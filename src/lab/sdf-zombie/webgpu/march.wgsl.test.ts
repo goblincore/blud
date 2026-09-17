@@ -2455,7 +2455,10 @@ describe('final-hit analytic normal integration', () => {
     expect(game).toContain('setNormalGradient(mode: 0 | 1)');
     expect(game).toContain('setNormalGradientDebug(mode: 0 | 1 | 2)');
     expect(game).toContain('normalGradientStatus()');
-    expect(game).toContain('view.uniforms.normalGradientCfg.value.set(normalGradientMode, normalGradientDebug, 0, 0)');
+    // Receivers moved onto the GameContext in the 2026-09-17 game-main
+    // decomposition (`normalGradientMode` -> `ctx.telemetry.normalGradientMode`).
+    // Spelling only — the uniform, the call and the argument order are unchanged.
+    expect(game).toContain('view.uniforms.normalGradientCfg.value.set(ctx.telemetry.normalGradientMode, ctx.telemetry.normalGradientDebug, 0, 0)');
   });
   it('runs the new fold only after the hit, preserving the complete legacy fallback and later detail', () => {
     expect(MARCH_BODY.indexOf('ngBody(')).toBeGreaterThan(MARCH_BODY.indexOf('let anchor = restPoint'));

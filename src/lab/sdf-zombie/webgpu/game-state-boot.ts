@@ -62,6 +62,13 @@ function unbuilt<T>(): T {
   return null as unknown as T;
 }
 
+// ASSIGNED-ONCE HANDLES. The fields below are `const` in game-main.ts: created
+// once at their declaration and never reassigned. The original code therefore
+// typed them non-nullable, and code all over main() relies on that. Typing them
+// `T | null` here would push ~190 spurious `possibly null` errors into
+// game-main.ts for a value that is never actually null once boot has run.
+// So they are typed `T`, and the factory seeds them with a definite-assignment
+// placeholder that the in-place assignment at the original line overwrites.
 export interface BootState {
   /** Startup phase marks; read as `__sdfGame.bootMarks()`. */
   marks: BootMark[];

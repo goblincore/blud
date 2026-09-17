@@ -57,6 +57,13 @@ interface TearShape {
   recoilM: number;
 }
 
+// ASSIGNED-ONCE HANDLES. The fields below are `const` in game-main.ts: created
+// once at their declaration and never reassigned. The original code therefore
+// typed them non-nullable, and code all over main() relies on that. Typing them
+// `T | null` here would push ~190 spurious `possibly null` errors into
+// game-main.ts for a value that is never actually null once boot has run.
+// So they are typed `T`, and the factory seeds them with a definite-assignment
+// placeholder that the in-place assignment at the original line overwrites.
 export interface VfxState {
   /** DEV-only `?bounded-wounds` gate for the bounded-wound preview. */
   boundedWoundPreview: boolean;
@@ -65,31 +72,31 @@ export interface VfxState {
   /** Carried-lamp beam tuning: peak gain, shoulder and key floor. */
   beamTuning: { gain: number; shoulder: number; keyFloor: number };
   /** Post-composite character overlay (muzzle flashes); codemod supplies it. */
-  characterEffects: CharacterEffects | null;
+  characterEffects: CharacterEffects;
   /** The zombie's compiled face params. */
-  face: FaceParams | null;
+  face: FaceParams;
   /** The zombie's flesh material (compiled palette, else preset fallback). */
-  flesh: FleshMaterial | null;
+  flesh: FleshMaterial;
   /** The zombie's flat face texture. */
-  faceTex: THREE.Texture | null;
+  faceTex: THREE.Texture;
   /** Face-atlas sub-rect (u0, v0, u1, v1) for the zombie sheet. */
-  faceAtlas: THREE.Vector4 | null;
+  faceAtlas: THREE.Vector4;
   /** Face textures BY CHARACTER, loaded once and shared by every body. */
   faceCache: Map<string, { tex: THREE.Texture; atlas: THREE.Vector4; mean: number }>;
   /** Requested state of the wound union-reach cull (ships ON). */
   woundCullRequested: boolean;
   /** The wound panel's live tuning values. */
-  woundTuning: WoundTuningValues | null;
+  woundTuning: WoundTuningValues;
   /** Reusable smoke puff meshes with their ages, velocities and roll. */
   smokePuffs: { mesh: THREE.Mesh; age: number; vel: THREE.Vector3; roll: number }[];
   /** Tracer streak sprite texture. */
-  tracerTex: THREE.DataTexture | null;
+  tracerTex: THREE.DataTexture;
   /** Head-on ember sprite texture. */
-  emberTex: THREE.DataTexture | null;
+  emberTex: THREE.DataTexture;
   /** Scale applied to the tear/slough lengths (`?tearslough`). */
   sloughScale: number;
   /** The rupture window's page-level shape. */
-  tearShape: TearShape | null;
+  tearShape: TearShape;
   /** Optical blast-distort strength (`?bdstrength`). */
   blastDistortStrength: number;
   /** Explosion visual-size multiplier (`?fxsize`). */
@@ -111,11 +118,11 @@ export interface VfxState {
   /** The showcase's baked chunk material. */
   gorePartMat: BakedChunkMaterial | null;
   /** (detailAmp, bumpAmp, bloodAmp, noiseScale) for the parts' detail layer. */
-  gorePartDetail: THREE.Vector4 | null;
+  gorePartDetail: THREE.Vector4;
   /** `look` for the gore materials. */
-  goreLookCfg: THREE.Vector4 | null;
+  goreLookCfg: THREE.Vector4;
   /** (burnAmp, wetGain, bloodDark, stainScale) — the stain half. */
-  gorePartStain: THREE.Vector4 | null;
+  gorePartStain: THREE.Vector4;
   /** `?goreparts=1` gate for the DEV gore showcase. */
   goreShowcaseOn: boolean;
   /** The sprite bench's scene group. */
@@ -123,7 +130,7 @@ export interface VfxState {
   /** The sprite bench's sprites. */
   spriteBenchSprites: THREE.Mesh[];
   /** Sprite-piece set; empty and unused unless `?gibrender=sprite` fills it. */
-  spritePieces: SpritePieceSet | null;
+  spritePieces: SpritePieceSet;
   /** Cook clock and phase for the held dynamite. */
   cook: CookState;
   /** Blast light reach, the soft room-fill component (`?fxspread`). */
@@ -131,9 +138,9 @@ export interface VfxState {
   /** Live explosions lighting something, newest last. Bounded by the pool. */
   explosionLights: { pos: Vec3; age: number }[];
   /** Procedural flash-sprite texture for the burst. */
-  burstTex: THREE.DataTexture | null;
+  burstTex: THREE.DataTexture;
   /** Procedural smoke-sprite texture for the burst. */
-  smokeBurstTex: THREE.DataTexture | null;
+  smokeBurstTex: THREE.DataTexture;
   /** `?explosionfx` mode: 'procedural' (default), 'atlas' or 'standin'. */
   mode: string | null;
   /** Procedural explosion vfx handle, or null in atlas/standin mode. */
@@ -141,13 +148,13 @@ export interface VfxState {
   /** Atlas burst layer handle, or null outside `?explosionfx=atlas`. */
   burstLayer: BurstLayer | null;
   /** The bleed particle simulation. */
-  bloodSim: BloodSim | null;
+  bloodSim: BloodSim;
   /** The bleed registry (per-wound emitters and trails). */
-  bleed: BleedRegistry | null;
+  bleed: BleedRegistry;
   /** Stable per-wound emitter-stream ids for blood-connections provenance. */
   woundStreamIds: WeakMap<Wound, number>;
   /** The bleed render view (droplets, ribbons, mist). */
-  bloodView: BloodView | null;
+  bloodView: BloodView;
   /** `setBleed(false)` freezes the whole bleed subsystem. */
   bleedEnabled: boolean;
   /** Gut ropes, at most one per body. */
@@ -164,19 +171,19 @@ export function makeVfxState(): VfxState {
     boundedWoundPreview: false,
     explosionLightPool: [],
     beamTuning: { gain: 4, shoulder: 0.35, keyFloor: 0 },
-    characterEffects: null,
-    face: null,
-    flesh: null,
-    faceTex: null,
-    faceAtlas: null,
+    characterEffects: null as unknown as CharacterEffects,
+    face: null as unknown as FaceParams,
+    flesh: null as unknown as FleshMaterial,
+    faceTex: null as unknown as THREE.Texture,
+    faceAtlas: null as unknown as THREE.Vector4,
     faceCache: new Map<string, { tex: THREE.Texture; atlas: THREE.Vector4; mean: number }>(),
     woundCullRequested: true,
-    woundTuning: null,
+    woundTuning: null as unknown as WoundTuningValues,
     smokePuffs: [],
-    tracerTex: null,
-    emberTex: null,
+    tracerTex: null as unknown as THREE.DataTexture,
+    emberTex: null as unknown as THREE.DataTexture,
     sloughScale: 0,
-    tearShape: null,
+    tearShape: null as unknown as TearShape,
     blastDistortStrength: 0,
     size: 0,
     aoeRadiusScale: 0,
@@ -187,25 +194,25 @@ export function makeVfxState(): VfxState {
     plume: 0,
     goreShowcase: null,
     gorePartMat: null,
-    gorePartDetail: null,
-    goreLookCfg: null,
-    gorePartStain: null,
+    gorePartDetail: null as unknown as THREE.Vector4,
+    goreLookCfg: null as unknown as THREE.Vector4,
+    gorePartStain: null as unknown as THREE.Vector4,
     goreShowcaseOn: false,
     spriteBenchGroup: null,
     spriteBenchSprites: [],
-    spritePieces: null,
+    spritePieces: null as unknown as SpritePieceSet,
     cook: { phase: 'idle', phaseAt: 0, cookStart: 0 },
     spread: 0,
     explosionLights: [],
-    burstTex: null,
-    smokeBurstTex: null,
+    burstTex: null as unknown as THREE.DataTexture,
+    smokeBurstTex: null as unknown as THREE.DataTexture,
     mode: null,
     explosionVfx: null,
     burstLayer: null,
-    bloodSim: null,
-    bleed: null,
+    bloodSim: null as unknown as BloodSim,
+    bleed: null as unknown as BleedRegistry,
     woundStreamIds: new WeakMap<Wound, number>(),
-    bloodView: null,
+    bloodView: null as unknown as BloodView,
     bleedEnabled: true,
     gutRopes: new Map<number, { chain: GutChain; wound: Wound; droplets: Droplet[] }>(),
     bleedClock: 0,

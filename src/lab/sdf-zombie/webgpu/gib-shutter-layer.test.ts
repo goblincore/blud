@@ -7,6 +7,12 @@
 //
 // The GPU factory is not instantiated here (that is the WebGPU smoke's job).
 
+// NOTE (2026-09-17, game-main decomposition): the receivers pinned below moved
+// from main()-scope locals onto the GameContext (`gooLayer` -> `ctx.goo.layer`,
+// `gibShutter` -> `ctx.gibs.shutter`, ...). Only the SPELLING changed — every
+// pinned number and method name is untouched, so this drift gate still gates
+// exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
@@ -76,22 +82,22 @@ describe('gib shutter — integration tripwires', () => {
     expect(resolveSrc).toContain('setOccluderDepth(tex: THREE.DepthTexture | null)');
     expect(resolveSrc).toContain('occlusionClipZ');
     expect(resolveSrc).toContain('uCfg2.value.set(tex ? 1 : 0, 0)');
-    expect(gameSrc).toContain('gibDepth = gibShutter.occluderDepth');
+    expect(gameSrc).toContain('gibDepth = ctx.gibs.shutter.occluderDepth');
     // Runtime A/B control for the evidence: the shipped default is ON.
-    expect(gameSrc).toContain('shutterGame.setOccluderDepth(gibOccluderEnabled ? gibDepth : null)');
+    expect(gameSrc).toContain('ctx.panels.shutterGame.setOccluderDepth(ctx.gibs.occluderEnabled ? gibDepth : null)');
     expect(gameSrc).toContain('setGibOccluder:');
     expect(gameSrc).toContain("get('giboccluder') !== '0'");
   });
 
   it('game-main lifts pieces before the base draw, then chains gib -> blood', () => {
-    const selectIdx = gameSrc.indexOf('gibShutter.select(');
+    const selectIdx = gameSrc.indexOf('ctx.gibs.shutter.select(');
     const renderCbIdx = gameSrc.indexOf('handle.setRenderCallback');
     expect(selectIdx).toBeGreaterThan(-1);
     expect(renderCbIdx).toBeGreaterThan(selectIdx);
 
-    const gibCaptureIdx = gameSrc.indexOf('gibShutter.capture(capture, scene, camera)');
-    const setSceneIdx = gameSrc.indexOf('shutterGame.setSceneTexture(src.texture)');
-    const bloodCaptureIdx = gameSrc.indexOf('shutterGame.capture(capture, bloodSim, camera)');
+    const gibCaptureIdx = gameSrc.indexOf('ctx.gibs.shutter.capture(capture, scene, camera)');
+    const setSceneIdx = gameSrc.indexOf('ctx.panels.shutterGame.setSceneTexture(src.texture)');
+    const bloodCaptureIdx = gameSrc.indexOf('ctx.panels.shutterGame.capture(capture, ctx.vfx.bloodSim, camera)');
     expect(gibCaptureIdx).toBeGreaterThan(-1);
     expect(setSceneIdx).toBeGreaterThan(gibCaptureIdx);
     expect(bloodCaptureIdx).toBeGreaterThan(setSceneIdx);
@@ -104,14 +110,14 @@ describe('gib shutter — integration tripwires', () => {
     expect(panelSrc).toContain('gib?.setMaxStreakPx(applied)');
     expect(gameSrc).toContain('readGibShutterSettings(location.search)');
     expect(gameSrc).toContain('setGibBlur');
-    expect(gameSrc).toContain('gibShutter?.setExposureMs(applied)');
-    expect(gameSrc).toContain('gibShutter?.setMaxStreakPx(applied)');
-    expect(gameSrc).toContain('shutterPanelHost(shutterGame, gibShutter)');
+    expect(gameSrc).toContain('ctx.gibs.shutter?.setExposureMs(applied)');
+    expect(gameSrc).toContain('ctx.gibs.shutter?.setMaxStreakPx(applied)');
+    expect(gameSrc).toContain('shutterPanelHost(ctx.panels.shutterGame, ctx.gibs.shutter)');
   });
 
   it('prewarms the gib targets against the real capture at boot', () => {
     expect(layerSrc).toContain('prewarm(capture: THREE.RenderTarget): boolean');
-    expect(gameSrc).toContain('gibShutter.prewarm(postAa.captureTarget)');
+    expect(gameSrc).toContain('ctx.gibs.shutter.prewarm(ctx.render.postAa.captureTarget)');
   });
 
   it('explicitly excludes the deferred route rather than excluding-but-undrawn', () => {
@@ -119,7 +125,7 @@ describe('gib shutter — integration tripwires', () => {
     // the switch is hard-off there so gibs render sharp through their own route
     // instead of vanishing. Reported, not silent. The gate lives in the layer
     // (`supported`) so the API/panel cannot re-enable it either.
-    expect(gameSrc).toContain('const gibRouteSupported = !deferredMode');
+    expect(gameSrc).toContain('const gibRouteSupported = !ctx.boot.deferredMode');
     expect(gameSrc).toContain('supported: gibRouteSupported');
     expect(gameSrc).toContain('deferred route: gib motion blur stays off');
     expect(layerSrc).toContain('supported = opts.supported !== false');

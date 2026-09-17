@@ -6,6 +6,12 @@
 // ^-anchored) and the reserved-word lint on declarations. Plus value pins
 // on the tuning that the mist/goo split depends on.
 
+// NOTE (2026-09-17, game-main decomposition): the receivers pinned below moved
+// from main()-scope locals onto the GameContext (`gooLayer` -> `ctx.goo.layer`,
+// `gibShutter` -> `ctx.gibs.shutter`, ...). Only the SPELLING changed — every
+// pinned number and method name is untouched, so this drift gate still gates
+// exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
@@ -337,13 +343,13 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
   // above: nothing here constructs a renderer.
   it('the game page syncs the density quads every frame', () => {
     const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
-    expect(src).toMatch(/gooLayer\?\.sync\(bloodSim, camera\)/);
+    expect(src).toMatch(/ctx\.goo\.layer\?\.sync\(ctx\.vfx\.bloodSim, camera\)/);
   });
 
   it('the game page syncs AFTER the camera is final, so the quads billboard correctly', () => {
     const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
     const cam = src.indexOf('camera.updateMatrixWorld();');
-    const sync = src.indexOf('gooLayer?.sync(bloodSim, camera)');
+    const sync = src.indexOf('ctx.goo.layer?.sync(ctx.vfx.bloodSim, camera)');
     expect(cam, 'camera.updateMatrixWorld() must be present').toBeGreaterThan(-1);
     expect(sync, 'the goo sync must be present').toBeGreaterThan(-1);
     expect(sync).toBeGreaterThan(cam);
@@ -685,8 +691,8 @@ describe('goo perf page seam (source tripwires)', () => {
 
   it('exposes setGooPerf and reports the lever state in the goo getter', () => {
     expect(src).toContain('setGooPerf(o: {');
-    expect(src).toContain('surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,');
-    expect(src).toContain('passGate: gooLayer.passGate,');
+    expect(src).toContain('surfaceAtDensityRes: ctx.goo.layer.surfaceAtDensityRes,');
+    expect(src).toContain('passGate: ctx.goo.layer.passGate,');
   });
 
   it('keeps the perf seams OUT of setGooTuning', () => {

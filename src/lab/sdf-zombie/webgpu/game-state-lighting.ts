@@ -22,9 +22,16 @@ import type { Flashlight } from './dungeon-lighting';
 import type { Projectile } from './game-weapon';
 import type { ProbeLightingNode } from './probe-lighting-node';
 
+// ASSIGNED-ONCE HANDLES. The fields below are `const` in game-main.ts: created
+// once at their declaration and never reassigned. The original code therefore
+// typed them non-nullable, and code all over main() relies on that. Typing them
+// `T | null` here would push ~190 spurious `possibly null` errors into
+// game-main.ts for a value that is never actually null once boot has run.
+// So they are typed `T`, and the factory seeds them with a definite-assignment
+// placeholder that the in-place assignment at the original line overwrites.
 export interface LightingState {
   /** Hemisphere ceiling fill; the codemod supplies the real light. */
-  hemi: THREE.HemisphereLight | null;
+  hemi: THREE.HemisphereLight;
   /** Raw `?levelprobes` value; `'0'`/`'off'` pin the hemisphere at full intensity. */
   levelProbesParam: string | null;
   /** 0..1 blend from the hemisphere fill to the room probe grid. */
@@ -40,7 +47,7 @@ export interface LightingState {
   /** Dungeon rig on/off; the gallery must render unchanged when false. */
   dungeonOn: boolean;
   /** Beam + shadow rig; the codemod supplies the real flashlight. */
-  flashlight: Flashlight | null;
+  flashlight: Flashlight;
   /** Provider for the live projectile lists, or null before they exist. */
   liveTracers: (() => readonly Projectile[]) | null;
   /** Raw `?tracerlight` value; `'0'`/`'off'` zero the gain. */
@@ -68,7 +75,7 @@ export interface LightingState {
 /** Every call returns a fresh object, nested arrays and maps included. */
 export function makeLightingState(): LightingState {
   return {
-    hemi: null,
+    hemi: null as unknown as THREE.HemisphereLight,
     levelProbesParam: null,
     levelProbeWeight: 0,
     levelProbeGain: -1,
@@ -76,7 +83,7 @@ export function makeLightingState(): LightingState {
     levelProbeNodes: new Map<number, ProbeLightingNode>(),
     flickerLights: [],
     dungeonOn: true,
-    flashlight: null,
+    flashlight: null as unknown as Flashlight,
     liveTracers: null,
     tracerLightParam: null,
     tracerLightGain: 0,

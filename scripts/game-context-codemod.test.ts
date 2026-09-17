@@ -148,3 +148,72 @@ describe('applyCodemod — multi-declarator statements', () => {
     expect(() => applyCodemod(src, { probeWeight: 'probes.weight' })).toThrow(/mixed multi-declarator/);
   });
 });
+
+describe('applyCodemod — name positions must never be rewritten', () => {
+  const M = { demoSeed: 'demo.seed', probeWeight: 'probes.weight' };
+
+  // Regression: the first version enumerated PropertyAssignment /
+  // PropertyAccessExpression / MethodDeclaration and still produced
+  // `get ctx.demo.seed() { ... }` — 808 syntax errors — because accessors
+  // were not on the list.
+  it('leaves a GETTER name alone but rewrites its body', () => {
+    const src = `async function main() {\n  let demoSeed = 1;\n  const o = { get demoSeed() { return demoSeed; } };\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('get demoSeed() { return ctx.demo.seed; }');
+  });
+
+  it('leaves a SETTER name alone', () => {
+    const src = `async function main() {\n  let demoSeed = 1;\n  const o = { set demoSeed(v) { demoSeed = v; } };\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('set demoSeed(v)');
+  });
+
+  it('leaves a method name alone but rewrites its body', () => {
+    const src = `async function main() {\n  let probeWeight = 1;\n  const o = { probeWeight() { return probeWeight; } };\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('probeWeight() { return ctx.probes.weight; }');
+  });
+
+  it('rewrites the object of a property access but not the property', () => {
+    const src = `async function main() {\n  let probeWeight = 1;\n  use(probeWeight.toFixed(2));\n}\n`;
+    expect(applyCodemod(src, M)).toContain('use(ctx.probes.weight.toFixed(2));');
+  });
+
+  it('leaves a nested function declaration name alone', () => {
+    const src = `async function main() {\n  let probeWeight = 1;\n  function probeWeight2() { return probeWeight; }\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('function probeWeight2()');
+  });
+});
+
+describe('applyCodemod — destructured shadows', () => {
+  const M = { coverage: 'world.coverage' };
+
+  // Regression: collectShadows only looked at `ts.isIdentifier(decl.name)`, so
+  // `const { coverage } = f()` shadowed nothing and the inner `coverage` — a
+  // Float32Array — was rewritten to ctx.world.coverage, an object of a totally
+  // different shape. tsc caught it, but only by luck of the type mismatch.
+  it('leaves a name shadowed by OBJECT destructuring alone', () => {
+    const src = `async function main() {\n  const coverage = { a: 1 };\n  function f() { const { target, coverage } = g(); return [target, coverage]; }\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('const { target, coverage } = g(); return [target, coverage];');
+  });
+
+  it('leaves a name shadowed by ARRAY destructuring alone', () => {
+    const src = `async function main() {\n  const coverage = { a: 1 };\n  function f() { const [coverage] = g(); return coverage; }\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('const [coverage] = g(); return coverage;');
+  });
+
+  it('leaves a name shadowed by a destructured PARAMETER alone', () => {
+    const src = `async function main() {\n  const coverage = { a: 1 };\n  const f = ({ coverage }: any) => coverage;\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('({ coverage }: any) => coverage');
+  });
+
+  it('still rewrites the outer binding outside the shadowing function', () => {
+    const src = `async function main() {\n  const coverage = { a: 1 };\n  use(coverage);\n  function f() { const { coverage } = g(); return coverage; }\n}\n`;
+    const out = applyCodemod(src, M);
+    expect(out).toContain('use(ctx.world.coverage);');
+  });
+});

@@ -58,6 +58,7 @@ import {
 } from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
+import { makeGameContext } from './game-context';
 import { createBoneInstancer } from './bone-instancer';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
 import { SegmentMeshCache } from './skeleton-spike/mesh';
@@ -300,6 +301,11 @@ function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
 }
 
 async function main() {
+  // Every main()-scope binding below lives on this container (see
+  // game-context.ts). Declarations were rewritten IN PLACE by
+  // scripts/game-context-codemod.ts — no line moved, so initialization
+  // order is exactly what it was.
+  const ctx = makeGameContext();
   // BOOT PHASE MARKS (startup attribution, 2026-09-16). main() is one long
   // synchronous block after its first awaits — rAF cannot run, timers cannot
   // fire, and every console line lands at the same wall clock — so phase
@@ -307,20 +313,20 @@ async function main() {
   // read via __sdfGame.bootMarks() or window.__bootMarks. `t` is
   // performance.now(), comparable to performance.timeOrigin-relative CDP
   // timestamps and to the pipeline log's frame windows.
-  const bootMarks: { n: string; t: number }[] = [];
-  const mark = (n: string) => { bootMarks.push({ n, t: Math.round(performance.now()) }); };
+  ctx.boot.marks = [];
+  const mark = (n: string) => { ctx.boot.marks.push({ n, t: Math.round(performance.now()) }); };
   mark('main-start');
-  (window as unknown as Record<string, unknown>).__bootMarks = bootMarks;
-  const boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
-  const mount = document.getElementById('app');
-  if (!mount) throw new Error('#app not found');
-  const resKey = resRungFromUrl(boundedWoundPreview ? '640' : DEFAULT_RES);
-  const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
+  (window as unknown as Record<string, unknown>).__bootMarks = ctx.boot.marks;
+  ctx.vfx.boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
+  ctx.boot.mount = document.getElementById('app');
+  if (!ctx.boot.mount) throw new Error('#app not found');
+  ctx.boot.resKey = resRungFromUrl(ctx.vfx.boundedWoundPreview ? '640' : DEFAULT_RES);
+  ctx.boot.handle = await createLabRenderer(ctx.boot.mount, RES_RUNGS[ctx.boot.resKey]);
   // Per-pass GPU timestamps (gpu-pass-timing.ts). Wraps the backend's uid
   // builder once; costs a string concat per pass. Read through
   // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
-  const passTiming = installPassTiming(handle.renderer);
-  const { scene, camera } = handle;
+  ctx.boot.passTiming = installPassTiming(ctx.boot.handle.renderer);
+  const { scene, camera } = ctx.boot.handle;
   mark('renderer-ready');
 
   // LOOP INTENT vs WARM SUSPENSION (warm-gate.ts, corrected 2026-09-16). The
@@ -328,9 +334,9 @@ async function main() {
   // finally, so a rig/bench that paused (or resumed) the loop WHILE the warm
   // was in flight had its intent overwritten. Every external request now goes
   // through the controller's intent; the warm only suspends and releases.
-  const rawSetLoopRunning = handle.setLoopRunning.bind(handle);
-  const loopControl = createLoopController((on) => rawSetLoopRunning(on), handle.loopRunning);
-  handle.setLoopRunning = (on: boolean) => loopControl.set(on);
+  ctx.boot.rawSetLoopRunning = ctx.boot.handle.setLoopRunning.bind(ctx.boot.handle);
+  ctx.boot.loopControl = createLoopController((on) => ctx.boot.rawSetLoopRunning(on), ctx.boot.handle.loopRunning);
+  ctx.boot.handle.setLoopRunning = (on: boolean) => ctx.boot.loopControl.set(on);
 
   // PIPELINE LOG (pipeline-log.ts). The wraps are already installed (the lab
   // renderer does it right after init); ?pipelinelog=1 turns on per-creation
@@ -344,11 +350,11 @@ async function main() {
   // can produce an identical census. Absent, a random seed keeps normal play
   // as varied as the Math.random() this replaces. Logged, so a run whose
   // numbers surprise can be reproduced from the console line.
-  const seedSearch = new URLSearchParams(location.search);
-  const demoSeed = parseIntParam(seedSearch.get('seed'), { min: 0, max: 0x7fffffff })
+  ctx.boot.seedSearch = new URLSearchParams(location.search);
+  ctx.demo.seed = parseIntParam(ctx.boot.seedSearch.get('seed'), { min: 0, max: 0x7fffffff })
     ?? (Date.now() & 0x7fffffff);
-  setRngSeed(demoSeed);
-  console.info(`[sdf-game] demo seed ${demoSeed}${seedSearch.has('seed') ? ' (?seed=)' : ' (random)'}`);
+  setRngSeed(ctx.demo.seed);
+  console.info(`[sdf-game] demo seed ${ctx.demo.seed}${ctx.boot.seedSearch.has('seed') ? ' (?seed=)' : ' (random)'}`);
 
   // LOADING SCREEN (spike program). The boot compiles for seconds before the
   // game is playable — WebGPU init, the TSL graph, the weapon GLB, and since
@@ -360,22 +366,22 @@ async function main() {
   // after ready so headless drivers that never click are not blocked; a
   // click on it requests pointer lock (the gesture the canvas needs anyway);
   // ?loader=0 removes it (bench/screenshot determinism).
-  const loaderEl = document.getElementById('loader');
-  const loaderDisabled = new URLSearchParams(location.search).get('loader') === '0';
-  if (loaderDisabled && loaderEl) loaderEl.style.display = 'none';
+  ctx.boot.loaderEl = document.getElementById('loader');
+  ctx.boot.loaderDisabled = new URLSearchParams(location.search).get('loader') === '0';
+  if (ctx.boot.loaderDisabled && ctx.boot.loaderEl) ctx.boot.loaderEl.style.display = 'none';
   function setLoader(text: string, ready = false): void {
-    if (loaderDisabled) return;
+    if (ctx.boot.loaderDisabled) return;
     const status = document.getElementById('loader-status');
     if (status) status.textContent = text;
-    if (ready) loaderEl?.classList.add('loader-ready');
+    if (ready) ctx.boot.loaderEl?.classList.add('loader-ready');
   }
   setLoader('webgpu ready');
-  loaderEl?.addEventListener('click', () => {
+  ctx.boot.loaderEl?.addEventListener('click', () => {
     const canvas = document.querySelector('#app canvas');
     if (canvas) canvas.requestPointerLock();
-    loaderEl?.classList.add('loader-hidden');
+    ctx.boot.loaderEl?.classList.add('loader-hidden');
   });
-  const telemetry = new GameTelemetry();
+  ctx.telemetry.telemetry = new GameTelemetry();
 
   // RENDER MODE — parsed ONCE at boot (hybrid deferred M2 task 5). Absent or
   // 'legacy' boots the legacy path unchanged; 'deferred' opts into the
@@ -384,10 +390,10 @@ async function main() {
   // handle.backend is the honest signal) is FATAL and visible on the page —
   // silently benchmarking legacy while claiming deferred is the one failure
   // this seam must never produce.
-  const bootMode = resolveGameBootMode(new URLSearchParams(location.search).get('renderer'), handle.backend);
-  if (bootMode.warning) console.warn(`[sdf-game] ${bootMode.warning}`);
-  if (bootMode.fatal) throw new Error(bootMode.fatal);
-  const deferredMode = bootMode.mode === 'deferred';
+  ctx.boot.mode = resolveGameBootMode(new URLSearchParams(location.search).get('renderer'), ctx.boot.handle.backend);
+  if (ctx.boot.mode.warning) console.warn(`[sdf-game] ${ctx.boot.mode.warning}`);
+  if (ctx.boot.mode.fatal) throw new Error(ctx.boot.mode.fatal);
+  ctx.boot.deferredMode = ctx.boot.mode.mode === 'deferred';
 
   // FRAME PACING. Present on a 30 fps cadence instead of taking whatever slot
   // rAF hands us. Unpaced, a ~33 ms frame on a 60 Hz display alternates between
@@ -404,13 +410,13 @@ async function main() {
   // A seam, not a constant -- __sdfGame.setFrameCap(60) or (0) to compare by
   // eye. Off everywhere else: the bench times its own render callback and a cap
   // would flatten every reading to the cadence.
-  handle.setFrameCap(30);
+  ctx.boot.handle.setFrameCap(30);
 
   // -----------------------------------------------------------------------
   mark('world-start');
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
-  const colliders = levelColliders();
+  ctx.world.colliders = levelColliders();
 
   /**
    * WHAT A DETACHED PIECE COLLIDES WITH. The owner, playing: *"it seems the gibs
@@ -430,7 +436,7 @@ async function main() {
    * out through the arena's 6 m roof while the 3 m rooms keep theirs.
    */
   function chunkCollidersAt(pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
-    return { boxes: colliders, ceilingY: ceilingAt(pos[0], pos[2]) };
+    return { boxes: ctx.world.colliders, ceilingY: ceilingAt(pos[0], pos[2]) };
   }
   // ---- ACTOR VISIBILITY CULL STATE ---------------------------------------
   //
@@ -441,7 +447,7 @@ async function main() {
   // happened to reach `actors` but not the constant before the first frame,
   // so the cull threw on every frame while the picture still looked fine.
   // If you add a binding this function reads, add it HERE.
-  const actors: ZombieActor[] = [];
+  ctx.world.actors = [];
   const CULL_DWELL_MS = 250;
   // Declared HERE, above the draw callback that closes over it, not beside
   // updateVisibleActors further down. `function updateVisibleActors` is a
@@ -450,15 +456,15 @@ async function main() {
   // initialization" and the cull silently never ran (HUD stuck at bodies
   // 0/15). It was a RACE — more boot work tipped it — which is exactly the
   // kind of bug that hides until something unrelated changes.
-  const frustum = new THREE.Frustum();
-  const projScreen = new THREE.Matrix4();
-  const bodySphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
-  const lastSeenMs = new Map<number, number>();
+  ctx.world.frustum = new THREE.Frustum();
+  ctx.world.projScreen = new THREE.Matrix4();
+  ctx.world.bodySphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
+  ctx.world.lastSeenMs = new Map<number, number>();
   /** SIM FRAME INDEX (determinism stage 1, 2026-09-14). Incremented once at the
    *  top of every `tick(dt)`; the bake swap is pinned to a frame relative to
    *  submit so its landing frame does not depend on WORKER SPEED (see
    *  finishChunkBake). Reads only — the single writer is `tick`. */
-  let simFrame = 0;
+  ctx.demo.simFrame = 0;
   /** THE SIM CLOCK now lives in `sim-clock.ts` (module state, so the demo
    *  player can reset it). The cull dwell below reads `simTimeMs()` —
    *  millisecond SIM time advanced only by `tick(dt)`, never wall time; see the
@@ -484,41 +490,41 @@ async function main() {
    *  normal play, so the shipped defaults are untouched; it is inert unless a
    *  demo is being recorded or replayed (see the frame hash:
    *  webgpu/demo-hash.ts). */
-  let demoHold = false;
+  ctx.demo.hold = false;
   /** The gather dispatch counter at demo entry, so the seed is a function of
    *  frames-since-entry rather than of how long the page happened to boot. */
-  let demoSeedBase = 0;
-  let actorCullEnabled = true;
+  ctx.demo.seedBase = 0;
+  ctx.render.actorCullEnabled = true;
   /** Run 5b: the distance band the refine twins are drawn in — from
    *  `scripts/lib/upscale-framing.mjs` DISTANCE_M.medium = [1.5, 3.5].
    *  Owner: close bodies are most of the pixels and the least visible gain
    *  (the march already resolves them), far bodies are cheap either way, so
    *  the twin only earns its cost in the middle. Hysteresis keeps a body
    *  walking along the edge from flickering. */
-  const refineBand = { near: 1.5, far: 3.5, hysteresis: 0.25 };
+  ctx.render.refineBand = { near: 1.5, far: 3.5, hysteresis: 0.25 };
   /** Run 5b: the twin lighting tail every view should be on — so a LATE SPAWN
    *  does not fall back to the default while the rest of the room is on the
    *  other tail (same idiom as boneCullMode). */
-  let refineTailWanted: RefineTail = 'slim';
+  ctx.render.refineTailWanted = 'slim';
   /** Bodies whose refine twin was drawn this frame (reset each cull pass). */
-  let refinedBodies = 0;
-  let visibleActors: ZombieActor[] = [];
-  const cullCounts = { visible: 0, total: 0 };
-  const coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
-  const sightA: [number, number, number] = [0, 0, 0];
+  ctx.render.refinedBodies = 0;
+  ctx.render.visibleActors = [];
+  ctx.world.cullCounts = { visible: 0, total: 0 };
+  ctx.world.coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
+  ctx.world.sightA = [0, 0, 0];
 
-  const encounterNav = createEncounterNavigation(ROOMS, TUNNELS, colliders);
-  const encounter = createEncounterDirector(encounterNav, colliders);
-  const encounterHomes = new Map<number, Vec3>();
-  const surfaces = levelSurfaces();
-  const levelGroup = new THREE.Group();
-  levelGroup.name = 'ring-level';
-  const stoneSet = dungeonMaterialSet();
+  ctx.world.encounterNav = createEncounterNavigation(ROOMS, TUNNELS, ctx.world.colliders);
+  ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
+  ctx.world.encounterHomes = new Map<number, Vec3>();
+  ctx.world.surfaces = levelSurfaces();
+  ctx.world.levelGroup = new THREE.Group();
+  ctx.world.levelGroup.name = 'ring-level';
+  ctx.world.stoneSet = dungeonMaterialSet();
   const stoneFor = (axis: 0 | 1 | 2, facing: 1 | -1) =>
-    axis !== 1 ? stoneSet.wall
-      : facing > 0 ? stoneSet.floor
-        : stoneSet.perimeterAccent;
-  for (const p of surfaces.planes) {
+    axis !== 1 ? ctx.world.stoneSet.wall
+      : facing > 0 ? ctx.world.stoneSet.floor
+        : ctx.world.stoneSet.perimeterAccent;
+  for (const p of ctx.world.surfaces.planes) {
     const axis = p.axis;
     // Walls span (x|z, y); floors/ceilings span (x, z).
     const w = axis === 1 ? p.max[0] - p.min[0] : p.max[axis === 0 ? 2 : 0] - p.min[axis === 0 ? 2 : 0];
@@ -545,19 +551,19 @@ async function main() {
     if (axis === 1) mesh.rotation.x = p.facing > 0 ? -Math.PI / 2 : Math.PI / 2;
     else if (axis === 0) mesh.rotation.y = p.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
     else if (p.facing < 0) mesh.rotation.y = Math.PI;
-    levelGroup.add(mesh);
+    ctx.world.levelGroup.add(mesh);
   }
-  for (const b of surfaces.boxes) {
+  for (const b of ctx.world.surfaces.boxes) {
     const geo = new THREE.BoxGeometry(
       b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
-    const mesh = new THREE.Mesh(geo, (stoneSet.coverLow as THREE.MeshStandardMaterial).clone());
+    const mesh = new THREE.Mesh(geo, (ctx.world.stoneSet.coverLow as THREE.MeshStandardMaterial).clone());
     (mesh.material as THREE.MeshStandardMaterial).color =
       new THREE.Color(b.color[0], b.color[1], b.color[2]);
     mesh.position.set(
       (b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
-    levelGroup.add(mesh);
+    ctx.world.levelGroup.add(mesh);
   }
-  scene.add(levelGroup);
+  scene.add(ctx.world.levelGroup);
 
   // CEILING FILL. The sun points down; ceilings (and north-south walls in
   // shadow) have normals pointing away from it, so with only a dim ambient
@@ -566,8 +572,8 @@ async function main() {
   // This touches ONLY these MeshStandardMaterials — the SDF bodies carry
   // their own lighting uniforms (enclosure bounce), so probe/bounce tuning
   // is untouched.
-  const hemi = new THREE.HemisphereLight(0xa39c93, 0x8f8880, 0.8);
-  scene.add(hemi);
+  ctx.lighting.hemi = new THREE.HemisphereLight(0xa39c93, 0x8f8880, 0.8);
+  scene.add(ctx.lighting.hemi);
   // LEVEL PROBES (lighting P3/P4 step 3): the walls, floor and ceiling take
   // their indirect diffuse from the room's probe grid + the GPU gather's
   // dynamic layer (probe-lighting-node.ts, wired below the gather). The
@@ -575,17 +581,17 @@ async function main() {
   // otherwise the level double-lights on the flip. ?levelprobes=0 pins the
   // hemisphere at the rig's full intensity and the nodes at zero: the
   // pre-probe look. Gain -1 = each room's matched level (levelMatchedGain).
-  const levelProbesParam = new URLSearchParams(location.search).get('levelprobes');
-  let levelProbeWeight = levelProbesParam === '0' || levelProbesParam === 'off' ? 0 : 1;
-  let levelProbeGain = -1;
-  let hemiBase = hemi.intensity;
-  const applyHemi = () => { hemi.intensity = hemiBase * (1 - levelProbeWeight); };
+  ctx.lighting.levelProbesParam = new URLSearchParams(location.search).get('levelprobes');
+  ctx.lighting.levelProbeWeight = ctx.lighting.levelProbesParam === '0' || ctx.lighting.levelProbesParam === 'off' ? 0 : 1;
+  ctx.lighting.levelProbeGain = -1;
+  ctx.lighting.hemiBase = ctx.lighting.hemi.intensity;
+  const applyHemi = () => { ctx.lighting.hemi.intensity = ctx.lighting.hemiBase * (1 - ctx.lighting.levelProbeWeight); };
   // Declared HERE, above applyRig (which restamps them): const/let are not
   // hoisted, and the first applyRig runs long before the gather site below
   // populates these — the cullCounts race, again.
-  const levelProbeNodes = new Map<number, ProbeLightingNode>();
-  const levelLightLists = new Map<number, THREE.LightsNode>();
-  const levelNodeMaterials: THREE.NodeMaterial[] = [];
+  ctx.lighting.levelProbeNodes = new Map<number, ProbeLightingNode>();
+  ctx.world.levelLightLists = new Map<number, THREE.LightsNode>();
+  ctx.world.levelNodeMaterials = [];
 
   // -----------------------------------------------------------------------
   mark('gallery-start');
@@ -605,9 +611,9 @@ async function main() {
       child.intensity = 0.95;
     }
   }
-  hemi.color.setHex(0xf5f3f0);   // sky term: near-white
-  hemi.groundColor.setHex(0x8f8c86); // floor bounce: mid grey
-  hemi.intensity = 0.75;
+  ctx.lighting.hemi.color.setHex(0xf5f3f0);   // sky term: near-white
+  ctx.lighting.hemi.groundColor.setHex(0x8f8c86); // floor bounce: mid grey
+  ctx.lighting.hemi.intensity = 0.75;
 
   // COLOURED ACCENTS as real mesh-side lights, straight from the level data
   // — the same entries litWallAlbedo folded into the bounce albedos, which
@@ -615,8 +621,8 @@ async function main() {
   // lights total (one per room + room3's second): few, on purpose — every
   // real-time light here spends frame time on WALLS, not on what the owner
   // is watching.
-  const accentGroup = new THREE.Group();
-  accentGroup.name = 'accent-lights';
+  ctx.world.accentGroup = new THREE.Group();
+  ctx.world.accentGroup.name = 'accent-lights';
   // ——— EXPLOSION LIGHT POOL (2026-09-10) ————————————————————————————————
   // Owner: "the explosion should cast dynamic light such that the whole room
   // lights up." Two separate lighting paths have to be fed, because the level
@@ -647,14 +653,14 @@ async function main() {
   // visible is three idle point-light iterations, against ~400 ms of pipeline
   // churn per blast.
   const EXPLOSION_LIGHTS = 3;
-  const explosionLightPool: THREE.PointLight[] = [];
+  ctx.vfx.explosionLightPool = [];
   for (let i = 0; i < EXPLOSION_LIGHTS; i++) {
     const pl = new THREE.PointLight(0xffb060, 0, 0, 2);
     pl.visible = true;
-    accentGroup.add(pl);
-    explosionLightPool.push(pl);
+    ctx.world.accentGroup.add(pl);
+    ctx.vfx.explosionLightPool.push(pl);
   }
-  const flickerLights: { light: THREE.PointLight; base: number; phase: number }[] = [];
+  ctx.lighting.flickerLights = [];
   for (const r of ROOMS) {
     for (const a of r.accents) {
       const pl = new THREE.PointLight(
@@ -663,8 +669,8 @@ async function main() {
       // Tagged with its room so the level's per-room light lists can drop
       // the OTHER rooms' accents (see levelSceneLights below).
       pl.userData.accentRoom = r.id;
-      accentGroup.add(pl);
-      flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
+      ctx.world.accentGroup.add(pl);
+      ctx.lighting.flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
 
       // A visible source. Without it the light has no cause and reads as a bug.
       const bowl = new THREE.Mesh(
@@ -676,17 +682,17 @@ async function main() {
           roughness: 0.7,
         }));
       bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
-      accentGroup.add(bowl);
+      ctx.world.accentGroup.add(bowl);
     }
   }
-  scene.add(accentGroup);
+  scene.add(ctx.world.accentGroup);
 
   // ---------------------------------------------------------------------
   mark('dungeon-start');
   // DUNGEON RIG. Off-state parity matters: with dungeon disabled the gallery
   // must render exactly as before, so the rig is applied, not hard-coded.
   // ---------------------------------------------------------------------
-  let dungeonOn = true;
+  ctx.lighting.dungeonOn = true;
   /** Live beam tuning (panel + console). x is how hard the beam drives the
    *  key; y is the highlight shoulder that keeps WOUNDS readable under direct
    *  light — at 0 a lit body hard-clips and crater, lip and clean skin all
@@ -702,11 +708,11 @@ async function main() {
   // key. Owner: "higher makes the zombies a bit too bright against ambient
   // when not lit" — which is the point of a carried lamp. What you can see is
   // what you are pointing at.
-  const beamTuning = { gain: 4, shoulder: 0.35, keyFloor: 0 };
+  ctx.vfx.beamTuning = { gain: 4, shoulder: 0.35, keyFloor: 0 };
   // ?shadowmap=1024 for the old maps; 512 ships (SHADOW_MAP_SIZE). Both
   // maps ride it: the twin only feeds the march's soft level shadow.
-  const shadowMapParam = Number(new URLSearchParams(location.search).get('shadowmap'));
-  const flashlight = createFlashlight(DUNGEON_RIG, shadowMapParam > 0 ? { shadowMapSize: shadowMapParam } : {});
+  ctx.boot.shadowMapParam = Number(new URLSearchParams(location.search).get('shadowmap'));
+  ctx.lighting.flashlight = createFlashlight(DUNGEON_RIG, ctx.boot.shadowMapParam > 0 ? { shadowMapSize: ctx.boot.shadowMapParam } : {});
   // BOOT-TIME shadow ablation (?spotshadow=0), for the dungeon bench legs.
   // castShadow has to be decided BEFORE the first frame: toggling it live
   // crashes three r185 WebGPU (ShadowNode.updateShadow dereferences the
@@ -715,15 +721,15 @@ async function main() {
   // the 1024² map still renders every frame, so it would measure the wrong
   // split. At boot, AnalyticLightNode.setup never builds the shadow node at
   // all, so the leg is a true zero-cost ablation.
-  flashlight.spot.castShadow = new URLSearchParams(location.search).get('spotshadow') !== '0';
-  scene.add(flashlight.spot);
-  scene.add(flashlight.spot.target);
+  ctx.lighting.flashlight.spot.castShadow = new URLSearchParams(location.search).get('spotshadow') !== '0';
+  scene.add(ctx.lighting.flashlight.spot);
+  scene.add(ctx.lighting.flashlight.spot.target);
   // The level-shadow twin (perf round 2 task 7) rides every shadow boot
   // decision the spot makes: ?spotshadow=0 kills BOTH maps (a true ablation
   // of the shadow cost), and the gallery rig shows neither.
-  flashlight.levelShadow.castShadow = flashlight.spot.castShadow;
-  scene.add(flashlight.levelShadow);
-  scene.add(flashlight.levelShadow.target);
+  ctx.lighting.flashlight.levelShadow.castShadow = ctx.lighting.flashlight.spot.castShadow;
+  scene.add(ctx.lighting.flashlight.levelShadow);
+  scene.add(ctx.lighting.flashlight.levelShadow.target);
 
   // DEFERRED MODE: three's own shadow traversal is OFF. The deferred shadow
   // maps (deferred-shadows.ts) are explicit raster passes that never consult
@@ -732,7 +738,7 @@ async function main() {
   // waste per renderer.render call. Boot-time decision: three r185 WebGPU
   // crashes when castShadow is toggled after maps were built, so this ships
   // as a boot property like the legacy ?spotshadow=0 ablation above.
-  handle.renderer.shadowMap.enabled = !deferredMode;
+  ctx.boot.handle.renderer.shadowMap.enabled = !ctx.boot.deferredMode;
   // PCF, not PCFSoft: the soft variant's kernel is FIXED and ignores
   // shadow.radius, which is the only edge-hardness knob the shadow map has
   // (owner ask, 2026-09-09). The WebGPU PCF filter is a 5-tap IGN-rotated
@@ -740,16 +746,16 @@ async function main() {
   // via __sdfGame.setShadowRadius (default SHADOW_RADIUS in
   // dungeon-lighting.ts). Changing the type needs a reload (shader
   // recompile); changing the radius after that does not.
-  handle.renderer.shadowMap.type = THREE.PCFShadowMap;
-  levelGroup.traverse((o) => {
+  ctx.boot.handle.renderer.shadowMap.type = THREE.PCFShadowMap;
+  ctx.world.levelGroup.traverse((o) => {
     if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; }
   });
 
   function applyRig(rig: AmbientRig) {
-    hemiBase = rig.hemiIntensity;
+    ctx.lighting.hemiBase = rig.hemiIntensity;
     applyHemi();
-    hemi.color.setRGB(...rig.hemiSky);
-    hemi.groundColor.setRGB(...rig.hemiGround);
+    ctx.lighting.hemi.color.setRGB(...rig.hemiSky);
+    ctx.lighting.hemi.groundColor.setRGB(...rig.hemiGround);
     restampLevelProbes();
     for (const child of scene.children) {
       if (child instanceof THREE.DirectionalLight) child.intensity = rig.sunIntensity;
@@ -764,19 +770,19 @@ async function main() {
       fog.near = rig.fogNear;
       fog.far = rig.fogFar;
     }
-    handle.renderer.setClearColor(new THREE.Color(...rig.fogColor));
-    flashlight.spot.visible = rig === DUNGEON_RIG;
-    flashlight.levelShadow.visible = rig === DUNGEON_RIG;
+    ctx.boot.handle.renderer.setClearColor(new THREE.Color(...rig.fogColor));
+    ctx.lighting.flashlight.spot.visible = rig === DUNGEON_RIG;
+    ctx.lighting.flashlight.levelShadow.visible = rig === DUNGEON_RIG;
   }
   applyRig(DUNGEON_RIG);
 
   (globalThis as Record<string, unknown>).__dungeon = {
-    setDungeon(on: boolean) { dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
-    get on() { return dungeonOn; },
+    setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
+    get on() { return ctx.lighting.dungeonOn; },
     /** The weapon light itself, for runtime A/Bs (shadow.intensity 0/1 is the
      *  shadow kill switch — do NOT toggle spot.castShadow live, three r185
      *  WebGPU crashes rebuilding a disposed shadow map). */
-    spot: flashlight.spot,
+    spot: ctx.lighting.flashlight.spot,
     /** Beam knobs, also on the tuning panel. */
     /** Accepts BOTH the short names and the panel's slider names, because the
      *  panel's COPY button emits the slider names (beamGain, ...) and a line
@@ -789,57 +795,57 @@ async function main() {
       const gain = t.gain ?? t.beamGain;
       const shoulder = t.shoulder ?? t.beamShoulder;
       const keyFloor = t.keyFloor ?? t.beamKeyFloor;
-      if (gain !== undefined) beamTuning.gain = gain;
-      if (shoulder !== undefined) beamTuning.shoulder = shoulder;
-      if (keyFloor !== undefined) beamTuning.keyFloor = keyFloor;
-      return { ...beamTuning };
+      if (gain !== undefined) ctx.vfx.beamTuning.gain = gain;
+      if (shoulder !== undefined) ctx.vfx.beamTuning.shoulder = shoulder;
+      if (keyFloor !== undefined) ctx.vfx.beamTuning.keyFloor = keyFloor;
+      return { ...ctx.vfx.beamTuning };
     },
-    get beam() { return { ...beamTuning }; },
+    get beam() { return { ...ctx.vfx.beamTuning }; },
   };
 
   // -----------------------------------------------------------------------
   mark('drawchain-start');
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
-  const postAa = createPostAa(handle.renderer);
+  ctx.render.postAa = createPostAa(ctx.boot.handle.renderer);
   // The blast refraction reprojects its live bands from WORLD positions every
   // frame, so it needs the camera's current view-projection. Handing it the
   // persistent camera once is enough — the matrices update in place.
-  postAa.setBlastDistortCamera(camera);
+  ctx.render.postAa.setBlastDistortCamera(camera);
   // VHS ships ON at 'blud' (owner, 2026-09-09) — the preset the owner swept in
   // vhs-panel.ts, replacing the club-mutant 'soft' this shipped at first.
   // ?vhs=blud|soft|balanced|chaotic picks another; ?vhs=off disables it, which is
   // also what the parity/bench drivers should pass — the all-off path is
   // untouched only when VHS is null.
-  const vhsParam = new URLSearchParams(location.search).get('vhs');
-  if (vhsParam === 'blud' || vhsParam === 'soft' || vhsParam === 'balanced'
-    || vhsParam === 'chaotic') {
-    postAa.setVhs(vhsParam);
-  } else if (vhsParam !== 'off' && vhsParam !== 'null') {
-    postAa.setVhs('blud');
+  ctx.boot.vhsParam = new URLSearchParams(location.search).get('vhs');
+  if (ctx.boot.vhsParam === 'blud' || ctx.boot.vhsParam === 'soft' || ctx.boot.vhsParam === 'balanced'
+    || ctx.boot.vhsParam === 'chaotic') {
+    ctx.render.postAa.setVhs(ctx.boot.vhsParam);
+  } else if (ctx.boot.vhsParam !== 'off' && ctx.boot.vhsParam !== 'null') {
+    ctx.render.postAa.setVhs('blud');
   }
-  const characterEffects = createCharacterEffects(handle.renderer);
+  ctx.vfx.characterEffects = createCharacterEffects(ctx.boot.handle.renderer);
   // GPU PROBE GATHER (P3/P4 dynamic layer). Declared here, ahead of the draw
   // callback, so the frame can test it without a temporal dead zone; created
   // next to the room probes once the level exists. ?probedyn=0 zeroes both
   // gains — the storage read is skipped and the march is bit-identical.
-  let probeGather: ProbeGatherBinding | null = null;
+  ctx.probes.gather = null;
   // TRACERS as gathered lights: the pellet lists are declared AFTER this draw
   // callback and after an await (the gun GLTF load), so a frame CAN render in
   // between — the same boot race the `cullCounts` comment describes. The
   // gather reads this provider, never the consts directly; it is assigned
   // right after `soldierPellets` exists.
-  let liveTracers: (() => readonly Projectile[]) | null = null;
-  const probeDynParam = new URLSearchParams(location.search).get('probedyn');
-  let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.15;
-  let probeVisStrength = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 1;
+  ctx.lighting.liveTracers = null;
+  ctx.probes.dynParam = new URLSearchParams(location.search).get('probedyn');
+  ctx.probes.dynGain = ctx.probes.dynParam === '0' || ctx.probes.dynParam === 'off' ? 0 : 0.15;
+  ctx.probes.visStrength = ctx.probes.dynParam === '0' || ctx.probes.dynParam === 'off' ? 0 : 1;
   // ?proberate=1 restores every-frame gathers (see probeGatherRate above).
   // ALL THREE of these go through parseIntParam now: it reads the RAW string, so
   // an absent parameter yields null (the shipped default) rather than 0. Doing
   // it by hand is what shipped the zeroed-dynamic-layer regression — see
   // boot-params.ts for the whole story and boot-params.test.ts for the gate.
-  const bootSearch = new URLSearchParams(location.search);
-  let probeGatherRateBoot = parseIntParam(bootSearch.get('proberate'), { min: 1, max: 4 });
+  ctx.boot.search = new URLSearchParams(location.search);
+  ctx.probes.gatherRateBoot = parseIntParam(ctx.boot.search.get('proberate'), { min: 1, max: 4 });
   // PROBE-GATHER COST SPLIT (2026-09-10). Two diagnostic seams that divide the
   // gather's cost into its primary-ray part and its per-light shadow part,
   // which is the split that decides whether widening the dispatch or replacing
@@ -856,8 +862,8 @@ async function main() {
   // MODEL, not a measurement (see the probe-gather-cost note).
   // min 0 is correct here and is exactly what made the old hand-rolled guard
   // unsafe: 0 is a real mode, so ABSENT must be detected before coercion.
-  let probeRaysBoot = parseIntParam(bootSearch.get('dynrays'), { min: 0, max: 64 });
-  let probeLightsBoot = parseIntParam(bootSearch.get('dynlights'), { min: 0, max: 1024 });
+  ctx.probes.raysBoot = parseIntParam(ctx.boot.search.get('dynrays'), { min: 0, max: 64 });
+  ctx.probes.lightsBoot = parseIntParam(ctx.boot.search.get('dynlights'), { min: 0, max: 1024 });
   // THE AFTERGLOW RATES, as verification seams (R1, 2026-09-10). `blend` is the
   // weight of the NEW estimate against last frame's record and `fall` the rate at
   // which a record decays when the estimate drops, so the shipped pair (0.6 rise,
@@ -878,13 +884,13 @@ async function main() {
   //
   // They are WRONG FRAMES ON PURPOSE (no afterglow) and default to the shipped
   // 0.6 / 0.12, so an unparameterised page is bit-identical to before.
-  let probeBlendBoot = parseFloatParam(bootSearch.get('dynblend'), { min: 0, max: 1 });
-  let probeFallBoot = parseFloatParam(bootSearch.get('dynfall'), { min: 0, max: 1 });
+  ctx.probes.blendBoot = parseFloatParam(ctx.boot.search.get('dynblend'), { min: 0, max: 1 });
+  ctx.probes.fallBoot = parseFloatParam(ctx.boot.search.get('dynfall'), { min: 0, max: 1 });
   // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
   // of peak by the frame the gather packs it (one frame of lag), and it
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
   // to the muzzle. Flash sources only — the beam stays physical.
-  let probeFlashBoost = 4;
+  ctx.probes.flashBoost = 4;
   // TRACER LIGHTS. Raw intensity per pellet in the gathered light list, the
   // same units as the flash entries. ?tracerlight=0 (or off) zeroes it: the
   // pure rule returns [] and the frame packs no tracer light (bit-identical).
@@ -908,8 +914,8 @@ async function main() {
   // the gain (0.5338 per gain unit per 2 tracers). WHERE IT WOULD EARN ITS KEEP
   // is a room you are NOT in — see the multi-room sketch — because there is no
   // competing muzzle flash there.
-  const tracerLightParam = new URLSearchParams(location.search).get('tracerlight');
-  let tracerLightGain = tracerLightParam === '0' || tracerLightParam === 'off' ? 0 : 2.0;
+  ctx.lighting.tracerLightParam = new URLSearchParams(location.search).get('tracerlight');
+  ctx.lighting.tracerLightGain = ctx.lighting.tracerLightParam === '0' || ctx.lighting.tracerLightParam === 'off' ? 0 : 2.0;
   // TRACER SLOT CAP: how many tracers can be gathered at once. 2, where it
   // started — it was raised to 4 alongside the gain on 2026-09-10 and reverted
   // with it, for the same two reasons (see the gain above). It IS the bigger of
@@ -929,12 +935,12 @@ async function main() {
   // (This default was once silently 0 rather than 2 — the `Number(null) === 0`
   // class that blacked out the dynamic layer. `parseIntParam` reads the RAW
   // string, and boot-params.ts + boot-params.test.ts carry the whole story.)
-  let tracerLightSlots = parseIntParam(
+  ctx.lighting.tracerLightSlots = parseIntParam(
     new URLSearchParams(location.search).get('tracerlightslots'), { min: 0, max: 8 },
   ) ?? 2;
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
-  let bodyFlashGain = 0.06;
+  ctx.lighting.bodyFlashGain = 0.06;
   /** Seconds since the last shot; >= FLASH.windowSec means no flash.
    *
    *  DECLARED HERE, not beside the weapon state it belongs to (it used to sit
@@ -944,11 +950,11 @@ async function main() {
    *  loop is already armed while boot is still awaiting the upscale model, so
    *  the later declaration threw `Cannot access 'flashAge' before
    *  initialization` on every frame until boot passed it. */
-  let flashAge = Infinity;
+  ctx.weapon.flashAge = Infinity;
   /** The player's muzzle flash as a LIGHT SOURCE for bodies and probes: a
    *  0.14 s burst shaped like the soldiers' (55 at the shot, (1-t)^2), so it
    *  survives the gather's one-frame lag. The sprite keeps its own envelope. */
-  const playerFlashLightIntensity = () => (flashAge >= 0 && flashAge < 0.14 ? 55 * (1 - flashAge / 0.14) ** 2 : 0);
+  const playerFlashLightIntensity = () => (ctx.weapon.flashAge >= 0 && ctx.weapon.flashAge < 0.14 ? 55 * (1 - ctx.weapon.flashAge / 0.14) ** 2 : 0);
   /** An actor counts as in a room when its CURRENT position is inside the
    *  room's ground rect grown by `margin` — a body that wandered from the
    *  next room into this one, or stands in the tunnel mouth, is lit by this
@@ -960,8 +966,8 @@ async function main() {
     q[0] >= r.minX - margin && q[0] <= r.maxX + margin
     && q[2] >= r.minZ - margin && q[2] <= r.maxZ + margin;
   const _flashWorld = new THREE.Vector3();
-  let probeFrame = 0;
-  let probeGatherErrors = 0;
+  ctx.probes.frame = 0;
+  ctx.probes.gatherErrors = 0;
   // GATHER AMORTIZATION (spike hunt, 2026-09-10): the dynamic gather is a
   // FIXED ~5.7 ms compute every frame — the largest standing per-frame GPU
   // cost the lighting batch added — and during fire bursts its measured
@@ -970,20 +976,20 @@ async function main() {
   // every OTHER frame halves that cost for a one-frame lag on indirect
   // radiance the layer smooths anyway. 1 = every frame (the old behaviour;
   // setProbeGatherRate / ?proberate flip it live).
-  let probeOptimized = bootSearch.get('probeopt') !== '0';
-  let probeGatherRate = 2;
-  if (probeGatherRateBoot !== null) probeGatherRate = probeGatherRateBoot;
-  let probeGatherTick = 0;
-  let pendingGather: import('./probe-gather-compute').ProbeGatherFrame | null = null;
+  ctx.probes.optimized = ctx.boot.search.get('probeopt') !== '0';
+  ctx.probes.gatherRate = 2;
+  if (ctx.probes.gatherRateBoot !== null) ctx.probes.gatherRate = ctx.probes.gatherRateBoot;
+  ctx.probes.gatherTick = 0;
+  ctx.probes.pendingGather = null;
   // The gather's capsule source: this room's actors' posed bones, packed
   // with the bone instancer's OWN packer into a private array. Not the
   // instancer's array — that is only filled in bone-mesh mode, and in the
   // shipped mode (bones marched in the field) its count is zero.
-  const probeCapsuleArrays = boneInstanceArrays(PROBE_MAX_BONE_INSTANCES);
-  let probeGateLogs = 0;
-  let probeLastGates: unknown = null;
-  let probeLastCapsules = 0;
-  let probeLastLights = 0;
+  ctx.probes.capsuleArrays = boneInstanceArrays(PROBE_MAX_BONE_INSTANCES);
+  ctx.probes.gateLogs = 0;
+  ctx.probes.lastGates = null;
+  ctx.probes.lastCapsules = 0;
+  ctx.probes.lastLights = 0;
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
@@ -996,10 +1002,10 @@ async function main() {
   // `postAa.setLens(camera.fov, centerFovDeg)` in the same breath, or the
   // blit's squeeze silently stops matching the frustum that drew the frame
   // — see post-aa.ts's own setRenderCap note for the same class of hazard.
-  let centerFovDeg: number = FISHEYE_DEFAULTS.centerFovDeg;
+  ctx.player.centerFovDeg = FISHEYE_DEFAULTS.centerFovDeg;
   camera.fov = FISHEYE_DEFAULTS.renderFovDeg;
   camera.updateProjectionMatrix();
-  postAa.setLens(camera.fov, centerFovDeg);
+  ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
   /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
    *  A shared function rather than three copies of the same object literal
    *  — and the setters' own return value, not just the getter, because an
@@ -1009,10 +1015,10 @@ async function main() {
    *  what tells a console user their setRenderFov(500) landed on 179. */
   function fisheyeReport() {
     return {
-      renderFovDeg: postAa.lens.renderFovDeg,
-      centerFovDeg,
-      visibleFovDeg: visibleFovDeg(postAa.lens),
-      k: postAa.lens.k,
+      renderFovDeg: ctx.render.postAa.lens.renderFovDeg,
+      centerFovDeg: ctx.player.centerFovDeg,
+      visibleFovDeg: visibleFovDeg(ctx.render.postAa.lens),
+      k: ctx.render.postAa.lens.k,
     };
   }
   // Runtime march normals (a second march attachment + renderer MRT) are allocated ONLY when the
@@ -1028,18 +1034,18 @@ async function main() {
   // run-5b refine head, which READS the normal attachments and REQUIRES the refine pass — both are
   // boot allocations, which is why this is a URL parameter and not a live toggle. `?upscale=0` (the
   // native march) still allocates nothing extra even at 'high': there is no stage to feed.
-  const graphics: GraphicsLevel =
+  ctx.boot.graphics =
     new URLSearchParams(location.search).get('graphics') === 'high' ? 'high' : 'default';
-  const graphicsHighUpscale = graphics === 'high'
+  ctx.boot.graphicsHighUpscale = ctx.boot.graphics === 'high'
     && new URLSearchParams(location.search).get('upscale') !== '0';
-  const refineWanted = (() => {
+  ctx.render.refineWanted = (() => {
     const q = new URLSearchParams(location.search);
     if (q.get('refine') === '1') return true;
     if (q.get('refine') === '0') return false;
-    if (graphicsHighUpscale) return true;
+    if (ctx.boot.graphicsHighUpscale) return true;
     return /headr(-|$)/.test(q.get('upscalemodel') ?? '');
   })();
-  const marchNormalsWanted = refineWanted || (() => {
+  ctx.boot.marchNormalsWanted = ctx.render.refineWanted || (() => {
     const q = new URLSearchParams(location.search);
     if (q.get('upscalenormals') === '1') return true;
     if (q.get('upscalenormals') === '0') return false;
@@ -1053,12 +1059,12 @@ async function main() {
     if (raw) {
       const parts = raw.split(',').map(Number);
       const n = parts[0] ?? NaN, f = parts[1] ?? NaN;
-      if (Number.isFinite(n) && Number.isFinite(f) && f > n && n >= 0) { refineBand.near = n; refineBand.far = f; }
+      if (Number.isFinite(n) && Number.isFinite(f) && f > n && n >= 0) { ctx.render.refineBand.near = n; ctx.render.refineBand.far = f; }
     }
   }
-  const sdfLayer = createSdfLayer(handle.renderer, { marchNormals: marchNormalsWanted, refine: refineWanted });
-  if (refineWanted) sdfLayer.setRefine(true);
-  postAa.addSink(sdfLayer);
+  ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted });
+  if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
+  ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
   // SSCS — screen-space contact shadows (post-sscs.ts, 2026-09-09 shadow
   // continuity). Default ON here (the post-aa factory stays neutral);
@@ -1072,11 +1078,11 @@ async function main() {
   // melee-range receivers painted a weapon-silhouette contact-shadow smear —
   // the gray rectangle that moves with the gun. Excluding the viewmodel from
   // the occluder depth is the proper fix; until then ?sscs=on opts in.
-  const sscsParam = new URLSearchParams(location.search).get('sscs');
-  const sscsEnabled = sscsParam === 'on' && !deferredMode;
-  if (sscsEnabled) {
-    postAa.setSscsFleshTex(sdfLayer.marchTarget.texture);
-    postAa.setSscs(true);
+  ctx.boot.sscsParam = new URLSearchParams(location.search).get('sscs');
+  ctx.boot.sscsEnabled = ctx.boot.sscsParam === 'on' && !ctx.boot.deferredMode;
+  if (ctx.boot.sscsEnabled) {
+    ctx.render.postAa.setSscsFleshTex(ctx.render.sdfLayer.marchTarget.texture);
+    ctx.render.postAa.setSscs(true);
   }
 
   // -----------------------------------------------------------------------
@@ -1100,22 +1106,22 @@ async function main() {
   /** The muzzle PointLight, assigned when the gun GLB resolves (it is
    *  allocated once at intensity 0 and modulated per shot). Read live by the
    *  coordinator's lights() callback. */
-  let muzzleLight: THREE.PointLight | null = null;
-  const spotShadowParam = new URLSearchParams(location.search).get('spotshadow');
-  const deferredApi = deferredMode
+  ctx.weapon.muzzleLight = null;
+  ctx.boot.spotShadowParam = new URLSearchParams(location.search).get('spotshadow');
+  ctx.boot.deferredApi = ctx.boot.deferredMode
     ? createGameDeferredRenderer({
-      renderer: handle.renderer,
+      renderer: ctx.boot.handle.renderer,
       scene,
       lights: () => {
         const candidates: GameLightCandidate[] = [
-          { id: 'flashlight', role: 'flashlight', light: flashlight.spot },
+          { id: 'flashlight', role: 'flashlight', light: ctx.lighting.flashlight.spot },
         ];
-        if (muzzleLight) candidates.push({ id: 'muzzle', role: 'muzzle', light: muzzleLight });
-        flickerLights.forEach((f, i) =>
+        if (ctx.weapon.muzzleLight) candidates.push({ id: 'muzzle', role: 'muzzle', light: ctx.weapon.muzzleLight });
+        ctx.lighting.flickerLights.forEach((f, i) =>
           candidates.push({ id: `fire-${String(i).padStart(2, '0')}`, role: 'practical', light: f.light }));
         return candidates;
       },
-      environment: () => deferredEnvironmentFromRig(dungeonOn ? DUNGEON_RIG : GALLERY_RIG),
+      environment: () => deferredEnvironmentFromRig(ctx.lighting.dungeonOn ? DUNGEON_RIG : GALLERY_RIG),
       // M2 task 5: the flashlight slot's march-key response for deferred
       // flesh, read LIVE from beamTuning — the same gain/shoulder the legacy
       // march replays per frame, so setBeamTuning moves BOTH paths together
@@ -1125,7 +1131,7 @@ async function main() {
       // — so every legal panel position packs (the raw `1 - shoulder` map
       // threw on shoulder 0 and .05 every frame). gain 0 is a PRESENT zero
       // (the beam leaves flesh) once packed, never an absent override.
-      flashKey: () => ({ gain: beamTuning.gain, knee: legacyFlashKnee(beamTuning.shoulder) }),
+      flashKey: () => ({ gain: ctx.vfx.beamTuning.gain, knee: legacyFlashKnee(ctx.vfx.beamTuning.shoulder) }),
       // M2 task 7 material-parity repair: the game's march materials keep
       // lodCfg.y at its 1 default (the legacy display decode is part of the
       // authored look — only lab-main ever flips it), so the deferred flesh
@@ -1134,46 +1140,35 @@ async function main() {
       // display decode; without it, deferred flesh keeps the flat M1
       // bounded approximation the owner rejected.
       fleshDisplay: () => true,
-      renderEffects: (camera) => characterEffects.render(camera),
-      flashlight: flashlight.spot,
-      width: postAa.contentSize.width,
-      height: postAa.contentSize.height,
+      renderEffects: (camera) => ctx.vfx.characterEffects.render(camera),
+      flashlight: ctx.lighting.flashlight.spot,
+      width: ctx.render.postAa.contentSize.width,
+      height: ctx.render.postAa.contentSize.height,
     })
     : null;
-  if (deferredApi) {
+  if (ctx.boot.deferredApi) {
     // Boot ablation (?spotshadow=0): the shadow maps never render. The
     // sampling-only diagnostic toggle lives on __sdfGame below.
-    deferredApi.setShadowGeneration(spotShadowParam !== '0');
-    postAa.addSink(deferredApi);
+    ctx.boot.deferredApi.setShadowGeneration(ctx.boot.spotShadowParam !== '0');
+    ctx.render.postAa.addSink(ctx.boot.deferredApi);
     // Static scene routes. Everything ASYNC (kit/prop groups, chunks, baked
     // meshes, bone tubes) registers at its own creation site below.
-    deferredApi.router.register(levelGroup, 'mesh', 'full');
-    deferredApi.router.register(accentGroup, 'mesh', 'full');
+    ctx.boot.deferredApi.router.register(ctx.world.levelGroup, 'mesh', 'full');
+    ctx.boot.deferredApi.router.register(ctx.world.accentGroup, 'mesh', 'full');
   }
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
-  let sdfScale = 1.0;
+  ctx.render.sdfScale = 1.0;
   // Texture round-trip probe rig (texRoundTrip below) — built lazily on the
   // first call, page-lifetime, never rendered by the frame loop. A diagnostic
   // of the 2026-09-04 close-up task; nothing outside texRoundTrip touches it.
-  let texProbe: null | {
-    scene: THREE.Scene;
-    quad: THREE.Mesh;
-    ortho: THREE.OrthographicCamera;
-    writes: {
-      uniform: { m: THREE.MeshBasicNodeMaterial; u: { value: number } };
-      dist: { m: THREE.MeshBasicNodeMaterial };
-      'dist-small': { m: THREE.MeshBasicNodeMaterial };
-    };
-    fetchNode: ReturnType<typeof wgslFn>;
-    targets: Record<string, [THREE.RenderTarget, THREE.RenderTarget]>;
-  } = null;
+  ctx.render.texProbe = null;
   // Declared AHEAD of sizeSdfLayer because that function reads it and runs
   // during init — a `let` further down is a temporal dead zone and the page
   // dies before __sdfGame exists (caught immediately: headless boot found no
   // __sdfGame at all). Assigned once the actors give it a light rig.
-  let gooLayer: GooLayer | null = null;
-  let gooPanel: GooPanel | null = null;
+  ctx.goo.layer = null;
+  ctx.panels.gooPanel = null;
   /** The wound panel (wound-panel.ts). Ships VISIBLE, like the goo panel, but
    *  COLLAPSED (panel-chrome.ts) — only its title bar shows, so it stays
    *  findable without covering the frame the way both panels did fully
@@ -1183,10 +1178,10 @@ async function main() {
    *  is guarded typeof-style in capture scripts like gooPanel. Not persisted
    *  across reloads — a remembered state would make a capture reproduce
    *  differently machine to machine. */
-  let woundPanel: WoundPanel | null = null;
+  ctx.panels.woundPanel = null;
   /** The DYNAMITE / GIB panel (dynamite-panel.ts). Fourth slot (right:782px),
    *  ships VISIBLE but COLLAPSED like the other three. */
-  let dynamitePanel: DynamitePanel | null = null;
+  ctx.panels.dynamitePanel = null;
 
   /**
    * THE PANEL'S SETTER — one entry point for every knob it owns, and the
@@ -1200,35 +1195,35 @@ async function main() {
       if (raw === undefined || !Number.isFinite(raw)) continue;
       switch (k as DynamiteTuningKey) {
         case 'blastdistort':
-          postAa.setBlastDistort(raw >= 0.5);
+          ctx.render.postAa.setBlastDistort(raw >= 0.5);
           break;
         case 'bdstrength':
-          blastDistortStrength = Math.max(0, Math.min(4, raw));
-          postAa.setBlastDistortStrength(blastDistortStrength);
+          ctx.vfx.blastDistortStrength = Math.max(0, Math.min(4, raw));
+          ctx.render.postAa.setBlastDistortStrength(ctx.vfx.blastDistortStrength);
           break;
         case 'maxchunks':
-          maxChunks = Math.max(1, Math.min(MAX_CHUNK_BUDGET, Math.round(raw)));
+          ctx.bake.maxChunks = Math.max(1, Math.min(MAX_CHUNK_BUDGET, Math.round(raw)));
           break;
         case 'mode':
-          gibMode = GIB_MODES[Math.max(0, Math.min(2, Math.round(raw)))]!;
+          ctx.gibs.mode = GIB_MODES[Math.max(0, Math.min(2, Math.round(raw)))]!;
           break;
         case 'bones':
-          gibBones = GIB_BONES[Math.max(0, Math.min(2, Math.round(raw)))]!;
+          ctx.gibs.bones = GIB_BONES[Math.max(0, Math.min(2, Math.round(raw)))]!;
           break;
         case 'stagger':
-          gibStaggerFrames = Math.max(1, Math.min(8, Math.round(raw)));
+          ctx.gibs.staggerFrames = Math.max(1, Math.min(8, Math.round(raw)));
           break;
         case 'tearSec':
-          gibTearSec = Math.max(0, Math.min(0.4, raw));
+          ctx.gibs.tearSec = Math.max(0, Math.min(0.4, raw));
           break;
         case 'tearAmp':
-          tearShape.amplitudeM = Math.max(0, Math.min(0.12, raw));
+          ctx.vfx.tearShape.amplitudeM = Math.max(0, Math.min(0.12, raw));
           break;
         case 'tearJiggle':
-          tearShape.jiggleAmp = Math.max(0, Math.min(1, raw));
+          ctx.vfx.tearShape.jiggleAmp = Math.max(0, Math.min(1, raw));
           break;
         case 'gibvel':
-          gibVelScale = Math.max(0, Math.min(2, raw));
+          ctx.gibs.velScale = Math.max(0, Math.min(2, raw));
           break;
         // SETTLED-PIECE DETAIL. `chunkdetail` sets the OVERRIDE, so once the
         // slider is touched the piece stops following the creature's own
@@ -1236,33 +1231,33 @@ async function main() {
         // push reads all three, so a settled piece already on the floor changes
         // on the next frame; there is no rebake.
         case 'chunkdetail':
-          chunkDetailOverride = Math.max(0, Math.min(1, raw));
+          ctx.bake.detailOverride = Math.max(0, Math.min(1, raw));
           break;
         case 'chunkdetailfreq':
-          chunkDetailFreq = Math.max(0.5, Math.min(64, raw));
+          ctx.bake.detailFreq = Math.max(0.5, Math.min(64, raw));
           break;
         case 'chunkdetailalbedo':
-          chunkDetailAlbedo = Math.max(0, Math.min(1.5, raw));
+          ctx.bake.detailAlbedo = Math.max(0, Math.min(1.5, raw));
           break;
         // FUTURE settles only — already-baked pieces stay baked until shot or
         // recycled. The panel row says so too.
         case 'chunkbake':
-          chunkBakeEnabled = Math.round(raw) === 1;
+          ctx.bake.enabled = Math.round(raw) === 1;
           break;
         case 'aoesize':
-          aoeRadiusScale = Math.max(0.3, Math.min(1.5, raw));
+          ctx.vfx.aoeRadiusScale = Math.max(0.3, Math.min(1.5, raw));
           break;
         case 'edgekick':
-          aoeLaunchFloor = Math.max(0, Math.min(1, raw));
+          ctx.vfx.aoeLaunchFloor = Math.max(0, Math.min(1, raw));
           break;
         case 'fxlight':
-          fxLightScale = Math.max(0, Math.min(4, raw));
+          ctx.lighting.fxLightScale = Math.max(0, Math.min(4, raw));
           break;
         case 'fxspread':
-          fxSpread = Math.max(0, Math.min(3, raw));
+          ctx.vfx.spread = Math.max(0, Math.min(3, raw));
           break;
         case 'fxsize':
-          fxSize = Math.max(0.1, Math.min(2, raw));
+          ctx.vfx.size = Math.max(0.1, Math.min(2, raw));
           break;
         // Everything below is the burst module's own tuning record.
         default: {
@@ -1273,7 +1268,7 @@ async function main() {
           };
           const target = fxKey[k];
           if (!target) break;
-          explosionVfx?.setTuning({
+          ctx.vfx.explosionVfx?.setTuning({
             [target]: raw,
             // The FLATTEN has a second field for the FIRE cap; keep them equal
             // so one slider cannot leave the two halves of the cap disagreeing.
@@ -1291,41 +1286,41 @@ async function main() {
     }
     // The tear is per-ACTOR state, so a change has to be pushed to every body —
     // and to any body that starts tearing later (`scheduleGib` re-applies it).
-    for (const a of actors) a.setTearTuning({ sec: gibTearSec, ...tearShape });
-    dynamitePanel?.refresh();
+    for (const a of ctx.world.actors) a.setTearTuning({ sec: ctx.gibs.tearSec, ...ctx.vfx.tearShape });
+    ctx.panels.dynamitePanel?.refresh();
   }
 
   /** What the panel reads back. The BURST half is asked of the module rather
    *  than mirrored here: a second copy of those numbers would be the drift this
    *  panel exists to avoid. */
   function dynamiteTuningValues(): DynamiteTuningValues {
-    const t = explosionVfx?.tuning;
+    const t = ctx.vfx.explosionVfx?.tuning;
     return {
       ...dynamiteDefaults(),
-      blastdistort: postAa.blastDistort ? 1 : 0,
-      bdstrength: postAa.blastDistortStrength,
-      maxchunks: maxChunks,
-      mode: Math.max(0, GIB_MODES.indexOf(gibMode as typeof GIB_MODES[number])),
-      bones: Math.max(0, GIB_BONES.indexOf(gibBones as typeof GIB_BONES[number])),
-      stagger: gibStaggerFrames,
-      tearSec: gibTearSec,
-      tearAmp: tearShape.amplitudeM,
-      tearJiggle: tearShape.jiggleAmp,
-      gibvel: gibVelScale,
+      blastdistort: ctx.render.postAa.blastDistort ? 1 : 0,
+      bdstrength: ctx.render.postAa.blastDistortStrength,
+      maxchunks: ctx.bake.maxChunks,
+      mode: Math.max(0, GIB_MODES.indexOf(ctx.gibs.mode as typeof GIB_MODES[number])),
+      bones: Math.max(0, GIB_BONES.indexOf(ctx.gibs.bones as typeof GIB_BONES[number])),
+      stagger: ctx.gibs.staggerFrames,
+      tearSec: ctx.gibs.tearSec,
+      tearAmp: ctx.vfx.tearShape.amplitudeM,
+      tearJiggle: ctx.vfx.tearShape.jiggleAmp,
+      gibvel: ctx.gibs.velScale,
       // The settled piece's detail. `chunkdetail` reports the EFFECTIVE
       // amplitude — the override if one is set, otherwise the creature's own
       // surfaceNoiseAmp through the gain — because that is what the slider
       // should show on open, and what the shader is actually using.
-      chunkdetail: chunkDetailOverride
-        ?? Math.min(1, (actors[0]?.view.uniforms.surfCfg2.value.y ?? 0) * CHUNK_DETAIL_GAIN),
-      chunkdetailfreq: chunkDetailFreq,
-      chunkdetailalbedo: chunkDetailAlbedo,
-      chunkbake: chunkBakeEnabled ? 1 : 0,
-      aoesize: aoeRadiusScale,
-      edgekick: aoeLaunchFloor,
-      fxsize: fxSize,
-      fxlight: fxLightScale,
-      fxspread: fxSpread,
+      chunkdetail: ctx.bake.detailOverride
+        ?? Math.min(1, (ctx.world.actors[0]?.view.uniforms.surfCfg2.value.y ?? 0) * CHUNK_DETAIL_GAIN),
+      chunkdetailfreq: ctx.bake.detailFreq,
+      chunkdetailalbedo: ctx.bake.detailAlbedo,
+      chunkbake: ctx.bake.enabled ? 1 : 0,
+      aoesize: ctx.vfx.aoeRadiusScale,
+      edgekick: ctx.vfx.aoeLaunchFloor,
+      fxsize: ctx.vfx.size,
+      fxlight: ctx.lighting.fxLightScale,
+      fxspread: ctx.vfx.spread,
       ...(t ? {
         fxsmoke: t.smokeOpacity, fxlife: t.lifeSec, fxgain: t.gain, plume: t.plumeMix,
         capflat: t.capFlatten, neck: t.plumeNeckH, cap: t.plumeCapH,
@@ -1340,12 +1335,12 @@ async function main() {
    *  and none of them was the look; keeping the panel is how the next one
    *  gets found.
    *  __sdfGame.vhsPanel(false) / vhsPanelCollapsed(false) are the seams. */
-  let vhsPanel: VhsPanel | null = null;
-  let panelsHidden = false;
+  ctx.panels.vhsPanel = null;
+  ctx.panels.hidden = false;
   // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
-  let gooEnabled = true;
+  ctx.goo.enabled = true;
   // Smooth reconstruction at the full SDF grid is the game default.
   // Boot flags are read where the goo defaults are applied:
   //   ?goorecon=original  comparison fallback to the old reconstruction
@@ -1354,41 +1349,41 @@ async function main() {
   //   ?impactsplash=1     SUPPLEMENTARY procedural impact crown on top of the
   //                       existing slug gout (does not replace it)
   // Live equivalents: __sdfGame.setGooCandidate, __sdfGame.setImpactSplash.
-  let gooReconstruction: GooReconstruction = 'smooth';
-  let gooConnectionsEnabled = false;
-  let gooStrandsEnabled = true;
+  ctx.goo.reconstruction = 'smooth';
+  ctx.goo.connectionsEnabled = false;
+  ctx.goo.strandsEnabled = true;
   // SHEETS OFF BY DEFAULT: the stream-local grid removed the world-position
   // hole swimming, but whether a density patch reads as a sheet is still an
   // open visual question. Opt in with ?goosheets=1 / setGooCandidate.
-  let gooSheetsEnabled = false;
+  ctx.goo.sheetsEnabled = false;
   // SUPPLEMENTARY IMPACT SPLASH (reference-directed slug splash, 2026-09-13).
   // A separate procedural crown effect fired ON TOP of the existing slug gout;
   // it mutates no shared table and does not replace the Current slug. OFF by
   // default: opt in with ?impactsplash=1 or __sdfGame.setImpactSplash.
-  let impactSplashEnabled = false;
-  let impactSplashLayer: ImpactSplashLayer | null = null;
+  ctx.panels.impactSplashEnabled = false;
+  ctx.panels.impactSplashLayer = null;
 
   // SELECTIVE SHUTTER BLUR (2026-09-17). Owner accepted the lab look and asked
   // for it in the game at the equivalent of the screenshot's 320° @ 20 fps =
   // 44.44 ms fixed exposure. Created with the goo layer (it partitions it) and
   // registered as post-aa's pre-post capture stage. ON by default; ?bloodblur=0
   // or __sdfGame.setBloodBlur(false) restores the fused sharp goo exactly.
-  let shutterGame: ShutterGameLayer | null = null;
-  let shutterPanel: ShutterPanel | null = null;
+  ctx.panels.shutterGame = null;
+  ctx.panels.shutterPanel = null;
   // FLYING-GIB SHUTTER BLUR (2026-09-17, shutter task 3). The gib twin of the
   // blood layer: selected moving gibs are lifted onto a dedicated layer, drawn
   // alone and exposure-resolved over the clean scene. Separate on/off switch,
   // shared exposure/max-trail controls. ON by default on this feature branch.
-  let gibShutter: GibShutterLayer | null = null;
+  ctx.gibs.shutter = null;
   /** MUTUAL OCCLUSION (task 4). When true (default) the blood resolve also
    *  tests against the blurred-gib layer's depth, so blood behind a blurred gib
    *  is dropped. `?giboccluder=0` / `setGibOccluder(false)` is the A/B seam
    *  that shows the ordered-vs-resolved difference on one frozen frame. */
-  let gibOccluderEnabled = true;
+  ctx.gibs.occluderEnabled = true;
   /** Presentation identity across frames, so a freshly spawned/reused piece
    *  gets no pre-birth streak on its first drawn frame. Keyed by the owning
    *  list AND id (the sprite and chunk id sequences are independent). */
-  let gibBlurPrevKeys = new Set<string>();
+  ctx.gibs.blurPrevKeys = new Set<string>();
 
   /**
    * This frame's gib-blur candidates. Built from the SAME lists the renderers
@@ -1402,27 +1397,27 @@ async function main() {
   function gibBlurSubjects(): GibBlurSubject[] {
     const out: GibBlurSubject[] = [];
     const nextKeys = new Set<string>();
-    for (const p of spritePieces.live) {
+    for (const p of ctx.vfx.spritePieces.live) {
       if (!p.mesh.visible) continue;
       const key = `sprite:${p.id}`;
       nextKeys.add(key);
       out.push({
         id: p.id, state: p.state, mesh: p.mesh,
         baseLayer: 0,
-        ageSeconds: gibBlurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
+        ageSeconds: ctx.gibs.blurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
       });
     }
-    for (const c of liveChunks) {
+    for (const c of ctx.bake.liveChunks) {
       if (!c.view.object.visible) continue;
       const key = `chunk:${c.id}`;
       nextKeys.add(key);
       out.push({
         id: c.id, state: c.state, mesh: c.view.object as unknown as THREE.Mesh,
         baseLayer: SDF_LAYER,
-        ageSeconds: gibBlurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
+        ageSeconds: ctx.gibs.blurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
       });
     }
-    gibBlurPrevKeys = nextKeys;
+    ctx.gibs.blurPrevKeys = nextKeys;
     return out;
   }
 
@@ -1430,48 +1425,48 @@ async function main() {
    *  light uniform NODES so it is lit by the same rig. Returns silently if
    *  there is no actor view yet (the same pre-condition the goo layer has). */
   function ensureImpactSplashLayer(): void {
-    if (impactSplashLayer) return;
-    const v = actors[0]?.view;
+    if (ctx.panels.impactSplashLayer) return;
+    const v = ctx.world.actors[0]?.view;
     if (!v) return;
-    impactSplashLayer = createImpactSplashLayer({
+    ctx.panels.impactSplashLayer = createImpactSplashLayer({
       rig: {
         lightDir: v.uniforms.lightDir,
         keyColor: v.uniforms.keyColor,
         lightCfg: v.uniforms.lightCfg,
       },
     });
-    scene.add(impactSplashLayer.object);
+    scene.add(ctx.panels.impactSplashLayer.object);
   }
 
   function sizeSdfLayer() {
-    const s = postAa.contentSize;
-    sdfLayer.setSize(s.width, s.height);
+    const s = ctx.render.postAa.contentSize;
+    ctx.render.sdfLayer.setSize(s.width, s.height);
     // The deferred layer tracks the same capped buffer (post-aa hands it the
     // same capture target as a sink).
-    deferredApi?.setSize(s.width, s.height);
-    sdfLayer.setConeGeometry(camera.fov, sdfLayer.targetSize.height);
+    ctx.boot.deferredApi?.setSize(s.width, s.height);
+    ctx.render.sdfLayer.setConeGeometry(camera.fov, ctx.render.sdfLayer.targetSize.height);
     // Density follows the SDF layer at GOO_TUNING.densityScale. Called from
     // here rather than a separate resize listener (lab-main's shape) because
     // ADAPTIVE RESOLUTION moves the SDF target at runtime through
     // applySdfScale -> sizeSdfLayer: a listener would never fire and the goo
     // would keep splatting into a stale-sized field.
-    const t = sdfLayer.targetSize;
-    gooLayer?.setSize(t.width, t.height);
+    const t = ctx.render.sdfLayer.targetSize;
+    ctx.goo.layer?.setSize(t.width, t.height);
   }
-  sdfLayer.setScale(sdfScale);
+  ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
   sizeSdfLayer();
   window.addEventListener('resize', sizeSdfLayer);
   function applySdfScale(v: number) {
-    sdfScale = Math.min(1, Math.max(0.2, v));
-    sdfLayer.setScale(sdfScale);
-    deferredApi?.setScale(sdfScale);
+    ctx.render.sdfScale = Math.min(1, Math.max(0.2, v));
+    ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
+    ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
     sizeSdfLayer();
     // The AA footprint (aaCfg.x) is ONE PIXEL at the current SDF pass height;
     // a rung change moved that height, so refresh every live view (perf round
     // 2 task 6). Only called post-boot (tickAdaptive / the setSdfScale seam),
     // so `actors` below is always initialised here.
-    const k = sdfLayer.pixelConeK;
-    for (const a of actors) a.view.uniforms.aaCfg.value.x = k;
+    const k = ctx.render.sdfLayer.pixelConeK;
+    for (const a of ctx.world.actors) a.view.uniforms.aaCfg.value.x = k;
   }
 
   // -----------------------------------------------------------------------
@@ -1498,32 +1493,32 @@ async function main() {
   // OFF by default (owner, 2026-09-04/05): the resolution drop is visible and
   // unwelcome up close, and a renderer A/B under a moving rung compares two
   // resolutions, not two renderers. __sdfGame.setAdaptive(true) re-arms it.
-  let adaptiveEnabled = false;
-  let adaptiveBudgetMs = 1000 / 30;
-  let adaptiveState = initialAdaptiveState(performance.now());
+  ctx.render.adaptiveEnabled = false;
+  ctx.render.adaptiveBudgetMs = 1000 / 30;
+  ctx.render.adaptiveState = initialAdaptiveState(performance.now());
   const ADAPTIVE_WINDOW = 30;
   const PROBE_ABORT_FRAMES = 8;
-  const adaptiveFrames: number[] = [];
+  ctx.render.adaptiveFrames = [];
   function tickAdaptive(nowMs: number): void {
-    if (!adaptiveEnabled) return;
-    const failingProbe = adaptiveState.probing && adaptiveFrames.length >= PROBE_ABORT_FRAMES
-      && (median(adaptiveFrames) > adaptiveBudgetMs * 1.1
-        || adaptiveFrames.filter((f) => f > adaptiveBudgetMs * 1.8).length >= 2);
-    if (adaptiveFrames.length < ADAPTIVE_WINDOW && !failingProbe) return;
-    const recent = adaptiveFrames.slice(-ADAPTIVE_WINDOW);
+    if (!ctx.render.adaptiveEnabled) return;
+    const failingProbe = ctx.render.adaptiveState.probing && ctx.render.adaptiveFrames.length >= PROBE_ABORT_FRAMES
+      && (median(ctx.render.adaptiveFrames) > ctx.render.adaptiveBudgetMs * 1.1
+        || ctx.render.adaptiveFrames.filter((f) => f > ctx.render.adaptiveBudgetMs * 1.8).length >= 2);
+    if (ctx.render.adaptiveFrames.length < ADAPTIVE_WINDOW && !failingProbe) return;
+    const recent = ctx.render.adaptiveFrames.slice(-ADAPTIVE_WINDOW);
     const sorted = [...recent].sort((a, b) => a - b);
-    const next = stepAdaptive(adaptiveState, {
+    const next = stepAdaptive(ctx.render.adaptiveState, {
       nowMs,
       medianFrameMs: median(recent),
       p95FrameMs: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
-      budgetMs: adaptiveBudgetMs,
+      budgetMs: ctx.render.adaptiveBudgetMs,
     });
-    if (next.rung !== adaptiveState.rung) {
+    if (next.rung !== ctx.render.adaptiveState.rung) {
       applySdfScale(scaleForRung(next.rung));
       // Frames rendered at the OLD scale must not feed the next decision.
-      adaptiveFrames.length = 0;
+      ctx.render.adaptiveFrames.length = 0;
     }
-    adaptiveState = next;
+    ctx.render.adaptiveState = next;
   }
   function median(xs: number[]): number {
     if (xs.length === 0) return 0;
@@ -1560,7 +1555,7 @@ async function main() {
   // (docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md, `## Distance
   // crowd`) is the evidence: crowd-quad beats per-body at every n = 8..24 at
   // both SDF scales, and 24 completes at ship scale under the frame guard.
-  const crowdParam = new URLSearchParams(location.search).get('crowd');
+  ctx.crowd.param = new URLSearchParams(location.search).get('crowd');
   // Stage a-2 dispatch: `?crowddispatch=boxes` restores the stage-a instanced
   // proxy boxes; anything else (including absent) uses the one-screen-quad
   // dispatch, which is the point of the stage.
@@ -1571,14 +1566,14 @@ async function main() {
   // rasterise (`docs/dev-notes/2026-09-14-crowd-firefight-cost.md`, Task 5).
   // `?crowddispatch=quad` keeps the quad reachable; it may still win specific
   // scenes (many bodies stacked in few tiles) and is worth revisiting.
-  let crowdDispatch: 'boxes' | 'quad' = new URLSearchParams(location.search).get('crowddispatch') === 'quad'
+  ctx.crowd.dispatch = new URLSearchParams(location.search).get('crowddispatch') === 'quad'
     ? 'quad' : 'boxes';
   // DEFAULT = CROWD, BOXES DISPATCH (2026-09-15). The 2026-09-14 revert to
   // per-body rested on a bench whose legs fought different fights (the
   // `setCrowd` respawn confound, fixed in sdf-game-bench.mjs). On matched
   // fights the crowd march with boxes beats per-body on the owner's real
   // room-1 run and keeps its 8..24-body wins. `?crowd=0` opts out.
-  let crowdOn = crowdParam !== '0';
+  ctx.crowd.on = ctx.crowd.param !== '0';
   // STAGE-3 COMPATIBILITY: the refine twins and the cone pass are unsupported
   // under the crowd march (they read per-body state the instance record does
   // not carry; stage 3 turns refine into a fullscreen record-reading pass). A
@@ -1586,24 +1581,24 @@ async function main() {
   // warns once, and records why in crowdInfo().fallbackReason.
   // `sdfLayer.coneEnabled` is the cone pass's own gate — it ships off and has
   // no boot flag yet, so in practice only `?refine=1` triggers this today.
-  let crowdFallbackReason: string | null = null;
-  if (crowdOn && (refineWanted || sdfLayer.coneEnabled)) {
-    crowdFallbackReason = refineWanted ? 'refine twin requested (?refine=1)' : 'cone pass requested';
-    crowdOn = false;
+  ctx.crowd.fallbackReason = null;
+  if (ctx.crowd.on && (ctx.render.refineWanted || ctx.render.sdfLayer.coneEnabled)) {
+    ctx.crowd.fallbackReason = ctx.render.refineWanted ? 'refine twin requested (?refine=1)' : 'cone pass requested';
+    ctx.crowd.on = false;
     console.warn('[crowd] refine/cone twins are not supported under the crowd march (stage 3); falling back to per-body for this boot');
   }
   /** One CrowdType per character registry name; lazily created on first spawn. */
-  const crowdTypes = new Map<string, CrowdType>();
+  ctx.crowd.types = new Map<string, CrowdType>();
   /** The first attached view per type — the source of the per-frame per-TYPE
    *  uniform values (lighting rig, spot, level shadow, probes). A same-name
    *  view, so its per-type statics match; the FIRST attaches in room order and
    *  pins the type's room uniforms for stage a (cross-room crowds are a known
    *  gap — see the crowd dev note). */
-  const crowdSourceView = new Map<CrowdType, ZombieGpuView>();
+  ctx.crowd.sourceView = new Map<CrowdType, ZombieGpuView>();
   /** Types whose shared segVolume atlas/meta were bound from the first actor. */
-  const crowdVolumeBound = new Set<CrowdType>();
-  let crowdSegMetaWarned = false;
-  let crowdRefineWarned = false;
+  ctx.crowd.volumeBound = new Set<CrowdType>();
+  ctx.crowd.segMetaWarned = false;
+  ctx.crowd.refineWarned = false;
 
   /** Copy every uniform VALUE from a stamped per-body view into a type's own
    *  nodes. The crowd material reads per-TYPE fields from these nodes and
@@ -1633,8 +1628,8 @@ async function main() {
    *  instant; default OFF, gate-only. DECLARED HERE (before setDrawFn)
    *  because the flicker block reads it and the render loop arms before
    *  main() finishes — the same TDZ rule chunkObjects obeys. */
-  let lightClockFrozen = false;
-  let flickerClockFrozenAt = 0;
+  ctx.lighting.clockFrozen = false;
+  ctx.lighting.flickerClockFrozenAt = 0;
   /** Flashlight bounce spot gain (P4 step 1): 1 = the physically-derived disc
    *  irradiance; ?bouncespot=0 pins the bit-identical path. Default 0 since the
    *  GPU gather lights the level with the beam itself (P4 step 2);
@@ -1645,8 +1640,8 @@ async function main() {
    *  boot is still awaiting the upscale model. Measured, not guessed — with
    *  `flashAge` hoisted this was the very next `Cannot access ... before
    *  initialization` the page threw. */
-  const bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
-  let bounceSpotGain = bounceSpotParam === null ? 0 : Math.max(0, Number(bounceSpotParam) || 0);
+  ctx.lighting.bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
+  ctx.lighting.bounceSpotGain = ctx.lighting.bounceSpotParam === null ? 0 : Math.max(0, Number(ctx.lighting.bounceSpotParam) || 0);
   /** THE BOOT-FRAME GATE. `handle.setDrawFn` arms this callback here, ~4700
    *  lines before main() finishes, and boot then AWAITS (the upscale model
    *  fetch, the weapon GLB, the arms GLB) — so the loop draws frames while
@@ -1660,34 +1655,34 @@ async function main() {
    *  main() has built everything the callback reads (set right before the
    *  `window.__sdfGame` seam). Nothing is lost — those frames drew nothing
    *  anyway — and the loader covers the canvas for all of it. */
-  let drawReady = false;
+  ctx.boot.drawReady = false;
   /** One-shot boot marks around the FIRST skeleton-mesh sync, so a startup
    *  probe can attribute the cold-blocking extraction without a per-frame
    *  allocation. Set once; never cleared (a rebuild's re-extraction is
    *  reported by SegmentMeshCache.stats() instead). */
-  let meshSyncMarked = false;
-  handle.setDrawFn(() => {
-    if (!drawReady) return;
+  ctx.render.meshSyncMarked = false;
+  ctx.boot.handle.setDrawFn(() => {
+    if (!ctx.boot.drawReady) return;
     // GPU PROBE GATHER dispatch (P3/P4). OUTSIDE the post-aa pass on purpose:
     // renderer.compute() inside a render callback broke the renderer's pass
     // state and stalled the loop after five frames (owner-observed HUD at
     // 0.0 ms, no bodies). The frame data is packed in the legacy block below
     // and dispatched here at the top of the NEXT frame — one frame of lag on
     // a layer that blends over frames anyway.
-    if (pendingGather && probeGather) {
-      try { probeGather.update(pendingGather); probeFrame++; }
-      catch (err) { if (probeGatherErrors++ === 0) console.error('[probe-gather] update failed', err); }
-      pendingGather = null;
+    if (ctx.probes.pendingGather && ctx.probes.gather) {
+      try { ctx.probes.gather.update(ctx.probes.pendingGather); ctx.probes.frame++; }
+      catch (err) { if (ctx.probes.gatherErrors++ === 0) console.error('[probe-gather] update failed', err); }
+      ctx.probes.pendingGather = null;
     }
-    return postAa.render(() => {
+    return ctx.render.postAa.render(() => {
     // Anything rendered before a site claims a label lands in 'frame:other'
     // — a non-zero row there means an unlabelled pass exists.
     setPassLabel('frame:other');
-    flashlight.update(camera);
+    ctx.lighting.flashlight.update(camera);
     // SSCS feed: the flashlight pose and this frame's camera matrices. The
     // camera's matrixWorld is current — flashlight.update just re-ran
     // updateMatrixWorld on it; setSscsFrame rebuilds the view matrix itself.
-    if (postAa.sscs) postAa.setSscsFrame(camera, flashlight.spot.position);
+    if (ctx.render.postAa.sscs) ctx.render.postAa.setSscsFrame(camera, ctx.lighting.flashlight.spot.position);
 
     // ---- COMMON per-frame updates (both render modes) ---------------------
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
@@ -1701,8 +1696,8 @@ async function main() {
     // a locked scene have identical practical intensity; gameplay never
     // freezes it.
     {
-      const ft = lightClockFrozen ? flickerClockFrozenAt : performance.now() * 0.001;
-      for (const f of flickerLights) {
+      const ft = ctx.lighting.clockFrozen ? ctx.lighting.flickerClockFrozenAt : performance.now() * 0.001;
+      for (const f of ctx.lighting.flickerLights) {
         const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
         f.light.intensity = f.base * (1 + w * 0.14);
       }
@@ -1714,20 +1709,20 @@ async function main() {
     // Bodies and CHUNKS are fed independently: `boneMesh` is the body switch,
     // `gibBoneMesh` the detached-piece one. They were one flag, which is why gib
     // bones could only be tubes if living skeletons became tubes as well.
-    if (boneMesh || gibBoneMesh) {
-      if (boneMesh) {
+    if (ctx.render.boneMesh || ctx.gibs.boneMesh) {
+      if (ctx.render.boneMesh) {
         const craters: { pos: Vec3; radius: number }[] = [];
-        for (const a of actors) {
+        for (const a of ctx.world.actors) {
           const prims = a.posed().prims;
-          for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+          for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
         }
-        boneInstancer.setWounds(craters);
+        ctx.render.boneInstancer.setWounds(craters);
       }
-      boneInstancer.update([
-        ...(boneMesh
-          ? actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; })
+      ctx.render.boneInstancer.update([
+        ...(ctx.render.boneMesh
+          ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; })
           : []),
-        ...(gibBoneMesh ? liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
+        ...(ctx.gibs.boneMesh ? ctx.bake.liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
       ]);
     }
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
@@ -1741,35 +1736,35 @@ async function main() {
     // the same instant. Before the 2026-09-08 mesh migration this could not
     // happen: bones were rows in the marched field and held with it.
     // Fields never hold: every frame marches at the current camera and pose.
-    const meshHold = sdfLayer.halfRate && sdfLayer.willHold;
-    if (segMeshRenderer && !meshHold) {
+    const meshHold = ctx.render.sdfLayer.halfRate && ctx.render.sdfLayer.willHold;
+    if (ctx.render.segMeshRenderer && !meshHold) {
       // Its own phase, NOT folded into an existing one: this path shipped as
       // the forward default without a controlled timing result (skeleton
       // wrap-up, 2026-09-08) and no capture could see it until now.
-      const meshTiming = telemetry.begin();
-      const firstMeshSync = !meshSyncMarked;
-      if (firstMeshSync) { meshSyncMarked = true; mark('mesh-sync-start'); }
+      const meshTiming = ctx.telemetry.telemetry.begin();
+      const firstMeshSync = !ctx.render.meshSyncMarked;
+      if (firstMeshSync) { ctx.render.meshSyncMarked = true; mark('mesh-sync-start'); }
       const craters: { pos: Vec3; radius: number }[] = [];
-      for (const a of actors) {
+      for (const a of ctx.world.actors) {
         const prims = a.posed().prims;
-        for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+        for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
       }
-      segMeshRenderer.setWounds(craters);
-      segMeshRenderer.update(actors.map(a => {
-        let e = skeletonSources.get(a);
-        if (!e) { e = buildSkeletonSources(a, 'zombie'); skeletonSources.set(a, e); a.view.setPackBones(false); }
-        else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); skeletonSources.set(a, e); }
+      ctx.render.segMeshRenderer.setWounds(craters);
+      ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
+        let e = ctx.render.skeletonSources.get(a);
+        if (!e) { e = buildSkeletonSources(a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); }
+        else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); ctx.render.skeletonSources.set(a, e); }
         return e.sources;
-      }), actors);
-      telemetry.end('skeleton-mesh', meshTiming);
+      }), ctx.world.actors);
+      ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
     // revision-keyed atlas; stale same-name grids are never re-enabled.
-    if (segVolumeCache) {
-      for (const actor of actors) {
-        const state = skeletonVolumes.get(actor);
+    if (ctx.render.segVolumeCache) {
+      for (const actor of ctx.world.actors) {
+        const state = ctx.render.skeletonVolumes.get(actor);
         if (!state) continue;
         if (state.body !== actor.body) bindSkeletonVolume(actor, state.name);
         else state.binding.update(state.sources);
@@ -1785,9 +1780,9 @@ async function main() {
     // branch below. The coordinator's render does shadows -> opaque ->
     // depth presentation -> forward content; goo nests around it exactly as
     // it nests the legacy sdf render (both are post-aa output sinks).
-    if (deferredApi) {
-      if (gooEnabled && gooLayer) gooLayer.render(camera, () => deferredApi.render(camera));
-      else deferredApi.render(camera);
+    if (ctx.boot.deferredApi) {
+      if (ctx.goo.enabled && ctx.goo.layer) ctx.goo.layer.render(camera, () => ctx.boot.deferredApi!.render(camera));
+      else ctx.boot.deferredApi!.render(camera);
       return;
     }
 
@@ -1800,19 +1795,19 @@ async function main() {
     // the shader collapse to the old key exactly.
     {
       const sAxis = new THREE.Vector3();
-      flashlight.spot.target.getWorldPosition(sAxis).sub(flashlight.spot.position).normalize();
+      ctx.lighting.flashlight.spot.target.getWorldPosition(sAxis).sub(ctx.lighting.flashlight.spot.position).normalize();
       // x intensity gate, y cosInner, z cosOuter, w range — the cone edge
       // comes straight off the light so the two systems cannot drift.
-      const spotOn = dungeonOn ? 1 : 0;
-      const cosInner = Math.cos(flashlight.spot.angle * (1 - flashlight.spot.penumbra));
-      const cosOuter = Math.cos(flashlight.spot.angle);
+      const spotOn = ctx.lighting.dungeonOn ? 1 : 0;
+      const cosInner = Math.cos(ctx.lighting.flashlight.spot.angle * (1 - ctx.lighting.flashlight.spot.penumbra));
+      const cosOuter = Math.cos(ctx.lighting.flashlight.spot.angle);
       // LEVEL SHADOW twin (perf round 2 task 7): exact flashlight pose, then
       // refresh its shadow matrix NOW — shadow.matrix is otherwise written
       // during the render, i.e. after we read it. Same pose => same shadows
       // on bodies as the meshes cast onto the floor.
-      const twin = flashlight.levelShadow;
-      twin.position.copy(flashlight.spot.position);
-      twin.target.position.copy(flashlight.spot.target.position);
+      const twin = ctx.lighting.flashlight.levelShadow;
+      twin.position.copy(ctx.lighting.flashlight.spot.position);
+      twin.target.position.copy(ctx.lighting.flashlight.spot.target.position);
       twin.updateMatrixWorld();
       twin.target.updateMatrixWorld();
       twin.shadow.updateMatrices(twin);
@@ -1823,7 +1818,7 @@ async function main() {
       // setFaceTexture) and the gate tracks the seam AND the beam: no beam,
       // no directional key, nothing for a level shadow to modulate.
       const map = twin.shadow.map?.depthTexture ?? null;
-      const lvlOn = spotOn > 0 && twin.castShadow && map !== null && levelShadowEnabled ? 1 : 0;
+      const lvlOn = spotOn > 0 && twin.castShadow && map !== null && ctx.lighting.levelShadowEnabled ? 1 : 0;
       // MUZZLE FLASH -- the marched bodies. They cannot see the PointLight
       // above, so the flash rides the beam that is already replayed here.
       // Nothing is saved or restored: these uniforms are rewritten from the
@@ -1836,7 +1831,7 @@ async function main() {
       // DELIBERATELY TEMPORARY: the right fix is a second light slot in the
       // march, which cannot land while sdf-render-perf-r2 is rewriting
       // march.wgsl.ts. Tracked under the spec's "Deferred".
-      const fv = flashEnvelope(flashAge);
+      const fv = flashEnvelope(ctx.weapon.flashAge);
       // 6x blew a nearby body to a featureless white silhouette. 2.2 still
       // reads unmistakably as a flash without destroying the wound detail
       // that is the entire point of looking at these creatures.
@@ -1849,8 +1844,8 @@ async function main() {
       // once per frame here, not per actor. Tunnels use their enclosure's
       // walls as-is. bounceSpotGain 0 (?bouncespot=0) is bit-identical.
       let bounceSpot: ReturnType<typeof computeBounceSpot> = null;
-      if (bounceSpotGain > 0 && flashGate > 0) {
-        const key = enclosureKeyAt(player.pos[0], player.pos[2]);
+      if (ctx.lighting.bounceSpotGain > 0 && flashGate > 0) {
+        const key = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
         const roomDef = ROOMS.find(r => r.name === key);
         const enc = enclosureOf(key);
         if (enc) {
@@ -1860,11 +1855,11 @@ async function main() {
           } : enc.walls;
           const occ = roomDef ? FURNITURE.filter(f => f.room === roomDef.id)
             .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 })) : [];
-          const sp = flashlight.spot.position, sc = flashlight.spot.color;
+          const sp = ctx.lighting.flashlight.spot.position, sc = ctx.lighting.flashlight.spot.color;
           bounceSpot = computeBounceSpot({
             pos: [sp.x, sp.y, sp.z], axis: [sAxis.x, sAxis.y, sAxis.z],
             intensity: flashGate, cosInner: flashInner, cosOuter: flashOuter,
-            range: flashlight.spot.distance, keyGain: beamTuning.gain, color: [sc.r, sc.g, sc.b],
+            range: ctx.lighting.flashlight.spot.distance, keyGain: ctx.vfx.beamTuning.gain, color: [sc.r, sc.g, sc.b],
           }, enc.box, walls, occ);
         }
       }
@@ -1876,35 +1871,35 @@ async function main() {
       // doorway — the NEAREST room by centre, so stepping back to watch a
       // firefight through the arch does not switch the layer off (owner:
       // "close it works, medium or far it doesn't").
-      const dynKey = enclosureKeyAt(player.pos[0], player.pos[2]);
+      const dynKey = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
       let dynRoom: RoomDef | null = ROOMS.find(r => r.name === dynKey) ?? null;
       if (!dynRoom) {
         let bestD = Infinity;
         for (const r of ROOMS) {
           const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
-          const d = (cx - player.pos[0]) ** 2 + (cz - player.pos[2]) ** 2;
+          const d = (cx - ctx.player.player.pos[0]) ** 2 + (cz - ctx.player.player.pos[2]) ** 2;
           if (d < bestD) { bestD = d; dynRoom = r; }
         }
       }
-      const dynGrid = dynRoom ? roomProbes.gridOf(dynRoom.id) : null;
-      const dynOn = probeGather !== null && dynRoom !== null && dynGrid !== null
-        && (probeDynGain > 0 || probeVisStrength > 0);
-      probeGateLogs++;
-      probeLastGates = { bound: probeGather !== null, dynKey, room: dynRoom?.id ?? null, grid: !!dynGrid, gain: probeDynGain, vis: probeVisStrength, dynOn, flashI: playerFlashLightIntensity(), flashAge, capsules: probeLastCapsules, lights: probeLastLights };
+      const dynGrid = dynRoom ? ctx.world.roomProbes.gridOf(dynRoom.id) : null;
+      const dynOn = ctx.probes.gather !== null && dynRoom !== null && dynGrid !== null
+        && (ctx.probes.dynGain > 0 || ctx.probes.visStrength > 0);
+      ctx.probes.gateLogs++;
+      ctx.probes.lastGates = { bound: ctx.probes.gather !== null, dynKey, room: dynRoom?.id ?? null, grid: !!dynGrid, gain: ctx.probes.dynGain, vis: ctx.probes.visStrength, dynOn, flashI: playerFlashLightIntensity(), flashAge: ctx.weapon.flashAge, capsules: ctx.probes.lastCapsules, lights: ctx.probes.lastLights };
       let probeCapsuleCount = 0;
       // Amortized rate: pack (and therefore dispatch, one frame later) only
       // on due ticks; skipped frames leave the dynamic layer frozen, which
       // the kernel's own cross-dispatch blending already models.
-      const gatherDue = probeGatherRate <= 1 || probeGatherTick % probeGatherRate === 0;
-      probeGatherTick++;
-      if (dynOn && probeGather && dynRoom && dynGrid && gatherDue) {
-        for (const a of actors) {
+      const gatherDue = ctx.probes.gatherRate <= 1 || ctx.probes.gatherTick % ctx.probes.gatherRate === 0;
+      ctx.probes.gatherTick++;
+      if (dynOn && ctx.probes.gather && dynRoom && dynGrid && gatherDue) {
+        for (const a of ctx.world.actors) {
           if (!nearRoom(a, dynRoom) || probeCapsuleCount >= PROBE_MAX_BONE_INSTANCES) continue;
           const posed = a.posed();
-          const sub = { ab: probeCapsuleArrays.ab.subarray(probeCapsuleCount * INSTANCE_FLOATS), overflowed: false };
+          const sub = { ab: ctx.probes.capsuleArrays.ab.subarray(probeCapsuleCount * INSTANCE_FLOATS), overflowed: false };
           probeCapsuleCount += packBoneInstances(posed.bonePrims ?? [], posed.clusters.map(c => c.alive), sub, PROBE_MAX_BONE_INSTANCES - probeCapsuleCount);
         }
-        probeLastCapsules = probeCapsuleCount;
+        ctx.probes.lastCapsules = probeCapsuleCount;
         // THE LIGHTS. (1) The player's muzzle flash, a point light while its
         // envelope burns. (2) Every soldier's muzzle flash in this room, from
         // the same muzzle the effects sprite is posed at, 0.14 s like the
@@ -1917,23 +1912,23 @@ async function main() {
         // with one frame of gather lag the layer never saw it (owner: "why
         // doesn't my muzzle flash do the same").
         const fI = playerFlashLightIntensity();
-        if (flashLight && fI > 0) {
-          flashLight.getWorldPosition(_flashWorld);
-          gatherLights.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], color: [1.0, 0.81, 0.58], intensity: fI * probeFlashBoost });
+        if (ctx.weapon.flashLight && fI > 0) {
+          ctx.weapon.flashLight.getWorldPosition(_flashWorld);
+          gatherLights.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], color: [1.0, 0.81, 0.58], intensity: fI * ctx.probes.flashBoost });
         }
-        for (const a of actors) {
+        for (const a of ctx.world.actors) {
           if (!nearRoom(a, dynRoom) || !a.character) continue;
           const age = a.sinceFire();
           if (!(age >= 0 && age < 0.14)) continue;
           const m = a.character.muzzle();
           if (!m) continue;
           const k = 1 - age / 0.14;
-          gatherLights.push({ pos: [m[0], m[1], m[2]], color: [1.0, 0.72, 0.45], intensity: 35 * k * k * probeFlashBoost });
+          gatherLights.push({ pos: [m[0], m[1], m[2]], color: [1.0, 0.72, 0.45], intensity: 35 * k * k * ctx.probes.flashBoost });
         }
-        if (spotOn > 0 && flashlight.spot.intensity > 0) {
-          const sp = flashlight.spot.position, sc = flashlight.spot.color;
+        if (spotOn > 0 && ctx.lighting.flashlight.spot.intensity > 0) {
+          const sp = ctx.lighting.flashlight.spot.position, sc = ctx.lighting.flashlight.spot.color;
           gatherLights.push({
-            pos: [sp.x, sp.y, sp.z], color: [sc.r, sc.g, sc.b], intensity: flashlight.spot.intensity,
+            pos: [sp.x, sp.y, sp.z], color: [sc.r, sc.g, sc.b], intensity: ctx.lighting.flashlight.spot.intensity,
             axis: [sAxis.x, sAxis.y, sAxis.z], cosInner, cosOuter,
           });
         }
@@ -1954,7 +1949,7 @@ async function main() {
         // it must not lose its slot to a bullet trail. `explosionLights` is the
         // same list the mesh-side pool reads, so the walls and the bodies cannot
         // disagree about where the blast was or how bright it is.
-        for (const e of explosionLights) {
+        for (const e of ctx.vfx.explosionLights) {
           const k = explosionLightEnv(e.age);
           if (k <= 0.001) continue;
           if (gatherLights.length >= 8) break;
@@ -1965,21 +1960,21 @@ async function main() {
           gatherLights.push({
             pos: [e.pos[0], e.pos[1], e.pos[2]],
             color: [1.0, 0.55, 0.24],
-            intensity: EXPLOSION_LIGHT.gatherPeak * k * fxLightScale,
+            intensity: EXPLOSION_LIGHT.gatherPeak * k * ctx.lighting.fxLightScale,
             // The blast is the one light in the game that has to fill a ROOM
             // rather than pool around its own position — see `fxSpread`.
-            fill: fxSpread,
+            fill: ctx.vfx.spread,
           });
         }
-        const tracerSlots = Math.min(tracerLightSlots, 8 - gatherLights.length);
-        if (tracerSlots > 0 && tracerLightGain > 0) {
-          gatherLights.push(...tracerGatherLights(liveTracers?.() ?? [], {
-            eye: player.pos, room: dynRoom, margin: 1.5, gain: tracerLightGain,
+        const tracerSlots = Math.min(ctx.lighting.tracerLightSlots, 8 - gatherLights.length);
+        if (tracerSlots > 0 && ctx.lighting.tracerLightGain > 0) {
+          gatherLights.push(...tracerGatherLights(ctx.lighting.liveTracers?.() ?? [], {
+            eye: ctx.player.player.pos, room: dynRoom, margin: 1.5, gain: ctx.lighting.tracerLightGain,
             slugRadius: SLUG.radius, cap: tracerSlots,
           }));
         }
-        probeLastLights = gatherLights.length;
-        pendingGather = {
+        ctx.probes.lastLights = gatherLights.length;
+        ctx.probes.pendingGather = {
           grid: dynGrid,
           enclosure: { min: [dynRoom.minX, 0, dynRoom.minZ], max: [dynRoom.maxX, dynRoom.height, dynRoom.maxZ] },
           wallAlbedo: dynRoom.wallColor,
@@ -1987,12 +1982,12 @@ async function main() {
             box: { min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 },
             albedo: [0.35, 0.33, 0.30] as Vec3,
           })),
-          instances: probeCapsuleArrays.ab, instanceCount: probeCapsuleCount,
+          instances: ctx.probes.capsuleArrays.ab, instanceCount: probeCapsuleCount,
           capsuleMargin: 0.06,
-          optimized: probeOptimized,
+          optimized: ctx.probes.optimized,
           // Diagnostic seams (see ?dynrays / ?dynlights above); both default to
           // the shipped values, so an unset URL is bit-identical to before.
-          lights: probeLightsBoot === null ? gatherLights : gatherLights.slice(0, probeLightsBoot),
+          lights: ctx.probes.lightsBoot === null ? gatherLights : gatherLights.slice(0, ctx.probes.lightsBoot),
           // THE SEED IS PINNED WHILE A DEMO IS HELD. The rotation exists so the
           // estimate does not strobe in play, but it makes each dispatch report
           // the estimate of a DIFFERENT ray set, and the kernel blends toward it
@@ -2006,10 +2001,10 @@ async function main() {
           // a recording needs. It is a RECORDING-ONLY change — normal play keeps
           // the rotation — and it is the one thing here that does alter the look
           // of a recording (a settled estimate rather than an oscillating one).
-          frameSeed: demoHold ? 0 : (probeFrame % 64) / 64,
-          blend: probeBlendBoot ?? 0.6,
-          fall: probeFallBoot ?? 0.12,
-          raysPerProbe: probeRaysBoot === null ? 32 : probeRaysBoot,
+          frameSeed: ctx.demo.hold ? 0 : (ctx.probes.frame % 64) / 64,
+          blend: ctx.probes.blendBoot ?? 0.6,
+          fall: ctx.probes.fallBoot ?? 0.12,
+          raysPerProbe: ctx.probes.raysBoot === null ? 32 : ctx.probes.raysBoot,
         };
       }
       // DIRECT FLASH SOURCES for the bodyFlash slot: every burning muzzle in
@@ -2017,11 +2012,11 @@ async function main() {
       // strongest by I/d^2 from its own position.
       const directFlashes: { pos: Vec3; intensity: number }[] = [];
       const playerFlashI = playerFlashLightIntensity();
-      if (flashLight && playerFlashI > 0) {
-        flashLight.getWorldPosition(_flashWorld);
+      if (ctx.weapon.flashLight && playerFlashI > 0) {
+        ctx.weapon.flashLight.getWorldPosition(_flashWorld);
         directFlashes.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], intensity: playerFlashI });
       }
-      for (const a of actors) {
+      for (const a of ctx.world.actors) {
         if (!a.character) continue;
         const age = a.sinceFire();
         if (!(age >= 0 && age < 0.14)) continue;
@@ -2033,15 +2028,15 @@ async function main() {
       // The level's rooms take the same dynamic cfg as the bodies: the room
       // the gather serves reads it, every other room reads 0 — and with the
       // level probes off the level never reads the buffer at all.
-      for (const [roomId, node] of levelProbeNodes) {
-        const on = dynOn && dynRoom !== null && dynRoom.id === roomId && levelProbeWeight > 0;
-        node.slots.probeDynCfg.value.set(on ? probeDynGain : 0, on ? probeVisStrength : 0, 0, 0);
+      for (const [roomId, node] of ctx.lighting.levelProbeNodes) {
+        const on = dynOn && dynRoom !== null && dynRoom.id === roomId && ctx.lighting.levelProbeWeight > 0;
+        node.slots.probeDynCfg.value.set(on ? ctx.probes.dynGain : 0, on ? ctx.probes.visStrength : 0, 0, 0);
       }
-      for (const a of actors) {
+      for (const a of ctx.world.actors) {
         const inDyn = dynOn && dynRoom !== null && nearRoom(a, dynRoom);
-        a.view.uniforms.probeDynCfg.value.set(inDyn ? probeDynGain : 0, inDyn ? probeVisStrength : 0, 0, 0);
+        a.view.uniforms.probeDynCfg.value.set(inDyn ? ctx.probes.dynGain : 0, inDyn ? ctx.probes.visStrength : 0, 0, 0);
         let best: { pos: Vec3; intensity: number } | null = null, bestScore = 0;
-        if (bodyFlashGain > 0 && directFlashes.length > 0) {
+        if (ctx.lighting.bodyFlashGain > 0 && directFlashes.length > 0) {
           const q = a.pose().pos;
           for (const f of directFlashes) {
             const dx = f.pos[0] - q[0], dy = f.pos[1] - (q[1] + 1.0), dz = f.pos[2] - q[2];
@@ -2049,17 +2044,17 @@ async function main() {
             if (score > bestScore) { bestScore = score; best = f; }
           }
         }
-        if (best) a.view.uniforms.bodyFlash.value.set(best.pos[0], best.pos[1], best.pos[2], best.intensity * bodyFlashGain);
+        if (best) a.view.uniforms.bodyFlash.value.set(best.pos[0], best.pos[1], best.pos[2], best.intensity * ctx.lighting.bodyFlashGain);
         else a.view.uniforms.bodyFlash.value.w = 0;
-        a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
+        a.view.uniforms.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
-        a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
-        a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+        a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, ctx.lighting.flashlight.spot.distance);
+        a.view.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
         if (bounceSpot) {
           a.view.uniforms.bounceSpotPos.value.set(bounceSpot.pos[0], bounceSpot.pos[1], bounceSpot.pos[2]);
           a.view.uniforms.bounceSpotNormal.value.set(bounceSpot.normal[0], bounceSpot.normal[1], bounceSpot.normal[2]);
           a.view.uniforms.bounceSpotRadiance.value.set(bounceSpot.radiance[0], bounceSpot.radiance[1], bounceSpot.radiance[2]);
-          a.view.uniforms.bounceSpotCfg.value.set(bounceSpotGain, bounceSpot.radius, 0, 0);
+          a.view.uniforms.bounceSpotCfg.value.set(ctx.lighting.bounceSpotGain, bounceSpot.radius, 0, 0);
         } else {
           a.view.uniforms.bounceSpotCfg.value.x = 0;
         }
@@ -2068,7 +2063,7 @@ async function main() {
           const c = a.view.uniforms.spotColor.value;
           c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
         }
-        a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        a.view.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
@@ -2081,29 +2076,29 @@ async function main() {
       // Detached views copied the lamp only at spawn, so moving/turning the
       // camera left their flashlight behind until the bake suddenly caught up.
       // Refresh at draw time, including render-locked diagnostic frames.
-      for (const c of bakedChunkReference ? [...liveChunks, ...bakedChunks] : liveChunks) {
+      for (const c of ctx.bake.reference ? [...ctx.bake.liveChunks, ...ctx.bake.chunks] : ctx.bake.liveChunks) {
         const u = c.view.uniforms;
-        u.spotPos.value.copy(flashlight.spot.position);
+        u.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
         u.spotAxis.value.copy(sAxis);
-        u.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
-        u.spotColor.value.copy(flashlight.spot.color);
-        u.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        u.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+        u.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+        u.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
       }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
-      boneInstancer.uniforms.spotPos.value.copy(flashlight.spot.position);
-      boneInstancer.uniforms.spotAxis.value.copy(sAxis);
-      boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
-      boneInstancer.uniforms.spotColor.value.copy(flashlight.spot.color);
-      boneInstancer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
-      if (segMeshRenderer) {
+      ctx.render.boneInstancer.uniforms.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
+      ctx.render.boneInstancer.uniforms.spotAxis.value.copy(sAxis);
+      ctx.render.boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+      ctx.render.boneInstancer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+      ctx.render.boneInstancer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+      if (ctx.render.segMeshRenderer) {
         // skeleton=mesh: the SAME beam — segment boneShade is the march's
         // formula on the same uniform values, like the tubes.
-        segMeshRenderer.uniforms.spotPos.value.copy(flashlight.spot.position);
-        segMeshRenderer.uniforms.spotAxis.value.copy(sAxis);
-        segMeshRenderer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
-        segMeshRenderer.uniforms.spotColor.value.copy(flashlight.spot.color);
-        segMeshRenderer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        ctx.render.segMeshRenderer.uniforms.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
+        ctx.render.segMeshRenderer.uniforms.spotAxis.value.copy(sAxis);
+        ctx.render.segMeshRenderer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+        ctx.render.segMeshRenderer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+        ctx.render.segMeshRenderer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
       }
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
@@ -2121,7 +2116,7 @@ async function main() {
       // cannot drift apart, and the wound panel's slider moves both at once.
       // Falls through with the last value when the cast is empty, so a piece
       // does not go smooth the moment its own body is the last one gibbed.
-      const liveSurf = actors[0]?.view.uniforms.surfCfg2.value;
+      const liveSurf = ctx.world.actors[0]?.view.uniforms.surfCfg2.value;
       // THE ROOM'S LIGHT, every frame — not just the beam.
       //
       // `seedBaked` copies lightDir/keyColor/lightCfg and derives an ambient from
@@ -2133,23 +2128,23 @@ async function main() {
       //
       // Re-derived here from the same live view the seed read, by the same
       // formula, so the only thing that changes is WHEN it is sampled.
-      const liveView = actors[0]?.view.uniforms;
+      const liveView = ctx.world.actors[0]?.view.uniforms;
       // `?chunkdetail=` / `__sdfGame.setChunkDetail(x)` overrides the creature's
       // own amplitude. The shipped value is the flesh preset's surfaceNoiseAmp
       // (0.06), which is deliberately subtle on a marched body and is therefore
       // hard to judge on a settled piece without sweeping it — so it sweeps.
-      const detailAmp = chunkDetailOverride
+      const detailAmp = ctx.bake.detailOverride
         ?? (liveSurf ? Math.min(1, liveSurf.y * CHUNK_DETAIL_GAIN) : null);
-      for (const lm of litChunkMaterials) {
+      for (const lm of ctx.world.litChunkMaterials) {
         const bu = lm.uniforms;
-        bu.spotPos.value.copy(flashlight.spot.position);
+        bu.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
         bu.spotAxis.value.copy(sAxis);
-        bu.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
-        bu.spotColor.value.copy(flashlight.spot.color);
-        bu.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        bu.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+        bu.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+        bu.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
         if (detailAmp !== null) {
           bu.fleshDetail.value.set(
-            detailAmp, chunkDetailFreq, chunkDetailAlbedo, 0);
+            detailAmp, ctx.bake.detailFreq, ctx.bake.detailAlbedo, 0);
         }
         if (liveView) {
           bu.lightDir.value.copy(liveView.lightDir.value);
@@ -2186,24 +2181,24 @@ async function main() {
     // level every frame and the cost tracked the cast, not the bodies on
     // screen. The per-body path is untouched — it already draws only
     // visibleActors.
-    if (crowdOn && crowdTypes.size > 0) {
-      const csize = sdfLayer.targetSize;
+    if (ctx.crowd.on && ctx.crowd.types.size > 0) {
+      const csize = ctx.render.sdfLayer.targetSize;
       const grid = {
         tilesX: Math.ceil(Math.max(1, csize.width) / TILE_SIZE_PX),
         tilesY: Math.ceil(Math.max(1, csize.height) / TILE_SIZE_PX),
         tilePx: TILE_SIZE_PX,
       };
-      const crowdTiming = telemetry.begin();
+      const crowdTiming = ctx.telemetry.telemetry.begin();
       // The level-shadow depth texture the type rebinds (same expression the
       // per-body loop's `map` uses; `flashlight.levelShadow.shadow.map` is
       // unchanged between there and here — nothing renders in between).
-      const levelShadowMap = flashlight.levelShadow.shadow.map?.depthTexture ?? null;
+      const levelShadowMap = ctx.lighting.flashlight.levelShadow.shadow.map?.depthTexture ?? null;
       const vis = new Set<number>();
-      for (const t of crowdTypes.values()) {
-        const src = crowdSourceView.get(t);
-        const copyTiming = telemetry.begin();
+      for (const t of ctx.crowd.types.values()) {
+        const src = ctx.crowd.sourceView.get(t);
+        const copyTiming = ctx.telemetry.telemetry.begin();
         if (src) copyUniformValues(t.uniforms, src.uniforms);
-        telemetry.end('crowd-uniform-copy', copyTiming);
+        ctx.telemetry.telemetry.end('crowd-uniform-copy', copyTiming);
         // CROWD REQUIRES ITS TILE LIST (task 8). The per-body tile playtest
         // (`gameTiles`) gates only the per-body path; the crowd type owns its
         // own ComputeTileBinding and always bins it, so a ship-defaults
@@ -2212,53 +2207,53 @@ async function main() {
         t.uniforms.tileCfg.value.x = 1;
         if (levelShadowMap !== null) t.levelShadowTex.value = levelShadowMap;
         vis.clear();
-        for (const a of visibleActors) {
+        for (const a of ctx.render.visibleActors) {
           if (a.crowd?.type !== t) continue;
           // A headless baked corpse is drawn by its mesh; its instance must not
           // march too (see soldier-corpse-bake bakedState).
-          if (soldierCorpses?.bakedState(a.id) === 'headless') continue;
+          if (ctx.world.soldierCorpses?.bakedState(a.id) === 'headless') continue;
           vis.add(a.crowd.slot);
         }
         t.sync(camera, grid, vis);
       }
-      telemetry.end('crowd-sync', crowdTiming);
+      ctx.telemetry.telemetry.end('crowd-sync', crowdTiming);
     }
     // Crowd stage a: one instanced mesh per type replaces its N hidden
     // per-body proxies; unattached (or crowd-off) actors keep their proxies.
     // Fire/gib profiling (2026-09-14): label the two draw-fn spans that are
     // NOT the per-type sync so the bench can attribute a cpu:draw climb.
-    const setBodiesTiming = telemetry.begin();
-    sdfLayer.setBodies(
-      crowdOn
-        ? ([...crowdTypes.values()].map(t => t.mesh) as THREE.Object3D[])
-            .concat(visibleActors.filter(a => !a.crowd).map(a => a.view.object))
-        : visibleActors.map(a => a.view.object),
+    const setBodiesTiming = ctx.telemetry.telemetry.begin();
+    ctx.render.sdfLayer.setBodies(
+      ctx.crowd.on
+        ? ([...ctx.crowd.types.values()].map(t => t.mesh) as THREE.Object3D[])
+            .concat(ctx.render.visibleActors.filter(a => !a.crowd).map(a => a.view.object))
+        : ctx.render.visibleActors.map(a => a.view.object),
       chunkObjects());
-    telemetry.end('crowd-set-bodies', setBodiesTiming);
-    const sdfRenderTiming = telemetry.begin();
-    if (gooEnabled && gooLayer) {
+    ctx.telemetry.telemetry.end('crowd-set-bodies', setBodiesTiming);
+    const sdfRenderTiming = ctx.telemetry.telemetry.begin();
+    if (ctx.goo.enabled && ctx.goo.layer) {
       // Fire/gib profiling: the goo layer's callback IS the SDF submit, so
       // nest so the bench can tell a goo pass from the march submit.
-      const gooTiming = telemetry.begin();
-      gooLayer.render(camera, () => {
-        const inner = telemetry.begin();
-        sdfLayer.render(scene, camera);
-        telemetry.end('crowd-sdf-inner', inner);
+      const gooTiming = ctx.telemetry.telemetry.begin();
+      ctx.goo.layer.render(camera, () => {
+        const inner = ctx.telemetry.telemetry.begin();
+        ctx.render.sdfLayer.render(scene, camera);
+        ctx.telemetry.telemetry.end('crowd-sdf-inner', inner);
       });
-      telemetry.end('crowd-goo-outer', gooTiming);
+      ctx.telemetry.telemetry.end('crowd-goo-outer', gooTiming);
     } else {
-      const inner = telemetry.begin();
-      sdfLayer.render(scene, camera);
-      telemetry.end('crowd-sdf-inner', inner);
+      const inner = ctx.telemetry.telemetry.begin();
+      ctx.render.sdfLayer.render(scene, camera);
+      ctx.telemetry.telemetry.end('crowd-sdf-inner', inner);
     }
-    telemetry.end('crowd-sdf-render', sdfRenderTiming);
-    characterEffects.render(camera);
+    ctx.telemetry.telemetry.end('crowd-sdf-render', sdfRenderTiming);
+    ctx.vfx.characterEffects.render(camera);
     });
   });
 
-  const occluderHull = createOccluderHull();
-  occluderHull.object.layers.set(OCCLUDER_LAYER);
-  scene.add(occluderHull.object);
+  ctx.render.occluderHull = createOccluderHull();
+  ctx.render.occluderHull.object.layers.set(OCCLUDER_LAYER);
+  scene.add(ctx.render.occluderHull.object);
   // The inflated shadow-casting twin (see occluder-hull.ts). castShadow and
   // the layer are already set in the factory; spelled out here to sit beside
   // the occlusion hull's wiring, where the next reader will look first.
@@ -2268,14 +2263,14 @@ async function main() {
   // shadows. The two hulls are twins in shape only; they have opposite
   // biases (shrunk to stay inside the body vs inflated to close the gaps
   // between spheres) and now opposite fates.
-  occluderHull.shadowObject.layers.set(SHADOW_HULL_LAYER);
-  occluderHull.shadowObject.castShadow = true;
-  scene.add(occluderHull.shadowObject);
+  ctx.render.occluderHull.shadowObject.layers.set(SHADOW_HULL_LAYER);
+  ctx.render.occluderHull.shadowObject.castShadow = true;
+  scene.add(ctx.render.occluderHull.shadowObject);
   // DEFERRED MODE: the occlusion hull and its inflated shadow twin are
   // march/composite helpers, never G-buffer or forward content — the shadow
   // module finds the twin through its SHADOW_HULL_LAYER membership instead.
-  deferredApi?.router.register(occluderHull.object, 'exclude');
-  deferredApi?.router.register(occluderHull.shadowObject, 'exclude');
+  ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.object, 'exclude');
+  ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.shadowObject, 'exclude');
 
   // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
   // march -- the distance it rasterises is only accurate in the near field
@@ -2283,7 +2278,7 @@ async function main() {
   // The full measurement and the revival conditions are in march.wgsl.ts
   // above tMax. __sdfGame.setOccluder still renders the pass for
   // diagnostics; nothing consumes it.
-  sdfLayer.setOccluderEnabled(false);
+  ctx.render.sdfLayer.setOccluderEnabled(false);
 
 /**
    * Over-relaxation factor for the game page's march (woundCfg2.y).
@@ -2422,30 +2417,30 @@ async function main() {
    *  block. Frames cannot fire mid-main (sync boot), so the let below is
    *  initialised before any draw — the same reasoning the blob comment
    *  above relies on. */
-  let levelShadowEnabled = GAME_LEVEL_SHADOW > 0.5;
+  ctx.lighting.levelShadowEnabled = GAME_LEVEL_SHADOW > 0.5;
 
   /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
    *  Read from the live uniform rather than a constant, so retuning the noise
    *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
    *  cone and occluder bounds. */
-  const shellAmpOf = () => actors[0]?.view.uniforms.marchCfg.value.z ?? 0;
+  const shellAmpOf = () => ctx.world.actors[0]?.view.uniforms.marchCfg.value.z ?? 0;
 
   // The conservative OUTER hull (shell-hull-outer.ts). Default OFF: it is a
   // measurement instrument until the march consumes it, and rasterising it
   // for nothing is pure cost.
-  const outerHull = createOuterHull();
-  outerHull.entryObject.layers.set(SHELL_LAYER);
-  outerHull.exitObject.layers.set(SHELL_EXIT_LAYER);
-  scene.add(outerHull.entryObject);
-  scene.add(outerHull.exitObject);
-  deferredApi?.router.register(outerHull.entryObject, 'exclude');
-  deferredApi?.router.register(outerHull.exitObject, 'exclude');
+  ctx.world.outerHull = createOuterHull();
+  ctx.world.outerHull.entryObject.layers.set(SHELL_LAYER);
+  ctx.world.outerHull.exitObject.layers.set(SHELL_EXIT_LAYER);
+  scene.add(ctx.world.outerHull.entryObject);
+  scene.add(ctx.world.outerHull.exitObject);
+  ctx.boot.deferredApi?.router.register(ctx.world.outerHull.entryObject, 'exclude');
+  ctx.boot.deferredApi?.router.register(ctx.world.outerHull.exitObject, 'exclude');
   // SHELL ON BY DEFAULT (owner visual pass, 2026-08-31). Worth -40%/-54%
   // frame time (room 4/3) at real-render parity below the same-state noise
   // floor. The hull is populated by the frame loop before the first draw
   // (tick runs ahead of drawFn), so no first-frame dropout. __sdfGame
   // .setShell(false) is the kill switch.
-  sdfLayer.setShellEnabled(true);
+  ctx.render.sdfLayer.setShellEnabled(true);
 
   // BONE TUBES (2026-09-02-bone-tubes plan, task 5): every posed bone prim
   // drawn as one instanced analytic tube in the POLYGONAL pass (layer 0),
@@ -2458,17 +2453,17 @@ async function main() {
   // chunks. 256 overflowed on the first frame.
   // 2026-09-03 skeleton re-author: 67 drawn bones per zombie (12 rib pairs as
   // hoops, clavicles, a 15-piece pelvis), x10 bodies = 670 > 512.
-  const boneInstancer = createBoneInstancer(1024,
+  ctx.render.boneInstancer = createBoneInstancer(1024,
     // DEFERRED MODE: the tubes are a level-only G-buffer producer (tissue —
     // a body's own hull must not swallow their light).
-    deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined);
-  let gibBoneMesh = new URLSearchParams(location.search).get('gibbonemesh') !== '0';
-  boneInstancer.object.layers.set(0);
+    ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined);
+  ctx.gibs.boneMesh = new URLSearchParams(location.search).get('gibbonemesh') !== '0';
+  ctx.render.boneInstancer.object.layers.set(0);
   // Visible when EITHER path draws through it — gib bones alone are enough.
-  boneInstancer.object.visible = gibBoneMesh;
-  scene.add(boneInstancer.object);
-  deferredApi?.router.register(boneInstancer.object, 'mesh', 'level-only');
-  let boneMesh = false;
+  ctx.render.boneInstancer.object.visible = ctx.gibs.boneMesh;
+  scene.add(ctx.render.boneInstancer.object);
+  ctx.boot.deferredApi?.router.register(ctx.render.boneInstancer.object, 'mesh', 'level-only');
+  ctx.render.boneMesh = false;
   /**
    * GIB BONES ARE MESH TUBES, not marched field rows (2026-09-15, owner's call:
    * "we need to change it so the bone gibs are mesh").
@@ -2494,28 +2489,28 @@ async function main() {
   // Accepted actor skeleton default: extracted meshes in forward mode.
   // ?skeleton=procedural restores the reference; volume remains dev-only.
   // Deferred and detached chunks retain procedural bones.
-  const skeletonMode = resolveSkeletonMode(location.search, {
-    dev: import.meta.env.DEV, deferred: deferredMode,
+  ctx.render.skeletonMode = resolveSkeletonMode(location.search, {
+    dev: import.meta.env.DEV, deferred: ctx.boot.deferredMode,
   });
-  if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && skeletonMode !== 'mesh') {
+  if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && ctx.render.skeletonMode !== 'mesh') {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
-  const segMeshCache = skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
+  ctx.render.segMeshCache = ctx.render.skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
   // FIELD_MESH_LAYER, not 0: the 'bodies' field style needs to pull the
   // skeleton out of the full-resolution polygonal pass and draw it into the
   // half-height field instead. Every other style just enables that layer in
   // pass 1, so this is a no-op for them.
-  const segMeshRenderer = segMeshCache ? createSegmentMeshRenderer(segMeshCache, FIELD_MESH_LAYER) : null;
-  if (segMeshRenderer) scene.add(segMeshRenderer.object);
-  const skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
-  const segVolumeCache = skeletonMode === 'volume' ? new SegmentVolumeCache() : null;
+  ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER) : null;
+  if (ctx.render.segMeshRenderer) scene.add(ctx.render.segMeshRenderer.object);
+  ctx.render.skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
+  ctx.render.segVolumeCache = ctx.render.skeletonMode === 'volume' ? new SegmentVolumeCache() : null;
   type SharedVolumeAtlas = ReturnType<typeof buildSegmentAtlas> & {
     texture: ReturnType<typeof createSegmentAtlasTexture>;
     refs: number;
   };
-  const sharedVolumeAtlases = new Map<string, SharedVolumeAtlas>();
-  let volumeAtlasBuilds = 0;
-  const skeletonVolumes = new Map<ZombieActor, {
+  ctx.render.sharedVolumeAtlases = new Map<string, SharedVolumeAtlas>();
+  ctx.telemetry.volumeAtlasBuilds = 0;
+  ctx.render.skeletonVolumes = new Map<ZombieActor, {
     body: BuildResult; name: string; sources: BoneFieldSource[];
     key: string; binding: SegmentVolumeBinding;
   }>();
@@ -2535,29 +2530,29 @@ async function main() {
   });
   const acquireVolumeAtlas = (actor: ZombieActor, sources: readonly BoneFieldSource[]) => {
     const key = sources.map(source => source.revision).sort().join('|');
-    let shared = sharedVolumeAtlases.get(key);
+    let shared = ctx.render.sharedVolumeAtlases.get(key);
     if (!shared) {
       const segIds = boneSegmentKeyMap(actor.body, actor.boundRig());
       const atlas = buildSegmentAtlas(sources.flatMap(source => {
         const segId = segIds.get(source.segment);
-        return segId === undefined ? [] : [{ segId, grid: segVolumeCache!.get(source) }];
+        return segId === undefined ? [] : [{ segId, grid: ctx.render.segVolumeCache!.get(source) }];
       }));
       shared = Object.assign(atlas, { texture: createSegmentAtlasTexture(atlas), refs: 0 });
-      sharedVolumeAtlases.set(key, shared);
-      volumeAtlasBuilds++;
+      ctx.render.sharedVolumeAtlases.set(key, shared);
+      ctx.telemetry.volumeAtlasBuilds++;
     }
     shared.refs++;
     return { key, shared };
   };
   const releaseVolumeAtlas = (key: string) => {
-    const shared = sharedVolumeAtlases.get(key);
+    const shared = ctx.render.sharedVolumeAtlases.get(key);
     if (!shared || --shared.refs > 0) return;
     shared.texture.dispose();
-    for (const meta of shared.metas) segVolumeCache?.evict(meta.grid);
-    sharedVolumeAtlases.delete(key);
+    for (const meta of shared.metas) ctx.render.segVolumeCache?.evict(meta.grid);
+    ctx.render.sharedVolumeAtlases.delete(key);
   };
   const bindSkeletonVolume = (actor: ZombieActor, name: string) => {
-    const prior = skeletonVolumes.get(actor);
+    const prior = ctx.render.skeletonVolumes.get(actor);
     if (prior) { prior.binding.dispose(); releaseVolumeAtlas(prior.key); }
     const state = buildSkeletonSources(actor, name);
     const { key, shared } = acquireVolumeAtlas(actor, state.sources);
@@ -2572,11 +2567,11 @@ async function main() {
       // re-binds it when that actor's own revision changes); a later actor's
       // bind is ignored — its own view still holds the right pair.
       actor.view.setBoneCullMode('cluster');
-      if (crowdSourceView.get(crowd.type) === actor.view || !crowdVolumeBound.has(crowd.type)) {
+      if (ctx.crowd.sourceView.get(crowd.type) === actor.view || !ctx.crowd.volumeBound.has(crowd.type)) {
         crowd.type.setSkeletonVolume(shared.texture, binding.metaTexture);
-        crowdVolumeBound.add(crowd.type);
-        if (!crowdSegMetaWarned) {
-          crowdSegMetaWarned = true;
+        ctx.crowd.volumeBound.add(crowd.type);
+        if (!ctx.crowd.segMetaWarned) {
+          ctx.crowd.segMetaWarned = true;
           console.warn('[crowd] segVolumeMeta is per-type from the first attached actor; '
             + 'other instances fall back to cluster bone culling (stage-a gap)');
         }
@@ -2586,25 +2581,25 @@ async function main() {
     }
     // Analytic primitive gradients cannot represent a sampled field.
     actor.view.uniforms.normalGradientCfg.value.x = 0;
-    skeletonVolumes.set(actor, { ...state, key, binding });
+    ctx.render.skeletonVolumes.set(actor, { ...state, key, binding });
   };
   const releaseSkeletonActor = (actor: ZombieActor) => {
     actor.crowd?.type.detach(actor.crowd.slot);
-    skeletonSources.delete(actor);
-    const volume = skeletonVolumes.get(actor);
+    ctx.render.skeletonSources.delete(actor);
+    const volume = ctx.render.skeletonVolumes.get(actor);
     if (!volume) return;
     volume.binding.dispose();
     releaseVolumeAtlas(volume.key);
-    skeletonVolumes.delete(actor);
+    ctx.render.skeletonVolumes.delete(actor);
   };
   import.meta.hot?.dispose(() => {
-    segMeshRenderer?.dispose();
-    segMeshCache?.dispose();
-    for (const state of skeletonVolumes.values()) state.binding.dispose();
-    skeletonVolumes.clear();
-    for (const atlas of sharedVolumeAtlases.values()) atlas.texture.dispose();
-    sharedVolumeAtlases.clear();
-    segVolumeCache?.dispose();
+    ctx.render.segMeshRenderer?.dispose();
+    ctx.render.segMeshCache?.dispose();
+    for (const state of ctx.render.skeletonVolumes.values()) state.binding.dispose();
+    ctx.render.skeletonVolumes.clear();
+    for (const atlas of ctx.render.sharedVolumeAtlases.values()) atlas.texture.dispose();
+    ctx.render.sharedVolumeAtlases.clear();
+    ctx.render.segVolumeCache?.dispose();
   });
   // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
   // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
@@ -2620,24 +2615,24 @@ async function main() {
   // late toggles via setBoneCullMode. Chunks stay on the flat fold.
   // Evidence: docs/dev-notes/2026-09-07-bone-segment-spheres/notes.md.
   const GAME_BONE_CULL_MODE = 'segment' as 'off' | 'cluster' | 'segment';
-  let boneCull = GAME_BONE_CULL_MODE !== 'off';
+  ctx.render.boneCull = GAME_BONE_CULL_MODE !== 'off';
   // Three-way cull state (bone-segment spheres): boneCull stays the boolean
   // view (off vs any cull) the old seam reports.
-  let boneCullMode: 'off' | 'cluster' | 'segment' = GAME_BONE_CULL_MODE;
+  ctx.render.boneCullMode = GAME_BONE_CULL_MODE;
   function applyBoneCullMode(mode: 'off' | 'cluster' | 'segment'): void {
-    boneCullMode = mode;
-    boneCull = mode !== 'off';
-    for (const a of actors) a.view.setBoneCullMode(mode);
-    for (const c of liveChunks) c.view.setBoneCullMode(mode);
+    ctx.render.boneCullMode = mode;
+    ctx.render.boneCull = mode !== 'off';
+    for (const a of ctx.world.actors) a.view.setBoneCullMode(mode);
+    for (const c of ctx.bake.liveChunks) c.view.setBoneCullMode(mode);
   }
   function applyBoneCull(on: boolean): void {
     applyBoneCullMode(on ? 'cluster' : 'off');
   }
   function applyBoneMesh(on: boolean): void {
-    boneMesh = on;
-    boneInstancer.object.visible = on || gibBoneMesh;
-    for (const a of actors) a.view.setPackBones(!on);
-    for (const c of liveChunks) c.view.setPackBones(!on);
+    ctx.render.boneMesh = on;
+    ctx.render.boneInstancer.object.visible = on || ctx.gibs.boneMesh;
+    for (const a of ctx.world.actors) a.view.setPackBones(!on);
+    for (const c of ctx.bake.liveChunks) c.view.setPackBones(!on);
   }
 
   /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
@@ -2657,14 +2652,14 @@ async function main() {
    *  higher body counts, flip back here. `__sdfGame.setDepthGate()` flips it
    *  live for A/B. */
   const GAME_DEPTH_GATE = 0;
-  sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
-  sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
+  ctx.render.sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
+  ctx.render.sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
   // TEMPORAL REPROJECTION START (plan 2026-09-10). SHIPS ON (owner,
   // 2026-09-10, after the own-body gate): march pass p50 14.9 -> 11.3 ms
   // on the room-4 bench (walk 11.0 -> 7.0, gib 18.0 -> 13.8), no visible
   // artefacts. ?tstart=0 pins the bit-identical march;
   // __sdfGame.setTemporalStart(on, margin, slope) flips it live.
-  sdfLayer.setTemporalStart(new URLSearchParams(location.search).get('tstart') !== '0');
+  ctx.render.sdfLayer.setTemporalStart(new URLSearchParams(location.search).get('tstart') !== '0');
   // INTERLACED FIELDS ON (2026-09-09), replacing half-rate. Half-rate held
   // and reprojected the whole marched frame, which desynced from the
   // full-rate skeleton meshes whenever the player moved — reprojected flesh
@@ -2687,8 +2682,8 @@ async function main() {
   // 1x1 depth allocation on the retained mesh field), both fixed in 9f205aaa
   // and pinned by tests. Resolution and history:
   // docs/dev-notes/2026-09-09-perf-spikes/bodies-style-handoff.md
-  sdfLayer.setFieldStyle('bodies');
-  sdfLayer.setFieldComb(0.6);
+  ctx.render.sdfLayer.setFieldStyle('bodies');
+  ctx.render.sdfLayer.setFieldComb(0.6);
   // DEEPER INTERLACE FIELDS (plan 2026-09-10, steps 1-2). `?fields=N` selects the
   // divisor: 2 is the shipped half-height field, 3 and 4 march a third or a
   // quarter of the rows. The owner gate on h/3 and h/4 is an ON-SCREEN look call —
@@ -2704,8 +2699,8 @@ async function main() {
   // default. The gate is GONE: keeping it would ship a parameter that silently
   // does nothing, which is a trap for the next reader. `?fields=N` now does
   // exactly what it says.
-  const fieldsBoot = parseIntParam(new URLSearchParams(location.search).get('fields'), { min: 2, max: 8 });
-  if (fieldsBoot !== null) sdfLayer.setFieldCount(fieldsBoot);
+  ctx.boot.fieldsBoot = parseIntParam(new URLSearchParams(location.search).get('fields'), { min: 2, max: 8 });
+  if (ctx.boot.fieldsBoot !== null) ctx.render.sdfLayer.setFieldCount(ctx.boot.fieldsBoot);
 
   // ORDER MATTERS AND THIS IS THE LAST WORD ON THE WEAVE. The block above sets
   // fieldStyle 'bodies' (and `?fields`), so an accumulation switch applied BEFORE
@@ -2734,11 +2729,11 @@ async function main() {
       // silently undoes this — which is exactly what a state read showed:
       // ?accumscale=0.35 booted with the layer at 1.0 (2026-09-10). Same two
       // lines the setSdfScale seam uses.
-      sdfScale = Math.min(1, Math.max(0.2, scale));
-      sdfLayer.setScale(sdfScale);
-      deferredApi?.setScale(sdfScale);
+      ctx.render.sdfScale = Math.min(1, Math.max(0.2, scale));
+      ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
+      ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
       const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
-      sdfLayer.setTemporalAccum(true, alpha ?? undefined);
+      ctx.render.sdfLayer.setTemporalAccum(true, alpha ?? undefined);
     }
   }
 
@@ -2755,69 +2750,63 @@ async function main() {
   // A/B KEY (P3 spec §5): while an upscale config is active, U cycles
   // native (march 1.0, the field style from before the stage) -> nearest (zero model) -> model.
   // A label bottom-left names the mode. Switching reallocates targets; a hitch is expected.
-  const upscaleAb: {
-    mode: 'native' | 'nearest' | 'model';
-    config: UpscaleConfig | null;
-    model: UpscaleModel | null;
-    modelName: string | null;
-    fieldStyle: typeof sdfLayer.fieldStyle;
-  } = { mode: 'model', config: null, model: null, modelName: null, fieldStyle: sdfLayer.fieldStyle };
-  let upscaleAbLabel: HTMLDivElement | null = null;
+  ctx.render.upscaleAb = { mode: 'model', config: null, model: null, modelName: null, fieldStyle: ctx.render.sdfLayer.fieldStyle };
+  ctx.render.upscaleAbLabel = null;
   function updateUpscaleAbLabel() {
-    const c = upscaleAb.config;
+    const c = ctx.render.upscaleAb.config;
     if (!c) {
-      if (upscaleAbLabel) upscaleAbLabel.hidden = true;
+      if (ctx.render.upscaleAbLabel) ctx.render.upscaleAbLabel.hidden = true;
       return;
     }
-    if (!upscaleAbLabel) {
-      upscaleAbLabel = document.createElement('div');
-      upscaleAbLabel.id = 'upscale-ab';
-      upscaleAbLabel.setAttribute('style',
+    if (!ctx.render.upscaleAbLabel) {
+      ctx.render.upscaleAbLabel = document.createElement('div');
+      ctx.render.upscaleAbLabel.id = 'upscale-ab';
+      ctx.render.upscaleAbLabel.setAttribute('style',
         'position:fixed; left:8px; bottom:8px; z-index:40; pointer-events:none;'
         + ' font:12px/1.3 monospace; color:#ffd98a; background:rgba(0,0,0,0.6); padding:3px 6px; border-radius:3px;');
-      document.body.appendChild(upscaleAbLabel);
+      document.body.appendChild(ctx.render.upscaleAbLabel);
     }
-    const m = upscaleAb.model;
-    const what = upscaleAb.mode === 'native' ? 'native (march 1.0, no upscale)'
-      : upscaleAb.mode === 'nearest' ? 'nearest 2x (zero model)'
-      : m ? `model ${upscaleAb.modelName ?? m.id} (${m.id} ${m.inputs}${m.step !== undefined ? `, step ${m.step}` : ''})`
+    const m = ctx.render.upscaleAb.model;
+    const what = ctx.render.upscaleAb.mode === 'native' ? 'native (march 1.0, no upscale)'
+      : ctx.render.upscaleAb.mode === 'nearest' ? 'nearest 2x (zero model)'
+      : m ? `model ${ctx.render.upscaleAb.modelName ?? m.id} (${m.id} ${m.inputs}${m.step !== undefined ? `, step ${m.step}` : ''})`
       : `random ${c.model} ${c.inputs} (untrained weights)`;
-    upscaleAbLabel.textContent = `upscale [U]: ${what} · ${c.layout}`;
-    upscaleAbLabel.hidden = false;
+    ctx.render.upscaleAbLabel.textContent = `upscale [U]: ${what} · ${c.layout}`;
+    ctx.render.upscaleAbLabel.hidden = false;
   }
   /** `booted` = false during main()'s boot, which sets the scale the way the ?accum block does. */
   function applyUpscaleAbMode(mode: 'native' | 'nearest' | 'model', booted = true): UpscaleInfo {
-    const c = upscaleAb.config;
+    const c = ctx.render.upscaleAb.config;
     if (!c) throw new Error('upscale A/B: no upscale config is active');
     const scaleTo = (v: number) => {
       if (booted) { applySdfScale(v); return; }
-      sdfScale = v;
-      sdfLayer.setScale(sdfScale);
-      deferredApi?.setScale(sdfScale);
+      ctx.render.sdfScale = v;
+      ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
+      ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
     };
     let info: UpscaleInfo;
     if (mode === 'native') {
-      info = sdfLayer.setUpscale(null);
+      info = ctx.render.sdfLayer.setUpscale(null);
       scaleTo(1);
-      sdfLayer.setFieldStyle(upscaleAb.fieldStyle);
+      ctx.render.sdfLayer.setFieldStyle(ctx.render.upscaleAb.fieldStyle);
     } else {
       scaleTo(UPSCALE_SCALE);
       info = mode === 'nearest'
-        ? sdfLayer.setUpscale({ model: 'zero', layout: c.layout, inputs: 'rgb', seed: 1 })
-        : sdfLayer.setUpscale(c, upscaleAb.model ?? undefined);
+        ? ctx.render.sdfLayer.setUpscale({ model: 'zero', layout: c.layout, inputs: 'rgb', seed: 1 })
+        : ctx.render.sdfLayer.setUpscale(c, ctx.render.upscaleAb.model ?? undefined);
     }
-    upscaleAb.mode = mode;
+    ctx.render.upscaleAb.mode = mode;
     updateUpscaleAbLabel();
     // A stage built AFTER boot carries brand-new per-pass pipelines the boot
     // warm-up never saw; without this they compile on the first frame the new
     // stage runs, which is the same multi-second stall in miniature. Loop
     // paused for the duration, exactly as warmPipelines does it.
     if (booted && info.on) {
-      handle.setLoopRunning(false);
-      void sdfLayer.precompilePasses(scene, camera)
+      ctx.boot.handle.setLoopRunning(false);
+      void ctx.render.sdfLayer.precompilePasses(scene, camera)
         .then((n) => console.log(`[warm] upscale stage passes compiled (${n})`))
         .catch((err) => console.warn('[warm] upscale stage precompile failed', err))
-        .finally(() => handle.setLoopRunning(true));
+        .finally(() => ctx.boot.handle.setLoopRunning(true));
     }
     return info;
   }
@@ -2837,9 +2826,9 @@ async function main() {
     if (!r.ok) throw new Error(`upscale model ${name}: HTTP ${r.status} (expected ${url ?? `.upscale-models/${name}/model.json`})`);
     const model = parseUpscaleModelJson(await r.json());
     const config = parseUpscaleConfig({ model: model.id, inputs: model.inputs, layout, seed: 1 });
-    upscaleAb.config = config;
-    upscaleAb.model = model;
-    upscaleAb.modelName = name;
+    ctx.render.upscaleAb.config = config;
+    ctx.render.upscaleAb.model = model;
+    ctx.render.upscaleAb.modelName = name;
     return applyUpscaleAbMode('model', booted);
   }
   {
@@ -2861,10 +2850,10 @@ async function main() {
       // `?upscale=0` is the native march (the pre-stage picture); the U key still cycles
       // native / nearest / model. NOTE this displaces the 'bodies' field style default: the stage
       // forces fields off (the fields+stage stack was tried and reverted 2026-09-12).
-      const ship = SHIPPED_UPSCALE[graphics];
+      const ship = SHIPPED_UPSCALE[ctx.boot.graphics];
       try {
         await enableTrainedUpscale(ship.name, undefined, false, ship.url);
-        sdfLayer.upscaleStage?.setSharpen(SHIPPED_UPSCALE_SHARPEN);
+        ctx.render.sdfLayer.upscaleStage?.setSharpen(SHIPPED_UPSCALE_SHARPEN);
       } catch (err) {
         console.error(`[upscale] shipped model not loaded — native march: ${String(err)}`);
       }
@@ -2877,42 +2866,42 @@ async function main() {
         head: upSearch.get('upscalehead') ?? undefined,   // run-4 full-res head on a random config
         headInputs: upSearch.get('upscaleheadinputs') ?? undefined,   // run-5 'detail' | 'detail+refine'
       });
-      sdfScale = UPSCALE_SCALE;
-      sdfLayer.setScale(sdfScale);
-      deferredApi?.setScale(sdfScale);
-      sdfLayer.setUpscale(cfg);
-      upscaleAb.config = cfg;
+      ctx.render.sdfScale = UPSCALE_SCALE;
+      ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
+      ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
+      ctx.render.sdfLayer.setUpscale(cfg);
+      ctx.render.upscaleAb.config = cfg;
       updateUpscaleAbLabel();
     }
     // `?upscalesharpen=0..1`: contrast-adaptive sharpen over the stage output (UPSCALE_SHARPEN_WGSL).
     // Live: __sdfGame.setUpscaleSharpen(x).
     const sharpenRaw = upSearch.get('upscalesharpen');
-    if (sharpenRaw !== null && sdfLayer.upscaleStage) sdfLayer.upscaleStage.setSharpen(Number(sharpenRaw));
-    else if (upRaw === 'trained' && sdfLayer.upscaleStage) sdfLayer.upscaleStage.setSharpen(SHIPPED_UPSCALE_SHARPEN);
+    if (sharpenRaw !== null && ctx.render.sdfLayer.upscaleStage) ctx.render.sdfLayer.upscaleStage.setSharpen(Number(sharpenRaw));
+    else if (upRaw === 'trained' && ctx.render.sdfLayer.upscaleStage) ctx.render.sdfLayer.upscaleStage.setSharpen(SHIPPED_UPSCALE_SHARPEN);
     const sharpenMode = upSearch.get('upscalesharpenmode');
-    if (sharpenMode === 'unsharp' && sdfLayer.upscaleStage) sdfLayer.upscaleStage.setSharpenMode('unsharp');
+    if (sharpenMode === 'unsharp' && ctx.render.sdfLayer.upscaleStage) ctx.render.sdfLayer.upscaleStage.setSharpenMode('unsharp');
   }
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
-  let hullExclusionsEnabled = true;
-  let occluderDesired = true;
+  ctx.render.hullExclusionsEnabled = true;
+  ctx.render.occluderDesired = true;
 
   // -----------------------------------------------------------------------
   mark('zombies-start');
   // Zombies. One compiled .blob, ten bodies; seeds/headings vary, the
   // character does not (12 prims each — the cheap one, on purpose).
   // -----------------------------------------------------------------------
-  const doc = parseBlob(zombieBlobSrc);
-  const face = compileFace(doc);
-  const flesh = compilePalette(doc) ?? { ...FLESH_PRESETS['henenlotter-latex'] };
-  const faceTex = new THREE.TextureLoader().load(ZOMBIE_FLAT.url);
-  faceTex.magFilter = THREE.NearestFilter;
-  faceTex.minFilter = THREE.NearestFilter;
-  faceTex.generateMipmaps = false;
-  faceTex.flipY = true;
+  ctx.boot.doc = parseBlob(zombieBlobSrc);
+  ctx.vfx.face = compileFace(ctx.boot.doc);
+  ctx.vfx.flesh = compilePalette(ctx.boot.doc) ?? { ...FLESH_PRESETS['henenlotter-latex'] };
+  ctx.vfx.faceTex = new THREE.TextureLoader().load(ZOMBIE_FLAT.url);
+  ctx.vfx.faceTex.magFilter = THREE.NearestFilter;
+  ctx.vfx.faceTex.minFilter = THREE.NearestFilter;
+  ctx.vfx.faceTex.generateMipmaps = false;
+  ctx.vfx.faceTex.flipY = true;
   const [fx, fy, fw, fh, fsw, fsh] = ZOMBIE_FLAT.rect;
-  const faceAtlas = new THREE.Vector4(fw / fsw, fh / fsh, fx / fsw, fy / fsh);
+  ctx.vfx.faceAtlas = new THREE.Vector4(fw / fsw, fh / fsh, fx / fsw, fy / fsh);
 
   /** Face textures BY CHARACTER, loaded once and shared by every body of that
    *  kind. The zombie's stays the module-level pair above (every zombie wears
@@ -2922,9 +2911,9 @@ async function main() {
    *  every body, so spawning the soldier through that path would have dressed
    *  him in the zombie's face — and one bad key in his sheet block already
    *  cost an hour on 2026-09-04 producing exactly that symptom. */
-  const faceCache = new Map<string, { tex: THREE.Texture; atlas: THREE.Vector4; mean: number }>();
+  ctx.vfx.faceCache = new Map<string, { tex: THREE.Texture; atlas: THREE.Vector4; mean: number }>();
   function faceFor(name: string) {
-    const hit = faceCache.get(name);
+    const hit = ctx.vfx.faceCache.get(name);
     if (hit) return hit;
     const sheet = compileCharacterSheet(characterEntry(name));
     if (sheet.error) {
@@ -2943,68 +2932,68 @@ async function main() {
       atlas: new THREE.Vector4(w / sw, h / sh, x / sw, y / sh),
       mean: f.mean,
     };
-    faceCache.set(name, entry);
+    ctx.vfx.faceCache.set(name, entry);
     return entry;
   }
 
-  let probeWeight = DEFAULT_PROBE_WEIGHT;
+  ctx.probes.weight = DEFAULT_PROBE_WEIGHT;
 
   /** Sever dispatch indirection — actors are built before the weapon block;
    *  the grapeshot wiring below assigns this once the chunk spawner exists. */
-  let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] }, stumpWound: Wound | null) => void) | null = null;
+  ctx.boot.onSeverDispatch = null;
 
-  const tilesPlaytest = import.meta.env.DEV && new URLSearchParams(location.search).has('tiles-playtest');
-  const gameTiles = createGameTilePlaytest({
-    allowed: tilesPlaytest,
-    capacity: () => ({ widthPx: Math.max(960, postAa.contentSize.width), heightPx: Math.max(600, postAa.contentSize.height) }),
-    createBinding: (w, h) => createComputeTileBinding(handle.renderer, w, h),
+  ctx.boot.tilesPlaytest = import.meta.env.DEV && new URLSearchParams(location.search).has('tiles-playtest');
+  ctx.boot.gameTiles = createGameTilePlaytest({
+    allowed: ctx.boot.tilesPlaytest,
+    capacity: () => ({ widthPx: Math.max(960, ctx.render.postAa.contentSize.width), heightPx: Math.max(600, ctx.render.postAa.contentSize.height) }),
+    createBinding: (w, h) => createComputeTileBinding(ctx.boot.handle.renderer, w, h),
   });
-  const tilesButton = tilesPlaytest ? document.createElement('button') : null;
+  ctx.boot.tilesButton = ctx.boot.tilesPlaytest ? document.createElement('button') : null;
   const updateTilesButton = () => {
-    if (!tilesButton) return;
-    const d = gameTiles.diagnostics();
+    if (!ctx.boot.tilesButton) return;
+    const d = ctx.boot.gameTiles.diagnostics();
     const fallback = Object.values(d.fallbacks).reduce((n, v) => n + v, 0);
     const label = `Tile culling: ${d.enabled ? 'ON' : 'OFF'} [F6]${fallback ? ` · ${fallback} fallback` : ''}`;
-    if (tilesButton.textContent !== label) tilesButton.textContent = label;
+    if (ctx.boot.tilesButton.textContent !== label) ctx.boot.tilesButton.textContent = label;
   };
   const setGameTiles = (on: boolean) => {
-    gameTiles.setEnabled(on);
-    telemetry.event('tile-culling', gameTiles.diagnostics() as unknown as Record<string, unknown>);
+    ctx.boot.gameTiles.setEnabled(on);
+    ctx.telemetry.telemetry.event('tile-culling', ctx.boot.gameTiles.diagnostics() as unknown as Record<string, unknown>);
     updateTilesButton();
   };
-  if (tilesButton) {
-    tilesButton.style.cssText = 'position:fixed;right:12px;top:52px;z-index:10001;padding:8px;background:#171b20;color:#eee;border:1px solid #687079';
-    tilesButton.onclick = () => setGameTiles(!gameTiles.diagnostics().enabled);
-    document.body.appendChild(tilesButton);
+  if (ctx.boot.tilesButton) {
+    ctx.boot.tilesButton.style.cssText = 'position:fixed;right:12px;top:52px;z-index:10001;padding:8px;background:#171b20;color:#eee;border:1px solid #687079';
+    ctx.boot.tilesButton.onclick = () => setGameTiles(!ctx.boot.gameTiles.diagnostics().enabled);
+    document.body.appendChild(ctx.boot.tilesButton);
     updateTilesButton();
   }
   const tilesKey = (e: KeyboardEvent) => {
-    if (tilesPlaytest && e.code === 'F6' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault(); setGameTiles(!gameTiles.diagnostics().enabled);
+    if (ctx.boot.tilesPlaytest && e.code === 'F6' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault(); setGameTiles(!ctx.boot.gameTiles.diagnostics().enabled);
     }
   };
   window.addEventListener('keydown', tilesKey);
   refreshActorTiles = () => {
-    if (!tilesPlaytest) return;
-    const timing = telemetry.begin();
+    if (!ctx.boot.tilesPlaytest) return;
+    const timing = ctx.telemetry.telemetry.begin();
     camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    const size = sdfLayer.targetSize;
-    gameTiles.refresh(camera, { widthPx: size.width, heightPx: size.height }, actors.map(a => a.view));
-    telemetry.end('tile-binning-submit', timing);
+    const size = ctx.render.sdfLayer.targetSize;
+    ctx.boot.gameTiles.refresh(camera, { widthPx: size.width, heightPx: size.height }, ctx.world.actors.map(a => a.view));
+    ctx.telemetry.telemetry.end('tile-binning-submit', timing);
     updateTilesButton();
   };
   import.meta.hot?.dispose(() => {
-    refreshActorTiles = () => {}; gameTiles.dispose(); tilesButton?.remove();
+    refreshActorTiles = () => {}; ctx.boot.gameTiles.dispose(); ctx.boot.tilesButton?.remove();
     window.removeEventListener('keydown', tilesKey);
   });
   // Owner-approved hybrid normals; unsupported surfaces retain calcNormal.
-  let normalGradientMode: 0 | 1 = 1;
-  let normalGradientDebug: 0 | 1 | 2 = 0;
-  const errors: string[] = [];
-  let nextId = 1;
+  ctx.telemetry.normalGradientMode = 1;
+  ctx.telemetry.normalGradientDebug = 0;
+  ctx.boot.errors = [];
+  ctx.boot.nextId = 1;
   /** Requested state of the wound union-reach cull (ships ON) — tracked
    *  because the uniform alone cannot say it (see the woundCull getter). */
-  let woundCullRequested = true;
+  ctx.vfx.woundCullRequested = true;
 
   // The wound panel's tuning state (wound-panel.ts). Lives HERE — before the
   // boot loop — because one of its eight keys, boneRatio, shapes buildBody's
@@ -3014,25 +3003,25 @@ async function main() {
   // EXCEPT the two entrails knobs whose live defaults live in
   // entrails-spawn (task 5 tuned GUT_DROPLET_SIZE to 0.3 after the panel
   // table froze 0.12), so they are re-seeded from the constants just below.
-  const woundTuning = defaultsFrom(WOUND_KEYS) as WoundTuningValues;
+  ctx.vfx.woundTuning = defaultsFrom(WOUND_KEYS) as WoundTuningValues;
   // Boot parity: the panel's record must state what the page ACTUALLY does
   // before anyone drags a slider — gut ropes spawn at GUT_DROPLET_SIZE and
   // slug spill rolls at SPILL_CHANCE.slug. Seeding (rather than reading the
   // constants at the use sites) keeps one writer: dragging the slider later
   // overrides the seeded value and every later spawn honours it.
-  woundTuning.gutSize = GUT_DROPLET_SIZE;
-  woundTuning.spillChance = SPILL_CHANCE.slug;
+  ctx.vfx.woundTuning.gutSize = GUT_DROPLET_SIZE;
+  ctx.vfx.woundTuning.spillChance = SPILL_CHANCE.slug;
   // Same boot parity for the spring knobs (organs r3): the table's defaults
   // say what the panel SHOWS; these say what the page DOES until a slider
   // moves. One writer: the slider override below.
-  woundTuning.coilTightness = GUT_TUNING.coilTightness;
-  woundTuning.springiness = GUT_TUNING.springiness;
+  ctx.vfx.woundTuning.coilTightness = GUT_TUNING.coilTightness;
+  ctx.vfx.woundTuning.springiness = GUT_TUNING.springiness;
   /** The owner's explicit bone ratio; null = defer to the doc (absent →
    *  DEFAULT_BONE_RATIO inside buildBody, and a later authored `bones ratio`
    *  would win untouched). Once the owner MOVES the slider their value wins
    *  every later build — an explicit setting clobbering an authored ratio is
    *  the requested semantics, so there is no extra flag machinery. */
-  let boneRatioOverride: number | null = null;
+  ctx.render.boneRatioOverride = null;
 
   /** Push the panel's tissue ramp into one view's surfCfg3, plus the cavity
    *  pair. Component order is pinned by zombie-gpu's uniform table (x
@@ -3044,25 +3033,25 @@ async function main() {
    *  an untouched panel still shades identically. */
   function applyWoundRamp(view: ZombieGpuView): void {
     const c = view.uniforms.surfCfg3.value;
-    c.x = woundTuning.woundDepthAmp;
-    c.y = woundTuning.fatDepth;
-    c.z = woundTuning.muscleDepth;
-    c.w = woundTuning.visceraAmp;
-    view.uniforms.visceraDepth.value = woundTuning.visceraDepth;
+    c.x = ctx.vfx.woundTuning.woundDepthAmp;
+    c.y = ctx.vfx.woundTuning.fatDepth;
+    c.z = ctx.vfx.woundTuning.muscleDepth;
+    c.w = ctx.vfx.woundTuning.visceraAmp;
+    view.uniforms.visceraDepth.value = ctx.vfx.woundTuning.visceraDepth;
     // organAmp rides the same re-apply (organs r3): applyMaterial stamps the
     // preset default on every rebuild, so the panel's value must be
     // re-stamped after it or a cast rebuild would silently reset the knob.
-    view.uniforms.organAmp.value = woundTuning.organAmp;
+    view.uniforms.organAmp.value = ctx.vfx.woundTuning.organAmp;
     // MEAT DETAIL (2026-09-12): the four MEAT sliders → meatCfg (x amp, y clot, z glint, w crevice).
-    view.uniforms.meatCfg.value.set(woundTuning.meatAmp, woundTuning.meatClot, woundTuning.meatGlint, woundTuning.meatCrevice);
+    view.uniforms.meatCfg.value.set(ctx.vfx.woundTuning.meatAmp, ctx.vfx.woundTuning.meatClot, ctx.vfx.woundTuning.meatGlint, ctx.vfx.woundTuning.meatCrevice);
   }
 
   /** The applied tuning record plus body 1's live surfCfg3 — the shader
    *  truth half of the seam's woundTuning getter/setWoundTuning return, so
    *  "did the slider reach the field" is one read, not a hope. */
   function woundTuningNow(): WoundTuningValues & { surfCfg3: number[] | null } {
-    const c = actors[0]?.view.uniforms.surfCfg3.value;
-    return { ...woundTuning, surfCfg3: c ? [c.x, c.y, c.z, c.w] : null };
+    const c = ctx.world.actors[0]?.view.uniforms.surfCfg3.value;
+    return { ...ctx.vfx.woundTuning, surfCfg3: c ? [c.x, c.y, c.z, c.w] : null };
   }
 
   /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
@@ -3073,33 +3062,33 @@ async function main() {
    *  by the frame loop); boneRatio rebuilds the cast. */
   function applyWoundTuning(o: Partial<WoundTuningValues>): void {
     let ramp = false;
-    if (o.woundDepthAmp !== undefined) { woundTuning.woundDepthAmp = o.woundDepthAmp; ramp = true; }
-    if (o.fatDepth !== undefined) { woundTuning.fatDepth = o.fatDepth; ramp = true; }
-    if (o.muscleDepth !== undefined) { woundTuning.muscleDepth = o.muscleDepth; ramp = true; }
-    if (o.visceraAmp !== undefined) { woundTuning.visceraAmp = o.visceraAmp; ramp = true; }
-    if (o.visceraDepth !== undefined) { woundTuning.visceraDepth = o.visceraDepth; ramp = true; }
-    if (o.organAmp !== undefined) { woundTuning.organAmp = o.organAmp; ramp = true; }
+    if (o.woundDepthAmp !== undefined) { ctx.vfx.woundTuning.woundDepthAmp = o.woundDepthAmp; ramp = true; }
+    if (o.fatDepth !== undefined) { ctx.vfx.woundTuning.fatDepth = o.fatDepth; ramp = true; }
+    if (o.muscleDepth !== undefined) { ctx.vfx.woundTuning.muscleDepth = o.muscleDepth; ramp = true; }
+    if (o.visceraAmp !== undefined) { ctx.vfx.woundTuning.visceraAmp = o.visceraAmp; ramp = true; }
+    if (o.visceraDepth !== undefined) { ctx.vfx.woundTuning.visceraDepth = o.visceraDepth; ramp = true; }
+    if (o.organAmp !== undefined) { ctx.vfx.woundTuning.organAmp = o.organAmp; ramp = true; }
     // MEAT DETAIL (2026-09-12): the four MEAT sliders write meatCfg live through the same re-apply.
     // (First cut forgot these four lines — the sliders moved the record and nothing reached the field.)
     for (const k of ['meatAmp', 'meatClot', 'meatGlint', 'meatCrevice'] as const) {
-      if (o[k] !== undefined) { woundTuning[k] = o[k]!; ramp = true; }
+      if (o[k] !== undefined) { ctx.vfx.woundTuning[k] = o[k]!; ramp = true; }
     }
-    if (ramp) for (const a of actors) applyWoundRamp(a.view);   // chunks copy the body template's meatCfg at spawn
-    if (o.gutSize !== undefined) woundTuning.gutSize = o.gutSize;
+    if (ramp) for (const a of ctx.world.actors) applyWoundRamp(a.view);   // chunks copy the body template's meatCfg at spawn
+    if (o.gutSize !== undefined) ctx.vfx.woundTuning.gutSize = o.gutSize;
     // Spring knobs (organs r3): read at makeGutChain time in spillVerdict, so
     // they shape every rope spawned from now on; existing ropes keep theirs.
-    if (o.coilTightness !== undefined) woundTuning.coilTightness = o.coilTightness;
-    if (o.springiness !== undefined) woundTuning.springiness = o.springiness;
+    if (o.coilTightness !== undefined) ctx.vfx.woundTuning.coilTightness = o.coilTightness;
+    if (o.springiness !== undefined) ctx.vfx.woundTuning.springiness = o.springiness;
     if (o.spillChance !== undefined) {
-      woundTuning.spillChance = o.spillChance;
+      ctx.vfx.woundTuning.spillChance = o.spillChance;
       // The roll reads the shared table (entrails-spawn.shouldSpill), so
       // overriding slug there is the whole override — no second source of
       // truth. blast spill stays 1.0.
       SPILL_CHANCE.slug = o.spillChance;
     }
-    if (o.boneRatio !== undefined && o.boneRatio !== woundTuning.boneRatio) {
-      boneRatioOverride = o.boneRatio;
-      woundTuning.boneRatio = o.boneRatio;
+    if (o.boneRatio !== undefined && o.boneRatio !== ctx.vfx.woundTuning.boneRatio) {
+      ctx.render.boneRatioOverride = o.boneRatio;
+      ctx.vfx.woundTuning.boneRatio = o.boneRatio;
       rebuildCast();
     }
   }
@@ -3113,9 +3102,9 @@ async function main() {
   // is bit-identical) for the parity and bench drivers. The gain defaults to
   // each room's matched level — the level of today's P1 at ambientGain 4 —
   // so only the direction and hue of the ambient change, not its brightness.
-  const probesParam = new URLSearchParams(location.search).get('probes');
-  const probesOff = probesParam === '0' || probesParam === 'off';
-  const roomProbes = createRoomProbes({
+  ctx.probes.probesParam = new URLSearchParams(location.search).get('probes');
+  ctx.probes.probesOff = ctx.probes.probesParam === '0' || ctx.probes.probesParam === 'off';
+  ctx.world.roomProbes = createRoomProbes({
     rooms: ROOMS, furniture: FURNITURE,
     light: {
       dir: LIGHT_PRESETS['practical-hard-key'].keyDir,
@@ -3129,8 +3118,8 @@ async function main() {
       stampLevelProbeRoom(roomId);
     },
   });
-  if (probesOff) roomProbes.setProbes(0, -1);
-  probeGather = createProbeGatherBinding(handle.renderer, {
+  if (ctx.probes.probesOff) ctx.world.roomProbes.setProbes(0, -1);
+  ctx.probes.gather = createProbeGatherBinding(ctx.boot.handle.renderer, {
     maxProbes: 10 * 4 * 10, maxBoxes: 16, maxCapsules: PROBE_MAX_CAPSULES, maxLights: 8,
   });
 
@@ -3189,63 +3178,63 @@ async function main() {
     });
     return ls;
   };
-  if (!deferredMode) {
-    const gatherNode = probeGather.probeDynNode;
+  if (!ctx.boot.deferredMode) {
+    const gatherNode = ctx.probes.gather.probeDynNode;
     for (const r of ROOMS) {
       const slots = createProbeLevelSlots(gatherNode);
       const node = new ProbeLightingNode(slots);
-      levelProbeNodes.set(r.id, node);
+      ctx.lighting.levelProbeNodes.set(r.id, node);
       // The room's grid lands on these four slots when its bake arrives;
       // the cfg is the LEVEL's (stampLevelProbeRoom), not the bodies' —
       // bind() would write the body weight and the 4x-fill gain there.
-      roomProbes.bind({
+      ctx.world.roomProbes.bind({
         probeTex: slots.probeTex, probeMin: slots.probeMin, probeInvExtent: slots.probeInvExtent,
         probeDims: slots.probeDims, probeCfg: { value: new THREE.Vector4() },
       }, r.id);
       stampLevelProbeRoom(r.id);
     }
-    for (const [roomId, node] of levelProbeNodes) levelLightLists.set(roomId, levelLightsNode(levelSceneLights(roomId), node));
+    for (const [roomId, node] of ctx.lighting.levelProbeNodes) ctx.world.levelLightLists.set(roomId, levelLightsNode(levelSceneLights(roomId), node));
     // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
     // it is what the builder calls per pipeline, just not in the typings.
-    const library = handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
-    for (const mesh of levelGroup.children) {
+    const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
+    for (const mesh of ctx.world.levelGroup.children) {
       if (!(mesh instanceof THREE.Mesh)) continue;
-      const list = levelLightLists.get(roomIdAt(mesh.position.x, mesh.position.z));
+      const list = ctx.world.levelLightLists.get(roomIdAt(mesh.position.x, mesh.position.z));
       if (!list) continue;
       const nm = library.fromMaterial(mesh.material as THREE.Material);
       if (!nm) continue;
       nm.lightsNode = list;
       mesh.material = nm;
-      levelNodeMaterials.push(nm);
+      ctx.world.levelNodeMaterials.push(nm);
     }
   }
   /** The room's level cfg: weight, and the gain that puts the probe level at
    *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
   function stampLevelProbeRoom(roomId: number) {
-    const node = levelProbeNodes.get(roomId);
+    const node = ctx.lighting.levelProbeNodes.get(roomId);
     if (!node) return;
-    const grid = roomProbes.gridOf(roomId);
+    const grid = ctx.world.roomProbes.gridOf(roomId);
     let gain = 0;
     if (grid) {
-      gain = levelProbeGain >= 0 ? levelProbeGain : levelMatchedGain(grid, {
-        sky: [hemi.color.r, hemi.color.g, hemi.color.b],
-        ground: [hemi.groundColor.r, hemi.groundColor.g, hemi.groundColor.b],
-        intensity: hemiBase,
+      gain = ctx.lighting.levelProbeGain >= 0 ? ctx.lighting.levelProbeGain : levelMatchedGain(grid, {
+        sky: [ctx.lighting.hemi.color.r, ctx.lighting.hemi.color.g, ctx.lighting.hemi.color.b],
+        ground: [ctx.lighting.hemi.groundColor.r, ctx.lighting.hemi.groundColor.g, ctx.lighting.hemi.groundColor.b],
+        intensity: ctx.lighting.hemiBase,
       });
     }
-    node.slots.probeCfg.value.set(levelProbeWeight, gain, 0, 0);
+    node.slots.probeCfg.value.set(ctx.lighting.levelProbeWeight, gain, 0, 0);
   }
   function restampLevelProbes() {
-    for (const roomId of levelProbeNodes.keys()) stampLevelProbeRoom(roomId);
+    for (const roomId of ctx.lighting.levelProbeNodes.keys()) stampLevelProbeRoom(roomId);
   }
   /** Re-list the scene's lights on every room (a light was added — the
    *  muzzle flash with the gun) and force the level pipelines to rebuild. */
   function refreshLevelLights() {
-    if (levelLightLists.size === 0) return;
-    for (const [roomId, node] of levelProbeNodes) {
-      levelLightLists.get(roomId)?.setLights([...levelSceneLights(roomId), node as unknown as THREE.Light]);
+    if (ctx.world.levelLightLists.size === 0) return;
+    for (const [roomId, node] of ctx.lighting.levelProbeNodes) {
+      ctx.world.levelLightLists.get(roomId)?.setLights([...levelSceneLights(roomId), node as unknown as THREE.Light]);
     }
-    for (const nm of levelNodeMaterials) nm.needsUpdate = true;
+    for (const nm of ctx.world.levelNodeMaterials) nm.needsUpdate = true;
   }
 
   /** Lazily create the ONE CrowdType a character registry name draws through
@@ -3264,32 +3253,32 @@ async function main() {
     // blotchy zombie (2026-09-14). A type per (character, room) keeps the
     // block honest; rooms are frustum-culled, so few types draw per frame.
     const key = `${name}@${roomId}`;
-    const existing = crowdTypes.get(key);
+    const existing = ctx.crowd.types.get(key);
     if (existing) return existing;
     const t = createCrowdType(
-      handle.renderer, key, defaultUniforms(blankFaceTexture()),
-      sdfLayer.maxWidth, sdfLayer.maxHeight,
+      ctx.boot.handle.renderer, key, defaultUniforms(blankFaceTexture()),
+      ctx.render.sdfLayer.maxWidth, ctx.render.sdfLayer.maxHeight,
       {
-        occluder: sdfLayer.occluder,
+        occluder: ctx.render.sdfLayer.occluder,
         shell: {
-          entry: sdfLayer.shellEntry.texture,
-          exit: sdfLayer.shellExit.texture,
-          uniforms: sdfLayer.shellEntry.uniforms,
+          entry: ctx.render.sdfLayer.shellEntry.texture,
+          exit: ctx.render.sdfLayer.shellExit.texture,
+          uniforms: ctx.render.sdfLayer.shellEntry.uniforms,
         },
-        prev: sdfLayer.prev,
-        depthPre: sdfLayer.depthPre,
-        lastFrame: sdfLayer.lastFrame,
-        probeDyn: probeGather ? { node: probeGather.probeDynNode } : undefined,
+        prev: ctx.render.sdfLayer.prev,
+        depthPre: ctx.render.sdfLayer.depthPre,
+        lastFrame: ctx.render.sdfLayer.lastFrame,
+        probeDyn: ctx.probes.gather ? { node: ctx.probes.gather.probeDynNode } : undefined,
       },
-      { dispatch: crowdDispatch, telemetry },
+      { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry },
     );
     t.mesh.layers.set(SDF_LAYER);
     t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);
     scene.add(t.mesh);
     scene.add(t.depthPreMesh);
-    deferredApi?.router.register(t.mesh, 'sdf');
-    deferredApi?.router.register(t.depthPreMesh, 'exclude');
-    crowdTypes.set(key, t);
+    ctx.boot.deferredApi?.router.register(t.mesh, 'sdf');
+    ctx.boot.deferredApi?.router.register(t.depthPreMesh, 'exclude');
+    ctx.crowd.types.set(key, t);
     return t;
   }
 
@@ -3310,7 +3299,7 @@ async function main() {
     // binding it hands out so it can re-bin them, and the lab has no such
     // registry. It rides in through `gpu`, which is createZombieGpuView's own
     // parameter type, so nothing about the seam had to widen to carry it.
-    const tileBinding = gameTiles.createBinding();
+    const tileBinding = ctx.boot.gameTiles.createBinding();
     // DEFERRED MODE GPU OPTIONS. The view becomes a level-only surface
     // producer (unlit G-buffer; the deferred light stage lights it), and the
     // legacy pre-pass sources are NOT bound: sdf-layer.render never runs in
@@ -3324,7 +3313,7 @@ async function main() {
     const viewGpuOpts: GpuViewOpts = {
       // The dynamic probe layer's storage node (P3/P4). Bound at material
       // creation like the tile binding — a storage node cannot be rebound.
-      ...(probeGather ? { probeDyn: { node: probeGather.probeDynNode } } : {}),
+      ...(ctx.probes.gather ? { probeDyn: { node: ctx.probes.gather.probeDynNode } } : {}),
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU
       // lazy-init submit conflict that rejects the WHOLE producer pass
@@ -3333,26 +3322,26 @@ async function main() {
       // ?tiles-playtest is on (game-tile-playtest gates it), so it rides in
       // both modes harmlessly. Tiles are re-enabled for the surface path by
       // the same playtest, which bins them itself.
-      ...(deferredMode ? {
+      ...(ctx.boot.deferredMode ? {
         output: 'surface' as const,
         shadowReceiver: 'level-only' as const,
         ...(tileBinding ? { tiles: tileBinding } : {}),
       } : {
-        cone: sdfLayer.cone,
+        cone: ctx.render.sdfLayer.cone,
         tiles: tileBinding,
-        occluder: sdfLayer.occluder,
+        occluder: ctx.render.sdfLayer.occluder,
         // The outer hull's bounds. Passing them unconditionally is safe:
         // the fetch identities (0 / 1e9) make the march bit-identical while
         // sdfLayer.shellEnabled is false, which is the ship default.
         shell: {
-          entry: sdfLayer.shellEntry.texture,
-          exit: sdfLayer.shellExit.texture,
-          uniforms: sdfLayer.shellEntry.uniforms,
+          entry: ctx.render.sdfLayer.shellEntry.texture,
+          exit: ctx.render.sdfLayer.shellExit.texture,
+          uniforms: ctx.render.sdfLayer.shellEntry.uniforms,
         },
-        prev: sdfLayer.prev,
+        prev: ctx.render.sdfLayer.prev,
         // Temporal reprojection start (plan 2026-09-10): passed
         // unconditionally like prev — cfg.x 0 is the fetch identity.
-        lastFrame: sdfLayer.lastFrame,
+        lastFrame: ctx.render.sdfLayer.lastFrame,
         // The quarter-res depth prepass (close-up task 3). Passed
         // unconditionally like the shell bounds — the fetch identities make
         // the march bit-identical while sdfLayer.depthPreEnabled is false,
@@ -3360,11 +3349,11 @@ async function main() {
         // conservative (they march from today's start), and the shared chunk
         // material's single-node-graph trick is not worth rethinking for a
         // few dozen boxes.
-        depthPre: sdfLayer.depthPre,
+        depthPre: ctx.render.sdfLayer.depthPre,
         // Run 5: the output-res refine twins. Null unless the boot allocated refine (?refine=1),
         // in which case createZombieGpuView builds a third twin mesh on REFINE_LAYER.
-        refine: sdfLayer.refineSource ?? undefined,
-        levelShadow: { light: flashlight.levelShadow },
+        refine: ctx.render.sdfLayer.refineSource ?? undefined,
+        levelShadow: { light: ctx.lighting.flashlight.levelShadow },
       }),
     };
     // DEFERRED MODE: kit and prop load ASYNC and are added to the scene when
@@ -3374,26 +3363,26 @@ async function main() {
     // scene, unchanged (the group is not even attached there).
     const rigGroup = new THREE.Group();
     rigGroup.name = `deferred-rig-${name}-${start[0]!.toFixed(2)}-${start[2]!.toFixed(2)}`;
-    if (deferredMode) scene.add(rigGroup);
+    if (ctx.boot.deferredMode) scene.add(rigGroup);
     const character = createCharacterView({
       name,
       start,
-      renderer: handle.renderer,
-      scene: deferredMode ? rigGroup : scene,
-      effectsScene: characterEffects.scene,
+      renderer: ctx.boot.handle.renderer,
+      scene: ctx.boot.deferredMode ? rigGroup : scene,
+      effectsScene: ctx.vfx.characterEffects.scene,
       errors: errs,
       // The panel's ratio, once the owner has touched it, overrides whatever
       // the doc would have done (nothing today; an authored ratio from the
       // bones block, later).
-      ...(boneRatioOverride !== null ? { boneRatio: boneRatioOverride } : {}),
+      ...(ctx.render.boneRatioOverride !== null ? { boneRatio: ctx.render.boneRatioOverride } : {}),
       gpu: viewGpuOpts,
     });
     const placed = character.body;
     const view = character.gpu;
-    gameTiles.track(view, tileBinding);
+    ctx.boot.gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
-    view.setPackBones(!boneMesh);
-    view.applyMaterial(name === 'soldier' ? character.palette ?? flesh : flesh,
+    view.setPackBones(!ctx.render.boneMesh);
+    view.applyMaterial(name === 'soldier' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
       LIGHT_PRESETS['practical-hard-key']);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
@@ -3408,12 +3397,12 @@ async function main() {
     view.uniforms.marchCfg.value.y = GAME_OMEGA;
     view.uniforms.perfCfg.value.z = GAME_WOUND_STEP;
     view.uniforms.perfCfg.value.w = GAME_LAST_STEP;
-    view.uniforms.normalGradientCfg.value.set(normalGradientMode, normalGradientDebug, 0, 0);
+    view.uniforms.normalGradientCfg.value.set(ctx.telemetry.normalGradientMode, ctx.telemetry.normalGradientDebug, 0, 0);
     view.uniforms.aaCfg.value.y = GAME_AA;
-    view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
+    view.uniforms.aaCfg.value.x = ctx.render.sdfLayer.pixelConeK;
     view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
     const face = name === 'zombie'
-      ? { tex: faceTex, atlas: faceAtlas, mean: ZOMBIE_FLAT.mean }
+      ? { tex: ctx.vfx.faceTex, atlas: ctx.vfx.faceAtlas, mean: ZOMBIE_FLAT.mean }
       : faceFor(name);
     view.setFaceTexture(face.tex, face.atlas, face.mean);
     view.uniforms.faceCfg.value.x = 1;
@@ -3453,20 +3442,20 @@ async function main() {
     view.uniforms.wallPosY.value.setRGB(...enc.walls.posY);
     view.uniforms.wallNegZ.value.setRGB(...enc.walls.negZ);
     view.uniforms.wallPosZ.value.setRGB(...enc.walls.posZ);
-    view.uniforms.bounceCfg.value.set(probeWeight, 4, 1, 1);
-    roomProbes.bind(view.uniforms, room.id);
+    view.uniforms.bounceCfg.value.set(ctx.probes.weight, 4, 1, 1);
+    ctx.world.roomProbes.bind(view.uniforms, room.id);
     // CROWD STAGE A: attach BEFORE the layers/registration block so the
     // deferred router can skip the per-body producer, and before the actor
     // exists (a slot is actor-independent). attach() rebinds the view's sink
     // and record slot into the type's shared atlas/buffer.
     let crowdAttach: { type: CrowdType; slot: number } | null = null;
-    if (crowdOn) {
+    if (ctx.crowd.on) {
       const t = crowdTypeFor(name, room.id);
       const slot = t.attach(view);
       if (slot < 0) console.warn('[crowd] type full', name);
       else {
         crowdAttach = { type: t, slot };
-        if (!crowdSourceView.has(t)) crowdSourceView.set(t, view);
+        if (!ctx.crowd.sourceView.has(t)) ctx.crowd.sourceView.set(t, view);
         // attach/detach is the crowd's visibility gate, so the per-body proxy
         // and its depth-pre twin stay in the scene but hidden (cheap to show
         // again only via a rebuild — see setCrowd).
@@ -3478,8 +3467,8 @@ async function main() {
         view.setBoneCullMode('cluster');
         if (view.refineObject) {
           view.refineObject.visible = false;
-          if (!crowdRefineWarned) {
-            crowdRefineWarned = true;
+          if (!ctx.crowd.refineWarned) {
+            ctx.crowd.refineWarned = true;
             console.warn('[crowd] refine twins are not supported in crowd mode (stage 3)');
           }
         }
@@ -3501,56 +3490,56 @@ async function main() {
     // coarse twin (always built) and the depth-pre twin (legacy only — the
     // deferred view opts omit it) are march helpers that must never reach a
     // G-buffer or forward pass; the kit/prop group is level-only tissue.
-    if (deferredApi) {
+    if (ctx.boot.deferredApi) {
       // A crowd-attached view is one instance of a shared type draw; its own
       // producer material must NOT also feed the G-buffer.
-      if (!crowdAttach) deferredApi.router.register(view.object, 'sdf');
-      deferredApi.router.register(view.coneObject, 'exclude');
-      if (view.depthPreObject) deferredApi.router.register(view.depthPreObject, 'exclude');
-      if (view.refineObject) deferredApi.router.register(view.refineObject, 'exclude');
-      deferredApi.router.register(rigGroup, 'mesh', 'level-only');
+      if (!crowdAttach) ctx.boot.deferredApi.router.register(view.object, 'sdf');
+      ctx.boot.deferredApi.router.register(view.coneObject, 'exclude');
+      if (view.depthPreObject) ctx.boot.deferredApi.router.register(view.depthPreObject, 'exclude');
+      if (view.refineObject) ctx.boot.deferredApi.router.register(view.refineObject, 'exclude');
+      ctx.boot.deferredApi.router.register(rigGroup, 'mesh', 'level-only');
     }
-    const zombieId = nextId++;
+    const zombieId = ctx.boot.nextId++;
     rigGroup.userData.gameActorId = zombieId;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
-      boundedWounds: boundedWoundPreview,
+      boundedWounds: ctx.vfx.boundedWoundPreview,
       ...(name === 'soldier' ? {
         mind: makeSoldierMind(),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
-          encounter.shot(zombieId);
+          ctx.world.encounter.shot(zombieId);
           // ONE barrel: the double-barrel volley is the player's signature,
           // and the soldier throwing the same wall of lead reads as a second
           // player rather than an enemy.
-          soldierPellets.push(...spawnPellets(muz, dir, 1, seedFromUnit(rngStreams.misc())));
+          ctx.weapon.soldierPellets.push(...spawnPellets(muz, dir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
       profile: characterEntry(name).profile,
-      seed: 1337 + nextId * 101,
+      seed: 1337 + ctx.boot.nextId * 101,
       bounds: wanderBounds(room),
       furniture: roomFurniture,
-      navigation: encounterNav,
-      onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
+      navigation: ctx.world.encounterNav,
+      onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
     });
     // Ship default + any live toggle: a late spawn must not fall back to the
     // flat bone fold while the rest of the room culls.
     if (crowdAttach) actor.crowd = crowdAttach;
-    actor.view.setBoneCullMode(crowdAttach ? 'cluster' : boneCullMode);
-    actor.view.setRefineTail(refineTailWanted);
+    actor.view.setBoneCullMode(crowdAttach ? 'cluster' : ctx.render.boneCullMode);
+    actor.view.setRefineTail(ctx.render.refineTailWanted);
     // skeleton=mesh: contract sources at REST bind (before any tick steps
     // the rig — stepActorMotion rewrites restPose, which limb local frames
     // are derived from), then the field drops this actor's bone rows so
     // the segment meshes are the ONLY bone surface (smax-then-min exposure
     // via depth composition — mesh-renderer.ts header).
-    if (segMeshCache) {
-      skeletonSources.set(actor, buildSkeletonSources(actor, name));
+    if (ctx.render.segMeshCache) {
+      ctx.render.skeletonSources.set(actor, buildSkeletonSources(actor, name));
       actor.view.setPackBones(false);
     }
     // Task 3 is zombie-first. Other characters keep exact procedural bones
     // until their source fixtures have been validated.
-    if (segVolumeCache && name === 'zombie') bindSkeletonVolume(actor, name);
-    encounterHomes.set(actor.id,[...start] as Vec3);
+    if (ctx.render.segVolumeCache && name === 'zombie') bindSkeletonVolume(actor, name);
+    ctx.world.encounterHomes.set(actor.id,[...start] as Vec3);
     return actor;
   }
 
@@ -3558,15 +3547,15 @@ async function main() {
     for (const room of ROOMS) {
       for (const [index,start] of spawnPoints(room).entries()) {
         const name = index < (room.soldiers ?? 0) ? 'soldier' : 'zombie';
-        actors.push(spawnEnemy(name, room, start, errs));
+        ctx.world.actors.push(spawnEnemy(name, room, start, errs));
       }
     }
   }
 
-  spawnAll(errors);
+  spawnAll(ctx.boot.errors);
   setLoader('level + actors');
-  if (errors.length > 0) {
-    console.error('[sdf-game] body errors:', errors.join(' | '));
+  if (ctx.boot.errors.length > 0) {
+    console.error('[sdf-game] body errors:', ctx.boot.errors.join(' | '));
   }
   // --- SETTLED-CHUNK BAKE (close-up task 5). A chunk that has come to rest
   // is a rigid static field that will never change again; when the seam is
@@ -3593,7 +3582,7 @@ async function main() {
   // primitives travel with the bake; retained views provide a same-pose
   // diagnostic reference via setBakedChunkReference, never the shipping draw.
   const GAME_CHUNK_BAKE: 0 | 1 = 1;
-  let chunkBakeEnabled = new URLSearchParams(location.search).get('chunkbake') !== '0'
+  ctx.bake.enabled = new URLSearchParams(location.search).get('chunkbake') !== '0'
     && (GAME_CHUNK_BAKE as 0 | 1) === 1;
   interface ChunkTemplate { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture }
   interface BakedChunk {
@@ -3609,13 +3598,13 @@ async function main() {
      *  piece spawns meat that shades like the body it came off. */
     template: ChunkTemplate;
   }
-  const bakedChunks: BakedChunk[] = [];
-  let bakedChunkReference = false;
-  let soldierCorpses: ReturnType<typeof createSoldierCorpseBakes> | null = null;
+  ctx.bake.chunks = [];
+  ctx.bake.reference = false;
+  ctx.world.soldierCorpses = null;
   // One material for every baked chunk — one pipeline, N meshes. Lighting
   // uniforms are LIVE (refreshed per frame beside the bone instancer's);
   // albedo is per-vertex so sharing costs nothing.
-  let bakedChunkMat: BakedChunkMaterial | null = null;
+  ctx.bake.mat = null;
   /**
    * EVERY material instance that must ride the flashlight beam.
    *
@@ -3640,30 +3629,30 @@ async function main() {
    * each new material silently depending on someone remembering to add a second
    * copy of the same block.
    */
-  const litChunkMaterials: BakedChunkMaterial[] = [];
+  ctx.world.litChunkMaterials = [];
 
   /** Register a material instance to be lit by the frame's beam. Every
    *  `createBakedChunkMaterial` that is DRAWN must go through this — an
    *  unregistered instance is not merely dimmer, it is lit by a lamp that does
    *  not exist (see the block above). */
   function registerLitChunkMaterial<T extends BakedChunkMaterial>(m: T): T {
-    litChunkMaterials.push(m);
+    ctx.world.litChunkMaterials.push(m);
     return m;
   }
-  let bakedChunkSeed: ((m: BakedChunkMaterial) => void) | null = null;
-  let totalBakes = 0;
-  let lastBakeMs = 0;
-  let lastBakeInfo: Record<string, number> | null = null;
+  ctx.bake.seed = null;
+  ctx.bake.totalBakes = 0;
+  ctx.bake.lastBakeMs = 0;
+  ctx.bake.lastBakeInfo = null;
   // Bone tubes (task 5): the instancer owns its own light set — seed it once
   // from body 1's view, which just took the LIGHT_PRESETS apply above, so
   // the tube pass cannot drift from the march's key.
   {
-    const v = actors[0]!.view.uniforms;
-    boneInstancer.uniforms.lightDir.value.copy(v.lightDir.value);
-    boneInstancer.uniforms.keyColor.value.copy(v.keyColor.value);
-    boneInstancer.uniforms.lightCfg.value.copy(v.lightCfg.value);
-    boneInstancer.uniforms.boneColor.value.copy(v.boneColor.value);
-    boneInstancer.uniforms.deepColor.value.copy(v.deepColor.value);
+    const v = ctx.world.actors[0]!.view.uniforms;
+    ctx.render.boneInstancer.uniforms.lightDir.value.copy(v.lightDir.value);
+    ctx.render.boneInstancer.uniforms.keyColor.value.copy(v.keyColor.value);
+    ctx.render.boneInstancer.uniforms.lightCfg.value.copy(v.lightCfg.value);
+    ctx.render.boneInstancer.uniforms.boneColor.value.copy(v.boneColor.value);
+    ctx.render.boneInstancer.uniforms.deepColor.value.copy(v.deepColor.value);
     // Ambient fill: the enclosure's mean wall albedo weighted by the bounce
     // probe weight, on top of the preset's fill — a cheap stand-in for the
     // march's ambientAt probe so cavity bone sits in the same light as flesh.
@@ -3672,19 +3661,19 @@ async function main() {
       let mr = 0, mg = 0, mb = 0;
       for (const c of walls) { mr += c.r / 6; mg += c.g / 6; mb += c.b / 6; }
       const fill = v.lightCfg.value.y, key = v.keyColor.value, pw = v.bounceCfg.value.x;
-      boneInstancer.uniforms.ambient.value.setRGB(
+      ctx.render.boneInstancer.uniforms.ambient.value.setRGB(
         fill * key.r + pw * mr * 0.5, fill * key.g + pw * mg * 0.5, fill * key.b + pw * mb * 0.5);
     }
     // skeleton=mesh: the segment renderer owns the SAME uniform value types
     // (boneInstancerUniforms) — seed it identically so mesh bone cannot
     // drift from the march's key either.
-    if (segMeshRenderer) {
-      segMeshRenderer.uniforms.lightDir.value.copy(v.lightDir.value);
-      segMeshRenderer.uniforms.keyColor.value.copy(v.keyColor.value);
-      segMeshRenderer.uniforms.lightCfg.value.copy(v.lightCfg.value);
-      segMeshRenderer.uniforms.boneColor.value.copy(v.boneColor.value);
-      segMeshRenderer.uniforms.deepColor.value.copy(v.deepColor.value);
-      segMeshRenderer.uniforms.ambient.value.copy(boneInstancer.uniforms.ambient.value);
+    if (ctx.render.segMeshRenderer) {
+      ctx.render.segMeshRenderer.uniforms.lightDir.value.copy(v.lightDir.value);
+      ctx.render.segMeshRenderer.uniforms.keyColor.value.copy(v.keyColor.value);
+      ctx.render.segMeshRenderer.uniforms.lightCfg.value.copy(v.lightCfg.value);
+      ctx.render.segMeshRenderer.uniforms.boneColor.value.copy(v.boneColor.value);
+      ctx.render.segMeshRenderer.uniforms.deepColor.value.copy(v.deepColor.value);
+      ctx.render.segMeshRenderer.uniforms.ambient.value.copy(ctx.render.boneInstancer.uniforms.ambient.value);
     }
   }
   // Baked chunks (close-up task 5): same seed from body 1's view — the
@@ -3692,7 +3681,7 @@ async function main() {
   // per-frame FLASHLIGHT refresh happens in the render callback beside the
   // bone instancer's; this seed is the room's key/ambient.
   {
-    const v = actors[0]!.view.uniforms;
+    const v = ctx.world.actors[0]!.view.uniforms;
     const seedBaked = (m: BakedChunkMaterial) => {
       m.uniforms.lightDir.value.copy(v.lightDir.value);
       m.uniforms.keyColor.value.copy(v.keyColor.value);
@@ -3705,8 +3694,8 @@ async function main() {
       m.uniforms.ambient.value.setRGB(
         fill * key.r + pw * mr * 0.5, fill * key.g + pw * mg * 0.5, fill * key.b + pw * mb * 0.5);
     };
-    bakedChunkSeed = seedBaked;
-    if (bakedChunkMat) bakedChunkSeed(bakedChunkMat);
+    ctx.bake.seed = seedBaked;
+    if (ctx.bake.mat) ctx.bake.seed(ctx.bake.mat);
   }
 
   /** The wound panel's boneRatio lever (applyWoundTuning calls this). Bones
@@ -3719,19 +3708,19 @@ async function main() {
    *  !wanderFrozen, and a FROZEN bench leg calling setWoundTuning must not
    *  march through a stale hull. */
   function rebuildCast(): void {
-    soldierCorpses?.dispose();
-    encounter.clear(); encounterHomes.clear();
+    ctx.world.soldierCorpses?.dispose();
+    ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
     // DRAIN IN-FLIGHT RUPTURES FIRST. Their actors are about to be disposed and
     // their queued impulses reference chunks from the pool that is also being
     // rebuilt; a window that survived the reset would gib a stale actor or
     // launch a stale id on the next tick.
-    for (const q of pendingGibs) q.actor.endTear();
-    pendingGibs.length = 0;
-    pendingGibImpulses.length = 0;
+    for (const q of ctx.gibs.pendingGibs) q.actor.endTear();
+    ctx.gibs.pendingGibs.length = 0;
+    ctx.gibs.pendingGibImpulses.length = 0;
     // The old source views are disposed below; refill from the rebuilt cast.
-    crowdSourceView.clear();
-    crowdVolumeBound.clear();
-    for (const a of actors) {
+    ctx.crowd.sourceView.clear();
+    ctx.crowd.volumeBound.clear();
+    for (const a of ctx.world.actors) {
       releaseSkeletonActor(a);
       scene.remove(a.view.object);
       scene.remove(a.view.coneObject);
@@ -3743,9 +3732,9 @@ async function main() {
     // No mesh may retain a geometry while the shared cache frees it. Clear
     // actor slots first, then dispose reusable cached geometries; the next
     // frame repopulates both from the rebuilt cast.
-    segMeshRenderer?.clear();
-    segMeshCache?.dispose();
-    actors.length = 0;
+    ctx.render.segMeshRenderer?.clear();
+    ctx.render.segMeshCache?.dispose();
+    ctx.world.actors.length = 0;
     const errs: string[] = [];
     spawnAll(errs);
     if (errs.length > 0) {
@@ -3753,24 +3742,24 @@ async function main() {
     }
     // The exclusion logic mirrors the refreshHull seam, which lives below
     // this point — object properties do not hoist, so it is restated here.
-    occluderHull.update(
-      actors.map(a => a.posed()),
-      hullExclusionsEnabled
-        ? actors.flatMap(a => {
+    ctx.render.occluderHull.update(
+      ctx.world.actors.map(a => a.posed()),
+      ctx.render.hullExclusionsEnabled
+        ? ctx.world.actors.flatMap(a => {
           const prims = a.posed().prims;
           const yaw = a.pose().yaw;
           return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
         })
         : [],
     );
-    if (sdfLayer.shellEnabled) {
-      outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+    if (ctx.render.sdfLayer.shellEnabled) {
+      ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
     }
   }
 
   function pushProbeWeight(v: number) {
-    probeWeight = Math.min(1, Math.max(0, v));
-    for (const a of actors) a.view.uniforms.bounceCfg.value.x = probeWeight;
+    ctx.probes.weight = Math.min(1, Math.max(0, v));
+    for (const a of ctx.world.actors) a.view.uniforms.bounceCfg.value.x = ctx.probes.weight;
   }
 
   /** Ground radius the crowd separates zombies at — the same 0.35 m the
@@ -3800,12 +3789,12 @@ async function main() {
   /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
    *  a player who shares their room. */
   function playerRoomId(): number {
-    return ROOM_ID_BY_NAME.get(enclosureKeyAt(player.pos[0], player.pos[2])) ?? -1;
+    return ROOM_ID_BY_NAME.get(enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2])) ?? -1;
   }
   /** Set when the weapon fires; consumed by the next tick to turn heads in
    *  the player's room. Sticky rather than instantaneous because a shot lands
    *  in an event handler, not in the frame callback. */
-  let shotAlert = false;
+  ctx.weapon.shotAlert = false;
 
   // -----------------------------------------------------------------------
   mark('player-start');
@@ -3816,26 +3805,26 @@ async function main() {
   // with a different ?fxsize lands you straight in the arena instead of walking
   // there. Absent = PLAYER_START, bit-identical to before this existed. The
   // in-page equivalent is __sdfGame.teleport(id).
-  const bootRoomParam = new URLSearchParams(location.search).get('room');
-  const bootRoom = bootRoomParam === null ? null
-    : ROOMS.find(r => r.name === bootRoomParam
-      || r.id === Number(bootRoomParam)) ?? null;
-  const player: PlayerState = {
-    pos: bootRoom
-      ? [(bootRoom.minX + bootRoom.maxX) / 2, 0, (bootRoom.minZ + bootRoom.maxZ) / 2]
+  ctx.boot.roomParam = new URLSearchParams(location.search).get('room');
+  ctx.boot.room = ctx.boot.roomParam === null ? null
+    : ROOMS.find(r => r.name === ctx.boot.roomParam
+      || r.id === Number(ctx.boot.roomParam)) ?? null;
+  ctx.player.player = {
+    pos: ctx.boot.room
+      ? [(ctx.boot.room.minX + ctx.boot.room.maxX) / 2, 0, (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2]
       : [PLAYER_START.x, 0, PLAYER_START.z],
     vel: [0, 0, 0],
-    yaw: bootRoom ? 0 : PLAYER_START.yaw,
+    yaw: ctx.boot.room ? 0 : PLAYER_START.yaw,
     pitch: PLAYER_START.pitch,
     grounded: true,
   };
-  const keys = new Set<string>();
-  const canvas = handle.canvas;
-  canvas.addEventListener('click', () => {
-    if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+  ctx.player.keys = new Set<string>();
+  ctx.boot.canvas = ctx.boot.handle.canvas;
+  ctx.boot.canvas.addEventListener('click', () => {
+    if (document.pointerLockElement !== ctx.boot.canvas) ctx.boot.canvas.requestPointerLock();
   });
   document.addEventListener('pointerlockchange', () => {
-    hud.lockHint = document.pointerLockElement !== canvas;
+    ctx.boot.hud.lockHint = document.pointerLockElement !== ctx.boot.canvas;
   });
 
   // -----------------------------------------------------------------------
@@ -3857,50 +3846,50 @@ async function main() {
   // -----------------------------------------------------------------------
   /** Accumulated mouse delta for the frame about to tick. Consumed (and
    *  zeroed) by readInputFrame. */
-  let pendingDx = 0, pendingDy = 0;
+  ctx.player.pendingDx = 0, ctx.player.pendingDy = 0;
   /** Edge events for the frame about to tick: 0 = none, 1 = one barrel,
    *  2 = both; `pendingReload` = a reload started this frame. */
-  let pendingFire: 0 | 1 | 2 = 0;
-  let pendingReload = false;
+  ctx.weapon.pendingFire = 0;
+  ctx.weapon.pendingReload = false;
   /** TRUE while a recording is being replayed. The listeners still fire but
    *  inject nothing — the player owns the frame. */
-  let replayActive = false;
+  ctx.demo.replayActive = false;
   /** Frames consumed by the current replay (demoInfo().frame). */
-  let replayFrame = 0;
+  ctx.demo.replayFrame = 0;
   /** The input frame the next tick consumes. Live: readInputFrame(); replay:
    *  the player's next(). */
-  let currentInputFrame: DemoFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [0, 0] };
+  ctx.player.currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [0, 0] };
   /** The previous frame's key set, so applyInputFrame can derive rising edges
    *  (toggles like slug mode) from an absolute held-key snapshot. */
-  let prevInputKeys = new Set<string>();
+  ctx.player.prevInputKeys = new Set<string>();
   /** The active recorder, or null. Pushed once per tick while recording. */
-  let recorder: DemoRecorder | null = null;
+  ctx.demo.recorder = null;
 
   document.addEventListener('mousemove', (e) => {
-    if (document.pointerLockElement !== canvas) return;
-    if (replayActive) return; // the player owns the pose
-    pendingDx += e.movementX;
-    pendingDy += e.movementY;
+    if (document.pointerLockElement !== ctx.boot.canvas) return;
+    if (ctx.demo.replayActive) return; // the player owns the pose
+    ctx.player.pendingDx += e.movementX;
+    ctx.player.pendingDy += e.movementY;
   });
   window.addEventListener('keydown', (e) => {
-    if (replayActive) return;
-    keys.add(e.code);
+    if (ctx.demo.replayActive) return;
+    ctx.player.keys.add(e.code);
   });
-  window.addEventListener('keyup', (e) => keys.delete(e.code));
-  let parked = DEFAULT_PROBE_WEIGHT;
+  window.addEventListener('keyup', (e) => ctx.player.keys.delete(e.code));
+  ctx.player.parked = DEFAULT_PROBE_WEIGHT;
 
   /** The mouse delta's effect, extracted so the live handler and the replay
    *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
    *  from the tick); otherwise it turns the camera directly. */
   function applyMouseDelta(dx: number, dy: number): void {
-    if (freeAimOn) {
+    if (ctx.player.freeAimOn) {
       // The mouse moves the RETICLE, not the camera. Turning is a consequence
       // of shoving the reticle past the dead zone, handled in the tick.
-      aim = moveAim(aim, dx, dy);
+      ctx.weapon.aim = moveAim(ctx.weapon.aim, dx, dy);
     } else {
-      player.yaw += dx * 0.0022;
-      player.pitch = Math.min(PLAYER.pitchLimit,
-        Math.max(-PLAYER.pitchLimit, player.pitch - dy * 0.0022));
+      ctx.player.player.yaw += dx * 0.0022;
+      ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
+        Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch - dy * 0.0022));
     }
   }
 
@@ -3908,7 +3897,7 @@ async function main() {
    *  listeners no longer do these inline: doing them here is what lets a
    *  replayed key set toggle slug mode exactly as a live press did. */
   function applyInputEdges(next: Set<string>): void {
-    const pressed = (code: string): boolean => next.has(code) && !prevInputKeys.has(code);
+    const pressed = (code: string): boolean => next.has(code) && !ctx.player.prevInputKeys.has(code);
     // WEAPON SLOTS. 1 = grapeshot, 2 = dynamite. Refused while a bundle is lit:
     // a player holding a burning bundle cannot put it away, which is the game's
     // own rule (Blood's dynamite FSM has no exit from the armed state) and the
@@ -3919,55 +3908,55 @@ async function main() {
     // every other edge does, or a replayed key set would not switch weapons and
     // the recording would diverge from the live run at the first slot press.
     for (const code of next) {
-      if (prevInputKeys.has(code)) continue;
+      if (ctx.player.prevInputKeys.has(code)) continue;
       const wantSlot = slotForKey(code);
       if (wantSlot === null) continue;
-      if (cook.phase === 'cooking') {
-        telemetry.event('weapon-switch-refused', { slot: wantSlot, reason: 'cooking' });
+      if (ctx.vfx.cook.phase === 'cooking') {
+        ctx.telemetry.telemetry.event('weapon-switch-refused', { slot: wantSlot, reason: 'cooking' });
       } else {
-        const before = slotState;
-        slotState = requestSlot(slotState, wantSlot);
-        if (slotState !== before) telemetry.event('weapon-switch', { to: wantSlot });
+        const before = ctx.weapon.slotState;
+        ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, wantSlot);
+        if (ctx.weapon.slotState !== before) ctx.telemetry.telemetry.event('weapon-switch', { to: wantSlot });
       }
       updateHud();
     }
-    if (pressed('BracketLeft')) pushProbeWeight(probeWeight - 0.05);
-    if (pressed('BracketRight')) pushProbeWeight(probeWeight + 0.05);
+    if (pressed('BracketLeft')) pushProbeWeight(ctx.probes.weight - 0.05);
+    if (pressed('BracketRight')) pushProbeWeight(ctx.probes.weight + 0.05);
     if (pressed('KeyP')) {
-      if (probeWeight > 0) { parked = probeWeight; pushProbeWeight(0); }
-      else pushProbeWeight(parked);
+      if (ctx.probes.weight > 0) { ctx.player.parked = ctx.probes.weight; pushProbeWeight(0); }
+      else pushProbeWeight(ctx.player.parked);
     }
-    if (pressed('KeyE')) { slugMode = !slugMode; updateHud(); }
+    if (pressed('KeyE')) { ctx.weapon.slugMode = !ctx.weapon.slugMode; updateHud(); }
     // Neural upscale A/B (dev-only, P3): native -> nearest -> model while an
     // upscale config is active. One toggle per rising edge, as before
     // (the old handler's `!e.repeat` guard is the same thing here).
-    if (pressed('KeyU') && upscaleAb.config) {
-      applyUpscaleAbMode(upscaleAb.mode === 'native' ? 'nearest' : upscaleAb.mode === 'nearest' ? 'model' : 'native');
+    if (pressed('KeyU') && ctx.render.upscaleAb.config) {
+      applyUpscaleAbMode(ctx.render.upscaleAb.mode === 'native' ? 'nearest' : ctx.render.upscaleAb.mode === 'nearest' ? 'model' : 'native');
     }
     // H hides/shows EVERY tuning panel together. They cover most of the
     // viewport, and until now the only way to dismiss them was to know the
     // console API -- which is no use to someone doing a look pass.
     // G toggles free aim, so the two schemes can be A/B'd back to back.
     if (pressed('KeyG')) {
-      freeAimOn = !freeAimOn;
-      aim = { x: 0, y: 0 };
+      ctx.player.freeAimOn = !ctx.player.freeAimOn;
+      ctx.weapon.aim = { x: 0, y: 0 };
       updateHud();
     }
     if (pressed('KeyH')) {
-      panelsHidden = !panelsHidden;
-      woundPanel?.setVisible(!panelsHidden);
-      gooPanel?.setVisible(!panelsHidden);
-      vhsPanel?.setVisible(!panelsHidden);
-      dynamitePanel?.setVisible(!panelsHidden);
-      shutterPanel?.setVisible(!panelsHidden);
+      ctx.panels.hidden = !ctx.panels.hidden;
+      ctx.panels.woundPanel?.setVisible(!ctx.panels.hidden);
+      ctx.panels.gooPanel?.setVisible(!ctx.panels.hidden);
+      ctx.panels.vhsPanel?.setVisible(!ctx.panels.hidden);
+      ctx.panels.dynamitePanel?.setVisible(!ctx.panels.hidden);
+      ctx.panels.shutterPanel?.setVisible(!ctx.panels.hidden);
     }
     // Manual reload. Dead under unlimited ammo BY CONSTRUCTION (the magazine is
     // never partial), which is why ?ammo=finite is the way to exercise it.
-    if (pressed('KeyR') && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
+    if (pressed('KeyR') && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) {
       startReload();
     }
     if (pressed('KeyT')) {
-      reloadSpeed = reloadSpeed === 1 ? 0.25 : reloadSpeed === 0.25 ? 0.1 : 1;
+      ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
       updateHud();
     }
   }
@@ -3976,17 +3965,17 @@ async function main() {
    *  consume. Zeroes the accumulators: a delta belongs to exactly one frame. */
   function readInputFrame(): DemoFrame {
     const frame: DemoFrame = {
-      keys: [...keys],
-      dx: pendingDx,
-      dy: pendingDy,
-      fire: pendingFire,
-      reload: pendingReload,
-      look: [player.yaw, player.pitch],
+      keys: [...ctx.player.keys],
+      dx: ctx.player.pendingDx,
+      dy: ctx.player.pendingDy,
+      fire: ctx.weapon.pendingFire,
+      reload: ctx.weapon.pendingReload,
+      look: [ctx.player.player.yaw, ctx.player.player.pitch],
     };
-    pendingDx = 0;
-    pendingDy = 0;
-    pendingFire = 0;
-    pendingReload = false;
+    ctx.player.pendingDx = 0;
+    ctx.player.pendingDy = 0;
+    ctx.weapon.pendingFire = 0;
+    ctx.weapon.pendingReload = false;
     return frame;
   }
 
@@ -4000,16 +3989,16 @@ async function main() {
     if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(f.dx, f.dy);
     // Anti-drift absolute pin. Skipped in free aim, where the pose is a
     // consequence of the reticle rather than a thing the mouse set directly.
-    if (!freeAimOn) {
-      player.yaw = f.look[0];
-      player.pitch = f.look[1];
+    if (!ctx.player.freeAimOn) {
+      ctx.player.player.yaw = f.look[0];
+      ctx.player.player.pitch = f.look[1];
     }
     if (f.fire === 1) fire(1);
     else if (f.fire === 2) fire(2);
     // The KeyR edge above already covers a live press; this covers a recorded
     // frame whose reload was folded into the flag rather than the keys.
-    if (f.reload && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) startReload();
-    prevInputKeys = next;
+    if (f.reload && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload();
+    ctx.player.prevInputKeys = next;
   }
 
   // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
@@ -4017,49 +4006,49 @@ async function main() {
   // DYNAMITE (slot 2) takes the same left button but as a HELD input: press
   // lights the fuse, release throws (fpv.ts's cook machine). Right button stays
   // a shotgun verb — a bundle has no second barrel.
-  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  canvas.addEventListener('mousedown', (e) => {
-    if (document.pointerLockElement !== canvas) return;
-    if (replayActive) return; // the player owns the shot
-    if (!slotReady(slotState)) return;            // mid-switch: no verbs at all
-    if (slotState.live === 'dynamite') {
-      if (e.button === 0) dynPress = true;        // light it
+  ctx.boot.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  ctx.boot.canvas.addEventListener('mousedown', (e) => {
+    if (document.pointerLockElement !== ctx.boot.canvas) return;
+    if (ctx.demo.replayActive) return; // the player owns the shot
+    if (!slotReady(ctx.weapon.slotState)) return;            // mid-switch: no verbs at all
+    if (ctx.weapon.slotState.live === 'dynamite') {
+      if (e.button === 0) ctx.dynamite.press = true;        // light it
       return;
     }
     // Deferred to the tick (see the input seam note): an edge event must land
     // on exactly one frame or a recording cannot replay it. The dynamite press
     // above is already a flag the tick consumes, so it is on the same seam.
-    if (e.button === 0) pendingFire = 1;
-    else if (e.button === 2) pendingFire = 2;
+    if (e.button === 0) ctx.weapon.pendingFire = 1;
+    else if (e.button === 2) ctx.weapon.pendingFire = 2;
   });
   // The release half of the cook. Without this the bundle could only ever cook
   // to an overcook, which is not the weapon.
   window.addEventListener('mouseup', (e) => {
     if (e.button !== 0) return;
-    if (document.pointerLockElement !== canvas) return;
-    if (slotState.live !== 'dynamite') return;
-    dynRelease = true;
+    if (document.pointerLockElement !== ctx.boot.canvas) return;
+    if (ctx.weapon.slotState.live !== 'dynamite') return;
+    ctx.dynamite.release = true;
   });
 
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
-  const viewModelAnchor = new THREE.Group();
-  viewModelAnchor.name = 'view-model-anchor';
+  ctx.weapon.viewModelAnchor = new THREE.Group();
+  ctx.weapon.viewModelAnchor.name = 'view-model-anchor';
   // Ride height of the whole view-model (gun + orb hands move together).
   // Owner playtest 2026-08-26: the gun sat high enough to crowd the frame.
   // Captured current / −5 cm / −10 cm from the same spot and compared: −5 cm
   // frees the centre of the frame while the breech and hammers — the detail
   // that chose this model — stay fully in frame; −10 cm starts to sink the
   // grip out of the bottom edge. −5 cm is the shipped height.
-  viewModelAnchor.position.y = -0.05;
+  ctx.weapon.viewModelAnchor.position.y = -0.05;
   /** Everything that leans and bobs together: gun, hands, flash, smoke, cases. */
-  let aimRig: THREE.Group | null = null;
+  ctx.weapon.aimRig = null;
   // One rig for the whole view model, so the free-aim lean and the walk bob are
   // a single transform instead of being applied to the gun, both hands, the
   // flash, the smoke and the cases separately (and inevitably inconsistently).
-  aimRig = new THREE.Group();
-  aimRig.name = 'aim-rig';
-  viewModelAnchor.add(aimRig);
+  ctx.weapon.aimRig = new THREE.Group();
+  ctx.weapon.aimRig.name = 'aim-rig';
+  ctx.weapon.viewModelAnchor.add(ctx.weapon.aimRig);
   // WEAPON SLOT 1's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
   // its point light — hangs off THIS rather than off aimRig directly, so a
@@ -4067,10 +4056,10 @@ async function main() {
   // per-node flag list that would silently miss whatever gets added next.
   // aimRig keeps the free-aim lean and the walk bob; gunRig carries only the
   // holster travel.
-  const gunRig = new THREE.Group();
-  gunRig.name = 'gun-rig';
-  aimRig.add(gunRig);
-  camera.add(viewModelAnchor);
+  ctx.weapon.gunRig = new THREE.Group();
+  ctx.weapon.gunRig.name = 'gun-rig';
+  ctx.weapon.aimRig.add(ctx.weapon.gunRig);
+  camera.add(ctx.weapon.viewModelAnchor);
   scene.add(camera);
 
   // -----------------------------------------------------------------------
@@ -4089,42 +4078,42 @@ async function main() {
    *  Blender's "muzzles down -Y" becomes +Z after the glTF y-up conversion, so
    *  a POSITIVE x-rotation swings the muzzles DOWN, which is the way a break
    *  action opens. */
-  let hingePivot: THREE.Group | null = null;
+  ctx.weapon.hingePivot = null;
   /** The GLB's own muzzle locators, kept so muzzleWorld() can read their LIVE
    *  world position each shot rather than a position sampled once at load. */
-  let muzzleNodes: THREE.Object3D[] = [];
+  ctx.weapon.muzzleNodes = [];
   /** Driven GLB nodes. Shells and the extractor live INSIDE Barrels, so they
    *  inherit the break rotation and the runtime only ever writes their LOCAL
    *  position -- no rotated basis is computed anywhere. */
-  let shellNodes: THREE.Object3D[] = [];
-  let breechNodes: THREE.Object3D[] = [];
-  let extractorNode: THREE.Object3D | null = null;
-  let topLeverNode: THREE.Object3D | null = null;
+  ctx.weapon.shellNodes = [];
+  ctx.weapon.breechNodes = [];
+  ctx.weapon.extractorNode = null;
+  ctx.weapon.topLeverNode = null;
   /** Each shell's seated local position, so the extract slide is a delta. */
-  const shellRestZ: number[] = [];
-  let extractorRestZ = 0;
-  let gripHandGroup: THREE.Group | null = null;
-  let foreHandGroup: THREE.Group | null = null;
-  let gunGroup: THREE.Group | null = null;
-  let flashGroup: THREE.Group | null = null;
-  let flashMaterial: THREE.MeshBasicMaterial | null = null;
-  let flashLight: THREE.PointLight | null = null;
-  let handMaterial: THREE.MeshStandardMaterial | null = null;
+  ctx.weapon.shellRestZ = [];
+  ctx.weapon.extractorRestZ = 0;
+  ctx.weapon.gripHandGroup = null;
+  ctx.weapon.foreHandGroup = null;
+  ctx.weapon.gunGroup = null;
+  ctx.weapon.flashGroup = null;
+  ctx.weapon.flashMaterial = null;
+  ctx.weapon.flashLight = null;
+  ctx.weapon.handMaterial = null;
   /** The loaded arms, for the gate's seam. */
-  let arms: GoblinArms | null = null;
+  ctx.weapon.arms = null;
   /** Gun body materials, kept so the finish is tunable at runtime. */
-  const gunMaterials: THREE.MeshStandardMaterial[] = [];
+  ctx.weapon.gunMaterials = [];
   const FLASH_VARIANTS = 4;
-  const flashTextures: THREE.DataTexture[] = [];
+  ctx.weapon.flashTextures = [];
   const SMOKE_COUNT = 7;
-  const smokePuffs: { mesh: THREE.Mesh; age: number; vel: THREE.Vector3; roll: number }[] = [];
-  const ejectedShells: THREE.Group[] = [];
-  const loadShells: THREE.Group[] = [];
+  ctx.vfx.smokePuffs = [];
+  ctx.weapon.ejectedShells = [];
+  ctx.weapon.loadShells = [];
   /** Where the last spent case was placed, in WORLD space, the moment it was
    *  handed from the extraction slide to the free tumble. Step 5b's proof
    *  that the eject origin is a real chamber mouth: this is asserted against
    *  breechWorld() rather than trusted by construction. */
-  let lastEjectOrigin: Vec3 | null = null;
+  ctx.weapon.lastEjectOrigin = null;
   const Y_UP = new THREE.Vector3(0, 1, 0);
   const _tmpV = new THREE.Vector3();
   /** The two elbows, rig space. See aimArm. */
@@ -4155,8 +4144,8 @@ async function main() {
    *  the anchor's world matrices first when the rig moved this frame. */
   function viewToRig(view: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
     out.copy(view);
-    viewModelAnchor.localToWorld(out);
-    (aimRig ?? viewModelAnchor).worldToLocal(out);
+    ctx.weapon.viewModelAnchor.localToWorld(out);
+    (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).worldToLocal(out);
     return out;
   }
   /** A view-space DIRECTION in rig space (two points, subtracted). */
@@ -4169,14 +4158,14 @@ async function main() {
    *  is set, and again wherever a hand is moved. */
   const _bendR = new THREE.Vector3(), _bendL = new THREE.Vector3();
   function aimArms(): void {
-    viewModelAnchor.updateMatrixWorld(true);
-    if (gripHandGroup) {
+    ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
+    if (ctx.weapon.gripHandGroup) {
       viewDirToRig(BEND_R_VIEW, _bendR);
-      aimArm(gripHandGroup, viewToRig(SHOULDER_R_VIEW, _sh), _bendR);
+      aimArm(ctx.weapon.gripHandGroup, viewToRig(SHOULDER_R_VIEW, _sh), _bendR);
     }
-    if (foreHandGroup) {
+    if (ctx.weapon.foreHandGroup) {
       viewDirToRig(BEND_L_VIEW, _bendL);
-      aimArm(foreHandGroup, viewToRig(SHOULDER_L_VIEW, _sh), _bendL);
+      aimArm(ctx.weapon.foreHandGroup, viewToRig(SHOULDER_L_VIEW, _sh), _bendL);
     }
   }
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
@@ -4207,9 +4196,9 @@ async function main() {
     let found: THREE.Object3D | null = null;
     root.traverse((o) => { if (o.name === name) found = o; });
     if (!found) return false;
-    viewModelAnchor.updateMatrixWorld(true);
+    ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
     out.copy((found as THREE.Object3D).getWorldPosition(new THREE.Vector3()));
-    (aimRig ?? viewModelAnchor).worldToLocal(out);
+    (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).worldToLocal(out);
     return true;
   }
   /** A breech locator's position in aim-rig space RIGHT NOW. Unlike
@@ -4221,10 +4210,10 @@ async function main() {
    *  static, so it could not follow the barrels through their swing -- which is
    *  the whole of "the shells don't come out of the right location". */
   function breechInRig(i: 0 | 1, out: THREE.Vector3): boolean {
-    const n = breechNodes[i];
+    const n = ctx.weapon.breechNodes[i];
     if (!n) return false;
     n.getWorldPosition(out);
-    (aimRig ?? viewModelAnchor).worldToLocal(out);
+    (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).worldToLocal(out);
     return true;
   }
   /** The bore's basis in RIG space this frame: `out` runs from the muzzles to
@@ -4235,10 +4224,10 @@ async function main() {
    *  a bore tilted 66 degrees off it goes through the chamber wall. */
   const _bfA = new THREE.Vector3(), _bfB = new THREE.Vector3();
   function boreFrameInRig(out: THREE.Vector3, side: THREE.Vector3): boolean {
-    const mL = muzzleNodes[0], mR = muzzleNodes[1];
-    const bL = breechNodes[0], bR = breechNodes[1];
+    const mL = ctx.weapon.muzzleNodes[0], mR = ctx.weapon.muzzleNodes[1];
+    const bL = ctx.weapon.breechNodes[0], bR = ctx.weapon.breechNodes[1];
     if (!mL || !mR || !bL || !bR) return false;
-    const rig = aimRig ?? viewModelAnchor;
+    const rig = ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor;
     rig.worldToLocal(bL.getWorldPosition(_bfA));
     rig.worldToLocal(bR.getWorldPosition(_bfB));
     out.copy(_bfA).add(_bfB).multiplyScalar(0.5);
@@ -4250,33 +4239,33 @@ async function main() {
     return true;
   }
   /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
-  let fireAge = Infinity;
-  let fireBarrels: 1 | 2 = 1;
+  ctx.weapon.fireAge = Infinity;
+  ctx.weapon.fireBarrels = 1;
 
   // ——— FREE AIM (Realms of the Haunting scheme) ———————————————————————
   // The mouse drives a RETICLE around the viewport; the camera only turns once
   // that reticle pushes past a large central dead zone, and the weapon leans to
   // follow it. Shots go through the reticle, not through screen centre.
-  let freeAimOn = true;
-  let aim: AimPoint = { x: 0, y: 0 };
-  let weaponYawDeg = 0;
-  let weaponPitchDeg = 0;
+  ctx.player.freeAimOn = true;
+  ctx.weapon.aim = { x: 0, y: 0 };
+  ctx.weapon.yawDeg = 0;
+  ctx.weapon.pitchDeg = 0;
   /** Lateral/vertical travel of the whole view model, METRES in camera space.
    *  Smoothed on the same lag as the angles so the gun arrives as one motion
    *  rather than sliding and turning at different rates. */
-  let weaponSlideXm = 0;
-  let weaponSlideYm = 0;
+  ctx.weapon.slideXm = 0;
+  ctx.weapon.slideYm = 0;
   /** Metres walked, and the smoothed 0..1 speed envelope. Bob is driven by
    *  DISTANCE so it stays locked to footfalls at any speed. */
-  let bobDistance = 0;
-  let bobAmount = 0;
-  let prevPlayerPos: Vec3 = [0, 0, 0];
-  let reticleEl: HTMLDivElement | null = null;
-  let gunReady = false;
+  ctx.player.bobDistance = 0;
+  ctx.player.bobAmount = 0;
+  ctx.player.prevPlayerPos = [0, 0, 0];
+  ctx.player.reticleEl = null;
+  ctx.weapon.gunReady = false;
   // LOADING SCREEN gate: resolved on BOTH paths below — a failed weapon load
   // still boots the game, and the loader must not hang on it.
   let resolveGunReady: () => void = () => {};
-  const gunReadyPromise = new Promise<void>((r) => { resolveGunReady = r; });
+  ctx.weapon.gunReadyPromise = new Promise<void>((r) => { resolveGunReady = r; });
   setLoader('weapon + effects');
   try {
     const gltf = await new GLTFLoader().loadAsync(GUN_GLB);
@@ -4284,7 +4273,7 @@ async function main() {
     // environment and the flesh's hand-written lighting does not apply to a
     // MeshStandardMaterial. Per-material env, kit-overlay style, so the level
     // meshes keep their gallery look.
-    const pmrem = new THREE.PMREMGenerator(handle.renderer);
+    const pmrem = new THREE.PMREMGenerator(ctx.boot.handle.renderer);
     const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
     gltf.scene.traverse((o) => {
@@ -4297,14 +4286,14 @@ async function main() {
           // dark dungeon. 0.7 against its private RoomEnvironment was tuned for
           // the old near-black metal.
           std.envMapIntensity = 1.1;
-          gunMaterials.push(std);
+          ctx.weapon.gunMaterials.push(std);
           std.needsUpdate = true;
         }
       }
     });
-    gunGroup = new THREE.Group();
-    gunGroup.name = 'grapeshot-k3';
-    gunGroup.add(gltf.scene);
+    ctx.weapon.gunGroup = new THREE.Group();
+    ctx.weapon.gunGroup.name = 'grapeshot-k3';
+    ctx.weapon.gunGroup.add(gltf.scene);
     // The break is a code-driven rotation of this node about the hinge locator
     // -- the GLB carries no animation. A null here means the export lost its
     // grouping, which must be loud: a silent null would present as a reload
@@ -4322,20 +4311,20 @@ async function main() {
       if (!o) throw new Error(`[sdf-game] shorty-double.glb is missing the ${n} node`);
       return o;
     };
-    shellNodes = [need('Shell_L'), need('Shell_R')];
-    breechNodes = [need('Breech_L'), need('Breech_R')];
-    extractorNode = need('Extractor');
-    topLeverNode = need('TopLever');
-    for (const s of shellNodes) shellRestZ.push(s.position.z);
-    extractorRestZ = extractorNode.position.z;
+    ctx.weapon.shellNodes = [need('Shell_L'), need('Shell_R')];
+    ctx.weapon.breechNodes = [need('Breech_L'), need('Breech_R')];
+    ctx.weapon.extractorNode = need('Extractor');
+    ctx.weapon.topLeverNode = need('TopLever');
+    for (const s of ctx.weapon.shellNodes) ctx.weapon.shellRestZ.push(s.position.z);
+    ctx.weapon.extractorRestZ = ctx.weapon.extractorNode.position.z;
     // Rotate about the HINGE, not about the barrel node's own origin -- the
     // latter would swing the barrels through the frame. Standard fix: a pivot
     // group parked at the hinge, with the barrels offset back by the same
     // amount, so the group's rotation IS the break.
-    hingePivot = new THREE.Group();
-    hingePivot.position.copy(hingeNode.position);
-    (barrels.parent ?? gltf.scene).add(hingePivot);
-    hingePivot.add(barrels);
+    ctx.weapon.hingePivot = new THREE.Group();
+    ctx.weapon.hingePivot.position.copy(hingeNode.position);
+    (barrels.parent ?? gltf.scene).add(ctx.weapon.hingePivot);
+    ctx.weapon.hingePivot.add(barrels);
     barrels.position.sub(hingeNode.position);
     // AXIS NOTE: the model script's "muzzles down -Y" is BLENDER space;
     // Blender's Z-up -> glTF Y-up conversion (x,z,-y) lands them at +Z in
@@ -4345,11 +4334,11 @@ async function main() {
     // FPV pose, carried over from the model script's preview constants so the
     // Blender FPV render and the game agree. Yaw cants the barrels toward
     // screen centre so BOTH bores read; pitch lifts the muzzle off the floor.
-    gunGroup.rotation.y = Math.PI;
-    gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
-    gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
-    gunGroup.position.copy(GUN_REST.pos);
-    gunRig.add(gunGroup);
+    ctx.weapon.gunGroup.rotation.y = Math.PI;
+    ctx.weapon.gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
+    ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
+    ctx.weapon.gunGroup.position.copy(GUN_REST.pos);
+    ctx.weapon.gunRig.add(ctx.weapon.gunGroup);
     // DEFERRED G-BUFFER ROUTE (composition review fix): the shorty is an
     // OPAQUE first-person surface — it belongs in the mesh pass (level-only
     // receiver, like the kits) so the shared light stage shades it, not a
@@ -4361,12 +4350,12 @@ async function main() {
     // `castShadow === true` meshes, so routing never puts the viewmodel in
     // the flashlight maps. The flash sprite, smoke and blood stay FORWARD
     // (blended, unregistered).
-    if (deferredApi) deferredApi.router.register(gunGroup, 'mesh', 'level-only');
+    if (ctx.boot.deferredApi) ctx.boot.deferredApi.router.register(ctx.weapon.gunGroup, 'mesh', 'level-only');
 
     // Anchor points come off the GLB itself, so they cannot drift from the
     // weapon when its pose changes -- which is what left the support hand
     // floating unattached instead of gripping the fore-end.
-    viewModelAnchor.updateMatrixWorld(true);
+    ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
     {
       const mL = new THREE.Vector3(), mR = new THREE.Vector3();
       if (locatorInView(gltf.scene, 'Muzzle_L', mL) && locatorInView(gltf.scene, 'Muzzle_R', mR)) {
@@ -4374,7 +4363,7 @@ async function main() {
       }
       const nL = gltf.scene.getObjectByName('Muzzle_L');
       const nR = gltf.scene.getObjectByName('Muzzle_R');
-      if (nL && nR) muzzleNodes = [nL, nR];
+      if (nL && nR) ctx.weapon.muzzleNodes = [nL, nR];
       if (!locatorInView(gltf.scene, 'Grip_Hand', GRIP_HAND_REST)) {
         GRIP_HAND_REST.set(GUN_REST.pos.x + 0.02, GUN_REST.pos.y - 0.04, GUN_REST.pos.z + 0.05);
       }
@@ -4394,22 +4383,22 @@ async function main() {
     // left wrist. Each group's origin is the HAND, so the rest positions read
     // off the gun's locators go straight onto it, and aimArm() swings the arm
     // behind the hand toward a fixed elbow without moving the hand.
-    arms = await loadGoblinArms(GOBLIN_ARM_GLB, { env, envMapIntensity: 1.1 });
-    handMaterial = arms.skin;
-    gripHandGroup = arms.right;
-    foreHandGroup = arms.left;
-    gripHandGroup.name = 'fpv-hand-grip';
-    foreHandGroup.name = 'fpv-hand-fore';
-    gripHandGroup.position.copy(GRIP_HAND_REST);
-    foreHandGroup.position.copy(FORE_HAND_REST);
-    gunRig.add(gripHandGroup, foreHandGroup);
+    ctx.weapon.arms = await loadGoblinArms(GOBLIN_ARM_GLB, { env, envMapIntensity: 1.1 });
+    ctx.weapon.handMaterial = ctx.weapon.arms.skin;
+    ctx.weapon.gripHandGroup = ctx.weapon.arms.right;
+    ctx.weapon.foreHandGroup = ctx.weapon.arms.left;
+    ctx.weapon.gripHandGroup.name = 'fpv-hand-grip';
+    ctx.weapon.foreHandGroup.name = 'fpv-hand-fore';
+    ctx.weapon.gripHandGroup.position.copy(GRIP_HAND_REST);
+    ctx.weapon.foreHandGroup.position.copy(FORE_HAND_REST);
+    ctx.weapon.gunRig.add(ctx.weapon.gripHandGroup, ctx.weapon.foreHandGroup);
     aimArms();
     // DEFERRED G-BUFFER ROUTE: the goblin arms are opaque Standard-material
     // surfaces (skin, bracer, watch screen — game-arms.ts) — same route as
     // the gun, same receiver, same castShadow reasoning.
-    if (deferredApi) {
-      deferredApi.router.register(gripHandGroup, 'mesh', 'level-only');
-      deferredApi.router.register(foreHandGroup, 'mesh', 'level-only');
+    if (ctx.boot.deferredApi) {
+      ctx.boot.deferredApi.router.register(ctx.weapon.gripHandGroup, 'mesh', 'level-only');
+      ctx.boot.deferredApi.router.register(ctx.weapon.foreHandGroup, 'mesh', 'level-only');
     }
 
     // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
@@ -4433,16 +4422,16 @@ async function main() {
       return g;
     }
     for (let i = 0; i < 2; i++) {
-      const e = makeShell(`shell-eject-${i}`); ejectedShells.push(e); gunRig.add(e);
-      const l = makeShell(`shell-load-${i}`); loadShells.push(l); gunRig.add(l);
+      const e = makeShell(`shell-eject-${i}`); ctx.weapon.ejectedShells.push(e); ctx.weapon.gunRig.add(e);
+      const l = makeShell(`shell-load-${i}`); ctx.weapon.loadShells.push(l); ctx.weapon.gunRig.add(l);
       // DEFERRED G-BUFFER ROUTE: the shells are OPAQUE Standard meshes (red
       // hull, brass head) — level-only like the rest of the viewmodel. They
       // fly and tumble through the forward-composited frame, so this route
       // is also what makes them depth-test against the presented scene
       // (walls occlude a shell that landed behind it).
-      if (deferredApi) {
-        deferredApi.router.register(e, 'mesh', 'level-only');
-        deferredApi.router.register(l, 'mesh', 'level-only');
+      if (ctx.boot.deferredApi) {
+        ctx.boot.deferredApi.router.register(e, 'mesh', 'level-only');
+        ctx.boot.deferredApi.router.register(l, 'mesh', 'level-only');
       }
     }
 
@@ -4453,31 +4442,31 @@ async function main() {
     for (let i = 0; i < FLASH_VARIANTS; i++) {
       const tex = new THREE.DataTexture(flashPixels(128, 17 + i * 31), 128, 128, THREE.RGBAFormat);
       tex.needsUpdate = true;
-      flashTextures.push(tex);
+      ctx.weapon.flashTextures.push(tex);
     }
     const flashMat = new THREE.MeshBasicMaterial({
-      map: flashTextures[0], color: 0xffe6bf, transparent: true, opacity: 0,
+      map: ctx.weapon.flashTextures[0], color: 0xffe6bf, transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
       side: THREE.DoubleSide,
     });
-    flashGroup = new THREE.Group();
-    flashGroup.visible = false;
+    ctx.weapon.flashGroup = new THREE.Group();
+    ctx.weapon.flashGroup.visible = false;
     // Two crossed cards so the star has volume from off-axis, plus a wider,
     // fainter one for the outer glow.
     for (const [roll, scale] of [[0, 1], [Math.PI / 2, 1], [Math.PI / 4, 1.7]] as const) {
       const q = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), flashMat);
       q.rotation.z = roll;
       q.scale.setScalar(scale);
-      flashGroup.add(q);
+      ctx.weapon.flashGroup.add(q);
     }
     // Just CLEAR of the bores: centred exactly on them, half the card sits
     // inside the barrel volume. And depthTest:false does not control draw
     // ORDER -- without a renderOrder the gun still paints over the flash.
-    flashGroup.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.035);
-    flashGroup.renderOrder = 999;
-    for (const c of flashGroup.children) c.renderOrder = 999;
-    gunRig.add(flashGroup);
-    flashMaterial = flashMat;
+    ctx.weapon.flashGroup.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.035);
+    ctx.weapon.flashGroup.renderOrder = 999;
+    for (const c of ctx.weapon.flashGroup.children) c.renderOrder = 999;
+    ctx.weapon.gunRig.add(ctx.weapon.flashGroup);
+    ctx.weapon.flashMaterial = flashMat;
 
     // SMOKE. A small pool of soft puffs released at the muzzle, drifting up and
     // out while they expand and fade. No particle system exists on this page;
@@ -4493,8 +4482,8 @@ async function main() {
         }),
       );
       m.visible = false;
-      smokePuffs.push({ mesh: m, age: Infinity, vel: new THREE.Vector3(), roll: 0 });
-      gunRig.add(m);
+      ctx.vfx.smokePuffs.push({ mesh: m, age: Infinity, vel: new THREE.Vector3(), roll: 0 });
+      ctx.weapon.gunRig.add(m);
     }
 
     // MUZZLE FLASH -- level half. Allocated ONCE at intensity 0 and only ever
@@ -4502,17 +4491,17 @@ async function main() {
     // recompile, which would hitch on every trigger pull. Range and power are
     // both up from the first pass, which the owner reported as barely lighting
     // its surroundings.
-    flashLight = new THREE.PointLight(0xffcf95, 0, 16, 1.7);
+    ctx.weapon.flashLight = new THREE.PointLight(0xffcf95, 0, 16, 1.7);
     // The deferred coordinator's muzzle candidate reads this (live closure) —
     // its own light entry, never a replay into the body flashlight uniforms.
-    muzzleLight = flashLight;
+    ctx.weapon.muzzleLight = ctx.weapon.flashLight;
     // A little AHEAD of the bores, so it throws light down the room instead of
     // mostly onto the gun's own barrels.
-    flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
-    gunRig.add(flashLight);
+    ctx.weapon.flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
+    ctx.weapon.gunRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights();
-    gunReady = true;
+    ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');
   } catch (err) {
@@ -4555,7 +4544,7 @@ async function main() {
     // compiles so nothing renders warm and nothing compiles mid-frame.
     // SUSPEND, do not change intent: a rig that pauses the loop while this is
     // in flight must win (warm-gate.ts createLoopController).
-    loopControl.suspend();
+    ctx.boot.loopControl.suspend();
     mark('warm-invoked');
     // The gun load is awaited earlier in boot, so this has usually resolved
     // already; awaiting it keeps the ordering explicit — the weapon's
@@ -4570,7 +4559,7 @@ async function main() {
     // stays correct if more synchronous code is ever added between the invoke
     // and this point. `bootBeforeWarmMs` is that interlude, reported, not
     // folded into the warm.
-    await gunReadyPromise;
+    await ctx.weapon.gunReadyPromise;
     const t0 = performance.now();
     mark('warm-steps-start');
     let passesCompiled = 0;
@@ -4595,13 +4584,13 @@ async function main() {
       camera.updateMatrixWorld();
       camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
       tp = performance.now();
-      if (crowdOn) {
+      if (ctx.crowd.on) {
         const warmGrid = {
-          widthPx: sdfLayer.targetSize.width,
-          heightPx: sdfLayer.targetSize.height,
+          widthPx: ctx.render.sdfLayer.targetSize.width,
+          heightPx: ctx.render.sdfLayer.targetSize.height,
         };
         const perType: number[] = [];
-        for (const t of crowdTypes.values()) {
+        for (const t of ctx.crowd.types.values()) {
           const t1 = performance.now();
           t.tiles.bin([], camera, 0, warmGrid);
           perType.push(Math.round((performance.now() - t1) * 10) / 10);
@@ -4612,7 +4601,7 @@ async function main() {
       phases.crowdBins = performance.now() - tp;
       mark('warm-crowd-bins-done');
       tp = performance.now();
-      if (gooLayer) await gooLayer.precompile(camera);
+      if (ctx.goo.layer) await ctx.goo.layer.precompile(camera);
       phases.goo = performance.now() - tp;
       mark('warm-goo-done');
       // ONE REAL FRAME (attribution 1 above). The previous warm-up ended here
@@ -4633,7 +4622,7 @@ async function main() {
       // march submit and precompilePasses below becomes a cache-hit
       // confirmation pass.
       tp = performance.now();
-      handle.drawOnce();
+      ctx.boot.handle.drawOnce();
       phases.drawOnce = performance.now() - tp;
       mark('warm-draw-once-done');
       // The SDF layer's own passes: the twins in their real target/MRT context,
@@ -4641,7 +4630,7 @@ async function main() {
       // in private scenes the traversal above cannot reach, and the upscale
       // stage's per-layer passes. See SdfLayer.precompilePasses.
       tp = performance.now();
-      passesCompiled = await sdfLayer.precompilePasses(scene, camera);
+      passesCompiled = await ctx.render.sdfLayer.precompilePasses(scene, camera);
       phases.precompile = performance.now() - tp;
       mark('warm-precompile-done');
       const done = {
@@ -4673,7 +4662,7 @@ async function main() {
       for (const o of flipped) o.visible = false;
       // Release the suspension; the CURRENT intent wins, so a pause requested
       // while the warm was in flight is respected (warm-gate.ts).
-      loopControl.release();
+      ctx.boot.loopControl.release();
       mark('warm-finally');
     }
     return didFail ? 'failed' : 'ok';
@@ -4690,25 +4679,25 @@ async function main() {
   // coordinator: it awaits the warm's OUTCOME, reports `warm-failed` /
   // `device-lost` honestly, and on the 15 s bound only changes the wording —
   // it never reveals the game before the work settles.
-  const warmRequested = new URLSearchParams(location.search).get('warm') !== '0';
-  const warmPromise: Promise<WarmOutcome> = warmRequested ? warmPipelines() : Promise.resolve<WarmOutcome>('ok');
+  ctx.boot.warmRequested = new URLSearchParams(location.search).get('warm') !== '0';
+  ctx.boot.warmPromise = ctx.boot.warmRequested ? warmPipelines() : Promise.resolve<WarmOutcome>('ok');
   void coordinateWarmGate({
-    warm: warmPromise,
-    prereq: gunReadyPromise,
+    warm: ctx.boot.warmPromise,
+    prereq: ctx.weapon.gunReadyPromise,
     timeoutMs: 15000,
-    isDeviceLost: () => Boolean(handle.gpuDiagnostics.lost),
+    isDeviceLost: () => Boolean(ctx.boot.handle.gpuDiagnostics.lost),
     handlers: {
       setLoader: (text, ready) => setLoader(text, ready),
       revealReady: () => {
         setLoader('READY — CLICK TO START', true);
-        window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 1200);
+        window.setTimeout(() => ctx.boot.loaderEl?.classList.add('loader-hidden'), 1200);
       },
       // A failed / lost warm must not be presented as a successful compile.
       // The game is still playable, so the overlay is dismissed after a beat —
       // with the honest message, and with the failure in the console.
       revealFailure: (text) => {
         setLoader(text, true);
-        window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 2500);
+        window.setTimeout(() => ctx.boot.loaderEl?.classList.add('loader-hidden'), 2500);
       },
     },
   }).then((gate) => {
@@ -4733,16 +4722,16 @@ async function main() {
    * re-deriving the basis by hand with the sign wrong.
    */
   function muzzleWorld(): Vec3 {
-    const eye = eyeOf(player);
-    if (gunReady && muzzleNodes.length === 2) {
-      muzzleNodes[0]!.getWorldPosition(_muzA);
-      muzzleNodes[1]!.getWorldPosition(_muzB);
+    const eye = eyeOf(ctx.player.player);
+    if (ctx.weapon.gunReady && ctx.weapon.muzzleNodes.length === 2) {
+      ctx.weapon.muzzleNodes[0]!.getWorldPosition(_muzA);
+      ctx.weapon.muzzleNodes[1]!.getWorldPosition(_muzB);
       _muzA.add(_muzB).multiplyScalar(0.5);
       return [_muzA.x, _muzA.y, _muzA.z];
     }
-    const cp = Math.cos(player.pitch);
-    const fwd = { x: Math.sin(player.yaw) * cp, y: Math.sin(player.pitch), z: -Math.cos(player.yaw) * cp };
-    const right = { x: Math.cos(player.yaw), y: 0, z: Math.sin(player.yaw) };
+    const cp = Math.cos(ctx.player.player.pitch);
+    const fwd = { x: Math.sin(ctx.player.player.yaw) * cp, y: Math.sin(ctx.player.player.pitch), z: -Math.cos(ctx.player.player.yaw) * cp };
+    const right = { x: Math.cos(ctx.player.player.yaw), y: 0, z: Math.sin(ctx.player.player.yaw) };
     const up = {
       x: right.y * fwd.z - right.z * fwd.y,
       y: right.z * fwd.x - right.x * fwd.z,
@@ -4769,25 +4758,25 @@ async function main() {
     return { tanV, tanH: tanV * camera.aspect };
   }
   function aimDir(): Vec3 {
-    const cp = Math.cos(player.pitch);
+    const cp = Math.cos(ctx.player.player.pitch);
     const fwd: Vec3 = [
-      Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp,
+      Math.sin(ctx.player.player.yaw) * cp, Math.sin(ctx.player.player.pitch), -Math.cos(ctx.player.player.yaw) * cp,
     ];
-    if (!freeAimOn) return fwd;
+    if (!ctx.player.freeAimOn) return fwd;
     // FIRE THROUGH THE RETICLE. With free aim the reticle is the aim point, so
     // a shot down the camera's forward axis would land wherever the player
     // happens to be FACING rather than where they are AIMING -- the one thing
     // this scheme exists to separate. Offset the ray by the reticle's angular
     // position inside the frustum.
     const { tanV, tanH } = aimFrustum();
-    const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
+    const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
     // up = right x fwd, for a right-handed basis
     const up: Vec3 = [
       right[1] * fwd[2] - right[2] * fwd[1],
       right[2] * fwd[0] - right[0] * fwd[2],
       right[0] * fwd[1] - right[1] * fwd[0],
     ];
-    const cx = aim.x * tanH, cy = aim.y * tanV;
+    const cx = ctx.weapon.aim.x * tanH, cy = ctx.weapon.aim.y * tanV;
     const d: Vec3 = [
       fwd[0] + right[0] * cx + up[0] * cy,
       fwd[1] + right[1] * cx + up[1] * cy,
@@ -4804,7 +4793,7 @@ async function main() {
    *  the parallel-ray offset is gone by construction. */
   const AIM_CONVERGE_M = 8;
   function convergedDir(origin: Vec3): Vec3 {
-    const eye = eyeOf(player);
+    const eye = eyeOf(ctx.player.player);
     const a = aimDir();
     const target: Vec3 = [
       eye[0] + a[0] * AIM_CONVERGE_M,
@@ -4818,7 +4807,7 @@ async function main() {
 
   // Pellets: simulated pure (game-weapon.ts), drawn from a mesh pool that
   // grows on demand inside the tick's sync step.
-  const pellets: Projectile[] = [];
+  ctx.weapon.pellets = [];
 
   /** SOLDIER PELLETS — A SEPARATE LIST, AND NEVER TRACED AGAINST ACTORS.
    *
@@ -4830,11 +4819,11 @@ async function main() {
    *
    *  There is no player health in the SDF game, so these hit nothing at all.
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
-  const soldierPellets: Projectile[] = [];
-  const soldierPelletViews: TracerView[] = [];
+  ctx.weapon.soldierPellets = [];
+  ctx.weapon.soldierPelletViews = [];
   // The gather's tracer provider (declared at the top, next to probeGather) can
   // only be wired once both lists exist — see the boot-race note there.
-  liveTracers = () => [...pellets, ...soldierPellets];
+  ctx.lighting.liveTracers = () => [...ctx.weapon.pellets, ...ctx.weapon.soldierPellets];
 
   // TRACERS. A shot in flight is drawn as a stretched, additively-blended
   // light streak (tracer-sprite.ts), not as the shaded ball this used to be:
@@ -4846,11 +4835,11 @@ async function main() {
   // glow card and no blur pass. The geometry is a unit plane; the per-frame
   // basis matrix carries length, width AND orientation together, which is why
   // these views run matrixAutoUpdate off.
-  const tracerTex = new THREE.DataTexture(tracerPixels(256, 64), 256, 64, THREE.RGBAFormat);
-  tracerTex.needsUpdate = true;
-  const emberTex = new THREE.DataTexture(emberPixels(128), 128, 128, THREE.RGBAFormat);
-  emberTex.needsUpdate = true;
-  const pelletGeo = new THREE.PlaneGeometry(1, 1);
+  ctx.vfx.tracerTex = new THREE.DataTexture(tracerPixels(256, 64), 256, 64, THREE.RGBAFormat);
+  ctx.vfx.tracerTex.needsUpdate = true;
+  ctx.vfx.emberTex = new THREE.DataTexture(emberPixels(128), 128, 128, THREE.RGBAFormat);
+  ctx.vfx.emberTex.needsUpdate = true;
+  ctx.weapon.pelletGeo = new THREE.PlaneGeometry(1, 1);
   /** The streak and the head-on ember for ONE projectile. Two quads because
    *  they are oriented differently — the streak rolls about the trajectory,
    *  the ember faces the eye outright — and because their weights are
@@ -4859,7 +4848,7 @@ async function main() {
    *  puffs above each own their opacity. */
   interface TracerView { streak: THREE.Mesh; ember: THREE.Mesh }
   function newTracerQuad(map: THREE.Texture): THREE.Mesh {
-    const mesh = new THREE.Mesh(pelletGeo, new THREE.MeshBasicMaterial({
+    const mesh = new THREE.Mesh(ctx.weapon.pelletGeo, new THREE.MeshBasicMaterial({
       map, transparent: true, opacity: 1, blending: THREE.AdditiveBlending,
       depthWrite: false, side: THREE.DoubleSide,
     }));
@@ -4868,15 +4857,15 @@ async function main() {
     return mesh;
   }
   function newTracerView(): TracerView {
-    const view = { streak: newTracerQuad(tracerTex), ember: newTracerQuad(emberTex) };
+    const view = { streak: newTracerQuad(ctx.vfx.tracerTex), ember: newTracerQuad(ctx.vfx.emberTex) };
     // The EFFECTS overlay, not the main scene: the overlay draws after the
     // SDF composite against the completed depth buffer, so a streak crossing
     // in front of a body stays visible and one behind it is occluded. In the
     // main pass the streak writes no depth, and the flesh composite — depth-
     // testing only against the wall behind — painted straight over it
     // (owner-caught: tracers clipped by the soldier's body).
-    characterEffects.scene.add(view.streak);
-    characterEffects.scene.add(view.ember);
+    ctx.vfx.characterEffects.scene.add(view.streak);
+    ctx.vfx.characterEffects.scene.add(view.ember);
     return view;
   }
   /** Compose one quad's world matrix from a basis, two axis scales and a centre. */
@@ -4932,7 +4921,7 @@ async function main() {
     v.streak.visible = false;
     v.ember.visible = false;
   }
-  const pelletViews: TracerView[] = [];
+  ctx.weapon.pelletViews = [];
 
   /** NOTE (determinism stage 1, 2026-09-14): the inline LCG and its `lcgNext` /
    *  `lcgUnit` helpers are gone. The named streams in `rng.ts` replace them —
@@ -4940,10 +4929,10 @@ async function main() {
    *  `misc` for pellet seeds. The values change (a different seed derivation),
    *  which is intended: the point is that a divergence is traceable to ONE
    *  subsystem rather than to a single shared counter. Do NOT reseed mid-run. */
-  let cooldown = 0;
+  ctx.weapon.cooldown = 0;
   /** Shells in the gun. The reload animation only means something if running
    *  dry is a state the player can be in. */
-  let shells = MAGAZINE_CAPACITY;
+  ctx.weapon.shells = MAGAZINE_CAPACITY;
   /** UNLIMITED AMMO — ON by default, 2026-09-10 (owner: "i noticed we have like
    *  'ammo'? it should be unlimited for now to make testing easier").
    *
@@ -4961,65 +4950,65 @@ async function main() {
    *  AMMO, not an unlimited rate of fire. The dynamite needs nothing: its prop
    *  pool refills the hand after each throw's recovery beat, so it was already
    *  unlimited. */
-  let infiniteAmmo = new URLSearchParams(location.search).get('ammo') !== 'finite';
+  ctx.weapon.infiniteAmmo = new URLSearchParams(location.search).get('ammo') !== 'finite';
   /** Seconds into the reload, or Infinity when not reloading. */
-  let reloadAge = Infinity;
+  ctx.weapon.reloadAge = Infinity;
   /** Varies the eject arc per reload (owner: "they always eject the same").
    *  0 is the reference arc; pinReloadSeed() holds one for a gate. */
-  let reloadSeed = 0;
-  let pinnedReloadSeed: number | null = null;
+  ctx.weapon.reloadSeed = 0;
+  ctx.weapon.pinnedReloadSeed = null;
   /** Reload time scale. 1 = real; KeyT cycles 1 -> 0.25 -> 0.1 so the owner
    *  can watch a case leave the bore frame by frame ("could slow it down to
    *  make it easier to see"). Inspection only: nothing else keys off it. */
-  let reloadSpeed = 1;
+  ctx.weapon.reloadSpeed = 1;
   function startReload(): void {
-    reloadAge = 0;
-    reloadSeed = pinnedReloadSeed ?? 1 + Math.floor(rngStreams.reload() * 1e6);
+    ctx.weapon.reloadAge = 0;
+    ctx.weapon.reloadSeed = ctx.weapon.pinnedReloadSeed ?? 1 + Math.floor(rngStreams.reload() * 1e6);
   }
-  let recoilPitch = 0;
+  ctx.weapon.recoilPitch = 0;
 
   /** SLUG MODE — one big projectile, one big crater. Diagnostic first: eight
    *  barely-visible 5.5 cm craters gave no signal about placement or look.
    *  Reachable three ways: ?slug URL param at boot, KeyE in-page toggle, or
    *  __sdfGame.fireSlug(). The HUD shows which mode is live. */
-  let slugMode = new URLSearchParams(location.search).has('slug');
+  ctx.weapon.slugMode = new URLSearchParams(location.search).has('slug');
 
   function fire(barrels: 1 | 2): boolean {
     // SLOT GATE. The grapeshot only speaks while it is the live weapon and the
     // switch has settled — __sdfGame.fire()/fireSlug() go through here too, so
     // a driver cannot fire the shotgun through a lit bundle.
-    if (slotState.live !== 'shotgun' || !slotReady(slotState)) return false;
-    if (!gunReady || cooldown > 0) return false;
-    if (reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
-    if (!infiniteAmmo && shells <= 0) { startReload(); return false; } // click -> start reloading
+    if (ctx.weapon.slotState.live !== 'shotgun' || !slotReady(ctx.weapon.slotState)) return false;
+    if (!ctx.weapon.gunReady || ctx.weapon.cooldown > 0) return false;
+    if (ctx.weapon.reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
+    if (!ctx.weapon.infiniteAmmo && ctx.weapon.shells <= 0) { startReload(); return false; } // click -> start reloading
     // Gunfire in a room turns every head in it, cone or no cone. Placed after
     // the guards on purpose: a dry click or a shot during a reload must not
     // alert anything, or the flag fires on inputs that made no noise.
-    barrels = (infiniteAmmo ? barrels : Math.min(shells, barrels)) as 1 | 2;
-    telemetry.event('shot', { kind: slugMode ? 'slug' : 'pellet', barrels });
-    shotAlert = true;
-    cooldown = GRAPESHOT.fireCooldownSec;
-    recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
-    if (!infiniteAmmo) {
-      shells = magazineAfterFire(shells, barrels);
-      if (shells <= 0) startReload();
+    barrels = (ctx.weapon.infiniteAmmo ? barrels : Math.min(ctx.weapon.shells, barrels)) as 1 | 2;
+    ctx.telemetry.telemetry.event('shot', { kind: ctx.weapon.slugMode ? 'slug' : 'pellet', barrels });
+    ctx.weapon.shotAlert = true;
+    ctx.weapon.cooldown = GRAPESHOT.fireCooldownSec;
+    ctx.weapon.recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
+    if (!ctx.weapon.infiniteAmmo) {
+      ctx.weapon.shells = magazineAfterFire(ctx.weapon.shells, barrels);
+      if (ctx.weapon.shells <= 0) startReload();
     }
     updateHud();
-    flashAge = 0;
-    fireAge = 0;
-    fireBarrels = barrels;
-    if (flashGroup && flashMaterial) {
+    ctx.weapon.flashAge = 0;
+    ctx.weapon.fireAge = 0;
+    ctx.weapon.fireBarrels = barrels;
+    if (ctx.weapon.flashGroup && ctx.weapon.flashMaterial) {
       // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
       // identical silhouette.
-      flashGroup.rotation.z = rngStreams.fx() * Math.PI * 2;
-      const tex = flashTextures[Math.floor(rngStreams.fx() * flashTextures.length)];
-      if (tex) { flashMaterial.map = tex; flashMaterial.needsUpdate = true; }
+      ctx.weapon.flashGroup.rotation.z = rngStreams.fx() * Math.PI * 2;
+      const tex = ctx.weapon.flashTextures[Math.floor(rngStreams.fx() * ctx.weapon.flashTextures.length)];
+      if (tex) { ctx.weapon.flashMaterial.map = tex; ctx.weapon.flashMaterial.needsUpdate = true; }
     }
     // Release a few smoke puffs at the muzzle. Both barrels make more smoke.
     {
       let released = 0;
       const want = barrels === 2 ? 5 : 3;
-      for (const puff of smokePuffs) {
+      for (const puff of ctx.vfx.smokePuffs) {
         if (released >= want) break;
         if (puff.age !== Infinity) continue;
         puff.age = 0;
@@ -5038,16 +5027,16 @@ async function main() {
         released++;
       }
     }
-    if (slugMode) {
+    if (ctx.weapon.slugMode) {
       // One lump down one known ray instead of a pellet volley.
-      pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
+      ctx.weapon.pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
       return true;
     }
     const muz = muzzleWorld();
     const dir = convergedDir(muz);
     // spawnPellets spreads around `dir`; convergence just re-centres the cone.
     // One `misc` draw per volley is the pellet seed (mulberry32 inside).
-    pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
+    ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
     return true;
   }
 
@@ -5104,7 +5093,7 @@ async function main() {
   // LIVE, all of these: the panel that tunes the gib sits beside the frame, and
   // a knob that needs a reload per attempt is a knob the owner cannot use. The
   // boot params below set the STARTING values.
-  let maxChunks = parseIntParam(DYN_PARAMS.get('maxchunks'), { min: 1, max: MAX_CHUNK_BUDGET }) ?? 64;
+  ctx.bake.maxChunks = parseIntParam(DYN_PARAMS.get('maxchunks'), { min: 1, max: MAX_CHUNK_BUDGET }) ?? 64;
   // GIBS ARE NOT BODIES. The resolver's concussion launch is tuned for DUDES
   // (EXPLOSION_LAUNCH.velocityScale 0.028 on impulse 900 = ~25 m/s point-blank,
   // "a survivor crosses the room"), and firing CHUNKS at that speed threw them
@@ -5114,7 +5103,7 @@ async function main() {
   // light; this scales the launch. The resolver's upwardBias and its 6 m/s
   // vertical floor are kept, so a slow piece still POPS UP and falls back —
   // which is what "rain down" means.
-  let gibVelScale = parseFloatParam(DYN_PARAMS.get('gibvel'), { min: 0, max: 2 }) ?? 0.35;
+  ctx.gibs.velScale = parseFloatParam(DYN_PARAMS.get('gibvel'), { min: 0, max: 2 }) ?? 0.35;
   // CLUSTERS BY DEFAULT (2026-09-10, owner look pass). `pieces` (gibAllPieces)
   // makes ONE CHUNK PER ADDITIVE PRIM and, by that function's own design, gives
   // each one `bones: []` — a single-prim fragment has no bone that matches it
@@ -5139,9 +5128,9 @@ async function main() {
   // three ways, every limb at its joint, and releases the authored skeleton as
   // its own bone-only chunks. The old modes stay as A/B controls in the knobs
   // (`?gib=clusters` is the cheap one, for a cost comparison).
-  const gibParam = DYN_PARAMS.get('gib');
-  let gibMode: 'pieces' | 'clusters' | 'parts' =
-    gibParam === 'pieces' || gibParam === 'clusters' ? gibParam : 'parts';
+  ctx.gibs.param = DYN_PARAMS.get('gib');
+  ctx.gibs.mode =
+    ctx.gibs.param === 'pieces' || ctx.gibs.param === 'clusters' ? ctx.gibs.param : 'parts';
   /**
    * HOW A PIECE IS DRAWN — `?gibrender=sprite` swaps the marched SDF piece for a
    * billboard cut from our own rendered zombie (`public/assets/lab/gore/`).
@@ -5163,11 +5152,11 @@ async function main() {
   // billboards. NB the bones are NOT in that field: `sdBody` skips op 'bone'
   // outright, so the skeleton shows on a cut as MATERIAL (goreKind), not as
   // silhouette. An earlier version of this comment claimed otherwise.
-  const gibRenderParam = DYN_PARAMS.get('gibrender');
-  let gibRenderMode: 'march' | 'sprite' | 'carve' | 'assets' =
-    gibRenderParam === 'sprite' ? 'sprite'
-      : gibRenderParam === 'carve' ? 'carve'
-        : gibRenderParam === 'march' ? 'march' : 'assets';
+  ctx.gibs.renderParam = DYN_PARAMS.get('gibrender');
+  ctx.gibs.renderMode =
+    ctx.gibs.renderParam === 'sprite' ? 'sprite'
+      : ctx.gibs.renderParam === 'carve' ? 'carve'
+        : ctx.gibs.renderParam === 'march' ? 'march' : 'assets';
   /** Slabs per cluster for the carved library — the GRANULARITY dial. */
   // 1 SINCE THE ANATOMICAL PARTITION (2026-09-11): `cells` used to mean slabs per
   // CLUSTER, where 3 was the owner's "more granular" ask; it now means
@@ -5176,8 +5165,8 @@ async function main() {
   // put back exactly the abstraction the partition was written to remove
   // ("they read a little too abstract ... should at least somewhat resemble
   // pieces from the character"). `?gibcarvecells=2+` trades it back for gore.
-  const gibCarveCells = parseIntParam(DYN_PARAMS.get('gibcarvecells'), { min: 1, max: 8 }) ?? 1;
-  const gibCarveCellSize = parseFloatParam(DYN_PARAMS.get('gibcarvecell'), { min: 0.005, max: 0.05 }) ?? 0.01;
+  ctx.gibs.carveCells = parseIntParam(DYN_PARAMS.get('gibcarvecells'), { min: 1, max: 8 }) ?? 1;
+  ctx.gibs.carveCellSize = parseFloatParam(DYN_PARAMS.get('gibcarvecell'), { min: 0.005, max: 0.05 }) ?? 0.01;
   /**
    * WHY A SETTLED PIECE NEEDS MORE MICRO-DETAIL THAN THE BODY IT CAME OFF.
    *
@@ -5209,20 +5198,20 @@ async function main() {
   /** Override for the settled piece's micro-detail amplitude; null = follow the
    *  live creature's `surfCfg2.y` through CHUNK_DETAIL_GAIN. See the per-frame
    *  push and `setChunkDetail`. */
-  let chunkDetailOverride: number | null =
+  ctx.bake.detailOverride =
     parseFloatParam(DYN_PARAMS.get('chunkdetail'), { min: 0, max: 1 }) ?? null;
   /** Live twins of CHUNK_DETAIL_FREQ / CHUNK_DETAIL_ALBEDO. Both are LOOK
    *  judgements — how coarse the grain should be, and how much of the contrast
    *  should be colour rather than relief — so both sweep without a reload. */
-  let chunkDetailFreq = parseFloatParam(DYN_PARAMS.get('chunkdetailfreq'), { min: 0.5, max: 64 })
+  ctx.bake.detailFreq = parseFloatParam(DYN_PARAMS.get('chunkdetailfreq'), { min: 0.5, max: 64 })
     ?? CHUNK_DETAIL_FREQ;
-  let chunkDetailAlbedo = parseFloatParam(DYN_PARAMS.get('chunkdetailalbedo'), { min: 0, max: 1.5 })
+  ctx.bake.detailAlbedo = parseFloatParam(DYN_PARAMS.get('chunkdetailalbedo'), { min: 0, max: 1.5 })
     ?? CHUNK_DETAIL_ALBEDO;
-  const gibSpriteLiveCap = parseIntParam(DYN_PARAMS.get('gibspritelive'), { min: 1, max: 512 })
+  ctx.gibs.spriteLiveCap = parseIntParam(DYN_PARAMS.get('gibspritelive'), { min: 1, max: 512 })
     ?? GIB_SPRITE_TUNING.liveCap;
-  const gibSpriteRestCap = parseIntParam(DYN_PARAMS.get('gibspriterest'), { min: 0, max: 512 })
+  ctx.gibs.spriteRestCap = parseIntParam(DYN_PARAMS.get('gibspriterest'), { min: 0, max: 512 })
     ?? GIB_SPRITE_TUNING.restCap;
-  const gibSpriteSizeScale = parseFloatParam(DYN_PARAMS.get('gibspritesize'), { min: 0.2, max: 3 })
+  ctx.gibs.spriteSizeScale = parseFloatParam(DYN_PARAMS.get('gibspritesize'), { min: 0.2, max: 3 })
     ?? GIB_SPRITE_TUNING.sizeScale;
 
   /**
@@ -5239,9 +5228,9 @@ async function main() {
    * live list (`stepSpritePieces` parks them), so a pile of old gore on the
    * floor never eats a new blast's budget.
    */
-  const gibBudget = () => (gibRenderMode !== 'march'
-    ? gibSpriteLiveCap
-    : Math.max(1, liveChunks.length + Math.max(0, maxChunks - chunkViews.length) - gibReserved()));
+  const gibBudget = () => (ctx.gibs.renderMode !== 'march'
+    ? ctx.gibs.spriteLiveCap
+    : Math.max(1, ctx.bake.liveChunks.length + Math.max(0, ctx.bake.maxChunks - ctx.bake.views.length) - gibReserved()));
 
   /**
    * SLOTS A PENDING RUPTURE IS HOLDING (body-to-gib task 3). The tier is chosen
@@ -5254,7 +5243,7 @@ async function main() {
    */
   const gibReserved = () => {
     let n = 0;
-    for (const q of pendingGibs) n += q.reserve;
+    for (const q of ctx.gibs.pendingGibs) n += q.reserve;
     return n;
   };
 
@@ -5270,7 +5259,7 @@ async function main() {
    *  its own pieces inside the same call — the "pieces jumping into positions"
    *  defect the budget exists to prevent. A body can now never be allowed more
    *  than the pool actually holds. */
-  const gibAllowance = (remaining: number, condemnedLeft: number) => (gibRenderMode !== 'march'
+  const gibAllowance = (remaining: number, condemnedLeft: number) => (ctx.gibs.renderMode !== 'march'
     ? Math.max(1, remaining)
     : Math.max(1, Math.min(remaining,
       Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)))));
@@ -5278,7 +5267,7 @@ async function main() {
   /** And what that body actually spent. The marched path debits at least a
    *  floor's worth whatever it made, because the floor's slots are reserved for
    *  it either way; sprite mode debits exactly what it made. */
-  const gibDebit = (remaining: number, made: number) => (gibRenderMode !== 'march'
+  const gibDebit = (remaining: number, made: number) => (ctx.gibs.renderMode !== 'march'
     ? Math.max(0, remaining - made)
     : Math.max(0, remaining - Math.max(made, GIB_TIER_FLOOR)));
   // WHICH BONE GROUPS A BLAST RELEASES. `all` is the eleven rigid groups
@@ -5286,7 +5275,7 @@ async function main() {
   // plus the skull — the A/B for what the skeleton costs; `off` is the
   // flesh-only control. `bone.cage` alone is 31 bone prims in ONE chunk, so
   // this is the first knob to reach for if a blast's cost spikes.
-  const gibBonesParam = DYN_PARAMS.get('gibbones');
+  ctx.gibs.bonesParam = DYN_PARAMS.get('gibbones');
   // CORE BY DEFAULT (2026-09-15, owner's call). `all` releases the eleven rigid
   // groups; `core` is the three torso masses plus the skull. Bones are the
   // expensive half of a gib and they NEVER BAKE — a bone piece is a marched
@@ -5294,15 +5283,15 @@ async function main() {
   // second or two after it lands — so the eight long bones are eight permanent
   // marched chunks holding view slots the flesh could have used. `?gibbones=all`
   // restores the full skeleton; `off` is the flesh-only control.
-  let gibBones: GibBoneRelease =
-    gibBonesParam === 'off' ? 'off' : gibBonesParam === 'all' ? 'all' : 'core';
+  ctx.gibs.bones =
+    ctx.gibs.bonesParam === 'off' ? 'off' : ctx.gibs.bonesParam === 'all' ? 'all' : 'core';
   // THE STAGED RELEASE (dev-note §3a/b). Every piece spawns AT ITS CURRENT
   // POSED TRANSFORM WITH ZERO VELOCITY, so the frame the blast lands shows the
   // BODY's silhouette in place instead of a substitution, and the pieces then
   // go over this many frames, NEAREST THE BLAST FIRST — which is what reads as
   // the blast ripping outward through the body rather than a swap. 1 disables
   // the stagger (everything leaves on the blast frame) and is the A/B control.
-  let gibStaggerFrames = parseIntParam(DYN_PARAMS.get('gibstagger'), { min: 1, max: 8 }) ?? 3;
+  ctx.gibs.staggerFrames = parseIntParam(DYN_PARAMS.get('gibstagger'), { min: 1, max: 8 }) ?? 3;
   /**
    * GIB LAUNCH DISTRIBUTION (2026-09-16 task 3). Default `notblood` is the
    * source-derived independent spread + one shared body shove (gib-launch.ts).
@@ -5311,7 +5300,7 @@ async function main() {
    * supported gameplay mode. It exists because the owner's report ("pieces
    * cluster too much") can only be judged against the thing that clustered.
    */
-  const gibLaunchMode = DYN_PARAMS.get('giblaunch') === 'radial' ? 'radial' : 'notblood';
+  ctx.gibs.launchMode = DYN_PARAMS.get('giblaunch') === 'radial' ? 'radial' : 'notblood';
   // DOES A BODY THIS BLAST IS ABOUT TO GIB GET THE 16 WOUNDS STAMPED ON IT?
   //
   // No. The gibbed branch below takes `gibActor` and `continue`s, so those
@@ -5321,7 +5310,7 @@ async function main() {
   // restores the old behaviour as the A/B; `setGibWounds` is the live seam so
   // the two arms can be alternated INSIDE ONE BOOT, which is the only way an
   // A/B on this machine is a measurement at all.
-  let gibWounds = DYN_PARAMS.get('gibwounds') === '1';
+  ctx.gibs.wounds = DYN_PARAMS.get('gibwounds') === '1';
   // The carve probe's cap, the OTHER half of the wound cost: `?carvecap=0`
   // restores the uncapped march. Separate from `?woundcap` (the rim probe's)
   // because the two probes have different consumers — the rim's is thresholded
@@ -5333,7 +5322,7 @@ async function main() {
   // body is swapped for debris in the very frame the bundle goes off — and is
   // the A/B for whether the window reads. Contract range 0.15–0.25 s; 0.2 is
   // the agreed start.
-  let gibTearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.2;
+  ctx.gibs.tearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.2;
   /**
    * NON-RIGID SLOUGH multiplier (`?tearslough=`, 0..3, default 1). The rupture
    * deforms flesh endpoints rather than sliding rigid regions; this scales the
@@ -5342,17 +5331,17 @@ async function main() {
    * attachment intact. There is no way to restore the rejected 0.3 m cranial
    * chest peel — that code path is gone.
    */
-  const sloughScale = parseFloatParam(DYN_PARAMS.get('tearslough'), { min: 0, max: 3 }) ?? 1;
+  ctx.vfx.sloughScale = parseFloatParam(DYN_PARAMS.get('tearslough'), { min: 0, max: 3 }) ?? 1;
   /** The rupture window's SHAPE, page-level so the panel owns it and every
    *  actor is pushed the same values (ZombieActor keeps its own copy, which is
    *  what makes a capture reproducible per body). `amplitudeM`/`jiggleAmp` are
    *  the panel knobs; the rest are the coherent defaults for a body that
    *  separates into real regions (see gib-tear.ts's TearTuning). */
-  const tearShape = {
+  ctx.vfx.tearShape = {
     amplitudeM: 0.045, jiggleAmp: 0.35, seamM: 0.09, boneLag: 0.15, headDamp: 0.3,
-    sloughOutM: TEAR_TUNING.sloughOutM * sloughScale,
-    sloughSagM: TEAR_TUNING.sloughSagM * sloughScale,
-    sloughStretchM: TEAR_TUNING.sloughStretchM * sloughScale,
+    sloughOutM: TEAR_TUNING.sloughOutM * ctx.vfx.sloughScale,
+    sloughSagM: TEAR_TUNING.sloughSagM * ctx.vfx.sloughScale,
+    sloughStretchM: TEAR_TUNING.sloughStretchM * ctx.vfx.sloughScale,
     // HEAD ATTACHMENT / ROOT RECOIL (2026-09-16 playtest follow-up task 4). The
     // defaults come from TEAR_TUNING so the page and the module cannot drift;
     // `?tearhead=0&tearneck=0&tearrecoil=0` restores the OLD independent-damped
@@ -5363,10 +5352,10 @@ async function main() {
     recoilM: parseFloatParam(DYN_PARAMS.get('tearrecoil'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.recoilM,
   };
   // Owner-approved optical wave defaults; URL flags retain off/on A/B control.
-  let blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 2.7;
-  postAa.setBlastDistort(
+  ctx.vfx.blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 2.7;
+  ctx.render.postAa.setBlastDistort(
     DYN_PARAMS.get('blastdistort') !== '0' && DYN_PARAMS.get('blastdistort') !== 'off');
-  postAa.setBlastDistortStrength(blastDistortStrength);
+  ctx.render.postAa.setBlastDistortStrength(ctx.vfx.blastDistortStrength);
   /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
    *  shape a body falls back to when the pool cannot afford anything better.
    *  Held back for every body still to come in a blast, so no body is left with
@@ -5377,7 +5366,7 @@ async function main() {
   // bundle gibs five bodies, so that is not an edge case — it is what the owner
   // sees in the room he tests in. Measured after the change, below.
   const GIB_TIER_FLOOR = 7;
-  const dynSpeedScale = parseFloatParam(DYN_PARAMS.get('dynspeed'), { min: 0.1, max: 4 }) ?? 1;
+  ctx.dynamite.speedScale = parseFloatParam(DYN_PARAMS.get('dynspeed'), { min: 0.1, max: 4 }) ?? 1;
   // ——— EXPLOSION SIZE (owner feedback, 2026-09-10) ————————————————————————
   // "the explosion makes it impossible to see the gibs... its not really what im
   // going for - the current one is kinda like a big round fireball but in the
@@ -5390,89 +5379,79 @@ async function main() {
   // billboards, the smoke that rises 2.2x it, the ring), so ONE multiplier on
   // the visual is the whole fix — and it stays decoupled from the AOE, which is
   // what EXPLOSION_VFX_HEIGHT_SCALE's own comment says the visual is for.
-  let fxSize = parseFloatParam(DYN_PARAMS.get('fxsize'), { min: 0.1, max: 2 }) ?? 0.42;
+  ctx.vfx.size = parseFloatParam(DYN_PARAMS.get('fxsize'), { min: 0.1, max: 2 }) ?? 0.42;
   // ——— THE BLAST'S FOCUS (owner, 2026-09-11): "it seems the effective radius of
   // the explosion is quite large … the area of effect should be abit more
   // focused". Both default to the reference behaviour, so nothing about the
   // shipped blast moves; they are the panel's two blast sliders.
-  let aoeRadiusScale = parseFloatParam(DYN_PARAMS.get('aoesize'), { min: 0.3, max: 1.5 }) ?? .82;
+  ctx.vfx.aoeRadiusScale = parseFloatParam(DYN_PARAMS.get('aoesize'), { min: 0.3, max: 1.5 }) ?? .82;
   // 0.45 is EXPLOSION_LAUNCH.falloffFloor — the resolver's default, kept here so
   // the panel's read-back shows the value the blast actually uses.
-  let aoeLaunchFloor = parseFloatParam(DYN_PARAMS.get('edgekick'), { min: 0, max: 1 }) ?? 0.45;
-  const fxSmoke = parseFloatParam(DYN_PARAMS.get('fxsmoke'), { min: 0, max: 2 }) ?? .76;
-  const fxLife = parseFloatParam(DYN_PARAMS.get('fxlife'), { min: 0.3, max: 3 }) ?? 1.55;
-  const fxGain = parseFloatParam(DYN_PARAMS.get('fxgain'), { min: 0, max: 4 }) ?? 3.3;
+  ctx.vfx.aoeLaunchFloor = parseFloatParam(DYN_PARAMS.get('edgekick'), { min: 0, max: 1 }) ?? 0.45;
+  ctx.vfx.smoke = parseFloatParam(DYN_PARAMS.get('fxsmoke'), { min: 0, max: 2 }) ?? .76;
+  ctx.vfx.life = parseFloatParam(DYN_PARAMS.get('fxlife'), { min: 0.3, max: 3 }) ?? 1.55;
+  ctx.vfx.gain = parseFloatParam(DYN_PARAMS.get('fxgain'), { min: 0, max: 4 }) ?? 3.3;
   // THE PLUME A/B. 1 (default) is the mushroom — the neck converges, the cap
   // rolls outward and flattens, the smoke spawns on a rim. 0 is the round
   // fireball this effect was before, blended term by term so ONE boot can A/B
   // the two on the same burst. Kept off the four size/colour knobs because it
   // is a SHAPE switch, and because `?explosionfx=atlas` is the reference the
   // shape is judged against: run 0, run 1, run atlas, in that order.
-  const fxPlume = parseFloatParam(DYN_PARAMS.get('fxplume'), { min: 0, max: 1 }) ?? .1;
+  ctx.vfx.plume = parseFloatParam(DYN_PARAMS.get('fxplume'), { min: 0, max: 1 }) ?? .1;
   // DEFERRED MODE: the shared chunk material carries the surface mode for
   // every detached chunk (one graph per output mode — the task-2 contract);
   // the legacy prev source is only bound in legacy mode.
-  const chunkMaterial = createSharedChunkGpuMaterial(
-    deferredMode ? undefined : sdfLayer.prev,
-    deferredMode
+  ctx.bake.material = createSharedChunkGpuMaterial(
+    ctx.boot.deferredMode ? undefined : ctx.render.sdfLayer.prev,
+    ctx.boot.deferredMode
       ? { output: 'surface', shadowReceiver: 'level-only', maxChunks: MAX_CHUNK_BUDGET }
       : { maxChunks: MAX_CHUNK_BUDGET },
   );
-  const chunkViews: ChunkGpuView[] = [];
-  const spareChunkViews: ChunkGpuView[] = [];
-  const liveChunks: {
-    id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate;
-    /** WHAT THIS PIECE IS, as it was SPAWNED. The render state it implies can be
-     *  read back off the view's uniforms (a bone piece is the pale one, a
-     *  bone-only piece is the one with no flesh), but "kind 'bone'" and "kind
-     *  'limb' with no prims" (an ORGAN piece) are indistinguishable from those
-     *  uniforms alone — both pack rows and neither is meat. The bone census
-     *  needs the spawn's own word. */
-    kind: 'limb' | 'gob' | 'bone';
-    boneOnly: boolean;
-  }[] = [];
+  ctx.bake.views = [];
+  ctx.bake.spareViews = [];
+  ctx.bake.liveChunks = [];
   // The bake STATE (seam, bakedChunks, material) is declared near the boot's
   // light-seed block; here live only the bake/gib/free functions.
   /** Free a baked piece's mesh and return its view to the ring. The view is
    *  NOT disposed — the ring recycles it in place via reset(), exactly as
    *  it always has (the leak gate counts these: bounded by `maxChunks`). */
   function freeBaked(b: BakedChunk): ChunkGpuView {
-    const i = bakedChunks.indexOf(b);
-    if (i >= 0) bakedChunks.splice(i, 1);
+    const i = ctx.bake.chunks.indexOf(b);
+    if (i >= 0) ctx.bake.chunks.splice(i, 1);
     scene.remove(b.mesh);
-    deferredApi?.router.unregister(b.mesh);
+    ctx.boot.deferredApi?.router.unregister(b.mesh);
     b.mesh.geometry.dispose();
     if (b.faceMaterial) {
-      const mi = litChunkMaterials.indexOf(b.faceMaterial);
-      if (mi >= 0) litChunkMaterials.splice(mi, 1);
+      const mi = ctx.world.litChunkMaterials.indexOf(b.faceMaterial);
+      if (mi >= 0) ctx.world.litChunkMaterials.splice(mi, 1);
       b.faceMaterial.dispose(); // borrowed actor atlas is not disposed
     }
     return b.view;
   }
-  const chunkBakeJobs = createChunkBakeJobs(() => new Worker(
+  ctx.bake.jobs = createChunkBakeJobs(() => new Worker(
     new URL('./chunk-bake.worker.ts', import.meta.url), { type: 'module' },
   ));
   // Completed corpses arrive asynchronously. A persistent registered parent
   // gives every replacement mesh the same route and removes it automatically
   // from the router when damage restores the live SDF body.
-  const soldierCorpseGroup = new THREE.Group();
-  soldierCorpseGroup.name = 'soldier-corpses';
-  scene.add(soldierCorpseGroup);
-  deferredApi?.router.register(soldierCorpseGroup, 'mesh', 'level-only');
-  soldierCorpses = createSoldierCorpseBakes(soldierCorpseGroup, () => {
-    if (!bakedChunkMat) {
+  ctx.world.soldierCorpseGroup = new THREE.Group();
+  ctx.world.soldierCorpseGroup.name = 'soldier-corpses';
+  scene.add(ctx.world.soldierCorpseGroup);
+  ctx.boot.deferredApi?.router.register(ctx.world.soldierCorpseGroup, 'mesh', 'level-only');
+  ctx.world.soldierCorpses = createSoldierCorpseBakes(ctx.world.soldierCorpseGroup, () => {
+    if (!ctx.bake.mat) {
       // Whichever finishes first (corpse or detached chunk) must seed the
       // same mode-aware shared material.
-      bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
-        deferredMode
+      ctx.bake.mat = registerLitChunkMaterial(createBakedChunkMaterial(
+        ctx.boot.deferredMode
           ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
           : { bakedAo: true, fleshResponse: true },
       ));
-      bakedChunkSeed?.(bakedChunkMat);
+      ctx.bake.seed?.(ctx.bake.mat);
     }
-    return bakedChunkMat.material;
+    return ctx.bake.mat.material;
   });
-  const disposeCorpses = () => soldierCorpses?.dispose();
+  const disposeCorpses = () => ctx.world.soldierCorpses?.dispose();
   window.addEventListener('pagehide', disposeCorpses);
   import.meta.hot?.dispose(() => { disposeCorpses(); window.removeEventListener('pagehide',disposeCorpses); });
   // ——— THE GORE-PART SHOWCASE ————————————————————————————————————————————
@@ -5489,8 +5468,8 @@ async function main() {
   // `createBakedChunkMaterial`, the same `bakeColor` attribute, the same
   // router registration — so what he looks at is what a gib will render, with no
   // second material to drift.
-  let goreShowcase: THREE.Group | null = null;
-  let gorePartMat: BakedChunkMaterial | null = null;
+  ctx.vfx.goreShowcase = null;
+  ctx.vfx.gorePartMat = null;
   /** (detailAmp, bumpAmp, bloodAmp, noiseScale) for the parts' procedural detail
    *  layer. Live: `__sdfGame.goreDetail({detail, bump, blood, noise})` rewrites it
    *  so the layer can be A/B'd in one boot rather than argued about across two.
@@ -5503,10 +5482,10 @@ async function main() {
    *  measurement said so outright: mean |difference to the neighbouring pixel|
    *  17.095 with the layer on vs 17.083 with it off, a ratio of 1.001. Scaling the
    *  domain is what produces actual per-pixel relief. */
-  const gorePartDetail = new THREE.Vector4(1, 1.6, 0.9, 12);
+  ctx.vfx.gorePartDetail = new THREE.Vector4(1, 1.6, 0.9, 12);
   /** `look` for the gore materials — the bakedChunkUniforms default until
    *  `__sdfGame.goreLook()` moves it. See that API for why it is tunable. */
-  const goreLookCfg = new THREE.Vector4(0.65, 0.5, 1.2, 0.6);
+  ctx.vfx.goreLookCfg = new THREE.Vector4(0.65, 0.5, 1.2, 0.6);
   /** (burnAmp, wetGain, bloodDark, stainScale) — the STAIN half. Defaults chosen
    *  from the owner's verdict that the blood was too pale and too dry to read as
    *  blood and that there were no burn stains at all: near-black venous blood
@@ -5514,12 +5493,12 @@ async function main() {
    *  flesh (wetGain 1.0), a full char field (burnAmp 1.0), and stains at a much
    *  broader DOMAIN than the bump (stainScale 2.5) so they read as patches rather
    *  than speckle. */
-  const gorePartStain = new THREE.Vector4(1, 1, 0.85, 2.5);
+  ctx.vfx.gorePartStain = new THREE.Vector4(1, 1, 0.85, 2.5);
   function spawnGoreShowcase(): number {
     const look = ((): ChunkLook | null => {
       // The palette comes from a live actor's own view uniforms, so the parts
       // are painted with the same flesh the bodies in this level use.
-      const a = actors[0];
+      const a = ctx.world.actors[0];
       if (!a) return null;
       const u = a.view.uniforms;
       const col = (v: { r: number; g: number; b: number }): Vec3 => [v.r, v.g, v.b];
@@ -5534,14 +5513,14 @@ async function main() {
       };
     })();
     if (!look) return 0;
-    if (!goreShowcase) {
-      goreShowcase = new THREE.Group();
-      goreShowcase.name = 'gore-showcase';
-      scene.add(goreShowcase);
-      deferredApi?.router.register(goreShowcase, 'mesh', 'level-only');
+    if (!ctx.vfx.goreShowcase) {
+      ctx.vfx.goreShowcase = new THREE.Group();
+      ctx.vfx.goreShowcase.name = 'gore-showcase';
+      scene.add(ctx.vfx.goreShowcase);
+      ctx.boot.deferredApi?.router.register(ctx.vfx.goreShowcase, 'mesh', 'level-only');
     }
-    for (const child of [...goreShowcase.children]) {
-      goreShowcase.remove(child);
+    for (const child of [...ctx.vfx.goreShowcase.children]) {
+      ctx.vfx.goreShowcase.remove(child);
       const m = child as THREE.Mesh;
       m.geometry?.dispose();
     }
@@ -5552,20 +5531,20 @@ async function main() {
     // decals"). Assigning it to `bakedChunkMat` instead would silently restyle
     // every settled piece at the same time, which is a decision to take on its
     // own evidence.
-    if (!gorePartMat) {
-      gorePartMat = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true }));
-      gorePartMat.uniforms.goreCfg.value.set(
-        gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+    if (!ctx.vfx.gorePartMat) {
+      ctx.vfx.gorePartMat = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true }));
+      ctx.vfx.gorePartMat.uniforms.goreCfg.value.set(
+        ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
       );
-      gorePartMat.uniforms.goreCfg2.value.set(
-        gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+      ctx.vfx.gorePartMat.uniforms.goreCfg2.value.set(
+        ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
       );
     }
-    const mat = gorePartMat;
+    const mat = ctx.vfx.gorePartMat;
     // A grid 2.4 m ahead, 0.42 m apart, at chest height, so a full set fills the
     // view without needing to walk around it.
-    const fwd: Vec3 = [Math.sin(player.yaw), 0, -Math.cos(player.yaw)];
-    const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
+    const fwd: Vec3 = [Math.sin(ctx.player.player.yaw), 0, -Math.cos(ctx.player.player.yaw)];
+    const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
     const rows: { geo: ReturnType<typeof meatPartGeometry>; bone: boolean }[] = [];
     let seed = 1;
     for (const v of MEAT_VARIANTS) {
@@ -5584,19 +5563,19 @@ async function main() {
       const across = (col - (perRow - 1) / 2) * 0.34;
       const mesh = new THREE.Mesh(row.geo.geometry, mat.material);
       mesh.position.set(
-        player.pos[0] + fwd[0] * along + right[0] * across,
+        ctx.player.player.pos[0] + fwd[0] * along + right[0] * across,
         0.42 + (row.bone ? 0.05 : 0),
-        player.pos[2] + fwd[2] * along + right[2] * across,
+        ctx.player.player.pos[2] + fwd[2] * along + right[2] * across,
       );
       // A deterministic tumble per slot, so every face of every part is visible
       // from one spot instead of all of them axis-aligned.
       mesh.rotation.set((i * 0.7) % Math.PI, (i * 1.31) % (Math.PI * 2), (i * 0.43) % Math.PI);
       mesh.frustumCulled = true;
-      goreShowcase!.add(mesh);
+      ctx.vfx.goreShowcase!.add(mesh);
     });
     return rows.length;
   }
-  const goreShowcaseOn = bootSearch.get('goreparts') === '1';
+  ctx.vfx.goreShowcaseOn = ctx.boot.search.get('goreparts') === '1';
 
   // ——— THE SPRITE BENCH ————————————————————————————————————————————————
   //
@@ -5609,24 +5588,24 @@ async function main() {
   //
   // The atlas here is the DEV-ONLY Blood extract (public/assets/gibs-placeholder,
   // gitignored: never commit, never ship). A generated sheet replaces it.
-  let gibAtlas: GibSpriteAtlas | null = null;
-  let spriteBenchGroup: THREE.Group | null = null;
-  const spriteBenchSprites: THREE.Mesh[] = [];
+  ctx.gibs.atlas = null;
+  ctx.vfx.spriteBenchGroup = null;
+  ctx.vfx.spriteBenchSprites = [];
   const GIB_ATLAS_URL = '/assets/gibs-placeholder/manifest.json';
   /** The GENERATED sheet: own render, own resolution, committable. */
   const GIB_SHEET_URL = '/assets/lab/gore/manifest.json';
   /** Which atlas the bench is showing. `sheet` is the one that ships. */
-  let gibAtlasSource: 'placeholder' | 'sheet' = 'placeholder';
+  ctx.gibs.atlasSource = 'placeholder';
 
   // THE BLAST'S OWN SPRITES. One set for the whole page, in its own group so a
   // sprite piece is separable from the marched views in the scene graph, in the
   // deferred router, and in a capture. Empty and unused until
   // `?gibrender=sprite` puts something in it — the shipped path never touches it.
-  const spritePieces: SpritePieceSet = makeSpritePieceSet();
-  scene.add(spritePieces.group);
-  deferredApi?.router.register(spritePieces.group, 'mesh', 'level-only');
+  ctx.vfx.spritePieces = makeSpritePieceSet();
+  scene.add(ctx.vfx.spritePieces.group);
+  ctx.boot.deferredApi?.router.register(ctx.vfx.spritePieces.group, 'mesh', 'level-only');
   /** One warning, not one per body per blast. See `gibActor`'s fallback. */
-  let gibSpriteAtlasWarned = false;
+  ctx.gibs.spriteAtlasWarned = false;
   /** Keeps sprite trail-emitter ids out of the chunk ids' range — `emitTrails`
    *  keys its per-emitter clock by id and the two sequences both start at 1. */
   const SPRITE_TRAIL_ID_BASE = 0x4000_0000;
@@ -5646,15 +5625,15 @@ async function main() {
    * `goreDetail` layer supplies the per-pixel bump and blood on top, exactly as
    * the gore-parts bench does.
    */
-  let carvedLibrary: CarvedLibrary | null = null;
-  let carvedMaterial: BakedChunkMaterial | null = null;
-  let carvedBuildMs = 0;
-  let carvedWarned = false;
+  ctx.bake.carvedLibrary = null;
+  ctx.bake.carvedMaterial = null;
+  ctx.bake.carvedBuildMs = 0;
+  ctx.bake.carvedWarned = false;
 
   function ensureCarvedLibrary(): boolean {
-    if (carvedLibrary && carvedMaterial) return true;
-    if (carvedLibrary) return true;
-    const a = actors[0];
+    if (ctx.bake.carvedLibrary && ctx.bake.carvedMaterial) return true;
+    if (ctx.bake.carvedLibrary) return true;
+    const a = ctx.world.actors[0];
     if (!a) return false;
     try {
       const look: ChunkLook = (() => {
@@ -5672,28 +5651,28 @@ async function main() {
       })();
       const t0 = performance.now();
       const body = buildBody(compileBlob(parseBlob(zombieBlobSrc)), DEFAULT_BUILD_OPTS, {});
-      carvedLibrary = carveBodyIntoPieces({
+      ctx.bake.carvedLibrary = carveBodyIntoPieces({
         archetype: 'zombie', body, look,
-        cells: gibCarveCells, cellSize: gibCarveCellSize,
+        cells: ctx.gibs.carveCells, cellSize: ctx.gibs.carveCellSize,
       });
-      carvedBuildMs = performance.now() - t0;
-      if (!carvedMaterial) {
-        carvedMaterial = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
-        carvedMaterial.uniforms.goreCfg.value.set(
-          gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+      ctx.bake.carvedBuildMs = performance.now() - t0;
+      if (!ctx.bake.carvedMaterial) {
+        ctx.bake.carvedMaterial = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
+        ctx.bake.carvedMaterial.uniforms.goreCfg.value.set(
+          ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
         );
-        carvedMaterial.uniforms.goreCfg2.value.set(
-          gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+        ctx.bake.carvedMaterial.uniforms.goreCfg2.value.set(
+          ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
         );
       }
-      console.log(`[gib-carve] zombie library: ${carvedLibrary.pieces.length} pieces, `
-        + `${carvedLibrary.totalVerts} verts, ${carvedLibrary.bonePrims} bone prims in the field, `
-        + `${carvedBuildMs.toFixed(0)} ms (cells ${gibCarveCells})`);
+      console.log(`[gib-carve] zombie library: ${ctx.bake.carvedLibrary.pieces.length} pieces, `
+        + `${ctx.bake.carvedLibrary.totalVerts} verts, ${ctx.bake.carvedLibrary.bonePrims} bone prims in the field, `
+        + `${ctx.bake.carvedBuildMs.toFixed(0)} ms (cells ${ctx.gibs.carveCells})`);
       return true;
     } catch (err) {
-      carvedLibrary = null;
-      if (!carvedWarned) {
-        carvedWarned = true;
+      ctx.bake.carvedLibrary = null;
+      if (!ctx.bake.carvedWarned) {
+        ctx.bake.carvedWarned = true;
         console.warn(`[gib-carve] library build failed: ${String(err)} — `
           + 'falling back to marched pieces for this session');
       }
@@ -5711,16 +5690,16 @@ async function main() {
     piece: CarvedPiece, origin: Vec3, kind: 'limb' | 'gob' | 'bone',
     impulseVel: Vec3 | null, impulseDelay: number,
   ): boolean {
-    if (!ensureCarvedLibrary() || !carvedMaterial) return false;
+    if (!ensureCarvedLibrary() || !ctx.bake.carvedMaterial) return false;
     const rng = rngStreams.misc;
     const state = makeChunk(
       piece.limb as never, origin, [0, 0, 0], piece.radius,
       piece.longAxis as never, rng, kind,
     );
-    spawnSpritePiece(spritePieces, {
+    spawnSpritePiece(ctx.vfx.spritePieces, {
       state,
       impulseDelay, impulseVel,
-      render: 'mesh', geometry: piece.geometry, material: carvedMaterial.material,
+      render: 'mesh', geometry: piece.geometry, material: ctx.bake.carvedMaterial.material,
     });
     return true;
   }
@@ -5739,26 +5718,26 @@ async function main() {
    * A body gibbed before the load resolves falls
    * back to marched pieces for that blast, never to no gore.
    */
-  let gibAssetMaterial: BakedChunkMaterial | null = null;
+  ctx.gibs.assetMaterial = null;
   /** ONE NEW face material per asset head. The face layer's `headCentre`,
    *  `headQuat` and `headAxes` are WORLD-space and therefore per-actor, so a
    *  shared material could only ever project the face at one actor's frame
    *  ("no shared mutable face uniforms across actors"). The handle owns nothing
    *  but the material: the face TEXTURE stays the actor's external atlas, which
    *  is why retirement of the actor cannot blank a flying head's face. */
-  const gibAssetHeadFactory = {
+  ctx.gibs.assetHeadFactory = {
     create: (source: unknown): { material: THREE.Material; setFrame: (f: { centre: Vec3; quat: Quat; axes: Vec3 }) => void; dispose: () => void } => {
       const u = source as import('./zombie-gpu').MarchUniforms;
       const built = registerLitChunkMaterial(createBakedChunkMaterial({
         goreDetail: true, bakedAo: true, fleshResponse: true, face: u,
       }));
       built.uniforms.goreCfg.value.set(
-        gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+        ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
       );
       built.uniforms.goreCfg2.value.set(
-        gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+        ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
       );
-      bakedChunkSeed?.(built);
+      ctx.bake.seed?.(built);
       return {
         material: built.material,
         setFrame: (f) => {
@@ -5769,8 +5748,8 @@ async function main() {
           fu.headAxes.value.set(f.axes[0], f.axes[1], f.axes[2]);
         },
         dispose: () => {
-          const i = litChunkMaterials.indexOf(built);
-          if (i >= 0) litChunkMaterials.splice(i, 1);
+          const i = ctx.world.litChunkMaterials.indexOf(built);
+          if (i >= 0) ctx.world.litChunkMaterials.splice(i, 1);
           built.dispose();
         },
       };
@@ -5782,26 +5761,26 @@ async function main() {
         // Same procedural detail layer the carve uses, plus the baked flesh
         // response (this set carries `bakeResponse`/`bakeFresnel`/`bakeAnchor`,
         // so the per-pixel detail rides the asset's own rest-frame anchor).
-        gibAssetMaterial = registerLitChunkMaterial(createBakedChunkMaterial({
+        ctx.gibs.assetMaterial = registerLitChunkMaterial(createBakedChunkMaterial({
           goreDetail: true, bakedAo: true, fleshResponse: true,
         }));
-        gibAssetMaterial.uniforms.goreCfg.value.set(
-          gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+        ctx.gibs.assetMaterial.uniforms.goreCfg.value.set(
+          ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
         );
-        gibAssetMaterial.uniforms.goreCfg2.value.set(
-          gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+        ctx.gibs.assetMaterial.uniforms.goreCfg2.value.set(
+          ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
         );
-        bakedChunkSeed?.(gibAssetMaterial);
-        return gibAssetMaterial.material;
+        ctx.bake.seed?.(ctx.gibs.assetMaterial);
+        return ctx.gibs.assetMaterial.material;
       },
     },
     onLoad: (lib) => {
       console.log(`[gib-assets] ${lib.archetype}: ${lib.pieces.length} pieces, ${lib.verts} verts, `
         + `${lib.bytes.bin} bin bytes (library build ${lib.builtMs.toFixed(0)} ms)`);
     },
-    headMaterialFactory: gibAssetHeadFactory,
+    headMaterialFactory: ctx.gibs.assetHeadFactory,
   });
-  let gibAssetRuntime = createGibAssetRuntime();
+  ctx.gibs.assetRuntime = createGibAssetRuntime();
 
   /** The archetype whose committed set an actor uses. */
   function gibAssetArchetypeOf(a: ZombieActor): string {
@@ -5811,15 +5790,15 @@ async function main() {
   /** Kick off (or join) the load for the archetypes the assets path can use. */
   function ensureGibAssets(): Promise<unknown> {
     return Promise.all([
-      gibAssetRuntime.ensure('zombie'),
-      gibAssetRuntime.ensure('soldier'),
+      ctx.gibs.assetRuntime.ensure('zombie'),
+      ctx.gibs.assetRuntime.ensure('soldier'),
     ]);
   }
 
   /** True once at least one archetype's committed set is loaded and usable. */
   function gibAssetArmed(): boolean {
-    return gibAssetRuntime.archetypeState('zombie') === 'ready'
-      || gibAssetRuntime.archetypeState('soldier') === 'ready';
+    return ctx.gibs.assetRuntime.archetypeState('zombie') === 'ready'
+      || ctx.gibs.assetRuntime.archetypeState('soldier') === 'ready';
   }
 
   /**
@@ -5838,10 +5817,10 @@ async function main() {
     impulseVel: Vec3 | null,
     impulseDelay: number,
   ): boolean {
-    const lib = gibAssetRuntime.library(gibAssetArchetypeOf(a));
-    if (!lib) { gibAssetRuntime.countFallback('no-library'); return false; }
+    const lib = ctx.gibs.assetRuntime.library(gibAssetArchetypeOf(a));
+    if (!lib) { ctx.gibs.assetRuntime.countFallback('no-library'); return false; }
     const piece = lib.byPart.get(g.part);
-    if (!piece) { gibAssetRuntime.countFallback('no-asset'); return false; }
+    if (!piece) { ctx.gibs.assetRuntime.countFallback('no-asset'); return false; }
     // THE HEAD NOW KEEPS THE MESH PATH WHEN A FACE CAN RIDE IT (task 4). The
     // face layer projects from the ACTOR's live `headCentre`/`headQuat`/
     // `headAxes`; a per-instance material built from those uniforms and moved
@@ -5849,11 +5828,11 @@ async function main() {
     // Without a face texture, or with face projection off (a custom/damaged
     // head), the piece still falls back — counted as `head-face`, never silent.
     const faceUniforms = a.view.uniforms;
-    const faceSupported = gibAssetRuntime.headFaceAvailable()
+    const faceSupported = ctx.gibs.assetRuntime.headFaceAvailable()
       && faceUniforms.faceCfg.value.x > 0.5
       && !!faceUniforms.faceTex.value;
     const ineligible = gibAssetMeshEligible(piece.doc, g, faceSupported);
-    if (ineligible) { gibAssetRuntime.countFallback(ineligible); return false; }
+    if (ineligible) { ctx.gibs.assetRuntime.countFallback(ineligible); return false; }
     // ROW ALIGNMENT IS PART OF ELIGIBILITY (and now SEMANTIC, not a count).
     // `gibAssetMeshEligible` -> `gibAssetRowsMatch` walks the bind table against
     // the runtime rows row for row: flesh rows against `g.prims` minus the `sub`
@@ -5861,8 +5840,8 @@ async function main() {
     // bone rows against `g.bones`. A plan that kept the same source set but
     // reordered/grew a row falls back here instead of deforming against the
     // wrong frame.
-    const pool = gibAssetRuntime.poolFor(lib);
-    if (!pool) { gibAssetRuntime.countFallback('no-pool'); return false; }
+    const pool = ctx.gibs.assetRuntime.poolFor(lib);
+    if (!pool) { ctx.gibs.assetRuntime.countFallback('no-pool'); return false; }
     const kind = g.kind ?? 'limb';
     const boneOnly = g.prims.length === 0 && g.bones.length > 0;
     const extentSource = boneOnly ? g.bones : g.prims;
@@ -5906,7 +5885,7 @@ async function main() {
     const bounds = checkGibAssetDeformBounds(piece.doc, piece.decoded, inst.positions, g.origin, additiveWorld);
     if (!gibAssetDeformBoundsOk(bounds)) {
       pool.release(inst);
-      gibAssetRuntime.countFallback(bounds.finite ? 'deform-bounds' : 'deform-nonfinite');
+      ctx.gibs.assetRuntime.countFallback(bounds.finite ? 'deform-bounds' : 'deform-nonfinite');
       return false;
     }
     // PER-INSTANCE FACE FRAME (task 4). The asset's stored `doc.face` is the
@@ -5920,16 +5899,16 @@ async function main() {
       const hc = faceUniforms.headCentre.value;
       const hq = faceUniforms.headQuat.value;
       const ax = faceUniforms.headAxes.value;
-      head = gibAssetRuntime.acquireHead(g.part, {
+      head = ctx.gibs.assetRuntime.acquireHead(g.part, {
         centre: [hc.x - g.origin[0], hc.y - g.origin[1], hc.z - g.origin[2]],
         quat: [hq.x, hq.y, hq.z, hq.w],
         axes: [ax.x, ax.y, ax.z],
       }, faceUniforms);
       // No material = no face: fall back rather than draw a bare-flesh head.
-      if (!head) { pool.release(inst); gibAssetRuntime.countFallback('head-face'); return false; }
+      if (!head) { pool.release(inst); ctx.gibs.assetRuntime.countFallback('head-face'); return false; }
       head.setFrameFromState(state);
     }
-    const sprite = spawnSpritePiece(spritePieces, {
+    const sprite = spawnSpritePiece(ctx.vfx.spritePieces, {
       state, render: 'mesh', geometry: inst.geometry, material: head ? (head.material as THREE.Material) : lib.material,
       impulseDelay, impulseVel,
     });
@@ -5942,68 +5921,68 @@ async function main() {
     // also gives back its per-instance face material at the SAME single point.
     sprite.onDetach = () => { pool.release(inst); head?.release(); };
     sprite.mesh.name = `gib-asset-${g.part}`;
-    gibAssetRuntime.countAssetPiece();
+    ctx.gibs.assetRuntime.countAssetPiece();
     return true;
   }
 
   /** Lay the sprite bench out in front of the player, sized like real gibs. */
   function laySpriteBench(): number {
-    if (!gibAtlas) return 0;
-    if (!spriteBenchGroup) {
-      spriteBenchGroup = new THREE.Group();
-      spriteBenchGroup.name = 'gib-sprite-bench';
-      scene.add(spriteBenchGroup);
-      deferredApi?.router.register(spriteBenchGroup, 'mesh', 'level-only');
+    if (!ctx.gibs.atlas) return 0;
+    if (!ctx.vfx.spriteBenchGroup) {
+      ctx.vfx.spriteBenchGroup = new THREE.Group();
+      ctx.vfx.spriteBenchGroup.name = 'gib-sprite-bench';
+      scene.add(ctx.vfx.spriteBenchGroup);
+      ctx.boot.deferredApi?.router.register(ctx.vfx.spriteBenchGroup, 'mesh', 'level-only');
     }
-    for (const child of [...spriteBenchGroup.children]) {
-      spriteBenchGroup.remove(child);
+    for (const child of [...ctx.vfx.spriteBenchGroup.children]) {
+      ctx.vfx.spriteBenchGroup.remove(child);
       const m = child as THREE.Mesh;
       m.geometry?.dispose();
       (m.material as THREE.Material)?.dispose();
     }
-    spriteBenchSprites.length = 0;
-    const fwd: Vec3 = [Math.sin(player.yaw), 0, -Math.cos(player.yaw)];
-    const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
+    ctx.vfx.spriteBenchSprites.length = 0;
+    const fwd: Vec3 = [Math.sin(ctx.player.player.yaw), 0, -Math.cos(ctx.player.player.yaw)];
+    const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
     // EVERY frame once, then the whole set again a size down: a gib has to read
     // at the size it will actually be thrown at, not just at bench scale.
     const sizes = [0.34, 0.2];
     let i = 0;
     for (const size of sizes) {
-      for (const frame of gibAtlas.frames) {
+      for (const frame of ctx.gibs.atlas.frames) {
         const mesh = makeGibSprite(frame, size);
         const col = i % 9, line = Math.floor(i / 9);
         const along = 1.7 + line * 0.5;
         const across = (col - 4) * 0.38;
         mesh.position.set(
-          player.pos[0] + fwd[0] * along + right[0] * across,
+          ctx.player.player.pos[0] + fwd[0] * along + right[0] * across,
           0.45 + (line % 2) * 0.1,
-          player.pos[2] + fwd[2] * along + right[2] * across,
+          ctx.player.player.pos[2] + fwd[2] * along + right[2] * across,
         );
         // Face the camera AT SPAWN as well as per frame: `tick` early-returns
         // under the render lock, so a capture would otherwise photograph the
         // bench edge-on — a plane facing +Z photographed from a player looking
         // east is a line.
         billboardGib(mesh, camera);
-        spriteBenchGroup.add(mesh);
-        spriteBenchSprites.push(mesh);
+        ctx.vfx.spriteBenchGroup.add(mesh);
+        ctx.vfx.spriteBenchSprites.push(mesh);
         i++;
       }
     }
-    return spriteBenchSprites.length;
+    return ctx.vfx.spriteBenchSprites.length;
   }
 
   /** Load the dev-only atlas on demand. A missing one is reported, not hidden:
    *  the bench is meaningless without it and a silent empty group reads as a bug
    *  in the renderer. */
-  async function ensureGibAtlas(which: 'placeholder' | 'sheet' = gibAtlasSource): Promise<number> {
-    if (gibAtlas && gibAtlasSource === which) return gibAtlas.frames.length;
-    gibAtlas?.dispose();
-    gibAtlas = null;
-    gibAtlasSource = which;
+  async function ensureGibAtlas(which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource): Promise<number> {
+    if (ctx.gibs.atlas && ctx.gibs.atlasSource === which) return ctx.gibs.atlas.frames.length;
+    ctx.gibs.atlas?.dispose();
+    ctx.gibs.atlas = null;
+    ctx.gibs.atlasSource = which;
     const url = which === 'sheet' ? GIB_SHEET_URL : GIB_ATLAS_URL;
     try {
-      gibAtlas = which === 'sheet' ? await loadGibSheet(url) : await loadGibSpriteAtlas(url);
-      console.log(`[gib-sprites] ${which} atlas: ${gibAtlas.frames.length} frames from ${url}`);
+      ctx.gibs.atlas = which === 'sheet' ? await loadGibSheet(url) : await loadGibSpriteAtlas(url);
+      console.log(`[gib-sprites] ${which} atlas: ${ctx.gibs.atlas.frames.length} frames from ${url}`);
     } catch (err) {
       console.warn(`[gib-sprites] no ${which} atlas at ${url}`
         + (which === 'placeholder'
@@ -6012,22 +5991,22 @@ async function main() {
         + `: ${String(err)}`);
       return 0;
     }
-    return gibAtlas.frames.length;
+    return ctx.gibs.atlas.frames.length;
   }
 
-  let chunkBakeInput: ChunkBakeData | null = null;
-  let lastBakeSwapMs = 0;
-  let lastBakeRequestMs = 0;
+  ctx.bake.input = null;
+  ctx.bake.lastSwapMs = 0;
+  ctx.bake.lastRequestMs = 0;
   /** The sim frame a bake job was submitted on (finishChunkBake waits for the
    *  next one) and the frame a swap actually landed on (reported). */
-  let bakeSubmitFrame = -1;
-  let lastBakeSwapFrame = -1;
+  ctx.bake.submitFrame = -1;
+  ctx.bake.lastSwapFrame = -1;
   const cancelChunkBake = () => {
-    if (chunkBakeJobs.pendingId !== null) telemetry.event('chunk-bake-cancel', { chunk: chunkBakeJobs.pendingId });
-    chunkBakeJobs.cancel(); chunkBakeInput = null;
+    if (ctx.bake.jobs.pendingId !== null) ctx.telemetry.telemetry.event('chunk-bake-cancel', { chunk: ctx.bake.jobs.pendingId });
+    ctx.bake.jobs.cancel(); ctx.bake.input = null;
   };
   window.addEventListener('pagehide', cancelChunkBake);
-  window.addEventListener('pagehide', () => { pendingGibImpulses.length = 0; });
+  window.addEventListener('pagehide', () => { ctx.gibs.pendingGibImpulses.length = 0; });
   import.meta.hot?.dispose(() => {
     cancelChunkBake();
     window.removeEventListener('pagehide', cancelChunkBake);
@@ -6046,20 +6025,20 @@ async function main() {
     // the same frame regardless of worker speed. Do NOT call takeCompleted()
     // before this check: consuming here would drop the result and the piece
     // would never bake.
-    if (chunkBakeJobs.pendingId !== null && simFrame < bakeSubmitFrame + 1) return;
-    const done = chunkBakeJobs.takeCompleted();
+    if (ctx.bake.jobs.pendingId !== null && ctx.demo.simFrame < ctx.bake.submitFrame + 1) return;
+    const done = ctx.bake.jobs.takeCompleted();
     if (!done) return;
-    telemetry.event('chunk-bake-complete', { chunk: done.id });
-    const data = chunkBakeInput;
-    chunkBakeInput = null;
-    const index = liveChunks.findIndex(c => c.id === done.id);
-    if (!chunkBakeEnabled || index < 0 || !data) return;
-    const entry = liveChunks[index]!;
+    ctx.telemetry.telemetry.event('chunk-bake-complete', { chunk: done.id });
+    const data = ctx.bake.input;
+    ctx.bake.input = null;
+    const index = ctx.bake.liveChunks.findIndex(c => c.id === done.id);
+    if (!ctx.bake.enabled || index < 0 || !data) return;
+    const entry = ctx.bake.liveChunks[index]!;
     if (!chunkSettled(entry.state)) return;
     const t0 = performance.now();
-    const swapTiming = telemetry.begin();
+    const swapTiming = ctx.telemetry.telemetry.begin();
     const baked = unpackChunkBake(done.result);
-    if (!bakedChunkMat) {
+    if (!ctx.bake.mat) {
       // REGISTERED, like the corpse path's identical construction a few thousand
       // lines up. It was not, and this is the site that WINS in normal play: the
       // corpse bake only runs if a soldier corpse settles first, so in a plain
@@ -6077,45 +6056,45 @@ async function main() {
       //
       // Caught by `__sdfGame.chunkDetailApplied()` reading `[]` while the census
       // reported 12 baked pieces on screen.
-      bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
+      ctx.bake.mat = registerLitChunkMaterial(createBakedChunkMaterial(
         // DEFERRED MODE: baked chunks are static flesh — level-only receivers
         // with a surface G-buffer producer material.
         // `bakedAo`: the settled bake writes a `bakeAo` attribute now, and
         // without reading it every piece shades at ao = 1.0 and can never be in
         // shadow — half of "way too light and dont follow the lighting".
-        deferredMode
+        ctx.boot.deferredMode
           ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
           : { bakedAo: true, fleshResponse: true },
       ));
-      bakedChunkSeed?.(bakedChunkMat);
+      ctx.bake.seed?.(ctx.bake.mat);
     }
-    liveChunks.splice(index, 1);
+    ctx.bake.liveChunks.splice(index, 1);
     // Face detail stays per-fragment at the source atlas resolution. A head
     // owns its projection snapshot/material; other chunks share the plain one.
     const faceMaterial = entry.view.uniforms.faceCfg.value.x > 0.5
       ? registerLitChunkMaterial(createBakedChunkMaterial({
         bakedAo: true, fleshResponse: true, face: entry.view.uniforms,
-        ...(deferredMode ? { output: 'surface' as const, shadowReceiver: 'level-only' as const } : {}),
+        ...(ctx.boot.deferredMode ? { output: 'surface' as const, shadowReceiver: 'level-only' as const } : {}),
       })) : undefined;
-    if (faceMaterial) bakedChunkSeed?.(faceMaterial);
-    const mesh = new THREE.Mesh(baked.geometry, (faceMaterial ?? bakedChunkMat).material);
+    if (faceMaterial) ctx.bake.seed?.(faceMaterial);
+    const mesh = new THREE.Mesh(baked.geometry, (faceMaterial ?? ctx.bake.mat).material);
     mesh.frustumCulled = true; // it is a static bounded mesh — let three cull it
     scene.add(mesh);
     // DEFERRED MODE: the bake swaps the piece between producer routes —
     // marched proxy (SDF producer) -> static mesh (level-only G-buffer
     // producer). The proxy is only HIDDEN (its registration stays valid for
     // the recycle ring).
-    deferredApi?.router.register(mesh, 'mesh', 'level-only');
-    entry.view.object.visible = bakedChunkReference;
-    mesh.visible = !bakedChunkReference; // normally the proxy leaves the SDF passes
-    bakedChunks.push({
+    ctx.boot.deferredApi?.router.register(mesh, 'mesh', 'level-only');
+    entry.view.object.visible = ctx.bake.reference;
+    mesh.visible = !ctx.bake.reference; // normally the proxy leaves the SDF passes
+    ctx.bake.chunks.push({
       id: entry.id, mesh, view: entry.view, state: entry.state, faceMaterial,
       centre: baked.centre, radius: baked.radius, bakeMs: baked.bakeMs,
       template: entry.template,
     });
-    totalBakes++;
-    lastBakeMs = baked.bakeMs;
-    lastBakeInfo = {
+    ctx.bake.totalBakes++;
+    ctx.bake.lastBakeMs = baked.bakeMs;
+    ctx.bake.lastBakeInfo = {
       id: entry.id, verts: baked.verts, tris: baked.tris,
       bakeMs: baked.bakeMs, overflow: baked.overflow ? 1 : 0,
       droppedQuads: baked.droppedQuads,
@@ -6123,12 +6102,12 @@ async function main() {
       torn: data.torn.length, gore: data.gore,
       radius: baked.radius,
     };
-    lastBakeSwapMs = performance.now() - t0;
+    ctx.bake.lastSwapMs = performance.now() - t0;
     // The frame this swap landed on — a recorded number, so a replay can assert
     // the same landing frame (chunkStats().bakeSwapFrame).
-    lastBakeSwapFrame = simFrame;
-    telemetry.end('chunk-bake-swap', swapTiming);
-    telemetry.event('chunk-bake-swap', { chunk: entry.id, workerMs: baked.bakeMs, swapCpuMs: lastBakeSwapMs, vertices: baked.verts, triangles: baked.tris });
+    ctx.bake.lastSwapFrame = ctx.demo.simFrame;
+    ctx.telemetry.telemetry.end('chunk-bake-swap', swapTiming);
+    ctx.telemetry.telemetry.event('chunk-bake-swap', { chunk: entry.id, workerMs: baked.bakeMs, swapCpuMs: ctx.bake.lastSwapMs, vertices: baked.verts, triangles: baked.tris });
     if (baked.overflow || baked.droppedQuads > 0) {
       console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
     }
@@ -6139,8 +6118,8 @@ async function main() {
    *  path — the design question settled for option 2 (simpler: no dual
    *  representation to keep in sync, and closer to the feel). */
   function gibBakedPiece(b: BakedChunk, at: Vec3): void {
-    telemetry.event('baked-piece-hit', { chunk: b.id, world: [...at] });
-    spareChunkViews.push(freeBaked(b));
+    ctx.telemetry.telemetry.event('baked-piece-hit', { chunk: b.id, world: [...at] });
+    ctx.bake.spareViews.push(freeBaked(b));
     gibChunkMeat(b.template, at);
   }
   function gibChunkMeat(template: ChunkTemplate, at: Vec3): void {
@@ -6162,10 +6141,10 @@ async function main() {
         tornAt: [], bones: [],
       }, template);
     }
-    if (bleedEnabled) {
+    if (ctx.vfx.bleedEnabled) {
       // One-shot gib gout: a fresh emitter stream so it never fuses with a
       // nearby wound's stream by proximity.
-      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, nextEmitterStream++);
+      spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++);
     }
   }
   /**
@@ -6191,12 +6170,12 @@ async function main() {
   }
   /** Set by the measurement seam below: pieces exist, fly and bake exactly as
    *  they would, and are simply not drawn. */
-  let chunksHidden = false;
+  ctx.bake.hidden = false;
   /** Whether BONE pieces are drawn — see setBonePiecesVisible. */
-  let bonesVisible = true;
+  ctx.render.bonesVisible = true;
   // Now that the array exists, the frame draw can read it directly.
-  chunkObjects = () => (bakedChunkReference ? [...liveChunks, ...bakedChunks] : liveChunks).map(c => c.view.object);
-  let nextChunkId = 1;
+  chunkObjects = () => (ctx.bake.reference ? [...ctx.bake.liveChunks, ...ctx.bake.chunks] : ctx.bake.liveChunks).map(c => c.view.object);
+  ctx.bake.nextId = 1;
   function primsLongAxis(prims: Primitive[], origin: Vec3): Vec3 {
     let best: Vec3 = [0, 1, 0];
     let bestLen = 0;
@@ -6262,15 +6241,15 @@ async function main() {
     // because a full-body gib is 19-20 pieces, and a gate here that still
     // recycled at the old constant would leave `cap: 24` reporting a pool that
     // is actually 12 — which is what the dynamite gate's census caught.
-    let recycled: ChunkGpuView | undefined = spareChunkViews.pop();
-    if (!recycled && chunkViews.length >= maxChunks) {
-      const oldestBaked = bakedChunks.shift();
+    let recycled: ChunkGpuView | undefined = ctx.bake.spareViews.pop();
+    if (!recycled && ctx.bake.views.length >= ctx.bake.maxChunks) {
+      const oldestBaked = ctx.bake.chunks.shift();
       if (oldestBaked) {
         recycled = freeBaked(oldestBaked);
       } else {
-        const oldest = liveChunks.shift();
+        const oldest = ctx.bake.liveChunks.shift();
         if (oldest) {
-          if (chunkBakeJobs.pendingId === oldest.id) cancelChunkBake();
+          if (ctx.bake.jobs.pendingId === oldest.id) cancelChunkBake();
           recycled = oldest.view;
         }
       }
@@ -6283,34 +6262,34 @@ async function main() {
       // organ rows only, so a chunk whose flesh list is empty packs NOTHING and
       // marches an empty field — an invisible skeleton, which is the exact
       // failure this whole piece set exists to end.
-      recycled.setPackBones(boneOnly ? !gibBoneMesh : !boneMesh);
+      recycled.setPackBones(boneOnly ? !ctx.gibs.boneMesh : !ctx.render.boneMesh);
       applyChunkKindLook(recycled, kind);
       // May be arriving from a baked retirement; and a bone piece spawned while
       // the differential hides the skeleton must stay hidden.
       // With `gibBoneMesh` the tubes draw this piece and its packed rows are
       // gone, so the marched proxy has an EMPTY field: it would march and
       // discard every pixel of its box for nothing. Hidden, not merely empty.
-      recycled.object.visible = !chunksHidden
-        && (kind !== 'bone' || (bonesVisible && !(boneOnly && gibBoneMesh)));
-      liveChunks.push({ id: nextChunkId++, state, view: recycled, template, kind, boneOnly });
+      recycled.object.visible = !ctx.bake.hidden
+        && (kind !== 'bone' || (ctx.render.bonesVisible && !(boneOnly && ctx.gibs.boneMesh)));
+      ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view: recycled, template, kind, boneOnly });
     } else {
       const view = createChunkGpuView(
         state, piece.prims, template.uniforms,
         piece.tornAt.length ? piece.tornAt : undefined,
-        template.volumeTexture, chunkMaterial, piece.bones,
+        template.volumeTexture, ctx.bake.material, piece.bones,
         // Matching options with the shared material (task-2 contract: with a
         // shared material the material's mode wins; the view must agree).
-        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+        ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
       );
-      view.setPackBones(boneOnly ? !gibBoneMesh : !boneMesh);
+      view.setPackBones(boneOnly ? !ctx.gibs.boneMesh : !ctx.render.boneMesh);
       applyChunkKindLook(view, kind);
-      view.object.visible = !chunksHidden
-        && (kind !== 'bone' || (bonesVisible && !(boneOnly && gibBoneMesh)));
+      view.object.visible = !ctx.bake.hidden
+        && (kind !== 'bone' || (ctx.render.bonesVisible && !(boneOnly && ctx.gibs.boneMesh)));
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
-      deferredApi?.router.register(view.object, 'sdf');
-      chunkViews.push(view);
-      liveChunks.push({ id: nextChunkId++, state, view, template, kind, boneOnly });
+      ctx.boot.deferredApi?.router.register(view.object, 'sdf');
+      ctx.bake.views.push(view);
+      ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view, template, kind, boneOnly });
     }
   }
 
@@ -6343,7 +6322,7 @@ async function main() {
     impulseVel: Vec3 | null,
     impulseDelay: number,
   ): boolean {
-    if (!gibAtlas) return false;
+    if (!ctx.gibs.atlas) return false;
     const rng = rngStreams.misc;
     const kind = piece.kind ?? 'limb';
     const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
@@ -6359,9 +6338,9 @@ async function main() {
         : undefined,
       support.length > 0 ? support : undefined,
     );
-    spawnSpritePiece(spritePieces, {
-      state, frame: pickFrame(gibAtlas, rng()),
-      impulseDelay, impulseVel, sizeScale: gibSpriteSizeScale,
+    spawnSpritePiece(ctx.vfx.spritePieces, {
+      state, frame: pickFrame(ctx.gibs.atlas, rng()),
+      impulseDelay, impulseVel, sizeScale: ctx.gibs.spriteSizeScale,
     });
     return true;
   }
@@ -6419,24 +6398,24 @@ async function main() {
     return BUNDLE_CEIL_M;
   }
 
-  let slotState: WeaponSlotState = makeWeaponSlotState('shotgun');
-  let cook: CookState = { phase: 'idle', phaseAt: 0, cookStart: 0 };
+  ctx.weapon.slotState = makeWeaponSlotState('shotgun');
+  ctx.vfx.cook = { phase: 'idle', phaseAt: 0, cookStart: 0 };
   /** The cook clock in SIM seconds, advanced by tick(dt) — not a wall clock,
    *  so a frozen/render-locked capture cannot advance the fuse behind its own
    *  back. */
-  let dynNow = 0;
+  ctx.dynamite.now = 0;
   // One-frame input edges, consumed by the next tick.
-  let dynPress = false;
-  let dynRelease = false;
+  ctx.dynamite.press = false;
+  ctx.dynamite.release = false;
   /** 0..1 charge of the live cook, for the HUD. */
-  let dynCharge = 0;
+  ctx.dynamite.charge = 0;
 
   /** Prop pool. The HELD one is parented to `bundleRig` (inside aimRig, so it
    *  rides the free-aim lean and the walk bob); a thrown one is moved to the
    *  scene root and posed in WORLD space from its flight state. */
-  const bundleProps: StickProp[] = [];
-  const bundleRig = new THREE.Group();
-  bundleRig.name = 'bundle-rig';
+  ctx.bake.bundleProps = [];
+  ctx.bake.bundleRig = new THREE.Group();
+  ctx.bake.bundleRig.name = 'bundle-rig';
   /** Hold pose, rig space: low and off to one side, canted so the fuse end
    *  reads against the dark. Which side is the off-hand side follows the
    *  existing view-model convention (the shorty is yawed 180°, so its chambers
@@ -6447,41 +6426,41 @@ async function main() {
       THREE.MathUtils.degToRad(-28), THREE.MathUtils.degToRad(18), THREE.MathUtils.degToRad(28),
     ),
   };
-  let bundleReady = false;
+  ctx.bake.bundleReady = false;
   {
     const errs: string[] = [];
     for (let i = 0; i < MAX_BUNDLES; i++) {
       try {
         const p = createStickProp();
         p.object.visible = false;
-        bundleProps.push(p);
+        ctx.bake.bundleProps.push(p);
       } catch (e) { errs.push(String(e)); }
     }
     if (errs.length > 0) console.error('[sdf-game] dynamite prop pool:', errs.join(' | '));
-    bundleRig.position.copy(BUNDLE_HOLD.pos);
-    bundleRig.rotation.copy(BUNDLE_HOLD.rot);
-    (aimRig ?? viewModelAnchor).add(bundleRig);
-    bundleReady = bundleProps.length > 0;
+    ctx.bake.bundleRig.position.copy(BUNDLE_HOLD.pos);
+    ctx.bake.bundleRig.rotation.copy(BUNDLE_HOLD.rot);
+    (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).add(ctx.bake.bundleRig);
+    ctx.bake.bundleReady = ctx.bake.bundleProps.length > 0;
   }
 
   /** The prop currently IN HAND, or null while the bundle it became is in the
    *  air. This is deliberately NOT `bundleProps[0]`: after a throw that very
    *  object belongs to the flight, and drawing it in the rig as well would put
    *  a second bundle in the player's hand. */
-  let heldProp: StickProp | null = bundleProps[0] ?? null;
+  ctx.weapon.heldProp = ctx.bake.bundleProps[0] ?? null;
   // `bundleRig.visible` is the gate for the whole in-hand model, so the prop's
   // OWN flag must stay true: setting it false here made the held bundle
   // invisible from boot until the first throw cycle happened to re-acquire one
   // (owner report, 2026-09-10: "after like the first 2 throws i dont see the
   // dynamite"). One gate, not two.
-  if (heldProp) { bundleRig.add(heldProp.object); heldProp.object.visible = true; }
+  if (ctx.weapon.heldProp) { ctx.bake.bundleRig.add(ctx.weapon.heldProp.object); ctx.weapon.heldProp.object.visible = true; }
   /** Props not in hand and not in flight. */
-  const spareBundles: StickProp[] = bundleProps.slice(1);
+  ctx.bake.spareBundles = ctx.bake.bundleProps.slice(1);
 
   /** A bundle in the air. `prop` is null when more bundles are flying than the
    *  pool can draw — the SIM is never dropped, only the drawing of it. */
   interface LiveBundle { state: FlightState; prop: StickProp | null }
-  const liveBundles: LiveBundle[] = [];
+  ctx.bake.liveBundles = [];
   /**
    * THE STAGED RELEASE'S QUEUE — the impulses a gib has NOT applied yet.
    *
@@ -6495,7 +6474,7 @@ async function main() {
    *
    * It is a few frames of state, not new geometry, and it is drained in the
    * same fixed step that integrates the chunks (see stepPendingGibImpulses). */
-  const pendingGibImpulses: { id: number; vel: Vec3; delay: number }[] = [];
+  ctx.gibs.pendingGibImpulses = [];
   /**
    * BODIES IN THEIR RUPTURE WINDOW, waiting to become pieces. A gibbed body is
    * NOT retired at the blast any more: it stays in the world, drawn with its
@@ -6506,13 +6485,7 @@ async function main() {
    * beginTear) and to `gibActor` at release, so the drawn regions and the
    * spawned chunks cannot disagree.
    */
-  const pendingGibs: {
-    actor: ZombieActor; at: Vec3; falloff: number; plan: GibPlan;
-    /** The tier chosen at SCHEDULE time; the release is locked to it. */
-    tier: string;
-    /** Chunk views this plan needs, held out of `gibBudget()` until release. */
-    reserve: number;
-  }[] = [];
+  ctx.gibs.pendingGibs = [];
   /**
    * Apply every impulse whose delay has run out. A piece whose chunk was
    * recycled out of the pool in the meantime is simply gone — the queue is
@@ -6529,12 +6502,12 @@ async function main() {
    * because the drain that could have fired it has already run and decremented.
    */
   function stepPendingGibImpulses(): void {
-    for (let i = pendingGibImpulses.length - 1; i >= 0; i--) {
-      const p = pendingGibImpulses[i]!;
+    for (let i = ctx.gibs.pendingGibImpulses.length - 1; i >= 0; i--) {
+      const p = ctx.gibs.pendingGibImpulses[i]!;
       if (p.delay > 0) { p.delay--; continue; }
-      const c = liveChunks.find(q => q.id === p.id);
+      const c = ctx.bake.liveChunks.find(q => q.id === p.id);
       if (c) c.state.vel = [p.vel[0], p.vel[1], p.vel[2]];
-      pendingGibImpulses.splice(i, 1);
+      ctx.gibs.pendingGibImpulses.splice(i, 1);
     }
   }
   /** Radians of view pitch per unit of the resolver's cameraKick magnitude. The
@@ -6571,23 +6544,23 @@ async function main() {
   // `?fxlight=K` scales BOTH peaks together — the owner tunes "how much does the
   // room light up" as one number, and scaling only one side would let the walls
   // and the bodies disagree about the blast's brightness.
-  let fxLightScale = parseFloatParam(DYN_PARAMS.get('fxlight'), { min: 0, max: 4 }) ?? 1;
+  ctx.lighting.fxLightScale = parseFloatParam(DYN_PARAMS.get('fxlight'), { min: 0, max: 4 }) ?? 1;
   /** How far the blast's light reaches (the soft room-fill component): see the
    *  panel's `light reach` row and LIGHT_FILL_REF_M. 0 = the pure point light. */
-  let fxSpread = parseFloatParam(DYN_PARAMS.get('fxspread'), { min: 0, max: 3 }) ?? 1.2;
+  ctx.vfx.spread = parseFloatParam(DYN_PARAMS.get('fxspread'), { min: 0, max: 3 }) ?? 1.2;
   // ?woundcap=0 restores the uncapped flesh probe (see damage.ts probeFlesh):
   // the A/B control for the wound-stamping cost, settable per boot so the two
   // arms can be measured interleaved rather than across runs.
   setProbeCapEnabled(DYN_PARAMS.get('woundcap') !== '0');
   /** Live explosions lighting something, newest last. Bounded by the pool. */
-  const explosionLights: { pos: Vec3; age: number }[] = [];
+  ctx.vfx.explosionLights = [];
   /** Light a blast. Called by BOTH the real detonation and the capture seam —
    *  a seam that drew the particles but not the light made the light look like
    *  it did nothing at all in the differential capture (measured: 15.0% of frame
    *  changed with the light "on" against 15.1% with ?fxlight=0). */
   function igniteExplosionLight(at: Vec3): void {
-    explosionLights.push({ pos: [at[0], at[1] + EXPLOSION_LIGHT.liftM, at[2]], age: 0 });
-    while (explosionLights.length > EXPLOSION_LIGHTS) explosionLights.shift();
+    ctx.vfx.explosionLights.push({ pos: [at[0], at[1] + EXPLOSION_LIGHT.liftM, at[2]], age: 0 });
+    while (ctx.vfx.explosionLights.length > EXPLOSION_LIGHTS) ctx.vfx.explosionLights.shift();
   }
 
   /** Spike-then-fall, 1 at ignition and 0 at lifeSec. */
@@ -6600,42 +6573,42 @@ async function main() {
   }
 
   // Telemetry for the tuning pass — read back through __sdfGame.dynamite().
-  let dynThrown = 0;
-  let dynDetonations = 0;
-  let dynGibbed = 0;
-  let dynGibPieces = 0;
+  ctx.dynamite.thrown = 0;
+  ctx.dynamite.detonations = 0;
+  ctx.dynamite.gibbed = 0;
+  ctx.dynamite.gibPieces = 0;
   /** DIAGNOSTIC (temporary): what the pre-tear window's drain did, so a census
    *  that disagrees with it says WHICH side is wrong. */
-  let dynScheduledGibBodies = 0;
-  let dynScheduledGibPieces = 0;
-  let dynLastBlastMs = 0;
+  ctx.dynamite.scheduledGibBodies = 0;
+  ctx.dynamite.scheduledGibPieces = 0;
+  ctx.dynamite.lastBlastMs = 0;
   /** THE RADIUS THE LAST BLAST ACTUALLY RESOLVED AT. The `detonate` seam used
    *  to return `explosionRadiusM()` — the reference CONSTANT — so the radius a
    *  rig read back could never move no matter what was tuned, and the new
    *  `?aoesize` slider looked inert to every instrument in the repo while it
    *  was in fact working. The gate caught it; this is the honest readback. */
-  let dynLastRadiusM = explosionRadiusM();
+  ctx.dynamite.lastRadiusM = explosionRadiusM();
   /** Pieces a gib had to leave OUT because the view pool was full — the number
    *  that says whether ?maxchunks needs raising for what is on screen. */
-  let dynLastGibDropped = 0;
+  ctx.dynamite.lastGibDropped = 0;
   /** Which piece SHAPE the last body got (see gibActor's tiers) and how many
    *  pieces it actually spawned — the two numbers the census cannot infer. */
-  let dynLastGibTier = 'parts';
+  ctx.dynamite.lastGibTier = 'parts';
   /** EVERY body's tier for the last blast, in the order they were gibbed —
    *  because "what did the owner actually see" is a question about ALL of them,
    *  and a single last-body field answers it wrongly: a five-body blast in the
    *  arena gives the first body `parts` and the rest the cheap rungs, and only
    *  the log shows that. Cleared at the top of each detonation. */
-  let dynGibTierLog: string[] = [];
-  let dynLastGibSpawned = 0;
-  let dynLastGibParts: string[] = [];
-  let dynLastGibHeld = 0;
-  let dynBloodOrphans = 0;
+  ctx.dynamite.gibTierLog = [];
+  ctx.dynamite.lastGibSpawned = 0;
+  ctx.dynamite.lastGibParts = [];
+  ctx.dynamite.lastGibHeld = 0;
+  ctx.dynamite.bloodOrphans = 0;
 
   /** World position of a prop, or the eye when there is none. */
   const _propPos = new THREE.Vector3();
   function propWorld(p: StickProp | null): Vec3 {
-    if (!p) return eyeOf(player);
+    if (!p) return eyeOf(ctx.player.player);
     p.object.getWorldPosition(_propPos);
     return [_propPos.x, _propPos.y, _propPos.z];
   }
@@ -6644,16 +6617,16 @@ async function main() {
    *  there, else a spare, else the OLDEST flying bundle's (its state keeps
    *  flying — only the drawing of it is recycled, so the sim never desyncs). */
   function takePropForThrow(): StickProp | null {
-    if (heldProp) {
-      const p = heldProp;
-      heldProp = null;
-      bundleRig.remove(p.object);
+    if (ctx.weapon.heldProp) {
+      const p = ctx.weapon.heldProp;
+      ctx.weapon.heldProp = null;
+      ctx.bake.bundleRig.remove(p.object);
       scene.add(p.object);
       return p;
     }
-    const spare = spareBundles.pop();
+    const spare = ctx.bake.spareBundles.pop();
     if (spare) return spare;
-    const oldest = liveBundles.find(b => b.prop);
+    const oldest = ctx.bake.liveBundles.find(b => b.prop);
     if (!oldest || !oldest.prop) return null;
     const p = oldest.prop;
     oldest.prop = null;
@@ -6669,10 +6642,10 @@ async function main() {
    *  mid-throw. An overcook returns straight to 'idle', so the replacement is
    *  immediate there, which is right: nothing was thrown. */
   function reacquireHeldProp(): void {
-    if (heldProp || !bundleReady) return;
-    if (cook.phase !== 'idle') return;
-    const p = spareBundles.pop() ?? (() => {
-      const oldest = liveBundles.find(b => b.prop);
+    if (ctx.weapon.heldProp || !ctx.bake.bundleReady) return;
+    if (ctx.vfx.cook.phase !== 'idle') return;
+    const p = ctx.bake.spareBundles.pop() ?? (() => {
+      const oldest = ctx.bake.liveBundles.find(b => b.prop);
       if (!oldest || !oldest.prop) return null;
       const q = oldest.prop;
       oldest.prop = null;
@@ -6680,7 +6653,7 @@ async function main() {
     })();
     if (!p) return;
     p.object.removeFromParent();
-    bundleRig.add(p.object);
+    ctx.bake.bundleRig.add(p.object);
     // RESET THE LOCAL TRANSFORM, and this is the whole bug (owner report
     // 2026-09-10: "after like the first 2 throws i dont see the dynamite").
     //
@@ -6699,7 +6672,7 @@ async function main() {
     p.object.quaternion.identity();
     p.object.scale.setScalar(1);
     p.object.visible = true;
-    heldProp = p;
+    ctx.weapon.heldProp = p;
   }
 
   /** True when a body is within the bundle's contact radius anywhere along the
@@ -6708,7 +6681,7 @@ async function main() {
   function bundleHitsBody(from: Vec3, to: Vec3): ZombieActor | null {
     const dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
     const l2 = dx * dx + dy * dy + dz * dz || 1;
-    for (const a of actors) {
+    for (const a of ctx.world.actors) {
       const p = a.pose();
       const cx = p.pos[0], cy = p.pos[1] + 0.95, cz = p.pos[2];
       const t = Math.max(0, Math.min(1,
@@ -6721,7 +6694,7 @@ async function main() {
 
   /** Release a bundle from the hand along the aim. */
   function throwBundle(speedMps: number): void {
-    if (!bundleReady) return;
+    if (!ctx.bake.bundleReady) return;
     // THE ORIGIN IS READ BEFORE THE REPARENT, and that order is load-bearing:
     // the held prop's world transform IS the hold pose (it rides `bundleRig`,
     // inside the camera), while `takePropForThrow` moves the object to the scene
@@ -6729,7 +6702,7 @@ async function main() {
     // that hands the flight the scene ORIGIN — a point inside the level's solid
     // centre block — so the bundle was born buried in geometry, pushed out
     // downward, and left sliding along the floor. Caught by the slot gate.
-    const origin = propWorld(heldProp);
+    const origin = propWorld(ctx.weapon.heldProp);
     const prop = takePropForThrow();
     // The reticle IS the aim under both schemes (aimDir handles free aim), and
     // fpv.ts's throwDirection applies the game's upward lob on top — the same
@@ -6740,19 +6713,19 @@ async function main() {
     const yaw = Math.atan2(d[0], -d[2]);
     const pitch = Math.asin(Math.max(-1, Math.min(1, d[1])));
     const dir = throwDirection(yaw, pitch);
-    const speed = speedMps * dynSpeedScale;
+    const speed = speedMps * ctx.dynamite.speedScale;
     const state = makeFlight(origin, [dir[0] * speed, dir[1] * speed, dir[2] * speed], { impactMode: true });
-    liveBundles.push({ state, prop });
+    ctx.bake.liveBundles.push({ state, prop });
     prop?.pose({ mode: 'flight', pos: state.pos, spin: state.spin, fuseBurning: true });
-    dynThrown++;
-    telemetry.event('dynamite-throw', { speedMps: speed, x: origin[0], y: origin[1], z: origin[2] });
+    ctx.dynamite.thrown++;
+    ctx.telemetry.telemetry.event('dynamite-throw', { speedMps: speed, x: origin[0], y: origin[1], z: origin[2] });
   }
 
   /** The bundle that never left the hand: an overcook, or a fuse that burned
    *  out while held. Detonates AT the player. */
   function overcookInHand(): void {
-    const at = propWorld(heldProp);
-    telemetry.event('dynamite-overcook', { x: at[0], y: at[1], z: at[2] });
+    const at = propWorld(ctx.weapon.heldProp);
+    ctx.telemetry.telemetry.event('dynamite-overcook', { x: at[0], y: at[1], z: at[2] });
     detonateAt(at, true);
   }
 
@@ -6766,35 +6739,35 @@ async function main() {
   function newBlastProfile() {
     return { resolve: 0, gib: 0, wound: 0, blood: 0, chunksSpawned: 0, bodies: 0, total: 0 };
   }
-  let dynBlastProfile = newBlastProfile();
+  ctx.dynamite.blastProfile = newBlastProfile();
 
   function detonateAt(at: Vec3, inHand = false): void {
     const t0 = performance.now();
-    dynGibTierLog = [];
+    ctx.dynamite.gibTierLog = [];
     const prof = newBlastProfile();
-    dynBlastProfile = prof;
+    ctx.dynamite.blastProfile = prof;
     EXPLOSION_PROFILE.traceMs = 0; EXPLOSION_PROFILE.woundMs = 0;
     EXPLOSION_PROFILE.cutMs = 0; EXPLOSION_PROFILE.bodiesTraced = 0;
     EXPLOSION_PROFILE.bodiesPruned = 0; EXPLOSION_PROFILE.prunedPrims = 0;
     EXPLOSION_PROFILE.traces = 0;
-    dynDetonations++;
-    const bodies: ExplosionBody[] = actors.map(a => ({
+    ctx.dynamite.detonations++;
+    const bodies: ExplosionBody[] = ctx.world.actors.map(a => ({
       id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw,
     }));
     const tResolve = performance.now();
     const fx = resolveExplosion(at, bodies, {
-      eye: eyeOf(player),
+      eye: eyeOf(ctx.player.player),
       // Floor distance IS the height above y = 0, this level's real floor, so
       // the resolver's air-vs-ground burst choice is exact here without
       // overriding its default.
       floorDistM: Math.max(0, at[1]),
       // A gibbed body's wounds are never read (see `gibWounds` above).
-      woundsOnGibbed: gibWounds,
+      woundsOnGibbed: ctx.gibs.wounds,
       // THE FOCUS KNOBS, live from the panel. Both are the resolver's own
       // options and both default to the reference (scale 1, floor 0.45), so a
       // page that never touches them resolves exactly as before.
-      radiusScale: aoeRadiusScale,
-      launchFloor: aoeLaunchFloor,
+      radiusScale: ctx.vfx.aoeRadiusScale,
+      launchFloor: ctx.vfx.aoeLaunchFloor,
       // The hand-splash flourish only makes sense for an in-hand detonation:
       // the resolver measures the FPV hands, and this page's hands are meshes
       // with no prim set to trace, so the band stays empty either way. Left
@@ -6812,7 +6785,7 @@ async function main() {
     // first, so the body the player is looking at is the one that gets the full
     // piece set; the rest degrade by tier inside gibActor.
     const condemned = fx.perBody
-      .filter(pb => pb.gibbed && actors.some(q => String(q.id) === pb.bodyId))
+      .filter(pb => pb.gibbed && ctx.world.actors.some(q => String(q.id) === pb.bodyId))
       .sort((x, y) => y.falloff - x.falloff);
     // THE BLAST'S WHOLE BUDGET, not just the free slots. A gib may take views
     // that OLDER gore is holding — that is what `spawnChunkPiece`'s
@@ -6837,14 +6810,14 @@ async function main() {
     let remaining = blastBudget;
     let condemnedLeft = condemned.length;
     for (const pb of fx.perBody) {
-      const a = actors.find(q => String(q.id) === pb.bodyId);
+      const a = ctx.world.actors.find(q => String(q.id) === pb.bodyId);
       if (!a) continue;
       if (pb.gibbed) {
         const tg = performance.now();
         // SINGLE-HIT RULE: damage ≥ GIB_THRESHOLD skips death entirely. The
         // resolver has already decided, and nothing severs a body that is
         // about to stop existing.
-        if (gibTearSec > 0) {
+        if (ctx.gibs.tearSec > 0) {
           // The window takes it from here. The TIER IS CHOSEN NOW (task 3) with
           // the same greedy allowance the immediate path uses, and its views
           // are RESERVED out of `gibBudget()` until release, so the preview is
@@ -6875,13 +6848,13 @@ async function main() {
       for (const w of pb.wounds) spillVerdict(a, w);
       prof.wound += performance.now() - tw;
     }
-    dynGibbed += gibbed;
-    dynGibPieces += pieces;
+    ctx.dynamite.gibbed += gibbed;
+    ctx.dynamite.gibPieces += pieces;
 
     // Concussion on pieces that already existed (the resolver's list) and on
     // the pieces this blast just made (spawnChunkPiece's ids, patched here).
     for (const ci of fx.chunkImpulses) {
-      const c = liveChunks.find(q => q.id === ci.chunkId);
+      const c = ctx.bake.liveChunks.find(q => q.id === ci.chunkId);
       if (c) c.state.vel = [ci.vel[0], ci.vel[1], ci.vel[2]];
     }
     // ——— The camera kick. `cameraKick` is the game's quake→magnitude mapping
@@ -6889,7 +6862,7 @@ async function main() {
     //     a MAGNITUDE, not radians, so it is scaled into the same `recoilPitch`
     //     channel the gun kick uses and rides that channel's decay. One channel
     //     on purpose: two independent pitch impulses would fight.
-    recoilPitch += fx.cameraKick * BLAST_KICK_RAD_PER_UNIT;
+    ctx.weapon.recoilPitch += fx.cameraKick * BLAST_KICK_RAD_PER_UNIT;
     // The burst BILLBOARD. Stage 3 replaces this stand-in with the procedural
     // fireball (webgpu/explosion-vfx.ts); until that lands the detonation still
     // has to be VISIBLE, so the tuning pass is not blocked on the art.
@@ -6911,28 +6884,28 @@ async function main() {
     // only pixels the fireball covered; and its life was 0.3 s with a squared
     // decay, so it was gone before the fireball cleared. The birth radius is now
     // the fireball's own rendered radius and the band expands past it.
-    if (postAa.blastDistort) {
-      postAa.pushBlastDistort(
+    if (ctx.render.postAa.blastDistort) {
+      ctx.render.postAa.pushBlastDistort(
         [at[0], at[1], at[2]],
         blastRefractionBirthRadiusM(burst.heightM),
         // Strength is applied by the post pass, once, including live changes.
         blastRefractionStrength(burst.heightM),
       );
     }
-    if (explosionVfx) explosionVfx.spawn(burst);
-    else if (burstLayer) burstLayer.spawn(burst);
+    if (ctx.vfx.explosionVfx) ctx.vfx.explosionVfx.spawn(burst);
+    else if (ctx.vfx.burstLayer) ctx.vfx.burstLayer.spawn(burst);
     // ...including the stand-in, which used to get the UNSCALED height and was
     // therefore a third size convention in a three-way branch. It is the
     // control arm of the A/B; a control at a different size compares nothing.
     else spawnBurstStandIn(burst.at, burst.heightM, burst.kind);
     prof.chunksSpawned = pieces;
-    dynLastRadiusM = fx.radiusM;
-    dynLastBlastMs = performance.now() - t0;
-    prof.total = dynLastBlastMs;
-    dynBloodOrphans += 0;
-    telemetry.event('dynamite-detonate', {
+    ctx.dynamite.lastRadiusM = fx.radiusM;
+    ctx.dynamite.lastBlastMs = performance.now() - t0;
+    prof.total = ctx.dynamite.lastBlastMs;
+    ctx.dynamite.bloodOrphans += 0;
+    ctx.telemetry.telemetry.event('dynamite-detonate', {
       x: at[0], y: at[1], z: at[2], radiusM: fx.radiusM,
-      bodies: fx.perBody.length, gibbed, pieces, ms: dynLastBlastMs,
+      bodies: fx.perBody.length, gibbed, pieces, ms: ctx.dynamite.lastBlastMs,
     });
   }
 
@@ -6953,9 +6926,9 @@ async function main() {
   function scheduleGib(
     a: ZombieActor, at: Vec3, falloff: number, allowance: number,
   ): ReturnType<typeof gibTierPlan> | null {
-    if (gibTearSec <= 0) return null; // caller gibs immediately
-    if (a.tearing() || pendingGibs.some(q => q.actor === a)) return null;
-    a.setTearTuning({ sec: gibTearSec, ...tearShape });
+    if (ctx.gibs.tearSec <= 0) return null; // caller gibs immediately
+    if (a.tearing() || ctx.gibs.pendingGibs.some(q => q.actor === a)) return null;
+    a.setTearTuning({ sec: ctx.gibs.tearSec, ...ctx.vfx.tearShape });
     // THE PLAN IS PREPARED ONCE, from the clean posed body, and reused for the
     // whole visualization AND the release. `gibParts` would re-derive it at
     // release from a body the rupture has already moved; the plan's own region
@@ -6967,10 +6940,10 @@ async function main() {
     // the cheap shape it will actually spawn instead of the full partition.
     // `?gib=pieces` is the one shape with no source indices yet; it keeps the
     // old preview-then-spawn route (see RESULTS.md Task 3 limits).
-    const mode = gibMode === 'clusters' ? 'clusters' : 'parts';
-    const planned = gibTierPlan(a.posed(), allowance, { bones: gibBones, mode, at });
+    const mode = ctx.gibs.mode === 'clusters' ? 'clusters' : 'parts';
+    const planned = gibTierPlan(a.posed(), allowance, { bones: ctx.gibs.bones, mode, at });
     a.beginTear(at, falloff, planned.plan);
-    pendingGibs.push({
+    ctx.gibs.pendingGibs.push({
       actor: a, at: [at[0], at[1], at[2]], falloff, plan: planned.plan,
       tier: planned.tier, reserve: planned.reserve,
     });
@@ -6988,20 +6961,20 @@ async function main() {
    * worth of pieces arriving at once.
    */
   function spawnScheduledGibs(dt: number): number {
-    if (pendingGibs.length === 0) return 0;
+    if (ctx.gibs.pendingGibs.length === 0) return 0;
     // THE WINDOW'S CLOCK LIVES HERE, not in the body's step: a frozen capture
     // (`?frozen=1`) skips the whole body block, and a body whose clock stopped
     // would never become pieces. Stepping it here also means the separating
     // body is re-drawn on frames the body itself did not step.
-    for (const q of pendingGibs) q.actor.stepTear(dt);
-    const ready = pendingGibs.filter(q => !q.actor.tearing());
+    for (const q of ctx.gibs.pendingGibs) q.actor.stepTear(dt);
+    const ready = ctx.gibs.pendingGibs.filter(q => !q.actor.tearing());
     if (ready.length === 0) return 0;
     let remaining = gibBudget();
     let left = ready.length;
     let spawned = 0;
     for (const q of ready) {
-      const i = pendingGibs.indexOf(q);
-      if (i >= 0) pendingGibs.splice(i, 1);
+      const i = ctx.gibs.pendingGibs.indexOf(q);
+      if (i >= 0) ctx.gibs.pendingGibs.splice(i, 1);
       const allowance = gibAllowance(remaining, left);
       // THE HAND-OFF: the plan's own regions at the offsets the body was last
       // DRAWN with, RETARGETED onto the SLOUGHED prims (`deformedPrims`/
@@ -7014,7 +6987,7 @@ async function main() {
       // LOCKED TO THE SCHEDULE-TIME TIER (task 3): the ladder does not re-run,
       // so a tight pool cannot preview one shape and spawn another. `q.reserve`
       // is what `gibBudget()` held for it; the splice above frees it.
-      const locked = gibMode !== 'pieces';
+      const locked = ctx.gibs.mode !== 'pieces';
       const planned = {
         pieces: frame
           ? displaceGibPieces(
@@ -7036,9 +7009,9 @@ async function main() {
     // blast that condemned the body, and a counter that only counted the blast
     // frame reported zero pieces for a gib that plainly happened (the gate's
     // live-view row showed 19 -> 24 chunks against "no pieces were spawned").
-    dynGibPieces += spawned;
-    for (const q of ready) dynScheduledGibBodies++;
-    dynScheduledGibPieces += spawned;
+    ctx.dynamite.gibPieces += spawned;
+    for (const q of ready) ctx.dynamite.scheduledGibBodies++;
+    ctx.dynamite.scheduledGibPieces += spawned;
     return spawned;
   }
 
@@ -7097,7 +7070,7 @@ async function main() {
     const posedBody = planned?.body ?? a.posed();
     const torsoC = posedBody.clusters.find(c => c.limb === 'torso')?.center
       ?? ([at[0], at[1], at[2]] as Vec3);
-    const clusters: GibPiece[] = (gibMode === 'pieces' ? gibAllPieces(posedBody, torsoC) : gibAll(posedBody))
+    const clusters: GibPiece[] = (ctx.gibs.mode === 'pieces' ? gibAllPieces(posedBody, torsoC) : gibAll(posedBody))
       .chunks.map(g => ({ ...g, part: g.limb, kind: 'limb' as const }));
     // THE SPLIT PLAN IS CHOSEN THE SAME WAY AT BOTH ENDS (2026-09-16 task 2).
     // A scheduled rupture already carries the plan the preview drew; the
@@ -7105,10 +7078,10 @@ async function main() {
     // with the same `gibTierPlan`, so no default path can silently fall back to
     // whole-limb clusters. `?gib=clusters|pieces` keep their own labelled
     // reference shapes.
-    const scheduledPlan = gibMode === 'parts' && planned === undefined
-      ? gibTierPlan(posedBody, budget, { bones: gibBones, mode: 'parts', at })
+    const scheduledPlan = ctx.gibs.mode === 'parts' && planned === undefined
+      ? gibTierPlan(posedBody, budget, { bones: ctx.gibs.bones, mode: 'parts', at })
       : null;
-    const pieces: GibPiece[] = gibMode === 'parts'
+    const pieces: GibPiece[] = ctx.gibs.mode === 'parts'
       ? (planned?.pieces ?? scheduledPlan!.plan.pieces)
       : clusters;
     const template = { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture };
@@ -7116,18 +7089,18 @@ async function main() {
     // has to be on AND there has to be an atlas to cut a frame from. Resolved
     // ONCE per body and used for the tier decision AND the spawn loop, so a body
     // can never take the sprite path's budget while spawning marched pieces.
-    const spriteMode = gibRenderMode === 'sprite' && gibAtlas !== null;
+    const spriteMode = ctx.gibs.renderMode === 'sprite' && ctx.gibs.atlas !== null;
     // CARVE IS THE THIRD RENDERER: real meshes from the archetype library. It
     // resolves ONCE per body (mode on AND a library that built), so a body can
     // never take the carve budget while spawning something else.
-    const carveMode = gibRenderMode === 'carve' && ensureCarvedLibrary() && carvedLibrary !== null;
+    const carveMode = ctx.gibs.renderMode === 'carve' && ensureCarvedLibrary() && ctx.bake.carvedLibrary !== null;
     // ASSETS ARE THE FOURTH RENDERER (task 2): real reusable meshes loaded from
     // the committed offline sets. Resolved ONCE per body, like carve, so the
     // budget/tier decision and the spawn loop agree. Until the archetype's load
     // resolves this is false and the body falls back to marched pieces.
-    const assetMode = gibRenderMode === 'assets' && gibAssetRuntime.library(gibAssetArchetypeOf(a)) !== null;
-    if (gibRenderMode === 'sprite' && gibAtlas === null && !gibSpriteAtlasWarned) {
-      gibSpriteAtlasWarned = true;
+    const assetMode = ctx.gibs.renderMode === 'assets' && ctx.gibs.assetRuntime.library(gibAssetArchetypeOf(a)) !== null;
+    if (ctx.gibs.renderMode === 'sprite' && ctx.gibs.atlas === null && !ctx.gibs.spriteAtlasWarned) {
+      ctx.gibs.spriteAtlasWarned = true;
       console.warn('[gib-sprites] ?gibrender=sprite but no atlas is loaded — '
         + 'falling back to marched pieces for this session');
     }
@@ -7149,12 +7122,12 @@ async function main() {
     // seed-deterministic spread on top at `coherentFrac`. GIB_LAUNCH keeps the
     // source 1:3 horizontal:vertical ratio and the lab's accepted arc.
     const coherentVel = concussionVelocity(
-      at, torsoC, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+      at, torsoC, EXPLOSION_STANDARD.impulse * launchFall * ctx.gibs.velScale);
     // `?giblaunch=radial` is the labelled CONTROL: the old per-piece radial
     // shove, kept only so a normal-speed A/B can be captured side by side.
-    const launchFor = (key: string, origin: Vec3): Vec3 => gibLaunchMode === 'radial'
-      ? concussionVelocity(at, origin, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale)
-      : gibLaunchVelocity({ key, seed: demoSeed, bodyVel: coherentVel });
+    const launchFor = (key: string, origin: Vec3): Vec3 => ctx.gibs.launchMode === 'radial'
+      ? concussionVelocity(at, origin, EXPLOSION_STANDARD.impulse * launchFall * ctx.gibs.velScale)
+      : gibLaunchVelocity({ key, seed: ctx.demo.seed, bodyVel: coherentVel });
     // NEAREST THE BLAST FIRST. This is the STAGGER order: the piece nearest the
     // explosion starts moving first, so the blast reads as ripping outward
     // through the body. It no longer decides what survives — the budget was
@@ -7171,7 +7144,7 @@ async function main() {
     // only remaining whole-limb shape is `?gib=clusters`, which is a labelled
     // A/B control the page asked for by name.
     let chosen = byBlast(pieces);
-    let tier = gibMode === 'parts' ? (scheduledPlan?.tier ?? 'parts') : gibMode;
+    let tier = ctx.gibs.mode === 'parts' ? (scheduledPlan?.tier ?? 'parts') : ctx.gibs.mode;
     // THE SCHEDULE-TIME TIER IS BINDING (task 3). When the caller locked the
     // plan, the shape was already chosen with the pool arithmetic and previewed;
     // re-deriving here is exactly the "preview rich, spawn cheap" defect this
@@ -7208,7 +7181,7 @@ async function main() {
       chosen = chosen.slice(0, Math.max(1, budget));
     }
     const ordered = chosen;
-    const liveBefore = liveChunks.length;
+    const liveBefore = ctx.bake.liveChunks.length;
     const spawning = ordered;
     const dropped = pieces.length - spawning.length;
     // THE RUPTURE HAND-OFF DOES NOT GET THE ZERO-VELOCITY HOLD (Task 2 audit).
@@ -7226,7 +7199,7 @@ async function main() {
     // minus the dead frame. `?gibstagger` keeps its meaning for the immediate
     // path.
     const ruptureHandoff = planned !== undefined;
-    const perFrame = Math.max(1, Math.ceil(spawning.length / gibStaggerFrames));
+    const perFrame = Math.max(1, Math.ceil(spawning.length / ctx.gibs.staggerFrames));
     const boneOnly = (g: GibPiece) => g.prims.length === 0 && g.bones.length > 0;
     let spawned = 0, boneSpawned = 0;
     // ——— CARVE: THE WHOLE BODY, FROM THE ARCHETYPE LIBRARY —————————————————
@@ -7237,12 +7210,12 @@ async function main() {
     // `actorPos + rotateY(regionCentre, bodyYaw)`. A gib is anonymous meat a
     // frame after the blast, so a rest-pose arm on a mid-stride body is the
     // standard trade — and it is what makes ONE library serve every zombie.
-    if (carveMode && carvedLibrary && carvedMaterial) {
-      const lib = carvedLibrary.pieces;
+    if (carveMode && ctx.bake.carvedLibrary && ctx.bake.carvedMaterial) {
+      const lib = ctx.bake.carvedLibrary.pieces;
       const yaw = a.pose().yaw;
       const cy = Math.cos(yaw), sy = Math.sin(yaw);
       const base = a.pose().pos;
-      const perFrameCarve = Math.max(1, Math.ceil(lib.length / gibStaggerFrames));
+      const perFrameCarve = Math.max(1, Math.ceil(lib.length / ctx.gibs.staggerFrames));
       for (let i = 0; i < lib.length; i++) {
         const p = lib[i]!;
         // Body space -> world: yaw about the vertical, then translate.
@@ -7251,7 +7224,7 @@ async function main() {
         const wz = base[2] + (-p.centre[0] * sy + p.centre[2] * cy);
         const o: Vec3 = [wx, wy, wz];
         const vel = launchFor(`carve#${i}`, o);
-        const delay = 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrameCarve));
+        const delay = 1 + Math.min(ctx.gibs.staggerFrames - 1, Math.floor(i / perFrameCarve));
         if (spawnCarvedPiece(p, o, 'limb', vel, delay)) spawned++;
       }
     }
@@ -7264,7 +7237,7 @@ async function main() {
       // see `ruptureHandoff` above. See stepPendingGibImpulses for why this
       // counts drains. The sprite path passes it to `spawnSpritePiece` instead,
       // and `stepSpritePieces` counts drains the same way.
-      const delay = ruptureHandoff ? 0 : 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrame));
+      const delay = ruptureHandoff ? 0 : 1 + Math.min(ctx.gibs.staggerFrames - 1, Math.floor(i / perFrame));
       if (spriteMode) {
         // THE SAME PIECE, A DIFFERENT RENDERER. `g` carries the split (which
         // prims, which bones, which limb) and the sprite path reads only its
@@ -7297,9 +7270,9 @@ async function main() {
         // no orientation reset and no second angular kick.
         spinQuat: g.spinQuat, spinAngVel: g.spinAngVel,
       }, template, [0, 0, 0]); // AT REST: see the doc block, point 2
-      const made = liveChunks[liveChunks.length - 1];
+      const made = ctx.bake.liveChunks[ctx.bake.liveChunks.length - 1];
       if (made) {
-        pendingGibImpulses.push({ id: made.id, vel, delay });
+        ctx.gibs.pendingGibImpulses.push({ id: made.id, vel, delay });
         spawned++;
         if (boneOnly(g)) boneSpawned++;
       }
@@ -7307,23 +7280,23 @@ async function main() {
     // Gore: the blast opens the body, so one gout at the epicentre. `spawnImpactGout`
     // takes the SIM directly (its droplets are rendered by bloodView.sync), and
     // 'slug' is the heaviest profile BleedKind has — there is no 'blast' one.
-    if (bleedEnabled) {
-      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, nextEmitterStream++);
+    if (ctx.vfx.bleedEnabled) {
+      spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++);
     }
     retireActor(a);
-    telemetry.event('dynamite-gib', {
-      actor: a.id, mode: gibMode, tier, pieces: spawned, dropped, bones: boneSpawned,
-      gibBones, gibStaggerFrames, gibVelScale, gibLaunchMode, budget, liveBefore,
+    ctx.telemetry.telemetry.event('dynamite-gib', {
+      actor: a.id, mode: ctx.gibs.mode, tier, pieces: spawned, dropped, bones: boneSpawned,
+      gibBones: ctx.gibs.bones, gibStaggerFrames: ctx.gibs.staggerFrames, gibVelScale: ctx.gibs.velScale, gibLaunchMode: ctx.gibs.launchMode, budget, liveBefore,
     });
-    dynLastGibDropped = dropped;
-    dynLastGibTier = tier;
-    dynGibTierLog.push(`${tier}:${spawned}`);
-    dynLastGibSpawned = spawned;
+    ctx.dynamite.lastGibDropped = dropped;
+    ctx.dynamite.lastGibTier = tier;
+    ctx.dynamite.gibTierLog.push(`${tier}:${spawned}`);
+    ctx.dynamite.lastGibSpawned = spawned;
     // WHAT THE BODY BECAME, by name. A census of chunk counts cannot say
     // whether the RIBCAGE is in the pile, and "is there a ribcage" is the
     // owner's actual question — so the part ids ride the seam.
-    dynLastGibParts = spawning.map(g => g.part);
-    dynLastGibHeld = spawning.length - spawned;
+    ctx.dynamite.lastGibParts = spawning.map(g => g.part);
+    ctx.dynamite.lastGibHeld = spawning.length - spawned;
     return spawned;
   }
 
@@ -7333,16 +7306,16 @@ async function main() {
     // Equipment is a scene sibling of the flesh proxies, not their child.
     // This actor stops ticking here, so its attachments must retire too.
     a.character?.retireEquipment();
-    const pi = pendingGibs.findIndex(q => q.actor === a);
-    if (pi >= 0) pendingGibs.splice(pi, 1);
+    const pi = ctx.gibs.pendingGibs.findIndex(q => q.actor === a);
+    if (pi >= 0) ctx.gibs.pendingGibs.splice(pi, 1);
     a.view.object.visible = false;
     a.view.coneObject.visible = false;
-    deferredApi?.router.unregister(a.view.object);
-    deferredApi?.router.unregister(a.view.coneObject);
+    ctx.boot.deferredApi?.router.unregister(a.view.object);
+    ctx.boot.deferredApi?.router.unregister(a.view.coneObject);
     a.view.object.removeFromParent();
     a.view.coneObject.removeFromParent();
-    const i = actors.indexOf(a);
-    if (i >= 0) actors.splice(i, 1);
+    const i = ctx.world.actors.indexOf(a);
+    if (i >= 0) ctx.world.actors.splice(i, 1);
   }
 
   // -----------------------------------------------------------------------
@@ -7354,34 +7327,34 @@ async function main() {
   // erase the burst and bodies can still occlude it).
   // -----------------------------------------------------------------------
   const BURST_SLOTS = 6;
-  const burstTex = new THREE.DataTexture(flashPixels(64, 11), 64, 64);
-  burstTex.needsUpdate = true;
-  const smokeBurstTex = new THREE.DataTexture(smokePixels(64), 64, 64);
-  smokeBurstTex.needsUpdate = true;
+  ctx.vfx.burstTex = new THREE.DataTexture(flashPixels(64, 11), 64, 64);
+  ctx.vfx.burstTex.needsUpdate = true;
+  ctx.vfx.smokeBurstTex = new THREE.DataTexture(smokePixels(64), 64, 64);
+  ctx.vfx.smokeBurstTex.needsUpdate = true;
   interface BurstSlot {
     core: THREE.Sprite; halo: THREE.Sprite; smoke: THREE.Sprite;
     age: number; life: number; h: number;
   }
-  const burstSlots: BurstSlot[] = [];
+  ctx.weapon.burstSlots = [];
   for (let i = 0; i < BURST_SLOTS; i++) {
     const core = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: burstTex, color: new THREE.Color(7, 4.4, 1.9), transparent: true, opacity: 0,
+      map: ctx.vfx.burstTex, color: new THREE.Color(7, 4.4, 1.9), transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false, toneMapped: false,
     }));
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: burstTex, color: new THREE.Color(2.2, 0.62, 0.14), transparent: true, opacity: 0,
+      map: ctx.vfx.burstTex, color: new THREE.Color(2.2, 0.62, 0.14), transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false, toneMapped: false,
     }));
     const smoke = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: smokeBurstTex, color: new THREE.Color(0.22, 0.20, 0.185), transparent: true, opacity: 0,
+      map: ctx.vfx.smokeBurstTex, color: new THREE.Color(0.22, 0.20, 0.185), transparent: true, opacity: 0,
       depthTest: true, depthWrite: false, toneMapped: false,
     }));
-    for (const s of [core, halo, smoke]) { s.visible = false; characterEffects.scene.add(s); }
-    burstSlots.push({ core, halo, smoke, age: Infinity, life: 0.55, h: 1 });
+    for (const s of [core, halo, smoke]) { s.visible = false; ctx.vfx.characterEffects.scene.add(s); }
+    ctx.weapon.burstSlots.push({ core, halo, smoke, age: Infinity, life: 0.55, h: 1 });
   }
-  let burstCursor = 0;
+  ctx.weapon.burstCursor = 0;
   function spawnBurstStandIn(at: Vec3, heightM: number, kind: 'air' | 'ground'): void {
-    const s = burstSlots[burstCursor++ % BURST_SLOTS]!;
+    const s = ctx.weapon.burstSlots[ctx.weapon.burstCursor++ % BURST_SLOTS]!;
     s.age = 0;
     s.life = kind === 'ground' ? 0.62 : 0.5;
     s.h = heightM;
@@ -7390,7 +7363,7 @@ async function main() {
     for (const m of [s.core, s.halo, s.smoke]) { m.position.set(at[0], y, at[2]); m.visible = true; }
   }
   function stepBursts(dt: number): void {
-    for (const s of burstSlots) {
+    for (const s of ctx.weapon.burstSlots) {
       if (s.age === Infinity) continue;
       s.age += dt;
       const u = s.age / s.life;
@@ -7440,14 +7413,14 @@ async function main() {
   // procedural path has to match. DEV ONLY: those tiles are gitignored, never
   // committed and never shipped, and the layer falls back to the procedural
   // discs when they are absent (a fresh clone without scripts/link-dev-assets.sh).
-  const fxMode = DYN_PARAMS.get('explosionfx') ?? 'procedural';
-  let explosionVfx: ExplosionVfx | null = null;
-  let burstLayer: BurstLayer | null = null;
-  if (fxMode === 'atlas') {
-    burstLayer = createBurstLayer(characterEffects.scene);
-  } else if (fxMode !== 'standin') {
+  ctx.vfx.mode = DYN_PARAMS.get('explosionfx') ?? 'procedural';
+  ctx.vfx.explosionVfx = null;
+  ctx.vfx.burstLayer = null;
+  if (ctx.vfx.mode === 'atlas') {
+    ctx.vfx.burstLayer = createBurstLayer(ctx.vfx.characterEffects.scene);
+  } else if (ctx.vfx.mode !== 'standin') {
     try {
-      explosionVfx = createExplosionVfx();
+      ctx.vfx.explosionVfx = createExplosionVfx();
       // The owner's size/smoke calls, applied as DEFAULTS rather than left to a
       // caller: a burst that hides the gib is the wrong default whatever the
       // module's own taste is. Three of the four stay overridable (?fxsmoke
@@ -7462,25 +7435,25 @@ async function main() {
       // atlas quad's 1.65 m: `?explosionfx=atlas` is the reference the plume is
       // supposed to be matched against, and a 2.38x size mismatch is not a
       // comparison. One multiplier, all three modes.
-      explosionVfx.setTuning({
-        smokeOpacity: fxSmoke, lifeSec: fxLife, gain: fxGain,
+      ctx.vfx.explosionVfx.setTuning({
+        smokeOpacity: ctx.vfx.smoke, lifeSec: ctx.vfx.life, gain: ctx.vfx.gain,
         // THE SHAPE SWITCH IS FOUR SETTINGS, NOT ONE. `plumeMix` alone blends
         // the envelope terms, and measured through the differential capture it
         // barely moved the silhouette (cap/stem 20.6 against 21.8): the fire's
         // CAP ROLE is what puts mass up top, and that is a separate knob. An
         // A/B that does not move the number it exists to compare is not an A/B.
-        plumeMix: fxPlume,
-        fireCapShare: fxPlume,
+        plumeMix: ctx.vfx.plume,
+        fireCapShare: ctx.vfx.plume,
         capFlatten: parseFloatParam(DYN_PARAMS.get('capflat'), { min: 0, max: 1 }) ?? dynamiteDefaults().capflat,
         capFireFlatten: Math.min(1, 0.5 + (parseFloatParam(DYN_PARAMS.get('capflat'), { min: 0, max: 1 }) ?? dynamiteDefaults().capflat) * 0.25),
       });
-      characterEffects.scene.add(explosionVfx.object);
+      ctx.vfx.characterEffects.scene.add(ctx.vfx.explosionVfx.object);
     } catch (e) {
       // Fail OPEN to the stand-in rather than take the page down: a node graph
       // this GPU cannot compile is a look problem, not a reason to have no
       // explosion at all.
       console.error('[sdf-game] explosion-vfx unavailable, using the stand-in:', e);
-      explosionVfx = null;
+      ctx.vfx.explosionVfx = null;
     }
   }
 
@@ -7491,28 +7464,28 @@ async function main() {
    *  setTuning comment above: applying it in both places made the procedural
    *  burst 2.38x smaller than the atlas it is the reference against). */
   function scaleBurstVisual(visual: BurstVisual): BurstVisual {
-    return { ...visual, heightM: visual.heightM * fxSize };
+    return { ...visual, heightM: visual.heightM * ctx.vfx.size };
   }
 
   function stepWeaponSlots(dt: number): void {
-    slotState = stepWeaponSlot(slotState, dt);
+    ctx.weapon.slotState = stepWeaponSlot(ctx.weapon.slotState, dt);
 
-    const gunLower = slotLowerAmount(slotState, 'shotgun');
+    const gunLower = slotLowerAmount(ctx.weapon.slotState, 'shotgun');
     // Drop out of frame AND dip the muzzles: that reads as putting a gun away,
     // where a fade reads as a bug.
-    gunRig.position.set(0, -0.42 * gunLower, 0.06 * gunLower);
-    gunRig.rotation.set(THREE.MathUtils.degToRad(38) * gunLower, 0, 0);
-    gunRig.visible = gunLower < 0.999;
+    ctx.weapon.gunRig.position.set(0, -0.42 * gunLower, 0.06 * gunLower);
+    ctx.weapon.gunRig.rotation.set(THREE.MathUtils.degToRad(38) * gunLower, 0, 0);
+    ctx.weapon.gunRig.visible = gunLower < 0.999;
 
-    const bundleLower = slotLowerAmount(slotState, 'dynamite');
-    bundleRig.position.set(
+    const bundleLower = slotLowerAmount(ctx.weapon.slotState, 'dynamite');
+    ctx.bake.bundleRig.position.set(
       BUNDLE_HOLD.pos.x,
       BUNDLE_HOLD.pos.y - 0.34 * bundleLower,
       BUNDLE_HOLD.pos.z,
     );
     // Only the LIVE weapon's model is drawn: during the drop the bundle is
     // still holstered, and it appears the instant the frame changes hands.
-    bundleRig.visible = slotState.live === 'dynamite' && heldProp !== null;
+    ctx.bake.bundleRig.visible = ctx.weapon.slotState.live === 'dynamite' && ctx.weapon.heldProp !== null;
   }
 
   /**
@@ -7523,30 +7496,30 @@ async function main() {
    * the in-hand detonation, so the timing rules have exactly one home.
    */
   function stepDynamite(dt: number): void {
-    dynNow += dt;
-    const liveDyn = slotState.live === 'dynamite' && slotReady(slotState);
+    ctx.dynamite.now += dt;
+    const liveDyn = ctx.weapon.slotState.live === 'dynamite' && slotReady(ctx.weapon.slotState);
     const { state: nextCook, signal } = stepCook(
-      cook, { press: dynPress && liveDyn, release: dynRelease && liveDyn }, dynNow,
+      ctx.vfx.cook, { press: ctx.dynamite.press && liveDyn, release: ctx.dynamite.release && liveDyn }, ctx.dynamite.now,
     );
-    cook = nextCook;
-    dynPress = false;
-    dynRelease = false;
+    ctx.vfx.cook = nextCook;
+    ctx.dynamite.press = false;
+    ctx.dynamite.release = false;
     const sig: CookSignal | null = signal;
     if (sig?.kind === 'throw') throwBundle(sig.speedMps);
     else if (sig?.kind === 'overcook') overcookInHand();
-    dynCharge = chargeFraction(dynNow - cook.cookStart) * (cook.phase === 'cooking' ? 1 : 0);
+    ctx.dynamite.charge = chargeFraction(ctx.dynamite.now - ctx.vfx.cook.cookStart) * (ctx.vfx.cook.phase === 'cooking' ? 1 : 0);
     reacquireHeldProp();
 
     // ——— The flights. Stepped at the flight module's own 120 Hz so the body
     //     contact test is as fine as the bounces are; a bundle that hits a body
     //     detonates there, which is what makes the thing aimable at all.
-    for (let i = liveBundles.length - 1; i >= 0; i--) {
-      const b = liveBundles[i]!;
+    for (let i = ctx.bake.liveBundles.length - 1; i >= 0; i--) {
+      const b = ctx.bake.liveBundles[i]!;
       // The ceiling is resolved per bundle PER FRAME, from where the bundle is:
       // see ceilingAt. One frame of lag across a doorway is invisible (the wall
       // boxes catch that frame), and a 5-entry lookup per bundle per frame is
       // nothing next to getting the roof wrong.
-      const world = { colliders, ceilM: ceilingAt(b.state.pos[0], b.state.pos[2]) };
+      const world = { colliders: ctx.world.colliders, ceilM: ceilingAt(b.state.pos[0], b.state.pos[2]) };
       let remaining = Math.min(dt, 0.25);
       let boom: Vec3 | null = null;
       while (remaining > 1e-9 && !flightDetonated(b.state)) {
@@ -7561,34 +7534,34 @@ async function main() {
       if (!boom && flightDetonated(b.state)) boom = b.state.pos;
       if (boom) {
         // Hand the prop back BEFORE the blast so the very next cook has one.
-        if (b.prop) { b.prop.object.visible = false; spareBundles.push(b.prop); }
-        liveBundles.splice(i, 1);
+        if (b.prop) { b.prop.object.visible = false; ctx.bake.spareBundles.push(b.prop); }
+        ctx.bake.liveBundles.splice(i, 1);
         detonateAt(boom);
         continue;
       }
       b.prop?.pose({ mode: 'flight', pos: b.state.pos, spin: b.state.spin, fuseBurning: true });
     }
     stepBursts(dt);
-    explosionVfx?.update(dt, camera);
-    burstLayer?.update(dt, camera);
+    ctx.vfx.explosionVfx?.update(dt, camera);
+    ctx.vfx.burstLayer?.update(dt, camera);
 
     // THE MESH-SIDE LIGHT. Aged and written every frame. The pool is
     // PERMANENTLY VISIBLE (see its construction comment): `visible` is never
     // toggled, because that re-keys the scene's LightsNode and recompiles the
     // light variant of every lit material mid-frame. An idle slot is left at
     // intensity 0, which contributes no light.
-    for (let i = explosionLights.length - 1; i >= 0; i--) {
-      const e = explosionLights[i]!;
+    for (let i = ctx.vfx.explosionLights.length - 1; i >= 0; i--) {
+      const e = ctx.vfx.explosionLights[i]!;
       e.age += dt;
-      if (e.age >= EXPLOSION_LIGHT.lifeSec) explosionLights.splice(i, 1);
+      if (e.age >= EXPLOSION_LIGHT.lifeSec) ctx.vfx.explosionLights.splice(i, 1);
     }
-    for (let i = 0; i < explosionLightPool.length; i++) {
-      const pl = explosionLightPool[i]!;
-      const e = explosionLights[i];
+    for (let i = 0; i < ctx.vfx.explosionLightPool.length; i++) {
+      const pl = ctx.vfx.explosionLightPool[i]!;
+      const e = ctx.vfx.explosionLights[i];
       if (!e) { pl.intensity = 0; continue; }
       const k = explosionLightEnv(e.age);
       pl.position.set(e.pos[0], e.pos[1], e.pos[2]);
-      pl.intensity = EXPLOSION_LIGHT.meshPeak * k * fxLightScale;
+      pl.intensity = EXPLOSION_LIGHT.meshPeak * k * ctx.lighting.fxLightScale;
     }
   }
 
@@ -7601,8 +7574,8 @@ async function main() {
   // Ships ON (it is the feature); __sdfGame.setBleed(false) is the off
   // gate, and OFF must be pixel-identical to the pre-feature page.
   // -----------------------------------------------------------------------
-  const bloodSim = createBloodSim();
-  const bleed = new BleedRegistry();
+  ctx.vfx.bloodSim = createBloodSim();
+  ctx.vfx.bleed = new BleedRegistry();
 
   // -----------------------------------------------------------------------
   // STABLE EMITTER STREAM IDS (blood-connections provenance, 2026-09-13).
@@ -7615,11 +7588,11 @@ async function main() {
   // a namespaced chunk id. Nothing here rolls an RNG and stepBlood never
   // reads `stream`, so the shipped physics is bit-identical.
   // -----------------------------------------------------------------------
-  let nextEmitterStream = 1;
-  const woundStreamIds = new WeakMap<Wound, number>();
+  ctx.boot.nextEmitterStream = 1;
+  ctx.vfx.woundStreamIds = new WeakMap<Wound, number>();
   function woundStreamId(wound: Wound): number {
-    let s = woundStreamIds.get(wound);
-    if (s === undefined) { s = nextEmitterStream++; woundStreamIds.set(wound, s); }
+    let s = ctx.vfx.woundStreamIds.get(wound);
+    if (s === undefined) { s = ctx.boot.nextEmitterStream++; ctx.vfx.woundStreamIds.set(wound, s); }
     return s;
   }
   const TRAIL_STREAM_BASE = 0x40000000;
@@ -7639,16 +7612,16 @@ async function main() {
   // the flesh stay lit by one rig. That is why it is created HERE, after the
   // actors: those nodes do not exist until a view does.
   // -----------------------------------------------------------------------
-  const gooRigView = actors[0]?.view;
-  if (gooRigView) {
-    gooLayer = createGooLayer(handle.renderer, {
-      lightDir: gooRigView.uniforms.lightDir,
-      keyColor: gooRigView.uniforms.keyColor,
-      lightCfg: gooRigView.uniforms.lightCfg,
+  ctx.goo.rigView = ctx.world.actors[0]?.view;
+  if (ctx.goo.rigView) {
+    ctx.goo.layer = createGooLayer(ctx.boot.handle.renderer, {
+      lightDir: ctx.goo.rigView.uniforms.lightDir,
+      keyColor: ctx.goo.rigView.uniforms.keyColor,
+      lightCfg: ctx.goo.rigView.uniforms.lightCfg,
     });
-    postAa.addSink(gooLayer);
-    const t = sdfLayer.targetSize;
-    gooLayer.setSize(t.width, t.height);
+    ctx.render.postAa.addSink(ctx.goo.layer);
+    const t = ctx.render.sdfLayer.targetSize;
+    ctx.goo.layer.setSize(t.width, t.height);
     // Game defaults. The threshold trades two failure modes against each
     // other and BOTH were hit on the way here:
     //   too low  -> every isolated droplet clears it and draws its own oval
@@ -7670,39 +7643,39 @@ async function main() {
     // small blobs (0.14), almost NO blur (0.5), stretch at maximum, gloss at
     // maximum, and a nearly stationary gout. That is a sharp, wet, elongated
     // read — the opposite of the round fused mass I kept steering toward.
-    gooLayer.setSizeScale(0.14);
-    gooLayer.setThreshold(0.65);
+    ctx.goo.layer.setSizeScale(0.14);
+    ctx.goo.layer.setThreshold(0.65);
     // BLUR OFF (owner, 2026-08-31: "we can remove the blur"). 0 bypasses both
     // blur passes ENTIRELY — not a degenerate copy — so this is also two
     // fewer full-screen passes per frame. The code stays because goo-layer is
     // shared with the LAB, whose look is tuned around blurPx 2.5.
-    gooLayer.setBlurPx(0);
+    ctx.goo.layer.setBlurPx(0);
     // DEPTH, not overlay. Overlay never depth-tests, so blood paints over the
     // crate it is behind and over the far side of the body it came out of,
     // which reads as a sticker regardless of scale. Overlay was added to
     // route around a depth blocker that turned out not to exist — the real
     // bug was the post-aa sink — so the reconstruction gets to do its job.
-    gooLayer.setMode('depth');
-    gooLayer.setStretch(4);
-    gooLayer.setEdge(2.75);
-    gooLayer.setAbsorb(1.6);
-    gooLayer.setSpec(2.85);
-    gooLayer.setGloss(220);
-    gooLayer.setRim(0);
+    ctx.goo.layer.setMode('depth');
+    ctx.goo.layer.setStretch(4);
+    ctx.goo.layer.setEdge(2.75);
+    ctx.goo.layer.setAbsorb(1.6);
+    ctx.goo.layer.setSpec(2.85);
+    ctx.goo.layer.setGloss(220);
+    ctx.goo.layer.setRim(0);
     // shadowRed RETUNED 0.12 -> 0.19 for the dungeon (owner, 2026-09-01).
     // Its whole job is that blood never reads black, and it was calibrated
     // against WHITE gallery walls that this relight deleted — against dark
     // wet stone the old floor was not enough to keep shadowed blood red.
-    gooLayer.setShadowRed(0.19);
+    ctx.goo.layer.setShadowRed(0.19);
 
     // Smooth full-grid goo is the accepted default. Connections and sheets
     // remain opt-in; original reconstruction is available for comparison.
     const gooCandidateBoot = new URLSearchParams(location.search);
-    gooReconstruction = gooCandidateBoot.get('goorecon') === 'original' ? 'original' : 'smooth';
-    gooLayer.setDensityScale(1);
-    gooConnectionsEnabled = gooCandidateBoot.get('gooconnections') === '1';
-    gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
-    gooLayer.setReconstruction(gooReconstruction);
+    ctx.goo.reconstruction = gooCandidateBoot.get('goorecon') === 'original' ? 'original' : 'smooth';
+    ctx.goo.layer.setDensityScale(1);
+    ctx.goo.connectionsEnabled = gooCandidateBoot.get('gooconnections') === '1';
+    ctx.goo.sheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
+    ctx.goo.layer.setReconstruction(ctx.goo.reconstruction);
 
     // SELECTIVE SHUTTER BLUR (2026-09-17). Owner-accepted lab look, now a
     // shipped default: fixed 320°/360/20 s (44.44 ms) exposure on airborne
@@ -7711,9 +7684,9 @@ async function main() {
     // blur runs in working-linear space before SSCS/FXAA/VHS and never touches
     // gameplay physics. Failure is surfaced through __sdfGame.bloodBlur.error,
     // never silently swallowed.
-    shutterGame = createShutterGameLayer({
-      renderer: handle.renderer,
-      gooLayer,
+    ctx.panels.shutterGame = createShutterGameLayer({
+      renderer: ctx.boot.handle.renderer,
+      gooLayer: ctx.goo.layer,
       settings: readShutterGameSettings(location.search),
       onError: (message) => {
         // eslint-disable-next-line no-console
@@ -7724,10 +7697,10 @@ async function main() {
     // SHARING the blood exposure contract and adding its own on/off switch.
     // `?gibblur=0` disables only the gib layer.
     const gibSettings = readGibShutterSettings(location.search);
-    gibSettings.exposureSeconds = shutterGame.exposureSeconds;
-    gibSettings.maxStreakPx = shutterGame.maxStreakPx;
-    gibSettings.seedScale = shutterGame.seedScale;
-    gibSettings.depthBiasM = shutterGame.depthBiasM;
+    gibSettings.exposureSeconds = ctx.panels.shutterGame.exposureSeconds;
+    gibSettings.maxStreakPx = ctx.panels.shutterGame.maxStreakPx;
+    gibSettings.seedScale = ctx.panels.shutterGame.seedScale;
+    gibSettings.depthBiasM = ctx.panels.shutterGame.depthBiasM;
     // EXPLICIT ROUTE LIMIT (task 3). The gib layer isolates pieces by rendering
     // the LIVE scene through a dedicated layer; in the deferred route the gib
     // meshes are G-buffer producers with route-assigned materials, and that
@@ -7735,14 +7708,14 @@ async function main() {
     // march shader's pre-existing pipeline errors). Rather than silently leave
     // moving gibs excluded-but-undrawn, the gib blur is hard-off in deferred and
     // the gibs render sharp through their normal route. Reported, not hidden.
-    const gibRouteSupported = !deferredMode;
+    const gibRouteSupported = !ctx.boot.deferredMode;
     if (!gibRouteSupported && gibSettings.enabled) {
       // eslint-disable-next-line no-console
       console.warn('[gib-shutter] deferred route: gib motion blur stays off '
         + '(only the legacy forward route is validated); gibs render sharp');
     }
-    gibShutter = createGibShutterLayer({
-      renderer: handle.renderer,
+    ctx.gibs.shutter = createGibShutterLayer({
+      renderer: ctx.boot.handle.renderer,
       settings: gibSettings,
       supported: gibRouteSupported,
       onError: (message) => {
@@ -7754,32 +7727,32 @@ async function main() {
     // the A/B control for the mutual-occlusion evidence; ON is the shipped
     // behaviour. Parsed here (not in the layer) because it is a blood-pass
     // concern, not a gib-layer one.
-    gibOccluderEnabled = new URLSearchParams(location.search).get('giboccluder') !== '0';
+    ctx.gibs.occluderEnabled = new URLSearchParams(location.search).get('giboccluder') !== '0';
     // ONE capture stage chains both layers: gibs first (they are opaque and
     // write their own depth in the layer), then blood over the gib-resolved
     // target. The blood resolve keeps occlusion against the capture's clean
     // static depth; the gib resolve occludes against that same depth.
-    postAa.setCaptureStage((capture) => {
+    ctx.render.postAa.setCaptureStage((capture) => {
       let src: THREE.RenderTarget = capture;
       let gibDepth: THREE.DepthTexture | null = null;
-      if (gibShutter) {
-        const g = gibShutter.capture(capture, scene, camera);
+      if (ctx.gibs.shutter) {
+        const g = ctx.gibs.shutter.capture(capture, scene, camera);
         if (g) {
           src = g;
-          gibDepth = gibShutter.occluderDepth;
+          gibDepth = ctx.gibs.shutter.occluderDepth;
         }
       }
-      if (gooEnabled && shutterGame) {
+      if (ctx.goo.enabled && ctx.panels.shutterGame) {
         // The blood resolve was built against the raw capture; point it at the
         // gib result so a blurred gib is not painted over by the blood pass.
-        shutterGame.setSceneTexture(src.texture);
+        ctx.panels.shutterGame.setSceneTexture(src.texture);
         // MUTUAL OCCLUSION (task 4): the selected gibs were lifted out of the
         // clean capture, so their depth is NOT in `capture.depthTexture`. Hand
         // the blood resolve the gib layer's own depth so blood behind a
         // blurred gib is dropped instead of composited over it. `null` (gib
         // blur off / nothing selected) restores the single-depth behaviour.
-        shutterGame.setOccluderDepth(gibOccluderEnabled ? gibDepth : null);
-        const b = shutterGame.capture(capture, bloodSim, camera);
+        ctx.panels.shutterGame.setOccluderDepth(ctx.gibs.occluderEnabled ? gibDepth : null);
+        const b = ctx.panels.shutterGame.capture(capture, ctx.vfx.bloodSim, camera);
         if (b) src = b;
       }
       return src === capture ? null : src;
@@ -7787,18 +7760,18 @@ async function main() {
     // PREWARM against the real capture target: the layer/seed allocation and the
     // resolve/selected-layer pipeline compile happen here, at boot, instead of
     // stalling the first live blood/gib frame (measured ~0.26 s, 2026-09-17).
-    shutterGame.prewarm(postAa.captureTarget);
-    gibShutter.prewarm(postAa.captureTarget);
-    void shutterGame.precompile();
+    ctx.panels.shutterGame.prewarm(ctx.render.postAa.captureTarget);
+    ctx.gibs.shutter.prewarm(ctx.render.postAa.captureTarget);
+    void ctx.panels.shutterGame.precompile();
     // Player-facing controls: separate blood/gib switches, SHARED exposure (ms)
     // and max-trail length. Ships visible like its sibling panels; debug seams
     // stay on the API.
-    shutterPanel = createShutterPanel(shutterPanelHost(shutterGame, gibShutter));
-    shutterPanel.setVisible(true);
+    ctx.panels.shutterPanel = createShutterPanel(shutterPanelHost(ctx.panels.shutterGame, ctx.gibs.shutter));
+    ctx.panels.shutterPanel.setVisible(true);
     const disposeShutter = (): void => {
-      postAa.setCaptureStage(null);
-      shutterGame?.dispose();
-      gibShutter?.dispose();
+      ctx.render.postAa.setCaptureStage(null);
+      ctx.panels.shutterGame?.dispose();
+      ctx.gibs.shutter?.dispose();
     };
     window.addEventListener('pagehide', disposeShutter);
     import.meta.hot?.dispose(() => {
@@ -7809,8 +7782,8 @@ async function main() {
     // SUPPLEMENTARY IMPACT SPLASH boot flag. Read AFTER the shipping defaults
     // so it can only ever add the new crown, never move a shipped value. It
     // is independent of the goo candidates above.
-    impactSplashEnabled = gooCandidateBoot.get('impactsplash') === '1';
-    if (impactSplashEnabled) ensureImpactSplashLayer();
+    ctx.panels.impactSplashEnabled = gooCandidateBoot.get('impactsplash') === '1';
+    if (ctx.panels.impactSplashEnabled) ensureImpactSplashLayer();
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
@@ -7819,8 +7792,8 @@ async function main() {
     // debug page and the panel is the reason to turn the layer on at all.
     // Dismissable with __sdfGame.gooPanel(false), which is also what the
     // headless look-capture calls so screenshots frame the room, not the UI.
-    const L = gooLayer;
-    gooPanel = createGooPanel([
+    const L = ctx.goo.layer;
+    ctx.panels.gooPanel = createGooPanel([
       { key: 'sizeScale', group: 'goo', min: 0.05, max: 1.5, step: 0.01,
         hint: 'World-size multiplier per blob. The scale knob: too high and the mass swallows the room.',
         get: () => L.sizeScale, set: v => L.setSizeScale(v) },
@@ -7862,13 +7835,13 @@ async function main() {
         get: () => IMPACT_GOUT.slug.speedMin, set: v => { IMPACT_GOUT.slug.speedMin = v; } },
       { key: 'beamGain', group: 'beam', min: 0, max: 8, step: 0.05,
         hint: 'How hard the flashlight drives the key on CHARACTERS. Was a fixed 2.2, which blew bodies past white. Raise for punch, lower if faces flatten out.',
-        get: () => beamTuning.gain, set: v => { beamTuning.gain = v; } },
+        get: () => ctx.vfx.beamTuning.gain, set: v => { ctx.vfx.beamTuning.gain = v; } },
       { key: 'beamShoulder', group: 'beam', min: 0, max: 0.9, step: 0.05,
         hint: 'Highlight rolloff. 0 = hard clip, and a lit body loses its WOUNDS (crater, lip and skin all saturate to the same white). Higher keeps them readable under the beam.',
-        get: () => beamTuning.shoulder, set: v => { beamTuning.shoulder = v; } },
+        get: () => ctx.vfx.beamTuning.shoulder, set: v => { ctx.vfx.beamTuning.shoulder = v; } },
       { key: 'beamKeyFloor', group: 'beam', min: 0, max: 1, step: 0.05,
         hint: 'How much of the PRESET key survives when the beam is off. 1.0 = the old bug (characters brightly lit in pitch darkness from a fixed direction). 0 = an unlit body vanishes entirely, because bounce carries hue, not level.',
-        get: () => beamTuning.keyFloor, set: v => { beamTuning.keyFloor = v; } },
+        get: () => ctx.vfx.beamTuning.keyFloor, set: v => { ctx.vfx.beamTuning.keyFloor = v; } },
     ], {
       toggles: [
         {
@@ -7914,11 +7887,11 @@ async function main() {
   // cast (see rebuildCast — bones are derived at build time and there is no
   // live repack), which is why it commits on release instead of per tick.
   // Wounds read best with actual wounds on screen: aim + fire, then sweep.
-  woundPanel = createWoundPanel({
-    get: () => ({ ...woundTuning }),
+  ctx.panels.woundPanel = createWoundPanel({
+    get: () => ({ ...ctx.vfx.woundTuning }),
     set: (key, v) => applyWoundTuning({ [key]: v }),
     presets: [
-      { label: 'shipped', values: { ...woundTuning } },
+      { label: 'shipped', values: { ...ctx.vfx.woundTuning } },
       {
         // A "what the ramp can do" reference: knees pulled deep. For seeing
         // the fat/muscle bands at a glance, not a look.
@@ -7933,21 +7906,21 @@ async function main() {
   // exist — the owner played a whole session against defaults without knowing
   // the knobs were there. `__sdfGame.woundPanel(false)` dismisses it, and
   // capture scripts already guard the seam typeof-style.
-  woundPanel?.setVisible(true);
+  ctx.panels.woundPanel?.setVisible(true);
 
   // `?goreparts=1` lays the gore-part bench out in front of the spawn (see
   // spawnGoreShowcase). It needs a live actor for the palette, so it runs here
   // rather than at the top of boot, and it is idempotent: the seam re-lays it
   // wherever the player is standing.
-  if (goreShowcaseOn) {
+  if (ctx.vfx.goreShowcaseOn) {
     const n = spawnGoreShowcase();
     console.log(`[gore-parts] showcase: ${n} parts in front of the spawn`);
   }
   // `?gibparts=sprite` (or `?gibsprites=1`) lays the SPRITE bench instead — the
   // reference look, for judging the approach.
-  const gibPartsMode = bootSearch.get('gibparts');
-  if (gibPartsMode === 'sprite' || gibPartsMode === 'sheet' || bootSearch.get('gibsprites') === '1') {
-    void ensureGibAtlas(gibPartsMode === 'sheet' ? 'sheet' : 'placeholder').then(() => {
+  ctx.gibs.partsMode = ctx.boot.search.get('gibparts');
+  if (ctx.gibs.partsMode === 'sprite' || ctx.gibs.partsMode === 'sheet' || ctx.boot.search.get('gibsprites') === '1') {
+    void ensureGibAtlas(ctx.gibs.partsMode === 'sheet' ? 'sheet' : 'placeholder').then(() => {
       const n = laySpriteBench();
       console.log(`[gib-sprites] bench: ${n} billboards in front of the spawn`);
     });
@@ -7960,24 +7933,24 @@ async function main() {
   // blast: the carve is ~2 s of CPU (18 pieces x surface nets), and paying that
   // inside a detonation would be a two-second freeze at the worst possible
   // moment. Once built it is reused for every zombie in the session.
-  if (gibRenderMode === 'carve') {
+  if (ctx.gibs.renderMode === 'carve') {
     // The ONLY boot-time carve trigger. Under the shipped default URL (no
     // ?gibrender=) this branch does not run: measured 2026-09-16, the default
     // mode is 'march' and the historical carve build cost is NOT boot cost.
     mark('carve-boot-scheduled');
     setTimeout(() => { mark('carve-build-start'); ensureCarvedLibrary(); mark('carve-build-end'); }, 0);
   }
-  if (gibRenderMode === 'sprite') {
+  if (ctx.gibs.renderMode === 'sprite') {
     void ensureGibAtlas('sheet').then((n) => {
       console.log(`[gib-sprites] blast render mode: sprite, ${n} frames, `
-        + `live cap ${gibSpriteLiveCap}, rest cap ${gibSpriteRestCap}, size x${gibSpriteSizeScale}`);
+        + `live cap ${ctx.gibs.spriteLiveCap}, rest cap ${ctx.gibs.spriteRestCap}, size x${ctx.gibs.spriteSizeScale}`);
     });
   }
   // `?gibrender=assets` (task 2) preloads the committed offline sets at boot, so
   // the first detonation has meshes to deform. It is a fetch + decode, not an
   // extraction, so unlike carve it costs no surface nets; a body gibbed before
   // it resolves still gets marched pieces (counted), never no gore.
-  if (gibRenderMode === 'assets') {
+  if (ctx.gibs.renderMode === 'assets') {
     mark('gib-assets-boot-scheduled');
     void ensureGibAssets().then(() => {
       mark('gib-assets-boot-ready');
@@ -7990,7 +7963,7 @@ async function main() {
   // it covers nothing. The two presets are the comparison the owner asked for —
   // the split piece set with a pool wide enough not to degrade it, and the
   // one-chunk-per-limb shape he rejected, one click apart.
-  dynamitePanel = createDynamitePanel({
+  ctx.panels.dynamitePanel = createDynamitePanel({
     get: dynamiteTuningValues,
     set: (key, v) => applyDynamiteTuning({ [key]: v } as Partial<DynamiteTuningValues>),
     presets: [
@@ -8001,19 +7974,19 @@ async function main() {
       { label: 'ball (old)', values: { plume: 0 } },
     ],
   });
-  dynamitePanel.setVisible(true);
+  ctx.panels.dynamitePanel.setVisible(true);
 
   // VHS tuning panel. The rows are derived from VHS_TERM_RANGES and every
   // emitted call is keyed by a `keyof VhsTerms`, so unlike the setBeam bug the
   // COPY text cannot name a key the setter ignores. Ships visible+collapsed
   // like its siblings; capture scripts dismiss it with __sdfGame.vhsPanel(false).
-  vhsPanel = createVhsPanel({
-    setVhs: (preset) => { postAa.setVhs(preset); return postAa.vhs; },
-    setVhsTerm: (name, value) => postAa.setVhsTerm(name, value),
-    get vhs() { return postAa.vhs; },
-    get vhsTerms() { return postAa.vhsTerms; },
+  ctx.panels.vhsPanel = createVhsPanel({
+    setVhs: (preset) => { ctx.render.postAa.setVhs(preset); return ctx.render.postAa.vhs; },
+    setVhsTerm: (name, value) => ctx.render.postAa.setVhsTerm(name, value),
+    get vhs() { return ctx.render.postAa.vhs; },
+    get vhsTerms() { return ctx.render.postAa.vhsTerms; },
   });
-  vhsPanel.setVisible(true);
+  ctx.panels.vhsPanel.setVisible(true);
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
@@ -8029,7 +8002,7 @@ async function main() {
   // stretch with volume-conserving thinning (fast spray reads as streaks, slow
   // drips stay beads) + a mist haze mesh (alphaHash so it survives the
   // composite's depth test while reading soft).
-  const bloodView = createBloodView({
+  ctx.vfx.bloodView = createBloodView({
     dropletDepthWrite: true,
     dropletViewScale: 0.5,
     stretch: { k: 0.5, max: 3.5, thin: true },
@@ -8038,7 +8011,7 @@ async function main() {
     // fluid" — beads sweep tapered strips through their path history.
     ribbons: true,
   });
-  for (const o of bloodView.objects) {
+  for (const o of ctx.vfx.bloodView.objects) {
     o.visible = true; // ships ON (it is the feature); setBleed(false) hides
     scene.add(o);
   }
@@ -8052,21 +8025,21 @@ async function main() {
   // only draws where droplets OVERLAP, so an ordinary pellet hit crosses no
   // threshold and draws nothing; with mist hidden too the result is a wound
   // with no blood at all (reproduced headless, 2026-08-31).
-  if (gooEnabled) {
-    bloodView.setBeadsVisible(false);
-    bloodView.setMistVisible(true);
+  if (ctx.goo.enabled) {
+    ctx.vfx.bloodView.setBeadsVisible(false);
+    ctx.vfx.bloodView.setMistVisible(true);
     // ...AND show the panel. It used to appear only via setGoo(true), which
     // this boot path deliberately does not call — so the panel that exists to
     // make the goo tunable was invisible on the page where goo ships ON, and
     // the owner had to toggle the layer off and on to get at it (owner ask,
     // 2026-09-01: "it should be default on tbh").
-    gooPanel?.setVisible(true);
+    ctx.panels.gooPanel?.setVisible(true);
   }
   // The bleed stream is `rngStreams.bleed` (rng.ts): ONE seeded stream for
   // EVERY bleed decision (spawns, trails, splat stamps) — advanced only while
   // bleed is enabled, so setBleed(false) freezes the subsystem exactly (OFF
   // mid-stream = ON-stream-paused).
-  let bleedEnabled = true;
+  ctx.vfx.bleedEnabled = true;
 
   // GUT ROPES — at most one per body (entrails-spawn.shouldSpill): the first
   // qualifying cavity wound spawns, a second TEARS the rope free instead of
@@ -8074,26 +8047,26 @@ async function main() {
   // count. The chain owns node positions (entrails.ts); the sim only holds
   // this rope's 'gut' droplets — stepBlood skips that kind — so the goo pass
   // draws the rope as fused metaballs riding the wound's emit point.
-  const gutRopes = new Map<number, { chain: GutChain; wound: Wound; droplets: Droplet[] }>();
+  ctx.vfx.gutRopes = new Map<number, { chain: GutChain; wound: Wound; droplets: Droplet[] }>();
   /** The one spill decision, taken at stamp time where cluster membership is
    *  free. Call for EVERY stamped wound (live fire routes through
    *  registerBleed; the capture twins stamp through stampBlast, so they call
    *  this directly). Rolls bleedRng — see the freeze note on registerBleed. */
   function spillVerdict(a: ZombieActor, wound: Wound): void {
-    const entry = gutRopes.get(a.id);
+    const entry = ctx.vfx.gutRopes.get(a.id);
     const verdict = shouldSpill(wound, entry !== undefined, rngStreams.bleed);
     if (verdict === 'none') return;
     if (verdict === 'tear') {
       // Keep the entry: the detached chain keeps falling/settling in
       // stepGutRopes, and its presence still blocks a second rope.
-      if (entry) gutRopes.set(a.id, { ...entry, chain: detachGutChain(entry.chain) });
+      if (entry) ctx.vfx.gutRopes.set(a.id, { ...entry, chain: detachGutChain(entry.chain) });
       return;
     }
     const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
-    gutRopes.set(a.id, {
+    ctx.vfx.gutRopes.set(a.id, {
       chain: makeGutChain(anchor, {
-        coilTightness: woundTuning.coilTightness,
-        springiness: woundTuning.springiness,
+        coilTightness: ctx.vfx.woundTuning.coilTightness,
+        springiness: ctx.vfx.woundTuning.springiness,
       }),
       wound, droplets: [],
     });
@@ -8107,22 +8080,22 @@ async function main() {
    *  prims; never re-poses. Runs regardless of bleedEnabled: a hanging gut
    *  is body state, not spray, and stepping spends no RNG. */
   function stepGutRopes(dt: number): void {
-    for (const a of actors) {
-      let entry = gutRopes.get(a.id);
+    for (const a of ctx.world.actors) {
+      let entry = ctx.vfx.gutRopes.get(a.id);
       if (!entry) continue;
       // Body down (falling or settled) → the rope tears free. It keeps its
       // verlet momentum, falls, settles, freezes (entrails.ts).
       if (entry.chain.attached && a.debug().phase !== 'standing') {
         entry = { ...entry, chain: detachGutChain(entry.chain) };
-        gutRopes.set(a.id, entry);
+        ctx.vfx.gutRopes.set(a.id, entry);
       }
       if (entry.chain.attached) {
         const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound, a.pose().yaw);
         entry = { ...entry, chain: pinGutChain(entry.chain, anchor) };
-        gutRopes.set(a.id, entry);
+        ctx.vfx.gutRopes.set(a.id, entry);
       }
       entry = { ...entry, chain: stepGutChain(entry.chain, dt) };
-      gutRopes.set(a.id, entry);
+      ctx.vfx.gutRopes.set(a.id, entry);
 
       // Keep the rope's droplets in the sim. They are created once and then
       // MOVED (Droplet.pos is mutable by contract; stepBlood skips 'gut'),
@@ -8131,22 +8104,22 @@ async function main() {
       const nodes = entry.chain.nodes;
       const live = entry.droplets.length === nodes.length
         && entry.droplets[0] !== undefined
-        && bloodSim.droplets.includes(entry.droplets[0]);
+        && ctx.vfx.bloodSim.droplets.includes(entry.droplets[0]);
       if (!live) {
         const fresh: Droplet[] = nodes.map(n => ({
           pos: [...n.pos] as [number, number, number],
           vel: [0, 0, 0] as [number, number, number],
           age: 0, life: Infinity,
-          size: woundTuning.gutSize,
+          size: ctx.vfx.woundTuning.gutSize,
           kind: 'gut',
           // The rope belongs to the wound that spilled it: reuse that wound's
           // stable stream id so the gut nodes are attributed like every other
           // emitter rather than falling through as untagged.
           stream: woundStreamId(entry!.wound),
         }));
-        for (const d of fresh) bloodSim.droplets.push(d);
+        for (const d of fresh) ctx.vfx.bloodSim.droplets.push(d);
         entry = { ...entry, droplets: fresh };
-        gutRopes.set(a.id, entry);
+        ctx.vfx.gutRopes.set(a.id, entry);
       } else {
         const invDt = dt > 1e-6 ? 1 / dt : 0;
         for (let i = 0; i < nodes.length; i++) {
@@ -8166,14 +8139,14 @@ async function main() {
   }
   /** Bleed's own sim clock — an accumulator, never wall time, so hand-
    *  stepped captures are deterministic. */
-  let bleedClock = 0;
-  const lastSplashShot = new WeakMap<ZombieActor, number>();
+  ctx.vfx.bleedClock = 0;
+  ctx.vfx.lastSplashShot = new WeakMap<ZombieActor, number>();
   function registerBleed(
     a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump',
     contact?: { point: Vec3; incoming: Vec3 },
   ): void {
-    if (!bleedEnabled) return;
-    bleed.register(a.id, wound, kind, bleedClock);
+    if (!ctx.vfx.bleedEnabled) return;
+    ctx.vfx.bleed.register(a.id, wound, kind, ctx.vfx.bleedClock);
     // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
     // the wound's own anchor so it leaves the body where the hole is. Fired
     // here rather than at each call site because both the impact path and
@@ -8187,7 +8160,7 @@ async function main() {
     // the gout so it fuses with this wound's per-frame droplets and no
     // other emitter's.
     const streamId = woundStreamId(wound);
-    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
+    spawnImpactGout(ctx.vfx.bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
     // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
     // use the contact and incoming shot below; stumps use their outward
     // wound normal. The seed is
@@ -8195,9 +8168,9 @@ async function main() {
     // draws no random numbers and leaves the shipped gout/bleed stream
     // bit-identical.
     const shotgunShot = wound.shot?.weapon === 'shotgun' ? wound.shot.shotId : undefined;
-    const repeatedPellet = shotgunShot !== undefined && lastSplashShot.get(a) === shotgunShot;
-    if (impactSplashEnabled && impactSplashLayer && !repeatedPellet) {
-      if (shotgunShot !== undefined) lastSplashShot.set(a, shotgunShot);
+    const repeatedPellet = shotgunShot !== undefined && ctx.vfx.lastSplashShot.get(a) === shotgunShot;
+    if (ctx.panels.impactSplashEnabled && ctx.panels.impactSplashLayer && !repeatedPellet) {
+      if (shotgunShot !== undefined) ctx.vfx.lastSplashShot.set(a, shotgunShot);
       // An immediate entry splash belongs to the projectile's actual surface
       // contact, not the wound's reconstructed/carved anchor. Send it back
       // toward the incoming shot and start just outside the contacted skin.
@@ -8210,7 +8183,7 @@ async function main() {
            contact.point[1] + splashDirection[1] * 0.035,
            contact.point[2] + splashDirection[2] * 0.035]
         : anchor;
-      impactSplashLayer.emit(splashOrigin, splashDirection, (streamId * 2654435761) >>> 0, { profile: impactSplashProfiles[kind] });
+      ctx.panels.impactSplashLayer.emit(splashOrigin, splashDirection, (streamId * 2654435761) >>> 0, { profile: impactSplashProfiles[kind] });
     }
     // Gut-rope decision for this stamped wound — placed BELOW the
     // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
@@ -8224,8 +8197,8 @@ async function main() {
   // actor's own look — the chunk shades like the flesh it came from), and
   // each sever's stump wound into the bleed ledger (the gushing emitter —
   // the wound is the actor's own reference, so the anchor rides the body).
-  onSeverDispatch = (a, piece, stumpWound) => {
-    telemetry.event('sever', { actor: a.id, limb: piece.limb });
+  ctx.boot.onSeverDispatch = (a, piece, stumpWound) => {
+    ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
     spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
     if (stumpWound) registerBleed(a, stumpWound, 'stump');
   };
@@ -8238,12 +8211,12 @@ async function main() {
   // ring, four ticks and a centre pip, drawn as one inline SVG so it stays crisp
   // at any size and costs no asset. It is the aim point in free-aim mode.
   {
-    reticleEl = document.createElement('div');
-    reticleEl.setAttribute('style',
+    ctx.player.reticleEl = document.createElement('div');
+    ctx.player.reticleEl.setAttribute('style',
       'position:fixed; left:50%; top:50%; width:34px; height:34px; z-index:35;'
       + ' margin:-17px 0 0 -17px; pointer-events:none;'
       + ' filter:drop-shadow(0 0 2px rgba(0,0,0,0.9));');
-    reticleEl.innerHTML =
+    ctx.player.reticleEl.innerHTML =
       '<svg viewBox="0 0 34 34" width="34" height="34" aria-hidden="true">'
       + '<circle cx="17" cy="17" r="10.5" fill="none" stroke="#ffd98a"'
       + ' stroke-width="1.4" opacity="0.85"/>'
@@ -8254,14 +8227,14 @@ async function main() {
       + '<line x1="1.5" y1="17" x2="6.5" y2="17"/>'
       + '<line x1="27.5" y1="17" x2="32.5" y2="17"/>'
       + '</g></svg>';
-    document.body.appendChild(reticleEl);
+    document.body.appendChild(ctx.player.reticleEl);
   }
 
-  const hudEl = document.getElementById('hud');
-  const hud = { lockHint: true };
-  let frameEma = 0;
+  ctx.boot.hudEl = document.getElementById('hud');
+  ctx.boot.hud = { lockHint: true };
+  ctx.boot.frameEma = 0;
   mark('boot-time');
-  const bootTime = performance.now();
+  ctx.boot.time = performance.now();
 
   // ---- ACTOR VISIBILITY CULL (2026-09-09) --------------------------------
   //
@@ -8341,80 +8314,80 @@ async function main() {
     const twin = a.view.refineObject;
     if (!twin) return false;
     if (!centre) { twin.visible = false; return false; }
-    const dx = centre[0] - sightA[0], dy = centre[1] - sightA[1], dz = centre[2] - sightA[2];
+    const dx = centre[0] - ctx.world.sightA[0], dy = centre[1] - ctx.world.sightA[1], dz = centre[2] - ctx.world.sightA[2];
     const d = Math.hypot(dx, dy, dz);
     const wasOn = twin.visible;
     const inBand = wasOn
-      ? d >= refineBand.near - refineBand.hysteresis && d <= refineBand.far + refineBand.hysteresis
-      : d >= refineBand.near && d <= refineBand.far;
-    const on = kept && sdfLayer.refine && a.refineEligible() && inBand;
+      ? d >= ctx.render.refineBand.near - ctx.render.refineBand.hysteresis && d <= ctx.render.refineBand.far + ctx.render.refineBand.hysteresis
+      : d >= ctx.render.refineBand.near && d <= ctx.render.refineBand.far;
+    const on = kept && ctx.render.sdfLayer.refine && a.refineEligible() && inBand;
     twin.visible = on;
     return on;
   }
 
   function updateVisibleActors(): void {
     const now = simTimeMs();
-    cullCounts.total = actors.length;
-    if (!actorCullEnabled) {
-      visibleActors = actors;
-      cullCounts.visible = actors.length;
+    ctx.world.cullCounts.total = ctx.world.actors.length;
+    if (!ctx.render.actorCullEnabled) {
+      ctx.render.visibleActors = ctx.world.actors;
+      ctx.world.cullCounts.visible = ctx.world.actors.length;
       // Cull off: the frustum/dwell work is skipped, but the refine gate is
       // NOT — the spec's first rule (a dead body never refines) has to hold in
       // both modes, so a body that collapses with the cull off still loses its
       // twin. Same band + hysteresis, every actor, no visibility work.
-      sightA[0] = camera.position.x; sightA[1] = camera.position.y; sightA[2] = camera.position.z;
-      refinedBodies = 0;
-      for (const a of actors) {
+      ctx.world.sightA[0] = camera.position.x; ctx.world.sightA[1] = camera.position.y; ctx.world.sightA[2] = camera.position.z;
+      ctx.render.refinedBodies = 0;
+      for (const a of ctx.world.actors) {
         const torso = a.posed().clusters.find(c => c.limb === 'torso');
-        if (gateRefineTwin(a, torso ? torso.center as Vec3 : null, true)) refinedBodies++;
+        if (gateRefineTwin(a, torso ? torso.center as Vec3 : null, true)) ctx.render.refinedBodies++;
       }
-      coverage.screenFrac = 0; coverage.nearestM = 0; coverage.biggestFrac = 0;
+      ctx.world.coverage.screenFrac = 0; ctx.world.coverage.nearestM = 0; ctx.world.coverage.biggestFrac = 0;
       return;
     }
-    projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    frustum.setFromProjectionMatrix(projScreen);
-    sightA[0] = camera.position.x; sightA[1] = camera.position.y; sightA[2] = camera.position.z;
+    ctx.world.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    ctx.world.frustum.setFromProjectionMatrix(ctx.world.projScreen);
+    ctx.world.sightA[0] = camera.position.x; ctx.world.sightA[1] = camera.position.y; ctx.world.sightA[2] = camera.position.z;
     const out: ZombieActor[] = [];
-    const tw = sdfLayer.marchTarget.width, th = sdfLayer.marchTarget.height;
+    const tw = ctx.render.sdfLayer.marchTarget.width, th = ctx.render.sdfLayer.marchTarget.height;
     const px = Math.max(1, tw * th);
     const halfHpx = th / 2;
     const tanHalfFov = Math.tan((camera.fov * Math.PI / 180) / 2);
     let area = 0, nearest = 0, biggest = 0;
-    refinedBodies = 0;
-    for (const a of actors) {
+    ctx.render.refinedBodies = 0;
+    for (const a of ctx.world.actors) {
       const torso = a.posed().clusters.find(c => c.limb === 'torso');
       // No torso cluster (mid-gib, exotic body): never cull what we cannot
       // measure — fall back to drawing it. No distance to band-test either, so
       // the refine twin stays off for it.
       if (!torso) {
-        out.push(a); lastSeenMs.set(a.id, now);
+        out.push(a); ctx.world.lastSeenMs.set(a.id, now);
         gateRefineTwin(a, null, true);
         continue;
       }
       const c = torso.center;
-      bodySphere.center.set(c[0], c[1], c[2]);
-      let seen = frustum.intersectsSphere(bodySphere);
+      ctx.world.bodySphere.center.set(c[0], c[1], c[2]);
+      let seen = ctx.world.frustum.intersectsSphere(ctx.world.bodySphere);
       if (seen) {
         // Two probes: torso centre, then a head-height point. A body edging
         // out of cover reveals its head before its chest.
         const head: Vec3 = [c[0], c[1] + 0.6, c[2]];
-        seen = clearSight(sightA, c as Vec3, colliders) || clearSight(sightA, head, colliders);
+        seen = clearSight(ctx.world.sightA, c as Vec3, ctx.world.colliders) || clearSight(ctx.world.sightA, head, ctx.world.colliders);
       }
-      if (seen) lastSeenMs.set(a.id, now);
-      const since = now - (lastSeenMs.get(a.id) ?? -Infinity);
+      if (seen) ctx.world.lastSeenMs.set(a.id, now);
+      const since = now - (ctx.world.lastSeenMs.get(a.id) ?? -Infinity);
       const kept = seen || since < CULL_DWELL_MS;
       if (kept) out.push(a);
 
       // Run 5b: the per-body refine gate (see gateRefineTwin).
-      if (gateRefineTwin(a, c as Vec3, kept)) refinedBodies++;
+      if (gateRefineTwin(a, c as Vec3, kept)) ctx.render.refinedBodies++;
 
       // Coverage estimate — only for bodies actually seen this frame, so a
       // body coasting on its dwell grace does not inflate the area.
       if (seen) {
-        const dx = c[0] - sightA[0], dy = c[1] - sightA[1], dz = c[2] - sightA[2];
+        const dx = c[0] - ctx.world.sightA[0], dy = c[1] - ctx.world.sightA[1], dz = c[2] - ctx.world.sightA[2];
         const dist = Math.hypot(dx, dy, dz);
         if (nearest === 0 || dist < nearest) nearest = dist;
-        const r = bodySphere.radius;
+        const r = ctx.world.bodySphere.radius;
         // Camera inside the bound: treat as full screen rather than dividing
         // by a distance that is about to go through zero.
         const frac = dist <= r ? 1 : Math.min(1, Math.PI * ((r / dist) * halfHpx / tanHalfFov) ** 2 / px);
@@ -8422,45 +8395,45 @@ async function main() {
         if (frac > biggest) biggest = frac;
       }
     }
-    coverage.screenFrac = Math.min(1, area);
-    coverage.nearestM = nearest;
-    coverage.biggestFrac = biggest;
-    visibleActors = out;
-    cullCounts.visible = out.length;
+    ctx.world.coverage.screenFrac = Math.min(1, area);
+    ctx.world.coverage.nearestM = nearest;
+    ctx.world.coverage.biggestFrac = biggest;
+    ctx.render.visibleActors = out;
+    ctx.world.cullCounts.visible = out.length;
   }
 
-  function bodiesOnScreen(): number { return cullCounts.visible; }
+  function bodiesOnScreen(): number { return ctx.world.cullCounts.visible; }
 
   function updateHud() {
-    if (!hudEl) return;
-    const where = enclosureKeyAt(player.pos[0], player.pos[2]);
-    const slot = slotState.phase !== 'up'
-      ? `switching ${slotState.target}`
-      : slotState.live === 'dynamite'
-        ? `2 DYNAMITE ${cook.phase === 'cooking'
-          ? `${(dynCharge * 100).toFixed(0)}% LIT`
-          : `${liveBundles.length} out`}`
+    if (!ctx.boot.hudEl) return;
+    const where = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
+    const slot = ctx.weapon.slotState.phase !== 'up'
+      ? `switching ${ctx.weapon.slotState.target}`
+      : ctx.weapon.slotState.live === 'dynamite'
+        ? `2 DYNAMITE ${ctx.vfx.cook.phase === 'cooking'
+          ? `${(ctx.dynamite.charge * 100).toFixed(0)}% LIT`
+          : `${ctx.bake.liveBundles.length} out`}`
         : '1 GRAPESHOT';
-    hudEl.textContent =
-      `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
-      ` · ${where} · probe ${probeWeight.toFixed(2)}` +
+    ctx.boot.hudEl.textContent =
+      `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${ctx.world.actors.length}` +
+      ` · ${where} · probe ${ctx.probes.weight.toFixed(2)}` +
       ` · [${slot}]` +
-      (slotState.live === 'shotgun'
-        ? infiniteAmmo ? ' · shells ∞' : ` · shells ${shells}/${MAGAZINE_CAPACITY}`
+      (ctx.weapon.slotState.live === 'shotgun'
+        ? ctx.weapon.infiniteAmmo ? ' · shells ∞' : ` · shells ${ctx.weapon.shells}/${MAGAZINE_CAPACITY}`
         : '') +
-      (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
-      (sdfLayer.halfRate
-        ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
+      (ctx.weapon.slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
+      (ctx.render.sdfLayer.halfRate
+        ? ` · HALF30 ${ctx.render.sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
         : '') +
-      (freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
+      (ctx.player.freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
       // The wound-zone step multiplier, so a setWoundStep() flip is visible
       // (owner: "hard to tell"). 0 = the shipped constant.
-      ` · wstep ${(() => { const z = actors[0]?.view.uniforms.perfCfg.value.z ?? 0; return z > 0 ? z.toFixed(2) : `${WOUND_STEP_MUL} (ship)`; })()}` +
-      (adaptiveEnabled ? ` · ADAPTIVE r${adaptiveState.rung}` : '') +
-      (sdfLayer.temporalStart.on ? ' · TSTART' : '') +
-      (reloadSpeed !== 1 ? ` · RELOAD x${reloadSpeed} (T)` : '') +
-      (hud.lockHint ? ' · click to lock' : '') +
-      (wanderFrozen ? ' · FROZEN' : '');
+      ` · wstep ${(() => { const z = ctx.world.actors[0]?.view.uniforms.perfCfg.value.z ?? 0; return z > 0 ? z.toFixed(2) : `${WOUND_STEP_MUL} (ship)`; })()}` +
+      (ctx.render.adaptiveEnabled ? ` · ADAPTIVE r${ctx.render.adaptiveState.rung}` : '') +
+      (ctx.render.sdfLayer.temporalStart.on ? ' · TSTART' : '') +
+      (ctx.weapon.reloadSpeed !== 1 ? ` · RELOAD x${ctx.weapon.reloadSpeed} (T)` : '') +
+      (ctx.boot.hud.lockHint ? ' · click to lock' : '') +
+      (ctx.demo.wanderFrozen ? ' · FROZEN' : '');
   }
 
   // -----------------------------------------------------------------------
@@ -8472,13 +8445,13 @@ async function main() {
   // the seam has already inherited a non-deterministic amount of wander;
   // captures that must be reproducible across boots (pixel parity, staged
   // benches) need the freeze to predate the first frame. Default unchanged.
-  let wanderFrozen = new URLSearchParams(location.search).has('frozen');
+  ctx.demo.wanderFrozen = new URLSearchParams(location.search).has('frozen');
   /** The distance-crowd bench pins the player's POSE for the whole leg
    *  (`bench({ holdPlayer: true })`). The firefight's frame-0 teleport would
    *  overwrite the caller's placePlayer() framing, and the walk input (keys /
    *  autopilot) would drift the camera; with this on, tick() forces the input
    *  to zero. Ordinary play never sets it. */
-  let holdPlayerPose = false;
+  ctx.player.holdPlayerPose = false;
   /** TASK-6 DIAGNOSTIC RENDER LOCK. When true, tick(dt) returns BEFORE any
    *  simulation mutation (player step, bob, recoil, weapon smoothing, flash
    *  envelopes, smoke, chunks) — __sdfGame.step(n) becomes n pure re-renders
@@ -8491,90 +8464,90 @@ async function main() {
    *  the lock (the bench's boot): the page's own rAF loop must not wander the
    *  cast during the settle, or the scenario it drives afterwards starts from a
    *  wall-clock-dependent state. `bench()` clears it before running. */
-  let simLocked = new URLSearchParams(location.search).has('simidle');
+  ctx.demo.simLocked = new URLSearchParams(location.search).has('simidle');
   /** Whether the hulls have been built for the CURRENT frozen stretch — see
    *  the frozen-from-boot hull build in tick. */
-  let frozenHullBuilt = false;
-  let frameCount = 0;
+  ctx.render.frozenHullBuilt = false;
+  ctx.demo.frameCount = 0;
   /** The __sdfGame.placeMarker debug sphere. */
-  let marker: THREE.Mesh | null = null;
+  ctx.player.marker = null;
   /** Headless driver autopilot: walk toward (x, z) until within 0.25 m. */
-  let autopilot: { x: number; z: number } | null = null;
+  ctx.player.autopilot = null;
   /** Stuck recovery: a wanderer frozen/standing on the path blocks the line
    *  head-on (the capsule push exactly opposes the intent, no slide). If we
    *  stop making progress, strafe around the obstacle for a beat. */
-  let stuckT = 0;
-  let strafeT = 0;
-  let strafeDir = 1;
-  let lastWalkPos: [number, number] | null = null;
+  ctx.player.stuckT = 0;
+  ctx.player.strafeT = 0;
+  ctx.player.strafeDir = 1;
+  ctx.player.lastWalkPos = null;
 
   function tick(dt: number) {
-    if (simLocked) return; // render-lock: drawFn still runs; nothing mutates.
+    if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
     // The sim clock advances ONLY here, from the step's own dt — never from
     // wall time. This is the single source of "how much simulated time has
     // passed", so every dwell/timer that reads it is reproducible under a
     // replay. See the declaration next to lastSeenMs for the why.
     advanceSimClock(dt);
-    simFrame++;
+    ctx.demo.simFrame++;
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
     // an on/off pair at the same frame is a real comparison (post-aa.ts).
-    postAa.stepBlastDistort(dt);
+    ctx.render.postAa.stepBlastDistort(dt);
     // Billboard the gib sprites. Cheap (a handful of quads) and it has to be per
     // frame: a piece that stops facing the camera vanishes edge-on.
-    for (const s of spriteBenchSprites) billboardGib(s, camera);
-    segMeshRenderer?.stepDebris(dt);
+    for (const s of ctx.vfx.spriteBenchSprites) billboardGib(s, camera);
+    ctx.render.segMeshRenderer?.stepDebris(dt);
     // ONE INPUT FRAME PER TICK (stage 3). Live, this snapshots the listeners'
     // accumulated state; replaying, it is the player's next frame. Both go
     // through applyInputFrame, so the input path is identical either way; and
     // while recording, the frame the tick CONSUMED is what gets logged (not a
     // re-read after the fact, which could see a later event).
-    const inputFrame = replayActive ? currentInputFrame : readInputFrame();
+    const inputFrame = ctx.demo.replayActive ? ctx.player.currentInputFrame : readInputFrame();
     applyInputFrame(inputFrame);
-    if (replayActive) {
+    if (ctx.demo.replayActive) {
       // A recorded frame is consumed by exactly ONE tick. Reset to a neutral
       // frame (keeping the last look) so a repeated step — the bench's warmup,
       // say — cannot re-fire the same shot.
-      currentInputFrame = neutralInput(inputFrame);
-      replayFrame++;
+      ctx.player.currentInputFrame = neutralInput(inputFrame);
+      ctx.demo.replayFrame++;
     } else {
       // The frame the tick CONSUMED, not a re-read after the fact: a live
       // event that lands mid-tick must belong to the next frame, not this one.
-      if (recorder) { recorder.push(inputFrame); updateDemoHud(); }
+      if (ctx.demo.recorder) { ctx.demo.recorder.push(inputFrame); updateDemoHud(); }
     }
     const held = inputFrame.keys;
-    let input: MoveInput = holdPlayerPose
+    let input: MoveInput = ctx.player.holdPlayerPose
       ? { x: 0, z: 0, jump: false }
       : {
         x: (held.includes('KeyD') ? 1 : 0) - (held.includes('KeyA') ? 1 : 0),
         z: (held.includes('KeyW') ? 1 : 0) - (held.includes('KeyS') ? 1 : 0),
         jump: held.includes('Space'),
       };
-    if (autopilot && !holdPlayerPose) {
-      const dx = autopilot.x - player.pos[0];
-      const dz = autopilot.z - player.pos[2];
+    if (ctx.player.autopilot && !ctx.player.holdPlayerPose) {
+      const dx = ctx.player.autopilot.x - ctx.player.player.pos[0];
+      const dz = ctx.player.autopilot.z - ctx.player.player.pos[2];
       if (Math.hypot(dx, dz) < 0.25) {
-        autopilot = null;
+        ctx.player.autopilot = null;
         input = { x: 0, z: 0, jump: false };
-      } else if (strafeT > 0) {
-        strafeT -= dt;
-        input = { x: strafeDir, z: 0.2, jump: false };
+      } else if (ctx.player.strafeT > 0) {
+        ctx.player.strafeT -= dt;
+        input = { x: ctx.player.strafeDir, z: 0.2, jump: false };
       } else {
-        player.yaw = Math.atan2(dx, -dz);
+        ctx.player.player.yaw = Math.atan2(dx, -dz);
         input = { x: 0, z: 1, jump: false };
       }
-      if (lastWalkPos
-        && Math.hypot(player.pos[0] - lastWalkPos[0], player.pos[2] - lastWalkPos[1]) < 0.02) {
-        stuckT += dt;
-        if (stuckT > 0.5) {
+      if (ctx.player.lastWalkPos
+        && Math.hypot(ctx.player.player.pos[0] - ctx.player.lastWalkPos[0], ctx.player.player.pos[2] - ctx.player.lastWalkPos[1]) < 0.02) {
+        ctx.player.stuckT += dt;
+        if (ctx.player.stuckT > 0.5) {
           // Strafe AWAY from whatever is ahead: nearest zombie within 1.2 m
           // in front picks the side; walls just get the fallback flip.
-          const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+          const sy = Math.sin(ctx.player.player.yaw), cy = Math.cos(ctx.player.player.yaw);
           let bestLat: number | null = null;
           let bestFwd = Infinity;
-          for (const a of actors) {
-            const ox = a.pose().pos[0] - player.pos[0];
-            const oz = a.pose().pos[2] - player.pos[2];
+          for (const a of ctx.world.actors) {
+            const ox = a.pose().pos[0] - ctx.player.player.pos[0];
+            const oz = a.pose().pos[2] - ctx.player.player.pos[2];
             const fwdDist = ox * sy - oz * cy;
             const lat = ox * cy + oz * sy;
             if (fwdDist > 0 && fwdDist < 1.2 && Math.abs(lat) < 0.9 && fwdDist < bestFwd) {
@@ -8582,44 +8555,44 @@ async function main() {
               bestLat = lat;
             }
           }
-          strafeDir = bestLat !== null ? (bestLat > 0 ? -1 : 1) : -strafeDir;
-          strafeT = 0.8;
-          stuckT = 0;
+          ctx.player.strafeDir = bestLat !== null ? (bestLat > 0 ? -1 : 1) : -ctx.player.strafeDir;
+          ctx.player.strafeT = 0.8;
+          ctx.player.stuckT = 0;
         }
       } else {
-        stuckT = 0;
+        ctx.player.stuckT = 0;
       }
-      lastWalkPos = [player.pos[0], player.pos[2]];
+      ctx.player.lastWalkPos = [ctx.player.player.pos[0], ctx.player.player.pos[2]];
     }
     // Zombies are soft obstacles: one fat AABB each, rebuilt per frame.
-    const zombieBoxes = actors.filter(a=>!a.motionFrame()?.collapsed).map(a => {
+    const zombieBoxes = ctx.world.actors.filter(a=>!a.motionFrame()?.collapsed).map(a => {
       const p = a.pose().pos;
       return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
     });
-    stepPlayer(player, input, dt, [...colliders, ...zombieBoxes]);
+    stepPlayer(ctx.player.player, input, dt, [...ctx.world.colliders, ...zombieBoxes]);
 
     // Damage transitions use their own clock; frozen pose captures must
     // still show a newly selected preset. Refresh exclusions as it grows.
-    for (const a of actors) if (a.advanceWoundPreview(dt)) frozenHullBuilt = false;
-    if (!wanderFrozen) {
-      frozenHullBuilt = false;
+    for (const a of ctx.world.actors) if (a.advanceWoundPreview(dt)) ctx.render.frozenHullBuilt = false;
+    if (!ctx.demo.wanderFrozen) {
+      ctx.render.frozenHullBuilt = false;
       // --- brain input + crowd separation, BEFORE the actors step ----------
       // Order matters: separating first means this frame's step() and its
       // view.update() render the corrected positions, so a resolved overlap
       // is never a frame late on screen.
-      const pRoom = encounterNav.roomAt(player.pos);
+      const pRoom = ctx.world.encounterNav.roomAt(ctx.player.player.pos);
       const pInfo = pRoom > 0
-        ? { x: player.pos[0], z: player.pos[2], room: pRoom }
+        ? { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], room: pRoom }
         : null;
       // The snapshot build is INSIDE the phase on purpose: it calls pose()
       // per actor and is part of what the director costs per frame.
-      const encounterTiming = telemetry.begin();
-      const snapshots: EncounterAgent[] = actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
-        home:encounterHomes.get(a.id)??a.pose().pos,soldier:a.kind==='soldier',ranged:a.kind==='soldier'&& !a.meleeCapable(),disabled:!!a.motionFrame()?.collapsed}));
-      const orders=encounter.update(snapshots,pInfo,shotAlert,dt);
-      shotAlert = false;
-      for (const a of actors) a.setEncounterOrder(orders.get(a.id)!);
-      telemetry.end('encounter', encounterTiming);
+      const encounterTiming = ctx.telemetry.telemetry.begin();
+      const snapshots: EncounterAgent[] = ctx.world.actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
+        home:ctx.world.encounterHomes.get(a.id)??a.pose().pos,soldier:a.kind==='soldier',ranged:a.kind==='soldier'&& !a.meleeCapable(),disabled:!!a.motionFrame()?.collapsed}));
+      const orders=ctx.world.encounter.update(snapshots,pInfo,ctx.weapon.shotAlert,dt);
+      ctx.weapon.shotAlert = false;
+      for (const a of ctx.world.actors) a.setEncounterOrder(orders.get(a.id)!);
+      ctx.telemetry.telemetry.end('encounter', encounterTiming);
 
       // --- melee ring: who may swing this frame ---------------------------
       // Claimants are the alert bodies that are actually in the encounter; an
@@ -8627,7 +8600,7 @@ async function main() {
       // that is closing. Runs BEFORE the actors step, so a body's brain sees
       // this frame's verdict rather than last frame's.
       if (pInfo) {
-        const claimants: RingClaimant[] = actors
+        const claimants: RingClaimant[] = ctx.world.actors
           // meleeCapable FIRST: the ring is the zombie's mechanism, and a
           // soldier in 'advance'/'standoff' satisfies the alert+non-idle test
           // while having no swing to throw. Submitting him would make him
@@ -8644,14 +8617,14 @@ async function main() {
             };
           });
         const verdict = arbitrate({ x: pInfo.x, z: pInfo.z }, claimants);
-        for (const a of actors) {
+        for (const a of ctx.world.actors) {
           a.setRingInput(verdict.holders.has(a.id), verdict.drift.get(a.id) ?? 0);
         }
       } else {
-        for (const a of actors) a.setRingInput(false, 0);
+        for (const a of ctx.world.actors) a.setRingInput(false, 0);
       }
 
-      const agents: CrowdAgent[] = actors.map(a => {
+      const agents: CrowdAgent[] = ctx.world.actors.map(a => {
         const p = a.pose().pos;
         return {
           x: p[0], z: p[2],
@@ -8662,19 +8635,19 @@ async function main() {
       // The player is an ANCHOR: zombies slide off him rather than shove him.
       // His own capsule already resolves against the per-frame zombie boxes
       // above (stepPlayer), which is the other half of the same contact.
-      agents.push({ x: player.pos[0], z: player.pos[2], r: PLAYER.radius, mobile: false });
+      agents.push({ x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], r: PLAYER.radius, mobile: false });
       const push = separate(agents);
-      actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
+      ctx.world.actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
 
-      const bodyTiming = telemetry.begin();
-      soldierCorpses?.update(actors,dt);
-      for (const a of actors) a.step(dt);
+      const bodyTiming = ctx.telemetry.telemetry.begin();
+      ctx.world.soldierCorpses?.update(ctx.world.actors,dt);
+      for (const a of ctx.world.actors) a.step(dt);
       // 'body-step' CLOSES HERE, before the kit pose below, because that is
       // the boundary main's telemetry numbers were taken with. Widening a
       // counter to cover more work without saying so makes every recorded
       // figure incomparable to every new one, which is worse than the counter
       // being slightly narrow than it ought to be.
-      telemetry.end('body-step', bodyTiming);
+      ctx.telemetry.telemetry.end('body-step', bodyTiming);
       // POLYGON HALVES RIDE THE RIG. Armour from per-bone frames, the gun from
       // the motion frame's gun pose; collapse and gib release the gun while the
       // kit keeps following the fallen rig. One call, because character-view
@@ -8687,8 +8660,8 @@ async function main() {
       // so they hold with the flesh for the same reason the skeleton meshes
       // do (see meshHold in the draw). Motion and the rig still advance —
       // only the VISUAL pose is held, so gameplay is untouched.
-      if (!(sdfLayer.halfRate && sdfLayer.willHold)) {
-        for (const a of actors) {
+      if (!(ctx.render.sdfLayer.halfRate && ctx.render.sdfLayer.willHold)) {
+        for (const a of ctx.world.actors) {
           if (!a.character) continue;
           const p = a.pose();
           a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
@@ -8700,8 +8673,8 @@ async function main() {
       // not the scale, and is therefore invisible when it is off. Without this
       // the rig jiggle would differ between two runs of one recording and the
       // frame hash could never match. Pixel-only: nothing here feeds the sim.
-      const now = demoHold ? simTimeMs() / 1000 : performance.now() / 1000;
-      for (const a of actors) {
+      const now = ctx.demo.hold ? simTimeMs() / 1000 : performance.now() / 1000;
+      for (const a of ctx.world.actors) {
         a.view.setTime(now);
         // Face projection tracks the posed skull through the gait jiggle — and
         // the RUPTURE's displaced head while a doomed body is coming apart, so
@@ -8718,15 +8691,15 @@ async function main() {
       // expose. The game never passed this before 2026-08-27 because its
       // craters were tangent (the pale-wound defect) and never reached the
       // hull; real craters exposed it within one capture.
-      if (sdfLayer.shellEnabled) {
+      if (ctx.render.sdfLayer.shellEnabled) {
         // Same posed bodies the occluder hull is built from, one line below —
         // this is what makes the hull "posed" at no extra cost.
-        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
       }
-      occluderHull.update(
-        actors.map(a => a.posed()),
-        hullExclusionsEnabled
-          ? actors.flatMap(a => {
+      ctx.render.occluderHull.update(
+        ctx.world.actors.map(a => a.posed()),
+        ctx.render.hullExclusionsEnabled
+          ? ctx.world.actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
             return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
@@ -8741,9 +8714,9 @@ async function main() {
         // as the visual-pose hold above: the flesh on screen is the PREVIOUS
         // pose reprojected, so a current-pose shadow hull would lead the body
         // by one sub-frame (the shadow-detaches-during-animation report).
-        { occluder: sdfLayer.occluderEnabled, shadow: !(sdfLayer.halfRate && sdfLayer.willHold) },
+        { occluder: ctx.render.sdfLayer.occluderEnabled, shadow: !(ctx.render.sdfLayer.halfRate && ctx.render.sdfLayer.willHold) },
       );
-    } else if (!frozenHullBuilt) {
+    } else if (!ctx.render.frozenHullBuilt) {
       // FROZEN-FROM-BOOT HULL BUILD (closeup task 1, 2026-09-04). A body
       // frozen via ?frozen=1 never runs the branch above, so the outer hull
       // never builds, the shell entry/exit targets stay cleared to zero, and
@@ -8754,65 +8727,65 @@ async function main() {
       // freeze() SEAM never hit this because it freezes after frames have
       // run. Nothing can move once frozen, so both hulls build exactly once;
       // unfreezing clears the flag and the normal per-frame path resumes.
-      if (sdfLayer.shellEnabled) {
-        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      if (ctx.render.sdfLayer.shellEnabled) {
+        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
       }
-      occluderHull.update(
-        actors.map(a => a.posed()),
-        hullExclusionsEnabled
-          ? actors.flatMap(a => {
+      ctx.render.occluderHull.update(
+        ctx.world.actors.map(a => a.posed()),
+        ctx.render.hullExclusionsEnabled
+          ? ctx.world.actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
             return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
-        { occluder: sdfLayer.occluderEnabled },
+        { occluder: ctx.render.sdfLayer.occluderEnabled },
       );
-      frozenHullBuilt = true;
+      ctx.render.frozenHullBuilt = true;
     }
 
     // ---------------------------------------------------------------
     // GRAPESHOT SIM — pellets fly, land as wounds through actor.hit();
     // detached pieces fly ballistically through the shared chunk path.
     // ---------------------------------------------------------------
-    cooldown = Math.max(0, cooldown - dt);
-    recoilPitch *= Math.exp(-9 * dt);
+    ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
+    ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
     // ——— FREE AIM ————————————————————————————————————————————————————
     // The reticle only turns the camera once it is shoved past the dead zone;
     // inside it, aiming is free and the world stays put.
-    if (freeAimOn) {
-      const turn = turnFromAim(aim, dt);
-      player.yaw += turn.yaw;
-      player.pitch = Math.min(PLAYER.pitchLimit,
-        Math.max(-PLAYER.pitchLimit, player.pitch + turn.pitch));
+    if (ctx.player.freeAimOn) {
+      const turn = turnFromAim(ctx.weapon.aim, dt);
+      ctx.player.player.yaw += turn.yaw;
+      ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
+        Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
     }
     {
-      const w = freeAimOn ? weaponAngles(aim, aimFrustum()) : { yawDeg: 0, pitchDeg: 0 };
-      weaponYawDeg = approachAngle(weaponYawDeg, w.yawDeg, dt);
-      weaponPitchDeg = approachAngle(weaponPitchDeg, w.pitchDeg, dt);
+      const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, aimFrustum()) : { yawDeg: 0, pitchDeg: 0 };
+      ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, dt);
+      ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, dt);
       // ...and the weapon CARRIES across the frame as well as turning. Rotation
       // alone pins the grip near screen centre at every reticle position --
       // that is what pivoting about the grip means -- so the gun read as bolted
       // to the camera with a hinged barrel (owner report). approachAngle is a
       // plain exponential catch-up, so it smooths metres as happily as degrees.
-      const s = freeAimOn ? weaponSlide(aim) : { x: 0, y: 0 };
-      weaponSlideXm = approachAngle(weaponSlideXm, s.x, dt);
-      weaponSlideYm = approachAngle(weaponSlideYm, s.y, dt);
+      const s = ctx.player.freeAimOn ? weaponSlide(ctx.weapon.aim) : { x: 0, y: 0 };
+      ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, dt);
+      ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, dt);
     }
     // WALK BOB, driven by distance rather than time so it stays locked to the
     // stride when the player speeds up, slows down or stops.
     {
-      const pos = player.pos;
-      const step = Math.hypot(pos[0] - prevPlayerPos[0], pos[2] - prevPlayerPos[2]);
-      prevPlayerPos = [pos[0], pos[1], pos[2]];
-      bobDistance += step;
+      const pos = ctx.player.player.pos;
+      const step = Math.hypot(pos[0] - ctx.player.prevPlayerPos[0], pos[2] - ctx.player.prevPlayerPos[2]);
+      ctx.player.prevPlayerPos = [pos[0], pos[1], pos[2]];
+      ctx.player.bobDistance += step;
       const speed01 = dt > 0 ? Math.min(1, step / dt / PLAYER.walkSpeed) : 0;
-      bobAmount = approachBob(bobAmount, speed01, dt);
+      ctx.player.bobAmount = approachBob(ctx.player.bobAmount, speed01, dt);
     }
-    if (aimRig) {
-      const b = bobPose(bobDistance, bobAmount);
-      const yaw = THREE.MathUtils.degToRad(weaponYawDeg);
-      const pitch = THREE.MathUtils.degToRad(weaponPitchDeg);
+    if (ctx.weapon.aimRig) {
+      const b = bobPose(ctx.player.bobDistance, ctx.player.bobAmount);
+      const yaw = THREE.MathUtils.degToRad(ctx.weapon.yawDeg);
+      const pitch = THREE.MathUtils.degToRad(ctx.weapon.pitchDeg);
       const roll = THREE.MathUtils.degToRad(b.rollDeg);
       // ROTATE ABOUT THE GRIP, not about the eye. Without this offset the rig
       // pivots on the player's head and the weapon leaves the frame the moment
@@ -8824,12 +8797,12 @@ async function main() {
       // all translations) but the roles do: `o` holds the grip STILL under the
       // rotation, and the slide is what then carries that held grip across the
       // frame. Without the slide the two cancel to a gun that only ever nods.
-      aimRig.position.set(
-        b.x + o.x + weaponSlideXm,
-        b.y + o.y + weaponSlideYm,
+      ctx.weapon.aimRig.position.set(
+        b.x + o.x + ctx.weapon.slideXm,
+        b.y + o.y + ctx.weapon.slideYm,
         o.z,
       );
-      aimRig.rotation.set(pitch, yaw, roll);
+      ctx.weapon.aimRig.rotation.set(pitch, yaw, roll);
       // The rig just moved; the shoulders did not. Re-aim the arms at them.
       aimArms();
     }
@@ -8839,37 +8812,37 @@ async function main() {
     // world-space and want the frame's final camera).
     stepWeaponSlots(dt);
     stepDynamite(dt);
-    if (reticleEl) {
-      reticleEl.style.display = freeAimOn ? 'block' : 'none';
-      if (freeAimOn) {
+    if (ctx.player.reticleEl) {
+      ctx.player.reticleEl.style.display = ctx.player.freeAimOn ? 'block' : 'none';
+      if (ctx.player.freeAimOn) {
         // Position against the CANVAS, not the window. Percent-of-viewport put
         // the reticle outside the render area whenever the canvas did not fill
         // the page -- so the thing marking where you are aiming sat somewhere
         // you could not shoot.
-        const r = canvas.getBoundingClientRect();
+        const r = ctx.boot.canvas.getBoundingClientRect();
         // Through the LENS. The fisheye moves the world under the crosshair,
         // so the crosshair rides the inverse map or it stops marking where
         // the shot lands. Pushed outward, because the centre is magnified.
         // Lens off (k = 0) returns `aim` unchanged — this is the old line.
-        const p = reticleNdc(aim, postAa.lens);
-        reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
-        reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
+        const p = reticleNdc(ctx.weapon.aim, ctx.render.postAa.lens);
+        ctx.player.reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
+        ctx.player.reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
       }
     }
 
-    flashAge += dt;
-    fireAge += dt;
-    const flashV = flashEnvelope(flashAge);
-    if (flashGroup && flashMaterial) {
-      flashGroup.visible = flashV > 0;
-      flashMaterial.opacity = flashV;
+    ctx.weapon.flashAge += dt;
+    ctx.weapon.fireAge += dt;
+    const flashV = flashEnvelope(ctx.weapon.flashAge);
+    if (ctx.weapon.flashGroup && ctx.weapon.flashMaterial) {
+      ctx.weapon.flashGroup.visible = flashV > 0;
+      ctx.weapon.flashMaterial.opacity = flashV;
       // Expand as it dies rather than shrinking -- burning gas pushes outward.
-      flashGroup.scale.setScalar(0.85 + 0.75 * (1 - flashV));
+      ctx.weapon.flashGroup.scale.setScalar(0.85 + 0.75 * (1 - flashV));
     }
-    if (flashLight) flashLight.intensity = 55 * flashV;
+    if (ctx.weapon.flashLight) ctx.weapon.flashLight.intensity = 55 * flashV;
 
     // SMOKE. Each live puff drifts, expands and fades; dead ones stay hidden.
-    for (const p of smokePuffs) {
+    for (const p of ctx.vfx.smokePuffs) {
       if (p.age === Infinity) continue;
       p.age += dt;
       const life = 0.9;
@@ -8886,25 +8859,25 @@ async function main() {
 
     // THE VIEW-MODEL POSE: rest + reload delta + recoil delta, composed once so
     // a reload during recoil reads as both rather than one clobbering the other.
-    const reloading = reloadAge <= RELOAD.totalSec;
-    if (reloading) reloadAge += dt * reloadSpeed;
-    const rp = reloading ? reloadPose(reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
-    const rc = fireRecoil(fireAge, fireBarrels);
-    if (gunGroup) {
-      gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
-      gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);
-      gunGroup.position.set(
+    const reloading = ctx.weapon.reloadAge <= RELOAD.totalSec;
+    if (reloading) ctx.weapon.reloadAge += dt * ctx.weapon.reloadSpeed;
+    const rp = reloading ? reloadPose(ctx.weapon.reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
+    const rc = fireRecoil(ctx.weapon.fireAge, ctx.weapon.fireBarrels);
+    if (ctx.weapon.gunGroup) {
+      ctx.weapon.gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
+      ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);
+      ctx.weapon.gunGroup.position.set(
         GUN_REST.pos.x,
         GUN_REST.pos.y + rp.dy + rc.dy,
         GUN_REST.pos.z + rp.dz + rc.dz,
       );
     }
-    if (hingePivot) hingePivot.rotation.x = rp.hinge * RELOAD.openRad;
+    if (ctx.weapon.hingePivot) ctx.weapon.hingePivot.rotation.x = rp.hinge * RELOAD.openRad;
     // The breech locators are read below in RIG space, and they hang off the
     // hinge pivot that was just rotated. Without this the eject would trail the
     // barrels by exactly one frame.
-    if (gunGroup) viewModelAnchor.updateMatrixWorld(true);
-    if (topLeverNode) topLeverNode.rotation.y = topLeverAngle(reloading ? reloadAge : 0);
+    if (ctx.weapon.gunGroup) ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
+    if (ctx.weapon.topLeverNode) ctx.weapon.topLeverNode.rotation.y = topLeverAngle(reloading ? ctx.weapon.reloadAge : 0);
 
     if (reloading) {
       // THE BORE BASIS, this frame, in rig space. The cases leave along it,
@@ -8938,13 +8911,13 @@ async function main() {
         });
         hold = { stage: asDelta(h.stage), seat: asDelta(h.seat) };
       }
-      const sh = supportHandPose(reloadAge, hold);
+      const sh = supportHandPose(ctx.weapon.reloadAge, hold);
       const handNow = new THREE.Vector3(
         FORE_HAND_REST.x + sh.dx,
         FORE_HAND_REST.y + sh.dy,
         FORE_HAND_REST.z + sh.dz,
       );
-      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimArms(); }
+      if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(handNow); aimArms(); }
 
       // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
       // The seated cases are children of Barrels, so they are already carrying
@@ -8952,11 +8925,11 @@ async function main() {
       // straight back out of the bores; sliding them the other way seats the
       // fresh ones. Larger z is toward the muzzle. Same nodes for both: a
       // fresh case IS the seated case, arriving.
-      const ex = extractStage(reloadAge);
-      const ins = insertStage(reloadAge);
-      for (let i = 0; i < shellNodes.length; i++) {
-        const s = shellNodes[i];
-        const restZ = shellRestZ[i];
+      const ex = extractStage(ctx.weapon.reloadAge);
+      const ins = insertStage(ctx.weapon.reloadAge);
+      for (let i = 0; i < ctx.weapon.shellNodes.length; i++) {
+        const s = ctx.weapon.shellNodes[i];
+        const restZ = ctx.weapon.shellRestZ[i];
         if (!s || restZ === undefined) continue;
         if (ex !== null) {
           s.visible = true;
@@ -8968,12 +8941,12 @@ async function main() {
         } else {
           // Seated before the extract beat, gone after the hand-off, back
           // once the insert has seated them.
-          s.visible = reloadAge < RELOAD.extractAtSec || reloadAge >= RELOAD.loadSeatSec;
+          s.visible = ctx.weapon.reloadAge < RELOAD.extractAtSec || ctx.weapon.reloadAge >= RELOAD.loadSeatSec;
           s.position.z = restZ;
         }
       }
-      if (extractorNode) {
-        extractorNode.position.z = extractorRestZ - extractorOffset(reloadAge);
+      if (ctx.weapon.extractorNode) {
+        ctx.weapon.extractorNode.position.z = ctx.weapon.extractorRestZ - extractorOffset(ctx.weapon.reloadAge);
       }
 
       // ——— STAGE 2: THE TUMBLE ———————————————————————————————————————
@@ -8981,19 +8954,19 @@ async function main() {
       // length out of the mouth along the bore, on a gun that may be at any
       // point in its swing, and bore-aligned -- not snapped to the rig's -Z
       // with its rear half still inside the tube, which is what clipped.
-      for (let i = 0; i < ejectedShells.length; i++) {
-        const m = ejectedShells[i];
+      for (let i = 0; i < ctx.weapon.ejectedShells.length; i++) {
+        const m = ctx.weapon.ejectedShells[i];
         if (!m) continue;
         const k: 0 | 1 = i === 0 ? 0 : 1;
-        const e = ejectedShell(reloadAge, k, frame, reloadSeed);
+        const e = ejectedShell(ctx.weapon.reloadAge, k, frame, ctx.weapon.reloadSeed);
         if (!e || !haveBore || !breechInRig(k, breech)) { m.visible = false; continue; }
         m.visible = true;
         const origin = breech.clone().addScaledVector(out, SHELL_LEN_M / 2);
         m.position.set(origin.x + e.x, origin.y + e.y, origin.z + e.z);
         // End over end about the side axis, from the bore-aligned start.
         m.quaternion.setFromAxisAngle(side, e.spin).multiply(qBore);
-        const originWorld = (aimRig ?? viewModelAnchor).localToWorld(origin);
-        lastEjectOrigin = [originWorld.x, originWorld.y, originWorld.z];
+        const originWorld = (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).localToWorld(origin);
+        ctx.weapon.lastEjectOrigin = [originWorld.x, originWorld.y, originWorld.z];
       }
 
       // FRESH CASES: the rig-space CARRY. They ride rigidly in the hand from
@@ -9002,9 +8975,9 @@ async function main() {
       // carry each case sits exactly where the barrel-local insert picks it
       // up, and the two stages meet without a jump. Held tips-up at first,
       // rolling onto the bore axis as they arrive.
-      const carry = loadCarry(reloadAge);
-      for (let i = 0; i < loadShells.length; i++) {
-        const m = loadShells[i];
+      const carry = loadCarry(ctx.weapon.reloadAge);
+      for (let i = 0; i < ctx.weapon.loadShells.length; i++) {
+        const m = ctx.weapon.loadShells[i];
         if (!m) continue;
         const k: 0 | 1 = i === 0 ? 0 : 1;
         if (carry === null || !haveBore || !hold || !breechInRig(k, breech)) {
@@ -9021,42 +8994,42 @@ async function main() {
         m.quaternion.copy(qHeld).slerp(qBore, carry);
       }
 
-      if (reloadPhaseAt(reloadAge) === 'done') {
-        shells = MAGAZINE_CAPACITY;
-        reloadAge = Infinity;
-        if (hingePivot) hingePivot.rotation.x = 0;
-        if (topLeverNode) topLeverNode.rotation.y = 0;
-        if (extractorNode) extractorNode.position.z = extractorRestZ;
-        for (let i = 0; i < shellNodes.length; i++) {
-          const s = shellNodes[i];
-          const restZ = shellRestZ[i];
+      if (reloadPhaseAt(ctx.weapon.reloadAge) === 'done') {
+        ctx.weapon.shells = MAGAZINE_CAPACITY;
+        ctx.weapon.reloadAge = Infinity;
+        if (ctx.weapon.hingePivot) ctx.weapon.hingePivot.rotation.x = 0;
+        if (ctx.weapon.topLeverNode) ctx.weapon.topLeverNode.rotation.y = 0;
+        if (ctx.weapon.extractorNode) ctx.weapon.extractorNode.position.z = ctx.weapon.extractorRestZ;
+        for (let i = 0; i < ctx.weapon.shellNodes.length; i++) {
+          const s = ctx.weapon.shellNodes[i];
+          const restZ = ctx.weapon.shellRestZ[i];
           if (!s || restZ === undefined) continue;
           s.visible = true;              // loaded gun: two heads at the breech
           s.position.z = restZ;
         }
-        if (gunGroup) {
-          gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
-          gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
-          gunGroup.position.copy(GUN_REST.pos);
+        if (ctx.weapon.gunGroup) {
+          ctx.weapon.gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
+          ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
+          ctx.weapon.gunGroup.position.copy(GUN_REST.pos);
         }
-        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimArms(); }
-        for (const m of ejectedShells) m.visible = false;
-        for (const m of loadShells) m.visible = false;
+        if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(FORE_HAND_REST); aimArms(); }
+        for (const m of ctx.weapon.ejectedShells) m.visible = false;
+        for (const m of ctx.weapon.loadShells) m.visible = false;
         updateHud();
       }
     }
     {
-      const projectileTiming = telemetry.begin();
-      const prevs = pellets.map(p => [...p.pos] as Vec3);
-      stepProjectiles(pellets, dt);
+      const projectileTiming = ctx.telemetry.telemetry.begin();
+      const prevs = ctx.weapon.pellets.map(p => [...p.pos] as Vec3);
+      stepProjectiles(ctx.weapon.pellets, dt);
       // Hit batching: every actor hit this frame flushes its rig/repack/
       // wound-row tail ONCE after the loop (ZombieActor.beginHits).
       const hitThisFrame = new Set<ZombieActor>();
-      for (let i = pellets.length - 1; i >= 0; i--) {
-        const p = pellets[i]!;
+      for (let i = ctx.weapon.pellets.length - 1; i >= 0; i--) {
+        const p = ctx.weapon.pellets[i]!;
         const from = prevs[i]!;
         let dead = expired(p);
-        if (!dead && bakedChunks.length > 0) {
+        if (!dead && ctx.bake.chunks.length > 0) {
           // ORDER: this MUST precede the floor kill below — a settled piece
           // rests AT the y = 0.02 plane, so the slug that reaches it is
           // always past y 0.02 by segment end, and a floor-first pre-check
@@ -9075,8 +9048,8 @@ async function main() {
           // eaten every such shot before the test could run.
           const segX = p.pos[0] - from[0], segY = p.pos[1] - from[1], segZ = p.pos[2] - from[2];
           const segLen2 = segX * segX + segY * segY + segZ * segZ || 1;
-          for (let bi = bakedChunks.length - 1; bi >= 0; bi--) {
-            const b = bakedChunks[bi]!;
+          for (let bi = ctx.bake.chunks.length - 1; bi >= 0; bi--) {
+            const b = ctx.bake.chunks[bi]!;
             const t = Math.max(0, Math.min(1,
               ((b.centre[0] - from[0]) * segX + (b.centre[1] - from[1]) * segY + (b.centre[2] - from[2]) * segZ) / segLen2));
             const qx = from[0] + segX * t - b.centre[0];
@@ -9093,14 +9066,14 @@ async function main() {
             break;
           }
         }
-        if (!dead && chunkBakeEnabled) {
+        if (!dead && ctx.bake.enabled) {
           // Settled pieces must remain hittable while queued/in flight. A
           // sphere rejects distant shots, then the existing CPU field tests
           // the actual piece without extracting any mesh on this thread.
           const dx = p.pos[0] - from[0], dy = p.pos[1] - from[1], dz = p.pos[2] - from[2];
           const l2 = dx * dx + dy * dy + dz * dz || 1;
-          for (let ci = liveChunks.length - 1; ci >= 0; ci--) {
-            const c = liveChunks[ci]!;
+          for (let ci = ctx.bake.liveChunks.length - 1; ci >= 0; ci--) {
+            const c = ctx.bake.liveChunks[ci]!;
             if (!chunkSettled(c.state)) continue;
             const centre = c.state.pos;
             const t = Math.max(0, Math.min(1, ((centre[0] - from[0]) * dx + (centre[1] - from[1]) * dy + (centre[2] - from[2]) * dz) / l2));
@@ -9111,10 +9084,10 @@ async function main() {
             const field = chunkBakeField(data).field;
             const hp = traceProjectile(from, p.pos, q => field(q) - p.radius);
             if (!hp) continue;
-            if (chunkBakeJobs.pendingId === c.id) cancelChunkBake();
-            liveChunks.splice(ci, 1);
+            if (ctx.bake.jobs.pendingId === c.id) cancelChunkBake();
+            ctx.bake.liveChunks.splice(ci, 1);
             c.view.object.visible = false;
-            spareChunkViews.push(c.view);
+            ctx.bake.spareViews.push(c.view);
             gibChunkMeat(c.template, hp);
             dead = true;
             break;
@@ -9124,7 +9097,7 @@ async function main() {
         if (!dead) {
           // Level geometry: a point-in-AABB test is enough — pellets are
           // small and the substepped trace already bounds their travel.
-          for (const b of colliders) {
+          for (const b of ctx.world.colliders) {
             if (p.pos[0] > b.min[0] && p.pos[0] < b.max[0]
               && p.pos[1] > b.min[1] && p.pos[1] < b.max[1]
               && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; break; }
@@ -9137,7 +9110,7 @@ async function main() {
           let hitActor: ZombieActor | null = null;
           let hitPoint: Vec3 | null = null;
           const segLen = Math.hypot(p.pos[0] - from[0], p.pos[1] - from[1], p.pos[2] - from[2]);
-          for (const a of actors) {
+          for (const a of ctx.world.actors) {
             const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
             if (!c) continue;
             // Segment-to-centre distance (clamped closest approach).
@@ -9161,16 +9134,16 @@ async function main() {
             // so the bleed emitter binds the exact wound instead of sniffing
             // the ring tail (a hit that also severs puts a stump there).
             if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
-            const hitTiming = telemetry.begin();
-            if (segMeshRenderer) {
-              const sources = skeletonSources.get(hitActor)?.sources;
-              if (sources) segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
+            const hitTiming = ctx.telemetry.telemetry.begin();
+            if (ctx.render.segMeshRenderer) {
+              const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
+              if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
             }
             const stamped = p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN, p.shot)
               : hitActor.hit(hitPoint, dirN, p.shot);
-            telemetry.end('wound-hit', hitTiming);
-            if (telemetry.active) telemetry.event('impact', {
+            ctx.telemetry.telemetry.end('wound-hit', hitTiming);
+            if (ctx.telemetry.telemetry.active) ctx.telemetry.telemetry.event('impact', {
               actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
               world: hitPoint, direction: dirN, actorPose: hitActor.pose(),
               wound: stamped ? describeRecordedWound(hitActor, stamped) : null,
@@ -9180,17 +9153,17 @@ async function main() {
             dead = true;
           }
         }
-        if (dead) pellets.splice(i, 1);
+        if (dead) ctx.weapon.pellets.splice(i, 1);
       }
-      const flushTiming = telemetry.begin();
+      const flushTiming = ctx.telemetry.telemetry.begin();
       for (const a of hitThisFrame) a.endHits();
-      if (telemetry.active) for (const a of hitThisFrame) telemetry.event('actor-wounds', {
+      if (ctx.telemetry.telemetry.active) for (const a of hitThisFrame) ctx.telemetry.telemetry.event('actor-wounds', {
         actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(a, w)),
         aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
       });
-      soldierCorpses?.update(actors,0); // restore damaged snapshots before this draw
-      telemetry.end('wound-flush', flushTiming);
-      telemetry.end('projectiles-and-hits', projectileTiming);
+      ctx.world.soldierCorpses?.update(ctx.world.actors,0); // restore damaged snapshots before this draw
+      ctx.telemetry.telemetry.end('wound-flush', flushTiming);
+      ctx.telemetry.telemetry.end('projectiles-and-hits', projectileTiming);
       // SOLDIER PELLETS SIT OUTSIDE 'projectiles-and-hits' ON PURPOSE — see
       // the same argument at 'body-step'. This is work that did not exist when
       // that counter was calibrated on main, and quietly folding it in would
@@ -9198,34 +9171,34 @@ async function main() {
       // SOLDIER PELLETS: stepped, culled and drawn — never traced. Uses the
       // same integrator as the player's (semi-implicit Euler, gravity before
       // move); hand-rolling a second one would let the two drift apart.
-      const soldierFrom = soldierPellets.map(p => [...p.pos] as Vec3);
-      stepProjectiles(soldierPellets, dt);
-      for (let i = soldierPellets.length - 1; i >= 0; i--) {
-        if (expired(soldierPellets[i]!) || colliders.some(box =>
-          segmentHitsBox(soldierFrom[i]!, soldierPellets[i]!.pos, box))) soldierPellets.splice(i, 1);
+      const soldierFrom = ctx.weapon.soldierPellets.map(p => [...p.pos] as Vec3);
+      stepProjectiles(ctx.weapon.soldierPellets, dt);
+      for (let i = ctx.weapon.soldierPellets.length - 1; i >= 0; i--) {
+        if (expired(ctx.weapon.soldierPellets[i]!) || ctx.world.colliders.some(box =>
+          segmentHitsBox(soldierFrom[i]!, ctx.weapon.soldierPellets[i]!.pos, box))) ctx.weapon.soldierPellets.splice(i, 1);
       }
       // The eye every tracer billboards around this frame. Declared here (not
       // reused from the block below) because that one is scoped to the hit
       // pass; the streaks need it whether or not anything was hit.
-      const tracerEye = eyeOf(player);
-      while (soldierPelletViews.length < soldierPellets.length) {
-        soldierPelletViews.push(newTracerView());
+      const tracerEye = eyeOf(ctx.player.player);
+      while (ctx.weapon.soldierPelletViews.length < ctx.weapon.soldierPellets.length) {
+        ctx.weapon.soldierPelletViews.push(newTracerView());
       }
-      for (let k = 0; k < soldierPelletViews.length; k++) {
-        const v = soldierPelletViews[k]!;
-        const p = soldierPellets[k];
+      for (let k = 0; k < ctx.weapon.soldierPelletViews.length; k++) {
+        const v = ctx.weapon.soldierPelletViews[k]!;
+        const p = ctx.weapon.soldierPellets[k];
         if (p) placeTracer(v, p, tracerEye);
         else hideTracer(v);
       }
       // Sync the mesh pool to the sim list — growing it on demand (the
       // pool is ONLY grown here; fire() must not touch meshes because it
       // runs from an evaluate() with no frame in between).
-      while (pelletViews.length < pellets.length) {
-        pelletViews.push(newTracerView());
+      while (ctx.weapon.pelletViews.length < ctx.weapon.pellets.length) {
+        ctx.weapon.pelletViews.push(newTracerView());
       }
-      for (let k = 0; k < pelletViews.length; k++) {
-        const v = pelletViews[k]!;
-        const p = pellets[k];
+      for (let k = 0; k < ctx.weapon.pelletViews.length; k++) {
+        const v = ctx.weapon.pelletViews[k]!;
+        const p = ctx.weapon.pellets[k];
         // A slug is drawn at its own (larger) calibre — placeTracer reads the
         // projectile's radius, so no branch is needed here.
         if (p) placeTracer(v, p, tracerEye);
@@ -9238,7 +9211,7 @@ async function main() {
       // for the clause-by-clause "has already stopped" argument) and its
       // march proxy is replaced by a static mesh. Reverse iteration: bake
       // SPLICES entries out of liveChunks.
-      const chunkTiming = telemetry.begin();
+      const chunkTiming = ctx.telemetry.telemetry.begin();
       const cdt = Math.min(dt, 1 / 30);
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
@@ -9253,26 +9226,26 @@ async function main() {
       // frame rather than a frame late.
       stepPendingGibImpulses();
       finishChunkBake();
-      for (let ci = liveChunks.length - 1; ci >= 0; ci--) {
-        const c = liveChunks[ci]!;
+      for (let ci = ctx.bake.liveChunks.length - 1; ci >= 0; ci--) {
+        const c = ctx.bake.liveChunks[ci]!;
         // Keep the exact settled snapshot visible while its worker runs.
         // No disappearance, and no pose drift between sampling and swap.
-        if (chunkBakeJobs.pendingId === c.id) {
+        if (ctx.bake.jobs.pendingId === c.id) {
           c.view.update(c.state); // repair view resets (e.g. bone-mode changes) without moving the snapshot
           continue;
         }
         c.state = stepChunk(c.state, cdt, chunkCollidersAt(c.state.pos));
         c.view.update(c.state);
-        if (chunkBakeEnabled && chunkBakeJobs.pendingId === null && !chunkBakeJobs.error && chunkSettled(c.state)) {
+        if (ctx.bake.enabled && ctx.bake.jobs.pendingId === null && !ctx.bake.jobs.error && chunkSettled(c.state)) {
           const t0 = performance.now();
           const data = c.view.bakeData();
           // Bone-only pieces retain their original SDF path.
-          if (data.flesh.length > 0 && chunkBakeJobs.submit(c.id, data)) {
-            chunkBakeInput = data;
-            bakeSubmitFrame = simFrame;
-            telemetry.event('chunk-bake-request', { chunk: c.id, flesh: data.flesh.length, bones: data.bones.length });
+          if (data.flesh.length > 0 && ctx.bake.jobs.submit(c.id, data)) {
+            ctx.bake.input = data;
+            ctx.bake.submitFrame = ctx.demo.simFrame;
+            ctx.telemetry.telemetry.event('chunk-bake-request', { chunk: c.id, flesh: data.flesh.length, bones: data.bones.length });
           }
-          lastBakeRequestMs = performance.now() - t0;
+          ctx.bake.lastRequestMs = performance.now() - t0;
         }
       }
       // SPRITE PIECES, on the same clock and in the same block as the marched
@@ -9281,30 +9254,30 @@ async function main() {
       // gib and a marched gib cannot disagree about where the wall is. What it
       // does NOT do is any of the bake: a settled sprite is parked, not retired
       // through a worker. Costs a loop over an empty array when the mode is off.
-      if (spritePieces.live.length > 0 || spritePieces.rest.length > 0) {
-        stepSpritePieces(spritePieces, {
+      if (ctx.vfx.spritePieces.live.length > 0 || ctx.vfx.spritePieces.rest.length > 0) {
+        stepSpritePieces(ctx.vfx.spritePieces, {
           dt: cdt,
           cameraQuat: camera.quaternion,
           collidersAt: chunkCollidersAt,
-          liveCap: gibSpriteLiveCap,
-          restCap: gibSpriteRestCap,
+          liveCap: ctx.gibs.spriteLiveCap,
+          restCap: ctx.gibs.spriteRestCap,
         });
       }
-      telemetry.end('chunks-and-guts', chunkTiming);
-      const bloodTiming = telemetry.begin();
+      ctx.telemetry.telemetry.end('chunks-and-guts', chunkTiming);
+      const bloodTiming = ctx.telemetry.telemetry.begin();
       // BLEED — emitters spray (anchors recomputed from the CURRENT posed
       // prims, so droplets ride the walking body), flying chunks trail, and
       // the sim settles into splats. Runs even with the wander frozen: it is
       // a cosmetic sim exactly like the pellets and chunks above (a frozen
       // capture that fired still bleeds), and posed() is always current.
-      if (bleedEnabled) {
-        bleedClock += cdt;
-        for (const e of bleed.live(bleedClock)) {
-          const a = actors.find(q => q.id === e.bodyId);
-          if (!a) { bleed.evictForBody(e.bodyId); continue; }
+      if (ctx.vfx.bleedEnabled) {
+        ctx.vfx.bleedClock += cdt;
+        for (const e of ctx.vfx.bleed.live(ctx.vfx.bleedClock)) {
+          const a = ctx.world.actors.find(q => q.id === e.bodyId);
+          if (!a) { ctx.vfx.bleed.evictForBody(e.bodyId); continue; }
           const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
-            bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
+            ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
             woundStreamId(e.wound),
           );
         }
@@ -9324,9 +9297,9 @@ async function main() {
         // would have the two pieces stealing each other's emission phase —
         // trails appearing and vanishing on the wrong bodies.
         emitTrails(
-          bloodSim,
+          ctx.vfx.bloodSim,
           [
-            ...liveChunks.map(c => ({
+            ...ctx.bake.liveChunks.map(c => ({
               id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
             })),
             // LIVE ONLY, not `rest`: the marched path's equivalent of a parked
@@ -9338,38 +9311,38 @@ async function main() {
             // both of which start at 1 — cannot collide; `trailStreamId` is then
             // given the OFFSET id, so a sprite piece and a chunk never share an
             // emission stream either (the same separation, one layer down).
-            ...spritePieces.live.map(p => ({
+            ...ctx.vfx.spritePieces.live.map(p => ({
               id: SPRITE_TRAIL_ID_BASE + p.id, pos: p.state.pos, vel: p.state.vel,
               stream: trailStreamId(SPRITE_TRAIL_ID_BASE + p.id),
             })),
           ],
           cdt, rngStreams.bleed,
         );
-        stepBlood(bloodSim, cdt, rngStreams.bleed);
+        stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed);
         // Re-pose every instance from sim state (billboards track the camera
         // even frozen — same contract as the lab's always-sync).
-        bloodView.sync(bloodSim, camera);
+        ctx.vfx.bloodView.sync(ctx.vfx.bloodSim, camera);
       }
-      telemetry.end('blood-simulation-and-sync', bloodTiming);
+      ctx.telemetry.telemetry.end('blood-simulation-and-sync', bloodTiming);
       // The optional impact crown advances even with bleed off, so an event
       // already in flight finishes instead of freezing mid-burst.
-      impactSplashLayer?.step(cdt);
+      ctx.panels.impactSplashLayer?.step(cdt);
     }
 
-    const eye = eyeOf(player);
+    const eye = eyeOf(ctx.player.player);
     camera.position.set(eye[0], eye[1], eye[2]);
-    const cp = Math.cos(player.pitch + recoilPitch);
+    const cp = Math.cos(ctx.player.player.pitch + ctx.weapon.recoilPitch);
     camera.lookAt(
-      eye[0] + Math.sin(player.yaw) * cp,
-      eye[1] + Math.sin(player.pitch + recoilPitch),
-      eye[2] - Math.cos(player.yaw) * cp,
+      eye[0] + Math.sin(ctx.player.player.yaw) * cp,
+      eye[1] + Math.sin(ctx.player.player.pitch + ctx.weapon.recoilPitch),
+      eye[2] - Math.cos(ctx.player.player.yaw) * cp,
     );
     camera.updateMatrixWorld();
 
     // Optional impact crown: rebuild from the current event times after the
     // camera is final (its sync takes the camera for parity; geometry is
     // world-space). No-op when the feature is off.
-    impactSplashLayer?.sync(camera);
+    ctx.panels.impactSplashLayer?.sync(camera);
 
     // GOO DENSITY QUADS — pose them from the same sim state, every frame,
     // AFTER the camera is final and before the drawFn composites. The lab
@@ -9388,48 +9361,48 @@ async function main() {
     // Unconditional, NOT under bleedEnabled like bloodView.sync above: floor
     // splats persist in the sim after bleed is switched off, and the goo
     // draws them. Gating this would freeze the pools mid-frame instead.
-    const gooTiming = telemetry.begin();
+    const gooTiming = ctx.telemetry.telemetry.begin();
     // CANDIDATE connections: derived deterministically from the SAME droplet
     // array the sim already owns (no new particles, no new RNG). Set BEFORE
     // sync so the density instancer poses them in the same pass. When the
     // feature is off this clears any stale extras, so the shipped frame is
     // bit-identical again on the very next frame after disabling it.
-    gooLayer?.setExtraBlobs(gooConnectionsEnabled
-      ? connectionBlobsForSim(bloodSim.droplets, {
-        enableStrands: gooStrandsEnabled, enableSheets: gooSheetsEnabled,
+    ctx.goo.layer?.setExtraBlobs(ctx.goo.connectionsEnabled
+      ? connectionBlobsForSim(ctx.vfx.bloodSim.droplets, {
+        enableStrands: ctx.goo.strandsEnabled, enableSheets: ctx.goo.sheetsEnabled,
       })
       : []);
     // SHUTTER BLUR PARTITION: when on, this sync poses only the sharp
     // remainder (pools/guts/leftover drops). The selected airborne partition is
     // posed and shaded later by the capture stage, exactly once. When off this
     // clears the selection, so the frame is the shipped fused goo.
-    shutterGame?.poseSharp();
-    gooLayer?.sync(bloodSim, camera);
+    ctx.panels.shutterGame?.poseSharp();
+    ctx.goo.layer?.sync(ctx.vfx.bloodSim, camera);
     // GIB SHUTTER PARTITION: lift this frame's moving pieces onto the blur
     // layer BEFORE the base scene renders (the draw callback follows this tick),
     // so the capture's clean background has no selected gib in it. When the
     // switch is off the list is empty and every mesh is put back where it was.
-    if (gibShutter) {
-      gibShutter.select(gibShutter.enabled ? gibBlurSubjects() : []);
-      if (!gibShutter.enabled) gibBlurPrevKeys = new Set();
+    if (ctx.gibs.shutter) {
+      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? gibBlurSubjects() : []);
+      if (!ctx.gibs.shutter.enabled) ctx.gibs.blurPrevKeys = new Set();
     }
-    telemetry.end('goo-sync', gooTiming);
+    ctx.telemetry.telemetry.end('goo-sync', gooTiming);
   }
 
-  handle.setRenderCallback((dt) => {
+  ctx.boot.handle.setRenderCallback((dt) => {
     // Wall-clock frame delta (seconds -> ms), EMA'd — what the owner feels.
     // During __sdfGame.step() the dt is the supplied fixed step, not a
     // measurement; the readout only means something with the loop running.
     if (dt < 0.25) {
       const ms = dt * 1000;
-      frameEma = frameEma === 0 ? ms : frameEma * 0.95 + ms * 0.05;
-      if (adaptiveEnabled) {
-        adaptiveFrames.push(ms);
+      ctx.boot.frameEma = ctx.boot.frameEma === 0 ? ms : ctx.boot.frameEma * 0.95 + ms * 0.05;
+      if (ctx.render.adaptiveEnabled) {
+        ctx.render.adaptiveFrames.push(ms);
         tickAdaptive(performance.now());
       }
     }
     tick(Math.min(dt, 1 / 20));
-    if (frameCount++ % 10 === 0) updateHud();
+    if (ctx.demo.frameCount++ % 10 === 0) updateHud();
   });
   updateHud();
 
@@ -9456,7 +9429,7 @@ async function main() {
       const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
       const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
       const dt = 1 / 120;
-      for (const a of actors) {
+      for (const a of ctx.world.actors) {
         const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
         if (!c) continue;
         if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
@@ -9507,8 +9480,8 @@ async function main() {
    */
   const MIN_STANDOFF = 1.5;
   function aimAtNearestSurface(limb?: string, actorId?: number): boolean {
-    const eye = eyeOf(player);
-    const candidates = actors
+    const eye = eyeOf(ctx.player.player);
+    const candidates = ctx.world.actors
       .filter(a => actorId === undefined || a.id === actorId)
       .map((a) => {
         const c = a.posed().clusters.find(cc => cc.limb === (limb ?? 'torso') && (actorId === undefined || cc.alive))?.center;
@@ -9517,8 +9490,8 @@ async function main() {
       .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
       .sort((a, b) => a.d - b.d);
 
-    const yaw0 = player.yaw;
-    const pitch0 = player.pitch;
+    const yaw0 = ctx.player.player.yaw;
+    const pitch0 = ctx.player.player.pitch;
     for (const cand of candidates) {
       // YAW CONVENTION: the page's forward is (sin yaw, −cos yaw) — camera
       // lookAt (below), aimDir and muzzleWorld all agree — so facing a target
@@ -9532,14 +9505,14 @@ async function main() {
       // the sign right: the predictor simulates SLUG GRAVITY, so dead-on
       // yaw/pitch at the torso can still miss low — try candidates, keep the
       // first the predictor confirms.
-      player.yaw = Math.atan2(cand.c[0] - eye[0], -(cand.c[2] - eye[2]));
-      player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
+      ctx.player.player.yaw = Math.atan2(cand.c[0] - eye[0], -(cand.c[2] - eye[2]));
+      ctx.player.player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
       // Scoped diagnostics settle the real viewmodel after this orientation
       // and verify the predictor there; its muzzle transform is stale here.
       if (actorId !== undefined || predictSlugHitNow().actorId >= 0) return true;
     }
-    player.yaw = yaw0;
-    player.pitch = pitch0;
+    ctx.player.player.yaw = yaw0;
+    ctx.player.player.pitch = pitch0;
     return false;
   }
 
@@ -9551,14 +9524,14 @@ async function main() {
       region: prim ? a.posed().clusters[prim.cluster]?.limb ?? null : null };
   }
   function captureTelemetryScene(name: string) {
-    if (!telemetry.active) return;
+    if (!ctx.telemetry.telemetry.active) return;
     const started = performance.now();
-    telemetry.snapshot(name, {
+    ctx.telemetry.telemetry.snapshot(name, {
       camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), projection: camera.projectionMatrix.toArray(), fov: camera.fov },
-      player: { position: player.pos, yaw: player.yaw, pitch: player.pitch },
-      settings: { tiles: gameTiles.diagnostics(), sdfScale, adaptive: adaptiveEnabled, frameCap: handle.frameCap,
-        width: sdfLayer.targetSize.width, height: sdfLayer.targetSize.height, woundTuning, normalGradientMode },
-      actors: actors.map(a => {
+      player: { position: ctx.player.player.pos, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch },
+      settings: { tiles: ctx.boot.gameTiles.diagnostics(), sdfScale: ctx.render.sdfScale, adaptive: ctx.render.adaptiveEnabled, frameCap: ctx.boot.handle.frameCap,
+        width: ctx.render.sdfLayer.targetSize.width, height: ctx.render.sdfLayer.targetSize.height, woundTuning: ctx.vfx.woundTuning, normalGradientMode: ctx.telemetry.normalGradientMode },
+      actors: ctx.world.actors.map(a => {
         const body = a.posed();
         // Already-posed CPU data: no ray queries, GPU fence or texture readback.
         return { id: a.id, model: 'zombie', room: a.room, pose: a.pose(),
@@ -9572,58 +9545,58 @@ async function main() {
           })),
         };
       }),
-      chunks: liveChunks.map(c => ({ id: c.id, state: c.state, pendingBake: chunkBakeJobs.pendingId === c.id })),
-      bakedChunks: bakedChunks.map(c => ({ id: c.id, centre: c.centre, radius: c.radius })),
+      chunks: ctx.bake.liveChunks.map(c => ({ id: c.id, state: c.state, pendingBake: ctx.bake.jobs.pendingId === c.id })),
+      bakedChunks: ctx.bake.chunks.map(c => ({ id: c.id, centre: c.centre, radius: c.radius })),
       purpose: 'Frozen actor geometry for diagnosis; not deterministic whole-game replay. No pixel/ray eligibility counters.',
     });
-    telemetry.event('snapshot-cost', { name, cpuMs: performance.now() - started });
+    ctx.telemetry.telemetry.event('snapshot-cost', { name, cpuMs: performance.now() - started });
   }
 
   // Read scalar counters only; no field queries/readbacks during live play.
-  let firstTelemetryFrame = true;
-  let telemetryVisibilityGap = false;
-  document.addEventListener('visibilitychange', () => { telemetryVisibilityGap = true; });
+  ctx.telemetry.firstFrame = true;
+  ctx.telemetry.visibilityGap = false;
+  document.addEventListener('visibilitychange', () => { ctx.telemetry.visibilityGap = true; });
   const telemetryFrame = (frame: FrameTiming) => {
-    telemetry.frame(frame, {
-      hidden: document.hidden, visibilityGap: telemetryVisibilityGap, firstFrame: firstTelemetryFrame,
-      pointerLocked: document.pointerLockElement === canvas,
-      actors: actors.length, bodiesOnScreen: bodiesOnScreen(),
-      liveChunks: liveChunks.length, bakedChunks: bakedChunks.length,
-      projectiles: pellets.length, droplets: bloodSim.droplets.length, splats: bloodSim.splats.length,
-      player: [...player.pos], yaw: player.yaw, pitch: player.pitch,
-      frameCap: handle.frameCap, refreshMs: handle.refreshMs,
-      renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
-      frozen: wanderFrozen, chunkBake: chunkBakeEnabled, bleed: bleedEnabled,
-      totalWounds: actors.reduce((n, a) => n + a.wounds().length, 0),
-      pendingBake: chunkBakeJobs.pendingId, bakeError: chunkBakeJobs.error,
-      tiles: gameTiles.diagnostics(), sdfScale, adaptive: adaptiveEnabled,
-      woundStep: actors[0]?.view.uniforms.perfCfg.value.z, analyticNormals: normalGradientMode,
+    ctx.telemetry.telemetry.frame(frame, {
+      hidden: document.hidden, visibilityGap: ctx.telemetry.visibilityGap, firstFrame: ctx.telemetry.firstFrame,
+      pointerLocked: document.pointerLockElement === ctx.boot.canvas,
+      actors: ctx.world.actors.length, bodiesOnScreen: bodiesOnScreen(),
+      liveChunks: ctx.bake.liveChunks.length, bakedChunks: ctx.bake.chunks.length,
+      projectiles: ctx.weapon.pellets.length, droplets: ctx.vfx.bloodSim.droplets.length, splats: ctx.vfx.bloodSim.splats.length,
+      player: [...ctx.player.player.pos], yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch,
+      frameCap: ctx.boot.handle.frameCap, refreshMs: ctx.boot.handle.refreshMs,
+      renderWidth: ctx.render.sdfLayer.marchTarget.width, renderHeight: ctx.render.sdfLayer.marchTarget.height,
+      frozen: ctx.demo.wanderFrozen, chunkBake: ctx.bake.enabled, bleed: ctx.vfx.bleedEnabled,
+      totalWounds: ctx.world.actors.reduce((n, a) => n + a.wounds().length, 0),
+      pendingBake: ctx.bake.jobs.pendingId, bakeError: ctx.bake.jobs.error,
+      tiles: ctx.boot.gameTiles.diagnostics(), sdfScale: ctx.render.sdfScale, adaptive: ctx.render.adaptiveEnabled,
+      woundStep: ctx.world.actors[0]?.view.uniforms.perfCfg.value.z, analyticNormals: ctx.telemetry.normalGradientMode,
       // Fill-bound march: cost tracks covered pixels, so a capture without an
       // area term cannot separate "wounds are expensive" from "close bodies
       // are expensive". CPU estimate — see the `coverage` declaration.
-      coverageFrac: +coverage.screenFrac.toFixed(4),
-      nearestBodyM: +coverage.nearestM.toFixed(2),
-      biggestBodyFrac: +coverage.biggestFrac.toFixed(4),
-      actorCull: actorCullEnabled, visibleBodies: cullCounts.visible,
-      halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
-      depthPrepass: sdfLayer.depthPreEnabled,
-      fieldMode: sdfLayer.fieldMode, fieldStyle: sdfLayer.fieldStyle, fieldComb: sdfLayer.fieldComb,
+      coverageFrac: +ctx.world.coverage.screenFrac.toFixed(4),
+      nearestBodyM: +ctx.world.coverage.nearestM.toFixed(2),
+      biggestBodyFrac: +ctx.world.coverage.biggestFrac.toFixed(4),
+      actorCull: ctx.render.actorCullEnabled, visibleBodies: ctx.world.cullCounts.visible,
+      halfRate: ctx.render.sdfLayer.halfRate, halfRateMode: ctx.render.sdfLayer.halfRateMode,
+      depthPrepass: ctx.render.sdfLayer.depthPreEnabled,
+      fieldMode: ctx.render.sdfLayer.fieldMode, fieldStyle: ctx.render.sdfLayer.fieldStyle, fieldComb: ctx.render.sdfLayer.fieldComb,
     });
-    firstTelemetryFrame = false; telemetryVisibilityGap = false;
-    telemetryControls?.afterFrame();
+    ctx.telemetry.firstFrame = false; ctx.telemetry.visibilityGap = false;
+    ctx.telemetry.controls?.afterFrame();
   };
-  const telemetryControls = import.meta.env.DEV ? createTelemetryControls(telemetry, async () => ({
+  ctx.telemetry.controls = import.meta.env.DEV ? createTelemetryControls(ctx.telemetry.telemetry, async () => ({
     build: await fetch('/__lab/telemetry-build', { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(r => { if (!r.ok) throw new Error('Build identity unavailable'); return r.json(); }),
     buildAtServerStart: import.meta.env.VITE_TELEMETRY_BUILD ?? { commit: 'unknown', dirty: true },
-    captureVersion: 2, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: gameTiles.diagnostics(),
-    page: location.pathname, query: location.search, userAgent: navigator.userAgent, backend: handle.backend,
-    visibility: document.visibilityState, frameCap: handle.frameCap,
-    fisheye: fisheyeReport(), renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
-    woundStep: actors[0]?.view.uniforms.perfCfg.value.z,
-    hullExitBound: actors[0]?.view.uniforms.perfCfg.value.x,
-    halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
-    depthPrepass: sdfLayer.depthPreEnabled, actorCull: actorCullEnabled,
-    fieldMode: sdfLayer.fieldMode, fieldStyle: sdfLayer.fieldStyle, fieldComb: sdfLayer.fieldComb,
+    captureVersion: 2, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: ctx.boot.gameTiles.diagnostics(),
+    page: location.pathname, query: location.search, userAgent: navigator.userAgent, backend: ctx.boot.handle.backend,
+    visibility: document.visibilityState, frameCap: ctx.boot.handle.frameCap,
+    fisheye: fisheyeReport(), renderWidth: ctx.render.sdfLayer.marchTarget.width, renderHeight: ctx.render.sdfLayer.marchTarget.height,
+    woundStep: ctx.world.actors[0]?.view.uniforms.perfCfg.value.z,
+    hullExitBound: ctx.world.actors[0]?.view.uniforms.perfCfg.value.x,
+    halfRate: ctx.render.sdfLayer.halfRate, halfRateMode: ctx.render.sdfLayer.halfRateMode,
+    depthPrepass: ctx.render.sdfLayer.depthPreEnabled, actorCull: ctx.render.actorCullEnabled,
+    fieldMode: ctx.render.sdfLayer.fieldMode, fieldStyle: ctx.render.sdfLayer.fieldStyle, fieldComb: ctx.render.sdfLayer.fieldComb,
     coverageMeaning: 'coverageFrac/biggestBodyFrac are a CPU bounding-sphere '
       + 'estimate of screen area covered by VISIBLE bodies, not a GPU pixel '
       + 'count; overlapping bodies double-count and occlusion is ignored, so '
@@ -9636,24 +9609,24 @@ async function main() {
     limits: { maxFrames: 18000, maxEvents: 4000, durationMs: 180000, maxSnapshots: 16, maxBytes: 12 * 1024 * 1024 },
     snapshots: 'At recording start and F9 only; snapshot-cost events identify instrumentation work.',
   }), undefined, active => {
-    firstTelemetryFrame = true; telemetryVisibilityGap = false;
-    handle.setFrameObserver(active ? telemetryFrame : null);
+    ctx.telemetry.firstFrame = true; ctx.telemetry.visibilityGap = false;
+    ctx.boot.handle.setFrameObserver(active ? telemetryFrame : null);
     if (active) captureTelemetryScene('recording-start');
   }, () => captureTelemetryScene('visual-issue')) : null;
-  import.meta.hot?.dispose(() => telemetryControls?.dispose());
+  import.meta.hot?.dispose(() => ctx.telemetry.controls?.dispose());
 
   // CONTROLLED FORWARD DEPTH PROBES (evidence seam backing __sdfGame
   // spawnDepthProbes/clearDepthProbes below). Deliberately UNREGISTERED:
   // the router hides unregistered renderables from the mesh/sdf G-buffer
   // passes and leaves them alone in the forward route, so these sprites
   // only ever composite depth-tested over the presented frame.
-  const depthProbes: THREE.Sprite[] = [];
+  ctx.render.depthProbes = [];
   const clearDepthProbes = () => {
-    for (const s of depthProbes) {
+    for (const s of ctx.render.depthProbes) {
       scene.remove(s);
       s.material.dispose();
     }
-    depthProbes.length = 0;
+    ctx.render.depthProbes.length = 0;
   };
   import.meta.hot?.dispose(clearDepthProbes);
 
@@ -9680,20 +9653,20 @@ async function main() {
   const readMarchTargetForHash = async (): Promise<{
     width: number; height: number; floatsPerTexel: number; data: ArrayLike<number>;
   }> => {
-    const t = sdfLayer.marchTarget;
+    const t = ctx.render.sdfLayer.marchTarget;
     const w = t.width, h = t.height;
     // 4 floats per texel is the march target's contract (rgba32f). Asserted
     // rather than assumed: a format change would otherwise be hashed as
     // garbage that still looks like a number.
     const floatsPerTexel = 4;
     if (!w || !h) throw new Error(`frameHash: marchTarget is ${w}x${h}`);
-    const data = await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h);
+    const data = await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h);
     return { width: w, height: h, floatsPerTexel, data: data as ArrayLike<number> };
   };
   /** The gather's dynamic probe layer, or null when the gather is not bound
    *  (a legitimate boot: `?probedyn=0` and the lab pages have none). */
   const readProbeDynForHash = async (): Promise<Float32Array | null> =>
-    probeGather ? await probeGather.readback() : null;
+    ctx.probes.gather ? await ctx.probes.gather.readback() : null;
   /** THE GATHER'S PACKED INPUTS — the bone capsules it gathers against, and the
    *  live count. Hashing these separates "two boots posed the bodies
    *  differently" from "the gather diverged on identical inputs", which is the
@@ -9702,14 +9675,14 @@ async function main() {
     // `probeLastCapsules` is the module-scope mirror of the draw callback's own
     // `probeCapsuleCount` (the count is written there and published here), which
     // is the only one this scope can see.
-    ({ data: probeCapsuleArrays.ab, count: probeLastCapsules, floatsPerInstance: INSTANCE_FLOATS });
+    ({ data: ctx.probes.capsuleArrays.ab, count: ctx.probes.lastCapsules, floatsPerInstance: INSTANCE_FLOATS });
 
   /** THE ONE frame-hash dependency set. Kept as a single object on purpose:
    *  this was four inline object literals, and they SILENTLY DRIFTED — two grew
    *  `readInstances` and two did not, so the instances layer vanished from a
    *  run with no error. A hash whose layer set depends on which call site asked
    *  is not a hash. */
-  const frameHashDeps = {
+  ctx.boot.frameHashDeps = {
     readMarchTarget: readMarchTargetForHash,
     readProbeDyn: readProbeDynForHash,
     readInstances: readInstancesForHash,
@@ -9735,7 +9708,7 @@ function performBenchAction(a: BenchAction): void {
         // missed, and an outer corner pointed the camera at a wall
         // with bodies 1 -> 0 on screen. The room's own actors are
         // the only thing that reliably says where to look.
-        const mine = actors.filter(x => x.room === a.room);
+        const mine = ctx.world.actors.filter(x => x.room === a.room);
         const cx = (r.minX + r.maxX) / 2;
         const cz = (r.minZ + r.maxZ) / 2;
         let tx = cx;
@@ -9755,25 +9728,25 @@ function performBenchAction(a: BenchAction): void {
         const inset = 0.6;
         const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
         const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
-        player.pos = [px, 0, pz];
-        player.vel = [0, 0, 0];
+        ctx.player.player.pos = [px, 0, pz];
+        ctx.player.player.vel = [0, 0, 0];
         // atan2(dx, −dz): the page's forward is (sin yaw, −cos
         // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
         // (z-mirrored) since cdba91f.
-        player.yaw = Math.atan2(tx - px, -(tz - pz));
-        player.pitch = 0;
-        player.grounded = true;
+        ctx.player.player.yaw = Math.atan2(tx - px, -(tz - pz));
+        ctx.player.player.pitch = 0;
+        ctx.player.player.grounded = true;
       }
       break;
     }
-    case 'freeze': wanderFrozen = a.on; break;
-    case 'look': player.yaw = a.yaw; player.pitch = a.pitch; break;
+    case 'freeze': ctx.demo.wanderFrozen = a.on; break;
+    case 'look': ctx.player.player.yaw = a.yaw; ctx.player.player.pitch = a.pitch; break;
     case 'aimSurface': aimAtNearestSurface(); break;
     case 'fire': fire(a.barrels); break;
     case 'fireSlug': {
-      const keep = slugMode;
-      slugMode = true;
-      try { fire(1); } finally { slugMode = keep; }
+      const keep = ctx.weapon.slugMode;
+      ctx.weapon.slugMode = true;
+      try { fire(1); } finally { ctx.weapon.slugMode = keep; }
       break;
     }
     // RECORDED INPUT (stage 3): stage the frame; `tick` consumes it through
@@ -9781,7 +9754,7 @@ function performBenchAction(a: BenchAction): void {
     // it here as well would double the shot. `replayActive` must be on (the
     // bench's demo path sets it) or tick would overwrite this frame from the
     // live listeners.
-    case 'input': currentInputFrame = a.frame; break;
+    case 'input': ctx.player.currentInputFrame = a.frame; break;
   }
 }
 
@@ -9800,11 +9773,11 @@ function performBenchAction(a: BenchAction): void {
   function sceneCensus(): { bodies: number; wounds: number; chunks: number; droplets: number; splats: number; gooQuads: number } {
     return {
       bodies: bodiesOnScreen(),
-      wounds: actors.reduce((n, a) => n + a.wounds().length, 0),
-      chunks: liveChunks.length,
-      droplets: bloodSim.droplets.length,
-      splats: bloodSim.splats.length,
-      gooQuads: gooLayer?.liveCount ?? 0,
+      wounds: ctx.world.actors.reduce((n, a) => n + a.wounds().length, 0),
+      chunks: ctx.bake.liveChunks.length,
+      droplets: ctx.vfx.bloodSim.droplets.length,
+      splats: ctx.vfx.bloodSim.splats.length,
+      gooQuads: ctx.goo.layer?.liveCount ?? 0,
     };
   }
 
@@ -9816,7 +9789,7 @@ function performBenchAction(a: BenchAction): void {
     const q = new URLSearchParams(query);
     if (q.has('crowd')) {
       const on = q.get('crowd') === '1';
-      if (on !== crowdOn) { crowdOn = on; rebuildCast(); }
+      if (on !== ctx.crowd.on) { ctx.crowd.on = on; rebuildCast(); }
     }
     if (q.has('scale')) {
       const v = Number(q.get('scale'));
@@ -9830,20 +9803,20 @@ function performBenchAction(a: BenchAction): void {
   function placeFromDemo(file: DemoFile): void {
     const sp = file.meta?.startPose as { x?: number; z?: number; yaw?: number; pitch?: number } | undefined;
     if (sp && Number.isFinite(sp.x) && Number.isFinite(sp.z)) {
-      player.pos = [sp.x as number, 0, sp.z as number];
-      player.vel = [0, 0, 0];
-      player.yaw = Number.isFinite(sp.yaw) ? (sp.yaw as number) : 0;
-      player.pitch = Number.isFinite(sp.pitch) ? (sp.pitch as number) : 0;
-      player.grounded = true;
+      ctx.player.player.pos = [sp.x as number, 0, sp.z as number];
+      ctx.player.player.vel = [0, 0, 0];
+      ctx.player.player.yaw = Number.isFinite(sp.yaw) ? (sp.yaw as number) : 0;
+      ctx.player.player.pitch = Number.isFinite(sp.pitch) ? (sp.pitch as number) : 0;
+      ctx.player.player.grounded = true;
       return;
     }
     const r = ROOMS.find(x => x.id === file.room);
     if (r) {
-      player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
-      player.vel = [0, 0, 0];
-      player.yaw = 0;
-      player.pitch = 0;
-      player.grounded = true;
+      ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+      ctx.player.player.vel = [0, 0, 0];
+      ctx.player.player.yaw = 0;
+      ctx.player.player.pitch = 0;
+      ctx.player.player.grounded = true;
     }
   }
 
@@ -9879,42 +9852,42 @@ function performBenchAction(a: BenchAction): void {
   }
 
   /** The F7 HUD line, created lazily and parked above the telemetry controls. */
-  let demoHudEl: HTMLDivElement | null = null;
+  ctx.demo.hudEl = null;
   function updateDemoHud(): void {
-    if (!recorder) {
-      if (demoHudEl) demoHudEl.hidden = true;
+    if (!ctx.demo.recorder) {
+      if (ctx.demo.hudEl) ctx.demo.hudEl.hidden = true;
       return;
     }
-    if (!demoHudEl) {
-      demoHudEl = document.createElement('div');
-      demoHudEl.id = 'demo-rec-status';
-      demoHudEl.setAttribute('style',
+    if (!ctx.demo.hudEl) {
+      ctx.demo.hudEl = document.createElement('div');
+      ctx.demo.hudEl.id = 'demo-rec-status';
+      ctx.demo.hudEl.setAttribute('style',
         'position:fixed;bottom:52px;left:12px;z-index:10001;padding:4px 8px;'
         + 'background:#2a0d0dee;color:#ffb4b4;font:12px monospace;border:1px solid #a04a4a;'
         + 'border-radius:5px;pointer-events:none');
-      document.body.appendChild(demoHudEl);
+      document.body.appendChild(ctx.demo.hudEl);
     }
-    demoHudEl.hidden = false;
-    demoHudEl.textContent = `REC \u25cf  frames: ${recorder.frames}`;
+    ctx.demo.hudEl.hidden = false;
+    ctx.demo.hudEl.textContent = `REC \u25cf  frames: ${ctx.demo.recorder.frames}`;
   }
 
   /** F7 / `__sdfGame.demoRecord('start')`. The header is snapshotted at START,
    *  not stop: the seed and query must be the ones the run BEGAN under, or a
    *  replay boots into a different world than the recording captured. */
   function demoRecordStart(): boolean {
-    if (recorder) return false;
-    replayActive = false;
-    recorder = createDemoRecorder({
-      seed: demoSeed,
+    if (ctx.demo.recorder) return false;
+    ctx.demo.replayActive = false;
+    ctx.demo.recorder = createDemoRecorder({
+      seed: ctx.demo.seed,
       query: location.search.replace(/^\?/, ''),
       room: playerRoomId(),
       dt: 1 / 60,
       meta: {
-        startPose: { x: player.pos[0], z: player.pos[2], yaw: player.yaw, pitch: player.pitch },
+        startPose: { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch },
         // Free-aim moves a RETICLE; mouselook turns the camera. Which one is
         // live decides whether a replay pins `look` or integrates dx/dy, so it
         // is part of the recording's state, not the view's.
-        freeAim: freeAimOn,
+        freeAim: ctx.player.freeAimOn,
         label: 'live',
       },
     });
@@ -9925,9 +9898,9 @@ function performBenchAction(a: BenchAction): void {
   /** Stop and (optionally) save. Returns the file so a caller keeps it in
    *  memory; the POST is best-effort — a failed save must not lose the run. */
   async function demoRecordStop(save = true): Promise<DemoFile | null> {
-    if (!recorder) return null;
-    const file = recorder.stop();
-    recorder = null;
+    if (!ctx.demo.recorder) return null;
+    const file = ctx.demo.recorder.stop();
+    ctx.demo.recorder = null;
     updateDemoHud();
     if (save) {
       try {
@@ -9951,8 +9924,8 @@ function performBenchAction(a: BenchAction): void {
    *  step, so the reply is always in hand on the pinned frame. Live play never
    *  calls it. */
   async function awaitBakes(): Promise<void> {
-    await chunkBakeJobs.settled();
-    if (soldierCorpses) await soldierCorpses.settled();
+    await ctx.bake.jobs.settled();
+    if (ctx.world.soldierCorpses) await ctx.world.soldierCorpses.settled();
   }
 
   /** THE REPLAY DRIVER. Owns the sim: stops the loop, resets the sim clock and
@@ -9967,33 +9940,33 @@ function performBenchAction(a: BenchAction): void {
   async function runDemoReplay(file: DemoFile, opts: { hold?: boolean; hash?: boolean; every?: number; hashFrom?: number; label?: string } = {}) {
     if (!file || file.version !== DEMO_VERSION) throw new Error(`demoReplay: version ${file?.version} is not ${DEMO_VERSION}`);
     if (!Array.isArray(file.frames) || file.frames.length === 0) throw new Error('demoReplay: recording has no frames');
-    if (opts.hold !== false) demoHold = true;
-    handle.setLoopRunning(false);
-    const hadAdaptive = adaptiveEnabled; adaptiveEnabled = false;
-    const hadReplay = replayActive; replayActive = true;
-    const hadLock = simLocked;
+    if (opts.hold !== false) ctx.demo.hold = true;
+    ctx.boot.handle.setLoopRunning(false);
+    const hadAdaptive = ctx.render.adaptiveEnabled; ctx.render.adaptiveEnabled = false;
+    const hadReplay = ctx.demo.replayActive; ctx.demo.replayActive = true;
+    const hadLock = ctx.demo.simLocked;
     // Render-side cadences reset + settled BEFORE the sim runs, exactly as the
     // bench does under ?simidle. inert for a non-hash caller and REQUIRED for a
     // hash: without it the frame parity and instance pack at frame 0 depend on
     // how long the page happened to boot.
-    demoHold = true;
-    demoSeedBase = probeFrame;
-    postAa.setTimeFrozen(true);
-    sdfLayer.resetFieldPhase();
-    probeGatherTick = 0;
+    ctx.demo.hold = true;
+    ctx.demo.seedBase = ctx.probes.frame;
+    ctx.render.postAa.setTimeFrozen(true);
+    ctx.render.sdfLayer.resetFieldPhase();
+    ctx.probes.gatherTick = 0;
     // AND the pack waiting to be dispatched. Without this the first replay draw
     // dispatches a pack left over from boot, so the gather gets one extra
     // dispatch in one run and not the other (measured: 301 vs 300), which moves
     // the blended dynamic layer and makes the frame hash flap.
-    pendingGather = null;
-    probeGather?.reset();
-    simLocked = false;
-    const hadHoldPlayer = holdPlayerPose; holdPlayerPose = false;
+    ctx.probes.pendingGather = null;
+    ctx.probes.gather?.reset();
+    ctx.demo.simLocked = false;
+    const hadHoldPlayer = ctx.player.holdPlayerPose; ctx.player.holdPlayerPose = false;
     // Free-aim vs mouselook is a SIM input mode: it decides whether `look` is
     // pinned or dx/dy drives the reticle. The recording says which one it was
     // captured in; an old file without the flag leaves the page as booted.
-    const hadFreeAim = freeAimOn;
-    if (typeof file.meta?.freeAim === 'boolean') freeAimOn = file.meta.freeAim;
+    const hadFreeAim = ctx.player.freeAimOn;
+    if (typeof file.meta?.freeAim === 'boolean') ctx.player.freeAimOn = file.meta.freeAim;
     const iter = createDemoPlayer(file);
     const hashes: import('./frame-hash').FrameHash[] = [];
     const parity: number[] = [];
@@ -10001,7 +9974,7 @@ function performBenchAction(a: BenchAction): void {
     const hashFrom = Math.max(0, Math.floor(opts.hashFrom ?? 0));
     const started = performance.now();
     let frames = 0;
-    replayFrame = 0;
+    ctx.demo.replayFrame = 0;
     try {
       // The replay starts from the SAME origin the synth/recorder did: sim
       // clock zeroed and the named streams reseeded, so a recorded draw index
@@ -10010,22 +9983,22 @@ function performBenchAction(a: BenchAction): void {
       setRngSeed(file.seed);
       applyDemoQuery(file.query);
       placeFromDemo(file);
-      simLocked = false;
-      prevInputKeys = new Set<string>();
-      currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [player.yaw, player.pitch] };
+      ctx.demo.simLocked = false;
+      ctx.player.prevInputKeys = new Set<string>();
+      ctx.player.currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [ctx.player.player.yaw, ctx.player.player.pitch] };
       // SETTLE BEFORE FRAME 0. Two replays of one recording differed at the
       // FIRST sampled frame only (frame 0 or 92 alike) — whatever the boot left
       // queued (worker replies, uploads, the first GPU fence) landed on the
       // same yield that took the first hash. Drain it here, before any sim
       // frame, so frame 0 starts from a page that has nothing in flight.
       await awaitBakes();
-      await handle.resolveGpu();
+      await ctx.boot.handle.resolveGpu();
       for (let f = 0; ; f++) {
         const frame = iter.next();
         if (!frame) break;
-        currentInputFrame = frame;
+        ctx.player.currentInputFrame = frame;
         await awaitBakes();
-        handle.step(file.dt);
+        ctx.boot.handle.step(file.dt);
         frames++;
         // `hashFrom` skips the RENDER warm-up frames: the scripted recorder
         // settles `warmup` frames before its first hash, and a replay gets the
@@ -10035,18 +10008,18 @@ function performBenchAction(a: BenchAction): void {
         // field as the regular samples: a recording with an even frame count
         // would otherwise mix parities and the ab gate refuses the run.
         if (opts.hash && f >= hashFrom && (f % every === 0 || (f === file.frames.length - 1 && (f & 1) === (hashFrom & 1)))) {
-          await handle.resolveGpu();
-          hashes.push(await hashFrame(frameHashDeps, f));
+          await ctx.boot.handle.resolveGpu();
+          hashes.push(await hashFrame(ctx.boot.frameHashDeps, f));
           parity.push(f % 2);
         }
       }
     } finally {
-      replayActive = hadReplay;
-      simLocked = hadLock;
-      adaptiveEnabled = hadAdaptive;
-      holdPlayerPose = hadHoldPlayer;
-      freeAimOn = hadFreeAim;
-      currentInputFrame = neutralInput(currentInputFrame);
+      ctx.demo.replayActive = hadReplay;
+      ctx.demo.simLocked = hadLock;
+      ctx.render.adaptiveEnabled = hadAdaptive;
+      ctx.player.holdPlayerPose = hadHoldPlayer;
+      ctx.player.freeAimOn = hadFreeAim;
+      ctx.player.currentInputFrame = neutralInput(ctx.player.currentInputFrame);
     }
     return {
       frames,
@@ -10055,11 +10028,11 @@ function performBenchAction(a: BenchAction): void {
       parity,
       every,
       ms: Math.round(performance.now() - started),
-      dispatches: probeFrame - demoSeedBase,
+      dispatches: ctx.probes.frame - ctx.demo.seedBase,
       label: opts.label ?? file.startedAt,
       // Bake outcomes, so a diverging replay can be blamed on a swap without a
       // second run: which soldiers baked, the last gib swap frame, bake count.
-      bakes: { corpse: soldierCorpses?.stats() ?? null, chunkSwapFrame: lastBakeSwapFrame, chunkBakes: totalBakes, chunkError: chunkBakeJobs.error },
+      bakes: { corpse: ctx.world.soldierCorpses?.stats() ?? null, chunkSwapFrame: ctx.bake.lastSwapFrame, chunkBakes: ctx.bake.totalBakes, chunkError: ctx.bake.jobs.error },
     };
   }
 
@@ -10074,18 +10047,18 @@ function performBenchAction(a: BenchAction): void {
     const scenario = buildFirefight({ room, walkFrames: o.walkFrames, fireFrames: o.fireFrames, gibFrames: o.gibFrames });
     const problems = validateScenario(scenario);
     if (problems.length) throw new Error(`demoSynthesize: bad scenario: ${problems.join('; ')}`);
-    handle.setLoopRunning(false);
-    const hadLock = simLocked; simLocked = false;
-    const hadAdaptive = adaptiveEnabled; adaptiveEnabled = false;
-    const hadReplay = replayActive; replayActive = true;
-    const hadHold = demoHold; demoHold = true;
-    const slugWas = slugMode;
+    ctx.boot.handle.setLoopRunning(false);
+    const hadLock = ctx.demo.simLocked; ctx.demo.simLocked = false;
+    const hadAdaptive = ctx.render.adaptiveEnabled; ctx.render.adaptiveEnabled = false;
+    const hadReplay = ctx.demo.replayActive; ctx.demo.replayActive = true;
+    const hadHold = ctx.demo.hold; ctx.demo.hold = true;
+    const slugWas = ctx.weapon.slugMode;
     // The scripted aim sets player.yaw/pitch directly, so the synthetic
     // recording is captured in MOUSELOOK mode (freeAim=false) and records that
     // as a precondition. Otherwise a replay would run the reticle path and
     // ignore the recorded look.
-    const aimWas = freeAimOn;
-    freeAimOn = false;
+    const aimWas = ctx.player.freeAimOn;
+    ctx.player.freeAimOn = false;
     let rec: DemoRecorder | null = null;
     try {
       // The scenario's frame-0 teleport is a PRECONDITION, not an input: its
@@ -10094,11 +10067,11 @@ function performBenchAction(a: BenchAction): void {
       const tele = scenario.steps.find(s => s.at === 0 && s.action.kind === 'teleport');
       if (tele) performBenchAction(tele.action);
       resetSimClock();
-      setRngSeed(demoSeed);
-      slugMode = false;
-      currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [player.yaw, player.pitch] };
+      setRngSeed(ctx.demo.seed);
+      ctx.weapon.slugMode = false;
+      ctx.player.currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [ctx.player.player.yaw, ctx.player.player.pitch] };
       rec = createDemoRecorder({
-        seed: demoSeed,
+        seed: ctx.demo.seed,
         query: location.search.replace(/^\?/, ''),
         room,
         dt: 1 / 60,
@@ -10107,10 +10080,10 @@ function performBenchAction(a: BenchAction): void {
           script: 'firefight',
           synthetic: true,
           freeAim: false,
-          startPose: { x: player.pos[0], z: player.pos[2], yaw: player.yaw, pitch: player.pitch },
+          startPose: { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch },
         },
       });
-      prevInputKeys = new Set<string>();
+      ctx.player.prevInputKeys = new Set<string>();
       for (let f = 0; f < scenario.frames; f++) {
         let fire: 0 | 1 | 2 = 0;
         let toggleSlug = false;
@@ -10121,34 +10094,34 @@ function performBenchAction(a: BenchAction): void {
         }
         const frame: DemoFrame = {
           keys: toggleSlug ? ['KeyE'] : [], dx: 0, dy: 0, fire, reload: false,
-          look: [player.yaw, player.pitch],
+          look: [ctx.player.player.yaw, ctx.player.player.pitch],
         };
         // Stage, do NOT apply: `tick` consumes currentInputFrame through
         // applyInputFrame, exactly as the bench's `input` action does. Applying
         // it here too would fire every shot twice.
-        currentInputFrame = frame;
+        ctx.player.currentInputFrame = frame;
         rec.push(frame);
         await awaitBakes();
-        handle.step(1 / 60);
+        ctx.boot.handle.step(1 / 60);
         if (toggleSlug) {
           const off: DemoFrame = {
             keys: ['KeyE'], dx: 0, dy: 0, fire: 0, reload: false,
-            look: [player.yaw, player.pitch],
+            look: [ctx.player.player.yaw, ctx.player.player.pitch],
           };
-          currentInputFrame = off;
+          ctx.player.currentInputFrame = off;
           rec.push(off);
           await awaitBakes();
-          handle.step(1 / 60);
+          ctx.boot.handle.step(1 / 60);
         }
       }
     } finally {
-      slugMode = slugWas;
-      freeAimOn = aimWas;
-      replayActive = hadReplay;
-      simLocked = hadLock;
-      adaptiveEnabled = hadAdaptive;
-      demoHold = hadHold;
-      currentInputFrame = neutralInput(currentInputFrame);
+      ctx.weapon.slugMode = slugWas;
+      ctx.player.freeAimOn = aimWas;
+      ctx.demo.replayActive = hadReplay;
+      ctx.demo.simLocked = hadLock;
+      ctx.render.adaptiveEnabled = hadAdaptive;
+      ctx.demo.hold = hadHold;
+      ctx.player.currentInputFrame = neutralInput(ctx.player.currentInputFrame);
     }
     if (!rec) throw new Error('demoSynthesize: recorder was never created');
     return rec.stop();
@@ -10158,7 +10131,7 @@ function performBenchAction(a: BenchAction): void {
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'F7' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
-    if (recorder) void demoRecordStop(true);
+    if (ctx.demo.recorder) void demoRecordStop(true);
     else demoRecordStart();
   });
 
@@ -10166,11 +10139,11 @@ function performBenchAction(a: BenchAction): void {
   mark('draw-ready');
   // Everything the draw callback reads now exists — let frames draw. See the
   // boot-frame gate's note at setDrawFn.
-  drawReady = true;
+  ctx.boot.drawReady = true;
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     /** The boot demo seed: `?seed=` when given, otherwise random. Reported so
      *  a recording/replay can pin it (stage 3 seam `demoInfo()`). */
-    get demoSeed() { return demoSeed; },
+    get demoSeed() { return ctx.demo.seed; },
     /** PIPELINE-CREATION LOG (pipeline-log.ts, startup-hitch attribution).
      *  `setPipelineLog(true)` starts recording per-creation entries (the
      *  device wraps are installed at boot regardless); `pipelineLog()` reads
@@ -10185,12 +10158,12 @@ function performBenchAction(a: BenchAction): void {
     /** What the recorder/player is doing right now. `frame` is frames recorded
      *  (live) or frames replayed (replay) — never a wall-clock measure. */
     demoInfo: () => ({
-      recording: !!recorder,
-      replaying: replayActive,
-      frame: replayActive ? replayFrame : (recorder?.frames ?? 0),
-      seed: demoSeed,
+      recording: !!ctx.demo.recorder,
+      replaying: ctx.demo.replayActive,
+      frame: ctx.demo.replayActive ? ctx.demo.replayFrame : (ctx.demo.recorder?.frames ?? 0),
+      seed: ctx.demo.seed,
       room: playerRoomId(),
-      demoHold,
+      demoHold: ctx.demo.hold,
     }),
     /** Replay a `.dem` (`file` object, or a path/URL to fetch) headlessly and
      *  return `{ frames, census, ... }`. `hash: true` also digests the frame
@@ -10211,20 +10184,20 @@ function performBenchAction(a: BenchAction): void {
      *  firefight through the input seam and return the recording. See
      *  demoSynthesize's note — it records a fight that actually happened. */
     demoSynthesize,
-    telemetry: telemetryControls ? {
-      start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
-      get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
+    telemetry: ctx.telemetry.controls ? {
+      start: () => ctx.telemetry.controls!.start(), stop: () => ctx.telemetry.controls!.stop(), mark: () => ctx.telemetry.controls!.mark(),
+      get active() { return ctx.telemetry.telemetry.active; }, lastCapture: () => ctx.telemetry.controls!.lastCapture(),
     } : null,
     /** Pass-timing seam: march the gib chunks in their own labelled pass
      *  ('split'), skip them ('skip', wrong frame on purpose), or the shipped
      *  single pass ('merged'). See sdf-layer.ts setChunkPass. */
-    setChunkPass: (mode: 'merged' | 'split' | 'skip') => sdfLayer.setChunkPass(mode),
-    get chunkPass() { return sdfLayer.chunkPass; },
+    setChunkPass: (mode: 'merged' | 'split' | 'skip') => ctx.render.sdfLayer.setChunkPass(mode),
+    get chunkPass() { return ctx.render.sdfLayer.chunkPass; },
     setTiles: setGameTiles,
     /** Prototype: per-ray sphere compaction of the tile list. Only has an
      *  effect while tiles are on (tiles-playtest). */
-    setTileRayCull: (on: boolean) => gameTiles.setRayCull(on),
-    tiles: () => gameTiles.diagnostics(),
+    setTileRayCull: (on: boolean) => ctx.boot.gameTiles.setRayCull(on),
+    tiles: () => ctx.boot.gameTiles.diagnostics(),
     /** CROWD STAGE A: switch between the per-body path and one draw per
      *  character type (?crowd=1 at boot). BOTH directions rebuild the cast:
      *  view.rebind leaves a view's own material pointing at the crowd type's
@@ -10232,8 +10205,8 @@ function performBenchAction(a: BenchAction): void {
      *  a fresh spawn is the only honest way back (Task 5 note). `?crowd=0` is
      *  the cheaper canonical opt-out — it never attaches at all. */
     setCrowd(on: boolean) {
-      if (on === crowdOn) return;
-      crowdOn = on;
+      if (on === ctx.crowd.on) return;
+      ctx.crowd.on = on;
       rebuildCast();
     },
     /** STAGE a-2: swap the crowd dispatch on every live type (and remember it
@@ -10241,32 +10214,32 @@ function performBenchAction(a: BenchAction): void {
      *  on the next sync(); a fresh page boot with ?crowddispatch= is the
      *  cheaper way to A/B. */
     setCrowdDispatch(mode: 'boxes' | 'quad') {
-      crowdDispatch = mode;
-      for (const t of crowdTypes.values()) t.setDispatch(mode);
+      ctx.crowd.dispatch = mode;
+      for (const t of ctx.crowd.types.values()) t.setDispatch(mode);
     },
     /** Crowd stage a census: the flag, the dispatch, and per type
      *  attached/live slots plus tile-binding fallbacks (bench + hash
      *  diagnostics). */
     crowdInfo: () => ({
-      on: crowdOn,
+      on: ctx.crowd.on,
       // DEFAULT FLIP (task 8, 2026-09-14). `default` is the compiled-in
       // default; `flag` echoes the opt-out so a script can distinguish "on
       // because default" from "on because ?crowd=1". `fallbackReason` is set
       // only when a stage-3-incompatible pass forced this boot per-body.
       default: true,
-      flag: crowdParam === '1' ? 'crowd=1' : crowdParam === '0' ? 'crowd=0' : null,
-      fallbackReason: crowdFallbackReason,
+      flag: ctx.crowd.param === '1' ? 'crowd=1' : ctx.crowd.param === '0' ? 'crowd=0' : null,
+      fallbackReason: ctx.crowd.fallbackReason,
       // The crowd march requires its tile list (see the draw-fn sync block):
       // true whenever the crowd is live. Gated on `on` so a crowd-off boot
       // with stale type uniforms cannot read true.
-      tilesOn: crowdOn && [...crowdTypes.values()].some(t => t.info().tilesOn),
-      dispatch: crowdDispatch,
+      tilesOn: ctx.crowd.on && [...ctx.crowd.types.values()].some(t => t.info().tilesOn),
+      dispatch: ctx.crowd.dispatch,
       // Fire/gib profiling (2026-09-14): aggregate counters over the live
       // types, computed from ONE info() pass (info() runs the diagnostic
       // tile binner on demand, so calling it repeatedly is not free).
       ...(() => {
         let atlasFlushes = 0, atlasRows = 0, recordsFlushes = 0, volumeRebinds = 0;
-        const types = [...crowdTypes].map(([n, t]) => {
+        const types = [...ctx.crowd.types].map(([n, t]) => {
           const i = t.info();
           atlasFlushes += i.atlasFlushes; atlasRows += i.atlasRows;
           recordsFlushes += i.recordsFlushes; volumeRebinds += i.volumeRebinds;
@@ -10275,28 +10248,28 @@ function performBenchAction(a: BenchAction): void {
         return { atlasFlushes, atlasRows, recordsFlushes, volumeRebinds, types };
       })(),
     }),
-    backend: handle.backend,
+    backend: ctx.boot.handle.backend,
     /** Place the player at (x, z) with the given yaw/pitch and zero velocity
      *  (the distance-crowd bench's framing seam, 2026-09-14). Same fields
      *  `teleport()` writes; returns the enclosure key under the feet so a
      *  caller can assert the pose landed in the intended room. */
     placePlayer(p: { x: number; z: number; yaw: number; pitch?: number }) {
-      player.pos = [p.x, 0, p.z];
-      player.vel = [0, 0, 0];
-      player.yaw = p.yaw;
-      player.pitch = p.pitch ?? 0;
-      player.grounded = true;
+      ctx.player.player.pos = [p.x, 0, p.z];
+      ctx.player.player.vel = [0, 0, 0];
+      ctx.player.player.yaw = p.yaw;
+      ctx.player.player.pitch = p.pitch ?? 0;
+      ctx.player.player.grounded = true;
       return enclosureKeyAt(p.x, p.z);
     },
     /** Set the player pose. y defaults to 0 (feet on the floor). */
     setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {
-      player.pos = [x, y, z];
-      player.vel = [0, 0, 0];
-      player.yaw = yaw;
-      player.pitch = pitch;
-      player.grounded = y === 0;
+      ctx.player.player.pos = [x, y, z];
+      ctx.player.player.vel = [0, 0, 0];
+      ctx.player.player.yaw = yaw;
+      ctx.player.player.pitch = pitch;
+      ctx.player.player.grounded = y === 0;
     },
-    pose: () => ({ pos: [...player.pos] as Vec3, yaw: player.yaw, pitch: player.pitch }),
+    pose: () => ({ pos: [...ctx.player.player.pos] as Vec3, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch }),
     /** Project a world point through the LIVE game camera to NDC + a
      *  behind-camera flag (M2 task 5 boot driver: proves a capture subject
      *  is actually IN FRAME — the old wounded capture faced +Z with the
@@ -10324,26 +10297,26 @@ function performBenchAction(a: BenchAction): void {
     teleport(roomId: number) {
       const r = ROOMS.find(r => r.id === roomId);
       if (!r) return false;
-      player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
-      player.vel = [0, 0, 0];
-      player.yaw = 0;
-      player.pitch = 0;
+      ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+      ctx.player.player.vel = [0, 0, 0];
+      ctx.player.player.yaw = 0;
+      ctx.player.player.pitch = 0;
       return true;
     },
     /** The player's ground position — a capture rig needs it to stand beside a
      *  chosen body rather than detonate across the room. Read-only. */
-    playerPos: () => [...player.pos] as Vec3,
+    playerPos: () => [...ctx.player.player.pos] as Vec3,
     /** Enclosure key under the player's feet ('room1'..'room5', tunnel, 'void'). */
-    room: () => enclosureKeyAt(player.pos[0], player.pos[2]),
+    room: () => enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]),
     /** Hand-step N frames at dt seconds each; stops the rAF loop first. */
     step(n: number, dt = 1 / 60) {
-      handle.setLoopRunning(false);
+      ctx.boot.handle.setLoopRunning(false);
       for (let i = 0; i < n; i++) {
-        handle.step(dt);
-        if (frameCount++ % 10 === 0) updateHud();
+        ctx.boot.handle.step(dt);
+        if (ctx.demo.frameCount++ % 10 === 0) updateHud();
       }
     },
-    setLoopRunning: (on: boolean) => handle.setLoopRunning(on),
+    setLoopRunning: (on: boolean) => ctx.boot.handle.setLoopRunning(on),
     /** IS THE STATIC PROBE GRID BAKED YET?
      *
      *  The per-room grids are gathered ONCE at boot in a module WORKER, and the
@@ -10355,7 +10328,7 @@ function performBenchAction(a: BenchAction): void {
      *
      *  This is a precondition seam, not a gate: it reports, it does not block.
      *  See scripts/sdf-demo-hash.mjs, which refuses to record until it is true. */
-    roomProbesReady: () => roomProbes.ready,
+    roomProbesReady: () => ctx.world.roomProbes.ready,
     /** THE FRAME HASH (deterministic demo recordings stage 2, 2026-09-10).
      *  Hashes the CURRENT rendered state — it does NOT step or mutate
      *  anything, which is what makes a recorded frame reproducible: the
@@ -10378,7 +10351,7 @@ function performBenchAction(a: BenchAction): void {
      *    await __sdfGame.frameHash(0);         // step first, hash second
      */
     frameHash: async (frame = 0) =>
-      hashFrame(frameHashDeps, frame),
+      hashFrame(ctx.boot.frameHashDeps, frame),
     /** THE PRESENTED FRAME, as the browser composes it.
      *
      *  WHY THIS IS A SEPARATE PATH from `frameHash`. `frameHash` reads GPU
@@ -10401,7 +10374,7 @@ function performBenchAction(a: BenchAction): void {
      *  hashes it (scripts/sdf-demo-hash.mjs, using the same tested byte digest),
      *  so no image codec is needed in the page. */
     presentedShot: (): string => {
-      const canvas = handle.renderer.domElement as HTMLCanvasElement;
+      const canvas = ctx.boot.handle.renderer.domElement as HTMLCanvasElement;
       const url = canvas.toDataURL('image/png');
       const comma = url.indexOf(',');
       return comma >= 0 ? url.slice(comma + 1) : url;
@@ -10426,10 +10399,10 @@ function performBenchAction(a: BenchAction): void {
      * target, so "the output" is the canvas — use presentedShot for that).
      */
     readOutputTarget: async (): Promise<{ w: number; h: number; rgba32f: string } | null> => {
-      const rt = sdfLayer.outputTarget;
+      const rt = ctx.render.sdfLayer.outputTarget;
       if (!rt) return null;
       const w = rt.width, h = rt.height;
-      const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h));
+      const raw = new Float32Array(await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h));
       const bytes = new Uint8Array(raw.buffer);
       let binary = '';
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -10439,13 +10412,13 @@ function performBenchAction(a: BenchAction): void {
      *  (actor animation phase, gather frameSeed). See the demoHold declaration.
      *  OFF by default and inert in normal play. */
     setDemoHold: (on: boolean) => {
-      demoHold = on;
-      demoSeedBase = probeFrame;
+      ctx.demo.hold = on;
+      ctx.demo.seedBase = ctx.probes.frame;
       // VHS's time hashes come off `performance.now()` 60/24/chromaBurst times a
       // second, so pin them with the hold. Its temporal blend is NOT pinned by
       // this and cannot be — see post-aa setTimeFrozen: that is exactly why the
       // frame hash measures the march target and not the presented image.
-      postAa.setTimeFrozen(on);
+      ctx.render.postAa.setTimeFrozen(on);
       // NOTE, and it is a lesson worth keeping: an earlier cut RESET
       // `probeFrame` here to re-anchor the gather's per-dispatch seed phase. It
       // was removed because (a) the seed is now PINNED for a recording (see the
@@ -10455,9 +10428,9 @@ function performBenchAction(a: BenchAction): void {
       // NEGATIVE (-34, -37, -1 in the stored runs). A diagnostic that can read
       // as nonsense is worse than no diagnostic: it was briefly used as
       // evidence. Do not reset a running counter to fix a phase problem.
-      return demoHold;
+      return ctx.demo.hold;
     },
-    get demoHold() { return demoHold; },
+    get demoHold() { return ctx.demo.hold; },
     /** Record (or replay) a scenario as a stream of frame hashes. The driver:
      *
      *    __sdfGame.setDemoHold(true);
@@ -10532,13 +10505,13 @@ function performBenchAction(a: BenchAction): void {
       if (problems.length) throw new Error(`bad scenario: ${problems.join('; ')}`);
       const total = o.frames ?? scenario.frames;
       const every = Math.max(1, Math.floor(o.every ?? 4));
-      if (o.hold !== false) demoHold = true;
+      if (o.hold !== false) ctx.demo.hold = true;
 
       // Frames must be driven by hand: the rAF loop would race the recorder
       // and a hidden/visible page would change which frames exist at all.
-      handle.setLoopRunning(false);
-      const hadAdaptive = adaptiveEnabled;
-      adaptiveEnabled = false;
+      ctx.boot.handle.setLoopRunning(false);
+      const hadAdaptive = ctx.render.adaptiveEnabled;
+      ctx.render.adaptiveEnabled = false;
 
       // Named `hashes`, NOT `hashFrame`: the latter is the imported digester,
       // and shadowing it inside this scope is a real failure mode.
@@ -10558,26 +10531,26 @@ function performBenchAction(a: BenchAction): void {
       const resampled: import('./frame-hash').FrameHash[] = [];
       const started = performance.now();
       const liveSim = o.sim === true;
-      const hadLock = simLocked;
+      const hadLock = ctx.demo.simLocked;
       // LOCK for the recording. tick() then mutates nothing, so each stepped
       // frame is a pure re-render of one settled instant (the same discipline
       // the close-up gates use) and the hash compares RENDERER state rather
       // than sim state.
-      if (!liveSim) simLocked = true;
+      if (!liveSim) ctx.demo.simLocked = true;
       try {
         for (let frame = 0; frame < total; frame++) {
           for (const a of actionsAt(scenario, frame)) performBenchAction(a);
           // 1/60 is the bench's fixed step and the only dt this format means.
           await awaitBakes();
-          handle.step(1 / 60);
+          ctx.boot.handle.step(1 / 60);
           stepsTaken++;
           // The final frame is sampled only when the regular cadence would MISS
           // it: `frame % every === 0 || frame === total - 1` could sample one
           // frame twice with an odd gap between, which flips the field parity
           // mid-recording and makes the whole run incomparable.
           if (frame % every === 0 || (frame === total - 1 && (total - 1) % every !== 0)) {
-            await handle.resolveGpu();
-            hashes.push(await hashFrame(frameHashDeps, frame));
+            await ctx.boot.handle.resolveGpu();
+            hashes.push(await hashFrame(ctx.boot.frameHashDeps, frame));
             parity.push(parityOf());
           }
         }
@@ -10585,7 +10558,7 @@ function performBenchAction(a: BenchAction): void {
         // hashes. Separates "the frame changed" from "the readback is not a
         // function of the frame".
         for (let i = 0; i < Math.max(0, Math.floor(o.resample ?? 0)); i++) {
-          resampled.push(await hashFrame(frameHashDeps, total));
+          resampled.push(await hashFrame(ctx.boot.frameHashDeps, total));
         }
         // SAME-SESSION CONTROL: hash the SAME frame position again, after a
         // further step. Locked, that step mutates nothing, so this measures
@@ -10596,15 +10569,15 @@ function performBenchAction(a: BenchAction): void {
           // keeps parity fixed, so this control measures frame determinism
           // instead of measuring the interlace.
           await awaitBakes();
-          handle.step(2 / 60);
+          ctx.boot.handle.step(2 / 60);
           stepsTaken += 2;
-          await handle.resolveGpu();
-          repeated.push(await hashFrame(frameHashDeps, total));
+          await ctx.boot.handle.resolveGpu();
+          repeated.push(await hashFrame(ctx.boot.frameHashDeps, total));
           repeatedParity.push(parityOf());
         }
       } finally {
-        adaptiveEnabled = hadAdaptive;
-        simLocked = hadLock;
+        ctx.render.adaptiveEnabled = hadAdaptive;
+        ctx.demo.simLocked = hadLock;
         // The loop stays OFF on purpose: a caller that wants live play back
         // says so explicitly, and one that forgets gets a still page rather
         // than a recording that quietly continued while it was being read.
@@ -10629,19 +10602,19 @@ function performBenchAction(a: BenchAction): void {
          *  design, so a set of mixed parities cannot be compared to anything. */
         parity,
         repeatedParity,
-        dispatches: probeFrame - demoSeedBase,
+        dispatches: ctx.probes.frame - ctx.demo.seedBase,
         ms: Math.round(performance.now() - started),
         hashes,
       };
     },
     /** Freeze/unfreeze the wanderers (pose, rig and shader clock all pin). */
-    freeze: (on: boolean) => { wanderFrozen = on; },
-    get frozen() { return wanderFrozen; },
+    freeze: (on: boolean) => { ctx.demo.wanderFrozen = on; },
+    get frozen() { return ctx.demo.wanderFrozen; },
     /** TASK-6 RENDER LOCK: while on, tick() mutates nothing (see simLocked),
      *  so step(n) is n deterministic re-renders. Turn OFF around any state
      *  change; settle transients with step(~90); turn back on to observe. */
-    setRenderLock: (on: boolean) => { simLocked = on; },
-    get renderLock() { return simLocked; },
+    setRenderLock: (on: boolean) => { ctx.demo.simLocked = on; },
+    get renderLock() { return ctx.demo.simLocked; },
     /** TASK-6 DIAGNOSTIC LIGHT CLOCK: the practical-fire flicker runs on
      *  wall-clock performance.now() INSIDE the draw path, which the render
      *  lock does not freeze — two renders of a locked scene still differ in
@@ -10650,17 +10623,17 @@ function performBenchAction(a: BenchAction): void {
      *  locked renders are bit-comparable in lit output too. Gate-only:
      *  default OFF, ordinary gameplay never freezes it. */
     setLightClockFrozen: (on: boolean) => {
-      if (on) flickerClockFrozenAt = performance.now() * 0.001;
-      lightClockFrozen = on;
+      if (on) ctx.lighting.flickerClockFrozenAt = performance.now() * 0.001;
+      ctx.lighting.clockFrozen = on;
     },
-    get lightClockFrozen() { return lightClockFrozen; },
+    get lightClockFrozen() { return ctx.lighting.clockFrozen; },
     setProbeWeight: pushProbeWeight,
-    get probeWeight() { return probeWeight; },
+    get probeWeight() { return ctx.probes.weight; },
     /** Every zombie: id, room, live ground pose. */
-    zombies: () => actors.map(a => ({ id: a.id, room: a.room, ...a.pose() })),
+    zombies: () => ctx.world.actors.map(a => ({ id: a.id, room: a.room, ...a.pose() })),
     /** Per-actor brain readout — the crowd/AI capture driver's oracle. */
-    encounter: () => encounter.debug(),
-    brains: () => actors.map(a => {
+    encounter: () => ctx.world.encounter.debug(),
+    brains: () => ctx.world.actors.map(a => {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
@@ -10670,8 +10643,8 @@ function performBenchAction(a: BenchAction): void {
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
         meleeContacts: a.debug().meleeContacts,
         speed: a.debug().speed, target: a.debug().target,
-        dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
-        bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),
+        dist: Math.hypot(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
+        bearing: Math.atan2(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
       };
     }),
     /** Ring tuning, so a capture driver asserts against the real numbers
@@ -10685,11 +10658,11 @@ function performBenchAction(a: BenchAction): void {
      *  simulation input — it drives the actor's motion config directly for
      *  one frame and the brain overwrites it on the next step. */
     poseSwing: (id: number, phase: number, side: 'L' | 'R', variant: string) => {
-      actors.find(a => a.id === id)?.forceSwing(phase, side, variant as SwingVariant);
+      ctx.world.actors.find(a => a.id === id)?.forceSwing(phase, side, variant as SwingVariant);
     },
     /** Smallest centre-to-centre distance between any two zombies (m).
      *  Two 0.35 m bodies touch at 0.70; below that they are interpenetrating. */
-    crowdMinDist: () => minPairDistance(actors.map(a => {
+    crowdMinDist: () => minPairDistance(ctx.world.actors.map(a => {
       const p = a.pose().pos;
       return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
     })),
@@ -10701,7 +10674,7 @@ function performBenchAction(a: BenchAction): void {
      *  right direction for a gate (it can cry wolf, it cannot miss a clip).
      *  O(n^2 k^2) over ten bodies — only the capture driver calls it. */
     minHandGap: () => {
-      const arms = actors.map(a => {
+      const arms = ctx.world.actors.map(a => {
         const posed = a.posed();
         const pts: { p: Vec3; r: number }[] = [];
         for (const prim of posed.prims) {
@@ -10718,7 +10691,7 @@ function performBenchAction(a: BenchAction): void {
             for (const v of arms[j]!) {
               const g = Math.hypot(u.p[0] - v.p[0], u.p[1] - v.p[1], u.p[2] - v.p[2])
                 - u.r - v.r;
-              if (g < best) { best = g; bestPair = [actors[i]!.id, actors[j]!.id]; }
+              if (g < best) { best = g; bestPair = [ctx.world.actors[i]!.id, ctx.world.actors[j]!.id]; }
             }
           }
         }
@@ -10730,7 +10703,7 @@ function performBenchAction(a: BenchAction): void {
      *  two idle wanderers in a distant room rather than from the melee ring
      *  around the player — which is exactly what it did on 2026-09-05. */
     minHandGapPair: () => {
-      const arms = actors.map(a => {
+      const arms = ctx.world.actors.map(a => {
         const posed = a.posed();
         const pts: { p: Vec3; r: number }[] = [];
         for (const prim of posed.prims) {
@@ -10750,8 +10723,8 @@ function performBenchAction(a: BenchAction): void {
               if (g < best) {
                 best = g;
                 pair = {
-                  a: actors[i]!.id, b: actors[j]!.id,
-                  roomA: actors[i]!.room, roomB: actors[j]!.room,
+                  a: ctx.world.actors[i]!.id, b: ctx.world.actors[j]!.id,
+                  roomA: ctx.world.actors[i]!.room, roomB: ctx.world.actors[j]!.room,
                 };
               }
             }
@@ -10765,12 +10738,12 @@ function performBenchAction(a: BenchAction): void {
      *  PLACE bodies (e.g. coincident, to watch separate() push them apart)
      *  without a separate teleport path that could dodge the clamps. */
     zombieNudge: (id: number, dx: number, dz: number) => {
-      actors.find(a => a.id === id)?.nudge(dx, dz);
+      ctx.world.actors.find(a => a.id === id)?.nudge(dx, dz);
     },
     /** One zombie's internals — the weapon seam: view (uniforms/wounds),
      *  posed() (raycast target), boundRig() (impulse/recoil entry). */
     zombie: (id: number) => {
-      const a = actors.find(a => a.id === id);
+      const a = ctx.world.actors.find(a => a.id === id);
       return a ? {
         get body() { return a.body; },
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
@@ -10787,7 +10760,7 @@ function performBenchAction(a: BenchAction): void {
      *  against the fired ray's impact point; carveDepth is the punch-through
      *  guard (0.45 × measured local flesh). */
     debugWounds: (id: number) => {
-      const a = actors.find(a => a.id === id);
+      const a = ctx.world.actors.find(a => a.id === id);
       if (!a) return undefined;
       const prims = a.posed().prims;
       const yaw = a.pose().yaw;
@@ -10809,8 +10782,8 @@ function performBenchAction(a: BenchAction): void {
     /** Task-8 evidence seam: live gut-rope state per body, read-only. A body
      *  with no rope entry reports {none: true}. droplets is the rope's current
      *  'gut'-kind population in the blood sim (the goo pass's input). */
-    guts: () => actors.map(a => {
-      const e = gutRopes.get(a.id);
+    guts: () => ctx.world.actors.map(a => {
+      const e = ctx.vfx.gutRopes.get(a.id);
       const nodes = e?.chain.nodes ?? [];
       return {
         id: a.id,
@@ -10828,30 +10801,30 @@ function performBenchAction(a: BenchAction): void {
     }),
     /** Walk the player toward (x, z) through the real collision path until
      *  within 0.25 m (or walkCancel). Pairs with step()/setLoopRunning. */
-    walkTo: (x: number, z: number) => { autopilot = { x, z }; },
-    walkCancel: () => { autopilot = null; },
-    get walking() { return autopilot !== null; },
-    frameMs: () => frameEma,
+    walkTo: (x: number, z: number) => { ctx.player.autopilot = { x, z }; },
+    walkCancel: () => { ctx.player.autopilot = null; },
+    get walking() { return ctx.player.autopilot !== null; },
+    frameMs: () => ctx.boot.frameEma,
     /** Frames actually PRESENTED. Under a frame cap the rAF loop still wakes
      *  every vsync and skips most of them, so raw rAF gaps measure the display
      *  rather than the cadence -- count this instead. */
-    presentCount: () => frameCount,
+    presentCount: () => ctx.demo.frameCount,
     bodiesOnScreen,
     // ---------------------------------------------------------------
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
     // the headless driver can shoot; aim with setPose(yaw, pitch).
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
-    get flashVisible() { return flashGroup?.visible ?? false; },
+    get flashVisible() { return ctx.weapon.flashGroup?.visible ?? false; },
     /** Free-aim seam, for the gate and for A/B by hand. */
-    get freeAim() { return freeAimOn; },
-    setFreeAim(on: boolean) { freeAimOn = on; aim = { x: 0, y: 0 }; updateHud(); return freeAimOn; },
-    get aimPoint() { return { x: aim.x, y: aim.y }; },
+    get freeAim() { return ctx.player.freeAimOn; },
+    setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(); return ctx.player.freeAimOn; },
+    get aimPoint() { return { x: ctx.weapon.aim.x, y: ctx.weapon.aim.y }; },
     setAimPoint(x: number, y: number) {
-      aim = { x: Math.min(1, Math.max(-1, x)), y: Math.min(1, Math.max(-1, y)) };
-      return { x: aim.x, y: aim.y };
+      ctx.weapon.aim = { x: Math.min(1, Math.max(-1, x)), y: Math.min(1, Math.max(-1, y)) };
+      return { x: ctx.weapon.aim.x, y: ctx.weapon.aim.y };
     },
-    get weaponLeanDeg() { return { yaw: weaponYawDeg, pitch: weaponPitchDeg }; },
+    get weaponLeanDeg() { return { yaw: ctx.weapon.yawDeg, pitch: ctx.weapon.pitchDeg }; },
     /** Live free-aim / bob knobs. Every one of these is a feel number that has
      *  to be played rather than reasoned about:
      *    __sdfGame.setAimTuning({ deadzoneX: 0.5, turnRateX: 1.4 })
@@ -10865,7 +10838,7 @@ function performBenchAction(a: BenchAction): void {
       }
       return { ...FREE_AIM, bob: { ...BOB } };
     },
-    get bob() { return { distance: bobDistance, amount: bobAmount }; },
+    get bob() { return { distance: ctx.player.bobDistance, amount: ctx.player.bobAmount }; },
     /** Live finish knobs. The owner's look pass: the gun reads a touch too
      *  shiny under the dungeon rig and the hands are hard to see at this
      *  exposure. Both are judgement calls that depend on the final lighting,
@@ -10877,37 +10850,37 @@ function performBenchAction(a: BenchAction): void {
       roughness?: number; envMapIntensity?: number; metalness?: number;
       handNormalScale?: number; handRoughness?: number;
     }) {
-      for (const m of gunMaterials) {
+      for (const m of ctx.weapon.gunMaterials) {
         if (t.roughness !== undefined) m.roughness = t.roughness;
         if (t.envMapIntensity !== undefined) m.envMapIntensity = t.envMapIntensity;
         if (t.metalness !== undefined) m.metalness = t.metalness;
         m.needsUpdate = true;
       }
-      if (handMaterial) {
-        if (t.handNormalScale !== undefined) handMaterial.normalScale.setScalar(t.handNormalScale);
-        if (t.handRoughness !== undefined) handMaterial.roughness = t.handRoughness;
-        handMaterial.needsUpdate = true;
+      if (ctx.weapon.handMaterial) {
+        if (t.handNormalScale !== undefined) ctx.weapon.handMaterial.normalScale.setScalar(t.handNormalScale);
+        if (t.handRoughness !== undefined) ctx.weapon.handMaterial.roughness = t.handRoughness;
+        ctx.weapon.handMaterial.needsUpdate = true;
       }
       return {
-        roughness: gunMaterials[0]?.roughness ?? null,
-        envMapIntensity: gunMaterials[0]?.envMapIntensity ?? null,
-        metalness: gunMaterials[0]?.metalness ?? null,
-        handNormalScale: handMaterial?.normalScale.x ?? null,
+        roughness: ctx.weapon.gunMaterials[0]?.roughness ?? null,
+        envMapIntensity: ctx.weapon.gunMaterials[0]?.envMapIntensity ?? null,
+        metalness: ctx.weapon.gunMaterials[0]?.metalness ?? null,
+        handNormalScale: ctx.weapon.handMaterial?.normalScale.x ?? null,
       };
     },
-    get shells() { return shells; },
+    get shells() { return ctx.weapon.shells; },
     /** Unlimited ammo (the shipped default; ?ammo=finite turns it off). */
-    get infiniteAmmo() { return infiniteAmmo; },
+    get infiniteAmmo() { return ctx.weapon.infiniteAmmo; },
     setInfiniteAmmo: (on: boolean) => {
-      infiniteAmmo = on;
+      ctx.weapon.infiniteAmmo = on;
       // Turning it OFF with 0 shells in the gun must not leave the player
       // holding a weapon that can only click: refill so the first dry state is
       // one the player creates by firing.
-      if (!on) shells = MAGAZINE_CAPACITY;
+      if (!on) ctx.weapon.shells = MAGAZINE_CAPACITY;
       updateHud();
-      return infiniteAmmo;
+      return ctx.weapon.infiniteAmmo;
     },
-    get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
+    get hingeOpenRad() { return ctx.weapon.hingePivot?.rotation.x ?? 0; },
     /** The reload's total length, seconds. Exposed so hand-stepping gates can
      *  DERIVE their wait budget instead of hardcoding a tick count: the shorty
      *  gate carried `57 ticks` against a 0.95 s reload, was still carrying it
@@ -10917,19 +10890,19 @@ function performBenchAction(a: BenchAction): void {
     get reloadTotalSec() { return RELOAD.totalSec; },
     /** The two chamber mouths in WORLD space, right now. The eject origin is
      *  supposed to track these through the swing; nothing proved it did. */
-    breechWorld: () => breechNodes.map((n) => {
+    breechWorld: () => ctx.weapon.breechNodes.map((n) => {
       const v = new THREE.Vector3(); n.getWorldPosition(v);
       return [v.x, v.y, v.z] as Vec3;
     }),
     /** Where the last case was when it was handed to the tumble. */
-    get lastEjectOrigin() { return lastEjectOrigin; },
+    get lastEjectOrigin() { return ctx.weapon.lastEjectOrigin; },
     /** The muzzle locators in world space right now (chunk-bake gate: lets a
      *  driver SOLVE for the player stance that puts the slug's spawn point
      *  where it wants — the muzzle offset is ~0.6 m of view-space rig, which
      *  no hand-derived stance reproduces). Read-only. */
     muzzleWorld: () => muzzleWorld(),
     /** Live projectile debug (chunk-bake gate): kind, position, age. */
-    pelletsDebug: () => pellets.map(p => ({ kind: p.kind, pos: [...p.pos] as [number, number, number], age: p.ageSec })),
+    pelletsDebug: () => ctx.weapon.pellets.map(p => ({ kind: p.kind, pos: [...p.pos] as [number, number, number], age: p.ageSec })),
     /** The EXACT ray a slug fired right now would take (chunk-bake gate):
      *  origin = muzzleWorld(), dir = convergedDir(muzzleWorld()) — the same
      *  two calls fire() makes. A driver can measure a ray-to-target miss
@@ -10943,44 +10916,44 @@ function performBenchAction(a: BenchAction): void {
      *  screen exists. `watchScreen` is the drawable canvas for a later pass. */
     get arms() {
       return {
-        left: !!arms?.left.parent, right: !!arms?.right.parent,
-        skinEmissive: arms?.skin.emissiveIntensity ?? null,
-        watch: !!arms?.left.getObjectByName('Watch_Screen'),
+        left: !!ctx.weapon.arms?.left.parent, right: !!ctx.weapon.arms?.right.parent,
+        skinEmissive: ctx.weapon.arms?.skin.emissiveIntensity ?? null,
+        watch: !!ctx.weapon.arms?.left.getObjectByName('Watch_Screen'),
       };
     },
-    get watchScreen() { return arms?.screen ?? null; },
+    get watchScreen() { return ctx.weapon.arms?.screen ?? null; },
     /** The eject arc's seed for the current/last reload; 0 = reference arc. */
-    get reloadSeed() { return reloadSeed; },
-    get reloadSpeed() { return reloadSpeed; },
-    setReloadSpeed(x: number) { reloadSpeed = Math.max(0.01, x); updateHud(); },
+    get reloadSeed() { return ctx.weapon.reloadSeed; },
+    get reloadSpeed() { return ctx.weapon.reloadSpeed; },
+    setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(); },
     /** Hold one seed for every reload from now on (null releases it), so a
      *  gate can capture the same arc twice. */
-    pinReloadSeed(seed: number | null) { pinnedReloadSeed = seed; },
-    get gunReady() { return gunReady; },
-    get cooldown() { return cooldown; },
+    pinReloadSeed(seed: number | null) { ctx.weapon.pinnedReloadSeed = seed; },
+    get gunReady() { return ctx.weapon.gunReady; },
+    get cooldown() { return ctx.weapon.cooldown; },
     // SLUG MODE surface + HUD-truthful flag.
-    get slugMode() { return slugMode; },
-    setSlugMode(on: boolean) { slugMode = on; updateHud(); },
-    fireSlug: () => { const keep = slugMode; slugMode = true; try { return fire(1); } finally { slugMode = keep; } },
+    get slugMode() { return ctx.weapon.slugMode; },
+    setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(); },
+    fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(1); } finally { ctx.weapon.slugMode = keep; } },
     // ---------------------------------------------------------------
     // BLEED seams (bleeding-wounds). Ships ON; setBleed(false) is the
     // off gate — it freezes AND clears the blood sim so OFF is pixel-
     // identical to the pre-feature page (no frozen mid-air droplets).
     // ---------------------------------------------------------------
     setBleed: (on: boolean) => {
-      bleedEnabled = on;
-      for (const o of bloodView.objects) o.visible = on;
+      ctx.vfx.bleedEnabled = on;
+      for (const o of ctx.vfx.bloodView.objects) o.visible = on;
       if (!on) {
-        bloodSim.droplets.length = 0;
-        bloodSim.splats.length = 0;
+        ctx.vfx.bloodSim.droplets.length = 0;
+        ctx.vfx.bloodSim.splats.length = 0;
       }
     },
     get bleed() {
       return {
-        enabled: bleedEnabled,
-        emitters: bleed.live(bleedClock).length,
-        droplets: bloodSim.droplets.length,
-        splats: bloodSim.splats.length,
+        enabled: ctx.vfx.bleedEnabled,
+        emitters: ctx.vfx.bleed.live(ctx.vfx.bleedClock).length,
+        droplets: ctx.vfx.bloodSim.droplets.length,
+        splats: ctx.vfx.bloodSim.splats.length,
       };
     },
     /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
@@ -10994,12 +10967,12 @@ function performBenchAction(a: BenchAction): void {
      *  empty wound list to the hull builder instead of the live one. Both
      *  default to shipped behaviour. */
     setOccluder: (on: boolean) => {
-      occluderDesired = on;
-      sdfLayer.setOccluderEnabled(on);
+      ctx.render.occluderDesired = on;
+      ctx.render.sdfLayer.setOccluderEnabled(on);
     },
-    get occluder() { return sdfLayer.occluderEnabled && occluderDesired; },
-    setHullExclusions: (on: boolean) => { hullExclusionsEnabled = on; },
-    get hullExclusions() { return hullExclusionsEnabled; },
+    get occluder() { return ctx.render.sdfLayer.occluderEnabled && ctx.render.occluderDesired; },
+    setHullExclusions: (on: boolean) => { ctx.render.hullExclusionsEnabled = on; },
+    get hullExclusions() { return ctx.render.hullExclusionsEnabled; },
 
     // -------------------------------------------------------------------
     // BENCH SEAMS (2026-08-31). Everything the ablation legs toggle, plus
@@ -11007,18 +10980,18 @@ function performBenchAction(a: BenchAction): void {
     // these only move when a driver moves them.
     // -------------------------------------------------------------------
     /** The GPU completion fence. Trust the fence, never a timestamp value. */
-    resolveGpu: () => handle.resolveGpu(),
+    resolveGpu: () => ctx.boot.handle.resolveGpu(),
     /** Per-pass GPU timestamps since the last call, labelled by pass site
      *  (gpu-pass-timing.ts). Ad-hoc probe; the bench's 'passes' mode is the
      *  measured form. `installed` false = no timestamp tracking on this page. */
-    passTimings: async () => ({ installed: passTiming.installed, samples: await passTiming.collect() }),
-    passCounts: () => passTiming.countsSinceLast(),
+    passTimings: async () => ({ installed: ctx.boot.passTiming.installed, samples: await ctx.boot.passTiming.collect() }),
+    passCounts: () => ctx.boot.passTiming.countsSinceLast(),
     // setAdaptive / setSdfScale already exist further down this object and
     // are better than the versions this block first added (they also clear
     // the adaptive sample window and report the whole ladder). Not
     // duplicated here — the driver calls those.
-    setCone: (on: boolean) => sdfLayer.setConeEnabled(on),
-    get cone() { return sdfLayer.coneEnabled; },
+    setCone: (on: boolean) => ctx.render.sdfLayer.setConeEnabled(on),
+    get cone() { return ctx.render.sdfLayer.coneEnabled; },
     // ---------------------------------------------------------------
     // FRAME PACING. setFrameCap(fps) presents on a fixed cadence; 0
     // uncaps and restores the raw rAF behaviour. Default 30, matching
@@ -11028,48 +11001,48 @@ function performBenchAction(a: BenchAction): void {
     // any arithmetic that assumes 60 Hz.
     // ---------------------------------------------------------------
     setFrameCap: (fps: number) => {
-      handle.setFrameCap(fps);
-      return { frameCap: handle.frameCap, refreshMs: handle.refreshMs };
+      ctx.boot.handle.setFrameCap(fps);
+      return { frameCap: ctx.boot.handle.frameCap, refreshMs: ctx.boot.handle.refreshMs };
     },
-    get frameCap() { return handle.frameCap; },
-    get refreshMs() { return handle.refreshMs; },
-    setFxaa: (on: boolean) => postAa.setFxaa(on),
-    get fxaa() { return postAa.fxaa; },
-    setSmear: (v: number) => postAa.setSmear(v),
+    get frameCap() { return ctx.boot.handle.frameCap; },
+    get refreshMs() { return ctx.boot.handle.refreshMs; },
+    setFxaa: (on: boolean) => ctx.render.postAa.setFxaa(on),
+    get fxaa() { return ctx.render.postAa.fxaa; },
+    setSmear: (v: number) => ctx.render.postAa.setSmear(v),
     /** BLAST REFRACTION experiment (default OFF). Live seam so the capture rig
      *  can A/B the SAME frame with it off and on — same seed, same pose, same
      *  sim time — which is the only honest comparison. */
-    setBlastDistort: (on: boolean) => { postAa.setBlastDistort(on); return postAa.blastDistort; },
-    get blastDistort() { return postAa.blastDistort; },
+    setBlastDistort: (on: boolean) => { ctx.render.postAa.setBlastDistort(on); return ctx.render.postAa.blastDistort; },
+    get blastDistort() { return ctx.render.postAa.blastDistort; },
     setBlastDistortStrength: (v: number) => {
-      blastDistortStrength = Math.max(0, Math.min(4, Number(v) || 0));
-      postAa.setBlastDistortStrength(blastDistortStrength);
-      return blastDistortStrength;
+      ctx.vfx.blastDistortStrength = Math.max(0, Math.min(4, Number(v) || 0));
+      ctx.render.postAa.setBlastDistortStrength(ctx.vfx.blastDistortStrength);
+      return ctx.vfx.blastDistortStrength;
     },
-    get blastDistortStrength() { return postAa.blastDistortStrength; },
-    get blastDistortCount() { return postAa.blastDistortCount; },
+    get blastDistortStrength() { return ctx.render.postAa.blastDistortStrength; },
+    get blastDistortCount() { return ctx.render.postAa.blastDistortCount; },
     /** The RESOLVED blast-refraction slots the last blit pushed — the seam a
      *  capture rig reads to prove the band is centred on the blast (task-2). */
-    blastDistortInfo: () => postAa.blastDistortSlots,
+    blastDistortInfo: () => ctx.render.postAa.blastDistortSlots,
     /** Per-room probe grids (P3 step 2): weight 0 = bit-identical P1; gain -1
      *  = each room's matched level, else an absolute multiplier. */
     /** Flashlight bounce spot (P4 step 1): 0 = off and bit-identical. */
-    setBounceSpot: (gain: number) => { bounceSpotGain = Math.max(0, gain); return bounceSpotGain; },
+    setBounceSpot: (gain: number) => { ctx.lighting.bounceSpotGain = Math.max(0, gain); return ctx.lighting.bounceSpotGain; },
     /** GPU probe gather dynamic layer: radiance gain (flash bounce) and
      *  visibility strength (bodies darken their surroundings). 0/0 = off. */
     /** Direct muzzle-flash light on bodies (bodyFlash slot). 0 = off. */
-    setBodyFlash: (gain: number) => { bodyFlashGain = Math.max(0, gain); return bodyFlashGain; },
-    get bodyFlash() { return bodyFlashGain; },
+    setBodyFlash: (gain: number) => { ctx.lighting.bodyFlashGain = Math.max(0, gain); return ctx.lighting.bodyFlashGain; },
+    get bodyFlash() { return ctx.lighting.bodyFlashGain; },
     setProbeDynamic: (radianceGain: number, visStrength: number, flashBoost?: number) => {
-      probeDynGain = Math.max(0, radianceGain); probeVisStrength = Math.max(0, Math.min(1, visStrength));
-      if (flashBoost !== undefined) probeFlashBoost = Math.max(0, flashBoost);
-      return { radianceGain: probeDynGain, visStrength: probeVisStrength, flashBoost: probeFlashBoost };
+      ctx.probes.dynGain = Math.max(0, radianceGain); ctx.probes.visStrength = Math.max(0, Math.min(1, visStrength));
+      if (flashBoost !== undefined) ctx.probes.flashBoost = Math.max(0, flashBoost);
+      return { radianceGain: ctx.probes.dynGain, visStrength: ctx.probes.visStrength, flashBoost: ctx.probes.flashBoost };
     },
     /** Exact-work A/B: capsule broad phase, visibility any-hit, cone-first shadows. */
-    setProbeOptimization(enabled: boolean) { probeOptimized = enabled; return probeOptimized; },
+    setProbeOptimization(enabled: boolean) { ctx.probes.optimized = enabled; return ctx.probes.optimized; },
     setProbeGatherRate(framesPerGather: number) {
-      probeGatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
-      return probeGatherRate;
+      ctx.probes.gatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
+      return ctx.probes.gatherRate;
     },
     /** Diagnostic cost-split seams (see ?dynrays / ?dynlights). BOTH PRODUCE
      *  WRONG FRAMES ON PURPOSE — they exist to divide the gather's cost into
@@ -11077,15 +11050,15 @@ function performBenchAction(a: BenchAction): void {
      *  decides whether widening the dispatch or replacing the per-light sweep
      *  pays more. null restores the shipped value (32 rays, every light). */
     setProbeRays(n: number | null) {
-      probeRaysBoot = n === null ? null : Math.max(0, Math.min(64, Math.floor(n)));
-      return probeRaysBoot;
+      ctx.probes.raysBoot = n === null ? null : Math.max(0, Math.min(64, Math.floor(n)));
+      return ctx.probes.raysBoot;
     },
     setProbeLights(n: number | null) {
-      probeLightsBoot = n === null ? null : Math.max(0, Math.floor(n));
-      return probeLightsBoot;
+      ctx.probes.lightsBoot = n === null ? null : Math.max(0, Math.floor(n));
+      return ctx.probes.lightsBoot;
     },
     get probeCostSplit() {
-      return { rays: probeRaysBoot, lights: probeLightsBoot, blend: probeBlendBoot, fall: probeFallBoot, optimized: probeOptimized };
+      return { rays: ctx.probes.raysBoot, lights: ctx.probes.lightsBoot, blend: ctx.probes.blendBoot, fall: ctx.probes.fallBoot, optimized: ctx.probes.optimized };
     },
     /** The gather's afterglow rates (?dynblend / ?dynfall). Set BOTH to 1 for the
      *  PURE-ESTIMATE configuration the R1 dispatch check measures in: the record
@@ -11094,12 +11067,12 @@ function performBenchAction(a: BenchAction): void {
      *  which two boots are not comparable to each other at all. null restores the
      *  shipped 0.6 / 0.12. */
     setProbeBlend(n: number | null) {
-      probeBlendBoot = n === null ? null : Math.max(0, Math.min(1, n));
-      return probeBlendBoot;
+      ctx.probes.blendBoot = n === null ? null : Math.max(0, Math.min(1, n));
+      return ctx.probes.blendBoot;
     },
     setProbeFall(n: number | null) {
-      probeFallBoot = n === null ? null : Math.max(0, Math.min(1, n));
-      return probeFallBoot;
+      ctx.probes.fallBoot = n === null ? null : Math.max(0, Math.min(1, n));
+      return ctx.probes.fallBoot;
     },
     // DRAW CENSUS (spike program): per-frame draw/compute totals from the
     // renderer's info. This frame is MANY render() calls (one per pass), and
@@ -11107,7 +11080,7 @@ function performBenchAction(a: BenchAction): void {
     // and the caller samples then resets — one drawStats(true) per frame is
     // the per-frame total.
     drawStats(reset = false) {
-      const info = handle.renderer.info;
+      const info = ctx.boot.handle.renderer.info;
       info.autoReset = false;
       const out = {
         drawCalls: info.render.drawCalls,
@@ -11139,60 +11112,60 @@ function performBenchAction(a: BenchAction): void {
       return { meshes, visible, instanced, top: [...byName].sort((a, b) => b[1] - a[1]).slice(0, 24) };
     },
     // `frames` is a DISPATCH counter (half-rate gather => ~half the drawn frames).
-    get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength, frames: probeFrame, errors: probeGatherErrors, bound: probeGather !== null, reached: probeGateLogs, gates: probeLastGates, rate: probeGatherRate }; },
+    get probeDynamic() { return { radianceGain: ctx.probes.dynGain, visStrength: ctx.probes.visStrength, frames: ctx.probes.frame, errors: ctx.probes.gatherErrors, bound: ctx.probes.gather !== null, reached: ctx.probes.gateLogs, gates: ctx.probes.lastGates, rate: ctx.probes.gatherRate }; },
     /** TRACERS as gathered lights. Raw intensity per pellet; 0 = off (no
      *  light packed). The owner tunes by eye and exaggerates with e.g. 6. */
-    setTracerLight: (gain: number) => { tracerLightGain = Math.max(0, gain); return tracerLightGain; },
-    setTracerLightSlots: (slots: number) => { tracerLightSlots = Math.max(0, Math.min(8, Math.floor(slots))); return tracerLightSlots; },
-    get tracerLight() { return tracerLightGain; },
+    setTracerLight: (gain: number) => { ctx.lighting.tracerLightGain = Math.max(0, gain); return ctx.lighting.tracerLightGain; },
+    setTracerLightSlots: (slots: number) => { ctx.lighting.tracerLightSlots = Math.max(0, Math.min(8, Math.floor(slots))); return ctx.lighting.tracerLightSlots; },
+    get tracerLight() { return ctx.lighting.tracerLightGain; },
     /** The slot cap, so a rig can report WHAT it measured against rather than
      *  assuming — `setTracerLightSlots` without a getter is the "silent seam"
      *  failure this file keeps re-learning. */
-    get tracerLightSlots() { return tracerLightSlots; },
-    probeDynReadback: () => probeGather?.readback() ?? Promise.resolve(new Float32Array(0)),
-    get bounceSpot() { return bounceSpotGain; },
-    setProbes: (weight: number, gain = -1) => { roomProbes.setProbes(weight, gain); return { weight: roomProbes.weight, gain: roomProbes.gain }; },
+    get tracerLightSlots() { return ctx.lighting.tracerLightSlots; },
+    probeDynReadback: () => ctx.probes.gather?.readback() ?? Promise.resolve(new Float32Array(0)),
+    get bounceSpot() { return ctx.lighting.bounceSpotGain; },
+    setProbes: (weight: number, gain = -1) => { ctx.world.roomProbes.setProbes(weight, gain); return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain }; },
     /** LEVEL surfaces reading the probes (P3/P4 step 3): weight 0 = the
      *  pre-probe level (hemisphere at full, nodes add nothing); gain -1 =
      *  each room's hemisphere-matched level. The hemisphere fades with the
      *  weight so the flip does not brighten the room. */
     setLevelProbes: (weight: number, gain = -1) => {
-      levelProbeWeight = Math.max(0, Math.min(1, weight)); levelProbeGain = gain;
+      ctx.lighting.levelProbeWeight = Math.max(0, Math.min(1, weight)); ctx.lighting.levelProbeGain = gain;
       applyHemi(); restampLevelProbes();
-      return { weight: levelProbeWeight, gain: levelProbeGain };
+      return { weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain };
     },
     get levelProbes() {
       return {
-        weight: levelProbeWeight, gain: levelProbeGain, hemi: hemi.intensity, hemiBase,
-        wired: levelProbeNodes.size, materials: levelNodeMaterials.length,
-        lights: [...levelLightLists].map(([id, l]) => [id, l.getLights().length]),
-        rooms: [...levelProbeNodes].map(([id, n]) => [id, n.slots.probeCfg.value.x, n.slots.probeCfg.value.y, n.slots.probeDynCfg.value.x, n.slots.probeDynCfg.value.y]),
+        weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain, hemi: ctx.lighting.hemi.intensity, hemiBase: ctx.lighting.hemiBase,
+        wired: ctx.lighting.levelProbeNodes.size, materials: ctx.world.levelNodeMaterials.length,
+        lights: [...ctx.world.levelLightLists].map(([id, l]) => [id, l.getLights().length]),
+        rooms: [...ctx.lighting.levelProbeNodes].map(([id, n]) => [id, n.slots.probeCfg.value.x, n.slots.probeCfg.value.y, n.slots.probeDynCfg.value.x, n.slots.probeDynCfg.value.y]),
       };
     },
-    get probes() { return { weight: roomProbes.weight, gain: roomProbes.gain, ready: roomProbes.ready, matched: ROOMS.map(r => [r.id, roomProbes.matchedGain(r.id)]) }; },
-    get smear() { return postAa.smear; },
+    get probes() { return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain, ready: ctx.world.roomProbes.ready, matched: ROOMS.map(r => [r.id, ctx.world.roomProbes.matchedGain(r.id)]) }; },
+    get smear() { return ctx.render.postAa.smear; },
     // VHS is the fourth chain stage, default OFF. While on it replaces the
     // smear pass; `effectiveSmear` says which temporal filter is really
     // running (0 while VHS owns it). Both return the resulting state so a
     // console caller sees the clamp without a second read.
     setVhs: (preset: VhsPreset | null) => {
-      postAa.setVhs(preset);
+      ctx.render.postAa.setVhs(preset);
       // A console preset overwrites every term; without this the panel's
       // sliders would keep showing the OLD look while the screen shows the new.
-      vhsPanel?.refresh();
-      return postAa.vhs;
+      ctx.panels.vhsPanel?.refresh();
+      return ctx.render.postAa.vhs;
     },
-    get vhs() { return postAa.vhs; },
+    get vhs() { return ctx.render.postAa.vhs; },
     setVhsTerm: (name: keyof VhsTerms, value: number) => {
-      postAa.setVhsTerm(name, value);
-      vhsPanel?.refresh();
-      return postAa.vhsTerms;
+      ctx.render.postAa.setVhsTerm(name, value);
+      ctx.panels.vhsPanel?.refresh();
+      return ctx.render.postAa.vhsTerms;
     },
     /** The live term values — the preset's, until a slider or setVhsTerm
      *  overrides one. Symmetric with `vhs`, so a capture script can read the
      *  whole look back without driving a setter. */
-    get vhsTerms() { return postAa.vhsTerms; },
-    get effectiveSmear() { return postAa.effectiveSmear; },
+    get vhsTerms() { return ctx.render.postAa.vhsTerms; },
+    get effectiveSmear() { return ctx.render.postAa.effectiveSmear; },
     // ---------------------------------------------------------------
     // DEFERRED RENDERER SEAM (M2 task 5). Everything is null-safe: on a
     // legacy boot they are no-ops / report the legacy mode, so a capture
@@ -11201,21 +11174,21 @@ function performBenchAction(a: BenchAction): void {
     // materials, light selection, shadow generation-vs-sampling counters
     // (deliberately SEPARATE toggles), sizes and errors.
     // ---------------------------------------------------------------
-    get renderMode() { return deferredMode ? 'deferred' : 'legacy'; },
+    get renderMode() { return ctx.boot.deferredMode ? 'deferred' : 'legacy'; },
     deferredDiagnostics: (): GameDeferredRendererDiagnostics | { mode: 'legacy' } =>
-      deferredApi ? deferredApi.diagnostics() : { mode: 'legacy' as const },
+      ctx.boot.deferredApi ? ctx.boot.deferredApi.diagnostics() : { mode: 'legacy' as const },
     /** Shadow map GENERATION. false skips both raster passes; the boot
      *  ?spotshadow=0 seeds this. */
-    setSpotShadow: (on: boolean) => deferredApi?.setShadowGeneration(on),
-    get spotShadow() { return deferredApi?.diagnostics().shadow.generationRequested ?? null; },
+    setSpotShadow: (on: boolean) => ctx.boot.deferredApi?.setShadowGeneration(on),
+    get spotShadow() { return ctx.boot.deferredApi?.diagnostics().shadow.generationRequested ?? null; },
     /** Diagnostic SAMPLING-only toggle: maps keep rendering, the lit stage
      *  ignores them. Its counter state lives in deferredDiagnostics().shadow
      *  (sampling flag vs renderedMaps — the two never conflate). */
-    setSpotShadowSampling: (on: boolean) => deferredApi?.setShadowSampling(on),
+    setSpotShadowSampling: (on: boolean) => ctx.boot.deferredApi?.setShadowSampling(on),
     /** The one exposure knob — scales the CONVERTED deferred lights without
      *  touching the source THREE lights (task 6/7 calibration seam). */
-    setDeferredLightGain: (v: number) => deferredApi?.setLightGain(v),
-    setDeferredDebugView: (v: DeferredDebugView) => deferredApi?.setDebugView(v),
+    setDeferredLightGain: (v: number) => ctx.boot.deferredApi?.setLightGain(v),
+    setDeferredDebugView: (v: DeferredDebugView) => ctx.boot.deferredApi?.setDebugView(v),
     /** RAW G-buffer sample at an NDC point (composition review fix evidence
      *  seam): lets a gate assert the gun/hand SURFACE CHANNELS — not just
      *  metadata — follow setGunTuning on the live frame. Draws a still frame
@@ -11223,23 +11196,23 @@ function performBenchAction(a: BenchAction): void {
      *  pass drawStill=false for BULK scans of an already-rendered locked
      *  frame (each still is a full render). Null-safe on legacy. */
     readSurfaceAt: (ndcX: number, ndcY: number, drawStill = true) => {
-      if (!deferredApi) return Promise.resolve(null);
-      if (drawStill) handle.drawOnce();
-      return deferredApi.readSurfaceAt(ndcX, ndcY);
+      if (!ctx.boot.deferredApi) return Promise.resolve(null);
+      if (drawStill) ctx.boot.handle.drawOnce();
+      return ctx.boot.deferredApi.readSurfaceAt(ndcX, ndcY);
     },
     /** Depth-gate color before FXAA/lens; null when presenting to canvas. */
     readCompositeAt: (ndcX: number, ndcY: number) => {
-      if (!deferredApi) return Promise.resolve(null);
-      handle.drawOnce();
-      return deferredApi.readCompositeAt(ndcX, ndcY);
+      if (!ctx.boot.deferredApi) return Promise.resolve(null);
+      ctx.boot.handle.drawOnce();
+      return ctx.boot.deferredApi.readCompositeAt(ndcX, ndcY);
     },
     /** BOUNDED MULTI-POINT surface sample (task-6 lattice scans): one
      *  readback set for up to 512 NDC points. Draws a still first so the
      *  samples reflect the current state. Null-safe on legacy. */
     sampleSurfacePoints: (points: Array<{ x: number; y: number }>) => {
-      if (!deferredApi) return Promise.resolve(null);
-      handle.drawOnce();
-      return deferredApi.sampleSurfacePoints(points);
+      if (!ctx.boot.deferredApi) return Promise.resolve(null);
+      ctx.boot.handle.drawOnce();
+      return ctx.boot.deferredApi.sampleSurfacePoints(points);
     },
     /** WHOLE-G-buffer digest (task-6 regression-gate seam): four per-
      *  attachment FNV-1a digests over the logical texels plus the class
@@ -11249,9 +11222,9 @@ function performBenchAction(a: BenchAction): void {
      *  render control the gate needs — not one target read twice. Null on
      *  a legacy boot. */
     hashSurface: (): Promise<GameSurfaceHash | null> => {
-      if (!deferredApi) return Promise.resolve(null);
-      handle.drawOnce();
-      return deferredApi.hashSurface();
+      if (!ctx.boot.deferredApi) return Promise.resolve(null);
+      ctx.boot.handle.drawOnce();
+      return ctx.boot.deferredApi.hashSurface();
     },
     /** TASK-6 TRUE-EMPTY PROOF SEAM: hide/show the static level meshes
      *  (dungeon shell + accents). With them hidden and the camera aimed at
@@ -11261,8 +11234,8 @@ function performBenchAction(a: BenchAction): void {
      *  lacks. The router's sync() skips visible=false subtrees, so this is
      *  exact for both the G-buffer and the forward pass. */
     setLevelMeshVisible: (on: boolean) => {
-      levelGroup.visible = on;
-      accentGroup.visible = on;
+      ctx.world.levelGroup.visible = on;
+      ctx.world.accentGroup.visible = on;
     },
     /** Bounded SUBTREE INSPECTOR (task-6 kit/prop evidence seam): finds the
      *  first scene descendant whose name contains `namePart` (the deferred
@@ -11289,7 +11262,7 @@ function performBenchAction(a: BenchAction): void {
       if (!root) return { found: false, namePart };
       const r = root as THREE.Object3D;
       const propNodes = new Set<string>();
-      actors.find(a => a.id === r.userData.gameActorId)?.character?.prop?.object
+      ctx.world.actors.find(a => a.id === r.userData.gameActorId)?.character?.prop?.object
         .traverse(o => propNodes.add(o.uuid));
       const nodes: Record<string, unknown>[] = [];
       const queue: THREE.Object3D[] = [r];
@@ -11332,15 +11305,15 @@ function performBenchAction(a: BenchAction): void {
           isSkinnedMesh: (o as THREE.SkinnedMesh).isSkinnedMesh === true,
           bones,
           materials: mats, pos: [round2(p.x), round2(p.y), round2(p.z)],
-          route: deferredApi?.router.routeOf(o) ?? null,
-          receiver: deferredApi?.router.receiverOf(o) ?? null,
+          route: ctx.boot.deferredApi?.router.routeOf(o) ?? null,
+          receiver: ctx.boot.deferredApi?.router.receiverOf(o) ?? null,
         });
         for (const c of o.children) queue.push(c);
       }
       return {
         found: true, name: r.name, actorId: r.userData.gameActorId ?? null,
-        route: deferredApi?.router.routeOf(r) ?? null,
-        receiver: deferredApi?.router.receiverOf(r) ?? null,
+        route: ctx.boot.deferredApi?.router.routeOf(r) ?? null,
+        receiver: ctx.boot.deferredApi?.router.receiverOf(r) ?? null,
         totalDescendants: countDescendants(r),
         truncated: seen >= maxNodes * 4 || nodes.length >= maxNodes,
         nodes,
@@ -11380,12 +11353,12 @@ function performBenchAction(a: BenchAction): void {
         const viewZ = new THREE.Vector3(...spots[i]!).applyMatrix4(camera.matrixWorldInverse).z;
         const worldSize = typeof scale === 'number' ? scale
           : 2 * Math.abs(viewZ) * Math.tan(camera.fov * Math.PI / 360)
-            * scale.pixels / postAa.contentSize.height;
+            * scale.pixels / ctx.render.postAa.contentSize.height;
         s.scale.setScalar(worldSize);
         scene.add(s);
-        depthProbes.push(s);
+        ctx.render.depthProbes.push(s);
       }
-      return depthProbes.map((s) => s.name);
+      return ctx.render.depthProbes.map((s) => s.name);
     },
     clearDepthProbes: () => clearDepthProbes(),
     // ---------------------------------------------------------------
@@ -11408,8 +11381,8 @@ function performBenchAction(a: BenchAction): void {
     // ---------------------------------------------------------------
     setFisheye: (deg: number) => {
       if (Number.isFinite(deg)) {
-        centerFovDeg = clampFovDeg(deg);
-        postAa.setLens(camera.fov, centerFovDeg);
+        ctx.player.centerFovDeg = clampFovDeg(deg);
+        ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
       }
       return fisheyeReport();
     },
@@ -11417,7 +11390,7 @@ function performBenchAction(a: BenchAction): void {
       if (Number.isFinite(deg)) {
         camera.fov = clampFovDeg(deg);
         camera.updateProjectionMatrix();
-        postAa.setLens(camera.fov, centerFovDeg);
+        ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
         sizeSdfLayer();
       }
       return fisheyeReport();
@@ -11433,11 +11406,11 @@ function performBenchAction(a: BenchAction): void {
     // in between (sdf-layer.ts header). Default OFF; the look verdict is
     // the owner's, from the capture reel.
     // ---------------------------------------------------------------
-    setHalfRate: (on: boolean) => sdfLayer.setHalfRate(on),
-    get halfRate() { return sdfLayer.halfRate; },
+    setHalfRate: (on: boolean) => ctx.render.sdfLayer.setHalfRate(on),
+    get halfRate() { return ctx.render.sdfLayer.halfRate; },
     /** 0 = hold only, 1 = per-pixel depth reproject (default). */
-    setHalfRateMode: (n: number) => sdfLayer.setHalfRateMode(n),
-    get halfRateMode() { return sdfLayer.halfRateMode; },
+    setHalfRateMode: (n: number) => ctx.render.sdfLayer.setHalfRateMode(n),
+    get halfRateMode() { return ctx.render.sdfLayer.halfRateMode; },
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. Optional `limb` aims at
      *  that cluster's centre instead of the torso (same confirm gate). */
@@ -11452,11 +11425,11 @@ function performBenchAction(a: BenchAction): void {
      * draw the same particles twice). Mist and floor splats stay.
      */
     setGoo(on: boolean) {
-      if (!gooLayer) return false;
-      gooEnabled = on;
+      if (!ctx.goo.layer) return false;
+      ctx.goo.enabled = on;
       // Beads and ribbons go: they are the hard-edged shapes the goo
       // replaces, and they would draw the same particles twice.
-      bloodView.setBeadsVisible(!on);
+      ctx.vfx.bloodView.setBeadsVisible(!on);
       // MIST STAYS. Hiding it (first cut) was a bug with teeth: the goo only
       // draws where droplets OVERLAP, so a sparse hit — an ordinary pellet
       // at range — crosses no threshold and draws NOTHING, and with mist off
@@ -11464,8 +11437,8 @@ function performBenchAction(a: BenchAction): void {
       // pellet at threshold 1.5 spawned 10 droplets and rendered zero pixels.
       // The reference frames want both anyway — connected masses PLUS fine
       // satellite specks — so mist is the sparse-case floor and the grain.
-      bloodView.setMistVisible(true);
-      gooPanel?.setVisible(on);
+      ctx.vfx.bloodView.setMistVisible(true);
+      ctx.panels.gooPanel?.setVisible(on);
       return true;
     },
     // ---------------------------------------------------------------
@@ -11475,93 +11448,93 @@ function performBenchAction(a: BenchAction): void {
     // ---------------------------------------------------------------
     /** On/off. Returns the resulting state. Off restores the fused sharp goo. */
     setBloodBlur: (on: boolean) => {
-      const next = shutterGame?.setEnabled(on) ?? false;
-      shutterPanel?.refresh();
+      const next = ctx.panels.shutterGame?.setEnabled(on) ?? false;
+      ctx.panels.shutterPanel?.refresh();
       return next;
     },
-    get bloodBlurEnabled() { return shutterGame?.enabled ?? false; },
+    get bloodBlurEnabled() { return ctx.panels.shutterGame?.enabled ?? false; },
     /** Compare identical density inputs with full versus live-prefix uploads. */
-    setGooUploadOptimization: (on: boolean) => gooLayer?.setUploadOptimization(on),
+    setGooUploadOptimization: (on: boolean) => ctx.goo.layer?.setUploadOptimization(on),
     /** Exposure in ms — longer = longer trails. Clamped [0, 200]. Shared by
      *  the blood AND gib layers (the panel control is one control). */
     setBloodBlurExposure: (ms: number) => {
-      const applied = shutterGame?.setExposureMs(ms) ?? 0;
-      gibShutter?.setExposureMs(applied);
-      shutterPanel?.refresh();
+      const applied = ctx.panels.shutterGame?.setExposureMs(ms) ?? 0;
+      ctx.gibs.shutter?.setExposureMs(applied);
+      ctx.panels.shutterPanel?.refresh();
       return applied;
     },
     /** Max drawn trail in CONTENT pixels. Clamped [1, 400]. Shared. */
     setBloodBlurMaxStreak: (px: number) => {
-      const applied = shutterGame?.setMaxStreakPx(px) ?? 0;
-      gibShutter?.setMaxStreakPx(applied);
-      shutterPanel?.refresh();
+      const applied = ctx.panels.shutterGame?.setMaxStreakPx(px) ?? 0;
+      ctx.gibs.shutter?.setMaxStreakPx(applied);
+      ctx.panels.shutterPanel?.refresh();
       return applied;
     },
     /** DEBUG: seed grid scale vs the goo density dims. Clamped [0.25, 2]. */
-    setBloodBlurSeedScale: (v: number) => shutterGame?.setSeedScale(v) ?? 0,
+    setBloodBlurSeedScale: (v: number) => ctx.panels.shutterGame?.setSeedScale(v) ?? 0,
     /** DEBUG: destination depth bias in metres. Clamped [0, 50]. */
-    setBloodBlurDepthBias: (m: number) => shutterGame?.setDepthBiasM(m) ?? 0,
+    setBloodBlurDepthBias: (m: number) => ctx.panels.shutterGame?.setDepthBiasM(m) ?? 0,
     /** Effective values, seed/layer dims, per-frame stats and any hard error. */
     get bloodBlur() {
-      return shutterGame
-        ? shutterGame.diagnostics()
+      return ctx.panels.shutterGame
+        ? ctx.panels.shutterGame.diagnostics()
         : { enabled: false, unavailable: true, route: 'capture-stage' as const };
     },
     /** FLYING-GIB SHUTTER BLUR — separate switch, shared exposure. */
     setGibBlur: (on: boolean) => {
-      const next = gibShutter?.setEnabled(on) ?? false;
-      shutterPanel?.refresh();
+      const next = ctx.gibs.shutter?.setEnabled(on) ?? false;
+      ctx.panels.shutterPanel?.refresh();
       return next;
     },
-    get gibBlurEnabled() { return gibShutter?.enabled ?? false; },
+    get gibBlurEnabled() { return ctx.gibs.shutter?.enabled ?? false; },
     /** Mutual-occlusion A/B seam: when ON (default) the blood resolve also
      *  occludes against the blurred-gib layer depth. Returns the applied value. */
-    setGibOccluder: (on: boolean) => { gibOccluderEnabled = !!on; return gibOccluderEnabled; },
-    get gibOccluderEnabled() { return gibOccluderEnabled; },
+    setGibOccluder: (on: boolean) => { ctx.gibs.occluderEnabled = !!on; return ctx.gibs.occluderEnabled; },
+    get gibOccluderEnabled() { return ctx.gibs.occluderEnabled; },
     /** Live values, seed/layer dims, per-frame stats and any hard error. */
     get gibBlur() {
-      return gibShutter
-        ? gibShutter.diagnostics()
+      return ctx.gibs.shutter
+        ? ctx.gibs.shutter.diagnostics()
         : { enabled: false, unavailable: true };
     },
     /** Show/hide the focused shutter controls. */
     shutterPanel: (on?: boolean) => {
-      if (on !== undefined) shutterPanel?.setVisible(on);
-      shutterPanel?.refresh();
-      return shutterPanel?.visible ?? false;
+      if (on !== undefined) ctx.panels.shutterPanel?.setVisible(on);
+      ctx.panels.shutterPanel?.refresh();
+      return ctx.panels.shutterPanel?.visible ?? false;
     },
     get goo() {
-      return gooLayer
+      return ctx.goo.layer
         ? {
-          enabled: gooEnabled,
-          threshold: gooLayer.threshold,
-          edge: gooLayer.edge,
-          blurPx: gooLayer.blurPx,
-          sizeScale: gooLayer.sizeScale,
-          target: gooLayer.targetSize,
-          mode: gooLayer.mode,
-          liveCount: gooLayer.liveCount,
-          syncCalls: gooLayer.syncCalls,
-          absorb: gooLayer.absorb,
-          spec: gooLayer.spec,
-          gloss: gooLayer.gloss,
-          rim: gooLayer.rim,
-          stretch: gooLayer.stretch,
-          shadowRed: gooLayer.shadowRed,
+          enabled: ctx.goo.enabled,
+          threshold: ctx.goo.layer.threshold,
+          edge: ctx.goo.layer.edge,
+          blurPx: ctx.goo.layer.blurPx,
+          sizeScale: ctx.goo.layer.sizeScale,
+          target: ctx.goo.layer.targetSize,
+          mode: ctx.goo.layer.mode,
+          liveCount: ctx.goo.layer.liveCount,
+          syncCalls: ctx.goo.layer.syncCalls,
+          absorb: ctx.goo.layer.absorb,
+          spec: ctx.goo.layer.spec,
+          gloss: ctx.goo.layer.gloss,
+          rim: ctx.goo.layer.rim,
+          stretch: ctx.goo.layer.stretch,
+          shadowRed: ctx.goo.layer.shadowRed,
           candidate: {
-            reconstruction: gooLayer.reconstruction,
-            connections: gooConnectionsEnabled,
-            strands: gooStrandsEnabled,
-            sheets: gooSheetsEnabled,
-            extraBlobs: gooLayer.extraBlobCount,
-            density: gooLayer.densityDiagnostics,
+            reconstruction: ctx.goo.layer.reconstruction,
+            connections: ctx.goo.connectionsEnabled,
+            strands: ctx.goo.strandsEnabled,
+            sheets: ctx.goo.sheetsEnabled,
+            extraBlobs: ctx.goo.layer.extraBlobCount,
+            density: ctx.goo.layer.densityDiagnostics,
           },
           perf: {
-            surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
-            minTexelRadius: gooLayer.minTexelRadius,
-            areaPriority: gooLayer.areaPriority,
-            splatFadeTail: gooLayer.splatFadeTail,
-            passGate: gooLayer.passGate,
+            surfaceAtDensityRes: ctx.goo.layer.surfaceAtDensityRes,
+            minTexelRadius: ctx.goo.layer.minTexelRadius,
+            areaPriority: ctx.goo.layer.areaPriority,
+            splatFadeTail: ctx.goo.layer.splatFadeTail,
+            passGate: ctx.goo.layer.passGate,
           },
         }
         : { enabled: false, unavailable: true };
@@ -11581,7 +11554,7 @@ function performBenchAction(a: BenchAction): void {
      * with nothing on screen means the fault is the surface or the composite.
      */
     async gooProbe() {
-      if (!gooLayer) return { unavailable: true };
+      if (!ctx.goo.layer) return { unavailable: true };
       // Half-float decode: WebGPU hands back raw 16-bit patterns, and the
       // density targets are HalfFloatType because additive blending is only
       // guaranteed on 16-bit float in WebGPU core.
@@ -11597,7 +11570,7 @@ function performBenchAction(a: BenchAction): void {
         const w = t.width;
         const h = t.height;
         const raw = new Uint16Array(
-          await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h) as ArrayLike<number>,
+          await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h) as ArrayLike<number>,
         );
         // WebGPU pads each readback row to a 256-byte boundary; at 8 bytes per
         // RGBA16F texel that is not the same as w * 4 shorts, and ignoring it
@@ -11617,47 +11590,47 @@ function performBenchAction(a: BenchAction): void {
         }
         return { w, h, max, nonZero, mean: sum / (w * h) };
       };
-      const { density, blurred } = gooLayer.debugTargets;
+      const { density, blurred } = ctx.goo.layer.debugTargets;
       return {
-        enabled: gooEnabled,
-        mode: gooLayer.mode,
-        threshold: gooLayer.threshold,
-        blurPx: gooLayer.blurPx,
-        liveCount: gooLayer.liveCount,
-        syncCalls: gooLayer.syncCalls,
+        enabled: ctx.goo.enabled,
+        mode: ctx.goo.layer.mode,
+        threshold: ctx.goo.layer.threshold,
+        blurPx: ctx.goo.layer.blurPx,
+        liveCount: ctx.goo.layer.liveCount,
+        syncCalls: ctx.goo.layer.syncCalls,
         density: await readOne(density),
         blurredBuf: await readOne(blurred),
       };
     },
     /** Show/hide the live tuning panel independently of the layer. */
     gooPanel(on: boolean) {
-      gooPanel?.setVisible(on);
-      return gooPanel?.visible ?? false;
+      ctx.panels.gooPanel?.setVisible(on);
+      return ctx.panels.gooPanel?.visible ?? false;
     },
     /** Show/hide the WOUND tuning panel (ships visible but collapsed; see
      *  woundPanel's declaration). Same shape as gooPanel so capture scripts
      *  can guard it the same typeof way. */
     woundPanel(on: boolean) {
-      woundPanel?.setVisible(on);
-      return woundPanel?.visible ?? false;
+      ctx.panels.woundPanel?.setVisible(on);
+      return ctx.panels.woundPanel?.visible ?? false;
     },
     /** Expand or re-collapse the GOO panel. Panels ship COLLAPSED so they stop
      *  covering the frame; a capture script that actually wants to photograph
      *  the sliders opens it with this. */
     gooPanelCollapsed(on: boolean) {
-      gooPanel?.setCollapsed(on);
-      return gooPanel?.collapsed ?? true;
+      ctx.panels.gooPanel?.setCollapsed(on);
+      return ctx.panels.gooPanel?.collapsed ?? true;
     },
     /** Show/hide the DYNAMITE / GIB tuning panel (dynamite-panel.ts). Same
      *  shape as the other three so a capture script can dismiss them all. */
     dynamitePanel(on: boolean) {
-      dynamitePanel?.setVisible(on);
-      return dynamitePanel?.visible ?? false;
+      ctx.panels.dynamitePanel?.setVisible(on);
+      return ctx.panels.dynamitePanel?.visible ?? false;
     },
     /** Expand or re-collapse the DYNAMITE / GIB panel. */
     dynamitePanelCollapsed(on: boolean) {
-      dynamitePanel?.setCollapsed(on);
-      return dynamitePanel?.collapsed ?? true;
+      ctx.panels.dynamitePanel?.setCollapsed(on);
+      return ctx.panels.dynamitePanel?.collapsed ?? true;
     },
     /** THE PANEL'S OWN SETTER, from the console: the same keys the sliders use
      *  (see dynamite-panel.ts's table, which is the one source for both), plus
@@ -11668,18 +11641,18 @@ function performBenchAction(a: BenchAction): void {
     },
     dynamiteTuning: () => dynamiteTuningValues(),
     woundPanelCollapsed(on: boolean) {
-      woundPanel?.setCollapsed(on);
-      return woundPanel?.collapsed ?? true;
+      ctx.panels.woundPanel?.setCollapsed(on);
+      return ctx.panels.woundPanel?.collapsed ?? true;
     },
     /** Show/hide the VHS tuning panel (vhs-panel.ts). Same shape as the two
      *  above, so a capture script can dismiss all three the same way. */
     vhsPanel(on: boolean) {
-      vhsPanel?.setVisible(on);
-      return vhsPanel?.visible ?? false;
+      ctx.panels.vhsPanel?.setVisible(on);
+      return ctx.panels.vhsPanel?.visible ?? false;
     },
     vhsPanelCollapsed(on: boolean) {
-      vhsPanel?.setCollapsed(on);
-      return vhsPanel?.collapsed ?? true;
+      ctx.panels.vhsPanel?.setCollapsed(on);
+      return ctx.panels.vhsPanel?.collapsed ?? true;
     },
 
     /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
@@ -11706,21 +11679,21 @@ function performBenchAction(a: BenchAction): void {
     setBoneMesh: (on: boolean) => applyBoneMesh(on),
     /** Tube bone look: { stain 0..1 toward deepColor, wet 0..1 blood tint on highlights, spec gain, fres gain }. */
     setBoneLook: (o: { stain?: number; wet?: number; spec?: number; fres?: number }) => {
-      const l = boneInstancer.uniforms.look.value;
+      const l = ctx.render.boneInstancer.uniforms.look.value;
       if (o.stain !== undefined) l.x = o.stain; if (o.wet !== undefined) l.y = o.wet;
       if (o.spec !== undefined) l.z = o.spec; if (o.fres !== undefined) l.w = o.fres;
       return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
     },
-    get boneMesh() { return boneMesh; },
+    get boneMesh() { return ctx.render.boneMesh; },
     /** skeleton=mesh diagnostics: null unless the dev selector resolved;
      *  otherwise the renderer's coverage stats — proof the intended path
      *  ran (segments/verts > 0) and extraction health flags. */
     /** Deterministic actual-hit fixture: front-centre skull slug, same eye
      * event and actor damage path as travelling projectiles. */
     hitMeshSkull: (bodyId?: number) => {
-      const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId);
-      if (!a || !segMeshRenderer) return null;
-      const sources = skeletonSources.get(a)?.sources;
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      if (!a || !ctx.render.segMeshRenderer) return null;
+      const sources = ctx.render.skeletonSources.get(a)?.sources;
       const head = sources?.find(s => s.segment === 'head' && s.isLive());
       if (!sources || !head) return null;
       const b = head.bounds, x=(b.min[0]+b.max[0])/2, y=b.min[1]+(b.max[1]-b.min[1])*.61;
@@ -11731,43 +11704,43 @@ function performBenchAction(a: BenchAction): void {
       if(!point)return null;
       const dl=Math.hypot(end[0]-start[0],end[1]-start[1],end[2]-start[2])||1;
       const direction:Vec3=[(end[0]-start[0])/dl,(end[1]-start[1])/dl,(end[2]-start[2])/dl];
-      const ejected = segMeshRenderer.impact(a, sources, point, direction, 'slug');
+      const ejected = ctx.render.segMeshRenderer.impact(a, sources, point, direction, 'slug');
       a.beginHits(); const wound = a.hitSlug(point, direction); a.endHits();
       return { actor: a.id, point, ejected, stamped: !!wound };
     },
-    meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId); return a && segMeshRenderer ? segMeshRenderer.eyeState(a) : null; },
-    skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals, cacheStats: segMeshCache!.stats() } : null,
+    meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
+    skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
     /** Cold-start task 1: how many per-character body builds the memo actually
      *  ran (vs served from cache) and their cumulative CPU time. */
     bodyBuild: () => ({ ...bodyBuildCacheStats() }),
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
-      requestedMode: skeletonMode,
-      activeMode: skeletonMode === 'volume'
-        ? (skeletonVolumes.size > 0 ? 'volume' : 'procedural')
-        : skeletonMode === 'mesh'
-          ? (segMeshRenderer && segMeshRenderer.stats.segments > 0 ? 'mesh' : 'procedural')
+      requestedMode: ctx.render.skeletonMode,
+      activeMode: ctx.render.skeletonMode === 'volume'
+        ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
+        : ctx.render.skeletonMode === 'mesh'
+          ? (ctx.render.segMeshRenderer && ctx.render.segMeshRenderer.stats.segments > 0 ? 'mesh' : 'procedural')
           : 'procedural',
-      volume: segVolumeCache ? {
-        actors: skeletonVolumes.size,
-        grids: segVolumeCache.stats().grids,
-        gridBytes: segVolumeCache.stats().bytes,
-        atlases: sharedVolumeAtlases.size,
-        atlasBytes: [...sharedVolumeAtlases.values()].reduce((sum, atlas) => sum + atlas.bytes, 0),
-        bakeMs: [...sharedVolumeAtlases.values()].reduce((sum, atlas) => sum + atlas.totalBakeMs, 0),
-        atlasBuilds: volumeAtlasBuilds,
+      volume: ctx.render.segVolumeCache ? {
+        actors: ctx.render.skeletonVolumes.size,
+        grids: ctx.render.segVolumeCache.stats().grids,
+        gridBytes: ctx.render.segVolumeCache.stats().bytes,
+        atlases: ctx.render.sharedVolumeAtlases.size,
+        atlasBytes: [...ctx.render.sharedVolumeAtlases.values()].reduce((sum, atlas) => sum + atlas.bytes, 0),
+        bakeMs: [...ctx.render.sharedVolumeAtlases.values()].reduce((sum, atlas) => sum + atlas.totalBakeMs, 0),
+        atlasBuilds: ctx.telemetry.volumeAtlasBuilds,
       } : null,
     }),
     boneTubes: () => ({
-      count: boneInstancer.count,
-      overflowed: boneInstancer.overflowed,
+      count: ctx.render.boneInstancer.count,
+      overflowed: ctx.render.boneInstancer.overflowed,
       /** WHICH PATHS FEED THE TUBES, and whether the object is drawn at all.
        *  With `gibBoneMesh` a bone gib packs no field rows and its marched proxy
        *  is hidden, so the instancer is the ONLY thing drawing it — and from the
        *  chunk census (which counts marched ROWS) "the skeleton is drawn as
        *  tubes" and "the skeleton silently vanished" are indistinguishable.
        *  These three make them distinguishable. */
-      gibBoneMesh, bodyBoneMesh: boneMesh, visible: boneInstancer.object.visible,
+      gibBoneMesh: ctx.gibs.boneMesh, bodyBoneMesh: ctx.render.boneMesh, visible: ctx.render.boneInstancer.object.visible,
       /** TASK-6 DIAGNOSTIC (bounded): world endpoints (a, b) of up to 8
        *  posed bone prims — the SAME prim data boneInstancer.update() packs
        *  this frame — so the gate can anchor its tube-texel scan to real
@@ -11776,7 +11749,7 @@ function performBenchAction(a: BenchAction): void {
        *  whenever the frozen gait phase shifts). Never mutates state. */
       tips: (() => {
         const out: number[][] = [];
-        for (const a of actors) {
+        for (const a of ctx.world.actors) {
           const prims = a.posed().bonePrims ?? [];
           for (const p of prims) {
             if (p.op !== 'bone') continue;
@@ -11794,18 +11767,18 @@ function performBenchAction(a: BenchAction): void {
       stretch?: number;
       shadowRed?: number;
     }) {
-      if (!gooLayer) return;
-      if (o.threshold !== undefined) gooLayer.setThreshold(o.threshold);
-      if (o.edge !== undefined) gooLayer.setEdge(o.edge);
-      if (o.blurPx !== undefined) gooLayer.setBlurPx(o.blurPx);
-      if (o.sizeScale !== undefined) gooLayer.setSizeScale(o.sizeScale);
-      if (o.mode !== undefined) gooLayer.setMode(o.mode);
-      if (o.absorb !== undefined) gooLayer.setAbsorb(o.absorb);
-      if (o.spec !== undefined) gooLayer.setSpec(o.spec);
-      if (o.gloss !== undefined) gooLayer.setGloss(o.gloss);
-      if (o.rim !== undefined) gooLayer.setRim(o.rim);
-      if (o.stretch !== undefined) gooLayer.setStretch(o.stretch);
-      if (o.shadowRed !== undefined) gooLayer.setShadowRed(o.shadowRed);
+      if (!ctx.goo.layer) return;
+      if (o.threshold !== undefined) ctx.goo.layer.setThreshold(o.threshold);
+      if (o.edge !== undefined) ctx.goo.layer.setEdge(o.edge);
+      if (o.blurPx !== undefined) ctx.goo.layer.setBlurPx(o.blurPx);
+      if (o.sizeScale !== undefined) ctx.goo.layer.setSizeScale(o.sizeScale);
+      if (o.mode !== undefined) ctx.goo.layer.setMode(o.mode);
+      if (o.absorb !== undefined) ctx.goo.layer.setAbsorb(o.absorb);
+      if (o.spec !== undefined) ctx.goo.layer.setSpec(o.spec);
+      if (o.gloss !== undefined) ctx.goo.layer.setGloss(o.gloss);
+      if (o.rim !== undefined) ctx.goo.layer.setRim(o.rim);
+      if (o.stretch !== undefined) ctx.goo.layer.setStretch(o.stretch);
+      if (o.shadowRed !== undefined) ctx.goo.layer.setShadowRed(o.shadowRed);
     },
 
     /**
@@ -11827,23 +11800,23 @@ function performBenchAction(a: BenchAction): void {
       /** Density quads per frame, at most GOO_TUNING.maxParticles (1000). */
       particleCap?: number;
     }) {
-      if (!gooLayer) return { unavailable: true };
-      if (o.densityScale !== undefined) gooLayer.setDensityScale(o.densityScale);
-      if (o.particleCap !== undefined) gooLayer.setParticleCap(o.particleCap);
-      if (o.surfaceAtDensityRes !== undefined) gooLayer.setSurfaceAtDensityRes(o.surfaceAtDensityRes);
-      if (o.minTexelRadius !== undefined) gooLayer.setMinTexelRadius(o.minTexelRadius);
-      if (o.areaPriority !== undefined) gooLayer.setAreaPriority(o.areaPriority);
-      if (o.splatFadeTail !== undefined) gooLayer.setSplatFadeTail(o.splatFadeTail);
-      if (o.passGate !== undefined) gooLayer.setPassGate(o.passGate);
+      if (!ctx.goo.layer) return { unavailable: true };
+      if (o.densityScale !== undefined) ctx.goo.layer.setDensityScale(o.densityScale);
+      if (o.particleCap !== undefined) ctx.goo.layer.setParticleCap(o.particleCap);
+      if (o.surfaceAtDensityRes !== undefined) ctx.goo.layer.setSurfaceAtDensityRes(o.surfaceAtDensityRes);
+      if (o.minTexelRadius !== undefined) ctx.goo.layer.setMinTexelRadius(o.minTexelRadius);
+      if (o.areaPriority !== undefined) ctx.goo.layer.setAreaPriority(o.areaPriority);
+      if (o.splatFadeTail !== undefined) ctx.goo.layer.setSplatFadeTail(o.splatFadeTail);
+      if (o.passGate !== undefined) ctx.goo.layer.setPassGate(o.passGate);
       return {
-        densityScale: gooLayer.densityScale,
-        particleCap: gooLayer.particleCap,
-        targetSize: gooLayer.targetSize,
-        surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
-        minTexelRadius: gooLayer.minTexelRadius,
-        areaPriority: gooLayer.areaPriority,
-        splatFadeTail: gooLayer.splatFadeTail,
-        passGate: gooLayer.passGate,
+        densityScale: ctx.goo.layer.densityScale,
+        particleCap: ctx.goo.layer.particleCap,
+        targetSize: ctx.goo.layer.targetSize,
+        surfaceAtDensityRes: ctx.goo.layer.surfaceAtDensityRes,
+        minTexelRadius: ctx.goo.layer.minTexelRadius,
+        areaPriority: ctx.goo.layer.areaPriority,
+        splatFadeTail: ctx.goo.layer.splatFadeTail,
+        passGate: ctx.goo.layer.passGate,
       };
     },
 
@@ -11863,20 +11836,20 @@ function performBenchAction(a: BenchAction): void {
       strands?: boolean;
       sheets?: boolean;
     }) {
-      if (!gooLayer) return { unavailable: true };
+      if (!ctx.goo.layer) return { unavailable: true };
       if (o.reconstruction !== undefined) {
-        gooReconstruction = o.reconstruction;
-        gooLayer.setReconstruction(o.reconstruction);
+        ctx.goo.reconstruction = o.reconstruction;
+        ctx.goo.layer.setReconstruction(o.reconstruction);
       }
-      if (o.connections !== undefined) gooConnectionsEnabled = o.connections;
-      if (o.strands !== undefined) gooStrandsEnabled = o.strands;
-      if (o.sheets !== undefined) gooSheetsEnabled = o.sheets;
+      if (o.connections !== undefined) ctx.goo.connectionsEnabled = o.connections;
+      if (o.strands !== undefined) ctx.goo.strandsEnabled = o.strands;
+      if (o.sheets !== undefined) ctx.goo.sheetsEnabled = o.sheets;
       return {
-        reconstruction: gooLayer.reconstruction,
-        connections: gooConnectionsEnabled,
-        strands: gooStrandsEnabled,
-        sheets: gooSheetsEnabled,
-        extraBlobs: gooLayer.extraBlobCount,
+        reconstruction: ctx.goo.layer.reconstruction,
+        connections: ctx.goo.connectionsEnabled,
+        strands: ctx.goo.strandsEnabled,
+        sheets: ctx.goo.sheetsEnabled,
+        extraBlobs: ctx.goo.layer.extraBlobCount,
       };
     },
 
@@ -11895,22 +11868,22 @@ function performBenchAction(a: BenchAction): void {
         const base = o.preset && Object.hasOwn(impactSplashPresets, o.preset) ? impactSplashPresets[o.preset] : impactSplashProfiles[weapon];
         impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...base, ...o.profile });
       }
-      if (o.enabled !== undefined) impactSplashEnabled = o.enabled;
-      if (impactSplashEnabled) ensureImpactSplashLayer();
-      impactSplashLayer?.setVisible(impactSplashEnabled);
+      if (o.enabled !== undefined) ctx.panels.impactSplashEnabled = o.enabled;
+      if (ctx.panels.impactSplashEnabled) ensureImpactSplashLayer();
+      ctx.panels.impactSplashLayer?.setVisible(ctx.panels.impactSplashEnabled);
       return {
-        enabled: impactSplashEnabled,
-        available: impactSplashLayer !== null,
+        enabled: ctx.panels.impactSplashEnabled,
+        available: ctx.panels.impactSplashLayer !== null,
         profiles: structuredClone(impactSplashProfiles),
-        events: impactSplashLayer?.eventCount ?? 0,
+        events: ctx.panels.impactSplashLayer?.eventCount ?? 0,
       };
     },
     get impactSplash() {
       return {
-        enabled: impactSplashEnabled,
-        available: impactSplashLayer !== null,
+        enabled: ctx.panels.impactSplashEnabled,
+        available: ctx.panels.impactSplashLayer !== null,
         profiles: structuredClone(impactSplashProfiles),
-        events: impactSplashLayer?.eventCount ?? 0,
+        events: ctx.panels.impactSplashLayer?.eventCount ?? 0,
       };
     },
 
@@ -11928,52 +11901,52 @@ function performBenchAction(a: BenchAction): void {
      *  owner-passed 2026-08-31 after the stale-hull mask fix; -40%/-54%
      *  frame time at real-render parity. This is the kill switch. */
     setShell(on: boolean) {
-      sdfLayer.setShellEnabled(on);
-      if (on) outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      ctx.render.sdfLayer.setShellEnabled(on);
+      if (on) ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
     },
     /** Perf round 2, task 5: the front-to-back per-body passes and their
      *  accumulated-depth gate. OFF restores the single-pass march. */
-    setDepthGate(on: boolean) { sdfLayer.setDepthGate(on); },
-    get depthGate() { return sdfLayer.depthGate; },
+    setDepthGate(on: boolean) { ctx.render.sdfLayer.setDepthGate(on); },
+    get depthGate() { return ctx.render.sdfLayer.depthGate; },
     /** Close-up task 3: the quarter-res depth prepass and the march's
      *  consumption of it. OFF (ship default) is bit-identical to the
      *  pre-task-3 frame; the census and the bench decide the flip. */
-    setDepthPrepass(on: boolean) { sdfLayer.setDepthPreEnabled(on); },
+    setDepthPrepass(on: boolean) { ctx.render.sdfLayer.setDepthPreEnabled(on); },
     /** Temporal reprojection start (plan 2026-09-10): rays start at last
      *  frame's reprojected hit minus `margin` m (0.25 ships) and `slope`.
      *  Off is bit-identical. */
-    setTemporalStart: (on: boolean, margin?: number, slope?: number) => { sdfLayer.setTemporalStart(on, margin, slope); return sdfLayer.temporalStart; },
+    setTemporalStart: (on: boolean, margin?: number, slope?: number) => { ctx.render.sdfLayer.setTemporalStart(on, margin, slope); return ctx.render.sdfLayer.temporalStart; },
     /** Temporal accumulation of the marched flesh (?accum). OFF is the plain
      *  low-res march. Turning it on turns the field weave off and the history is
      *  re-seeded, so the first frame of the new epoch is independent of the old
      *  one — see the frame-hash decision note. */
     /** Run 5 refine pass (spec 2026-09-13 §4). setRefine throws unless the boot allocated it (?refine=1). */
-    setRefine: (on: boolean) => { sdfLayer.setRefine(on); return sdfLayer.refine; },
-    setRefineView: (on: boolean) => { sdfLayer.setRefineView(on); return sdfLayer.refineView; },
-    setRefineCfg: (cfg: { reject?: number; normalEps?: number; steps?: number }) => { sdfLayer.setRefineCfg(cfg); return sdfLayer.refineCfg; },
+    setRefine: (on: boolean) => { ctx.render.sdfLayer.setRefine(on); return ctx.render.sdfLayer.refine; },
+    setRefineView: (on: boolean) => { ctx.render.sdfLayer.setRefineView(on); return ctx.render.sdfLayer.refineView; },
+    setRefineCfg: (cfg: { reject?: number; normalEps?: number; steps?: number }) => { ctx.render.sdfLayer.setRefineCfg(cfg); return ctx.render.sdfLayer.refineCfg; },
     /** Run 5b: the refine twins' lighting tail — 'slim' (default) drops scatter, the wound
      *  soft shadow, the ambient bounce and the probe gather from the twin only; 'full' is
      *  run 5's behaviour. Applies to every live actor view (chunks have no refine twin). */
     setRefineTail: (tail: RefineTail) => {
-      refineTailWanted = tail;
-      for (const a of actors) a.view.setRefineTail(tail);
-      return actors[0]?.view.refineTail ?? tail;
+      ctx.render.refineTailWanted = tail;
+      for (const a of ctx.world.actors) a.view.setRefineTail(tail);
+      return ctx.world.actors[0]?.view.refineTail ?? tail;
     },
     /** Run 5b: the per-body distance band. Clamped: near >= 0, far > near, hysteresis >= 0. */
     setRefineBand: (band: { near?: number; far?: number; hysteresis?: number }) => {
-      const near = Math.max(0, band.near ?? refineBand.near);
-      const far = Math.max(near + 1e-6, band.far ?? refineBand.far);
-      const hysteresis = Math.max(0, band.hysteresis ?? refineBand.hysteresis);
-      refineBand.near = near; refineBand.far = far; refineBand.hysteresis = hysteresis;
-      return { ...refineBand };
+      const near = Math.max(0, band.near ?? ctx.render.refineBand.near);
+      const far = Math.max(near + 1e-6, band.far ?? ctx.render.refineBand.far);
+      const hysteresis = Math.max(0, band.hysteresis ?? ctx.render.refineBand.hysteresis);
+      ctx.render.refineBand.near = near; ctx.render.refineBand.far = far; ctx.render.refineBand.hysteresis = hysteresis;
+      return { ...ctx.render.refineBand };
     },
-    refineBand: () => ({ ...refineBand }),
-    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg, tail: actors[0]?.view.refineTail ?? 'slim', bodies: refinedBodies, band: { ...refineBand } }),
+    refineBand: () => ({ ...ctx.render.refineBand }),
+    refineInfo: () => ({ allocated: ctx.render.sdfLayer.refineSource !== null, on: ctx.render.sdfLayer.refine, view: ctx.render.sdfLayer.refineView, cfg: ctx.render.sdfLayer.refineCfg, tail: ctx.world.actors[0]?.view.refineTail ?? 'slim', bodies: ctx.render.refinedBodies, band: { ...ctx.render.refineBand } }),
     /** The boot's graphics level (`?graphics=high`) — which SHIPPED_UPSCALE entry was loaded.
      *  Not a setter: 'high' allocates the normal attachments + refine targets at boot. */
-    graphics: (): GraphicsLevel => graphics,
-    setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
-    resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
+    graphics: (): GraphicsLevel => ctx.boot.graphics,
+    setTemporalAccum: (on: boolean, alpha?: number) => ctx.render.sdfLayer.setTemporalAccum(on, alpha),
+    resetTemporalAccum: () => ctx.render.sdfLayer.resetTemporalAccum(),
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
      *  through applySdfScale (the game's own state). `null` turns the stage off and
      *  leaves the scale alone — callers restore it. `{ model }` = random weights (cost/parity
@@ -11983,20 +11956,20 @@ function performBenchAction(a: BenchAction): void {
       raw: { model?: string; layout?: string; inputs?: string; seed?: number; trained?: string } | null,
     ): UpscaleInfo | Promise<UpscaleInfo> => {
       if (raw === null) {
-        upscaleAb.config = null;
-        upscaleAb.model = null;
-        upscaleAb.modelName = null;
+        ctx.render.upscaleAb.config = null;
+        ctx.render.upscaleAb.model = null;
+        ctx.render.upscaleAb.modelName = null;
         updateUpscaleAbLabel();
-        return sdfLayer.setUpscale(null);
+        return ctx.render.sdfLayer.setUpscale(null);
       }
       if (raw.trained !== undefined) return enableTrainedUpscale(raw.trained, raw.layout);
       const cfg = parseUpscaleConfig(raw);
       applySdfScale(UPSCALE_SCALE);
-      const info = sdfLayer.setUpscale(cfg);
-      upscaleAb.config = cfg;
-      upscaleAb.model = null;
-      upscaleAb.modelName = null;
-      upscaleAb.mode = 'model';
+      const info = ctx.render.sdfLayer.setUpscale(cfg);
+      ctx.render.upscaleAb.config = cfg;
+      ctx.render.upscaleAb.model = null;
+      ctx.render.upscaleAb.modelName = null;
+      ctx.render.upscaleAb.mode = 'model';
       updateUpscaleAbLabel();
       return info;
     },
@@ -12007,59 +11980,59 @@ function performBenchAction(a: BenchAction): void {
       return r.json();
     },
     /** P3 A/B state: the mode U last selected, and the loaded model's store name. */
-    upscaleAb: () => ({ active: upscaleAb.config !== null, mode: upscaleAb.mode, model: upscaleAb.modelName }),
+    upscaleAb: () => ({ active: ctx.render.upscaleAb.config !== null, mode: ctx.render.upscaleAb.mode, model: ctx.render.upscaleAb.modelName }),
     /** Stage state plus the camera's near/far (what rgbd depth linearization uses).
      *  near/far are reported even when the stage is off (the capture script needs them). */
     /** Whether the layer allocated the march normal attachment this boot (rgbn/rgbdn models). */
-    upscaleNormalsAllocated: (): boolean => sdfLayer.marchNormalTexture !== null,
+    upscaleNormalsAllocated: (): boolean => ctx.render.sdfLayer.marchNormalTexture !== null,
     /** Post-sharpen over the stage output, 0..1 (owner experiment 2026-09-12; `?upscalesharpen=`). */
     setUpscaleSharpen: (strength: number): number => {
-      const st = sdfLayer.upscaleStage;
+      const st = ctx.render.sdfLayer.upscaleStage;
       if (!st) return 0;
       st.setSharpen(strength);
       return st.sharpen;
     },
     /** 'cas' | 'unsharp' (see UpscaleStage.setSharpenMode; `?upscalesharpenmode=`). */
     setUpscaleSharpenMode: (mode: 'cas' | 'unsharp'): string => {
-      const st = sdfLayer.upscaleStage;
+      const st = ctx.render.sdfLayer.upscaleStage;
       if (!st) return 'off';
       st.setSharpenMode(mode);
       return st.sharpenMode;
     },
     setUpscaleEmptyTileCulling: (enabled: boolean): boolean => {
-      sdfLayer.upscaleStage?.setEmptyTileCulling(enabled);
-      return sdfLayer.upscaleStage?.emptyTileCulling ?? false;
+      ctx.render.sdfLayer.upscaleStage?.setEmptyTileCulling(enabled);
+      return ctx.render.sdfLayer.upscaleStage?.emptyTileCulling ?? false;
     },
     upscaleInfo: () => ({
-      ...sdfLayer.upscaleInfo,
+      ...ctx.render.sdfLayer.upscaleInfo,
       near: (camera as THREE.PerspectiveCamera).near,
       far: (camera as THREE.PerspectiveCamera).far,
     }),
     /** G1-parity (spec 2026-09-11): GPU output vs the CPU twin, in-page. Requires
      *  freeze(true) + setRenderLock(true) first. Returns statistics only. */
     upscaleSelfCheck: (opts?: { compareLayouts?: boolean }) => runUpscaleSelfCheck({
-      renderer: handle.renderer,
-      layer: sdfLayer,
+      renderer: ctx.boot.handle.renderer,
+      layer: ctx.render.sdfLayer,
       camera: camera as THREE.PerspectiveCamera,
-      renderFrames: (n: number) => { handle.setLoopRunning(false); for (let k = 0; k < n; k++) handle.step(1 / 60); },
-      resolveGpu: () => handle.resolveGpu(),
+      renderFrames: (n: number) => { ctx.boot.handle.setLoopRunning(false); for (let k = 0; k < n; k++) ctx.boot.handle.step(1 / 60); },
+      resolveGpu: () => ctx.boot.handle.resolveGpu(),
     }, opts ?? {}),
     /** NEURAL UPSCALE P3 capture (spec 2026-09-11-neural-upscale-p3-training-design.md §1).
      *  A fixed sub-pixel march jitter in output px, or null. Returns false when refused. */
-    setMarchJitter: (x: number | null, y = 0) => sdfLayer.setMarchJitter(x === null ? null : [x, y]),
+    setMarchJitter: (x: number | null, y = 0) => ctx.render.sdfLayer.setMarchJitter(x === null ? null : [x, y]),
     /** P3 capture: replace every actor with the default cast (fresh, unwounded bodies). */
-    resetCast: () => { rebuildCast(); return actors.length; },
+    resetCast: () => { rebuildCast(); return ctx.world.actors.length; },
     /** P3 capture: a full magazine, so scripted wound shots never click empty. */
-    refillShells: () => { shells = MAGAZINE_CAPACITY; updateHud(); return shells; },
+    refillShells: () => { ctx.weapon.shells = MAGAZINE_CAPACITY; updateHud(); return ctx.weapon.shells; },
     /** P3 capture: world centre of an actor's live head or torso cluster, or null. */
     actorLimbCenter: (actorId: number, limb: 'head' | 'torso') => {
-      const a = actors.find((q) => q.id === actorId);
+      const a = ctx.world.actors.find((q) => q.id === actorId);
       const c = a?.posed().clusters.find((cc) => cc.limb === limb && cc.alive)?.center;
       return c ? ([c[0], c[1], c[2]] as Vec3) : null;
     },
     /** P3 capture: an actor's wounds in world space — the transform rendering uses. */
     actorWounds: (actorId: number) => {
-      const a = actors.find((q) => q.id === actorId);
+      const a = ctx.world.actors.find((q) => q.id === actorId);
       if (!a) return [];
       const posed = a.posed();
       const yaw = a.pose().yaw;
@@ -12081,7 +12054,7 @@ function performBenchAction(a: BenchAction): void {
         const by = (1 - b.y) * 0.5 * height;
         return { x: ax, y: ay, r: Math.hypot(bx - ax, by - ay) };
       };
-      return actors.map((a) => {
+      return ctx.world.actors.map((a) => {
         const posed = a.posed();
         const yaw = a.pose().yaw;
         const head = posed.clusters.find((cc) => cc.limb === 'head' && cc.alive)?.center;
@@ -12093,16 +12066,16 @@ function performBenchAction(a: BenchAction): void {
         return { actorId: a.id, head: head ? circle(head, headRadius) : null, wounds };
       });
     },
-    get temporalAccum() { return sdfLayer.temporalAccum; },
-    get temporalStart() { return sdfLayer.temporalStart; },
-    get depthPrepass() { return sdfLayer.depthPreEnabled; },
+    get temporalAccum() { return ctx.render.sdfLayer.temporalAccum; },
+    get temporalStart() { return ctx.render.sdfLayer.temporalStart; },
+    get depthPrepass() { return ctx.render.sdfLayer.depthPreEnabled; },
     get shell() {
       return {
-        enabled: sdfLayer.shellEnabled,
-        instances: outerHull.instanceCount,
+        enabled: ctx.render.sdfLayer.shellEnabled,
+        instances: ctx.world.outerHull.instanceCount,
         // An overflowed hull leaves flesh uncovered, which under a bounded
         // march is a HOLE, not a slightly worse bound. Never ignore this.
-        overflowed: outerHull.overflowed,
+        overflowed: ctx.world.outerHull.overflowed,
         shellAmp: shellAmpOf(),
       };
     },
@@ -12121,30 +12094,30 @@ function performBenchAction(a: BenchAction): void {
      */
     async shellDiag() {
       const readGrid = async () => {
-        const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
-        for (const a of actors) a.view.uniforms.debugCfg.value.x = 4;
+        const prevMode = ctx.world.actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+        for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = 4;
         try {
-          handle.setLoopRunning(false);
-          handle.step(1 / 60);
-          await handle.resolveGpu();
-          const t = sdfLayer.marchTarget;
+          ctx.boot.handle.setLoopRunning(false);
+          ctx.boot.handle.step(1 / 60);
+          await ctx.boot.handle.resolveGpu();
+          const t = ctx.render.sdfLayer.marchTarget;
           const w = t.width;
           const h = t.height;
           const buf = new Float32Array(
-            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+            await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
           );
           const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
           return { w, h, buf, floatsPerRow };
         } finally {
-          for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
+          for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = prevMode;
         }
       };
-      const wasOn = sdfLayer.shellEnabled;
+      const wasOn = ctx.render.sdfLayer.shellEnabled;
       try {
-        sdfLayer.setShellEnabled(false);
+        ctx.render.sdfLayer.setShellEnabled(false);
         const off = await readGrid();
-        sdfLayer.setShellEnabled(true);
-        outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+        ctx.render.sdfLayer.setShellEnabled(true);
+        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
         const on = await readGrid();
         const stepsHist = new Array(13).fill(0); // OFF steps/8 for ON-only hits
         const onStepsHist = new Array(13).fill(0); // ON steps at ON-only hits
@@ -12204,8 +12177,8 @@ function performBenchAction(a: BenchAction): void {
           onStepsAtOnOnly: onStepsHist,
         };
       } finally {
-        sdfLayer.setShellEnabled(wasOn);
-        handle.setLoopRunning(true);
+        ctx.render.sdfLayer.setShellEnabled(wasOn);
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -12222,34 +12195,34 @@ function performBenchAction(a: BenchAction): void {
      * "terminated early" (few steps, tOn short).
      */
     async temporalDiag() {
-      const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
-      for (const a of actors) a.view.uniforms.debugCfg.value.x = 4;
-      const prevWarm = sdfLayer.temporalStart.on;
+      const prevMode = ctx.world.actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+      for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = 4;
+      const prevWarm = ctx.render.sdfLayer.temporalStart.on;
       try {
-        handle.setLoopRunning(false);
-        handle.step(1 / 60);
-        await handle.resolveGpu();
+        ctx.boot.handle.setLoopRunning(false);
+        ctx.boot.handle.step(1 / 60);
+        await ctx.boot.handle.resolveGpu();
         const read = async () => {
-          const t = sdfLayer.marchTarget;
+          const t = ctx.render.sdfLayer.marchTarget;
           const w = t.width;
           const h = t.height;
           const buf = new Float32Array(
-            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+            await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
           );
           const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
           return { w, h, buf, floatsPerRow };
         };
-        sdfLayer.setTemporalStart(true);
+        ctx.render.sdfLayer.setTemporalStart(true);
         // dt = 0: re-render the SAME frozen sim state — the two legs must
         // differ ONLY by temporalCfg.x, or a swinging limb between legs
         // masquerades as the artifact (measured 2026-09-10: dt=1/60 legs
         // 'broke' ~450 px that were just melee motion).
-        handle.step(0);
-        await handle.resolveGpu();
+        ctx.boot.handle.step(0);
+        await ctx.boot.handle.resolveGpu();
         const A = await read();
-        sdfLayer.setTemporalStart(false);
-        handle.step(0);
-        await handle.resolveGpu();
+        ctx.render.sdfLayer.setTemporalStart(false);
+        ctx.boot.handle.step(0);
+        await ctx.boot.handle.resolveGpu();
         const B = await read();
         let broke = 0, fixed = 0, bothMiss = 0, bothHit = 0;
         const broken: { x: number; y: number; tOn: number; tOff: number; stepsOn: number; stepsOff: number }[] = [];
@@ -12283,9 +12256,9 @@ function performBenchAction(a: BenchAction): void {
           brokenSample: broken,
         };
       } finally {
-        for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
-        sdfLayer.setTemporalStart(prevWarm);
-        handle.setLoopRunning(true);
+        for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        ctx.render.sdfLayer.setTemporalStart(prevWarm);
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -12300,18 +12273,18 @@ function performBenchAction(a: BenchAction): void {
      * deletes.
      */
     async hullCoverage() {
-      const wasOn = sdfLayer.shellEnabled;
-      sdfLayer.setShellEnabled(true);
-      outerHull.update(actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      const wasOn = ctx.render.sdfLayer.shellEnabled;
+      ctx.render.sdfLayer.setShellEnabled(true);
+      ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
       try {
-        handle.setLoopRunning(false);
-        handle.step(1 / 60);
-        await handle.resolveGpu();
+        ctx.boot.handle.setLoopRunning(false);
+        ctx.boot.handle.step(1 / 60);
+        await ctx.boot.handle.resolveGpu();
         const read = async (t: THREE.RenderTarget) => {
           const w = t.width;
           const h = t.height;
           const buf = new Float32Array(
-            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+            await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
           );
           // Row padding again — bytesPerRow is aligned to 256. RedFormat, so
           // one float per pixel rather than four.
@@ -12323,17 +12296,17 @@ function performBenchAction(a: BenchAction): void {
           }
           return { w, h, covered, frac: covered / (w * h) };
         };
-        const entry = await read(sdfLayer.shellEntryTarget);
-        const exit = await read(sdfLayer.shellExitTarget);
+        const entry = await read(ctx.render.sdfLayer.shellEntryTarget);
+        const exit = await read(ctx.render.sdfLayer.shellExitTarget);
         return {
           entry, exit,
-          instances: outerHull.instanceCount,
-          overflowed: outerHull.overflowed,
+          instances: ctx.world.outerHull.instanceCount,
+          overflowed: ctx.world.outerHull.overflowed,
           bodiesOnScreen: bodiesOnScreen(),
         };
       } finally {
-        sdfLayer.setShellEnabled(wasOn);
-        handle.setLoopRunning(true);
+        ctx.render.sdfLayer.setShellEnabled(wasOn);
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -12356,9 +12329,9 @@ function performBenchAction(a: BenchAction): void {
     /** Over-relaxation (woundCfg2.y). Ships at GAME_RELAX; <= 1.0 falls back
      *  to marchCfg.y, which is the UNDER-relaxed 0.6 the page used to run. */
     setRelax(v: number) {
-      for (const a of actors) a.view.uniforms.woundCfg2.value.y = v;
+      for (const a of ctx.world.actors) a.view.uniforms.woundCfg2.value.y = v;
     },
-    get relax() { return actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
+    get relax() { return ctx.world.actors[0]?.view.uniforms.woundCfg2.value.y ?? 0; },
     /** FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). 1 = the
      *  march fragment returns the body's base albedo at the hit and skips
      *  the whole post-hit chain (see the seam block in MARCH_BODY); 0 =
@@ -12369,31 +12342,31 @@ function performBenchAction(a: BenchAction): void {
      *  with flying chunks must not read chunks shaded by a different rule
      *  than the bodies. */
     setNormalGradient(mode: 0 | 1) {
-      normalGradientMode = mode === 1 ? 1 : 0;
-      for (const a of actors) a.view.uniforms.normalGradientCfg.value.x = skeletonVolumes.has(a) ? 0 : normalGradientMode;
-      for (const c of chunkViews) c.uniforms.normalGradientCfg.value.x = normalGradientMode;
+      ctx.telemetry.normalGradientMode = mode === 1 ? 1 : 0;
+      for (const a of ctx.world.actors) a.view.uniforms.normalGradientCfg.value.x = ctx.render.skeletonVolumes.has(a) ? 0 : ctx.telemetry.normalGradientMode;
+      for (const c of ctx.bake.views) c.uniforms.normalGradientCfg.value.x = ctx.telemetry.normalGradientMode;
     },
     setNormalGradientDebug(mode: 0 | 1 | 2) {
-      normalGradientDebug = mode === 1 || mode === 2 ? mode : 0;
-      for (const a of actors) a.view.uniforms.normalGradientCfg.value.y = normalGradientDebug;
-      for (const c of chunkViews) c.uniforms.normalGradientCfg.value.y = normalGradientDebug;
+      ctx.telemetry.normalGradientDebug = mode === 1 || mode === 2 ? mode : 0;
+      for (const a of ctx.world.actors) a.view.uniforms.normalGradientCfg.value.y = ctx.telemetry.normalGradientDebug;
+      for (const c of ctx.bake.views) c.uniforms.normalGradientCfg.value.y = ctx.telemetry.normalGradientDebug;
     },
     /** Read-only diagnostic identities; chunk ids survive pooled-view reuse. */
     normalGradientPieces() {
       return [
-        ...actors.map(a=>({key:`body:${a.id}`,kind:'body',id:a.id,ownerLimbs:[...a.posed().prims.map(p=>p.limb),...(a.posed().bonePrims??[]).map(()=> 'internal')]})),
-        ...liveChunks.map(c=>({key:`chunk:${c.id}`,kind:'chunk',id:c.id,ownerLimbs:Array.from({length:Math.round(c.view.uniforms.counts.value.x)},()=>c.state.limb)})),
+        ...ctx.world.actors.map(a=>({key:`body:${a.id}`,kind:'body',id:a.id,ownerLimbs:[...a.posed().prims.map(p=>p.limb),...(a.posed().bonePrims??[]).map(()=> 'internal')]})),
+        ...ctx.bake.liveChunks.map(c=>({key:`chunk:${c.id}`,kind:'chunk',id:c.id,ownerLimbs:Array.from({length:Math.round(c.view.uniforms.counts.value.x)},()=>c.state.limb)})),
       ];
     },
     normalGradientPiece(key: string) {
-      if(key.startsWith('body:')) return actors.find(a=>a.id===Number(key.slice(5)))?.view;
-      if(key.startsWith('chunk:')) return [...liveChunks, ...bakedChunks].find(c=>c.id===Number(key.slice(6)))?.view;
+      if(key.startsWith('body:')) return ctx.world.actors.find(a=>a.id===Number(key.slice(5)))?.view;
+      if(key.startsWith('chunk:')) return [...ctx.bake.liveChunks, ...ctx.bake.chunks].find(c=>c.id===Number(key.slice(6)))?.view;
       return undefined;
     },
     normalGradientStatus() {
-      const supportedBodies = actors.filter(a => classifyNormalSupport(a.posed()).commonFlesh).length;
-      return { mode: normalGradientMode, diagnostic: normalGradientDebug,
-        supportedBodies, legacyBodies: actors.length - supportedBodies };
+      const supportedBodies = ctx.world.actors.filter(a => classifyNormalSupport(a.posed()).commonFlesh).length;
+      return { mode: ctx.telemetry.normalGradientMode, diagnostic: ctx.telemetry.normalGradientDebug,
+        supportedBodies, legacyBodies: ctx.world.actors.length - supportedBodies };
     },
     /** Diagnostic: march debugCfg.x mode on every per-body view and crowd type (9 = normal output). */
     /** Diagnostic: per crowd type, which per-TYPE uniform values differ between the type's block and
@@ -12402,9 +12375,9 @@ function performBenchAction(a: BenchAction): void {
       const skip = new Set(['counts', 'counts2', 'woundBound', 'bodyCentre', 'bodyHalf', 'bodyAnchor', 'windDrift',
         'meltCfg', 'bodyFlash', 'headCentre', 'headQuat', 'volumePose0', 'volumePose1', 'tileCfg', 'debugCfg']);
       const out: Record<string, Record<string, string[]>> = {};
-      for (const [name, t] of crowdTypes) {
+      for (const [name, t] of ctx.crowd.types) {
         const per: Record<string, string[]> = {};
-        for (const a of actors) {
+        for (const a of ctx.world.actors) {
           if (a.crowd?.type !== t) continue;
           const diffs: string[] = [];
           const tu = t.uniforms as unknown as Record<string, { value: unknown }>;
@@ -12430,12 +12403,12 @@ function performBenchAction(a: BenchAction): void {
      *  needs, in one call. */
     actorDump() {
       const cam = camera.position;
-      return actors.map((a) => {
+      return ctx.world.actors.map((a) => {
         const o = a.view.object;
         return {
           id: a.id, room: a.room,
           name: (a as unknown as { name?: string }).name ?? null,
-          visible: visibleActors.includes(a),
+          visible: ctx.render.visibleActors.includes(a),
           proxyVisible: o.visible,
           crowdSlot: a.crowd?.slot ?? null,
           dist: Math.round(o.position.distanceTo(cam) * 100) / 100,
@@ -12447,23 +12420,23 @@ function performBenchAction(a: BenchAction): void {
             return { visible: k.visible, parent: k.parent?.name ?? k.parent?.type ?? null, world: [w.x, w.y, w.z].map((v) => Math.round(v * 100) / 100) };
           })(),
           bakeEligible: a.corpseBakeEligible(),
-          baked: soldierCorpses?.bakedState(a.id) ?? 'n/a',
+          baked: ctx.world.soldierCorpses?.bakedState(a.id) ?? 'n/a',
           rev: a.damageRevision(),
         };
       });
     },
     crowdSlotDump() {
       const out: Record<string, unknown[]> = {};
-      for (const [name, t] of crowdTypes) {
+      for (const [name, t] of ctx.crowd.types) {
         const rows: unknown[] = [];
-        for (const a of actors) {
+        for (const a of ctx.world.actors) {
           if (a.crowd?.type !== t) continue;
           const s = a.crowd.slot; const f = t.records.floats; const b = s * REC_VEC4S * 4;
           rows.push({ actor: a.id, slot: s, alive: f[b + REC_WIND_ALIVE * 4 + 3], counts: Array.from(f.subarray(b + REC_COUNTS * 4, b + REC_COUNTS * 4 + 4)),
             counts2: Array.from(f.subarray(b + REC_COUNTS2 * 4, b + REC_COUNTS2 * 4 + 4)), band: f[b + REC_ANCHOR_BAND * 4 + 3],
             woundBound: Array.from(f.subarray(b + REC_WOUND_BOUND * 4, b + REC_WOUND_BOUND * 4 + 4)),
             volPose0w: f[b + REC_VOL_POSE0 * 4 + 3], melt: Array.from(f.subarray(b + REC_MELT * 4, b + REC_MELT * 4 + 4)),
-            isSource: crowdSourceView.get(t) === a.view, room: a.room });
+            isSource: ctx.crowd.sourceView.get(t) === a.view, room: a.room });
         }
         out[name] = rows;
       }
@@ -12471,7 +12444,7 @@ function performBenchAction(a: BenchAction): void {
     },
     /** Diagnostic: a band's row (4 floats per prim column) from a crowd type's atlas. */
     crowdBandRow(typeName: string, slot: number, row: number, cols = 8) {
-      const t = crowdTypes.get(typeName); if (!t) return null;
+      const t = ctx.crowd.types.get(typeName); if (!t) return null;
       const w = t.atlas.texture.image.width as number; const r0 = slot * CROWD_DATA_ROWS + row;
       return Array.from(t.atlas.texels.subarray(r0 * w * 4, r0 * w * 4 + cols * 4));
     },
@@ -12483,29 +12456,29 @@ function performBenchAction(a: BenchAction): void {
         if (idx < 0) { n.value = value; return; }
         const v = n.value as Record<string, number>; v[['x', 'y', 'z', 'w'][idx]!] = value;
       };
-      for (const a of actors) apply(a.view.uniforms as unknown as Record<string, { value: unknown }>);
-      for (const t of crowdTypes.values()) apply(t.uniforms as unknown as Record<string, { value: unknown }>);
+      for (const a of ctx.world.actors) apply(a.view.uniforms as unknown as Record<string, { value: unknown }>);
+      for (const t of ctx.crowd.types.values()) apply(t.uniforms as unknown as Record<string, { value: unknown }>);
     },
     setMarchDebugMode(x: number) {
-      for (const a of actors) a.view.uniforms.debugCfg.value.x = x;
-      for (const t of crowdTypes.values()) t.uniforms.debugCfg.value.x = x;
+      for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = x;
+      for (const t of ctx.crowd.types.values()) t.uniforms.debugCfg.value.x = x;
     },
     setFlatAlbedo(on: boolean) {
       const v = on ? 1 : 0;
-      for (const a of actors) a.view.uniforms.debugCfg.value.y = v;
-      for (const c of chunkViews) c.uniforms.debugCfg.value.y = v;
+      for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.y = v;
+      for (const c of ctx.bake.views) c.uniforms.debugCfg.value.y = v;
       // Crowd stage a: a type's uniforms are seeded by copyUniformValues from
       // its source actor view each frame (crowdOn block in the draw fn), so
       // the write above usually reaches them — but the crowd parity gate must
       // not depend on that frame ordering. Write the type nodes directly too.
-      for (const t of crowdTypes.values()) t.uniforms.debugCfg.value.y = v;
+      for (const t of ctx.crowd.types.values()) t.uniforms.debugCfg.value.y = v;
     },
-    get flatAlbedo() { return (actors[0]?.view.uniforms.debugCfg.value.y ?? 0) > 0.5; },
-    setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
-    get hullExitBound() { return (actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
+    get flatAlbedo() { return (ctx.world.actors[0]?.view.uniforms.debugCfg.value.y ?? 0) > 0.5; },
+    setHullExitBound(on: boolean) { for (const a of ctx.world.actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },
+    get hullExitBound() { return (ctx.world.actors[0]?.view.uniforms.perfCfg.value.x ?? 0) > 0.5; },
     /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
-    setWoundEarlyOut(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.y = on ? 1 : 0; },
-    get woundEarlyOut() { return (actors[0]?.view.uniforms.perfCfg.value.y ?? 0) > 0.5; },
+    setWoundEarlyOut(on: boolean) { for (const a of ctx.world.actors) a.view.uniforms.perfCfg.value.y = on ? 1 : 0; },
+    get woundEarlyOut() { return (ctx.world.actors[0]?.view.uniforms.perfCfg.value.y ?? 0) > 0.5; },
     /**
      * Near-wound step multiplier (perfCfg.z), for looking at the 2026-09-04
      * retune on screen. 0 restores the shipped WOUND_STEP_MUL; **0.6 is the
@@ -12519,16 +12492,16 @@ function performBenchAction(a: BenchAction): void {
      */
     setWoundStep(v: number) {
       const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
-      for (const a of actors) a.view.uniforms.perfCfg.value.z = n;
+      for (const a of ctx.world.actors) a.view.uniforms.perfCfg.value.z = n;
       updateHud();
     },
-    get woundStep() { return actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
+    get woundStep() { return ctx.world.actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
     /** Last-step secant accept multiplier (perfCfg.w); 0 = off. */
     setLastStep(v: number) {
       const n = v <= 0 ? 0 : Math.min(16, v);
-      for (const a of actors) a.view.uniforms.perfCfg.value.w = n;
+      for (const a of ctx.world.actors) a.view.uniforms.perfCfg.value.w = n;
     },
-    get lastStep() { return actors[0]?.view.uniforms.perfCfg.value.w ?? 0; },
+    get lastStep() { return ctx.world.actors[0]?.view.uniforms.perfCfg.value.w ?? 0; },
     /** Wound union-reach cull (close-up wound-cull task, 2026-09-05) —
      *  applyWounds' one-sphere test before the wound loop. SHIPS ON; a value
      *  no-op by construction, so ON vs OFF is a pixel-parity gate, and the
@@ -12536,41 +12509,41 @@ function performBenchAction(a: BenchAction): void {
      *  torn-end wounds ride writeWounds directly and keep the 1e9 no-cull
      *  identity (a chunk's proxy box is already tight). */
     setWoundCull(on: boolean) {
-      woundCullRequested = on;
-      for (const a of actors) a.view.setWoundCull(on);
+      ctx.vfx.woundCullRequested = on;
+      for (const a of ctx.world.actors) a.view.setWoundCull(on);
     },
     /** ATTRIBUTION ONLY: the per-limb owner re-fold under another cluster's
      *  wound (march.wgsl.ts, counts2.z). OFF renders a wrong frame on
      *  purpose; it exists to price the mechanism in the passes bench. */
     setOwnerRefold(on: boolean) {
-      for (const a of actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
     },
-    get ownerRefold() { return (actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    get ownerRefold() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
     /** Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
      *  bone loop; the bench's bone-cull-on leg flips it for A/B. Takes effect
      *  on the next per-frame pack, so a live flip needs a frame to land. */
     setBoneCull(on: boolean) { applyBoneCull(on); },
-    get boneCull() { return boneCull; },
+    get boneCull() { return ctx.render.boneCull; },
     /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
      *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
      *  setBoneCull(on) is the boolean shorthand for off/cluster. */
     setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(mode); },
-    get boneCullMode() { return boneCullMode; },
+    get boneCullMode() { return ctx.render.boneCullMode; },
     /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
      *  wound set once per pixel and fold only those. OFF is bit-identical. */
     setWoundList(on: boolean) {
-      for (const a of actors) a.view.uniforms.counts2.value.w = on ? 1 : 0;
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.w = on ? 1 : 0;
     },
-    get woundList() { return (actors[0]?.view.uniforms.counts2.value.w ?? 0) > 0.5; },
+    get woundList() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.w ?? 0) > 0.5; },
     // Tracks the REQUESTED state, not the uniform: an unwounded body never
     // uploads wounds, so its bound radius stays at the 1e9 identity even
     // with the cull on, and reading the uniform back would lie.
-    get woundCull() { return woundCullRequested; },
+    get woundCull() { return ctx.vfx.woundCullRequested; },
     /** Diagnostic read: every actor's wound bound [x, y, z, radius]. Proves
      *  the wire end-to-end — a radius in (0, 1e8) is a COMPUTED bound; 1e9
      *  is the no-cull identity; 0 means no wounds uploaded. */
     woundBound() {
-      return actors.map(a => {
+      return ctx.world.actors.map(a => {
         const v = a.view.uniforms.woundBound.value;
         return [v.x, v.y, v.z, v.w];
       });
@@ -12578,33 +12551,33 @@ function performBenchAction(a: BenchAction): void {
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
     setOmega(v: number) {
       const n = Math.max(0.1, Math.min(1.0, v));
-      for (const a of actors) a.view.uniforms.marchCfg.value.y = n;
+      for (const a of ctx.world.actors) a.view.uniforms.marchCfg.value.y = n;
     },
-    get omega() { return actors[0]?.view.uniforms.marchCfg.value.y ?? 0; },
+    get omega() { return ctx.world.actors[0]?.view.uniforms.marchCfg.value.y ?? 0; },
     /** Footprint-AA strength (perf round 2 task 6, aaCfg.y). 0 = the old
      *  march bit-for-bit; also refreshes the one-pixel footprint (aaCfg.x) so
      *  a frozen-scene A/B at a pinned scale reads the intended pair. */
     setAa(strength: number) {
-      const k = sdfLayer.pixelConeK;
-      for (const a of actors) {
+      const k = ctx.render.sdfLayer.pixelConeK;
+      for (const a of ctx.world.actors) {
         a.view.uniforms.aaCfg.value.x = k;
         a.view.uniforms.aaCfg.value.y = strength;
       }
     },
-    get aa() { return actors[0]?.view.uniforms.aaCfg.value.y ?? 0; },
+    get aa() { return ctx.world.actors[0]?.view.uniforms.aaCfg.value.y ?? 0; },
     /** Level shadows on bodies (perf round 2 task 7, levelShadowCfg.x).
      *  0 = the pre-task-7 march bit-for-bit (the helper returns 1.0 before
      *  sampling). The per-frame pose block ANDs this with the beam and map
      *  existence, so a false here also survives ?spotshadow=0 boots. */
     setLevelShadow(on: boolean) {
-      levelShadowEnabled = !!on;
-      for (const a of actors) a.view.uniforms.levelShadowCfg.value.x = on ? 1 : 0;
+      ctx.lighting.levelShadowEnabled = !!on;
+      for (const a of ctx.world.actors) a.view.uniforms.levelShadowCfg.value.x = on ? 1 : 0;
     },
-    get levelShadow() { return (actors[0]?.view.uniforms.levelShadowCfg.value.x ?? 0) > 0.5; },
+    get levelShadow() { return (ctx.world.actors[0]?.view.uniforms.levelShadowCfg.value.x ?? 0) > 0.5; },
     setMarchSteps(n: number) {
-      for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
+      for (const a of ctx.world.actors) a.view.uniforms.marchCfg.value.x = n;
     },
-    get marchSteps() { return actors[0]?.view.uniforms.marchCfg.value.x ?? 0; },
+    get marchSteps() { return ctx.world.actors[0]?.view.uniforms.marchCfg.value.x ?? 0; },
 
     /**
      * DEPTH-PREPASS STATS (close-up task 3) — is the coarse pass actually
@@ -12614,14 +12587,14 @@ function performBenchAction(a: BenchAction): void {
      * is invisible in the frame and shows up here as nonZero 0.
      */
     async depthPreStats() {
-      handle.setLoopRunning(false);
-      handle.step(1 / 60);
-      await handle.resolveGpu();
-      const t = sdfLayer.depthPreTarget;
+      ctx.boot.handle.setLoopRunning(false);
+      ctx.boot.handle.step(1 / 60);
+      await ctx.boot.handle.resolveGpu();
+      const t = ctx.render.sdfLayer.depthPreTarget;
       const w = t.width;
       const h = t.height;
       const buf = new Float32Array(
-        await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+        await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
       );
       const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
       let nonZero = 0;
@@ -12635,7 +12608,7 @@ function performBenchAction(a: BenchAction): void {
           if (v > 0) { nonZero++; sum += v; if (v < min) min = v; if (v > max) max = v; }
         }
       }
-      handle.setLoopRunning(true);
+      ctx.boot.handle.setLoopRunning(true);
       return { w, h, texels: w * h, nonZero, min: nonZero ? +min.toFixed(3) : 0, max: +max.toFixed(3), mean: nonZero ? +(sum / nonZero).toFixed(3) : 0 };
     },
 
@@ -12658,17 +12631,17 @@ function performBenchAction(a: BenchAction): void {
      * hide extra fragment invocations this cannot see.
      */
     async occupancy() {
-      const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
-      for (const a of actors) a.view.uniforms.debugCfg.value.x = 4;
+      const prevMode = ctx.world.actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+      for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = 4;
       try {
-        handle.setLoopRunning(false);
-        handle.step(1 / 60);
-        await handle.resolveGpu();
-        const t = sdfLayer.marchTarget;
+        ctx.boot.handle.setLoopRunning(false);
+        ctx.boot.handle.step(1 / 60);
+        await ctx.boot.handle.resolveGpu();
+        const t = ctx.render.sdfLayer.marchTarget;
         const w = t.width;
         const h = t.height;
         const buf = new Float32Array(
-          await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
         );
         // ROW PADDING, and it is not optional: WebGPU aligns bytesPerRow to
         // 256, so the readback is NOT densely packed. Walking it as w*h*4
@@ -12706,8 +12679,8 @@ function performBenchAction(a: BenchAction): void {
           bodiesOnScreen: bodiesOnScreen(),
         };
       } finally {
-        for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
-        handle.setLoopRunning(true);
+        for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -12725,17 +12698,17 @@ function performBenchAction(a: BenchAction): void {
      * wounds the nearWound gate means the honest answer is zero.
      */
     async boneEvals() {
-      const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
-      for (const a of actors) a.view.uniforms.debugCfg.value.x = 5;
+      const prevMode = ctx.world.actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+      for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = 5;
       try {
-        handle.setLoopRunning(false);
-        handle.step(1 / 60);
-        await handle.resolveGpu();
-        const t = sdfLayer.marchTarget;
+        ctx.boot.handle.setLoopRunning(false);
+        ctx.boot.handle.step(1 / 60);
+        await ctx.boot.handle.resolveGpu();
+        const t = ctx.render.sdfLayer.marchTarget;
         const w = t.width;
         const h = t.height;
         const buf = new Float32Array(
-          await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
         );
         const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
         let rasterised = 0;
@@ -12773,8 +12746,8 @@ function performBenchAction(a: BenchAction): void {
           bodiesOnScreen: bodiesOnScreen(),
         };
       } finally {
-        for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
-        handle.setLoopRunning(true);
+        for (const a of ctx.world.actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -12853,26 +12826,26 @@ function performBenchAction(a: BenchAction): void {
       // Captured AFTER the caller's placePlayer(): the pose every step is
       // restored to. pos/vel are copies, not aliases.
       const held = o.holdPlayer
-        ? { pos: [...player.pos] as Vec3, yaw: player.yaw, pitch: player.pitch }
+        ? { pos: [...ctx.player.player.pos] as Vec3, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch }
         : null;
       const restoreHeldPose = () => {
         if (!held) return;
-        player.pos = [held.pos[0], held.pos[1], held.pos[2]];
-        player.vel = [0, 0, 0];
-        player.yaw = held.yaw;
-        player.pitch = held.pitch;
+        ctx.player.player.pos = [held.pos[0], held.pos[1], held.pos[2]];
+        ctx.player.player.vel = [0, 0, 0];
+        ctx.player.player.yaw = held.yaw;
+        ctx.player.player.pitch = held.pitch;
       };
-      const hadHoldPlayer = holdPlayerPose;
-      holdPlayerPose = o.holdPlayer === true;
+      const hadHoldPlayer = ctx.player.holdPlayerPose;
+      ctx.player.holdPlayerPose = o.holdPlayer === true;
 
-      handle.setLoopRunning(false);
+      ctx.boot.handle.setLoopRunning(false);
       // Clear the `?simidle=1` boot lock (see simLocked): the scenario this runs
       // must start from the deterministic spawn state, not from a set of frames
       // the boot loop happened to take. RESTORED in the finally — otherwise the
       // rAF loop it restarts would tick the sim freely between the probe and the
       // measured run, which is the same wall-clock divergence one layer up.
-      const hadSimLock = simLocked;
-      simLocked = false;
+      const hadSimLock = ctx.demo.simLocked;
+      ctx.demo.simLocked = false;
       // Pin the RENDER-side clocks the frame hash reads, for the same reason: a
       // repeated run must render the same frame. `demoHold` fixes the gather's
       // per-dispatch `frameSeed` and drives `view.setTime` from the SIM clock;
@@ -12882,49 +12855,49 @@ function performBenchAction(a: BenchAction): void {
       // Sim-idle boots only — normal play and other bench callers are untouched.
       const hasSimIdle = new URLSearchParams(location.search).has('simidle');
       if (o.demo || hasSimIdle) {
-        demoHold = true;
-        demoSeedBase = probeFrame;
-        postAa.setTimeFrozen(true);
+        ctx.demo.hold = true;
+        ctx.demo.seedBase = ctx.probes.frame;
+        ctx.render.postAa.setTimeFrozen(true);
         // The interlaced field is a two-state function of an absolute render
         // counter, so a single end-of-run hash only compares at a fixed phase.
-        sdfLayer.resetFieldPhase();
+        ctx.render.sdfLayer.resetFieldPhase();
         // And the gather is dispatched only every `probeGatherRate` ticks, so
         // WHICH frame the packed instances/dynamic layer were last built on is
         // a function of the absolute tick counter. Reset the cadence phase too,
         // or the end-of-run `instances`/`probeDyn` hashes differ between a
         // first page load and a warm one. Diagnostic only: `probeFrame`
         // (dispatch count) and the demo seed are left alone.
-        probeGatherTick = 0;
+        ctx.probes.gatherTick = 0;
         // The dynamic layer blends each dispatch into the previous values, so it
         // is a function of the dispatch count too. Start every run from zero, or
         // the first page load and a warm one hash differently (measured).
         // pendingGather too: a pack left over from boot would be dispatched on
         // the first measured draw, giving one run an extra gather dispatch.
-        pendingGather = null;
-        probeGather?.reset();
+        ctx.probes.pendingGather = null;
+        ctx.probes.gather?.reset();
       }
       // A DEMO bench run IS a replay: the recording's frames are staged as
       // `input` actions and consumed by tick through applyInputFrame, and the
       // sim streams + clock reset to the recording's own origin so every leg
       // and every repeat starts from the same draw index. Inert off the demo
       // path, so normal play and every other bench call are untouched.
-      const hadReplay = replayActive;
-      const hadFreeAim = freeAimOn;
+      const hadReplay = ctx.demo.replayActive;
+      const hadFreeAim = ctx.player.freeAimOn;
       if (o.demo) {
-        replayActive = true;
-        replayFrame = 0;
+        ctx.demo.replayActive = true;
+        ctx.demo.replayFrame = 0;
         resetSimClock();
         setRngSeed(o.demo.seed);
-        if (typeof o.demo.meta?.freeAim === 'boolean') freeAimOn = o.demo.meta.freeAim;
-        prevInputKeys = new Set<string>();
+        if (typeof o.demo.meta?.freeAim === 'boolean') ctx.player.freeAimOn = o.demo.meta.freeAim;
+        ctx.player.prevInputKeys = new Set<string>();
       }
-      const hadAdaptive = adaptiveEnabled;
-      adaptiveEnabled = false;
-      const hadTelemetry = telemetry.active;
-      if (o.mode === 'passes') telemetry.active = true;
+      const hadAdaptive = ctx.render.adaptiveEnabled;
+      ctx.render.adaptiveEnabled = false;
+      const hadTelemetry = ctx.telemetry.telemetry.active;
+      if (o.mode === 'passes') ctx.telemetry.telemetry.active = true;
       try {
         const deps: BenchDeps = {
-          step: (dt) => { beginPassFrame(); handle.step(dt); restoreHeldPose(); },
+          step: (dt) => { beginPassFrame(); ctx.boot.handle.step(dt); restoreHeldPose(); },
           beforeStep: awaitBakes,
           // 'passes' mode: CPU tick/draw plus the telemetry phases the tick
           // already brackets (blood sim, goo sync, body step, ...). Telemetry
@@ -12932,31 +12905,31 @@ function performBenchAction(a: BenchAction): void {
           // observer runs while the loop is off, so nothing else is captured.
           stepTimed: (dt) => {
             beginPassFrame();
-            telemetry.drainPhases();
-            const t = handle.stepTimed(dt);
+            ctx.telemetry.telemetry.drainPhases();
+            const t = ctx.boot.handle.stepTimed(dt);
             restoreHeldPose();
             const out: Record<string, number> = { 'cpu:tick': t.tickMs, 'cpu:draw': t.drawMs };
-            for (const [k, v] of Object.entries(telemetry.drainPhases())) out[`cpu:phase:${k}`] = v;
+            for (const [k, v] of Object.entries(ctx.telemetry.telemetry.drainPhases())) out[`cpu:phase:${k}`] = v;
             return out;
           },
-          resolveGpu: () => handle.resolveGpu(),
-          passTimings: () => passTiming.collect(),
+          resolveGpu: () => ctx.boot.handle.resolveGpu(),
+          passTimings: () => ctx.boot.passTiming.collect(),
           // THE FRAME HASH, once per leg and AFTER every timing sample (see
           // BenchDeps.endHash). The census below counts what the page CONTAINS;
           // this digests what it RENDERS — the half of the workload the census
           // is blind to, and the half that shipped two playtest-caught bugs on
           // 2026-09-10 (the zeroed dynamic probe layer, and tracer light slots
           // defaulting to 0).
-          endHash: () => hashFrame(frameHashDeps, frameCount),
+          endHash: () => hashFrame(ctx.boot.frameHashDeps, ctx.demo.frameCount),
           now: () => performance.now(),
           hidden: () => document.hidden,
           census: () => ({
             bodies: bodiesOnScreen(),
-            wounds: actors.reduce((n, a) => n + a.wounds().length, 0),
-            chunks: liveChunks.length,
-            droplets: bloodSim.droplets.length,
-            splats: bloodSim.splats.length,
-            gooQuads: gooLayer?.liveCount ?? 0,
+            wounds: ctx.world.actors.reduce((n, a) => n + a.wounds().length, 0),
+            chunks: ctx.bake.liveChunks.length,
+            droplets: ctx.vfx.bloodSim.droplets.length,
+            splats: ctx.vfx.bloodSim.splats.length,
+            gooQuads: ctx.goo.layer?.liveCount ?? 0,
           }),
           perform: performBenchAction,
         };
@@ -12969,17 +12942,17 @@ function performBenchAction(a: BenchAction): void {
         (window as unknown as { __gameBench: unknown }).__gameBench = result;
         return result;
       } finally {
-        holdPlayerPose = hadHoldPlayer;
-        replayActive = hadReplay;
-        freeAimOn = hadFreeAim;
+        ctx.player.holdPlayerPose = hadHoldPlayer;
+        ctx.demo.replayActive = hadReplay;
+        ctx.player.freeAimOn = hadFreeAim;
         restoreHeldPose();
         // Re-lock under `?simidle` so the frames the restarted loop renders
         // between runs cannot mutate the sim (see the capture at the top).
-        simLocked = hadSimLock;
-        adaptiveEnabled = hadAdaptive;
-        telemetry.active = hadTelemetry;
-        adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
-        handle.setLoopRunning(true);
+        ctx.demo.simLocked = hadSimLock;
+        ctx.render.adaptiveEnabled = hadAdaptive;
+        ctx.telemetry.telemetry.active = hadTelemetry;
+        ctx.render.adaptiveState = initialAdaptiveState(performance.now(), ctx.render.adaptiveState.rung);
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
     /**
@@ -12995,8 +12968,8 @@ function performBenchAction(a: BenchAction): void {
       const bad: Array<Record<string, unknown>> = [];
       let total = 0;
       let worst = 0;
-      for (let bi = 0; bi < actors.length; bi++) {
-        const body = actors[bi]!.posed();
+      for (let bi = 0; bi < ctx.world.actors.length; bi++) {
+        const body = ctx.world.actors[bi]!.posed();
         const spheres = buildHullInstances([body], HULL_SHRINK);
         for (const sph of spheres) {
           total++;
@@ -13006,7 +12979,7 @@ function performBenchAction(a: BenchAction): void {
           if (proud > worst) worst = proud;
           if (proud > tol) {
             bad.push({
-              actor: actors[bi]!.id, centre: sph.centre.map(v => +v.toFixed(3)),
+              actor: ctx.world.actors[bi]!.id, centre: sph.centre.map(v => +v.toFixed(3)),
               radius: +sph.radius.toFixed(4), sdBody: +d.toFixed(4),
               proudMm: +(proud * 1000).toFixed(1),
             });
@@ -13026,20 +12999,20 @@ function performBenchAction(a: BenchAction): void {
      * sphere a fragment came from.
      */
     async syntheticSphereCheck(dist = 5, radius = 0.2) {
-      const wasOn = sdfLayer.occluderEnabled;
+      const wasOn = ctx.render.sdfLayer.occluderEnabled;
       try {
-        handle.setLoopRunning(false);
+        ctx.boot.handle.setLoopRunning(false);
         // Straight ahead of the camera, `dist` metres away.
         const fwd = new THREE.Vector3();
         camera.getWorldDirection(fwd);
         const c = camera.position.clone().addScaledVector(fwd, dist);
-        occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
-        sdfLayer.setOccluderEnabled(true);
-        handle.step(1 / 60);
-        await handle.resolveGpu();
-        const ot = sdfLayer.occluderTarget;
+        ctx.render.occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
+        ctx.render.sdfLayer.setOccluderEnabled(true);
+        ctx.boot.handle.step(1 / 60);
+        await ctx.boot.handle.resolveGpu();
+        const ot = ctx.render.sdfLayer.occluderTarget;
         const buf = new Float32Array(
-          await handle.renderer.readRenderTargetPixelsAsync(ot, 0, 0, ot.width, ot.height),
+          await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(ot, 0, 0, ot.width, ot.height),
         );
         const fpr = Math.ceil((ot.width * 16) / 256) * 256 / 4;
         // The pixel the sphere centre projects to.
@@ -13070,8 +13043,8 @@ function performBenchAction(a: BenchAction): void {
           col, rowTop,
         };
       } finally {
-        sdfLayer.setOccluderEnabled(wasOn);
-        handle.setLoopRunning(true);
+        ctx.render.sdfLayer.setOccluderEnabled(wasOn);
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -13090,28 +13063,28 @@ function performBenchAction(a: BenchAction): void {
      * quad probes in texRoundTrip).
      */
     async occluderWorldCheck(dist = 5, radius = 0.2) {
-      const wasOn = sdfLayer.occluderEnabled;
+      const wasOn = ctx.render.sdfLayer.occluderEnabled;
       try {
-        handle.setLoopRunning(false);
+        ctx.boot.handle.setLoopRunning(false);
         const fwd = new THREE.Vector3();
         camera.getWorldDirection(fwd);
         const c = camera.position.clone().addScaledVector(fwd, dist);
-        occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
-        sdfLayer.setOccluderEnabled(true);
+        ctx.render.occluderHull.setSpheres([{ centre: [c.x, c.y, c.z], radius }]);
+        ctx.render.sdfLayer.setOccluderEnabled(true);
         const readFrame = async () => {
-          handle.step(1 / 60);
-          await handle.resolveGpu();
-          const t = sdfLayer.occluderTarget;
+          ctx.boot.handle.step(1 / 60);
+          await ctx.boot.handle.resolveGpu();
+          const t = ctx.render.sdfLayer.occluderTarget;
           const buf = new Float32Array(
-            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height),
+            await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height),
           );
           return { buf, w: t.width, h: t.height };
         };
-        occluderHull.debugWorld.value = 0;
+        ctx.render.occluderHull.debugWorld.value = 0;
         const d0 = await readFrame();
-        occluderHull.debugWorld.value = 1;
+        ctx.render.occluderHull.debugWorld.value = 1;
         const d1 = await readFrame();
-        occluderHull.debugWorld.value = 0;
+        ctx.render.occluderHull.debugWorld.value = 0;
         const fpr = (w: number) => Math.ceil((w * 16) / 256) * 256 / 4;
         const ndc = c.clone().project(camera);
         const col = Math.round(((ndc.x + 1) / 2) * d0.w - 0.5);
@@ -13134,8 +13107,8 @@ function performBenchAction(a: BenchAction): void {
           distFromWrittenPos: +wPos.distanceTo(camera.position).toFixed(4),
         };
       } finally {
-        sdfLayer.setOccluderEnabled(wasOn);
-        handle.setLoopRunning(true);
+        ctx.render.sdfLayer.setOccluderEnabled(wasOn);
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -13149,7 +13122,7 @@ function performBenchAction(a: BenchAction): void {
        *  into a dense rgba32f base64 blob. `index` selects an MRT attachment. */
       const packFloatTarget = async (t: THREE.RenderTarget, index = 0) => {
         const w = t.width, h = t.height;
-        const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h, index));
+        const raw = new Float32Array(await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h, index));
         const stride = Math.ceil(w * 16 / 256) * 64;
         const dense = new Float32Array(w * h * 4);
         for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
@@ -13162,25 +13135,25 @@ function performBenchAction(a: BenchAction): void {
         /** Rebuild with the original dense shader for honest whole-frame A/B;
          * the live uniform toggle still contains the culling branch. */
         setUpscaleCullingPipeline(emptyTileCulling: boolean) {
-          const st = sdfLayer.upscaleStage;
+          const st = ctx.render.sdfLayer.upscaleStage;
           if (!st) throw new Error('Upscale is off');
           const { config, model, sharpen, sharpenMode } = st;
-          sdfLayer.setUpscale(config, model, { emptyTileCulling });
-          sdfLayer.upscaleStage!.setSharpen(sharpen);
-          sdfLayer.upscaleStage!.setSharpenMode(sharpenMode);
-          return sdfLayer.upscaleInfo;
+          ctx.render.sdfLayer.setUpscale(config, model, { emptyTileCulling });
+          ctx.render.sdfLayer.upscaleStage!.setSharpen(sharpen);
+          ctx.render.sdfLayer.upscaleStage!.setSharpenMode(sharpenMode);
+          return ctx.render.sdfLayer.upscaleInfo;
         },
         async upscaleCullingCheck(opts?: { frames?: number; repeats?: number; synthetic?: boolean }) {
-          handle.setLoopRunning(false);
-          await handle.resolveGpu();
+          ctx.boot.handle.setLoopRunning(false);
+          await ctx.boot.handle.resolveGpu();
           const { runUpscaleCullingCheck } = await import('./upscale/upscale-culling-check');
-          return runUpscaleCullingCheck({ renderer: handle.renderer, layer: sdfLayer,
-            camera: camera as THREE.PerspectiveCamera, renderFrames: () => {}, resolveGpu: () => handle.resolveGpu() }, opts);
+          return runUpscaleCullingCheck({ renderer: ctx.boot.handle.renderer, layer: ctx.render.sdfLayer,
+            camera: camera as THREE.PerspectiveCamera, renderFrames: () => {}, resolveGpu: () => ctx.boot.handle.resolveGpu() }, opts);
         },
         /** Raw float readback, row padding removed. The driver compares these
          * bytes before any composite, color conversion or antialias filtering. */
         normalCaptureState() {
-          const pieces=[...actors.map(a=>({key:`body:${a.id}`,view:a.view})),...liveChunks.map(c=>({key:`chunk:${c.id}`,view:c.view}))];
+          const pieces=[...ctx.world.actors.map(a=>({key:`body:${a.id}`,view:a.view})),...ctx.bake.liveChunks.map(c=>({key:`chunk:${c.id}`,view:c.view}))];
           return {camera:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),pieces:pieces.map(({key,view})=>({key,data:Array.from((view.dataTexture as THREE.DataTexture).image.data as Float32Array),records:Array.from((view as unknown as { records: { floats: Float32Array } }).records.floats),uniforms:Object.fromEntries(Object.entries(view.uniforms).filter(([k])=>k!=='normalGradientCfg'&&k!=='debugCfg').map(([k,u])=>{const v=u.value;return [k,v&&typeof v==='object'&&'toArray' in v?(v as {toArray:()=>unknown}).toArray():v];}))}))};
         },
         /** NEURAL UPSCALE P3: the supersampled 800x600 training target. Renders the CURRENT state
@@ -13188,36 +13161,36 @@ function performBenchAction(a: BenchAction): void {
          *  reprojection matrix is the unjittered camera), accumulating in-page; only the averaged
          *  target crosses CDP. Caller: freeze + render lock on, scale 1.0, fields off, upscale off. */
         async readSupersampledTarget(grid = 4) {
-          const t = sdfLayer.marchTarget;
+          const t = ctx.render.sdfLayer.marchTarget;
           const w = t.width, h = t.height;
           const offsets = sampleOrder(jitterGrid(grid));
           const stride = Math.ceil(w * 16 / 256) * 64;
-          const wasStart = sdfLayer.temporalStart.on;
+          const wasStart = ctx.render.sdfLayer.temporalStart.on;
           const samples: Float32Array[] = [];
-          handle.setLoopRunning(false);
-          sdfLayer.setTemporalStart(false);
+          ctx.boot.handle.setLoopRunning(false);
+          ctx.render.sdfLayer.setTemporalStart(false);
           try {
             for (const [jx, jy] of offsets) {
-              if (!sdfLayer.setMarchJitter([jx, jy])) throw new Error('readSupersampledTarget: march jitter refused (fields or accumulation on?)');
-              handle.step(1 / 60);
-              await handle.resolveGpu();
-              const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h));
+              if (!ctx.render.sdfLayer.setMarchJitter([jx, jy])) throw new Error('readSupersampledTarget: march jitter refused (fields or accumulation on?)');
+              ctx.boot.handle.step(1 / 60);
+              await ctx.boot.handle.resolveGpu();
+              const raw = new Float32Array(await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h));
               const dense = new Float32Array(w * h * 4);
               for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
               samples.push(dense);
             }
           } finally {
-            sdfLayer.setMarchJitter(null);
-            sdfLayer.setTemporalStart(wasStart);
+            ctx.render.sdfLayer.setMarchJitter(null);
+            ctx.render.sdfLayer.setTemporalStart(wasStart);
           }
           const { target, coverage } = accumulateSamples(samples, w, h);
           return { w, h, offsets, target: float32ToBase64(target), coverage: float32ToBase64(coverage) };
         },
         async readMarchTarget() {
-          handle.setLoopRunning(false);
-          handle.step(0);
-          await handle.resolveGpu();
-          return packFloatTarget(sdfLayer.marchTarget);
+          ctx.boot.handle.setLoopRunning(false);
+          ctx.boot.handle.step(0);
+          await ctx.boot.handle.resolveGpu();
+          return packFloatTarget(ctx.render.sdfLayer.marchTarget);
         },
         /** ROOM-2 PARITY DIAGNOSTIC (crowd stage a Task 7): per tile, whether
          *  the PROXY BOXES of >= 2 distinct instances of the SAME character
@@ -13241,13 +13214,13 @@ function performBenchAction(a: BenchAction): void {
         readTileSlotMask() {
           camera.updateMatrixWorld();
           camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-          const size = sdfLayer.targetSize;
+          const size = ctx.render.sdfLayer.targetSize;
           const W = Math.max(1, size.width), H = Math.max(1, size.height);
           const tilesX = Math.ceil(W / TILE_SIZE_PX);
           const tilesY = Math.ceil(H / TILE_SIZE_PX);
           const mask = new Uint8Array(tilesX * tilesY);
           const byKind = new Map<string, ZombieActor[]>();
-          for (const a of actors) {
+          for (const a of ctx.world.actors) {
             const list = byKind.get(a.kind);
             if (list) list.push(a); else byKind.set(a.kind, [a]);
           }
@@ -13304,27 +13277,27 @@ function performBenchAction(a: BenchAction): void {
          *  twins compare against (march.wgsl.ts MARCH_BODY_LIGHT `bodyKey`). Null when the layer
          *  allocated no normal attachment. */
         async readMarchNormalTarget() {
-          if (!sdfLayer.marchNormalTexture) return null;
-          handle.setLoopRunning(false);
-          handle.step(0);
-          await handle.resolveGpu();
-          return packFloatTarget(sdfLayer.marchTarget, 1);
+          if (!ctx.render.sdfLayer.marchNormalTexture) return null;
+          ctx.boot.handle.setLoopRunning(false);
+          ctx.boot.handle.step(0);
+          await ctx.boot.handle.resolveGpu();
+          return packFloatTarget(ctx.render.sdfLayer.marchTarget, 1);
         },
         /** Run 4: the output-res detail field (sdf-layer detailTarget) as { w, h, rgba32f } — same
          *  de-pad as readMarchTarget. Null when the layer has no normal attachment. */
         async readDetailTarget() {
-          const t = sdfLayer.detailTarget;
+          const t = ctx.render.sdfLayer.detailTarget;
           if (!t) return null;
-          handle.setLoopRunning(false);
-          handle.step(0);
-          await handle.resolveGpu();
+          ctx.boot.handle.setLoopRunning(false);
+          ctx.boot.handle.step(0);
+          await ctx.boot.handle.resolveGpu();
           return packFloatTarget(t);
         },
         /** Run 5: both refine attachments as { c, n } of { w, h, rgba32f }; null unless the boot allocated them. */
         async readRefine() {
-          const t = sdfLayer.refineTarget;
+          const t = ctx.render.sdfLayer.refineTarget;
           if (!t) return null;
-          handle.setLoopRunning(false); handle.step(0); await handle.resolveGpu();
+          ctx.boot.handle.setLoopRunning(false); ctx.boot.handle.step(0); await ctx.boot.handle.resolveGpu();
           return { c: await packFloatTarget(t, 0), n: await packFloatTarget(t, 1) };
         },
         /** Neural upscale normals capture (2026-09-12): the march target re-rendered with every
@@ -13334,7 +13307,7 @@ function performBenchAction(a: BenchAction): void {
          *  (column-major 16), for the capture to rotate normals into view space. */
         async readMarchNormals() {
           const prev = new Map<unknown, number>();
-          const views = [...actors.map((a) => a.view), ...liveChunks.map((c) => c.view)];
+          const views = [...ctx.world.actors.map((a) => a.view), ...ctx.bake.liveChunks.map((c) => c.view)];
           for (const v of views) { prev.set(v, v.uniforms.debugCfg.value.x); v.uniforms.debugCfg.value.x = 9; }
           try {
             const dbg = (window as unknown as { __sdfGameDebug: { readMarchTarget(): Promise<{ w: number; h: number; rgba32f: string }> } }).__sdfGameDebug;
@@ -13345,7 +13318,7 @@ function performBenchAction(a: BenchAction): void {
           }
         },
         async normalPointSamples(bodyId: number | string, points: Vec3[]) {
-          const view=typeof bodyId==='number'?actors.find(a=>a.id===bodyId)?.view:liveChunks.find(c=>`chunk:${c.id}`===bodyId)?.view;if(!view)throw new Error('missing probe piece');
+          const view=typeof bodyId==='number'?ctx.world.actors.find(a=>a.id===bodyId)?.view:ctx.bake.liveChunks.find(c=>`chunk:${c.id}`===bodyId)?.view;if(!view)throw new Error('missing probe piece');
           const u=view.uniforms,p=tslUniform(new THREE.Vector3()),kind=tslUniform(0),noise=tslUniform(new THREE.Vector4());
           const material=new THREE.MeshBasicNodeMaterial();
           material.outputNode=buildNormalBodyPointFn()({p,data:tslTexture(view.dataTexture),noiseCfg:noise,woundCfg:u.woundCfg,woundCfg2:u.woundCfg2,volumeTex:tslTexture3D(view.volumeTexture),volumeMin:u.volumeMin,volumeInvExtent:u.volumeInvExtent,volumeWarp:u.volumeWarp,volumeClip:u.volumeClip,perfCfg:u.perfCfg,inst:(view as unknown as { records: { node: unknown } }).records.node,instCfg:tslUniform(new THREE.Vector4(1,0,0,0)),probeKind:kind});
@@ -13353,8 +13326,8 @@ function performBenchAction(a: BenchAction): void {
           const scene=new THREE.Scene(),geometry=new THREE.PlaneGeometry(2,2),quad=new THREE.Mesh(geometry,material);quad.frustumCulled=false;scene.add(quad);
           const camera=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
           const target=new THREE.RenderTarget(1,1,{depthBuffer:false,type:THREE.FloatType,format:THREE.RGBAFormat});
-          const renderer=handle.renderer,previous=renderer.getRenderTarget();
-          const read=async(q:Vec3,mode:number)=>{p.value.fromArray(q);kind.value=mode;renderer.setRenderTarget(target);renderer.render(scene,camera);await handle.resolveGpu();return Array.from(new Float32Array(await renderer.readRenderTargetPixelsAsync(target,0,0,1,1)).slice(0,4));};
+          const renderer=ctx.boot.handle.renderer,previous=renderer.getRenderTarget();
+          const read=async(q:Vec3,mode:number)=>{p.value.fromArray(q);kind.value=mode;renderer.setRenderTarget(target);renderer.render(scene,camera);await ctx.boot.handle.resolveGpu();return Array.from(new Float32Array(await renderer.readRenderTargetPixelsAsync(target,0,0,1,1)).slice(0,4));};
           const results=[];
           try {for(const point of points) {
             noise.value.x=0;
@@ -13383,8 +13356,8 @@ function performBenchAction(a: BenchAction): void {
          * rows. sdBody supplies original authored/carved flesh; classification
          * uses the production scalar equations, not a screen-space circle. */
         normalWoundCoverage(bodyId: number | string, packed: string, w: number, h: number, suspects: number[] = []) {
-          const actor=typeof bodyId==='number'?actors.find(a=>a.id===bodyId):undefined;
-          const chunk=typeof bodyId==='string'?liveChunks.find(c=>`chunk:${c.id}`===bodyId):undefined;
+          const actor=typeof bodyId==='number'?ctx.world.actors.find(a=>a.id===bodyId):undefined;
+          const chunk=typeof bodyId==='string'?ctx.bake.liveChunks.find(c=>`chunk:${c.id}`===bodyId):undefined;
           const view=actor?.view??chunk?.view;if(!view)throw new Error('missing wound coverage piece');
           const u=view.uniforms,tex=view.dataTexture as THREE.DataTexture;
           const image=tex.image as {data:Float32Array;width:number};
@@ -13446,10 +13419,10 @@ function performBenchAction(a: BenchAction): void {
           return {thresholdMetres:1e-5,method:'unproject WebGPU clip-depth alpha; production uploaded wound scalar minus sdBody authored flesh; internal owners separate',regions,scalarSurfaceMax,samples,wounds,cfg,cfg2,perf};
         },
         async hashMarchTarget() {
-          const t = sdfLayer.marchTarget;
+          const t = ctx.render.sdfLayer.marchTarget;
           const w = t.width, h = t.height;
           const buf = new Float32Array(
-            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+            await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
           );
           const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
           let hash = 0x811c9dc5;
@@ -13515,7 +13488,7 @@ function performBenchAction(a: BenchAction): void {
       const dist = o.dist;
       const mode = o.mode ?? 'uniform';
       // ---- lazily-built probe rig ----------------------------------------
-      if (!texProbe) {
+      if (!ctx.render.texProbe) {
         const QuadFetchWGSL = /* wgsl */ `fn quadFetch(
   srcTex: texture_2d<f32>,
   suv: vec2<f32>
@@ -13525,8 +13498,8 @@ function performBenchAction(a: BenchAction): void {
   return textureLoad(srcTex, c, 0).x;
 }`;
         const mkWriteTarget = (fmt: 'rgba' | 'red', quarter: boolean): THREE.RenderTarget => new THREE.RenderTarget(
-          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.width / 4)) : sdfLayer.marchTarget.width,
-          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.height / 4)) : sdfLayer.marchTarget.height,
+          quarter ? Math.max(1, Math.ceil(ctx.render.sdfLayer.marchTarget.width / 4)) : ctx.render.sdfLayer.marchTarget.width,
+          quarter ? Math.max(1, Math.ceil(ctx.render.sdfLayer.marchTarget.height / 4)) : ctx.render.sdfLayer.marchTarget.height,
           {
             depthBuffer: true,
             type: THREE.FloatType,
@@ -13542,8 +13515,8 @@ function performBenchAction(a: BenchAction): void {
         // readback (which this renderer's helper does not support) never
         // enters the picture.
         const mkReadTarget = (quarter: boolean): THREE.RenderTarget => new THREE.RenderTarget(
-          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.width / 4)) : sdfLayer.marchTarget.width,
-          quarter ? Math.max(1, Math.ceil(sdfLayer.marchTarget.height / 4)) : sdfLayer.marchTarget.height,
+          quarter ? Math.max(1, Math.ceil(ctx.render.sdfLayer.marchTarget.width / 4)) : ctx.render.sdfLayer.marchTarget.width,
+          quarter ? Math.max(1, Math.ceil(ctx.render.sdfLayer.marchTarget.height / 4)) : ctx.render.sdfLayer.marchTarget.height,
           {
             depthBuffer: false,
             type: THREE.FloatType,
@@ -13567,7 +13540,7 @@ function performBenchAction(a: BenchAction): void {
         const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
         ortho.position.set(0, 0, 5);
         ortho.lookAt(0, 0, 0);
-        texProbe = {
+        ctx.render.texProbe = {
           scene, quad, ortho,
           writes: { uniform: { m: uniformMat, u }, dist: { m: distMat }, 'dist-small': { m: distMat } },
           fetchNode: wgslFn(QuadFetchWGSL),
@@ -13579,12 +13552,12 @@ function performBenchAction(a: BenchAction): void {
           },
         };
       }
-      const probe = texProbe;
+      const probe = ctx.render.texProbe;
       try {
-        handle.setLoopRunning(false);
+        ctx.boot.handle.setLoopRunning(false);
         // One step so the camera's world matrix reflects any pose the driver
         // set just before this call.
-        handle.step(1 / 60);
+        ctx.boot.handle.step(1 / 60);
         const fwd = new THREE.Vector3();
         camera.getWorldDirection(fwd);
         // Near-plane guard: a quad closer than the near plane clips, which
@@ -13619,15 +13592,15 @@ function performBenchAction(a: BenchAction): void {
           probe.quad.position.copy(writePos);
           probe.quad.quaternion.copy(writeQuat);
           probe.quad.scale.setScalar(writeScale);
-          handle.renderer.setRenderTarget(writeT);
-          handle.renderer.render(probe.scene, camera);
-          await handle.resolveGpu();
+          ctx.boot.handle.renderer.setRenderTarget(writeT);
+          ctx.boot.handle.renderer.render(probe.scene, camera);
+          await ctx.boot.handle.resolveGpu();
           // ---- CPU read of the WRITE target (RGBA only — see mkReadTarget):
           // centre pixel + neighbours, so a partial-coverage write shows up
           // as spread rather than silently aliasing into the centre value ----
           const w = writeT.width, ht = writeT.height;
           const buf = new Float32Array(
-            await handle.renderer.readRenderTargetPixelsAsync(writeT, 0, 0, w, ht),
+            await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(writeT, 0, 0, w, ht),
           );
           const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
           const cx = Math.floor(w / 2), cy = Math.floor(ht / 2);
@@ -13647,11 +13620,11 @@ function performBenchAction(a: BenchAction): void {
           probe.quad.position.set(0, 0, 0);
           probe.quad.quaternion.identity();
           probe.quad.scale.set(1, 1, 1);
-          handle.renderer.setRenderTarget(readT);
-          handle.renderer.render(probe.scene, probe.ortho);
-          await handle.resolveGpu();
+          ctx.boot.handle.renderer.setRenderTarget(readT);
+          ctx.boot.handle.renderer.render(probe.scene, probe.ortho);
+          await ctx.boot.handle.resolveGpu();
           const buf2 = new Float32Array(
-            await handle.renderer.readRenderTargetPixelsAsync(readT, 0, 0, w, ht),
+            await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(readT, 0, 0, w, ht),
           );
           const wgsl = buf2[cy * floatsPerRow + cx * 4] ?? NaN;
           rows.push({
@@ -13665,8 +13638,8 @@ function performBenchAction(a: BenchAction): void {
         }
         return { dist, mode, expected, near: camera.near, far: camera.far, rows };
       } finally {
-        handle.renderer.setRenderTarget(null);
-        handle.setLoopRunning(true);
+        ctx.boot.handle.renderer.setRenderTarget(null);
+        ctx.boot.handle.setLoopRunning(true);
       }
     },
 
@@ -13674,10 +13647,10 @@ function performBenchAction(a: BenchAction): void {
      *  so frozen captures would otherwise shoot through a stale hull). No
      *  simulation steps, so a stamped body stays exactly where it was put. */
     refreshHull: () => {
-      occluderHull.update(
-        actors.map(a => a.posed()),
-        hullExclusionsEnabled
-          ? actors.flatMap(a => {
+      ctx.render.occluderHull.update(
+        ctx.world.actors.map(a => a.posed()),
+        ctx.render.hullExclusionsEnabled
+          ? ctx.world.actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
             return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
@@ -13685,17 +13658,17 @@ function performBenchAction(a: BenchAction): void {
           : [],
         // Same rule as the frame loop: only rebuild the occluder half when
         // the pre-pass is on to consume it.
-        { occluder: sdfLayer.occluderEnabled },
+        { occluder: ctx.render.sdfLayer.occluderEnabled },
       );
     },
     /** A/B seam: rebuild the SHADOW hull with spanning off (the pre-fix
      *  bead-chain) or on. Pair it with refreshHull() — and use it INSTEAD of
      *  a two-build cross-load A/B, which the wander makes untrustworthy. */
-    setShadowSpan: (on: boolean, inflate?: number) => occluderHull.setShadowSpan(on, inflate),
+    setShadowSpan: (on: boolean, inflate?: number) => ctx.render.occluderHull.setShadowSpan(on, inflate),
     /** A/B seam for the shadow hull's junction bridges (the shoulder-shadow
      *  pinch fix). Pair with refreshHull() — and use it INSTEAD of a
      *  cross-load A/B, which the wander makes untrustworthy. */
-    setShadowBridges: (on: boolean) => occluderHull.setShadowBridges(on),
+    setShadowBridges: (on: boolean) => ctx.render.occluderHull.setShadowBridges(on),
     /** A/B seam for the shoulder socket clamp (motion.ts
      *  MOTION_TUNING.shoulderSocket). 0.05 is the shipped cap; 0 disables the
      *  clamp entirely. Live — the next stepMotion reads it — and pairable
@@ -13707,18 +13680,18 @@ function performBenchAction(a: BenchAction): void {
      *  mask, so enabling from the console in deferred mode is refused — the
      *  march target is not the flesh mask there). */
     setSscs: (on: boolean) => {
-      if (on && deferredMode) return 'refused: sscs is legacy-path-only';
-      if (on) postAa.setSscsFleshTex(sdfLayer.marchTarget.texture);
-      postAa.setSscs(on);
-      return postAa.sscs;
+      if (on && ctx.boot.deferredMode) return 'refused: sscs is legacy-path-only';
+      if (on) ctx.render.postAa.setSscsFleshTex(ctx.render.sdfLayer.marchTarget.texture);
+      ctx.render.postAa.setSscs(on);
+      return ctx.render.postAa.sscs;
     },
     /** SSCS live tuning: setSscsTerm('strength', 0.5) etc. Clamped to
      *  SSCS_TERM_RANGES. Pair with ?frozen=1 for single-variable captures. */
     setSscsTerm: (name: keyof SscsTerms, value: number) => {
-      postAa.setSscsTerm(name, value);
-      return postAa.sscsTerms;
+      ctx.render.postAa.setSscsTerm(name, value);
+      return ctx.render.postAa.sscsTerms;
     },
-    get sscsTerms() { return postAa.sscsTerms; },
+    get sscsTerms() { return ctx.render.postAa.sscsTerms; },
     /** Shadow-map edge hardness (the A/B seam for SHADOW_RADIUS): radius in
      *  shadow-map texels, 0 = crisp edge, ~2 the shipped default, 6+ very
      *  soft. Live on the WebGPU PCF filter (a reference uniform) — no
@@ -13726,37 +13699,37 @@ function performBenchAction(a: BenchAction): void {
      *  the march's own LEVEL_SHADOW PCF, and the contact term's softness is
      *  setSscsTerm's to tune. */
     setShadowRadius: (r: number) => {
-      flashlight.spot.shadow.radius = Math.max(0, Math.min(8, r));
-      return flashlight.spot.shadow.radius;
+      ctx.lighting.flashlight.spot.shadow.radius = Math.max(0, Math.min(8, r));
+      return ctx.lighting.flashlight.spot.shadow.radius;
     },
-    get shadowRadius() { return flashlight.spot.shadow.radius; },
+    get shadowRadius() { return ctx.lighting.flashlight.spot.shadow.radius; },
     hullDebug: () => ({
-      occluder: sdfLayer.occluderEnabled,
-      exclusions: hullExclusionsEnabled,
-      instances: occluderHull.instanceCount,
-      woundsPerBody: actors.map(a => a.wounds().length),
+      occluder: ctx.render.sdfLayer.occluderEnabled,
+      exclusions: ctx.render.hullExclusionsEnabled,
+      instances: ctx.render.occluderHull.instanceCount,
+      woundsPerBody: ctx.world.actors.map(a => a.wounds().length),
     }),
     /** A visible sphere in WORLD space, drawn through the normal geometry
      *  pass — so captures can mark predicted impacts vs actual craters.
      *  One marker at a time; pass null coords to remove. */
     placeMarker(x: number | null, y = 0, z = 0, colorHex = 0xff00ff) {
-      if (!marker) {
+      if (!ctx.player.marker) {
         const geo = new THREE.SphereGeometry(0.03, 12, 8);
-        marker = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colorHex }));
-        marker.frustumCulled = false;
-        scene.add(marker);
+        ctx.player.marker = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colorHex }));
+        ctx.player.marker.frustumCulled = false;
+        scene.add(ctx.player.marker);
       }
-      (marker.material as THREE.MeshBasicMaterial).color.setHex(colorHex);
-      if (x === null) { marker.visible = false; return; }
-      marker.visible = true;
-      marker.position.set(x, y, z);
+      (ctx.player.marker.material as THREE.MeshBasicMaterial).color.setHex(colorHex);
+      if (x === null) { ctx.player.marker.visible = false; return; }
+      ctx.player.marker.visible = true;
+      ctx.player.marker.position.set(x, y, z);
     },
-    projectiles: () => pellets.map(p => ({
+    projectiles: () => ctx.weapon.pellets.map(p => ({
       pos: [...p.pos] as Vec3,
       vel: [...p.vel] as Vec3,
       ageSec: p.ageSec,
     })),
-    get chunkCount() { return liveChunks.length; },
+    get chunkCount() { return ctx.bake.liveChunks.length; },
     /** Dev seam (chunk-bake gate/look/bench): spawn one synthetic meat-ball
      *  chunk at a world position through the REAL spawn path — the same
      *  view, sim, settle, bake and gib machinery a severed limb uses, with
@@ -13785,7 +13758,7 @@ function performBenchAction(a: BenchAction): void {
           radius: radius * 0.55, scale: [1, 1, 1], blendK: 0.03,
         } as unknown as Primitive);
       }
-      const id = nextChunkId;
+      const id = ctx.bake.nextId;
       spawnChunkPiece(
         {
           limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [],
@@ -13793,7 +13766,7 @@ function performBenchAction(a: BenchAction): void {
           // a rig can stage a truly stationary piece that must NOT blur.
           ...(spin ? { spinAngVel: spin } : {}),
         },
-        { uniforms: actors[0]!.view.uniforms, volumeTexture: actors[0]!.view.volumeTexture },
+        { uniforms: ctx.world.actors[0]!.view.uniforms, volumeTexture: ctx.world.actors[0]!.view.volumeTexture },
         velocity ?? (stationary ? [0, 0, 0] : undefined),
       );
       return id;
@@ -13807,7 +13780,7 @@ function performBenchAction(a: BenchAction): void {
      *  leave STILL at the centre — translation-only blur cannot fake it.
      *  Returns the new piece id (or -1 if the actor view is not up yet). */
     spawnSpinFixture: (x: number, y: number, z: number, radius = 0.2, spin: Vec3 = [0, 0, 8]) => {
-      const view = actors[0]?.view;
+      const view = ctx.world.actors[0]?.view;
       if (!view) return -1;
       const prims: Primitive[] = [];
       const rng = rngStreams.misc;
@@ -13824,7 +13797,7 @@ function performBenchAction(a: BenchAction): void {
           radius: radius * 0.55, scale: [1, 1, 1], blendK: 0.03,
         } as unknown as Primitive);
       }
-      const id = nextChunkId;
+      const id = ctx.bake.nextId;
       // One 1/60 s of gravity exactly cancelled: after `step(1)` the piece's
       // velocity is ~0, so the exposure gather is spin-only.
       const cancel: Vec3 = [0, -CHUNK_TUNING.gravity / 60, 0];
@@ -13841,21 +13814,21 @@ function performBenchAction(a: BenchAction): void {
     /** Settled-chunk bake (close-up task 5). ON at boot (GAME_CHUNK_BAKE);
      *  off is pixel-identical. Toggling mid-session only affects FUTURE
      *  settles — baked pieces stay baked until shot or recycled. */
-    soldierCorpseBake: () => soldierCorpses?.stats(),
-    setSoldierCorpseBake(on: boolean) { soldierCorpses?.setEnabled(on); },
+    soldierCorpseBake: () => ctx.world.soldierCorpses?.stats(),
+    setSoldierCorpseBake(on: boolean) { ctx.world.soldierCorpses?.setEnabled(on); },
     /** Micro-detail amplitude on every settled/baked piece — the march's
      *  `surfaceNoiseAmp`, which the bake used to drop entirely. `null` follows
      *  the live creature (the shipped behaviour); a number overrides it, which
      *  is how to judge a term whose authored value is 0.06. Live: no rebake,
      *  the pieces already on the floor change on the next frame. */
     setChunkDetail(x: number | null, o?: { freq?: number; albedo?: number }) {
-      chunkDetailOverride = x === null ? null : Math.max(0, Math.min(1, x));
-      if (o?.freq !== undefined) chunkDetailFreq = Math.max(0.5, Math.min(64, o.freq));
-      if (o?.albedo !== undefined) chunkDetailAlbedo = Math.max(0, Math.min(1.5, o.albedo));
-      return { amp: chunkDetailOverride, freq: chunkDetailFreq, albedo: chunkDetailAlbedo };
+      ctx.bake.detailOverride = x === null ? null : Math.max(0, Math.min(1, x));
+      if (o?.freq !== undefined) ctx.bake.detailFreq = Math.max(0.5, Math.min(64, o.freq));
+      if (o?.albedo !== undefined) ctx.bake.detailAlbedo = Math.max(0, Math.min(1.5, o.albedo));
+      return { amp: ctx.bake.detailOverride, freq: ctx.bake.detailFreq, albedo: ctx.bake.detailAlbedo };
     },
     get chunkDetail() {
-      return { amp: chunkDetailOverride, freq: chunkDetailFreq, albedo: chunkDetailAlbedo };
+      return { amp: ctx.bake.detailOverride, freq: ctx.bake.detailFreq, albedo: ctx.bake.detailAlbedo };
     },
     /** WHAT THE MATERIALS ACTUALLY HOLD, not what was requested. `chunkDetail`
      *  is the override; this is the value the per-frame push last wrote into
@@ -13864,7 +13837,7 @@ function performBenchAction(a: BenchAction): void {
      *  exact failure this getter exists to make visible, because a look A/B on
      *  a floor full of recycling gore cannot distinguish "the term does nothing"
      *  from "the term never arrived". */
-    chunkDetailApplied: () => litChunkMaterials.map(m => {
+    chunkDetailApplied: () => ctx.world.litChunkMaterials.map(m => {
       const d = m.uniforms.fleshDetail.value;
       return { amp: d.x, freq: d.y, albedo: d.z, ambient: m.uniforms.ambient.value.getHex() };
     }),
@@ -13876,7 +13849,7 @@ function performBenchAction(a: BenchAction): void {
      *  indistinguishable on screen. This reads the albedo directly: mean rgb,
      *  its range, and the mean wound-mask alpha. Values are LINEAR, matching
      *  the .blob palette (flesh baseColor is 0.68 0.44 0.40). */
-    bakedAlbedoStats: () => bakedChunks.map(b => {
+    bakedAlbedoStats: () => ctx.bake.chunks.map(b => {
       const a = b.mesh.geometry.getAttribute('bakeColor');
       if (!a) return { id: b.id, error: 'no bakeColor' };
       const v = a.array as ArrayLike<number>;
@@ -13913,24 +13886,24 @@ function performBenchAction(a: BenchAction): void {
     /** Compare the SAME settled poses, with no worker timing or physics drift.
      * The retained views exist for recycling already; only this dev seam draws them. */
     setBakedChunkReference(on: boolean) {
-      bakedChunkReference = on;
-      for (const b of bakedChunks) {
+      ctx.bake.reference = on;
+      for (const b of ctx.bake.chunks) {
         b.mesh.visible = !on;
         b.view.object.visible = on;
         if (on) b.view.update(b.state);
       }
     },
     setChunkBake(on: boolean) {
-      chunkBakeEnabled = on;
+      ctx.bake.enabled = on;
       if (!on) cancelChunkBake();
-      if (on && bakedChunkMat) bakedChunkSeed?.(bakedChunkMat);
+      if (on && ctx.bake.mat) ctx.bake.seed?.(ctx.bake.mat);
     },
-    get chunkBake() { return chunkBakeEnabled; },
+    get chunkBake() { return ctx.bake.enabled; },
     /** Paired-pixel diagnostic: hide exactly one live or baked producer
      * while the gate holds simulation locked; returns false for stale IDs. */
     setChunkVisible(id: number, visible: boolean) {
-      const live = liveChunks.find(c => c.id === id);
-      const baked = bakedChunks.find(c => c.id === id);
+      const live = ctx.bake.liveChunks.find(c => c.id === id);
+      const baked = ctx.bake.chunks.find(c => c.id === id);
       const object = live?.view.object ?? baked?.mesh;
       if (!object) return false;
       object.visible = visible;
@@ -13939,32 +13912,32 @@ function performBenchAction(a: BenchAction): void {
     /** Leak/observability census: live (stepped/marched) chunks, baked
      *  meshes, ring views, bake cost. The long-firefight gate reads this. */
     chunkStats: () => ({
-      live: liveChunks.length,
-      sharedLiveMaterial: liveChunks.every(c => (c.view.object as THREE.Mesh).material === chunkMaterial.material),
-      baked: bakedChunks.length,
-      views: chunkViews.length,
-      totalBakes,
-      lastBakeMs, // worker CPU time, NOT a main-thread span
-      lastBakeSwapMs,
-      lastBakeSwapFrame,
-      lastBakeRequestMs,
+      live: ctx.bake.liveChunks.length,
+      sharedLiveMaterial: ctx.bake.liveChunks.every(c => (c.view.object as THREE.Mesh).material === ctx.bake.material.material),
+      baked: ctx.bake.chunks.length,
+      views: ctx.bake.views.length,
+      totalBakes: ctx.bake.totalBakes,
+      lastBakeMs: ctx.bake.lastBakeMs, // worker CPU time, NOT a main-thread span
+      lastBakeSwapMs: ctx.bake.lastSwapMs,
+      lastBakeSwapFrame: ctx.bake.lastSwapFrame,
+      lastBakeRequestMs: ctx.bake.lastRequestMs,
       bakeThread: 'worker',
-      pendingBake: chunkBakeJobs.pendingId,
-      bakeError: chunkBakeJobs.error,
-      lastBakeInfo,
+      pendingBake: ctx.bake.jobs.pendingId,
+      bakeError: ctx.bake.jobs.error,
+      lastBakeInfo: ctx.bake.lastBakeInfo,
       /** THE ASSET PATH'S OWN CENSUS (task 2): asset hits, fallback reasons,
        *  load bytes, live moving meshes and runtime extraction jobs. Included
        *  here so a single `chunkStats()` read answers "did the offline set
        *  actually carry this blast, and how much runtime extraction did it
        *  remove?" without a second seam. */
-      gibAssets: gibAssetRuntime.countersSnapshot(),
+      gibAssets: ctx.gibs.assetRuntime.countersSnapshot(),
       /** Baked pieces wearing the per-fragment textured HEAD material — the
        *  first non-zero value is the first textured-head draw (startup probe). */
-      faceBaked: bakedChunks.filter(b => b.faceMaterial !== undefined).length,
-      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius, face: b.faceMaterial !== undefined, quat: [...b.state.quat] as [number, number, number, number] })),
+      faceBaked: ctx.bake.chunks.filter(b => b.faceMaterial !== undefined).length,
+      pieces: ctx.bake.chunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius, face: b.faceMaterial !== undefined, quat: [...b.state.quat] as [number, number, number, number] })),
       /** Live (still-marched) chunk positions — the look/bench drivers frame
        *  the camera on these in bake-OFF captures. */
-      livePieces: liveChunks.map(c => ({
+      livePieces: ctx.bake.liveChunks.map(c => ({
         id: c.id, centre: [...c.state.pos] as [number, number, number], radius: c.state.radius,
         /** Orientation and angular velocity (task 4): the rupture hand-off must
          *  leave a NON-identity quat and a nonzero spin on each released piece. */
@@ -13974,48 +13947,48 @@ function performBenchAction(a: BenchAction): void {
     }),
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
     setSdfScale: (v: number) => applySdfScale(v),
-    get sdfScale() { return sdfScale; },
-    get sdfTarget() { return sdfLayer.targetSize; },
+    get sdfScale() { return ctx.render.sdfScale; },
+    get sdfTarget() { return ctx.render.sdfLayer.targetSize; },
     /** Adaptive resolution ladder — default OFF so the chosen rung ships. */
     /** A/B seam for the actor visibility cull (ships ON). The bench's
      *  `actor-cull-off` leg is the "before" column. */
     /** 'off' | 'sdf' (flesh only) | 'frame' (whole picture). */
-    setFieldStyle: (style: 'off' | 'sdf' | 'bodies' | 'frame') => sdfLayer.setFieldStyle(style),
-    get fieldStyle() { return sdfLayer.fieldStyle; },
-    setFieldMode: (on: boolean) => sdfLayer.setFieldMode(on),
-    get fieldMode() { return sdfLayer.fieldMode; },
-    setFieldComb: (v: number) => sdfLayer.setFieldComb(v),
+    setFieldStyle: (style: 'off' | 'sdf' | 'bodies' | 'frame') => ctx.render.sdfLayer.setFieldStyle(style),
+    get fieldStyle() { return ctx.render.sdfLayer.fieldStyle; },
+    setFieldMode: (on: boolean) => ctx.render.sdfLayer.setFieldMode(on),
+    get fieldMode() { return ctx.render.sdfLayer.fieldMode; },
+    setFieldComb: (v: number) => ctx.render.sdfLayer.setFieldComb(v),
     /** THE INTERLACED FIELD DIVISOR (deeper interlace fields, 2026-09-10).
      *  2 = shipped; 3 and 4 are owner-approved on screen, which is where they
      *  must be judged — the arithmetic is not the decision. Returns what it
      *  ACTUALLY set, because `frame` refuses anything but 2 (its weave still
      *  hardcodes two fields) and a silent no-op would read as success. */
-    setFieldCount: (n: number) => sdfLayer.setFieldCount(n),
-    get fieldCount() { return sdfLayer.fieldCount; },
-    get fieldComb() { return sdfLayer.fieldComb; },
-    setActorCull(on: boolean) { actorCullEnabled = on; if (!on) lastSeenMs.clear(); },
-    actorCull: () => ({ enabled: actorCullEnabled, ...cullCounts }),
+    setFieldCount: (n: number) => ctx.render.sdfLayer.setFieldCount(n),
+    get fieldCount() { return ctx.render.sdfLayer.fieldCount; },
+    get fieldComb() { return ctx.render.sdfLayer.fieldComb; },
+    setActorCull(on: boolean) { ctx.render.actorCullEnabled = on; if (!on) ctx.world.lastSeenMs.clear(); },
+    actorCull: () => ({ enabled: ctx.render.actorCullEnabled, ...ctx.world.cullCounts }),
     setAdaptive(on: boolean, budgetMs?: number) {
-      adaptiveEnabled = on;
-      if (budgetMs !== undefined) adaptiveBudgetMs = budgetMs;
-      adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
-      adaptiveFrames.length = 0;
+      ctx.render.adaptiveEnabled = on;
+      if (budgetMs !== undefined) ctx.render.adaptiveBudgetMs = budgetMs;
+      ctx.render.adaptiveState = initialAdaptiveState(performance.now(), ctx.render.adaptiveState.rung);
+      ctx.render.adaptiveFrames.length = 0;
     },
     get adaptive() {
       return {
-        enabled: adaptiveEnabled,
-        budgetMs: adaptiveBudgetMs,
-        rung: adaptiveState.rung,
-        scale: scaleForRung(adaptiveState.rung),
+        enabled: ctx.render.adaptiveEnabled,
+        budgetMs: ctx.render.adaptiveBudgetMs,
+        rung: ctx.render.adaptiveState.rung,
+        scale: scaleForRung(ctx.render.adaptiveState.rung),
         ladder: [...SCALE_LADDER],
       };
     },
     /** The active render cap + how it was chosen (?res=). */
     get resolution() {
-      const cap = RES_RUNGS[resKey];
-      const content = postAa.contentSize;
+      const cap = RES_RUNGS[ctx.boot.resKey];
+      const content = ctx.render.postAa.contentSize;
       return {
-        rung: resKey,
+        rung: ctx.boot.resKey,
         cap: { ...cap },
         content: { ...content },
         letterboxed: cap.mode === 'fixed',
@@ -14028,7 +14001,7 @@ function performBenchAction(a: BenchAction): void {
      *  only exists through this seam. */
     stampWoundAt: (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
       kind: 'pellet' | 'slug' = 'pellet', bodyId?: number) => {
-      const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId);
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
       if (!a) return null;
       const posed = a.posed();
       const hit = traceProjectile(
@@ -14056,12 +14029,12 @@ function performBenchAction(a: BenchAction): void {
      *  blast calibre — wounds only, no shove/sever/gib, so captures are not
      *  displaced by their own impact. Returns what it did. */
     explode: (x: number, y: number, z: number) => {
-      const bodies: ExplosionBody[] = actors.map(a => ({ id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw }));
+      const bodies: ExplosionBody[] = ctx.world.actors.map(a => ({ id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw }));
       const fx = resolveExplosion([x, y, z], bodies);
       let totalWounds = 0;
       for (const pb of fx.perBody) {
         if (pb.wounds.length === 0) continue;
-        const a = actors.find(q => String(q.id) === pb.bodyId);
+        const a = ctx.world.actors.find(q => String(q.id) === pb.bodyId);
         if (!a) continue;
         a.stampBlast(pb.wounds);
         // One decision PER stamped wound: the first cavity wound spawns,
@@ -14077,87 +14050,87 @@ function performBenchAction(a: BenchAction): void {
      *  `explode` above stays the wound-only capture twin: this one displaces
      *  bodies and destroys them, so a still frame of it is not reproducible. */
     detonate: (x: number, y: number, z: number) => {
-      const before = { actors: actors.length, chunks: liveChunks.length };
+      const before = { actors: ctx.world.actors.length, chunks: ctx.bake.liveChunks.length };
       detonateAt([x, y, z]);
       return {
         // `dynLastRadiusM`, NOT `explosionRadiusM()`: see that field's block —
         // the constant made every radius knob invisible to every rig.
-        radiusM: dynLastRadiusM,
+        radiusM: ctx.dynamite.lastRadiusM,
         actorsBefore: before.actors,
-        actorsAfter: actors.length,
+        actorsAfter: ctx.world.actors.length,
         chunksBefore: before.chunks,
-        chunksAfter: liveChunks.length,
-        gibbed: dynGibbed,
-        gibPieces: dynGibPieces,
-        lastBlastMs: dynLastBlastMs,
+        chunksAfter: ctx.bake.liveChunks.length,
+        gibbed: ctx.dynamite.gibbed,
+        gibPieces: ctx.dynamite.gibPieces,
+        lastBlastMs: ctx.dynamite.lastBlastMs,
       };
     },
     /** Live slot/cook/flight state — the tuning readout and a gate's oracle. */
     dynamite: () => ({
-      live: slotState.live,
-      target: slotState.target,
-      phase: slotState.phase,
-      ready: slotReady(slotState),
-      gunLower: slotLowerAmount(slotState, 'shotgun'),
-      bundleLower: slotLowerAmount(slotState, 'dynamite'),
-      cookPhase: cook.phase,
-      charge: dynCharge,
-      inHand: heldProp !== null,
-      inFlight: liveBundles.length,
-      flights: liveBundles.map(b => ({
+      live: ctx.weapon.slotState.live,
+      target: ctx.weapon.slotState.target,
+      phase: ctx.weapon.slotState.phase,
+      ready: slotReady(ctx.weapon.slotState),
+      gunLower: slotLowerAmount(ctx.weapon.slotState, 'shotgun'),
+      bundleLower: slotLowerAmount(ctx.weapon.slotState, 'dynamite'),
+      cookPhase: ctx.vfx.cook.phase,
+      charge: ctx.dynamite.charge,
+      inHand: ctx.weapon.heldProp !== null,
+      inFlight: ctx.bake.liveBundles.length,
+      flights: ctx.bake.liveBundles.map(b => ({
         pos: b.state.pos, vel: b.state.vel, fuse: b.state.fuse,
         resting: b.state.resting, detonated: b.state.detonated,
         drawn: b.prop !== null,
       })),
       // PROP-POOL ACCOUNTING. The pool is where a "the dynamite vanished" bug
       // lives, and none of it is visible from the outside without these.
-      props: bundleProps.length,
-      spares: spareBundles.length,
-      heldVisible: heldProp ? heldProp.object.visible : null,
-      heldParent: heldProp ? (heldProp.object.parent === bundleRig ? 'rig' : 'other') : null,
-      heldLocal: heldProp
-        ? [heldProp.object.position.x, heldProp.object.position.y, heldProp.object.position.z]
+      props: ctx.bake.bundleProps.length,
+      spares: ctx.bake.spareBundles.length,
+      heldVisible: ctx.weapon.heldProp ? ctx.weapon.heldProp.object.visible : null,
+      heldParent: ctx.weapon.heldProp ? (ctx.weapon.heldProp.object.parent === ctx.bake.bundleRig ? 'rig' : 'other') : null,
+      heldLocal: ctx.weapon.heldProp
+        ? [ctx.weapon.heldProp.object.position.x, ctx.weapon.heldProp.object.position.y, ctx.weapon.heldProp.object.position.z]
           .map(v => Number(v.toFixed(3)))
         : null,
-      drawnBundles: liveBundles.filter(b => b.prop !== null).length,
-      thrown: dynThrown, detonations: dynDetonations,
-      gibbed: dynGibbed, gibPieces: dynGibPieces, lastBlastMs: dynLastBlastMs,
-      gibMode, gibBones, gibStaggerFrames, maxChunks, dynSpeedScale, gibVelScale,
-      gibLaunchMode,
-      aoeRadiusScale, aoeLaunchFloor,
+      drawnBundles: ctx.bake.liveBundles.filter(b => b.prop !== null).length,
+      thrown: ctx.dynamite.thrown, detonations: ctx.dynamite.detonations,
+      gibbed: ctx.dynamite.gibbed, gibPieces: ctx.dynamite.gibPieces, lastBlastMs: ctx.dynamite.lastBlastMs,
+      gibMode: ctx.gibs.mode, gibBones: ctx.gibs.bones, gibStaggerFrames: ctx.gibs.staggerFrames, maxChunks: ctx.bake.maxChunks, dynSpeedScale: ctx.dynamite.speedScale, gibVelScale: ctx.gibs.velScale,
+      gibLaunchMode: ctx.gibs.launchMode,
+      aoeRadiusScale: ctx.vfx.aoeRadiusScale, aoeLaunchFloor: ctx.vfx.aoeLaunchFloor,
       ceilM: BUNDLE_CEIL_M,
       // THE STAGED RELEASE, as numbers a gate can assert on: how many pieces are
       // still waiting for their blast impulse, and how far that queue's oldest
       // entry is from firing. `?gibstagger=1` must empty the queue on the blast
       // frame; the default must NOT.
-      pendingPieceImpulses: pendingGibImpulses.length,
-      pendingPieceFrames: pendingGibImpulses.reduce((m, p) => Math.max(m, p.delay), 0),
+      pendingPieceImpulses: ctx.gibs.pendingGibImpulses.length,
+      pendingPieceFrames: ctx.gibs.pendingGibImpulses.reduce((m, p) => Math.max(m, p.delay), 0),
       // NB there is deliberately NO "pieces at rest" counter: `stepChunk`
       // applies gravity to every chunk, so a piece held for the stagger is at
       // rest for exactly the frame it was born and for none after. The queue
       // length is the honest signal that the blast has not gone off yet.
-      pendingPieceDelays: pendingGibImpulses.map(p => p.delay),
-      fxLightScale, lights: explosionLights.length,
+      pendingPieceDelays: ctx.gibs.pendingGibImpulses.map(p => p.delay),
+      fxLightScale: ctx.lighting.fxLightScale, lights: ctx.vfx.explosionLights.length,
       // What the ROOM is actually being lit with right now, and the age of the
       // newest burst's light — the two numbers a light measurement needs.
-      meshIntensity: explosionLightPool.map(pl => Number(pl.intensity.toFixed(1))),
-      lightAges: explosionLights.map(e => Number(e.age.toFixed(3))),
-      lastBlastRadiusM: dynLastRadiusM,
-      lastGibDropped: dynLastGibDropped,
-      lastGibTier: dynLastGibTier, lastGibSpawned: dynLastGibSpawned, gibWounds,
-      gibTierLog: dynGibTierLog,
-      gibTearSec,
+      meshIntensity: ctx.vfx.explosionLightPool.map(pl => Number(pl.intensity.toFixed(1))),
+      lightAges: ctx.vfx.explosionLights.map(e => Number(e.age.toFixed(3))),
+      lastBlastRadiusM: ctx.dynamite.lastRadiusM,
+      lastGibDropped: ctx.dynamite.lastGibDropped,
+      lastGibTier: ctx.dynamite.lastGibTier, lastGibSpawned: ctx.dynamite.lastGibSpawned, gibWounds: ctx.gibs.wounds,
+      gibTierLog: ctx.dynamite.gibTierLog,
+      gibTearSec: ctx.gibs.tearSec,
       // THE PRE-TEAR WINDOW, live: how many bodies are bending right now, how
       // far into their window the oldest is, and how many are waiting for it to
       // close. A rig asserts the sequence from these rather than from a feeling
       // about the frames.
-      tearing: actors.filter(x => x.tearing()).length,
-      tearAge: actors.reduce((m, x) => Math.max(m, x.tearAge()), 0),
+      tearing: ctx.world.actors.filter(x => x.tearing()).length,
+      tearAge: ctx.world.actors.reduce((m, x) => Math.max(m, x.tearAge()), 0),
       // THE RUPTURE'S ACTUAL DISPLACEMENT, in metres: the largest region offset
       // any body is being drawn with right now. A rig asserts that the body is
       // separating (this climbs from 0 to the peak) instead of trusting a
       // frame's silhouette.
-      ruptureMaxM: actors.reduce((m, x) => {
+      ruptureMaxM: ctx.world.actors.reduce((m, x) => {
         const f = x.tearFrame();
         if (!f) return m;
         for (const o of f.offsets) m = Math.max(m, Math.hypot(o[0], o[1], o[2]));
@@ -14168,7 +14141,7 @@ function performBenchAction(a: BenchAction): void {
       // the pieces are already TILTED before release (this climbs from 0) and
       // that the released chunks keep the orientation (chunkStats().livePieces
       // quats) rather than being a translation-only explosion.
-      ruptureMaxRad: actors.reduce((m, x) => {
+      ruptureMaxRad: ctx.world.actors.reduce((m, x) => {
         const f = x.tearFrame();
         if (!f) return m;
         for (const q of f.quats) {
@@ -14177,16 +14150,16 @@ function performBenchAction(a: BenchAction): void {
         }
         return m;
       }, 0),
-      pendingGibs: pendingGibs.length,
+      pendingGibs: ctx.gibs.pendingGibs.length,
       // THE PREVIEW'S SHAPE, live (task 3): the regions a pending body is
       // actually being drawn as, and the tier that will spawn. A rig compares
       // these against `lastGibTier`/`lastGibSpawned` after release to prove the
       // preview and the spawn are the same piece set.
-      pendingPlanPieces: pendingGibs.reduce((n, q) => n + q.plan.pieces.length, 0),
-      pendingTiers: pendingGibs.map(q => q.tier),
-      scheduledGibBodies: dynScheduledGibBodies, scheduledGibPieces: dynScheduledGibPieces,
-      lastGibParts: dynLastGibParts, lastGibHeld: dynLastGibHeld,
-      blastProfile: dynBlastProfile,
+      pendingPlanPieces: ctx.gibs.pendingGibs.reduce((n, q) => n + q.plan.pieces.length, 0),
+      pendingTiers: ctx.gibs.pendingGibs.map(q => q.tier),
+      scheduledGibBodies: ctx.dynamite.scheduledGibBodies, scheduledGibPieces: ctx.dynamite.scheduledGibPieces,
+      lastGibParts: ctx.dynamite.lastGibParts, lastGibHeld: ctx.dynamite.lastGibHeld,
+      blastProfile: ctx.dynamite.blastProfile,
       // The resolver's own split for the LAST blast. Reset in detonateAt, not
       // here: a getter with a side effect is a trap, and reading this after
       // `blastProfile` (which shares this object) silently consumed the data.
@@ -14194,7 +14167,7 @@ function performBenchAction(a: BenchAction): void {
     }),
     /** AUTOMATION: select a slot without synthesising a key event. */
     selectSlot: (slot: WeaponSlot) => {
-      if (cook.phase === 'cooking') return { ok: false, reason: 'cooking' };
+      if (ctx.vfx.cook.phase === 'cooking') return { ok: false, reason: 'cooking' };
       // VALIDATED, because a bad argument here does not fail — it POISONS.
       // `WeaponSlot` is the string union 'shotgun' | 'dynamite' and the slot
       // machine only ever compares against those, so a caller passing the
@@ -14207,56 +14180,56 @@ function performBenchAction(a: BenchAction): void {
       if (!WEAPON_SLOTS.includes(slot)) {
         return { ok: false, reason: `unknown-slot:${String(slot)}` };
       }
-      slotState = requestSlot(slotState, slot);
+      ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, slot);
       updateHud();
-      return { ok: true, live: slotState.live, target: slotState.target, phase: slotState.phase };
+      return { ok: true, live: ctx.weapon.slotState.live, target: ctx.weapon.slotState.target, phase: ctx.weapon.slotState.phase };
     },
     /** A/B seam: stamp the 16 wounds on bodies this blast gibs (the old
      *  behaviour) or skip them (the shipped one). See `gibWounds`. */
-    setGibWounds: (on: boolean) => { gibWounds = !!on; return gibWounds; },
+    setGibWounds: (on: boolean) => { ctx.gibs.wounds = !!on; return ctx.gibs.wounds; },
     /** AUTOMATION: light the fuse / let it go, the two edges a mouse provides.
      *  Kept as edges rather than a cooked-to-order throw so a gate drives the
      *  SAME path a player does. */
-    dynamitePress: () => { dynPress = true; return { ok: true }; },
-    dynamiteRelease: () => { dynRelease = true; return { ok: true }; },
+    dynamitePress: () => { ctx.dynamite.press = true; return { ok: true }; },
+    dynamiteRelease: () => { ctx.dynamite.release = true; return { ok: true }; },
     /** AUTOMATION: the in-hand overcook, without waiting out the fuse. */
     overcook: () => { overcookInHand(); return { ok: true }; },
     /** Which explosion renderer is live and what it holds. `mode` is
      *  'procedural' (the GPU fireball) or 'standin' (the additive cards). */
     explosionFx: () => ({
-      mode: explosionVfx ? 'procedural' : burstLayer ? 'atlas' : 'standin',
-      usingAtlas: burstLayer?.usingAtlas ?? null,
-      size: fxSize, smoke: fxSmoke, life: fxLife, gain: fxGain, plume: fxPlume,
-      liveBursts: explosionVfx?.activeBursts ?? 0,
-      lightIntensity: explosionVfx?.lightIntensity ?? 0,
-      tuning: explosionVfx?.tuning ?? null,
+      mode: ctx.vfx.explosionVfx ? 'procedural' : ctx.vfx.burstLayer ? 'atlas' : 'standin',
+      usingAtlas: ctx.vfx.burstLayer?.usingAtlas ?? null,
+      size: ctx.vfx.size, smoke: ctx.vfx.smoke, life: ctx.vfx.life, gain: ctx.vfx.gain, plume: ctx.vfx.plume,
+      liveBursts: ctx.vfx.explosionVfx?.activeBursts ?? 0,
+      lightIntensity: ctx.vfx.explosionVfx?.lightIntensity ?? 0,
+      tuning: ctx.vfx.explosionVfx?.tuning ?? null,
       // THE BURST'S OWN SHAPE, in metres, per layer — the measurement the frame
       // differential cannot make (the ring dominates the changed area, and the
       // changed region's bounding box is re-cut by one stray pixel). Read it
       // straight after a `step`, with `?frozen=1` and the loop stopped.
-      layerExtents: explosionVfx?.layerExtents ?? null,
-      burstHalfHeightM: explosionVfx?.burstHalfHeightM ?? null,
+      layerExtents: ctx.vfx.explosionVfx?.layerExtents ?? null,
+      burstHalfHeightM: ctx.vfx.explosionVfx?.burstHalfHeightM ?? null,
     }),
     /** Live tuning for the procedural burst (see ExplosionVfxTuning). */
     setExplosionFxTuning: (t: Record<string, number>) => {
-      explosionVfx?.setTuning(t as never);
-      return explosionVfx?.tuning ?? null;
+      ctx.vfx.explosionVfx?.setTuning(t as never);
+      return ctx.vfx.explosionVfx?.tuning ?? null;
     },
     /** Force a burst at a point, for a capture that must not wait for a throw. */
     spawnExplosionFx: (x: number, y: number, z: number, heightM = 2, kind: 'air' | 'ground' = 'ground') => {
       const visual = { kind, at: [x, y, z] as Vec3, heightM };
       const scaled = scaleBurstVisual(visual);
       igniteExplosionLight(visual.at);
-      if (explosionVfx) explosionVfx.spawn(scaled);
-      else if (burstLayer) burstLayer.spawn(scaled);
+      if (ctx.vfx.explosionVfx) ctx.vfx.explosionVfx.spawn(scaled);
+      else if (ctx.vfx.burstLayer) ctx.vfx.burstLayer.spawn(scaled);
       else spawnBurstStandIn(scaled.at, scaled.heightM, scaled.kind);
-      return { mode: explosionVfx ? 'procedural' : burstLayer ? 'atlas' : 'standin' };
+      return { mode: ctx.vfx.explosionVfx ? 'procedural' : ctx.vfx.burstLayer ? 'atlas' : 'standin' };
     },
     /** The live roster in world terms — what a blast gate needs to pick a
      *  target and to count what a detonation removed. Read-only scalars only:
      *  id, kind, room, ground position, yaw, collapse phase. No GPU state, so
      *  this is safe to poll between stepped frames. */
-    actorList: () => actors.map(a => {
+    actorList: () => ctx.world.actors.map(a => {
       const p = a.pose();
       const d = a.debug();
       return {
@@ -14289,9 +14262,9 @@ function performBenchAction(a: BenchAction): void {
      * any spawned while it is off.
      */
     setBonePiecesVisible: (on: boolean) => {
-      bonesVisible = !!on;
-      for (const c of liveChunks) if (c.kind === 'bone') c.view.object.visible = bonesVisible;
-      return bonesVisible;
+      ctx.render.bonesVisible = !!on;
+      for (const c of ctx.bake.liveChunks) if (c.kind === 'bone') c.view.object.visible = ctx.render.bonesVisible;
+      return ctx.render.bonesVisible;
     },
     /** HIDE THE VIEW MODEL (the held shotgun/arm rig parented to the camera).
      *  A capture that must see the BODY's silhouette has the player's own arm
@@ -14300,24 +14273,24 @@ function performBenchAction(a: BenchAction): void {
      *  so `setRegisteredObjectsVisible` cannot reach it. Capture-only, and off
      *  by default. */
     setViewModelVisible: (on: boolean) => {
-      viewModelAnchor.visible = !!on;
-      return viewModelAnchor.visible;
+      ctx.weapon.viewModelAnchor.visible = !!on;
+      return ctx.weapon.viewModelAnchor.visible;
     },
     setChunksVisible: (on: boolean) => {
-      chunksHidden = !on;
-      for (const c of liveChunks) {
-        c.view.object.visible = !chunksHidden && (c.kind !== 'bone' || bonesVisible);
+      ctx.bake.hidden = !on;
+      for (const c of ctx.bake.liveChunks) {
+        c.view.object.visible = !ctx.bake.hidden && (c.kind !== 'bone' || ctx.render.bonesVisible);
       }
-      for (const b of bakedChunks) b.mesh.visible = !chunksHidden;
+      for (const b of ctx.bake.chunks) b.mesh.visible = !ctx.bake.hidden;
       // SPRITE PIECES COUNT AS PIECES HERE. This seam is the "pieces shown vs
       // hidden" arm every cost rig and differential uses, and a rig that had to
       // know which render mode was on would be a rig that silently measured
       // nothing the day the mode changed. The sprite mode's OWN control is
       // `setSpritePiecesVisible` below; this one moves both.
-      setSpritePiecesVisible(spritePieces, on);
-      return !chunksHidden;
+      setSpritePiecesVisible(ctx.vfx.spritePieces, on);
+      return !ctx.bake.hidden;
     },
-    chunksVisible: () => !chunksHidden,
+    chunksVisible: () => !ctx.bake.hidden,
     /** THE RENDER MODE BESIDE THE PIECE MODE — live, no reload.
      *
      *  This exists as a SETTER, not only as a boot param, for the reason every
@@ -14332,69 +14305,69 @@ function performBenchAction(a: BenchAction): void {
      *  happened, so a caller can tell "the mode is on" from "the mode is on and
      *  armed". */
     setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' | 'assets' = 'march') => {
-      gibRenderMode = mode === 'sprite' ? 'sprite'
+      ctx.gibs.renderMode = mode === 'sprite' ? 'sprite'
         : mode === 'carve' ? 'carve' : mode === 'assets' ? 'assets' : 'march';
-      if (gibRenderMode === 'carve') ensureCarvedLibrary();
-      if (gibRenderMode === 'sprite') await ensureGibAtlas('sheet');
+      if (ctx.gibs.renderMode === 'carve') ensureCarvedLibrary();
+      if (ctx.gibs.renderMode === 'sprite') await ensureGibAtlas('sheet');
       // The asset path is a fetch+decode; await it so a caller can tell "mode
       // on" from "mode on and armed" (the same contract as the sprite atlas).
-      if (gibRenderMode === 'assets') await ensureGibAssets();
-      return { mode: gibRenderMode, frames: gibAtlas?.frames.length ?? 0, ready: gibRenderMode === 'assets' ? gibAssetArmed() : gibAtlas !== null };
+      if (ctx.gibs.renderMode === 'assets') await ensureGibAssets();
+      return { mode: ctx.gibs.renderMode, frames: ctx.gibs.atlas?.frames.length ?? 0, ready: ctx.gibs.renderMode === 'assets' ? gibAssetArmed() : ctx.gibs.atlas !== null };
     },
     gibRenderMode: () => ({
-      mode: gibRenderMode,
+      mode: ctx.gibs.renderMode,
       // `ready` is per mode: the sprite path needs its ATLAS, the carve path its
       // LIBRARY, the assets path a loaded archetype SET — and conflating them
       // would report one mode armed because another's asset loaded.
-      ready: gibRenderMode === 'assets'
+      ready: ctx.gibs.renderMode === 'assets'
         ? gibAssetArmed()
-        : gibRenderMode === 'carve' ? (carvedLibrary !== null) : gibAtlas !== null,
-      frames: gibAtlas?.frames.length ?? 0, atlas: gibAtlasSource,
-      liveCap: gibSpriteLiveCap, restCap: gibSpriteRestCap, sizeScale: gibSpriteSizeScale,
+        : ctx.gibs.renderMode === 'carve' ? (ctx.bake.carvedLibrary !== null) : ctx.gibs.atlas !== null,
+      frames: ctx.gibs.atlas?.frames.length ?? 0, atlas: ctx.gibs.atlasSource,
+      liveCap: ctx.gibs.spriteLiveCap, restCap: ctx.gibs.spriteRestCap, sizeScale: ctx.gibs.spriteSizeScale,
       assets: {
         armed: gibAssetArmed(),
-        zombie: gibAssetRuntime.archetypeState('zombie'),
-        soldier: gibAssetRuntime.archetypeState('soldier'),
+        zombie: ctx.gibs.assetRuntime.archetypeState('zombie'),
+        soldier: ctx.gibs.assetRuntime.archetypeState('soldier'),
       },
-      carve: carvedLibrary ? {
-        pieces: carvedLibrary.pieces.length,
-        verts: carvedLibrary.totalVerts,
-        tris: carvedLibrary.totalTris,
-        bonePrims: carvedLibrary.bonePrims,
-        fleshPrims: carvedLibrary.fleshPrims,
-        cells: carvedLibrary.cells,
-        cellSize: carvedLibrary.cellSize,
-        buildMs: carvedBuildMs,
-        skipped: carvedLibrary.skipped.length,
-        piecesWithBones: carvedLibrary.pieces.filter(x => x.bonesNear > 0).length,
+      carve: ctx.bake.carvedLibrary ? {
+        pieces: ctx.bake.carvedLibrary.pieces.length,
+        verts: ctx.bake.carvedLibrary.totalVerts,
+        tris: ctx.bake.carvedLibrary.totalTris,
+        bonePrims: ctx.bake.carvedLibrary.bonePrims,
+        fleshPrims: ctx.bake.carvedLibrary.fleshPrims,
+        cells: ctx.bake.carvedLibrary.cells,
+        cellSize: ctx.bake.carvedLibrary.cellSize,
+        buildMs: ctx.bake.carvedBuildMs,
+        skipped: ctx.bake.carvedLibrary.skipped.length,
+        piecesWithBones: ctx.bake.carvedLibrary.pieces.filter(x => x.bonesNear > 0).length,
       } : null,
     }),
     /** The carved library's per-piece breakdown — the seam a rig uses to check
      *  that the ribcage is actually in a chest slice rather than merely assumed. */
-    gibCarveLibrary: () => (carvedLibrary ? carvedLibrary.pieces.map(p => ({
+    gibCarveLibrary: () => (ctx.bake.carvedLibrary ? ctx.bake.carvedLibrary.pieces.map(p => ({
       part: p.part, limb: p.limb, verts: p.verts, tris: p.tris, radius: p.radius,
       bonesNear: p.bonesNear, centre: p.centre,
     })) : []),
     /** Hide/show the blast's sprite pieces without destroying them — the sprite
      *  twin of `setChunksVisible`, and how a capture proves a DETONATION's
      *  sprites are drawn rather than merely in the scene graph. */
-    setSpritePiecesVisible: (on: boolean) => setSpritePiecesVisible(spritePieces, !!on),
+    setSpritePiecesVisible: (on: boolean) => setSpritePiecesVisible(ctx.vfx.spritePieces, !!on),
     /** WHERE EVERY SPRITE PIECE IS — the sprite twin of `chunkStates()`, live and
      *  parked, so a rig watching a gib fly does not care which mode made it. */
-    spritePieceStates: () => spritePieceStates(spritePieces),
+    spritePieceStates: () => spritePieceStates(ctx.vfx.spritePieces),
     spriteCensus: () => ({
-      live: spritePieces.live.length,
-      rest: spritePieces.rest.length,
-      meshes: spritePieces.group.children.length,
-      geometries: spritePieces.assets.unitPlane ? 1 : 0,
-      materials: spritePieces.assets.material.size,
-      liveCap: gibSpriteLiveCap,
-      restCap: gibSpriteRestCap,
-      hidden: spritePieces.hidden,
+      live: ctx.vfx.spritePieces.live.length,
+      rest: ctx.vfx.spritePieces.rest.length,
+      meshes: ctx.vfx.spritePieces.group.children.length,
+      geometries: ctx.vfx.spritePieces.assets.unitPlane ? 1 : 0,
+      materials: ctx.vfx.spritePieces.assets.material.size,
+      liveCap: ctx.gibs.spriteLiveCap,
+      restCap: ctx.gibs.spriteRestCap,
+      hidden: ctx.vfx.spritePieces.hidden,
     }),
     /** Drop every sprite piece (both lists) — the reset a paired rig wants
      *  between arms, so an earlier blast's pile is not in the frame. */
-    clearSpritePieces: () => clearSpritePieces(spritePieces),
+    clearSpritePieces: () => clearSpritePieces(ctx.vfx.spritePieces),
     /**
      * THE OFFLINE ASSET SEAM (task 2). `stats` is the always-available census
      * (asset hits, per-reason fallbacks, load bytes, live moving meshes, runtime
@@ -14402,13 +14375,13 @@ function performBenchAction(a: BenchAction): void {
      * loads and drops every cached library so a rig can force a clean reload —
      * a reset drops the sprite pieces first, which returns their pooled buffers.
      */
-    gibAssetStats: () => gibAssetRuntime.countersSnapshot(),
+    gibAssetStats: () => ctx.gibs.assetRuntime.countersSnapshot(),
     gibAssetLibrary: () => {
       const out: Record<string, unknown> = {};
       for (const archetype of ['zombie', 'soldier']) {
-        const lib = gibAssetRuntime.library(archetype);
+        const lib = ctx.gibs.assetRuntime.library(archetype);
         out[archetype] = lib ? {
-          state: gibAssetRuntime.archetypeState(archetype),
+          state: ctx.gibs.assetRuntime.archetypeState(archetype),
           fingerprint: lib.fingerprint,
           pieces: lib.pieces.length,
           verts: lib.verts,
@@ -14417,17 +14390,17 @@ function performBenchAction(a: BenchAction): void {
           builtMs: lib.builtMs,
           materials: 1,
         } : {
-          state: gibAssetRuntime.archetypeState(archetype),
-          reason: gibAssetRuntime.failureReason(archetype),
+          state: ctx.gibs.assetRuntime.archetypeState(archetype),
+          reason: ctx.gibs.assetRuntime.failureReason(archetype),
         };
       }
       return out;
     },
     resetGibAssets: () => {
-      const dropped = clearSpritePieces(spritePieces);
-      gibAssetRuntime.dispose();
+      const dropped = clearSpritePieces(ctx.vfx.spritePieces);
+      ctx.gibs.assetRuntime.dispose();
       resetGibAssetCache();
-      gibAssetRuntime = createGibAssetRuntime();
+      ctx.gibs.assetRuntime = createGibAssetRuntime();
       return dropped;
     },
     /** PRELOAD THE COMMITTED SETS without switching mode — the paired rig's
@@ -14438,15 +14411,15 @@ function performBenchAction(a: BenchAction): void {
     goreShowcase: () => spawnGoreShowcase(),
     /** LAY THE SPRITE GIB BENCH in front of the player (loads the dev-only atlas
      *  on first use). Returns the number of billboards. */
-    gibSpriteBench: async (which: 'placeholder' | 'sheet' = gibAtlasSource) => {
+    gibSpriteBench: async (which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource) => {
       await ensureGibAtlas(which);
       return laySpriteBench();
     },
     /** Show/hide the sprite bench without destroying it — the same A/B the mesh
      *  bench has, so a capture can prove the sprites are DRAWN. */
     gibSpriteBenchVisible: (on: boolean) => {
-      if (spriteBenchGroup) spriteBenchGroup.visible = on;
-      return spriteBenchGroup?.visible ?? false;
+      if (ctx.vfx.spriteBenchGroup) ctx.vfx.spriteBenchGroup.visible = on;
+      return ctx.vfx.spriteBenchGroup?.visible ?? false;
     },
     /** THE PARTS' PROCEDURAL DETAIL, live: `{detail, bump, blood, noise}` plus the
      *  STAIN terms `{burn, wet, dark, stainScale}`. `detail: 0` turns the whole
@@ -14480,14 +14453,14 @@ function performBenchAction(a: BenchAction): void {
      * supposed to match. That is the "white / concrete" read.
      */
     goreLook: (o: { spec?: number; fres?: number; wetTint?: number; stain?: number } = {}) => {
-      if (o.stain !== undefined) goreLookCfg.x = o.stain;
-      if (o.wetTint !== undefined) goreLookCfg.y = o.wetTint;
-      if (o.spec !== undefined) goreLookCfg.z = o.spec;
-      if (o.fres !== undefined) goreLookCfg.w = o.fres;
-      for (const m of [gorePartMat, carvedMaterial, gibAssetMaterial]) {
-        m?.uniforms.look.value.set(goreLookCfg.x, goreLookCfg.y, goreLookCfg.z, goreLookCfg.w);
+      if (o.stain !== undefined) ctx.vfx.goreLookCfg.x = o.stain;
+      if (o.wetTint !== undefined) ctx.vfx.goreLookCfg.y = o.wetTint;
+      if (o.spec !== undefined) ctx.vfx.goreLookCfg.z = o.spec;
+      if (o.fres !== undefined) ctx.vfx.goreLookCfg.w = o.fres;
+      for (const m of [ctx.vfx.gorePartMat, ctx.bake.carvedMaterial, ctx.gibs.assetMaterial]) {
+        m?.uniforms.look.value.set(ctx.vfx.goreLookCfg.x, ctx.vfx.goreLookCfg.y, ctx.vfx.goreLookCfg.z, ctx.vfx.goreLookCfg.w);
       }
-      return { stain: goreLookCfg.x, wetTint: goreLookCfg.y, spec: goreLookCfg.z, fres: goreLookCfg.w };
+      return { stain: ctx.vfx.goreLookCfg.x, wetTint: ctx.vfx.goreLookCfg.y, spec: ctx.vfx.goreLookCfg.z, fres: ctx.vfx.goreLookCfg.w };
     },
     goreDetail: (
       o: {
@@ -14495,14 +14468,14 @@ function performBenchAction(a: BenchAction): void {
         burn?: number; wet?: number; dark?: number; stainScale?: number;
       } = {},
     ) => {
-      if (o.detail !== undefined) gorePartDetail.x = o.detail;
-      if (o.bump !== undefined) gorePartDetail.y = o.bump;
-      if (o.blood !== undefined) gorePartDetail.z = o.blood;
-      if (o.noise !== undefined) gorePartDetail.w = Math.max(1, o.noise);
-      if (o.burn !== undefined) gorePartStain.x = Math.max(0, o.burn);
-      if (o.wet !== undefined) gorePartStain.y = Math.max(0, o.wet);
-      if (o.dark !== undefined) gorePartStain.z = Math.min(1, Math.max(0, o.dark));
-      if (o.stainScale !== undefined) gorePartStain.w = Math.max(0.25, o.stainScale);
+      if (o.detail !== undefined) ctx.vfx.gorePartDetail.x = o.detail;
+      if (o.bump !== undefined) ctx.vfx.gorePartDetail.y = o.bump;
+      if (o.blood !== undefined) ctx.vfx.gorePartDetail.z = o.blood;
+      if (o.noise !== undefined) ctx.vfx.gorePartDetail.w = Math.max(1, o.noise);
+      if (o.burn !== undefined) ctx.vfx.gorePartStain.x = Math.max(0, o.burn);
+      if (o.wet !== undefined) ctx.vfx.gorePartStain.y = Math.max(0, o.wet);
+      if (o.dark !== undefined) ctx.vfx.gorePartStain.z = Math.min(1, Math.max(0, o.dark));
+      if (o.stainScale !== undefined) ctx.vfx.gorePartStain.w = Math.max(0.25, o.stainScale);
       // EVERY material that opted into the detail layer, not just the bench's.
       // `carvedMaterial` is a SECOND `createBakedChunkMaterial({goreDetail:true})`
       // instance with its own uniform set (it has to be — a material instance
@@ -14510,33 +14483,33 @@ function performBenchAction(a: BenchAction): void {
       // bench and leaves ?gibrender=carve on its boot values. That is the same
       // shape of bug as the flashlight's: see `litChunkMaterials`, which exists
       // because the per-frame beam update had exactly this omission.
-      for (const m of [gorePartMat, carvedMaterial, gibAssetMaterial]) {
+      for (const m of [ctx.vfx.gorePartMat, ctx.bake.carvedMaterial, ctx.gibs.assetMaterial]) {
         m?.uniforms.goreCfg.value.set(
-          gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+          ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
         );
         m?.uniforms.goreCfg2.value.set(
-          gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+          ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
         );
       }
       return {
-        detail: gorePartDetail.x, bump: gorePartDetail.y,
-        blood: gorePartDetail.z, noise: gorePartDetail.w,
-        burn: gorePartStain.x, wet: gorePartStain.y,
-        dark: gorePartStain.z, stainScale: gorePartStain.w,
+        detail: ctx.vfx.gorePartDetail.x, bump: ctx.vfx.gorePartDetail.y,
+        blood: ctx.vfx.gorePartDetail.z, noise: ctx.vfx.gorePartDetail.w,
+        burn: ctx.vfx.gorePartStain.x, wet: ctx.vfx.gorePartStain.y,
+        dark: ctx.vfx.gorePartStain.z, stainScale: ctx.vfx.gorePartStain.w,
       };
     },
     /** Show/hide the bench WITHOUT destroying it, which is how a capture proves
      *  the parts are actually drawn rather than merely in the scene graph. */
     goreShowcaseVisible: (on: boolean) => {
-      if (goreShowcase) goreShowcase.visible = on;
-      return goreShowcase?.visible ?? false;
+      if (ctx.vfx.goreShowcase) ctx.vfx.goreShowcase.visible = on;
+      return ctx.vfx.goreShowcase?.visible ?? false;
     },
     /** WHERE EVERY LIVE PIECE IS, and what it is doing — the seam a rig needs to
      *  watch a gib fly. Added for the wall-collision check: "do the pieces stay
      *  in the room" is a question about POSITIONS over time, and the only other
      *  way to read them was a telemetry snapshot (F9). */
     chunkStates: () => [
-      ...liveChunks.map(c => ({
+      ...ctx.bake.liveChunks.map(c => ({
         id: c.id, limb: c.state.limb, kind: c.state.kind,
         pos: c.state.pos, vel: c.state.vel, radius: c.state.radius,
         // Orientation too: a rig that frames a detached head has to know which
@@ -14550,7 +14523,7 @@ function performBenchAction(a: BenchAction): void {
       // wall/ceiling guarantees would silently go unverified the moment someone
       // flips `?gibrender=sprite`. `rest` distinguishes a parked quad from one
       // still flying; the other fields are the marched row's own shape.
-      ...spritePieceStates(spritePieces).map(p => ({ ...p, render: 'sprite' as const })),
+      ...spritePieceStates(ctx.vfx.spritePieces).map(p => ({ ...p, render: 'sprite' as const })),
     ],
     /** THE ENCLOSURE A POINT IS IN, in metres: the same box the probe gather and
      *  the bundle's ceiling resolve against. A rig that wants to assert "this
@@ -14571,7 +14544,7 @@ function performBenchAction(a: BenchAction): void {
         ),
       );
       let inFrustum = 0;
-      for (const c of liveChunks) if (frustum.intersectsObject(c.view.object)) inFrustum++;
+      for (const c of ctx.bake.liveChunks) if (frustum.intersectsObject(c.view.object)) inFrustum++;
       // ——— IS THE SKELETON ACTUALLY DRAWN AS BONE? ————————————————————————
       // The owner's complaint was "i still dont see anything bone related like
       // idk rib cage or something", and there are two separate claims in
@@ -14593,7 +14566,7 @@ function performBenchAction(a: BenchAction): void {
       // ribcage's meltCfg.x would render pale and matte — a bone-coloured arm.
       let bonePieces = 0, boneRows = 0, organPieces = 0, buriedBonePieces = 0;
       let bonesShadingAsMeat = 0, organsShadingAsBone = 0;
-      for (const c of liveChunks) {
+      for (const c of ctx.bake.liveChunks) {
         const pale = c.view.uniforms.meltCfg.value.x > 0;
         const rows = c.view.uniforms.counts2.value.x;
         if (c.kind === 'bone') {
@@ -14607,7 +14580,7 @@ function performBenchAction(a: BenchAction): void {
           // instancer draws it from `posedBones()` and the proxy is hidden. The
           // metric predates that path and would report all of them as a failure,
           // which is the census crying wolf about the shipped configuration.
-          else if (!gibBoneMesh) bonesShadingAsMeat++;
+          else if (!ctx.gibs.boneMesh) bonesShadingAsMeat++;
         } else if (c.boneOnly) {
           // An ORGAN piece: deliberately NOT pale (it tints as viscera), and its
           // rows are organs. If it ever goes pale it renders as bare bone.
@@ -14623,13 +14596,13 @@ function performBenchAction(a: BenchAction): void {
         }
       }
       return {
-      inFrustum, ofPieces: liveChunks.length,
+      inFrustum, ofPieces: ctx.bake.liveChunks.length,
       bonePieces, boneRows, organPieces, buriedBonePieces,
       bonesShadingAsMeat, organsShadingAsBone,
-      live: liveChunks.length, baked: bakedChunks.length,
-      views: chunkViews.length, spare: spareChunkViews.length,
-      bakePending: chunkBakeJobs.pendingId !== null,
-      cap: maxChunks,
+      live: ctx.bake.liveChunks.length, baked: ctx.bake.chunks.length,
+      views: ctx.bake.views.length, spare: ctx.bake.spareViews.length,
+      bakePending: ctx.bake.jobs.pendingId !== null,
+      cap: ctx.bake.maxChunks,
       };
     },
     /** CAPTURE SEAM (M2 task 5): spawn one extra REGISTRY character in the
@@ -14650,10 +14623,10 @@ function performBenchAction(a: BenchAction): void {
       const starts = spawnPoints(room);
       // The game's own debug seam keeps the modulo default; crowdGridPoints()
       // callers pass an explicit point (perf 7f).
-      const chosen = start ?? starts[actors.filter(a => a.room === room.id).length % starts.length]!;
+      const chosen = start ?? starts[ctx.world.actors.filter(a => a.room === room.id).length % starts.length]!;
       const errs: string[] = [];
       const actor = spawnEnemy(name, room, chosen, errs);
-      actors.push(actor);
+      ctx.world.actors.push(actor);
       if (errs.length > 0) console.error(`[sdf-game] spawnDebugCharacter(${name}):`, errs.join(' | ')) ;
       return { id: actor.id, room: room.id, errors: errs };
     },
@@ -14709,32 +14682,32 @@ function performBenchAction(a: BenchAction): void {
      * `loopRunning` the current rAF state (so a caller can prove the warm did
      * not restart a loop it had deliberately paused).
      */
-    bootMarks: () => bootMarks.slice(),
+    bootMarks: () => ctx.boot.marks.slice(),
     warmDone: () => (window as unknown as Record<string, unknown>).__warmDone ?? null,
     /** Re-run the warm-up on demand. The startup probe uses this to prove the
      *  loop-restore contract: pause the loop, call rewarm(), assert it is still
      *  paused. Warm steps are cache hits after boot, so this is cheap. */
     rewarm: () => warmPipelines(),
-    gpuDiagnostics: () => handle.gpuDiagnostics,
-    loopRunning: () => handle.loopRunning,
+    gpuDiagnostics: () => ctx.boot.handle.gpuDiagnostics,
+    loopRunning: () => ctx.boot.handle.loopRunning,
     /** Which gib renderer boot selected and whether the carve library built. */
     gibRenderer: () => ({
-      mode: gibRenderMode,
-      carvedLibraryBuilt: carvedLibrary !== null,
-      carvedBuildMs,
-      carveCells: gibCarveCells,
+      mode: ctx.gibs.renderMode,
+      carvedLibraryBuilt: ctx.bake.carvedLibrary !== null,
+      carvedBuildMs: ctx.bake.carvedBuildMs,
+      carveCells: ctx.gibs.carveCells,
       /** Task 2: the offline-asset arm's own state + census. */
       assetArmed: gibAssetArmed(),
       assets: {
-        zombie: gibAssetRuntime.archetypeState('zombie'),
-        soldier: gibAssetRuntime.archetypeState('soldier'),
+        zombie: ctx.gibs.assetRuntime.archetypeState('zombie'),
+        soldier: ctx.gibs.assetRuntime.archetypeState('soldier'),
       },
-      assetStats: gibAssetRuntime.countersSnapshot(),
+      assetStats: ctx.gibs.assetRuntime.countersSnapshot(),
     }),
-    uptime: () => (performance.now() - bootTime) / 1000,
-    get frames() { return frameCount; },
+    uptime: () => (performance.now() - ctx.boot.time) / 1000,
+    get frames() { return ctx.demo.frameCount; },
     /** Where a view-model hangs (child of the camera). */
-    viewModelAnchor,
+    viewModelAnchor: ctx.weapon.viewModelAnchor,
     rooms: ROOMS.map(r => ({
       id: r.id, name: r.name, zombies: r.zombies,
       bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },

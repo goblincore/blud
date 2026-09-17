@@ -38,14 +38,21 @@ describe('binding maps', () => {
     expect(dupes).toEqual([]);
   });
 
-  it('claims every state binding in game-main.ts', () => {
-    const seen = mapped();
-    expect(stateBindings().filter(b => !seen.has(b.name)).map(b => b.name)).toEqual([]);
+  // BEFORE the codemod these two asserted the maps covered every main()-scope
+  // binding. AFTER it there are no such bindings left, so the useful invariant
+  // inverts: the migration must stay complete. This is the gate that stops a
+  // new `let foo` from quietly reappearing in main()'s scope and starting the
+  // 14,000-line closure over again.
+  it('leaves ctx as the only state binding in main()', () => {
+    const names = stateBindings().map(b => b.name);
+    expect(names).toEqual(['ctx']);
   });
 
-  it('claims nothing that is not a state binding', () => {
-    const names = new Set(stateBindings().map(b => b.name));
-    expect([...mapped().keys()].filter(k => !names.has(k))).toEqual([]);
+  it('maps a name for every slice field path it declares', () => {
+    for (const [sliceExport, map] of Object.entries(slices)) {
+      const paths = Object.values(map as Record<string, string>);
+      expect(new Set(paths).size, `${sliceExport} maps two names onto one field`).toBe(paths.length);
+    }
   });
 
   it('routes every mapping into its own slice namespace', () => {
