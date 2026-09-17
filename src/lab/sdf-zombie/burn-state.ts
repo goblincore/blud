@@ -58,10 +58,11 @@ export function extinguishBurn(s: BurnState): void { s.alight = false; }
  * convention is for the caller to clamp at the call site (e.g.
  * `Math.min(dt, 1/30)`) before passing it in.
  *
- * Mutates `s` in place and returns that SAME object. This differs from
- * every other `step*` function in this directory (melt.ts, prop-drop.ts,
- * humanoid-verlet.ts, rig.ts), which all return a fresh object — don't
- * assume the same convention here from the signature alone. Mutation is
+ * Mutates `s` in place and returns that SAME object. This differs from the
+ * fresh-object `step*` functions in this directory (melt.ts, prop-drop.ts,
+ * humanoid-verlet.ts, rig.ts) — though not from all of them, since
+ * blood-sim.ts's stepBlood mutates too — so don't assume either convention
+ * here from the signature alone. Mutation is
  * deliberate: this runs per body per frame, one state per body, and
  * allocating a fresh object every call would be pure waste.
  */
@@ -77,8 +78,9 @@ export function stepBurn(s: BurnState, dt: number, rates: BurnRates): BurnState 
     s.burnSec += dt;
     // Trapezoid of burn across the step, not the post-step value alone —
     // otherwise a coarse step during the ignite ramp over-chars relative to
-    // many small steps covering the same interval. Keeps captures
-    // reproducible at any frame rate.
+    // many small steps covering the same interval. Exact at any frame rate
+    // while no single step overshoots the burn = 1 clamp, which the caller's
+    // dt clamp guarantees as long as igniteSec stays above it.
     const charRate = Math.max(0, rates.charRate);
     s.char = clamp01(s.char + dt * charRate * 0.5 * (before + s.burn));
   } else {

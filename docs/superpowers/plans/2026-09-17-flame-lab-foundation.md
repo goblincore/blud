@@ -1021,10 +1021,12 @@ Expected: FAIL on `stepBurn`.
 
 In `flame-lab-main.ts`:
 
-1. Import the pure pieces:
+1. Import the pure pieces (`forceBurn` sets a body straight to a burn/char pair
+   for captures, keeping the clamping and the char invariant inside
+   `burn-state.ts` instead of poking fields from the page):
 
 ```ts
-import { createBurnState, igniteBurn, extinguishBurn, stepBurn } from '../burn-state';
+import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
 ```
 
@@ -1035,11 +1037,14 @@ import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './
   const burns = FLAME_LAB_BODIES.map(() => createBurnState());
 ```
 
-3. In the frame loop, after each body's motion step:
+3. In the frame loop, after each body's motion step. `dt` is clamped the way the
+   rest of the lab clamps it (`lab-main.ts:316,323,336`), so one stalled frame
+   cannot ignite and fully char a body in a single step:
 
 ```ts
+    const burnDt = Math.min(dt, 1 / 30);
     for (let i = 0; i < views.length; i++) {
-      const s = stepBurn(burns[i]!, dt, tuning);
+      const s = stepBurn(burns[i]!, burnDt, tuning);
       const u = views[i]!.gpu.uniforms;
       u.burnCfg.value.set(s.burn, s.burnSec, s.char, 0);
       u.burnNoiseScale.value = tuning.noiseScale;
@@ -1065,9 +1070,7 @@ import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './
     preset(name: keyof typeof burnPresets) { tuning = resolveBurnTuning(burnPresets[name]); return tuning; },
     /** Full burn immediately, for deterministic captures. */
     capture(burn = 1, char = 0) {
-      for (let i = 0; i < burns.length; i++) {
-        burns[i]!.alight = burn > 0; burns[i]!.burn = burn; burns[i]!.char = char; burns[i]!.burnSec = 0;
-      }
+      for (const s of burns) forceBurn(s, burn, char);
     },
     tuning() { return { ...tuning }; },
     burns() { return burns.map(b => ({ ...b })); },
