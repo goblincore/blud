@@ -24,8 +24,15 @@ export function applyCodemod(source: string, map: BindingMap): string {
 
   const edits: Edit[] = [];
   const owned = new Set<string>();
+  /** Spans rewritten by pass 1. Pass 2 must not edit inside one, or the two
+   *  edits overlap and corrupt each other. */
+  const covered: Array<[number, number]> = [];
 
   // Pass 1 — declarations in the immediate main() body scope.
+  //
+  // Replace only the DECLARATION PREFIX (`let foo`, or `let foo: Bar`), never
+  // the whole statement: the initializer may itself reference another owned
+  // binding, and pass 2 has to be able to rewrite inside it.
   for (const stmt of main.body.statements) {
     if (!ts.isVariableStatement(stmt)) continue;
     const decls = stmt.declarationList.declarations;
@@ -33,20 +40,76 @@ export function applyCodemod(source: string, map: BindingMap): string {
       if (!ts.isIdentifier(decl.name)) continue;
       const path = map[decl.name.text];
       if (!path) continue;
-      owned.add(decl.name.text);
       if (decls.length !== 1) {
         throw new Error(`multi-declarator statement for '${decl.name.text}' — split it by hand first`);
       }
-      const init = decl.initializer?.getText(sf);
-      edits.push({
-        start: stmt.getStart(sf),
-        end: stmt.getEnd(),
-        text: init === undefined ? '' : `ctx.${path} = ${init};`,
-      });
+      owned.add(decl.name.text);
+      // `let foo: Bar = x` -> `ctx.s.foo = x`: the type annotation goes too,
+      // since an assignment cannot carry one.
+      const end = decl.type ? decl.type.getEnd() : decl.name.getEnd();
+      const start = stmt.getStart(sf);
+      edits.push({ start, end, text: `ctx.${path}` });
+      covered.push([start, end]);
     }
   }
 
+  // Pass 2 — references. Walk main(), tracking scopes that redeclare an owned
+  // name so shadowed uses are left alone.
+  const shadowed: Array<Set<string>> = [];
+  const isShadowed = (name: string) => shadowed.some(s => s.has(name));
+  const isCovered = (pos: number) => covered.some(([a, b]) => pos >= a && pos < b);
+
+  const collectShadows = (node: ts.Node): Set<string> => {
+    const names = new Set<string>();
+    const scan = (child: ts.Node): void => {
+      if (ts.isVariableDeclaration(child) && ts.isIdentifier(child.name) && owned.has(child.name.text)) {
+        names.add(child.name.text);
+      }
+      if (ts.isParameter(child) && ts.isIdentifier(child.name) && owned.has(child.name.text)) {
+        names.add(child.name.text);
+      }
+      // Do not descend into nested functions; they get their own scope frame.
+      if (!isFunctionLike(child)) child.forEachChild(scan);
+    };
+    node.forEachChild(scan);
+    return names;
+  };
+
+  const visit = (node: ts.Node): void => {
+    const opensScope = isFunctionLike(node) && node !== main;
+    if (opensScope) shadowed.push(collectShadows(node));
+
+    if (ts.isIdentifier(node) && owned.has(node.text)
+      && !isShadowed(node.text) && !isCovered(node.getStart(sf))) {
+      const path = map[node.text];
+      const p = node.parent;
+
+      const isDeclName = ts.isVariableDeclaration(p) && p.name === node;
+      const isPropName = (ts.isPropertyAssignment(p) && p.name === node)
+        || (ts.isPropertyAccessExpression(p) && p.name === node)
+        || (ts.isMethodDeclaration(p) && p.name === node);
+      const isParam = ts.isParameter(p) && p.name === node;
+
+      if (ts.isShorthandPropertyAssignment(p)) {
+        // { probeWeight } -> { probeWeight: ctx.probes.weight }
+        edits.push({ start: node.getStart(sf), end: node.getEnd(), text: `${node.text}: ctx.${path}` });
+      } else if (!isDeclName && !isPropName && !isParam) {
+        edits.push({ start: node.getStart(sf), end: node.getEnd(), text: `ctx.${path}` });
+      }
+    }
+
+    node.forEachChild(visit);
+    if (opensScope) shadowed.pop();
+  };
+
+  visit(main);
+
   return applyEdits(source, edits);
+}
+
+function isFunctionLike(n: ts.Node): boolean {
+  return ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n)
+    || ts.isArrowFunction(n) || ts.isMethodDeclaration(n);
 }
 
 function findMain(sf: ts.SourceFile): ts.FunctionDeclaration | undefined {
