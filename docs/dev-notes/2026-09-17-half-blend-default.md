@@ -23,6 +23,10 @@ These are real diagnostic findings, not a clean-geometry claim. They were not su
 
 300 tests across 14 files passed: body building/caching, all 20 registry characters' blend propagation, GPU packing, damage, severing, rig binding, validation and gib build/load/deformation/head integration. Full production build and TypeScript passed (existing bundle-size warning only). `npm run gib:assets:check` confirms both regenerated assets are current. Two sparse synthetic source-provenance/nearest-primitive fixtures explicitly retain `roundBlendScale: 1`, because those tests exercise their authored geometry rather than the new character default. Validators themselves are unchanged.
 
-No new GPU timing or live-play acceptance is claimed for this rollout. A Vite server on port 5498 serves the primary checkout for manual playtest at `/sdf-game.html`.
+At implementation time, no new GPU timing or live-play acceptance was claimed; see the subsequent owner acceptance below. A Vite server on port 5498 serves the primary checkout for manual playtest at `/sdf-game.html`.
 
 To revert the profile, set `DEFAULT_BUILD_OPTS.roundBlendScale` back to 1 and regenerate gib assets with `npm run gib:assets`. Do not compensate in the shader alone.
+
+## Owner acceptance — 2026-09-17
+
+After the heading fix, the owner manually playtested, reported everything looked good, and authorized shipping both changes to main and pushing. Half-strength blending remains the accepted default. See the [combined wrap-up and lessons](2026-09-17-character-blends-wrap-up.md). The diagnostic and timing limitations above remain applicable.

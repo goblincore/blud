@@ -4,6 +4,11 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Character blends and zombie heading — owner accepted 2026-09-17
+
+- [x] Half-strength round flesh blends, matching CPU/GPU/gib geometry, and heading-dependent torso/foot/attachment fix on main.
+  [Wrap-up, measurements, verification and lessons](docs/dev-notes/2026-09-17-character-blends-wrap-up.md).
+
 ## Selective shutter blur — owner accepted and merged 2026-09-17
 
 - [x] Blood + rotating gibs default ON at 44.44 ms / 120 px; lab comparison and in-game controls shipped.

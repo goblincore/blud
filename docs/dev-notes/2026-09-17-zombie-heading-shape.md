@@ -13,3 +13,7 @@ Regression: rotate the same zombie and query points together at yaw 0, ±90°, 1
 WebGPU smoke check on the normal animation loop (headless Chrome, primary Vite on 5498) covered room 2 at approximately 1.76 radians, then full-body views in rooms 2 and 4. The sideways torso retains its width and shoulders stay attached; feet retain distinct silhouettes. No captured page/console errors. These are visual checks, not frame-time measurements or a full gameplay pass.
 
 Harness caveat: issuing all simulation/render steps synchronously in one browser evaluation initially captured missing flesh with visible mesh bones. Allowing actual animation frames produced complete bodies with the shell both enabled and disabled. The synchronous captures were discarded; do not use them as geometry evidence.
+
+## Owner acceptance — 2026-09-17
+
+After the heading fix, the owner manually playtested, reported everything looked good, and authorized shipping both changes to main and pushing. Half-strength blending remains the accepted default. See the [combined wrap-up and lessons](2026-09-17-character-blends-wrap-up.md). The diagnostic and timing limitations above remain applicable.
