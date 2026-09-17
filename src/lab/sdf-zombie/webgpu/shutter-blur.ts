@@ -471,13 +471,16 @@ export const SHUTTER_RESOLVE_WGSL = /* wgsl */ `fn shutterResolve(
   sceneTex: texture_2d<f32>,
   seedTex: texture_2d<f32>,
   depthTex: texture_depth_2d,
+  occluderTex: texture_depth_2d,
   texCoord: vec2<f32>,
   cfg: vec4<f32>,
   motion: vec2<f32>,
-  seedDims: vec2<f32>
+  seedDims: vec2<f32>,
+  cfg2: vec2<f32>
 ) -> vec4<f32> {
   // cfg: x depth bias metres, y near, z far, w minimum seed weight.
-  // motion: x exposure seconds.
+  // motion: x exposure seconds, y unused.
+  // cfg2: x occluder enabled (a second, nearer occluder depth), y unused.
   let d = vec2<f32>(texCoord.x, 1.0 - texCoord.y);
   let outDims = vec2<f32>(textureDimensions(sceneTex, 0));
   let maxP = vec2<i32>(i32(outDims.x) - 1, i32(outDims.y) - 1);
@@ -514,9 +517,20 @@ export const SHUTTER_RESOLVE_WGSL = /* wgsl */ `fn shutterResolve(
     // emitter is visible somewhere else in frame.
     let ownerZ = (cfg.y * cfg.z) / (cfg.z - seed.z * (cfg.z - cfg.y));
     var occluded = false;
-    let clipZ = textureLoad(depthTex, pix, 0);
-    if (clipZ < 1.0) {
-      let sceneZ = (cfg.y * cfg.z) / (cfg.z - clipZ * (cfg.z - cfg.y));
+    // MUTUAL OCCLUSION (task 4). The blood pass runs AFTER the gib pass, so a
+    // blurred gib lives only in the gib-resolved colour and its own depth — the
+    // clean capture's depth does not contain it (the piece was lifted out of
+    // the base scene). occluderTex is that gib-layer depth: the NEARER of the
+    // two depths is the true first surface, so blood behind a blurred gib is
+    // dropped instead of painted over it. cfg2.x = 0 (no gib occluder) keeps
+    // the original single-depth behaviour for the lab and for gib-off frames.
+    var occlusionClipZ = textureLoad(depthTex, pix, 0);
+    if (cfg2.x > 0.5) {
+      let occluderZ = textureLoad(occluderTex, pix, 0);
+      if (occluderZ < occlusionClipZ) { occlusionClipZ = occluderZ; }
+    }
+    if (occlusionClipZ < 1.0) {
+      let sceneZ = (cfg.y * cfg.z) / (cfg.z - occlusionClipZ * (cfg.z - cfg.y));
       occluded = ownerZ > sceneZ + cfg.x;
     }
     if (occluded) {
@@ -573,6 +587,14 @@ export interface ShutterResolveInputs {
   depthTex: THREE.DepthTexture;
   /** CPU-built motion seed (display-indexed RGBA float). */
   seedTex: THREE.DataTexture;
+  /**
+   * OPTIONAL second occluder depth (task 4). The game's blood resolve runs
+   * after the gib resolve, and a blurred gib is absent from the clean capture
+   * and its depth; passing the gib layer's depth here lets the blood pass drop
+   * a droplet that is behind a blurred gib instead of painting it over one.
+   * Omitted = single-depth behaviour, unchanged.
+   */
+  occluderDepthTex?: THREE.DepthTexture;
 }
 
 export interface ShutterResolveHandle {
@@ -593,6 +615,14 @@ export interface ShutterResolveHandle {
    * its own stages), so no material is rebuilt per frame.
    */
   setSceneTexture(tex: THREE.Texture): void;
+  /**
+   * Rebind the OPTIONAL second occluder depth (the blurred-gib layer's own
+   * depth). Pass the gib layer's DepthTexture to make the blood resolve drop
+   * droplets behind a blurred gib; pass null to restore single-depth
+   * behaviour. The node and the enable flag are updated in place, so no
+   * material is rebuilt per frame.
+   */
+  setOccluderDepth(tex: THREE.DepthTexture | null): void;
   /** Render the resolve. `target` null is the canvas. */
   render(renderer: THREE.WebGPURenderer, target: THREE.RenderTarget | null): void;
   dispose(): void;
@@ -615,16 +645,24 @@ export function createShutterResolve(
   ));
   const uSeedDims = uniform(new THREE.Vector2(1, 1));
   const uMotion = uniform(new THREE.Vector2(0, 0));
+  // cfg2.x = occluder enable. Default OFF: a 1x1 depth texture is still bound
+  // (WebGPU requires the binding to exist) but never sampled.
+  const uCfg2 = uniform(new THREE.Vector2(0, 0));
+  const farDepth = new THREE.DepthTexture(1, 1);
   const sceneNode = texture(inputs.sceneTex);
+  const occluderNode = texture(inputs.occluderDepthTex ?? farDepth);
+  if (inputs.occluderDepthTex) uCfg2.value.set(1, 0);
   const out = wgslFn(SHUTTER_RESOLVE_WGSL)({
     layerTex: texture(inputs.layerTex),
     sceneTex: sceneNode,
     seedTex: texture(inputs.seedTex),
     depthTex: texture(inputs.depthTex),
+    occluderTex: occluderNode,
     texCoord: uv(),
     cfg: uCfg,
     motion: uMotion,
     seedDims: uSeedDims,
+    cfg2: uCfg2,
   }) as unknown as { xyz: unknown; w: unknown };
 
   const material = new MeshBasicNodeMaterial();
@@ -651,6 +689,10 @@ export function createShutterResolve(
     setExposure(seconds) { uMotion.value.set(Number.isFinite(seconds) && seconds > 0 ? seconds : 0, 0); },
     setSeedDims(width, height) { uSeedDims.value.set(width, height); },
     setSceneTexture(tex) { sceneNode.value = tex; },
+    setOccluderDepth(tex) {
+      occluderNode.value = tex ?? farDepth;
+      uCfg2.value.set(tex ? 1 : 0, 0);
+    },
     render(renderer, target) {
       const outW = target ? target.width : renderer.domElement.width;
       const outH = target ? target.height : renderer.domElement.height;
@@ -665,6 +707,7 @@ export function createShutterResolve(
     dispose() {
       quad.geometry.dispose();
       material.dispose();
+      farDepth.dispose();
     },
   };
 }

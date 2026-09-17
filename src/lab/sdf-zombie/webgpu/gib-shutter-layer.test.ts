@@ -66,6 +66,23 @@ describe('gib shutter — integration tripwires', () => {
     expect(resolveSrc).toContain('sceneNode.value = tex');
   });
 
+  it('mutual occlusion: the blood pass can drop behind a blurred gib', () => {
+    // The gib layer owns a SAMPLEABLE depth so the blood resolve (which runs
+    // second) can test against the lifted pieces that are absent from the clean
+    // capture's depth. Default OFF, so the lab / gib-off frames are unchanged.
+    expect(layerSrc).toContain('layerTarget.depthTexture = new THREE.DepthTexture');
+    expect(layerSrc).toContain('get occluderDepth()');
+    expect(resolveSrc).toContain('occluderTex: texture_depth_2d');
+    expect(resolveSrc).toContain('setOccluderDepth(tex: THREE.DepthTexture | null)');
+    expect(resolveSrc).toContain('occlusionClipZ');
+    expect(resolveSrc).toContain('uCfg2.value.set(tex ? 1 : 0, 0)');
+    expect(gameSrc).toContain('gibDepth = gibShutter.occluderDepth');
+    // Runtime A/B control for the evidence: the shipped default is ON.
+    expect(gameSrc).toContain('shutterGame.setOccluderDepth(gibOccluderEnabled ? gibDepth : null)');
+    expect(gameSrc).toContain('setGibOccluder:');
+    expect(gameSrc).toContain("get('giboccluder') !== '0'");
+  });
+
   it('game-main lifts pieces before the base draw, then chains gib -> blood', () => {
     const selectIdx = gameSrc.indexOf('gibShutter.select(');
     const renderCbIdx = gameSrc.indexOf('handle.setRenderCallback');
@@ -113,5 +130,19 @@ describe('gib shutter — integration tripwires', () => {
     expect(GIB_BLUR_MAX_PIECES).toBeGreaterThan(0);
     expect(layerSrc).toContain('selected.length >= GIB_BLUR_MAX_PIECES');
     expect(GIB_BLUR_LAYER).toBe(10);
+  });
+
+  it('exposes a deterministic pure-spin fixture for rotation evidence', () => {
+    // Task 4 needs a fixed-centre piece whose ONLY motion is rotation: the
+    // upward kick cancels one frame of gravity, so after `step(1)` the piece
+    // has ~zero linear velocity while still turning. Without this the rotation
+    // claim could only be tested on the random blast.
+    expect(gameSrc).toContain('spawnSpinFixture:');
+    expect(gameSrc).toContain('spinAngVel: spin');
+    expect(gameSrc).toContain('CHUNK_TUNING.gravity / 60');
+    // The generic fixture seam also returns a stable id and accepts a velocity
+    // so a rig can stage a slow slide and track it across the settle.
+    expect(gameSrc).toContain('spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3)');
+    expect(gameSrc).toContain('velocity ?? (stationary ? [0, 0, 0] : undefined)');
   });
 });

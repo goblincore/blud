@@ -266,6 +266,12 @@ export interface ShutterGameLayer {
    */
   setSceneTexture(tex: THREE.Texture): void;
   /**
+   * Install the OPTIONAL second occluder depth (task 4): the blurred-gib
+   * layer's own depth, so blood behind a blurred gib is dropped instead of
+   * painted over it. `null` restores the single-depth behaviour.
+   */
+  setOccluderDepth(tex: THREE.DepthTexture | null): void;
+  /**
    * Install the SHARP-remainder selection on the goo layer. Call it in the
    * render callback BEFORE the frame's `gooLayer.sync()`; when blur is off it
    * clears the selection so the goo frame is bit-identical to the shipped one.
@@ -515,6 +521,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     setSeedScale(v) { seedScale = resolveSeedScale(v); return seedScale; },
     setDepthBiasM(m) { depthBiasM = resolveDepthBiasM(m); return depthBiasM; },
     setSceneTexture(tex) { resolve?.setSceneTexture(tex); },
+    setOccluderDepth(tex) { resolve?.setOccluderDepth(tex); },
     poseSharp() {
       gooLayer.setSelection(enabled && exposureSeconds > 0 ? SHUTTER_SHARP_SELECTION : null);
     },

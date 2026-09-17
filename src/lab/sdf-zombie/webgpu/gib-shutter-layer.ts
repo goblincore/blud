@@ -108,6 +108,12 @@ export interface GibShutterLayer {
   readonly maxStreakPx: number;
   readonly seedScale: number;
   readonly depthBiasM: number;
+  /**
+   * The selected pieces' depth from the most recent layer draw, or null when
+   * no layer target exists. The blood resolve uses it as a second occluder so
+   * blood behind a blurred gib is dropped rather than painted over it.
+   */
+  readonly occluderDepth: THREE.DepthTexture | null;
   setEnabled(on: boolean): boolean;
   setExposureMs(ms: number): number;
   setMaxStreakPx(px: number): number;
@@ -195,6 +201,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
 
   function disposeTargets(): void {
     resolve?.dispose();
+    layerTarget?.depthTexture?.dispose();
     layerTarget?.dispose();
     stageTarget?.dispose();
     seedTex?.dispose();
@@ -223,6 +230,12 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     layerTarget = new THREE.RenderTarget(cw, ch, {
       depthBuffer: true, type: THREE.HalfFloatType,
     });
+    // SAMPLEABLE DEPTH (task 4). The blood pass runs after this one and needs
+    // the blurred gibs' depth to occlude blood behind them; a plain depth
+    // renderbuffer is not readable, so attach a DepthTexture. The layer's
+    // background is cleared to the far plane, so this is exactly the selected
+    // pieces' depth plus "nothing".
+    layerTarget.depthTexture = new THREE.DepthTexture(cw, ch);
     stageTarget = new THREE.RenderTarget(cw, ch, {
       depthBuffer: false, type: THREE.HalfFloatType,
     });
@@ -370,6 +383,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     get maxStreakPx() { return maxStreakPx; },
     get seedScale() { return seedScale; },
     get depthBiasM() { return depthBiasM; },
+    get occluderDepth() { return (enabled ? layerTarget?.depthTexture : null) ?? null; },
     setEnabled(on) {
       // The route gate is authoritative: an unsupported host cannot be talked
       // into the blur by the API or the panel.

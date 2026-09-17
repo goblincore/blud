@@ -193,7 +193,7 @@ import {
 } from './wound-panel';
 import { rngStreams, setRngSeed, seedFromUnit } from './rng';
 import { advance as advanceSimClock, simTimeMs, resetSimClock } from './sim-clock';
-import { chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
+import { CHUNK_TUNING, chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
 import { gibLaunchVelocity } from '../gib-launch';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
 import {
@@ -1379,6 +1379,11 @@ async function main() {
   // alone and exposure-resolved over the clean scene. Separate on/off switch,
   // shared exposure/max-trail controls. ON by default on this feature branch.
   let gibShutter: GibShutterLayer | null = null;
+  /** MUTUAL OCCLUSION (task 4). When true (default) the blood resolve also
+   *  tests against the blurred-gib layer's depth, so blood behind a blurred gib
+   *  is dropped. `?giboccluder=0` / `setGibOccluder(false)` is the A/B seam
+   *  that shows the ordered-vs-resolved difference on one frozen frame. */
+  let gibOccluderEnabled = true;
   /** Presentation identity across frames, so a freshly spawned/reused piece
    *  gets no pre-birth streak on its first drawn frame. Keyed by the owning
    *  list AND id (the sprite and chunk id sequences are independent). */
@@ -7743,20 +7748,35 @@ async function main() {
         console.error('[gib-shutter] disabled after error:', message);
       },
     });
+    // `?giboccluder=0` disables the blood-against-blurred-gib depth test. It is
+    // the A/B control for the mutual-occlusion evidence; ON is the shipped
+    // behaviour. Parsed here (not in the layer) because it is a blood-pass
+    // concern, not a gib-layer one.
+    gibOccluderEnabled = new URLSearchParams(location.search).get('giboccluder') !== '0';
     // ONE capture stage chains both layers: gibs first (they are opaque and
     // write their own depth in the layer), then blood over the gib-resolved
     // target. The blood resolve keeps occlusion against the capture's clean
     // static depth; the gib resolve occludes against that same depth.
     postAa.setCaptureStage((capture) => {
       let src: THREE.RenderTarget = capture;
+      let gibDepth: THREE.DepthTexture | null = null;
       if (gibShutter) {
         const g = gibShutter.capture(capture, scene, camera);
-        if (g) src = g;
+        if (g) {
+          src = g;
+          gibDepth = gibShutter.occluderDepth;
+        }
       }
       if (gooEnabled && shutterGame) {
         // The blood resolve was built against the raw capture; point it at the
         // gib result so a blurred gib is not painted over by the blood pass.
         shutterGame.setSceneTexture(src.texture);
+        // MUTUAL OCCLUSION (task 4): the selected gibs were lifted out of the
+        // clean capture, so their depth is NOT in `capture.depthTexture`. Hand
+        // the blood resolve the gib layer's own depth so blood behind a
+        // blurred gib is dropped instead of composited over it. `null` (gib
+        // blur off / nothing selected) restores the single-depth behaviour.
+        shutterGame.setOccluderDepth(gibOccluderEnabled ? gibDepth : null);
         const b = shutterGame.capture(capture, bloodSim, camera);
         if (b) src = b;
       }
@@ -11488,6 +11508,10 @@ function performBenchAction(a: BenchAction): void {
       return next;
     },
     get gibBlurEnabled() { return gibShutter?.enabled ?? false; },
+    /** Mutual-occlusion A/B seam: when ON (default) the blood resolve also
+     *  occludes against the blurred-gib layer depth. Returns the applied value. */
+    setGibOccluder: (on: boolean) => { gibOccluderEnabled = !!on; return gibOccluderEnabled; },
+    get gibOccluderEnabled() { return gibOccluderEnabled; },
     /** Live values, seed/layer dims, per-frame stats and any hard error. */
     get gibBlur() {
       return gibShutter
@@ -13710,8 +13734,14 @@ function performBenchAction(a: BenchAction): void {
      *  view, sim, settle, bake and gib machinery a severed limb uses, with
      *  a controlled size so drivers get a target whose radius they know.
      *  A severed hand-gob's 4.6 cm bounding sphere is a sniper target; this
-     *  is the same machinery at a testable size. */
-    spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false) => {
+     *  is the same machinery at a testable size.
+     *
+     *  Task-4 additions (additive): an optional `velocity` overrides the random
+     *  launch (so a rig can stage a slow SLIDE instead of a lob), and the return
+     *  value is the new piece's stable id (was `prims.length`) so a rig can
+     *  track it across the exposure/settle. The only prior consumer carried the
+     *  count into a JSON blob without asserting on it. */
+    spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3) => {
       const prims: Primitive[] = [];
       const rng = rngStreams.misc;
       for (let i = 0; i < 6; i++) {
@@ -13727,12 +13757,58 @@ function performBenchAction(a: BenchAction): void {
           radius: radius * 0.55, scale: [1, 1, 1], blendK: 0.03,
         } as unknown as Primitive);
       }
+      const id = nextChunkId;
       spawnChunkPiece(
-        { limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [] },
+        {
+          limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [],
+          // An explicit spin (including [0,0,0]) overrides the random tumble, so
+          // a rig can stage a truly stationary piece that must NOT blur.
+          ...(spin ? { spinAngVel: spin } : {}),
+        },
         { uniforms: actors[0]!.view.uniforms, volumeTexture: actors[0]!.view.volumeTexture },
-        stationary ? [0, 0, 0] : undefined,
+        velocity ?? (stationary ? [0, 0, 0] : undefined),
       );
-      return prims.length;
+      return id;
+    },
+    /** PURE-SPIN FIXTURE (task 4). Spawn ONE piece at a known world point
+     *  through the REAL spawn path with a chosen angular velocity and NO net
+     *  gravity for the first frame: the upward kick cancels `CHUNK_TUNING.
+     *  gravity * (1/60)` exactly, so after ONE 1/60 step the piece has ~zero
+     *  linear velocity and sits where it was placed while still turning. That
+     *  is the fixed-centre spin the shutter resolve must smear at the EDGES and
+     *  leave STILL at the centre — translation-only blur cannot fake it.
+     *  Returns the new piece id (or -1 if the actor view is not up yet). */
+    spawnSpinFixture: (x: number, y: number, z: number, radius = 0.2, spin: Vec3 = [0, 0, 8]) => {
+      const view = actors[0]?.view;
+      if (!view) return -1;
+      const prims: Primitive[] = [];
+      const rng = rngStreams.misc;
+      for (let i = 0; i < 6; i++) {
+        const th = rng() * Math.PI * 2;
+        const ph = Math.acos(2 * rng() - 1);
+        const dx = Math.sin(ph) * Math.cos(th) * radius * 0.5;
+        const dy = Math.cos(ph) * radius * 0.5;
+        const dz = Math.sin(ph) * Math.sin(th) * radius * 0.5;
+        prims.push({
+          limb: 'torso', cluster: 0, op: 'add',
+          a: [x + dx - 0.02, y + dy, z + dz] as Vec3,
+          b: [x + dx + 0.02, y + dy, z + dz] as Vec3,
+          radius: radius * 0.55, scale: [1, 1, 1], blendK: 0.03,
+        } as unknown as Primitive);
+      }
+      const id = nextChunkId;
+      // One 1/60 s of gravity exactly cancelled: after `step(1)` the piece's
+      // velocity is ~0, so the exposure gather is spin-only.
+      const cancel: Vec3 = [0, -CHUNK_TUNING.gravity / 60, 0];
+      spawnChunkPiece(
+        {
+          limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [],
+          spinAngVel: spin,
+        },
+        { uniforms: view.uniforms, volumeTexture: view.volumeTexture },
+        cancel,
+      );
+      return id;
     },
     /** Settled-chunk bake (close-up task 5). ON at boot (GAME_CHUNK_BAKE);
      *  off is pixel-identical. Toggling mid-session only affects FUTURE

@@ -201,6 +201,11 @@ describe('shutter game — integration tripwires', () => {
     expect(layerSrc).not.toContain('renderer.render(scene, camera)');
   });
 
+  it('forwards the optional gib occluder depth to the resolve', () => {
+    expect(layerSrc).toContain('setOccluderDepth(tex: THREE.DepthTexture | null): void');
+    expect(layerSrc).toContain('setOccluderDepth(tex) { resolve?.setOccluderDepth(tex); }');
+  });
+
   it('clamps exposure against particle age (no pre-birth streaks)', () => {
     expect(layerSrc).toContain('clampToAge: true');
   });
