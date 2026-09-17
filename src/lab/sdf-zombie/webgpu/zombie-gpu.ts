@@ -626,6 +626,18 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  world space, w its intensity (0 = none, bit-identical). Stamped per
      *  frame by the game from the player's and the soldiers' flashes. */
     bodyFlash: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** BURNING BODY (flame lab): x = burn 0..1, y = seconds alight, z = char
+     *  0..1, w spare. Per VIEW, so a single body burns through this; crowd
+     *  instances burn through REC_BURN. */
+    burnCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** Rest-space frequency of the fire noise. */
+    burnNoiseScale: uniform(7),
+    /** Rest-space units per second the fire noise scrolls upward. */
+    burnRiseSpeed: uniform(1.8),
+    /** How much of a charred surface stays dark instead of burning, 0..1. */
+    burnCharPatch: uniform(0.35),
+    /** Emissive multiplier on the surface fire. */
+    burnFireGain: uniform(1.6),
   };
 }
 
@@ -1363,6 +1375,14 @@ export function createMarchMaterial(
     instCfg: crowd?.instCfg ?? fallbackInstCfg(),
     instCentre: (crowd?.instCentre ?? fallbackInstCentre()) as never,
     instHalf: (crowd?.instHalf ?? fallbackInstHalf()) as never,
+    // BURNING BODY (flame lab) — POSITIONALLY LAST after instHalf, bound in
+    // the same commit as the WGSL inputs (the meltCfg rule). All-zero burnCfg
+    // keeps every view that does not ignite bit-identical.
+    burnCfg: u.burnCfg,
+    burnNoiseScale: u.burnNoiseScale,
+    burnRiseSpeed: u.burnRiseSpeed,
+    burnCharPatch: u.burnCharPatch,
+    burnFireGain: u.burnFireGain,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 
@@ -1537,6 +1557,9 @@ export function writeViewRecord(
     // per-VIEW uniform, and the crowd shares one material, so the only way a
     // doomed body can wear the gore the chunks wear is through its own record.
     gore: u.lodCfg.value.w,
+    // The per-instance half of the burn ramp, for the same reason as `gore`:
+    // burnCfg is per VIEW and the crowd shares one material.
+    burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z,
   }, band);
 }
 
