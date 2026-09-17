@@ -714,6 +714,17 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY.indexOf('albedo = mix(albedo, charColor, cm);'))
       .toBeLessThan(MARCH_BODY.indexOf('let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);'));
     expect(MARCH_BODY).toContain('gBurnEmit = fireRamp(fire)');
+    // The char mix sits OUTSIDE the fire gate: char is monotonic, so a body
+    // put out mid-burn stays charred (a burnt corpse, not a clean body). The
+    // mix is an exact identity at charAmt 0, so non-burning bodies are
+    // unchanged; only fire, the glow kills and the emissive fold gate.
+    {
+      const gate = MARCH_BODY.indexOf('if (burnAmt > 0.0)');
+      const burnCharMix = MARCH_BODY.indexOf('albedo = mix(albedo, charColor, charAmt);');
+      expect(gate).toBeGreaterThan(-1);
+      expect(burnCharMix).toBeGreaterThan(-1);
+      expect(burnCharMix).toBeLessThan(gate);
+    }
     // The emissive fold: burning fire adds light, and a burning face is fire.
     expect(MARCH_BODY).toContain('+ glow + gBurnEmit');
     expect(MARCH_BODY).toContain('faceGlow = faceGlow * (1.0 - burnAmt);');

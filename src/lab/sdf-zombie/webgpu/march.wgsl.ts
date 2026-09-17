@@ -3912,13 +3912,20 @@ ${FACE_LAYER_WGSL}
   // along -y, so fire climbs the body and stays ON the body as it walks -- in
   // world space it would swim through the skin. char blackens the albedo and
   // holds fire off the parts already burnt out.
+  //
+  // THE CHAR MIX IS OUTSIDE THE FIRE GATE, deliberately. char is monotonic
+  // (burn-state.ts) -- a body that burned and was put out is a CHARRED CORPSE,
+  // not a clean one -- so the blackening must survive burnAmt reaching 0. Only
+  // the fire, the glow kills and the emissive fold are gated on live fire; for
+  // charAmt 0 the mix is an exact identity (x*1 + y*0), so a non-burning body
+  // shades unchanged.
   let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);
+  let charAmt = clamp(max(burnCfg.z, gInstBurn.z), 0.0, 1.0);
+  albedo = mix(albedo, charColor, charAmt);
   if (burnAmt > 0.0) {
     let burnPhase = max(burnCfg.y, gInstBurn.y) * burnRiseSpeed;
-    let charAmt = clamp(max(burnCfg.z, gInstBurn.z), 0.0, 1.0);
     let fireN = fbm(anchor * burnNoiseScale + vec3<f32>(0.0, -burnPhase, 0.0));
     let fire = clamp(fireN * 1.45 - 0.22, 0.0, 1.0) * burnAmt * (1.0 - charAmt * burnCharPatch);
-    albedo = mix(albedo, charColor, charAmt);
     gBurnEmit = fireRamp(fire) * fire * burnFireGain;
     faceGlow = faceGlow * (1.0 - burnAmt);
     primGlow = primGlow * (1.0 - burnAmt);

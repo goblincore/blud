@@ -31,4 +31,24 @@ describe('flame lab page', () => {
     expect(src).toContain('createCharacterView');
     expect(src).toContain('postAa.render(');
   });
+
+  it('drives each body burn state into its own burnCfg uniform', () => {
+    expect(src).toContain('stepBurn(');
+    expect(src).toContain('igniteBurn(');
+    expect(src).toContain('extinguishBurn(');
+    expect(src).toContain('.uniforms.burnCfg.value.set(');
+    expect(src).toContain('resolveBurnTuning');
+  });
+
+  it('exposes the lab through a console API and pins its clock for captures', () => {
+    expect(src).toContain('__flameLab');
+    expect(src).toContain('ignite');
+    expect(src).toContain('setTuning');
+    expect(src).toContain('capture');
+  });
+
+  it('pins the Blood reference sprites beside the bodies', () => {
+    // Tiles 3321-3326 are the burning-run frames and ARE tracked in the repo.
+    expect(html).toContain('assets/blood-tiles/3321.png');
+  });
 });

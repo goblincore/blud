@@ -35,12 +35,14 @@
   <button id="panel-toggle" type="button" aria-controls="panel" aria-expanded="true">debug: hide (H)</button>
   <div id="panel"><div id="errors"></div></div>
   <div id="controls">
-    <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom &nbsp;·&nbsp; <b>click</b> shoot
-    &nbsp;(<b>shift</b> blast, <b>alt</b> burn)<br />
-    <b>1</b> head &nbsp;<b>3</b>/<b>4</b> arm L/R &nbsp;<b>5</b>/<b>6</b> leg L/R sever
-    &nbsp;·&nbsp; <b>G</b> gib everything<br />
-    <b>[</b> / <b>]</b> remove/add a crowd body
-    &nbsp;·&nbsp; <b>B</b> benchmark (needs a visible window)
+    <b>drag</b> orbit &nbsp;·&nbsp; <b>wheel</b> zoom<br />
+    <b>,</b> walk &nbsp;·&nbsp; <b>.</b> run &nbsp;·&nbsp; <b>k</b> collapse<br />
+    <b>I</b> ignite &nbsp;·&nbsp; <b>O</b> extinguish &nbsp;·&nbsp; <b>H</b> panel
+  </div>
+  <div id="reference" style="position:fixed;bottom:8px;right:8px;z-index:9;display:flex;gap:4px;background:#15151ac0;padding:6px;border-radius:6px">
+    <img src="/assets/blood-tiles/3321.png" style="height:120px;image-rendering:pixelated" alt="Blood burning run reference">
+    <img src="/assets/blood-tiles/3323.png" style="height:120px;image-rendering:pixelated" alt="">
+    <img src="/assets/blood-tiles/3325.png" style="height:120px;image-rendering:pixelated" alt="">
   </div>
   <script type="module" src="/src/lab/sdf-zombie/webgpu/flame-lab-main.ts"></script>
 </body>

@@ -36,6 +36,8 @@ import {
 import { MOTION_TUNING } from '../motion';
 import { motionProfileFor, speedForBand, type MotionProfile } from '../motion-profile';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
+import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
+import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
 
 export interface FlameLabBody {
   name: string;
@@ -157,6 +159,24 @@ async function bootstrap(): Promise<void> {
   // THE BODIES. One createCharacterView per FLAME_LAB_BODIES entry; each body
   // keeps its own face sheet, palette and motion record (two characters, not
   // one hero plus clones).
+  // URL params, read once at boot. ?preset= picks a burnPresets entry,
+  // ?burn=1 boots already alight, ?seed= seeds the motion RNG so capture runs
+  // reproduce (lab-main has no ?seed reader — the plan assumed one — so this
+  // page owns it).
+  const q = new URLSearchParams(location.search);
+  const startLit = q.get('burn') === '1';   // boot already alight
+  const preset = q.get('preset');           // a burnPresets name
+  const seedParam = q.get('seed');
+  const motionSeed = seedParam !== null && /^\\d+$/.test(seedParam)
+    ? Number(seedParam) >>> 0 : MOTION_SEED;
+  // One live tuning + one burn state per body. The state is pure (burn-state.ts
+  // keeps the clamping and the char invariant); the page only steps it and
+  // copies the numbers into uniforms.
+  let tuning: BurnTuning = preset && Object.hasOwn(burnPresets, preset)
+    ? resolveBurnTuning(burnPresets[preset as keyof typeof burnPresets])
+    : resolveBurnTuning(BURN_TUNING);
+  const burns = FLAME_LAB_BODIES.map(() => createBurnState());
+  if (startLit) for (const s of burns) igniteBurn(s);
   const actors: FlameLabActor[] = [];
   for (let i = 0; i < FLAME_LAB_BODIES.length; i++) {
     const slot = FLAME_LAB_BODIES[i]!;
@@ -321,13 +341,13 @@ async function bootstrap(): Promise<void> {
       view,
       gpu,
       current: view.body,
-      motion: makeActorMotion(view.body, { seed: MOTION_SEED + i * 7919, start: spawn }),
+      motion: makeActorMotion(view.body, { seed: motionSeed + i * 7919, start: spawn }),
       profile: motionProfileFor(name),
       bounds: {
         minX: spawn[0]! - WANDER_R, maxX: spawn[0]! + WANDER_R,
         minZ: spawn[2]! - WANDER_R, maxZ: spawn[2]! + WANDER_R,
       },
-      rng: makeRng(MOTION_SEED + i * 7919),
+      rng: makeRng(motionSeed + i * 7919),
       signals: emptyActorSignals(),
       faceTex,
     });
@@ -453,6 +473,10 @@ async function bootstrap(): Promise<void> {
       for (const a of actors) a.signals.forcedCollapse = true;
       return;
     }
+    // Burn: I lights both bodies, O puts them out (the char STAYS — the
+    // difference between a burnt corpse and a clean one).
+    if (ev.key === 'i' || ev.key === 'I') { for (const s of burns) igniteBurn(s); return; }
+    if (ev.key === 'o' || ev.key === 'O') { for (const s of burns) extinguishBurn(s); return; }
   });
 
   // -------------------------------------------------------------------------
@@ -515,6 +539,25 @@ async function bootstrap(): Promise<void> {
         headQuatOf(a.motion.bound, a.motion.lastBodyYaw) ?? [0, 0, 0, 1]);
     }
 
+    // — Per-body burn step + uniform write. dt is clamped the way the rest of
+    //    the lab clamps it, so one stalled frame cannot ignite AND fully char
+    //    a body in a single step (stepBurn integrates burn across the step;
+    //    a dt over igniteSec would overshoot into the clamp). The four
+    //    tuning scalars rewrite every frame, so setTuning takes effect live
+    //    with no re-upload path.
+    {
+      const burnDt = Math.min(dt, 1 / 30);
+      for (let i = 0; i < actors.length; i++) {
+        const s = stepBurn(burns[i]!, burnDt, tuning);
+        const gpu = actors[i]!.gpu;
+        gpu.uniforms.burnCfg.value.set(s.burn, s.burnSec, s.char, 0);
+        gpu.uniforms.burnNoiseScale.value = tuning.noiseScale;
+        gpu.uniforms.burnRiseSpeed.value = tuning.riseSpeed;
+        gpu.uniforms.burnCharPatch.value = tuning.charPatch;
+        gpu.uniforms.burnFireGain.value = tuning.fireGain;
+      }
+    }
+
     // Orbit camera. Either button drags; the slow spin keeps the pair framed
     // when you are not grabbing it.
     if (autoSpin) camYaw += dt * 0.35;
@@ -526,6 +569,22 @@ async function bootstrap(): Promise<void> {
     );
     camera.lookAt(camTarget);
   });
+
+  // Console API — the capture and tuning entry point until the tuning panel
+  // lands (plan task 9). `__flameLab.capture()` pins a body straight to a
+  // burn/char pair for deterministic screenshots; `burns()`/`tuning()` echo
+  // the live state back.
+  (window as unknown as { __flameLab: unknown }).__flameLab = {
+    ignite(on = true) { for (const s of burns) (on ? igniteBurn : extinguishBurn)(s); },
+    setTuning(p: Partial<BurnTuning> = {}) { tuning = resolveBurnTuning({ ...tuning, ...p }); return tuning; },
+    preset(name: keyof typeof burnPresets) { tuning = resolveBurnTuning(burnPresets[name]); return tuning; },
+    /** Full burn immediately, for deterministic captures. */
+    capture(burn = 1, char = 0) {
+      for (const s of burns) forceBurn(s, burn, char);
+    },
+    tuning() { return { ...tuning }; },
+    burns() { return burns.map(b => ({ ...b })); },
+  };
 }
 
 void bootstrap().catch((err) => {
