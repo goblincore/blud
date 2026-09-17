@@ -40,6 +40,7 @@ import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
 import { createFlamePanel } from './flame-panel';
 import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
+import { burnDistortStrength, burnDistortRadiusM, burnWobble } from './burn-distort';
 
 export interface FlameLabBody {
   name: string;
@@ -148,6 +149,15 @@ async function bootstrap(): Promise<void> {
   // contentSize (the capped render size).
   const postAa = createPostAa(handle.renderer);
   postAa.addSink(sdfLayer);
+  // HEAT DISTORTION (plan task 12): the blit's bounded blast warp doubles as
+  // the burning bodies' heat band. setBlastDistort just opens the uniform
+  // gate — nothing recompiles (the blit comment explains why that matters);
+  // with no live sources the warp's dist.x is 0 and it is an exact identity,
+  // so a cold page is untouched. The camera is what reprojects each body's
+  // world anchor every frame — without it the pass stays inert by design
+  // (game-main hands its camera over at boot the same way).
+  postAa.setBlastDistort(true);
+  postAa.setBlastDistortCamera(camera);
   // PERF TASK 5 step 3, compute port: each body opts into the per-tile fold
   // lists. The GPU binding is allocated ONCE at the WORST-CASE grid — one per
   // body, since each view binds its own. Gated by tileCfg.x = 0, so nothing
@@ -605,6 +615,18 @@ async function bootstrap(): Promise<void> {
           s.burn, s.char, tuning.lightPeak, tuning.lightFlicker,
           burnLightFlicker(clock, tuning.lightFlicker, i * 2.7),
         );
+        // HEAT DISTORTION (plan task 12): the band rides the SAME chest
+        // anchor as the light, at a fixed radius (no blast expansion), with
+        // the strength from burn/char breathing on the two-rate wobble —
+        // per-body phase, so the pair does not shimmer in step. The wobble
+        // lives here, on the TS side, exactly as blast-refraction.ts owns
+        // the blast's decay; the shader only ever sees a strength number.
+        const s2 = burnDistortStrength(s.burn, s.char, tuning.distortStrength);
+        if (s2 > 0) {
+          postAa.pushBurnDistort(
+            anchor, burnDistortRadiusM(1.8), s2 * (1 + 0.35 * burnWobble(clock, i * 2.7)),
+          );
+        }
       }
     }
 

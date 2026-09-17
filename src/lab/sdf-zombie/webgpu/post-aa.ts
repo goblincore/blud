@@ -97,6 +97,7 @@ import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 import { setPassLabel } from './gpu-pass-timing';
+import type { Vec3 } from '../types';
 import {
   BLAST_REFRACTION, blastRefractionPhase, projectBlastRefraction,
 } from '../blast-refraction';
@@ -627,6 +628,21 @@ export interface PostAa {
    */
   pushBlastDistort(world: readonly [number, number, number], birthRadiusM: number, strength: number): void;
   /**
+   * A burning body's heat band. Same four slots as the blast warp, but the
+   * radius does not expand and the strength comes from burn, not from age.
+   *
+   * Entries live exactly ONE resolve: the feed re-pushes every frame while a
+   * body burns (the light uniforms' discipline — per-frame state, aged by
+   * nobody), render() consumes them against that frame's camera, and the
+   * list returns to blasts-only for `stepBlastDistort` aging. While the warp
+   * is off the entries sit in the bounded ring until the next resolve, so
+   * enabling the warp mid-burn lights the band on the same frame. Bounded:
+   * when a frame's pushes exceed the four unrolled slots together with the
+   * live blasts, the STRONGEST sources survive (unlike the blast push, which
+   * drops the oldest — "oldest" carries no meaning for a per-frame feed).
+   */
+  pushBurnDistort(world: Vec3, radiusM: number, strength: number): void;
+  /**
    * The camera the live bands are reprojected against. Called once with the
    * page's persistent camera; without it the pass stays inert (a blast with no
    * camera cannot be placed on screen).
@@ -799,6 +815,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     birthRadiusM: number;
     strength: number;
     age: number;
+    /** 'burn' entries skip the blast phase (no expansion, no decay) and are
+     *  dropped after the resolve that consumed them — see pushBurnDistort. */
+    kind: 'blast' | 'burn';
   }
   const liveBlastDistorts: LiveBlastDistort[] = [];
   /** The last blit's resolved slots — see `blastDistortSlots` (task-2 seam). */
@@ -1333,7 +1352,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
           blastViewProj.multiplyMatrices(
             blastCamera.projectionMatrix, blastCamera.matrixWorldInverse);
           for (const b of liveBlastDistorts) {
-            const phase = blastRefractionPhase(b.age, BLAST_REFRACTION);
+            // A burn band has no phase: its radius never expands and its
+            // strength carries no age decay (burn-distort.ts computes both
+            // from burn and char instead). The TS-side shape the blast's
+            // phase returns is exactly (1, 1).
+            const phase = b.kind === 'burn'
+              ? { t: 1, radiusScale: 1, decay: 1 }
+              : blastRefractionPhase(b.age, BLAST_REFRACTION);
             if (!phase) {
               resolved.push({ world: b.world, age: b.age, radiusScale: 1, decay: 0, u: null, v: null, radiusUv: null, strength: 0, reason: 'spent' });
               continue;
@@ -1368,6 +1393,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
           active, BLAST_REFRACTION.maxOffsetUv, aspect,
           blastDistortOn && active > 0 ? 1 : 0,
         );
+        // Burn entries are a PER-FRAME feed — the resolve above consumed
+        // this frame's pushes, so drop them here and the list returns to
+        // blasts-only for stepBlastDistort aging. A host that never resolves
+        // (parity path) just leaves at most four of them parked in the ring.
+        for (let i = liveBlastDistorts.length - 1; i >= 0; i--) {
+          if (liveBlastDistorts[i]!.kind === 'burn') liveBlastDistorts.splice(i, 1);
+        }
       }
       setPassLabel('post:blit');
       renderer.setRenderTarget(null);
@@ -1433,14 +1465,42 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
         birthRadiusM: Math.max(0.05, Math.min(20, birthRadiusM)),
         strength: Math.max(0, Math.min(BLAST_REFRACTION.maxOffsetUv, strength)),
         age: 0,
+        kind: 'blast',
       });
       // BOUNDED: the oldest blast beyond the four unrolled slots is dropped.
       while (liveBlastDistorts.length > BLAST_DISTORT_MAX) liveBlastDistorts.shift();
+    },
+    pushBurnDistort(world: Vec3, radiusM: number, strength: number) {
+      if (world.length < 3) return;
+      const [x, y, z] = world;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+      if (!(radiusM > 0) || !(strength > 0)) return;
+      const entry: LiveBlastDistort = {
+        world: [x, y, z],
+        birthRadiusM: Math.max(0.05, Math.min(20, radiusM)),
+        strength: Math.max(0, Math.min(BLAST_REFRACTION.maxOffsetUv, strength)),
+        age: 0,
+        kind: 'burn',
+      };
+      if (liveBlastDistorts.length >= BLAST_DISTORT_MAX) {
+        // Keep the STRONGEST of the four (see pushBurnDistort's doc): a
+        // per-frame feed has no meaningful "oldest", and a weak blast must
+        // not evict a strong fire.
+        let weakest = 0;
+        for (let i = 1; i < liveBlastDistorts.length; i++) {
+          if (liveBlastDistorts[i]!.strength < liveBlastDistorts[weakest]!.strength) weakest = i;
+        }
+        if (entry.strength <= liveBlastDistorts[weakest]!.strength) return;
+        liveBlastDistorts.splice(weakest, 1);
+      }
+      liveBlastDistorts.push(entry);
     },
     stepBlastDistort(dt: number) {
       if (!(dt > 0)) return;
       for (let i = liveBlastDistorts.length - 1; i >= 0; i--) {
         const b = liveBlastDistorts[i]!;
+        // Burns are the host's per-frame feed; nobody ages them.
+        if (b.kind === 'burn') continue;
         b.age += dt;
         if (!blastRefractionPhase(b.age, BLAST_REFRACTION)) liveBlastDistorts.splice(i, 1);
       }
