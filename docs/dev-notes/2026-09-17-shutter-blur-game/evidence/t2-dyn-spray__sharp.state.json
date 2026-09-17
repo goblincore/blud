@@ -1,0 +1,48 @@
+{
+  "file": "t2-dyn-spray__sharp",
+  "diag": {
+    "enabled": false,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.044444444444444446,
+    "exposureMs": 44.44444444444444,
+    "exposureLabel": "44.44 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 568,
+    "last": {
+      "stamps": 536,
+      "texels": 16711,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 23,
+      "maxStreakPx": 22.469950423424716,
+      "avgStreakPx": 7.6986279580317065,
+      "buildMs": 0.3999999761581421
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 1,
+    "droplets": 592,
+    "splats": 256
+  },
+  "sha256_16": "b426a2edcc33d964"
+}

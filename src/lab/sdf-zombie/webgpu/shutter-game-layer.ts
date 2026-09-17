@@ -274,6 +274,13 @@ export interface ShutterGameLayer {
   ): THREE.RenderTarget | null;
   /** Warm the resolve + reference-layer pipelines. Safe to call once at boot. */
   precompile(): Promise<void>;
+  /**
+   * Allocate the layer/seed targets and fire the pipeline compile against the
+   * REAL post-aa capture target at boot. Without this the first blurred frame
+   * pays the allocation + first-use compile (measured ~0.26 s on 2026-09-17).
+   * Returns true once the resolve exists. A later size change still rebuilds.
+   */
+  prewarm(capture: THREE.RenderTarget): boolean;
   diagnostics(): ShutterGameDiagnostics;
   dispose(): void;
 }
@@ -506,6 +513,17 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     capture,
     async precompile() {
       warmOnce();
+    },
+    prewarm(capture) {
+      try {
+        const diag = gooLayer.densityDiagnostics;
+        if (!(diag.densityWidth > 0) || !(diag.densityHeight > 0)) return false;
+        ensureTargets(capture, diag.densityWidth, diag.densityHeight);
+        return resolve !== null;
+      } catch (err) {
+        fail('prewarm failed', err);
+        return false;
+      }
     },
     diagnostics(): ShutterGameDiagnostics {
       return {

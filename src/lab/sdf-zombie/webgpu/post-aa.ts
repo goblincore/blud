@@ -493,6 +493,15 @@ export interface PostAa {
   /** Registers a layer whose output gets captured while any effect is on. */
   addSink(s: PostAaSink): void;
   /**
+   * The capture target the chain draws into while redirected, with the
+   * sampleable depth the capture stage and SSCS read. Exposed so a capture
+   * stage can PREWARM its own targets/pipelines against the real texture at
+   * boot instead of paying the allocation + compile on the first live frame
+   * (the shutter layer's first-use stall, measured 2026-09-17). The object
+   * identity is stable; refit() resizes it in place.
+   */
+  readonly captureTarget: THREE.RenderTarget;
+  /**
    * PRE-POST CAPTURE STAGE. While set, the chain is always captured (the
    * redirect is forced even with every effect off) and this runs on the
    * capture before SSCS/FXAA/VHS. Null (the default) is the shipped chain.
@@ -1076,6 +1085,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   window.addEventListener('resize', refit);
 
   return {
+    get captureTarget() { return sceneTarget; },
     render(chain) {
       const smear = uSmear.value;
       const vhsOn = vhsPreset !== null;

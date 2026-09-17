@@ -7666,6 +7666,10 @@ async function main() {
     });
     postAa.setCaptureStage((capture) =>
       gooEnabled && shutterGame ? shutterGame.capture(capture, bloodSim, camera) : null);
+    // PREWARM against the real capture target: the layer/seed allocation and the
+    // resolve/selected-layer pipeline compile happen here, at boot, instead of
+    // stalling the first live blood frame (measured ~0.26 s, 2026-09-17).
+    shutterGame.prewarm(postAa.captureTarget);
     void shutterGame.precompile();
     // Player-facing controls: on/off, exposure (ms), max trail length. Ships
     // visible+collapsed like its sibling panels; debug seams stay on the API.

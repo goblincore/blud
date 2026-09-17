@@ -1,0 +1,4680 @@
+{
+  "task": "2026-09-17-shutter-blur-game-task-2",
+  "hash": "e76ba1438792ac0461c3f300d3220b6441095e31",
+  "branch": "codex/shutter-blur-game-task-2",
+  "startedAt": "2026-09-17T06:55:13.799Z",
+  "modes": [
+    "cost"
+  ],
+  "shots": {
+    "t2-wound-44__sharp": {
+      "file": "t2-wound-44__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 16972,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 37,
+          "maxStreakPx": 84.6447105844878,
+          "avgStreakPx": 26.809175421900875,
+          "buildMs": 0.5999999046325684
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "fbe99bf8dccbb965"
+    },
+    "t2-wound-44__m44": {
+      "file": "t2-wound-44__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 16972,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 37,
+          "maxStreakPx": 84.6447105844878,
+          "avgStreakPx": 26.809175421900875,
+          "buildMs": 0.5
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "a67afc9df30a330a"
+    },
+    "t2-wound-44__m67": {
+      "file": "t2-wound-44__m67",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 19633,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 69,
+          "maxStreakPx": 120,
+          "avgStreakPx": 40.37685327776547,
+          "buildMs": 0.5
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "fb3ea5440f36ea4c"
+    },
+    "t2-wound-44__m100": {
+      "file": "t2-wound-44__m100",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.1,
+        "exposureMs": 100,
+        "exposureLabel": "100.00 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 23115,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 141,
+          "maxStreakPx": 120,
+          "avgStreakPx": 60.32146398698184,
+          "buildMs": 0.6999999284744263
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "966fa872d2268396"
+    },
+    "t2-det__on-a": {
+      "file": "t2-det__on-a",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 16972,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 37,
+          "maxStreakPx": 84.6447105844878,
+          "avgStreakPx": 26.809175421900875,
+          "buildMs": 0.40000009536743164
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "a0678f6639dbdce5"
+    },
+    "t2-det__off": {
+      "file": "t2-det__off",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 16972,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 37,
+          "maxStreakPx": 84.6447105844878,
+          "avgStreakPx": 26.809175421900875,
+          "buildMs": 0.40000009536743164
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "b1088e216c9e122d"
+    },
+    "t2-det__on-b": {
+      "file": "t2-det__on-b",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 16972,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 37,
+          "maxStreakPx": 84.6447105844878,
+          "avgStreakPx": 26.809175421900875,
+          "buildMs": 0.40000009536743164
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "891edd5da4689331"
+    },
+    "t2-det__m67": {
+      "file": "t2-det__m67",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 19633,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 69,
+          "maxStreakPx": 120,
+          "avgStreakPx": 40.37685327776547,
+          "buildMs": 0.5
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "9a9ea4dfcd8b1407"
+    },
+    "t2-woundclose__sharp": {
+      "file": "t2-woundclose__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 168,
+        "last": {
+          "stamps": 168,
+          "texels": 13023,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 39,
+          "maxStreakPx": 80.72778521271151,
+          "avgStreakPx": 27.301486448854842,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 254,
+        "splats": 256
+      },
+      "sha256_16": "cb491f49ab3ba50f"
+    },
+    "t2-woundclose__m44": {
+      "file": "t2-woundclose__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 168,
+        "last": {
+          "stamps": 168,
+          "texels": 13023,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 39,
+          "maxStreakPx": 80.72778521271151,
+          "avgStreakPx": 27.301486448854842,
+          "buildMs": 0.20000004768371582
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 254,
+        "splats": 256
+      },
+      "sha256_16": "df5f8d539da4d3b4"
+    },
+    "t2-woundclose__m67": {
+      "file": "t2-woundclose__m67",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 168,
+        "last": {
+          "stamps": 168,
+          "texels": 15293,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 75,
+          "maxStreakPx": 118.14063606820525,
+          "avgStreakPx": 41.02827561055808,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 254,
+        "splats": 256
+      },
+      "sha256_16": "e4a6e97693480e15"
+    },
+    "t2-woundclose__m100": {
+      "file": "t2-woundclose__m100",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.1,
+        "exposureMs": 100,
+        "exposureLabel": "100.00 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 168,
+        "last": {
+          "stamps": 168,
+          "texels": 18426,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 139,
+          "maxStreakPx": 120,
+          "avgStreakPx": 61.02533663180961,
+          "buildMs": 0.5
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 254,
+        "splats": 256
+      },
+      "sha256_16": "0d472620afb636ca"
+    },
+    "t2-impact__sharp": {
+      "file": "t2-impact__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 217,
+        "last": {
+          "stamps": 195,
+          "texels": 4861,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 24,
+          "maxStreakPx": 120,
+          "avgStreakPx": 25.547999025240014,
+          "buildMs": 0.19999992847442627
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 255,
+        "splats": 256
+      },
+      "sha256_16": "17c424e681b56cbd"
+    },
+    "t2-impact__m44": {
+      "file": "t2-impact__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 217,
+        "last": {
+          "stamps": 195,
+          "texels": 4861,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 24,
+          "maxStreakPx": 120,
+          "avgStreakPx": 25.547999025240014,
+          "buildMs": 0.19999992847442627
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 255,
+        "splats": 256
+      },
+      "sha256_16": "3b3cb86af225fe96"
+    },
+    "t2-impact__m67": {
+      "file": "t2-impact__m67",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 217,
+        "last": {
+          "stamps": 195,
+          "texels": 5893,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 27,
+          "maxStreakPx": 120,
+          "avgStreakPx": 32.850617135268244,
+          "buildMs": 0.19999992847442627
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 255,
+        "splats": 256
+      },
+      "sha256_16": "26d3464039956e51"
+    },
+    "t2-dyn-blast__sharp": {
+      "file": "t2-dyn-blast__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 181,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 240,
+        "splats": 256
+      },
+      "sha256_16": "c1bad0e46b098595"
+    },
+    "t2-dyn-blast__m44": {
+      "file": "t2-dyn-blast__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 181,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 240,
+        "splats": 256
+      },
+      "sha256_16": "a700ad0a1dc96eb2"
+    },
+    "t2-dyn-blast__m67": {
+      "file": "t2-dyn-blast__m67",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 181,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 240,
+        "splats": 256
+      },
+      "sha256_16": "b7194d11df5575d7"
+    },
+    "t2-dyn-spray__sharp": {
+      "file": "t2-dyn-spray__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 568,
+        "last": {
+          "stamps": 536,
+          "texels": 16711,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 23,
+          "maxStreakPx": 22.469950423424716,
+          "avgStreakPx": 7.6986279580317065,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 592,
+        "splats": 256
+      },
+      "sha256_16": "b426a2edcc33d964"
+    },
+    "t2-dyn-spray__m44": {
+      "file": "t2-dyn-spray__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 568,
+        "last": {
+          "stamps": 536,
+          "texels": 16711,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 23,
+          "maxStreakPx": 22.469950423424716,
+          "avgStreakPx": 7.6986279580317065,
+          "buildMs": 0.40000009536743164
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 592,
+        "splats": 256
+      },
+      "sha256_16": "ff96eda595f153e7"
+    },
+    "t2-dyn-spray__m67": {
+      "file": "t2-dyn-spray__m67",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 568,
+        "last": {
+          "stamps": 536,
+          "texels": 19777,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 26,
+          "maxStreakPx": 33.767837402535704,
+          "avgStreakPx": 11.550320835015619,
+          "buildMs": 0.2999999523162842
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 592,
+        "splats": 256
+      },
+      "sha256_16": "5400f3a99f85ec79"
+    },
+    "t2-dyn-trail__sharp": {
+      "file": "t2-dyn-trail__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 555,
+        "last": {
+          "stamps": 538,
+          "texels": 17256,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 16,
+          "maxStreakPx": 29.698843046982443,
+          "avgStreakPx": 8.585009278095907,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 563,
+        "splats": 256
+      },
+      "sha256_16": "91f2d99801eda8f3"
+    },
+    "t2-dyn-trail__m44": {
+      "file": "t2-dyn-trail__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 555,
+        "last": {
+          "stamps": 538,
+          "texels": 17256,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 16,
+          "maxStreakPx": 29.698843046982443,
+          "avgStreakPx": 8.585009278095907,
+          "buildMs": 0.2999999523162842
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 563,
+        "splats": 256
+      },
+      "sha256_16": "bac34c8bf9dd5c01"
+    },
+    "t2-dyn-trail__m67": {
+      "file": "t2-dyn-trail__m67",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 555,
+        "last": {
+          "stamps": 538,
+          "texels": 20755,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 36,
+          "maxStreakPx": 44.27944109820897,
+          "avgStreakPx": 12.854672450907701,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 563,
+        "splats": 256
+      },
+      "sha256_16": "a0b70e508cfe31c7"
+    },
+    "t2-removal__sharp": {
+      "file": "t2-removal__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 0,
+        "splats": 256
+      },
+      "sha256_16": "92e1366ef5d5b031"
+    },
+    "t2-removal__m44": {
+      "file": "t2-removal__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 1,
+        "droplets": 0,
+        "splats": 256
+      },
+      "sha256_16": "127220c81e92a6e2"
+    },
+    "t2-pools__sharp": {
+      "file": "t2-pools__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 0,
+        "droplets": 0,
+        "splats": 256
+      },
+      "sha256_16": "bf9277598154ef96"
+    },
+    "t2-pools__m44": {
+      "file": "t2-pools__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 0,
+        "droplets": 0,
+        "splats": 256
+      },
+      "sha256_16": "eda74417a297dd5f"
+    },
+    "t2-pools__m100": {
+      "file": "t2-pools__m100",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.1,
+        "exposureMs": 100,
+        "exposureLabel": "100.00 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 0,
+        "droplets": 0,
+        "splats": 256
+      },
+      "sha256_16": "832b6b504f0ac5f2"
+    },
+    "t2-check-empty-idle": {
+      "file": "t2-check-empty-idle",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 0,
+        "droplets": 0,
+        "splats": 0
+      },
+      "sha256_16": "eff554638e3b8b2e"
+    },
+    "t2-parity__sharp": {
+      "file": "t2-parity__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 83,
+        "last": {
+          "stamps": 83,
+          "texels": 2201,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 73.38747281638899,
+          "avgStreakPx": 16.594199392576787,
+          "buildMs": 0.19999992847442627
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 5,
+        "droplets": 113,
+        "splats": 39
+      },
+      "sha256_16": "c9dabe7a1aa1a387"
+    },
+    "t2-parity__zero": {
+      "file": "t2-parity__zero",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0,
+        "exposureMs": 0,
+        "exposureLabel": "off",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 83,
+        "last": {
+          "stamps": 83,
+          "texels": 2201,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 73.38747281638899,
+          "avgStreakPx": 16.594199392576787,
+          "buildMs": 0.19999992847442627
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 5,
+        "droplets": 113,
+        "splats": 39
+      },
+      "sha256_16": "5a0783e84efcd2e2"
+    },
+    "t2-parity__m44": {
+      "file": "t2-parity__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 83,
+        "last": {
+          "stamps": 83,
+          "texels": 2201,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 73.38747281638899,
+          "avgStreakPx": 16.594199392576787,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 5,
+        "droplets": 113,
+        "splats": 39
+      },
+      "sha256_16": "724045cadc575f02"
+    },
+    "t2-detparity__sharp": {
+      "file": "t2-detparity__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 83,
+        "last": {
+          "stamps": 83,
+          "texels": 2201,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 73.38747281638899,
+          "avgStreakPx": 16.594199392576787,
+          "buildMs": 0.20000004768371582
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 5,
+        "droplets": 113,
+        "splats": 39
+      },
+      "sha256_16": "68bdff5bb02d06b6"
+    },
+    "t2-detparity__zero": {
+      "file": "t2-detparity__zero",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0,
+        "exposureMs": 0,
+        "exposureLabel": "off",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 83,
+        "last": {
+          "stamps": 83,
+          "texels": 2201,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 73.38747281638899,
+          "avgStreakPx": 16.594199392576787,
+          "buildMs": 0.20000004768371582
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 5,
+        "droplets": 113,
+        "splats": 39
+      },
+      "sha256_16": "310b16f1540b3988"
+    },
+    "t2-detparity__sharp2": {
+      "file": "t2-detparity__sharp2",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0,
+        "exposureMs": 0,
+        "exposureLabel": "off",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 83,
+        "last": {
+          "stamps": 83,
+          "texels": 2201,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 73.38747281638899,
+          "avgStreakPx": 16.594199392576787,
+          "buildMs": 0.20000004768371582
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 5,
+        "droplets": 113,
+        "splats": 39
+      },
+      "sha256_16": "d84aaeeb2cedf7eb"
+    },
+    "t2-wound-44__m44cap200": {
+      "file": "t2-wound-44__m44cap200",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 200,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 16972,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 37,
+          "maxStreakPx": 84.6447105844878,
+          "avgStreakPx": 26.809175421900875,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "1246a90ddfc07014"
+    },
+    "t2-det__cap200": {
+      "file": "t2-det__cap200",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 200,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 178,
+        "last": {
+          "stamps": 178,
+          "texels": 16972,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 37,
+          "maxStreakPx": 84.6447105844878,
+          "avgStreakPx": 26.809175421900875,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 266,
+        "splats": 229
+      },
+      "sha256_16": "cb772e1123a90009"
+    },
+    "t2-still__sharp": {
+      "file": "t2-still__sharp",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": false,
+        "emitters": 5,
+        "droplets": 0,
+        "splats": 0
+      },
+      "sha256_16": "f75efa91c95c7ab9"
+    },
+    "t2-still__m44": {
+      "file": "t2-still__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": false,
+        "emitters": 5,
+        "droplets": 0,
+        "splats": 0
+      },
+      "sha256_16": "f75efa91c95c7ab9"
+    },
+    "t2-still__m100": {
+      "file": "t2-still__m100",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.1,
+        "exposureMs": 100,
+        "exposureLabel": "100.00 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": false,
+        "emitters": 5,
+        "droplets": 0,
+        "splats": 0
+      },
+      "sha256_16": "f41a59f70340fcfe"
+    },
+    "t2-still__sharp2": {
+      "file": "t2-still__sharp2",
+      "diag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.1,
+        "exposureMs": 100,
+        "exposureLabel": "100.00 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": false,
+        "emitters": 5,
+        "droplets": 0,
+        "splats": 0
+      },
+      "sha256_16": "f41a59f70340fcfe"
+    },
+    "t2-tier-res640": {
+      "file": "t2-tier-res640",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 320,
+          "height": 240
+        },
+        "layer": {
+          "width": 640,
+          "height": 480
+        },
+        "selectedDroplets": 135,
+        "last": {
+          "stamps": 108,
+          "texels": 5675,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 4,
+          "maxStreakPx": 120,
+          "avgStreakPx": 54.18476966452067,
+          "buildMs": 0.20000004768371582
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 171,
+        "splats": 23
+      },
+      "sha256_16": "f69302406ee251aa"
+    },
+    "t2-tier-res960": {
+      "file": "t2-tier-res960",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 432,
+          "height": 270
+        },
+        "layer": {
+          "width": 864,
+          "height": 540
+        },
+        "selectedDroplets": 135,
+        "last": {
+          "stamps": 109,
+          "texels": 7719,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 2,
+          "maxStreakPx": 120,
+          "avgStreakPx": 58.05610236230108,
+          "buildMs": 0.2999999523162842
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 171,
+        "splats": 23
+      },
+      "sha256_16": "1f943596b56419ce"
+    },
+    "t2-tier-graphics-high": {
+      "file": "t2-tier-graphics-high",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 136,
+        "last": {
+          "stamps": 106,
+          "texels": 10237,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 6,
+          "maxStreakPx": 120,
+          "avgStreakPx": 60.89747579890891,
+          "buildMs": 0.3999999761581421
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 172,
+        "splats": 21
+      },
+      "sha256_16": "f7e1490d52482820"
+    },
+    "t2-tier-graphics-high-noblur": {
+      "file": "t2-tier-graphics-high-noblur",
+      "diag": {
+        "enabled": false,
+        "ready": false,
+        "warmed": false,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 0,
+          "height": 0
+        },
+        "layer": {
+          "width": 0,
+          "height": 0
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 107,
+        "splats": 256
+      },
+      "sha256_16": "50ae5be5d5f0d2c6"
+    },
+    "t2-check-reset__m44": {
+      "file": "t2-check-reset__m44",
+      "diag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 512,
+          "height": 384
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 190,
+        "last": {
+          "stamps": 169,
+          "texels": 12983,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 65,
+          "maxStreakPx": 120,
+          "avgStreakPx": 23.085586169395405,
+          "buildMs": 0.5999999046325684
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bleed": {
+        "enabled": true,
+        "emitters": 6,
+        "droplets": 248,
+        "splats": 126
+      },
+      "sha256_16": "52b723e6eb4b52a1"
+    }
+  },
+  "checks": {
+    "defaults": {
+      "enabled": true,
+      "exposureMs": 44.444444444444436,
+      "taps": 24,
+      "depthBiasM": 0.02,
+      "maxStreakPx": 120,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "sscsTerms": {
+        "strength": 0.35,
+        "maxDist": 0.8,
+        "bias": 0.02
+      },
+      "vhs": "blud",
+      "vhsTerms": {
+        "intensity": 0.81,
+        "blurAmount": 0.17,
+        "noiseAmount": 0.005,
+        "gradeAmount": 0.38,
+        "warpAmount": 0.3,
+        "warpFrequency": 1.1,
+        "warpSpeed": 0.05,
+        "chromaAmount": 5.4,
+        "chromaJitter": 10,
+        "motionThreshold": 0.12,
+        "chromaBurstChance": 0.61,
+        "chromaBurstStrength": 1.45,
+        "chromaBurstRate": 34.1
+      },
+      "renderMode": "legacy",
+      "sdfScale": 0.5,
+      "frameCap": 30
+    },
+    "woundStage": {
+      "room": 4,
+      "texels": 17408,
+      "stamps": 184,
+      "frame": 23,
+      "drops": 272,
+      "sawMin": true
+    },
+    "counts:wound-44": [
+      {
+        "file": "t2-wound-44__sharp",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 16972
+      },
+      {
+        "file": "t2-wound-44__m44",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 16972
+      },
+      {
+        "file": "t2-wound-44__m67",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 19633
+      },
+      {
+        "file": "t2-wound-44__m100",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 23115
+      },
+      {
+        "file": "t2-wound-44__m44cap200",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 16972
+      }
+    ],
+    "counts:det": [
+      {
+        "file": "t2-det__on-a",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 16972
+      },
+      {
+        "file": "t2-det__off",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 16972
+      },
+      {
+        "file": "t2-det__on-b",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 16972
+      },
+      {
+        "file": "t2-det__m67",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 19633
+      },
+      {
+        "file": "t2-det__cap200",
+        "droplets": 266,
+        "splats": 229,
+        "stamps": 178,
+        "texels": 16972
+      }
+    ],
+    "counts:woundclose": [
+      {
+        "file": "t2-woundclose__sharp",
+        "droplets": 254,
+        "splats": 256,
+        "stamps": 168,
+        "texels": 13023
+      },
+      {
+        "file": "t2-woundclose__m44",
+        "droplets": 254,
+        "splats": 256,
+        "stamps": 168,
+        "texels": 13023
+      },
+      {
+        "file": "t2-woundclose__m67",
+        "droplets": 254,
+        "splats": 256,
+        "stamps": 168,
+        "texels": 15293
+      },
+      {
+        "file": "t2-woundclose__m100",
+        "droplets": 254,
+        "splats": 256,
+        "stamps": 168,
+        "texels": 18426
+      }
+    ],
+    "impactStage": {
+      "aim": {
+        "id": 7,
+        "dist": 0.8908240567428661,
+        "yaw": -0.10130239514015676,
+        "pitch": -0.5553113069442964,
+        "hit": 7,
+        "c": [
+          -4.876551339791871,
+          1.1503505602412618,
+          4.046915146758223
+        ]
+      },
+      "framesWithBurst": 2
+    },
+    "counts:impact": [
+      {
+        "file": "t2-impact__sharp",
+        "droplets": 255,
+        "splats": 256,
+        "stamps": 195,
+        "texels": 4861
+      },
+      {
+        "file": "t2-impact__m44",
+        "droplets": 255,
+        "splats": 256,
+        "stamps": 195,
+        "texels": 4861
+      },
+      {
+        "file": "t2-impact__m67",
+        "droplets": 255,
+        "splats": 256,
+        "stamps": 195,
+        "texels": 5893
+      }
+    ],
+    "crowd": {
+      "room": 6,
+      "count": 8,
+      "byRoom": {
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5,
+        "6": 8
+      }
+    },
+    "dynamiteStage": {
+      "room": 6,
+      "target": {
+        "id": 16,
+        "neighbours": 3,
+        "c": [
+          30.38200554651641,
+          1.1587553317807755,
+          -10.135371023828817
+        ]
+      },
+      "blast": {
+        "radiusM": 3.8437499999999996,
+        "actorsBefore": 23,
+        "actorsAfter": 23,
+        "chunksBefore": 0,
+        "chunksAfter": 0,
+        "gibbed": 2,
+        "gibPieces": 0,
+        "lastBlastMs": 5.800000071525574
+      }
+    },
+    "counts:dyn-blast": [
+      {
+        "file": "t2-dyn-blast__sharp",
+        "droplets": 240,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-dyn-blast__m44",
+        "droplets": 240,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-dyn-blast__m67",
+        "droplets": 240,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      }
+    ],
+    "dynamitePeak": {
+      "drops": 595,
+      "frame": 83,
+      "splats": 256
+    },
+    "counts:dyn-spray": [
+      {
+        "file": "t2-dyn-spray__sharp",
+        "droplets": 592,
+        "splats": 256,
+        "stamps": 536,
+        "texels": 16711
+      },
+      {
+        "file": "t2-dyn-spray__m44",
+        "droplets": 592,
+        "splats": 256,
+        "stamps": 536,
+        "texels": 16711
+      },
+      {
+        "file": "t2-dyn-spray__m67",
+        "droplets": 592,
+        "splats": 256,
+        "stamps": 536,
+        "texels": 19777
+      }
+    ],
+    "counts:dyn-trail": [
+      {
+        "file": "t2-dyn-trail__sharp",
+        "droplets": 563,
+        "splats": 256,
+        "stamps": 538,
+        "texels": 17256
+      },
+      {
+        "file": "t2-dyn-trail__m44",
+        "droplets": 563,
+        "splats": 256,
+        "stamps": 538,
+        "texels": 17256
+      },
+      {
+        "file": "t2-dyn-trail__m67",
+        "droplets": 563,
+        "splats": 256,
+        "stamps": 538,
+        "texels": 20755
+      }
+    ],
+    "removal": {
+      "drops0": 90,
+      "maxStreak": 1.9209030244994216,
+      "minDrops": 0,
+      "frames": 78,
+      "removed": true
+    },
+    "counts:removal": [
+      {
+        "file": "t2-removal__sharp",
+        "droplets": 0,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-removal__m44",
+        "droplets": 0,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      }
+    ],
+    "settled": {
+      "enabled": true,
+      "emitters": 0,
+      "droplets": 0,
+      "splats": 256
+    },
+    "counts:pools": [
+      {
+        "file": "t2-pools__sharp",
+        "droplets": 0,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-pools__m44",
+        "droplets": 0,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-pools__m100",
+        "droplets": 0,
+        "splats": 256,
+        "stamps": 0,
+        "texels": 0
+      }
+    ],
+    "clamps": {
+      "exposureHigh": 200,
+      "exposureNeg": 0,
+      "exposureDefault": 44.44444444444444,
+      "streakHigh": 400,
+      "streakZero": 1,
+      "streakDefault": 120,
+      "seedHigh": 2,
+      "seedLow": 0.25,
+      "seedDefault": 1,
+      "biasHigh": 50,
+      "biasDefault": 0.02
+    },
+    "clampsOk": true,
+    "emptyBypass": {
+      "stamps": 0,
+      "texels": 0,
+      "error": null,
+      "ready": true
+    },
+    "parityStage": {
+      "aim": {
+        "id": 10,
+        "dist": 3.2394435688066823,
+        "yaw": -0.21175293587223584,
+        "pitch": -0.14621611297425954,
+        "hit": 10,
+        "c": [
+          -5.473581819494185,
+          1.1480270873575575,
+          1.666707205245306
+        ]
+      },
+      "peak": {
+        "texels": 2399,
+        "stamps": 89,
+        "frame": 0,
+        "drops": 119,
+        "sawMin": true
+      }
+    },
+    "counts:parity": [
+      {
+        "file": "t2-parity__sharp",
+        "droplets": 113,
+        "splats": 39,
+        "stamps": 83,
+        "texels": 2201
+      },
+      {
+        "file": "t2-parity__zero",
+        "droplets": 113,
+        "splats": 39,
+        "stamps": 83,
+        "texels": 2201
+      },
+      {
+        "file": "t2-parity__m44",
+        "droplets": 113,
+        "splats": 39,
+        "stamps": 83,
+        "texels": 2201
+      }
+    ],
+    "counts:detparity": [
+      {
+        "file": "t2-detparity__sharp",
+        "droplets": 113,
+        "splats": 39,
+        "stamps": 83,
+        "texels": 2201
+      },
+      {
+        "file": "t2-detparity__zero",
+        "droplets": 113,
+        "splats": 39,
+        "stamps": 83,
+        "texels": 2201
+      },
+      {
+        "file": "t2-detparity__sharp2",
+        "droplets": 113,
+        "splats": 39,
+        "stamps": 83,
+        "texels": 2201
+      }
+    ],
+    "pauseResume": {
+      "beforeMaxPx": 16.931296873716395,
+      "afterMaxPx": 16.931296873716395,
+      "beforeTexels": 1072,
+      "afterTexels": 1072,
+      "error": null
+    },
+    "resizeTrace": [
+      {
+        "w": 720,
+        "h": 480,
+        "how": "window-bounds",
+        "inner": [
+          960,
+          600
+        ],
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "error": null,
+        "draws": {
+          "drawCalls": 0,
+          "triangles": 0,
+          "computeCalls": null
+        }
+      },
+      {
+        "w": 960,
+        "h": 600,
+        "how": "window-bounds",
+        "inner": [
+          960,
+          600
+        ],
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "error": null,
+        "draws": {
+          "drawCalls": 1082,
+          "triangles": 1828314,
+          "computeCalls": null
+        }
+      },
+      {
+        "w": 1280,
+        "h": 720,
+        "how": "window-bounds",
+        "inner": [
+          960,
+          600
+        ],
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "error": null,
+        "draws": {
+          "drawCalls": 1082,
+          "triangles": 1828314,
+          "computeCalls": null
+        }
+      },
+      {
+        "w": 960,
+        "h": 600,
+        "how": "window-bounds",
+        "inner": [
+          960,
+          600
+        ],
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "error": null,
+        "draws": {
+          "drawCalls": 1082,
+          "triangles": 1828314,
+          "computeCalls": null
+        }
+      }
+    ],
+    "renderScaleTrace": [
+      {
+        "sdfScale": 0.5,
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "error": null,
+        "drops": 139
+      },
+      {
+        "sdfScale": 1,
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "seed": {
+          "width": 512,
+          "height": 384
+        },
+        "error": null,
+        "drops": 139
+      }
+    ],
+    "counts:still": [
+      {
+        "file": "t2-still__sharp",
+        "droplets": 0,
+        "splats": 0,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-still__m44",
+        "droplets": 0,
+        "splats": 0,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-still__m100",
+        "droplets": 0,
+        "splats": 0,
+        "stamps": 0,
+        "texels": 0
+      },
+      {
+        "file": "t2-still__sharp2",
+        "droplets": 0,
+        "splats": 0,
+        "stamps": 0,
+        "texels": 0
+      }
+    ],
+    "tier:res640": {
+      "query": "?res=640",
+      "graphics": "default",
+      "sdfScale": 0.5,
+      "upscale": {
+        "on": true,
+        "model": "t16",
+        "layout": "sp",
+        "inputs": "rgb",
+        "seed": 1,
+        "weightHash": "7ab8f2fe",
+        "source": "trained",
+        "run": "t16-rgb-v32",
+        "step": 11000,
+        "passes": [
+          "L1a",
+          "L2a",
+          "L3a",
+          "L4a",
+          "shuffle"
+        ],
+        "head": false,
+        "headInputs": null,
+        "sharpen": 0.5,
+        "sharpenMode": "cas",
+        "inSize": {
+          "width": 320,
+          "height": 240
+        },
+        "outSize": {
+          "width": 640,
+          "height": 480
+        },
+        "near": 0.1,
+        "far": 200
+      },
+      "layer": {
+        "width": 640,
+        "height": 480
+      },
+      "seed": {
+        "width": 320,
+        "height": 240
+      },
+      "error": null,
+      "peak": {
+        "texels": 6208,
+        "stamps": 113,
+        "frame": 0,
+        "drops": 176,
+        "sawMin": true
+      },
+      "layerAfter": {
+        "width": 640,
+        "height": 480
+      },
+      "seedAfter": {
+        "width": 320,
+        "height": 240
+      },
+      "errorAfter": null,
+      "stamps": 108
+    },
+    "tier:res960": {
+      "query": "?res=960",
+      "graphics": "default",
+      "sdfScale": 0.5,
+      "upscale": {
+        "on": true,
+        "model": "t16",
+        "layout": "sp",
+        "inputs": "rgb",
+        "seed": 1,
+        "weightHash": "7ab8f2fe",
+        "source": "trained",
+        "run": "t16-rgb-v32",
+        "step": 11000,
+        "passes": [
+          "L1a",
+          "L2a",
+          "L3a",
+          "L4a",
+          "shuffle"
+        ],
+        "head": false,
+        "headInputs": null,
+        "sharpen": 0.5,
+        "sharpenMode": "cas",
+        "inSize": {
+          "width": 432,
+          "height": 270
+        },
+        "outSize": {
+          "width": 864,
+          "height": 540
+        },
+        "near": 0.1,
+        "far": 200
+      },
+      "layer": {
+        "width": 864,
+        "height": 540
+      },
+      "seed": {
+        "width": 432,
+        "height": 270
+      },
+      "error": null,
+      "peak": {
+        "texels": 8600,
+        "stamps": 113,
+        "frame": 0,
+        "drops": 176,
+        "sawMin": true
+      },
+      "layerAfter": {
+        "width": 864,
+        "height": 540
+      },
+      "seedAfter": {
+        "width": 432,
+        "height": 270
+      },
+      "errorAfter": null,
+      "stamps": 109
+    },
+    "clipWoundStage": {
+      "aim": {
+        "id": 7,
+        "dist": 0.9643809647640557,
+        "yaw": 0.22132583802898645,
+        "pitch": -0.520942248910866,
+        "hit": 7,
+        "c": [
+          -4.616378316111781,
+          1.1400298901954795,
+          3.9839470506765258
+        ]
+      },
+      "fired": [
+        true,
+        true
+      ]
+    },
+    "costOrdinaryStage": {
+      "aim": {
+        "id": 7,
+        "dist": 0.8815441187414323,
+        "yaw": 0.05062524064089514,
+        "pitch": -0.5592801992744699,
+        "hit": 7,
+        "c": [
+          -4.762187477041374,
+          1.15227366647734,
+          4.053727715023156
+        ]
+      },
+      "peak": {
+        "texels": 17435,
+        "stamps": 184,
+        "frame": 23,
+        "drops": 272,
+        "sawMin": true
+      }
+    },
+    "costHeavyStage": {
+      "crowd": {
+        "room": 6,
+        "count": 8,
+        "byRoom": {
+          "1": 1,
+          "2": 2,
+          "3": 3,
+          "4": 4,
+          "5": 5,
+          "6": 8
+        }
+      },
+      "dyn": {
+        "room": 6,
+        "target": {
+          "id": 13,
+          "neighbours": 4,
+          "c": [
+            31.040222378677342,
+            1.1562721536509242,
+            -9.614356195983065
+          ]
+        },
+        "blast": {
+          "radiusM": 3.8437499999999996,
+          "actorsBefore": 23,
+          "actorsAfter": 23,
+          "chunksBefore": 0,
+          "chunksAfter": 0,
+          "gibbed": 2,
+          "gibPieces": 0,
+          "lastBlastMs": 8.799999952316284
+        }
+      },
+      "peak": {
+        "drops": 599,
+        "frame": 95,
+        "splats": 256
+      }
+    },
+    "costHeavyCounts": {
+      "enabled": true,
+      "emitters": 1,
+      "droplets": 565,
+      "splats": 256
+    },
+    "tier:graphics-high": {
+      "query": "?graphics=high",
+      "graphics": "high",
+      "sdfScale": 0.5,
+      "upscale": {
+        "on": true,
+        "model": "s32",
+        "layout": "sp",
+        "inputs": "rgbn",
+        "seed": 1,
+        "weightHash": "1ed2aeeb",
+        "source": "trained",
+        "run": "s32-rgbn-headr-drop-int2",
+        "step": 10000,
+        "passes": [
+          "L1a",
+          "L1b",
+          "L2a",
+          "L2b",
+          "L3a",
+          "shuffle",
+          "H1",
+          "H2"
+        ],
+        "head": true,
+        "headInputs": "detail+refine",
+        "sharpen": 0.5,
+        "sharpenMode": "cas",
+        "inSize": {
+          "width": 400,
+          "height": 300
+        },
+        "outSize": {
+          "width": 800,
+          "height": 600
+        },
+        "near": 0.1,
+        "far": 200
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "error": null,
+      "peak": {
+        "texels": 10533,
+        "stamps": 115,
+        "frame": 0,
+        "drops": 181,
+        "sawMin": true
+      },
+      "layerAfter": {
+        "width": 800,
+        "height": 600
+      },
+      "seedAfter": {
+        "width": 400,
+        "height": 300
+      },
+      "errorAfter": null,
+      "stamps": 106
+    },
+    "tier:graphics-high-noblur": {
+      "query": "?graphics=high&bloodblur=0",
+      "graphics": "high",
+      "sdfScale": 0.5,
+      "upscale": {
+        "on": true,
+        "model": "s32",
+        "layout": "sp",
+        "inputs": "rgbn",
+        "seed": 1,
+        "weightHash": "1ed2aeeb",
+        "source": "trained",
+        "run": "s32-rgbn-headr-drop-int2",
+        "step": 10000,
+        "passes": [
+          "L1a",
+          "L1b",
+          "L2a",
+          "L2b",
+          "L3a",
+          "shuffle",
+          "H1",
+          "H2"
+        ],
+        "head": true,
+        "headInputs": "detail+refine",
+        "sharpen": 0.5,
+        "sharpenMode": "cas",
+        "inSize": {
+          "width": 400,
+          "height": 300
+        },
+        "outSize": {
+          "width": 800,
+          "height": 600
+        },
+        "near": 0.1,
+        "far": 200
+      },
+      "layer": {
+        "width": 0,
+        "height": 0
+      },
+      "seed": {
+        "width": 0,
+        "height": 0
+      },
+      "error": null,
+      "peak": {
+        "texels": 0,
+        "stamps": 0,
+        "frame": -1,
+        "drops": 0,
+        "sawMin": false
+      },
+      "layerAfter": {
+        "width": 0,
+        "height": 0
+      },
+      "seedAfter": {
+        "width": 0,
+        "height": 0
+      },
+      "errorAfter": null,
+      "stamps": 0
+    },
+    "sceneReset": {
+      "peak": {
+        "texels": 13463,
+        "stamps": 171,
+        "frame": 6,
+        "drops": 250,
+        "sawMin": true
+      },
+      "stamps": 169,
+      "texels": 12983,
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "seed": {
+        "width": 512,
+        "height": 384
+      },
+      "error": null
+    },
+    "costLoadStart": [
+      2.13,
+      2.61,
+      2.87
+    ],
+    "bootReady": {
+      "ready": true,
+      "warmed": true,
+      "seed": {
+        "width": 400,
+        "height": 300
+      }
+    },
+    "costLoadEnd": [
+      2.28,
+      2.55,
+      2.81
+    ]
+  },
+  "benches": {
+    "firstUse": {
+      "firstFrameMs": 229.8,
+      "next4": [
+        38,
+        36,
+        34.7,
+        40.7
+      ],
+      "ready": true,
+      "warmed": true,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "stamps": 178
+    },
+    "ordinary-sharp": {
+      "label": "ordinary-sharp",
+      "variant": "sharp",
+      "frames": 80,
+      "totalMsPerFrame": {
+        "p50": 40.1,
+        "p95": 44.2,
+        "mean": 40.314
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 7829,
+      "stamps": 166,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0188,
+        "sdf:polys": 1.7236,
+        "sdf:shell-hull": 2.0275,
+        "sdf:march": 27.6906,
+        "sdf:last-blit": 27.7438,
+        "sdf:upscale:L1a": 27.8118,
+        "sdf:upscale:L2a": 28.0805,
+        "sdf:upscale:L3a": 28.1412,
+        "sdf:upscale:L4a": 28.3288,
+        "sdf:upscale:shuffle": 28.2862,
+        "sdf:upscale:sharpen": 28.273,
+        "sdf:composite": 27.6144,
+        "goo:surface": 27.3211,
+        "effects": 27.2581,
+        "post:fxaa": 27.4588,
+        "post:vhs-input": 27.4252,
+        "post:vhs": 27.4645,
+        "post:blit": 53.5306,
+        "compute:tile-bin": 0.109,
+        "compute:probe-gather": 0.3129
+      }
+    },
+    "ordinary-m44": {
+      "label": "ordinary-m44",
+      "variant": "m44",
+      "frames": 80,
+      "totalMsPerFrame": {
+        "p50": 41.6,
+        "p95": 47.7,
+        "mean": 41.876
+      },
+      "buildMs": {
+        "p50": 0.4,
+        "p95": 0.5,
+        "max": 0.6
+      },
+      "texels": 7829,
+      "stamps": 166,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 22.4354,
+        "sdf:polys": 1.6933,
+        "sdf:shell-hull": 1.9399,
+        "sdf:march": 27.4776,
+        "sdf:last-blit": 27.2826,
+        "sdf:upscale:L1a": 26.5937,
+        "sdf:upscale:L2a": 25.8679,
+        "sdf:upscale:L3a": 25.7155,
+        "sdf:upscale:L4a": 25.3264,
+        "sdf:upscale:shuffle": 25.2273,
+        "sdf:upscale:sharpen": 25.1527,
+        "sdf:composite": 22.5952,
+        "goo:surface": 22.5427,
+        "effects": 22.4616,
+        "goo:layer": 19.4462,
+        "shutter:resolve": 3.3038,
+        "post:fxaa": 3.2178,
+        "post:vhs-input": 3.2367,
+        "post:vhs": 3.3104,
+        "post:blit": 6.6986,
+        "compute:tile-bin": 0.0803,
+        "compute:probe-gather": 0.3211
+      }
+    },
+    "ordinary-m67": {
+      "label": "ordinary-m67",
+      "variant": "m67",
+      "frames": 80,
+      "totalMsPerFrame": {
+        "p50": 41.5,
+        "p95": 45.2,
+        "mean": 41.772
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 9359,
+      "stamps": 166,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 23.0793,
+        "sdf:polys": 1.7007,
+        "sdf:shell-hull": 1.9243,
+        "sdf:march": 27.4604,
+        "sdf:last-blit": 27.5268,
+        "sdf:upscale:L1a": 27.5882,
+        "sdf:upscale:L2a": 26.955,
+        "sdf:upscale:L3a": 26.8083,
+        "sdf:upscale:L4a": 26.5044,
+        "sdf:upscale:shuffle": 26.3676,
+        "sdf:upscale:sharpen": 26.3463,
+        "sdf:composite": 23.7232,
+        "goo:surface": 23.4316,
+        "effects": 23.0957,
+        "goo:layer": 20.5947,
+        "shutter:resolve": 3.2227,
+        "post:fxaa": 3.226,
+        "post:vhs-input": 3.2432,
+        "post:vhs": 3.3055,
+        "post:blit": 6.6732,
+        "compute:tile-bin": 0.0852,
+        "compute:probe-gather": 0.3269
+      }
+    },
+    "ordinary-summary": {
+      "reps": 4,
+      "framesPerVariant": 100,
+      "perRep": [
+        {
+          "sharp": 39.7,
+          "sharp_mean": 40.256,
+          "m44": 39.5,
+          "m44_mean": 39.966,
+          "m67": 39.3,
+          "m67_mean": 40.137
+        },
+        {
+          "sharp": 37.6,
+          "sharp_mean": 38.75,
+          "m44": 39.1,
+          "m44_mean": 39.903,
+          "m67": 39.5,
+          "m67_mean": 39.974
+        },
+        {
+          "sharp": 37.9,
+          "sharp_mean": 38.69,
+          "m44": 39.6,
+          "m44_mean": 40.493,
+          "m67": 39.6,
+          "m67_mean": 40.25
+        },
+        {
+          "sharp": 37.6,
+          "sharp_mean": 38.553,
+          "m44": 39.4,
+          "m44_mean": 40.264,
+          "m67": 39.4,
+          "m67_mean": 40.239
+        }
+      ],
+      "sharpP50Median": 37.9,
+      "m44P50Median": 39.5,
+      "m67P50Median": 39.5,
+      "deltaM44Median": 1.7,
+      "deltaM67Median": 1.8,
+      "deltaM44PerRep": [
+        -0.2,
+        1.5,
+        1.7,
+        1.8
+      ],
+      "deltaM67PerRep": [
+        -0.4,
+        1.9,
+        1.7,
+        1.8
+      ],
+      "meanDeltaM44Median": 1.711,
+      "meanDeltaM67Median": 1.56,
+      "meanDeltaM44PerRep": [
+        -0.29,
+        1.153,
+        1.803,
+        1.711
+      ],
+      "meanDeltaM67PerRep": [
+        -0.119,
+        1.224,
+        1.56,
+        1.686
+      ],
+      "texels": 17160
+    },
+    "heavy-sharp": {
+      "label": "heavy-sharp",
+      "variant": "sharp",
+      "frames": 80,
+      "totalMsPerFrame": {
+        "p50": 21,
+        "p95": 25.9,
+        "mean": 21.678
+      },
+      "buildMs": {
+        "p50": 0.7,
+        "p95": 0.7,
+        "max": 0.7
+      },
+      "texels": 43549,
+      "stamps": 382,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0254,
+        "sdf:polys": 1.6597,
+        "sdf:shell-hull": 2.0701,
+        "sdf:march": 10.2875,
+        "sdf:last-blit": 10.3227,
+        "sdf:upscale:L1a": 10.2506,
+        "sdf:upscale:L2a": 10.6439,
+        "sdf:upscale:L3a": 10.8978,
+        "sdf:upscale:L4a": 11.1591,
+        "sdf:upscale:shuffle": 11.0838,
+        "sdf:upscale:sharpen": 11.0297,
+        "sdf:composite": 10.2482,
+        "goo:surface": 10.1958,
+        "effects": 10.027,
+        "post:fxaa": 10.2146,
+        "post:vhs-input": 9.8451,
+        "post:vhs": 9.7477,
+        "post:blit": 19.2184,
+        "compute:tile-bin": 0.1098,
+        "compute:probe-gather": 0.3514
+      }
+    },
+    "heavy-m44": {
+      "label": "heavy-m44",
+      "variant": "m44",
+      "frames": 80,
+      "totalMsPerFrame": {
+        "p50": 21,
+        "p95": 22.7,
+        "mean": 21.115
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 34640,
+      "stamps": 382,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 9.6633,
+        "sdf:polys": 1.6204,
+        "sdf:shell-hull": 2.0275,
+        "sdf:march": 10.2408,
+        "sdf:last-blit": 10.2777,
+        "sdf:upscale:L1a": 10.2367,
+        "sdf:upscale:L2a": 10.5988,
+        "sdf:upscale:L3a": 10.8143,
+        "sdf:upscale:L4a": 10.992,
+        "sdf:upscale:shuffle": 10.8134,
+        "sdf:upscale:sharpen": 10.725,
+        "sdf:composite": 10.1802,
+        "goo:surface": 10.0844,
+        "effects": 9.9803,
+        "goo:layer": 9.4134,
+        "shutter:resolve": 5.8491,
+        "post:fxaa": 5.9769,
+        "post:vhs-input": 5.3969,
+        "post:vhs": 5.4575,
+        "post:blit": 10.9658,
+        "compute:tile-bin": 0.1319,
+        "compute:probe-gather": 0.3146
+      }
+    },
+    "heavy-m67": {
+      "label": "heavy-m67",
+      "variant": "m67",
+      "frames": 80,
+      "totalMsPerFrame": {
+        "p50": 21.2,
+        "p95": 24.4,
+        "mean": 21.379
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.7
+      },
+      "texels": 43549,
+      "stamps": 382,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 9.5453,
+        "sdf:polys": 1.6261,
+        "sdf:shell-hull": 2.0685,
+        "sdf:march": 10.3309,
+        "sdf:last-blit": 10.3227,
+        "sdf:upscale:L1a": 10.0286,
+        "sdf:upscale:L2a": 10.4063,
+        "sdf:upscale:L3a": 10.5923,
+        "sdf:upscale:L4a": 10.7807,
+        "sdf:upscale:shuffle": 10.7151,
+        "sdf:upscale:sharpen": 10.5128,
+        "sdf:composite": 10.1253,
+        "goo:surface": 9.9746,
+        "effects": 9.8755,
+        "goo:layer": 9.2807,
+        "shutter:resolve": 6.0064,
+        "post:fxaa": 6.2005,
+        "post:vhs-input": 5.7573,
+        "post:vhs": 5.8212,
+        "post:blit": 10.8708,
+        "compute:tile-bin": 0.1016,
+        "compute:probe-gather": 0.3228
+      }
+    },
+    "heavy-summary": {
+      "reps": 4,
+      "framesPerVariant": 100,
+      "perRep": [
+        {
+          "sharp": 21.2,
+          "sharp_mean": 21.908,
+          "m44": 22.5,
+          "m44_mean": 22.39,
+          "m67": 21.5,
+          "m67_mean": 21.447
+        },
+        {
+          "sharp": 22.3,
+          "sharp_mean": 23.016,
+          "m44": 21.9,
+          "m44_mean": 22.023,
+          "m67": 21.9,
+          "m67_mean": 21.783
+        },
+        {
+          "sharp": 22.1,
+          "sharp_mean": 22.228,
+          "m44": 20.8,
+          "m44_mean": 20.911,
+          "m67": 21.2,
+          "m67_mean": 22.928
+        },
+        {
+          "sharp": 61.9,
+          "sharp_mean": 56.306,
+          "m44": 66.7,
+          "m44_mean": 66.66,
+          "m67": 66.5,
+          "m67_mean": 65.934
+        }
+      ],
+      "sharpP50Median": 22.3,
+      "m44P50Median": 22.5,
+      "m67P50Median": 21.9,
+      "deltaM44Median": 1.3,
+      "deltaM67Median": 0.3,
+      "deltaM44PerRep": [
+        1.3,
+        -0.4,
+        -1.3,
+        4.8
+      ],
+      "deltaM67PerRep": [
+        0.3,
+        -0.4,
+        -0.9,
+        4.6
+      ],
+      "meanDeltaM44Median": 0.482,
+      "meanDeltaM67Median": 0.7,
+      "meanDeltaM44PerRep": [
+        0.482,
+        -0.993,
+        -1.317,
+        10.354
+      ],
+      "meanDeltaM67PerRep": [
+        -0.461,
+        -1.233,
+        0.7,
+        9.628
+      ],
+      "texels": 27808
+    },
+    "ordinary-sharp-r0": {
+      "label": "ordinary-sharp-r0",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.7,
+        "p95": 48.3,
+        "mean": 40.256
+      },
+      "buildMs": {
+        "p50": 0.7,
+        "p95": 0.7,
+        "max": 0.7
+      },
+      "texels": 17160,
+      "stamps": 178,
+      "maxStreakPx": 85.5,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0242,
+        "sdf:polys": 1.5794,
+        "sdf:shell-hull": 1.8363,
+        "sdf:march": 26.3238,
+        "sdf:last-blit": 26.451,
+        "sdf:upscale:L1a": 26.3114,
+        "sdf:upscale:L2a": 26.6122,
+        "sdf:upscale:L3a": 26.7649,
+        "sdf:upscale:L4a": 26.97,
+        "sdf:upscale:shuffle": 26.9045,
+        "sdf:upscale:sharpen": 26.4824,
+        "sdf:composite": 25.2025,
+        "goo:surface": 24.9915,
+        "effects": 24.6101,
+        "post:fxaa": 24.7896,
+        "post:vhs-input": 24.7641,
+        "post:vhs": 24.5327,
+        "post:blit": 48.3649,
+        "compute:probe-gather": 0.2215,
+        "compute:tile-bin": 0.0832
+      }
+    },
+    "ordinary-m44-r0": {
+      "label": "ordinary-m44-r0",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.5,
+        "p95": 45.5,
+        "mean": 39.966
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.7
+      },
+      "texels": 17160,
+      "stamps": 178,
+      "maxStreakPx": 85.5,
+      "passMeanMsPerFrame": {
+        "goo:density": 24.0373,
+        "sdf:polys": 1.5814,
+        "sdf:shell-hull": 1.8324,
+        "sdf:march": 25.9529,
+        "sdf:last-blit": 26.0925,
+        "sdf:upscale:L1a": 26.1738,
+        "sdf:upscale:L2a": 26.3278,
+        "sdf:upscale:L3a": 26.3743,
+        "sdf:upscale:L4a": 26.2321,
+        "sdf:upscale:shuffle": 26.1698,
+        "sdf:upscale:sharpen": 26.1344,
+        "sdf:composite": 25.6167,
+        "goo:surface": 25.6429,
+        "effects": 25.5702,
+        "goo:layer": 22.9769,
+        "shutter:resolve": 7.2942,
+        "post:fxaa": 6.7463,
+        "post:vhs-input": 5.7796,
+        "post:vhs": 5.8163,
+        "post:blit": 11.7139,
+        "compute:probe-gather": 0.1979,
+        "compute:tile-bin": 0.0859
+      }
+    },
+    "ordinary-m67-r0": {
+      "label": "ordinary-m67-r0",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.3,
+        "p95": 45.6,
+        "mean": 40.137
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.8
+      },
+      "texels": 19889,
+      "stamps": 178,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 23.4947,
+        "sdf:polys": 1.5525,
+        "sdf:shell-hull": 1.8127,
+        "sdf:march": 26.3383,
+        "sdf:last-blit": 26.4543,
+        "sdf:upscale:L1a": 26.3389,
+        "sdf:upscale:L2a": 26.061,
+        "sdf:upscale:L3a": 26.1725,
+        "sdf:upscale:L4a": 26.316,
+        "sdf:upscale:shuffle": 26.2419,
+        "sdf:upscale:sharpen": 25.8035,
+        "sdf:composite": 24.076,
+        "goo:surface": 24.0786,
+        "effects": 23.9816,
+        "goo:layer": 22.9278,
+        "shutter:resolve": 8.1868,
+        "post:fxaa": 7.306,
+        "post:vhs-input": 6.5503,
+        "post:vhs": 6.5975,
+        "post:blit": 13.2724,
+        "compute:probe-gather": 0.2189,
+        "compute:tile-bin": 0.0891
+      }
+    },
+    "ordinary-sharp-r1": {
+      "label": "ordinary-sharp-r1",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 37.6,
+        "p95": 45.7,
+        "mean": 38.75
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 19889,
+      "stamps": 178,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0203,
+        "sdf:polys": 1.6102,
+        "sdf:shell-hull": 1.8003,
+        "sdf:march": 26.5709,
+        "sdf:last-blit": 26.7013,
+        "sdf:upscale:L1a": 26.7649,
+        "sdf:upscale:L2a": 27.1044,
+        "sdf:upscale:L3a": 27.2564,
+        "sdf:upscale:L4a": 27.4432,
+        "sdf:upscale:shuffle": 27.3816,
+        "sdf:upscale:sharpen": 27.3305,
+        "sdf:composite": 26.006,
+        "goo:surface": 25.8323,
+        "effects": 25.5138,
+        "post:fxaa": 25.447,
+        "post:vhs-input": 25.1475,
+        "post:vhs": 25.1632,
+        "post:blit": 49.8506,
+        "compute:probe-gather": 0.2045,
+        "compute:tile-bin": 0.0826
+      }
+    },
+    "ordinary-m44-r1": {
+      "label": "ordinary-m44-r1",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.1,
+        "p95": 45.6,
+        "mean": 39.903
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 17160,
+      "stamps": 178,
+      "maxStreakPx": 85.5,
+      "passMeanMsPerFrame": {
+        "goo:density": 23.1637,
+        "sdf:polys": 1.603,
+        "sdf:shell-hull": 1.8855,
+        "sdf:march": 25.9405,
+        "sdf:last-blit": 26.0486,
+        "sdf:upscale:L1a": 26.1082,
+        "sdf:upscale:L2a": 25.9496,
+        "sdf:upscale:L3a": 26.0859,
+        "sdf:upscale:L4a": 26.0322,
+        "sdf:upscale:shuffle": 25.9457,
+        "sdf:upscale:sharpen": 25.9162,
+        "sdf:composite": 24.2051,
+        "goo:surface": 23.7214,
+        "effects": 23.6493,
+        "goo:layer": 22.564,
+        "shutter:resolve": 7.4029,
+        "post:fxaa": 7.1487,
+        "post:vhs-input": 6.4691,
+        "post:vhs": 6.1256,
+        "post:blit": 12.1936,
+        "compute:probe-gather": 0.2032,
+        "compute:tile-bin": 0.0813
+      }
+    },
+    "ordinary-m67-r1": {
+      "label": "ordinary-m67-r1",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.5,
+        "p95": 44.6,
+        "mean": 39.974
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.8
+      },
+      "texels": 19889,
+      "stamps": 178,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 20.4263,
+        "sdf:polys": 1.6024,
+        "sdf:shell-hull": 1.7957,
+        "sdf:march": 25.9005,
+        "sdf:last-blit": 26.0401,
+        "sdf:upscale:L1a": 26.1148,
+        "sdf:upscale:L2a": 25.5007,
+        "sdf:upscale:L3a": 25.4581,
+        "sdf:upscale:L4a": 25.483,
+        "sdf:upscale:shuffle": 25.4201,
+        "sdf:upscale:sharpen": 25.3906,
+        "sdf:composite": 22.8721,
+        "goo:surface": 20.5298,
+        "effects": 20.4741,
+        "goo:layer": 20.1143,
+        "shutter:resolve": 7.0137,
+        "post:fxaa": 6.4887,
+        "post:vhs-input": 6.338,
+        "post:vhs": 6.3865,
+        "post:blit": 10.9583,
+        "compute:probe-gather": 0.2032,
+        "compute:tile-bin": 0.0839
+      }
+    },
+    "ordinary-sharp-r2": {
+      "label": "ordinary-sharp-r2",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 37.9,
+        "p95": 44.7,
+        "mean": 38.69
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 19889,
+      "stamps": 178,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0118,
+        "sdf:polys": 1.5598,
+        "sdf:shell-hull": 1.8586,
+        "sdf:march": 26.472,
+        "sdf:last-blit": 26.6286,
+        "sdf:upscale:L1a": 26.6994,
+        "sdf:upscale:L2a": 27.0428,
+        "sdf:upscale:L3a": 27.1922,
+        "sdf:upscale:L4a": 27.377,
+        "sdf:upscale:shuffle": 27.2833,
+        "sdf:upscale:sharpen": 27.1044,
+        "sdf:composite": 25.7773,
+        "goo:surface": 25.5728,
+        "effects": 25.0551,
+        "post:fxaa": 25.2274,
+        "post:vhs-input": 25.1894,
+        "post:vhs": 25.1973,
+        "post:blit": 49.9129,
+        "compute:probe-gather": 0.2143,
+        "compute:tile-bin": 0.0872
+      }
+    },
+    "ordinary-m44-r2": {
+      "label": "ordinary-m44-r2",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.6,
+        "p95": 47.4,
+        "mean": 40.493
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 17160,
+      "stamps": 178,
+      "maxStreakPx": 85.5,
+      "passMeanMsPerFrame": {
+        "goo:density": 25.3847,
+        "sdf:polys": 1.6279,
+        "sdf:shell-hull": 1.8042,
+        "sdf:march": 26.2799,
+        "sdf:last-blit": 26.4746,
+        "sdf:upscale:L1a": 26.5467,
+        "sdf:upscale:L2a": 26.7243,
+        "sdf:upscale:L3a": 26.8049,
+        "sdf:upscale:L4a": 26.989,
+        "sdf:upscale:shuffle": 26.9445,
+        "sdf:upscale:sharpen": 26.9307,
+        "sdf:composite": 26.4634,
+        "goo:surface": 26.4838,
+        "effects": 26.428,
+        "goo:layer": 24.3014,
+        "shutter:resolve": 8.4987,
+        "post:fxaa": 7.8257,
+        "post:vhs-input": 6.3301,
+        "post:vhs": 6.3668,
+        "post:blit": 12.8097,
+        "compute:probe-gather": 0.2064,
+        "compute:tile-bin": 0.0865
+      }
+    },
+    "ordinary-m67-r2": {
+      "label": "ordinary-m67-r2",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.6,
+        "p95": 45.8,
+        "mean": 40.25
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.8
+      },
+      "texels": 19889,
+      "stamps": 178,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 21.545,
+        "sdf:polys": 1.5807,
+        "sdf:shell-hull": 1.8212,
+        "sdf:march": 26.1823,
+        "sdf:last-blit": 26.3265,
+        "sdf:upscale:L1a": 26.3933,
+        "sdf:upscale:L2a": 26.0538,
+        "sdf:upscale:L3a": 26.162,
+        "sdf:upscale:L4a": 26.1535,
+        "sdf:upscale:shuffle": 26.0414,
+        "sdf:upscale:sharpen": 26.0008,
+        "sdf:composite": 24.2313,
+        "goo:surface": 24.0268,
+        "effects": 22.4684,
+        "goo:layer": 20.8116,
+        "shutter:resolve": 7.262,
+        "post:fxaa": 6.5051,
+        "post:vhs-input": 6.3164,
+        "post:vhs": 6.2587,
+        "post:blit": 12.17,
+        "compute:probe-gather": 0.2104,
+        "compute:tile-bin": 0.0885
+      }
+    },
+    "heavy-sharp-r0": {
+      "label": "heavy-sharp-r0",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 21.2,
+        "p95": 25.3,
+        "mean": 21.908
+      },
+      "buildMs": {
+        "p50": 0.4,
+        "p95": 0.4,
+        "max": 0.4
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0184,
+        "sdf:polys": 1.702,
+        "sdf:shell-hull": 2.0893,
+        "sdf:march": 10.1797,
+        "sdf:last-blit": 10.2492,
+        "sdf:upscale:L1a": 10.3134,
+        "sdf:upscale:L2a": 10.706,
+        "sdf:upscale:L3a": 11.0041,
+        "sdf:upscale:L4a": 11.3141,
+        "sdf:upscale:shuffle": 11.2899,
+        "sdf:upscale:sharpen": 11.2807,
+        "sdf:composite": 10.7826,
+        "goo:surface": 10.5795,
+        "effects": 10.4622,
+        "post:fxaa": 10.6686,
+        "post:vhs-input": 10.569,
+        "post:vhs": 10.491,
+        "post:blit": 20.6864,
+        "compute:probe-gather": 0.3578,
+        "compute:tile-bin": 0.137
+      }
+    },
+    "heavy-m44-r0": {
+      "label": "heavy-m44-r0",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 22.5,
+        "p95": 26.1,
+        "mean": 22.39
+      },
+      "buildMs": {
+        "p50": 0.4,
+        "p95": 0.5,
+        "max": 0.5
+      },
+      "texels": 27808,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 11.282,
+        "sdf:polys": 1.8468,
+        "sdf:shell-hull": 2.261,
+        "sdf:march": 10.704,
+        "sdf:last-blit": 10.8272,
+        "sdf:upscale:L1a": 10.9039,
+        "sdf:upscale:L2a": 11.3135,
+        "sdf:upscale:L3a": 11.6018,
+        "sdf:upscale:L4a": 11.9,
+        "sdf:upscale:shuffle": 11.7676,
+        "sdf:upscale:sharpen": 11.7447,
+        "sdf:composite": 11.3345,
+        "goo:surface": 11.3921,
+        "effects": 11.3541,
+        "goo:layer": 10.7708,
+        "shutter:resolve": 6.6532,
+        "post:fxaa": 6.5641,
+        "post:vhs-input": 6.2725,
+        "post:vhs": 6.3472,
+        "post:blit": 12.7513,
+        "compute:probe-gather": 0.3683,
+        "compute:tile-bin": 0.1285
+      }
+    },
+    "heavy-m67-r0": {
+      "label": "heavy-m67-r0",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 21.5,
+        "p95": 24.2,
+        "mean": 21.447
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.5,
+        "max": 0.6
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 10.0336,
+        "sdf:polys": 1.7688,
+        "sdf:shell-hull": 2.0926,
+        "sdf:march": 10.2518,
+        "sdf:last-blit": 10.3285,
+        "sdf:upscale:L1a": 10.2911,
+        "sdf:upscale:L2a": 10.6634,
+        "sdf:upscale:L3a": 10.9688,
+        "sdf:upscale:L4a": 11.2814,
+        "sdf:upscale:shuffle": 11.1647,
+        "sdf:upscale:sharpen": 11.1444,
+        "sdf:composite": 10.6653,
+        "goo:surface": 10.7047,
+        "effects": 10.4536,
+        "goo:layer": 9.8841,
+        "shutter:resolve": 6.7423,
+        "post:fxaa": 6.8203,
+        "post:vhs-input": 6.3786,
+        "post:vhs": 6.4369,
+        "post:blit": 12.6943,
+        "compute:probe-gather": 0.3637,
+        "compute:tile-bin": 0.1173
+      }
+    },
+    "heavy-sharp-r1": {
+      "label": "heavy-sharp-r1",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 22.3,
+        "p95": 27.9,
+        "mean": 23.016
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.5,
+        "max": 0.5
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0223,
+        "sdf:polys": 1.8776,
+        "sdf:shell-hull": 2.242,
+        "sdf:march": 10.9222,
+        "sdf:last-blit": 11.0454,
+        "sdf:upscale:L1a": 11.0186,
+        "sdf:upscale:L2a": 11.4249,
+        "sdf:upscale:L3a": 11.7277,
+        "sdf:upscale:L4a": 12.0455,
+        "sdf:upscale:shuffle": 12.0298,
+        "sdf:upscale:sharpen": 12.0285,
+        "sdf:composite": 11.5356,
+        "goo:surface": 11.6536,
+        "effects": 11.4858,
+        "post:fxaa": 11.516,
+        "post:vhs-input": 11.4858,
+        "post:vhs": 11.5258,
+        "post:blit": 23.0366,
+        "compute:probe-gather": 0.3781,
+        "compute:tile-bin": 0.1285
+      }
+    },
+    "heavy-m44-r1": {
+      "label": "heavy-m44-r1",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 21.9,
+        "p95": 25.5,
+        "mean": 22.023
+      },
+      "buildMs": {
+        "p50": 0.4,
+        "p95": 0.5,
+        "max": 0.5
+      },
+      "texels": 27808,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 9.9444,
+        "sdf:polys": 1.7714,
+        "sdf:shell-hull": 2.1542,
+        "sdf:march": 10.5814,
+        "sdf:last-blit": 10.6856,
+        "sdf:upscale:L1a": 10.7492,
+        "sdf:upscale:L2a": 11.1339,
+        "sdf:upscale:L3a": 11.4131,
+        "sdf:upscale:L4a": 11.7218,
+        "sdf:upscale:shuffle": 11.7159,
+        "sdf:upscale:sharpen": 11.7093,
+        "sdf:composite": 10.8233,
+        "goo:surface": 10.7748,
+        "effects": 10.4163,
+        "goo:layer": 9.8723,
+        "shutter:resolve": 6.6191,
+        "post:fxaa": 6.3832,
+        "post:vhs-input": 6.4068,
+        "post:vhs": 6.4822,
+        "post:blit": 12.6327,
+        "compute:probe-gather": 0.3795,
+        "compute:tile-bin": 0.1134
+      }
+    },
+    "heavy-m67-r1": {
+      "label": "heavy-m67-r1",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 21.9,
+        "p95": 24.7,
+        "mean": 21.783
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 10.1587,
+        "sdf:polys": 1.7544,
+        "sdf:shell-hull": 2.1922,
+        "sdf:march": 10.5225,
+        "sdf:last-blit": 10.4923,
+        "sdf:upscale:L1a": 10.4504,
+        "sdf:upscale:L2a": 10.8488,
+        "sdf:upscale:L3a": 11.1372,
+        "sdf:upscale:L4a": 11.421,
+        "sdf:upscale:shuffle": 11.4118,
+        "sdf:upscale:sharpen": 11.4,
+        "sdf:composite": 10.9013,
+        "goo:surface": 10.6358,
+        "effects": 10.2695,
+        "goo:layer": 10.0617,
+        "shutter:resolve": 6.3917,
+        "post:fxaa": 6.3472,
+        "post:vhs-input": 6.34,
+        "post:vhs": 6.4061,
+        "post:blit": 12.2297,
+        "compute:probe-gather": 0.3578,
+        "compute:tile-bin": 0.1239
+      }
+    },
+    "heavy-sharp-r2": {
+      "label": "heavy-sharp-r2",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 22.1,
+        "p95": 25.9,
+        "mean": 22.228
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.5,
+        "max": 0.5
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.019,
+        "sdf:polys": 1.8199,
+        "sdf:shell-hull": 2.2341,
+        "sdf:march": 10.5166,
+        "sdf:last-blit": 10.5762,
+        "sdf:upscale:L1a": 10.6496,
+        "sdf:upscale:L2a": 11.0618,
+        "sdf:upscale:L3a": 11.3554,
+        "sdf:upscale:L4a": 11.689,
+        "sdf:upscale:shuffle": 11.6956,
+        "sdf:upscale:sharpen": 11.6916,
+        "sdf:composite": 11.189,
+        "goo:surface": 11.1824,
+        "effects": 11.0422,
+        "post:fxaa": 11.2493,
+        "post:vhs-input": 11.2257,
+        "post:vhs": 11.1562,
+        "post:blit": 22.1846,
+        "compute:probe-gather": 0.3434,
+        "compute:tile-bin": 0.0963
+      }
+    },
+    "heavy-m44-r2": {
+      "label": "heavy-m44-r2",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 20.8,
+        "p95": 23.7,
+        "mean": 20.911
+      },
+      "buildMs": {
+        "p50": 0.4,
+        "p95": 0.5,
+        "max": 0.5
+      },
+      "texels": 27808,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 9.3985,
+        "sdf:polys": 1.643,
+        "sdf:shell-hull": 2.0487,
+        "sdf:march": 9.9464,
+        "sdf:last-blit": 9.8835,
+        "sdf:upscale:L1a": 9.9549,
+        "sdf:upscale:L2a": 10.3455,
+        "sdf:upscale:L3a": 10.6044,
+        "sdf:upscale:L4a": 10.8777,
+        "sdf:upscale:shuffle": 10.7813,
+        "sdf:upscale:sharpen": 10.6404,
+        "sdf:composite": 10.1437,
+        "goo:surface": 10.0991,
+        "effects": 9.4857,
+        "goo:layer": 9.3376,
+        "shutter:resolve": 5.5135,
+        "post:fxaa": 5.5765,
+        "post:vhs-input": 5.3438,
+        "post:vhs": 5.4087,
+        "post:blit": 10.2878,
+        "compute:probe-gather": 0.3316,
+        "compute:tile-bin": 0.0996
+      }
+    },
+    "heavy-m67-r2": {
+      "label": "heavy-m67-r2",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 21.2,
+        "p95": 34.6,
+        "mean": 22.928
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 11.052,
+        "sdf:polys": 1.9379,
+        "sdf:shell-hull": 2.3586,
+        "sdf:march": 11.2191,
+        "sdf:last-blit": 11.1378,
+        "sdf:upscale:L1a": 11.1129,
+        "sdf:upscale:L2a": 11.5219,
+        "sdf:upscale:L3a": 11.7185,
+        "sdf:upscale:L4a": 12.0436,
+        "sdf:upscale:shuffle": 12.0344,
+        "sdf:upscale:sharpen": 12.0259,
+        "sdf:composite": 11.0848,
+        "goo:surface": 11.1444,
+        "effects": 11.0939,
+        "goo:layer": 10.9753,
+        "shutter:resolve": 6.2508,
+        "post:fxaa": 6.2541,
+        "post:vhs-input": 6.2849,
+        "post:vhs": 6.3583,
+        "post:blit": 12.8136,
+        "compute:probe-gather": 0.3781,
+        "compute:tile-bin": 0.173
+      }
+    },
+    "ordinary-sharp-r3": {
+      "label": "ordinary-sharp-r3",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 37.6,
+        "p95": 46.3,
+        "mean": 38.553
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 19889,
+      "stamps": 178,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.0151,
+        "sdf:polys": 1.5617,
+        "sdf:shell-hull": 1.8389,
+        "sdf:march": 26.3704,
+        "sdf:last-blit": 26.2413,
+        "sdf:upscale:L1a": 26.2983,
+        "sdf:upscale:L2a": 26.6201,
+        "sdf:upscale:L3a": 26.8095,
+        "sdf:upscale:L4a": 26.8488,
+        "sdf:upscale:shuffle": 26.78,
+        "sdf:upscale:sharpen": 26.7656,
+        "sdf:composite": 25.5073,
+        "goo:surface": 25.5322,
+        "effects": 25.4712,
+        "post:fxaa": 25.3506,
+        "post:vhs-input": 25.0734,
+        "post:vhs": 24.8355,
+        "post:blit": 49.2457,
+        "compute:probe-gather": 0.2091,
+        "compute:tile-bin": 0.0937
+      }
+    },
+    "ordinary-m44-r3": {
+      "label": "ordinary-m44-r3",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.4,
+        "p95": 46.3,
+        "mean": 40.264
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 17160,
+      "stamps": 178,
+      "maxStreakPx": 85.5,
+      "passMeanMsPerFrame": {
+        "goo:density": 22.4651,
+        "sdf:polys": 1.5716,
+        "sdf:shell-hull": 1.8055,
+        "sdf:march": 26.3376,
+        "sdf:last-blit": 26.4955,
+        "sdf:upscale:L1a": 26.5755,
+        "sdf:upscale:L2a": 26.1902,
+        "sdf:upscale:L3a": 26.2655,
+        "sdf:upscale:L4a": 26.0125,
+        "sdf:upscale:shuffle": 25.8743,
+        "sdf:upscale:sharpen": 25.8153,
+        "sdf:composite": 24.3722,
+        "goo:surface": 24.3604,
+        "effects": 23.8394,
+        "goo:layer": 21.4644,
+        "shutter:resolve": 7.1624,
+        "post:fxaa": 6.5497,
+        "post:vhs-input": 6.5398,
+        "post:vhs": 6.5896,
+        "post:blit": 12.9565,
+        "compute:probe-gather": 0.2189,
+        "compute:tile-bin": 0.0911
+      }
+    },
+    "ordinary-m67-r3": {
+      "label": "ordinary-m67-r3",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 39.4,
+        "p95": 48.9,
+        "mean": 40.239
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.8
+      },
+      "texels": 19889,
+      "stamps": 178,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 22.9455,
+        "sdf:polys": 1.5807,
+        "sdf:shell-hull": 1.8422,
+        "sdf:march": 25.871,
+        "sdf:last-blit": 25.8186,
+        "sdf:upscale:L1a": 25.7242,
+        "sdf:upscale:L2a": 25.4103,
+        "sdf:upscale:L3a": 25.5302,
+        "sdf:upscale:L4a": 25.4417,
+        "sdf:upscale:shuffle": 25.3441,
+        "sdf:upscale:sharpen": 25.2976,
+        "sdf:composite": 23.4036,
+        "goo:surface": 23.3747,
+        "effects": 23.2961,
+        "goo:layer": 22.4775,
+        "shutter:resolve": 6.3675,
+        "post:fxaa": 5.4591,
+        "post:vhs-input": 5.4585,
+        "post:vhs": 5.5142,
+        "post:blit": 11.0644,
+        "compute:probe-gather": 0.2392,
+        "compute:tile-bin": 0.0885
+      }
+    },
+    "heavy-sharp-r3": {
+      "label": "heavy-sharp-r3",
+      "variant": "sharp",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 61.9,
+        "p95": 69.8,
+        "mean": 56.306
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.6,
+        "max": 0.6
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 0.173,
+        "sdf:polys": 5.5004,
+        "sdf:shell-hull": 6.4225,
+        "sdf:march": 30.815,
+        "sdf:last-blit": 32.458,
+        "sdf:upscale:L1a": 32.6376,
+        "sdf:upscale:L2a": 33.3401,
+        "sdf:upscale:L3a": 34.2144,
+        "sdf:upscale:L4a": 35.183,
+        "sdf:upscale:shuffle": 35.2315,
+        "sdf:upscale:sharpen": 35.2793,
+        "sdf:composite": 33.9935,
+        "goo:surface": 34.2871,
+        "effects": 33.6907,
+        "post:fxaa": 34.1069,
+        "post:vhs-input": 33.9712,
+        "post:vhs": 32.5406,
+        "post:blit": 64.6893,
+        "compute:probe-gather": 1.2078,
+        "compute:tile-bin": 0.5865
+      }
+    },
+    "heavy-m44-r3": {
+      "label": "heavy-m44-r3",
+      "variant": "m44",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 66.7,
+        "p95": 69.9,
+        "mean": 66.66
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.8
+      },
+      "texels": 27808,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 35.4963,
+        "sdf:polys": 7.5622,
+        "sdf:shell-hull": 8.5878,
+        "sdf:march": 36.5789,
+        "sdf:last-blit": 38.3989,
+        "sdf:upscale:L1a": 38.0351,
+        "sdf:upscale:L2a": 38.2219,
+        "sdf:upscale:L3a": 39.1139,
+        "sdf:upscale:L4a": 40.3158,
+        "sdf:upscale:shuffle": 40.4357,
+        "sdf:upscale:sharpen": 40.4724,
+        "sdf:composite": 36.7605,
+        "goo:surface": 36.0081,
+        "effects": 35.9524,
+        "goo:layer": 35.1548,
+        "shutter:resolve": 28.0907,
+        "post:fxaa": 27.533,
+        "post:vhs-input": 26.4805,
+        "post:vhs": 26.0755,
+        "post:blit": 49.8021,
+        "compute:probe-gather": 1.3133,
+        "compute:tile-bin": 0.5492
+      }
+    },
+    "heavy-m67-r3": {
+      "label": "heavy-m67-r3",
+      "variant": "m67",
+      "frames": 100,
+      "totalMsPerFrame": {
+        "p50": 66.5,
+        "p95": 70.2,
+        "mean": 65.934
+      },
+      "buildMs": {
+        "p50": 0.7,
+        "p95": 0.9,
+        "max": 0.9
+      },
+      "texels": 34964,
+      "stamps": 360,
+      "maxStreakPx": 120,
+      "passMeanMsPerFrame": {
+        "goo:density": 37.1484,
+        "sdf:polys": 7.0536,
+        "sdf:shell-hull": 8.5715,
+        "sdf:march": 36.2598,
+        "sdf:last-blit": 38.524,
+        "sdf:upscale:L1a": 38.5096,
+        "sdf:upscale:L2a": 39.1656,
+        "sdf:upscale:L3a": 40.0825,
+        "sdf:upscale:L4a": 41.1933,
+        "sdf:upscale:shuffle": 41.1795,
+        "sdf:upscale:sharpen": 41.1566,
+        "sdf:composite": 38.159,
+        "goo:surface": 38.2311,
+        "effects": 37.5305,
+        "goo:layer": 36.8889,
+        "shutter:resolve": 27.9773,
+        "post:fxaa": 26.3337,
+        "post:vhs-input": 25.5531,
+        "post:vhs": 25.3382,
+        "post:blit": 50.0079,
+        "compute:probe-gather": 1.3022,
+        "compute:tile-bin": 0.5256
+      }
+    }
+  },
+  "clips": {
+    "wound-on-44": {
+      "frames": 101,
+      "fps": 28,
+      "sustainMs": 3600,
+      "files": [
+        "clips/wound-on-44.mp4",
+        "clips/wound-on-44.gif"
+      ]
+    },
+    "wound-off": {
+      "frames": 101,
+      "fps": 28,
+      "sustainMs": 3600,
+      "files": [
+        "clips/wound-off.mp4",
+        "clips/wound-off.gif"
+      ]
+    },
+    "dynamite-on-44": {
+      "frames": 233,
+      "fps": 27,
+      "sustainMs": 8500,
+      "files": [
+        "clips/dynamite-on-44.mp4",
+        "clips/dynamite-on-44.gif"
+      ]
+    },
+    "camera-turn-on-44": {
+      "frames": 89,
+      "fps": 28,
+      "sustainMs": 3200,
+      "files": [
+        "clips/camera-turn-on-44.mp4",
+        "clips/camera-turn-on-44.gif"
+      ]
+    }
+  },
+  "consoleErrors": [],
+  "previousRun": "2026-09-17T06:52:10.350Z"
+}

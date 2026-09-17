@@ -237,4 +237,15 @@ describe('shutter game — integration tripwires', () => {
     const syncIdx = gameSrc.indexOf('gooLayer?.sync(bloodSim, camera)', poseIdx);
     expect(syncIdx).toBeGreaterThan(poseIdx);
   });
+
+  it('prewarms the shutter targets against the post-aa capture target at boot', () => {
+    // Without this the first live blurred frame pays the allocation + first-use
+    // compile (measured ~0.26 s). The capture target must be the REAL one the
+    // resolve will sample, so identity is stable across refit.
+    expect(postSrc).toContain('captureTarget: THREE.RenderTarget');
+    expect(postSrc).toContain('get captureTarget() { return sceneTarget; }');
+    expect(layerSrc).toContain('prewarm(capture: THREE.RenderTarget): boolean');
+    expect(layerSrc).toContain('ensureTargets(capture, diag.densityWidth, diag.densityHeight)');
+    expect(gameSrc).toContain('shutterGame.prewarm(postAa.captureTarget)');
+  });
 });

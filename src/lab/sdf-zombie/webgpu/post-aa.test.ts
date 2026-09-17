@@ -296,6 +296,16 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(sink.target).toBe('unset');
   });
 
+  it('exposes the real capture target with sampleable depth (prewarm seam)', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    // The shutter layer binds this texture + depth at prewarm; it must be the
+    // same target the chain draws into, not a copy.
+    expect(post.captureTarget).toBeInstanceOf(THREE.RenderTarget);
+    expect(post.captureTarget.depthTexture).not.toBeNull();
+    expect(post.captureTarget.width).toBeGreaterThan(0);
+  });
+
   it('an active effect redirects the sinks and runs the passes', () => {
     const { renderer, calls } = stubRenderer();
     const post = createPostAa(renderer);
