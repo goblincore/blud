@@ -30,12 +30,54 @@ census, torso-slug reaction. The decomposition added only new files; `git diff
 zero**. A 16th failure is a regression. Do not "fix" these as part of the
 decomposition — they predate it and belong to separate work.
 
-## Pixel and frame gates
+## Pixel gate — RUN, and the refactor is pixel-identical
 
-**NOT YET RUN.** `node scripts/march-hash.mjs` (expected `room1` =
-`0b84c119e04fc8b2f7a3fe2f69b85737448ec86c`) and `scripts/sdf-demo-hash.sh ab`
-must be captured before task 8 applies the codemod to `game-main.ts`. No GPU
-pass is claimed until observed.
+`node scripts/march-hash.mjs`, inside `scripts/lab-servers.sh`.
+
+| When | `room1` |
+| --- | --- |
+| Before apply, run 1 (ports 5323/9323) | `8f2b74e71ff18dd04a99c05fe19392b96dd80c9d` |
+| Before apply, run 2 (ports 5324/9324, fresh Chrome) | `8f2b74e71ff18dd04a99c05fe19392b96dd80c9d` |
+| **After apply** (ports 5325/9325) | **`8f2b74e71ff18dd04a99c05fe19392b96dd80c9d`** |
+
+**Before == after, byte for byte.** That is the proof the migration is
+behaviour-preserving.
+
+### The pinned canonical is STALE — pre-existing, not ours
+
+The script exits FAIL because it compares against `DEFAULT_HASH =
+0b84c119e04fc8b2f7a3fe2f69b85737448ec86c`, which no longer matches HEAD. This
+drift predates this work: our tree adds only new files (`git diff
+--diff-filter=M` reports one modified file, a markdown plan), and the
+pre-apply runs already produced `8f2b74e7…`.
+
+Cause: the canonical was pinned **2026-09-15** in `2b396068` (crowd march with
+boxes dispatch becomes default). Since then at least 11 commits have touched
+`march.wgsl.ts` / `sdf-layer.ts` / `post-aa.ts` — `acb2329c` upscale empty-tile
+skipping, the shutter-blur integration, `30e66c84` blast refraction, the rupture
+and slough work.
+
+**Deliberately NOT re-pinned here.** Re-pinning is a change to a gate other
+work depends on, it needs someone to confirm which commit legitimately moved the
+value, and doing it inside a refactor is indistinguishable from loosening a gate
+to make it pass. It is filed as separate work. The refactor does not need it:
+before-vs-after is the correct comparison for a behaviour-preserving change, and
+that comparison passes exactly.
+
+## Frame gate — could not produce a comparison (pre-existing)
+
+`scripts/sdf-demo-hash.sh ab` fails during recording, before any hash is
+compared:
+
+```
+FAIL: run A: the recording sampled BOTH field parities
+  (1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0).
+```
+
+**Verified identical at base `8f70d26f`** — same message, same parity sequence.
+Pre-existing and unrelated to this work. The gate yields no evidence either way
+here; the pixel gate above carries the proof. Fixing the recorder's parity
+sampling is separate work.
 
 ## Codemod dry run (all 395 bindings)
 
