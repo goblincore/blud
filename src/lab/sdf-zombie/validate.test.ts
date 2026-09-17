@@ -5,7 +5,7 @@ import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
 import type { LimbId, Primitive, Vec3 } from './types';
-import { buildBody } from './build-body';
+import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { parseBlob } from './blob-parse';
 import { compileBlob, compileFace } from './blob-compile';
 import { add } from './vec';
@@ -338,7 +338,8 @@ body
   const bottomLine = 14;
 
   const doc = parseBlob(SRC);
-  const body = buildBody(compileBlob(doc, compileFace(doc)));
+  // This sparse nearest-primitive fixture tests the authored full-strength field.
+  const body = buildBody(compileBlob(doc, compileFace(doc)), { ...DEFAULT_BUILD_OPTS, roundBlendScale: 1 });
 
   const top = body.prims.findIndex(p => p.src === topLine);
   const bottom = body.prims.findIndex(p => p.src === bottomLine);

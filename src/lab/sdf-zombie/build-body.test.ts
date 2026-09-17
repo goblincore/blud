@@ -97,7 +97,8 @@ body
   const torso2Line = 13;
 
   const doc = parseBlob(SRC);
-  const body = buildBody(compileBlob(doc, compileFace(doc)));
+  // This sparse provenance fixture was authored for full-strength joins.
+  const body = buildBody(compileBlob(doc, compileFace(doc)), { ...DEFAULT_BUILD_OPTS, roundBlendScale: 1 });
 
   it('builds clean', () => {
     expect(body.errors).toEqual([]);

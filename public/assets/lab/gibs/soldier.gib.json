@@ -2,7 +2,7 @@
   "kind": "blud-gib-assets",
   "schemaVersion": 3,
   "archetype": "soldier",
-  "fingerprint": "ef6d8613c4181483",
+  "fingerprint": "47dc59e2634572b9",
   "recipe": {
     "schemaVersion": 3,
     "generator": "scripts/build-gib-assets.ts",
@@ -10,7 +10,8 @@
     "blobPath": "src/lab/sdf-zombie/characters/soldier.blob",
     "buildOpts": {
       "silhouetteNoiseAmp": 0.012,
-      "stepMultiplier": 0.6
+      "stepMultiplier": 0.6,
+      "roundBlendScale": 0.5
     },
     "face": {
       "headRadius": 0.09,
@@ -109,9 +110,9 @@
   },
   "totals": {
     "pieces": 19,
-    "verts": 42918,
-    "tris": 85820,
-    "binBytes": 4463376
+    "verts": 41684,
+    "tris": 83352,
+    "binBytes": 4335040
   },
   "pieces": [
     {
@@ -135,8 +136,8 @@
         1,
         0
       ],
-      "verts": 1988,
-      "tris": 3972,
+      "verts": 1966,
+      "tris": 3928,
       "bounds": {
         "min": [
           -0.08777279406785965,
@@ -145,96 +146,96 @@
         ],
         "max": [
           0.08777279406785965,
-          0.13802646100521088,
+          0.13394664227962494,
           0.1080029085278511
         ],
         "center": [
           0,
-          -0.06117912381887436,
+          -0.06321903318166733,
           -0.007322628051042557
         ],
-        "sphereRadius": 0.2063488120007104
+        "sphereRadius": 0.20398868503161202
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 5964,
+          "count": 5898,
           "itemSize": 3,
           "byteOffset": 0,
-          "byteLength": 23856
+          "byteLength": 23592
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 5964,
+          "count": 5898,
           "itemSize": 3,
-          "byteOffset": 23856,
-          "byteLength": 23856
+          "byteOffset": 23592,
+          "byteLength": 23592
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 11916,
+          "count": 11784,
           "itemSize": 3,
-          "byteOffset": 47712,
-          "byteLength": 23832
+          "byteOffset": 47184,
+          "byteLength": 23568
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 7952,
+          "count": 7864,
           "itemSize": 4,
-          "byteOffset": 71544,
-          "byteLength": 31808
+          "byteOffset": 70752,
+          "byteLength": 31456
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 7952,
+          "count": 7864,
           "itemSize": 4,
-          "byteOffset": 103352,
-          "byteLength": 31808
+          "byteOffset": 102208,
+          "byteLength": 31456
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 1988,
+          "count": 1966,
           "itemSize": 1,
-          "byteOffset": 135160,
-          "byteLength": 7952
+          "byteOffset": 133664,
+          "byteLength": 7864
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 7952,
+          "count": 7864,
           "itemSize": 4,
-          "byteOffset": 143112,
-          "byteLength": 31808
+          "byteOffset": 141528,
+          "byteLength": 31456
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 1988,
+          "count": 1966,
           "itemSize": 1,
-          "byteOffset": 174920,
-          "byteLength": 7952
+          "byteOffset": 172984,
+          "byteLength": 7864
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 7952,
+          "count": 7864,
           "itemSize": 1,
-          "byteOffset": 182872,
-          "byteLength": 15904
+          "byteOffset": 180848,
+          "byteLength": 15728
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 7952,
+          "count": 7864,
           "itemSize": 1,
-          "byteOffset": 198776,
-          "byteLength": 7952
+          "byteOffset": 196576,
+          "byteLength": 7864
         }
       ],
       "bind": {
@@ -263,7 +264,7 @@
               1,
               1.1
             ],
-            "blendK": 0.0048
+            "blendK": 0.0024
           },
           {
             "source": "flesh",
@@ -314,7 +315,7 @@
               0.42,
               0.7
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           },
           {
             "source": "flesh",
@@ -339,7 +340,7 @@
               1.15,
               1.05
             ],
-            "blendK": 0.006
+            "blendK": 0.003
           },
           {
             "source": "flesh",
@@ -364,7 +365,7 @@
               0.9,
               1.008
             ],
-            "blendK": 0.006
+            "blendK": 0.003
           },
           {
             "source": "flesh",
@@ -389,7 +390,7 @@
               0.42,
               0.8
             ],
-            "blendK": 0.0078000000000000005
+            "blendK": 0.0039000000000000003
           },
           {
             "source": "flesh",
@@ -414,7 +415,7 @@
               0.85,
               1.45
             ],
-            "blendK": 0.0072
+            "blendK": 0.0036
           }
         ]
       },
@@ -440,10 +441,10 @@
       },
       "cuts": [],
       "approximation": {
-        "vertexFieldErrorMax": 0.002149869193930383,
-        "vertexFieldErrorMean": 0.0002833658173545951,
-        "deformedFieldErrorMax": 0.004128904892681839,
-        "deformedFieldErrorMean": 0.0003529005884369088,
+        "vertexFieldErrorMax": 0.0028858592513527287,
+        "vertexFieldErrorMean": 0.00032481009715172766,
+        "deformedFieldErrorMax": 0.004274533143073221,
+        "deformedFieldErrorMean": 0.00036513916554382095,
         "seams": []
       },
       "srcPrims": [
@@ -472,18 +473,18 @@
         1.425281892111872,
         -0.00539802931105179
       ],
-      "radius": 0.2901,
+      "radius": 0.28049999999999986,
       "longAxis": [
         0,
         0.9998476951563912,
         -0.017452406437283522
       ],
-      "verts": 4030,
-      "tris": 8056,
+      "verts": 3966,
+      "tris": 7928,
       "bounds": {
         "min": [
           -0.17365384101867676,
-          -0.12039685994386673,
+          -0.11070872098207474,
           -0.1472282111644745
         ],
         "max": [
@@ -493,91 +494,91 @@
         ],
         "center": [
           0,
-          0.06482410058379173,
+          0.06966817006468773,
           -0.0013349652290344238
         ],
-        "sphereRadius": 0.23733428470225132
+        "sphereRadius": 0.23596824674152378
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 12090,
+          "count": 11898,
           "itemSize": 3,
-          "byteOffset": 206728,
-          "byteLength": 48360
+          "byteOffset": 204440,
+          "byteLength": 47592
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 12090,
+          "count": 11898,
           "itemSize": 3,
-          "byteOffset": 255088,
-          "byteLength": 48360
+          "byteOffset": 252032,
+          "byteLength": 47592
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 24168,
+          "count": 23784,
           "itemSize": 3,
-          "byteOffset": 303448,
-          "byteLength": 48336
+          "byteOffset": 299624,
+          "byteLength": 47568
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 16120,
+          "count": 15864,
           "itemSize": 4,
-          "byteOffset": 351784,
-          "byteLength": 64480
+          "byteOffset": 347192,
+          "byteLength": 63456
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 16120,
+          "count": 15864,
           "itemSize": 4,
-          "byteOffset": 416264,
-          "byteLength": 64480
+          "byteOffset": 410648,
+          "byteLength": 63456
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 4030,
+          "count": 3966,
           "itemSize": 1,
-          "byteOffset": 480744,
-          "byteLength": 16120
+          "byteOffset": 474104,
+          "byteLength": 15864
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 16120,
+          "count": 15864,
           "itemSize": 4,
-          "byteOffset": 496864,
-          "byteLength": 64480
+          "byteOffset": 489968,
+          "byteLength": 63456
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 4030,
+          "count": 3966,
           "itemSize": 1,
-          "byteOffset": 561344,
-          "byteLength": 16120
+          "byteOffset": 553424,
+          "byteLength": 15864
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 16120,
+          "count": 15864,
           "itemSize": 1,
-          "byteOffset": 577464,
-          "byteLength": 32240
+          "byteOffset": 569288,
+          "byteLength": 31728
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 16120,
+          "count": 15864,
           "itemSize": 1,
-          "byteOffset": 609704,
-          "byteLength": 16120
+          "byteOffset": 601016,
+          "byteLength": 15864
         }
       ],
       "bind": {
@@ -592,8 +593,8 @@
             "cluster": 1,
             "a": [
               0,
-              1.3091995747042149,
-              -0.0033718049236831716
+              1.3187981125777164,
+              -0.0035393480254810963
             ],
             "b": [
               0,
@@ -607,7 +608,7 @@
               1,
               0.84
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           }
         ]
       },
@@ -624,20 +625,20 @@
             -0.9998476951563913,
             0.017452406437283487
           ],
-          "overhang": 0.0192
+          "overhang": 0.0096
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.002465781647771525,
-        "vertexFieldErrorMean": 0.00017579791063303282,
-        "deformedFieldErrorMax": 0.024423525615509423,
-        "deformedFieldErrorMean": 0.002207949592428621,
+        "vertexFieldErrorMax": 0.0024643579015169456,
+        "vertexFieldErrorMean": 0.00017492562507375646,
+        "deformedFieldErrorMax": 0.023312809509302923,
+        "deformedFieldErrorMean": 0.0022693083015748947,
         "seams": [
           {
             "withPart": "torso.abdomen",
-            "gapMin": 0.0012033405409276213,
-            "gapMean": 0.020869657812617036,
-            "samples": 1230
+            "gapMin": 0.0008249956157824139,
+            "gapMean": 0.020057308173996476,
+            "samples": 1162
           }
         ]
       },
@@ -661,112 +662,112 @@
         1.250408530229019,
         -0.002345603425170904
       ],
-      "radius": 0.3180006789857982,
+      "radius": 0.3060002510513108,
       "longAxis": [
         0,
         0.9998476951563912,
         -0.0174524064372835
       ],
-      "verts": 3168,
-      "tris": 6332,
+      "verts": 2968,
+      "tris": 5932,
       "bounds": {
         "min": [
-          -0.16127580404281616,
-          -0.1595209836959839,
-          -0.13847045600414276
+          -0.16115467250347137,
+          -0.14752674102783203,
+          -0.13825544714927673
         ],
         "max": [
-          0.16127580404281616,
-          0.10179507732391357,
-          0.13568896055221558
+          0.16115467250347137,
+          0.09215211868286133,
+          0.13579492270946503
         ],
         "center": [
           0,
-          -0.028862953186035156,
-          -0.0013907477259635925
+          -0.02768731117248535,
+          -0.0012302622199058533
         ],
-        "sphereRadius": 0.20260948866737657
+        "sphereRadius": 0.1954894113307006
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 9504,
+          "count": 8904,
           "itemSize": 3,
-          "byteOffset": 625824,
-          "byteLength": 38016
+          "byteOffset": 616880,
+          "byteLength": 35616
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 9504,
+          "count": 8904,
           "itemSize": 3,
-          "byteOffset": 663840,
-          "byteLength": 38016
+          "byteOffset": 652496,
+          "byteLength": 35616
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 18996,
+          "count": 17796,
           "itemSize": 3,
-          "byteOffset": 701856,
-          "byteLength": 37992
+          "byteOffset": 688112,
+          "byteLength": 35592
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 12672,
+          "count": 11872,
           "itemSize": 4,
-          "byteOffset": 739848,
-          "byteLength": 50688
+          "byteOffset": 723704,
+          "byteLength": 47488
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 12672,
+          "count": 11872,
           "itemSize": 4,
-          "byteOffset": 790536,
-          "byteLength": 50688
+          "byteOffset": 771192,
+          "byteLength": 47488
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 3168,
+          "count": 2968,
           "itemSize": 1,
-          "byteOffset": 841224,
-          "byteLength": 12672
+          "byteOffset": 818680,
+          "byteLength": 11872
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 12672,
+          "count": 11872,
           "itemSize": 4,
-          "byteOffset": 853896,
-          "byteLength": 50688
+          "byteOffset": 830552,
+          "byteLength": 47488
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 3168,
+          "count": 2968,
           "itemSize": 1,
-          "byteOffset": 904584,
-          "byteLength": 12672
+          "byteOffset": 878040,
+          "byteLength": 11872
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 12672,
+          "count": 11872,
           "itemSize": 1,
-          "byteOffset": 917256,
-          "byteLength": 25344
+          "byteOffset": 889912,
+          "byteLength": 23744
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 12672,
+          "count": 11872,
           "itemSize": 1,
-          "byteOffset": 942600,
-          "byteLength": 12672
+          "byteOffset": 913656,
+          "byteLength": 11872
         }
       ],
       "bind": {
@@ -781,13 +782,13 @@
             "cluster": 1,
             "a": [
               0,
-              1.0944316109022367,
-              0.0003769838289814373
+              1.1064302111134243,
+              0.00016754748324743327
             ],
             "b": [
               0,
-              1.3475937261982205,
-              -0.004041977330874863
+              1.337995188324719,
+              -0.0038744342290769384
             ],
             "radius": 0.1548,
             "radiusB": 0.162,
@@ -796,7 +797,7 @@
               1,
               0.85
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           }
         ]
       },
@@ -813,7 +814,7 @@
             0.9998476951563913,
             -0.017452406437283487
           ],
-          "overhang": 0.0192
+          "overhang": 0.0096
         },
         {
           "withPart": "torso.pelvis",
@@ -827,26 +828,26 @@
             -0.9999594268180385,
             0.009008036286544162
           ],
-          "overhang": 0.024
+          "overhang": 0.012
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0020634294108149687,
-        "vertexFieldErrorMean": 0.00020747965325741883,
-        "deformedFieldErrorMax": 0.023822256692299707,
-        "deformedFieldErrorMean": 0.0038169052737037075,
+        "vertexFieldErrorMax": 0.002266416031347421,
+        "vertexFieldErrorMean": 0.00021754425508445293,
+        "deformedFieldErrorMax": 0.02359018058362689,
+        "deformedFieldErrorMean": 0.003975302626701878,
         "seams": [
           {
             "withPart": "torso.chest",
-            "gapMin": 0.0012033405409276213,
-            "gapMean": 0.020670447891029373,
-            "samples": 1200
+            "gapMin": 0.0008249956157824139,
+            "gapMean": 0.019695258578882612,
+            "samples": 1098
           },
           {
             "withPart": "torso.pelvis",
-            "gapMin": 0.0015041744270808655,
-            "gapMean": 0.0266907555169159,
-            "samples": 1198
+            "gapMin": 0.0014242883155701838,
+            "gapMean": 0.022551187028295935,
+            "samples": 1096
           }
         ]
       },
@@ -870,112 +871,112 @@
         1.044029,
         0
       ],
-      "radius": 0.2773171700239222,
+      "radius": 0.2653171700239222,
       "longAxis": [
         0,
         -0.9999594268180386,
-        0.009008036286544162
+        0.00900803628654416
       ],
-      "verts": 3068,
-      "tris": 6132,
+      "verts": 2964,
+      "tris": 5924,
       "bounds": {
         "min": [
-          -0.17863969504833221,
+          -0.1786346286535263,
           -0.1529165506362915,
-          -0.1436740905046463
+          -0.1435622125864029
         ],
         "max": [
-          0.17863969504833221,
-          0.10412931442260742,
+          0.1786346286535263,
+          0.09212994575500488,
           0.14292402565479279
         ],
         "center": [
           0,
-          -0.02439361810684204,
-          -0.0003750324249267578
+          -0.03039330244064331,
+          -0.0003190934658050537
         ],
-        "sphereRadius": 0.21314847512828192
+        "sphereRadius": 0.20972853051897736
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 9204,
+          "count": 8892,
           "itemSize": 3,
-          "byteOffset": 955272,
-          "byteLength": 36816
+          "byteOffset": 925528,
+          "byteLength": 35568
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 9204,
+          "count": 8892,
           "itemSize": 3,
-          "byteOffset": 992088,
-          "byteLength": 36816
+          "byteOffset": 961096,
+          "byteLength": 35568
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 18396,
+          "count": 17772,
           "itemSize": 3,
-          "byteOffset": 1028904,
-          "byteLength": 36792
+          "byteOffset": 996664,
+          "byteLength": 35544
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 12272,
+          "count": 11856,
           "itemSize": 4,
-          "byteOffset": 1065696,
-          "byteLength": 49088
+          "byteOffset": 1032208,
+          "byteLength": 47424
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 12272,
+          "count": 11856,
           "itemSize": 4,
-          "byteOffset": 1114784,
-          "byteLength": 49088
+          "byteOffset": 1079632,
+          "byteLength": 47424
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 3068,
+          "count": 2964,
           "itemSize": 1,
-          "byteOffset": 1163872,
-          "byteLength": 12272
+          "byteOffset": 1127056,
+          "byteLength": 11856
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 12272,
+          "count": 11856,
           "itemSize": 4,
-          "byteOffset": 1176144,
-          "byteLength": 49088
+          "byteOffset": 1138912,
+          "byteLength": 47424
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 3068,
+          "count": 2964,
           "itemSize": 1,
-          "byteOffset": 1225232,
-          "byteLength": 12272
+          "byteOffset": 1186336,
+          "byteLength": 11856
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 12272,
+          "count": 11856,
           "itemSize": 1,
-          "byteOffset": 1237504,
-          "byteLength": 24544
+          "byteOffset": 1198192,
+          "byteLength": 23712
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 12272,
+          "count": 11856,
           "itemSize": 1,
-          "byteOffset": 1262048,
-          "byteLength": 12272
+          "byteOffset": 1221904,
+          "byteLength": 11856
         }
       ],
       "bind": {
@@ -990,8 +991,8 @@
             "cluster": 1,
             "a": [
               0,
-              1.1424221777376384,
-              -0.0008863652780687467
+              1.130422664615822,
+              -0.0007782688426302167
             ],
             "b": [
               0,
@@ -1004,7 +1005,7 @@
               0.9,
               0.84
             ],
-            "blendK": 0.012
+            "blendK": 0.006
           }
         ]
       },
@@ -1021,20 +1022,20 @@
             0.9999594268180385,
             -0.009008036286544162
           ],
-          "overhang": 0.024
+          "overhang": 0.012
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.002199598603535489,
-        "vertexFieldErrorMean": 0.0002072527085801344,
-        "deformedFieldErrorMax": 0.02683933891194412,
-        "deformedFieldErrorMean": 0.003207612100132645,
+        "vertexFieldErrorMax": 0.0022072612994679785,
+        "vertexFieldErrorMean": 0.00021105735465765842,
+        "deformedFieldErrorMax": 0.02686224385356395,
+        "deformedFieldErrorMean": 0.0033118130854882305,
         "seams": [
           {
             "withPart": "torso.abdomen",
-            "gapMin": 0.0015041744270808655,
-            "gapMean": 0.025794863900390343,
-            "samples": 1336
+            "gapMin": 0.0014242883155701838,
+            "gapMean": 0.024727169570607704,
+            "samples": 1232
           }
         ]
       },
@@ -1058,112 +1059,112 @@
         1.4921079983005932,
         -0.0036717816652381296
       ],
-      "radius": 0.3337800000000001,
+      "radius": 0.3241800000000002,
       "longAxis": [
         0.1390883204672919,
-        -0.9896648241902408,
+        -0.9896648241902407,
         0.03489949670250096
       ],
-      "verts": 2856,
-      "tris": 5708,
+      "verts": 2736,
+      "tris": 5468,
       "bounds": {
         "min": [
-          -0.13026279211044312,
-          -0.2359800487756729,
-          -0.12309767305850983
+          -0.12748491764068604,
+          -0.2265879064798355,
+          -0.12009082734584808
         ],
         "max": [
-          0.11125033348798752,
+          0.10740002244710922,
           0.19635580480098724,
-          0.11832915246486664
+          0.11479459702968597
         ],
         "center": [
-          -0.009506229311227798,
-          -0.019812121987342834,
-          -0.0023842602968215942
+          -0.010042447596788406,
+          -0.015116050839424133,
+          -0.0026481151580810547
         ],
-        "sphereRadius": 0.2245758320645265
+        "sphereRadius": 0.21874216606546656
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 8568,
+          "count": 8208,
           "itemSize": 3,
-          "byteOffset": 1274320,
-          "byteLength": 34272
+          "byteOffset": 1233760,
+          "byteLength": 32832
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 8568,
+          "count": 8208,
           "itemSize": 3,
-          "byteOffset": 1308592,
-          "byteLength": 34272
+          "byteOffset": 1266592,
+          "byteLength": 32832
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 17124,
+          "count": 16404,
           "itemSize": 3,
-          "byteOffset": 1342864,
-          "byteLength": 34248
+          "byteOffset": 1299424,
+          "byteLength": 32808
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 4,
-          "byteOffset": 1377112,
-          "byteLength": 45696
+          "byteOffset": 1332232,
+          "byteLength": 43776
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 4,
-          "byteOffset": 1422808,
-          "byteLength": 45696
+          "byteOffset": 1376008,
+          "byteLength": 43776
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2856,
+          "count": 2736,
           "itemSize": 1,
-          "byteOffset": 1468504,
-          "byteLength": 11424
+          "byteOffset": 1419784,
+          "byteLength": 10944
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 4,
-          "byteOffset": 1479928,
-          "byteLength": 45696
+          "byteOffset": 1430728,
+          "byteLength": 43776
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2856,
+          "count": 2736,
           "itemSize": 1,
-          "byteOffset": 1525624,
-          "byteLength": 11424
+          "byteOffset": 1474504,
+          "byteLength": 10944
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 1,
-          "byteOffset": 1537048,
-          "byteLength": 22848
+          "byteOffset": 1485448,
+          "byteLength": 21888
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 1,
-          "byteOffset": 1559896,
-          "byteLength": 11424
+          "byteOffset": 1507336,
+          "byteLength": 10944
         }
       ],
       "bind": {
@@ -1192,7 +1193,7 @@
               1.05,
               1
             ],
-            "blendK": 0.012
+            "blendK": 0.006
           },
           {
             "source": "flesh",
@@ -1207,9 +1208,9 @@
               -0.005604515792622633
             ],
             "b": [
-              0.2129811628391222,
-              1.2639110831388074,
-              0.004375344284424542
+              0.2116459149626362,
+              1.2734118654510336,
+              0.004040309116080537
             ],
             "radius": 0.1032,
             "radiusB": 0.0696,
@@ -1218,7 +1219,7 @@
               1,
               1
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           }
         ]
       },
@@ -1235,20 +1236,20 @@
             -0.9896648241902408,
             0.03489949670250084
           ],
-          "overhang": 0.0192
+          "overhang": 0.0096
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0023840436117319713,
-        "vertexFieldErrorMean": 0.0002347122078150397,
-        "deformedFieldErrorMax": 0.0058621317203616675,
-        "deformedFieldErrorMean": 0.0009569356651689814,
+        "vertexFieldErrorMax": 0.0023477023613544517,
+        "vertexFieldErrorMean": 0.00024029618536139402,
+        "deformedFieldErrorMax": 0.005713747536000113,
+        "deformedFieldErrorMean": 0.0006312848242275643,
         "seams": [
           {
             "withPart": "armL.lower",
-            "gapMin": 0.0015153818832700442,
-            "gapMean": 0.02303293630278275,
-            "samples": 473
+            "gapMin": 0.0014774745250692334,
+            "gapMean": 0.021458029147967496,
+            "samples": 426
           }
         ]
       },
@@ -1273,112 +1274,112 @@
         1.1121565156498379,
         0.029403061442559414
       ],
-      "radius": 0.2688703193004208,
+      "radius": 0.2593464693446604,
       "longAxis": [
         0.06907760853681709,
         -0.9878558254968149,
         0.13917310096006535
       ],
-      "verts": 2106,
-      "tris": 4208,
+      "verts": 2020,
+      "tris": 4036,
       "bounds": {
         "min": [
-          -0.10022448003292084,
+          -0.09618701785802841,
           -0.2455034852027893,
-          -0.11516980081796646
+          -0.1108209639787674
         ],
         "max": [
-          0.08156267553567886,
-          0.20051217079162598,
+          0.077610082924366,
+          0.19068336486816406,
           0.09245795756578445
         ],
         "center": [
-          -0.009330902248620987,
-          -0.022495657205581665,
-          -0.011355921626091003
+          -0.009288467466831207,
+          -0.027410060167312622,
+          -0.00918150320649147
         ],
-        "sphereRadius": 0.2341595087985271
+        "sphereRadius": 0.22915284600254132
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 6318,
+          "count": 6060,
           "itemSize": 3,
-          "byteOffset": 1571320,
-          "byteLength": 25272
+          "byteOffset": 1518280,
+          "byteLength": 24240
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 6318,
+          "count": 6060,
           "itemSize": 3,
-          "byteOffset": 1596592,
-          "byteLength": 25272
+          "byteOffset": 1542520,
+          "byteLength": 24240
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 12624,
+          "count": 12108,
           "itemSize": 3,
-          "byteOffset": 1621864,
-          "byteLength": 25248
+          "byteOffset": 1566760,
+          "byteLength": 24216
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 4,
-          "byteOffset": 1647112,
-          "byteLength": 33696
+          "byteOffset": 1590976,
+          "byteLength": 32320
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 4,
-          "byteOffset": 1680808,
-          "byteLength": 33696
+          "byteOffset": 1623296,
+          "byteLength": 32320
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2106,
+          "count": 2020,
           "itemSize": 1,
-          "byteOffset": 1714504,
-          "byteLength": 8424
+          "byteOffset": 1655616,
+          "byteLength": 8080
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 4,
-          "byteOffset": 1722928,
-          "byteLength": 33696
+          "byteOffset": 1663696,
+          "byteLength": 32320
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2106,
+          "count": 2020,
           "itemSize": 1,
-          "byteOffset": 1756624,
-          "byteLength": 8424
+          "byteOffset": 1696016,
+          "byteLength": 8080
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 1,
-          "byteOffset": 1765048,
-          "byteLength": 16848
+          "byteOffset": 1704096,
+          "byteLength": 16160
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 1,
-          "byteOffset": 1781896,
-          "byteLength": 8424
+          "byteOffset": 1720256,
+          "byteLength": 8080
         }
       ],
       "bind": {
@@ -1392,9 +1393,9 @@
             "limb": "armL",
             "cluster": 2,
             "a": [
-              0.2076401713331782,
-              1.3019142123877125,
-              0.0030352036110485097
+              0.20897541920966417,
+              1.2924134300754864,
+              0.003370238779392513
             ],
             "b": [
               0.21139555598579507,
@@ -1407,7 +1408,7 @@
               1,
               1
             ],
-            "blendK": 0.0072
+            "blendK": 0.0036
           },
           {
             "source": "flesh",
@@ -1433,7 +1434,7 @@
               1,
               1
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           },
           {
             "source": "flesh",
@@ -1458,7 +1459,7 @@
               1,
               1
             ],
-            "blendK": 0.006
+            "blendK": 0.003
           }
         ]
       },
@@ -1475,20 +1476,20 @@
             0.9896648241902408,
             -0.03489949670250084
           ],
-          "overhang": 0.0192
+          "overhang": 0.0096
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0022962407936897547,
-        "vertexFieldErrorMean": 0.00030873723880950267,
-        "deformedFieldErrorMax": 0.010361486039246248,
-        "deformedFieldErrorMean": 0.0010856112419530663,
+        "vertexFieldErrorMax": 0.002257651010640696,
+        "vertexFieldErrorMean": 0.0003309960643233636,
+        "deformedFieldErrorMax": 0.011889214005682639,
+        "deformedFieldErrorMean": 0.0008870580659280588,
         "seams": [
           {
             "withPart": "armL.upper",
-            "gapMin": 0.0015153818832700442,
-            "gapMean": 0.02413471807805249,
-            "samples": 621
+            "gapMin": 0.0014774745250692334,
+            "gapMean": 0.02519549282122565,
+            "samples": 538
           }
         ]
       },
@@ -1514,112 +1515,112 @@
         1.4921079983005932,
         -0.0036717816652381296
       ],
-      "radius": 0.3337800000000001,
+      "radius": 0.3241800000000002,
       "longAxis": [
         -0.1390883204672919,
-        -0.9896648241902408,
+        -0.9896648241902407,
         0.03489949670250096
       ],
-      "verts": 2856,
-      "tris": 5708,
+      "verts": 2736,
+      "tris": 5468,
       "bounds": {
         "min": [
-          -0.11125033348798752,
-          -0.2359800487756729,
-          -0.12309767305850983
+          -0.10740002244710922,
+          -0.2265879064798355,
+          -0.12009082734584808
         ],
         "max": [
-          0.13026279211044312,
+          0.12748491764068604,
           0.19635580480098724,
-          0.11832915246486664
+          0.11479459702968597
         ],
         "center": [
-          0.009506229311227798,
-          -0.019812121987342834,
-          -0.0023842602968215942
+          0.010042447596788406,
+          -0.015116050839424133,
+          -0.0026481151580810547
         ],
-        "sphereRadius": 0.2245758320645265
+        "sphereRadius": 0.21874216606546656
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 8568,
+          "count": 8208,
           "itemSize": 3,
-          "byteOffset": 1790320,
-          "byteLength": 34272
+          "byteOffset": 1728336,
+          "byteLength": 32832
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 8568,
+          "count": 8208,
           "itemSize": 3,
-          "byteOffset": 1824592,
-          "byteLength": 34272
+          "byteOffset": 1761168,
+          "byteLength": 32832
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 17124,
+          "count": 16404,
           "itemSize": 3,
-          "byteOffset": 1858864,
-          "byteLength": 34248
+          "byteOffset": 1794000,
+          "byteLength": 32808
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 4,
-          "byteOffset": 1893112,
-          "byteLength": 45696
+          "byteOffset": 1826808,
+          "byteLength": 43776
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 4,
-          "byteOffset": 1938808,
-          "byteLength": 45696
+          "byteOffset": 1870584,
+          "byteLength": 43776
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2856,
+          "count": 2736,
           "itemSize": 1,
-          "byteOffset": 1984504,
-          "byteLength": 11424
+          "byteOffset": 1914360,
+          "byteLength": 10944
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 4,
-          "byteOffset": 1995928,
-          "byteLength": 45696
+          "byteOffset": 1925304,
+          "byteLength": 43776
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2856,
+          "count": 2736,
           "itemSize": 1,
-          "byteOffset": 2041624,
-          "byteLength": 11424
+          "byteOffset": 1969080,
+          "byteLength": 10944
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 1,
-          "byteOffset": 2053048,
-          "byteLength": 22848
+          "byteOffset": 1980024,
+          "byteLength": 21888
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 11424,
+          "count": 10944,
           "itemSize": 1,
-          "byteOffset": 2075896,
-          "byteLength": 11424
+          "byteOffset": 2001912,
+          "byteLength": 10944
         }
       ],
       "bind": {
@@ -1648,7 +1649,7 @@
               1.05,
               1
             ],
-            "blendK": 0.012
+            "blendK": 0.006
           },
           {
             "source": "flesh",
@@ -1663,9 +1664,9 @@
               -0.005604515792622633
             ],
             "b": [
-              -0.2129811628391222,
-              1.2639110831388074,
-              0.004375344284424542
+              -0.2116459149626362,
+              1.2734118654510336,
+              0.004040309116080537
             ],
             "radius": 0.1032,
             "radiusB": 0.0696,
@@ -1674,7 +1675,7 @@
               1,
               1
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           }
         ]
       },
@@ -1691,20 +1692,20 @@
             -0.9896648241902408,
             0.03489949670250084
           ],
-          "overhang": 0.0192
+          "overhang": 0.0096
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0023840436117319713,
-        "vertexFieldErrorMean": 0.00023471221489027204,
-        "deformedFieldErrorMax": 0.005605033480963029,
-        "deformedFieldErrorMean": 0.0009617178834979811,
+        "vertexFieldErrorMax": 0.0023477023613544517,
+        "vertexFieldErrorMean": 0.00024029618688155242,
+        "deformedFieldErrorMax": 0.005589355317935547,
+        "deformedFieldErrorMean": 0.0006620988413644547,
         "seams": [
           {
             "withPart": "armR.lower",
-            "gapMin": 0.0015153818832700442,
-            "gapMean": 0.023032936300963334,
-            "samples": 473
+            "gapMin": 0.0014774745250692334,
+            "gapMean": 0.021458029147967503,
+            "samples": 426
           }
         ]
       },
@@ -1729,112 +1730,112 @@
         1.1121565156498379,
         0.029403061442559414
       ],
-      "radius": 0.2688703193004208,
+      "radius": 0.2593464693446604,
       "longAxis": [
         -0.06907760853681709,
         -0.9878558254968149,
         0.13917310096006535
       ],
-      "verts": 2106,
-      "tris": 4208,
+      "verts": 2020,
+      "tris": 4036,
       "bounds": {
         "min": [
-          -0.08156267553567886,
+          -0.077610082924366,
           -0.2455034852027893,
-          -0.11516980081796646
+          -0.1108209639787674
         ],
         "max": [
-          0.10022448003292084,
-          0.20051217079162598,
+          0.09618701785802841,
+          0.19068336486816406,
           0.09245795756578445
         ],
         "center": [
-          0.009330902248620987,
-          -0.022495657205581665,
-          -0.011355921626091003
+          0.009288467466831207,
+          -0.027410060167312622,
+          -0.00918150320649147
         ],
-        "sphereRadius": 0.2341595087985271
+        "sphereRadius": 0.22915284600254132
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 6318,
+          "count": 6060,
           "itemSize": 3,
-          "byteOffset": 2087320,
-          "byteLength": 25272
+          "byteOffset": 2012856,
+          "byteLength": 24240
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 6318,
+          "count": 6060,
           "itemSize": 3,
-          "byteOffset": 2112592,
-          "byteLength": 25272
+          "byteOffset": 2037096,
+          "byteLength": 24240
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 12624,
+          "count": 12108,
           "itemSize": 3,
-          "byteOffset": 2137864,
-          "byteLength": 25248
+          "byteOffset": 2061336,
+          "byteLength": 24216
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 4,
-          "byteOffset": 2163112,
-          "byteLength": 33696
+          "byteOffset": 2085552,
+          "byteLength": 32320
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 4,
-          "byteOffset": 2196808,
-          "byteLength": 33696
+          "byteOffset": 2117872,
+          "byteLength": 32320
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2106,
+          "count": 2020,
           "itemSize": 1,
-          "byteOffset": 2230504,
-          "byteLength": 8424
+          "byteOffset": 2150192,
+          "byteLength": 8080
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 4,
-          "byteOffset": 2238928,
-          "byteLength": 33696
+          "byteOffset": 2158272,
+          "byteLength": 32320
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2106,
+          "count": 2020,
           "itemSize": 1,
-          "byteOffset": 2272624,
-          "byteLength": 8424
+          "byteOffset": 2190592,
+          "byteLength": 8080
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 1,
-          "byteOffset": 2281048,
-          "byteLength": 16848
+          "byteOffset": 2198672,
+          "byteLength": 16160
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 8424,
+          "count": 8080,
           "itemSize": 1,
-          "byteOffset": 2297896,
-          "byteLength": 8424
+          "byteOffset": 2214832,
+          "byteLength": 8080
         }
       ],
       "bind": {
@@ -1848,9 +1849,9 @@
             "limb": "armR",
             "cluster": 3,
             "a": [
-              -0.2076401713331782,
-              1.3019142123877125,
-              0.0030352036110485097
+              -0.20897541920966417,
+              1.2924134300754864,
+              0.003370238779392513
             ],
             "b": [
               -0.21139555598579507,
@@ -1863,7 +1864,7 @@
               1,
               1
             ],
-            "blendK": 0.0072
+            "blendK": 0.0036
           },
           {
             "source": "flesh",
@@ -1889,7 +1890,7 @@
               1,
               1
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           },
           {
             "source": "flesh",
@@ -1914,7 +1915,7 @@
               1,
               1
             ],
-            "blendK": 0.006
+            "blendK": 0.003
           }
         ]
       },
@@ -1931,20 +1932,20 @@
             0.9896648241902408,
             -0.03489949670250084
           ],
-          "overhang": 0.0192
+          "overhang": 0.0096
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0022962407936897547,
-        "vertexFieldErrorMean": 0.0003087372486486692,
-        "deformedFieldErrorMax": 0.009915818899475681,
-        "deformedFieldErrorMean": 0.0011220088922034705,
+        "vertexFieldErrorMax": 0.002257651010640696,
+        "vertexFieldErrorMean": 0.000330996075503144,
+        "deformedFieldErrorMax": 0.01342576273110976,
+        "deformedFieldErrorMean": 0.0009432358265052287,
         "seams": [
           {
             "withPart": "armR.upper",
-            "gapMin": 0.0015153818832700442,
-            "gapMean": 0.024134718075891272,
-            "samples": 621
+            "gapMin": 0.0014774745250692334,
+            "gapMean": 0.025195492826823346,
+            "samples": 538
           }
         ]
       },
@@ -1970,112 +1971,112 @@
         0.9998198346342196,
         0
       ],
-      "radius": 0.47622,
+      "radius": 0.46782,
       "longAxis": [
-        0.034899496702501004,
+        0.034899496702500976,
         -0.9993908270190957,
         0
       ],
-      "verts": 3426,
-      "tris": 6848,
+      "verts": 3256,
+      "tris": 6508,
       "bounds": {
         "min": [
-          -0.10981559753417969,
-          -0.3784479796886444,
-          -0.11130471527576447
+          -0.10591199994087219,
+          -0.3701176941394806,
+          -0.10718085616827011
         ],
         "max": [
-          0.10195759683847427,
-          0.21905021369457245,
-          0.11130471527576447
+          0.0979965403676033,
+          0.21653024852275848,
+          0.10718085616827011
         ],
         "center": [
-          -0.003929000347852707,
-          -0.07969888299703598,
+          -0.003957729786634445,
+          -0.07679372280836105,
           0
         ],
-        "sphereRadius": 0.30478369918064874
+        "sphereRadius": 0.29874702439943984
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 10278,
+          "count": 9768,
           "itemSize": 3,
-          "byteOffset": 2306320,
-          "byteLength": 41112
+          "byteOffset": 2222912,
+          "byteLength": 39072
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 10278,
+          "count": 9768,
           "itemSize": 3,
-          "byteOffset": 2347432,
-          "byteLength": 41112
+          "byteOffset": 2261984,
+          "byteLength": 39072
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 20544,
+          "count": 19524,
           "itemSize": 3,
-          "byteOffset": 2388544,
-          "byteLength": 41088
+          "byteOffset": 2301056,
+          "byteLength": 39048
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 4,
-          "byteOffset": 2429632,
-          "byteLength": 54816
+          "byteOffset": 2340104,
+          "byteLength": 52096
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 4,
-          "byteOffset": 2484448,
-          "byteLength": 54816
+          "byteOffset": 2392200,
+          "byteLength": 52096
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 3426,
+          "count": 3256,
           "itemSize": 1,
-          "byteOffset": 2539264,
-          "byteLength": 13704
+          "byteOffset": 2444296,
+          "byteLength": 13024
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 4,
-          "byteOffset": 2552968,
-          "byteLength": 54816
+          "byteOffset": 2457320,
+          "byteLength": 52096
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 3426,
+          "count": 3256,
           "itemSize": 1,
-          "byteOffset": 2607784,
-          "byteLength": 13704
+          "byteOffset": 2509416,
+          "byteLength": 13024
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 1,
-          "byteOffset": 2621488,
-          "byteLength": 27408
+          "byteOffset": 2522440,
+          "byteLength": 26048
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 1,
-          "byteOffset": 2648896,
-          "byteLength": 13704
+          "byteOffset": 2548488,
+          "byteLength": 13024
         }
       ],
       "bind": {
@@ -2104,7 +2105,7 @@
               1,
               1.05
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           },
           {
             "source": "flesh",
@@ -2119,8 +2120,8 @@
               0
             ],
             "b": [
-              0.09880405589446489,
-              0.6233692979126667,
+              0.09851090012216387,
+              0.631764180859627,
               0
             ],
             "radius": 0.0948,
@@ -2130,7 +2131,7 @@
               1,
               1.05
             ],
-            "blendK": 0.0084
+            "blendK": 0.0042
           }
         ]
       },
@@ -2147,20 +2148,20 @@
             -0.9993908270190955,
             0
           ],
-          "overhang": 0.0168
+          "overhang": 0.0084
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0019448301384779208,
-        "vertexFieldErrorMean": 0.0002358558065678386,
-        "deformedFieldErrorMax": 0.0083275274457476,
-        "deformedFieldErrorMean": 0.0011007370064999515,
+        "vertexFieldErrorMax": 0.0025273385048870025,
+        "vertexFieldErrorMean": 0.0002423621416689323,
+        "deformedFieldErrorMax": 0.01210451323448027,
+        "deformedFieldErrorMean": 0.001027134670169608,
         "seams": [
           {
             "withPart": "legL.lower",
-            "gapMin": 0.0012171337890835158,
-            "gapMean": 0.01796005578737801,
-            "samples": 472
+            "gapMin": 0.0016406228090178874,
+            "gapMean": 0.022134078024809888,
+            "samples": 420
           }
         ]
       },
@@ -2185,112 +2186,112 @@
         0.38831257539777536,
         0
       ],
-      "radius": 0.3408,
+      "radius": 0.3324000000000001,
       "longAxis": [
-        0.034899496702500976,
-        -0.9993908270190955,
+        0.034899496702500955,
+        -0.9993908270190957,
         0
       ],
-      "verts": 2100,
-      "tris": 4196,
+      "verts": 2054,
+      "tris": 4104,
       "bounds": {
         "min": [
-          -0.07931464165449142,
+          -0.07882458716630936,
           -0.28340405225753784,
-          -0.07085148245096207
+          -0.07093947380781174
         ],
         "max": [
-          0.0620301254093647,
-          0.27068954706192017,
-          0.07085148245096207
+          0.06229247525334358,
+          0.2623061537742615,
+          0.07093947380781174
         ],
         "center": [
-          -0.008642258122563362,
-          -0.006357252597808838,
+          -0.008266055956482887,
+          -0.010548949241638184,
           0
         ],
-        "sphereRadius": 0.282415971657335
+        "sphereRadius": 0.27835496200897963
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 6300,
+          "count": 6162,
           "itemSize": 3,
-          "byteOffset": 2662600,
-          "byteLength": 25200
+          "byteOffset": 2561512,
+          "byteLength": 24648
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 6300,
+          "count": 6162,
           "itemSize": 3,
-          "byteOffset": 2687800,
-          "byteLength": 25200
+          "byteOffset": 2586160,
+          "byteLength": 24648
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 12588,
+          "count": 12312,
           "itemSize": 3,
-          "byteOffset": 2713000,
-          "byteLength": 25176
+          "byteOffset": 2610808,
+          "byteLength": 24624
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 4,
-          "byteOffset": 2738176,
-          "byteLength": 33600
+          "byteOffset": 2635432,
+          "byteLength": 32864
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 4,
-          "byteOffset": 2771776,
-          "byteLength": 33600
+          "byteOffset": 2668296,
+          "byteLength": 32864
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2100,
+          "count": 2054,
           "itemSize": 1,
-          "byteOffset": 2805376,
-          "byteLength": 8400
+          "byteOffset": 2701160,
+          "byteLength": 8216
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 4,
-          "byteOffset": 2813776,
-          "byteLength": 33600
+          "byteOffset": 2709376,
+          "byteLength": 32864
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2100,
+          "count": 2054,
           "itemSize": 1,
-          "byteOffset": 2847376,
-          "byteLength": 8400
+          "byteOffset": 2742240,
+          "byteLength": 8216
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 1,
-          "byteOffset": 2855776,
-          "byteLength": 16800
+          "byteOffset": 2750456,
+          "byteLength": 16432
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 1,
-          "byteOffset": 2872576,
-          "byteLength": 8400
+          "byteOffset": 2766888,
+          "byteLength": 8216
         }
       ],
       "bind": {
@@ -2304,8 +2305,8 @@
             "limb": "legL",
             "cluster": 4,
             "a": [
-              0.09763143280526085,
-              0.6569488297005083,
+              0.09792458857756187,
+              0.6485539467535479,
               0
             ],
             "b": [
@@ -2320,7 +2321,7 @@
               1,
               1
             ],
-            "blendK": 0.0072
+            "blendK": 0.0036
           }
         ]
       },
@@ -2337,20 +2338,20 @@
             0.9993908270190955,
             0
           ],
-          "overhang": 0.0168
+          "overhang": 0.0084
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0020190911855865715,
-        "vertexFieldErrorMean": 0.0003332335480208332,
-        "deformedFieldErrorMax": 0.01333295930279462,
-        "deformedFieldErrorMean": 0.000613835666647042,
+        "vertexFieldErrorMax": 0.002721266716684221,
+        "vertexFieldErrorMean": 0.0003383062408732899,
+        "deformedFieldErrorMax": 0.013243053336066884,
+        "deformedFieldErrorMean": 0.0005970947223836353,
         "seams": [
           {
             "withPart": "legL.upper",
-            "gapMin": 0.0012171337890835158,
-            "gapMean": 0.01802827528477194,
-            "samples": 412
+            "gapMin": 0.0016406228090178874,
+            "gapMean": 0.02096270452695876,
+            "samples": 366
           }
         ]
       },
@@ -2374,112 +2375,112 @@
         0.9998198346342196,
         0
       ],
-      "radius": 0.47622,
+      "radius": 0.46782,
       "longAxis": [
-        -0.034899496702501004,
+        -0.034899496702500976,
         -0.9993908270190957,
         0
       ],
-      "verts": 3426,
-      "tris": 6848,
+      "verts": 3256,
+      "tris": 6508,
       "bounds": {
         "min": [
-          -0.10195759683847427,
-          -0.3784479796886444,
-          -0.11130471527576447
+          -0.0979965403676033,
+          -0.3701176941394806,
+          -0.10718085616827011
         ],
         "max": [
-          0.10981559753417969,
-          0.21905021369457245,
-          0.11130471527576447
+          0.10591199994087219,
+          0.21653024852275848,
+          0.10718085616827011
         ],
         "center": [
-          0.003929000347852707,
-          -0.07969888299703598,
+          0.003957729786634445,
+          -0.07679372280836105,
           0
         ],
-        "sphereRadius": 0.30478369918064874
+        "sphereRadius": 0.29874702439943984
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 10278,
+          "count": 9768,
           "itemSize": 3,
-          "byteOffset": 2880976,
-          "byteLength": 41112
+          "byteOffset": 2775104,
+          "byteLength": 39072
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 10278,
+          "count": 9768,
           "itemSize": 3,
-          "byteOffset": 2922088,
-          "byteLength": 41112
+          "byteOffset": 2814176,
+          "byteLength": 39072
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 20544,
+          "count": 19524,
           "itemSize": 3,
-          "byteOffset": 2963200,
-          "byteLength": 41088
+          "byteOffset": 2853248,
+          "byteLength": 39048
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 4,
-          "byteOffset": 3004288,
-          "byteLength": 54816
+          "byteOffset": 2892296,
+          "byteLength": 52096
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 4,
-          "byteOffset": 3059104,
-          "byteLength": 54816
+          "byteOffset": 2944392,
+          "byteLength": 52096
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 3426,
+          "count": 3256,
           "itemSize": 1,
-          "byteOffset": 3113920,
-          "byteLength": 13704
+          "byteOffset": 2996488,
+          "byteLength": 13024
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 4,
-          "byteOffset": 3127624,
-          "byteLength": 54816
+          "byteOffset": 3009512,
+          "byteLength": 52096
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 3426,
+          "count": 3256,
           "itemSize": 1,
-          "byteOffset": 3182440,
-          "byteLength": 13704
+          "byteOffset": 3061608,
+          "byteLength": 13024
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 1,
-          "byteOffset": 3196144,
-          "byteLength": 27408
+          "byteOffset": 3074632,
+          "byteLength": 26048
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 13704,
+          "count": 13024,
           "itemSize": 1,
-          "byteOffset": 3223552,
-          "byteLength": 13704
+          "byteOffset": 3100680,
+          "byteLength": 13024
         }
       ],
       "bind": {
@@ -2508,7 +2509,7 @@
               1,
               1.05
             ],
-            "blendK": 0.0096
+            "blendK": 0.0048
           },
           {
             "source": "flesh",
@@ -2523,8 +2524,8 @@
               0
             ],
             "b": [
-              -0.09880405589446489,
-              0.6233692979126667,
+              -0.09851090012216387,
+              0.631764180859627,
               0
             ],
             "radius": 0.0948,
@@ -2534,7 +2535,7 @@
               1,
               1.05
             ],
-            "blendK": 0.0084
+            "blendK": 0.0042
           }
         ]
       },
@@ -2551,20 +2552,20 @@
             -0.9993908270190955,
             0
           ],
-          "overhang": 0.0168
+          "overhang": 0.0084
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0019448301384779208,
-        "vertexFieldErrorMean": 0.00023585580454953616,
-        "deformedFieldErrorMax": 0.008309923618705991,
-        "deformedFieldErrorMean": 0.0010893993206903027,
+        "vertexFieldErrorMax": 0.0025273385048870025,
+        "vertexFieldErrorMean": 0.00024236214370603932,
+        "deformedFieldErrorMax": 0.011937688923082631,
+        "deformedFieldErrorMean": 0.0009879023969453873,
         "seams": [
           {
             "withPart": "legR.lower",
-            "gapMin": 0.0012171337890835158,
-            "gapMean": 0.01796005579149189,
-            "samples": 472
+            "gapMin": 0.0016406228090178874,
+            "gapMean": 0.02213407802248074,
+            "samples": 420
           }
         ]
       },
@@ -2589,112 +2590,112 @@
         0.38831257539777536,
         0
       ],
-      "radius": 0.3408,
+      "radius": 0.3324000000000001,
       "longAxis": [
-        -0.034899496702500976,
-        -0.9993908270190955,
+        -0.034899496702500955,
+        -0.9993908270190957,
         0
       ],
-      "verts": 2100,
-      "tris": 4196,
+      "verts": 2054,
+      "tris": 4104,
       "bounds": {
         "min": [
-          -0.0620301254093647,
+          -0.06229247525334358,
           -0.28340405225753784,
-          -0.07085148245096207
+          -0.07093947380781174
         ],
         "max": [
-          0.07931464165449142,
-          0.27068954706192017,
-          0.07085148245096207
+          0.07882458716630936,
+          0.2623061537742615,
+          0.07093947380781174
         ],
         "center": [
-          0.008642258122563362,
-          -0.006357252597808838,
+          0.008266055956482887,
+          -0.010548949241638184,
           0
         ],
-        "sphereRadius": 0.282415971657335
+        "sphereRadius": 0.27835496200897963
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 6300,
+          "count": 6162,
           "itemSize": 3,
-          "byteOffset": 3237256,
-          "byteLength": 25200
+          "byteOffset": 3113704,
+          "byteLength": 24648
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 6300,
+          "count": 6162,
           "itemSize": 3,
-          "byteOffset": 3262456,
-          "byteLength": 25200
+          "byteOffset": 3138352,
+          "byteLength": 24648
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 12588,
+          "count": 12312,
           "itemSize": 3,
-          "byteOffset": 3287656,
-          "byteLength": 25176
+          "byteOffset": 3163000,
+          "byteLength": 24624
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 4,
-          "byteOffset": 3312832,
-          "byteLength": 33600
+          "byteOffset": 3187624,
+          "byteLength": 32864
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 4,
-          "byteOffset": 3346432,
-          "byteLength": 33600
+          "byteOffset": 3220488,
+          "byteLength": 32864
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2100,
+          "count": 2054,
           "itemSize": 1,
-          "byteOffset": 3380032,
-          "byteLength": 8400
+          "byteOffset": 3253352,
+          "byteLength": 8216
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 4,
-          "byteOffset": 3388432,
-          "byteLength": 33600
+          "byteOffset": 3261568,
+          "byteLength": 32864
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2100,
+          "count": 2054,
           "itemSize": 1,
-          "byteOffset": 3422032,
-          "byteLength": 8400
+          "byteOffset": 3294432,
+          "byteLength": 8216
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 1,
-          "byteOffset": 3430432,
-          "byteLength": 16800
+          "byteOffset": 3302648,
+          "byteLength": 16432
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 8400,
+          "count": 8216,
           "itemSize": 1,
-          "byteOffset": 3447232,
-          "byteLength": 8400
+          "byteOffset": 3319080,
+          "byteLength": 8216
         }
       ],
       "bind": {
@@ -2708,8 +2709,8 @@
             "limb": "legR",
             "cluster": 5,
             "a": [
-              -0.09763143280526085,
-              0.6569488297005083,
+              -0.09792458857756187,
+              0.6485539467535479,
               0
             ],
             "b": [
@@ -2724,7 +2725,7 @@
               1,
               1
             ],
-            "blendK": 0.0072
+            "blendK": 0.0036
           }
         ]
       },
@@ -2741,20 +2742,20 @@
             0.9993908270190955,
             0
           ],
-          "overhang": 0.0168
+          "overhang": 0.0084
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.0020190911855865715,
-        "vertexFieldErrorMean": 0.00033323354711493273,
-        "deformedFieldErrorMax": 0.013197878247516942,
-        "deformedFieldErrorMean": 0.0006170142557072574,
+        "vertexFieldErrorMax": 0.002721266716684221,
+        "vertexFieldErrorMean": 0.0003383062508447076,
+        "deformedFieldErrorMax": 0.013176342597450161,
+        "deformedFieldErrorMean": 0.000594852308112073,
         "seams": [
           {
             "withPart": "legR.upper",
-            "gapMin": 0.0012171337890835158,
-            "gapMean": 0.018028275289673094,
-            "samples": 412
+            "gapMin": 0.0016406228090178874,
+            "gapMean": 0.020962704524443987,
+            "samples": 366
           }
         ]
       },
@@ -2810,7 +2811,7 @@
           "dtype": "f32",
           "count": 3528,
           "itemSize": 3,
-          "byteOffset": 3455632,
+          "byteOffset": 3327296,
           "byteLength": 14112
         },
         {
@@ -2818,7 +2819,7 @@
           "dtype": "f32",
           "count": 3528,
           "itemSize": 3,
-          "byteOffset": 3469744,
+          "byteOffset": 3341408,
           "byteLength": 14112
         },
         {
@@ -2826,7 +2827,7 @@
           "dtype": "u16",
           "count": 7044,
           "itemSize": 3,
-          "byteOffset": 3483856,
+          "byteOffset": 3355520,
           "byteLength": 14088
         },
         {
@@ -2834,7 +2835,7 @@
           "dtype": "f32",
           "count": 4704,
           "itemSize": 4,
-          "byteOffset": 3497944,
+          "byteOffset": 3369608,
           "byteLength": 18816
         },
         {
@@ -2842,7 +2843,7 @@
           "dtype": "f32",
           "count": 4704,
           "itemSize": 4,
-          "byteOffset": 3516760,
+          "byteOffset": 3388424,
           "byteLength": 18816
         },
         {
@@ -2850,7 +2851,7 @@
           "dtype": "f32",
           "count": 1176,
           "itemSize": 1,
-          "byteOffset": 3535576,
+          "byteOffset": 3407240,
           "byteLength": 4704
         },
         {
@@ -2858,7 +2859,7 @@
           "dtype": "f32",
           "count": 4704,
           "itemSize": 4,
-          "byteOffset": 3540280,
+          "byteOffset": 3411944,
           "byteLength": 18816
         },
         {
@@ -2866,7 +2867,7 @@
           "dtype": "f32",
           "count": 1176,
           "itemSize": 1,
-          "byteOffset": 3559096,
+          "byteOffset": 3430760,
           "byteLength": 4704
         },
         {
@@ -2874,7 +2875,7 @@
           "dtype": "u16",
           "count": 4704,
           "itemSize": 1,
-          "byteOffset": 3563800,
+          "byteOffset": 3435464,
           "byteLength": 9408
         },
         {
@@ -2882,7 +2883,7 @@
           "dtype": "u8",
           "count": 4704,
           "itemSize": 1,
-          "byteOffset": 3573208,
+          "byteOffset": 3444872,
           "byteLength": 4704
         }
       ],
@@ -3028,7 +3029,7 @@
           "dtype": "f32",
           "count": 13824,
           "itemSize": 3,
-          "byteOffset": 3577912,
+          "byteOffset": 3449576,
           "byteLength": 55296
         },
         {
@@ -3036,7 +3037,7 @@
           "dtype": "f32",
           "count": 13824,
           "itemSize": 3,
-          "byteOffset": 3633208,
+          "byteOffset": 3504872,
           "byteLength": 55296
         },
         {
@@ -3044,7 +3045,7 @@
           "dtype": "u16",
           "count": 27816,
           "itemSize": 3,
-          "byteOffset": 3688504,
+          "byteOffset": 3560168,
           "byteLength": 55632
         },
         {
@@ -3052,7 +3053,7 @@
           "dtype": "f32",
           "count": 18432,
           "itemSize": 4,
-          "byteOffset": 3744136,
+          "byteOffset": 3615800,
           "byteLength": 73728
         },
         {
@@ -3060,7 +3061,7 @@
           "dtype": "f32",
           "count": 18432,
           "itemSize": 4,
-          "byteOffset": 3817864,
+          "byteOffset": 3689528,
           "byteLength": 73728
         },
         {
@@ -3068,7 +3069,7 @@
           "dtype": "f32",
           "count": 4608,
           "itemSize": 1,
-          "byteOffset": 3891592,
+          "byteOffset": 3763256,
           "byteLength": 18432
         },
         {
@@ -3076,7 +3077,7 @@
           "dtype": "f32",
           "count": 18432,
           "itemSize": 4,
-          "byteOffset": 3910024,
+          "byteOffset": 3781688,
           "byteLength": 73728
         },
         {
@@ -3084,7 +3085,7 @@
           "dtype": "f32",
           "count": 4608,
           "itemSize": 1,
-          "byteOffset": 3983752,
+          "byteOffset": 3855416,
           "byteLength": 18432
         },
         {
@@ -3092,7 +3093,7 @@
           "dtype": "u16",
           "count": 18432,
           "itemSize": 1,
-          "byteOffset": 4002184,
+          "byteOffset": 3873848,
           "byteLength": 36864
         },
         {
@@ -3100,7 +3101,7 @@
           "dtype": "u8",
           "count": 18432,
           "itemSize": 1,
-          "byteOffset": 4039048,
+          "byteOffset": 3910712,
           "byteLength": 18432
         }
       ],
@@ -3823,7 +3824,7 @@
           "dtype": "f32",
           "count": 1752,
           "itemSize": 3,
-          "byteOffset": 4057480,
+          "byteOffset": 3929144,
           "byteLength": 7008
         },
         {
@@ -3831,7 +3832,7 @@
           "dtype": "f32",
           "count": 1752,
           "itemSize": 3,
-          "byteOffset": 4064488,
+          "byteOffset": 3936152,
           "byteLength": 7008
         },
         {
@@ -3839,7 +3840,7 @@
           "dtype": "u16",
           "count": 3492,
           "itemSize": 3,
-          "byteOffset": 4071496,
+          "byteOffset": 3943160,
           "byteLength": 6984
         },
         {
@@ -3847,7 +3848,7 @@
           "dtype": "f32",
           "count": 2336,
           "itemSize": 4,
-          "byteOffset": 4078480,
+          "byteOffset": 3950144,
           "byteLength": 9344
         },
         {
@@ -3855,7 +3856,7 @@
           "dtype": "f32",
           "count": 2336,
           "itemSize": 4,
-          "byteOffset": 4087824,
+          "byteOffset": 3959488,
           "byteLength": 9344
         },
         {
@@ -3863,7 +3864,7 @@
           "dtype": "f32",
           "count": 584,
           "itemSize": 1,
-          "byteOffset": 4097168,
+          "byteOffset": 3968832,
           "byteLength": 2336
         },
         {
@@ -3871,7 +3872,7 @@
           "dtype": "f32",
           "count": 2336,
           "itemSize": 4,
-          "byteOffset": 4099504,
+          "byteOffset": 3971168,
           "byteLength": 9344
         },
         {
@@ -3879,7 +3880,7 @@
           "dtype": "f32",
           "count": 584,
           "itemSize": 1,
-          "byteOffset": 4108848,
+          "byteOffset": 3980512,
           "byteLength": 2336
         },
         {
@@ -3887,7 +3888,7 @@
           "dtype": "u16",
           "count": 2336,
           "itemSize": 1,
-          "byteOffset": 4111184,
+          "byteOffset": 3982848,
           "byteLength": 4672
         },
         {
@@ -3895,7 +3896,7 @@
           "dtype": "u8",
           "count": 2336,
           "itemSize": 1,
-          "byteOffset": 4115856,
+          "byteOffset": 3987520,
           "byteLength": 2336
         }
       ],
@@ -3989,7 +3990,7 @@
           "dtype": "f32",
           "count": 2892,
           "itemSize": 3,
-          "byteOffset": 4118192,
+          "byteOffset": 3989856,
           "byteLength": 11568
         },
         {
@@ -3997,7 +3998,7 @@
           "dtype": "f32",
           "count": 2892,
           "itemSize": 3,
-          "byteOffset": 4129760,
+          "byteOffset": 4001424,
           "byteLength": 11568
         },
         {
@@ -4005,7 +4006,7 @@
           "dtype": "u16",
           "count": 5772,
           "itemSize": 3,
-          "byteOffset": 4141328,
+          "byteOffset": 4012992,
           "byteLength": 11544
         },
         {
@@ -4013,7 +4014,7 @@
           "dtype": "f32",
           "count": 3856,
           "itemSize": 4,
-          "byteOffset": 4152872,
+          "byteOffset": 4024536,
           "byteLength": 15424
         },
         {
@@ -4021,7 +4022,7 @@
           "dtype": "f32",
           "count": 3856,
           "itemSize": 4,
-          "byteOffset": 4168296,
+          "byteOffset": 4039960,
           "byteLength": 15424
         },
         {
@@ -4029,7 +4030,7 @@
           "dtype": "f32",
           "count": 964,
           "itemSize": 1,
-          "byteOffset": 4183720,
+          "byteOffset": 4055384,
           "byteLength": 3856
         },
         {
@@ -4037,7 +4038,7 @@
           "dtype": "f32",
           "count": 3856,
           "itemSize": 4,
-          "byteOffset": 4187576,
+          "byteOffset": 4059240,
           "byteLength": 15424
         },
         {
@@ -4045,7 +4046,7 @@
           "dtype": "f32",
           "count": 964,
           "itemSize": 1,
-          "byteOffset": 4203000,
+          "byteOffset": 4074664,
           "byteLength": 3856
         },
         {
@@ -4053,7 +4054,7 @@
           "dtype": "u16",
           "count": 3856,
           "itemSize": 1,
-          "byteOffset": 4206856,
+          "byteOffset": 4078520,
           "byteLength": 7712
         },
         {
@@ -4061,7 +4062,7 @@
           "dtype": "u8",
           "count": 3856,
           "itemSize": 1,
-          "byteOffset": 4214568,
+          "byteOffset": 4086232,
           "byteLength": 3856
         }
       ],
@@ -4182,7 +4183,7 @@
           "dtype": "f32",
           "count": 2892,
           "itemSize": 3,
-          "byteOffset": 4218424,
+          "byteOffset": 4090088,
           "byteLength": 11568
         },
         {
@@ -4190,7 +4191,7 @@
           "dtype": "f32",
           "count": 2892,
           "itemSize": 3,
-          "byteOffset": 4229992,
+          "byteOffset": 4101656,
           "byteLength": 11568
         },
         {
@@ -4198,7 +4199,7 @@
           "dtype": "u16",
           "count": 5772,
           "itemSize": 3,
-          "byteOffset": 4241560,
+          "byteOffset": 4113224,
           "byteLength": 11544
         },
         {
@@ -4206,7 +4207,7 @@
           "dtype": "f32",
           "count": 3856,
           "itemSize": 4,
-          "byteOffset": 4253104,
+          "byteOffset": 4124768,
           "byteLength": 15424
         },
         {
@@ -4214,7 +4215,7 @@
           "dtype": "f32",
           "count": 3856,
           "itemSize": 4,
-          "byteOffset": 4268528,
+          "byteOffset": 4140192,
           "byteLength": 15424
         },
         {
@@ -4222,7 +4223,7 @@
           "dtype": "f32",
           "count": 964,
           "itemSize": 1,
-          "byteOffset": 4283952,
+          "byteOffset": 4155616,
           "byteLength": 3856
         },
         {
@@ -4230,7 +4231,7 @@
           "dtype": "f32",
           "count": 3856,
           "itemSize": 4,
-          "byteOffset": 4287808,
+          "byteOffset": 4159472,
           "byteLength": 15424
         },
         {
@@ -4238,7 +4239,7 @@
           "dtype": "f32",
           "count": 964,
           "itemSize": 1,
-          "byteOffset": 4303232,
+          "byteOffset": 4174896,
           "byteLength": 3856
         },
         {
@@ -4246,7 +4247,7 @@
           "dtype": "u16",
           "count": 3856,
           "itemSize": 1,
-          "byteOffset": 4307088,
+          "byteOffset": 4178752,
           "byteLength": 7712
         },
         {
@@ -4254,7 +4255,7 @@
           "dtype": "u8",
           "count": 3856,
           "itemSize": 1,
-          "byteOffset": 4314800,
+          "byteOffset": 4186464,
           "byteLength": 3856
         }
       ],
@@ -4375,7 +4376,7 @@
           "dtype": "f32",
           "count": 2088,
           "itemSize": 3,
-          "byteOffset": 4318656,
+          "byteOffset": 4190320,
           "byteLength": 8352
         },
         {
@@ -4383,7 +4384,7 @@
           "dtype": "f32",
           "count": 2088,
           "itemSize": 3,
-          "byteOffset": 4327008,
+          "byteOffset": 4198672,
           "byteLength": 8352
         },
         {
@@ -4391,7 +4392,7 @@
           "dtype": "u16",
           "count": 4164,
           "itemSize": 3,
-          "byteOffset": 4335360,
+          "byteOffset": 4207024,
           "byteLength": 8328
         },
         {
@@ -4399,7 +4400,7 @@
           "dtype": "f32",
           "count": 2784,
           "itemSize": 4,
-          "byteOffset": 4343688,
+          "byteOffset": 4215352,
           "byteLength": 11136
         },
         {
@@ -4407,7 +4408,7 @@
           "dtype": "f32",
           "count": 2784,
           "itemSize": 4,
-          "byteOffset": 4354824,
+          "byteOffset": 4226488,
           "byteLength": 11136
         },
         {
@@ -4415,7 +4416,7 @@
           "dtype": "f32",
           "count": 696,
           "itemSize": 1,
-          "byteOffset": 4365960,
+          "byteOffset": 4237624,
           "byteLength": 2784
         },
         {
@@ -4423,7 +4424,7 @@
           "dtype": "f32",
           "count": 2784,
           "itemSize": 4,
-          "byteOffset": 4368744,
+          "byteOffset": 4240408,
           "byteLength": 11136
         },
         {
@@ -4431,7 +4432,7 @@
           "dtype": "f32",
           "count": 696,
           "itemSize": 1,
-          "byteOffset": 4379880,
+          "byteOffset": 4251544,
           "byteLength": 2784
         },
         {
@@ -4439,7 +4440,7 @@
           "dtype": "u16",
           "count": 2784,
           "itemSize": 1,
-          "byteOffset": 4382664,
+          "byteOffset": 4254328,
           "byteLength": 5568
         },
         {
@@ -4447,7 +4448,7 @@
           "dtype": "u8",
           "count": 2784,
           "itemSize": 1,
-          "byteOffset": 4388232,
+          "byteOffset": 4259896,
           "byteLength": 2784
         }
       ],
@@ -4542,7 +4543,7 @@
           "dtype": "f32",
           "count": 2088,
           "itemSize": 3,
-          "byteOffset": 4391016,
+          "byteOffset": 4262680,
           "byteLength": 8352
         },
         {
@@ -4550,7 +4551,7 @@
           "dtype": "f32",
           "count": 2088,
           "itemSize": 3,
-          "byteOffset": 4399368,
+          "byteOffset": 4271032,
           "byteLength": 8352
         },
         {
@@ -4558,7 +4559,7 @@
           "dtype": "u16",
           "count": 4164,
           "itemSize": 3,
-          "byteOffset": 4407720,
+          "byteOffset": 4279384,
           "byteLength": 8328
         },
         {
@@ -4566,7 +4567,7 @@
           "dtype": "f32",
           "count": 2784,
           "itemSize": 4,
-          "byteOffset": 4416048,
+          "byteOffset": 4287712,
           "byteLength": 11136
         },
         {
@@ -4574,7 +4575,7 @@
           "dtype": "f32",
           "count": 2784,
           "itemSize": 4,
-          "byteOffset": 4427184,
+          "byteOffset": 4298848,
           "byteLength": 11136
         },
         {
@@ -4582,7 +4583,7 @@
           "dtype": "f32",
           "count": 696,
           "itemSize": 1,
-          "byteOffset": 4438320,
+          "byteOffset": 4309984,
           "byteLength": 2784
         },
         {
@@ -4590,7 +4591,7 @@
           "dtype": "f32",
           "count": 2784,
           "itemSize": 4,
-          "byteOffset": 4441104,
+          "byteOffset": 4312768,
           "byteLength": 11136
         },
         {
@@ -4598,7 +4599,7 @@
           "dtype": "f32",
           "count": 696,
           "itemSize": 1,
-          "byteOffset": 4452240,
+          "byteOffset": 4323904,
           "byteLength": 2784
         },
         {
@@ -4606,7 +4607,7 @@
           "dtype": "u16",
           "count": 2784,
           "itemSize": 1,
-          "byteOffset": 4455024,
+          "byteOffset": 4326688,
           "byteLength": 5568
         },
         {
@@ -4614,7 +4615,7 @@
           "dtype": "u8",
           "count": 2784,
           "itemSize": 1,
-          "byteOffset": 4460592,
+          "byteOffset": 4332256,
           "byteLength": 2784
         }
       ],

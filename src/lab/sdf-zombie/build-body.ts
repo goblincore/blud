@@ -8,11 +8,16 @@ import { validateBody, boneBreach, type ValidateOpts } from './validate';
 import { deriveBones, DEFAULT_BONE_RATIO } from './bone-derive';
 import type { FaceParams } from './face';
 
-export interface BuildOpts extends ValidateOpts {}
+export interface BuildOpts extends ValidateOpts {
+  /** Scale authored additive round blends before explicit per-primitive tuning.
+   * Shared by CPU fields, GPU packs, validation and offline mesh generation. */
+  roundBlendScale?: number;
+}
 
 export const DEFAULT_BUILD_OPTS: BuildOpts = {
   silhouetteNoiseAmp: 0.012,
   stepMultiplier: 0.6,
+  roundBlendScale: 0.5,
 };
 
 /**
@@ -126,7 +131,20 @@ export function buildBody(
   const placed = placePrims(fleshDefs, bones);
   const { prims, clusters } = assignClusters(placed);
 
-  // Overrides apply AFTER clustering, so indices are stable built-array indices.
+  // Apply once to the built flesh, before bone containment and validation.
+  // Smaller round unions are the accepted character default; hard features,
+  // carves and internal anatomy retain their authored blend semantics.
+  const blendScale = opts.roundBlendScale ?? DEFAULT_BUILD_OPTS.roundBlendScale!;
+  for (let i = 0; i < prims.length; i++) {
+    const p = prims[i]!;
+    if (!p.dead && (p.op === undefined || p.op === 'add')
+      && !p.shell && !p.strand && !p.box && p.blendProfile !== 'chamfer') {
+      prims[i] = { ...p, blendK: p.blendK * blendScale };
+    }
+  }
+
+  // Overrides apply AFTER scaling and clustering, so the panel's values are
+  // absolute effective strengths and indices remain stable built-array indices.
   for (const [k, v] of Object.entries(override.primRadius ?? {}))
     if (prims[+k]) prims[+k] = { ...prims[+k]!, radius: v };
   for (const [k, v] of Object.entries(override.primBlendK ?? {}))

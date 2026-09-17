@@ -231,7 +231,7 @@ describe('committed offline assets', () => {
       expect(bin.byteLength).toBe(entry.bytes.bin);
       expect(doc.fingerprint).toBe(entry.fingerprint);
 
-      // Recompute the recipe from the CURRENT source + the recorded settings.
+      // Recompute from current source/body defaults + recorded extraction settings.
       const header = doc.recipe;
       const src = name === 'zombie'
         ? zombieSrc
@@ -246,7 +246,7 @@ describe('committed offline assets', () => {
         paletteName: gibPaletteName(palette),
         cellSize: header.cellSize, maxBindPrims: header.maxBindPrims, carveK: header.carveK,
         boneRelease: header.boneRelease, organs: header.organs,
-        generator: header.generator, buildOpts: header.buildOpts,
+        generator: header.generator, buildOpts: { ...DEFAULT_BUILD_OPTS },
       });
       expect(gibAssetRecipeFingerprint(recipe)).toBe(entry.fingerprint);
 

@@ -6,7 +6,7 @@
   "assets": [
     {
       "archetype": "soldier",
-      "fingerprint": "ef6d8613c4181483",
+      "fingerprint": "47dc59e2634572b9",
       "recipe": {
         "schemaVersion": 3,
         "generator": "scripts/build-gib-assets.ts",
@@ -14,7 +14,8 @@
         "blobPath": "src/lab/sdf-zombie/characters/soldier.blob",
         "buildOpts": {
           "silhouetteNoiseAmp": 0.012,
-          "stepMultiplier": 0.6
+          "stepMultiplier": 0.6,
+          "roundBlendScale": 0.5
         },
         "face": {
           "headRadius": 0.09,
@@ -96,18 +97,18 @@
       "json": "soldier.gib.json",
       "bin": "soldier.gib.bin",
       "bytes": {
-        "json": 107745,
-        "bin": 4463376
+        "json": 107802,
+        "bin": 4335040
       },
       "totals": {
         "pieces": 19,
-        "verts": 42918,
-        "tris": 85820,
-        "binBytes": 4463376
+        "verts": 41684,
+        "tris": 83352,
+        "binBytes": 4335040
       },
       "timing": {
-        "bakeMs": 2404.93,
-        "buildMs": 2711
+        "bakeMs": 2471.29,
+        "buildMs": 2777
       },
       "source": {
         "blob": "src/lab/sdf-zombie/characters/soldier.blob",
@@ -117,7 +118,7 @@
     },
     {
       "archetype": "zombie",
-      "fingerprint": "d74e110e29432853",
+      "fingerprint": "3e590fe9ddaf3525",
       "recipe": {
         "schemaVersion": 3,
         "generator": "scripts/build-gib-assets.ts",
@@ -125,7 +126,8 @@
         "blobPath": "src/lab/sdf-zombie/characters/zombie.blob",
         "buildOpts": {
           "silhouetteNoiseAmp": 0.012,
-          "stepMultiplier": 0.6
+          "stepMultiplier": 0.6,
+          "roundBlendScale": 0.5
         },
         "face": {
           "headRadius": 0.118,
@@ -207,18 +209,18 @@
       "json": "zombie.gib.json",
       "bin": "zombie.gib.bin",
       "bytes": {
-        "json": 141252,
-        "bin": 3925208
+        "json": 141269,
+        "bin": 3770272
       },
       "totals": {
         "pieces": 24,
-        "verts": 37738,
-        "tris": 75552,
-        "binBytes": 3925208
+        "verts": 36248,
+        "tris": 72576,
+        "binBytes": 3770272
       },
       "timing": {
-        "bakeMs": 2888.38,
-        "buildMs": 3318
+        "bakeMs": 2974.68,
+        "buildMs": 3414
       },
       "source": {
         "blob": "src/lab/sdf-zombie/characters/zombie.blob",

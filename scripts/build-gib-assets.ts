@@ -85,8 +85,8 @@ function usage(): void {
 }
 
 /** Recompute the full recipe from the CURRENT source, using the settings the
- *  manifest recorded. This is the stale check: a changed `.blob`, palette or
- *  face block changes the fingerprint. */
+ *  manifest recorded, with CURRENT body-build defaults. This is the stale
+ *  check: a changed `.blob`, palette, face or blend default changes the fingerprint. */
 function recomputeRecipe(def: GibArchetypeDef, header: GibAssetArchetype['recipe']): ReturnType<typeof makeGibAssetRecipe> {
   const src = readFileSync(join(ROOT, def.blobPath), 'utf8');
   const doc = parseBlob(src);
@@ -99,7 +99,7 @@ function recomputeRecipe(def: GibArchetypeDef, header: GibAssetArchetype['recipe
     paletteName: gibPaletteName(palette),
     cellSize: header.cellSize, maxBindPrims: header.maxBindPrims, carveK: header.carveK,
     boneRelease: header.boneRelease, organs: header.organs,
-    generator: header.generator, buildOpts: header.buildOpts,
+    generator: header.generator, buildOpts: { ...DEFAULT_BUILD_OPTS },
   });
 }
 

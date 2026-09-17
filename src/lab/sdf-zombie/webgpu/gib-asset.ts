@@ -277,7 +277,7 @@ export interface GibAssetRecipe {
   archetype: string;
   blobPath: string;
   blobSource: string;
-  buildOpts: { silhouetteNoiseAmp: number; stepMultiplier: number };
+  buildOpts: { silhouetteNoiseAmp: number; stepMultiplier: number; roundBlendScale?: number };
   /** The COMPLETE compiled face parameters — they change which head prims
    *  exist, so they are part of the geometry recipe, not a look detail. */
   face: Record<string, number>;

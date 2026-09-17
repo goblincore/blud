@@ -93,7 +93,7 @@ export interface MakeGibRecipeInput {
   boneRelease: string;
   organs: boolean;
   generator: string;
-  buildOpts: { silhouetteNoiseAmp: number; stepMultiplier: number };
+  buildOpts: { silhouetteNoiseAmp: number; stepMultiplier: number; roundBlendScale?: number };
 }
 
 /** The complete geometry/deformation recipe. `blobSource` is the full text so
