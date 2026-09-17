@@ -19,6 +19,7 @@ import {
   createPostAa,
 } from './post-aa';
 import { POST_VHS_WGSL, VHS_PRESETS } from './post-vhs';
+import { POST_GLOW_EXTRACT_WGSL, POST_GLOW_BLUR_WGSL } from './post-glow';
 import { getRenderCap, setRenderCap } from './lab-renderer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
@@ -175,7 +176,7 @@ describe('post-aa module wiring', () => {
 
   it('every target gets the explicit first clear after (re)allocation', () => {
     expect(src).toContain(
-      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget])',
+      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB])',
     );
     expect(src).toContain('targetsNeedInit = true;');
   });
@@ -228,6 +229,10 @@ describe('post-aa module wiring', () => {
       // resolves keys against the parsed header, so a missing `samp` would be
       // silently unbound (and generateInput would substitute float(0)).
       ['POST_VHS_WGSL', POST_VHS_WGSL],
+      // The glow pair: the blur declares a sampler the extract does not, so
+      // each call site must match ITS header — the same silent-unbind trap.
+      ['POST_GLOW_EXTRACT_WGSL', POST_GLOW_EXTRACT_WGSL],
+      ['POST_GLOW_BLUR_WGSL', POST_GLOW_BLUR_WGSL],
     ];
     for (const [constName, wgsl] of callSites) {
       expect(callSiteKeys(constName)).toEqual(headerParams(wgsl));

@@ -30,6 +30,16 @@
 //   and three emits no sampler for a nearest/nearest target; the smear pair
 //   stays NearestFilter and is not reused.
 //
+//   GLOW — bright-pass + separable blur (post-glow.ts), default OFF (the
+//   flame lab enables it while its tuning's glowGain is up). Two draws run
+//   BEFORE FXAA on the raw capture: the extract thresholds WORKING-space
+//   luminance and blurs along x into a half-size LinearFilter target, then a
+//   second draw blurs along y and is ADDED back into the capture with
+//   additive blending — glow is never added after display encoding (the
+//   colour-chain rule below). The pair is LinearFilter, not nearest, for the
+//   same hard binding reason as the VHS input pair: three emits no sampler
+//   for a nearest/nearest target and the y-blur samples with textureSample.
+//
 //   SSCS — screen-space contact shadows (post-sscs.ts), default OFF at the
 //   factory and default ON on the game page (?sscs=off). Runs BEFORE FXAA on
 //   the raw capture: each level pixel marches a short ray toward the
@@ -97,6 +107,7 @@ import {
   type VhsPreset,
   type VhsTerms,
 } from './post-vhs';
+import { POST_GLOW_EXTRACT_WGSL, POST_GLOW_BLUR_WGSL } from './post-glow';
 import {
   POST_SSCS_WGSL,
   SSCS_DEFAULTS,
@@ -561,6 +572,15 @@ export interface PostAa {
   setSscsTerm(name: keyof SscsTerms, value: number): void;
   /** Whether the SSCS stage runs. */
   readonly sscs: boolean;
+  /**
+   * THE GLOW STAGE (post-glow.ts), default OFF — the flame lab enables it
+   * while its tuning's glowGain is above zero. Bright-pass + separable blur
+   * off the working-space capture, added back into it BEFORE FXAA, so glow
+   * is never added after display encoding (the colour-chain rule). Two quad
+   * draws into one half-size pair; no chain stages are reordered and the
+   * all-off parity path never binds either glow material.
+   */
+  setGlow(on: boolean, gain?: number, threshold?: number): void;
   /** The live SSCS terms (the defaults, until setSscsTerm overrides one). */
   readonly sscsTerms: SscsTerms;
   /**
@@ -720,6 +740,18 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   // SSCS output. Colour-only like the VHS target: the pass reads scene
   // depth, it does not write any.
   const sscsTarget = new THREE.RenderTarget(1, 1, passOpts);
+  // --- GLOW pair (post-glow.ts), default OFF ----------------------------
+  // Half-content-size working targets for the two glow draws, LinearFilter
+  // ON PURPOSE and for the same hard reason as the VHS input pair above:
+  // POST_GLOW_BLUR_WGSL samples with textureSample, and three emits no
+  // `<tex>_sampler` for a nearest/nearest target (WGSLNodeBuilder
+  // .isUnfilterable) — the blur would not compile against nearest.
+  // rgba16float is filterable in WebGPU, so the sampler is valid. glowA is
+  // written once (extract+blur-x) and read once (blur-y-and-add), no
+  // ping-pong; glowB is its pair half, allocated so a non-additive variant
+  // has somewhere to land without a mid-session reallocation.
+  const glowA = new THREE.RenderTarget(1, 1, vhsPairOpts);
+  const glowB = new THREE.RenderTarget(1, 1, vhsPairOpts);
 
   // The single canvas-boundary flip. Stays a uniform as a console escape
   // hatch (setBlitFlipY) — the intermediate passes flip their own sampling
@@ -837,6 +869,19 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   ));
   const _sscsView = new THREE.Matrix4();
   const _sscsVp = new THREE.Matrix4();
+
+  // --- GLOW state (post-glow.ts). Inert while `glowOn` is false — the
+  // factory default — so the parity path never binds either glow material.
+  // The extract reads whatever the chain currently holds (swapped per frame,
+  // the blendCurTex pattern); the blur always reads glowA, which never
+  // changes, so its texture node is bound once.
+  let glowOn = false;
+  let glowGain = 0;
+  let glowThreshold = 0.75;
+  // Per-draw cfg, x = knee threshold, y/z = one GLOW-target texel as UV,
+  // w = gain (applied by the blur draw only).
+  const uGlowExtractCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uGlowBlurCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
@@ -977,6 +1022,43 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   sscsMat.fog = false;
   const sscsScene = quadScene(sscsMat);
 
+  // The GLOW passes. Extract: bright-pass + blur-x off the current chain
+  // source into glowA. Blur: blur-y off glowA, ADDITIVE into the capture —
+  // AdditiveBlending is (SrcAlpha, One) non-premultiplied on this backend
+  // (explosion-vfx.ts read the factors out of the build), and alpha is 1, so
+  // rgb * cfg.w lands over the frame the capture already holds. The additive
+  // draw must run with autoClear off (render() does the blit's dance): a
+  // clear would wipe the frame from under the glow.
+  const glowExtractSrcTex = texture(sceneTarget.texture);
+  const glowExtractOut = wgslFn(POST_GLOW_EXTRACT_WGSL)({
+    srcTex: glowExtractSrcTex,
+    texCoord: uv(),
+    cfg: uGlowExtractCfg,
+  }) as unknown as Swizzled;
+  const glowExtractMat = new MeshBasicNodeMaterial();
+  glowExtractMat.name = 'post:glow-extract';
+  glowExtractMat.colorNode = vec4(glowExtractOut.xyz as never, 1.0);
+  glowExtractMat.depthWrite = false;
+  glowExtractMat.depthTest = false;
+  glowExtractMat.fog = false;
+  const glowExtractScene = quadScene(glowExtractMat);
+
+  const glowBlurTex = texture(glowA.texture);
+  const glowBlurOut = wgslFn(POST_GLOW_BLUR_WGSL)({
+    glowTex: glowBlurTex,
+    glowSamp: glowBlurTex,
+    texCoord: uv(),
+    cfg: uGlowBlurCfg,
+  }) as unknown as Swizzled;
+  const glowBlurMat = new MeshBasicNodeMaterial();
+  glowBlurMat.name = 'post:glow-blur';
+  glowBlurMat.colorNode = vec4(glowBlurOut.xyz as never, 1.0);
+  glowBlurMat.depthWrite = false;
+  glowBlurMat.depthTest = false;
+  glowBlurMat.fog = false;
+  glowBlurMat.blending = THREE.AdditiveBlending;
+  const glowBlurScene = quadScene(glowBlurMat);
+
   const blitOut = wgslFn(POST_AA_BLIT_WGSL)({
     srcTex: blitSrcTex,
     texCoord: uv(),
@@ -1072,6 +1154,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     vhsInB.setSize(content.width, content.height);
     vhsTarget.setSize(content.width, content.height);
     sscsTarget.setSize(content.width, content.height);
+    // The glow pair runs at HALF content size: a bloom's footprint is wide
+    // relative to one pixel, so the blur does not need full resolution, and
+    // the two draws cost a quarter of one each.
+    glowA.setSize(Math.max(1, Math.floor(content.width / 2)), Math.max(1, Math.floor(content.height / 2)));
+    glowB.setSize(Math.max(1, Math.floor(content.width / 2)), Math.max(1, Math.floor(content.height / 2)));
     // setSize reallocates the backing textures: uninitialised again, and the
     // old history is the wrong size besides.
     targetsNeedInit = true;
@@ -1092,7 +1179,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // A narrowing lens is an effect like any other: it needs the capture
       // redirect, because the blit has to sample a texture rather than be one.
       // VHS is a stage too, so it forces the redirected chain even alone.
-      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn || sscsOn
+      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn || sscsOn || glowOn
         || (blastDistortOn && liveBlastDistorts.length > 0) || captureStage !== null;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
@@ -1111,7 +1198,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (targetsNeedInit) {
         targetsNeedInit = false;
         setPassLabel('init');
-        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget]) {
+        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, quadCam);
         }
@@ -1130,6 +1217,30 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (captureStage !== null) {
         const staged = captureStage(sceneTarget);
         if (staged !== null) src = staged;
+      }
+
+      // GLOW: bright-pass + separable blur off the working-space capture,
+      // added back into it — BEFORE SSCS/FXAA see the frame, so glow is
+      // never added after display encoding (the colour-chain rule) and the
+      // stages below simply read the glowing frame. The add draws INTO src
+      // (additive, autoClear off — a clear would wipe the frame under the
+      // glow), so `src` itself is unchanged and nothing downstream reorders.
+      // Both thresholds work in WORKING space: the capture is pre-encode.
+      if (glowOn && glowGain > 0) {
+        const gw = Math.max(1, glowA.width);
+        const gh = Math.max(1, glowA.height);
+        glowExtractSrcTex.value = src.texture;
+        uGlowExtractCfg.value.set(glowThreshold, 1 / gw, 1 / gh, glowGain);
+        setPassLabel('post:glow-extract');
+        renderer.setRenderTarget(glowA);
+        void renderer.render(glowExtractScene, quadCam);
+        uGlowBlurCfg.value.set(glowThreshold, 1 / gw, 1 / gh, glowGain);
+        setPassLabel('post:glow-blur');
+        renderer.setRenderTarget(src);
+        const prevAutoClearGlow = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(glowBlurScene, quadCam);
+        renderer.autoClear = prevAutoClearGlow;
       }
 
       // SSCS: contact shadows from the capture's own depth, run BEFORE FXAA
@@ -1390,6 +1501,14 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     },
     get sscs() { return sscsOn; },
     get sscsTerms(): SscsTerms { return { ...sscsTerms }; },
+    // --- GLOW (post-glow.ts), default OFF; the flame lab feeds it from its
+    // live burn tuning every frame. Non-finite arguments fall back rather
+    // than poisoning the uniforms.
+    setGlow(on: boolean, gain = 0, threshold = 0.75) {
+      glowOn = on;
+      glowGain = Number.isFinite(gain) ? Math.max(0, gain) : 0;
+      glowThreshold = Number.isFinite(threshold) ? Math.max(0, threshold) : 0.75;
+    },
     get vhsTerms() {
       const out = {} as VhsTerms;
       for (const k of Object.keys(vhsTermUniforms) as (keyof VhsTerms)[]) {
@@ -1415,8 +1534,12 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     vhsInB.dispose();
     vhsTarget.dispose();
     sscsTarget.dispose();
+    glowA.dispose();
+    glowB.dispose();
     sscsFleshFallback.dispose();
     sscsMat.dispose();
+    glowExtractMat.dispose();
+    glowBlurMat.dispose();
     fxaaMat.dispose();
       blendMat.dispose();
       vhsCopyMat.dispose();

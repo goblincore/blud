@@ -580,6 +580,10 @@ async function bootstrap(): Promise<void> {
       // Wall-clock seconds, as game-main's flicker clock — never dt-integrated,
       // so a stall cannot jump the wobble phase.
       const clock = now * 0.001;
+      // GLOW (plan task 11): the pass is fed from the live tuning every
+      // frame, so a slider move takes effect at once. Gain 0 keeps it fully
+      // inert — the draws are skipped and the frame is bit-identical.
+      postAa.setGlow(tuning.glowGain > 0, tuning.glowGain, tuning.glowThreshold);
       for (let i = 0; i < actors.length; i++) {
         const s = stepBurn(burns[i]!, burnDt, tuning);
         const gpu = actors[i]!.gpu;
