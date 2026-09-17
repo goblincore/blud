@@ -268,6 +268,46 @@ export function gibAssetEligible(
 }
 
 /**
+ * ROW-FOR-ROW semantic check between the baked bind table and the runtime
+ * piece (2026-09-17). `gibAssetEligible` proves the SOURCE INDEX SETS match;
+ * this also proves each table row is the runtime row it will be deformed
+ * against, in order — flesh rows against `gib.prims` (minus the `sub` caps that
+ * are not bind targets) and bone rows against `gib.bones`. A plan that
+ * retained the same sources but reordered or grew a row would slip past a
+ * count-only check and deform against the wrong frame; this refuses it.
+ */
+export function gibAssetRowsMatch(
+  doc: GibAssetPiece,
+  gib: {
+    prims?: readonly { op?: string }[];
+    bones?: readonly { op?: string }[];
+    srcPrims?: readonly number[];
+    srcBones?: readonly number[];
+  },
+): GibAssetIneligibleReason | null {
+  if (!doc) return 'no-asset';
+  // Without the runtime rows there is nothing to align against; the source-set
+  // check in `gibAssetEligible` is the whole contract in that case.
+  if (gib.prims === undefined && gib.bones === undefined) return null;
+  const flesh = gib.prims ? gib.prims.filter(p => p.op !== 'sub') : null;
+  const bones = gib.bones ? gib.bones.filter(p => p.op !== 'sub') : null;
+  const srcPrims = gib.srcPrims ?? [];
+  const srcBones = gib.srcBones ?? [];
+  const fleshCount = flesh ? flesh.length : doc.srcPrims.length;
+  const boneCount = bones ? bones.length : doc.srcBones.length;
+  if (doc.bind.prims.length !== fleshCount + boneCount) return 'source-mismatch';
+  for (let i = 0; i < fleshCount; i++) {
+    const p = doc.bind.prims[i]!;
+    if (p.source !== 'flesh' || p.index !== (srcPrims[i] ?? -1)) return 'source-mismatch';
+  }
+  for (let j = 0; j < boneCount; j++) {
+    const p = doc.bind.prims[fleshCount + j]!;
+    if (p.source !== 'bone' || p.index !== (srcBones[j] ?? -1)) return 'source-mismatch';
+  }
+  return null;
+}
+
+/**
  * The MESH-path eligibility the renderer uses. It is `gibAssetEligible` plus the
  * face rule:
  *
@@ -281,11 +321,17 @@ export function gibAssetEligible(
  */
 export function gibAssetMeshEligible(
   doc: GibAssetPiece,
-  gib: { part?: string; srcPrims?: readonly number[]; srcBones?: readonly number[] },
+  gib: {
+    part?: string;
+    prims?: readonly { op?: string }[];
+    bones?: readonly { op?: string }[];
+    srcPrims?: readonly number[];
+    srcBones?: readonly number[];
+  },
   faceSupported = false,
 ): GibAssetIneligibleReason | null {
   if (doc?.face && !faceSupported) return 'head-face';
-  return gibAssetEligible(doc, gib);
+  return gibAssetEligible(doc, gib) ?? gibAssetRowsMatch(doc, gib);
 }
 
 // ---------------------------------------------------------------------------

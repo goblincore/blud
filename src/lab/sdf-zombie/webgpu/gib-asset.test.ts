@@ -119,7 +119,7 @@ describe('gib-asset schema', () => {
       blobSource: 'head 1\nbody 2\n', buildOpts: { silhouetteNoiseAmp: 0.012, stepMultiplier: 0.6 },
       face: {}, palette: 'default', look: {}, surface: {},
       boneRelease: 'all', organs: true, cellSize: 0.012, maxBindPrims: 4, carveK: 0.008, gore: 1,
-      cutMask: 'planner-cut-v1',
+      cutMask: 'planner-cut-v1', bindMask: 'additive-v1',
     };
     const a = gibAssetRecipeFingerprint(base);
     // One character swapped, same byte length — a length-only key would miss it.

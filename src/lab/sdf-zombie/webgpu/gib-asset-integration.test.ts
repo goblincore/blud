@@ -131,17 +131,18 @@ describe('offline asset release continuity (CPU frame bookkeeping)', () => {
   });
 
   // THE TASK-3 REGRESSION (measured on the page, now pinned on the CPU). The
-  // asset's bind table stores a REST frame for the unsourced `sub` CUT CAPS. The
+  // task-3 bind table stored a REST frame for the unsourced `sub` CUT CAPS. The
   // old rupture path mapped those rows through `frame.deformedPrims` by source
   // index — which has no entry for a cap — so `deformBoundVertex` fell back to
   // the rest frame, and the vertex was placed at (rest body point − the RUNTIME
-  // plan's clean origin). The runtime plan is built on the POSED body, so that
-  // origin differs from the REST origin the asset was baked with; every cap
-  // vertex inherited that whole offset, which rotated into long spike triangles
-  // off each piece (page-observed, then fixed). The shipped path deforms against
-  // the runtime piece's own row-aligned prims (caps included) about
-  // `moved.origin`, which cancels the pose/origin difference.
-  it('deforms cut-cap rows against the runtime frames, with no rest-origin spike', async () => {
+  // plan's clean origin); every cap vertex inherited that whole offset, which
+  // rotated into long spike triangles off each piece. Task 3 fixed the ROW
+  // alignment; schema 3 (2026-09-17) fixed the deeper cause by removing the caps
+  // from the bind table altogether (a point cap had no axis, so its metre-scale
+  // radial could not rotate with the body). This test now pins that BOTH frame
+  // sources land the piece near its rest extent — the row-aligned runtime prims
+  // and the source-indexed slough — with no rest-origin spike.
+  it('deforms against runtime frames with no rest-origin spike, both frame sources', async () => {
     const lib = await loaded();
     const rest = zombieBody();
     const asset = lib.byPart.get('torso.chest')!;
@@ -180,14 +181,14 @@ describe('offline asset release continuity (CPU frame bookkeeping)', () => {
     pool.deformRows(newInst, gibAssetRowsFromPrims([...moved.prims, ...moved.bones]), moved.origin);
     const newMax = maxLocal(newInst.positions);
 
-    // The OLD path, reproduced exactly as it shipped: source-indexed rows from
-    // the whole-body slough + the runtime plan's CLEAN origin.
+    // The task-3 source-indexed frame source. With schema 3 there are no cap
+    // rows, so it is a valid additive map too — and must also stay near rest.
     const oldInst = pool.acquire('torso.chest');
     pool.deformRows(oldInst, gibAssetPosedRows(asset.doc, frame.deformedPrims, frame.deformedBones), piecePosed.origin);
     const oldMax = maxLocal(oldInst.positions);
 
     expect(newMax).toBeLessThan(restMax * 1.6 + 0.1);
-    expect(oldMax).toBeGreaterThan(newMax + 0.2);
+    expect(oldMax).toBeLessThan(restMax * 1.6 + 0.1);
     pool.dispose();
   });
 });

@@ -198,7 +198,9 @@ import {
 } from './gib-sprite-pieces';
 import { carveBodyIntoPieces, type CarvedLibrary, type CarvedPiece } from './gib-carve';
 import { GibAssetRuntime, gibAssetMeshEligible } from './gib-asset-runtime';
-import { gibAssetRowsFromPrims } from './gib-asset-deform';
+import {
+  checkGibAssetDeformBounds, gibAssetDeformBoundsOk, gibAssetRowsFromPrims,
+} from './gib-asset-deform';
 import { resetGibAssetCache } from './gib-asset-loader';
 import { compileBlob } from '../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
@@ -5779,15 +5781,13 @@ async function main() {
       && !!faceUniforms.faceTex.value;
     const ineligible = gibAssetMeshEligible(piece.doc, g, faceSupported);
     if (ineligible) { gibAssetRuntime.countFallback(ineligible); return false; }
-    // ROW ALIGNMENT IS PART OF ELIGIBILITY. The deform walks the runtime piece's
-    // rows (`g.prims` then `g.bones`) against the asset's bind table row for row.
-    // `srcPrims`/`srcBones` equality proves the SOURCED rows line up, but not the
-    // cut caps: a plan that grew or lost a `sub` cap between the rest bake and
-    // this body would silently deform against the wrong frame. Fall back instead.
-    if (piece.doc.bind.prims.length !== g.prims.length + g.bones.length) {
-      gibAssetRuntime.countFallback('row-mismatch');
-      return false;
-    }
+    // ROW ALIGNMENT IS PART OF ELIGIBILITY (and now SEMANTIC, not a count).
+    // `gibAssetMeshEligible` -> `gibAssetRowsMatch` walks the bind table against
+    // the runtime rows row for row: flesh rows against `g.prims` minus the `sub`
+    // cut caps (not bind targets under `GIB_ASSET_BIND_MASK = 'additive-v1'`),
+    // bone rows against `g.bones`. A plan that kept the same source set but
+    // reordered/grew a row falls back here instead of deforming against the
+    // wrong frame.
     const pool = gibAssetRuntime.poolFor(lib);
     if (!pool) { gibAssetRuntime.countFallback('no-pool'); return false; }
     const kind = g.kind ?? 'limb';
@@ -5821,6 +5821,21 @@ async function main() {
     const rows = gibAssetRowsFromPrims([...g.prims, ...g.bones]);
     const inst = pool.acquire(g.part);
     pool.deformRows(inst, rows, g.origin);
+    // THE DISPLAY GATE (2026-09-17). Finiteness alone cannot tell a torn piece
+    // from a spike: the pre-fix cap-bound deform was finite and 4-5 m long. The
+    // bounds are derived from the piece's RUNTIME ADDITIVE prims — the exact
+    // geometry the deform read — so a vertex outside their union, or a triangle
+    // spanning metres, is refused and this piece falls back to the marched path
+    // with a counted reason. The pooled buffers are returned exactly once here;
+    // nothing downstream has seen the mesh yet. NO clamping: a rogue vertex is
+    // never repaired, the invalid piece is not displayed as an asset.
+    const additiveWorld = [...g.prims, ...g.bones].filter(p => p.op !== 'sub');
+    const bounds = checkGibAssetDeformBounds(piece.doc, piece.decoded, inst.positions, g.origin, additiveWorld);
+    if (!gibAssetDeformBoundsOk(bounds)) {
+      pool.release(inst);
+      gibAssetRuntime.countFallback(bounds.finite ? 'deform-bounds' : 'deform-nonfinite');
+      return false;
+    }
     // PER-INSTANCE FACE FRAME (task 4). The asset's stored `doc.face` is the
     // REST frame; what must be projected is the POSED/sloughed frame the actor
     // is drawing with right now — the same snapshot `spawnChunkPiece` takes from

@@ -17,11 +17,12 @@ import { resolve } from 'node:path';
 declare const process: { cwd(): string };
 import * as THREE from 'three/webgpu';
 import zombieSrc from '../characters/zombie.blob?raw';
+import soldierSrc from '../characters/soldier.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { DEFAULT_FACE, type FaceParams } from '../face';
-import { gibParts, type GibPiece } from '../gib-parts';
+import { gibParts, gibPlan, type GibPiece } from '../gib-parts';
 import { createBakedChunkMaterial } from './baked-chunks';
 import { deformGibAssetPiece, gibAssetPosedRows, gibAssetRowsFromPrims } from './gib-asset-deform';
 import {
@@ -33,7 +34,7 @@ import {
   gibAssetEligible, type GibAssetLibraryPiece,
 } from './gib-asset-runtime';
 import { sdPrimitive } from '../validate';
-import type { GibAssetBindingPrim } from './gib-asset';
+import type { Primitive } from '../types';
 import type { Vec3 } from '../types';
 
 const GIB_DIR = resolve(process.cwd(), 'public/assets/lab/gibs');
@@ -62,6 +63,12 @@ function zombieBody() {
   const doc = parseBlob(zombieSrc);
   // The face must be MERGED with DEFAULT_FACE exactly as the generator does,
   // or the body's prim order/geometry differs and the bind indices miss.
+  const face: FaceParams = { ...DEFAULT_FACE, ...compileFace(doc) };
+  return buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS);
+}
+
+function soldierBody() {
+  const doc = parseBlob(soldierSrc);
   const face: FaceParams = { ...DEFAULT_FACE, ...compileFace(doc) };
   return buildBody(compileBlob(doc, face), DEFAULT_BUILD_OPTS);
 }
@@ -353,11 +360,12 @@ describe('gib-asset runtime head materials', () => {
 // with `torn: []`, so `bakeColor.a` — the wound/wet mask the mesh shader turns
 // into blood-slick cut faces — was 0 on 100% of vertices; every cut face read
 // as dry outer skin. The regeneration derives the mask from the ACTUAL planner
-// cut caps (`sub` prims in the bind table), so the classification here is
-// independent of the bake: a vertex is "at a cut" when it sits on a stored cap
-// sphere's own iso (`sdPrimitive(cap) ~= 0`), and "outer skin" when it is well
-// clear of every cap. The assertion is the blocker's exact shape — meaningful
-// nonzero mask at cuts, lower away from them — on the committed files.
+// cut caps, so the classification here is independent of the bake: a vertex is
+// "at a cut" when it sits on a cap sphere's own iso (`sdPrimitive(cap) ~= 0`),
+// and "outer skin" when it is well clear of every cap. The caps come from a
+// fresh `gibPlan` (schema 3 removed them from the BIND TABLE — they are not
+// deform targets — but the planner still emits them); the coordinates are the
+// same rest body frame as `decoded.positions + doc.offset`.
 describe('gib-asset cut mask — committed sets', () => {
   it('has a wet cut face and a dry outer skin (bakeColor.a is not empty)', async () => {
     resetGibAssetCache();
@@ -366,13 +374,10 @@ describe('gib-asset cut mask — committed sets', () => {
     let cappedPieces = 0;
     for (const archetype of ['zombie', 'soldier'] as const) {
       const set = await loadGibAssetSet(archetype, { fetchImpl: diskFetch() });
+      const body = archetype === 'zombie' ? zombieBody() : soldierBody();
+      const plan = gibPlan(body, { bones: 'all', organs: true });
       for (const { doc, decoded } of set.pieces) {
-        const caps = doc.bind.prims
-          .filter((p: GibAssetBindingPrim) => p.op === 'sub')
-          .map((p: GibAssetBindingPrim) => ({
-            limb: p.limb as never, cluster: p.cluster, op: p.op as never,
-            a: p.a, b: p.b, radius: p.radius, radiusB: p.radiusB, scale: p.scale, blendK: p.blendK,
-          }));
+        const caps: Primitive[] = (plan.pieces.find(p => p.part === doc.part)?.prims ?? []).filter(p => p.op === 'sub');
         if (caps.length === 0) continue;
         cappedPieces++;
         for (let i = 0; i < doc.verts; i++) {

@@ -1,10 +1,10 @@
 {
   "kind": "blud-gib-assets",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "archetype": "zombie",
-  "fingerprint": "6ce4f7104ab8f5df",
+  "fingerprint": "d74e110e29432853",
   "recipe": {
-    "schemaVersion": 2,
+    "schemaVersion": 3,
     "generator": "scripts/build-gib-assets.ts",
     "archetype": "zombie",
     "blobPath": "src/lab/sdf-zombie/characters/zombie.blob",
@@ -86,7 +86,8 @@
     "maxBindPrims": 4,
     "carveK": 0.008,
     "gore": 1,
-    "cutMask": "planner-cut-v1"
+    "cutMask": "planner-cut-v1",
+    "bindMask": "additive-v1"
   },
   "source": {
     "blob": "src/lab/sdf-zombie/characters/zombie.blob",
@@ -99,7 +100,8 @@
     "gore": 1,
     "boneRelease": "all",
     "organs": true,
-    "cutMask": "planner-cut-v1"
+    "cutMask": "planner-cut-v1",
+    "bindMask": "additive-v1"
   },
   "offsets": {
     "json": "zombie.gib.json",
@@ -389,8 +391,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.001139130962579199,
         "vertexFieldErrorMean": 0.00026223141045011506,
-        "deformedFieldErrorMax": 0.0014100298139656103,
-        "deformedFieldErrorMean": 0.00032822722440374597,
+        "deformedFieldErrorMax": 0.0025530202087724017,
+        "deformedFieldErrorMean": 0.00031192846335286503,
         "seams": []
       },
       "srcPrims": [
@@ -577,30 +579,6 @@
               0.8
             ],
             "blendK": 0.02
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "torso",
-            "cluster": 1,
-            "a": [
-              0,
-              -1.7652310463561358,
-              -0.3390277049230845
-            ],
-            "b": [
-              0,
-              -1.7652310463561358,
-              -0.3390277049230845
-            ],
-            "radius": 2.9160000000000004,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -623,8 +601,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002058369433001931,
         "vertexFieldErrorMean": 0.00015886745826128098,
-        "deformedFieldErrorMax": 0.0029035985980134836,
-        "deformedFieldErrorMean": 0.00031447239452204935,
+        "deformedFieldErrorMax": 0.013055181921319825,
+        "deformedFieldErrorMean": 0.0011661302750364546,
         "seams": [
           {
             "withPart": "torso.abdomen",
@@ -790,54 +768,6 @@
               0.95
             ],
             "blendK": 0.02
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "torso",
-            "cluster": 1,
-            "a": [
-              0,
-              -0.7329535300578507,
-              -0.07712825581661042
-            ],
-            "b": [
-              0,
-              -0.7329535300578507,
-              -0.07712825581661042
-            ],
-            "radius": 1.73808,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "torso",
-            "cluster": 1,
-            "a": [
-              0,
-              2.935127341250139,
-              0.22501526725132276
-            ],
-            "b": [
-              0,
-              2.935127341250139,
-              0.22501526725132276
-            ],
-            "radius": 1.73808,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -874,8 +804,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002793834997144779,
         "vertexFieldErrorMean": 0.00023567138301155,
-        "deformedFieldErrorMax": 0.0074114859243775795,
-        "deformedFieldErrorMean": 0.0010060165509785896,
+        "deformedFieldErrorMax": 0.02239022928606138,
+        "deformedFieldErrorMean": 0.004124267422668597,
         "seams": [
           {
             "withPart": "torso.chest",
@@ -1046,30 +976,6 @@
               0.92
             ],
             "blendK": 0.02
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "torso",
-            "cluster": 1,
-            "a": [
-              0,
-              2.9953313576975713,
-              0.09113618527107009
-            ],
-            "b": [
-              0,
-              2.9953313576975713,
-              0.09113618527107009
-            ],
-            "radius": 1.9140000000000001,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -1092,8 +998,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002537267787084528,
         "vertexFieldErrorMean": 0.00021799717481746876,
-        "deformedFieldErrorMax": 0.004040837285705848,
-        "deformedFieldErrorMean": 0.0004600531152894465,
+        "deformedFieldErrorMax": 0.02461620565520173,
+        "deformedFieldErrorMean": 0.003294012202032554,
         "seams": [
           {
             "withPart": "torso.abdomen",
@@ -1283,30 +1189,6 @@
               1
             ],
             "blendK": 0.007
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "armL",
-            "cluster": 2,
-            "a": [
-              0.838166639342877,
-              -2.0965215628301452,
-              0.20453466607564874
-            ],
-            "b": [
-              0.838166639342877,
-              -2.0965215628301452,
-              0.20453466607564874
-            ],
-            "radius": 3.2440392824215794,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -1329,8 +1211,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.0026699041764865475,
         "vertexFieldErrorMean": 0.0003537546942242201,
-        "deformedFieldErrorMax": 0.003990594331698622,
-        "deformedFieldErrorMean": 0.0005951336117027509,
+        "deformedFieldErrorMax": 0.003920465990583752,
+        "deformedFieldErrorMean": 0.0005992792351359996,
         "seams": [
           {
             "withPart": "armL.lower",
@@ -1521,30 +1403,6 @@
               1
             ],
             "blendK": 0.0125
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "armL",
-            "cluster": 2,
-            "a": [
-              -0.23651332148845405,
-              4.1264578135295835,
-              -0.11235084990044701
-            ],
-            "b": [
-              -0.23651332148845405,
-              4.1264578135295835,
-              -0.11235084990044701
-            ],
-            "radius": 3.0509999999999997,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -1567,8 +1425,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.00322186033182755,
         "vertexFieldErrorMean": 0.0003938401324292931,
-        "deformedFieldErrorMax": 0.014153434837641095,
-        "deformedFieldErrorMean": 0.0014106908772581576,
+        "deformedFieldErrorMax": 0.009595093047085628,
+        "deformedFieldErrorMean": 0.0013494921036877009,
         "seams": [
           {
             "withPart": "armL.upper",
@@ -1759,30 +1617,6 @@
               1
             ],
             "blendK": 0.007
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "armR",
-            "cluster": 3,
-            "a": [
-              -0.838166639342877,
-              -2.0965215628301452,
-              0.20453466607564874
-            ],
-            "b": [
-              -0.838166639342877,
-              -2.0965215628301452,
-              0.20453466607564874
-            ],
-            "radius": 3.2440392824215794,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -1805,8 +1639,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.0026699041764865475,
         "vertexFieldErrorMean": 0.0003537546954798536,
-        "deformedFieldErrorMax": 0.00426565976247447,
-        "deformedFieldErrorMean": 0.000606930521552826,
+        "deformedFieldErrorMax": 0.004168487577861196,
+        "deformedFieldErrorMean": 0.0006089350908737854,
         "seams": [
           {
             "withPart": "armR.lower",
@@ -1997,30 +1831,6 @@
               1
             ],
             "blendK": 0.0125
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "armR",
-            "cluster": 3,
-            "a": [
-              0.23651332148845405,
-              4.1264578135295835,
-              -0.11235084990044701
-            ],
-            "b": [
-              0.23651332148845405,
-              4.1264578135295835,
-              -0.11235084990044701
-            ],
-            "radius": 3.0509999999999997,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -2043,8 +1853,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.00322186033182755,
         "vertexFieldErrorMean": 0.0003938401394509271,
-        "deformedFieldErrorMax": 0.012293536406884409,
-        "deformedFieldErrorMean": 0.0013595388046296784,
+        "deformedFieldErrorMax": 0.00943223851845134,
+        "deformedFieldErrorMean": 0.0012982562033132866,
         "seams": [
           {
             "withPart": "armR.upper",
@@ -2210,30 +2020,6 @@
               1
             ],
             "blendK": 0.0175
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "legL",
-            "cluster": 4,
-            "a": [
-              0.1,
-              -2.5184461915202627,
-              0.08186153597021963
-            ],
-            "b": [
-              0.1,
-              -2.5184461915202627,
-              0.08186153597021963
-            ],
-            "radius": 3.144000000000001,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -2256,8 +2042,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002502899194273245,
         "vertexFieldErrorMean": 0.00029031388839493525,
-        "deformedFieldErrorMax": 0.022777755212226553,
-        "deformedFieldErrorMean": 0.0009949090299138405,
+        "deformedFieldErrorMax": 0.014681206204896064,
+        "deformedFieldErrorMean": 0.000634785835866546,
         "seams": [
           {
             "withPart": "legL.lower",
@@ -2447,30 +2233,6 @@
               1.5
             ],
             "blendK": 0.0125
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "legL",
-            "cluster": 4,
-            "a": [
-              0.1,
-              4.927315494033776,
-              -0.10870646222328807
-            ],
-            "b": [
-              0.1,
-              4.927315494033776,
-              -0.10870646222328807
-            ],
-            "radius": 4.2341999999999995,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -2493,8 +2255,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002681115973336921,
         "vertexFieldErrorMean": 0.0002972369128849198,
-        "deformedFieldErrorMax": 0.02243823511299299,
-        "deformedFieldErrorMean": 0.0016298075697177093,
+        "deformedFieldErrorMax": 0.01620758594625788,
+        "deformedFieldErrorMean": 0.0013604720908526385,
         "seams": [
           {
             "withPart": "legL.upper",
@@ -2660,30 +2422,6 @@
               1
             ],
             "blendK": 0.0175
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "legR",
-            "cluster": 5,
-            "a": [
-              -0.1,
-              -2.5184461915202627,
-              0.08186153597021963
-            ],
-            "b": [
-              -0.1,
-              -2.5184461915202627,
-              0.08186153597021963
-            ],
-            "radius": 3.144000000000001,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -2706,8 +2444,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002502899194273245,
         "vertexFieldErrorMean": 0.00029031388839493216,
-        "deformedFieldErrorMax": 0.022777759179089918,
-        "deformedFieldErrorMean": 0.0009949090387496333,
+        "deformedFieldErrorMax": 0.01468120632082376,
+        "deformedFieldErrorMean": 0.0006347858350230868,
         "seams": [
           {
             "withPart": "legR.lower",
@@ -2897,30 +2635,6 @@
               1.5
             ],
             "blendK": 0.0125
-          },
-          {
-            "source": null,
-            "index": -1,
-            "op": "sub",
-            "limb": "legR",
-            "cluster": 5,
-            "a": [
-              -0.1,
-              4.927315494033776,
-              -0.10870646222328807
-            ],
-            "b": [
-              -0.1,
-              4.927315494033776,
-              -0.10870646222328807
-            ],
-            "radius": 4.2341999999999995,
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "blendK": 0.003
           }
         ]
       },
@@ -2943,8 +2657,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002681115973336921,
         "vertexFieldErrorMean": 0.00029723691578645127,
-        "deformedFieldErrorMax": 0.02243823749867592,
-        "deformedFieldErrorMean": 0.001629807506300954,
+        "deformedFieldErrorMax": 0.016207584162081744,
+        "deformedFieldErrorMean": 0.0013604720557722787,
         "seams": [
           {
             "withPart": "legR.upper",
@@ -4097,8 +3811,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.007081471965117063,
         "vertexFieldErrorMean": 0.001239650326162044,
-        "deformedFieldErrorMax": 0.008945606247974832,
-        "deformedFieldErrorMean": 0.0014150142359254146,
+        "deformedFieldErrorMax": 0.00904202235899007,
+        "deformedFieldErrorMean": 0.0014060471875176964,
         "seams": []
       },
       "srcPrims": [],
@@ -4619,8 +4333,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.00300483708694968,
         "vertexFieldErrorMean": 0.0007679162328656656,
-        "deformedFieldErrorMax": 0.010856516502727048,
-        "deformedFieldErrorMean": 0.0011097703509929913,
+        "deformedFieldErrorMax": 0.010596792904190445,
+        "deformedFieldErrorMean": 0.0011581149138848363,
         "seams": []
       },
       "srcPrims": [],
@@ -4798,8 +4512,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002273872922450324,
         "vertexFieldErrorMean": 0.0009120540591400267,
-        "deformedFieldErrorMax": 0.002273872922450324,
-        "deformedFieldErrorMean": 0.0010697752144237871,
+        "deformedFieldErrorMax": 0.002273872922450248,
+        "deformedFieldErrorMean": 0.000912054059140025,
         "seams": []
       },
       "srcPrims": [],
@@ -4964,8 +4678,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002273872922450324,
         "vertexFieldErrorMean": 0.0009120540591400262,
-        "deformedFieldErrorMax": 0.002273872922450324,
-        "deformedFieldErrorMean": 0.0010644603378654452,
+        "deformedFieldErrorMax": 0.0022738729224503346,
+        "deformedFieldErrorMean": 0.0009120540591400272,
         "seams": []
       },
       "srcPrims": [],
@@ -5155,8 +4869,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002939826724640004,
         "vertexFieldErrorMean": 0.0010554159442078997,
-        "deformedFieldErrorMax": 0.007895690949634696,
-        "deformedFieldErrorMean": 0.0011982785522769543,
+        "deformedFieldErrorMax": 0.008286537158486566,
+        "deformedFieldErrorMean": 0.001108082722813135,
         "seams": []
       },
       "srcPrims": [],
@@ -5347,8 +5061,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002939826724640004,
         "vertexFieldErrorMean": 0.0010554159390332109,
-        "deformedFieldErrorMax": 0.00640485445736152,
-        "deformedFieldErrorMean": 0.0011882607671691186,
+        "deformedFieldErrorMax": 0.006766317263330997,
+        "deformedFieldErrorMean": 0.001094623724987878,
         "seams": []
       },
       "srcPrims": [],
@@ -5514,8 +5228,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.001594954180095337,
         "vertexFieldErrorMean": 0.0006578085373487414,
-        "deformedFieldErrorMax": 0.001594954180095337,
-        "deformedFieldErrorMean": 0.000861035600057531,
+        "deformedFieldErrorMax": 0.0015949541800953544,
+        "deformedFieldErrorMean": 0.000657808537348743,
         "seams": []
       },
       "srcPrims": [],
@@ -5680,8 +5394,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.001594954180095337,
         "vertexFieldErrorMean": 0.0006578085373487414,
-        "deformedFieldErrorMax": 0.001594954180095337,
-        "deformedFieldErrorMean": 0.000861035600057526,
+        "deformedFieldErrorMax": 0.0015949541800953718,
+        "deformedFieldErrorMean": 0.0006578085373487417,
         "seams": []
       },
       "srcPrims": [],
@@ -5871,8 +5585,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.0021818536939253314,
         "vertexFieldErrorMean": 0.0009088443961954614,
-        "deformedFieldErrorMax": 0.00549686985018881,
-        "deformedFieldErrorMean": 0.0010968622906339174,
+        "deformedFieldErrorMax": 0.006645732787501565,
+        "deformedFieldErrorMean": 0.0009700238015184893,
         "seams": []
       },
       "srcPrims": [],
@@ -6063,8 +5777,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.0021818536939253314,
         "vertexFieldErrorMean": 0.0009088443961954614,
-        "deformedFieldErrorMax": 0.0054968684646733955,
-        "deformedFieldErrorMean": 0.001096862289917558,
+        "deformedFieldErrorMax": 0.006645731283641449,
+        "deformedFieldErrorMean": 0.0009700238127153708,
         "seams": []
       },
       "srcPrims": [],
@@ -6405,8 +6119,8 @@
       "approximation": {
         "vertexFieldErrorMax": 0.002491777373098591,
         "vertexFieldErrorMean": 0.0007327522510050436,
-        "deformedFieldErrorMax": 0.004328042105219712,
-        "deformedFieldErrorMean": 0.0010822723215983079,
+        "deformedFieldErrorMax": 0.005376440148383578,
+        "deformedFieldErrorMean": 0.0010434663389564938,
         "seams": []
       },
       "srcPrims": [],

@@ -31,7 +31,7 @@
 // `.gib.bin` is generated from tracked `.blob` sources and contains no extracted
 // Blood art, so it is safe to commit and ship.
 import type { Vec3 } from '../types';
-import { dot, sub, type Quat } from '../vec';
+import { dot, qFromTo, qRotate, sub, type Quat } from '../vec';
 
 /** Manifest `kind` — a cheap sanity check that a file is ours. */
 export const GIB_ASSET_KIND = 'blud-gib-assets' as const;
@@ -42,8 +42,11 @@ export const GIB_ASSET_KIND = 'blud-gib-assets' as const;
  *
  * 2 — 2026-09-16: `bakeColor.a` is now the cut-aware wound mask derived from
  *     the planner's `sub` cut caps (was uniformly 0 on 100% of vertices).
+ * 3 — 2026-09-17: the bind table no longer contains `sub` carve caps. See
+ *     `GIB_ASSET_BIND_MASK`: binding surface vertices to a cap (a point sphere
+ *     ~3 m away with no axis) produced metre-long deform spikes.
  */
-export const GIB_ASSET_SCHEMA_VERSION = 2;
+export const GIB_ASSET_SCHEMA_VERSION = 3;
 
 /** Bounded per-vertex binding count. Four is the standard skinning budget: a
  *  vertex on a smooth-union fillet between two prims blends two, and a vertex
@@ -61,6 +64,22 @@ export const GIB_ASSET_DEFAULT_CELL = 0.012;
  *  the meaning of `bakeColor.a` changes; it rides the recipe fingerprint so an
  *  older set is STALE, not silently dry (see `GibAssetRecipe.cutMask`). */
 export const GIB_ASSET_CUT_MASK = 'planner-cut-v1';
+
+/**
+ * Which prims a vertex may bind to. Bump whenever the bind CANDIDATE SET
+ * changes; it rides the recipe fingerprint so a set baked under the old rule is
+ * STALE rather than served with a bad deformation.
+ *
+ * `additive-v1` (2026-09-17): only additive (`op !== 'sub'`) prims are bind
+ * targets. A planner cut cap is a POINT sphere whose centre sits `radius`
+ * (~3-5 m at `GIB_CUT.radiusK`) behind the cut plane and whose surface passes
+ * right through the cut face — so nearest-surface binding handed the cut-face
+ * vertices to the cap. A point prim has no axis, so `primTransformPoint` could
+ * not rotate the (metre-scale) radial offset with the posed body, and every
+ * animated piece trailed metre-long spike triangles. Caps still carve the
+ * extracted surface; they are simply not skinning targets.
+ */
+export const GIB_ASSET_BIND_MASK = 'additive-v1';
 
 export type GibAssetDType = 'f32' | 'u32' | 'u16' | 'u8';
 
@@ -95,8 +114,11 @@ export interface GibAssetSection {
 
 /** One rest-pose primitive a baked piece's vertices may bind to. `source`
  *  names where its DEFORMED twin lives at runtime (`gib-tear.ts`'s
- *  `deformedPrims`/`deformedBones`); a null source is a cut cap (`sub`) or an
- *  unsourced row that follows the piece rigidly. */
+ *  `deformedPrims`/`deformedBones`). Under `GIB_ASSET_BIND_MASK = 'additive-v1'`
+ *  every row is sourced (flesh or bone) — the unsourced `sub` cut caps are not
+ *  bind targets. A null source is kept in the type so a pre-v3 set still LOADS
+ *  (and can be validated) rather than being misread; it follows the piece
+ *  rigidly, which is exactly the pathology v3 removes. */
 export interface GibAssetBindingPrim {
   source: 'flesh' | 'bone' | null;
   /** Index into the body's `prims` (flesh) or `bonePrims` (bone); -1 for a cap. */
@@ -215,7 +237,7 @@ export interface GibAssetArchetype {
   /** The recipe WITHOUT the source text (see `source` for the blob hash). */
   recipe: GibAssetRecipeHeader;
   source: { blob: string; blobBytes: number; blobHash: string };
-  bake: { cellSize: number; carveK: number; gore: number; boneRelease: string; organs: boolean; cutMask: string };
+  bake: { cellSize: number; carveK: number; gore: number; boneRelease: string; organs: boolean; cutMask: string; bindMask: string };
   offsets: { json: string; bin: string };
   totals: GibAssetTotals;
   pieces: GibAssetPiece[];
@@ -272,6 +294,10 @@ export interface GibAssetRecipe {
    *  something different, so it MUST be in the fingerprint: an old set is
    *  detected as STALE instead of served with a dry cut. */
   cutMask: string;
+  /** Which prims vertices may bind to (`GIB_ASSET_BIND_MASK`). A change here
+   *  changes every deform, so an old set is STALE rather than served with the
+   *  old binding. */
+  bindMask: string;
 }
 
 /** Deterministic 64-bit FNV-1a over the UTF-8 bytes. Browser- and Node-safe. */
@@ -577,7 +603,19 @@ export function gibPrimFrame(p: GibAssetBindingPrim): GibPrimFrame {
   return { a: p.a, b: p.b, radius: p.radius, radiusB: p.radiusB, scale: p.scale };
 }
 
-/** Rest→posed map of one prim applied to a rest-frame point. */
+/** Rest→posed map of one prim applied to a rest-frame point.
+ *
+ *  EXACT for a capsule whose endpoints have moved rigidly: `t` locates the
+ *  closest point on the REST segment, the offset from that base is expressed in
+ *  the REST segment frame and rebuilt in the POSED one — rotated by the
+ *  shortest arc taking the rest axis onto the posed axis and scaled by the
+ *  posed/rest radius ratio. Rotation is what keeps a swung limb's surface on
+ *  the limb; omitting it (the pre-2026-09-17 behaviour) left the radial offset
+ *  pointing the REST way, which for a metre-scale radial was a metre-scale
+ *  error. A DEGENERATE segment (a point sphere, `|b-a| ≈ 0`) has no axis to
+ *  rotate about, so its radial is carried unrotated — which is exactly why
+ *  `GIB_ASSET_BIND_MASK` no longer lets a point cut cap be a bind target.
+ *  Non-uniform `scale` is still approximated (only the radius ratio is used). */
 export function primTransformPoint(q: Vec3, rest: GibPrimFrame, posed: GibPrimFrame): Vec3 {
   const d = sub(rest.b, rest.a);
   const l2 = dot(d, d);
@@ -589,6 +627,15 @@ export function primTransformPoint(q: Vec3, rest: GibPrimFrame, posed: GibPrimFr
   const ratio = rr > 1e-9 ? pr / rr : 1;
   const pd = sub(posed.b, posed.a);
   const newBase: Vec3 = [posed.a[0] + pd[0] * t, posed.a[1] + pd[1] * t, posed.a[2] + pd[2] * t];
+  // Rotate the radial offset from the rest axis frame onto the posed one. Both
+  // segments must be non-degenerate: qFromTo normalises, and a point prim has
+  // no direction to give it.
+  const pdl2 = dot(pd, pd);
+  if (l2 >= 1e-12 && pdl2 >= 1e-12) {
+    const rot = qFromTo(d, pd);
+    const r = qRotate(rot, radial);
+    return [newBase[0] + r[0] * ratio, newBase[1] + r[1] * ratio, newBase[2] + r[2] * ratio];
+  }
   return [newBase[0] + radial[0] * ratio, newBase[1] + radial[1] * ratio, newBase[2] + radial[2] * ratio];
 }
 

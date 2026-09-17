@@ -41,11 +41,11 @@ import { bakeChunkGeometry, type ChunkBakeData } from './chunk-bake-geometry';
 import type { Primitive, Vec3 } from '../types';
 import { cross, normalize, qFromAxisAngle, qRotate, type Quat } from '../vec';
 import {
-  GIB_ASSET_CUT_MASK, GIB_ASSET_KIND, GIB_ASSET_MAX_BIND_PRIMS, GIB_ASSET_SCHEMA_VERSION,
+  GIB_ASSET_BIND_MASK, GIB_ASSET_CUT_MASK, GIB_ASSET_KIND, GIB_ASSET_MAX_BIND_PRIMS, GIB_ASSET_SCHEMA_VERSION,
   fnv1a64, gibAssetRecipeFingerprint, gibAssetRecipeHeader,
   type GibAssetArchetype, type GibAssetBindingPrim, type GibAssetBounds,
   type GibAssetCut, type GibAssetFaceFrame, type GibAssetPiece,
-  type GibAssetRecipe, type GibAssetSectionInput,
+  type GibAssetRecipe, type GibAssetSectionInput, type GibPrimFrame,
   encodeGibAssetBin, type GibAssetSection,
 } from './gib-asset';
 import { deformBoundVertex } from './gib-asset';
@@ -161,6 +161,11 @@ function bindVertices(
   verts: number,
   table: GibAssetBindingPrim[],
   tablePrims: Primitive[],
+  /** `tablePrims[i]`'s index in `fieldPrims`, so the synthetic motion (and thus
+   *  the reconstructed vertex and the ground-truth field) uses ONE angle per
+   *  prim. Without it a cap shifts every later bone's angle. */
+  tableFieldIdx: readonly number[],
+  fieldPrims: Primitive[],
   cellSize: number,
 ): {
   bindIndex: Uint16Array; bindWeight: Uint8Array;
@@ -180,17 +185,22 @@ function bindVertices(
     };
   }
 
-  // The rest field, for the extraction-error number.
+  // The rest field, for the extraction-error number. This is the FULL planner
+  // field — cut caps included — because that is the surface the vertices were
+  // extracted from; the bind candidates are the additive subset only.
   const restField = chunkBakeField({
-    flesh: tablePrims.map(p => (p.op === 'sub' ? p : { ...p, op: 'add' as const })),
+    flesh: fieldPrims.map(p => (p.op === 'sub' ? p : { ...p, op: 'add' as const })),
     bones: [], torn: [], carveK: 0,
   });
 
   // The synthetic motion: rotate each prim about its own midpoint by a small,
   // fixed, per-index angle. This is the cheapest stand-in for the rupture's
   // independent per-prim endpoint motion; the field it defines is the ground
-  // truth the blended vertex is compared against.
-  const posedFrames = tablePrims.map((p, i) => {
+  // truth the blended vertex is compared against. It is computed for the FULL
+  // field list (caps included) so `movedField` is the deformed CARVED surface,
+  // and separately for the bind table so the reconstruction can be measured
+  // against it.
+  const syntheticPose = (p: Primitive, i: number): GibPrimFrame => {
     const angle = 0.09 * ((i % 5) - 2);
     const dir: Vec3 = [p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]];
     let axis = cross(dir, [0.13, 1, 0.07]);
@@ -207,9 +217,11 @@ function bindVertices(
       a: rot([p.a[0], p.a[1], p.a[2]]), b: rot([p.b[0], p.b[1], p.b[2]]),
       radius: p.radius, radiusB: p.radiusB, scale: [p.scale[0], p.scale[1], p.scale[2]] as Vec3,
     };
-  });
-  const movedPrims = tablePrims.map((p, i) => {
-    const f = posedFrames[i]!;
+  };
+  const fieldPosed = fieldPrims.map(syntheticPose);
+  const posedFrames = tableFieldIdx.map(i => fieldPosed[i]!);
+  const movedPrims = fieldPrims.map((p, i) => {
+    const f = fieldPosed[i]!;
     const q: Primitive = { ...p, a: f.a, b: f.b };
     return q.op === 'sub' ? q : { ...q, op: 'add' as const };
   });
@@ -431,22 +443,35 @@ export function buildGibAssetArchetype(opts: BuildGibAssetOptions): GibAssetBuil
     localByPart.set(g.part, local);
 
     // Binding table: sourced flesh rows (indexed by srcPrims), sourced bone
-    // rows, then any unsourced caps. `srcPrims`/`srcBones` name only the
-    // sourced rows, so a trailing sub cap has no source and follows the piece.
+    // rows. THE `sub` CUT CAPS ARE NOT BIND TARGETS (schema 3, 2026-09-17): a
+    // cap is a point sphere ~`GIB_CUT.radiusK` piece-extents behind the cut
+    // plane whose surface passes through the cut face, so nearest-surface
+    // binding used to hand whole cut faces to a cap. A point prim has no axis
+    // for `primTransformPoint` to rotate, and the radial offset is metres long,
+    // so every animated piece grew spike triangles. The caps still carve the
+    // extracted surface (`g.prims` is untouched for the field below); they just
+    // do not skin it. `GIB_ASSET_BIND_MASK` rides the recipe so an old set is
+    // STALE.
+    const allPrims: Primitive[] = [...g.prims, ...g.bones];
     const table: GibAssetBindingPrim[] = [];
     const tablePrims: Primitive[] = [];
+    const tableFieldIdx: number[] = [];
     g.prims.forEach((p, j) => {
+      if (p.op === 'sub') return;
       const src = g.srcPrims?.[j];
       table.push(bindingPrim(p, src === undefined ? null : 'flesh', src ?? -1));
       tablePrims.push(p);
+      tableFieldIdx.push(j);
     });
     g.bones.forEach((p, j) => {
+      if (p.op === 'sub') return;
       const src = g.srcBones?.[j];
       table.push(bindingPrim(p, src === undefined ? null : 'bone', src ?? -1));
       tablePrims.push(p);
+      tableFieldIdx.push(g.prims.length + j);
     });
 
-    const bind = bindVertices(world, baked.verts, table, tablePrims, cellSize);
+    const bind = bindVertices(world, baked.verts, table, tablePrims, tableFieldIdx, allPrims, cellSize);
 
     // Cuts this piece is part of, by neighbour part name.
     const cuts: GibAssetCut[] = [];
@@ -564,6 +589,7 @@ export function buildGibAssetArchetype(opts: BuildGibAssetOptions): GibAssetBuil
       boneRelease: opts.bones ?? 'all',
       organs: opts.organs ?? true,
       cutMask: GIB_ASSET_CUT_MASK,
+      bindMask: GIB_ASSET_BIND_MASK,
     },
     offsets: { json: `${opts.archetype}.gib.json`, bin: `${opts.archetype}.gib.bin` },
     totals,

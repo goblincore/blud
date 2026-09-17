@@ -1,14 +1,14 @@
 {
   "kind": "blud-gib-assets",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "generator": "scripts/build-gib-assets.ts",
   "builtAt": "2026-09-16T21:09:07.745Z",
   "assets": [
     {
       "archetype": "soldier",
-      "fingerprint": "7d85d00d4602e46b",
+      "fingerprint": "ef6d8613c4181483",
       "recipe": {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "generator": "scripts/build-gib-assets.ts",
         "archetype": "soldier",
         "blobPath": "src/lab/sdf-zombie/characters/soldier.blob",
@@ -90,12 +90,13 @@
         "maxBindPrims": 4,
         "carveK": 0.008,
         "gore": 1,
-        "cutMask": "planner-cut-v1"
+        "cutMask": "planner-cut-v1",
+        "bindMask": "additive-v1"
       },
       "json": "soldier.gib.json",
       "bin": "soldier.gib.bin",
       "bytes": {
-        "json": 114426,
+        "json": 107745,
         "bin": 4463376
       },
       "totals": {
@@ -105,8 +106,8 @@
         "binBytes": 4463376
       },
       "timing": {
-        "bakeMs": 2415.75,
-        "buildMs": 2719
+        "bakeMs": 2404.93,
+        "buildMs": 2711
       },
       "source": {
         "blob": "src/lab/sdf-zombie/characters/soldier.blob",
@@ -116,9 +117,9 @@
     },
     {
       "archetype": "zombie",
-      "fingerprint": "6ce4f7104ab8f5df",
+      "fingerprint": "d74e110e29432853",
       "recipe": {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "generator": "scripts/build-gib-assets.ts",
         "archetype": "zombie",
         "blobPath": "src/lab/sdf-zombie/characters/zombie.blob",
@@ -200,12 +201,13 @@
         "maxBindPrims": 4,
         "carveK": 0.008,
         "gore": 1,
-        "cutMask": "planner-cut-v1"
+        "cutMask": "planner-cut-v1",
+        "bindMask": "additive-v1"
       },
       "json": "zombie.gib.json",
       "bin": "zombie.gib.bin",
       "bytes": {
-        "json": 147986,
+        "json": 141252,
         "bin": 3925208
       },
       "totals": {
@@ -215,8 +217,8 @@
         "binBytes": 3925208
       },
       "timing": {
-        "bakeMs": 2886.34,
-        "buildMs": 3317
+        "bakeMs": 2888.38,
+        "buildMs": 3318
       },
       "source": {
         "blob": "src/lab/sdf-zombie/characters/zombie.blob",

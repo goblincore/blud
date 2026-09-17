@@ -13,7 +13,7 @@ import { FLESH_PRESETS } from '../material';
 import type { FaceParams } from '../face';
 import type { ChunkLook } from '../chunk-bake-field';
 import type { GibSurfaceResponse } from './gib-asset-build';
-import { GIB_ASSET_CUT_MASK, GIB_ASSET_SCHEMA_VERSION, type GibAssetRecipe } from './gib-asset';
+import { GIB_ASSET_BIND_MASK, GIB_ASSET_CUT_MASK, GIB_ASSET_SCHEMA_VERSION, type GibAssetRecipe } from './gib-asset';
 
 /** The archetypes Task 1 ships. `blobPath` is repo-relative and must stay in
  *  step with the tracked `.blob` files (a moved source leaves the asset stale,
@@ -117,5 +117,6 @@ export function makeGibAssetRecipe(input: MakeGibRecipeInput): GibAssetRecipe {
     carveK: input.carveK,
     gore: 1,
     cutMask: GIB_ASSET_CUT_MASK,
+    bindMask: GIB_ASSET_BIND_MASK,
   };
 }
