@@ -26,6 +26,11 @@ export const CHUNK_TUNING = {
   restitution: 0.55,
   /** Horizontal + angular velocity multiplier while in floor contact. */
   floorFriction: 0.72,
+  /** WALL contact (a chunk hitting a room wall or the ceiling): the same
+   *  restitution the floor uses, because a gib hitting a wall should read like
+   *  the same gib hitting the floor. Friction applies to the tangential
+   *  component the same way `floorFriction` does. */
+  wallRestitution: 0.55,
   airDrag: 0.006,
   /** Squash decays back to zero at this rate per second. */
   squashRelax: 5.5,
@@ -85,28 +90,198 @@ export interface Chunk {
   angVel: Vec3;
   /** Chunk-LOCAL long axis (unit). The topple aligns this with the floor. */
   longAxis: Vec3;
+  /** CHUNK-LOCAL support spheres — the piece's real cross-section, used for the
+   *  NARROW-PHASE floor/ceiling contact (see `chunkSupportOffset`). Separate
+   *  from `radius`, which stays the CONSERVATIVE broad-phase bound for walls.
+   *  Defaults to one origin sphere of `radius`, which reproduces the old
+   *  single-radius floor behaviour for every caller that does not supply one. */
+  support: readonly SupportSphere[];
+}
+
+/** One sphere of a chunk's local support shape: a centre in chunk-local space
+ *  and a world radius. A capsule becomes two (its ends), so the piece rests on
+ *  its thickness when flat and on its end when upright instead of hovering at
+ *  half its length. */
+export interface SupportSphere {
+  c: Vec3;
+  r: number;
 }
 
 export function makeChunk(
   limb: LimbId, pos: Vec3, vel: Vec3, radius: number,
   longAxis: Vec3, rng: () => number = Math.random,
   kind: ChunkKind = 'limb',
+  /**
+   * PRE-RELEASE STATE (body-to-gib task 4). A chunk born from the rupture was
+   * ALREADY turning when the body was last drawn: it is handed the displayed
+   * orientation and the angular velocity that produced it, so the release has
+   * no orientation reset and no second angular kick. The random tumble is still
+   * drawn (so the shared rngStreams.misc sequence is unchanged for every other
+   * path) and then OVERRIDDEN — the pre-release state wins.
+   */
+  spin?: { quat?: Quat; angVel?: Vec3 },
+  /**
+   * NARROW-PHASE support shape (see `chunkSupportOffset`). Omitted keeps the
+   * historical single-sphere-at-origin behaviour: floor contact at `radius`.
+   */
+  support?: readonly SupportSphere[],
 ): Chunk {
   // Tumble proportional-ish to being launched at all. Limbs tumble slower
   // than the game's ±9 rad/s (helicopter fix); gobs keep the chaotic spawn.
   const tumble = kind === 'gob' ? CHUNK_TUNING.gobTumble : CHUNK_TUNING.limbTumble;
-  const angVel: Vec3 = [
+  const tumbleVel: Vec3 = [
     (rng() - 0.5) * 2 * tumble,
     (rng() - 0.5) * 2 * tumble,
     (rng() - 0.5) * 2 * tumble,
   ];
   return {
     limb, kind, pos, vel, radius, squash: 0,
-    quat: qIdentity(), angVel, longAxis: normalize(longAxis),
+    quat: spin?.quat ? qNormalize(spin.quat) : qIdentity(),
+    angVel: spin?.angVel ?? tumbleVel,
+    longAxis: normalize(longAxis),
+    support: support ?? [{ c: [0, 0, 0] as Vec3, r: radius }],
   };
 }
 
-export function stepChunk(c: Chunk, dt: number): Chunk {
+/** A solid box a chunk bounces off. Structurally the level's own `Aabb`
+ *  (`game-level.ts` `levelColliders()`), declared here as a plain shape so this
+ *  module keeps no dependency on the WebGPU level. */
+export interface ChunkBox { min: Vec3; max: Vec3 }
+
+/** What a chunk collides with. BOTH fields are optional and absent by default,
+ *  so the lab's stepper and every existing test keep the exact behaviour they
+ *  had (a floor plane and nothing else). */
+export interface ChunkColliders {
+  /** Solid boxes — the level's colliders, which are the WALLS SPLIT AROUND THE
+   *  DOORWAYS, so a gib flies through a door and bounces off the wall beside
+   *  it. */
+  boxes?: readonly ChunkBox[];
+  /** Ceiling height (m) for the enclosure the chunk is in, if known. */
+  ceilingY?: number;
+}
+
+/**
+ * Push a chunk out of any box it overlaps and reflect its velocity.
+ *
+ * The owner, playing: *"it seems the gibs dont bounce off the walls/have
+ * collission"* — and they did not: `stepChunk` had a floor plane at y = radius
+ * and nothing else, so a piece thrown at a wall flew straight through it and out
+ * of the room. This is a sphere-vs-AABB resolve (closest point on the box, push
+ * out along the surface normal), which handles corners and edges without any
+ * special cases and does not care what the boxes MEAN.
+ *
+ * A chunk whose centre is INSIDE a box is pushed out along its shallowest
+ * penetration axis: the common cause is a fast piece tunnelling through a thin
+ * wall in one frame, where there is no surface normal to use.
+ */
+function resolveBoxes(
+  p: Vec3, v: Vec3, radius: number, boxes: readonly ChunkBox[],
+): { pos: Vec3; vel: Vec3; hit: boolean } {
+  let [x, y, z] = p;
+  let [vx, vy, vz] = v;
+  let hit = false;
+  for (const b of boxes) {
+    // Broad phase: a box further than (radius) from the centre on any axis
+    // cannot touch it.
+    if (x + radius < b.min[0] || x - radius > b.max[0]) continue;
+    if (y + radius < b.min[1] || y - radius > b.max[1]) continue;
+    if (z + radius < b.min[2] || z - radius > b.max[2]) continue;
+
+    const qx = Math.min(Math.max(x, b.min[0]), b.max[0]);
+    const qy = Math.min(Math.max(y, b.min[1]), b.max[1]);
+    const qz = Math.min(Math.max(z, b.min[2]), b.max[2]);
+    let nx = x - qx, ny = y - qy, nz = z - qz;
+    const d = Math.hypot(nx, ny, nz);
+    if (d >= radius) continue;
+    hit = true;
+    if (d > 1e-6) {
+      const inv = 1 / d;
+      nx *= inv; ny *= inv; nz *= inv;
+      const push = radius - d;
+      x += nx * push; y += ny * push; z += nz * push;
+    } else {
+      // Centre inside the box: push out along the shallowest axis.
+      const dxMin = x - b.min[0], dxMax = b.max[0] - x;
+      const dyMin = y - b.min[1], dyMax = b.max[1] - y;
+      const dzMin = z - b.min[2], dzMax = b.max[2] - z;
+      const m = Math.min(dxMin, dxMax, dyMin, dyMax, dzMin, dzMax);
+      nx = 0; ny = 0; nz = 0;
+      if (m === dxMin) { nx = -1; x = b.min[0] - radius; }
+      else if (m === dxMax) { nx = 1; x = b.max[0] + radius; }
+      else if (m === dyMin) { ny = -1; y = b.min[1] - radius; }
+      else if (m === dyMax) { ny = 1; y = b.max[1] + radius; }
+      else if (m === dzMin) { nz = -1; z = b.min[2] - radius; }
+      else { nz = 1; z = b.max[2] + radius; }
+    }
+    const vn = vx * nx + vy * ny + vz * nz;
+    if (vn < 0) {
+      // Reflect the NORMAL component with restitution, then damp the
+      // TANGENTIAL component by the floor's friction: a gib skids along a wall
+      // exactly like it skids along the floor. Decomposed rather than scaled
+      // per-axis, because the normal is not axis-aligned at a corner.
+      const j = -(1 + CHUNK_TUNING.wallRestitution) * vn;
+      vx += j * nx; vy += j * ny; vz += j * nz;
+      const vnAfter = vx * nx + vy * ny + vz * nz;
+      const tx = vx - vnAfter * nx, ty = vy - vnAfter * ny, tz = vz - vnAfter * nz;
+      vx = tx * FLOOR_FRICTION + vnAfter * nx;
+      vy = ty * FLOOR_FRICTION + vnAfter * ny;
+      vz = tz * FLOOR_FRICTION + vnAfter * nz;
+    }
+  }
+  return { pos: [x, y, z], vel: [vx, vy, vz], hit };
+}
+
+/**
+ * How far the chunk ORIGIN sits above its LOWEST world point, for the current
+ * orientation. This is the NARROW-PHASE floor support: `pos[1] ===
+ * chunkSupportOffset(c)` puts the piece exactly on the floor, whatever its
+ * rotation. Deliberately separate from `radius`, which stays the conservative
+ * broad-phase bound for the wall/ceiling sweeps — the two answer different
+ * questions and conflating them was the floating-gib bug.
+ *
+ * Deterministic, pure, O(support spheres) (a capsule contributes two).
+ */
+export function chunkSupportOffset(c: Chunk): number {
+  return supportBottom(c.support, c.quat, c.squash, c.radius);
+}
+
+/** How far the chunk ORIGIN sits below its HIGHEST world point — the ceiling
+ *  counterpart of {@link chunkSupportOffset}. */
+export function chunkTopOffset(c: Chunk): number {
+  return supportTop(c.support, c.quat, c.squash, c.radius);
+}
+
+/** Private core: the lowest world point for an EXPLICIT orientation. `stepChunk`
+ *  must call this with the quat it just integrated, not the input chunk's, or
+ *  the contact plane lags the piece by one frame of rotation (measured: a
+ *  settled leg ~2.5 cm low / an arm ~1 frame stale). */
+function supportBottom(
+  support: readonly SupportSphere[], quat: Quat, squash: number, fallback: number,
+): number {
+  const sy = 1 - Math.min(1, Math.max(0, squash)) * 0.5;
+  let lowest = Infinity;
+  for (const s of support) {
+    const w = qRotate(quat, s.c);
+    const bottom = (w[1] - s.r) * sy;
+    if (bottom < lowest) lowest = bottom;
+  }
+  return Number.isFinite(lowest) ? -lowest : fallback;
+}
+
+function supportTop(
+  support: readonly SupportSphere[], quat: Quat, squash: number, fallback: number,
+): number {
+  const sy = 1 - Math.min(1, Math.max(0, squash)) * 0.5;
+  let highest = -Infinity;
+  for (const s of support) {
+    const w = qRotate(quat, s.c);
+    const top = (w[1] + s.r) * sy;
+    if (top > highest) highest = top;
+  }
+  return Number.isFinite(highest) ? highest : fallback;
+}
+
+export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chunk {
   let [x, y, z] = c.pos;
   let [vx, vy, vz] = c.vel;
   let { squash } = c;
@@ -128,9 +303,28 @@ export function stepChunk(c: Chunk, dt: number): Chunk {
   // Airborne angular damping: the tumble DECAYS in flight (helicopter fix).
   angVel = scale(angVel, Math.max(0, 1 - CHUNK_TUNING.angularAirDamp * dt));
 
+  // WALLS AND CEILING, before the floor: the floor is a plane and should have
+  // the last word on y (a wall resolve can push a chunk downward).
+  if (colliders?.boxes?.length) {
+    const r = resolveBoxes([x, y, z], [vx, vy, vz], c.radius, colliders.boxes);
+    x = r.pos[0]; y = r.pos[1]; z = r.pos[2];
+    vx = r.vel[0]; vy = r.vel[1]; vz = r.vel[2];
+  }
+  // The ceiling is not one of `levelColliders()`' boxes (they are walls up to
+  // WALL_H), so it comes in as an explicit height for the enclosure the chunk is
+  // in. Without it a blast can throw a piece up through the room's roof.
+  const ceilingY = colliders?.ceilingY;
+  const topOffset = supportTop(c.support, quat, squash, c.radius);
+  if (ceilingY !== undefined && y + topOffset > ceilingY) {
+    y = ceilingY - topOffset;
+    if (vy > 0) vy = -vy * CHUNK_TUNING.wallRestitution;
+    vx *= FLOOR_FRICTION; vz *= FLOOR_FRICTION;
+  }
+
   let grounded = false;
-  if (y < c.radius) {
-    y = c.radius;
+  const floorOffset = supportBottom(c.support, quat, squash, c.radius);
+  if (y < floorOffset) {
+    y = floorOffset;
     grounded = true;
     if (vy < 0) {
       // Squash scales with impact speed — this is what sells wetness. BONES
@@ -170,6 +364,16 @@ export function stepChunk(c: Chunk, dt: number): Chunk {
   }
 
   squash = Math.max(0, squash - SQUASH_RELAX * dt);
+
+  // The topple above changed the orientation, and a rotation can swing a
+  // support sphere further DOWN than the floor clamp saw (measured on a real
+  // severed arm: 1.6 cm of sink at settle). Re-seat UP only — never down — so
+  // the piece follows the contact its new orientation implies without popping
+  // through the floor.
+  if (grounded) {
+    const postFloor = supportBottom(c.support, quat, squash, c.radius);
+    if (y < postFloor) y = postFloor;
+  }
 
   const out: Chunk = { ...c, pos: [x, y, z], vel: [vx, vy, vz], squash, quat, angVel };
   return finite(out) ? out : {
@@ -217,7 +421,9 @@ export function toppleAngleToFlat(c: Chunk): number {
  * fails grounded; one mid-topple fails the angle.
  */
 export function chunkSettled(c: Chunk): boolean {
-  if (!(c.pos[1] <= c.radius + 1e-4)) return false;              // grounded
+  // Grounded = the piece's LOWEST WORLD POINT is on the floor (orientation
+  // aware), not merely that its origin is under the broad-phase radius.
+  if (!(c.pos[1] <= chunkSupportOffset(c) + 1e-4)) return false;
   if (c.angVel[0] !== 0 || c.angVel[1] !== 0 || c.angVel[2] !== 0) return false;
   if (c.squash > 0) return false;                                 // still relaxing
   if (toppleAngleToFlat(c) > 0.011) return false;                 // still toppling

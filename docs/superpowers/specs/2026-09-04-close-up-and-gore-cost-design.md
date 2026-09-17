@@ -25,7 +25,7 @@ these cost a session each. Every one is a measurement, not an opinion.
 | Tile binning | **Nil** | p50 45 vs 44 ms. The per-step group-sphere cull already handles the prim fold; primitives are not the cost. |
 | Per-body CPU upload | **Not worth it** | 0.06 ms/frame for ten bodies, 3–5× under the gate (r2 task 8). |
 | Depth gate / per-body passes | **Exact, biting, and still OFF** | The gate is right; the *pass structure* costs +4.6–4.8 ms at 3–4 bodies (r2 task 5b, task 9). `GAME_DEPTH_GATE = 0`. |
-| Hull exit bound | **Never ships as-is** | "Wins" 0.28 ms by deleting 4 of 9 bodies from the census. Blocked on the decay bug below. |
+| Hull exit bound | **SHIPPED 1** (2026-09-04, `6a514a0`) | The "decay" was scene fog, root-caused below. Re-census bit-identical on hits / rasterised / meanStepsHit; the earlier −0.28 ms "win" was body deletion and must not be cited. |
 | Occluder pre-pass | **~nothing** | Inside spread on every A/B. Rebuild now gated off (r2 task 4). |
 | Shell march (vertex descent) | **Parked** | The ray start is worth ~14 steps → 2–3, but the vertex descent cost more than it saved. |
 | Hull refine renderer | **Parked** | Look passes parity; extraction ~3–4 ms/frame; draw-only ~22 ms vs march 22–27. No win at one *live* body. |
@@ -35,22 +35,21 @@ these cost a session each. Every one is a measurement, not an opinion.
 to *vertices* or to *passes* — neither of which scales down when a body fills
 the screen. The levers below are chosen because they scale with pixels.
 
-## The blocker that two dead features share
+## ~~The blocker that two dead features share~~ — RESOLVED 2026-09-04
 
-`GAME_HULL_EXIT_BOUND` is 0 because the hull's **written distance decays with
-range**: a true 9 m reads back as 2.8 m, while the near field is exact. This is
-the same unexplained three-r185 TSL phenomenon that killed the occluder
-pre-pass. It has never been root-caused, and the step win it holds hostage was
-measured (missStepShare 0.54 → 0.41).
+**SUPERSEDED — both halves of this section were answered, and neither survived.
+Nothing below is outstanding work.** The decay was **scene fog**, not a TSL
+round-trip bug and not "unexplained" (`TASKS.md:1029-1041`). Consequently:
 
-**This matters far beyond the exit bound.** A quarter-resolution depth prepass —
-the strongest remaining close-up lever — writes a ray parameter into a texture
-and reads it back. That is the same operation that decays. So the round-trip
-must be validated on a known value *before* anything is built on it, and
-root-causing the decay unblocks two features at once.
+- `GAME_HULL_EXIT_BOUND` **ships 1** (`6a514a0`; `game-main.ts:1426`), and its
+  re-census is bit-identical on hits / rasterised / meanStepsHit. The old
+  "−0.28 ms" figure measured body deletion and must not be cited again.
+- The **quarter-res depth prepass was built, is census-clean, and ships OFF on
+  economics** — a net loss of +0.5 / +0.95 / +1.94 ms against a 15.9% walk
+  share. It is **not** "the strongest remaining close-up lever", and validating
+  its round-trip is no longer "the highest-leverage single item on the board".
 
-This is the highest-leverage single item on the board and it is a diagnostic,
-not a feature.
+Retained only as the record of a wrong hypothesis; skip to the next section.
 
 ## The instrument problem, stated once
 

@@ -1,0 +1,48 @@
+{
+  "file": "t2-tier-res640",
+  "diag": {
+    "enabled": true,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.04444444444444444,
+    "exposureMs": 44.444444444444436,
+    "exposureLabel": "44.44 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 320,
+      "height": 240
+    },
+    "layer": {
+      "width": 640,
+      "height": 480
+    },
+    "selectedDroplets": 135,
+    "last": {
+      "stamps": 108,
+      "texels": 5675,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 4,
+      "maxStreakPx": 120,
+      "avgStreakPx": 54.18476966452067,
+      "buildMs": 0.20000004768371582
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 6,
+    "droplets": 171,
+    "splats": 23
+  },
+  "sha256_16": "f69302406ee251aa"
+}

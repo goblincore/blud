@@ -8,7 +8,7 @@ describe('VHS_PRESETS', () => {
   // changes that look with no error anywhere.
   it('matches the owner-tuned blud preset exactly — the shipped default', () => {
     expect(VHS_PRESETS.blud).toEqual({
-      intensity: 1, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 0.38,
+      intensity: 0.81, blurAmount: 0.17, noiseAmount: 0.005, gradeAmount: 0.38,
       warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
       chromaAmount: 5.4, chromaJitter: 10, motionThreshold: 0.12,
       chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,

@@ -1,0 +1,48 @@
+{
+  "file": "t2-det__m67",
+  "diag": {
+    "enabled": true,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.06666666666666667,
+    "exposureMs": 66.66666666666667,
+    "exposureLabel": "66.67 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 178,
+    "last": {
+      "stamps": 178,
+      "texels": 19633,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 69,
+      "maxStreakPx": 120,
+      "avgStreakPx": 40.37685327776547,
+      "buildMs": 0.5
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 6,
+    "droplets": 266,
+    "splats": 229
+  },
+  "sha256_16": "9a9ea4dfcd8b1407"
+}

@@ -1,0 +1,48 @@
+{
+  "file": "t2-woundclose__m100",
+  "diag": {
+    "enabled": true,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.1,
+    "exposureMs": 100,
+    "exposureLabel": "100.00 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 168,
+    "last": {
+      "stamps": 168,
+      "texels": 18426,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 139,
+      "maxStreakPx": 120,
+      "avgStreakPx": 61.02533663180961,
+      "buildMs": 0.5
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 6,
+    "droplets": 254,
+    "splats": 256
+  },
+  "sha256_16": "0d472620afb636ca"
+}

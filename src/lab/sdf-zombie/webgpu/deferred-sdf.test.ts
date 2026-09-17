@@ -66,7 +66,7 @@ describe('surface-entry wgslFn parse contract', () => {
     }
   });
 
-  it('the real parser sees EXACTLY marchBody’s 99 inputs, in the same order — one binding block serves both', () => {
+  it('the real parser sees EXACTLY marchBody’s 100 inputs, in the same order — one binding block serves both', () => {
     // marchSurface shares MARCH_BODY_PARAMS textually, so createMarchMaterial's
     // positional binding cannot drift between the modes. Running the REAL
     // parser (not a grep) also proves no comment phantom crept into the shared
@@ -75,7 +75,11 @@ describe('surface-entry wgslFn parse contract', () => {
     const surface = new WGSLNodeFunction(MARCH_SURFACE).inputs.map((i: { name: string }) => i.name);
     // 84 + 5 probe grid + 4 bounce spot + 2 dynamic probe layer + 1 bodyFlash, positionally last.
     // +3 temporal reprojection start (lastTex, lastInvVp, temporalCfg) — plan 2026-09-10.
-    expect(legacy.length).toBe(99); // plus sampled-skeleton atlas and metadata textures
+    // crowd stage a: 13 per-instance params moved into the record, +inst +instCfg
+    // (the plan wrote 88; the signature has 13 removable params, not 14 — the record
+    //   itself is 14 vec4s, but woundCfg/lodCfg/faceCfg3 stay as per-type vec4 params).
+    // crowd stage a task 5: +instCentre +instHalf (the instanced proxy box).
+    expect(legacy.length).toBe(91); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });
@@ -97,7 +101,7 @@ describe('the surface entry IS the production march, not a copy', () => {
     );
     // The prologue (output reset) must precede the trace's first statement.
     expect(MARCH_SURFACE.indexOf('_ = sdfSurfaceStateReset();'))
-      .toBeLessThan(MARCH_SURFACE.indexOf('gWindDrift = windDrift;'));
+      .toBeLessThan(MARCH_SURFACE.indexOf('loadInstance(inst, i32(instCfg.z));'));
   });
 
   it('runs the real material chain — tissue, char, face, painted prims, melt — not the flat-albedo seam', () => {
@@ -118,12 +122,16 @@ describe('the surface entry IS the production march, not a copy', () => {
     // surfaceParams — the same probe the legacy light tail pays, so the
     // budget is unchanged relative to the legacy path). calcNormal's own
     // calls live in CALC_NORMAL's source; the scatter/shadow probes are all
-    // in the lighting tail this entry does not include. A THIRD call would
+    // in the lighting tail this entry does not include. A FOURTH call would
     // mean a per-attachment retrace crept back in. The THIRD (plan
     // 2026-09-10) is the temporal start's inside check — one sample, taken
     // only when the reprojected bound is live, before the loop; not a
-    // retrace.
-    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(3);
+    // retrace. The FOURTH and FIFTH (2026-09-10 follow-up) are the recovery
+    // probes' two textual sites in that same pre-loop gate — first probe
+    // plus rewind loop — runtime-bounded at three evals, still gated on the
+    // live bound, still not a retrace. (Count is textual: two sites, one
+    // loop body.)
+    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(4);
   });
 
   it('exits before every light-dependent term and the display conversion', () => {

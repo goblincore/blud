@@ -74,8 +74,23 @@ describe('TileBinner', () => {
     expect(r.totalEntries).toBe(4);
   });
 
-  it('bins a sphere BEHIND the camera into every tile (conservative)', () => {
-    const r = binner().bin([group({ center: [0, 0, 5], radius: 1 })], straightCamera());
+  it('binds a sphere fully BEHIND the eye plane to zero tiles (perf 7e)', () => {
+    // Centre 5 m behind the camera (view +z), radius 0.5: the FARTHEST point
+    // along the view axis is -5 + 0.5 < 0, so no forward ray can reach it and
+    // it touches no pixel. Omitting it is sound.
+    const r = binner().bin([group({ center: [0, 0, 5], radius: 0.5 })], straightCamera());
+    expect(r.totalEntries).toBe(0);
+    expect(r.clampedTiles).toBe(0);
+    for (let ty = 0; ty < r.tilesY; ty++) {
+      for (let tx = 0; tx < r.tilesX; tx++) expect(r.countAt(tx, ty)).toBe(0);
+    }
+  });
+
+  it('bins a sphere STRADDLING the eye plane into every tile (conservative)', () => {
+    // Centre 0.5 m behind the eye but radius 1: the near end is in front and
+    // the far end behind, so a forward ray can still clip it. Cover-all is the
+    // safe direction for a crossing sphere.
+    const r = binner().bin([group({ center: [0, 0, 0.5], radius: 1 })], straightCamera());
     expect(r.totalEntries).toBe(16);
     for (let ty = 0; ty < r.tilesY; ty++) {
       for (let tx = 0; tx < r.tilesX; tx++) expect(r.countAt(tx, ty)).toBe(1);

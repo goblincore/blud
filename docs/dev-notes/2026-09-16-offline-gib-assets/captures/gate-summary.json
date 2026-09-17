@@ -1,0 +1,827 @@
+{
+  "gate": "all",
+  "branch": "codex/offline-gib-assets-task-4",
+  "committedBinBytes": {
+    "zombie": 3925208,
+    "soldier": 4463376,
+    "total": 8388584
+  },
+  "loadBytesBothArchetypes": 8650996,
+  "diffs": {
+    "anatomy-ab": {
+      "frames": 61,
+      "meanPctGt12": 9.48,
+      "maxPctGt12": 100,
+      "meanMeanAbs": 6.564
+    },
+    "deferred-ab": {
+      "frames": 62,
+      "meanPctGt12": 0.107,
+      "maxPctGt12": 0.503,
+      "meanMeanAbs": 0.027
+    },
+    "head-ab": {
+      "frames": 20,
+      "meanPctGt12": 27.35,
+      "maxPctGt12": 47.678,
+      "meanMeanAbs": 9.338
+    },
+    "multi-ab": {
+      "frames": 92,
+      "meanPctGt12": 1.723,
+      "maxPctGt12": 3.106,
+      "meanMeanAbs": 0.711
+    },
+    "soldier-ab": {
+      "frames": 92,
+      "meanPctGt12": 4.905,
+      "maxPctGt12": 17.151,
+      "meanMeanAbs": 2.398
+    },
+    "wounds-ab": {
+      "frames": 82,
+      "meanPctGt12": 8.087,
+      "maxPctGt12": 100,
+      "meanMeanAbs": 5.456
+    },
+    "zombie-aa": {
+      "frames": 92,
+      "meanPctGt12": 0.036,
+      "maxPctGt12": 0.129,
+      "meanMeanAbs": 0.289
+    },
+    "zombie-ab": {
+      "frames": 92,
+      "meanPctGt12": 1.209,
+      "maxPctGt12": 2.228,
+      "meanMeanAbs": 0.572
+    }
+  },
+  "assetCounters": {
+    "zombie-march": {
+      "finalStats": {
+        "assetPieces": 0,
+        "fallbacks": {},
+        "loadBytes": 0,
+        "loading": 0,
+        "liveMeshes": 0,
+        "poolCreated": 0,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 0,
+          "created": 0,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 14,
+        "total": 14,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.022,
+          0.041,
+          0.058,
+          0.071,
+          0.071
+        ],
+        "highY": [
+          0.254,
+          0.169,
+          0.147,
+          0.133
+        ]
+      }
+    },
+    "zombie-assets": {
+      "finalStats": {
+        "assetPieces": 14,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 14,
+        "poolCreated": 14,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 1,
+          "created": 1,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 14,
+        "total": 14,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.022,
+          0.041,
+          0.058,
+          0.071,
+          0.071
+        ],
+        "highY": [
+          0.254,
+          0.169,
+          0.146,
+          0.133
+        ]
+      }
+    },
+    "zombie-march-aa": {
+      "finalStats": {
+        "assetPieces": 0,
+        "fallbacks": {},
+        "loadBytes": 0,
+        "loading": 0,
+        "liveMeshes": 0,
+        "poolCreated": 0,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 0,
+          "created": 0,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 14,
+        "total": 14,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.022,
+          0.041,
+          0.058,
+          0.071,
+          0.071
+        ],
+        "highY": [
+          0.254,
+          0.169,
+          0.147,
+          0.133
+        ]
+      }
+    },
+    "soldier-march": {
+      "finalStats": {
+        "assetPieces": 0,
+        "fallbacks": {},
+        "loadBytes": 0,
+        "loading": 0,
+        "liveMeshes": 0,
+        "poolCreated": 0,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 0,
+          "created": 0,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 13,
+        "total": 13,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.009,
+          -0.002,
+          -0.001,
+          0.015,
+          0.019,
+          0.067,
+          0.076,
+          0.079
+        ],
+        "highY": [
+          0.514,
+          0.166,
+          0.129,
+          0.113
+        ]
+      }
+    },
+    "soldier-assets": {
+      "finalStats": {
+        "assetPieces": 13,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 13,
+        "poolCreated": 13,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 1,
+          "created": 1,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 13,
+        "total": 13,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.009,
+          -0.002,
+          -0.001,
+          0.015,
+          0.019,
+          0.067,
+          0.076,
+          0.079
+        ],
+        "highY": [
+          0.514,
+          0.166,
+          0.129,
+          0.113
+        ]
+      }
+    },
+    "multi-march": {
+      "finalStats": {
+        "assetPieces": 0,
+        "fallbacks": {},
+        "loadBytes": 0,
+        "loading": 0,
+        "liveMeshes": 0,
+        "poolCreated": 0,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 0,
+          "created": 0,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 56,
+        "total": 56,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.019,
+          0.019,
+          0.022,
+          0.024,
+          0.024
+        ],
+        "highY": [
+          0.254,
+          0.253,
+          0.253,
+          0.252
+        ]
+      }
+    },
+    "multi-assets": {
+      "finalStats": {
+        "assetPieces": 56,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 56,
+        "poolCreated": 56,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 4,
+          "created": 4,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 56,
+        "total": 56,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.019,
+          0.019,
+          0.022,
+          0.024,
+          0.024
+        ],
+        "highY": [
+          0.254,
+          0.253,
+          0.253,
+          0.252
+        ]
+      }
+    },
+    "wounds-march": {
+      "finalStats": {
+        "assetPieces": 0,
+        "fallbacks": {},
+        "loadBytes": 0,
+        "loading": 0,
+        "liveMeshes": 0,
+        "poolCreated": 0,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 0,
+          "created": 0,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 14,
+        "total": 14,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.022,
+          0.041,
+          0.058,
+          0.071,
+          0.071
+        ],
+        "highY": [
+          0.254,
+          0.169,
+          0.147,
+          0.133
+        ]
+      }
+    },
+    "wounds-assets": {
+      "finalStats": {
+        "assetPieces": 14,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 14,
+        "poolCreated": 14,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 1,
+          "created": 1,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 14,
+        "total": 14,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.022,
+          0.041,
+          0.058,
+          0.071,
+          0.071
+        ],
+        "highY": [
+          0.254,
+          0.169,
+          0.146,
+          0.133
+        ]
+      }
+    },
+    "tight-assets": {
+      "finalStats": {
+        "assetPieces": 52,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 9,
+        "poolCreated": 52,
+        "poolFree": 43,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 1,
+          "created": 4,
+          "disposed": 3
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 8,
+        "total": 9,
+        "airborne": 0,
+        "spriteLive": 1,
+        "lowY": [
+          0.036,
+          0.04,
+          0.062,
+          0.062,
+          0.077,
+          0.08,
+          0.099,
+          0.104
+        ],
+        "highY": [
+          0.138,
+          0.104,
+          0.099,
+          0.08
+        ]
+      }
+    },
+    "reset-assets": {
+      "finalStats": {
+        "assetPieces": 14,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 14,
+        "poolCreated": 14,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 1,
+          "created": 1,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 2,
+        "total": 14,
+        "airborne": 10,
+        "spriteLive": 12,
+        "lowY": [
+          -0.001,
+          0.049,
+          0.071,
+          0.095,
+          0.104,
+          0.145,
+          0.213,
+          0.254
+        ],
+        "highY": [
+          0.927,
+          0.863,
+          0.665,
+          0.387
+        ]
+      }
+    },
+    "deferred-march": {
+      "finalStats": {
+        "assetPieces": 0,
+        "fallbacks": {},
+        "loadBytes": 0,
+        "loading": 0,
+        "liveMeshes": 0,
+        "poolCreated": 0,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 0,
+          "created": 0,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 14,
+        "total": 14,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.022,
+          0.041,
+          0.058,
+          0.071,
+          0.071
+        ],
+        "highY": [
+          0.254,
+          0.169,
+          0.147,
+          0.133
+        ]
+      }
+    },
+    "deferred-assets": {
+      "finalStats": {
+        "assetPieces": 14,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 14,
+        "poolCreated": 14,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 1,
+          "created": 1,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "settle": {
+        "settled": 14,
+        "total": 14,
+        "airborne": 0,
+        "spriteLive": 0,
+        "lowY": [
+          -0.036,
+          -0.012,
+          0.001,
+          0.022,
+          0.041,
+          0.058,
+          0.071,
+          0.071
+        ],
+        "highY": [
+          0.254,
+          0.169,
+          0.146,
+          0.133
+        ]
+      }
+    }
+  },
+  "head": {
+    "march": {
+      "settled": {
+        "file": "head-baked.png",
+        "pos": [
+          20.52493381500244,
+          0.13857706548878923,
+          -8.651042461395264
+        ],
+        "faceBaked": 1,
+        "bakedFaceId": 14,
+        "spriteLive": 0,
+        "atSteps": 180
+      },
+      "faceBaked": 1,
+      "gibAssets": {
+        "assetPieces": 0,
+        "fallbacks": {},
+        "loadBytes": 0,
+        "loading": 0,
+        "liveMeshes": 0,
+        "poolCreated": 0,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 0,
+          "created": 0,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "pageErrors": 0,
+      "orbit": [
+        "head-orbit-0",
+        "head-orbit-1",
+        "head-orbit-2",
+        "head-orbit-3",
+        "head-orbit-4",
+        "head-orbit-5",
+        "head-orbit-6",
+        "head-orbit-7",
+        "head-face-plus",
+        "head-face-minus"
+      ]
+    },
+    "assets": {
+      "settled": {
+        "file": "head-asset-settled.png",
+        "pos": [
+          20.535600056458545,
+          0.10193494759199895,
+          -8.593729829628098
+        ],
+        "headMaterials": {
+          "live": 1,
+          "created": 1,
+          "disposed": 0
+        },
+        "faceBaked": 0,
+        "spriteLive": 6,
+        "atSteps": 160
+      },
+      "faceBaked": 0,
+      "gibAssets": {
+        "assetPieces": 14,
+        "fallbacks": {},
+        "loadBytes": 8650996,
+        "loading": 0,
+        "liveMeshes": 14,
+        "poolCreated": 14,
+        "poolFree": 0,
+        "runtimeExtractionJobs": 0,
+        "headMaterials": {
+          "live": 1,
+          "created": 1,
+          "disposed": 0
+        },
+        "headFaceAvailable": true
+      },
+      "pageErrors": 0,
+      "orbit": [
+        "head-orbit-0",
+        "head-orbit-1",
+        "head-orbit-2",
+        "head-orbit-3",
+        "head-orbit-4",
+        "head-orbit-5",
+        "head-orbit-6",
+        "head-orbit-7",
+        "head-face-plus",
+        "head-face-minus"
+      ]
+    }
+  },
+  "notes": [
+    "All legs exit 0; no failed legs. vsync-limited pacing; no perf win claimed."
+  ],
+  "perf": {
+    "perf-march": {
+      "loader": null,
+      "detMs": [
+        9.5,
+        9.9,
+        1.9
+      ],
+      "assetPieces": [
+        0,
+        0,
+        0
+      ],
+      "pacing": {
+        "shown": {
+          "n": 240,
+          "median": 16.69999999999891,
+          "p95": 16.799999999999272,
+          "max": 16.80000000000109
+        },
+        "hidden": {
+          "n": 239,
+          "median": 16.69999999999891,
+          "p95": 16.799999999999272,
+          "max": 16.80000000000109
+        }
+      }
+    },
+    "perf-march-aa": {
+      "loader": null,
+      "detMs": [
+        8.4,
+        6.5,
+        2.5
+      ],
+      "assetPieces": [
+        0,
+        0,
+        0
+      ],
+      "pacing": {
+        "shown": {
+          "n": 240,
+          "median": 16.69999999999891,
+          "p95": 16.700000000000728,
+          "max": 16.80000000000109
+        },
+        "hidden": {
+          "n": 239,
+          "median": 16.69999999999891,
+          "p95": 16.799999999999272,
+          "max": 16.80000000000109
+        }
+      }
+    },
+    "perf-assets": {
+      "loader": {
+        "coldMs": 185.10000002384186,
+        "warmMs": 33.90000009536743,
+        "armed": true,
+        "armed2": true,
+        "coldLib": {
+          "zombie": {
+            "state": "ready",
+            "fingerprint": "6ce4f7104ab8f5df",
+            "pieces": 24,
+            "verts": 37738,
+            "tris": 75552,
+            "binBytes": 3925208,
+            "builtMs": 2.100000023841858,
+            "materials": 1
+          },
+          "soldier": {
+            "state": "ready",
+            "fingerprint": "7d85d00d4602e46b",
+            "pieces": 19,
+            "verts": 42918,
+            "tris": 85820,
+            "binBytes": 4463376,
+            "builtMs": 2.399999976158142,
+            "materials": 1
+          }
+        },
+        "warmLib": {
+          "zombie": {
+            "state": "ready",
+            "fingerprint": "6ce4f7104ab8f5df",
+            "pieces": 24,
+            "verts": 37738,
+            "tris": 75552,
+            "binBytes": 3925208,
+            "builtMs": 2,
+            "materials": 1
+          },
+          "soldier": {
+            "state": "ready",
+            "fingerprint": "7d85d00d4602e46b",
+            "pieces": 19,
+            "verts": 42918,
+            "tris": 85820,
+            "binBytes": 4463376,
+            "builtMs": 2.399999976158142,
+            "materials": 1
+          }
+        },
+        "stats": {
+          "assetPieces": 0,
+          "fallbacks": {},
+          "loadBytes": 8650996,
+          "loading": 0,
+          "liveMeshes": 0,
+          "poolCreated": 0,
+          "poolFree": 0,
+          "runtimeExtractionJobs": 0,
+          "headMaterials": {
+            "live": 0,
+            "created": 0,
+            "disposed": 0
+          },
+          "headFaceAvailable": true
+        }
+      },
+      "detMs": [
+        8.7,
+        6.8,
+        2.4
+      ],
+      "assetPieces": [
+        14,
+        28,
+        14
+      ],
+      "pacing": {
+        "shown": {
+          "n": 240,
+          "median": 16.69999999999891,
+          "p95": 16.700000000000728,
+          "max": 16.80000000000109
+        },
+        "hidden": {
+          "n": 239,
+          "median": 16.69999999999891,
+          "p95": 16.799999999999272,
+          "max": 16.80000000000109
+        }
+      }
+    }
+  }
+}

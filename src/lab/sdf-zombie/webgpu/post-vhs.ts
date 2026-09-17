@@ -97,8 +97,10 @@ export const VHS_PRESETS: Record<VhsPreset, VhsTerms> = {
   // 34 Hz — so the frame is clean until it tears, which is the VHS read.
   //
   // motionThreshold is soft's 0.12, deliberately untouched by the sweep.
+  // 2026-09-12 (owner): intensity 1 -> 0.81, blurAmount 1 -> 0.17, tuned in-game on top of the
+  // neural upscaler (the stage already softens the flesh; the VHS blur on top of it was too much).
   blud: {
-    intensity: 1, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 0.38,
+    intensity: 0.81, blurAmount: 0.17, noiseAmount: 0.005, gradeAmount: 0.38,
     warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
     chromaAmount: 5.4, chromaJitter: 10, motionThreshold: 0.12,
     chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,

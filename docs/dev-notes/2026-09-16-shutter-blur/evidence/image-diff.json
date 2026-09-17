@@ -1,0 +1,305 @@
+{
+  "prefixes": {
+    "r10-bleed-1-60": {
+      "candidateChangedPx": 709,
+      "sampledChangedPx": 752,
+      "candidateBbox": [
+        389,
+        333,
+        419,
+        571
+      ],
+      "sampledBbox": [
+        389,
+        333,
+        419,
+        600
+      ],
+      "changedMaskIoU": 0.8541,
+      "candidateMeanAbsInUnion": 28.518,
+      "sampledMeanAbsInUnion": 30.218
+    },
+    "r11-trail-1-60": {
+      "candidateChangedPx": 515,
+      "sampledChangedPx": 753,
+      "candidateBbox": [
+        108,
+        273,
+        437,
+        331
+      ],
+      "sampledBbox": [
+        108,
+        273,
+        437,
+        331
+      ],
+      "changedMaskIoU": 0.5674,
+      "candidateMeanAbsInUnion": 16.536,
+      "sampledMeanAbsInUnion": 32.823
+    },
+    "r12-burst-1-30": {
+      "candidateChangedPx": 7297,
+      "sampledChangedPx": 7351,
+      "candidateBbox": [
+        345,
+        472,
+        459,
+        585
+      ],
+      "sampledBbox": [
+        345,
+        473,
+        459,
+        585
+      ],
+      "changedMaskIoU": 0.9233,
+      "candidateMeanAbsInUnion": 55.52,
+      "sampledMeanAbsInUnion": 56.135
+    },
+    "r13-crossing-1-30": {
+      "candidateChangedPx": 45630,
+      "sampledChangedPx": 45853,
+      "candidateBbox": [
+        110,
+        268,
+        698,
+        600
+      ],
+      "sampledBbox": [
+        109,
+        268,
+        698,
+        600
+      ],
+      "changedMaskIoU": 0.8327,
+      "candidateMeanAbsInUnion": 37.516,
+      "sampledMeanAbsInUnion": 37.401
+    },
+    "r14-overlap-closeup-1-30": {
+      "candidateChangedPx": 6173,
+      "sampledChangedPx": 6440,
+      "candidateBbox": [
+        274,
+        313,
+        525,
+        420
+      ],
+      "sampledBbox": [
+        274,
+        312,
+        525,
+        420
+      ],
+      "changedMaskIoU": 0.8823,
+      "candidateMeanAbsInUnion": 43.505,
+      "sampledMeanAbsInUnion": 50.703
+    },
+    "r15-landing-contact-1-60": {
+      "candidateChangedPx": 29,
+      "sampledChangedPx": 30,
+      "candidateBbox": [
+        397,
+        399,
+        415,
+        451
+      ],
+      "sampledBbox": [
+        397,
+        400,
+        415,
+        451
+      ],
+      "changedMaskIoU": 0.3111,
+      "candidateMeanAbsInUnion": 16.844,
+      "sampledMeanAbsInUnion": 18.222
+    },
+    "r16-landing-settle-1-60": {
+      "candidateChangedPx": 80,
+      "sampledChangedPx": 84,
+      "candidateBbox": [
+        389,
+        399,
+        401,
+        459
+      ],
+      "sampledBbox": [
+        389,
+        399,
+        423,
+        523
+      ],
+      "changedMaskIoU": 0.5922,
+      "candidateMeanAbsInUnion": 19.311,
+      "sampledMeanAbsInUnion": 23.757
+    },
+    "r17-occluded-1-30": {
+      "candidateChangedPx": 1687,
+      "sampledChangedPx": 1990,
+      "candidateBbox": [
+        319,
+        397,
+        362,
+        464
+      ],
+      "sampledBbox": [
+        278,
+        398,
+        389,
+        593
+      ],
+      "changedMaskIoU": 0.711,
+      "candidateMeanAbsInUnion": 29.861,
+      "sampledMeanAbsInUnion": 30.412
+    },
+    "r18-offcenter-1-30": {
+      "candidateChangedPx": 2961,
+      "sampledChangedPx": 4306,
+      "candidateBbox": [
+        328,
+        422,
+        393,
+        502
+      ],
+      "sampledBbox": [
+        286,
+        423,
+        455,
+        600
+      ],
+      "changedMaskIoU": 0.6283,
+      "candidateMeanAbsInUnion": 41.878,
+      "sampledMeanAbsInUnion": 45.822
+    },
+    "r19-camera-turn-left-1-60": {
+      "candidateChangedPx": 224,
+      "sampledChangedPx": 225,
+      "candidateBbox": [
+        394,
+        433,
+        439,
+        570
+      ],
+      "sampledBbox": [
+        395,
+        433,
+        473,
+        570
+      ],
+      "changedMaskIoU": 0.6943,
+      "candidateMeanAbsInUnion": 18.328,
+      "sampledMeanAbsInUnion": 19.46
+    },
+    "r19-camera-turn-right-1-60": {
+      "candidateChangedPx": 226,
+      "sampledChangedPx": 225,
+      "candidateBbox": [
+        364,
+        432,
+        404,
+        565
+      ],
+      "sampledBbox": [
+        364,
+        432,
+        436,
+        599
+      ],
+      "changedMaskIoU": 0.6282,
+      "candidateMeanAbsInUnion": 28.007,
+      "sampledMeanAbsInUnion": 25.65
+    }
+  },
+  "strips": {
+    "r13-crossing-1-30": {
+      "file": "50-strip-crossing.png",
+      "crop": [
+        70,
+        228,
+        738,
+        600
+      ],
+      "size": [
+        6028,
+        1116
+      ]
+    },
+    "r12-burst-1-30": {
+      "file": "51-strip-burst.png",
+      "crop": [
+        305,
+        432,
+        499,
+        600
+      ],
+      "size": [
+        1762,
+        504
+      ]
+    },
+    "r18-offcenter-1-30": {
+      "file": "52-strip-offcenter.png",
+      "crop": [
+        288,
+        382,
+        433,
+        542
+      ],
+      "size": [
+        1321,
+        480
+      ]
+    },
+    "r14-overlap-closeup-1-30": {
+      "file": "53-strip-closeup.png",
+      "crop": [
+        234,
+        273,
+        565,
+        460
+      ],
+      "size": [
+        2995,
+        561
+      ]
+    },
+    "r15-landing-contact-1-60": {
+      "file": "54-strip-landing-contact.png",
+      "crop": [
+        357,
+        359,
+        455,
+        491
+      ],
+      "size": [
+        898,
+        396
+      ]
+    },
+    "r10-bleed-1-60": {
+      "file": "55-strip-bleed.png",
+      "crop": [
+        349,
+        293,
+        459,
+        600
+      ],
+      "size": [
+        1006,
+        921
+      ]
+    },
+    "56-crop-crossing-cand-vs-sampled.png": {
+      "size": [
+        3854,
+        1113
+      ]
+    },
+    "57-crop-burst-cand-vs-sampled.png": {
+      "size": [
+        1166,
+        492
+      ]
+    }
+  }
+}

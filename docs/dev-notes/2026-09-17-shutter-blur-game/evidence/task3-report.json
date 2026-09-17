@@ -1,0 +1,2911 @@
+{
+  "task": "shutter-blur-game-task3",
+  "startedAt": "2026-09-17T07:25:30.123Z",
+  "git": "e20cb8f96b22920590eeac50cbb71539425a3398",
+  "shots": {
+    "t3-gib__sharp": {
+      "file": "t3-gib__sharp",
+      "gibDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 25267,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 203,
+          "maxStreakPx": 38.114246286977576,
+          "avgStreakPx": 27.49325296008147,
+          "buildMs": 0.8999999761581421
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 521,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 3,
+          "maxStreakPx": 4.021467506872801,
+          "avgStreakPx": 2.913413498200302,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "0dfdb755ef009d0a"
+    },
+    "t3-gib__m44": {
+      "file": "t3-gib__m44",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 24924,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 192,
+          "maxStreakPx": 35.50117417617387,
+          "avgStreakPx": 25.583703036011624,
+          "buildMs": 0.8999999761581421
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 521,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 3,
+          "maxStreakPx": 4.021467506872801,
+          "avgStreakPx": 2.913413498200302,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "409f63a54b7946a8"
+    },
+    "t3-gib__m67": {
+      "file": "t3-gib__m67",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 27300,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 324,
+          "maxStreakPx": 51.14595225291247,
+          "avgStreakPx": 36.790629357074216,
+          "buildMs": 0.8999999761581421
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 521,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 3,
+          "maxStreakPx": 4.021467506872801,
+          "avgStreakPx": 2.913413498200302,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "b428872d2249350e"
+    },
+    "t3-gib__m100": {
+      "file": "t3-gib__m100",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.1,
+        "exposureMs": 100,
+        "exposureLabel": "100.00 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 30783,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 479,
+          "maxStreakPx": 73.55147639196915,
+          "avgStreakPx": 52.78398071171921,
+          "buildMs": 1.100000023841858
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.1,
+        "exposureMs": 100,
+        "exposureLabel": "100.00 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 521,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 3,
+          "maxStreakPx": 4.021467506872801,
+          "avgStreakPx": 2.913413498200302,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "c8c9c78fbee75304"
+    },
+    "t3-gib__m44both": {
+      "file": "t3-gib__m44both",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 24399,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 172,
+          "maxStreakPx": 31.914120289959776,
+          "avgStreakPx": 22.960570202722835,
+          "buildMs": 0.6000000238418579
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 521,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 3,
+          "maxStreakPx": 4.021467506872801,
+          "avgStreakPx": 2.9134134982003035,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "b5c080c06d2771f1"
+    },
+    "t3-gib__m44bloodonly": {
+      "file": "t3-gib__m44bloodonly",
+      "gibDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 24399,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 172,
+          "maxStreakPx": 31.914120289959776,
+          "avgStreakPx": 22.960570202722835,
+          "buildMs": 0.6000000238418579
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 521,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 3,
+          "maxStreakPx": 4.021467506872801,
+          "avgStreakPx": 2.9134134982003035,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "bb0ceedf7a3f983a"
+    },
+    "t3-gib__shipped": {
+      "file": "t3-gib__shipped",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 24074,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 165,
+          "maxStreakPx": 29.72721177932508,
+          "avgStreakPx": 21.36030564889724,
+          "buildMs": 0.7000000476837158
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 521,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 3,
+          "maxStreakPx": 4.021467506872801,
+          "avgStreakPx": 2.9134134982003035,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "74e02132b2fcd38f"
+    },
+    "t3-gibdet__on-a": {
+      "file": "t3-gibdet__on-a",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 23915,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 145,
+          "maxStreakPx": 32.744076787326335,
+          "avgStreakPx": 24.377777127975087,
+          "buildMs": 0.7999999523162842
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 507,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.06553370884864,
+          "avgStreakPx": 2.9166504264065187,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "75a70be452c16752"
+    },
+    "t3-gibdet__off": {
+      "file": "t3-gibdet__off",
+      "gibDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 23915,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 145,
+          "maxStreakPx": 32.744076787326335,
+          "avgStreakPx": 24.377777127975087,
+          "buildMs": 0.7999999523162842
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 507,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.06553370884864,
+          "avgStreakPx": 2.9166504264065187,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "fc4c0723495039f1"
+    },
+    "t3-gibdet__on-b": {
+      "file": "t3-gibdet__on-b",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 23618,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 129,
+          "maxStreakPx": 31.348491942805115,
+          "avgStreakPx": 23.231429843974958,
+          "buildMs": 0.6999999284744263
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 507,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.06553370884864,
+          "avgStreakPx": 2.9166504264065187,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "2184c490480cc2d6"
+    },
+    "t3-gibdet__m67": {
+      "file": "t3-gibdet__m67",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 25846,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 254,
+          "maxStreakPx": 45.636793029787185,
+          "avgStreakPx": 33.841981961959945,
+          "buildMs": 0.9000000953674316
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 507,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.06553370884864,
+          "avgStreakPx": 2.9166504264065187,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "7650cbe624dbd5e1"
+    },
+    "t3-gibdet__cap200": {
+      "file": "t3-gibdet__cap200",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 200,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 23434,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 127,
+          "maxStreakPx": 30.015225631977692,
+          "avgStreakPx": 22.138003667666883,
+          "buildMs": 0.7000000476837158
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 200,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 507,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.06553370884864,
+          "avgStreakPx": 2.9166504264065187,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "741f8552fd148777"
+    },
+    "t3-gibmarch__sharp": {
+      "file": "t3-gibmarch__sharp",
+      "gibDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 108,
+        "last": {
+          "stamps": 108,
+          "texels": 27017,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 235,
+          "maxStreakPx": 35.453444598985655,
+          "avgStreakPx": 26.372767188307563,
+          "buildMs": 1
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 515,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.065534173280369,
+          "avgStreakPx": 2.9184540742855836,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "1c103755e18116dc"
+    },
+    "t3-gibmarch__m44": {
+      "file": "t3-gibmarch__m44",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 13,
+        "stamps": 108,
+        "last": {
+          "stamps": 108,
+          "texels": 26731,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 221,
+          "maxStreakPx": 33.795546456377686,
+          "avgStreakPx": 25.138146979162624,
+          "buildMs": 0.8999999761581421
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 515,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.065534173280369,
+          "avgStreakPx": 2.9184540742855836,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "d8fee4fd5f5b8d06"
+    },
+    "t3-gibmarch__m67": {
+      "file": "t3-gibmarch__m67",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 13,
+        "stamps": 108,
+        "last": {
+          "stamps": 108,
+          "texels": 29466,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 321,
+          "maxStreakPx": 48.72438895969453,
+          "avgStreakPx": 36.53602346175655,
+          "buildMs": 1
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.06666666666666667,
+        "exposureMs": 66.66666666666667,
+        "exposureLabel": "66.67 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 515,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.065534173280369,
+          "avgStreakPx": 2.9184540742855836,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "684fdbdbb41cf606"
+    },
+    "t3-gibhead__sharp": {
+      "file": "t3-gibhead__sharp",
+      "gibDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 167,
+        "last": {
+          "stamps": 167,
+          "texels": 35150,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 91,
+          "maxStreakPx": 38.233765514075316,
+          "avgStreakPx": 19.40680159925212,
+          "buildMs": 0.7000000476837158
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 258,
+        "last": {
+          "stamps": 258,
+          "texels": 3612,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 5,
+          "maxStreakPx": 8.492682828308919,
+          "avgStreakPx": 5.150801369726367,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 22,
+      "flying": 22,
+      "heads": 1,
+      "sha256_16": "440f363baba33184"
+    },
+    "t3-gibhead__m44": {
+      "file": "t3-gibhead__m44",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 22,
+        "stamps": 167,
+        "last": {
+          "stamps": 167,
+          "texels": 34862,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 85,
+          "maxStreakPx": 36.45635033136884,
+          "avgStreakPx": 18.492545487365504,
+          "buildMs": 0.7999999523162842
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 258,
+        "last": {
+          "stamps": 258,
+          "texels": 3612,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 5,
+          "maxStreakPx": 8.492682828308919,
+          "avgStreakPx": 5.150801369726367,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 22,
+      "flying": 22,
+      "heads": 1,
+      "sha256_16": "f8cb5602344b1b7a"
+    },
+    "t3-mode-carve-on": {
+      "file": "t3-mode-carve-on",
+      "gibDiag": {
+        "enabled": true,
+        "supported": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 11,
+        "stamps": 77,
+        "last": {
+          "stamps": 77,
+          "texels": 9985,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 20,
+          "maxStreakPx": 37.32865137426092,
+          "avgStreakPx": 27.000370575639018,
+          "buildMs": 0.20000004768371582
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 118,
+        "last": {
+          "stamps": 118,
+          "texels": 660,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 4,
+          "maxStreakPx": 4.602063852829016,
+          "avgStreakPx": 3.262441524663735,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 11,
+      "flying": 11,
+      "heads": 1,
+      "sha256_16": "f0915864f26c96e5"
+    },
+    "t3-mode-carve-off": {
+      "file": "t3-mode-carve-off",
+      "gibDiag": {
+        "enabled": false,
+        "supported": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 77,
+        "last": {
+          "stamps": 77,
+          "texels": 9985,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 20,
+          "maxStreakPx": 37.32865137426092,
+          "avgStreakPx": 27.000370575639018,
+          "buildMs": 0.20000004768371582
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 118,
+        "last": {
+          "stamps": 118,
+          "texels": 660,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 4,
+          "maxStreakPx": 4.602063852829016,
+          "avgStreakPx": 3.262441524663735,
+          "buildMs": 0.09999990463256836
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 11,
+      "flying": 11,
+      "heads": 1,
+      "sha256_16": "632011ec709a33f2"
+    },
+    "t3-mode-sprite-on": {
+      "file": "t3-mode-sprite-on",
+      "gibDiag": {
+        "enabled": true,
+        "supported": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 14,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 23014,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 173,
+          "maxStreakPx": 33.9521376165212,
+          "avgStreakPx": 25.700000373590203,
+          "buildMs": 0.7000000476837158
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 511,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.065528555918101,
+          "avgStreakPx": 2.9154539844825855,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "d51c78dd17865350"
+    },
+    "t3-mode-sprite-off": {
+      "file": "t3-mode-sprite-off",
+      "gibDiag": {
+        "enabled": false,
+        "supported": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 115,
+        "last": {
+          "stamps": 115,
+          "texels": 23014,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 173,
+          "maxStreakPx": 33.9521376165212,
+          "avgStreakPx": 25.700000373590203,
+          "buildMs": 0.7000000476837158
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 113,
+        "last": {
+          "stamps": 113,
+          "texels": 511,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 1,
+          "maxStreakPx": 4.065528555918101,
+          "avgStreakPx": 2.9154539844825855,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "3e7c60fd06fe6ef8"
+    },
+    "t3-mode-deferred-on": {
+      "file": "t3-mode-deferred-on",
+      "gibDiag": {
+        "enabled": false,
+        "supported": false,
+        "ready": false,
+        "warmed": false,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 0,
+          "height": 0
+        },
+        "layer": {
+          "width": 0,
+          "height": 0
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 244,
+        "last": {
+          "stamps": 244,
+          "texels": 13266,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 8,
+          "maxStreakPx": 26.39431798037013,
+          "avgStreakPx": 12.69267049604127,
+          "buildMs": 0.30000007152557373
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "9070aacfc813fb06"
+    },
+    "t3-mode-deferred-off": {
+      "file": "t3-mode-deferred-off",
+      "gibDiag": {
+        "enabled": false,
+        "supported": false,
+        "ready": false,
+        "warmed": false,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 0,
+          "height": 0
+        },
+        "layer": {
+          "width": 0,
+          "height": 0
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 244,
+        "last": {
+          "stamps": 244,
+          "texels": 13266,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 8,
+          "maxStreakPx": 26.39431798037013,
+          "avgStreakPx": 12.69267049604127,
+          "buildMs": 0.30000007152557373
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "9070aacfc813fb06"
+    },
+    "t3-mode-deferred-off-on": {
+      "file": "t3-mode-deferred-off-on",
+      "gibDiag": {
+        "enabled": false,
+        "supported": false,
+        "ready": false,
+        "warmed": false,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 0,
+          "height": 0
+        },
+        "layer": {
+          "width": 0,
+          "height": 0
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 243,
+        "last": {
+          "stamps": 243,
+          "texels": 8463,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 7,
+          "maxStreakPx": 15.490559192735143,
+          "avgStreakPx": 9.770126921631487,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "f7dc04c592e645ab"
+    },
+    "t3-mode-deferred-off-off": {
+      "file": "t3-mode-deferred-off-off",
+      "gibDiag": {
+        "enabled": false,
+        "supported": false,
+        "ready": false,
+        "warmed": false,
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 0,
+          "height": 0
+        },
+        "layer": {
+          "width": 0,
+          "height": 0
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.044444444444444446,
+        "exposureMs": 44.44444444444444,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 243,
+        "last": {
+          "stamps": 243,
+          "texels": 8463,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 7,
+          "maxStreakPx": 15.490559192735143,
+          "avgStreakPx": 9.770126921631487,
+          "buildMs": 0.10000002384185791
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 14,
+      "flying": 14,
+      "heads": 1,
+      "sha256_16": "98ea1ce6a2f3ae39"
+    },
+    "t3-check-empty-on": {
+      "file": "t3-check-empty-on",
+      "gibDiag": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 0,
+      "flying": 0,
+      "heads": 0,
+      "sha256_16": "c71121ed6abcab09"
+    },
+    "t3-check-empty-off": {
+      "file": "t3-check-empty-off",
+      "gibDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "bloodDiag": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "route": "capture-stage",
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "taps": 24,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedDroplets": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "sceneRenders": 0,
+          "gooChains": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "pieces": 0,
+      "flying": 0,
+      "heads": 0,
+      "sha256_16": "11edbd4a91eab82c"
+    }
+  },
+  "checks": {
+    "defaults": {
+      "gib": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureMs": 44.444444444444436,
+        "maxStreakPx": 120,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "depthBiasM": 0.02
+      },
+      "blood": {
+        "enabled": true,
+        "exposureMs": 44.444444444444436,
+        "seed": {
+          "width": 400,
+          "height": 300
+        }
+      },
+      "renderMode": "legacy",
+      "gibAssets": {},
+      "vhs": "blud"
+    },
+    "gibBlastStage": {
+      "room": 6,
+      "target": {
+        "id": 11,
+        "neighbours": 3,
+        "c": [
+          24.03237119661251,
+          1.1512525332131511,
+          -10.775624704263459
+        ]
+      },
+      "blast": {
+        "radiusM": 3.8437499999999996,
+        "actorsBefore": 23,
+        "actorsAfter": 23,
+        "chunksBefore": 0,
+        "chunksAfter": 0,
+        "gibbed": 1,
+        "gibPieces": 0,
+        "lastBlastMs": 10.100000023841858
+      }
+    },
+    "gibFlightPeak": {
+      "stamps": 115,
+      "selected": 14,
+      "pieces": 14,
+      "frame": 13,
+      "maxStreakPx": 40.89251540551347
+    },
+    "counts:gib": [
+      {
+        "file": "t3-gib__sharp",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 0,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gib__m44",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gib__m67",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gib__m100",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gib__m44both",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gib__m44bloodonly",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 0,
+        "stamps": 115
+      }
+    ],
+    "counts:gibdet": [
+      {
+        "file": "t3-gibdet__on-a",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gibdet__off",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 0,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gibdet__on-b",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gibdet__m67",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      },
+      {
+        "file": "t3-gibdet__cap200",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 14,
+        "stamps": 115
+      }
+    ],
+    "fallbackFlightPeak": {
+      "stamps": 108,
+      "selected": 13,
+      "pieces": 14,
+      "frame": 13,
+      "maxStreakPx": 36.26001722320137
+    },
+    "counts:gibmarch": [
+      {
+        "file": "t3-gibmarch__sharp",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 0,
+        "stamps": 108
+      },
+      {
+        "file": "t3-gibmarch__m44",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 13,
+        "stamps": 108
+      },
+      {
+        "file": "t3-gibmarch__m67",
+        "pieces": 14,
+        "flying": 14,
+        "heads": 1,
+        "selected": 13,
+        "stamps": 108
+      }
+    ],
+    "headPeak": {
+      "stamps": 183,
+      "heads": 1,
+      "frame": 31,
+      "selected": 22
+    },
+    "counts:gibhead": [
+      {
+        "file": "t3-gibhead__sharp",
+        "pieces": 22,
+        "flying": 22,
+        "heads": 1,
+        "selected": 0,
+        "stamps": 167
+      },
+      {
+        "file": "t3-gibhead__m44",
+        "pieces": 22,
+        "flying": 22,
+        "heads": 1,
+        "selected": 22,
+        "stamps": 167
+      }
+    ],
+    "mode:carve": {
+      "query": "?gibrender=carve",
+      "renderMode": "legacy",
+      "peak": {
+        "stamps": 77,
+        "selected": 11,
+        "pieces": 11
+      },
+      "enabled": true,
+      "ready": true,
+      "error": null,
+      "consoleErrors": 0
+    },
+    "mode:sprite": {
+      "query": "?gibrender=sprite",
+      "renderMode": "legacy",
+      "peak": {
+        "stamps": 115,
+        "selected": 14,
+        "pieces": 14
+      },
+      "enabled": true,
+      "ready": true,
+      "error": null,
+      "consoleErrors": 0
+    },
+    "mode:deferred": {
+      "query": "?renderer=deferred",
+      "renderMode": "deferred",
+      "peak": {
+        "stamps": 0,
+        "selected": 0,
+        "pieces": 0
+      },
+      "enabled": false,
+      "ready": false,
+      "error": null,
+      "consoleErrors": 46
+    },
+    "mode:deferred-off": {
+      "query": "?renderer=deferred&gibblur=0",
+      "renderMode": "deferred",
+      "peak": {
+        "stamps": 0,
+        "selected": 0,
+        "pieces": 0
+      },
+      "enabled": false,
+      "ready": false,
+      "error": null,
+      "consoleErrors": 42
+    },
+    "costLoadStart": [
+      2.6,
+      2.43,
+      2.43
+    ],
+    "costBootReady": {
+      "ready": true,
+      "warmed": true,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      }
+    },
+    "costFlightPeak": {
+      "stamps": 115,
+      "selected": 14,
+      "pieces": 14,
+      "frame": 13,
+      "maxStreakPx": 35.67791259710666
+    },
+    "costLoadEnd": [
+      2.43,
+      2.4,
+      2.42
+    ],
+    "checkEmpty": {
+      "on": {
+        "enabled": true,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      },
+      "off": {
+        "enabled": false,
+        "ready": true,
+        "warmed": true,
+        "exposureSeconds": 0.04444444444444444,
+        "exposureMs": 44.444444444444436,
+        "exposureLabel": "44.44 ms",
+        "maxStreakPx": 120,
+        "seedScale": 1,
+        "depthBiasM": 0.02,
+        "seed": {
+          "width": 400,
+          "height": 300
+        },
+        "layer": {
+          "width": 800,
+          "height": 600
+        },
+        "selectedPieces": 0,
+        "stamps": 0,
+        "last": {
+          "stamps": 0,
+          "texels": 0,
+          "conflicts": 0,
+          "oppositeConflicts": 0,
+          "nearerWins": 0,
+          "maxStreakPx": 0,
+          "avgStreakPx": 0,
+          "buildMs": 0
+        },
+        "passes": {
+          "layerDraws": 1,
+          "fullscreen": 1
+        },
+        "error": null
+      }
+    },
+    "clamps": {
+      "streakHigh": 400,
+      "streakLow": 1,
+      "msHigh": 200,
+      "msLow": 0
+    },
+    "queryOff": {
+      "enabled": false,
+      "ready": true,
+      "warmed": true,
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedPieces": 0,
+      "stamps": 0,
+      "last": {
+        "stamps": 0,
+        "texels": 0,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 0,
+        "avgStreakPx": 0,
+        "buildMs": 0
+      },
+      "passes": {
+        "layerDraws": 1,
+        "fullscreen": 1
+      },
+      "error": null
+    }
+  },
+  "benches": {
+    "gibcost-sharp-r0": {
+      "label": "gibcost-sharp-r0",
+      "variant": "sharp",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 13.7,
+        "p95": 17.1,
+        "mean": 14.108
+      },
+      "buildMs": {
+        "p50": 0.8,
+        "p95": 0.8,
+        "max": 0.8
+      },
+      "stamps": 115,
+      "selected": 0,
+      "maxStreakPx": 34.2
+    },
+    "gibcost-gibm44-r0": {
+      "label": "gibcost-gibm44-r0",
+      "variant": "gibm44",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 14.9,
+        "p95": 22.9,
+        "mean": 15.329
+      },
+      "buildMs": {
+        "p50": 0.7,
+        "p95": 0.9,
+        "max": 0.9
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 28.6
+    },
+    "gibcost-gibm67-r0": {
+      "label": "gibcost-gibm67-r0",
+      "variant": "gibm67",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 15.9,
+        "p95": 22.5,
+        "mean": 15.65
+      },
+      "buildMs": {
+        "p50": 0.8,
+        "p95": 0.9,
+        "max": 0.9
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 36.6
+    },
+    "gibcost-sharp-r1": {
+      "label": "gibcost-sharp-r1",
+      "variant": "sharp",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 16.8,
+        "p95": 22.1,
+        "mean": 16.279
+      },
+      "buildMs": {
+        "p50": 0.7,
+        "p95": 0.7,
+        "max": 0.7
+      },
+      "stamps": 115,
+      "selected": 0,
+      "maxStreakPx": 32.4
+    },
+    "gibcost-gibm44-r1": {
+      "label": "gibcost-gibm44-r1",
+      "variant": "gibm44",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 13.8,
+        "p95": 19,
+        "mean": 14.571
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.7
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 18.2
+    },
+    "gibcost-gibm67-r1": {
+      "label": "gibcost-gibm67-r1",
+      "variant": "gibm67",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 13.5,
+        "p95": 17.9,
+        "mean": 13.567
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.8,
+        "max": 0.8
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 23.6
+    },
+    "gibcost-sharp-r2": {
+      "label": "gibcost-sharp-r2",
+      "variant": "sharp",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 16.9,
+        "p95": 21.9,
+        "mean": 16.908
+      },
+      "buildMs": {
+        "p50": 0.7,
+        "p95": 0.7,
+        "max": 0.7
+      },
+      "stamps": 115,
+      "selected": 0,
+      "maxStreakPx": 21
+    },
+    "gibcost-gibm44-r2": {
+      "label": "gibcost-gibm44-r2",
+      "variant": "gibm44",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 13.5,
+        "p95": 18.8,
+        "mean": 13.892
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 1.2
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 11.9
+    },
+    "gibcost-gibm67-r2": {
+      "label": "gibcost-gibm67-r2",
+      "variant": "gibm67",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 16.7,
+        "p95": 18.9,
+        "mean": 16.475
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.8
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 15.9
+    },
+    "gibcost-sharp-r3": {
+      "label": "gibcost-sharp-r3",
+      "variant": "sharp",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 13.4,
+        "p95": 18.9,
+        "mean": 14.583
+      },
+      "buildMs": {
+        "p50": 0.5,
+        "p95": 0.5,
+        "max": 0.5
+      },
+      "stamps": 115,
+      "selected": 0,
+      "maxStreakPx": 14.7
+    },
+    "gibcost-gibm44-r3": {
+      "label": "gibcost-gibm44-r3",
+      "variant": "gibm44",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 13.5,
+        "p95": 17.4,
+        "mean": 13.529
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.6,
+        "max": 0.7
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 8.9
+    },
+    "gibcost-gibm67-r3": {
+      "label": "gibcost-gibm67-r3",
+      "variant": "gibm67",
+      "frames": 24,
+      "totalMsPerFrame": {
+        "p50": 16.1,
+        "p95": 20.2,
+        "mean": 16.167
+      },
+      "buildMs": {
+        "p50": 0.6,
+        "p95": 0.7,
+        "max": 0.7
+      },
+      "stamps": 115,
+      "selected": 14,
+      "maxStreakPx": 12.2
+    },
+    "gibcost-summary": {
+      "reps": 4,
+      "framesPerVariant": 24,
+      "perRep": [
+        {
+          "sharp": 13.7,
+          "gibm44": 14.9,
+          "gibm67": 15.9
+        },
+        {
+          "sharp": 16.8,
+          "gibm44": 13.8,
+          "gibm67": 13.5
+        },
+        {
+          "sharp": 16.9,
+          "gibm44": 13.5,
+          "gibm67": 16.7
+        },
+        {
+          "sharp": 13.4,
+          "gibm44": 13.5,
+          "gibm67": 16.1
+        }
+      ],
+      "sharpP50Median": 16.8,
+      "m44P50Median": 13.8,
+      "m67P50Median": 16.1,
+      "deltaM44Median": 0.1,
+      "deltaM67Median": 2.2
+    }
+  },
+  "clips": {
+    "gib-dynamite-on-44": {
+      "frames": 100,
+      "fps": 28,
+      "sustainMs": 3600,
+      "files": [
+        "clips/gib-dynamite-on-44.mp4",
+        "clips/gib-dynamite-on-44.gif"
+      ]
+    }
+  },
+  "consoleErrors": [
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_207): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_207 / fragment error] at line 3512:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_249): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_249 / fragment error] at line 3512:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_255): Error while parsing WGSL: :3512:3 error: unresolved value 'gMarchAnchor'\n  gMarchAnchor = vec4<f32>(anchor, detailAmp);\n  ^^^^^^^^^^^^\n\n\n - While calling [Device].CreateShaderModule([ShaderModuleDescriptor \"\"fragment\"\"]).\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_255 / fragment error] at line 3512:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_257): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_257 / fragment error] at line 3512:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_263): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_263 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_265): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_265 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_267): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_267 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_273): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_273 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_275): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_275 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_277): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_277 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_279): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_279 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_285): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_285 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_287): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_287 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_289): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_289 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_291): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_291 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_293): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_293 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_295): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_295 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_297): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_297 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_299): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_299 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^",
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_341): [Invalid ShaderModule \"fragment\"] is invalid due to a previous error.\n - While validating fragment stage ([Invalid ShaderModule \"fragment\"], entryPoint: \"main\").\n - While validating fragment state.\n",
+    "THREE.WebGPURenderer [renderPipeline_MeshBasicNodeMaterial_341 / fragment error] at line 3541:3: unresolved value 'gMarchAnchor'\n    gMarchAnchor = vec4<f32>(anchor, detailAmp);\n    ^"
+  ],
+  "finishedAt": "2026-09-17T07:26:18.667Z"
+}

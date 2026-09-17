@@ -5,6 +5,8 @@ dist/
 *.log
 .superpowers/
 .vite/
+# Trained neural upscale models pulled from training runs (dev-only; accepted models get committed elsewhere)
+.upscale-models/
 .worktrees/
 
 # dev tooling
@@ -48,3 +50,6 @@ telemetry/
 # agents have already committed scratch to the repo root once.
 .lab-tmp/
 .tmp-chrome*/
+
+# Neural upscale training pairs (spec 2026-09-11 §7) — local data, never committed
+.upscale-data/

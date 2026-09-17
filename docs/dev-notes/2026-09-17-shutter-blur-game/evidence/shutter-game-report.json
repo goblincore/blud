@@ -1,0 +1,738 @@
+{
+  "branch": "codex/shutter-blur-game-task-1",
+  "shots": {
+    "game-00-idle-on": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 0,
+      "last": {
+        "stamps": 0,
+        "texels": 0,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 0,
+        "avgStreakPx": 0,
+        "buildMs": 0
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "ef1e75cb3ab125d0"
+    },
+    "game-10-spray-on-22": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.40000009536743164
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "b09c360c1d2c31c2"
+    },
+    "game-15-resize-720x480": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.5
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "e9c4057e4abedbc9"
+    },
+    "game-16-resize-back-f1": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.5
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "fdc123e54bf0053c"
+    },
+    "game-17-resize-back-f3": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.3999999761581421
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "ffe90b79e1b2e602"
+    },
+    "game-18-resize-back-f8": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.2999999523162842
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "8458085c1569cce6"
+    },
+    "game-19-resize-back-off": {
+      "enabled": false,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.2999999523162842
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "36f5994aa8a26f74"
+    },
+    "game-20-spray-off": {
+      "enabled": false,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.2999999523162842
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "d8d3ad46b0f70ca0"
+    },
+    "game-21-spray-on-again": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.5
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "2ca5f889ca69405c"
+    },
+    "game-40-ab-on": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.3999999761581421
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "dc4a7d4dc7691255"
+    },
+    "game-41-ab-off": {
+      "enabled": false,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.3999999761581421
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "cc42c0b5ebb9d8f5"
+    },
+    "game-42-ab-on-again": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 176,
+      "last": {
+        "stamps": 176,
+        "texels": 15481,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 37,
+        "maxStreakPx": 79.4267553111477,
+        "avgStreakPx": 27.911916820851058,
+        "buildMs": 0.5
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "ecd56b8413773ec9"
+    },
+    "game-30-dynamite-on": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 53,
+      "last": {
+        "stamps": 53,
+        "texels": 5289,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 13,
+        "maxStreakPx": 67.7431400707263,
+        "avgStreakPx": 29.081249047587203,
+        "buildMs": 0.19999992847442627
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "90bf9afc19833d0b"
+    },
+    "game-60-query-off": {
+      "enabled": false,
+      "ready": false,
+      "warmed": false,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 0,
+        "height": 0
+      },
+      "layer": {
+        "width": 0,
+        "height": 0
+      },
+      "selectedDroplets": 0,
+      "last": {
+        "stamps": 0,
+        "texels": 0,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 0,
+        "avgStreakPx": 0,
+        "buildMs": 0
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "7ce1866ccad7f9f7"
+    },
+    "game-70-deferred-on": {
+      "enabled": true,
+      "ready": true,
+      "warmed": true,
+      "route": "capture-stage",
+      "exposureSeconds": 0.04444444444444444,
+      "exposureMs": 44.444444444444436,
+      "exposureLabel": "44.44 ms",
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "selectedDroplets": 88,
+      "last": {
+        "stamps": 5,
+        "texels": 378,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 120,
+        "avgStreakPx": 92.48075317250422,
+        "buildMs": 0.10000002384185791
+      },
+      "passes": {
+        "sceneRenders": 0,
+        "gooChains": 1,
+        "fullscreen": 1
+      },
+      "error": null,
+      "sha256_16": "e5ce7701e8e8e1c6"
+    }
+  },
+  "checks": {
+    "default": {
+      "enabled": true,
+      "exposureMs": 44.444444444444436,
+      "exposureSeconds": 0.04444444444444444,
+      "maxStreakPx": 120,
+      "seedScale": 1,
+      "depthBiasM": 0.02,
+      "taps": 24,
+      "route": "capture-stage",
+      "error": null
+    },
+    "spray": {
+      "attempt": 0,
+      "room": 4,
+      "info": {
+        "id": 7,
+        "dist": 0.9497963224909808,
+        "yaw": 0.2502136211167564,
+        "pitch": -0.5096946891703743,
+        "hit": 7,
+        "fired": [
+          true,
+          true
+        ]
+      },
+      "maxStamps": 186,
+      "maxTexels": 15509,
+      "peakFrame": 22
+    },
+    "resize": {
+      "layer": {
+        "width": 800,
+        "height": 600
+      },
+      "seed": {
+        "width": 400,
+        "height": 300
+      },
+      "error": null
+    },
+    "passCost": {
+      "installed": true,
+      "frames": 60,
+      "onMsPerFrame": {
+        "goo:density": 22.3106,
+        "sdf:polys": 1.9694,
+        "sdf:shell-hull": 3.1457,
+        "sdf:march": 23.9479,
+        "sdf:last-blit": 24.0495,
+        "sdf:upscale:L1a": 24.1336,
+        "sdf:upscale:L2a": 24.3586,
+        "sdf:upscale:L3a": 24.5749,
+        "sdf:upscale:L4a": 24.7387,
+        "sdf:upscale:shuffle": 24.2134,
+        "sdf:upscale:sharpen": 24.2035,
+        "sdf:composite": 22.8284,
+        "goo:surface": 22.4231,
+        "effects": 21.889,
+        "goo:layer": 20.6853,
+        "shutter:resolve": 20.2015,
+        "post:fxaa": 20.3151,
+        "post:smear": 20.3446,
+        "post:blit": 40.2369,
+        "compute:probe-gather": 0.2425,
+        "compute:tile-bin": 0.2643
+      },
+      "offMsPerFrame": {
+        "goo:density": 1.6056,
+        "sdf:polys": 2.0185,
+        "sdf:shell-hull": 3.208,
+        "sdf:march": 26.6983,
+        "sdf:last-blit": 26.8173,
+        "sdf:upscale:L1a": 26.9156,
+        "sdf:upscale:L2a": 27.1614,
+        "sdf:upscale:L3a": 27.4039,
+        "sdf:upscale:L4a": 27.6005,
+        "sdf:upscale:shuffle": 27.6114,
+        "sdf:upscale:sharpen": 27.5874,
+        "sdf:composite": 25.3231,
+        "goo:surface": 25.393,
+        "effects": 24.9354,
+        "post:fxaa": 24.1282,
+        "post:smear": 23.712,
+        "post:blit": 47.0057,
+        "compute:probe-gather": 0.2174,
+        "compute:tile-bin": 0.2501
+      }
+    },
+    "wallCost": {
+      "on": {
+        "frames": 90,
+        "totalMs": 2884.7,
+        "msPerFrame": 32.052
+      },
+      "off": {
+        "frames": 90,
+        "totalMs": 2842.6,
+        "msPerFrame": 31.584
+      },
+      "deltaMsPerFrame": 0.468
+    },
+    "dynamiteAim": {
+      "id": 7,
+      "dist": 0.8587973659123477,
+      "yaw": 0.0012766274269761311,
+      "pitch": -0.5716333483075852,
+      "hit": 7
+    },
+    "dynamite": {
+      "before": {
+        "detonations": 0,
+        "cookPhase": "idle"
+      },
+      "cooking": {
+        "cookPhase": "cooking",
+        "charge": 0.32499999999999885
+      },
+      "detonations": 1,
+      "framesToDet": 0,
+      "maxStamps": 58,
+      "after": {
+        "detonations": 1,
+        "thrown": 1
+      }
+    },
+    "queryOff": {
+      "enabled": false
+    },
+    "deferred": {
+      "renderMode": "deferred",
+      "enabled": true,
+      "error": null,
+      "aim": {
+        "id": 7,
+        "dist": 1.3537512837043264,
+        "yaw": -2.1933508734786367,
+        "pitch": -0.34516494597786357,
+        "hit": 8,
+        "fired": [
+          true,
+          true
+        ]
+      },
+      "stamps": 8
+    }
+  },
+  "consoleErrors": []
+}

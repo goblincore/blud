@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 // probe-grid.wgsl.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
 import { K_PROBE_GATHER, PROBE_DYNAMIC_WGSL } from './probe-dynamic.wgsl';
-import { DYN_RAY_CAP, GOLDEN_ANGLE, TWO_PI } from '../probe-dynamic';
+import { DYN_RAY_CAP, GOLDEN_ANGLE, PROBE_GATHER_WORKGROUP, TWO_PI } from '../probe-dynamic';
 import { SH_A0, SH_A1, SH_Y00, SH_Y1 } from '../probe-grid';
 
 describe('PROBE_DYNAMIC_WGSL — parse and shape contract', () => {
@@ -70,7 +70,7 @@ describe('K_PROBE_GATHER — parse and shape contract', () => {
     expect(K_PROBE_GATHER.startsWith('fn kProbeGather(')).toBe(true);
   });
 
-  it('declares the exact nine-input signature Task 2 binds', () => {
+  it('declares the exact ten-input signature Task 2 binds', () => {
     const compact = K_PROBE_GATHER.replace(/\s+/g, ' ');
     expect(compact).toContain(
       'fn kProbeGather( boxes: ptr<storage, array<vec4<f32>>, read>, '
@@ -78,21 +78,89 @@ describe('K_PROBE_GATHER — parse and shape contract', () => {
       + 'lights: ptr<storage, array<vec4<f32>>, read>, '
       + 'probeDyn: ptr<storage, array<vec4<f32>>, read_write>, '
       + 'cfg: vec4<f32>, gridMin: vec4<f32>, gridInvExtent: vec4<f32>, '
-      + 'gridDims: vec4<f32>, gi: u32 ) -> void',
+      + 'gridDims: vec4<f32>, gather: vec4<f32>, gi: u32 ) -> void',
     );
     // The real parser is the authority: a stray `word: word` in a comment
     // would become a phantom input and shift every binding.
     const parsed = new WGSLNodeFunction(K_PROBE_GATHER);
     expect(parsed.inputs.map((i: { name: string }) => i.name)).toEqual([
       'boxes', 'capsules', 'lights', 'probeDyn',
-      'cfg', 'gridMin', 'gridInvExtent', 'gridDims', 'gi',
+      'cfg', 'gridMin', 'gridInvExtent', 'gridDims', 'gather', 'gi',
     ]);
-    expect(parsed.inputs.length).toBe(9);
+    expect(parsed.inputs.length).toBe(10);
   });
 
-  it('the first statement is the probe-count guard', () => {
+  it('has NO count guard: the probe test is a flag, so every thread reaches the barrier', () => {
+    // R1 (2026-09-10). The pass used to open with `if (gi >= u32(cfg.x)) {
+    // return; }`. A workgroupBarrier may not sit in non-uniform control flow, so
+    // that guard had to go: threads past the last probe now contribute zeros and
+    // retire at the write, not at the entry. The host dispatches by WORKGROUP
+    // COUNT for the same reason, which also stops three from emitting its own
+    // `if (instanceIndex >= count) return;` ahead of the call.
     const body = K_PROBE_GATHER.slice(K_PROBE_GATHER.indexOf(') -> void {') + ') -> void {'.length);
-    expect(body.trimStart().startsWith('if (gi >= u32(cfg.x)) { return; }')).toBe(true);
+    expect(body).not.toContain('{ return; }');
+    expect(K_PROBE_GATHER).toContain('let valid = probe < probeCount;');
+  });
+
+  it('folds one probe per lane group with a single unconditional barrier', () => {
+    // The barrier must not be reachable only from inside a branch: Tint rejects
+    // that outright ('may result in a non-uniform value'), and it would be a
+    // pipeline-creation failure with no vitest-visible symptom.
+    expect(K_PROBE_GATHER).toContain('workgroupBarrier();');
+    const barrierCount = (K_PROBE_GATHER.match(/workgroupBarrier\(\);/g) ?? []).length;
+    expect(barrierCount).toBe(1);
+    const barrierIdx = K_PROBE_GATHER.indexOf('workgroupBarrier();');
+    const guardIdx = K_PROBE_GATHER.lastIndexOf('if (lane == 0u && valid) {');
+    expect(barrierIdx).toBeGreaterThan(-1);
+    // The barrier sits BETWEEN the scratch write and the fold, at top level.
+    expect(guardIdx).toBeGreaterThan(barrierIdx);
+    // ...and the write/fold are the only brace-level siblings around it.
+    const between = K_PROBE_GATHER.slice(K_PROBE_GATHER.indexOf('gProbeScratch[lin * 4u + 0u]'), barrierIdx);
+    expect(between).not.toContain('if (');
+  });
+
+  it('declares its workgroup scratch at module scope, sized by the shared constants', () => {
+    // Tint will not accept a workgroup variable declared inside a
+    // non-entry-point function, and three's workgroupArray node buys nothing
+    // because this kernel indexes the scratch itself. surface-nets.wgsl.ts
+    // declares its workgroup storage the same way and is the precedent.
+    expect(K_PROBE_GATHER).toContain(`var<workgroup> gProbeScratch: array<vec4<f32>, ${PROBE_GATHER_WORKGROUP * 4}>;`);
+    expect(K_PROBE_GATHER).toContain(`var<workgroup> gProbeHit: array<u32, ${PROBE_GATHER_WORKGROUP}>;`);
+    expect(K_PROBE_GATHER).toContain(`let lin = gi % ${PROBE_GATHER_WORKGROUP}u;`);
+  });
+
+  it('emits those declarations into the GENERATED code, not just the source', () => {
+    // The mechanism, not the intent: the wgslFn parser reproduces everything
+    // after the parameter list — the body, then the module-scope declarations —
+    // and that whole string is spliced into the shader's module scope. If a
+    // future parser change dropped the trailing text, the kernel would
+    // reference an undeclared gProbeScratch and the pipeline would fail to
+    // compile with the flesh's black-silhouette symptom and no CPU-test signal.
+    const code = new WGSLNodeFunction(K_PROBE_GATHER).getCode();
+    expect(code).toContain(`var<workgroup> gProbeScratch: array<vec4<f32>, ${PROBE_GATHER_WORKGROUP * 4}>;`);
+    expect(code).toContain(`var<workgroup> gProbeHit: array<u32, ${PROBE_GATHER_WORKGROUP}>;`);
+    // The whole body travels with it, helpers and all.
+    expect(code).toContain('fn kdShadowed(');
+    expect(code).toContain('workgroupBarrier();');
+  });
+
+  it('runs ONE ray per thread and divides the probe out of the invocation index', () => {
+    expect(K_PROBE_GATHER).toContain('let tpp = max(1u, u32(gather.x));');
+    expect(K_PROBE_GATHER).toContain('let probe = gi / tpp;');
+    expect(K_PROBE_GATHER).toContain('let lane = gi % tpp;');
+    // One ray, one direction: the old kernel looped `for (i in 0..nRays)` here.
+    expect(K_PROBE_GATHER).toContain('let dir = kdFibonacci(lane, nRays, cfg.z);');
+    expect(K_PROBE_GATHER).not.toContain('for (var i = 0u; i < nRays; i = i + 1u)');
+  });
+
+  it('folds in ASCENDING slot order, the old accumulation order', () => {
+    // The equivalence argument is order-based: the fold must visit the group's
+    // slots the way the old per-probe loop visited its rays.
+    expect(K_PROBE_GATHER).toContain('for (var s = 0u; s < tpp; s = s + 1u) {');
+    const kInit = K_PROBE_GATHER.indexOf('for (var s = 0u; s < tpp; s = s + 1u) {');
+    const fold = K_PROBE_GATHER.slice(kInit, kInit + 600);
+    expect(fold).toContain('s0 = s0 + gProbeScratch[k + 0u];');
+    expect(fold).toContain('nHit = nHit + gProbeHit[groupBase + s];');
   });
 
   it('caps rays per probe at 64', () => {

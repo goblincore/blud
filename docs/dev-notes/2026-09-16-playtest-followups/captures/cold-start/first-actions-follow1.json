@@ -1,0 +1,480 @@
+{
+  "label": "follow1",
+  "url": "http://localhost:5490/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7&crowd=1&vhs=blud&res=800",
+  "viewport": {
+    "width": 960,
+    "height": 720,
+    "dpr": 1,
+    "canvasW": 800,
+    "canvasH": 600
+  },
+  "warm": {
+    "ms": 2306,
+    "bootBeforeWarmMs": 10,
+    "flipped": 58,
+    "passes": 11,
+    "computes": 7,
+    "phases": {
+      "flip": 0.09999990463256836,
+      "crowdBinsPerType": [
+        3.4,
+        2,
+        2.1,
+        2,
+        1.6,
+        1.9,
+        1.8
+      ],
+      "crowdBins": 14.800000071525574,
+      "goo": 60.5,
+      "drawOnce": 1622.5999999046326,
+      "precompile": 607.7000000476837
+    }
+  },
+  "firstDetonation": {
+    "wallMs": 97,
+    "frames": {
+      "n": 3,
+      "p50": 32.6,
+      "p95": 51.4,
+      "max": 51.4
+    },
+    "pipelinesCreated": 4,
+    "compileMs": 0,
+    "longFramesAdded": 0,
+    "longFrames": []
+  },
+  "repeatedShots": {
+    "totalPipelinesCreated": 2,
+    "maxFrameMs": 37.5,
+    "maxP95": 34.8,
+    "longFrames": 0
+  },
+  "repeatedBlasts": {
+    "totalPipelinesCreated": 1,
+    "maxFrameMs": 34.5,
+    "maxP95": 31.9,
+    "longFrames": 0
+  },
+  "gibTimeline": {
+    "blastWallMs": 97,
+    "blastFrames": {
+      "n": 3,
+      "p50": 32.6,
+      "p95": 51.4,
+      "max": 51.4
+    },
+    "firstVisibleChunk": {
+      "t": 188,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 13.799999952316284,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": null,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSubmit": {
+      "t": 2129,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 13.799999952316284,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": 57,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSwap": {
+      "t": 2484,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 13.799999952316284,
+      "live": 63,
+      "baked": 1,
+      "pendingBake": 62,
+      "totalBakes": 1,
+      "lastBakeMs": 215.70000004768372,
+      "lastBakeSwapMs": 0.6000000238418579,
+      "faceBaked": 0
+    },
+    "firstTexturedHeadDraw": {
+      "t": 3683,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 13.799999952316284,
+      "live": 56,
+      "baked": 8,
+      "pendingBake": 55,
+      "totalBakes": 8,
+      "lastBakeMs": 172,
+      "lastBakeSwapMs": 0.2999999523162842,
+      "faceBaked": 1
+    },
+    "samples": [
+      {
+        "t": 53,
+        "pendingGibs": 7,
+        "tearing": 7,
+        "tier": "parts",
+        "blastMs": 13.799999952316284,
+        "live": 0,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 188,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 294,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 539,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 788,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1026,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1252,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1472,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1692,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1920,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2189,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": 57,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2484,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 63,
+        "baked": 1,
+        "pendingBake": 62,
+        "totalBakes": 1,
+        "lastBakeMs": 215.70000004768372,
+        "lastBakeSwapMs": 0.6000000238418579,
+        "faceBaked": 0
+      },
+      {
+        "t": 2744,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 63,
+        "baked": 1,
+        "pendingBake": 62,
+        "totalBakes": 1,
+        "lastBakeMs": 215.70000004768372,
+        "lastBakeSwapMs": 0.6000000238418579,
+        "faceBaked": 0
+      },
+      {
+        "t": 3011,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 62,
+        "baked": 2,
+        "pendingBake": 59,
+        "totalBakes": 2,
+        "lastBakeMs": 320.60000002384186,
+        "lastBakeSwapMs": 0.10000002384185791,
+        "faceBaked": 0
+      },
+      {
+        "t": 3279,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 60,
+        "baked": 4,
+        "pendingBake": 60,
+        "totalBakes": 4,
+        "lastBakeMs": 162.10000002384186,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3543,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 57,
+        "baked": 7,
+        "pendingBake": 64,
+        "totalBakes": 7,
+        "lastBakeMs": 50.89999997615814,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3683,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 13.799999952316284,
+        "live": 56,
+        "baked": 8,
+        "pendingBake": 55,
+        "totalBakes": 8,
+        "lastBakeMs": 172,
+        "lastBakeSwapMs": 0.2999999523162842,
+        "faceBaked": 1
+      }
+    ]
+  },
+  "probeHealth": {
+    "errors": 0,
+    "capsules": null,
+    "lights": null,
+    "bound": true,
+    "dynOn": null
+  },
+  "probeStress": [
+    {
+      "requested": 6,
+      "post": {
+        "frames": 323,
+        "errors": 0,
+        "bound": true,
+        "capsules": 395,
+        "lights": 3,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      },
+      "spawnFrames": {
+        "n": 31,
+        "p50": 9.4,
+        "p95": 35.6,
+        "max": 41.3
+      },
+      "steadyFrames": {
+        "n": 92,
+        "p50": 30.6,
+        "p95": 58.3,
+        "max": 72.5
+      }
+    },
+    {
+      "requested": 9,
+      "post": {
+        "frames": 369,
+        "errors": 0,
+        "bound": true,
+        "capsules": 935,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      },
+      "spawnFrames": {
+        "n": 9,
+        "p50": 38.3,
+        "p95": 114.5,
+        "max": 114.5
+      },
+      "steadyFrames": {
+        "n": 58,
+        "p50": 9,
+        "p95": 157.1,
+        "max": 176.8
+      }
+    },
+    {
+      "requested": 12,
+      "post": {
+        "frames": 385,
+        "errors": 0,
+        "bound": true,
+        "capsules": 1024,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      },
+      "spawnFrames": {
+        "n": 7,
+        "p50": 36.8,
+        "p95": 153.9,
+        "max": 153.9
+      },
+      "steadyFrames": {
+        "n": 17,
+        "p50": 21.2,
+        "p95": 392.4,
+        "max": 392.4
+      }
+    },
+    {
+      "requested": 20,
+      "post": {
+        "frames": 394,
+        "errors": 0,
+        "bound": true,
+        "capsules": 1024,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      },
+      "spawnFrames": {
+        "n": 3,
+        "p50": 26.6,
+        "p95": 423.5,
+        "max": 423.5
+      },
+      "steadyFrames": {
+        "n": 7,
+        "p50": 42.4,
+        "p95": 595.7,
+        "max": 595.7
+      }
+    }
+  ],
+  "gpuDiagnostics": {
+    "lost": null,
+    "uncaptured": [],
+    "uncapturedCount": 0
+  },
+  "pageErrors": [],
+  "longFrames": []
+}

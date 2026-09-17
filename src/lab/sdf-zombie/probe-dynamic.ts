@@ -48,6 +48,58 @@ export const DYN_FLOATS_PER_PROBE = DYN_VEC4_PER_PROBE * 4;
 /** The kernel's hard per-probe ray cap (`min(u32(cfg.y), 64u)`). */
 export const DYN_RAY_CAP = 64;
 
+/** The game gathers at most this many bone rows; each expands to two capsules. */
+export const PROBE_MAX_BONE_INSTANCES = 1024;
+export const PROBE_CAPSULES_PER_BONE = 2;
+export const PROBE_MAX_CAPSULES = PROBE_MAX_BONE_INSTANCES * PROBE_CAPSULES_PER_BONE;
+
+/**
+ * THE GATHER'S WORKGROUP SIZE, and the shape of the R1 dispatch (2026-09-10).
+ *
+ * The pass runs one thread per (probe, ray). A workgroup this wide holds
+ * `PROBE_GATHER_WORKGROUP / tpp` WHOLE probes, where `tpp` is the
+ * threads-per-probe below — which is why `tpp` is a power of two: a probe's ray
+ * group must never straddle two workgroups, because the reduction that folds it
+ * is workgroup-local (WebGPU has no barrier between workgroups in a dispatch).
+ */
+export const PROBE_GATHER_WORKGROUP = 64;
+
+/**
+ * Threads the gather spawns per probe: the smallest power of two that can hold
+ * `raysPerProbe`, clamped to [1, PROBE_GATHER_WORKGROUP].
+ *
+ * Not simply `raysPerProbe`, for two reasons. It must divide
+ * PROBE_GATHER_WORKGROUP so the groups tile the workgroup exactly, and it must
+ * be at least 1 when the ray count is 0 — the `?dynrays=0` control still writes
+ * the decayed record for every probe, which is what the one-thread-per-probe
+ * pass did. Rays beyond the count are idle threads that contribute zeros, and
+ * the fold reads only the first `rays` slots, so a padded group costs slots and
+ * nothing else.
+ *
+ * BOTH SIDES SHARE THIS. The kernel takes the value as `gather.x` rather than
+ * re-deriving it, so exactly one place decides it; the host uses it to size the
+ * dispatch through `gatherWorkgroupCount` below.
+ */
+export function gatherThreadsPerProbe(raysPerProbe: number): number {
+  const rays = Math.min(Math.max(0, Math.floor(raysPerProbe)), DYN_RAY_CAP);
+  let tpp = 1;
+  while (tpp < rays && tpp < PROBE_GATHER_WORKGROUP) tpp *= 2;
+  return tpp;
+}
+
+/**
+ * Workgroups to dispatch for `probeCount` probes at `raysPerProbe` rays. The
+ * last workgroup is partial whenever `probeCount * tpp` is not a multiple of
+ * PROBE_GATHER_WORKGROUP; its surplus threads are out of range, so they do no
+ * ray work and write nothing — the kernel tests the PROBE index, never the
+ * thread index, and that test is a flag rather than a guard (the barrier must
+ * stay in uniform control flow).
+ */
+export function gatherWorkgroupCount(probeCount: number, raysPerProbe: number): number {
+  const tpp = gatherThreadsPerProbe(raysPerProbe);
+  return Math.ceil((Math.max(0, Math.floor(probeCount)) * tpp) / PROBE_GATHER_WORKGROUP);
+}
+
 /**
  * The Fibonacci lattice's golden angle and a full turn. Exported so the WGSL
  * pin test can assert the exact literals in `K_PROBE_GATHER` — the one place
@@ -99,10 +151,42 @@ export interface CapsuleHit {
  * returns null: an occluder you are inside blocks nothing, so a body wrapping
  * a probe must not darken it from within.
  */
-export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number): CapsuleHit | null {
+export function hitCapsule(
+  origin: Vec3,
+  dir: Vec3,
+  a: Vec3,
+  b: Vec3,
+  r: number,
+  tMax = Infinity,
+): CapsuleHit | null {
   const ba: Mut3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   const pa: Mut3 = [origin[0] - a[0], origin[1] - a[1], origin[2] - a[2]];
   const baba = dot(ba, ba);
+
+  // BOUNDING-SPHERE REJECT FIRST (2026-09-10). The capsule is contained in the
+  // sphere centred on the segment midpoint with radius |ba|/2 + r, so a ray
+  // that misses that sphere CANNOT hit the capsule, and one whose sphere exit
+  // is behind the origin cannot have a positive entry either. Both are exact
+  // miss conditions, and they cost one dot, one dot and at most one sqrt —
+  // against the ~15 operations plus three sqrts the full quadratic below pays.
+  //
+  // This is where the sweep's cost actually goes: the gather walks up to 1024
+  // capsules per shadow ray and most of them are nowhere near the ray, so the
+  // reject fires on the large majority and the exact maths is never reached.
+  // `tMax` additionally lets a caller with a running best (or a light
+  // distance) retire a capsule it could not beat.
+  {
+    const mx = a[0] + ba[0] * 0.5, my = a[1] + ba[1] * 0.5, mz = a[2] + ba[2] * 0.5;
+    const R = 0.5 * Math.sqrt(baba) + r;
+    const ocx = origin[0] - mx, ocy = origin[1] - my, ocz = origin[2] - mz;
+    const bq = ocx * dir[0] + ocy * dir[1] + ocz * dir[2];
+    const cq = ocx * ocx + ocy * ocy + ocz * ocz - R * R;
+    const disc = bq * bq - cq;
+    if (disc < 0) return null;
+    const sq = Math.sqrt(disc);
+    if (sq - bq < 0) return null;          // the whole sphere is behind the origin
+    if (-bq - sq > tMax) return null;      // entered only beyond the caller's bound
+  }
 
   // Inside/on test: distance from the origin to the segment a-b.
   const s = baba > 1e-18 ? clamp(dot(pa, ba) / baba, 0, 1) : 0;
@@ -128,7 +212,7 @@ export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number)
       if (h >= 0) {
         const t = (-qb - Math.sqrt(h)) / qa;
         const y = baoa + t * bard;
-        if (t > 0 && y >= 0 && y <= baba) {
+        if (t > 0 && t < tMax && y >= 0 && y <= baba) {
           const p: Mut3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
           const sa = y / baba;
           const n = normalize3([
@@ -150,7 +234,7 @@ export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number)
     const disc = bq * bq - cq;
     if (disc < 0) continue;
     const t = -bq - Math.sqrt(disc);
-    if (t <= 0 || t >= bestT) continue;
+    if (t <= 0 || t >= bestT || t >= tMax) continue;
     const p: Mut3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
     bestT = t;
     bestPoint = p;
@@ -159,6 +243,81 @@ export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number)
 
   if (bestPoint === null || bestNormal === null) return null;
   return { t: bestT, point: bestPoint, normal: bestNormal };
+}
+
+/**
+ * ANY-HIT within `dist` — the shadow-ray question, and all it is.
+ *
+ * `hitCapsule` answers "where is the nearest entry", so it must scan every
+ * capsule to prove none is nearer. A shadow ray does not care where: it cares
+ * only whether SOMETHING blocks before the light, so it can return on the first
+ * blocker and retire every capsule it passes. `dist` doubles as the bound, so
+ * capsules whose entry lies beyond the light are rejected without the
+ * quadratic — the same `tMax` reject `hitCapsule` now applies.
+ *
+ * Same entry semantics as `hitCapsule` (a ray starting inside a capsule is not
+ * blocked by it), so the answer is identical; only the work differs.
+ */
+export function capsuleBlocks(
+  origin: Vec3,
+  dir: Vec3,
+  a: Vec3,
+  b: Vec3,
+  r: number,
+  dist: number,
+): boolean {
+  const ba: Mut3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const pa: Mut3 = [origin[0] - a[0], origin[1] - a[1], origin[2] - a[2]];
+  const baba = dot(ba, ba);
+
+  // Bounding-sphere reject, bounded by the light distance — see hitCapsule.
+  {
+    const mx = a[0] + ba[0] * 0.5, my = a[1] + ba[1] * 0.5, mz = a[2] + ba[2] * 0.5;
+    const R = 0.5 * Math.sqrt(baba) + r;
+    const ocx = origin[0] - mx, ocy = origin[1] - my, ocz = origin[2] - mz;
+    const bq = ocx * dir[0] + ocy * dir[1] + ocz * dir[2];
+    const cq = ocx * ocx + ocy * ocy + ocz * ocz - R * R;
+    const disc = bq * bq - cq;
+    if (disc < 0) return false;
+    const sq = Math.sqrt(disc);
+    if (sq - bq < 0) return false;
+    if (-bq - sq > dist) return false;
+  }
+
+  const s = baba > 1e-18 ? clamp(dot(pa, ba) / baba, 0, 1) : 0;
+  const cx = origin[0] - (a[0] + ba[0] * s);
+  const cy = origin[1] - (a[1] + ba[1] * s);
+  const cz = origin[2] - (a[2] + ba[2] * s);
+  if (cx * cx + cy * cy + cz * cz < r * r) return false;
+
+  if (baba > 1e-18) {
+    const bard = dot(ba, dir);
+    const baoa = dot(ba, pa);
+    const rdoa = dot(dir, pa);
+    const oaoa = dot(pa, pa);
+    const qa = baba - bard * bard;
+    const qb = baba * rdoa - baoa * bard;
+    const qc = baba * oaoa - baoa * baoa - r * r * baba;
+    if (qa > 1e-18) {
+      const h = qb * qb - qa * qc;
+      if (h >= 0) {
+        const t = (-qb - Math.sqrt(h)) / qa;
+        const y = baoa + t * bard;
+        if (t > 0 && t < dist && y >= 0 && y <= baba) return true;
+      }
+    }
+  }
+
+  for (const c of [a, b]) {
+    const oc: Mut3 = [origin[0] - c[0], origin[1] - c[1], origin[2] - c[2]];
+    const bq = dot(oc, dir);
+    const cq = dot(oc, oc) - r * r;
+    const disc = bq * bq - cq;
+    if (disc < 0) continue;
+    const t = -bq - Math.sqrt(disc);
+    if (t > 0 && t < dist) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +372,7 @@ export function packCapsulesFromBoneInstances(
   out: Float32Array,
   max: number,
 ): number {
-  const n = count * 2;
+  const n = count * PROBE_CAPSULES_PER_BONE;
   if (n > max) {
     throw new Error(`packCapsulesFromBoneInstances: ${n} capsules exceed max ${max}`);
   }
@@ -239,6 +398,24 @@ export function packCapsulesFromBoneInstances(
 
 /** Floats per packed light: three vec4. */
 export const LIGHT_FLOATS = 12;
+
+/**
+ * THE SOFT (ROOM-FILL) REFERENCE DISTANCE, in metres.
+ *
+ * A packed light is a POINT light and accumulates as `intensity · n·l / d²`, so
+ * it reads as a bright blob at its own position and as almost nothing across a
+ * room: at 2 m a surface gets 1/4 of the peak and at 8 m it gets 1/64. That is
+ * correct for a muzzle flash and WRONG for a detonation — the owner, playing:
+ * *"the explosion seems to have a rather small radius of light effect"*, with
+ * the room staying dark while the crater blew out.
+ *
+ * A real explosion also scatters: the flash lights the air, dust and smoke, and
+ * the room fills. `DynLightInput.fill` adds that component at
+ * `intensity · fill / (1 + d²/REF²)` — a soft falloff that is ~1 at the source
+ * and still ~0.2 at 8 m, i.e. a 12.8x lift in the far field for the same peak.
+ * REF is where that term has fallen to half.
+ */
+export const LIGHT_FILL_REF_M = 4;
 /** cosOuter value that marks a POINT light (no cone). Any cosine is > -1. */
 export const LIGHT_NO_CONE = -2;
 
@@ -247,6 +424,13 @@ export interface DynLightInput {
   /** SPOT lights: unit beam axis pointing away from the lamp, plus the cone
    *  cosines the analytic beam uses (inner >= outer). Omit for a point light. */
   axis?: Vec3; cosInner?: number; cosOuter?: number;
+  /**
+   * POINT lights only: the SOFT room-fill component, as a fraction of
+   * `intensity` (0 or absent = the pure point light every other caller wants).
+   * A detonation sets it — see `LIGHT_FILL_REF_M`. Ignored for spots, whose
+   * `cosInner` slot is reused to carry it in the packed layout.
+   */
+  fill?: number;
 }
 
 /**
@@ -273,7 +457,10 @@ export function packLights(
     out[o + 4] = l.color[0]; out[o + 5] = l.color[1]; out[o + 6] = l.color[2];
     out[o + 7] = spot ? l.cosOuter! : LIGHT_NO_CONE;
     out[o + 8] = spot ? l.axis![0] : 0; out[o + 9] = spot ? l.axis![1] : 0; out[o + 10] = spot ? l.axis![2] : 0;
-    out[o + 11] = spot ? l.cosInner! : LIGHT_NO_CONE;
+    // Slot 11 is `cosInner` for a SPOT and, for a POINT light, the room-fill
+    // fraction: the cone branch (the only reader of cosInner) runs only when
+    // cosOuter > -1.5, which a point light never satisfies (it packs -2 here).
+    out[o + 11] = spot ? l.cosInner! : (l.fill ?? 0);
     o += LIGHT_FLOATS;
   }
   return count;
@@ -409,14 +596,10 @@ function dynShadowed(
   boxes: Float32Array,
   nBoxes: number,
 ): boolean {
-  for (let c = 0; c < nCaps; c++) {
-    const base = 4 + c * 8;
-    const a: Vec3 = [capsules[base + 0]!, capsules[base + 1]!, capsules[base + 2]!];
-    const r = capsules[base + 3]!;
-    const b: Vec3 = [capsules[base + 4]!, capsules[base + 5]!, capsules[base + 6]!];
-    const h = hitCapsule(origin, dir, a, b, r);
-    if (h !== null && h.t < dist) return true;
-  }
+  // BOXES FIRST (2026-09-10) — same reasoning as the kernel's kdShadowed: the
+  // result is an OR, so order cannot change it, and testing at most 16 boxes
+  // before ~200 capsules short-circuits the capsule sweep whenever a wall or a
+  // piece of furniture is in the way.
   for (let b = 0; b < nBoxes; b++) {
     const base = 4 + b * 12;
     if (boxes[base + 3]! < 0.5) continue; // the enclosure is the light's own room
@@ -426,6 +609,18 @@ function dynShadowed(
     };
     const h = hitAabbEntry(origin, dir, box);
     if (h !== null && h.t < dist) return true;
+  }
+  for (let c = 0; c < nCaps; c++) {
+    const base = 4 + c * 8;
+    const a: Vec3 = [capsules[base + 0]!, capsules[base + 1]!, capsules[base + 2]!];
+    const r = capsules[base + 3]!;
+    const b2: Vec3 = [capsules[base + 4]!, capsules[base + 5]!, capsules[base + 6]!];
+    // ANY-HIT, bounded by the light distance (2026-09-10) — not a nearest
+    // search. Returning on the first blocker retires the rest of the list, and
+    // the bound rejects capsules entered beyond the light without the
+    // quadratic. The answer is identical to `hitCapsule(...) !== null &&
+    // h.t < dist`; only the work differs.
+    if (capsuleBlocks(origin, dir, a, b2, r, dist)) return true;
   }
   return false;
 }
@@ -477,7 +672,13 @@ function dynSurfaceRadiance(
       cone = t * t;
       if (cone <= 0) continue;
     }
-    const f = (intensity * ndl * cone) / d2;
+    // Hard point term, plus the SOFT room-fill term for a light that carries
+    // one (`fill` rides in slot 11 for point lights — see packLights). The fill
+    // is what lets a detonation light a whole room instead of a disc of floor
+    // around the crater: at 8 m it is 12.8x the hard term's contribution.
+    const fill = cosOuter > -1.5 ? 0 : lights[base + 11]!;
+    const soft = fill > 0 ? fill / (1 + d2 / (LIGHT_FILL_REF_M * LIGHT_FILL_REF_M)) : 0;
+    const f = (intensity * ndl * cone) * (1 / d2 + soft);
     out[0] += albedo[0] * lights[base + 4]! * f;
     out[1] += albedo[1] * lights[base + 5]! * f;
     out[2] += albedo[2] * lights[base + 6]! * f;

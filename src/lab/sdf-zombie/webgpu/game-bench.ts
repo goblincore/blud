@@ -31,6 +31,11 @@ import { aggregatePassSamples, attributePassSamples, type PassSample } from './g
 export interface BenchDeps {
   /** Drive exactly one frame at this timestep. */
   step(dtSec: number): void;
+  /** Optional: awaited before EVERY step. The page uses it to wait for an
+   *  outstanding bake worker so a corpse/gib swap lands on the same frame in
+   *  every run (determinism, 2026-09-14). The time spent here is subtracted
+   *  from the chunk's frame cost — live play runs the worker in parallel. */
+  beforeStep?(): Promise<void>;
   /** Await a real GPU completion fence. */
   resolveGpu(): Promise<void>;
   /** A monotonic clock in milliseconds. */
@@ -65,6 +70,22 @@ export interface BenchDeps {
    * tables as the GPU passes so CPU and GPU can be read side by side.
    */
   stepTimed?(dtSec: number): Record<string, number>;
+  /**
+   * THE FRAME HASH AT THE END OF THE LEG (deterministic demo recordings stage
+   * 2, 2026-09-10). Optional, and called ONCE per leg AFTER the timed loop, so
+   * it cannot contaminate a timing sample: a hash is a ~1M-float readback plus
+   * a digest — tens of milliseconds of work that would be visible inside a
+   * 17 ms frame.
+   *
+   * It is the frame-level companion to `census`. The census counts what the page
+   * CONTAINS (bodies, droplets, goo quads); this digests what the page RENDERS.
+   * The census cannot see a zeroed probe layer or a mistranscribed shader — both
+   * shipped on 2026-09-10 and were caught by playtesting, not by a gate — and
+   * the hash cannot see a droplet count that changed without changing a pixel.
+   * Two repeats of one leg that hash differently were never measuring one
+   * workload, whatever the census says.
+   */
+  endHash?(): Promise<import('./frame-hash').FrameHash>;
 }
 
 /** A cheap count of what the frame contained. */
@@ -137,6 +158,11 @@ export interface PassReport {
 export interface BenchResult {
   mode: BenchMode;
   label: string;
+  /** Frame hash of the leg's ENDING state, when the page supplies one. Compare
+   *  ACROSS REPEATS of the same leg: two repeats that hash differently were not
+   *  running the same frame, so no delta between them is attributable. See
+   *  BenchDeps.endHash. */
+  endHash?: import('./frame-hash').FrameHash;
   /** False when any frame was stepped while the page was hidden. */
   valid: boolean;
   hiddenSteps: number;
@@ -209,6 +235,7 @@ export async function runBench(
   for (let i = 0; i < warmup; i++) {
     if (deps.hidden()) hiddenSteps++;
     if (i === 0) for (const a of actionsAt(scenario, 0)) deps.perform(a);
+    if (deps.beforeStep) await deps.beforeStep();
     deps.step(dt);
   }
   await deps.resolveGpu();
@@ -272,9 +299,13 @@ export async function runBench(
     while (f < seg.to) {
       const n = Math.min(chunkFrames, seg.to - f);
       const t0 = deps.now();
-      for (let i = 0; i < n; i++) stepOnce(f + i);
+      let waited = 0;
+      for (let i = 0; i < n; i++) {
+        if (deps.beforeStep) { const w0 = deps.now(); await deps.beforeStep(); waited += deps.now() - w0; }
+        stepOnce(f + i);
+      }
       await deps.resolveGpu();
-      record(seg.name, (deps.now() - t0) / n);
+      record(seg.name, (deps.now() - t0 - waited) / n);
       if (passMode) await recordPasses(seg.name);
       f += n;
     }
@@ -315,10 +346,15 @@ export async function runBench(
     })),
   } : undefined;
 
+  // AFTER every timing sample. `endHash` is deliberately the last thing this
+  // function does, so its readback cost cannot land inside a measured frame.
+  const endHash = deps.endHash ? await deps.endHash() : undefined;
+
   return {
     mode: opts.mode,
     label: opts.label ?? '',
     ...(passes ? { passes } : {}),
+    ...(endHash ? { endHash } : {}),
     valid: hiddenSteps === 0,
     hiddenSteps,
     frames: scenario.frames,

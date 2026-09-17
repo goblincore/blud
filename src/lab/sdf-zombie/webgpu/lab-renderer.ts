@@ -24,12 +24,33 @@
 import * as THREE from 'three/webgpu';
 import { WebGPURenderer } from 'three/webgpu';
 import type { FrameTiming } from './game-telemetry';
+import { installPipelineLog, noteFrameEnd } from './pipeline-log';
+
+/**
+ * WebGPU device health, captured where the device is created (startup-freeze
+ * attribution, 2026-09-16). Device loss is otherwise silent: the canvas just
+ * stops updating and every driver-visible symptom is inferred. There was no
+ * `device.lost` / `onuncapturederror` handler before this, so a lost device or
+ * a validation error outside a three error scope left no evidence at all.
+ */
+export interface GpuDiagnostics {
+  /** Set when `device.lost` resolves. `atMs` is performance.now() at loss. */
+  lost: { reason: string; message: string; atMs: number } | null;
+  /** First few uncaptured errors (validation / out-of-memory / internal). */
+  uncaptured: { message: string; atMs: number }[];
+  /** Total uncaptured errors seen (the list above is bounded). */
+  uncapturedCount: number;
+}
 
 export interface LabRendererHandle {
   renderer: WebGPURenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   canvas: HTMLCanvasElement;
+  /** Device loss / uncaptured-error evidence. */
+  readonly gpuDiagnostics: GpuDiagnostics;
+  /** True while the rAF loop is armed; setLoopRunning keeps this in sync. */
+  readonly loopRunning: boolean;
   setRenderCallback(cb: (dtSec: number) => void): void;
   setDrawFn(fn: () => void): void;
   /** Observe natural frames only; CPU submission timing is NOT GPU duration. */
@@ -247,8 +268,20 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // issue 502668704 — the collapse-stall investigation, X1.22.1; see
   // docs/dev-notes/2026-08-16-collapse-stall/notes.md). 'opaque' keeps the
   // present on the overlay-capable path and stops tripping it.
+  // COLOUR ATTACHMENT BUDGET (run 4, 2026-09-12): the march can carry three rgba32f attachments
+  // (output + normal + anchor) = 48 bytes/sample, over WebGPU's default cap of 32. Ask the device for
+  // the adapter's real cap (Apple silicon reports 128) — only when the adapter offers more than the
+  // default, so a device that cannot simply keeps the default and the extra attachments stay off.
+  let requiredLimits: Record<string, number> | undefined;
+  try {
+    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<{ limits: { maxColorAttachmentBytesPerSample?: number } } | null> } }).gpu;
+    const adapter = await gpu?.requestAdapter();
+    const cap = adapter?.limits.maxColorAttachmentBytesPerSample ?? 32;
+    if (cap > 32) requiredLimits = { maxColorAttachmentBytesPerSample: Math.min(cap, 64) };
+  } catch { /* leave the default */ }
   const renderer = new WebGPURenderer({
     antialias: false, trackTimestamp: true, alpha: false,
+    ...(requiredLimits ? { requiredLimits } : {}),
   });
   renderer.setPixelRatio(1); // explicit: we drive internal size ourselves
   // WebGPURenderer's signature takes a Color, where WebGLRenderer accepts a
@@ -260,6 +293,52 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // adapter and device. Skipping this is the classic first WebGPU bug: the
   // first frame silently does nothing.
   await renderer.init();
+
+  // PIPELINE-CREATION LOG (pipeline-log.ts, startup-hitch attribution). Must
+  // wrap before ANY pipeline exists — the first frame and the boot warm-up
+  // both create some — so this sits immediately after init produced the
+  // device. Recording itself is gated by ?pipelinelog=1 / setPipelineLog.
+  installPipelineLog(renderer);
+
+  // DEVICE HEALTH (startup-freeze attribution). `device.lost` is a promise that
+  // never rejects, so a `.then` never firing means the device survived the run —
+  // which is itself the evidence ("loss did not reproduce"). `onuncapturederror`
+  // catches validation/oom errors that no error scope claimed (three wraps most
+  // of its own work in scopes, so this is the residual channel).
+  const gpuDiagnostics: GpuDiagnostics = { lost: null, uncaptured: [], uncapturedCount: 0 };
+  {
+    // Structural device shape: the DOM WebGPU lib types are not loaded here
+    // (three ships its own), so name only what is used.
+    type DeviceLike = {
+      lost?: Promise<{ reason?: string; message?: string }>;
+      onuncapturederror?: ((ev: { error?: { message?: string } }) => void) | null;
+    };
+    const device = (renderer.backend as unknown as { device?: DeviceLike })?.device;
+    try {
+      void device?.lost?.then((info) => {
+        gpuDiagnostics.lost = {
+          reason: String(info?.reason ?? 'unknown'),
+          message: String(info?.message ?? ''),
+          atMs: Math.round(performance.now()),
+        };
+        console.error(`[gpu] device lost (${gpuDiagnostics.lost.reason}): ${gpuDiagnostics.lost.message}`);
+      });
+    } catch { /* no lost promise on this backend */ }
+    try {
+      if (device) {
+        device.onuncapturederror = (ev) => {
+          gpuDiagnostics.uncapturedCount++;
+          if (gpuDiagnostics.uncaptured.length < 20) {
+            gpuDiagnostics.uncaptured.push({
+              message: String(ev.error?.message ?? ev),
+              atMs: Math.round(performance.now()),
+            });
+          }
+        };
+      }
+    } catch { /* handler unsupported */ }
+    (window as unknown as Record<string, unknown>).__gpuDiagnostics = gpuDiagnostics;
+  }
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x1a1116, 10, 60);
@@ -316,6 +395,14 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // resolve has to keep up with the frames. One in-flight resolve at a time is
   // enough: it is async, and a reading every few frames is plenty for tuning.
   let resolving = false;
+  // The COMPUTE pool is separate from the render pool and three resolves
+  // neither on its own. The crowd path alone runs 24 compute passes per frame
+  // (6 types x 4 tile-bin kernels); unresolved, the compute pool's 2048-query
+  // capacity overflowed in ~85 frames and three's warnOnce fired mid-game
+  // ('THREE.WebGPUTimestampQueryPool [compute]: Maximum number of queries
+  // exceeded'). Both pools are drained here, each with its own in-flight
+  // guard (resolveQueriesAsync already coalesces concurrent calls per pool).
+  let resolvingCompute = false;
 
   const loop = () => {
     const now = performance.now();
@@ -335,30 +422,39 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
 
     const dt = (now - lastTime) / 1000;
     lastTime = now;
+    const start = performance.now();
+    cb(dt);
+    const afterTick = performance.now();
+    drawFn();
+    const end = performance.now();
     if (frameObserver) {
-      const start = performance.now();
-      cb(dt);
-      const afterTick = performance.now();
-      drawFn();
-      const end = performance.now();
       frameObserver({ startMs: now, endMs: end, intervalMs: dt * 1000,
         tickCpuMs: afterTick - start, drawCpuMs: end - afterTick });
-    } else {
-      cb(dt);
-      drawFn();
     }
+    // Long-frame census (pipeline-log.ts): wall ms of the rAF handler, the
+    // same span the browser's '[Violation] requestAnimationFrame handler
+    // took Nms' measures, plus the frame's start so creations are
+    // attributed to the frame they started in.
+    noteFrameEnd(end - start, start);
 
-    // Drain the timestamp query pool. It has a fixed capacity and warns loudly
-    // once it fills, so the resolve has to keep up with the frames even though
-    // nothing reads its value any more (the per-frame number was unreliable
-    // with multiple passes per frame — see resolveGpu's note).
+    // Drain BOTH timestamp query pools. Fixed capacity, loud warnings once
+    // full, so the resolves have to keep up with the frames even though
+    // nothing reads the per-frame value any more (the per-frame number was
+    // unreliable with multiple passes per frame — see resolveGpu's note).
     if (!resolving) {
       resolving = true;
       renderer.resolveTimestampsAsync()
         .catch(() => {})
         .finally(() => { resolving = false; });
     }
+    if (!resolvingCompute) {
+      resolvingCompute = true;
+      renderer.resolveTimestampsAsync(THREE.TimestampQuery.COMPUTE)
+        .catch(() => {})
+        .finally(() => { resolvingCompute = false; });
+    }
   };
+  let loopOn = true;
   renderer.setAnimationLoop(loop);
 
   // `backend.isWebGPUBackend` is how three distinguishes them. Surfacing this
@@ -373,6 +469,8 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     scene,
     camera,
     canvas: renderer.domElement as HTMLCanvasElement,
+    gpuDiagnostics,
+    get loopRunning() { return loopOn; },
     setFrameCap(fps) {
       const ok = Number.isFinite(fps) && fps > 0;
       frameCapFps = ok ? fps : 0;
@@ -403,6 +501,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
       }
     },
     setLoopRunning(on) {
+      loopOn = on;
       renderer.setAnimationLoop(on ? loop : null);
       // Otherwise the first frame back sees the whole benchmark as its dt and
       // the rig integrates a several-second step in one go.

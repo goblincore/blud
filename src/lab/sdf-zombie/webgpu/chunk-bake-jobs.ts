@@ -11,12 +11,19 @@ export function createChunkBakeJobs(factory: () => Worker) {
   let completed: { id: number; result: ChunkBakeBuffers } | null = null;
   let error: string | null = null;
   let generation = 0;
+  /** Replay/bench waiters (determinism, 2026-09-14): a driver that steps the
+   *  sim by hand awaits `settled()` before the frame after a submit, so the
+   *  swap lands on that frame REGARDLESS of worker speed. Live play never
+   *  waits — the worker reply is applied whenever it arrives. */
+  let waiters: Array<() => void> = [];
+  const wake = () => { const w = waiters; waiters = []; for (const r of w) r(); };
   const cancel = () => {
     generation++;
     worker?.terminate();
     worker = null;
     pendingId = null;
     completed = null;
+    wake();
   };
   const fail = (message: string) => { cancel(); error = message; };
   return {
@@ -31,7 +38,7 @@ export function createChunkBakeJobs(factory: () => Worker) {
           worker.onmessage = (event: MessageEvent<ChunkBakeReply>) => {
             if (generation !== current || event.data.id !== pendingId) return;
             if ('error' in event.data) fail(event.data.error);
-            else completed = event.data;
+            else { completed = event.data; wake(); }
           };
           worker.onerror = (event) => {
             event.preventDefault();
@@ -49,6 +56,12 @@ export function createChunkBakeJobs(factory: () => Worker) {
         fail(cause instanceof Error ? cause.message : String(cause));
         return false;
       }
+    },
+    /** Resolves once no reply is outstanding: nothing pending, a reply is
+     *  waiting in `completed`, or the worker failed. */
+    settled(): Promise<void> {
+      if (pendingId === null || completed !== null || error !== null) return Promise.resolve();
+      return new Promise<void>((resolve) => { waiters.push(resolve); });
     },
     takeCompleted() {
       const result = completed;

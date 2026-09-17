@@ -1,0 +1,48 @@
+{
+  "file": "t2-woundclose__sharp",
+  "diag": {
+    "enabled": false,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.044444444444444446,
+    "exposureMs": 44.44444444444444,
+    "exposureLabel": "44.44 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 168,
+    "last": {
+      "stamps": 168,
+      "texels": 13023,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 39,
+      "maxStreakPx": 80.72778521271151,
+      "avgStreakPx": 27.301486448854842,
+      "buildMs": 0.3999999761581421
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 6,
+    "droplets": 254,
+    "splats": 256
+  },
+  "sha256_16": "cb491f49ab3ba50f"
+}

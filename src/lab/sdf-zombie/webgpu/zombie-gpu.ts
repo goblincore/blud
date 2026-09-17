@@ -13,7 +13,8 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
-  storage,
+  cameraProjectionMatrixInverse, cameraWorldMatrix,
+  storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
@@ -22,7 +23,7 @@ import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
-import { bendCtrl, qRotate, sub as vsub } from '../vec';
+import { bendCtrl, qRotate, qMul, type Quat, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
@@ -32,13 +33,16 @@ import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS,
+  HELPERS, MARCH_BODY, REFINE_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT, MARCH_ANCHOR_READ, DETAIL_FIELD, HASH13, NOISE3, FBM,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
+  QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
 import { TEMPORAL_START_WGSL } from './temporal-start';
+import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
+import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
 import {
   encodeSurfaceClass, SURFACE_CLASS_FLESH,
@@ -55,8 +59,16 @@ export interface ZombieGpuView {
    *  never rendered when omitted, so callers may add it to the scene
    *  unconditionally. */
   depthPreObject?: THREE.Object3D;
+  /** Run 5: the output-res refine twin — same proxy geometry, the refineBody entry,
+   *  rendered into the layer's output-res target only when opts.refine is passed. */
+  refineObject?: THREE.Mesh;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
+  /** Run 5b: which lighting tail the refine twin runs ('slim' by default). */
+  readonly refineTail: RefineTail;
+  /** Run 5b: rebuilds the refine twin's material on the other tail (A/B bench).
+   *  No-op without a refine twin. */
+  setRefineTail(tail: RefineTail): void;
   /** The 3D texture bound to the march's volume slot (X1.26). The shared
    *  1-cubed fallback while the volume branch stays disabled; a view that
    *  created its own fallback disposes it in dispose(). */
@@ -152,6 +164,27 @@ export interface ZombieGpuView {
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
    *  melting body (and its released bone chunks) ever set this non-zero. */
   setMelt(progress: number): void;
+  /**
+   * RUPTURE GORE 0..1 → lodCfg.w, the SAME channel a spawned flesh chunk sets
+   * to 1 (body-to-gib task 3). A standing body is 0; a doomed body ramps it
+   * toward 1.0 as it tears, so the release frame is the material the body was
+   * already wearing rather than a switch. It is a VIEW-WIDE gate — that is the
+   * channel's shape — which is why the ramp is tied to progress and is 0 for
+   * the whole recoil phase: an intact body is never repainted.
+   */
+  setGoreStrength(v: number): void;
+  /** Crowd stage a: the per-instance record buffer this view writes through
+   *  syncRecord(). Exposed so the frame-hash seam can cover pose/wound state. */
+  records: CrowdRecords;
+  /** Crowd stage a: this view's base record slot + instance-count config. A
+   *  twin material (the hull refine) binds the SAME record and slot. */
+  instCfg: ReturnType<typeof uniform>;
+  /** Copies every per-instance uniform into the record at this view's slot.
+   *  Call after any setter that touches one of the record's fields. */
+  syncRecord(): void;
+  /** Crowd stage a: re-point this view at a new band/record/slot (Task 5's
+   *  CrowdType.attach). Re-uploads the last pack into the new sink. */
+  rebind(r: { sink: PrimSink; records: CrowdRecords; slot: number }): void;
   /** The level-shadow TextureNode this view's material binds (perf round 2
    *  task 7). Rebind `.value` to the twin light's real depthTexture once
    *  three has rendered it — same mechanism as setFaceTexture. */
@@ -171,7 +204,18 @@ export interface ZombieGpuView {
  * Each helper is itself a node, built by folding so that every one carries the
  * helpers declared before it.
  */
-function buildMarchFn() {
+/** The runtime-normals read fn + its private global (MARCH_NORMAL_OUT). Shared by the lit march
+ *  chain and the layer's march MRT; call as marchNormalRead({ dep }) with the march result. */
+export const marchNormalRead = wgslFn(MARCH_NORMAL_OUT);
+/** Run 4: the anchor/gate read (MARCH_ANCHOR_READ), sharing marchNormalRead's private declaration. */
+export const marchAnchorRead = wgslFn(MARCH_ANCHOR_READ, [marchNormalRead] as never);
+/** Run 4: the output-res detail field (DETAIL_FIELD) on the march's own hash/noise/fbm chain. */
+export const detailFieldFn = (() => {
+  const chain = [HASH13, NOISE3, FBM].reduce<ReturnType<typeof wgslFn>[]>((acc, src) => [...acc, wgslFn(src, acc.slice(-1))], []);
+  return wgslFn(DETAIL_FIELD, chain.slice(-1));
+})();
+
+function buildEntryFn(entry: string) {
   // mapBody sits at a fixed place in HELPERS — after the things it calls,
   // before calcNormal which calls it — so any future per-body variant of it
   // would have to go in the SAME slot or WGSL's declaration-before-use rule
@@ -180,6 +224,8 @@ function buildMarchFn() {
   // TEMPORAL_START_WGSL last: MARCH_BODY calls temporalStartFetch (plan
   // 2026-09-10); it depends on nothing, and the chain carries it through.
   const sources = [...HELPERS, ...NORMAL_GRADIENT_HELPERS, ...NORMAL_GRADIENT_GAME_HELPERS, TEMPORAL_START_WGSL];
+  // marchNormalRead seeds the chain (rather than being a source string) so the SAME node — and
+  // its single `var<private> gMarchNormal` — is what the layer's MRT read includes. See MARCH_NORMAL_OUT.
   // EACH HELPER DEPENDS ON THE PREVIOUS ONE ONLY, not on every earlier one.
   // wgslFn includes a dependency's code transitively, and HELPERS is already a
   // strict declaration order, so a chain emits exactly the same WGSL as the
@@ -187,14 +233,18 @@ function buildMarchFn() {
   // At 26 helpers that is 25 edges rather than 325, and three's NodeBuilder
   // walks those edges repeatedly (NodeBuilder.get was 37.6% of a boot profile).
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [marchNormalRead],
   );
-  return wgslFn(MARCH_BODY, nodes.slice(-1));
+  return wgslFn(entry, nodes.slice(-1));
 }
 
 /** The default march entry (plus its dependency-ordered helpers), shared by
  *  the body views and the hands view. */
-export const marchBody = buildMarchFn();
+export const marchBody = buildEntryFn(MARCH_BODY);
+
+/** Run 5: the output-res refine entry (REFINE_BODY) on the same helper chain — same
+ *  gMarchNormal private, so the layer's MRT read of the normal works for both. */
+export const refineBody = buildEntryFn(REFINE_BODY);
 
 /** The coarse cone-march entry, sharing the same dependency-ordered helpers. */
 const coneMarch = (() => {
@@ -205,7 +255,7 @@ const coneMarch = (() => {
 })();
 
 /** The quarter-res depth-prepass entry (close-up task 3), same helper chain.
- *  Its own chain rather than coneMarch's final node — buildMarchFn's edge
+ *  Its own chain rather than coneMarch's final node — buildEntryFn's edge
  *  structure is load-bearing and boot-profiled, and this page is not the
  *  place to optimise node sharing away from a shipping path. */
 const depthPreMarch = (() => {
@@ -333,6 +383,8 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  wound tissue ramp (march.wgsl.ts TISSUE_RAMP). Defaults mirror
      *  henenlotter-latex; applyMaterial overwrites from the material. */
     surfCfg3: uniform(new THREE.Vector4(1.0, 0.004, 0.014, 1.0)),
+    /** MEAT DETAIL (soldier wounds, 2026-09-12): x amp, y clot, z glint, w crevice — wound panel MEAT group. */
+    meatCfg: uniform(new THREE.Vector4(1.0, 1.0, 1.0, 1.0)),
     /** The colour the albedo mottle mixes toward. Inert while surfCfg2.z is 0,
      *  which is every stock preset — see FleshMaterial.mottleAmp. */
     mottleColor: uniform(new THREE.Color(0.62, 0.24, 0.30)),
@@ -595,6 +647,16 @@ function fallbackProbeDyn() {
   }
   return fallbackProbeDynNode;
 }
+let fallbackInstCfgNode: ReturnType<typeof uniform> | null = null;
+/** One-instance config for materials built without a crowd (tests, hands view). */
+function fallbackInstCfg() { return (fallbackInstCfgNode ??= uniform(new THREE.Vector4(1, 0, 0, 0))); }
+let fallbackInstCentreNode: ReturnType<typeof uniform> | null = null;
+let fallbackInstHalfNode: ReturnType<typeof uniform> | null = null;
+/** Zero proxy-box overrides for materials built without a crowd — instCfg.y 0
+ *  makes MARCH_TRACE_SETUP select the record's centre/half instead. */
+function fallbackInstCentre() { return (fallbackInstCentreNode ??= uniform(new THREE.Vector3())); }
+function fallbackInstHalf() { return (fallbackInstHalfNode ??= uniform(new THREE.Vector3())); }
+
 function fallbackTileBindings() {
   if (!fallbackTileNodes) {
     const h = new THREE.StorageBufferAttribute(1, 2);
@@ -629,6 +691,12 @@ function fallbackLevelShadowTexture() {
   return fallbackLevelShadow;
 }
 
+let fallbackCrowdVolume: THREE.Data3DTexture | null = null;
+/** The shared 1-cubed volume a crowd material binds (its volume branch is off,
+ *  volumePose0.w stays 0). One per page, never disposed — the crowd types
+ *  outlive any single one of them. */
+function fallbackCrowdVolumeTexture() { return (fallbackCrowdVolume ??= createFallbackHandVolumeTexture()); }
+
 let fallbackSegmentVolume: { atlas: THREE.Data3DTexture; meta: THREE.DataTexture } | null = null;
 function fallbackSegmentVolumeTextures() {
   if (!fallbackSegmentVolume) {
@@ -650,11 +718,13 @@ function fallbackSegmentVolumeTextures() {
 /** A tiled view's binning surface: delegates to the owner's GPU binding and
  *  flips this view's tileCfg gate. */
 export interface ViewTileBinding {
-  /** Bin this frame's posed groups (see ComputeTileBinding.bin). */
+  /** Bin this frame's posed groups (see ComputeTileBinding.bin). Returns
+   *  false when the group count exceeded the binding's capacity — the caller
+   *  treats that as "fall back this frame". */
   bin(
     groups: TileGroupInput[], camera: THREE.PerspectiveCamera, maxBlendK: number,
     grid: { widthPx: number; heightPx: number },
-  ): void;
+  ): boolean;
   setEnabled(on: boolean): void;
   /** Per-ray sphere compaction of the tile list (prototype): with tiles
    *  enabled, tileCfg.x becomes 2 and the march drops entries whose inflated
@@ -671,6 +741,39 @@ export interface ViewTileBinding {
  * would not satisfy it.
  */
 export type MarchUniforms = ReturnType<typeof defaultUniforms>;
+
+/** Run 5b: which lighting tail the refine twin runs. */
+export type RefineTail = 'full' | 'slim';
+
+/**
+ * Run 5b: the refine twin's lighting tail. 'slim' (the default) is a SHALLOW COPY of the
+ * body's uniforms in which the terms the refine head does not need are twin-owned zeros —
+ * the shader already skips each one at 0 (pinned in zombie-gpu.test.ts): scatter
+ * (surfCfg.w), the wound soft shadow (woundShadowCfg.x), the ambient bounce
+ * (bounceCfg.x = 0 is the flat fill "exactly as before"), and the probe gather
+ * (probeCfg.x, probeDynCfg.x/.y). Key light, flashlight beam, level shadow and bodyFlash
+ * stay. 'full' binds the body's own uniforms (run 5's behaviour), kept for the A/B bench.
+ *
+ * The twin's surfCfg.xyz are LIVE look knobs (spec/roughness/fresnel) that the twin must
+ * FOLLOW, so only `.w` is zeroed and `sync()` re-copies xyz each frame; the other four
+ * overrides are constant, so their sync is nothing.
+ */
+export function refineTailUniforms(u: MarchUniforms, tail: RefineTail):
+  { uniforms: MarchUniforms; sync: () => void } {
+  if (tail === 'full') return { uniforms: u, sync: () => {} };
+  const s = u.surfCfg.value;
+  const surfCfg = uniform(new THREE.Vector4(s.x, s.y, s.z, 0));
+  const woundShadowCfg = uniform(new THREE.Vector2(0, u.woundShadowCfg.value.y));
+  const bounceCfg = uniform(new THREE.Vector4(0, 1, 1, 1));
+  const probeCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const probeDynCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  return {
+    uniforms: { ...u, surfCfg, woundShadowCfg, bounceCfg, probeCfg, probeDynCfg },
+    sync: () => {
+      surfCfg.value.set(u.surfCfg.value.x, u.surfCfg.value.y, u.surfCfg.value.z, 0);
+    },
+  };
+}
 
 /**
  * Swizzle accessors on a wgslFn result.
@@ -805,6 +908,16 @@ const PREV_FETCH_WGSL = /* wgsl */ `fn prevFetch(prevTex: texture_2d<f32>, scree
 }`;
 export const prevFetchNode = wgslFn(PREV_FETCH_WGSL);
 
+/**
+ * QUAD empty-tile gate (crowd firefight task 2). `createMarchMaterial` wraps
+ * the quad crowd material's march in a TSL Fn whose first statement calls
+ * this and discards on a true result, so an empty-tile fragment never
+ * evaluates the occ/shell/prev/temporal/depth-pre fetches, the record load or
+ * the march. Only the quad crowd material uses it (see the `rays.rayDir`
+ * guard); per-body and box materials are byte-identical.
+ */
+export const quadTileEmptyNode = wgslFn(QUAD_TILE_EMPTY_WGSL);
+
 /** Last FRESH frame's final layer (RGBA, NDC depth in .a, >= 1 = nothing)
  *  plus the inverse view-projection that made it — the temporal
  *  reprojection start's source (plan 2026-09-10). Bound unconditionally;
@@ -914,6 +1027,25 @@ export interface DepthPreSource {
   uniforms: DepthPreUniforms;
 }
 
+/** Run 5: what the refine twin binds — the march target (400x300 colour + clip depth in
+ *  alpha) and the layer's refine uniforms. cfg: x enabled, y reject (march texels),
+ *  z normal stencil (output-pixel footprints), w Newton steps. */
+export function createRefineUniforms() {
+  return {
+    cfg: uniform(new THREE.Vector4(0, 1, 0.25, 2)),
+    nearFar: uniform(new THREE.Vector2(0.1, 200)),
+  };
+}
+export type RefineUniforms = ReturnType<typeof createRefineUniforms>;
+/** The refine twin's bound sources — same shape as DepthPreSource. */
+export interface RefineSource {
+  texture: THREE.Texture;
+  /** The march MRT's normal attachment. Run 5b: its alpha carries the per-body key the
+   *  twin's ownership early-out compares against (REFINE_LOOP `nk != myKey`). */
+  normalTexture: THREE.Texture;
+  uniforms: RefineUniforms;
+}
+
 /**
  * The 1×1 depth-prepass texture views bind when their caller passes no
  * DepthPreSource — same contract as fallbackLevelShadowTexture. The binding
@@ -961,6 +1093,12 @@ export interface MarchRayOverride {
   startT: unknown;
   marchCfg: unknown;
   side: THREE.Side;
+  /** Optional explicit world ray direction. Per-body/box materials leave this
+   *  off and derive it from the fragment's positionWorld; a quad-dispatch
+   *  crowd has no meaningful positionWorld (clip-space vertex override) and
+   *  passes the reconstructed direction so the depth node and cosRay agree
+   *  with the ray the marcher integrates. */
+  rayDir?: unknown;
 }
 
 /** Builds the march material (depth-writing proxy-box shader). Exported for
@@ -1001,6 +1139,33 @@ export function createMarchMaterial(
   // Temporal reprojection start (plan 2026-09-10), POSITIONALLY LAST: last
   // fresh frame's layer + inverse VP + cfg, or the never-fetched fallback.
   lastFrame?: LastFrameSource,
+  // Run 5: extra named inputs for an entry whose signature extends MARCH_BODY's
+  // (refineBody). Spread LAST into the call object; bound by name like every other
+  // input — the positional notes above concern the WGSL parameter list, not this spread.
+  extra?: Record<string, unknown>,
+  // Run 5, POSITIONALLY LAST: share an EXISTING level-shadow TextureNode instead of
+  // building a local one. Per-material nodes drift — the game's per-frame rebind
+  // (game-main's `view.levelShadowTex.value = map`) knows only the one node the view
+  // publishes, so a twin with its own node stays on the 1x1 fallback, LEVEL_SHADOW
+  // returns 0 and the key diffuse+spec vanish. Omitted, the local node is built as
+  // before and the main material is unchanged.
+  levelShadowTexNodeIn?: ReturnType<typeof texture>,
+  // Run 5, POSITIONALLY LAST after levelShadowTexNodeIn: share EXISTING segment-volume
+  // nodes. Same drift hazard as the level shadow — the view's setSkeletonVolume rebinds
+  // .value on the nodes it knows about, and a twin holding its own pair would keep
+  // marching the all-zero fallback atlas. On a volume-backed body that makes mapBody
+  // disagree between the two entries and the refine's SDF reject discards every pixel.
+  segVolumeAtlasNodeIn?: ReturnType<typeof texture3D>,
+  segVolumeMetaNodeIn?: ReturnType<typeof texture>,
+  // Crowd stage a, POSITIONALLY LAST: the per-instance record storage node
+  // and its config (x = instance count, y = 1 for a crowd material). Omitted,
+  // a one-slot fallback record keeps every existing material marching the
+  // pre-crowd one-instance field. instCentre/instHalf are the crowd proxy-box
+  // overrides; per-body materials bind zero vec3s and instCfg.y 0 ignores them.
+  crowd?: {
+    inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform>;
+    instCentre?: unknown; instHalf?: unknown;
+  },
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1009,38 +1174,40 @@ export function createMarchMaterial(
     ? texture3D(volumeTex)
     : volumeTex as ReturnType<typeof texture3D>;
   const segFallback = fallbackSegmentVolumeTextures();
-  const segVolumeAtlasNode = texture3D(segFallback.atlas);
-  const segVolumeMetaNode = texture(segFallback.meta);
+  const segVolumeAtlasNode = segVolumeAtlasNodeIn ?? texture3D(segFallback.atlas);
+  const segVolumeMetaNode = segVolumeMetaNodeIn ?? texture(segFallback.meta);
   // Hoisted above the march call: the accumulated-depth gate's cosRay reads
   // the same ray the march integrates.
-  const rayDir = normalize(sub(positionWorld, cameraPosition));
+  // The ray's world direction. Per-body/box materials derive it from the
+  // fragment's interpolated positionWorld; a quad-dispatch crowd reconstructs
+  // it from screenUV and passes it through `rays` (see crowdRayNodes).
+  const rayDir = (rays?.rayDir ?? normalize(sub(positionWorld, cameraPosition))) as never;
+  /** The ray's cosine against the view axis — one definition, shared by the prev-depth
+   *  fetch and (via `extra`) any entry that needs it. */
+  const cosRay = mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate();
   // Level-only shadow map (perf round 2 task 7). The node rides the march's
   // last three slots; its .value starts on the 1×1 fallback whenever the
   // twin light has not rendered yet (shadow.map is null before three's
   // first shadow pass) and is rebound to the real depthTexture per frame by
   // the game page — same rebind-without-recompile mechanism as
   // setFaceTexture below.
-  const levelShadowTexNode = texture(
+  const levelShadowTexNode = levelShadowTexNodeIn ?? texture(
     levelShadow
       ? (levelShadow.light.shadow.map?.depthTexture ?? fallbackLevelShadowTexture())
       : fallbackLevelShadowTexture(),
   );
-  const marched = (output === 'surface' ? sdfSurfaceMarch : march)({
+  const callMarch = () => (output === 'surface' ? sdfSurfaceMarch : march)({
     worldPos: (rays?.worldPos ?? positionWorld) as never,
     camPos: cameraPosition,
     data: dataNode,
     volumeTex: volumeNode,
     faceTex: u.faceTex,
-    volumePose0: u.volumePose0,
-    volumePose1: u.volumePose1,
     volumeMin: u.volumeMin,
     volumeInvExtent: u.volumeInvExtent,
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
     segVolumeAtlas: segVolumeAtlasNode,
     segVolumeMeta: segVolumeMetaNode,
-    counts: u.counts,
-    counts2: u.counts2,
     marchCfg: (rays?.marchCfg ?? u.marchCfg) as never,
     woundCfg: u.woundCfg,
     woundCfg2: u.woundCfg2,
@@ -1064,6 +1231,7 @@ export function createMarchMaterial(
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
     surfCfg3: u.surfCfg3,
+    meatCfg: u.meatCfg,
     mottleColor: u.mottleColor,
     fatColor: u.fatColor,
     boneColor: u.boneColor,
@@ -1077,9 +1245,7 @@ export function createMarchMaterial(
     faceCfg3: u.faceCfg3,
     faceProj: u.faceProj,
     faceAtlas: u.faceAtlas,
-    headCentre: u.headCentre,
     headAxes: u.headAxes,
-    headQuat: u.headQuat,
     faceGlowColor: u.faceGlowColor,
     lodCfg: u.lodCfg,
     woundShadowCfg: u.woundShadowCfg,
@@ -1147,26 +1313,9 @@ export function createMarchMaterial(
           enabled: prev.uniforms.enabled,
           near: cameraNear,
           far: cameraFar,
-          cosRay: mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate(),
+          cosRay,
         })
       : float(1e9),
-    // The fragment's own proxy box: centre from the mesh's world matrix,
-    // half extents from the uniform above. Consumed by the accumulated-depth
-    // gate — see MARCH_BODY's bodyEntry block.
-    bodyCentre: mul(modelWorldMatrix, vec4(0.0, 0.0, 0.0, 1.0)).xyz,
-    bodyHalf: u.bodyHalf,
-    // Melt progress (zombie melt task 6). Bound between bodyHalf and the
-    // level-shadow slots, matching MARCH_BODY's signature — positional, see
-    // the ORDER MATTERS note above.
-    //
-    // IT MUST BE BOUND AT ALL, and the failure is quiet: MARCH_BODY declares
-    // the input, and an unbound declared input logs "THREE.TSL: Input
-    // 'meltCfg' not found in 'Fn()'" once at boot and then shades as ZERO.
-    // The parked melt spike (c52b05b) added a uniform and a WGSL input and
-    // no binding, and rendered as nothing at every amplitude while the
-    // uniform read back correctly from the console — hours went into looking
-    // for the bug on the shader side of a wire that was never connected.
-    meltCfg: u.meltCfg,
     // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
     // MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg, levelShadow*, in
     // this order (see the ORDER MATTERS note above; a slot swap here silently
@@ -1174,17 +1323,6 @@ export function createMarchMaterial(
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
     levelShadowCfg: u.levelShadowCfg,
-    // Wind drift and the body frame, POSITIONALLY LAST and in this order —
-    // appended after the level-shadow slots in MARCH_BODY's signature too.
-    // Bound in the same commit as the WGSL inputs, which is the rule the
-    // meltCfg note above exists to enforce.
-    windDrift: u.windDrift,
-    bodyAnchor: u.bodyAnchor,
-    // Wound union-reach cull (close-up wound-cull task, 2026-09-05). Bound
-    // POSITIONALLY last — MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg,
-    // levelShadow*, woundBound, in this order (see the ORDER MATTERS note
-    // above).
-    woundBound: u.woundBound,
     // Quarter-res depth prepass (close-up task 3) — POSITIONALLY LAST after
     // windDrift, bound in the same commit as the WGSL input (the meltCfg
     // rule). Without a source the fallback 1×1 texture and the all-zero cfg
@@ -1213,14 +1351,52 @@ export function createMarchMaterial(
     // bounceSpotCfg, bound in the same commit as the WGSL inputs.
     probeDyn: (probeDyn ?? fallbackProbeDyn()) as never,
     probeDynCfg: u.probeDynCfg,
-    // Direct muzzle flash — after probeDynCfg.
-    bodyFlash: u.bodyFlash,
-    // Temporal reprojection start — POSITIONALLY LAST after bodyFlash, three
-    // slots bound in the same commit as the WGSL inputs.
+    // Temporal reprojection start — bound after probeDynCfg, in the same
+    // commit as the WGSL inputs.
     lastTex: texture(lastFrame ? lastFrame.texture : fallbackLastFrame().tex),
     lastInvVp: lastFrame ? lastFrame.uniforms.invVp : fallbackLastFrame().invVp,
     temporalCfg: lastFrame ? lastFrame.uniforms.cfg : fallbackLastFrame().cfg,
+    // Crowd stage a — the tail order is ..., temporalCfg, inst, instCfg,
+    // instCentre, instHalf. An unbound declared storage input reads as a null
+    // pointer and the pipeline dies, so the fallback record is always bound.
+    inst: (crowd?.inst ?? fallbackCrowdRecords().node) as never,
+    instCfg: crowd?.instCfg ?? fallbackInstCfg(),
+    instCentre: (crowd?.instCentre ?? fallbackInstCentre()) as never,
+    instHalf: (crowd?.instHalf ?? fallbackInstHalf()) as never,
+    ...(extra ?? {}),
   }) as unknown as Swizzled;
+
+  // QUAD EMPTY-TILE GATE (crowd firefight cost, task 2). The quad crowd
+  // material rasterises the union rect and discards on an empty tile, but
+  // INSIDE MARCH_TRACE_SETUP that discard runs after the material's
+  // occ/shell/prev/temporal/depth-pre fetches have evaluated (they are call
+  // arguments) and after the record load. Wrapping the whole march in a TSL
+  // Fn whose FIRST statement reads this pixel's tile header and discards
+  // moves the gate ahead of every one of them; the existing `gTileN < 0.5`
+  // discard inside the trace stays and still covers tiles-off callers. Only
+  // the quad crowd material (the sole caller with an explicit `rays.rayDir`)
+  // takes this path — per-body and box materials generate byte-identical
+  // source.
+  let marched: Swizzled;
+  if (rays?.rayDir !== undefined && tiles) {
+    const gateInstCfg = (crowd?.instCfg ?? fallbackInstCfg()) as unknown as {
+      y: { greaterThan: (v: number) => { and: (b: unknown) => { and: (c: unknown) => unknown } } };
+    };
+    const tileEmpty = quadTileEmptyNode({
+      tileHdr: tiles.header as never,
+      tileCfg: u.tileCfg as never,
+      screenUV,
+    });
+    marched = Fn(() => {
+      If(
+        (gateInstCfg.y.greaterThan(1.5).and(u.tileCfg.x.greaterThan(0.5)).and(tileEmpty as never)) as never,
+        () => { Discard(); },
+      );
+      return callMarch();
+    })() as unknown as Swizzled;
+  } else {
+    marched = callMarch();
+  }
 
   const material = new MeshBasicNodeMaterial();
   material.side = rays?.side ?? THREE.BackSide;
@@ -1299,6 +1475,234 @@ export function createMarchMaterial(
   return material;
 }
 
+/** What a crowd type needs back from its one material pair. */
+export interface CrowdMaterialHandles {
+  material: MeshBasicNodeMaterial;
+  depthPreMaterial: MeshBasicNodeMaterial;
+  /** Rebinds the shared sampled-skeleton atlas/meta on BOTH materials — same
+   *  drift hazard the per-body twins have (see createMarchMaterial's tail). */
+  setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
+  /** The quad dispatch's NDC rasterisation rect — the SAME uniform node the
+   *  lit material and its depth-pre twin read. Undefined on the box material. */
+  quadRect?: { value: THREE.Vector4 };
+}
+
+/** TSL's `attribute` factory is untyped at runtime; this names the node
+ *  shape the crowd material's `iCentre`/`iHalf` attributes are used as. */
+type Vec3Node = ReturnType<typeof vec3>;
+
+/**
+ * The sampled start/early-out sources a crowd material must bind to stay
+ * bit-identical to the per-body material it replaces. The per-body view binds
+ * every one of these (GpuViewOpts); a crowd material that omits them marches
+ * from a different start, so even a lone body stops matching. `levelShadow` is
+ * deliberately absent: the crowd material builds its own node and publishes it
+ * through CrowdMaterialHandles for the game's per-frame rebind.
+ */
+export interface CrowdMaterialSources {
+  occluder?: OccluderSource;
+  shell?: ShellSource;
+  prev?: PrevSource;
+  depthPre?: DepthPreSource;
+  lastFrame?: LastFrameSource;
+  probeDyn?: { node: unknown };
+}
+
+/**
+ * Crowd stage a (task 7c): copy every per-instance uniform into a record slot.
+ * ONE writer for every view that marches a record (the per-body view, the FPV
+ * hands, the hull refine through its inner view, and the shared chunk
+ * material), so the record layout cannot drift between them.
+ *
+ * `band` overrides the data-texture row band the record points at. The default
+ * (undefined -> slot * DATA_ROWS) is the banded-atlas case. Chunks bind their
+ * OWN single-band DataTexture per draw and share only the record buffer, so
+ * they pass band 0 — their slot indexes the record, not a band.
+ */
+export function writeViewRecord(
+  records: CrowdRecords, slot: number, u: MarchUniforms, centre: THREE.Vector3, band?: number,
+): void {
+  records.write(slot, {
+    counts: u.counts.value.toArray(), counts2: u.counts2.value.toArray(),
+    woundBound: u.woundBound.value.toArray(), bodyAnchor: u.bodyAnchor.value.toArray(),
+    windDrift: u.windDrift.value.toArray(), meltCfg: u.meltCfg.value.toArray(),
+    bodyFlash: u.bodyFlash.value.toArray(),
+    noiseShift: [u.faceCfg3.value.z, u.lodCfg.value.z, u.faceCfg3.value.w], bodyYaw: u.lodCfg.value.z,
+    headCentre: u.headCentre.value.toArray(), woundCount: u.woundCfg.value.x,
+    headQuat: u.headQuat.value.toArray(), volumePose0: u.volumePose0.value.toArray(),
+    volumePose1: u.volumePose1.value.toArray(),
+    bodyCentre: centre.toArray(), variantSeed: 0, bodyHalf: u.bodyHalf.value.toArray(),
+    damageRevision: 0,
+    // The per-instance half of the rupture material ramp: `lodCfg.w` is a
+    // per-VIEW uniform, and the crowd shares one material, so the only way a
+    // doomed body can wear the gore the chunks wear is through its own record.
+    gore: u.lodCfg.value.w,
+  }, band);
+}
+
+/**
+ * The full-screen-quad ray reconstruction (stage a-2). PlaneGeometry(2, 2)
+ * spans clip xy in [-1, 1]; z = w = 1 places the quad on the far plane so it
+ * never clips, and the marcher writes the real hit depth through depthNode.
+ * `screenUV` is three's screenCoordinate/screenSize — origin TOP-left, y down
+ * — so NDC.y = 1 - 2 uv.y, the same flip the tile binner uses (see
+ * tile-cull.ts). `worldPos` is the true far-plane point, which makes the march's
+ * `tMax = length(worldPos - camPos)` the pixel's actual far distance.
+ *
+ * Stage a-2 (3): the quad no longer spans the whole screen. `quadRect` is the
+ * union NDC rect of the type's visible instances (crowdScreenRect, CPU); the
+ * clip vertex maps the unit plane into it. The fragment's ray still comes from
+ * screenUV (the real pixel), so shrinking the quad only reduces the pixels the
+ * material runs for — every pixel inside is identical. The lit material and its
+ * depth-pre twin share this one uniform.
+ */
+function crowdRayNodes() {
+  const quadRect = uniform(new THREE.Vector4(-1, -1, 1, 1));
+  const uv2 = positionGeometry.xy.mul(0.5).add(0.5);
+  const clip = vec4(
+    mix(quadRect.x, quadRect.z, uv2.x),
+    mix(quadRect.y, quadRect.w, uv2.y),
+    float(1.0), float(1.0),
+  );
+  const ndc = vec4(
+    screenUV.x.mul(2).sub(1),
+    float(1).sub(screenUV.y).mul(2).sub(1),
+    float(1.0), float(1.0),
+  );
+  const view = cameraProjectionMatrixInverse.mul(ndc);
+  const viewFar = view.xyz.div(view.w);
+  const farWorld = cameraWorldMatrix.mul(vec4(viewFar, float(1.0))).xyz;
+  return { clip, worldPos: farWorld, rayDir: normalize(farWorld.sub(cameraPosition)), quadRect };
+}
+
+/**
+ * Crowd stage a (Task 5): the ONE material pair a character type draws every
+ * instance with. A thin wrapper around createMarchMaterial that
+ *
+ *   (i)  places the unit proxy box per instance — positionNode reads the
+ *        per-instance `iCentre` / `iHalf` interleaved attributes;
+ *   (ii) passes the same two attributes as the WGSL `instCentre` / `instHalf`
+ *        box-entry overrides (instCfg.y = 1 selects them in MARCH_TRACE_SETUP);
+ *   (iii) binds the type's shared record buffer and tile header/entry nodes;
+ *   (iv) builds the quarter-res depth-prepass twin on the same record path.
+ *
+ * The fragment's `startT` still comes from its own box face, so a lone body is
+ * bit-identical to the per-body material; the fold set is the tile list.
+ */
+export function createCrowdMaterial(
+  dataTex: THREE.Texture,
+  u: MarchUniforms,
+  crowd: { inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform> },
+  tiles?: ComputeTileBinding,
+  sources?: CrowdMaterialSources,
+  dispatch: 'boxes' | 'quad' = 'boxes',
+  // Quad dispatch builds a SECOND material pair per type; handing it the box
+  // pair's level-shadow node keeps the game's single per-frame rebind reaching
+  // whichever dispatch is active (a private node would stay on the fallback).
+  sharedLevelShadowTex?: ReturnType<typeof texture>,
+): CrowdMaterialHandles {
+  const quad = dispatch === 'quad';
+  // Box: a [-1, 1]^3 BoxGeometry scaled by the instance's half extents and
+  // moved to its centre — the iCentre/iHalf attributes ARE the box-entry
+  // override the shader reads. Quad: the plane carries no such attributes, so
+  // bind zero vec3 uniforms; MARCH_TRACE_SETUP still evaluates the box branch
+  // but selects the tile-sphere entry in quad mode, so the zeros never become
+  // the march's entry.
+  const instCentre = (quad
+    ? uniform(new THREE.Vector3(0, 0, 0))
+    : attribute('iCentre', 'vec3')) as unknown as Vec3Node;
+  const instHalf = (quad
+    ? uniform(new THREE.Vector3(0, 0, 0))
+    : attribute('iHalf', 'vec3')) as unknown as Vec3Node;
+  const positionNode = instCentre.add(positionGeometry.mul(instHalf));
+  const quadNodes = quad ? crowdRayNodes() : undefined;
+  const volumeTex = fallbackCrowdVolumeTexture();
+  const segFallback = fallbackSegmentVolumeTextures();
+  const depthSegAtlasNode = texture3D(segFallback.atlas);
+  const depthSegMetaNode = texture(segFallback.meta);
+
+  const material = createMarchMaterial(
+    dataTex, volumeTex, u,
+    marchBody,
+    undefined, sources?.occluder,
+    tiles ? { header: tiles.headerNode, entries: tiles.entryNode } : undefined,
+    sources?.shell, sources?.prev, undefined,
+    quadNodes
+      ? {
+          worldPos: quadNodes.worldPos,
+          rayDir: quadNodes.rayDir,
+          startT: float(0),
+          marchCfg: u.marchCfg,
+          side: THREE.DoubleSide,
+        }
+      : undefined,
+    sources?.depthPre, 'lit', undefined,
+    sources?.probeDyn?.node, sources?.lastFrame,
+    undefined,
+    sharedLevelShadowTex,
+    undefined, undefined,
+    { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
+  );
+  if (quad) {
+    // Full-screen quad: the raw clip-space vertex; the ray override above
+    // carries worldPos/rayDir to the march and to the depth node.
+    material.vertexNode = quadNodes!.clip as never;
+  } else {
+    material.positionNode = positionNode as never;
+  }
+
+  const depthPreCfg = sources?.depthPre ? sources.depthPre.uniforms.cfg : createDepthPreUniforms().cfg;
+  const depthPreT = depthPreMarch({
+    worldPos: (quad ? quadNodes!.worldPos : positionWorld) as never,
+    camPos: cameraPosition,
+    data: texture(dataTex),
+    volumeTex: texture3D(volumeTex),
+    volumeMin: u.volumeMin,
+    volumeInvExtent: u.volumeInvExtent,
+    volumeWarp: u.volumeWarp,
+    volumeClip: u.volumeClip,
+    segVolumeAtlas: depthSegAtlasNode,
+    segVolumeMeta: depthSegMetaNode,
+    marchCfg: u.marchCfg,
+    woundCfg: u.woundCfg,
+    woundCfg2: u.woundCfg2,
+    depthPreCfg,
+    perfCfg: u.perfCfg,
+    inst: crowd.inst as never,
+    instCfg: crowd.instCfg,
+  }) as unknown as { div: (d: unknown) => unknown };
+  const depthPreMaterial = new MeshBasicNodeMaterial();
+  if (quad) {
+    depthPreMaterial.vertexNode = quadNodes!.clip as never;
+    depthPreMaterial.side = THREE.DoubleSide;
+  } else {
+    depthPreMaterial.positionNode = positionNode as never;
+    depthPreMaterial.side = THREE.BackSide;
+  }
+  // FOG STAYS OFF: this material writes a distance through the main scene, and
+  // scene fog would smoothstep-mix it toward fogColor (see the per-body twin).
+  depthPreMaterial.fog = false;
+  depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
+  depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+  depthPreMaterial.depthWrite = true;
+  depthPreMaterial.depthTest = true;
+
+  const mainSegVolume = material as unknown as MaterialWithSegmentVolume;
+  return {
+    material,
+    depthPreMaterial,
+    quadRect: quad
+      ? (quadNodes!.quadRect as unknown as { value: THREE.Vector4 })
+      : undefined,
+    setSkeletonVolume(atlas, meta) {
+      mainSegVolume.segVolumeAtlas.value = atlas;
+      mainSegVolume.segVolumeMeta.value = meta;
+      (depthSegAtlasNode as unknown as { value: THREE.Texture }).value = atlas;
+      (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
+    },
+  };
+}
+
 /** Per-object inputs consumed by the one NodeMaterial shared by every gib.
  *
  * Three's object uniform group is rewritten before each draw. The update
@@ -1309,6 +1713,14 @@ interface ChunkMaterialState {
   dataTexture: THREE.Texture;
   volumeTexture: THREE.Texture;
   uniforms: MarchUniforms;
+  /** Crowd stage a (task 7c): the shared record slot this chunk writes its
+   *  per-instance state into. */
+  slot: number;
+  /** The record buffer the slot lives in (the shared material's, or a
+   *  private one-slot buffer for an isolated chunk view). */
+  records: CrowdRecords;
+  /** Per-draw base-slot config: x = 1 (one field), z = record slot. */
+  instCfg: THREE.Vector4;
 }
 
 const CHUNK_MATERIAL_STATE = '__sdfChunkMaterialState';
@@ -1348,8 +1760,17 @@ export interface SharedChunkGpuMaterial {
   dataNode: { value: THREE.Texture; update: (frame: { object: THREE.Object3D }) => void };
   /** The per-draw bound volume-texture node. */
   volumeNode: { value: THREE.Texture; update: (frame: { object: THREE.Object3D }) => void };
+  /** The per-draw bound base-slot node (x=1, z = the object's record slot). */
+  instCfgNode: { value: THREE.Vector4; update: (frame: { object: THREE.Object3D }) => void };
   /** The seed uniform NODES — every one rebinds its .value per draw. */
   uniformNodes: MarchUniforms;
+  /** Crowd stage a (task 7c): ONE record buffer shared by every chunk view;
+   *  each view owns a distinct slot (chunks share the material's `inst` node,
+   *  so they cannot own per-chunk buffers). */
+  records: CrowdRecords;
+  /** Lowest free record slot, or -1 when all `maxChunks` slots are taken. */
+  allocSlot(): number;
+  freeSlot(slot: number): void;
   dispose(): void;
 }
 
@@ -1364,16 +1785,28 @@ export function createSharedChunkGpuMaterial(
   const seedUniforms = defaultUniforms(seedFace);
   const { tex: seedData } = createDataTexture();
   const seedVolume = createFallbackHandVolumeTexture();
+  // Crowd stage a (task 7c): ONE record buffer for every chunk, each chunk at
+  // its own slot. Capacity defaults to the crowd maximum; the page passes its
+  // own view cap (MAX_CHUNKS) so the pool can never under-allocate.
+  const records = createCrowdRecords(options?.maxChunks ?? MAX_CROWD_INSTANCES);
+  const freeSlots = new Set<number>();
+  for (let i = 0; i < records.capacity; i++) freeSlots.add(i);
 
   for (const key of Object.keys(seedUniforms) as (keyof MarchUniforms)[]) {
     bindObjectValue(seedUniforms[key], state => state.uniforms[key].value);
   }
   const dataNode = bindObjectValue(texture(seedData), state => state.dataTexture);
   const volumeNode = bindObjectValue(texture3D(seedVolume), state => state.volumeTexture);
+  // Per-draw base slot. The chunk's own instCfg vector is returned (never a
+  // fresh allocation per draw) so the renderer's uniform write reads it.
+  const instCfgNode = uniform(new THREE.Vector4(1, 0, 0, 0));
+  bindObjectValue(instCfgNode, state => state.instCfg);
   const material = createMarchMaterial(
     dataNode, volumeNode, seedUniforms,
     undefined, undefined, undefined, undefined, undefined, prev,
     undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    { inst: records.node, instCfg: instCfgNode },
   );
 
   let disposed = false;
@@ -1381,7 +1814,13 @@ export function createSharedChunkGpuMaterial(
     material,
     dataNode: dataNode as unknown as SharedChunkGpuMaterial['dataNode'],
     volumeNode: volumeNode as unknown as SharedChunkGpuMaterial['volumeNode'],
+    instCfgNode: instCfgNode as unknown as SharedChunkGpuMaterial['instCfgNode'],
     uniformNodes: seedUniforms,
+    records,
+    allocSlot() { return allocateSlot(freeSlots); },
+    freeSlot(slot) {
+      if (slot >= 0 && slot < records.capacity) freeSlots.add(slot);
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -1570,6 +2009,9 @@ export interface GpuViewOpts {
    *  twin renders into it, and the march starts from its nearest-touch
    *  distance. Omit for the from-camera march — the fetch identity is 0. */
   depthPre?: DepthPreSource;
+  /** Run 5: the output-res refine pass. Present only when the layer was created with
+   *  refine — then this view gets a third twin mesh (refineObject) on REFINE_LAYER. */
+  refine?: RefineSource;
   /** Level-only shadow light (perf round 2 task 7) — the twin of the
    *  flashlight. Omit in the lab/hands: the binding falls back to a 1×1
    *  depth texture and levelShadowCfg.x = 0 keeps the march inert. */
@@ -1620,6 +2062,15 @@ export interface GpuViewOpts {
    * Ignored in lit mode.
    */
   shadowReceiver?: ShadowReceiver;
+  /** Crowd stage a (Task 5): pack into an EXTERNAL band of a shared type
+   *  atlas instead of owning a one-band texture. `sinkTexture` is the
+   *  DataTexture node the material binds (the shared atlas). */
+  sink?: PrimSink;
+  sinkTexture?: THREE.Texture;
+  /** Crowd stage a (Task 5): write records into a SHARED per-type buffer and
+   *  attach at `slot` instead of owning a one-slot record. */
+  records?: CrowdRecords;
+  slot?: number;
 }
 
 /** Wires an externally-owned GPU binding into a view: the material gets the
@@ -1631,7 +2082,7 @@ function wireViewTiles(
   let rayCull = false;
   return {
     bin(groups, camera, maxBlendK, grid) {
-      binding.bin(groups, camera, maxBlendK, grid);
+      const ok = binding.bin(groups, camera, maxBlendK, grid);
       // Stamp the ACTIVE grid for the shader on every bin — adaptive
       // resolution moves it under our feet. x is the enable gate and keeps
       // whatever setEnabled last set.
@@ -1641,6 +2092,7 @@ function wireViewTiles(
         TILE_SIZE_PX,
         Math.ceil(Math.max(1, grid.heightPx) / TILE_SIZE_PX),
       );
+      return ok;
     },
     setEnabled(on) {
       tileCfg.x = on ? (rayCull ? 2 : 1) : 0;
@@ -1656,7 +2108,19 @@ function wireViewTiles(
 export function createZombieGpuView(
   body: BuildResult, opts: GpuViewOpts = {},
 ): ZombieGpuView {
-  const { tex: dataTex, texels, writeRow } = createDataTexture();
+  // Crowd stage a: every view is a one-slot crowd of its own type now. It
+  // owns a one-band atlas and a one-record buffer, OR borrows a shared band
+  // and the type's record buffer (Task 5). Either way the kernel reads the
+  // same record layout and the same banded texture.
+  const ownAtlas = opts.sink ? null : createCrowdPrimAtlas(1);
+  let sink: PrimSink = opts.sink ?? ownAtlas!.sink(0);
+  const dataTex = opts.sink ? opts.sinkTexture! : ownAtlas!.texture;
+  const ownRecords = opts.records ? null : createCrowdRecords(1);
+  let records = opts.records ?? ownRecords!;
+  let slot = opts.slot ?? 0;
+  const instCfg = uniform(new THREE.Vector4(1, 0, 0, 0));
+  let texels = sink.texels;
+  const writeRow = (row: number, src: Float32Array, count: number, col = 0) => sink.writeRow(row, src, count, col);
   const u = defaultUniforms(blankFaceTexture());
   // Volume slot (X1.26): bind the shared fallback when the caller owns one,
   // else create (and later dispose) our own. The branch stays disabled.
@@ -1672,6 +2136,9 @@ export function createZombieGpuView(
   // re-pack, so the frame is bit-identical to the pre-toggle frame.
   let lastUploadNext: BuildResult | undefined;
   let lastUploadRest: BuildResult | undefined;
+  // Each view owns its packing scratch. writeRow copies into the atlas before
+  // the next upload, so the temporary rows need not allocate every frame.
+  let uploadScratch: ReturnType<typeof packBody> | undefined;
 
   // Bone tubes: FALSE once the instanced-tube renderer owns the bones — the
   // pack then writes ORGANS only and counts2.x counts organs.
@@ -1702,14 +2169,15 @@ export function createZombieGpuView(
   function upload(next: BuildResult, rest?: BuildResult) {
     lastUploadNext = next;
     lastUploadRest = rest;
-    const p = packBody(next, rest, { packBones, boneCullMode });
+    const p = packBody(next, rest, { packBones, boneCullMode }, uploadScratch);
+    uploadScratch = p;
     lastGroups = [];
     for (let g = 0; g < p.groupCount; g++) {
       const o = g * 4;
       const gb = p.groupBounds;
       const gr = p.groupRange;
       lastGroups.push({
-        bodyIndex: 0,
+        bodyIndex: slot,
         start: gr[o]!, count: gr[o + 1]!,
         center: [gb[o]!, gb[o + 1]!, gb[o + 2]!],
         radius: gb[o + 3]!,
@@ -1747,7 +2215,8 @@ export function createZombieGpuView(
     writeRow(ROW_GROUP_BOUNDS, p.groupBounds, MAX_PRIMS);
     writeRow(ROW_GROUP_RANGE, p.groupRange, MAX_PRIMS);
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
-    dataTex.needsUpdate = true;
+    sink.markDirty();
+    ownAtlas?.flush();
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
     // z is the owner re-fold attribution gate (march.wgsl.ts) and w is the
     // per-ray wound list gate (counts2.w, 2026-09-07) — settings channels
@@ -1774,6 +2243,8 @@ export function createZombieGpuView(
     undefined, opts.depthPre, opts.output, opts.shadowReceiver,
     opts.probeDyn?.node,
     opts.lastFrame,
+    undefined, undefined, undefined, undefined,
+    { inst: records.node, instCfg },
   );
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
@@ -1786,16 +2257,12 @@ export function createZombieGpuView(
     camPos: cameraPosition,
     data: texture(dataTex),
     volumeTex: texture3D(volumeTex),
-    volumePose0: u.volumePose0,
-    volumePose1: u.volumePose1,
     volumeMin: u.volumeMin,
     volumeInvExtent: u.volumeInvExtent,
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
     segVolumeAtlas: coneSegAtlas,
     segVolumeMeta: coneSegMeta,
-    counts: u.counts,
-    counts2: u.counts2,
     marchCfg: u.marchCfg,
     // NOTE: meltCfg is deliberately NOT bound here. The melt commit (c52b05b)
     // passed u.meltCfg into this literal while CONE_MARCH's WGSL signature
@@ -1820,16 +2287,10 @@ export function createZombieGpuView(
     // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
     // same seams the march does.
     perfCfg: u.perfCfg,
-    // ...and the same WIND and BODY FRAME. Unlike the noise, which the cone
-    // deliberately passes as 0 because it lives on the normal, both of these
-    // move the FIELD: a cone marching the no-wind, world-anchored surface
-    // would certify space the real cloth occupies.
-    windDrift: u.windDrift,
-    bodyAnchor: u.bodyAnchor,
-    // Wound union-reach cull (close-up wound-cull task) — the cone marches
-    // the same field, so it takes the same bound; positionally last, after
-    // perfCfg, matching CONE_MARCH's signature.
-    woundBound: u.woundBound,
+    // Crowd stage a — POSITIONALLY LAST, matching CONE_MARCH's signature.
+    // The cone marches the record field exactly like the main material.
+    inst: records.node as never,
+    instCfg,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
@@ -1902,16 +2363,12 @@ export function createZombieGpuView(
       camPos: cameraPosition,
       data: texture(dataTex),
       volumeTex: texture3D(volumeTex),
-      volumePose0: u.volumePose0,
-      volumePose1: u.volumePose1,
       volumeMin: u.volumeMin,
       volumeInvExtent: u.volumeInvExtent,
       volumeWarp: u.volumeWarp,
       volumeClip: u.volumeClip,
       segVolumeAtlas: depthSegAtlasNode,
       segVolumeMeta: depthSegMetaNode,
-      counts: u.counts,
-      counts2: u.counts2,
       marchCfg: u.marchCfg,
       woundCfg: u.woundCfg,
       woundCfg2: u.woundCfg2,
@@ -1919,7 +2376,8 @@ export function createZombieGpuView(
       // Bound POSITIONALLY last, matching DEPTH_PREPASS_MARCH's WGSL
       // signature (the ORDER MATTERS note in createMarchMaterial).
       perfCfg: u.perfCfg,
-      windDrift: u.windDrift,
+      inst: records.node as never,
+      instCfg,
     }) as unknown as { div: (d: unknown) => unknown };
     depthPreMaterial = new MeshBasicNodeMaterial();
     depthPreMaterial.side = THREE.BackSide;
@@ -1933,14 +2391,91 @@ export function createZombieGpuView(
     depthPreMesh.position.copy(mesh.position);
   }
 
+  // Run 5: the output-res refine twin — same proxy box, the refineBody entry, its own
+  // layer (sdf-layer REFINE_LAYER). No cone/occluder/shell/prev/depthPre sources: the
+  // fetch identities keep SETUP's gates open and the refine reads its start from the
+  // march texels instead. Chunks get no twin (same reasoning as depthPre). Bound only
+  // when the layer was created with refine.
+  let refineMesh: THREE.Mesh | undefined;
+  let refineTail: RefineTail = 'slim';
+  let refineTailSync: () => void = () => {};
+  // Run 5b: rebuilt on setRefineTail — the mesh and geometry are kept, only the
+  // material (and with it the uniform set the tail binds) is replaced.
+  const buildRefineMaterial = (tail: RefineTail) => {
+    const refineOpt = opts.refine!;
+    const tailU = refineTailUniforms(u, tail);
+    refineTailSync = tailU.sync;
+    const uu = tailU.uniforms;
+    return createMarchMaterial(
+      dataTex, volumeTex, uu,
+      refineBody,
+      undefined, undefined, tileNodes, undefined, undefined, opts.levelShadow,
+      undefined, undefined, 'lit', undefined,
+      opts.probeDyn?.node,
+      undefined,
+      {
+        marchTex: texture(refineOpt.texture),
+        // The SAME ray the material integrates — createMarchMaterial's own rayDir is
+        // internal, so recompute it identically here rather than approximating.
+        cosRay: mul(cameraViewMatrix,
+          vec4(normalize(sub(positionWorld, cameraPosition)), 0.0)).z.negate(),
+        nearFar: refineOpt.uniforms.nearFar,
+        refineCfg: refineOpt.uniforms.cfg,
+        // Run 5b body-ownership early-out: the march's normal attachment, whose alpha is the
+        // per-body key. A tap on another body's texel contributes no weight, so `wsum < 0.5`
+        // discards this pixel before the first mapBody.
+        normalTex: texture(refineOpt.normalTexture),
+      },
+      // ONE level-shadow node across both materials. The per-frame rebind in the game
+      // page assigns to the view's published node only; a twin with its own node would
+      // stay on the 1x1 fallback, LEVEL_SHADOW would return 0 for every pixel and the
+      // refine would render ambient-only (Gate-1 colour mismatch, 2026-09-13).
+      (material as unknown as MaterialWithLevelShadowTex)
+        .levelShadowTex as unknown as ReturnType<typeof texture>,
+      // ...and the SAME segment-volume pair, so setSkeletonVolume's rebind of the main
+      // material's nodes reaches the twin without a third explicit assignment.
+      (material as unknown as MaterialWithSegmentVolume)
+        .segVolumeAtlas as unknown as ReturnType<typeof texture3D>,
+      (material as unknown as MaterialWithSegmentVolume)
+        .segVolumeMeta as unknown as ReturnType<typeof texture>,
+      // Crowd stage a: the refine twin marches the SAME record band.
+      { inst: records.node, instCfg },
+    );
+  };
+  if (opts.refine) {
+    refineMesh = new THREE.Mesh(mesh.geometry, buildRefineMaterial(refineTail));
+    refineMesh.frustumCulled = false;
+    refineMesh.position.copy(mesh.position);
+  }
+
+  /** Crowd stage a: copy every per-instance uniform into the record slot the
+   *  kernel reads. The uniform nodes stay authoritative for the per-TYPE
+   *  block; this is the bridge for the per-INSTANCE half. */
+  function syncRecord() {
+    writeViewRecord(records, slot, u, mesh.position);
+    if (ownRecords) ownRecords.flush();
+  }
+
   const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
   return {
     object: mesh,
     coneObject: coneMesh,
     depthPreObject: depthPreMesh,
+    refineObject: refineMesh,
     uniforms: u,
     volumeTexture: volumeTex,
     dataTexture: dataTex,
+    records,
+    instCfg,
+    syncRecord,
+    rebind(r) {
+      sink = r.sink;
+      records = r.records;
+      slot = r.slot;
+      texels = sink.texels;
+      if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
+      syncRecord();
+    },
     tiles: viewTiles,
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
@@ -1967,7 +2502,8 @@ export function createZombieGpuView(
       if (depthSegAtlasNode) (depthSegAtlasNode as unknown as { value: THREE.Texture }).value = atlas;
       if (depthSegMetaNode) (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
     },
-    setMelt(progress) { u.meltCfg.value.x = progress; },
+    setMelt(progress) { u.meltCfg.value.x = progress; syncRecord(); },
+    setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
@@ -1983,9 +2519,14 @@ export function createZombieGpuView(
         depthPreMesh.position.copy(mesh.position);
         depthPreMesh.scale.copy(mesh.scale);
       }
+      if (refineMesh) {
+        refineMesh.position.copy(mesh.position);
+        refineMesh.scale.copy(mesh.scale);
+      }
+      syncRecord();
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners) {
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {}, caps, undefined, owners);
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a
@@ -1994,18 +2535,36 @@ export function createZombieGpuView(
         u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x);
       woundBoundR = b[3];
       u.woundBound.value.set(b[0], b[1], b[2], woundCullOn ? b[3] : 1e9);
-      dataTex.needsUpdate = true;
+      sink.markDirty();
+      syncRecord();
     },
     setWoundCull(on) {
       woundCullOn = on;
       u.woundBound.value.w = on ? woundBoundR : 1e9;
+      syncRecord();
     },
     setHeadShape(centre, axes) {
       u.headCentre.value.set(...centre);
       u.headAxes.value.set(...axes);
+      syncRecord();
     },
-    setHeadRotation(q) { u.headQuat.value.set(q[0], q[1], q[2], q[3]); },
-    setTime(seconds) { u.faceCfg3.value.y = seconds; },
+    setHeadRotation(q) { u.headQuat.value.set(q[0], q[1], q[2], q[3]); syncRecord(); },
+    setTime(seconds) {
+      u.faceCfg3.value.y = seconds;
+      // Run 5b: the slim twin's surfCfg.xyz follow the body's live look knobs.
+      refineTailSync();
+      syncRecord();
+    },
+    get refineTail() { return refineTail; },
+    setRefineTail(tail: RefineTail) {
+      if (tail === refineTail) return;
+      refineTail = tail;
+      if (!refineMesh) return;
+      const old = refineMesh.material as THREE.Material;
+      refineMesh.material = buildRefineMaterial(tail) as unknown as THREE.Material;
+      old.dispose();
+      refineTailSync();
+    },
     setRootShift(x, z, bodyYaw = 0) {
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
@@ -2014,6 +2573,7 @@ export function createZombieGpuView(
       // pre-pass. Written HERE so there is a single place that decides what
       // "the body's frame" is — see bodyAnchor's declaration.
       u.bodyAnchor.value.set(x, bodyYaw, z);
+      syncRecord();
     },
     setFaceTexture(tex, atlas, mean) {
       u.faceTex.value = tex;
@@ -2051,7 +2611,8 @@ export function createZombieGpuView(
       material.dispose();
       coneMaterial.dispose();
       if (depthPreMaterial) depthPreMaterial.dispose();
-      dataTex.dispose();
+      if (refineMesh) (refineMesh.material as THREE.Material).dispose();
+      if (ownAtlas) ownAtlas.texture.dispose();
       if (ownsVolume) volumeTex.dispose();
       // viewTiles' underlying binding is owned by its creator, not the view.
     },
@@ -2069,8 +2630,13 @@ export interface ChunkGpuView {
   /** The packed prim DataTexture this view uploads to — the hull extraction
    *  kernel reads the same texture the march does. */
   dataTexture: THREE.Texture;
+  /** Crowd stage a (task 7c): this chunk's record buffer and base-slot node
+   *  (used by a hull-refine twin and the frame-hash seam). With a shared
+   *  material the buffer is the material's, and the node's z is the slot. */
+  records: CrowdRecords;
+  instCfg: ReturnType<typeof uniform>;
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
-  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[]): void;
+  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[], template?: MarchUniforms): void;
   update(chunk: Chunk): void;
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
@@ -2111,7 +2677,11 @@ export interface ChunkGpuBakeData {
   extent: number;
   quat: import('../gib-chunks').Chunk['quat'];
   look: import('./baked-chunks').ChunkBakeData['look'];
+  surface: NonNullable<import('./baked-chunks').ChunkBakeData['surface']>;
   gore: number;
+  /** Present only on a head chunk that wears the face projection; the bake
+   *  uses it to keep the gore off the face. */
+  face?: import('../chunk-bake-field').BakeFaceFrame;
 }
 
 /**
@@ -2158,10 +2728,30 @@ export function createChunkGpuView(
   const volTex = volumeTex ?? createFallbackHandVolumeTexture();
 
   const ownsMaterial = !sharedMaterial;
+  // Crowd stage a (task 7c): chunks share ONE record buffer (the shared
+  // material binds a single `inst` node, so it cannot carry per-chunk
+  // buffers). Each view owns a distinct slot. An isolated view (no shared
+  // material, e.g. tests) owns a private one-slot buffer at slot 0.
+  const ownRecords = sharedMaterial ? null : createCrowdRecords(1);
+  let slot = 0;
+  if (sharedMaterial) {
+    slot = sharedMaterial.allocSlot();
+    if (slot < 0) throw new Error(`shared chunk material is full (${sharedMaterial.records.capacity} slots)`);
+  }
+  const records = sharedMaterial ? sharedMaterial.records : ownRecords!;
+  // The chunk binds its OWN single-band data texture per draw, so its record
+  // points at band 0 (NOT slot * DATA_ROWS); the slot indexes the record.
+  // instCfg.z = the base record slot, read by MAP_BODY. In the shared case the
+  // material's per-draw bound node carries this vector; an isolated view binds
+  // its own uniform node.
+  const instCfg = new THREE.Vector4(1, 0, slot, 0);
+  const ownInstCfgNode = uniform(instCfg.clone());
   const material = sharedMaterial?.material ?? createMarchMaterial(
     dataTex, volTex, u,
     undefined, undefined, undefined, undefined, undefined, undefined,
     undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    { inst: records.node, instCfg: ownInstCfgNode },
   );
   // A unit proxy lets reset() resize this exact mesh with scale instead of
   // replacing its geometry. Object identity is what bounds Three's
@@ -2171,8 +2761,30 @@ export function createChunkGpuView(
     dataTexture: dataTex,
     volumeTexture: volTex,
     uniforms: u,
+    slot,
+    records,
+    instCfg,
   } satisfies ChunkMaterialState;
+  // FRUSTUM CULLING WAS TRIED HERE AND MEASURED TO BUY NOTHING (2026-09-11).
+  // The box IS the bound, so Three's test is exact and it was frame-hash
+  // verified — but it is not worth the risk: measured with 64 pieces in the
+  // arena, 55 of them OUT of frame, culling the off-screen ones saved a median
+  // of -0.3 ms (spread +-2), because a piece whose proxy box is off-screen has
+  // its fragments clipped anyway and cost only a draw call. The piece cost is
+  // per piece IN FRAME, and no cull can touch that. See the dev-note.
+  //
+  // `Proxy IS the bound; don't double-cull` — the shader's per-pixel box reject
+  // is the only cull this path needs.
   mesh.frustumCulled = false;
+
+  /** Crowd stage a (task 7c): push the chunk's per-instance uniforms into its
+   *  record slot at BAND 0 (the chunk's data texture is single-band and bound
+   *  per draw). Called once per frame from apply(), and at the end of reset()
+   *  after bodyHalf is written. */
+  function syncChunkRecord(): void {
+    writeViewRecord(records, slot, u, mesh.position, 0);
+    records.flush();
+  }
 
   let local: Primitive[] = [];
   /** The severed limb's BONE prims, recentred like `local` (gore r3
@@ -2193,6 +2805,9 @@ export function createChunkGpuView(
   let tornRadii: number[] = [];
   let packed!: ReturnType<typeof packBody>;
   let proxySize = 1;
+  let faceCentreLocal: Vec3 = [0, 0, 0];
+  let faceRestQuat: Quat = [0, 0, 0, 1];
+  let faceRestAxes: Vec3 = [1, 1, 1];
 
   function copyTemplateLook() {
     u.faceTex.value = template.faceTex.value;
@@ -2221,6 +2836,7 @@ export function createChunkGpuView(
     u.surfCfg.value.copy(template.surfCfg.value);
     u.surfCfg2.value.copy(template.surfCfg2.value);
     u.surfCfg3.value.copy(template.surfCfg3.value);
+    u.meatCfg.value.copy(template.meatCfg.value);
     u.mottleColor.value.copy(template.mottleColor.value);
     u.fatColor.value.copy(template.fatColor.value);
     u.boneColor.value.copy(template.boneColor.value);
@@ -2330,7 +2946,11 @@ export function createChunkGpuView(
       u.woundCfg.value.x = 0;
     }
 
-    if (u.faceCfg.value.x > 0.5) u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
+    if (u.faceCfg.value.x > 0.5) {
+      u.headCentre.value.set(...chunkPoint(c, faceCentreLocal, sx, sy, sz));
+      u.headQuat.value.set(...qMul(c.quat, faceRestQuat));
+      u.headAxes.value.set(faceRestAxes[0] * sx, faceRestAxes[1] * sy, faceRestAxes[2] * sz);
+    }
 
     // Noise anchor: the chunk's gore mottle rides the CHUNK, not the world.
     // Overwrites the body root shift the template copy brought over — a
@@ -2345,8 +2965,9 @@ export function createChunkGpuView(
   }
 
   function reset(
-    c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[],
+    c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[], nextTemplate?: MarchUniforms,
   ) {
+    if (nextTemplate) template = nextTemplate;
     lastReset = { c, prims: nextPrims, tornAt: nextTornAt, bones: nextBones };
     copyTemplateLook();
 
@@ -2415,9 +3036,12 @@ export function createChunkGpuView(
     // released skeleton groups) is not torn meat; the mask would paint bare
     // bone red and the puddle's pale bits would read as more goo.
     u.lodCfg.value.w = nextPrims.length > 0 ? 1 : 0;
-    u.faceCfg.value.x = c.limb === 'head' ? 1 : 0;
-    u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
-    u.headAxes.value.set(extent, extent, extent);
+    // Preserve the source projection/mode; a spherical extent is not the
+    // skull's authored projection frame. The frame tumbles with its piece.
+    u.faceCfg.value.x = c.limb === 'head' && nextPrims.length > 0 ? template.faceCfg.value.x : 0;
+    faceCentreLocal = vsub(template.headCentre.value.toArray() as Vec3, c.pos);
+    faceRestQuat = template.headQuat.value.toArray() as Quat;
+    faceRestAxes = template.headAxes.value.toArray() as Vec3;
     proxySize = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
 
     const { sx, sy, sz } = apply(c);
@@ -2426,6 +3050,7 @@ export function createChunkGpuView(
     // field, while squash remains in world axes.
     mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
     u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+    syncChunkRecord();
   }
 
   reset(chunk, prims, tornAt, bones);
@@ -2435,6 +3060,8 @@ export function createChunkGpuView(
     uniforms: u,
     volumeTexture: volTex,
     dataTexture: dataTex,
+    records,
+    instCfg: ownInstCfgNode,
     reset,
     setPackBones(on: boolean) {
       if (on === packBones) return;
@@ -2467,7 +3094,8 @@ export function createChunkGpuView(
       const col = (u2: { value: THREE.Color }): Vec3 =>
         [u2.value.r, u2.value.g, u2.value.b];
       return {
-        flesh: local.filter(p => p.op !== 'sub').map(xf),
+        // Keep the cap carves: dropping them turns cut meat back into rounded limbs.
+        flesh: local.map(xf),
         bones: localBones.map(xf),
         torn: tornLocals.map((t, i) => ({
           at: chunkPoint(c, t, sx, sy, sz),
@@ -2494,7 +3122,21 @@ export function createChunkGpuView(
           organAmp: u.organAmp.value,
           goreStrength: u.lodCfg.value.w,
         },
+        surface: { legacyGamma: u.lodCfg.value.y, wetness: u.surfCfg2.value.x,
+          roughness: u.surfCfg.value.y, specIntensity: u.surfCfg.value.x, noiseAmp: u.marchCfg.value.z, fresnel: u.surfCfg.value.z },
         gore: u.lodCfg.value.w,
+        // The head's face frame, in the same world values the march reads. The
+        // bake attenuates its gore by this coverage so a settled head keeps its
+        // face (task 2); non-head chunks and face-off views omit it.
+        face: u.faceCfg.value.x > 0.5
+          ? {
+            centre: u.headCentre.value.toArray() as Vec3,
+            quat: u.headQuat.value.toArray() as Quat,
+            axes: u.headAxes.value.toArray() as Vec3,
+            forward: u.faceCfg.value.z,
+            reach: 1 + 0.5 * (Math.abs(u.faceCfg.value.x - 2) < 0.5 ? 1 : 0),
+          }
+          : undefined,
       };
     },
     posedBones(): Primitive[] {
@@ -2514,12 +3156,15 @@ export function createChunkGpuView(
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
       mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
       u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+      syncChunkRecord();
     },
     dispose() {
       mesh.geometry.dispose();
       if (ownsMaterial) material.dispose();
       dataTex.dispose();
       if (ownsVolume) volTex.dispose();
+      // Crowd stage a (task 7c): return the shared record slot to the pool.
+      sharedMaterial?.freeSlot(slot);
       delete mesh.userData[CHUNK_MATERIAL_STATE];
     },
   };

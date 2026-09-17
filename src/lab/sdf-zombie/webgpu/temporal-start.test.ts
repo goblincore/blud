@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 // @ts-expect-error — deep three source import for the real wgslFn parser (same
 // pattern as probe-grid.wgsl.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
-import { TEMPORAL_START_DEFAULTS, TEMPORAL_START_WGSL, temporalStart, type TemporalCfg } from './temporal-start';
+import { TEMPORAL_MARGIN_FLOOR, TEMPORAL_START_DEFAULTS, TEMPORAL_START_WGSL, temporalMarginForMotion, temporalStart, type TemporalCfg } from './temporal-start';
 
 /** A camera at `pos` looking down -Z, 60° vertical fov, 4:3, near 0.1 far 100. */
 function cam(pos: [number, number, number]): { vp: THREE.Matrix4; invVp: THREE.Matrix4; near: number; far: number } {
@@ -92,5 +92,25 @@ describe('TEMPORAL_START_WGSL — parse and shape contract', () => {
   });
   it('shares the margin formula with the CPU twin', () => {
     expect(TEMPORAL_START_WGSL).toContain('t - cfg.y - t * cfg.z');
+  });
+});
+
+describe('temporalMarginForMotion — the adaptive start margin', () => {
+  // PARKED at the shipped constant (floor == cap == 0.25): the owner
+  // playtest found glitches at the 0.15 floor in real play that the frozen
+  // closeup bisect missed. The measurement machinery stays wired; the
+  // clamp pins the margin to the shipped figure for every input.
+  it('is the shipped constant for every input — still scene, motion, teleports', () => {
+    expect(temporalMarginForMotion(0)).toBe(0.25);
+    expect(temporalMarginForMotion(0.05)).toBe(0.25);
+    expect(temporalMarginForMotion(0.14)).toBe(0.25);
+    expect(temporalMarginForMotion(0.2)).toBe(0.25);
+    expect(temporalMarginForMotion(10)).toBe(0.25);
+    expect(TEMPORAL_MARGIN_FLOOR).toBe(0.25);
+  });
+
+  it('respects an explicit cap (the layer passes none; A/Bs may)', () => {
+    expect(temporalMarginForMotion(10, 0.4)).toBe(0.4);
+    expect(temporalMarginForMotion(0.1, 0.2)).toBe(0.2);
   });
 });

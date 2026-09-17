@@ -24,11 +24,14 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, NOISE_LOCAL, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, FOLD_BONE_RANGE, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
-  CALC_NORMAL,
+  CALC_NORMAL, INSTANCE_STATE, MARCH_BODY_PARAMS, MARCH_TRACE_SETUP, MARCH_TRACE_POST,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
+  HEAD_EXTERIOR_GORE_KEEP,
+  QUAD_TILE_EMPTY_WGSL,
   soldierFaceDamageShadow,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+import { REC_VEC4S, REC_ANCHOR_BAND, REC_COUNTS } from './crowd-records';
 import { MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 // Raw source import: the row-table docstrings are TS comments, invisible to
 // every exported WGSL string, and the Done-when "docstring no longer lies"
@@ -83,6 +86,26 @@ describe('wgslFn parse contract', () => {
   it('declares no helper twice', () => {
     const names = HELPERS.map(declaredName);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('parses every runtime helper with the real wgslFn parser', () => {
+    // declaredName only checks the ^-anchor. three's own regexp also needs a
+    // resolvable RETURN TYPE after the parameter list: a source that starts
+    // with `fn` but has no `-> type` can still fail, and the failure is a
+    // silent "Function is not a WGSL code" whose downstream symptom is a
+    // blank march target. INSTANCE_STATE originally had no return type and
+    // only parsed because the loose regexp backtracked into a LATER helper in
+    // the same string; deleting tileHasSlot removed that crutch and blanked
+    // the page, which is why loadInstance now declares `-> void` and this
+    // test parses HELPERS exactly as buildEntryFn does.
+    for (const [i, src] of HELPERS.entries()) {
+      expect(() => new WGSLNodeFunction(src), `HELPERS[${i}]`).not.toThrow();
+    }
+    for (const [n, src] of [
+      ['MARCH_BODY', MARCH_BODY], ['CONE_MARCH', CONE_MARCH], ['DEPTH_PREPASS_MARCH', DEPTH_PREPASS_MARCH],
+    ] as const) {
+      expect(() => new WGSLNodeFunction(src), n).not.toThrow();
+    }
   });
 
 });
@@ -205,7 +228,7 @@ describe('ported features reach the entry point', () => {
     // the entire half-space behind the cap plane — mixed-direction wounds
     // hollowed whole bodies (the owner's invisible-zombie report). Do not
     // revert to that form.
-    expect(applyWounds).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0)`);
+    expect(applyWounds).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP} + band), 0)`);
     expect(applyWounds).toContain('min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz))');
     // Uncapped wounds (w <= 0) must take a capEff no real distance can
     // cross, so the slab term loses the min EXACTLY and the field is
@@ -215,10 +238,10 @@ describe('ported features reach the entry point', () => {
   });
 
   it('skips a wound before loading its meta/cap rows when the sample is out of reach (perf round 2 task 3)', () => {
-    const iPos = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND})`);
+    const iPos = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND} + band)`);
     const iReach = APPLY_WOUNDS.indexOf('if (perfCfg.y > 0.5 && r > reach) { continue; }');
-    const iMeta = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_META})`);
-    const iCap = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_CAP})`);
+    const iMeta = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_META} + band)`);
+    const iCap = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND_CAP} + band)`);
     expect(iPos).toBeGreaterThan(-1);
     expect(iReach).toBeGreaterThan(iPos);
     expect(iMeta).toBeGreaterThan(iReach);
@@ -240,21 +263,24 @@ describe('ported features reach the entry point', () => {
     expect(APPLY_WOUNDS).toContain('woundBound: vec4<f32>');
     const iBound = APPLY_WOUNDS.indexOf('if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
     const iLoop = APPLY_WOUNDS.indexOf('for (var k = 0; k < 16; k = k + 1)');
-    const iFirstLoad = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND})`);
+    const iFirstLoad = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND} + band)`);
     expect(iBound).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iBound);
     expect(iFirstLoad).toBeGreaterThan(iLoop);
     // Threading: mapBody hands it to applyWounds, and every entry point
     // that can reach a wounded field declares and forwards it.
-    expect(MAP_BODY).toContain('applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound)');
+    expect(MAP_BODY).toContain('applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band)');
+    // crowd stage a: woundBound moves to the instance record; every mapBody
+    // caller forwards the record pointer instead of per-instance uniforms.
+    expect(MAP_BODY).toContain('let woundBound = gInstWoundBound;');
     for (const src of [MAP_BODY, CALC_NORMAL, CONE_MARCH, WOUND_SHADOW, MARCH_BODY]) {
-      expect(src).toContain('woundBound: vec4<f32>');
+      expect(src).toContain('inst: ptr<storage, array<vec4<f32>>, read>');
     }
-    expect(MARCH_BODY).toContain('woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound)');
-    // MARCH_BODY's binding is positional — woundBound sits LAST, after the
-    // level-shadow slots (the parser-count test above pins the full order).
+    expect(MARCH_BODY).toContain('woundShadow(p, L, abs(woundShadowCfg.y), data, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
+    // inst and instCfg are bound POSITIONALLY LAST (the parser-count test
+    // above pins the full order).
     const tail = MARCH_BODY.slice(MARCH_BODY.indexOf('levelShadowCfg: vec4<f32>'));
-    expect(tail.indexOf('woundBound: vec4<f32>')).toBeGreaterThan(tail.indexOf('levelShadowCfg: vec4<f32>'));
+    expect(tail.indexOf('inst: ptr<storage, array<vec4<f32>>, read>')).toBeGreaterThan(tail.indexOf('levelShadowCfg: vec4<f32>'));
   });
 
   // Line-for-line TS transcription of the fixed carve term (the inside-positive
@@ -310,6 +336,21 @@ describe('ported features reach the entry point', () => {
     // chunk's own translation, not the world.
     expect(MARCH_BODY).toContain('goreStrength');
     expect(MARCH_BODY).toContain('fbm(anchor * 6.0)');
+    // TASK 3: the gate is per-instance OR per-view, so a doomed body in a
+    // crowd can ramp its own gore without repainting the shared-material type.
+    // TASK 2 (2026-09-16 follow-ups): the mask is attenuated by face coverage,
+    // and the pass now runs AFTER the face layer, so a detached head keeps its
+    // painted face instead of being mottled into a meat blob.
+    expect(MARCH_BODY).toContain('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);');
+    expect(MARCH_BODY).toContain('faceCover = faceCover * tex.a;');
+    // The head's non-face exterior keeps a bounded share of the gore, so the
+    // head is not a meat blob from the back either, while the neck cut still
+    // tears. The constant is shared with the CPU bake.
+    expect(MARCH_BODY).toContain(`faceRegion * ${HEAD_EXTERIOR_GORE_KEEP}`);
+    expect(MARCH_BODY).toContain('let faceRegion = 1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs));');
+    expect(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'))
+      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);'));
+    expect(INSTANCE_STATE).toContain('gInstGore = (*inst)[base + ');
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
@@ -332,7 +373,7 @@ describe('ported features reach the entry point', () => {
     const applyCarves = HELPERS.find(h => declaredName(h) === 'applyCarves')!;
     // ONE sd evaluation feeds both branches, the same invariant mapBody's fold
     // keeps — evaluating the field twice is how the two paths drift apart.
-    expect(applyCarves).toContain('let sd = select(sdPrim(p, idx, data, r2, prof, cpos, 0), sdPrimO(p, idx, data, r2, prof, cpos, 0), ori);');
+    expect(applyCarves).toContain('let sd = select(sdPrim(p, idx, data, r2, prof, cpos, band), sdPrimO(p, idx, data, r2, prof, cpos, band), ori);');
     expect(applyCarves).toContain('if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }');
     // Depth and width ride primShape.zw, spare since the taper claimed xy.
     expect(applyCarves).toContain('gr = T.zw;');
@@ -360,7 +401,7 @@ describe('ported features reach the entry point', () => {
     // The shell's fbm samples the dominant prim's REST frame (task 6) — the
     // displaced silhouette rides the same flesh as the normal-warped skin.
     expect(MARCH_BODY)
-      .toMatch(/d = d \+ fbm\(restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\)\) \* 3\.0\) \* shellAmp;/);
+      .toMatch(/d = d \+ fbm\(restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\), gBand\) \* 3\.0\) \* shellAmp;/);
   });
 
   it('anchors every noise site in REST space, so texture rides every limb (task 6)', () => {
@@ -371,7 +412,7 @@ describe('ported features reach the entry point', () => {
     // doesn't"). mapBody tracks the argmin prim in its fold and every noise
     // site maps through restPoint; the task-3 root-shift anchor (noiseLocal)
     // survives ONLY as the fallback for bodies without rest rows.
-    expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);');
+    expect(MARCH_BODY).toContain('let noiseShift = vec3<f32>(gInstNoiseShift.x, gInstYaw, gInstNoiseShift.z);');
     // (hard-surface task 1: the noiseAmp argument now carries the gloss
     // kill, `* (1.0 - max(gloss, metal))` — a polished or machined prim's
     // normal is not rippled. Pinned in detail by the dedicated
@@ -379,8 +420,8 @@ describe('ported features reach the entry point', () => {
     // carries anything: y/z/w were the parked melt spike's lanes and are
     // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
     // kill this pins is unchanged.)
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound)');
-    expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
+    expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift), gBand);');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
     const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;
@@ -399,7 +440,7 @@ describe('ported features reach the entry point', () => {
     // i32(bestIdx), not bestIdx: this branch reads gFoldBestIdx (an f32) AFTER
     // the bone fold so a bone prim can win the argmin, so the cast is needed
     // here where main's version had already narrowed it.
-    expect(mapBody).toContain('let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));');
+    expect(mapBody).toContain('let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift), band);');
     expect(mapBody).toContain('fbm(anchor * 3.0) * noiseCfg.x');
     // The cone pre-pass marches the SMOOTH field (amplitude 0) and stays
     // independent of the motion plumbing — zero shift, dead noise term (the
@@ -408,7 +449,7 @@ describe('ported features reach the entry point', () => {
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x');
+      'mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x');
   });
 
   it('tracks the dominant group distortion in a private global and divides the footprint epsilon by it', () => {
@@ -446,12 +487,15 @@ describe('ported features reach the entry point', () => {
     //    presets (all mottleAmp 0) skip the fbm entirely and shade exactly as
     //    they did before this existed.
     expect(MARCH_BODY).toContain('if (surfCfg2.z > 0.0) {');
-    // Before the gore and face passes: mottle is the flesh's own colour, so
-    // damage and the face paint OVER it.
-    expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
-      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = lodCfg.w;'));
-    expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
-      .toBeLessThan(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'));
+    // Before the FACE pass (mottle is the flesh's own colour, so the face
+    // paints over it) and therefore before the gore pass, which task 2 moved
+    // AFTER the face layer so it can be attenuated by the face's own coverage.
+    const mottleIdx = MARCH_BODY.indexOf('mix(albedo, mottleColor');
+    const faceIdx = MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {');
+    const goreIdx = MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore)');
+    expect(mottleIdx).toBeGreaterThanOrEqual(0);
+    expect(mottleIdx).toBeLessThan(faceIdx);
+    expect(faceIdx).toBeLessThan(goreIdx);
   });
 
   it('steps the shell conservatively and never retracts a displaced sample', () => {
@@ -532,15 +576,19 @@ describe('ported features reach the entry point', () => {
     // max(max(startT, shellIn), preStart): the max of lower bounds is the
     // tightest of them and still a lower bound. preStart collapses to 0 when
     // the pass is off, which is the identity inside the max.
-    // tempStart (plan 2026-09-10) is the fourth max term; 0 is its identity too.
-    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);');
+    // tempStart (plan 2026-09-10) is the fifth max term; 0 is its identity
+    // too. bodyEntry is the sixth: the proxy box contains the hull contains
+    // the flesh, so the ray-box entry is a lower bound like the others — and
+    // it catches the pixels whose temporal gate failed, which used to
+    // restart from the shared shellIn and walk their own empty proxy space.
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);');
     // The prepass inputs ride POSITIONALLY LAST (after windDrift), and the
     // disabled identity is the fetch's 0 — never a missing binding (the
     // meltCfg rule: a declared input without a binding shades as zero and
     // only logs).
-    expect(MARCH_BODY.indexOf('windDrift: vec3<f32>')).toBeGreaterThan(-1);
-    expect(MARCH_BODY.indexOf('depthPreTex: texture_2d<f32>')).toBeGreaterThan(MARCH_BODY.indexOf('windDrift: vec3<f32>'));
+    expect(MARCH_BODY.indexOf('depthPreTex: texture_2d<f32>')).toBeGreaterThan(-1);
     expect(MARCH_BODY.indexOf('depthPreCfg: vec4<f32>')).toBeGreaterThan(MARCH_BODY.indexOf('depthPreTex: texture_2d<f32>'));
+    expect(MARCH_BODY.indexOf('inst: ptr<storage, array<vec4<f32>>, read>')).toBeGreaterThan(MARCH_BODY.indexOf('depthPreCfg: vec4<f32>'));
     expect(MARCH_BODY).toContain('let preStart = select(0.0, max(preT - (preT * depthPreCfg.y + 0.0012 + woundCfg2.z), 0.0), preT > 0.0);');
     // Both parameters exist, so a material built without a shell source still
     // type-checks and takes the 0 / 1e9 identities.
@@ -578,7 +626,7 @@ describe('ported features reach the entry point', () => {
     // The coarse walk marches the FULL cluster field (no tile binning) —
     // conservative relative to any tile-listed sub-field the full march
     // might run, because culling a prim from a min-fold can only raise it.
-    expect(DEPTH_PREPASS_MARCH).toContain('let dres = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2,');
+    expect(DEPTH_PREPASS_MARCH).toContain('let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2,');
     // Same near-wound multiplier as the full march (WOUND_STEP_MUL via the
     // perfCfg.z override) — the coarse walk shares the field's unsoundness
     // near craters and must not step looser than the walk it feeds. The
@@ -603,10 +651,13 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('prevT: f32');
     expect(MARCH_BODY.indexOf('perfCfg: vec4<f32>')).toBeLessThan(MARCH_BODY.indexOf('prevT: f32'));
     // The per-body conservative entry rides LAST (positional): centre from the
-    // mesh's model matrix, half extents from the bodyHalf uniform.
-    expect(MARCH_BODY).toContain('bodyCentre: vec3<f32>,');
-    expect(MARCH_BODY).toContain('bodyHalf: vec3<f32>');
-    expect(MARCH_BODY.indexOf('prevT: f32')).toBeLessThan(MARCH_BODY.indexOf('bodyCentre: vec3<f32>'));
+    // mesh's model matrix, half extents from the bodyHalf uniform. Task 5
+    // added the crowd proxy-box overrides: instCfg.y 0 selects the record's
+    // gInstCentre/gInstHalf bit-identically, y 1 selects the attributes.
+    expect(MARCH_BODY).toContain('let boxCentre = select(gInstCentre, instCentre, instCfg.y > 0.5);');
+    expect(MARCH_BODY).toContain('let boxHalf = select(gInstHalf, instHalf, instCfg.y > 0.5);');
+    expect(MARCH_BODY).toContain('let bLo = (boxCentre - boxHalf - camPos) * invRd;');
+    expect(MARCH_BODY.indexOf('prevT: f32')).toBeLessThan(MARCH_BODY.indexOf('inst: ptr<storage, array<vec4<f32>>, read>'));
     // max(shellIn, bodyEntry): BOTH are lower bounds on the first point at
     // which THIS body could be hit (shellIn the shared hull entry, weaker;
     // bodyEntry the per-body proxy-box entry) — the larger lower bound is
@@ -614,8 +665,14 @@ describe('ported features reach the entry point', () => {
     // wherever the fragment lies behind an already-accumulated hit. min()
     // was inert: min <= shellIn <= prevT almost everywhere (task 5 finding).
     expect(MARCH_BODY).toContain('if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
-    expect(MARCH_BODY).toContain('let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
+    // Stage a-2 renamed the raw ray-box entry to boxEntry so the quad mode can
+    // select against gTileEntryT; the box algebra itself is unchanged.
+    expect(MARCH_BODY).toContain('let boxEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
     expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT);');
+    // The 5 cm graze slack from 48f00de2 was REMOVED (adversarial review: a
+    // behaviour change riding a debug commit, superseded by the graze
+    // accept in 426118e8). The removal is pinned so it cannot creep back.
+    expect(MARCH_BODY).not.toContain('+ select(0.0, 0.05, temporalCfg.x > 0.5)');
   });
 
   it('stops the cone one shell amp early (X1.21.2 pale tile wedges)', () => {
@@ -663,7 +720,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(WOUND_SHADOW).toContain('if (res < 0.02 || t > 0.4) { break; }');
     expect(WOUND_SHADOW).toContain('t = t + clamp(h, 0.01, 0.06);');
     // Smooth field: no fbm in the shadow march (noiseAmp 0, like the cone).
-    expect(WOUND_SHADOW).toContain('counts2, vec4<f32>(0.0), woundCfg, woundCfg2');
+    expect(WOUND_SHADOW).toContain('data, vec4<f32>(0.0), woundCfg, woundCfg2');
   });
   it('darkens ONLY the key diffuse + specular; fill/ambient/scatter stay lit', () => {
     // Multiply the whole lit sum and craters go pitch black — the fill and
@@ -677,7 +734,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
     // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
     expect(MARCH_BODY).toContain(
-      'woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound), woundShadowCfg.x');
+      'woundShadow(p, L, abs(woundShadowCfg.y), data, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg), woundShadowCfg.x');
   });
 });
 
@@ -698,7 +755,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // Positional-binding tripwire (see the ORDER MATTERS note in
     // createMarchMaterial): the new slots sit at the very END, after
     // bodyHalf, in the exact order the JS object binds them.
-    const tail = MARCH_BODY.slice(MARCH_BODY.indexOf('bodyHalf: vec3<f32>,'));
+    const tail = MARCH_BODY.slice(MARCH_BODY.indexOf('levelShadowTex: texture_depth_2d'));
     expect(tail.indexOf('levelShadowTex: texture_depth_2d')).toBeGreaterThan(-1);
     expect(tail.indexOf('levelShadowMatrix: mat4x4<f32>')).toBeGreaterThan(tail.indexOf('levelShadowTex: texture_depth_2d'));
     expect(tail.indexOf('levelShadowCfg: vec4<f32>')).toBeGreaterThan(tail.indexOf('levelShadowMatrix: mat4x4<f32>'));
@@ -737,26 +794,46 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // +2 GPU probe gather dynamic layer (probeDyn storage, probeDynCfg).
     // +1 direct muzzle flash (bodyFlash).
     // +3 temporal reprojection start (lastTex, lastInvVp, temporalCfg) — plan 2026-09-10.
-    expect(names.length).toBe(99);
+    // +1 meatCfg (soldier wound MEAT DETAIL, wound panel MEAT group, 2026-09-12), after surfCfg3.
+    // crowd stage a: 13 per-instance params move into the record, +inst +instCfg.
+    // crowd stage a task 5: +instCentre +instHalf (the instanced proxy box).
+    expect(names.length).toBe(91);
     expect(names).toContain('faceGlowRedOnly');
     expect(names.slice(-21)).toEqual([
-      'windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
+      'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
-      'probeDyn', 'probeDynCfg', 'bodyFlash',
-      'lastTex', 'lastInvVp', 'temporalCfg',
+      'probeDyn', 'probeDynCfg',
+      'lastTex', 'lastInvVp', 'temporalCfg', 'inst', 'instCfg', 'instCentre', 'instHalf',
     ]);
-    // The temporal start folds in AFTER preStart, as the fourth max term.
-    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);');
+    // The temporal start folds in AFTER preStart, with bodyEntry as the
+    // sixth lower-bound term (see the other pin above for the argument).
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);');
     expect(MARCH_BODY).toContain('temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg)');
     // Own-body gate + inside check: the reprojected point must sit in THIS
-    // body's box and the start must be outside the field, else 0.
+    // body's box and the start must be outside the field AND outside a
+    // wound's near zone (mapBody.z — the field is not a bound beside a
+    // crater; a start there banded the wounded closeup at a 0.05 m margin).
+    // The shellAmp backoff keeps the start outside the DISPLACED silhouette
+    // too, and the recovery probes rewind (2x penetration when inside,
+    // 0.15 fixed when in-zone) instead of dropping the bound.
     expect(MARCH_BODY).toContain('temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y');
-    expect(MARCH_BODY).toContain('if (d0 <= 0.0) { tempStart = 0.0; }');
-    // meltCfg sits between bodyHalf and the level-shadow tail, matching the
-    // JS binding object in createMarchMaterial (positional — a swap silently
-    // hands the shader the wrong uniform).
-    expect(names.indexOf('meltCfg')).toBe(names.indexOf('bodyHalf') + 1);
+    expect(MARCH_BODY).toContain('var s = temp.x - woundCfg2.z;');
+    expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) { break; }');
+    expect(MARCH_BODY).toContain('let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);');
+    expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) {');
+    // HULL-RELATIVE CAP: the accepted start tightens at most 6 cm past the
+    // current frame's hull face — stale history cannot move the start deeper
+    // than that, which is what bounds the swing-tip see-through holes.
+    expect(MARCH_BODY).toContain('s = min(s, shellIn + 0.06);');
+    expect(MARCH_BODY).toContain('tempStart = s;');
+    // crowd stage a: the record pointer and its config are the two new
+    // positional tails, in signature order (the JS binding object matches).
+    // crowd stage a task 5: instCentre/instHalf follow them (the proxy box).
+    expect(names.indexOf('instCfg')).toBe(names.length - 3);
+    expect(names.indexOf('inst')).toBe(names.length - 4);
+    expect(names.indexOf('instCentre')).toBe(names.length - 2);
+    expect(names.indexOf('instHalf')).toBe(names.length - 1);
   });
 });
 
@@ -765,16 +842,20 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
   // These assert the uniform is declared, bound and CONSUMED in the flesh
   // shading branch — and that the consumption is gated flesh-vs-bone, since
   // pale matte bone against wet red flesh is the whole look.
-  it('declares the meltCfg slot in the signature', () => {
-    expect(MARCH_BODY).toContain('meltCfg: vec4<f32>,');
+  it('reads melt state from the per-instance record', () => {
+    // crowd stage a: meltCfg left the signature and rides the record.
+    expect(MARCH_BODY).not.toContain('meltCfg: vec4<f32>,');
+    expect(MARCH_BODY).toContain('gInstMelt');
   });
   it('READS meltCfg in the flesh shading branch — colour leads the sag', () => {
     // smoothstep(clamp(meltCfg.x * 2)) — the ramp completes by half progress,
     // so the body is clearly red while still standing, before it shortens.
     expect(MARCH_BODY).toContain(
-      'let meltU = smoothstep(0.0, 1.0, clamp(meltCfg.x * 2.0, 0.0, 1.0));');
+      'let meltU = smoothstep(0.0, 1.0, clamp(gInstMelt.x * 2.0, 0.0, 1.0));');
     // Flesh reddens; bone goes PALE instead — the contrast is the effect.
-    expect(MARCH_BODY).toContain('albedo = mix(albedo, boneColor, meltU * 0.9)');
+    // `bonePaleU` is max(bareBoneU, meltU): a rupture's exposed skeleton goes
+    // pale with NO melt ramp (see the body-to-gib rupture branch below).
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, boneColor, bonePaleU * 0.9)');
     // Flesh mixes toward the deep red — but through the PER-PATCH `local`,
     // not meltU directly. Skin sloughs in pieces (owner review 2026-09-03):
     // each point crosses at its own progress off the rest-space anchor, and
@@ -788,13 +869,15 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
     // `patch` is a RESERVED WORD in WGSL: naming it that compiles in TS and
     // fails the shader at runtime, rendering the body invisible. Guard it.
     expect(MARCH_BODY).not.toMatch(/\blet patch\b/);
-    // Wetness ramps on flesh ONLY — bone stays matte.
-    expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), meltU)');
+    // Wetness ramps on flesh ONLY — bone stays matte. `bonePaleU` is
+    // max(bareBoneU, meltU), so a rupturing body's exposed bones go matte too.
+    expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), bonePaleU)');
   });
-  it('identifies an exposed bone row — the wm gate alone cannot see one', () => {
-    // The melt's skeleton emerges with NO wound (bareBones bypass), so the
-    // primScale.w material read must also run when meltCfg.x > 0.
-    expect(MARCH_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
+  it('identifies an exposed bone row — the wound gate alone cannot see one', () => {
+    // The melt's skeleton emerges with NO wound (bareBones bypass) and so does
+    // a rupturing body's, so the primScale.w material read must also run when
+    // meltCfg.x > 0 OR bareBones is set.
+    expect(MARCH_BODY).toContain('if ((wm > 0.0 || gInstMelt.x > 0.0 || gInstCounts2.y > 0.5) && hitBest >= 0)');
     expect(MARCH_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
   });
 
@@ -828,7 +911,7 @@ describe('melt face drip (zombie melt task 8)', () => {
     expect(FACE.length).toBeGreaterThan(500);
   });
   it('READS meltCfg in the face block — the face drips off the skull', () => {
-    expect(FACE).toContain('let meltSag = meltCfg.x;');
+    expect(FACE).toContain('let meltSag = gInstMelt.x;');
     // Sag + paired stretch on the V coordinate: the offset alone slides a
     // rigid face like a sticker; the stretch is the elongation.
     expect(FACE).toContain(
@@ -836,7 +919,7 @@ describe('melt face drip (zombie melt task 8)', () => {
   });
   it('widens the facing fade as the head flattens', () => {
     expect(FACE).toContain(
-      `var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, meltCfg.x), 0.66, dot(n, hfr));`);
+      `var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, gInstMelt.x), 0.66, dot(n, hfr));`);
   });
 });
 
@@ -924,7 +1007,7 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // Argument forwarding is load-bearing: a call site that forgets one
     // volume argument does not fail to compile — WGSL has no named args —
     // the generated node call simply mismatches. Every call, every source.
-    const needed = ['volumeTex', 'volumePose0', 'volumePose1', 'volumeMin',
+    const needed = ['volumeTex', 'volumeMin',
       'volumeInvExtent', 'volumeWarp', 'volumeClip', 'segVolumeAtlas', 'segVolumeMeta'];
     for (const src of [...HELPERS, MARCH_BODY, CONE_MARCH]) {
       let at = src.indexOf('mapBody(');
@@ -945,15 +1028,13 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
   it('calcNormal declares and forwards the volume params', () => {
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeTex: texture_3d<f32>');
-    expect(calcNormal).toContain('volumePose0: vec4<f32>');
+    expect(calcNormal).toContain('volumeMin: vec3<f32>');
     expect((calcNormal.match(/mapBody\(/g) ?? []).length).toBe(4);
   });
 
   it('MARCH_BODY and CONE_MARCH declare the volume params', () => {
     for (const src of [MARCH_BODY, CONE_MARCH]) {
       expect(src).toContain('volumeTex: texture_3d<f32>');
-      expect(src).toContain('volumePose0: vec4<f32>');
-      expect(src).toContain('volumePose1: vec4<f32>');
       expect(src).toContain('volumeMin: vec3<f32>');
       expect(src).toContain('volumeInvExtent: vec3<f32>');
       expect(src).toContain('volumeWarp: vec4<f32>');
@@ -989,7 +1070,10 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(pre).toBeLessThan(MARCH_BODY.indexOf('let dres = mapBody('));
     // One read loop, bounded by the same cap the CPU binner clamps to.
     expect(MARCH_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
-    expect(MAP_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
+    // The per-pixel slot table (perf 7d) is built in SETUP, once, from that
+    // same preloaded, slot-sorted entry list.
+    expect(MARCH_TRACE_SETUP).toContain('gPixSlot[gPixN] = s;');
+    expect(MARCH_TRACE_SETUP).toContain('gPixEnd[gPixN - 1] = e + 1;');
     expect(MARCH_BODY).toContain('if (e >= i32(n)) { break; }');
   });
 
@@ -1008,10 +1092,21 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(MARCH_BODY).toContain('let lin = (head.x + u32(e)) * 3u;');
   });
 
-  it('mapBody branches on gTileActive: tile list vs cluster walk, both through foldGroup', () => {
-    expect(MAP_BODY).toContain('if (gTileActive > 0.5) {');
-    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, i32(gTileBand[e]), gTileBounds[e], gTileGrp[e]);');
-    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, 0, bounds, range);');
+  it('mapBody walks the per-pixel slot table: tile range vs cluster walk, both through foldGroup', () => {
+    expect(MAP_BODY).toContain('let tiled = gTileActive > 0.5;');
+    // crowd stage a, task 7c: a shared-record single-field material offsets the
+    // slot index by its base record slot.
+    expect(MAP_BODY).toContain('let base = i32(instCfg.z);');
+    expect(MAP_BODY).toContain('loadInstance(inst, base + s);');
+    expect(MAP_BODY).toContain('bestSlot = base + s;');
+    expect(MAP_BODY).toContain('let nIter = select(nInst, gPixN, tiled);');
+    expect(MAP_BODY).toContain('let s = select(k, gPixSlot[k], tiled);');
+    // The range walk folds exactly this slot's contiguous entry run; the
+    // per-step slot scan is gone.
+    expect(MAP_BODY).toContain('for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {');
+    expect(MAP_BODY).not.toContain('tileHasSlot');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, bounds, range);');
   });
 
   it('keeps the per-step sphere cull WITH the distortion factor inside foldGroup', () => {
@@ -1159,7 +1254,7 @@ describe('arc capsule — bent primitives', () => {
     // The prim loop lives in foldGroup now (shared by the cluster walk and
     // the tile-list path); APPLY_CARVES keeps its own copy.
     const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
-    expect(APPLY_CARVES).toContain(`cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;`);
+    expect(APPLY_CARVES).toContain(`cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0).xyz;`);
     expect(foldGroup).toContain(
       `cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0).xyz;`);
     for (const src of [foldGroup, APPLY_CARVES]) {
@@ -1444,8 +1539,8 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     expect(foldGroup).toContain('if (shaped) {');
     // BOTH fold paths call foldGroup with the group texels, so neither can
     // drift from the other's sphere-cull or flag semantics.
-    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, i32(gTileBand[e]), gTileBounds[e], gTileGrp[e]);');
-    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, 0, bounds, range);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);');
+    expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, bounds, range);');
     // The carve pass reads the same bitfield, so a tapered carve is a taper in
     // BOTH fields. This one backs click-to-shoot; a divergence here lands
     // shots where nothing is drawn.
@@ -1600,18 +1695,15 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     // passes as 0 by design, because it lives on the normal), wind moves the
     // field: a cone without this slot would certify space the drifted cloth
     // occupies and the march would start inside it.
-    expect(CONE_MARCH).toContain('windDrift: vec3<f32>');
-    expect(CONE_MARCH).toContain('gWindDrift = windDrift;');
-    expect(MARCH_BODY).toContain('gWindDrift = windDrift;');
+    expect(CONE_MARCH).toContain('gWindDrift = gInstWind;');
+    expect(MARCH_BODY).toContain('gWindDrift = gInstWind;');
     // BODY FRAME PARITY, for the same reason and with a sharper failure: a
     // cone anchored to the world while the march is anchored to a turning
     // body certifies emptiness against a surface that has rotated away.
     // Both must read the same uniform — NOT rebuild the triple from
     // faceCfg3/lodCfg, which only MARCH_BODY has.
-    expect(CONE_MARCH).toContain('bodyAnchor: vec3<f32>');
-    expect(CONE_MARCH).toContain('gBodyAnchor = bodyAnchor;');
-    expect(MARCH_BODY).toContain('bodyAnchor: vec3<f32>');
-    expect(MARCH_BODY).toContain('gBodyAnchor = bodyAnchor;');
+    expect(CONE_MARCH).toContain('gBodyAnchor = gInstAnchor;');
+    expect(MARCH_BODY).toContain('gBodyAnchor = gInstAnchor;');
     // sdShell must actually USE it, and noiseLocal must be declared first.
     expect(SD_SHELL).toContain('noiseLocal(p - drift, gBodyAnchor)');
     expect(HELPERS.indexOf(NOISE_LOCAL)).toBeLessThan(HELPERS.indexOf(SD_SHELL));
@@ -1620,7 +1712,7 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg
     // and woundBound pass-throughs behind it (perf round 2 task 3, close-up
     // wound-cull task).
-    expect((calcNormal.match(/volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound\)/g) ?? []).length).toBe(4);
+    expect((calcNormal.match(/volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg\)/g) ?? []).length).toBe(4);
   });
 });
 
@@ -1630,7 +1722,7 @@ describe('per-primitive colour', () => {
   });
 
   it('reads the row at the HIT primitive and gates on the w sentinel', () => {
-    expect(MARCH_BODY).toContain(`vec2<i32>(hitBest, ${ROW_PRIM_COLOR})`);
+    expect(MARCH_BODY).toContain(`vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand)`);
     expect(MARCH_BODY).toContain('if (PC.w > 0.0)');
   });
 
@@ -1837,9 +1929,8 @@ describe('bone fold (wound pass r2)', () => {
     // rides the return as the bare f32 global: an f32(bestIdx) cast INSIDE
     // the vec4 would not even lex past the nested paren, and task 6 reads
     // .w per march step.
-    const returns = MAP_BODY.match(/return vec4<f32>\([^)]*\)/g) ?? [];
-    expect(returns.length).toBeGreaterThanOrEqual(2);
-    for (const r of returns) expect(r).toContain('carved');
+    expect(MAP_BODY).toContain('carvedU = carved;');
+    expect(MAP_BODY).toMatch(/return vec4<f32>\(dUnion, bestIdxU, nearWoundU, carvedU\)/);
   });
 
   it('lets a bone prim win bestIdx so shading can identify it', () => {
@@ -1860,8 +1951,8 @@ describe('bone fold (wound pass r2)', () => {
     // without a wound. The bypass must never REPLACE the gate — an intact
     // body still skips the bone fold exactly.
     expect(MAP_BODY).toMatch(/\(nearWound > 0\.5 \|\| counts2\.y > 0\.5\) && counts2\.x > 0\.0/);
-    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0, segVolumeAtlas, segVolumeMeta)');
-    expect(MARCH_BODY).toContain('counts2: vec4<f32>');
+    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, band, segVolumeAtlas, segVolumeMeta)');
+    expect(MAP_BODY).toContain('let counts2 = gInstCounts2;');
     expect(MARCH_BODY).not.toMatch(/woundCfg2\.w[^;]*applyBones/);
   });
 
@@ -1981,31 +2072,26 @@ describe('bone material (wound pass r2)', () => {
     expect(SHADE_BODY).not.toContain('boneStain');
   });
 
-  it('identifies bone by material code ONLY for the melt ramp (task 6)', () => {
+  it('identifies bone by material code for the melt ramp AND a rupture', () => {
     // Bone tubes deleted the old always-on bone albedo branch, and it stays
-    // deleted: bone is identified again, but the ONLY consumer is the melt's
-    // pale-vs-wet-red split (march.wgsl.ts, zombie melt task 6) — the melt's
-    // skeleton emerges through thinning flesh with no wound to key on, and
-    // without the material read an exposed bone would take the red flesh
-    // ramp and shade as meat. The read is gated on meltCfg.x, so a
-    // non-melting body pays and shades exactly as the bone-tubes deletion
-    // left it.
+    // deleted: bone is identified again, but its only consumers are the melt's
+    // pale-vs-wet-red split (zombie melt task 6) and the body-to-gib rupture's
+    // exposed skeleton. Both need the material read because the bone wins the
+    // fold with no wound to key on.
     expect(SHADE_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
-    expect(SHADE_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
-    // And bone still does not get its old always-on shading back — the
-    // isBone read is consumed ONLY inside the meltU-gated block (the one
-    // bare `if (isBone)` line is nested directly inside `if (meltU > 0.0)`).
-    const uses = SHADE_BODY.split('\n').filter((l: string) => l.includes('isBone'));
-    for (const l of uses) {
-      if (l.includes('let isBone') || l.trim() === 'if (isBone) {') continue;
-      expect(l).toMatch(/meltU|meltCfg/);
-    }
-    // Prove the nesting claimed above: the bare branch sits inside the meltU
-    // gate, not loose in the shading flow.
-    const gate = SHADE_BODY.indexOf('if (meltU > 0.0) {');
-    const branch = SHADE_BODY.indexOf('if (isBone) {');
-    expect(branch).toBeGreaterThan(gate);
-    expect(branch - gate).toBeLessThan(200);
+    expect(SHADE_BODY).toContain('if ((wm > 0.0 || gInstMelt.x > 0.0 || gInstCounts2.y > 0.5) && hitBest >= 0)');
+    // Bone paleness is gated on bonePaleU = max(bareBoneU, meltU); the FLESH
+    // reddening stays meltU-only, so a bare-bone rupture never stains skin and
+    // never sags a face — the melt geometry is a separate ramp.
+    expect(SHADE_BODY).toContain('let bonePaleU = max(bareBoneU, meltU);');
+    expect(SHADE_BODY).toContain('if (isBone && bonePaleU > 0.0) {');
+    expect(SHADE_BODY).toContain('} else if (meltU > 0.0) {');
+    // The flesh branch must sit BELOW the bone branch, so nothing can redden
+    // exposed bone.
+    const pale = SHADE_BODY.indexOf('if (isBone && bonePaleU > 0.0) {');
+    const flesh = SHADE_BODY.indexOf('} else if (meltU > 0.0) {');
+    expect(pale).toBeGreaterThan(-1);
+    expect(flesh).toBeGreaterThan(pale);
   });
 });
 
@@ -2020,7 +2106,7 @@ describe('organ shading (organs r3)', () => {
     // "any hitBest read ending in .w": glow= legitimately reads ROW_PRIM_CLIP.w
     // at the same pixel (hard-surface task 3), which is a different row and a
     // different lane, not a duplicated hitMat.
-    expect((SHADE_BODY.match(new RegExp(`textureLoad\\(data, vec2<i32>\\(hitBest, ${ROW_PRIM_SCALE}\\), 0\\)\\.w`, 'g')) ?? []))
+    expect((SHADE_BODY.match(new RegExp(`textureLoad\\(data, vec2<i32>\\(hitBest, ${ROW_PRIM_SCALE} \\+ gBand\\), 0\\)\\.w`, 'g')) ?? []))
       .toHaveLength(1);
     expect(SHADE_BODY).toContain('isOrgan');
   });
@@ -2084,7 +2170,7 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
   // the look.
   const SHADE_BODY = MARCH_BODY;
   // The one ROW_PRIM_COLOR read (pack.ts writes w = 1 + gloss, w = 0 flesh).
-  const LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0)`;
+  const LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand), 0)`;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   it('resolves gloss BEFORE the shading normal exists, off ONE load', () => {
@@ -2109,7 +2195,7 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     // task-3 merge: calcNormal's amp is melt's vec4 (x silhouette, y/z/w
     // melt) — the kill applies to .x only, melt passes through untouched.
     expect(SHADE_BODY).toContain(
-      'calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg');
+      'calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg');
   });
 
   it('scales the micro-detail perturbation by (1 - max(gloss, metal)), still inside its amplitude guard', () => {
@@ -2146,7 +2232,7 @@ describe('metal modifier (hard-surface task 2)', () => {
   // plates read as steel — is the render's job, not this suite's.
   const SHADE_BODY = MARCH_BODY;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const SHAPE_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0)`;
+  const SHAPE_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0)`;
 
   it('reads the metal bit inside the ONE hoisted painted read, above calcNormal', () => {
     // Same hoist discipline as gloss (task 1): the value is needed by the
@@ -2231,7 +2317,7 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
   // from frames, not from strings).
   const SHADE_BODY = MARCH_BODY;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const CLIP_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0)`;
+  const CLIP_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0)`;
 
   it('row 17 no longer documents w as spare', () => {
     // Done-when: leaving "w spare" in the row table is how the next person
@@ -2375,6 +2461,10 @@ describe('final-hit analytic normal integration', () => {
     expect(MARCH_BODY.indexOf('ngBody(')).toBeGreaterThan(MARCH_BODY.indexOf('let anchor = restPoint'));
     expect(MARCH_BODY).toContain('if (!ngValid)');
     expect(MARCH_BODY).toContain('normalGradientCfg.x > 0.5');
+    // Crowd fix (2026-09-14): the analytic path is ungated for every slot. The
+    // temporary single-slot mitigation (`instCfg.x < 1.5`) must not come back.
+    expect(MARCH_TRACE_POST).toContain('if (normalGradientCfg.x > 0.5) {');
+    expect(MARCH_TRACE_POST).not.toContain('instCfg.x < 1.5');
     expect((MARCH_BODY.match(/let detailAmp = surfCfg2.y/g) ?? []).length).toBe(1);
     for (const src of [MAP_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, WOUND_SHADOW]) expect(src).not.toContain('ngBody(');
   });
@@ -2421,6 +2511,131 @@ describe('MARCH_BODY section split (hybrid deferred M1 task 2)', () => {
       // params — check the bodies only).
       expect(m.MARCH_BODY_TRACE).not.toContain(marker);
       expect(m.MARCH_BODY_SURFACE_PREP).not.toContain(marker);
+    }
+  });
+});
+
+describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
+  it('concatenates textually and splits at the walk', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.MARCH_BODY_TRACE).toBe(`${m.MARCH_TRACE_SETUP}${m.MARCH_TRACE_LOOP}${m.MARCH_TRACE_POST}`);
+    expect(m.MARCH_TRACE_LOOP.startsWith('  var t = clamp(max(max(max(max(startT')).toBe(true);
+    expect(m.MARCH_TRACE_POST.startsWith('  if (!hit) { discard; }')).toBe(true);
+    expect(m.MARCH_TRACE_SETUP).not.toContain('for (var i = 0; i < 512');
+    expect(m.MARCH_TRACE_LOOP).toContain('for (var i = 0; i < 512');
+    expect(m.MARCH_TRACE_POST).not.toContain('for (var i = 0; i < 512');
+  });
+
+  it('calcNormal takes its stencil size from gNormalEps, default 0.0015', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.CALC_NORMAL).toContain('var<private> gNormalEps: f32 = 0.0015;');
+    expect(m.CALC_NORMAL).toContain('let e = vec2<f32>(1.0, -1.0) * gNormalEps;');
+    expect(m.CALC_NORMAL).not.toContain('* 0.0015;');
+  });
+
+  it('REFINE_BODY is params + setup + REFINE_LOOP + post + prep + light, with four refine params appended', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.REFINE_BODY).toBe(`fn refineBody${m.REFINE_PARAMS}${m.MARCH_TRACE_SETUP}${m.REFINE_LOOP}${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`);
+    expect(m.REFINE_PARAMS.endsWith('  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>,\n  normalTex: texture_2d<f32>\n) -> vec4<f32> {\n')).toBe(true);
+    expect(m.REFINE_PARAMS.startsWith(m.MARCH_BODY_PARAMS.slice(0, m.MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, ''))).toBe(true);
+  });
+  it('REFINE_LOOP declares every name the walk declares that the later sections read', async () => {
+    const m = await import('./march.wgsl');
+    // Strip WGSL comments: the pin is about names read as CODE, not mentioned in prose.
+    const later = `${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const declared = [...m.MARCH_TRACE_LOOP.matchAll(/\b(?:let|var)\s+([A-Za-z_]\w*)/g)].map((x) => x[1]!);
+    const needed = [...new Set(declared)].filter((n) => new RegExp(`\\b${n}\\b`).test(later));
+    expect(needed.length).toBeGreaterThan(0);
+    for (const n of needed) expect(m.REFINE_LOOP, `REFINE_LOOP must declare ${n}`).toMatch(new RegExp(`\\b(?:let|var)\\s+${n}\\b`));
+  });
+  it('REFINE_LOOP rejects on the SDF distance before any Newton step, never walks, and sets gNormalEps', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.REFINE_LOOP).not.toContain('for (var i = 0; i < 512');
+    const reject = m.REFINE_LOOP.indexOf('refineCfg.y');
+    const newton = m.REFINE_LOOP.indexOf('t = t + dres.x');
+    expect(reject).toBeGreaterThan(-1); expect(newton).toBeGreaterThan(reject);
+    expect(m.REFINE_LOOP).toContain('gNormalEps = ');
+    expect(m.REFINE_LOOP).toContain('if (wsum < 0.5) { discard; }');
+  });
+  it('run 5b: the march writes the per-body key into the normal attachment alpha', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.MARCH_BODY_LIGHT).toContain('let bodyKey = dot(gInstCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;');
+    expect(m.MARCH_BODY_LIGHT).toContain('gMarchNormal = vec4<f32>(normalize(n), bodyKey);');
+    expect(m.MARCH_BODY_LIGHT).not.toContain('gMarchNormal = vec4<f32>(normalize(n), 1.0);');
+  });
+  it('run 5b: the ownership early-out precedes the first mapBody in REFINE_LOOP', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.REFINE_LOOP).toContain('let myKey = dot(gInstCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;');
+    const gate = m.REFINE_LOOP.indexOf('nk != myKey');
+    const map = m.REFINE_LOOP.indexOf('mapBody(');
+    expect(gate).toBeGreaterThan(-1);
+    expect(map).toBeGreaterThan(gate);
+  });
+});
+
+describe('crowd instance state', () => {
+  it('declares the record loader and the per-instance globals', () => {
+    // The vars ride FOLD_GROUP's tail (the same wgslFn parse-contract trick
+    // the tile globals use), so the loader source still STARTS with fn.
+    const globals = FOLD_GROUP + INSTANCE_STATE;
+    for (const g of ['gInstCounts', 'gInstCounts2', 'gInstWoundBound', 'gInstAnchor', 'gInstWind',
+      'gInstMelt', 'gInstFlash', 'gInstNoiseShift', 'gInstHeadCentre', 'gInstHeadQuat',
+      'gInstVolPose0', 'gInstVolPose1', 'gInstCentre', 'gInstHalf', 'gBand', 'gSlot',
+      'gTileEntryT']) {
+      expect(globals).toContain(`var<private> ${g}`);
+    }
+    expect(INSTANCE_STATE).toContain(`fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32)`);
+    expect(INSTANCE_STATE).toContain(`${REC_VEC4S}`);
+    expect(INSTANCE_STATE).toContain(`+ ${REC_ANCHOR_BAND}]`);
+  });
+  it('removes every per-instance parameter from the signature and adds inst/instCfg/instCentre/instHalf last', () => {
+    for (const p of ['counts:', 'counts2:', 'woundBound:', 'bodyCentre:', 'bodyHalf:', 'bodyAnchor:',
+      'windDrift:', 'meltCfg:', 'bodyFlash:', 'headCentre:', 'headQuat:', 'volumePose0:', 'volumePose1:']) {
+      expect(MARCH_BODY_PARAMS).not.toContain(p);
+    }
+    // Strip comments first: the crowd proxy-box comment sits between instCfg
+    // and instCentre, and the wgslFn parser sees it as ordinary text.
+    const sig = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
+    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>\s*\)/);
+  });
+  it('bands the damage folds', () => {
+    expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');
+    expect(APPLY_WOUNDS).toContain('band: i32');
+    expect(MAP_BODY).toContain('for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1)'.replace('${MAX_CROWD_INSTANCES}', '64'));
+  });
+});
+
+describe('crowd quad dispatch (stage a-2)', () => {
+  it('has a quad entry mode gated on instCfg.y == 2 that discards empty tiles before stepping', () => {
+    expect(MARCH_TRACE_SETUP).toContain('let quadMode = instCfg.y > 1.5;');
+    expect(MARCH_TRACE_SETUP).toContain('if (quadMode && gTileN < 0.5) { discard;');
+    expect(MARCH_TRACE_SETUP).toContain('gTileEntryT');
+    expect(MARCH_TRACE_SETUP).toContain('let bodyEntry = select(boxEntry, gTileEntryT, quadMode);');
+  });
+
+  it('keeps the box entry text for instCfg.y <= 1', () => {
+    expect(MARCH_TRACE_SETUP).toContain('let boxEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
+  });
+
+  it('accumulates the nearest sphere entry only in quad mode, with the type max blend reach', () => {
+    expect(MARCH_TRACE_SETUP).toContain('let reach = select(gInstCounts.w, instCfg.w, quadMode) * 4.0 +');
+    expect(MARCH_TRACE_SETUP).toContain('gTileEntryT = entryT;');
+    expect(MARCH_TRACE_SETUP).toContain('if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
+  });
+
+  it('keeps the material-side empty-tile gate on the SAME tile index formula as the preload', () => {
+    // The gate (QUAD_TILE_EMPTY_WGSL, called from createMarchMaterial before
+    // the march) must address the SAME tile the preload does, or it would
+    // discard a pixel whose real tile is non-empty. Pin the three lines that
+    // define the mapping in both texts.
+    for (const line of [
+      'let gx = max(1, i32(tileCfg.y));',
+      'let gy = max(1, i32(tileCfg.w));',
+      'let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(f32(gx), f32(gy)))), vec2<i32>(0, 0), vec2<i32>(gx - 1, gy - 1));',
+    ]) {
+      expect(MARCH_TRACE_SETUP).toContain(line);
+      expect(QUAD_TILE_EMPTY_WGSL).toContain(line);
     }
   });
 });

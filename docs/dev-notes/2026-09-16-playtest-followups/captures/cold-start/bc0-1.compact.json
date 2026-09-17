@@ -1,0 +1,1760 @@
+{
+  "label": "bc0-1",
+  "url": "http://localhost:5490/sdf-game.html?seed=7&bodycache=0",
+  "qs": "&bodycache=0",
+  "loads": 3,
+  "viewport": {
+    "width": 1512,
+    "height": 982,
+    "dpr": 2
+  },
+  "startedAt": "2026-09-16T18:18:24.691Z",
+  "samples": [
+    {
+      "t": 7934,
+      "backend": "webgpu",
+      "bootMarks": [
+        {
+          "n": "main-start",
+          "t": 430
+        },
+        {
+          "n": "renderer-ready",
+          "t": 436
+        },
+        {
+          "n": "world-start",
+          "t": 436
+        },
+        {
+          "n": "gallery-start",
+          "t": 509
+        },
+        {
+          "n": "dungeon-start",
+          "t": 512
+        },
+        {
+          "n": "drawchain-start",
+          "t": 513
+        },
+        {
+          "n": "deferred-start",
+          "t": 515
+        },
+        {
+          "n": "adaptive-start",
+          "t": 515
+        },
+        {
+          "n": "zombies-start",
+          "t": 524
+        },
+        {
+          "n": "room-probes-start",
+          "t": 526
+        },
+        {
+          "n": "player-start",
+          "t": 1375
+        },
+        {
+          "n": "gun-start",
+          "t": 1375
+        },
+        {
+          "n": "gun-ready",
+          "t": 1669
+        },
+        {
+          "n": "warm-invoked",
+          "t": 1669
+        },
+        {
+          "n": "dynamite-start",
+          "t": 1673
+        },
+        {
+          "n": "detonation-start",
+          "t": 1673
+        },
+        {
+          "n": "burst-start",
+          "t": 1673
+        },
+        {
+          "n": "bleed-start",
+          "t": 1674
+        },
+        {
+          "n": "goo-start",
+          "t": 1674
+        },
+        {
+          "n": "hud-start",
+          "t": 1678
+        },
+        {
+          "n": "boot-time",
+          "t": 1678
+        },
+        {
+          "n": "frameloop-start",
+          "t": 1678
+        },
+        {
+          "n": "api-start",
+          "t": 1678
+        },
+        {
+          "n": "demo-start",
+          "t": 1678
+        },
+        {
+          "n": "draw-ready",
+          "t": 1678
+        },
+        {
+          "n": "main-end",
+          "t": 1678
+        },
+        {
+          "n": "warm-steps-start",
+          "t": 1678
+        },
+        {
+          "n": "warm-flip-done",
+          "t": 1678
+        },
+        {
+          "n": "warm-crowd-bins-done",
+          "t": 1692
+        },
+        {
+          "n": "warm-goo-done",
+          "t": 1733
+        },
+        {
+          "n": "mesh-sync-start",
+          "t": 1734
+        },
+        {
+          "n": "mesh-sync-end",
+          "t": 2495
+        },
+        {
+          "n": "warm-draw-once-done",
+          "t": 3340
+        },
+        {
+          "n": "warm-precompile-done",
+          "t": 3993
+        },
+        {
+          "n": "warm-finally",
+          "t": 3993
+        }
+      ],
+      "warmDone": {
+        "ms": 2314,
+        "bootBeforeWarmMs": 9,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0,
+          "crowdBinsPerType": [
+            3.2,
+            2.1,
+            1.8,
+            1.5,
+            1.9,
+            1.5,
+            1.3
+          ],
+          "crowdBins": 13.299999952316284,
+          "goo": 41.300000071525574,
+          "drawOnce": 1607.3999999761581,
+          "precompile": 652.2999999523163
+        }
+      },
+      "warmGate": {
+        "phase": "ready",
+        "timedOut": false
+      },
+      "loader": {
+        "status": "READY — CLICK TO START",
+        "hidden": true,
+        "ready": true
+      },
+      "loopRunning": true,
+      "gunReady": true,
+      "frames": 117,
+      "skeletonMesh": {
+        "mode": "mesh",
+        "actors": 23,
+        "segments": 426,
+        "rigid": 96,
+        "limb": 330,
+        "hidden": 0,
+        "verts": 387482,
+        "tris": 776004,
+        "overflow": 0,
+        "clamped": 0,
+        "droppedQuads": 0,
+        "cacheEntries": 39,
+        "cacheTotals": {
+          "verts": 32948,
+          "tris": 65916
+        },
+        "cacheStats": {
+          "entries": 39,
+          "extractCount": 39,
+          "extractMs": 752,
+          "firstExtractAt": 1740.7,
+          "lastExtractAt": 2491,
+          "maxExtractMs": 546.5,
+          "maxExtractKey": "zombie:axial:1-2:33:d25a5fde@0.01"
+        }
+      },
+      "bodyBuild": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "buildMs": 0
+      },
+      "gpuDiagnostics": {
+        "lost": null,
+        "uncaptured": [],
+        "uncapturedCount": 0
+      },
+      "resources": {
+        "count": 239,
+        "byType": {
+          "script": 230,
+          "other": 2,
+          "fetch": 5,
+          "img": 2
+        },
+        "transferSize": 17034494,
+        "encodedBodySize": 17030948,
+        "totalDuration": 11156
+      },
+      "navigation": {
+        "responseEnd": 10,
+        "domContentLoaded": 431,
+        "loadEvent": 431
+      },
+      "longTasks": {
+        "n": 6,
+        "totalMs": 2793,
+        "longest": [
+          {
+            "s": 1733,
+            "d": 1608
+          },
+          {
+            "s": 520,
+            "d": 855
+          },
+          {
+            "s": 1386,
+            "d": 108
+          },
+          {
+            "s": 1610,
+            "d": 83
+          },
+          {
+            "s": 435,
+            "d": 82
+          },
+          {
+            "s": 4002,
+            "d": 57
+          }
+        ]
+      },
+      "pageErrors": [],
+      "load": 0,
+      "mode": "cold",
+      "backendWallMs": 1713,
+      "warmWallMs": 4129,
+      "readyWallMs": 4129,
+      "warm": {
+        "ms": 2314,
+        "bootBeforeWarmMs": 9,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0,
+          "crowdBinsPerType": [
+            3.2,
+            2.1,
+            1.8,
+            1.5,
+            1.9,
+            1.5,
+            1.3
+          ],
+          "crowdBins": 13.299999952316284,
+          "goo": 41.300000071525574,
+          "drawOnce": 1607.3999999761581,
+          "precompile": 652.2999999523163
+        }
+      },
+      "markDeltas": {
+        "main-start->renderer-ready": 6,
+        "renderer-ready->world-start": 0,
+        "world-start->gallery-start": 73,
+        "gallery-start->dungeon-start": 3,
+        "dungeon-start->drawchain-start": 1,
+        "drawchain-start->deferred-start": 2,
+        "deferred-start->adaptive-start": 0,
+        "adaptive-start->zombies-start": 9,
+        "zombies-start->room-probes-start": 2,
+        "room-probes-start->player-start": 849,
+        "player-start->gun-start": 0,
+        "gun-start->gun-ready": 294,
+        "gun-ready->warm-invoked": 0,
+        "warm-invoked->dynamite-start": 4,
+        "dynamite-start->detonation-start": 0,
+        "detonation-start->burst-start": 0,
+        "burst-start->bleed-start": 1,
+        "bleed-start->goo-start": 0,
+        "goo-start->hud-start": 4,
+        "hud-start->boot-time": 0,
+        "boot-time->frameloop-start": 0,
+        "frameloop-start->api-start": 0,
+        "api-start->demo-start": 0,
+        "demo-start->draw-ready": 0,
+        "draw-ready->main-end": 0,
+        "main-end->warm-steps-start": 0,
+        "warm-steps-start->warm-flip-done": 0,
+        "warm-flip-done->warm-crowd-bins-done": 14,
+        "warm-crowd-bins-done->warm-goo-done": 41,
+        "warm-goo-done->mesh-sync-start": 1,
+        "mesh-sync-start->mesh-sync-end": 761,
+        "mesh-sync-end->warm-draw-once-done": 845,
+        "warm-draw-once-done->warm-precompile-done": 653,
+        "warm-precompile-done->warm-finally": 0
+      },
+      "postReadyFrames": {
+        "n": 150,
+        "p50": 17,
+        "p95": 18,
+        "max": 33
+      },
+      "profile": {
+        "file": "bc0-1-load0.cpuprofile",
+        "totalMs": 4109,
+        "top": [
+          {
+            "fn": "(idle)  :0",
+            "ms": 1044,
+            "pct": 25.4
+          },
+          {
+            "fn": "sdBody  src/lab/sdf-zombie/validate.ts:185",
+            "ms": 428,
+            "pct": 10.4
+          },
+          {
+            "fn": "device.createShaderModule  src/lab/sdf-zombie/webgpu/pipeline-log.ts:162",
+            "ms": 380,
+            "pct": 9.3
+          },
+          {
+            "fn": "sdPrimitive  src/lab/sdf-zombie/validate.ts:14",
+            "ms": 185,
+            "pct": 4.5
+          },
+          {
+            "fn": "boneBreach  src/lab/sdf-zombie/validate.ts:237",
+            "ms": 166,
+            "pct": 4
+          },
+          {
+            "fn": "sdBentCone  src/lab/sdf-zombie/validate.ts:131",
+            "ms": 141,
+            "pct": 3.4
+          },
+          {
+            "fn": "distance  src/lab/sdf-zombie/webgpu/skeleton-spike/contract.ts:132",
+            "ms": 132,
+            "pct": 3.2
+          },
+          {
+            "fn": "(garbage collector)  :0",
+            "ms": 108,
+            "pct": 2.6
+          },
+          {
+            "fn": "at  src/lab/sdf-zombie/validate.ts:138",
+            "ms": 95,
+            "pct": 2.3
+          },
+          {
+            "fn": "(program)  :0",
+            "ms": 89,
+            "pct": 2.2
+          },
+          {
+            "fn": "sub  src/lab/sdf-zombie/vec.ts:2",
+            "ms": 81,
+            "pct": 2
+          },
+          {
+            "fn": "sdBezierTs  src/lab/sdf-zombie/validate.ts:100",
+            "ms": 80,
+            "pct": 2
+          },
+          {
+            "fn": "build  three/chunk-DEF7EUCY.js:1442",
+            "ms": 67,
+            "pct": 1.6
+          },
+          {
+            "fn": "extractSegmentMesh  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.ts:5",
+            "ms": 38,
+            "pct": 0.9
+          },
+          {
+            "fn": "g  src/lab/sdf-zombie/validate.ts:143",
+            "ms": 33,
+            "pct": 0.8
+          },
+          {
+            "fn": "build  three/chunk-DEF7EUCY.js:1744",
+            "ms": 29,
+            "pct": 0.7
+          },
+          {
+            "fn": "extractHullSoup  src/lab/sdf-zombie/webgpu/surface-nets-cpu.ts:70",
+            "ms": 28,
+            "pct": 0.7
+          },
+          {
+            "fn": "_getChildren  three/chunk-DEF7EUCY.js:1139",
+            "ms": 27,
+            "pct": 0.7
+          },
+          {
+            "fn": "getChildren  three/chunk-DEF7EUCY.js:1103",
+            "ms": 24,
+            "pct": 0.6
+          },
+          {
+            "fn": "getDataFromNode  three/chunk-DEF7EUCY.js:25488",
+            "ms": 22,
+            "pct": 0.5
+          },
+          {
+            "fn": "analyze  three/chunk-DEF7EUCY.js:1363",
+            "ms": 20,
+            "pct": 0.5
+          },
+          {
+            "fn": "createAttribute  three/chunk-DEF7EUCY.js:42270",
+            "ms": 16,
+            "pct": 0.4
+          },
+          {
+            "fn": "dot  src/lab/sdf-zombie/vec.ts:4",
+            "ms": 16,
+            "pct": 0.4
+          },
+          {
+            "fn": "generateStone  src/game/level/stone-textures.ts:67",
+            "ms": 15,
+            "pct": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "t": 7541,
+      "backend": "webgpu",
+      "bootMarks": [
+        {
+          "n": "main-start",
+          "t": 212
+        },
+        {
+          "n": "renderer-ready",
+          "t": 240
+        },
+        {
+          "n": "world-start",
+          "t": 240
+        },
+        {
+          "n": "gallery-start",
+          "t": 305
+        },
+        {
+          "n": "dungeon-start",
+          "t": 308
+        },
+        {
+          "n": "drawchain-start",
+          "t": 308
+        },
+        {
+          "n": "deferred-start",
+          "t": 309
+        },
+        {
+          "n": "adaptive-start",
+          "t": 309
+        },
+        {
+          "n": "zombies-start",
+          "t": 315
+        },
+        {
+          "n": "room-probes-start",
+          "t": 317
+        },
+        {
+          "n": "player-start",
+          "t": 1150
+        },
+        {
+          "n": "gun-start",
+          "t": 1150
+        },
+        {
+          "n": "gun-ready",
+          "t": 1401
+        },
+        {
+          "n": "warm-invoked",
+          "t": 1402
+        },
+        {
+          "n": "dynamite-start",
+          "t": 1405
+        },
+        {
+          "n": "detonation-start",
+          "t": 1405
+        },
+        {
+          "n": "burst-start",
+          "t": 1405
+        },
+        {
+          "n": "bleed-start",
+          "t": 1406
+        },
+        {
+          "n": "goo-start",
+          "t": 1406
+        },
+        {
+          "n": "hud-start",
+          "t": 1408
+        },
+        {
+          "n": "boot-time",
+          "t": 1408
+        },
+        {
+          "n": "frameloop-start",
+          "t": 1408
+        },
+        {
+          "n": "api-start",
+          "t": 1408
+        },
+        {
+          "n": "demo-start",
+          "t": 1408
+        },
+        {
+          "n": "draw-ready",
+          "t": 1408
+        },
+        {
+          "n": "main-end",
+          "t": 1408
+        },
+        {
+          "n": "warm-steps-start",
+          "t": 1408
+        },
+        {
+          "n": "warm-flip-done",
+          "t": 1409
+        },
+        {
+          "n": "warm-crowd-bins-done",
+          "t": 1420
+        },
+        {
+          "n": "warm-goo-done",
+          "t": 1464
+        },
+        {
+          "n": "mesh-sync-start",
+          "t": 1464
+        },
+        {
+          "n": "mesh-sync-end",
+          "t": 2190
+        },
+        {
+          "n": "warm-draw-once-done",
+          "t": 2984
+        },
+        {
+          "n": "warm-precompile-done",
+          "t": 3589
+        },
+        {
+          "n": "warm-finally",
+          "t": 3589
+        }
+      ],
+      "warmDone": {
+        "ms": 2181,
+        "bootBeforeWarmMs": 7,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0.20000004768371582,
+          "crowdBinsPerType": [
+            2.2,
+            1.4,
+            1.7,
+            1.4,
+            1.9,
+            1.4,
+            1.8
+          ],
+          "crowdBins": 11.799999952316284,
+          "goo": 43.299999952316284,
+          "drawOnce": 1520.3000000715256,
+          "precompile": 605.1000000238419
+        }
+      },
+      "warmGate": {
+        "phase": "ready",
+        "timedOut": false
+      },
+      "loader": {
+        "status": "READY — CLICK TO START",
+        "hidden": true,
+        "ready": true
+      },
+      "loopRunning": true,
+      "gunReady": true,
+      "frames": 118,
+      "skeletonMesh": {
+        "mode": "mesh",
+        "actors": 23,
+        "segments": 426,
+        "rigid": 96,
+        "limb": 330,
+        "hidden": 0,
+        "verts": 387482,
+        "tris": 776004,
+        "overflow": 0,
+        "clamped": 0,
+        "droppedQuads": 0,
+        "cacheEntries": 39,
+        "cacheTotals": {
+          "verts": 32948,
+          "tris": 65916
+        },
+        "cacheStats": {
+          "entries": 39,
+          "extractCount": 39,
+          "extractMs": 719.7,
+          "firstExtractAt": 1470.2,
+          "lastExtractAt": 2186.7,
+          "maxExtractMs": 511.6,
+          "maxExtractKey": "zombie:axial:1-2:33:d25a5fde@0.01"
+        }
+      },
+      "bodyBuild": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "buildMs": 0
+      },
+      "gpuDiagnostics": {
+        "lost": null,
+        "uncaptured": [],
+        "uncapturedCount": 0
+      },
+      "resources": {
+        "count": 238,
+        "byType": {
+          "script": 230,
+          "fetch": 5,
+          "img": 2,
+          "other": 1
+        },
+        "transferSize": 110427,
+        "encodedBodySize": 16902975,
+        "totalDuration": 4900
+      },
+      "navigation": {
+        "responseEnd": 5,
+        "domContentLoaded": 213,
+        "loadEvent": 213
+      },
+      "longTasks": {
+        "n": 5,
+        "totalMs": 2589,
+        "longest": [
+          {
+            "s": 1464,
+            "d": 1521
+          },
+          {
+            "s": 313,
+            "d": 837
+          },
+          {
+            "s": 1157,
+            "d": 85
+          },
+          {
+            "s": 1347,
+            "d": 74
+          },
+          {
+            "s": 238,
+            "d": 72
+          }
+        ]
+      },
+      "pageErrors": [],
+      "load": 1,
+      "mode": "warm-reload",
+      "backendWallMs": 1502,
+      "warmWallMs": 3833,
+      "readyWallMs": 3833,
+      "warm": {
+        "ms": 2181,
+        "bootBeforeWarmMs": 7,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0.20000004768371582,
+          "crowdBinsPerType": [
+            2.2,
+            1.4,
+            1.7,
+            1.4,
+            1.9,
+            1.4,
+            1.8
+          ],
+          "crowdBins": 11.799999952316284,
+          "goo": 43.299999952316284,
+          "drawOnce": 1520.3000000715256,
+          "precompile": 605.1000000238419
+        }
+      },
+      "markDeltas": {
+        "main-start->renderer-ready": 28,
+        "renderer-ready->world-start": 0,
+        "world-start->gallery-start": 65,
+        "gallery-start->dungeon-start": 3,
+        "dungeon-start->drawchain-start": 0,
+        "drawchain-start->deferred-start": 1,
+        "deferred-start->adaptive-start": 0,
+        "adaptive-start->zombies-start": 6,
+        "zombies-start->room-probes-start": 2,
+        "room-probes-start->player-start": 833,
+        "player-start->gun-start": 0,
+        "gun-start->gun-ready": 251,
+        "gun-ready->warm-invoked": 1,
+        "warm-invoked->dynamite-start": 3,
+        "dynamite-start->detonation-start": 0,
+        "detonation-start->burst-start": 0,
+        "burst-start->bleed-start": 1,
+        "bleed-start->goo-start": 0,
+        "goo-start->hud-start": 2,
+        "hud-start->boot-time": 0,
+        "boot-time->frameloop-start": 0,
+        "frameloop-start->api-start": 0,
+        "api-start->demo-start": 0,
+        "demo-start->draw-ready": 0,
+        "draw-ready->main-end": 0,
+        "main-end->warm-steps-start": 0,
+        "warm-steps-start->warm-flip-done": 1,
+        "warm-flip-done->warm-crowd-bins-done": 11,
+        "warm-crowd-bins-done->warm-goo-done": 44,
+        "warm-goo-done->mesh-sync-start": 0,
+        "mesh-sync-start->mesh-sync-end": 726,
+        "mesh-sync-end->warm-draw-once-done": 794,
+        "warm-draw-once-done->warm-precompile-done": 605,
+        "warm-precompile-done->warm-finally": 0
+      },
+      "postReadyFrames": {
+        "n": 150,
+        "p50": 17,
+        "p95": 17,
+        "max": 18
+      },
+      "profile": {
+        "file": "bc0-1-load1.cpuprofile",
+        "totalMs": 3742,
+        "top": [
+          {
+            "fn": "(idle)  :0",
+            "ms": 697,
+            "pct": 18.6
+          },
+          {
+            "fn": "sdBody  src/lab/sdf-zombie/validate.ts:185",
+            "ms": 434,
+            "pct": 11.6
+          },
+          {
+            "fn": "createShaderModule  :0",
+            "ms": 327,
+            "pct": 8.7
+          },
+          {
+            "fn": "(program)  :0",
+            "ms": 204,
+            "pct": 5.5
+          },
+          {
+            "fn": "sdPrimitive  src/lab/sdf-zombie/validate.ts:14",
+            "ms": 186,
+            "pct": 5
+          },
+          {
+            "fn": "boneBreach  src/lab/sdf-zombie/validate.ts:237",
+            "ms": 171,
+            "pct": 4.6
+          },
+          {
+            "fn": "distance  src/lab/sdf-zombie/webgpu/skeleton-spike/contract.ts:132",
+            "ms": 132,
+            "pct": 3.5
+          },
+          {
+            "fn": "sdBentCone  src/lab/sdf-zombie/validate.ts:131",
+            "ms": 130,
+            "pct": 3.5
+          },
+          {
+            "fn": "(garbage collector)  :0",
+            "ms": 91,
+            "pct": 2.4
+          },
+          {
+            "fn": "sdBezierTs  src/lab/sdf-zombie/validate.ts:100",
+            "ms": 86,
+            "pct": 2.3
+          },
+          {
+            "fn": "at  src/lab/sdf-zombie/validate.ts:138",
+            "ms": 83,
+            "pct": 2.2
+          },
+          {
+            "fn": "build  three/chunk-DEF7EUCY.js:1442",
+            "ms": 74,
+            "pct": 2
+          },
+          {
+            "fn": "sub  src/lab/sdf-zombie/vec.ts:2",
+            "ms": 71,
+            "pct": 1.9
+          },
+          {
+            "fn": "g  src/lab/sdf-zombie/validate.ts:143",
+            "ms": 41,
+            "pct": 1.1
+          },
+          {
+            "fn": "extractSegmentMesh  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.ts:5",
+            "ms": 37,
+            "pct": 1
+          },
+          {
+            "fn": "_getChildren  three/chunk-DEF7EUCY.js:1139",
+            "ms": 26,
+            "pct": 0.7
+          },
+          {
+            "fn": "extractHullSoup  src/lab/sdf-zombie/webgpu/surface-nets-cpu.ts:70",
+            "ms": 26,
+            "pct": 0.7
+          },
+          {
+            "fn": "build  three/chunk-DEF7EUCY.js:1744",
+            "ms": 20,
+            "pct": 0.5
+          },
+          {
+            "fn": "getDataFromNode  three/chunk-DEF7EUCY.js:25488",
+            "ms": 20,
+            "pct": 0.5
+          },
+          {
+            "fn": "analyze  three/chunk-DEF7EUCY.js:1363",
+            "ms": 18,
+            "pct": 0.5
+          },
+          {
+            "fn": "getChildren  three/chunk-DEF7EUCY.js:1103",
+            "ms": 17,
+            "pct": 0.4
+          },
+          {
+            "fn": "setData  three/chunk-DEF7EUCY.js:24069",
+            "ms": 15,
+            "pct": 0.4
+          },
+          {
+            "fn": "getNodeFromHash  three/chunk-DEF7EUCY.js:24868",
+            "ms": 14,
+            "pct": 0.4
+          },
+          {
+            "fn": "canStand  src/lab/sdf-zombie/webgpu/encounter-navigation.ts:11",
+            "ms": 11,
+            "pct": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "t": 7487,
+      "backend": "webgpu",
+      "bootMarks": [
+        {
+          "n": "main-start",
+          "t": 224
+        },
+        {
+          "n": "renderer-ready",
+          "t": 227
+        },
+        {
+          "n": "world-start",
+          "t": 227
+        },
+        {
+          "n": "gallery-start",
+          "t": 291
+        },
+        {
+          "n": "dungeon-start",
+          "t": 293
+        },
+        {
+          "n": "drawchain-start",
+          "t": 294
+        },
+        {
+          "n": "deferred-start",
+          "t": 294
+        },
+        {
+          "n": "adaptive-start",
+          "t": 294
+        },
+        {
+          "n": "zombies-start",
+          "t": 299
+        },
+        {
+          "n": "room-probes-start",
+          "t": 301
+        },
+        {
+          "n": "player-start",
+          "t": 1139
+        },
+        {
+          "n": "gun-start",
+          "t": 1139
+        },
+        {
+          "n": "gun-ready",
+          "t": 1401
+        },
+        {
+          "n": "warm-invoked",
+          "t": 1401
+        },
+        {
+          "n": "dynamite-start",
+          "t": 1404
+        },
+        {
+          "n": "detonation-start",
+          "t": 1404
+        },
+        {
+          "n": "burst-start",
+          "t": 1404
+        },
+        {
+          "n": "bleed-start",
+          "t": 1405
+        },
+        {
+          "n": "goo-start",
+          "t": 1405
+        },
+        {
+          "n": "hud-start",
+          "t": 1408
+        },
+        {
+          "n": "boot-time",
+          "t": 1408
+        },
+        {
+          "n": "frameloop-start",
+          "t": 1408
+        },
+        {
+          "n": "api-start",
+          "t": 1408
+        },
+        {
+          "n": "demo-start",
+          "t": 1408
+        },
+        {
+          "n": "draw-ready",
+          "t": 1408
+        },
+        {
+          "n": "main-end",
+          "t": 1408
+        },
+        {
+          "n": "warm-steps-start",
+          "t": 1408
+        },
+        {
+          "n": "warm-flip-done",
+          "t": 1408
+        },
+        {
+          "n": "warm-crowd-bins-done",
+          "t": 1419
+        },
+        {
+          "n": "warm-goo-done",
+          "t": 1459
+        },
+        {
+          "n": "mesh-sync-start",
+          "t": 1460
+        },
+        {
+          "n": "mesh-sync-end",
+          "t": 2168
+        },
+        {
+          "n": "warm-draw-once-done",
+          "t": 2949
+        },
+        {
+          "n": "warm-precompile-done",
+          "t": 3541
+        },
+        {
+          "n": "warm-finally",
+          "t": 3541
+        }
+      ],
+      "warmDone": {
+        "ms": 2133,
+        "bootBeforeWarmMs": 7,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0,
+          "crowdBinsPerType": [
+            2.2,
+            1.4,
+            1.4,
+            1.4,
+            1.3,
+            1.2,
+            1.3
+          ],
+          "crowdBins": 10.199999928474426,
+          "goo": 40.800000071525574,
+          "drawOnce": 1489.5,
+          "precompile": 592.1999999284744
+        }
+      },
+      "warmGate": {
+        "phase": "ready",
+        "timedOut": false
+      },
+      "loader": {
+        "status": "READY — CLICK TO START",
+        "hidden": true,
+        "ready": true
+      },
+      "loopRunning": true,
+      "gunReady": true,
+      "frames": 117,
+      "skeletonMesh": {
+        "mode": "mesh",
+        "actors": 23,
+        "segments": 426,
+        "rigid": 96,
+        "limb": 330,
+        "hidden": 0,
+        "verts": 387482,
+        "tris": 776004,
+        "overflow": 0,
+        "clamped": 0,
+        "droppedQuads": 0,
+        "cacheEntries": 39,
+        "cacheTotals": {
+          "verts": 32948,
+          "tris": 65916
+        },
+        "cacheStats": {
+          "entries": 39,
+          "extractCount": 39,
+          "extractMs": 701.5,
+          "firstExtractAt": 1464.8,
+          "lastExtractAt": 2164.1,
+          "maxExtractMs": 514.5,
+          "maxExtractKey": "zombie:axial:1-2:33:d25a5fde@0.01"
+        }
+      },
+      "bodyBuild": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "buildMs": 0
+      },
+      "gpuDiagnostics": {
+        "lost": null,
+        "uncaptured": [],
+        "uncapturedCount": 0
+      },
+      "resources": {
+        "count": 238,
+        "byType": {
+          "script": 230,
+          "fetch": 5,
+          "img": 2,
+          "other": 1
+        },
+        "transferSize": 110427,
+        "encodedBodySize": 16902975,
+        "totalDuration": 4840
+      },
+      "navigation": {
+        "responseEnd": 5,
+        "domContentLoaded": 225,
+        "loadEvent": 225
+      },
+      "longTasks": {
+        "n": 6,
+        "totalMs": 2615,
+        "longest": [
+          {
+            "s": 1459,
+            "d": 1490
+          },
+          {
+            "s": 297,
+            "d": 842
+          },
+          {
+            "s": 1146,
+            "d": 85
+          },
+          {
+            "s": 1342,
+            "d": 77
+          },
+          {
+            "s": 227,
+            "d": 69
+          },
+          {
+            "s": 3555,
+            "d": 52
+          }
+        ]
+      },
+      "pageErrors": [],
+      "load": 2,
+      "mode": "warm-reload",
+      "backendWallMs": 1499,
+      "warmWallMs": 3783,
+      "readyWallMs": 3783,
+      "warm": {
+        "ms": 2133,
+        "bootBeforeWarmMs": 7,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0,
+          "crowdBinsPerType": [
+            2.2,
+            1.4,
+            1.4,
+            1.4,
+            1.3,
+            1.2,
+            1.3
+          ],
+          "crowdBins": 10.199999928474426,
+          "goo": 40.800000071525574,
+          "drawOnce": 1489.5,
+          "precompile": 592.1999999284744
+        }
+      },
+      "markDeltas": {
+        "main-start->renderer-ready": 3,
+        "renderer-ready->world-start": 0,
+        "world-start->gallery-start": 64,
+        "gallery-start->dungeon-start": 2,
+        "dungeon-start->drawchain-start": 1,
+        "drawchain-start->deferred-start": 0,
+        "deferred-start->adaptive-start": 0,
+        "adaptive-start->zombies-start": 5,
+        "zombies-start->room-probes-start": 2,
+        "room-probes-start->player-start": 838,
+        "player-start->gun-start": 0,
+        "gun-start->gun-ready": 262,
+        "gun-ready->warm-invoked": 0,
+        "warm-invoked->dynamite-start": 3,
+        "dynamite-start->detonation-start": 0,
+        "detonation-start->burst-start": 0,
+        "burst-start->bleed-start": 1,
+        "bleed-start->goo-start": 0,
+        "goo-start->hud-start": 3,
+        "hud-start->boot-time": 0,
+        "boot-time->frameloop-start": 0,
+        "frameloop-start->api-start": 0,
+        "api-start->demo-start": 0,
+        "demo-start->draw-ready": 0,
+        "draw-ready->main-end": 0,
+        "main-end->warm-steps-start": 0,
+        "warm-steps-start->warm-flip-done": 0,
+        "warm-flip-done->warm-crowd-bins-done": 11,
+        "warm-crowd-bins-done->warm-goo-done": 40,
+        "warm-goo-done->mesh-sync-start": 1,
+        "mesh-sync-start->mesh-sync-end": 708,
+        "mesh-sync-end->warm-draw-once-done": 781,
+        "warm-draw-once-done->warm-precompile-done": 592,
+        "warm-precompile-done->warm-finally": 0
+      },
+      "postReadyFrames": {
+        "n": 150,
+        "p50": 17,
+        "p95": 17,
+        "max": 19
+      },
+      "profile": {
+        "file": "bc0-1-load2.cpuprofile",
+        "totalMs": 3683,
+        "top": [
+          {
+            "fn": "(idle)  :0",
+            "ms": 708,
+            "pct": 19.2
+          },
+          {
+            "fn": "sdBody  src/lab/sdf-zombie/validate.ts:185",
+            "ms": 445,
+            "pct": 12.1
+          },
+          {
+            "fn": "createShaderModule  :0",
+            "ms": 330,
+            "pct": 9
+          },
+          {
+            "fn": "(program)  :0",
+            "ms": 179,
+            "pct": 4.9
+          },
+          {
+            "fn": "boneBreach  src/lab/sdf-zombie/validate.ts:237",
+            "ms": 171,
+            "pct": 4.6
+          },
+          {
+            "fn": "sdPrimitive  src/lab/sdf-zombie/validate.ts:14",
+            "ms": 169,
+            "pct": 4.6
+          },
+          {
+            "fn": "sdBentCone  src/lab/sdf-zombie/validate.ts:131",
+            "ms": 135,
+            "pct": 3.7
+          },
+          {
+            "fn": "distance  src/lab/sdf-zombie/webgpu/skeleton-spike/contract.ts:132",
+            "ms": 133,
+            "pct": 3.6
+          },
+          {
+            "fn": "(garbage collector)  :0",
+            "ms": 91,
+            "pct": 2.5
+          },
+          {
+            "fn": "sdBezierTs  src/lab/sdf-zombie/validate.ts:100",
+            "ms": 82,
+            "pct": 2.2
+          },
+          {
+            "fn": "at  src/lab/sdf-zombie/validate.ts:138",
+            "ms": 78,
+            "pct": 2.1
+          },
+          {
+            "fn": "sub  src/lab/sdf-zombie/vec.ts:2",
+            "ms": 74,
+            "pct": 2
+          },
+          {
+            "fn": "build  three/chunk-DEF7EUCY.js:1442",
+            "ms": 73,
+            "pct": 2
+          },
+          {
+            "fn": "g  src/lab/sdf-zombie/validate.ts:143",
+            "ms": 39,
+            "pct": 1.1
+          },
+          {
+            "fn": "build  three/chunk-DEF7EUCY.js:1744",
+            "ms": 32,
+            "pct": 0.9
+          },
+          {
+            "fn": "extractSegmentMesh  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.ts:5",
+            "ms": 26,
+            "pct": 0.7
+          },
+          {
+            "fn": "_getChildren  three/chunk-DEF7EUCY.js:1139",
+            "ms": 24,
+            "pct": 0.6
+          },
+          {
+            "fn": "getDataFromNode  three/chunk-DEF7EUCY.js:25488",
+            "ms": 21,
+            "pct": 0.6
+          },
+          {
+            "fn": "extractHullSoup  src/lab/sdf-zombie/webgpu/surface-nets-cpu.ts:70",
+            "ms": 20,
+            "pct": 0.5
+          },
+          {
+            "fn": "getChildren  three/chunk-DEF7EUCY.js:1103",
+            "ms": 18,
+            "pct": 0.5
+          },
+          {
+            "fn": "dot  src/lab/sdf-zombie/vec.ts:4",
+            "ms": 17,
+            "pct": 0.5
+          },
+          {
+            "fn": "build  three/chunk-DEF7EUCY.js:4238",
+            "ms": 16,
+            "pct": 0.4
+          },
+          {
+            "fn": "analyze  three/chunk-DEF7EUCY.js:1363",
+            "ms": 16,
+            "pct": 0.4
+          },
+          {
+            "fn": "tileNoise  src/lab/sdf-zombie/webgpu/goblin-skin.ts:96",
+            "ms": 16,
+            "pct": 0.4
+          }
+        ]
+      }
+    }
+  ],
+  "finishedAt": "2026-09-16T18:18:47.900Z"
+}

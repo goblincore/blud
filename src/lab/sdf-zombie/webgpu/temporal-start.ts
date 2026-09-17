@@ -28,6 +28,30 @@ export interface TemporalCfg {
 export const TEMPORAL_START_DEFAULTS: TemporalCfg = { enabled: 1, margin: 0.25, slope: 0.02, maxStart: 50 };
 
 /**
+ * Floor for the ADAPTIVE margin, metres — parked at the shipped constant
+ * after the owner playtest (2026-09-10): 0.15 was pixel-clean on the frozen
+ * closeup bisect but showed glitches in real play (motion, grazing
+ * silhouettes, the field weave — none of which that static scene covers),
+ * while the shipped 0.25 read clean. Floor == cap means the margin rides at
+ * 0.25 and the measurement machinery is parked, live for a future attempt
+ * with better scene coverage. Floor == cap also means the function below
+ * returns the constant for every input; the tests pin exactly that.
+ */
+export const TEMPORAL_MARGIN_FLOOR = 0.25;
+
+/**
+ * The adaptive start margin for a measured worst-body translation of
+ * `maxDisp` metres over one history interval (fresh frame to fresh frame,
+ * measured by sdf-layer). 1.5x slack for inter-interval acceleration,
+ * floored at TEMPORAL_MARGIN_FLOOR, capped at the shipped constant. With
+ * floor == cap the margin is the shipped figure for every input (parked —
+ * see TEMPORAL_MARGIN_FLOOR). Pure — the layer calls this per fresh frame.
+ */
+export function temporalMarginForMotion(maxDisp: number, cap = TEMPORAL_START_DEFAULTS.margin): number {
+  return Math.min(cap, Math.max(TEMPORAL_MARGIN_FLOOR, 1.5 * maxDisp));
+}
+
+/**
  * The CPU twin. `d` is last frame's NDC depth at this pixel (>= 1 = nothing),
  * `ndc` the pixel's clip-space xy in [-1, 1] (convention-free: the caller
  * maps uv to ndc), `lastInvVp` the inverse view-projection of the frame that

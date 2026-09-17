@@ -1,0 +1,66 @@
+opening http://localhost:5403/sdf-game.html?room=arena&vhs=off&seed=7
+wrote /tmp/gib-lifecycle.json
+{
+  "cases": {
+    "movingCast": true,
+    "secondBlastDuringTear": {
+      "pendingMid": 1,
+      "tearingMid": 1,
+      "pendingAfterSecond": 1,
+      "scheduledBodies": 1,
+      "oneRelease": true
+    },
+    "repeated": {
+      "live": 64,
+      "cap": 64,
+      "baked": 0,
+      "views": 64,
+      "bounded": true,
+      "uniqueIds": true,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0
+    },
+    "resetMidTear": {
+      "midTearing": 1,
+      "midPending": 1,
+      "actorsAfterReset": 23,
+      "postTearing": 0,
+      "postPending": 0,
+      "liveAfter": 64,
+      "drained": true
+    },
+    "tightMultiBody": {
+      "tierLog": [
+        "parts:16",
+        "parts:16"
+      ],
+      "live": 64,
+      "cap": 12,
+      "bounded": false,
+      "dropped": 0,
+      "views": 64
+    }
+  },
+  "perf": {
+    "coldBlast": {
+      "lastBlastMs": 7.600000023841858,
+      "frames": {
+        "n": 7,
+        "p50": 17.300000071525574,
+        "p95": 223.30000007152557,
+        "max": 223.30000007152557
+      }
+    },
+    "repeatedBlast": {
+      "lastBlastMs": 0.3999999761581421,
+      "frames": {
+        "n": 96,
+        "p50": 13.799999952316284,
+        "p95": 181.59999990463257,
+        "max": 218.29999995231628
+      }
+    }
+  },
+  "pageErrors": []
+}
+PASS: lifecycle probe completed

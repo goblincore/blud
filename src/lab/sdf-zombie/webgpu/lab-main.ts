@@ -3942,6 +3942,61 @@ async function main() {
     //                          jumped-to bone was being photographed at the
     //                          instant it was released, mid-air)
     //   __sdfLab.meltState()
+    /**
+     * WOUND THE BODY DIRECTLY — `__sdfLab.wound(n, seed, type)`.
+     *
+     * WHY THIS EXISTS, and why it is not a synthetic click. The gib-sheet
+     * generator wants to cut sprite pieces out of a WOUNDED body so the gore is
+     * baked into the pixels, and the first attempt drove the real click-shoot
+     * path with dispatched CDP mouse events: the aim was verified correct from the
+     * body's own mask (bbox centre 690,424) and the loop was confirmed running, and
+     * six shots moved the body's pixel count by 0.4% — nothing. `lab-main`'s own
+     * comment says why: the click-shoot pipeline "stays god-only", and the capture
+     * rig freezes the rig into a rest pose, so the input path was never live.
+     *
+     * A seam is better than a click for this job regardless: it is deterministic
+     * (seeded), aim-free, and it can be asked for a NUMBER of wounds, which is what
+     * turns a sheet into a range of gore levels instead of one wounded body.
+     *
+     * Each wound is stamped exactly the way the shot path stamps one: a ray from
+     * outside the body, `worldHitToWound` in the body's CURRENT yaw (so the crater
+     * rides the authored body through any heading rotation), then `woundRing.stamp`.
+     */
+    wound(n = 4, seed = 1, type: WoundType = 'pellet') {
+      const prims = lastPosed.prims;
+      if (!prims.length) return 0;
+      // The body's own centre, from its live clusters — not a guessed point.
+      let cx = 0, cy = 0, cz = 0, cn = 0;
+      for (const c of lastPosed.clusters) {
+        if (!c.alive) continue;
+        cx += c.center[0]; cy += c.center[1]; cz += c.center[2]; cn++;
+      }
+      if (!cn) return 0;
+      cx /= cn; cy /= cn; cz /= cn;
+      const rng = mulberry32(seed >>> 0);
+      const radius = (WOUND_PROFILES[type] ?? WOUND_PROFILES.pellet).radius;
+      let stamped = 0;
+      for (let k = 0; k < n; k++) {
+        // Aim from a deterministic direction, biased HORIZONTAL (a wound on the
+        // top of the head is invisible from every yaw the sheet captures).
+        const a = rng() * Math.PI * 2;
+        const pitch = (rng() - 0.5) * 0.9;
+        const dir: Vec3 = [Math.sin(a) * Math.cos(pitch), Math.sin(pitch), Math.cos(a) * Math.cos(pitch)];
+        const origin: Vec3 = [cx - dir[0] * 3, cy - dir[1] * 3, cz - dir[2] * 3];
+        const hit = raycastBody(origin, dir, lastPosed);
+        if (!hit) continue;
+        const wound = worldHitToWound(
+          prims, hit, radius, type, heroMotion.lastBodyYaw, p => sdBody(p, lastPosed),
+        );
+        woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
+        stamped++;
+      }
+      refreshWounds();
+      return stamped;
+    },
+    /** How many wounds the body is carrying — the readback a capture rig needs to
+     *  prove a wound actually landed rather than inferring it from pixels. */
+    woundCount: () => woundRing.all().length,
     melt: () => startMelt(),
     meltOff: () => stopMelt(),
     meltDirect: (t: number) => meltDirect(t),
@@ -4104,9 +4159,16 @@ async function main() {
         v.set(g.center[0], g.center[1], g.center[2]).applyMatrix4(camera.matrixWorldInverse);
         const rBlend = g.radius + blendReach;
         const nearDist = -v.z - rBlend;
+        // Far end along the view axis (perf 7e): fully behind the eye plane ->
+        // ZERO tiles. Mirrors tile-cull.ts and the kTileRange kernel; without
+        // it this JS reimplementation would disagree with both and report a
+        // phantom range mismatch on every behind-camera group.
+        const farDist = -v.z + rBlend;
         const clipW = pe[3]! * v.x + pe[7]! * v.y + pe[11]! * v.z + pe[15]!;
         let tx0 = 0, tx1 = -1, ty0 = 0, ty1 = -1;
-        if (nearDist <= 0 || clipW <= 0) {
+        if (farDist <= 0) {
+          // Fully behind the eye plane: cover no tile (the empty default).
+        } else if (nearDist <= 0 || clipW <= 0) {
           tx1 = cpu.tilesX - 1; ty1 = cpu.tilesY - 1;
         } else {
           const clipX = pe[0]! * v.x + pe[4]! * v.y + pe[8]! * v.z;
@@ -4122,8 +4184,7 @@ async function main() {
             ty1 = Math.min(cpu.tilesY - 1, Math.floor((cy + rpix - 1e-6) / 16));
           }
         }
-        jsRanges.push([tx0, tx1, ty0, ty1, nearDist, clipW]);
-      }
+        jsRanges.push([tx0, tx1, ty0, ty1, nearDist, clipW]);      }
       const rangeSamples: unknown[] = [];
       for (let gi = 0; gi < groups.length; gi++) {
         const gr = [gpu.ranges[gi * 4]!, gpu.ranges[gi * 4 + 1]!, gpu.ranges[gi * 4 + 2]!, gpu.ranges[gi * 4 + 3]!];

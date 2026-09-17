@@ -234,15 +234,31 @@ export interface PassTiming {
   /** Resolve both pools and drain every labelled sample recorded since the
    *  last collect. Samples three recorded before install() are dropped. */
   collect(): Promise<PassSample[]>;
+  /** Pass COUNT per label since the last call, AGGREGATED over frames
+   *  (draw census): a label whose pass count multiplies during fire is
+   *  re-rendering the scene — shadow faces, per-light re-renders — even
+   *  when its exclusive ms looks small. BENCH-ONLY per-frame grouping:
+   *  frameNo advances via beginPassFrame, which only the bench calls; in
+   *  live play this returns session totals per label. */
+  countsSinceLast(): { label: string; passes: number }[];
 }
 
 export function installPassTiming(renderer: THREE.WebGPURenderer): PassTiming {
   const backend = (renderer as unknown as { backend?: BackendLike }).backend;
   const orig = backend?.getTimestampUID;
   if (!backend || typeof orig !== 'function' || backend.trackTimestamp !== true) {
-    return { installed: false, async collect() { return []; } };
+    return { installed: false, async collect() { return []; }, countsSinceLast() { return []; } };
   }
-  backend.getTimestampUID = (ctx: unknown) => makePassUid(currentLabel, frameNo, orig.call(backend, ctx));
+  backend.getTimestampUID = (ctx: unknown) => {
+    const uid = makePassUid(currentLabel, frameNo, orig.call(backend, ctx));
+    const key = `${frameNo}|${currentLabel}`;
+    passCounts.set(key, (passCounts.get(key) ?? 0) + 1);
+    return uid;
+  };
+
+  // Per-frame per-label PASS COUNTS (draw census). Grows one entry per
+  // (frame, label) pair between calls; the census drains it each sample.
+  const passCounts = new Map<string, number>();
 
   // Raw boundaries. three's resolve clears the uid -> query-index map before
   // the GPU work even starts, so the map is snapshotted from a wrap around
@@ -291,6 +307,16 @@ export function installPassTiming(renderer: THREE.WebGPURenderer): PassTiming {
 
   return {
     installed: true,
+    countsSinceLast() {
+      const byLabel = new Map<string, number>();
+      for (const [key, passes] of passCounts) {
+        const bar = key.indexOf('|');
+        const label = key.slice(bar + 1);
+        byLabel.set(label, (byLabel.get(label) ?? 0) + passes);
+      }
+      passCounts.clear();
+      return [...byLabel].map(([label, passes]) => ({ label, passes }));
+    },
     async collect() {
       const out: PassSample[] = [];
       for (const kind of ['render', 'compute'] as const) {

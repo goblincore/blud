@@ -296,6 +296,16 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(sink.target).toBe('unset');
   });
 
+  it('exposes the real capture target with sampleable depth (prewarm seam)', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    // The shutter layer binds this texture + depth at prewarm; it must be the
+    // same target the chain draws into, not a copy.
+    expect(post.captureTarget).toBeInstanceOf(THREE.RenderTarget);
+    expect(post.captureTarget.depthTexture).not.toBeNull();
+    expect(post.captureTarget.width).toBeGreaterThan(0);
+  });
+
   it('an active effect redirects the sinks and runs the passes', () => {
     const { renderer, calls } = stubRenderer();
     const post = createPostAa(renderer);
@@ -309,6 +319,50 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(chainCalls).toBe(1);
     expect(sink.target).not.toBeNull();
     expect(calls.render).toBeGreaterThan(0);
+  });
+
+  it('a capture stage forces the captured path even with every effect off', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+
+    const stageOut = new THREE.RenderTarget(8, 8);
+    let stageCalls = 0;
+    let seen: THREE.RenderTarget | null = null;
+    post.setCaptureStage((capture) => { stageCalls++; seen = capture; return stageOut; });
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    // The stage is the only active stage, yet the chain was still captured:
+    // the sinks were redirected and the stage received the capture target.
+    expect(chainCalls).toBe(1);
+    expect(stageCalls).toBe(1);
+    expect(seen).not.toBeNull();
+    expect(sink.target).toBe(seen);
+    expect(calls.render).toBeGreaterThan(0);
+  });
+
+  it('clearing the capture stage restores the all-off parity path', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setCaptureStage(() => new THREE.RenderTarget(8, 8));
+    post.render(() => {});
+    // Now off.
+    post.setCaptureStage(null);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+    expect(chainCalls).toBe(1);
+    expect(calls.render).toBe(0);
   });
 
   it('setSmear clamps to the slider range', () => {
@@ -578,5 +632,182 @@ describe('post-aa fisheye in the blit', () => {
     // Centred on the pixel: the four taps sum to zero on both axes.
     expect(offsets.reduce((sum, [x]) => sum + x, 0)).toBeCloseTo(0);
     expect(offsets.reduce((sum, [, y]) => sum + y, 0)).toBeCloseTo(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BLAST REFRACTION — the bounded experiment (2026-09-16 playtest task 4).
+// These pin the BOUNDS, not the look: the ring is at most four blasts, ages on
+// sim time, drops off-screen/behind-camera feeds, and is inert while off.
+// ---------------------------------------------------------------------------
+describe('blast refraction (bounded experiment)', () => {
+  /** A camera at the origin looking down -Z; f = 1 at 90 deg vertical FOV. */
+  const camera = () => {
+    const cam = new THREE.PerspectiveCamera(90, 1, 0.1, 100);
+    cam.updateMatrixWorld(true);
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    return cam;
+  };
+
+  it('is off and empty by default, and inert in the parity path', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    expect(post.blastDistort).toBe(false);
+    expect(post.blastDistortCount).toBe(0);
+    post.setFxaa(false);
+    post.setSmear(0);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
+    // A push while off records it, but the pass stays inactive.
+    expect(post.blastDistortCount).toBe(1);
+    post.render(() => {});
+    expect(calls.render).toBe(0);
+  });
+
+  it('runs the blit once enabled with a live blast', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistortCamera(camera());
+    post.setBlastDistort(true);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    post.render(() => {});
+    expect(sink.target).not.toBeNull();
+    expect(calls.render).toBeGreaterThan(0);
+  });
+
+  // TASK-2 REVIEW SEAM. `blastDistortSlots` is the read-back a capture rig uses
+  // to prove the band is centred on the blast and follows a moving camera. It
+  // reports exactly what the last blit PUSHED, so a wrong `u`/`v` (or a silent
+  // drop) is visible from the page instead of being inferred from a pixel diff.
+  it('reports the resolved slot it pushed, centred on the blast', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistortCamera(camera());
+    post.setBlastDistort(true);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
+    // Past the attack ramp: at age 0 the decay is deliberately 0.
+    post.stepBlastDistort(0.1);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    expect(post.blastDistortSlots).toEqual([]);
+    post.render(() => {});
+    const slots = post.blastDistortSlots;
+    expect(slots).toHaveLength(1);
+    expect(slots[0]!.reason).toBe('ok');
+    // The camera looks straight down -Z, so an origin-centred blast is centred.
+    expect(slots[0]!.u).toBeCloseTo(0.5, 5);
+    expect(slots[0]!.v).toBeCloseTo(0.5, 5);
+    expect(slots[0]!.radiusUv).toBeGreaterThan(0);
+    expect(slots[0]!.strength).toBeGreaterThan(0);
+  });
+
+  it('reports WHY a live blast was dropped (behind the camera)', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistortCamera(camera());
+    post.setBlastDistort(true);
+    // Behind the origin camera (which faces -Z).
+    post.pushBlastDistort([0, 0, 4], 1, 0.03);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    post.render(() => {});
+    expect(post.blastDistortSlots).toHaveLength(1);
+    expect(post.blastDistortSlots[0]!.reason).toBe('behind');
+    expect(post.blastDistortSlots[0]!.u).toBeNull();
+  });
+
+  it('resolves every live blast and reports the ring bound at four', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistortCamera(camera());
+    post.setBlastDistort(true);
+    for (let i = 0; i < 5; i++) post.pushBlastDistort([0, 0, -4 - i], 1, 0.03);
+    // The push is the bound: the ring never holds more than four, so the
+    // shader's four unrolled slots can never index out of range.
+    expect(post.blastDistortCount).toBe(4);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    post.render(() => {});
+    const reasons = post.blastDistortSlots.map(s => s.reason);
+    expect(reasons).toHaveLength(4);
+    expect(reasons.every(r => r === 'ok')).toBe(true);
+  });
+
+
+  it('keeps at most FOUR blasts and drops the oldest', () => {    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    for (let i = 0; i < 7; i++) post.pushBlastDistort([0, 0, -4 - i * 0.5], 1, 0.03);
+    expect(post.blastDistortCount).toBe(4);
+  });
+
+  it('drops non-finite and degenerate feeds at the push', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.pushBlastDistort([NaN, 0, -4], 1, 0.03);
+    post.pushBlastDistort([0, 0, -4], NaN, 0.03);
+    post.pushBlastDistort([0, 0, -4], 0, 0.03);
+    post.pushBlastDistort([0, 0, -4], 1, 0);
+    post.pushBlastDistort([0, 0, -4], 1, NaN);
+    expect(post.blastDistortCount).toBe(0);
+    // A behind-camera blast is STORED (there is no camera at the feed), and the
+    // per-frame projection drops it: `projectBlastRefraction` is the gate, and
+    // its own behind-camera contract is pinned in blast-refraction.test.ts.
+    post.pushBlastDistort([0, 0, 4], 1, 0.03);
+    expect(post.blastDistortCount).toBe(1);
+  });
+
+  it('ages on sim time and expires, so a frozen capture stays deterministic', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
+    expect(post.blastDistortCount).toBe(1);
+    post.stepBlastDistort(1 / 60);
+    expect(post.blastDistortCount).toBe(1);
+    // Long enough to exceed the ~0.55 s life regardless of its exact value.
+    post.stepBlastDistort(0.7);
+    expect(post.blastDistortCount).toBe(0);
+    // Wall-clock is never consulted: a second identical run gives the same
+    // state for the same dt sequence.
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
+    post.stepBlastDistort(0.1);
+    expect(post.blastDistortCount).toBe(1);
+  });
+
+  it('clamps strength into a bounded multiplier', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setBlastDistortStrength(99);
+    expect(post.blastDistortStrength).toBe(4);
+    post.setBlastDistortStrength(-3);
+    expect(post.blastDistortStrength).toBe(0);
+    post.setBlastDistortStrength(NaN);
+    expect(post.blastDistortStrength).toBe(1);
+  });
+
+  it('the WGSL loop is unrolled, bounded to four, and clamped', () => {
+    expect(POST_AA_BLIT_WGSL).toContain('fn postAaBlastWarp(');
+    expect(POST_AA_BLIT_WGSL.indexOf('fn postAaBlastWarp('))
+      .toBeGreaterThan(POST_AA_BLIT_WGSL.indexOf('fn postAaBlit('));
+    // One loop of four iterations and a per-blast slot guard.
+    expect(POST_AA_BLIT_WGSL).toMatch(/for \(var i: i32 = 0; i < 4; i = i \+ 1\)/);
+    expect(POST_AA_BLIT_WGSL).toContain('f32(i) + 0.5 > dist.x');
+    // The summed offset is clamped to the uniform max.
+    expect(POST_AA_BLIT_WGSL).toMatch(/if \(l > dist\.y\) \{ off = off \* \(dist\.y \/ l\); \}/);
+    // Inert gate.
+    expect(POST_AA_BLIT_WGSL).toContain('if (dist.w < 0.5 || dist.x < 0.5) { return uvIn; }');
+    // The BROAD shell, not the old sin^4 hairline.
+    expect(POST_AA_BLIT_WGSL).toContain('let ring = s * s;');
+    expect(POST_AA_BLIT_WGSL).not.toContain('ring = ring * ring;');
   });
 });

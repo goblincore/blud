@@ -5,11 +5,40 @@ import { PROBE_DYNAMIC_WGSL } from './probe-dynamic.wgsl';
 import { SEG_VOLUME_WGSL } from './skeleton-spike/volume.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
+import { HEAD_EXTERIOR_GORE_KEEP } from '../gib-look-tuning';
+import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
+  REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
+  REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, MAX_CROWD_INSTANCES } from './crowd-records';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
  *  n * 0.06 — still see every group the ray's own march did. */
 export const RAY_CULL_SLACK = '0.07';
+/** Extra metres added to the QUAD-dispatch entry sphere (stage a-2). The sphere
+ *  already carries blendReach x distortion; this covers the smin support's
+ *  outward bulge so a ray that just grazes a body still enters before its
+ *  surface. It widens `t` only — a conservative lower bound, never a miss. */
+export const QUAD_ENTRY_SLACK = '0.02';
+/**
+ * QUAD EMPTY-TILE GATE (crowd firefight task 2, 2026-09-14). True when this
+ * pixel's tile header carries no entries, i.e. no instance can have a surface
+ * on any ray through the tile. The quad material calls this BEFORE the
+ * occ/shell/prev fetches and the march, so an empty-tile fragment discards
+ * without paying the per-pixel input setup. The index formula is the SAME one
+ * MARCH_TRACE_SETUP uses for its tile preload (gx/gy, floored screenUV,
+ * clamp-to-grid, row-major tid.y * gx + tid.x) — march.wgsl.test.ts pins the
+ * two texts together so they cannot drift.
+ */
+export const QUAD_TILE_EMPTY_WGSL = /* wgsl */ `fn quadTileEmpty(
+  tileHdr: ptr<storage, array<vec2<u32>>, read>,
+  tileCfg: vec4<f32>,
+  screenUV: vec2<f32>
+) -> bool {
+  let gx = max(1, i32(tileCfg.y));
+  let gy = max(1, i32(tileCfg.w));
+  let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(f32(gx), f32(gy)))), vec2<i32>(0, 0), vec2<i32>(gx - 1, gy - 1));
+  return (*tileHdr)[tid.y * gx + tid.x].y < 1u;
+}`;
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on
@@ -738,6 +767,53 @@ export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: 
   return max(max(d, dPlane), rim - length(vec2(d, dPlane))) / lip;
 }`;
 
+/**
+ * Run 4 DETAIL PASS (plan 2026-09-12-neural-upscale-run4-relief §2): the march's skin-detail noise —
+ * vec3(fbm(a*22), fbm(a*22+5), fbm(a*22+11)), the world-space normal perturbation applied under
+ * detailAmp — evaluated at OUTPUT resolution from the marchAnchor attachment. Each output pixel takes
+ * its march texel's rest-space anchor and extrapolates sub-texel with SCREEN-SPACE anchor gradients
+ * from same-body neighbours (a linear map holds across one texel; a jump larger than jumpMax metres
+ * is another body or a fold and contributes no gradient). w = the texel's detail gate.
+ */
+export const DETAIL_FIELD = /* wgsl */ `fn detailField(
+  anchorTex: texture_2d<f32>,
+  marchTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  jumpMax: f32
+) -> vec4<f32> {
+  let dims = vec2<i32>(textureDimensions(anchorTex, 0));
+  let maxI = dims - vec2<i32>(1, 1);
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let q = st * vec2<f32>(dims);
+  let c = clamp(vec2<i32>(floor(q)), vec2<i32>(0, 0), maxI);
+  let f = q - (vec2<f32>(c) + vec2<f32>(0.5, 0.5));
+  // Gate on the march HIT (depth alpha < 1) as well as the detail gate: the anchor attachment's
+  // cleared background carries the clear colour's alpha, which is not a gate.
+  let a0 = textureLoad(anchorTex, c, 0);
+  if (a0.w <= 0.0 || textureLoad(marchTex, c, 0).w >= 1.0) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+  let axp = textureLoad(anchorTex, clamp(c + vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0);
+  let axm = textureLoad(anchorTex, clamp(c - vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0);
+  let ayp = textureLoad(anchorTex, clamp(c + vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0);
+  let aym = textureLoad(anchorTex, clamp(c - vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0);
+  var dx = vec3<f32>(0.0);
+  var dy = vec3<f32>(0.0);
+  let dxp = axp.xyz - a0.xyz;
+  let dxm = a0.xyz - axm.xyz;
+  let okxp = axp.w > 0.0 && textureLoad(marchTex, clamp(c + vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dxp) < jumpMax;
+  let okxm = axm.w > 0.0 && textureLoad(marchTex, clamp(c - vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dxm) < jumpMax;
+  if (okxp && okxm) { dx = 0.5 * (dxp + dxm); } else if (okxp) { dx = dxp; } else if (okxm) { dx = dxm; }
+  let dyp = ayp.xyz - a0.xyz;
+  let dym = a0.xyz - aym.xyz;
+  let okyp = ayp.w > 0.0 && textureLoad(marchTex, clamp(c + vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dyp) < jumpMax;
+  let okym = aym.w > 0.0 && textureLoad(marchTex, clamp(c - vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dym) < jumpMax;
+  if (okyp && okym) { dy = 0.5 * (dyp + dym); } else if (okyp) { dy = dyp; } else if (okym) { dy = dym; }
+  let a = a0.xyz + dx * f.x + dy * f.y;
+  let d = vec3<f32>(fbm(a * 22.0), fbm(a * 22.0 + 5.0), fbm(a * 22.0 + 11.0));
+  return vec4<f32>(d, a0.w);
+}`;
+
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {
   var p = fract(pIn * 0.1031);
   p = p + dot(p, p.yzx + 33.33);
@@ -823,19 +899,19 @@ export const Q_FROM_TO = /* wgsl */ `fn qFromToV(u: vec3<f32>, v: vec3<f32>) -> 
 // caller's fallback, which is the old noiseLocal anchor. Degenerate capsules
 // (a == b point prims, e.g. the nose ball) skip the swing and map by
 // translation plus the orient frame alone.
-export const REST_POINT = /* wgsl */ `fn restPoint(p: vec3<f32>, data: texture_2d<f32>, best: i32, fallback: vec3<f32>) -> vec3<f32> {
+export const REST_POINT = /* wgsl */ `fn restPoint(p: vec3<f32>, data: texture_2d<f32>, best: i32, fallback: vec3<f32>, band: i32) -> vec3<f32> {
   if (best < 0) { return fallback; }
-  let ra = textureLoad(data, vec2<i32>(best, ${ROW_REST_A}), 0);
+  let ra = textureLoad(data, vec2<i32>(best, ${ROW_REST_A} + band), 0);
   if (ra.w <= 0.0) { return fallback; }
-  let rb = textureLoad(data, vec2<i32>(best, ${ROW_REST_B}), 0);
-  let pa = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_A}), 0).xyz;
-  let pb = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_B}), 0).xyz;
+  let rb = textureLoad(data, vec2<i32>(best, ${ROW_REST_B} + band), 0);
+  let pa = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_A} + band), 0).xyz;
+  let pb = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_B} + band), 0).xyz;
   let midP = (pa + pb) * 0.5;
   let midR = (ra.xyz + rb.xyz) * 0.5;
   // The exact local frame first: the conjugate of the packed orient. A zero
   // or identity quat leaves q identity (qRot by it is the identity anyway).
   var q = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-  let O = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_QUAT}), 0);
+  let O = textureLoad(data, vec2<i32>(best, ${ROW_PRIM_QUAT} + band), 0);
   if (abs(1.0 - O.w) > 1e-6) { q = vec4<f32>(-O.xyz, O.w); }
   let axisP = pb - pa;
   let axisR = rb.xyz - ra.xyz;
@@ -852,14 +928,14 @@ export const REST_POINT = /* wgsl */ `fn restPoint(p: vec3<f32>, data: texture_2
 // complete additive fold and in fixed cluster order — the structure the GLSL
 // version uses for wounds. Carving per-cluster would restructure a
 // non-associative fold and change the surface everywhere.
-export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>) -> f32 {
+export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32) -> f32 {
   var d = dIn;
   if (counts.z < 0.5) { return d; }
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
   for (var c = 0; c < 8; c = c + 1) {
     if (c >= clusterCount) { break; }
-    let range = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
+    let range = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
     if (range.z < 0.5) { continue; }
     let start = i32(range.x);
     let count = i32(range.y);
@@ -874,7 +950,7 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       if (i >= count) { break; }
       let idx = start + i;
       if (idx >= primCount) { break; }
-      let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE}), 0);
+      let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE} + band), 0);
       // S.w: 0 add, 1 carve, 2 dead (severed mid-limb). Dead prims stop
       // carving too — a severed hand must not keep biting the field it left.
       // 1 = carve, 3 = groove. 0 (additive) and 2 (dead) are skipped.
@@ -884,7 +960,7 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       // a groove. Bone is folded separately, after wounds — see applyBones.
       let isGroove = S.w > 2.5 && S.w < 3.5;
       if (!isCarve && !isGroove) { continue; }
-      let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B}), 0).w;
+      let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0).w;
       // The shape row is read on the CARVE path too, not only in mapBody.
       // Skipping it would make a tapered carve a plain capsule in the shader
       // while validate.ts's carve loop honoured the taper: the two fields would
@@ -901,7 +977,7 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
       var prof = 0.0;
       var cpos = vec3<f32>(0.0, 0.0, 0.0);
       if (shaped) {
-        let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE}), 0);
+        let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
         r2 = T.x;
         prof = T.y;
         gr = T.zw;
@@ -909,10 +985,10 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
         // encodes bend so a straight SHELL (prof 4) skips it. Keeps every
         // "> 0.5 means chamfer" consumer working unchanged.
         if ((i32(prof) & 2) != 0) {
-          cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND}), 0).xyz;
+          cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0).xyz;
         }
       }
-      let sd = select(sdPrim(p, idx, data, r2, prof, cpos, 0), sdPrimO(p, idx, data, r2, prof, cpos, 0), ori);
+      let sd = select(sdPrim(p, idx, data, r2, prof, cpos, band), sdPrimO(p, idx, data, r2, prof, cpos, band), ori);
       if (isGroove) { d = sdGroove(d, sd, gr.x, gr.y); } else { d = smax(d, -sd, k); }
     }
   }
@@ -945,7 +1021,7 @@ export const APPLY_CARVES = /* wgsl */ `fn applyCarves(dIn: f32, p: vec3<f32>, d
 // and hands views keep). A sample outside it is outside EVERY per-wound reach
 // sphere, so every loop iteration would hit the early-out `continue` — the
 // early return is bit-identical to running the loop: d unchanged, near 0.
-export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>) -> vec2<f32> {
+export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>, band: i32) -> vec2<f32> {
   var d = dIn;
   var near = 0.0;
   // One sphere test before the loop replaces up to 16 wound-row loads plus a
@@ -953,7 +1029,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   // a crater. Tested BEFORE the loop (pinned by test): the whole point is
   // that a far sample pays nothing per-wound.
   if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }
-  let n = i32(woundCfg.x);
+  let n = i32(gInstWoundCount);
   // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07): with the gate ON the
   // loop iterates only the preloaded reachable set; with it OFF this is the
   // same iteration sequence as before (k == i, same break on n), so OFF is
@@ -966,7 +1042,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     } else {
       if (k >= n) { break; }
     }
-    let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
+    let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + band), 0);
     let r = length(p - w.xyz);
     // Reach of this wound's influence, beyond which the carve, the fillet
     // and the rim bump all contribute exactly nothing (see the test):
@@ -981,10 +1057,10 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // keeps its reference bit-identical.)
     let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;
     if (perfCfg.y > 0.5 && r > reach) { continue; }
-    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0).y;
+    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0).y;
     if (gWoundCluster > 0.0 && owner > 0.0 && owner != gWoundCluster) { continue; }
     if (owner > 0.0) { gWoundOwners = gWoundOwners | (1u << u32(owner)); }
-    let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
+    let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + band), 0);
     // Depth slab (2026-08-27): the sphere stays centred on the uploaded
     // anchor — the lab's deep bowl — and is clipped by a plane through the
     // anchor facing inward, at most wCap.w deep. The carve region is the
@@ -1005,7 +1081,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // 1e5 term loses the min for any real distance, so the carve is
     // BIT-IDENTICAL to the pre-slab sphere — that is what keeps the lab
     // reference stable.
-    let wCap = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
+    let wCap = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP} + band), 0);
     let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
     // Bounded torso preview: a fixed sphere recipe, with its owner's depth
     // cap. Negative type is upload-only; stock gameplay types remain 0..2.
@@ -1052,13 +1128,15 @@ var<private> gWoundShadePrim: f32 = -1.0;`
 export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec3<f32> {
   var m = 0.0;
   var cav = 0.0;
-  let n = i32(woundCfg.x);
+  // Per-instance wound count: the slot loop's loadInstance set this before
+  // the post-hit readback (POST reloads gHitSlot).
+  let n = i32(gInstWoundCount);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
-    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0);
+    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
         (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }
-    let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
+    let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
     let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz));
     m = max(m, contribution);
     // Cavity-ness (entrails, 2026-09-02): the SAME radial footprint,
@@ -1098,15 +1176,15 @@ export const TISSUE_RAMP = /* wgsl */ `fn tissueRamp(depth: f32, baseColor: vec3
 // 0 unburned, 1 fully charred.
 export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> f32 {
   var m = 0.0;
-  let n = i32(woundCfg.x);
+  let n = i32(gInstWoundCount);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
-    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0);
+    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
         (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }
-    let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
+    let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + gBand), 0);
     if (wMeta.x < 1.5) { continue; }
-    let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
+    let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
     m = max(m, (1.0 - smoothstep(0.0, w.w * 2.2, length(p - w.xyz))) * clamp(wMeta.y, 0.0, 1.0));
   }
   return m;
@@ -1365,6 +1443,11 @@ var<private> gWindDrift: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 var<private> gBodyAnchor: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
+// QUAD DISPATCH (stage a-2): the nearest conservative ray-sphere entry over
+// the pixel's preloaded tile entries. 1e9 means "the ray entered no inflated
+// sphere"; MARCH_TRACE_SETUP discards that fragment before stepping. Only read
+// when instCfg.y > 1 (quad mode) — the box path never touches it.
+var<private> gTileEntryT: f32 = 1e9;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileGrp: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
@@ -1378,7 +1461,103 @@ var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
 // full field, and any correctly-binned list is a subset of it).
 var<private> gWoundListOn: f32 = 0.0;
 var<private> gWoundN: i32 = 0;
-var<private> gWoundList: array<i32, 16>;`;
+var<private> gWoundList: array<i32, 16>;
+var<private> gSlot: i32 = 0;
+var<private> gBand: i32 = 0;
+var<private> gHitSlot: i32 = 0;
+// PINNED SLOT (crowd fix 2026-09-14). Once the hit instance is loaded, every
+// later mapBody call in the invocation (calcNormal's four taps, the AO and
+// scatter probes, wound/level shadow marches) still walks all the slots in
+// this pixel's list and would leave the gInst*/gBand globals on the LAST slot
+// it touched — so the material rows, rest anchor, wounds and face after it
+// read ANOTHER instance's band (misaligned skin, or a free band's zeros: the
+// pale/white zombie). POST pins the hit slot; mapBody restores the pinned
+// instance on exit. -1 = unpinned (the march loop, where the winner is what
+// matters). A one-slot pixel never reloads: gSlot already equals the slot.
+var<private> gPinSlot: i32 = -1;
+var<private> gTileSlot: array<f32, ${TILE_MAX_ENTRIES}>;
+// Per-pixel slot table, built ONCE in MARCH_TRACE_SETUP from the sorted tile
+// entry list: distinct slots present in this pixel's tile and each slot's
+// entry range. The per-step loop walks gPixN slots, not MAX_CROWD_INSTANCES,
+// and each slot folds only its own contiguous entry run — the old per-step
+// slot-membership scan over the full entry list is gone.
+var<private> gPixN: i32 = 0;
+var<private> gPixSlot: array<i32, ${TILE_MAX_ENTRIES}>;
+var<private> gPixFirst: array<i32, ${TILE_MAX_ENTRIES}>;
+var<private> gPixEnd: array<i32, ${TILE_MAX_ENTRIES}>;
+var<private> gInstCounts: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstCounts2: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstWoundBound: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1e9);
+var<private> gInstAnchor: vec3<f32> = vec3<f32>(0.0);
+var<private> gInstWind: vec3<f32> = vec3<f32>(0.0);
+// The record's alive flag (REC_WIND_ALIVE.w), hoisted out of the wind read so
+// the per-step slot gate costs one storage read instead of two.
+var<private> gInstAlive: f32 = 0.0;
+var<private> gInstMelt: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstFlash: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstNoiseShift: vec3<f32> = vec3<f32>(0.0);
+var<private> gInstYaw: f32 = 0.0;
+var<private> gInstHeadCentre: vec3<f32> = vec3<f32>(0.0);
+var<private> gInstWoundCount: f32 = 0.0;
+var<private> gInstHeadQuat: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+var<private> gInstVolPose0: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstVolPose1: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstCentre: vec3<f32> = vec3<f32>(0.0);
+var<private> gInstSeed: f32 = 0.0;
+var<private> gInstHalf: vec3<f32> = vec3<f32>(0.0);
+var<private> gInstRevision: f32 = 0.0;
+// RUPTURE GORE (body-to-gib task 3). 0 outside a crowd draw (so the per-view
+// lodCfg.w remains authoritative there); the doomed body's ramp rides its own
+// record because the crowd shares one material and one lodCfg uniform.
+var<private> gInstGore: f32 = 0.0;`;
+
+// Per-instance state, loaded from the record buffer by slot. Everything that
+// used to be a per-body uniform parameter is a private global now, so the
+// section text that reads it changes by NAME ONLY (counts -> gInstCounts).
+//
+// The slot index is also the prim-atlas BAND index (REC_ANCHOR_BAND.w =
+// slot * DATA_ROWS), so loadInstance leaves gBand ready for every row read
+// that follows. gHitSlot is the slot whose field won the union fold; the
+// post-hit sections reload it before they read the hit's material rows.
+// gTileSlot mirrors the tile entry's bodyIndex so the per-slot loop can fold
+// only the entries belonging to the slot it is evaluating.
+export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32) -> void {
+  let base = slot * ${REC_VEC4S};
+  gSlot = slot;
+  gInstCounts = (*inst)[base + ${REC_COUNTS}];
+  gInstCounts2 = (*inst)[base + ${REC_COUNTS2}];
+  gInstWoundBound = (*inst)[base + ${REC_WOUND_BOUND}];
+  let ab = (*inst)[base + ${REC_ANCHOR_BAND}];
+  gInstAnchor = ab.xyz;
+  gBand = i32(ab.w);
+  let wa = (*inst)[base + ${REC_WIND_ALIVE}];
+  gInstWind = wa.xyz;
+  // CROWD (2026-09-14): the field's noise anchor and shell wind are per
+  // instance too; keep them on the loaded slot so every slot folds its own
+  // field (and the analytic gradient, which anchors per owner prim, agrees).
+  gWindDrift = gInstWind;
+  gBodyAnchor = gInstAnchor;
+  gInstAlive = wa.w;
+  gInstMelt = (*inst)[base + ${REC_MELT}];
+  gInstFlash = (*inst)[base + ${REC_FLASH}];
+  let ny = (*inst)[base + ${REC_NOISE_YAW}];
+  gInstNoiseShift = ny.xyz;
+  gInstYaw = ny.w;
+  let hw = (*inst)[base + ${REC_HEAD_WCOUNT}];
+  gInstHeadCentre = hw.xyz;
+  gInstWoundCount = hw.w;
+  gInstHeadQuat = (*inst)[base + ${REC_HEAD_QUAT}];
+  gInstVolPose0 = (*inst)[base + ${REC_VOL_POSE0}];
+  gInstVolPose1 = (*inst)[base + ${REC_VOL_POSE1}];
+  let cs = (*inst)[base + ${REC_CENTRE_SEED}];
+  gInstCentre = cs.xyz;
+  gInstSeed = cs.w;
+  let hr = (*inst)[base + ${REC_HALF_REV}];
+  gInstHalf = hr.xyz;
+  gInstRevision = hr.w;
+  gInstGore = (*inst)[base + ${REC_GORE}].x;
+}
+`;
 
 // Folds bone into the field, AFTER wounds have been carved.
 //
@@ -1518,16 +1697,65 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
   return d;
 }`;
 
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>) -> vec4<f32> {
-  var d = 1e9;
-  // Argmin tracking now lives in private globals shared with foldGroup
-  // (above); reset per call — calcNormal calls mapBody four times and each
-  // must track its own dominant prim.
-  gFoldBest = 1e9;
-  gFoldBestIdx = -1.0;
-  gFoldBestDistort = 1.0;
-  gWoundCluster = 0.0;
-  gWoundOwners = 0u;
+export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
+  // PER-SLOT UNION FOLD (crowd stage a). One draw traces every instance of a
+  // character type; each instance's FULL field is evaluated in turn and the
+  // min is the union surface. PER-INSTANCE state (counts, counts2, woundBound,
+  // the volume pose, noise shift, band) is loaded from the record buffer by
+  // slot, so the body below is the pre-crowd mapBody verbatim with those names
+  // bound to locals.
+  //
+  // SINGLE-INSTANCE BIT IDENTITY: with instCfg.x == 1 and gTileActive == 0 the
+  // loop runs exactly once with band 0, and its body is the pre-change mapBody
+  // character for character. The final min against 1e9 and the argmin
+  // save/restore touch only the RETURN value, never the per-sample float ops
+  // that produce it, so d is bit-identical.
+  var dUnion = 1e9;
+  var bestSlot = gSlot;          // the slot POST will reload
+  var bestIdxU = -1.0;
+  var bestU = 1e9;
+  var bestDistortU = 1.0;
+  var nearWoundU = 0.0;
+  var carvedU = 0.0;
+  // PER-STEP SLOT ITERATION. Tiles off: walk the capacity bound and take slot
+  // k directly (the pre-crowd one-slot case is k == 0). Tiles on: walk the
+  // per-pixel table built in MARCH_TRACE_SETUP — gPixN distinct slots, each
+  // with its contiguous entry run — instead of scanning all
+  // MAX_CROWD_INSTANCES slots and testing each for membership per step.
+  //
+  // BIT IDENTITY: with one instance and tiles off, tiled = false, nIter =
+  // nInst = 1, k = 0, s = 0, and the body below is the pre-change mapBody
+  // character for character. The alive read is the same value, now hoisted
+  // into gInstAlive by loadInstance.
+  let nInst = i32(instCfg.x);
+  // BASE SLOT (crowd stage a, task 7c). A material drawing ONE field out of a
+  // SHARED record buffer (the chunk views) sets instCfg.z to its record slot
+  // and marches with tiles off, where the slot index is s = 0. Every existing
+  // caller passes z = 0, so base + s is s and the canonical march is untouched.
+  let base = i32(instCfg.z);
+  let tiled = gTileActive > 0.5;
+  let nIter = select(nInst, gPixN, tiled);
+  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
+    if (k >= nIter) { break; }
+    let s = select(k, gPixSlot[k], tiled);
+    loadInstance(inst, base + s);
+    if (gInstAlive < 0.5) { continue; }
+    let counts = gInstCounts;
+    let counts2 = gInstCounts2;
+    let woundBound = gInstWoundBound;
+    let noiseShift = gInstNoiseShift;
+    let volumePose0 = gInstVolPose0;
+    let volumePose1 = gInstVolPose1;
+    let band = gBand;
+    var d = 1e9;
+    // Argmin tracking now lives in private globals shared with foldGroup
+    // (above); reset per slot — calcNormal calls mapBody four times and each
+    // must track its own dominant prim.
+    gFoldBest = 1e9;
+    gFoldBestIdx = -1.0;
+    gFoldBestDistort = 1.0;
+    gWoundCluster = 0.0;
+    gWoundOwners = 0u;
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -1540,17 +1768,16 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   } else {
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
-  if (gTileActive > 0.5) {
-    // TILE-LIST PATH (perf task 5 step 2). MARCH_BODY preloaded this pixel's
-    // tile entries into gTile* ONCE, before any stepping; every march step
-    // folds exactly that list through the SAME foldGroup the cluster walk
-    // uses, so the two paths cannot drift. No per-step bound texel reads
-    // before the prim work — that is the whole economics argument (the
-    // flat-list lesson: per-step reads dominate; this list costs one read
-    // per pixel).
-    for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
-      if (f32(e) >= gTileN) { break; }
-      d = foldGroup(d, p, data, counts, i32(gTileBand[e]), gTileBounds[e], gTileGrp[e]);
+  if (tiled) {
+    // TILE-LIST PATH (perf task 5 step 2, range-walked in 7d). MARCH_BODY
+    // preloaded this pixel's tile entries into gTile* ONCE, before any
+    // stepping, and MARCH_TRACE_SETUP collapsed them into the per-pixel slot
+    // table. Every march step folds exactly this slot's contiguous run
+    // through the SAME foldGroup the cluster walk uses, so the two paths
+    // cannot drift. No per-step bound texel reads before the prim work and
+    // no per-step slot scan — one table lookup plus the run's own fold.
+    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
+      d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);
     }
   } else {
   // TWO-LEVEL CULL. The outer loop is the cluster (limb) sphere it has
@@ -1564,10 +1791,10 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // keeps the far-limb cost at the old two texels.
   for (var c = 0; c < 8; c = c + 1) {
     if (c >= clusterCount) { break; }
-    let crange = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
+    let crange = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
     if (crange.z < 0.5) { continue; }
-    let cbounds = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS}), 0);
-    let gspan = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS}), 0);
+    let cbounds = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
+    let gspan = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + band), 0);
     // The CLUSTER test carries the factor too. A factor-free test (as
     // always shipped) was tried for speed and TORE THE FIELD inside wound
     // cavities: there the running d is negative, the threshold collapses,
@@ -1582,8 +1809,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   for (var gi = 0; gi < 64; gi = gi + 1) {
     if (gi >= gCount) { break; }
     let g = gFirst + gi;
-    let range = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE}), 0);
-    let bounds = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_BOUNDS}), 0);
+    let range = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE} + band), 0);
+    let bounds = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_BOUNDS} + band), 0);
     // range.w is a BITFIELD, not a bool: 1 = oriented group, 2 = some prim
     // here is tapered or chamfered. Both are per-group hoists of a per-prim
     // decision, for the reason sdPrimO's header measures — paying an extra
@@ -1591,13 +1818,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // shaped prims never touches ROW_PRIM_SHAPE at all. The prim loop,
     // sphere cull and argmin tracking all live in foldGroup (above), shared
     // with the tile-list path.
-    d = foldGroup(d, p, data, counts, 0, bounds, range);
+    d = foldGroup(d, p, data, counts, band, bounds, range);
   }
   }
   }
   }
-  let carved = applyCarves(d, p, data, counts);
-  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound);
+  let carved = applyCarves(d, p, data, counts, band);
+  let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band);
   var dmg = dmgRes.x;
   let nearWound = dmgRes.y;
   // Preserve independently moving limbs under somebody else's wound.
@@ -1616,10 +1843,10 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
       if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
-      let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
+      let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
       if (cr.z < 0.5) { continue; }
-      let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS}), 0);
-      let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS}), 0);
+      let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
+      let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + band), 0);
       if (length(p - cb.xyz) - cb.w > (dmg + counts.w * 4.0) * gs.z) { continue; }
       let savedBest = gFoldBest;
       let savedIdx = gFoldBestIdx;
@@ -1631,13 +1858,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       for (var gi = 0; gi < 64; gi = gi + 1) {
         if (gi >= i32(gs.y)) { break; }
         let group = i32(gs.x) + gi;
-        let range = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_RANGE}), 0);
-        let bounds = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_BOUNDS}), 0);
-        limb = foldGroup(limb, p, data, counts, 0, bounds, range);
+        let range = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_RANGE} + band), 0);
+        let bounds = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_BOUNDS} + band), 0);
+        limb = foldGroup(limb, p, data, counts, band, bounds, range);
       }
       gWoundCluster = f32(c + 1);
-      let limbCarved = applyCarves(limb, p, data, counts);
-      let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound).x;
+      let limbCarved = applyCarves(limb, p, data, counts, band);
+      let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
       if (limbDamage < dmg) {
         dmg = limbDamage;
       } else {
@@ -1660,7 +1887,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // released skeleton group) has no flesh and no wound to be near, so gated
   // it would march an EMPTY field.
   if ((nearWound > 0.5 || counts2.y > 0.5) && counts2.x > 0.0) {
-    dmg = applyBones(dmg, p, data, counts, counts2.x, 0, segVolumeAtlas, segVolumeMeta);
+    dmg = applyBones(dmg, p, data, counts, counts2.x, band, segVolumeAtlas, segVolumeMeta);
   }
   // bestIdx is read AFTER the bone fold so a bone that won the min is the
   // reported dominant prim — shading identifies bone via primScale.w == 4.
@@ -1680,30 +1907,54 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // The guard stays and now matters more than ever, since the march relies on
   // this call costing nothing: fbm is two 3D value-noise lookups, sixteen
   // hash13 calls, and without the branch a zero amplitude still pays in full.
-  if (noiseCfg.x <= 0.0) { return vec4<f32>(dmg, bestIdx, nearWound, carved); }
-  // NOISE ANCHOR (motion-polish task 6): the fbm samples the DOMINANT prim's
-  // REST frame — the texture is baked into the model, so gait bob, arm raises
-  // and jiggle carry their skin instead of sliding through the world-frame
-  // field. restPoint falls back to the old root-shift anchor (noiseLocal)
-  // when there is no live prim or the rest rows were never written.
-  let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift));
-  // Hoisted so the return carries no nested parens — the ramp test lexes the
-  // return site for the word 'carved' and a paren would truncate the match.
-  let detail = fbm(anchor * 3.0) * noiseCfg.x;
-  return vec4<f32>(dmg + detail, bestIdx, nearWound, carved);
+  var dmgFinal = dmg;
+  if (noiseCfg.x > 0.0) {
+    // NOISE ANCHOR (motion-polish task 6): the fbm samples the DOMINANT prim's
+    // REST frame — the texture is baked into the model, so gait bob, arm raises
+    // and jiggle carry their skin instead of sliding through the world-frame
+    // field. restPoint falls back to the old root-shift anchor (noiseLocal)
+    // when there is no live prim or the rest rows were never written.
+    let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift), band);
+    dmgFinal = dmg + fbm(anchor * 3.0) * noiseCfg.x;
+  }
+    // UNION MIN. .w keeps the PRE-WOUND carved field value, exactly as the
+    // one-slot entry returned it; POST's tissue-depth read is unchanged.
+    if (dmgFinal < dUnion) {
+      dUnion = dmgFinal;
+      bestSlot = base + s;
+      nearWoundU = nearWound;
+      carvedU = carved;
+      bestIdxU = gFoldBestIdx;
+      bestU = gFoldBest;
+      bestDistortU = gFoldBestDistort;
+    }
+  }
+  gFoldBest = bestU;
+  gFoldBestIdx = bestIdxU;
+  gFoldBestDistort = bestDistortU;
+  gHitSlot = bestSlot;
+  // Leave the instance globals on the slot the caller expects: the pinned hit
+  // slot after the hit, else the union's winner. No-op for a one-slot pixel.
+  let wantSlot = select(bestSlot, gPinSlot, gPinSlot >= 0);
+  if (gSlot != wantSlot) { loadInstance(inst, wantSlot); }
+  return vec4<f32>(dUnion, bestIdxU, nearWoundU, carvedU);
 }`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
-export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>) -> vec3<f32> {
-  let e = vec2<f32>(1.0, -1.0) * 0.0015;
+export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec3<f32> {
+  let e = vec2<f32>(1.0, -1.0) * gNormalEps;
   return normalize(
-    e.xyy * mapBody(p + e.xyy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x +
-    e.yyx * mapBody(p + e.yyx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x +
-    e.yxy * mapBody(p + e.yxy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x +
-    e.xxx * mapBody(p + e.xxx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x);
-}`;
+    e.xyy * mapBody(p + e.xyy, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x +
+    e.yyx * mapBody(p + e.yyx, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x +
+    e.yxy * mapBody(p + e.yxy, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x +
+    e.xxx * mapBody(p + e.xxx, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x);
+}
+
+// Run 5: the refine entry (REFINE_LOOP) sets this to its output-pixel footprint; the march never
+// touches it, so x * 0.0015 is the exact pre-run-5 stencil.
+var<private> gNormalEps: f32 = 0.0015;`;
 
 // Nearest-neighbour fetch by uv.
 //
@@ -1779,34 +2030,29 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   camPos: vec3<f32>,
   data: texture_2d<f32>,
   volumeTex: texture_3d<f32>,
-  volumePose0: vec4<f32>,
-  volumePose1: vec4<f32>,
   volumeMin: vec3<f32>,
   volumeInvExtent: vec3<f32>,
   volumeWarp: vec4<f32>,
   volumeClip: vec4<f32>,
   segVolumeAtlas: texture_3d<f32>,
   segVolumeMeta: texture_2d<f32>,
-  counts: vec4<f32>,
-  counts2: vec4<f32>,
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
   coneK: f32,
   startT: f32,
   perfCfg: vec4<f32>,
-  windDrift: vec3<f32>,
-  bodyAnchor: vec3<f32>,
-  // Wound union-reach bound (close-up wound-cull task, 2026-09-05), positionally LAST.
-  woundBound: vec4<f32>
+  inst: ptr<storage, array<vec4<f32>>, read>,
+  instCfg: vec4<f32>
 ) -> f32 {
   // The cone pre-pass certifies "empty up to t" for the march that follows.
   // It passes noiseCfg 0 deliberately (the noise lives on the normal), but
   // wind is NOT like the noise: it moves the FIELD. A cone that marched the
   // no-wind surface would certify space the drifted cloth actually occupies
   // and the march would start inside it. Same uniform, same surface.
-  gWindDrift = windDrift;
-  gBodyAnchor = bodyAnchor;
+  loadInstance(inst, i32(instCfg.z));
+  gWindDrift = gInstWind;
+  gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
   // Chained levels: this cone begins where the coarser one stopped. Safe
@@ -1822,7 +2068,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // the zero vector keeps this pass independent of the motion plumbing.
     // The volume block rides along for the same reason (X1.26): a cone that
     // ignored an enabled volume would certify empty space inside the hand.
-    let d = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x;
+    let d = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x;
     let r = t * coneK;
     // + woundCfg2.z (shell displacement, X1.21.2): the emptiness this pass
     // certifies is measured against the SMOOTH field, but the shell displaces
@@ -1944,24 +2190,30 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
   camPos: vec3<f32>,
   data: texture_2d<f32>,
   volumeTex: texture_3d<f32>,
-  volumePose0: vec4<f32>,
-  volumePose1: vec4<f32>,
   volumeMin: vec3<f32>,
   volumeInvExtent: vec3<f32>,
   volumeWarp: vec4<f32>,
   volumeClip: vec4<f32>,
   segVolumeAtlas: texture_3d<f32>,
   segVolumeMeta: texture_2d<f32>,
-  counts: vec4<f32>,
-  counts2: vec4<f32>,
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
   depthPreCfg: vec4<f32>,
   perfCfg: vec4<f32>,
-  windDrift: vec3<f32>
+  inst: ptr<storage, array<vec4<f32>>, read>,
+  instCfg: vec4<f32>
 ) -> f32 {
-  gWindDrift = windDrift;
+  // QUAD DISPATCH (stage a-2). A quad-mode crowd draws ONE screen quad and
+  // hands this entry the reconstructed pixel ray as worldPos, so the coarse
+  // walk runs against the union field. This entry has no tile list to take a
+  // sphere entry from, so the walk stays conservative from t = 0; an empty
+  // pixel returns -1, which DEPTH_PRE_FETCH reads as the no-start identity.
+  // Every per-body caller is unchanged: there worldPos is the proxy-box
+  // fragment position and no quad branch is reachable.
+  loadInstance(inst, i32(instCfg.z));
+  gWindDrift = gInstWind;
+  gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
   var t = 0.0;
@@ -1972,7 +2224,7 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
     // a prim from a min-fold can only raise the field), so a distance proven
     // empty against the full field is empty against every tile-listed
     // sub-field too.
-    let dres = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
+    let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
     let d = dres.x;
     let r = t * depthPreCfg.y;
     if (d < r + 0.0012 + woundCfg2.z) { return t; }
@@ -2091,6 +2343,13 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
 export const FACE_MELT_SAG = 0.25;
 export const FACE_MELT_STRETCH = 0.6;
 export const FACE_MELT_FADE_LO = 0.05;
+/** Fraction of a piece's gore a HEAD's non-face exterior keeps (0..1).
+ *  A detached head was torn at the NECK; its exterior skin is intact, so at
+ *  0.6 of the normal chunk gore it reads as a bloodied head rather than the
+ *  generic mottled meat blob the owner reported (2026-09-16 follow-ups task 2).
+ *  Setting it to 1 restores the pre-task-2 behaviour exactly. Shared with the
+ *  CPU bake (gib-look-tuning.ts) so the two cannot drift. */
+export { HEAD_EXTERIOR_GORE_KEEP };
 
 /**
  * MELT SKIN PATCHES (owner review, 2026-09-03: "some of the pink would still
@@ -2153,16 +2412,12 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   data: texture_2d<f32>,
   volumeTex: texture_3d<f32>,
   faceTex: texture_2d<f32>,
-  volumePose0: vec4<f32>,
-  volumePose1: vec4<f32>,
   volumeMin: vec3<f32>,
   volumeInvExtent: vec3<f32>,
   volumeWarp: vec4<f32>,
   volumeClip: vec4<f32>,
   segVolumeAtlas: texture_3d<f32>,
   segVolumeMeta: texture_2d<f32>,
-  counts: vec4<f32>,
-  counts2: vec4<f32>,
   marchCfg: vec3<f32>,
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
@@ -2180,6 +2435,7 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   surfCfg: vec4<f32>,
   surfCfg2: vec4<f32>,
   surfCfg3: vec4<f32>,
+  meatCfg: vec4<f32>,
   mottleColor: vec3<f32>,
   fatColor: vec3<f32>,
   boneColor: vec3<f32>,
@@ -2193,9 +2449,7 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   faceCfg3: vec4<f32>,
   faceProj: vec4<f32>,
   faceAtlas: vec4<f32>,
-  headCentre: vec3<f32>,
   headAxes: vec3<f32>,
-  headQuat: vec4<f32>,
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
   woundShadowCfg: vec2<f32>,
@@ -2220,12 +2474,6 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   shellOut: f32,
   perfCfg: vec4<f32>,
   prevT: f32,
-  bodyCentre: vec3<f32>,
-  bodyHalf: vec3<f32>,
-  // Melt progress in x, yzw spare - zombie melt task 6. Zero everywhere but a
-  // melting body and its released bone chunks; the flesh-only wet-red ramp
-  // below is bit-identical to the pre-melt shader while it is 0.
-  meltCfg: vec4<f32>,
   // Level-only shadow - perf round 2 task 7 — bound positionally LAST to
   // match createMarchMaterial's binding order. The gate is cfg.x — zero
   // keeps the march bit-identical to the pre-task-7 shader.
@@ -2236,10 +2484,6 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   levelShadowTex: texture_depth_2d,
   levelShadowMatrix: mat4x4<f32>,
   levelShadowCfg: vec4<f32>,
-  windDrift: vec3<f32>,
-  bodyAnchor: vec3<f32>,
-  // Wound union-reach bound - close-up wound-cull task 2026-09-05. No parens or colons in these comments.
-  woundBound: vec4<f32>,
   // Quarter-res depth prepass - close-up task 3. Bound POSITIONALLY LAST,
   // in the same commit as the WGSL input - the meltCfg rule. cfg is
   // x enabled, y the coarse block footprint - radius per unit distance, the
@@ -2277,10 +2521,6 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // the compose bit-identical. NO PARENS and NO COLONS in this comment either.
   probeDyn: ptr<storage, array<vec4<f32>>, read>,
   probeDynCfg: vec4<f32>,
-  // Direct muzzle flash on this body - owner 2026-09-09 - bound POSITIONALLY LAST.
-  // xyz the burning muzzle in world space, w its intensity and 0 skips the term.
-  // NO PARENS and NO COLONS in this comment either.
-  bodyFlash: vec4<f32>,
   // Temporal reprojection start - plan 2026-09-10 - bound POSITIONALLY LAST.
   // lastTex is last fresh frame's layer with NDC depth in alpha, lastInvVp the
   // inverse view projection that made it, temporalCfg x enable y margin z slope
@@ -2288,7 +2528,21 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // NO PARENS and NO COLONS in this comment either.
   lastTex: texture_2d<f32>,
   lastInvVp: mat4x4<f32>,
-  temporalCfg: vec4<f32>
+  temporalCfg: vec4<f32>,
+  // Instance record and config - crowd stage a - bound POSITIONALLY LAST in
+  // the same commit as the kernel. instCfg x is the instance count, y is the
+  // crowd-material flag - 1 = use instCentre/instHalf for the proxy box, 0 =
+  // use the record's bodyCentre/bodyHalf. NO PARENS and NO COLONS in this
+  // comment either.
+  inst: ptr<storage, array<vec4<f32>>, read>,
+  instCfg: vec4<f32>,
+  // Crowd proxy box overrides - Task 5 - POSITIONALLY LAST after instCfg.
+  // The instanced crowd material passes its per-instance box centre and half
+  // extent as ATTRIBUTES so every instance's box entry maths uses its own
+  // box; a per-body material binds zero vec3s and instCfg.y 0 selects the
+  // record instead. NO PARENS and NO COLONS in this comment either.
+  instCentre: vec3<f32>,
+  instHalf: vec3<f32>
 ) -> vec4<f32> {
 `;
 
@@ -2300,14 +2554,21 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
  * surface entry reuses this text verbatim. The debug early-returns and the
  * miss discard are part of the trace and behave identically in both entries.
  */
-export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
+export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
+  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
   // sdShell, which is reached from foldGroup on every mapBody call in this
   // invocation — the march steps, calcNormal, the AO and scatter probes. Set
   // it late and the normal would be taken against a different surface than
   // the one the march hit.
-  gWindDrift = windDrift;
-  gBodyAnchor = bodyAnchor;
+  loadInstance(inst, i32(instCfg.z));
+  gWindDrift = gInstWind;
+  gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);
+  // QUAD DISPATCH (stage a-2). instCfg.y: 0 per-body, 1 instanced proxy box,
+  // 2 screen quad. Declared at SETUP's top so the tile preload (below) and the
+  // box-entry block (much later) share one definition; for y <= 1 it is false
+  // and every branch below is dead.
+  let quadMode = instCfg.y > 1.5;
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
   // shipping path pays exactly one uniform branch; gDebugMode hands the
@@ -2341,8 +2602,15 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     // for the post-hit probes that leave the ray (calcNormal eps, the AO
     // probe at n * 0.06) — those sample the same gTile list.
     let rayCull = tileCfg.x > 1.5;
-    let reach = counts.w * 4.0 + ${RAY_CULL_SLACK};
+    // QUAD DISPATCH (stage a-2): the per-ray cull's reach is slot 0's record
+    // (gInstCounts.w) in box/boxless mode; a quad frame has no per-instance
+    // record bound, so the type's max blend K rides instCfg.w instead. select
+    // keeps the box reach verbatim when quadMode is false.
+    let reach = select(gInstCounts.w, instCfg.w, quadMode) * 4.0 + ${RAY_CULL_SLACK};
     var w = 0;
+    // Nearest conservative sphere entry, accumulated over the entries that
+    // survive (or skip) the per-ray cull. Only meaningful in quad mode.
+    var entryT = 1e9;
     for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
       if (e >= i32(n)) { break; }
       // Entry stream: TILE_STRIDE vec4s per entry at base head.x. Same record
@@ -2356,12 +2624,60 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
         let rInf = b.w + reach * max(g.z, 1.0);
         if (dot(oc, oc) - tc * tc > rInf * rInf) { continue; }
       }
+      if (quadMode) {
+        // Ray vs the INFLATED bound sphere (reach x distortion + slack). entryT
+        // is a lower bound on this body's first possible surface, so clamping
+        // the march to it can never drop a hit; max(tc - th, 0) folds the
+        // camera-inside-sphere case.
+        let ocQ = b.xyz - camPos;
+        let tcQ = dot(ocQ, rd);
+        let rQ = b.w + reach * max(g.z, 1.0) + ${QUAD_ENTRY_SLACK};
+        let d2Q = dot(ocQ, ocQ) - tcQ * tcQ;
+        if (d2Q <= rQ * rQ) {
+          entryT = min(entryT, max(tcQ - sqrt(max(rQ * rQ - d2Q, 0.0)), 0.0));
+        }
+      }
       gTileBounds[w] = b;
       gTileGrp[w] = g;
       gTileBand[w] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
+      gTileSlot[w] = (*tileEnt)[lin + 2u].x;
       w = w + 1;
     }
     gTileN = f32(w);
+    // QUAD DISPATCH (stage a-2): a quad fragment whose tile list is EMPTY can
+    // have no surface — discard before the wound list and before any stepping.
+    // This sits inside the tiles-on block on purpose: tiles off falls through
+    // to the else-if below and marches from the camera instead.
+    if (quadMode && gTileN < 0.5) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+    gTileEntryT = entryT;
+    // PER-PIXEL SLOT TABLE (perf 7d). The binder emits entries sorted by slot
+    // (groups are appended per slot in CrowdType.sync, and the ray-cull
+    // filter is a monotone subset), so a slot's entries are one contiguous
+    // run. Collapse that into (slot, first, end) triples HERE, once per
+    // pixel, and MAP_BODY's per-step loop walks gPixN slots with a bounded
+    // range fold instead of scanning all MAX_CROWD_INSTANCES slots.
+    gPixN = 0;
+    {
+      var prev = -1;
+      for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
+        if (f32(e) >= gTileN) { break; }
+        let s = i32(gTileSlot[e]);
+        if (s != prev) {
+          gPixSlot[gPixN] = s;
+          gPixFirst[gPixN] = e;
+          gPixEnd[gPixN] = e + 1;
+          gPixN = gPixN + 1;
+          prev = s;
+        } else {
+          gPixEnd[gPixN - 1] = e + 1;
+        }
+      }
+    }
+  } else if (quadMode) {
+    // QUAD DISPATCH (stage a-2): tiles off, so there is no tile list to take a
+    // conservative entry from — march from the camera. Correct (an entry is
+    // only ever a lower bound), slow, and debug-only: sync() logs once.
+    gTileEntryT = 0.0;
   }
   // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel:
   // a wound whose REACH sphere the ray never enters cannot change this
@@ -2370,13 +2686,13 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // for the off-ray probes). The cone/depth pre-pass chains never run this
   // block, so their gWoundListOn stays 0 and they fold every wound —
   // conservative by construction.
-  gWoundListOn = select(0.0, 1.0, counts2.w > 0.5);
+  gWoundListOn = select(0.0, 1.0, gInstCounts2.w > 0.5);
   if (gWoundListOn > 0.5) {
     gWoundN = 0;
-    let nW = min(i32(woundCfg.x), 16);
+    let nW = min(i32(gInstWoundCount), 16);
     for (var i = 0; i < 16; i = i + 1) {
       if (i >= nW) { break; }
-      let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
+      let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
       let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25 + ${RAY_CULL_SLACK};
       let oc = w.xyz - camPos;
       let tc = max(dot(oc, rd), 0.0);
@@ -2525,9 +2841,23 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // inside that slab and the ±1e9 pair cancels in the min/max. The 0 clamp
   // is the camera-inside-the-box case: entry 0 never discards.
   let invRd = select(vec3<f32>(1e9), 1.0 / rd, abs(rd) > vec3<f32>(1e-8));
-  let bLo = (bodyCentre - bodyHalf - camPos) * invRd;
-  let bHi = (bodyCentre + bodyHalf - camPos) * invRd;
-  let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));
+  // Crowd proxy box - Task 5. The instanced crowd material carries its own
+  // centre and half extent as vertex attributes: every instance shares ONE
+  // record buffer, so the record's slot-0 box cannot describe the fragment's
+  // own box. instCfg.y > 0.5 marks a crowd material; per-body materials bind
+  // zeros and keep reading gInstCentre/gInstHalf bit-identically.
+  let boxCentre = select(gInstCentre, instCentre, instCfg.y > 0.5);
+  let boxHalf = select(gInstHalf, instHalf, instCfg.y > 0.5);
+  let bLo = (boxCentre - boxHalf - camPos) * invRd;
+  let bHi = (boxCentre + boxHalf - camPos) * invRd;
+  let boxEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));
+  // QUAD DISPATCH (stage a-2): in quad mode the fragment's conservative entry
+  // is the nearest tile-sphere entry (gTileEntryT == 1e9 when the ray entered
+  // none), not a box face. BIT IDENTITY: for instCfg.y <= 1 quadMode is false,
+  // both discards below are dead, bodyEntry == boxEntry verbatim, and
+  // gTileEntryT is never read.
+  let bodyEntry = select(boxEntry, gTileEntryT, quadMode);
+  if (quadMode && bodyEntry > 1e8) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let tMax = min(tMaxSel, prevT);
   let steps = i32(marchCfg.x);
@@ -2580,7 +2910,7 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // model. noiseShift (faceCfg3.zw + lodCfg.z, the task-3 root-shift anchor)
   // survives ONLY as restPoint's fallback for bodies without rest rows and
   // for the no-live-prim case. Zero = the pre-motion behaviour there.
-  let noiseShift = vec3<f32>(faceCfg3.z, lodCfg.z, faceCfg3.w);
+  let noiseShift = vec3<f32>(gInstNoiseShift.x, gInstYaw, gInstNoiseShift.z);
   // ONLY .x CARRIES MEANING: the silhouette-noise amplitude. y/z/w are dead.
   //
   // They were a parked melt spike's amp/frequency/time (c52b05b), removed in
@@ -2690,16 +3020,87 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // see-through - other bodies' silhouettes cut into flesh). Trust the
   // reprojected point only when it lies inside THIS body's proxy box along
   // the ray, margin either side; then confirm the start is OUTSIDE the field
-  // with one sample - inside means the surface was skipped, fall back.
+  // with one sample - inside means the surface was skipped, and the
+  // recovery probes below rewind to the surface instead of dropping the
+  // whole bound.
   var tempStart = 0.0;
-  if (temp.y > 0.0 && temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y) {
-    tempStart = temp.x;
-    if (tempStart > 0.0) {
-      let d0 = mapBody(camPos + rd * tempStart, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x;
-      if (d0 <= 0.0) { tempStart = 0.0; }
+  // WINDOW-WIDTH REFUSAL (the holes fix, 2026-09-10 night). On a ray that
+  // GRAZES the body, the entry/exit window is razor-thin and the field's
+  // convergence dip is narrower than the walk's sampling stride: a temporal
+  // start landing at/past the dip can never accept (per-pixel temporalDiag:
+  // ~460 broken px at ANY margin; 0.25 -> 607, 1.0 -> 231, cap+slack ->
+  // 64-118), and the exit-side accepts cannot recover a walk that skipped
+  // its only convergent region. So the temporal start fires only where the
+  // window is at least margin + cap + headroom wide — face-on pixels, where
+  // the approach-skipping win lives; thin-window silhouette pixels fall
+  // back to the safe shellIn walk, which is current-frame and tracks
+  // swung limbs.
+  if (temp.y > 0.0
+      && tMax - shellIn >= temporalCfg.y + 0.18
+      && temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y) {
+    // shellAmp backoff: with shell displacement live, the displaced
+    // silhouette sticks out up to shellAmp beyond the smooth field the probe
+    // below samples — the same slack preStart carries. woundCfg2.z is 0 at
+    // the shipping default, so this is the identity there.
+    var s = temp.x - woundCfg2.z;
+    if (s > 0.0) {
+      var dres0 = mapBody(camPos + rd * s, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+      // ACCEPTANCE: outside the field AND outside a wound's near zone
+      // (dres0.z). Near a crater applyWounds' smax fillet OVERSTATES the
+      // distance — the field is not a bound there — and a start beside the
+      // zone lets the first step land inside the carve: the frozen-scene
+      // pixel diff (2026-09-10) showed banded deep-tissue/char striping on
+      // the wounded closeup at a 0.05 m adaptive margin, while the shipped
+      // 0.25 m margin rendered pixel-identical to tstart off. Clean skin
+      // keeps the tight start; wound-adjacent pixels back off below.
+      // RECOVERY PROBES. Inside (x <= 0) means the surface reached the
+      // start — flesh moved toward the camera, or this pixel sits on a
+      // silhouette slope the flat slope term undershoots; rewind by twice
+      // the reported penetration (twice: the field under-reports Euclid by
+      // the group distortion factor). In-zone (z >= 0.5) rewinds by a fixed
+      // 0.15 — the zone reaches ~wound radius + rim beyond the crater, so a
+      // couple of steps clear it. Three probes at most, then the bound is
+      // dropped (max() below still marches from bodyEntry). A rewind before
+      // the box entry always probes positive-and-out-of-zone (every prim of
+      // this body lies inside the box; zones only exist around its own
+      // wounds), so the loop self-terminates there.
+      for (var probe = 0; probe < 3; probe = probe + 1) {
+        if (dres0.x > 0.0 && dres0.z < 0.5) { break; }
+        let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);
+        if (back <= 0.0) { break; }
+        s = back;
+        dres0 = mapBody(camPos + rd * s, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+      }
+      if (dres0.x > 0.0 && dres0.z < 0.5) {
+        // HULL-RELATIVE CAP (the holes fix, 2026-09-10 night). The accepted
+        // start may tighten at most 6 cm past the CURRENT frame's hull face:
+        // shellIn is rebuilt every frame and tracks swung limbs perfectly,
+        // while the temporal history is one frame stale — at melee swing
+        // tips the surface moves 0.3-0.5 m per frame, and a stale start past
+        // the moved surface re-phases the walk into the razor-thin graze
+        // window where acceptance falls off its edge (the stacked-corridor
+        // holes: ~460-620 broken px at ANY fixed margin; margin sweep 0.25
+        // -> 607, 0.6 -> 622, 1.0 -> 231, meanTOn pinned at the box exit).
+        // The 6 cm budget is what the temporal start is FOR — tightening
+        // the last stretch where the hull is loose — and it bounds the
+        // stale-history damage to less than the hull's own inflation.
+        s = min(s, shellIn + 0.06);
+        tempStart = s;
+      }
     }
   }
-  var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);
+  // bodyEntry joins the fold as the FIFTH term (startT, shellIn, preStart,
+  // tempStart, bodyEntry). The proxy box CONTAINS the hull contains the
+  // flesh, so nothing of this body is nearer than the ray-box entry — the
+  // same argument the accumulated-depth discard above already rests on. It is a lower bound
+  // like every other term: in a crowd it is the tighter bound for a body
+  // whose cone/coarse touch sits at the tile's FRONT surface, and it catches
+  // the pixels whose temporal gate failed — those used to restart from the
+  // shared shellIn and walk their own empty proxy space.
+`;
+/** Run 5 (plan 2026-09-13-neural-upscale-run5-sdf-refine): the walk alone — from `var t` to the
+ *  line before `if (!hit) { discard; }`. REFINE_LOOP replaces exactly this section. */
+export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;
@@ -2728,7 +3129,7 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
-    let dres = mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
+    let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
     let distort = max(gFoldBestDistort, 1.0);
     var d = dres.x;
     hitBest = i32(dres.y);
@@ -2742,7 +3143,7 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     let shellAmp = woundCfg2.z;
     var conservative = false;
     if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
-      d = d + fbm(restPoint(camPos + rd * t, data, i32(dres.y), noiseLocal(camPos + rd * t, noiseShift)) * 3.0) * shellAmp;
+      d = d + fbm(restPoint(camPos + rd * t, data, i32(dres.y), noiseLocal(camPos + rd * t, noiseShift), gBand) * 3.0) * shellAmp;
       conservative = true;
     }
     // Near a wound (mapBody.z) the field is not a distance bound — see
@@ -2848,11 +3249,36 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
         // the old form LENGTHENED the step to 0.6 in the very zones that
         // wanted it shortest; min() keeps omega there instead.
         stepLen = d * min(select(omega, 0.6, conservative), select(omega, woundMul, nearWound));
+        // CRAWL FLOOR (temporal start): graze rays near the surface step
+        // sub-millimetre distances and burn 15-30 samples crossing the last
+        // few cm (the gib-segment march cost of the holes fix). A 2 mm floor
+        // bounds the crawl to ~window/2mm steps; the graze accept (1 cm) and
+        // the eps accept still land hits that the floor steps across.
+        stepLen = max(stepLen, select(0.0, 0.002, temporalCfg.x > 0.5));
       }
     }
     prevRadius = radius;
     t = t + stepLen;
     if (t > tMax) {
+      // GRAZE ACCEPT (temporal start, 2026-09-10 night). The temporal start
+      // re-phases the walk; at silhouette/graze pixels the acceptance window
+      // before the exit is razor-thin, and the re-phased crawl (15-30 sub-mm
+      // steps) crossed the exit with its last sample a few mm OFF the
+      // surface and discarded: the stacked-corridor holes. radius here is
+      // the LAST SAMPLE's field value; accept at the crossing when that is
+      // within a HARD 1 cm — absolute, deliberately NOT scaled by the AA
+      // epsilon (t * aaCfg.x = 2% of distance): the first version multiplied
+      // the distance-scaled epsilon by 8 and the band grew to ~1.9 m at
+      // 12 m, accepting hits in the air beside distant limbs — white
+      // fresnel/spec lint over the whole body (owner report + screenshots,
+      // 2026-09-10). 1 cm is sub-visible at every range and still covers
+      // the 2-5 mm graze crawls. Scoped to the temporal start so
+      // ?tstart=0 stays bit-identical.
+      if (temporalCfg.x > 0.5 && radius < 0.01) {
+        t = t - stepLen;
+        hit = true;
+        break;
+      }
       // Do NOT break outright on the relaxed path. An over-relaxed step can
       // cross the surface AND tMax together, and the overshoot test cannot
       // fire until the NEXT sample — so breaking here discards a hit the
@@ -2916,7 +3342,183 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   if (debugCfg.x > 7.5 && debugCfg.x < 8.5) {
     return vec4<f32>(gDebugVolumeSamples, gDebugVolumeFallbacks, select(0.0, 1.0, hit), t);
   }
-  if (!hit) { discard; }
+`;
+/** Shared projection/colour/relief layer for live flesh and settled head meshes. */
+export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face sheet; added into the lit colour further down.
+  var faceGlow = 0.0;
+  // Decal coverage at this pixel (facing * alpha, decal mode only): drives
+  // the FLAT-LIGHTING blend at fleshLit. A painted PSX face is authored
+  // pre-lit; shading it again buries the nose and lips under the fringe
+  // shadow and the jaw's diffuse falloff.
+  var faceFlat = 0.0;
+  // Face coverage REGARDLESS of mode (facing * alpha). The torn-meat gore pass
+  // runs after this layer and attenuates by (1 - faceCover), so a detached
+  // head keeps its authored face instead of being mottled into a meat blob —
+  // the torn treatment belongs on the cut and the rest of the piece, not over
+  // the exterior skin (2026-09-16 playtest follow-ups task 2).
+  var faceCover = 0.0;
+
+  // Face texture, before wounds and char so damage still paints over it.
+  if (faceCfg.x > 0.5) {
+    let forward = faceCfg.z;
+    // Head-space position, normalised PER AXIS by the skull's own semi-axes —
+    // re-uploaded every frame from the posed primitives, so the projection
+    // rides the head as it jiggles without a full rest-space transform. One
+    // scalar radius put whichever axis was largest exactly on the head-mask
+    // cutoff, and raising headDepth then erased the entire face.
+    // Un-rotate into the head's REST frame before projecting (motion-polish):
+    // the rigid head pass rotates the skull masses, and a projection that
+    // stays axis-aligned paints the face onto whichever side happens to face
+    // front — nose mass out the ear, eyes off the brow. Rotation by the
+    // CONJUGATE of the head quaternion (v' = v + 2*cross(-q.xyz, cross(-q.xyz, v) + q.w*v)).
+    let hql = -gInstHeadQuat.xyz;
+    let hpv = p - gInstHeadCentre;
+    let hrot = hpv + 2.0 * cross(hql, cross(hql, hpv) + gInstHeadQuat.w * hpv);
+    let hs = hrot / max(headAxes, vec3<f32>(1e-4, 1e-4, 1e-4));
+    var raw = vec2<f32>(hs.x * forward, hs.y);
+    if (faceCfg2.x > 0.5) {
+      let dir = normalize(hs);
+      // Longitude measured from the front, latitude from the equator. Both
+      // normalised to -1..1 so faceProj means the same thing in either mode.
+      // NOTE atan2 — GLSL's two-argument atan() renames on this path.
+      raw = vec2<f32>(
+        atan2(dir.x * forward, dir.z * forward) / 3.14159265,
+        asin(clamp(dir.y, -1.0, 1.0)) / 1.57079633);
+    }
+    let uv0 = raw * faceProj.xy + faceProj.zw;
+    // Melt drips the face off the skull (task 8): sag drags features DOWN
+    // (see the FACE_MELT_SAG comment at the constants for why positive is
+    // down), the stretch elongates them as they go. The offset alone would
+    // slide a rigid face downward like a sticker.
+    let meltSag = gInstMelt.x;
+    var uv = uv0;
+    uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};
+    // Fade by how squarely this surface faces the front, so the projection does
+    // not smear a second face down the sides and back of the skull. A planar
+    // projection derives uv from x/y alone, so as the surface turns away it
+    // repeats the same uv column and STREAKS; fading out well before edge-on
+    // hides that.
+    // The facing axis is the head's rotated forward, not world +z.
+    // The lower bound widens toward FACE_MELT_FADE_LO as the melt flattens
+    // the head: a squashed skull's surface turns away from the forward axis
+    // far sooner than a round one's, and the un-widened cutoff faded the
+    // face out before it had finished dripping.
+    let hfw = vec3<f32>(0.0, 0.0, forward);
+    let hfr = hfw + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, hfw) + gInstHeadQuat.w * hfw);
+    var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, gInstMelt.x), 0.66, dot(n, hfr));
+    // Confine it to the HEAD. Generous, because the surface now sits at
+    // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
+    // against wrapping onto the neck.
+    // A DECAL (faceCfg.x == 2) gets half again the reach: hs is normalised by
+    // the FATTEST head prim, which on a character with hair is the crown
+    // shell, centred well above the face -- the schoolgirl's mouth sat at
+    // |hs| 1.55 and faded out at every projection setting. The decal's own
+    // alpha and the facing fade bound it instead.
+    // FACE MODE, faceCfg.x: 1 = sheet (MULTIPLY the rgb), 2 = decal (REPLACE
+    // the albedo), 3 = LUMA multiply. Mode 3 exists because multiplying two
+    // COLOURED values compounds their hue -- a skin-toned bake times skin-toned
+    // flesh reads more saturated than either, which the owner spotted as the
+    // face looking "more saturated from the surrounding skin". Using the
+    // decal's LUMINANCE as a scalar modulates brightness and leaves hue alone.
+    // Modes 1 and 2 are untouched and bit-identical.
+    let decal = select(0.0, 1.0, abs(faceCfg.x - 2.0) < 0.5);
+    let lumaOnly = abs(faceCfg.x - 3.0) < 0.5;
+    let reach = 1.0 + 0.5 * decal;
+    // HEAD-REGION MASK, independent of which way the surface faces: ~1 anywhere
+    // on the head's own extent, 0 down the neck. The gore pass uses it so a
+    // detached head keeps its OWN SKIN all around (the torn treatment belongs
+    // on the neck cut, not over the exterior), not merely the frontal face.
+    let faceRegion = 1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs));
+    facing = facing * faceRegion;
+    // Full protection on the frontal face; the rest of the head keeps only the
+    // HEAD_EXTERIOR_GORE_KEEP fraction of the piece's gore.
+    faceCover = clamp(facing + faceRegion * ${HEAD_EXTERIOR_GORE_KEEP}, 0.0, 1.0);
+    if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
+      let base = uv * faceAtlas.xy + faceAtlas.zw;
+      // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
+      // hand-tuned flesh colours it blends against, which were authored to
+      // compensate for the missing output encode. Revisit both together at the
+      // preset retune, not before.
+      let tex = texel(faceTex, base);
+      faceFlat = facing * tex.a * decal;
+      // Refine the region-level protection with the sheet's own alpha where it
+      // is actually sampled (a decal's transparent background must not shield
+      // the gore). A sheet with no alpha channel reads 1 and is unchanged.
+      faceCover = faceCover * tex.a;
+      let W = vec3<f32>(0.2126, 0.7152, 0.0722);
+      // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
+      // reference mesh and pasted on as albedo where its alpha is set, the way
+      // a PSX face was painted onto a head. No luma glow -- a photo is bright in
+      // many places that are not eyes -- and no relief, because its luminance
+      // edges (hairline, lips) are colour changes, not height.
+      faceGlow = smoothstep(faceCfg2.z, 1.0, dot(tex.rgb, W)) * facing * tex.a * (1.0 - decal);
+      // Opt-in painted red eyes: brightness alone would select skin/teeth.
+      // Red dominance rejects those, and the brightness gate rejects dark
+      // reddish hair/mouth pixels. This mask works with Replace albedo too.
+      if (faceGlowRedOnly > 0.5) {
+        let redDominance = (tex.r - max(tex.g, tex.b)) / max(tex.r, 0.001);
+        let redMask = smoothstep(min(faceCfg2.z, 0.999), 1.0, redDominance)
+                    * smoothstep(0.35, 0.70, tex.r);
+        faceGlow = redMask * facing * tex.a * clamp(faceCfg.y, 0.0, 1.0)
+                 * clamp(faceCfg2.w, 0.0, 1.0);
+      }
+
+      // Otherwise a MULTIPLIER, not a replacement: the generated sheet carries
+      // baked lighting, so pasting it in as albedo and lighting it again
+      // double-shades. Dividing by its measured mean keeps the pattern and
+      // throws away level.
+      // Luma mode divides by the same mean, so an average texel still
+      // multiplies by ~1 and the level is unchanged -- only the hue shift goes.
+      let detailSrc = select(tex.rgb, vec3<f32>(dot(tex.rgb, W)), lumaOnly);
+      let detail = detailSrc / max(faceCfg2.y, 1e-3);
+      // Skip the multiply where it glows: an eye is not tinted flesh, and the
+      // emissive term below supplies its colour outright.
+      // Soldier uses the otherwise unique red-only face flag. Its Replace
+      // decal must yield to the wound mask or it paints pale forehead pixels
+      // back over the tissue ramp after the crater was shaded.
+      let woundDecalFade = 1.0 - faceGlowRedOnly * smoothstep(0.02, 0.25, wm);
+      albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
+                   facing * tex.a * faceCfg.y * (1.0 - faceGlow) * woundDecalFade);
+      // Keep only the decal's dark facial structure over damaged Soldier
+      // tissue. This restores sockets/nose/mouth contrast without pasting its
+      // intact skin colour back onto the red wound.
+      let damagedFace = faceGlowRedOnly * smoothstep(0.02, 0.62, wm) * facing * tex.a;
+      let faceShadow = clamp(1.0 - dot(tex.rgb, W) / max(faceCfg2.y, 1e-3), 0.0, 1.0);
+      albedo = albedo * (1.0 - faceShadow * damagedFace * 0.78);
+
+      // Relief. Central differences on luminance give the height gradient; the
+      // projection is planar along z, so its tangent basis is just x and y and
+      // the bump drops straight into world space with no TBN to build.
+      if (faceCfg.w > 0.0 && decal < 0.5) {
+        let e = faceAtlas.xy * 0.012;
+        let hL = dot(texel(faceTex, base - vec2<f32>(e.x, 0.0)).rgb, W);
+        let hR = dot(texel(faceTex, base + vec2<f32>(e.x, 0.0)).rgb, W);
+        let hD = dot(texel(faceTex, base - vec2<f32>(0.0, e.y)).rgb, W);
+        let hU = dot(texel(faceTex, base + vec2<f32>(0.0, e.y)).rgb, W);
+        // Negated: the gradient points UPHILL, and a normal tilts away from
+        // rising ground. Without this the sockets would bulge instead of sink.
+        let bumpL = vec3<f32>(-(hR - hL) * forward, -(hU - hD), 0.0);
+        // The bump lives in the PROJECTION frame (the un-rotated head/hand
+        // space the uv was derived in) — rotate it by headQuat into world,
+        // the same rotation hfr gets above. Identity for an unrotated head;
+        // load-bearing for the hands view, whose frame is a large rotation
+        // (Opus hands round 3 — grooves shaded from a skewed direction).
+        let bump = bumpL
+          + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, bumpL) + gInstHeadQuat.w * bumpL);
+        // Suppressed where it glows: bright means RAISED to a height map, so
+        // without this the eyes bulge out of their sockets.
+        n = normalize(n + bump * faceCfg.w * facing * tex.a * (1.0 - faceGlow));
+      }
+    }
+  }`;
+
+export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
+  // Reload the slot whose field won the union fold. Every post-hit row read
+  // below (material, rest anchor, face, wound masks) is the HIT instance's.
+  loadInstance(inst, gHitSlot);
+  gPinSlot = gHitSlot;
+  // DEBUG MODE 11 (crowd diagnostics 2026-09-14): per-pixel slot / prim / distortion / band readout.
+  if (debugCfg.x > 10.5 && debugCfg.x < 11.5) { return vec4<f32>(f32(gHitSlot), gFoldBestDistort, f32(hitBest), f32(gBand)); }
   // FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). Returns the
   // body's base albedo AT THE HIT and skips the entire post-hit chain —
   // calcNormal (4 field evals), the anchor, the micro-detail fbm, wound/char
@@ -2968,19 +3570,19 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   var primGlow = 0.0;
   var primAlbedo = vec3<f32>(0.0);
   if (hitBest >= 0) {
-    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
+    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand), 0);
     if (PC.w > 0.0) {
       primAlbedo = PC.xyz;
       gloss = clamp(PC.w - 1.0, 0.0, 1.0);
       painted = 1.0;
-      let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0);
+      let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0);
       if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
       // GLOW (hard-surface task 3): primClip.w, the lane that was documented
       // spare until now. Loaded ONLY inside the painted branch — glow is
       // parse-gated on color=, so an unpainted pixel can never author one,
       // and this is the third texel a painted hit pixel pays for (colour,
       // shape, clip) and the last.
-      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0).w, 0.0, 1.0);
+      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0).w, 0.0, 1.0);
     }
   }
   // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
@@ -3006,18 +3608,27 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // anchor must exist before the normal runs. restPoint and noiseLocal are
   // pure reads, so hoisting them cannot move a pixel, and the mode-0 branch
   // below is byte-for-byte the pre-task-2 call.
-  let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));
+  let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift), gBand);
   var n = vec3<f32>(0.0);
   var ngValid = false;
   var ngReason = 7;
   var ngScalar = 0.0;
+  // CROWD (2026-09-14): the analytic gradient runs for single- AND multi-slot
+  // draws. ngBody no longer reloads a hard-coded slot 0 — that clobbered the
+  // hit slot POST pins just above and returned slot 0's field for every other
+  // instance (probe: dot(analytic, FD) 1.0 for slot 0, ~ -0.42 otherwise). It
+  // now reads whatever slot the caller loaded, so the gradient is the hit
+  // instance's own. The finite-difference path below remains the fallback for
+  // unsupported fields and as the debug comparison.
+  gNgDebugMask = u32(max(normalGradientCfg.z, 0.0));
   if (normalGradientCfg.x > 0.5) {
     let noiseAmplitude = marchCfg.z * (1.0 - max(gloss, metal));
-    let ng = ngBody(p, data, counts, counts2, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound);
+    let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
     ngScalar = ng.x;
     if (ngReason == 0) {
-      let candidate = ng.yzw + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude);
+      var candidate = ng.yzw;
+      if ((gNgDebugMask & 8u) == 0u) { candidate = candidate + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude); }
       let magnitude2 = dot(candidate, candidate);
       // Comparisons reject NaN and infinity as well as a collapsed gradient.
       ngValid = magnitude2 > 1e-12 && magnitude2 < 1e12;
@@ -3025,7 +3636,12 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     }
   }
   if (!ngValid) {
-    n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
+    n = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+  }
+  // DEBUG MODE 12 (crowd diagnostics 2026-09-14): slot, analytic reason, dot(analytic n, finite-difference n).
+  if (debugCfg.x > 11.5 && debugCfg.x < 12.5) {
+    let nFD = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+    return vec4<f32>(f32(gHitSlot), f32(ngReason), dot(n, nFD), t);
   }
   // Raw diagnostic RGB bypasses later detail/shading; outputNode still writes
   // the identical clip depth. Eligibility 0 is background, 1 is analytic.
@@ -3033,13 +3649,15 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     return vec4<f32>(f32(ngReason + 1), select(0.0, ngScalar - hitField.x, ngValid), f32(hitBest), t);
   }
   if (normalGradientCfg.y > 0.5) { return vec4<f32>(n * 0.5 + 0.5, t); }
-  gWoundShadePrim = select(-1.0, f32(hitBest), hitBest >= 0 && hitBest < i32(counts.x));
+  gWoundShadePrim = select(-1.0, f32(hitBest), hitBest >= 0 && hitBest < i32(gInstCounts.x));
   let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
   let wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
   let cm = charMask(p, data, woundCfg);
   let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
+  // Run 4: hand the anchor + gate to the output-res detail pass (MARCH_ANCHOR_READ).
+  gMarchAnchor = vec4<f32>(anchor, detailAmp);
   if (detailAmp > 0.0) {
     let detailNoise = vec3<f32>(
       fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0));
@@ -3108,8 +3726,8 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // thinning flesh with no wound anywhere near it (the bareBones bypass), so
   // the wm gate alone would leave an exposed bone unidentified and it would
   // shade as meat — the exact pale-vs-red contrast the melt lives on lost.
-  if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0) {
-    hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE}), 0).w;
+  if ((wm > 0.0 || gInstMelt.x > 0.0 || gInstCounts2.y > 0.5) && hitBest >= 0) {
+    hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE} + gBand), 0).w;
   }
   let isOrgan = hitMat > 4.5 && hitMat < 5.5;
   // W_BONE is 4 — the dominant row is a packed bone prim (bones still fold
@@ -3162,177 +3780,72 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     albedo = mix(albedo, mottleColor, blotch * surfCfg2.z);
   }
 
+${FACE_LAYER_WGSL}
+
   // Gore mask (gobs-and-goo spec §2): chunks are torn meat, not clean latex.
   // fbm mottling + proximity to the torn wounds; blends toward wet deep red
   // and darker clot, and rides the wet boost so bloody regions glisten.
-  // Sits BEFORE the face/char pass so a torn-off head still gets its face
-  // and char painted over the gore, and before the wet line, which maxes wm
-  // against gore. goreStrength is 0 on the body view, so standing bodies skip
-  // the whole block — including its fbm — and shade exactly as before.
-  let goreStrength = lodCfg.w;
+  //
+  // TASK 2 (2026-09-16 playtest follow-ups): this pass MOVED AFTER the face
+  // layer and is attenuated by (1 - faceCover). Before, the face multiplied an
+  // already gore-blackened albedo, so a detached head read as a mottled meat
+  // blob with the painted face invisible under it. Standing bodies have
+  // goreStrength 0 and pay nothing; a non-head chunk has faceCfg.x 0, so the
+  // face layer is a no-op and the gore result is bit-identical to before.
+  //
+  // TASK 3: the gate is the MAX of the per-view uniform (non-crowd draws and
+  // chunk views) and the per-instance record. The crowd shares ONE material, so
+  // a doomed body in a crowd could not ramp its gore through lodCfg.w without
+  // repainting the whole type; gInstGore carries its own ramp (REC_GORE).
+  let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);
   var gore = 0.0;
   if (goreStrength > 0.0) {
     let mottle = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);
     gore = clamp(mottle * 0.55 + wm * 0.65, 0.0, 1.0) * goreStrength;
     let clot = deepColor * 0.55;
     albedo = mix(albedo, mix(deepColor, clot, mottle), gore * 0.85);
-  }
-
-  // Emissive mask from the face sheet; added into the lit colour further down.
-  var faceGlow = 0.0;
-  // Decal coverage at this pixel (facing * alpha, decal mode only): drives
-  // the FLAT-LIGHTING blend at fleshLit. A painted PSX face is authored
-  // pre-lit; shading it again buries the nose and lips under the fringe
-  // shadow and the jaw's diffuse falloff.
-  var faceFlat = 0.0;
-
-  // Face texture, before wounds and char so damage still paints over it.
-  if (faceCfg.x > 0.5) {
-    let forward = faceCfg.z;
-    // Head-space position, normalised PER AXIS by the skull's own semi-axes —
-    // re-uploaded every frame from the posed primitives, so the projection
-    // rides the head as it jiggles without a full rest-space transform. One
-    // scalar radius put whichever axis was largest exactly on the head-mask
-    // cutoff, and raising headDepth then erased the entire face.
-    // Un-rotate into the head's REST frame before projecting (motion-polish):
-    // the rigid head pass rotates the skull masses, and a projection that
-    // stays axis-aligned paints the face onto whichever side happens to face
-    // front — nose mass out the ear, eyes off the brow. Rotation by the
-    // CONJUGATE of the head quaternion (v' = v + 2*cross(-q.xyz, cross(-q.xyz, v) + q.w*v)).
-    let hql = -headQuat.xyz;
-    let hpv = p - headCentre;
-    let hrot = hpv + 2.0 * cross(hql, cross(hql, hpv) + headQuat.w * hpv);
-    let hs = hrot / max(headAxes, vec3<f32>(1e-4, 1e-4, 1e-4));
-    var raw = vec2<f32>(hs.x * forward, hs.y);
-    if (faceCfg2.x > 0.5) {
-      let dir = normalize(hs);
-      // Longitude measured from the front, latitude from the equator. Both
-      // normalised to -1..1 so faceProj means the same thing in either mode.
-      // NOTE atan2 — GLSL's two-argument atan() renames on this path.
-      raw = vec2<f32>(
-        atan2(dir.x * forward, dir.z * forward) / 3.14159265,
-        asin(clamp(dir.y, -1.0, 1.0)) / 1.57079633);
-    }
-    let uv0 = raw * faceProj.xy + faceProj.zw;
-    // Melt drips the face off the skull (task 8): sag drags features DOWN
-    // (see the FACE_MELT_SAG comment at the constants for why positive is
-    // down), the stretch elongates them as they go. The offset alone would
-    // slide a rigid face downward like a sticker.
-    let meltSag = meltCfg.x;
-    var uv = uv0;
-    uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};
-    // Fade by how squarely this surface faces the front, so the projection does
-    // not smear a second face down the sides and back of the skull. A planar
-    // projection derives uv from x/y alone, so as the surface turns away it
-    // repeats the same uv column and STREAKS; fading out well before edge-on
-    // hides that.
-    // The facing axis is the head's rotated forward, not world +z.
-    // The lower bound widens toward FACE_MELT_FADE_LO as the melt flattens
-    // the head: a squashed skull's surface turns away from the forward axis
-    // far sooner than a round one's, and the un-widened cutoff faded the
-    // face out before it had finished dripping.
-    let hfw = vec3<f32>(0.0, 0.0, forward);
-    let hfr = hfw + 2.0 * cross(headQuat.xyz, cross(headQuat.xyz, hfw) + headQuat.w * hfw);
-    var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, meltCfg.x), 0.66, dot(n, hfr));
-    // Confine it to the HEAD. Generous, because the surface now sits at
-    // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
-    // against wrapping onto the neck.
-    // A DECAL (faceCfg.x == 2) gets half again the reach: hs is normalised by
-    // the FATTEST head prim, which on a character with hair is the crown
-    // shell, centred well above the face -- the schoolgirl's mouth sat at
-    // |hs| 1.55 and faded out at every projection setting. The decal's own
-    // alpha and the facing fade bound it instead.
-    // FACE MODE, faceCfg.x: 1 = sheet (MULTIPLY the rgb), 2 = decal (REPLACE
-    // the albedo), 3 = LUMA multiply. Mode 3 exists because multiplying two
-    // COLOURED values compounds their hue -- a skin-toned bake times skin-toned
-    // flesh reads more saturated than either, which the owner spotted as the
-    // face looking "more saturated from the surrounding skin". Using the
-    // decal's LUMINANCE as a scalar modulates brightness and leaves hue alone.
-    // Modes 1 and 2 are untouched and bit-identical.
-    let decal = select(0.0, 1.0, abs(faceCfg.x - 2.0) < 0.5);
-    let lumaOnly = abs(faceCfg.x - 3.0) < 0.5;
-    let reach = 1.0 + 0.5 * decal;
-    facing = facing * (1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs)));
-    if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
-      let base = uv * faceAtlas.xy + faceAtlas.zw;
-      // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
-      // hand-tuned flesh colours it blends against, which were authored to
-      // compensate for the missing output encode. Revisit both together at the
-      // preset retune, not before.
-      let tex = texel(faceTex, base);
-      faceFlat = facing * tex.a * decal;
-      let W = vec3<f32>(0.2126, 0.7152, 0.0722);
-      // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
-      // reference mesh and pasted on as albedo where its alpha is set, the way
-      // a PSX face was painted onto a head. No luma glow -- a photo is bright in
-      // many places that are not eyes -- and no relief, because its luminance
-      // edges (hairline, lips) are colour changes, not height.
-      faceGlow = smoothstep(faceCfg2.z, 1.0, dot(tex.rgb, W)) * facing * tex.a * (1.0 - decal);
-      // Opt-in painted red eyes: brightness alone would select skin/teeth.
-      // Red dominance rejects those, and the brightness gate rejects dark
-      // reddish hair/mouth pixels. This mask works with Replace albedo too.
-      if (faceGlowRedOnly > 0.5) {
-        let redDominance = (tex.r - max(tex.g, tex.b)) / max(tex.r, 0.001);
-        let redMask = smoothstep(min(faceCfg2.z, 0.999), 1.0, redDominance)
-                    * smoothstep(0.35, 0.70, tex.r);
-        faceGlow = redMask * facing * tex.a * clamp(faceCfg.y, 0.0, 1.0)
-                 * clamp(faceCfg2.w, 0.0, 1.0);
-      }
-
-      // Otherwise a MULTIPLIER, not a replacement: the generated sheet carries
-      // baked lighting, so pasting it in as albedo and lighting it again
-      // double-shades. Dividing by its measured mean keeps the pattern and
-      // throws away level.
-      // Luma mode divides by the same mean, so an average texel still
-      // multiplies by ~1 and the level is unchanged -- only the hue shift goes.
-      let detailSrc = select(tex.rgb, vec3<f32>(dot(tex.rgb, W)), lumaOnly);
-      let detail = detailSrc / max(faceCfg2.y, 1e-3);
-      // Skip the multiply where it glows: an eye is not tinted flesh, and the
-      // emissive term below supplies its colour outright.
-      // Soldier uses the otherwise unique red-only face flag. Its Replace
-      // decal must yield to the wound mask or it paints pale forehead pixels
-      // back over the tissue ramp after the crater was shaded.
-      let woundDecalFade = 1.0 - faceGlowRedOnly * smoothstep(0.02, 0.25, wm);
-      albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
-                   facing * tex.a * faceCfg.y * (1.0 - faceGlow) * woundDecalFade);
-      // Keep only the decal's dark facial structure over damaged Soldier
-      // tissue. This restores sockets/nose/mouth contrast without pasting its
-      // intact skin colour back onto the red wound.
-      let damagedFace = faceGlowRedOnly * smoothstep(0.02, 0.62, wm) * facing * tex.a;
-      let faceShadow = clamp(1.0 - dot(tex.rgb, W) / max(faceCfg2.y, 1e-3), 0.0, 1.0);
-      albedo = albedo * (1.0 - faceShadow * damagedFace * 0.78);
-
-      // Relief. Central differences on luminance give the height gradient; the
-      // projection is planar along z, so its tangent basis is just x and y and
-      // the bump drops straight into world space with no TBN to build.
-      if (faceCfg.w > 0.0 && decal < 0.5) {
-        let e = faceAtlas.xy * 0.012;
-        let hL = dot(texel(faceTex, base - vec2<f32>(e.x, 0.0)).rgb, W);
-        let hR = dot(texel(faceTex, base + vec2<f32>(e.x, 0.0)).rgb, W);
-        let hD = dot(texel(faceTex, base - vec2<f32>(0.0, e.y)).rgb, W);
-        let hU = dot(texel(faceTex, base + vec2<f32>(0.0, e.y)).rgb, W);
-        // Negated: the gradient points UPHILL, and a normal tilts away from
-        // rising ground. Without this the sockets would bulge instead of sink.
-        let bumpL = vec3<f32>(-(hR - hL) * forward, -(hU - hD), 0.0);
-        // The bump lives in the PROJECTION frame (the un-rotated head/hand
-        // space the uv was derived in) — rotate it by headQuat into world,
-        // the same rotation hfr gets above. Identity for an unrotated head;
-        // load-bearing for the hands view, whose frame is a large rotation
-        // (Opus hands round 3 — grooves shaded from a skewed direction).
-        let bump = bumpL
-          + 2.0 * cross(headQuat.xyz, cross(headQuat.xyz, bumpL) + headQuat.w * bumpL);
-        // Suppressed where it glows: bright means RAISED to a height map, so
-        // without this the eyes bulge out of their sockets.
-        n = normalize(n + bump * faceCfg.w * facing * tex.a * (1.0 - faceGlow));
-      }
-    }
+    // Capped blast cuts have no spherical torn-end wound. Stain their flesh
+    // without carving away the caps; mirror this in bakeChunkAlbedo.
+    let stain = smoothstep(0.40, 0.68, mottle) * goreStrength;
+    albedo = mix(albedo, deepColor * 0.22, stain * 0.85);
   }
 
   // Soldier-only wet blood stain. This uses the existing character flag and
   // the one authoritative wound mask, so it affects head and torso lips while
   // leaving Zombie, panel overrides, carve depth and gameplay untouched.
   let soldierWound = faceGlowRedOnly * smoothstep(0.02, 0.62, wm);
-  let gooRed = mix(vec3<f32>(0.52, 0.006, 0.009), vec3<f32>(0.16, 0.001, 0.003), smoothstep(surfCfg3.y, surfCfg3.z * 2.2, tissueDepth));
+  var gooRed = mix(vec3<f32>(0.52, 0.006, 0.009), vec3<f32>(0.16, 0.001, 0.003), smoothstep(surfCfg3.y, surfCfg3.z * 2.2, tissueDepth));
+  // MEAT DETAIL (owner 2026-09-12: the revealed flesh "reads as a smooth blobby red"). The stain
+  // above was ONE colour ramp; this breaks it into flesh. Everything keys off anchor (rest space,
+  // so nothing swims) and is gated on soldierWound > 0 so unwounded pixels pay nothing — the fbm
+  // must sit inside the gate, not just its result (the torn-fibre lesson). Deliberately STRONG:
+  // the r2 torn-fibre pass was cut as "rather subtle" at its ceiling; a wound has to read at
+  // 400x300 through the upscaler, which averages fine detail away.
+  //   clot     high-frequency speckle: sparse near-black clots in the arterial red
+  //   fibre    striation along the rest-space Y axis, muscle only (deeper tissue)
+  //   crevice  darkening where the carve is deepest (tissueDepth) — the wound reads recessed
+  //   glint    a second noise that BREAKS the wet highlight into glints (applied in SURFACE_PREP)
+  // meatCfg (wound panel, MEAT group): x amp (0 = the old flat stain), y clot strength, z glint
+  // range, w crevice darkening. All 1 = the shipped look.
+  let meatAmp = meatCfg.x;
+  var woundGlint = 1.0;
+  if (soldierWound > 0.0 && meatAmp > 0.0) {
+    let muscle = smoothstep(surfCfg3.y, surfCfg3.z * 2.2, tissueDepth);
+    let crevice = smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
+    let clot = fbm(anchor * 38.0) * 0.5 + 0.5;
+    let clotDark = clamp(smoothstep(0.45, 0.75, clot) * meatAmp * meatCfg.y, 0.0, 1.0);
+    let fibre = (fbm(anchor * vec3<f32>(9.0, 64.0, 9.0)) * 0.5 + 0.5) * meatAmp;
+    let glintN = fbm(anchor * 57.0 + 3.0) * 0.5 + 0.5;
+    // Arterial glaze on the lip (brighter, redder), clotted and striated further in.
+    gooRed = gooRed + vec3<f32>(0.16, 0.006, 0.006) * (1.0 - muscle) * (1.0 - clot) * meatAmp;
+    gooRed = gooRed * mix(1.0, 0.18, clotDark);
+    gooRed = gooRed * mix(1.0, mix(0.55, 1.45, fibre), muscle);
+    gooRed = gooRed * (1.0 - clamp(crevice * 0.65 * meatAmp * meatCfg.w, 0.0, 0.95));
+    // Wet highlight shattered into glints: 0.25..2.1 of the wound wetness by a fine noise (owner:
+    // overdo it), and dull on clots. (specPow itself is pinned to one shared definition, so the
+    // tight-vs-broad difference is carried by wetness alone.)
+    woundGlint = mix(1.0, mix(1.0 - 0.75 * meatCfg.z, 1.0 + 1.1 * meatCfg.z, smoothstep(0.35, 0.72, glintN)) * mix(1.0, 0.35, clotDark), meatAmp);
+  }
   albedo = mix(albedo, gooRed, soldierWound * 0.72);
 
   // PER-PRIMITIVE COLOUR. The fold already reports the nearest primitive at
@@ -3380,26 +3893,34 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   //
   // meltCfg.x is 0 everywhere except a melting body and its released bone
   // chunks, so every other pixel shades bit-identical to before this existed.
-  let meltU = smoothstep(0.0, 1.0, clamp(meltCfg.x * 2.0, 0.0, 1.0));
-  if (meltU > 0.0) {
-    if (isBone) {
-      albedo = mix(albedo, boneColor, meltU * 0.9);
-    } else {
-      // Patchy, not uniform: skin sloughs in pieces. Each point crosses over
-      // at its OWN progress, read off the rest-space anchor, and the patches
-      // scaled past 1.0 by MELT_SKIN_KEEP never cross at all — so pink skin
-      // survives in the finished puddle instead of everything staining red
-      // together. See the constants for the owner's brief.
-      // NB 'patch' is a RESERVED KEYWORD in WGSL — naming this variable that
-      // compiles fine in TypeScript and fails the shader at runtime, which
-      // renders the body invisible rather than erroring anywhere a test looks.
-      let skinPatch = clamp(fbm(anchor * ${MELT_SKIN_PATCH_FREQ}) * ${MELT_SKIN_CONTRAST} * 0.5 + 0.5, 0.0, 1.0);
-      let thresh = skinPatch * ${MELT_SKIN_KEEP};
-      let local = smoothstep(thresh - ${MELT_SKIN_PATCH_SOFT}, thresh + ${MELT_SKIN_PATCH_SOFT}, meltU);
-      albedo = mix(albedo, deepColor * 0.8, local * 0.8);
-    }
+  let meltU = smoothstep(0.0, 1.0, clamp(gInstMelt.x * 2.0, 0.0, 1.0));
+  // BONE EXPOSURE (body-to-gib rupture). A live body whose procedural skeleton
+  // is folded bare (counts2.y, set while the flesh is pulled off it) has bones
+  // winning the fold with no wound and no melt anywhere near, so the paleness
+  // cannot ride meltU — that would require meltCfg.x > 0 and drag the skin
+  // reddening and face sag of an actual melt onto a body that is being TORN,
+  // not liquefied. bareBoneU is the separate, monotone "this row is exposed
+  // bone" flag; the flesh branch below still runs only for a real melt.
+  let bareBoneU = select(0.0, 1.0, gInstCounts2.y > 0.5);
+  let bonePaleU = max(bareBoneU, meltU);
+  if (isBone && bonePaleU > 0.0) {
+    albedo = mix(albedo, boneColor, bonePaleU * 0.9);
+  } else if (meltU > 0.0) {
+    // Patchy, not uniform: skin sloughs in pieces. Each point crosses over
+    // at its OWN progress, read off the rest-space anchor, and the patches
+    // scaled past 1.0 by MELT_SKIN_KEEP never cross at all — so pink skin
+    // survives in the finished puddle instead of everything staining red
+    // together. See the constants for the owner's brief.
+    // NB 'patch' is a RESERVED KEYWORD in WGSL — naming this variable that
+    // compiles fine in TypeScript and fails the shader at runtime, which
+    // renders the body invisible rather than erroring anywhere a test looks.
+    let skinPatch = clamp(fbm(anchor * ${MELT_SKIN_PATCH_FREQ}) * ${MELT_SKIN_CONTRAST} * 0.5 + 0.5, 0.0, 1.0);
+    let thresh = skinPatch * ${MELT_SKIN_KEEP};
+    let local = smoothstep(thresh - ${MELT_SKIN_PATCH_SOFT}, thresh + ${MELT_SKIN_PATCH_SOFT}, meltU);
+    albedo = mix(albedo, deepColor * 0.8, local * 0.8);
   }
 `;
+export const MARCH_BODY_TRACE = /* wgsl */ `${MARCH_TRACE_SETUP}${MARCH_TRACE_LOOP}${MARCH_TRACE_POST}`;
 
 /**
  * SECTION 3 of 4 — SURFACE PREP: the light-independent material terms the
@@ -3429,12 +3950,14 @@ export const MARCH_BODY_SURFACE_PREP = /* wgsl */ `
   // Melt wetness (task 6): liquefying flesh goes FULLY wet — the puddle
   // glistens. FLESH ONLY: bone stays matte (the anchor comment above — wet
   // skin reflects, wet bone just looks polished), and that matte-vs-wet
-  // contrast is what makes pale bones read inside the red puddle.
+  // contrast is what makes pale bones read inside the red puddle. The same
+  // branch now covers a RUPTURING body's bare bones (bareBoneU), so exposed
+  // ribs read matte there too.
   // 1.6, the wound-wetness precedent: 2.2 was the first guess and the
   // near-level capture showed the whole grazing-angle puddle clipping to
   // paper white — wet, yes; blown out, no.
-  if (meltU > 0.0) {
-    wet = mix(wet, select(1.6, 0.45, isBone), meltU);
+  if (bonePaleU > 0.0) {
+    wet = mix(wet, select(1.6, 0.45, isBone), bonePaleU);
   }
   // The legacy shine exponent, named so the lighting tail and the deferred
   // surface output share one definition: the surface's roughness inverts the
@@ -3473,7 +3996,48 @@ export const MARCH_BODY_SURFACE_PREP = /* wgsl */ `
  * fleshLit compose, the display conversion and the debug heatmaps. None of
  * this exists in the deferred surface entry.
  */
-export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
+/**
+ * NEURAL UPSCALE RUNTIME NORMALS (plan docs/superpowers/plans/2026-09-12-neural-upscale-runtime-normals.md).
+ * The lit march leaves its final shading normal (WORLD space, unit, after the face bump — the
+ * same `n` the capture's debug mode 9 returns) in a module-scope private, and this read fn hands
+ * it to a renderer-level MRT as a second colour attachment. The private-global pattern is
+ * deferred-sdf.ts's SDF_SURFACE_STATE: the declaration trails the fn because wgslFn's parser is
+ * ^fn-anchored, and a read fn taking the march result as `dep` orders the read after the write.
+ * ONE node must carry this source for every chain that includes MARCH_BODY (zombie-gpu.ts
+ * `marchNormalRead` seeds buildMarchFn's chain) — a second wgslFn of the same text would
+ * redeclare the var and fail every pipeline.
+ */
+export const MARCH_NORMAL_OUT = /* wgsl */ `fn readMarchNormal(dep: vec4<f32>) -> vec4<f32> {
+  return gMarchNormal;
+}
+var<private> gMarchNormal: vec4<f32>;
+var<private> gMarchAnchor: vec4<f32>;
+`;
+
+/** Run 4 (plan 2026-09-12-neural-upscale-run4-relief): the rest-space noise anchor of the hit
+ *  (xyz) and the skin-detail gate detailAmp (w), for the output-resolution detail pass. Reads the
+ *  private declared in MARCH_NORMAL_OUT — include that node, never redeclare the var. */
+export const MARCH_ANCHOR_READ = /* wgsl */ `fn readMarchAnchor(dep: vec4<f32>) -> vec4<f32> {
+  return gMarchAnchor;
+}`;
+
+export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
+  // Run 5b: the normal attachment's alpha carries a per-body KEY (gInstCentre is the record's per-body centre, read from the
+  // same record by the march and by the refine twin, so it compares exactly). +1 keeps it off the cleared 0.
+  // No reader of the attachment consumes .w except the refine twin (pinned).
+  let bodyKey = dot(gInstCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;
+  gMarchNormal = vec4<f32>(normalize(n), bodyKey);
+  // NORMAL-OUTPUT MODE (debugCfg.x == 9, neural upscale normals capture,
+  // 2026-09-12). The final shading normal (after the face bump) in WORLD space,
+  // depth in alpha exactly as the lit output, so the same readback and crop
+  // apply. Read-back only, like the counters above; the capture script
+  // (scripts/upscale-capture-v2.mjs) rotates it into view space. The runtime
+  // stage gets normals from an MRT attachment later — this mode is the
+  // TRAINING-side source and must compute the same n the lit path shades with.
+  if (debugCfg.x > 8.5 && debugCfg.x < 9.5) {
+    return vec4<f32>(normalize(n), t);
+  }
+  // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
   // The world's SpotLight is invisible to the march — SDF bodies are shaded
   // here, not by three — so the beam is re-evaluated analytically per pixel.
   //
@@ -3547,7 +4111,7 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
   if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x * -8.0, 0.0, 1.0);
+    let thin = clamp(mapBody(p + L * 0.06, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x * -8.0, 0.0, 1.0);
     scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
   }
 
@@ -3558,7 +4122,7 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   // there is no "AO strength" to turn down.
   var ao = 1.0;
   if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x / 0.06, 0.35, 1.0);
+    ao = clamp(mapBody(p + n * 0.06, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x / 0.06, 0.35, 1.0);
   }
   // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
   // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24
@@ -3577,7 +4141,7 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   // fill, ambient and scatter stay untouched or craters go pitch black.
   var wShadow = 1.0;
   if (woundShadowCfg.x > 0.0 && hitNearWound) {
-    wShadow = mix(1.0, woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound), woundShadowCfg.x);
+    wShadow = mix(1.0, woundShadow(p, L, abs(woundShadowCfg.y), data, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg), woundShadowCfg.x);
   }
 
   // LEVEL SHADOW (perf round 2 task 7). One texture load per hit pixel, ZERO
@@ -3685,14 +4249,16 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   // light with a 0.2 m floor on the distance so a muzzle against the flesh
   // does not blow it out. bodyFlash.w = 0 skips it: bit-identical.
   var flashDirect = vec3<f32>(0.0, 0.0, 0.0);
-  if (bodyFlash.w > 0.0) {
-    let fv = bodyFlash.xyz - p;
+  if (gInstFlash.w > 0.0) {
+    let fv = gInstFlash.xyz - p;
     let fd2 = max(dot(fv, fv), 0.04);
     let fl = fv * inverseSqrt(fd2);
-    flashDirect = vec3<f32>(1.0, 0.72, 0.45) * (bodyFlash.w * max(dot(n, fl), 0.0) / fd2);
+    flashDirect = vec3<f32>(1.0, 0.72, 0.45) * (gInstFlash.w * max(dot(n, fl), 0.0) / fd2);
   }
   var fleshLit = albedo * (amb + flashDirect + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
-               + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
+               // * woundGlint: MEAT DETAIL (soldierWound block) — the wet highlight broken into glints,
+               // soldier wounds only; applied at the consumer so the hoisted wet statement stays pinned.
+               + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, soldierWound)
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
@@ -3813,13 +4379,9 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   L: vec3<f32>,
   k: f32,
   data: texture_2d<f32>,
-  counts: vec4<f32>,
-  counts2: vec4<f32>,
   woundCfg: vec4<f32>,
   woundCfg2: vec4<f32>,
   volumeTex: texture_3d<f32>,
-  volumePose0: vec4<f32>,
-  volumePose1: vec4<f32>,
   volumeMin: vec3<f32>,
   volumeInvExtent: vec3<f32>,
   volumeWarp: vec4<f32>,
@@ -3827,7 +4389,8 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   segVolumeAtlas: texture_3d<f32>,
   segVolumeMeta: texture_2d<f32>,
   perfCfg: vec4<f32>,
-  woundBound: vec4<f32>
+  inst: ptr<storage, array<vec4<f32>>, read>,
+  instCfg: vec4<f32>
 ) -> f32 {
   var res = 1.0;
   var t = 0.02;
@@ -3842,7 +4405,7 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   // so the first sample degrades to the plain estimator (y -> 0, d -> h).
   var ph = 1e10;
   for (var i = 0; i < 14; i = i + 1) {
-    let h = mapBody(p + L * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x;
+    let h = mapBody(p + L * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x;
     let y = h * h / (2.0 * ph);
     let dd = sqrt(max(h * h - y * y, 0.0));
     res = min(res, k * dd / max(t - y, 1e-4));
@@ -3924,9 +4487,96 @@ export const HELPERS = [
   SD_SHELL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
-  FOLD_GROUP, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
+  FOLD_GROUP, INSTANCE_STATE, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, PROBE_DYNAMIC_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_FETCH,
 ];
+
+/**
+ * RUN 5 (spec docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md §4).
+ * The refine entry shares the march's PARAMS (+4 appended), SETUP, POST, SURFACE_PREP and LIGHT
+ * sections verbatim; only the walk is replaced. Per OUTPUT pixel: the hit comes from the four
+ * surrounding march texels (hit-gated bilinear of linear view depth, along THIS pixel's ray) and
+ * only when at least HALF that bilinear weight is over hit texels (a grazing pixel whose
+ * footprint is mostly misses would converge on the silhouette's far side - a halo - so it is
+ * discarded and left to the net), the
+ * OWNERSHIP early-out (run 5b) drops a tap whose march texel belongs to another body - the key in
+ * the normal attachment's alpha - so a twin's proxy box costs nothing over pixels another body owns
+ * and the pass becomes screen- rather than body-bound, the
+ * body's own SDF rejects the pixel if it disagrees by more than refineCfg.y march texels (another
+ * body, or an edge — the net keeps owning edges), then refineCfg.w Newton steps land on the true
+ * surface and the normal stencil shrinks to refineCfg.z of an OUTPUT pixel's footprint.
+ * refineCfg: x = enabled (0 discards everything), y = reject in march texels (1.0),
+ *            z = normal stencil in output-pixel footprints (0.25), w = Newton steps (2).
+ *
+ * Walk state the later sections actually READ is declared here too: t, hit, hitBest, hitField
+ * and hitNearWound, each with the refine's real value. The walk's pure bookkeeping (step
+ * counters, prevRadius, omega/overshoot state) has no reader past the walk and is absent.
+ */
+export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
+  // The march texel grid under this output pixel - coneFetch's mapping, screenUV times dims.
+  let mDims = vec2<f32>(textureDimensions(marchTex, 0));
+  let mMax = vec2<i32>(mDims) - vec2<i32>(1, 1);
+  let q = screenUV * mDims - vec2<f32>(0.5, 0.5);
+  let c0 = clamp(vec2<i32>(floor(q)), vec2<i32>(0, 0), mMax);
+  let fr = clamp(q - vec2<f32>(c0), vec2<f32>(0.0), vec2<f32>(1.0));
+  var zsum = 0.0;
+  var wsum = 0.0;
+  // Run 5b: this body's key, the same expression MARCH_BODY_LIGHT wrote into the normal
+  // attachment's alpha, from the SAME per-body uniform - so it compares exactly.
+  let myKey = dot(gInstCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;
+  for (var k = 0; k < 4; k = k + 1) {
+    let dx = k & 1;
+    let dy = k >> 1;
+    let mcc = clamp(c0 + vec2<i32>(dx, dy), vec2<i32>(0, 0), mMax);
+    let mc = textureLoad(marchTex, mcc, 0);
+    let nk = textureLoad(normalTex, mcc, 0).w;
+    if (mc.w >= 1.0 || nk != myKey) { continue; }
+    let z = nearFar.x * nearFar.y / (nearFar.y - mc.w * (nearFar.y - nearFar.x));
+    let wgt = (1.0 - abs(fr.x - f32(dx))) * (1.0 - abs(fr.y - f32(dy)));
+    zsum = zsum + z * wgt;
+    wsum = wsum + wgt;
+  }
+  // wsum is the bilinear weight of the HIT texels THIS BODY OWNS only (run 5b: a texel whose
+  // normal-attachment alpha carries another body's key contributes nothing), i.e. the fraction of
+  // this output pixel's footprint that lies over THIS body's marched flesh. Below one half the pixel CENTRE sits over
+  // misses, and a Newton-converged point there is on the silhouette's far side - a lit halo
+  // outside the body - so the pixel is left to the net, which keeps owning that rim.
+  if (wsum < 0.5) { discard; }
+  // View depth to distance along THIS pixel's ray - cosRay is minus the view-space z of rd.
+  var t = clamp((zsum / wsum) / max(cosRay, 1e-4), 0.0, tMax);
+  var hit = false;
+  var hitBest = -1;
+  var hitNearWound = false;
+  var hitField = vec4<f32>(0.0);
+  var pRef = camPos + rd * t;
+  var dres = mapBody(pRef, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+  // aaCfg.x is the footprint RADIUS per unit distance for one MARCH-RES pixel - see the
+  // PARAMS doc above - so at distance t a MARCH texel spans 2*t*aaCfg.x across and an
+  // OUTPUT pixel, being half the march texel, spans t*aaCfg.x. This is the march texel.
+  let texelFoot = 2.0 * t * aaCfg.x;
+  if (abs(dres.x) > refineCfg.y * max(texelFoot, 1e-4)) { discard; }
+  for (var k = 0; k < i32(refineCfg.w); k = k + 1) {
+    t = t + dres.x;
+    pRef = camPos + rd * t;
+    dres = mapBody(pRef, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+  }
+  hit = true;
+  hitBest = i32(dres.y);
+  hitField = dres;
+  hitNearWound = dres.z > 0.5;
+  // t*aaCfg.x is one OUTPUT pixel's world footprint (the same framing as texelFoot above
+  // and the PARAMS doc), so refineCfg.z scales the stencil in output-pixel footprints.
+  // The floor exists because the footprint goes to zero at the near plane and a stencil
+  // small enough to vanish into float spacing would collapse calcNormal's four taps onto
+  // the same value - an undefined normal. It sits far BELOW the march's 0.0015 default
+  // on purpose - the refined point is already ON the surface after the Newton steps, so
+  // there is no walk tolerance to straddle and a tight stencil is both safe and the whole
+  // point of the pass - while 2e-4 is still ~1e3 ulps of a metre-scale coordinate.
+  gNormalEps = max(refineCfg.z * t * aaCfg.x, 2e-4);
+`;
+export const REFINE_PARAMS = MARCH_BODY_PARAMS.slice(0, MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, '') +
+  `,\n  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>,\n  normalTex: texture_2d<f32>\n) -> vec4<f32> {\n`;
+export const REFINE_BODY = `fn refineBody${REFINE_PARAMS}${MARCH_TRACE_SETUP}${REFINE_LOOP}${MARCH_TRACE_POST}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}`;

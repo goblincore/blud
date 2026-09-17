@@ -1,0 +1,67 @@
+{
+  "cases": {
+    "movingCast": true,
+    "secondBlastDuringTear": {
+      "pendingMid": 1,
+      "tearingMid": 1,
+      "pendingAfterSecond": 1,
+      "scheduledBodies": 1,
+      "oneRelease": true
+    },
+    "repeated": {
+      "live": 64,
+      "cap": 64,
+      "baked": 0,
+      "views": 64,
+      "bounded": true,
+      "uniqueIds": true,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0
+    },
+    "resetMidTear": {
+      "midTearing": 1,
+      "midPending": 1,
+      "actorsAfterReset": 23,
+      "postTearing": 0,
+      "postPending": 0,
+      "liveAfter": 64,
+      "drained": true
+    },
+    "tightMultiBody": {
+      "tierLog": [
+        "parts:16",
+        "parts:16"
+      ],
+      "live": 64,
+      "cap": 12,
+      "bounded": false,
+      "dropped": 0,
+      "views": 64
+    }
+  },
+  "perf": {
+    "coldBlast": {
+      "lastBlastMs": 4.300000071525574,
+      "frames": {
+        "n": 6,
+        "p50": 17.200000047683716,
+        "p95": 201.40000009536743,
+        "max": 201.40000009536743
+      }
+    },
+    "repeatedBlast": {
+      "lastBlastMs": 0.5,
+      "frames": {
+        "n": 95,
+        "p50": 12.5,
+        "p95": 171.5,
+        "max": 200
+      }
+    },
+    "pipelineLog": {
+      "frames": 8,
+      "longFrames": []
+    }
+  },
+  "pageErrors": []
+}

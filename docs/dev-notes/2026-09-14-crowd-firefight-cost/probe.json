@@ -1,0 +1,1829 @@
+{
+  "at": "2026-09-15T00:32:55.653Z",
+  "demo": "docs/dev-notes/demos/2026-09-14T21-02-05-669Z-room1.dem.json",
+  "seed": 565832646,
+  "frames": [
+    1300,
+    1600,
+    1900
+  ],
+  "legs": [
+    "crowd-off",
+    "crowd-quad",
+    "crowd-boxes"
+  ],
+  "loadAvg": [
+    3.70947265625,
+    3.52685546875,
+    4.0263671875
+  ],
+  "rows": [
+    {
+      "leg": "crowd-off",
+      "frame": 1300,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "quad",
+      "crowdOn": false,
+      "replayMs": 26364,
+      "quadFragPx": 0,
+      "quadRectFrac": 0,
+      "steppedPx": 134647,
+      "setupNoStepUpperBound": null,
+      "setupNoStepUpperBoundFrac": null,
+      "coverage": 0.28051458333333334,
+      "hits": 64530,
+      "misses": 70117,
+      "occupancy": 0.4792531582582605,
+      "meanStepsHit": 5.548194638152797,
+      "meanStepsMiss": 4.054209392871914,
+      "meanStepsPerSteppedPx": 4.770206540064019,
+      "missStepShare": 0.4425839257411715,
+      "bodiesOnScreen": 4,
+      "stepsTotal": 642294,
+      "tileMultiFrac": 0.5036842105263157,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [],
+      "primsVisible": 364,
+      "primsPerBody": [
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        },
+        {
+          "id": 8,
+          "prims": 91
+        },
+        {
+          "id": 10,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 4,
+      "actors": [
+        {
+          "id": 1,
+          "visible": false,
+          "dist": 2.86,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 2,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 3.43,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 9.7,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 10.8,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 9.22,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.46,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": true,
+          "dist": 7.33,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 8.19,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": true,
+          "dist": 1.32,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 18.45,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 19.1,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 17.82,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 13.82,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 14.16,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 4,
+        "wounds": 7,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-off",
+      "frame": 1600,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "quad",
+      "crowdOn": false,
+      "replayMs": 32411,
+      "quadFragPx": 0,
+      "quadRectFrac": 0,
+      "steppedPx": 87306,
+      "setupNoStepUpperBound": null,
+      "setupNoStepUpperBoundFrac": null,
+      "coverage": 0.1818875,
+      "hits": 36112,
+      "misses": 51194,
+      "occupancy": 0.4136256385586329,
+      "meanStepsHit": 4.889731945059814,
+      "meanStepsMiss": 3.5220533656287847,
+      "meanStepsPerSteppedPx": 4.087760291388908,
+      "missStepShare": 0.5052257583654164,
+      "bodiesOnScreen": 4,
+      "stepsTotal": 356886,
+      "tileMultiFrac": 0.391578947368421,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [],
+      "primsVisible": 334,
+      "primsPerBody": [
+        {
+          "id": 1,
+          "prims": 61
+        },
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        },
+        {
+          "id": 10,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 4,
+      "actors": [
+        {
+          "id": 1,
+          "visible": true,
+          "dist": 3.1,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 1.94,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 3.43,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 9.56,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 10,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 9.22,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.35,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": false,
+          "dist": 7.33,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 8.19,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": true,
+          "dist": 1.32,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 17.42,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 19.22,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 17.81,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 14.27,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 13.83,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 4,
+        "wounds": 7,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-off",
+      "frame": 1900,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "quad",
+      "crowdOn": false,
+      "replayMs": 38321,
+      "quadFragPx": 0,
+      "quadRectFrac": 0,
+      "steppedPx": 89117,
+      "setupNoStepUpperBound": null,
+      "setupNoStepUpperBoundFrac": null,
+      "coverage": 0.18566041666666666,
+      "hits": 41741,
+      "misses": 47376,
+      "occupancy": 0.46838425889560914,
+      "meanStepsHit": 6.145180997101171,
+      "meanStepsMiss": 5.527271192164809,
+      "meanStepsPerSteppedPx": 5.816690418214257,
+      "missStepShare": 0.5051643047576423,
+      "bodiesOnScreen": 3,
+      "stepsTotal": 518366,
+      "tileMultiFrac": 0.10263157894736842,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [],
+      "primsVisible": 243,
+      "primsPerBody": [
+        {
+          "id": 1,
+          "prims": 61
+        },
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 3,
+      "actors": [
+        {
+          "id": 1,
+          "visible": true,
+          "dist": 1.11,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 1.42,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 5.34,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 11.7,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 12.11,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 11.39,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.09,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": false,
+          "dist": 8.23,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 9.69,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": false,
+          "dist": 1.78,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 18.93,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 20.83,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 19.72,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 16.08,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 16.64,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 3,
+        "wounds": 23,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-quad",
+      "frame": 1300,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "quad",
+      "crowdOn": true,
+      "replayMs": 24722,
+      "quadFragPx": 613737,
+      "quadRectFrac": 1.2786192358858113,
+      "steppedPx": 132966,
+      "setupNoStepUpperBound": 480771,
+      "setupNoStepUpperBoundFrac": 0.7833501972343202,
+      "coverage": 0.2770125,
+      "hits": 87917,
+      "misses": 45049,
+      "occupancy": 0.6611991035302258,
+      "meanStepsHit": 5.303627284825461,
+      "meanStepsMiss": 7.88379320295678,
+      "meanStepsPerSteppedPx": 6.177789810929109,
+      "missStepShare": 0.43236113342974986,
+      "bodiesOnScreen": 4,
+      "stepsTotal": 821436,
+      "tileMultiFrac": 0.5036842105263157,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [
+        {
+          "name": "soldier@1",
+          "attached": 1,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 617
+        },
+        {
+          "name": "zombie@2",
+          "attached": 2,
+          "visible": 1,
+          "rect": [
+            0.44276152822837767,
+            -1,
+            1,
+            1
+          ],
+          "rectFrac": 0.27861923588581117,
+          "meanDistance": 2.0014630963573303,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 664
+        },
+        {
+          "name": "zombie@3",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1369
+        },
+        {
+          "name": "zombie@4",
+          "attached": 4,
+          "visible": 3,
+          "rect": [
+            -1,
+            -1,
+            1,
+            1
+          ],
+          "rectFrac": 1,
+          "meanDistance": 3.7050157661681076,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 128
+        },
+        {
+          "name": "soldier@5",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1211
+        },
+        {
+          "name": "zombie@5",
+          "attached": 2,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1312
+        }
+      ],
+      "primsVisible": 364,
+      "primsPerBody": [
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        },
+        {
+          "id": 8,
+          "prims": 91
+        },
+        {
+          "id": 10,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 4,
+      "actors": [
+        {
+          "id": 1,
+          "visible": false,
+          "dist": 2.86,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 2,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 3.43,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 9.7,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 10.8,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 9.22,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.46,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": true,
+          "dist": 7.33,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 8.19,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": true,
+          "dist": 1.32,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 18.45,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 19.1,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 17.82,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 13.82,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 14.16,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 4,
+        "wounds": 7,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-quad",
+      "frame": 1600,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "quad",
+      "crowdOn": true,
+      "replayMs": 30535,
+      "quadFragPx": 940351,
+      "quadRectFrac": 1.9590635737062652,
+      "steppedPx": 87306,
+      "setupNoStepUpperBound": 853045,
+      "setupNoStepUpperBoundFrac": 0.9071559449609773,
+      "coverage": 0.1818875,
+      "hits": 58425,
+      "misses": 28881,
+      "occupancy": 0.6691979932650677,
+      "meanStepsHit": 4.912229353872486,
+      "meanStepsMiss": 7.78151726048267,
+      "meanStepsPerSteppedPx": 5.861395551279408,
+      "missStepShare": 0.43916871036767074,
+      "bodiesOnScreen": 4,
+      "stepsTotal": 511735,
+      "tileMultiFrac": 0.391578947368421,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [
+        {
+          "name": "soldier@1",
+          "attached": 1,
+          "visible": 1,
+          "rect": [
+            -0.05749845535601529,
+            -1,
+            1,
+            0.6854765635437892
+          ],
+          "rectFrac": 0.4455972156215805,
+          "meanDistance": 3.104618761373183,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 878
+        },
+        {
+          "name": "zombie@2",
+          "attached": 2,
+          "visible": 1,
+          "rect": [
+            -0.4138895333179456,
+            -1,
+            1,
+            1
+          ],
+          "rectFrac": 0.7069447666589728,
+          "meanDistance": 1.9445640935417063,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 882
+        },
+        {
+          "name": "zombie@3",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1668
+        },
+        {
+          "name": "zombie@4",
+          "attached": 4,
+          "visible": 2,
+          "rect": [
+            -1,
+            -1,
+            0.6130431828514242,
+            1
+          ],
+          "rectFrac": 0.8065215914257121,
+          "meanDistance": 1.8359597457593764,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 127
+        },
+        {
+          "name": "soldier@5",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1510
+        },
+        {
+          "name": "zombie@5",
+          "attached": 2,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1611
+        }
+      ],
+      "primsVisible": 334,
+      "primsPerBody": [
+        {
+          "id": 1,
+          "prims": 61
+        },
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        },
+        {
+          "id": 10,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 4,
+      "actors": [
+        {
+          "id": 1,
+          "visible": true,
+          "dist": 3.1,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 1.94,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 3.43,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 9.56,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 10,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 9.22,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.35,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": false,
+          "dist": 7.33,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 8.19,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": true,
+          "dist": 1.32,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 17.42,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 19.22,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 17.81,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 14.27,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 13.83,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 4,
+        "wounds": 7,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-quad",
+      "frame": 1900,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "quad",
+      "crowdOn": true,
+      "replayMs": 40703,
+      "quadFragPx": 1077401,
+      "quadRectFrac": 2.2445855340248397,
+      "steppedPx": 89117,
+      "setupNoStepUpperBound": 988284,
+      "setupNoStepUpperBoundFrac": 0.9172852076432081,
+      "coverage": 0.18566041666666666,
+      "hits": 55323,
+      "misses": 33794,
+      "occupancy": 0.6207906460046905,
+      "meanStepsHit": 6.077327693725937,
+      "meanStepsMiss": 9.359531277741612,
+      "meanStepsPerSteppedPx": 7.32196999450161,
+      "missStepShare": 0.4847359129027512,
+      "bodiesOnScreen": 3,
+      "stepsTotal": 652512,
+      "tileMultiFrac": 0.10263157894736842,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [
+        {
+          "name": "soldier@1",
+          "attached": 1,
+          "visible": 1,
+          "rect": [
+            -1,
+            -1,
+            1,
+            1
+          ],
+          "rectFrac": 1,
+          "meanDistance": 1.110234547513496,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 877
+        },
+        {
+          "name": "zombie@2",
+          "attached": 2,
+          "visible": 1,
+          "rect": [
+            -1,
+            -1,
+            1,
+            -0.41274233675596245
+          ],
+          "rectFrac": 0.2936288316220188,
+          "meanDistance": 1.4216417767316862,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 950
+        },
+        {
+          "name": "zombie@3",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1967
+        },
+        {
+          "name": "zombie@4",
+          "attached": 4,
+          "visible": 1,
+          "rect": [
+            -0.9019134048056417,
+            -1,
+            1,
+            1
+          ],
+          "rectFrac": 0.9509567024028209,
+          "meanDistance": 2.0866239546816283,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 126
+        },
+        {
+          "name": "soldier@5",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1809
+        },
+        {
+          "name": "zombie@5",
+          "attached": 2,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1910
+        }
+      ],
+      "primsVisible": 243,
+      "primsPerBody": [
+        {
+          "id": 1,
+          "prims": 61
+        },
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 3,
+      "actors": [
+        {
+          "id": 1,
+          "visible": true,
+          "dist": 1.11,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 1.42,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 5.34,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 11.7,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 12.11,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 11.39,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.09,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": false,
+          "dist": 8.23,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 9.69,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": false,
+          "dist": 1.78,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 18.93,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 20.83,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 19.72,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 16.08,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 16.64,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 3,
+        "wounds": 23,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-boxes",
+      "frame": 1300,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "boxes",
+      "crowdOn": true,
+      "replayMs": 23956,
+      "quadFragPx": 0,
+      "quadRectFrac": 0,
+      "steppedPx": 134647,
+      "setupNoStepUpperBound": null,
+      "setupNoStepUpperBoundFrac": null,
+      "coverage": 0.28051458333333334,
+      "hits": 62867,
+      "misses": 71780,
+      "occupancy": 0.4669023446493423,
+      "meanStepsHit": 5.599074236085705,
+      "meanStepsMiss": 3.982516021175815,
+      "meanStepsPerSteppedPx": 4.737290841979398,
+      "missStepShare": 0.44816120101213114,
+      "bodiesOnScreen": 4,
+      "stepsTotal": 637862,
+      "tileMultiFrac": 0.5036842105263157,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [
+        {
+          "name": "soldier@1",
+          "attached": 1,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 615
+        },
+        {
+          "name": "zombie@2",
+          "attached": 2,
+          "visible": 1,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 2.0014630963573303,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 662
+        },
+        {
+          "name": "zombie@3",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1367
+        },
+        {
+          "name": "zombie@4",
+          "attached": 4,
+          "visible": 3,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 3.7050157661681076,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 126
+        },
+        {
+          "name": "soldier@5",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1209
+        },
+        {
+          "name": "zombie@5",
+          "attached": 2,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1310
+        }
+      ],
+      "primsVisible": 364,
+      "primsPerBody": [
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        },
+        {
+          "id": 8,
+          "prims": 91
+        },
+        {
+          "id": 10,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 4,
+      "actors": [
+        {
+          "id": 1,
+          "visible": false,
+          "dist": 2.86,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 2,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 3.43,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 9.7,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 10.8,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 9.22,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.46,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": true,
+          "dist": 7.33,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 8.19,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": true,
+          "dist": 1.32,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 18.45,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 19.1,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 17.82,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 13.82,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 14.16,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 4,
+        "wounds": 7,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-boxes",
+      "frame": 1600,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "boxes",
+      "crowdOn": true,
+      "replayMs": 30199,
+      "quadFragPx": 0,
+      "quadRectFrac": 0,
+      "steppedPx": 87306,
+      "setupNoStepUpperBound": null,
+      "setupNoStepUpperBoundFrac": null,
+      "coverage": 0.1818875,
+      "hits": 35914,
+      "misses": 51392,
+      "occupancy": 0.4113577531899297,
+      "meanStepsHit": 4.901152753800746,
+      "meanStepsMiss": 3.585499688667497,
+      "meanStepsPerSteppedPx": 4.126703777518155,
+      "missStepShare": 0.5114436864046896,
+      "bodiesOnScreen": 4,
+      "stepsTotal": 360286,
+      "tileMultiFrac": 0.391578947368421,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [
+        {
+          "name": "soldier@1",
+          "attached": 1,
+          "visible": 1,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 3.104618761373183,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 878
+        },
+        {
+          "name": "zombie@2",
+          "attached": 2,
+          "visible": 1,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 1.9445640935417063,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 882
+        },
+        {
+          "name": "zombie@3",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1668
+        },
+        {
+          "name": "zombie@4",
+          "attached": 4,
+          "visible": 2,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 1.8359597457593764,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 127
+        },
+        {
+          "name": "soldier@5",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1510
+        },
+        {
+          "name": "zombie@5",
+          "attached": 2,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1611
+        }
+      ],
+      "primsVisible": 334,
+      "primsPerBody": [
+        {
+          "id": 1,
+          "prims": 61
+        },
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        },
+        {
+          "id": 10,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 4,
+      "actors": [
+        {
+          "id": 1,
+          "visible": true,
+          "dist": 3.1,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 1.94,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 3.43,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 9.56,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 10,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 9.22,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.35,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": false,
+          "dist": 7.33,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 8.19,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": true,
+          "dist": 1.32,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 17.42,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 19.22,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 17.81,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 14.27,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 13.83,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 4,
+        "wounds": 7,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    },
+    {
+      "leg": "crowd-boxes",
+      "frame": 1900,
+      "targetW": 800,
+      "targetH": 600,
+      "screenPx": 480000,
+      "dispatch": "boxes",
+      "crowdOn": true,
+      "replayMs": 39120,
+      "quadFragPx": 0,
+      "quadRectFrac": 0,
+      "steppedPx": 89117,
+      "setupNoStepUpperBound": null,
+      "setupNoStepUpperBoundFrac": null,
+      "coverage": 0.18566041666666666,
+      "hits": 47423,
+      "misses": 41694,
+      "occupancy": 0.5321431376729469,
+      "meanStepsHit": 6.232503215739198,
+      "meanStepsMiss": 6.51391087446635,
+      "meanStepsPerSteppedPx": 6.364161719986086,
+      "missStepShare": 0.4788655658506052,
+      "bodiesOnScreen": 3,
+      "stepsTotal": 567155,
+      "tileMultiFrac": 0.10263157894736842,
+      "tilesX": 50,
+      "tilesY": 38,
+      "types": [
+        {
+          "name": "soldier@1",
+          "attached": 1,
+          "visible": 1,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 1.110234547513496,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 877
+        },
+        {
+          "name": "zombie@2",
+          "attached": 2,
+          "visible": 1,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 1.4216417767316862,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 950
+        },
+        {
+          "name": "zombie@3",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1966
+        },
+        {
+          "name": "zombie@4",
+          "attached": 4,
+          "visible": 1,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 2.0866239546816283,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 126
+        },
+        {
+          "name": "soldier@5",
+          "attached": 3,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1808
+        },
+        {
+          "name": "zombie@5",
+          "attached": 2,
+          "visible": 0,
+          "rect": null,
+          "rectFrac": 0,
+          "meanDistance": 0,
+          "clampedTiles": 0,
+          "tilesOn": true,
+          "idleSkips": 1909
+        }
+      ],
+      "primsVisible": 243,
+      "primsPerBody": [
+        {
+          "id": 1,
+          "prims": 61
+        },
+        {
+          "id": 2,
+          "prims": 91
+        },
+        {
+          "id": 7,
+          "prims": 91
+        }
+      ],
+      "bodiesVisible": 3,
+      "actors": [
+        {
+          "id": 1,
+          "visible": true,
+          "dist": 1.11,
+          "baked": "none"
+        },
+        {
+          "id": 2,
+          "visible": true,
+          "dist": 1.42,
+          "baked": "none"
+        },
+        {
+          "id": 3,
+          "visible": false,
+          "dist": 5.34,
+          "baked": "none"
+        },
+        {
+          "id": 4,
+          "visible": false,
+          "dist": 11.7,
+          "baked": "none"
+        },
+        {
+          "id": 5,
+          "visible": false,
+          "dist": 12.11,
+          "baked": "none"
+        },
+        {
+          "id": 6,
+          "visible": false,
+          "dist": 11.39,
+          "baked": "none"
+        },
+        {
+          "id": 7,
+          "visible": true,
+          "dist": 2.09,
+          "baked": "none"
+        },
+        {
+          "id": 8,
+          "visible": false,
+          "dist": 8.23,
+          "baked": "none"
+        },
+        {
+          "id": 9,
+          "visible": false,
+          "dist": 9.69,
+          "baked": "none"
+        },
+        {
+          "id": 10,
+          "visible": false,
+          "dist": 1.78,
+          "baked": "none"
+        },
+        {
+          "id": 11,
+          "visible": false,
+          "dist": 18.93,
+          "baked": "none"
+        },
+        {
+          "id": 12,
+          "visible": false,
+          "dist": 20.83,
+          "baked": "none"
+        },
+        {
+          "id": 13,
+          "visible": false,
+          "dist": 19.72,
+          "baked": "none"
+        },
+        {
+          "id": 14,
+          "visible": false,
+          "dist": 16.08,
+          "baked": "none"
+        },
+        {
+          "id": 15,
+          "visible": false,
+          "dist": 16.64,
+          "baked": "none"
+        }
+      ],
+      "censusAtFrame": {
+        "bodies": 3,
+        "wounds": 23,
+        "chunks": 0,
+        "droplets": 0,
+        "splats": 256,
+        "gooQuads": 256
+      },
+      "demoInfo": {
+        "frame": 0,
+        "replaying": false
+      }
+    }
+  ]
+}

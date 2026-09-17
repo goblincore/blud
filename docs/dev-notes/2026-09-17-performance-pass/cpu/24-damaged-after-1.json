@@ -1,0 +1,13 @@
+{
+  "count": 24,
+  "frames": 900,
+  "dt": 0.03333333333333333,
+  "scenario": "damaged",
+  "profile": false,
+  "wounds": 73,
+  "packedBytesPerActor": 32256,
+  "digest": "2fc506c9f42cbe8f06427940f391f4a5160c632b7046a4164018fde2e208a638",
+  "p50": 2.181332999999995,
+  "p95": 2.9088329999999587,
+  "mean": 2.301488061111115
+}

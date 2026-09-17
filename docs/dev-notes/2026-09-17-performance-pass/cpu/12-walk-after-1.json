@@ -1,0 +1,13 @@
+{
+  "count": 12,
+  "frames": 900,
+  "dt": 0.03333333333333333,
+  "scenario": "walk",
+  "profile": false,
+  "wounds": 0,
+  "packedBytesPerActor": 32256,
+  "digest": "7454933c02ded3bc890580ee70bd8e11f44e16c9f09221d2ce1eca7e44607312",
+  "p50": 1.049792000000025,
+  "p95": 1.3516250000000127,
+  "mean": 1.0942913388888864
+}

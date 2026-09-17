@@ -1,0 +1,725 @@
+{
+  "note": "CPU sync only, excludes GPU submission",
+  "rows": [
+    {
+      "name": "empty",
+      "rep": 0,
+      "optimized": false,
+      "ms": 0.019889624999999966,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 0,
+      "optimized": true,
+      "ms": 0.00006141600000000836,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 1,
+      "optimized": true,
+      "ms": 0.00005670900000001211,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 1,
+      "optimized": false,
+      "ms": 0.01991145899999998,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 2,
+      "optimized": false,
+      "ms": 0.019869416999999997,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 2,
+      "optimized": true,
+      "ms": 0.00005737499999997908,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 3,
+      "optimized": true,
+      "ms": 0.000056875000000047746,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 3,
+      "optimized": false,
+      "ms": 0.02006216599999999,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 4,
+      "optimized": false,
+      "ms": 0.019892709000000026,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 4,
+      "optimized": true,
+      "ms": 0.00005750000000000455,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 5,
+      "optimized": true,
+      "ms": 0.00005654200000003584,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 5,
+      "optimized": false,
+      "ms": 0.01989691700000003,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 6,
+      "optimized": false,
+      "ms": 0.019891750000000003,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 6,
+      "optimized": true,
+      "ms": 0.00005829199999999446,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 7,
+      "optimized": true,
+      "ms": 0.00008620899999999665,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 7,
+      "optimized": false,
+      "ms": 0.02005645800000002,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 8,
+      "optimized": false,
+      "ms": 0.020150792000000025,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 8,
+      "optimized": true,
+      "ms": 0.00006712500000003275,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 9,
+      "optimized": true,
+      "ms": 0.0000952909999999747,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 9,
+      "optimized": false,
+      "ms": 0.019963542000000018,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 10,
+      "optimized": false,
+      "ms": 0.019994042000000035,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 10,
+      "optimized": true,
+      "ms": 0.00005941599999994196,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 11,
+      "optimized": true,
+      "ms": 0.000058374999999955435,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 11,
+      "optimized": false,
+      "ms": 0.01993404099999998,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 12,
+      "optimized": false,
+      "ms": 0.019934041999999978,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 12,
+      "optimized": true,
+      "ms": 0.00005949999999995725,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 13,
+      "optimized": true,
+      "ms": 0.00005837500000006912,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 13,
+      "optimized": false,
+      "ms": 0.020161583999999948,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 14,
+      "optimized": false,
+      "ms": 0.019952583000000003,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "empty",
+      "rep": 14,
+      "optimized": true,
+      "ms": 0.00005875000000003183,
+      "drops": 0,
+      "pools": 0
+    },
+    {
+      "name": "spray",
+      "rep": 0,
+      "optimized": false,
+      "ms": 0.027214708999999972,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 0,
+      "optimized": true,
+      "ms": 0.007263500000000022,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 1,
+      "optimized": true,
+      "ms": 0.007110125000000039,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 1,
+      "optimized": false,
+      "ms": 0.026630457999999975,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 2,
+      "optimized": false,
+      "ms": 0.026347624999999993,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 2,
+      "optimized": true,
+      "ms": 0.0075188340000000835,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 3,
+      "optimized": true,
+      "ms": 0.007018333999999982,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 3,
+      "optimized": false,
+      "ms": 0.02649016599999993,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 4,
+      "optimized": false,
+      "ms": 0.02676820900000007,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 4,
+      "optimized": true,
+      "ms": 0.007578416999999945,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 5,
+      "optimized": true,
+      "ms": 0.007119542000000024,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 5,
+      "optimized": false,
+      "ms": 0.027434875000000032,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 6,
+      "optimized": false,
+      "ms": 0.02713737500000002,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 6,
+      "optimized": true,
+      "ms": 0.007493666999999959,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 7,
+      "optimized": true,
+      "ms": 0.007321333999999979,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 7,
+      "optimized": false,
+      "ms": 0.027450542000000043,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 8,
+      "optimized": false,
+      "ms": 0.02729275000000007,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 8,
+      "optimized": true,
+      "ms": 0.007215249999999969,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 9,
+      "optimized": true,
+      "ms": 0.007341583000000014,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 9,
+      "optimized": false,
+      "ms": 0.02807604200000003,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 10,
+      "optimized": false,
+      "ms": 0.02741774999999984,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 10,
+      "optimized": true,
+      "ms": 0.007092582999999877,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 11,
+      "optimized": true,
+      "ms": 0.007675500000000056,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 11,
+      "optimized": false,
+      "ms": 0.026970249999999852,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 12,
+      "optimized": false,
+      "ms": 0.027981375000000072,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 12,
+      "optimized": true,
+      "ms": 0.007047333999999864,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 13,
+      "optimized": true,
+      "ms": 0.007257792000000108,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 13,
+      "optimized": false,
+      "ms": 0.0264208329999999,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 14,
+      "optimized": false,
+      "ms": 0.026883333999999877,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "spray",
+      "rep": 14,
+      "optimized": true,
+      "ms": 0.0070643749999999275,
+      "drops": 48,
+      "pools": 32
+    },
+    {
+      "name": "blast",
+      "rep": 0,
+      "optimized": false,
+      "ms": 0.07837429199999997,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 0,
+      "optimized": true,
+      "ms": 0.06499529099999996,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 1,
+      "optimized": true,
+      "ms": 0.06391949999999998,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 1,
+      "optimized": false,
+      "ms": 0.07793533300000013,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 2,
+      "optimized": false,
+      "ms": 0.07845329200000015,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 2,
+      "optimized": true,
+      "ms": 0.06486020799999984,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 3,
+      "optimized": true,
+      "ms": 0.06406799999999999,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 3,
+      "optimized": false,
+      "ms": 0.07813041700000008,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 4,
+      "optimized": false,
+      "ms": 0.07716799999999989,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 4,
+      "optimized": true,
+      "ms": 0.06378883300000007,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 5,
+      "optimized": true,
+      "ms": 0.06447383300000001,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 5,
+      "optimized": false,
+      "ms": 0.0772661250000001,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 6,
+      "optimized": false,
+      "ms": 0.07692270899999994,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 6,
+      "optimized": true,
+      "ms": 0.06422175000000016,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 7,
+      "optimized": true,
+      "ms": 0.06394541699999991,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 7,
+      "optimized": false,
+      "ms": 0.07746749999999974,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 8,
+      "optimized": false,
+      "ms": 0.07742662500000005,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 8,
+      "optimized": true,
+      "ms": 0.06416083399999979,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 9,
+      "optimized": true,
+      "ms": 0.06444220900000028,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 9,
+      "optimized": false,
+      "ms": 0.07824237499999981,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 10,
+      "optimized": false,
+      "ms": 0.07802333399999997,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 10,
+      "optimized": true,
+      "ms": 0.06589079200000014,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 11,
+      "optimized": true,
+      "ms": 0.06388387499999999,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 11,
+      "optimized": false,
+      "ms": 0.07761916599999995,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 12,
+      "optimized": false,
+      "ms": 0.07716404199999988,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 12,
+      "optimized": true,
+      "ms": 0.06485012499999994,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 13,
+      "optimized": true,
+      "ms": 0.06436887500000012,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 13,
+      "optimized": false,
+      "ms": 0.0788145410000002,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 14,
+      "optimized": false,
+      "ms": 0.08248095899999998,
+      "drops": 431,
+      "pools": 256
+    },
+    {
+      "name": "blast",
+      "rep": 14,
+      "optimized": true,
+      "ms": 0.06747045799999978,
+      "drops": 431,
+      "pools": 256
+    }
+  ]
+}

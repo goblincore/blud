@@ -43,7 +43,8 @@
 // same anchor convention (chunk-local rest frame) even phase.
 import type { Primitive, Vec3 } from './types';
 import { sdBody, sdPrimitive, smax, type Body } from './validate';
-import { dot, len, normalize } from './vec';
+import { dot, len, normalize, qRotate, type Quat } from './vec';
+import { HEAD_EXTERIOR_GORE_KEEP } from './gib-look-tuning';
 
 /** CPU mirrors of the march's hash/noise/fbm (march.wgsl.ts HASH13/NOISE3/FBM).
  *  Same constants, same smoothstep fade — the mottle field the bake paints
@@ -194,6 +195,128 @@ export function chunkBakeField(parts: ChunkBakeParts): ChunkFieldEvals {
   };
 }
 
+/** How far beneath the ORIGINAL skin a vertex must sit before it is fully torn
+ *  meat rather than skin. One and a half millimetres: the extraction puts a
+ *  genuine skin vertex at preWound = 0 to well under a tenth of that (measured
+ *  p50 = 0.47 mm over the carve library), and a cut face is 3-5 cells across, so
+ *  this is a crisp tear rim and not a gradient smeared over the piece. */
+export const CUT_BAND = 0.0015;
+
+/**
+ * THE CUT IS THE WOUND — the shared form, used by BOTH the carve path and the
+ * offline per-piece asset bake.
+ *
+ * `bakeChunkAlbedo` mirrors the march's albedo chain, and in that chain the
+ * wound mask is the SOLE authority on whether a point is wounded:
+ * `albedo = mix(baseColor, tissue, wm)`. The entire tissue ramp — dermis, fat,
+ * muscle, clot, viscera — is multiplied by it.
+ *
+ * A rest-pose body has no torn ends, so `chunkBakeField` gets `torn: []` and its
+ * mask is identically zero. Left that way, every vertex is painted as intact
+ * outer skin — including the third of the surface that is a cut face. That is a
+ * gib with no interior: one flat hue at alpha 0, which the shader then renders
+ * fully matte.
+ *
+ * But the cut is KNOWN and needs no new machinery to say so. `depthAt(p)` is how
+ * far INSIDE the pre-cut surface a point sits (positive inside); on the ORIGINAL
+ * skin it is ~0, on a CUT FACE it is however deep the cut fell. Depth beneath the
+ * original skin IS the cut mask, and it is the same quantity the tissue ramp
+ * already reads, so the mask and the colour it selects cannot disagree about
+ * where the tear is.
+ *
+ * The RAMP'S KNEES DESCRIBE TISSUE LAYERS, AND LAYERS ONLY EXIST NEAR THE SKIN.
+ * fatDepth 4 mm, muscleDepth 14 mm, visceraDepth 45 mm are authored for a WOUND
+ * CRATER a centimetre or two deep. A slab/cap cut through a torso is 100 mm deep
+ * across its whole face, so the raw depth would drive every interior vertex clean
+ * past the last knee and paint the piece entrails-dark edge to edge. The depth
+ * the ALBEDO sees therefore saturates at the clot knee: exponential, C1 and
+ * monotonic, so a deeper cut is still never lighter than a shallower one. The
+ * GEOMETRY is untouched — this is `preWound`, the colour's depth term only.
+ */
+export function cutAwareField(
+  ev: ChunkFieldEvals,
+  look: ChunkLook,
+  depthAt: (p: Vec3) => number = (p) => ev.preWound(p),
+): ChunkFieldEvals {
+  const clotKnee = Math.max(look.muscleDepth * 2.5, 1e-4);
+  return {
+    ...ev,
+    preWound(p: Vec3): number {
+      const d = -depthAt(p);
+      if (d <= 0) return 0;
+      return -clotKnee * (1 - Math.exp(-d / clotKnee));
+    },
+    woundMask(p: Vec3): number {
+      const depth = -depthAt(p);
+      if (depth <= 0) return 0;
+      const t = Math.min(1, depth / CUT_BAND);
+      return t * t * (3 - 2 * t);
+    },
+  };
+}
+
+/**
+ * A SLAB/CAP CUT IS NOT A CAVITY.
+ *
+ * `bakeChunkAlbedo` fires the viscera lump wherever `wm > 0` and the depth
+ * clears the muscle knee. The march is stricter: it gates viscera on `wmCav`,
+ * the CAVITY mask, precisely because entrails belong to a hole blown INTO a
+ * body, not to every wounded pixel. A rest-pose body cut by caps has no cavities
+ * at all, so on a cut-aware bake the gate would be true across every cut face.
+ * Zeroing the amplitude is what keeps a cap cut reading as a butcher's cut and
+ * not as an anatomy chart. Organs are not lost: they are authored prims and the
+ * piece's `material`/`goreKind` still owns them.
+ */
+export function cutLook(look: ChunkLook): ChunkLook {
+  return { ...look, visceraAmp: 0 };
+}
+
+/**
+ * The settled chunk's face frame, in the SAME world values the march's
+ * `gInstHeadCentre`/`gInstHeadQuat`/`headAxes`/`faceCfg.z` hold. Carried into
+ * the bake so a detached head's vertex albedo can keep the face clean instead
+ * of baking the gore mask over it (2026-09-16 playtest follow-ups task 2).
+ */
+export interface BakeFaceFrame {
+  centre: Vec3;
+  quat: Quat;
+  axes: Vec3;
+  /** faceCfg.z — the head's forward sign. */
+  forward: number;
+  /** The march's `reach`: 1 for a sheet, 1.5 for a decal. */
+  reach?: number;
+}
+
+/**
+ * Coverage of the head's face projection at a surface point, mirroring the
+ * FACE_LAYER facing/head-confine terms. APPROXIMATION, stated: the bake runs
+ * per vertex before its normals are needed elsewhere, so the surface normal is
+ * taken as the radial direction from the head centre. A head is locally convex
+ * and that is the direction the face projection faces, so the coverage front
+ * matches; the exact march value uses the interpolated normal.
+ */
+export function bakeFaceCover(p: Vec3, face: BakeFaceFrame): number {
+  const d: Vec3 = [p[0] - face.centre[0], p[1] - face.centre[1], p[2] - face.centre[2]];
+  const dl = len(d);
+  const n: Vec3 = dl > 1e-6 ? [d[0] / dl, d[1] / dl, d[2] / dl] : [0, 0, 0];
+  // Un-rotate into the head's rest frame (conjugate), then normalise per axis.
+  const c: Quat = [-face.quat[0], -face.quat[1], -face.quat[2], face.quat[3]];
+  const hrot = qRotate(c, d);
+  const hs: Vec3 = [
+    hrot[0] / Math.max(face.axes[0], 1e-4),
+    hrot[1] / Math.max(face.axes[1], 1e-4),
+    hrot[2] / Math.max(face.axes[2], 1e-4),
+  ];
+  const hfw: Vec3 = [0, 0, face.forward];
+  const hfr = qRotate(face.quat, hfw);
+  const reach = face.reach ?? 1;
+  const region = 1 - smoothstep(1.30 * reach, 1.70 * reach, len(hs));
+  const facing = smoothstep(0.28, 0.66, dot(n, hfr)) * region;
+  // Mirror FACE_LAYER exactly: the frontal face is fully protected, the rest of
+  // the head keeps HEAD_EXTERIOR_GORE_KEEP of the piece's gore.
+  return Math.min(1, Math.max(0, facing + region * HEAD_EXTERIOR_GORE_KEEP));
+}
+
 /** The look values the albedo bake reads off the view's uniform set at bake
  *  time — the same VALUES the marched chunk would have shaded with (copied
  *  from the body template at cut time). Plain number/vec3 records so this
@@ -231,6 +354,11 @@ export interface ChunkLook {
  */
 export function bakeChunkAlbedo(
   p: Vec3, anchor: Vec3, ev: ChunkFieldEvals, look: ChunkLook,
+  /** Face coverage at this vertex (0..1). The gore mask is attenuated by
+   *  `(1 - faceCover)` so a detached head keeps its authored face — the march
+   *  does the identical attenuation in FACE_LAYER + gore. Defaults to 0, which
+   *  is every non-head piece and every pre-task-2 call site. */
+  faceCover = 0,
 ): [number, number, number, number] {
   const wm = ev.woundMask(p);
   // Tissue ramp by depth beneath the ORIGINAL skin. The march reads
@@ -289,17 +417,59 @@ export function bakeChunkAlbedo(
 
   // Gore mask (gobs-and-goo spec §2) — chunks are torn meat. Direct mirror
   // of the shipped block including its fbm-at-6.0 mottle and the clot mix.
-  if (look.goreStrength > 0) {
+  // ATTENUATED BY FACE COVERAGE (task 2): the march moved this pass after the
+  // face layer for the same reason — a head must not bake its face under 85%
+  // clot. faceCover is 0 off the face and on every non-head piece, so those
+  // vertices are unchanged.
+  const goreStrength = look.goreStrength * (1 - faceCover);
+  if (goreStrength > 0) {
     const mottle = Math.min(1, Math.max(0, fbm([anchor[0] * 6, anchor[1] * 6, anchor[2] * 6]) * 0.5 + 0.5));
-    const gore = Math.min(1, mottle * 0.55 + wm * 0.65) * look.goreStrength;
+    const gore = Math.min(1, mottle * 0.55 + wm * 0.65) * goreStrength;
     const goreTarget = mix3(look.deepColor, [look.deepColor[0] * 0.55, look.deepColor[1] * 0.55, look.deepColor[2] * 0.55], mottle);
     albedo = mix3(albedo, goreTarget, gore * 0.85);
+    // Broad dark clots on torn meat, including capped blast pieces whose
+    // torn-end list is intentionally empty. Same mask as MARCH_BODY.
+    const stain = smoothstep(0.40, 0.68, mottle) * goreStrength;
+    albedo = mix3(albedo, [look.deepColor[0] * 0.22, look.deepColor[1] * 0.22, look.deepColor[2] * 0.22], stain * 0.85);
   }
 
   return [albedo[0], albedo[1], albedo[2], wm];
 }
 
 /** World dir -> chunk-local unit axis helper re-exported for tests. */
+/**
+ * BAKED AMBIENT OCCLUSION — the term a baked chunk cannot compute at runtime.
+ *
+ * The march has cheap AO from the field ("so creases and the insides of joints
+ * stay dark") and `chunkShade` cannot: a mesh fragment shader has no field to
+ * sample. Without it a settled piece shades at ao = 1.0 and NOTHING on it can be
+ * in shadow, which is most of the owner's "way too light and dont follow the
+ * lighting" beside the marched piece next to it.
+ *
+ * iq's five-tap occlusion along the surface normal, against the piece's OWN
+ * field — a gib is a separate object, so occlusion by the body it came from
+ * would be a shadow cast by something no longer there. The normal is the field
+ * gradient by central differences rather than the triangulation's, because it is
+ * the surface's own and is available before `computeVertexNormals` has run.
+ */
+export function bakeAoAt(field: (p: Vec3) => number, p: Vec3, cell: number): number {
+  const e = cell * 0.5;
+  const gx = field([p[0] + e, p[1], p[2]]) - field([p[0] - e, p[1], p[2]]);
+  const gy = field([p[0], p[1] + e, p[2]]) - field([p[0], p[1] - e, p[2]]);
+  const gz = field([p[0], p[1], p[2] + e]) - field([p[0], p[1], p[2] - e]);
+  const gl = Math.hypot(gx, gy, gz) || 1;
+  const n: Vec3 = [gx / gl, gy / gl, gz / gl];
+  let occ = 0;
+  let sca = 1;
+  for (let i = 1; i <= 5; i++) {
+    const h = 0.01 + 0.11 * (i / 5);
+    const d = field([p[0] + n[0] * h, p[1] + n[1] * h, p[2] + n[2] * h]);
+    occ += (h - d) * sca;
+    sca *= 0.92;
+  }
+  return Math.max(0, Math.min(1, 1 - 2.4 * occ));
+}
+
 export const worldToLocalAxis = (v: Vec3): Vec3 => normalize(v);
 
 /** Squared distance, the pellet test's inner loop. */

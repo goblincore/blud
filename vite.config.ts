@@ -3,6 +3,8 @@ import type { Plugin } from 'vite';
 import { resolve } from 'path';
 import { saveFace, savePalette } from './src/lab/dev-save';
 import { saveGameplayCapture } from './scripts/lib/game-telemetry-save';
+import { saveDemo } from './scripts/lib/game-demo-save';
+import { listModels, modelStoreRoot, readModelText } from './scripts/lib/upscale-model-store';
 import { execFileSync } from 'node:child_process';
 
 function readTelemetryBuild(cwd = process.cwd()) {
@@ -51,6 +53,43 @@ function labDevSave(): Plugin {
           });
           return;
         }
+        // Deterministic demo recordings (stage 3, 2026-09-14). A `.dem` is an
+        // input log, saved like telemetry — the page posts the DemoFile and the
+        // server owns the filename. Get one back for a replay at
+        // /docs/dev-notes/demos/<name>.dem.json (Vite serves the project root).
+        if (url.pathname === '/__lab/save-demo') {
+          if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+          if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`
+            && req.headers.origin !== `https://${req.headers.host}`) { res.statusCode = 403; res.end(); return; }
+          const chunks: Buffer[] = [];
+          let bytes = 0, rejected = false;
+          req.on('data', (chunk: Buffer) => {
+            if (rejected) return;
+            bytes += chunk.length;
+            if (bytes > 16 * 1024 * 1024) {
+              rejected = true; chunks.length = 0; res.statusCode = 413; res.end('Demo too large');
+            } else chunks.push(chunk);
+          });
+          req.on('end', () => {
+            if (rejected) return;
+            res.setHeader('content-type', 'application/json');
+            try { res.end(JSON.stringify(saveDemo(server.config.root, JSON.parse(Buffer.concat(chunks).toString('utf8'))))); }
+            catch (error) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: String(error) })); }
+          });
+          return;
+        }
+        // Trained neural upscale models (docs/superpowers/plans/2026-09-11-neural-upscale-p3-contracts.md §4).
+        if (url.pathname === '/__lab/upscale-models' || url.pathname.startsWith('/__lab/upscale-model/')) {
+          if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
+          const store = modelStoreRoot(server.config.root);
+          res.setHeader('content-type', 'application/json');
+          res.setHeader('cache-control', 'no-store');
+          if (url.pathname === '/__lab/upscale-models') { res.end(JSON.stringify(listModels(store))); return; }
+          const text = readModelText(store, url.pathname.slice('/__lab/upscale-model/'.length));
+          if (text === null) { res.statusCode = 404; res.end(JSON.stringify({ ok: false, error: 'no such model' })); return; }
+          res.end(text);
+          return;
+        }
         if (!url.pathname.startsWith('/__lab/save-')) return next();
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         const name = url.searchParams.get('character') ?? '';
@@ -89,7 +128,21 @@ export default defineConfig({
     // scripts/ is in for the CLI tests that shell out to a tool (blob-measure);
     // they live beside their script because a test importing node builtins
     // cannot sit under src/ without breaking the app typecheck.
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+    //
+    // The .mjs entries are LISTED rather than globbed, and that is deliberate:
+    // scripts/**/*.test.mjs would also sweep in the `node:test` suites
+    // (scripts/lib/normal-gradient-*.test.mjs, scripts/zombie-normal-gradient-check.test.mjs),
+    // which are written for `node --test` and report "No test suite found" under
+    // vitest. `npm test` has never covered them, and a config change must not
+    // silently change what `npm test` means. Add a new .mjs vitest suite here.
+    include: [
+      'src/**/*.test.ts',
+      'scripts/**/*.test.ts',
+      'scripts/census-diff.test.mjs',
+      'scripts/lib/demo-digest.test.mjs',
+      'scripts/lib/demo-presented.test.mjs',
+      'scripts/lib/png-write.test.mjs',
+    ],
     exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**'],
   },
   build: {
@@ -105,6 +158,7 @@ export default defineConfig({
         humanoidSdfSpike: resolve(__dirname, 'humanoid-sdf-spike.html'),
         sdfHullSpike: resolve(__dirname, 'sdf-hull-spike.html'),
         sdfGame: resolve(__dirname, 'sdf-game.html'),
+        sdfBloodCompare: resolve(__dirname, 'sdf-blood-compare.html'),
         sdfDeferred: resolve(__dirname, 'sdf-deferred.html'),
       },
     },

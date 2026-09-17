@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/extent.test.ts
 import { describe, it, expect } from 'vitest';
-import { boxReach, chunkExtent, tornEndRadius } from './extent';
+import { boxReach, chunkExtent, tornEndRadius, chunkSupportSpheres } from './extent';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { severLimb } from './sever';
@@ -93,5 +93,46 @@ describe('tornEndRadius', () => {
     // half-size; girth-based must come in far under it.
     expect(r).toBeLessThan(extent * 0.55 * 0.7);
     expect(r).toBeGreaterThan(0.02); // and still a visible stump, not a pinprick
+  });
+});
+
+describe('chunkSupportSpheres (orientation-aware floor support)', () => {
+  it('turns a capsule into two end spheres of its own girth', () => {
+    const s = chunkSupportSpheres([capsule([-0.5, 0, 0], [0.5, 0, 0], 0.06)], [0, 0, 0]);
+    expect(s).toHaveLength(2);
+    expect(s[0]!.c).toEqual([-0.5, 0, 0]);
+    expect(s[1]!.c).toEqual([0.5, 0, 0]);
+    for (const q of s) expect(q.r).toBeCloseTo(0.06, 9);
+    // The support reaches the thickness (0.06), NOT the half-length (0.5):
+    // this is the whole point — a flat shin must not hover at half its length.
+    expect(Math.max(...s.map(q => q.r))).toBeLessThan(0.1);
+  });
+
+  it('returns LOCAL centres (relative to origin)', () => {
+    const s = chunkSupportSpheres([capsule([0, 0, 0], [1, 0, 0], 0.05)], [0.5, 0, 0]);
+    expect(s[0]!.c).toEqual([-0.5, 0, 0]);
+    expect(s[1]!.c).toEqual([0.5, 0, 0]);
+  });
+
+  it('skips carve (sub) primitives', () => {
+    const prims = [
+      { ...capsule([0, 0, 0], [0.2, 0, 0], 0.3), op: 'sub' as const },
+      capsule([0, 0, 0], [0.4, 0, 0], 0.05),
+    ];
+    const s = chunkSupportSpheres(prims, [0, 0, 0]);
+    expect(s).toHaveLength(2);
+    for (const q of s) expect(q.r).toBeCloseTo(0.05, 9);
+  });
+
+  it('is empty for an empty prim list', () => {
+    expect(chunkSupportSpheres([], [0, 0, 0])).toEqual([]);
+  });
+
+  it('falls back to one conservative extent sphere past the point budget', () => {
+    const prims = Array.from({ length: 20 }, () => capsule([0, 0, 0], [0.1, 0, 0], 0.05));
+    const s = chunkSupportSpheres(prims, [0, 0, 0], 8);
+    expect(s).toHaveLength(1);
+    expect(s[0]!.c).toEqual([0, 0, 0]);
+    expect(s[0]!.r).toBeCloseTo(chunkExtent(prims, [0, 0, 0]), 9);
   });
 });

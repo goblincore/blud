@@ -54,7 +54,15 @@ export function soldierCorpseSnapshot(actor: ZombieActor): ChunkBakeData | null 
 export function createSoldierCorpseBakes(scene: THREE.Object3D, material: () => THREE.Material,
   factory = () => new Worker(new URL('./chunk-bake.worker.ts',import.meta.url),{type:'module'})) {
   const jobs = createChunkBakeJobs(factory);
-  type Entry = { actor:ZombieActor; revision:number; mesh?:THREE.Mesh };
+  type Entry = { actor:ZombieActor; revision:number; mesh?:THREE.Mesh; headless?:boolean };
+  // CROWD (2026-09-14): an actor attached to a crowd type has its per-body
+  // proxy hidden by the attach and is drawn through the type's instance.
+  // The baker must not touch that proxy's visibility (re-showing the head
+  // drew it twice), and game-main drops a headless-baked slot from the
+  // crowd's visible set (else the instance kept marching the full body under
+  // the baked mesh — 17 ms of march in a cleared room). `bakedState` is that
+  // signal.
+  const ownsProxy = (actor:ZombieActor) => !actor.crowd;
   const entries = new Map<number,Entry>();
   const quiet = new Map<number,{revision:number;seconds:number}>();
   const rejected = new Map<number,number>();
@@ -63,9 +71,15 @@ export function createSoldierCorpseBakes(scene: THREE.Object3D, material: () => 
     if (entry.mesh) { scene.remove(entry.mesh); entry.mesh.geometry.dispose(); }
     entry.actor.pauseForBake(false);
     entry.actor.view.update(entry.actor.posed(),entry.actor.body);
+    if (ownsProxy(entry.actor)) {
     entry.actor.view.object.visible = true;
     entry.actor.view.coneObject.visible = true;
     if (entry.actor.view.depthPreObject) entry.actor.view.depthPreObject.visible = true;
+    // Run 5b: the refine twin follows the other twins. (The per-frame band gate
+    // in game-main also hides it for a settled body via refineEligible(); this
+    // keeps the twin consistent whenever the bake toggles.)
+    if (entry.actor.view.refineObject) entry.actor.view.refineObject.visible = true;
+    }
     entries.delete(entry.actor.id); quiet.delete(entry.actor.id);
   };
   const clear = () => { jobs.cancel(); for (const entry of [...entries.values()]) restore(entry); quiet.clear(); rejected.clear(); };
@@ -90,9 +104,13 @@ export function createSoldierCorpseBakes(scene: THREE.Object3D, material: () => 
             const head = corpsePartition(entry.actor.posed(),true);
             const hasHead = head.clusters.some(c=>c.alive);
             if (hasHead) entry.actor.view.update(head,entry.actor.body);
-            entry.actor.view.object.visible = hasHead;
-            entry.actor.view.coneObject.visible = hasHead;
-            if (entry.actor.view.depthPreObject) entry.actor.view.depthPreObject.visible = hasHead;
+            entry.headless = !hasHead;
+            if (ownsProxy(entry.actor)) {
+              entry.actor.view.object.visible = hasHead;
+              entry.actor.view.coneObject.visible = hasHead;
+              if (entry.actor.view.depthPreObject) entry.actor.view.depthPreObject.visible = hasHead;
+              if (entry.actor.view.refineObject) entry.actor.view.refineObject.visible = hasHead;
+            }
           }
         }
       }
@@ -112,6 +130,15 @@ export function createSoldierCorpseBakes(scene: THREE.Object3D, material: () => 
       }
     },
     setEnabled(on:boolean) { enabled=on; if(!on) clear(); },
+    /** 'none' = not baked (or bake pending); 'head' = baked, the head still
+     *  marches; 'headless' = baked, nothing of the body should march. */
+    bakedState(actorId:number): 'none'|'head'|'headless' {
+      const e = entries.get(actorId);
+      if (!e?.mesh) return 'none';
+      return e.headless ? 'headless' : 'head';
+    },
+    /** See chunk-bake-jobs settled(): replay/bench drivers await this so the corpse swap lands on a fixed frame. */
+    settled: () => jobs.settled(),
     stats: () => ({enabled,pending:jobs.pendingId,baked:[...entries.values()].filter(e=>e.mesh).map(e=>e.actor.id),error:jobs.error}),
     dispose: clear,
   };

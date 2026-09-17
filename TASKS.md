@@ -9,7 +9,227 @@
 - [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Vision](docs/game/vision.md).
 - [ ] Production scope draft 1 (milestones G0–G10, asset inventory). Level route: Blender (B/D), proven on the Wake + flat. [Scope](docs/game/production-scope.md).
 - [ ] First content in flight: the Flat ([tasks](docs/game/flat/tasks.md)) and level 0 The Wake ([tasks](docs/game/levels/00-the-wake/tasks.md)). Start with the render-to-texture spike (F-T2) and the melee prototype (W-B4).
-- [ ] The Wake: agent-ready plans written — [brief](docs/game/levels/00-the-wake/implementation.md) → plans 2026-09-11-wake-1/2/3. Plans 2–3 need `claude/dynamite-weapon-slot` merged (weapon slots).
+- [ ] The Wake: agent-ready plans written — [brief](docs/game/levels/00-the-wake/implementation.md) → plans 2026-09-11-wake-1/2/3. Weapon slots (dynamite branch) are on main as of 2026-09-17; main has moved a lot since the plans were written, so re-check line references before wiring tasks.
+## Character blends and zombie heading — owner accepted 2026-09-17
+
+- [x] Half-strength round flesh blends, matching CPU/GPU/gib geometry, and heading-dependent torso/foot/attachment fix on main.
+  [Wrap-up, measurements, verification and lessons](docs/dev-notes/2026-09-17-character-blends-wrap-up.md).
+
+## Selective shutter blur — owner accepted and merged 2026-09-17
+
+- [x] Blood + rotating gibs default ON at 44.44 ms / 120 px; lab comparison and in-game controls shipped.
+  [Wrap-up, controls, evidence and limits](docs/dev-notes/2026-09-17-shutter-blur-game/WRAP-UP.md).
+- [x] Hidden blur-panel bug fixed: **BLOOD + GIB BLUR** docks bottom-right, clear of Dynamite / Gib; H toggles visibility.
+- [ ] Quiet-machine combined blur cost measurement; prior loaded-machine marginal timings are inconclusive.
+- [ ] Investigate first-use gib-material compile hitch and in-app-browser GPU loss during warm-up; Chrome boots successfully.
+
+## Dynamite gib appearance — owner accepted 2026-09-16
+
+- [x] Preserve flesh shading, cut geometry and face texture through settle baking; owner manual test accepted.
+  [Results, captures and limits](docs/dev-notes/2026-09-15-gib-baked-vs-marched/parity-fix/RESULTS.md) · PR #8.
+- [x] Startup + first/repeated-blast freeze profiled with corrected attribution; blast stalls fixed.
+  Explosion light visibility toggle re-keyed three's lightsNode and rebuilt 17-18 pipelines per blast frame
+  (p95 221-234 ms → 31-35 ms, 11 long frames → 0 over six blasts). Candidate `fd704125` on
+  `codex/blud-action-stall-fix`; [results + raw evidence](docs/dev-notes/2026-09-16-startup-freezes/RESULTS.md).
+  Still open: steady-state probe gather at the 1024-row cap (338-1069 ms p95), warm hidden-mesh flip re-key,
+  opt-in carve 22.3 s build, and the unreproduced owner 38.9 s.
+- [ ] Next: body-to-gib tearing transition; active melting and retired NotBlood sprites are references. Design remains open.
+- [~] Playtest follow-ups 2026-09-16 (candidates on `codex/playtest-followups-task-*`, not merged).
+  Task 1 cold start (`64a4737b`); task 2 split limbs + recognizable heads + leaner plan — the default `parts`
+  shape is a priority prefix of one split-only 14-piece plan (no whole-limb fallback at any budget), the
+  skull/pelvis duplicates are gone and the gore pass is face-aware in the march and the bake.
+  [diagnosis, census, captures, limits](docs/dev-notes/2026-09-16-playtest-followups/ANATOMY-HEADS.md).
+- [ ] Then: blast shockwave A/B + integrated rupture review (task 4); NotBlood launch dispersion (task 3);
+  floating/upright settled pieces (later follow-up, not this task).
+- [~] Offline reusable gib assets 2026-09-16 — tasks 1–3 done on `codex/offline-gib-assets-task-3` (not merged):
+  generator + committed zombie/soldier sets (43 pieces, 8.4 MB, 12 mm cells) and the mesh path
+  `?gibrender=assets` (loads/deforms them, exact sim parity), but the default stays `march`: blockers are
+  `bakeColor.a == 0` on 100% of asset verts (no wet/cut mask) and the mesh head face projection is unwired
+  (head excluded, counted `head-face`). Task 3 fixed a rupture-path cut-cap spike (2,540/37,738 verts) with a
+  CPU regression test; loader 8.65 MB / 33–190 ms / 0 runtime extraction; no measurable moving-gib cadence
+  cost at 14–56 pieces. [report, captures, exact usage + blockers](docs/dev-notes/2026-09-16-offline-gib-assets/REPORT.md).
+- [~] Offline gib-asset metre poles on ANIMATED bodies 2026-09-17 — fixed on `codex/offline-gib-spikes`
+  (not merged): the owner's live-playtest poles were `sub` cut caps used as skinning targets (a point
+  sphere ~3–5 m out with no axis, so its radial could not rotate with the posed body). Bind table is now
+  additive-only (schema 3 / `GIB_ASSET_BIND_MASK`), `primTransformPoint` rotates the radial, and the
+  renderer refuses an out-of-runtime-bounds deform (counted marched fallback, pool released once).
+  Worst vertex outside the runtime additive union: **4.28 m zombie / 5.19 m soldier → 0.036 / 0.030 m**;
+  344 CPU piece-spawns, 0 fallbacks; gate cost 0.44–0.50 ms/body. Substantive tip `9b1d05d0`.
+  [report](docs/dev-notes/2026-09-17-offline-gib-spikes/REPORT.md).
+  Default stays `?gibrender=march`; the GPU/native-vision pass on live moving/damaged actors is the
+  outstanding step (GPU not approved for this task).
+
+## Neural upscale (ESPCN family) — flesh 400×300 → 800×600 — 2026-09-11
+
+- [x] Spec approved: `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md`.
+  Reopens the 09-08 idea (that pilot was 1.4k params). Stage contract, `sp`/`dc` layouts.
+- [x] P1+P2 built (plan `docs/superpowers/plans/2026-09-11-neural-upscale-p1p2.md`): stage, both layouts,
+  G1-parity and the G2 capture pipeline — verdicts in `docs/dev-notes/2026-09-11-neural-upscale/`.
+- [x] G2 pairs PASS (re-run r4): gate re-scoped to linear-depth registration — marches aligned at (0.0002, 0.003) px;
+  colour and centroid checks were misreading aliasing. 60 pairs, 559 MB in /tmp (regenerable) — `g2-pairs.md`.
+- [-] G1 cost bench (plan Task 6) DEFERRED 2026-09-11 (owner: machine under load; quality first, optimize after).
+- [x] P3 spec `docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md`; plans p3a–p3d + contracts in `docs/superpowers/plans/`.
+- [x] P3a capture v2 built — smoke 24 pairs OK (`p3a-capture.md`). Owner: run the full ~1,000-pair capture (runbook in the plan).
+- [x] P3c in-game loader: `?upscale=trained&upscalemodel=<name>`, U key A/B, G3 parity script — smoke **PASS** (`sp 1.71e-3` ≤ `2e-3`) once the fixture moved to seed 1, the G1-reference seed. The twin's `f16round` now rounds half-to-even (a correctness fix; it moved no number — this workload hits no ties). G1 parity re-run PASS on all 7 configs. `p3c-ingame.md`.
+- [x] P3d pre-flight PASS on the 60 smoke pairs: train, G3, pull round trip, dashboard, in-game smoke (`p3-preflight.md`).
+- [x] OWNER VERDICT 2026-09-12: **worth it** — playtested in-game, stable 30 fps, "smooth and details are not bad".
+  All six runs passed G4 (best s32-rgbd 0.0233 vs bicubic 0.0284, nearest 0.0314, native 0.0141) for $2.21 of pod time.
+- [x] LOCAL GRID 2026-09-12 (MacBook Air, 20k steps each): s32-rgbd best **0.02289** (G3 PASS, staged in
+  `.upscale-models/s32-rgbd-best`; `?upscale=trained&upscalemodel=s32-rgbd-best`). Steps are spent (every run
+  peaked by 16k); width is not (s8→s16→s32 = 0.0248→0.0238→0.0232); depth input buys nothing. Pod deleted.
+  Assessment + next steps: `docs/dev-notes/2026-09-12-upscaler-next-steps.md` (Obsidian copy in Research/).
+- [x] S64 GRID WITH NORMALS + FLIPS + 9-CHARACTER ROSTER (2026-09-12) — DONE, best **s64d-rgbn 0.0145** vs bicubic 0.0191 on v3
+  (normals + width stack; 3rd layer > 2× width; depth useless; edge band is where normals pay). Results §6 of the
+  next-steps note. **Runtime normals LANDED same day** (renderer-level MRT around the march, second attachment
+  for `?upscale` boots only; `dc` layout refused at 64 wide — 17 sampled textures): `v3-s64d-rgbn-best` loads
+  in-game (`?upscale=trained&upscalemodel=v3-s64d-rgbn-best`), compile smoke PASS on all configs, G3 PASS 6e-7.
+  Trained-smoke GPU-vs-twin sits at 3–5e-3 vs the 2e-3 bar for EVERY s64 model incl. the no-normals one — f16
+  accumulation at 64 wide, bar unchanged, owner's call (p3c-ingame.md). Fields + stage stack was tried and
+  REVERTED the same evening (owner: "looks bad" — comb artifacts sharpened; needs a fields-on retrain first). Built: `s64`/`s64d` ladder in py+ts;
+  `rgbn`/`rgbdn` input sets (Python side; TS twin + runtime MRT normals still TODO before an rgbn model can ship
+  in-game); flip augmentation in `CropSampler` (vector-aware); march debug mode 9 = world normals,
+  `__sdfGameDebug.readMarchNormals()`, capture writes view-space `normal.npy` (contracts §1). Smoke v3 6 pairs OK
+  (unit normals, hit mask identical, 7.7 s/pair). Roster: zombie goblin soldier + bonewalker clown cyberdemon
+  female gnasher minotaur (the other lab bodies fail to spawn: no motion joints). Launch: `.lab-tmp/grid-s64.sh`.
+- [x] COST BENCH (the deferred P1 Task 6): upscale legs added to `scripts/sdf-game-bench.mjs`
+  (`march-half`, `upscale-s8`, `upscale-s32`, `upscale-s32-rgbd`); clean 3-repeat run in `/tmp/sdf-game-bench-upscale-clean`.
+- [x] **SHIPPED 2026-09-12: s32-rgbd + CAS sharpen 0.5 is the default boot** (`public/assets/lab/upscale/
+  s32-rgbd-best.json`; `?upscale=0` = native). s64 REJECTED (6x compute, no visible gain). VHS 'blud' retuned
+  (intensity 0.81, blur 0.17). Unsharp mode tried, left off. Decisions: next-steps note §8.
+  FOLLOW-UP: `scripts/sdf-game-bench.mjs` `baseline` leg pins `setUpscale(null)` and is no longer ship truth —
+  add a ship leg that loads the tracked asset before trusting any new baseline number.
+- [x] RUN 3 DONE (2026-09-12): t24/t16 dilated ladder, reparam, gradient weight 1.0 — ALL within ±1 % of s32-rgbn
+  (0.0157–0.0164). The s32 cost class is saturated on L1; t16-rgbn (half cost, −3 %) is the cheap-tier candidate.
+  Next quality step = full-res procedural detail channels (demodulation) + a look metric, not net shape. Note §12.
+- [x] WOUND MEAT DETAIL (2026-09-12): soldier wound band gets clots / striation / crevice / shattered glints
+  (march.wgsl.ts soldierWound block), uniform `meatCfg` + wound-panel MEAT group (4 sliders); march param count
+  re-pinned 99 → 100. Owner look pending (Chrome lost WebGPU under the training load — relaunch).
+- [x] **RUN 4 — FULL-RES RELIEF (radiance demodulation) — DONE 2026-09-13, head KEPT.** Controlled pair on v3.1
+  (652/57 pairs): s32-rgbn-head-int2 **0.01443** vs control 0.01474 (2–3 % on every region, inside noise); t16-head
+  0.01505. Owner look: "subtle, not a regression" → keep. G3 PASS 7e-7; trained-smoke head 3.0e-3 (control 1.5e-3),
+  the head's f16 pass, bar unchanged. Staged `.upscale-models/r4-*` (`?upscale=trained&upscalemodel=r4-s32-rgbn-head-int2`).
+  Results + reading: next-steps note §13. NEXT CANDIDATES (Obsidian `Research/2026-09-13-upscaler-sample-the-surface-
+  not-the-march.md`): one-step SDF refinement at output res → same head; meat/albedo through the anchor channel;
+  temporal via anchor MVs (shared with shutter motion blur — build blur conventionally first).
+- [x] **RUN 5 — ONE-STEP SDF REFINEMENT AT OUTPUT RES — DONE 2026-09-13; QUALITY WIN, COST TOO HIGH AS BUILT.**
+  Spec `docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md`, plan + log
+  `docs/superpowers/plans/2026-09-13-neural-upscale-run5-sdf-refine.md`. Controlled pair on v3.2 (748 pairs):
+  refine head **0.01112** vs control 0.01455 (−24 % overall, −32 % face; native 0.00905). Gate 2 (owner): "definitely
+  the best looking, especially at medium distance" — but frame +23 % (room 1) / +45 % (room 2); `sdf:refine` 6–11 ms.
+  Staged `.upscale-models/r5-*` (`?upscale=trained&upscalemodel=r5-s32-rgbn-headr-int2`). Results §14 of the
+  next-steps note. Gates: refine-smoke, refine-check, march-hash (fields-off canonical a8ab4efa), G3 9e-7.
+- [x] **RUN 5b — refine gating + graceful degradation + slim twin tail — DONE 2026-09-13, GATE MET.** refine_drop
+  retrain 0.01118 (refine on) / 0.01511 (off); slim tail −7…14 % of the pass; band gating (standing bodies, 1.5–3.5 m,
+  hysteresis; dead never refines in either cull mode; corpse bake hides the twin); body-ownership early-out (key in
+  the normal attachment'"'"'s alpha). Clean bench: 5b slim+band 21.3/24.3 ms vs control 21.9/22.2 (−3 %/+9 %); open band
+  30 ms. §15. Owner: "at medium lgtm" → ships as the **high** graphics setting.
+- [x] **DEFAULT-MODEL BENCH — DONE:** t16-rgb (v3.2, 0.0154; no normals, no head) 19.0/18.7 ms vs ship s32-rgbd 19.5/20.4
+  vs r5-head 21.9/22.2. Owner: **t16-rgb is the new default**.
+- [~] **SHIP: t16-rgb default + `graphics=high` (5b refine head) — in flight.** Track both exports under
+  `public/assets/lab/upscale/`, boot by setting (`?graphics=high` / `__sdfGame.setGraphics`), keep CAS 0.5; bench
+  `upscale-ship` leg points at the new default. Then merge to main.
+- [x] **BOOT/MID-GAME FREEZE — FIXED 2026-09-13** (e71cee3d…3c1480f1): `SdfLayer.precompilePasses` compiles every
+  twin layer in its own target+MRT (gated on the pass's own enable flag; 8 s race per compile) plus the private
+  fullscreen passes, `UpscaleStage.precompile` every net pass incl. sharpen; `[warm]` log now counts them. First
+  refined frame 21 → 6 ms in the headless check. `flashAge`/`bounceSpotGain` hoisted; a `drawReady` gate closes the
+  rest of the TDZ class (the draw callback was armed ~4700 lines before boot finished). Boot warm-up 1.0 → 1.9 s.
+- [ ] **SHELL-HULL TWIN SHADER IS BROKEN** (pre-existing, found by the warm-up work): `unresolved value 'woundBound'`
+  in its `mapBody` call — turning the shell pass on yields a failed pipeline (and hung `compileAsync` before the
+  race). Own ticket; until fixed, off-at-boot passes are not warmed and would stall once if switched on mid-session.
+- [ ] **MERGED CROWD MARCH — HIGH PRIORITY AFTER RUN 5b (owner 2026-09-13: crowds are the game; gibs would
+  otherwise be an explosion of marched instances).** One union field, one ray per pixel. Split by what varies:
+  per TYPE (shared by all zombies): face sheet, segment-volume atlas, rest prim template, material/lighting knobs;
+  per INSTANCE (a record in a storage buffer): pose/bone transforms, wounds + severed flags, melt/flash, variant,
+  placement. Prim rows: first keep CPU posing and share one tall atlas with per-instance row ranges; later pose on
+  the GPU from the type template. Tile list (`?tiles-playtest`) becomes the per-pixel instance/cluster index. One
+  material per type; gibs become instances; the refine becomes a fullscreen pass (no twins, no Task E).
+  Hand-off brief for a fresh session: `docs/superpowers/specs/2026-09-13-merged-crowd-march-brief.md` (Obsidian
+  copy in Planning/). Design + stage (a) plan written 2026-09-13 (autonomous session; decisions D1–D10 need owner
+  ratification): spec `docs/superpowers/specs/2026-09-13-merged-crowd-march-design.md`, plan
+  `docs/superpowers/plans/2026-09-13-merged-crowd-march-stage-a.md` (8 tasks: baselines → records → one-slot
+  kernel [hash gate] → CrowdType → `?crowd=1` → parity + crowd bench → default flip). D1–D10 ratified by owner
+  2026-09-13. D1–D10 ratified by owner 2026-09-13. **Stage (a) 0–7f + stage a-2 landed** (a-1 records/one-slot kernel,
+  a-2 CrowdType/`?crowd=1`, 7b parity gate, 7d slot table + frame guard, 7f spread spawns; a-2 quad dispatch
+  `b3ee7742`: one full-screen quad per type, tile-sphere entry, empty-tile discard, `?crowddispatch=quad|boxes`,
+  default quad). Canonical per-body hash `a8ab4e…` unchanged; quad/boxes parity PASS. **Stage a-2 (2) knee
+  (2026-09-14, `## Stage a-2 (2)`):** the quad removes the duplicate-trace growth (cost per visible body flat
+  ~7–8.5 ms over 5→17 visible; 2.18x total 2→8 vs the boxes' 13.68x in 7f) but paid a fixed full-screen cost —
+  at 2 bodies the boxes' walk (12.26 ms) beat the quad's (41.12 ms, 3.4x). **Stage a-2 (3) — union screen-rect
+  quad (2026-09-14, `## Stage a-2 (3)`, code `1c68162f`):** each type's quad now rasterises the CPU-computed
+  union NDC rect of its visible instances (`crowdScreenRect`, one LIT tile of margin; full screen if an inflated
+  corner is behind the eye; meshes hidden if none visible), shared by the lit material and its depth-pre twin;
+  `info()` reports `rect`/`rectFrac`. Parity quad+boxes PASS with every gated line identical to a-2 (1). The
+  low-`n` fixed cost is **gone**: n=2 walk quad 0.99–1.23× boxes (was 3.4×), quad ≤ per-body in rooms 1–2, n=8
+  overall 69.64 ≤ the a-2 (2) 92.99, 16 completes at 132.38. But `rectFrac` is already 1.00 from n=8 up (the
+  rect has nothing left to give at high `n` — the cost is the flat per-body slope over a screen-bound quad),
+  **n=20 aborts the frame guard (probe never answered in 60 s) and 24 was not attempted.**
+  **Distance-crowd bench (2026-09-14, `## Distance crowd` in the dev note):** the a-3 bar was re-measured on the
+  scene the game actually shows — the player in room 1's near corner down the 11 m diagonal, a 0.9 m grid of
+  bodies in the far-half 3.5 x 7 m strip (~6.3 m mean camera distance), camera pinned (`holdPlayer`) and
+  wanderers frozen. Sweep 8/12/16/20/24 at scales 1.0 and 0.5: **every row completed, including 24 at ship
+  scale** (`sdf:march` 30.20 ms overall / 30.33 walk, fenced 36.42 ms; `rectFrac` 0.50, `clampedTiles` 0),
+  and **crowd-quad beat per-body at every completed n at both scales** (total march 0.35–0.63x at 1.0, 0.79–0.84x
+  at 0.5; per-visible-body 0.54–0.68x at 1.0, tie at n=8 0.5). **RECOMMENDATION: FLIP THE DEFAULT (Task 8) —
+  quad dispatch on, per-body behind a flag.** Both flip conditions hold. Remaining non-blocking gap: the 48-body
+  `tile-binning-submit < 1 ms` bar is untested (48 bodies at 0.9 m fit no region in this level; a
+  longer-sightline space is future work). Plan
+  `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
+  **DEFAULT = CROWD MARCH, BOXES DISPATCH (2026-09-15).** The revert below rested on a bench whose legs
+  fought different fights (`setCrowd` mid-session respawns the cast; fixed in `sdf-game-bench.mjs`). On matched
+  fights the crowd march with the instanced-box dispatch beats per-body on the owner's real room-1 recording
+  (frame p50 17.3/15.4 vs 19.8/19.2 ms) and keeps the 8..24-body wins; the one-screen quad does not (20.3/20.2)
+  because of raster footprint no exact lever removed (`docs/dev-notes/2026-09-14-crowd-firefight-cost.md`).
+  `?crowd=0` opts out; `?crowddispatch=quad` keeps the quad reachable. Canonical hashes: default (boxes)
+  `0b84c119…`, `MARCH_HASH_CROWD=1` quad `a350361d…`, `MARCH_HASH_PERBODY=1` `a8ab4efa…`. Next test of the
+  crowd: the owner's WIP branch with dynamite and an 8–10 zombie room.
+
+  **DEFAULT REVERTED TO PER-BODY (2026-09-14 evening).** The equal-workload bench on the owner's 56 s
+  room-1 recording (`BENCH_DEMO`, both legs replay the same fight) is a wash overall and the crowd quad
+  loses the fire-heavy third by ~15 ms (three overlapping type quads cover 45–81 % of the screen each);
+  its wins are 8..24-body scenes that ordinary rooms do not hold yet. `?crowd=1` opts in; canonical
+  hashes: default per-body `a8ab4efa…`, `MARCH_HASH_CROWD=1` crowd `a350361d…`. Two crowd bugs fixed on
+  the way (baked corpses kept marching, 87ca510c; full-screen quad for a near-plane-straddling body,
+  dc4a7a4c). Next lever: per-instance rects / a shared union quad. See `## Flip decision bench` in
+  `docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md`.
+
+  **TASK 8 DEFAULT FLIP LANDED (2026-09-14, task-8 commit `the merged crowd march is the default; ?crowd=0
+  opts out`):** the merged crowd march (quad
+  dispatch, tile list on) is the SHIPPED default — a flagless boot attaches every actor to its character type
+  and draws one union field per type. `?crowd=0` (or `__sdfGame.setCrowd(false)`) opts out to the per-body
+  path; `?crowd=1` is accepted as a no-op. `crowdInfo()` reports `{ on, default: true, flag: 'crowd=0' | null,
+  fallbackReason, tilesOn, dispatch, types }`. New canonical march hash (crowd quad, tiles on)
+  `a350361d6a223946a4cb8aac9bc2a3a70ee15bfd` (wounded `07f60ecf…`); the per-body hash
+  `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` is unchanged and reachable in one self-checking command via
+  `MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs`. **Crowd tiles are mandatory:** the per-type
+  `ComputeTileBinding` always bins and the draw fn stamps `tileCfg.x = 1`, independent of the per-body
+  `?tiles-playtest` switch (the old cross-coupling let a ship-defaults `setTiles(false)` silently pin the
+  crowd to the slow cluster walk). **Compatibility rule:** `?refine=1` or the cone pass forces the boot
+  per-body (the refine twins/cone read per-body state the instance record does not carry), warns once
+  (`[crowd] refine/cone twins are not supported under the crowd march (stage 3); falling back to per-body for
+  this boot`), and records the reason in `crowdInfo().fallbackReason`. Flip bench rooms 1–2
+  (`BENCH_LEGS=baseline,crowd-off`, `BENCH_PASSES=1`, `BENCH_REPEATS=1`): `sdf:march` room1 13.41 (crowd) vs
+  66.61 (per-body); room2 33.59 vs 37.63 — crowd ≤ per-body in both. **What remains:** stage 3 (refine as one
+  fullscreen record-reading pass; delete the REFINE_LAYER twins), stage 4 (gibs as a chunk/slot type, corpse
+  bake for every character), the 48-body `tile-binning-submit < 1 ms` bar (needs a longer-sightline scene; no
+  region in this level holds 48 at 0.9 m), and the per-instance `segVolumeMeta` gap (bone-cull 'segment'
+  falls back to 'cluster' for attached views).
+
+  **Determinism gate PASSES (2026-09-14, demo-recorder stage 1)** — the reason the fire/gib
+  crowd-vs-per-body verdict was held ("the two legs shot different fights") is fixed.
+  `BENCH_QUERY='seed=4242'` + the bench's `?simidle=1` boot make the scripted scenario play
+  the same fight every run: `census-diff.mjs` exit 0 across 3 repeats with the census AND the
+  frame hash identical, on a loaded machine. Re-run the flip's fire/gib legs with that query
+  before merging the flip. See `docs/dev-notes/2026-09-14-demo-recorder.md`.
+- [ ] **BAKED MESH LOD (plan 2026-09-14):** `docs/superpowers/plans/2026-09-14-baked-mesh-lod.md` — L1 textured bake (rest-anchor + aux vertex attrs, per-pixel detail/mottle/meat/gloss; the "untextured smooth corpse" fix), L2 corpse bake for every character, L3 distance LOD (per-type segment bake shared by all instances, posed per frame, hysteretic band; removes far bodies from the march). Owner 2026-09-14: distant crowds are the real crowd case.
+- [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
+  collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
+  mostly the flag (the bake rejects on overflow and falls back). Independent of the upscaler.
+- [ ] P4 (brainstormed, spec pending) — **read `docs/dev-notes/2026-09-12-visual-direction-handoff.md` first**:
+  upscaler as an AESTHETIC tool (90s pre-rendered CG, soft ray-traced, characters only, normals + adversarial loss),
+  blood overhaul (conventional rendering FIRST — narrow-range filter, refraction, volume — then learn it cheap),
+  gibs parked pending the prebaked-mesh rework. Cost bench (P1 Task 6) still deferred.
+- [ ] P3 plain-language overview for the owner: `docs/superpowers/plans/2026-09-11-neural-upscale-p3-overview.md`
+  (copy into Obsidian `Claude Notes/Research/` once macOS stops blocking writes to ~/Documents). Nothing executed yet; dispatch order: p3a/p3b/p3c parallel, then p3d.
 
 ## Raymarch — Claybook cheap wins — 2026-09-09
 
@@ -121,18 +341,1251 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ---
 
+## GIB GORE — SHAPE SOLVED, MATERIAL STILL WRONG — 2026-09-11
+> **NEXT ACTION: fix the GORE MATERIAL's texture. The shape is accepted; the look is
+> not.** Three renderers exist and the owner has looked at all three — marched
+> pieces, sprite sheet (REJECTED), and the carved whole-body meshes (the current
+> path). Verdict on the carve, verbatim: *"in terms of shape i think are fine but
+> they literally look like rocks - nothing even abit fleshy about them - pale, like
+> gray offwhite with some maybe texture that is linear streaky looking looks kinda
+> like concrete meets marble a little"*, then *"they dont look right still gray and
+> stone"* and *"i dont think the texture is right either it doesnt look like the
+> zombie skin texture at all."*
+>
+> ## 2026-09-15 (later) — THE SETTLED GIB STILL DOES NOT MATCH THE MARCHED ONE
+>
+> **READ [`docs/dev-notes/2026-09-15-gib-baked-vs-marched/HANDOFF.md`](docs/dev-notes/2026-09-15-gib-baked-vs-marched/HANDOFF.md) FIRST.**
+>
+> The goal is the owner's: *"the idea was to optimize it so htey arent marched
+> but keep the same look"*. KEEP the bake, MAKE IT MATCH. A reference exists and
+> is one flag — `?chunkbake=0` (or the panel's `settle bake` row) leaves a landed
+> piece marched, which he confirmed is the target: *"thats wahat i want"*. Diff
+> against it; do not ship it.
+>
+> **After a full lighting pass his verdict was "still looks the same".** Not
+> better — the same. So the remaining gap is probably NOT lighting.
+>
+> **PRIME SUSPECT — the albedo, and it is a known bug class.** Every baked piece
+> measures (`__sdfGame.bakedAlbedoStats()`) mean rgb (0.487, 0.334, 0.265) with a
+> total range of 0.09 and **`meanWoundMask: 0`**. The wound mask is dead, so
+> `mix(baseColor, tissue, wm)` discards the whole tissue ramp and the piece is ONE
+> COLOUR. Cause is upstream: pieces reach the baker with `torn: []`
+> (`lastBakeInfo.torn: 0`) — trace `bakeData()` → `tornLocals` → `piece.tornAt`.
+> **`gib-carve.ts` had the identical bug and it is already fixed there**
+> (`cutAwareField`); the settled path has real torn ends that simply are not
+> arriving. Do this before touching the shader again.
+>
+> Fixed this session and verified: the 12-slot record pool throwing inside the
+> tick; the settled-chunk material never registered with `litChunkMaterials` (so
+> it had NO flashlight and NO room light — a regression that landed AFTER the
+> owner approved the bake on 2026-09-05); per-pixel micro-detail from the march's
+> own noise source strings as wgslFn includes; baked per-vertex AO through the
+> worker; the 0.15 key floor; a gib-specific fresnel (0.6 → 0.18) for the edge
+> glow; `gibbones=core` default; gib bones as MESH tubes. Three panel sliders and
+> a `settle bake` toggle.
+>
+> Still absent from `chunkShade`: backlit scatter (flesh authored `translucency
+> 0.45`) and wound shadow.
+>
+> ---
+>
+> ## 2026-09-15 — REBASED ONTO THE CROWD MARCH, AND THREE MORE FIXES
+>
+> The branch is on main as [PR #8](https://github.com/goblincore/blud/pull/8)
+> (draft). 47 commits squashed to one integration commit — a commit-by-commit
+> rebase needed ~26 separate integrations of `game-main.ts` and most intermediate
+> commits would not have compiled, so they could not have been verified. Full
+> history kept at `backup/pre-rebase-2026-09-15`. Six conflicts, all in
+> `game-main.ts`; the two that needed judgement were main's replay-determinism
+> refactor (weapon slots had to become a RISING-EDGE scan inside
+> `applyInputEdges`, and mousedown had to keep the tick deferral).
+>
+> **THE WHOLE SUITE PASSED WHILE THE FEATURE WAS DEAD IN THE BROWSER.** Three
+> runtime-only faults, none of which a test could see:
+>
+> 1. `createChunkGpuView` THREW "shared chunk material is full (12 slots)" from
+>    inside the tick, where the animation loop swallowed it — after the body was
+>    spliced out of `pendingGibs` and before `retireActor`, so a gib vanished
+>    silently (`gibbed: 1, gibPieces: 0`, body never retired, nothing logged).
+>    Main's crowd march sizes one shared record buffer from what the page passes,
+>    and the page passed the PRE-DYNAMITE `MAX_CHUNKS` of 12 while the recycler
+>    allowed 64. Now one ceiling: `MAX_CHUNK_BUDGET = 96`. Measured 0 -> 19 pieces.
+> 2. A settled piece had no per-pixel detail at all. The bake drops it on purpose
+>    ("the baked surface is the clean field") and this shader's header claimed the
+>    march's fbm "has no mesh-side equivalent and does not need one" — it does.
+>    The march's OWN `HASH13`/`NOISE3`/`FBM` source strings are now wgslFn
+>    includes, so parity is structural. Amplitude follows the live creature's
+>    `surfCfg2.y`; `?chunkdetail=` / `__sdfGame.setChunkDetail(x)` overrides it.
+> 3. **THE SETTLED-CHUNK MATERIAL WAS NEVER REGISTERED.**
+>    `createBakedChunkMaterial` is built in two places and only the corpse path
+>    wrapped it in `registerLitChunkMaterial` — but the CHUNK BAKE path is the one
+>    that wins in normal play. So every per-frame push went past it, including the
+>    FLASHLIGHT: settled pieces kept `spotCfg.x = 0` (beam off) against a fixed
+>    2.4 directional key — a body lit by a lamp that is not there, at ~2.5x, which
+>    is what blows flesh pale. `litChunkMaterials` was added to fix exactly this
+>    class of miss and this path was left out of the fix.
+>
+> **The instrument that caught (3) is kept.** A look A/B could not tell "the term
+> does nothing" from "the term never arrived" — sweeping `setChunkDetail` 0.06 ->
+> 0.9 changed nothing on screen. `__sdfGame.chunkDetailApplied()` reports what the
+> MATERIALS hold rather than what was requested; it read `[]` against 12 baked
+> pieces on screen. After the fix, `[0.06]`.
+>
+> **BONES: MESH ON A BODY, MARCHED IN A GIB — by design.**
+> `resolveSkeletonMode` returns `'mesh'` by default (only deferred mode or
+> `?skeleton=procedural` forces otherwise), so a living actor wears extracted
+> segment meshes. A DETACHED chunk does not: `spawnChunkPiece` calls
+> `setPackBones(boneOnly ? true : !boneMesh)`, so a bone-only gib piece always
+> packs its bone rows into the marched field — without that it would march an
+> empty field and the skeleton would be invisible. Measured after a gib: the 7
+> remaining live chunks are all `kind: "bone", render: "march"` and settled; the
+> 12 that BAKE are the flesh. So the pale capsules in a settled pile are the
+> skeleton, pale by design (`boneColor`), and bones never bake.
+>
+> **STILL UNJUDGED: the look.** Nothing above is an owner view-test. The harness
+> available here throttles `requestAnimationFrame` whenever its pane is hidden
+> (it reported 1030 ms/frame with zero gibs), and a floor of recycling gore will
+> not hold still for an A/B — so no frame-time or appearance claim from it is
+> trustworthy. What is established is mechanical: the uniforms now arrive.
+>
+> **ALSO IN THE SQUASHED COMMIT, and not described anywhere below** (these
+> landed after the 2026-09-11 banner was written):
+>
+> - **The carve cuts at JOINTS now.** Pieces were even slabs of each cluster's
+>   bounding box (`armL.0/1/2`), which the owner read as "too abstract ... should
+>   at least somewhat resemble pieces from the character". They are cut on a
+>   NEAREST-BONE-GROUP VORONOI over melt-bones.ts's eleven groups, so a boundary
+>   falls where two groups' bones are equidistant — on a limb, the joint. Eleven
+>   pieces: skull, cage, pelvis, upper arms, forearms, thighs, shins. `cells` now
+>   SUBDIVIDES an anatomical part rather than defining one, and defaults to 1.
+> - **Baked per-vertex AO**, because a mesh fragment shader cannot sample the
+>   field the way the march's cheap AO does. iq's five-tap against the piece's own
+>   clipped field (not the whole body's — a gib flies away from the body, so
+>   occlusion by a torso it is no longer attached to would be a shadow from
+>   nothing). Opt-in via `bakedAo`, with the same attribute discipline `goreKind`
+>   taught.
+> - **The tissue ramp no longer runs off the end of its range.** Its knees
+>   describe layers under skin and are authored for a crater a centimetre deep; a
+>   slab cut is 100 mm deep across its face. 21.2% of vertices were landing on
+>   VISCERA and 0.0% on fat — a butcher's cross-section ("beef chunks I get from
+>   the Piggly Wiggly"). The depth the albedo sees now saturates at the clot knee,
+>   and viscera is gated off plain cuts (the march gates it on the CAVITY mask;
+>   the bake had collapsed that to `wm > 0`).
+> - **CORRECTION — bones were never in the carved geometry.** The module header
+>   claimed "one field over flesh AND its 68 authored bone prims", and that was
+>   the headline justification for the carve over the per-piece bake. `sdBody`
+>   skips `op === 'bone'` in BOTH folds and says so: "the CPU field never shows
+>   it". The test that "proved" it only counted bone prims whose BOUNDING BOX
+>   overlapped a region, never a vertex. The skeleton is real on a cut, but as
+>   MATERIAL: `makeKindAt` tags the vertices a cut drove INSIDE a bone. Header and
+>   test both corrected.
+>
+> > **Known regression:** the carve library build is ~19.7 s at boot
+> (`?gibrender=carve` only, measured idle; was 3-5 s before the anatomical
+> partition). The default `march` path is unaffected.
+>
+> ---
+>
+> **FOUR causes, all fixed (2026-09-11, second session). Needs an owner view-test.**
+> The plaid-texture theory in the row below was a RED HERRING: the blowout survived
+> turning that layer fully off, and turning it off made it WORSE (10.9% vs 7.7%).
+> 1. **The wound mask was identically ZERO.** `gib-carve.ts` builds its field with
+>    `torn: []` (a rest pose has no wounds), but the march's chain is
+>    `albedo = mix(baseColor, tissue, wm)` — wm is "the sole authority on whether
+>    this pixel is wounded", so the whole tissue ramp was computed and discarded.
+>    Measured: **0.00% of 23,846 vertices** had any mask, while **33% of the surface
+>    sits >2mm beneath the original skin** — a third of every gib was painted as
+>    intact outer skin, alpha 0, fully matte. The CUT is the wound, and depth beneath
+>    the original skin is the mask (`cutAwareField`). Now bimodal at the shipped 1 cm
+>    cell: 60% skin, 32% meat, ~2% rim.
+> 2. **`goreKind` was never set.** The carve uses `createBakedChunkMaterial({goreDetail:
+>    true})`, which branches the ENTIRE material on that vertex attribute; the geometry
+>    never had one and three said so every frame (`THREE.AttributeNode: Vertex attribute
+>    "goreKind" not found on geometry`). An unbound selector takes the organ arm (albedo
+>    62% toward a pale wash, wetness forced >= 0.86, gloss 48 -> **220**) or the bone arm
+>    (gloss 90). Now derived from the authored bone/organ prims, so exposed ribcage
+>    shades as bone. Pinned by a test.
+> 3. **`__sdfGame.goreDetail()` never reached the carve** — it wrote only `gorePartMat`,
+>    so every live tuning attempt on `?gibrender=carve` was a silent no-op. Same shape
+>    as the flashlight bug in the row below.
+> 4. **`chunkShade` was the march's INVERSE in two places** — this was the "white
+>    concrete". (a) Fresnel: the march does `surfCfg.z * (1.0 - wmRim)`, killing it
+>    inside a wound ("whole patches clip to white and sweep across the cavity as the
+>    camera moves", X1.17); this did `* (1.0 + wm * 1.5)`. (b) No tone-map shoulder:
+>    the march runs lit flesh through `softShoulder` under the beam, this returned
+>    `diffuse + specular` raw — and its specular is ADDITIVE, never multiplied by
+>    albedo. Both ported. Measured blown-to-white pixels: **7.7-17% -> 0.46%**, against
+>    **0.0%** on the marched body in the same frame.
+>
+> **Carries a caveat:** the shoulder also applies to SETTLED CHUNK bakes (same
+> material, they track the flashlight). Deliberate — matching the marched body is the
+> point — but it is a visible change beyond the carve and has NOT been view-tested.
+>
+> **The SDF->mesh pipeline was never missing.** `chunk-bake-field.ts` +
+> `surface-nets-cpu.ts` is it (per-vertex albedo mirroring the march's albedo chain),
+> and the carve already called it. It was being fed inputs that switched off the half
+> that makes meat look like meat.
+>
+> Read [the handoff](docs/dev-notes/2026-09-11-gibs-as-classic-gore-parts/HANDOFF.md)
+> first: it opens with this state, the dead ends (a perlin-via-`wgslFn` attempt that
+> measurably delivered NOTHING), the traps with their numbers, and the rigs.
+> Look at: `?gibrender=carve` (current), `?goreparts=1` (bench, same material),
+> `?gibrender=sprite` (rejected, reference).
+
+- [x] **THE OWNER'S LOOK PASSES REJECTED THE BODY'S OWN FLESH** — "tubes and balls",
+  then "weird oblong sausages", then (on the procedural mesh parts that replaced
+  them) "they just look like crystals rn". The accepted direction is the REFERENCE
+  game's: *"generate spritesheets based on the rendered SDF and then cut those up
+  randomly and use them in the gibs … sure you trade 3d but its not important in
+  this case"*.
+- [x] **THE SHEET EXISTS AND CAN SHIP.** `public/assets/lab/gore/{sheet.png,
+  manifest.json,index.html}` — **154 pieces from 16 frames (77 clean + 77 from a body
+  carrying 10 wounds)**, sheet 512x1950, coverage 0.45/0.78/1.00. Generated from OUR
+  rendered zombie, so unlike `public/assets/gibs-placeholder/` (extracted Blood art,
+  gitignored, never commit) it is committable.
+- [x] **THE PIPELINE.** `blob-turntable.mjs` with `BLOB_MASK=1` writes an EXACT body
+  mask per angle by capturing twice (once with `__sdfLab.body` hidden) and diffing —
+  that replaced three failed background keys, all measured (the lab's background is a
+  fogged AND dithered gradient). `scripts/gib-sheet.mjs` cuts with radial-noise masks
+  so edges are TORN (not rectangles), jitters the grid so no two pieces share a
+  silhouette, merges multiple sources (`--also`) and packs one sheet + rect manifest
+  with each piece's `origin` and source `yawDeg`. `scripts/lib/png-write.mjs` is a
+  new PNG ENCODER (the repo had only a decoder), round-tripped against that decoder.
+- [x] **WOUNDS ARE BAKED INTO THE PIXELS.** `__sdfLab.wound(n, seed, type)` is a
+  direct, deterministic, AIM-FREE seam that REPORTS what it stamped
+  (`.woundCount()` reads the body back), because the synthetic-click path measured
+  **+0.4%** and could never have worked — the click-shoot pipeline is god-cam-only
+  and the capture rig freezes the rig. Clean vs 10 wounds: **25.38% of the body's own
+  pixels change** (34.51% at yaw 0).
+- [x] **THE BENCH.** `?gibparts=sheet|sprite` (own render vs the reference extract)
+  and `?goreparts=1` (mesh parts) are comparable in one place; 308 billboards spawn,
+  drawn (shown-vs-hidden **5.38%** of pixels), no page errors.
+- [x] **THE BLAST IS WIRED — `?gibrender=sprite`, OPT-IN** (2026-09-11, second
+  pass). A render mode BESIDE the piece mode, orthogonal to `?gib=`: the piece set
+  still comes from `pieces|clusters|parts`, and this only chooses what each chunk
+  looks like. A sprite piece is **the same `Chunk` state** stepped by **the same
+  `stepChunk`** with the same colliders — no new physics — plus a billboard quad
+  (`webgpu/gib-sprite-pieces.ts`, +21 tests). **MEASURED** (`sdf-gib-sprites-rig.mjs`):
+  a blast spawns **19 sprite billboards, 0 marched pieces, tier `sprite`, 0 dropped**;
+  all 19 fall, come to rest and PARK (none below the floor); hiding them changes
+  **2.93%** of the presented frame; six blasts leave **128 live + 19 parked =
+  147 meshes**, exactly the cap, with **1 geometry and 129 materials**. The
+  **degradation is retired**: the tier ladder and the `?maxchunks` view pool do
+  not exist in this mode, because a quad has no proxy box and no bake — which is
+  what produced the owner's original "tubes and orbs" report. Gate PASSES in both
+  arms; the wall/ceiling rig PASSES on sprite pieces (8040 piece-frames, 67
+  pieces, every one inside a room or tunnel); the **live-loop soak PASSES**
+  (`SOAK_QS='&gibrender=sprite'` — 8 detonations, 9 gibs, 211 pieces, 0 stuck
+  tears, 0 queued gibs, peak **128 live = exactly the cap**, geometry/material
+  held at **1/107**).
+- [x] **SPRITES ARE CHEAPER, BUT ONLY THE MARCHED ARM IS ABOVE THE NOISE FLOOR.**
+  Paired shown/hidden GPU rows in one boot each (camera AIMED at the pile, with
+  `screenPosOf` proving it): marched pieces moved `sdf:march` **+2.90 ms** at 51
+  pieces (29 on screen); the sprite arm moved **no row** beyond ±1.4 ms of noise
+  with both signs (`sdf:march` itself read −0.28 ms). Cadence is useless for this
+  on a vsync-capped page: both arms sat at 16.70 ms. NOT a controlled A/B —
+  different boots, different piece sets — so the claim is the narrow one: **a
+  sprite blast is not measurably expensive, and the marched path is.**
+- [x] **IN-PLANE ROLL.** A billboard that only copies the camera quaternion is a
+  decal. The piece's own `longAxis` (a real `Chunk` field, tumbled by the piece's
+  real `quat`, the same axis `stepChunk` topples flat) is projected into the
+  camera's screen plane and the projection's ANGLE is the roll — no accumulator,
+  so it is right after a pause and in a static capture. Degenerate case (axis
+  pointed at the camera) falls back to the spin's in-plane direction.
+- [x] **NO BLOOD TRAILS IN SPRITE MODE — the owner's first report, and a real gap.**
+  `emitTrails` was fed only `liveChunks`, which is EMPTY by construction in sprite
+  mode (a sprite piece has no marched view), so a sprite blast threw gore that
+  trailed nothing. Both lists now feed it, with the two id spaces OFFSET because
+  `emitTrails` keys its per-emitter clock by id and both sequences start at 1.
+  MEASURED and pinned by the rig: droplets **38 → 600** while 67 pieces fly.
+- [x] **THE ELONGATED OVOID PIECES WERE THE CUTTER, NOT THE GORE.** Owner: *"they
+  are all somewhat elongated ovoid shaped, they whould be more chunky like
+  squareish"*. **All 154 shipped pieces were tall — median aspect 0.36, not one
+  square-ish** — because a fixed `COLS=4, ROWS=4` grid sat over a STANDING BODY's
+  bounding rect (~186x392) and every cell inherited its 0.47 aspect. Fixed by
+  searching (cols, rows) PER FRAME for the squarest cells near `--cells 16`: **177
+  pieces, median aspect 0.97, all square-ish**. Corroborated independently: hiding
+  the sprites now changes **5.85%** of the presented frame, up from 2.65%, i.e.
+  they really do cover more pixels. The mask also became a 5-gon (`--sides`) with a
+  `--polyscale` dial, but **that half is NOT visually verified** — the alpha is
+  `body AND polygon`, so the facets only show where the cut lands inside the flesh.
+- [ ] Owner asked for **more blood and dirt streaks**: cheapest form is 2-3 wound
+  levels merged into the sheet (`BLOB_WOUND_TYPE` = pellet|burn|blast, one turntable
+  run each) plus streaks applied AT THE CUT, which needs no shader work.
+- [x] **THE MESH PARTS' BUMP WAS NEVER RENDERING — the owner found this by eye.**
+  *"when i saw the mesh they had no texture no nothing just albedo"* — correct, and a
+  real render bug. Cause: the bump sampled `positionLocal` at 6-43 cycles per unit on
+  parts built AT FINAL SIZE (0.075-0.115 m) with no mesh scale, so a whole part
+  spanned **less than one noise cycle** — the fbm was a smooth ramp, i.e. a uniform
+  normal tilt, not texture. (The blood decals DID land, because one of their fields
+  runs at frequency 60 — the only term fine enough to vary at pixel scale.) FIXED by
+  scaling the noise domain through `goreCfg.w`, which was declared and never read.
+  **MEASURED** (`scripts/gore-detail-ab.mjs`, neighbourhood roughness inside the
+  parts' own pixels): **x0.996 at the old unscaled scale → x1.120 at the shipped 12**,
+  plateauing 4-32. Live: `__sdfGame.goreDetail({detail, bump, blood, noise})`.
+- [x] **THE GIB LIBRARY — the owner's design: bake an archetype's gibs ONCE, reuse
+  for every instance.** "we should bake it at spawn and basically reuse across a
+  character instance eg all zombies use the same gib library". `webgpu/gib-library.ts`
+  (+7 tests) bakes the archetype's `gibParts` split into named meshes and caches them
+  per archetype (`gibLibraryFor`), so the second zombie asks for `zombie` and gets the
+  same object. It needs NO renderer, NO actor and NO blast: `bakeChunkGeometry` is pure
+  synchronous CPU, so a library is built straight from a rest-pose body. **Verified
+  against the real archetype** (compiled `characters/zombie.blob`: 23 flesh prims, 6
+  clusters, **68 bone prims** → 24 split pieces): the flesh pieces all bake with real
+  geometry, baked albedo and a wound mask; geometry is **recentred** (required twice
+  over — to re-instance at all, and because the detail material's bump samples
+  `positionLocal`, so world-space vertices would give every instance a different,
+  grain-fine noise field); and asking twice is provably ONE bake.
+- [ ] **KNOWN GAP, and it is the bones: a bone-only piece bakes to NOTHING.** Every
+  `bone.*` piece comes out of `bakeChunkGeometry` with zero vertices — the CPU field
+  only unions bones in NEAR A WOUND (it mirrors the shader's `applyBones` nearWound
+  gate), and a bone piece has no flesh and no wound, so its field is empty. The
+  existing design sidesteps this deliberately (`game-main`: "Bone-only pieces retain
+  their original SDF path", gated on `data.flesh.length > 0`), because marched bone
+  pieces never needed a mesh. A LIBRARY does. **THE FIX:** a bone bake path that
+  composes the field from the bone prims ALONE. Pinned as `it.fails` in
+  `gib-library.test.ts`, so it starts failing the moment bones land and forces the
+  assertion to be promoted; the library also warns per piece
+  (`[gib-library] … produced no geometry`) so the gap is loud, never silent.
+- [x] **BUILD THE LIBRARY FROM THE COMPILED ARCHETYPE, NOT `makeZombie()`.** A trap
+  that cost a test cycle: the TS fallback carries NO authored bones, so a body built
+  from it splits into 10 pieces with zero `bone.*` and no `torso.chest` at all — a
+  library built from it is a library with no skeleton in it. `characters/zombie.blob`
+  compiled through `compileBlob(parseBlob(src))` is the archetype the game uses, and
+  the one with the bones.
+- [ ] **Bones in the sprite path** — DEFERRED by the owner until the meat direction
+  is settled. Today a sprite blast has no bones at all (in the marched path a bone
+  piece is its own `kind` with its own thud physics and the pale-bone shade; sprites
+  render everything as one billboard).
+- [ ] **View-angle sets for the head** (handoff item 4). NOT done, and it is a
+  CUTTER job, not a runtime one: the shipped sheet's 154 pieces carry `yawDeg` and
+  every one of the 8 yaws is represented (17-23 pieces each), but they are
+  INDEPENDENT random cuts, not 8 views of the same part — so there is nothing to
+  select between yet. Build it by projecting a piece's 3D anchor into all 8 yaws
+  and cutting around the projection; do NOT cut the same screen rect across yaws,
+  because the anatomy differs per frame and the piece would morph as it spins.
+
+## Weapon slot 2 — dynamite, for tuning the blast + gib — 2026-09-10
+
+- [x] **UNLIMITED AMMO IS THE DEFAULT** (owner: "it should be unlimited for now to
+  make testing easier"). The grapeshot's 2-shell magazine + 1.30 s reload is pure
+  friction for a tuning pass, so running dry is OFF unless asked for:
+  `?ammo=finite` / `__sdfGame.setInfiniteAmmo(false)`. That flag is now the ONLY
+  way to exercise the reload, so `sdf-game-shorty-gate.mjs` — whose whole subject
+  IS the reload — boots with it pinned. The dynamite was already unlimited (the
+  prop pool refills the hand after each throw's recovery). The gun's 0.45 s fire
+  cooldown still applies: unlimited AMMO, not unlimited rate of fire.
+- [x] Branch `claude/dynamite-weapon-slot` (worktree `.claude/worktrees/dynamite-weapon-slot`):
+  `2` selects a throwable bundle (hold LMB to cook, release to throw), the game's
+  FIRST live-actor gib, and a procedural GPU explosion. Gate:
+  `node scripts/sdf-game-dynamite-gate.mjs <vite> <cdp>` — PASS, zero page errors.
+  [design + evidence](docs/dev-notes/2026-09-10-dynamite-weapon-slot/README.md).
+- [ ] **OWNER LOOK PASS PENDING** on both the bundle prop's hold pose and the
+  fireball. `?explosionfx=procedural|standin` A/Bs it in-page;
+  `node scripts/sdf-explosion-fx-shot.mjs` writes the PNG pairs. Numbers measured,
+  look NOT judged.
+- [x] **"i didnt see any skeleton chunks and the gib parts still looked like tubes and
+  orbs" — REPRODUCED, AND THE CAUSE WAS THE POOL DEFAULT, not the piece set.** The piece
+  pool is GLOBAL and a pile from earlier blasts is charged against a later blast's budget,
+  and `?maxchunks` shipped at **24** — the exact count of the split piece set. So a blast
+  that gibs several bodies can only afford the full set for the FIRST one, and the rest
+  walk down the tier ladder to `clusters+cage`: six tubes with the skeleton packed INSIDE
+  them. Reproduced twice, deterministically, by `node scripts/sdf-pile-crowding.mjs 5391
+  9391 24 64` (five blasts in a row in the arena): at **24** the 3-body blast gives
+  `parts-core:16` then `clusters+cage:7`, **17 of the last body's pieces dropped and 18
+  recycled on the frame they were born, `buriedBonePieces 6`**; at **64** the same blast
+  gives `parts:24` to every body with `buriedBonePieces 0` (pile 28 bone pieces / 154
+  rows). Default is now 64 (`?maxchunks=N`, 1..96). NB a body in round 1 reads `parts:19`
+  — that is the SOLDIER (19 pieces), the arena roster is mixed, so a tier log can only be
+  read with the piece count beside it.
+- [x] **...AND THE GATE PASSED THROUGH THE WHOLE BUG.** At the old default the gate's own
+  gib probe reported `lastGibTier: clusters+cage`, 17 pieces dropped, "18 of this gib's
+  pieces recycled immediately" — and PASSED, because the bone-census assertion is
+  conditional on `lastGibTier === 'parts'`, i.e. skipped in exactly the degrading case.
+  The gate now asserts the SHIPPED configuration never degrades the last body of a
+  multi-body blast (`knobbed` runs are exempt and print the row), and it was proven to
+  FIRE by setting the default back to 24 and watching it fail with the owner's own
+  condition. Also: both the gate and the new rig now call `Network.setCacheDisabled`,
+  because that falsification run first reported the NEW default and PASSED — Chrome served
+  a cached transform of `game-main.ts` while vite served the edited file. **A long-open
+  tab serving a stale module graph is the other candidate explanation for an owner look
+  pass that does not match the numbers; hard-reload before judging.**
+- [x] **THE COLLAPSIBLE TUNING PANEL the owner asked for** ("or if you want me to manual
+  tune please add another tuning panel that is collapsible"):
+  `src/lab/sdf-zombie/webgpu/dynamite-panel.ts` (+ `dynamite-panel.test.ts`), fourth slot
+  (right:782px) beside GOO/WOUND/VHS, visible but collapsed, hidden with them on `H`.
+  19 rows generated from ONE key table, which the test pins against
+  `applyDynamiteTuning`'s switch cases — the "a tuning that LOOKED applied and was not"
+  bug has shipped twice here (setBeam, then goo). Presets `split` / `tubes (old)` (his own
+  A/B) and `plume` / `ball (old)`. Every gib knob it owns is now `let`, so a slider lands
+  with no reload: `maxChunks`, `gibMode`, `gibBones`, `gibStaggerFrames`, `gibTearSec`,
+  `gibVelScale`, `fxSize`, plus `tearShape {amplitudeM, jiggleAmp}` pushed to every actor
+  (including bodies that start tearing later). Seams `__sdfGame.setDynamiteTuning(patch)` /
+  `.dynamiteTuning()` / `.dynamitePanel(on)` / `.dynamitePanelCollapsed(on)`.
+- [ ] **A gib is 24 pieces** for a zombie (12 flesh + 11 bone + 1 organ) and **19** for a
+  soldier against a 64-view pool: `?maxchunks=N` raises it and the tier ladder
+  (`parts` 24 → `parts-core` 15 → `clusters+core` 9 → `clusters+cage` 7 → `clusters` 6 →
+  a nearest-first slice) degrades the shape rather than the count — which is also the knob
+  to raise if a crowded blast still reads as tubes. `lastBlastMs` is 18-28 ms per
+  detonation (CPU, headless) and the cap barely moves it — the resolver's trace/wound
+  split dominates.
+- [ ] The burst does **not light the room**: `explosion-vfx.ts` exposes
+  `lightIntensity` and nothing feeds the probe gather's dynamic light list yet.
+- [x] **THE ARENA** (owner: "the rooms are quite small... we might need a big open
+  space with some zombies"): a 16x16x6 m chamber east of the annex, 8 zombies,
+  `__sdfGame.teleport(6)` to jump straight in. Roster 15 -> 23. Its 6 m ceiling
+  forced the bundle's ceiling to resolve PER ENCLOSURE (`ceilingAt`) rather than
+  from one global plane. **The annex is now a through-room** (it gained an east
+  door) — a topology change, flagged in game-level.ts; the three level gates that
+  assumed it was sealed were updated to assert BOTH halves (the door exists AND
+  the closed sides still contain a capsule).
+- [ ] Arena look unjudged: 2 braziers at power 13 in 8x the volume of an 8x8x3 m
+  room — the frame reads brighter than the corridor rooms (mean 80 against 23-35),
+  though 8 bodies at close range could account for that. Owner's call.
+- [x] **Perf: the blast pause, round 2 — the wound phase was still 18.1 of a
+  22.0 ms resolve.** Two levers, both measured. (1) The CARVE-depth probe, the
+  SECOND `probeFlesh` call per wound, was never capped: 150 `sdBody` folds
+  against the rim probe's 36. It is capped now at the point past which the
+  shader's slab cannot bind (`thick ≥ radius / 0.45`), so the carved field is
+  unchanged — `?carvecap=0` is the control, woundMs median 7.6 vs 13.6.
+  (2) A body this blast is about to GIB no longer gets 16 wounds stamped on it
+  that nothing reads (`ResolveExplosionOpts.woundsOnGibbed`, default TRUE so the
+  lab/tests keep their contract, FALSE from the game): interleaved in one boot,
+  woundMs median **8.5 → 0.0**. Seams `?gibwounds=1`, `?carvecap=0`,
+  `__sdfGame.setGibWounds(on)`. [Detail](docs/dev-notes/2026-09-10-dynamite-weapon-slot/README.md).
+- [x] **Perf: the blast pause, round 1. `trace 5.2 + WOUND 50.2 + cut 0.3` ms** — the cost
+  was never the field or the chunk spawn, it was `probeFlesh` marching 150
+  `sdBody` folds per wound for a measurement only used as `min(1, thick/2·lip)`.
+  Capped exactly at `2·lip` (`?woundcap=0` is the control): woundMs median
+  **8.8 vs 26.9** interleaved in one boot, 3x. End-to-end the gate's
+  `lastBlastMs` went **45 → 25 ms**. Splits exposed at
+  `__sdfGame.dynamite().blastProfile` / `.resolveProfile`.
+- [x] **Gib quality: the SPLIT PIECE SET + the skeleton as its own pieces** —
+  `src/lab/sdf-zombie/gib-parts.ts` (+13 tests): torso → chest/abdomen/pelvis,
+  every limb at its joint, head whole, and the skeleton released as bone-ONLY
+  chunks (the eleven `partitionBones` groups: ribcage, spine/pelvis mass, skull,
+  eight long bones). Measured: **zombie 24 pieces (12 flesh + 11 bone + 1
+  organ), soldier 19**. Cuts are SEALED and CAPPED (a `sub` sphere per side,
+  `2 × blendK` past the plane), so the union of the pieces still covers the
+  body's surface to within the cluster seam — 5.4% of surface points off by
+  >2 mm against `gibAll`'s 3.7%, both bounded by the same 27 mm at the armpit.
+- [x] **The body→gib TRANSITION, stages (a) and (b)** — pieces spawn at their
+  posed transform with ZERO velocity and their blast impulse is QUEUED over
+  `?gibstagger` waves (default 3), nearest-the-blast-first, so frame 0 is the
+  body's own silhouette and it comes apart outward. The queue's delay counts
+  DRAINS, so every piece gets at least one full frame at rest (a frame-indexed
+  queue released the first wave before the first frame was DRAWN). MEASURED
+  frame by frame by `scripts/sdf-gib-look.mjs`: 24 held at frame 0, then 16, 8,
+  0 — and that rig prints what the body became BY NAME, including `bone.cage`.
+- [x] **THE REAL LOOP, not just `step()`** — `node scripts/sdf-dynamite-soak.mjs
+  5391 9391 [rounds]` throws real bundles on the game's own rAF loop (it never
+  calls `step` and never stops the loop) and detonates on live bodies, sampling
+  throughout. That is where the pre-tear window, the deferred spawn and the view
+  pool meet variable dt and overlapping blasts — every other rig in the repo
+  drives tidy 1/60 s slices instead. It asserts no page errors, a pool that
+  never exceeds its cap, nothing left `tearing`/`pendingGibs` after settling, and
+  that no bone piece ever shades as meat. Measured: 3 throws → 3 detonations →
+  `bone 11 buried 0`; 6 detonations / 8 gibs / 90 pieces in one run; peak pool
+  24 of 24. It also found the `selectSlot(2)` trap (below).
+- [x] **`selectSlot()` REFUSES A KEY NUMBER** — `WeaponSlot` is the string union
+  `'shotgun' | 'dynamite'` and the seam silently accepted `selectSlot(2)`: the
+  switch ran, `phase` read `'up'`, NOTHING was live, and every later press was
+  dropped with no error anywhere (a soak rig lost an hour to it). The seam now
+  returns `{ok:false, reason:'unknown-slot:2'}` and the gate asserts the refusal.
+- [x] **The gate runs against the feature's own A/B controls.** `GATE_QS` boots
+  the same gate on a knob (`GATE_QS='&gibtear=0'` the instant swap,
+  `&gib=clusters|pieces` the legacy piece sets), so "`?gibtear=0` restores the old
+  behaviour" is checked rather than claimed. All four arms PASS; the knob runs
+  report the bone census instead of asserting it, because a legacy piece set has
+  no bone pieces by design.
+- [x] **The AIR burst is still a fireball, measured.** `PLUME_KIND=air
+  node scripts/sdf-plume-shape.mjs` reads fire 1.47 x 1.52 m (a ball) and smoke
+  1.88 x 1.85 m, against the ground burst's 2.72 x 2.18 (a plume) and 3.75 x 3.10
+  (a flattened cap) — i.e. the shape terms differentiate the reference's two
+  sequences the way the reference art does. An in-hand detonation is an air
+  burst, so this is the case a "make it a mushroom" change most easily breaks.
+- [x] **"You can see it" is measured, not argued** — the bone census proves the
+  pieces are FLAGGED as bone; `scripts/sdf-gib-look.mjs` now proves they reach
+  the FRAME by hiding them and reading the RENDERER's march-target `frameHash`
+  (it changes when they go, and a no-change control reads identical). Three
+  attempts were needed and the two discarded ones are documented traps: a capture
+  without a draw, and the explosion VFX ageing in the RENDER path so every draw
+  differs (control 55k px). Reach for `frameHash` first.
+- [x] **The tier ladder now guarantees a ribcage in a crowd.** Measured in the
+  arena — the room the owner tests in — a point-blank bundle gibs FIVE bodies,
+  and with a reserve floor of 6 slots every one of them got the shape whose bones
+  are BURIED: `bonePieces 0`, i.e. no visible skeleton at all, which is the
+  complaint reproduced by the allocation. Floor raised to 7 and a
+  `clusters+cage` rung added (six limb chunks + the ribcage ALONE, the one bone
+  group worth a slot when there is exactly one), so a body down to seven slots
+  still shows a ribcage.
+- [x] **The skeleton is in the pile AND DRAWING AS BONE — asserted from the page,
+  which is the claim "you can see it" rather than "it was spawned".**
+  `chunkCensus()` now reports, per live piece, what it was spawned AS
+  (`bonePieces`, `boneRows` packed, `organPieces`) against what it will RENDER as
+  (`bonesShadingAsMeat`, `organsShadingAsBone`, `buriedBonePieces`), and the
+  dynamite gate asserts five things about it. Measured: a throw's gib reads
+  `bonePieces 7, boneRows 35, bonesShadingAsMeat 0, buriedBonePieces 0`; a
+  two-body blast into a 24-piece pool reads `bonePieces 3, buried 6`, and into a
+  48-piece pool `bonePieces 22, buried 0`.
+- [x] **The tier ladder put the skeleton back in the meat, so it was fixed.**
+  The bone census caught it: a degraded blast spent the first body's allowance on
+  a bone-FREE twelve-piece flesh set and the second's on six `clusters` chunks
+  whose bones are packed INSIDE the meat — `bonePieces 0`, i.e. the owner's
+  complaint reproduced by the fallback. The bone-free rung is gone (still
+  reachable as `?gibbones=off`, which makes it the first tier) and a
+  `clusters+core` rung (six limb chunks + skull/cage/pelvis as bone-only pieces)
+  took its place, so every body down to six slots keeps a visible ribcage.
+- [x] **THE BLAST TELEPORTED BODIES: the rig shove was handed a VELOCITY where it
+  wants METRES.** Owner, playing: *"the shockwave or whatever causes a weird animation
+  glitch for bodies not close to the explosion where they are like teleported outside the
+  screen then animated backwards"* — and that is exactly what the code did.
+  `impulseAt(bound, world, delta)` displaces the nearest rig point by `delta` **metres**;
+  every other caller passes metres (`IMPULSE[type]` is 0.04-0.18, motion's `kick.delta`),
+  and `blast()` passed `impulse.vel` — the resolver's concussion **velocity**, 2.0 m/s at
+  the launch floor and **25.2 m/s point-blank**. So a body at the radius edge had one
+  joint teleported ~11 m out of frame and the rest-pose pull then sprang the whole body
+  back over the following frames. `RigImpulse`'s own doc already said so: *"a world point
+  plus a concussion VELOCITY (m/s) — the wiring turns it into an impulseAt
+  displacement"*. Fixed by `shoveFromVelocity` (one frame of travel, capped at 0.35 m —
+  which lands a radius-edge body on the same 0.18 m a blast WOUND shoves by, so the two
+  paths finally agree). Measured: the pose `blast()` writes now moves **0.18 m**, against
+  **5.5 m** before (11 m for the joint itself). Four tests pin it and the falsification
+  run fails at 5.5.
+- [x] **The AOE is now focusable — `aoesize` and `edge fling` on the panel.** Same
+  session, same report: *"it seems the effective radius of the explosion is quite large …
+  the area of effect should be abit more focused"*. `ResolveExplosionOpts` gained
+  `radiusScale` (multiplier on every distance-gated term at once: damage, wounds, launch,
+  hand band, prune) and `launchFloor` (how much of the point-blank launch survives to the
+  radius EDGE — the shipped 0.45 is NotBlood's "edge survivors fly comically", and it is
+  the other half of why the blast feels big). Both default to the reference, so the
+  shipped blast is unchanged until he moves a slider. **The fireball's size is
+  deliberately NOT folded in** (`burst.heightM` still uses the REFERENCE radius): the look
+  was tuned and judged on its own via `?fxsize`, and a gameplay slider that silently
+  resized it would invalidate that pass. The gate asserts the slider reaches the
+  RESOLVER (radiusM 4.6875 → 2.34375 at 0.5x).
+- [x] **A SEAM THAT REPORTED A CONSTANT MADE THE NEW KNOB LOOK INERT.** The `detonate`
+  seam returned `radiusM: explosionRadiusM()` — the reference CONSTANT, not `fx.radiusM` —
+  so the first run of the new gate assertion read 4.6875 at BOTH slider positions and
+  failed. Every rig in the repo reads that field, so any radius tuning would have looked
+  like it did nothing. The seam (and `dynamite().lastBlastRadiusM`) now report what the
+  blast actually resolved at. Same bug class as the `?maxchunks` half-wiring: **when a
+  knob looks inert, suspect the instrument before the knob.**
+- [x] **Does the blast light the room? YES, and it is measured — plus it is now a
+  slider.** `node scripts/sdf-explosion-light-check.mjs` sweeps the arena's WHOLE-FRAME
+  mean: at the shipped `fxlight=1` it goes **30.16 → 39.05 (+8.89, ~30% brighter)**, with
+  0.5 and 2.0 reading +4.93 and +15.19, i.e. the light carries across the room and scales
+  linearly. Both the real detonation and the capture seam ignite it. `?fxlight` was a URL
+  knob only, so it is now `blast light` on the panel (0-4) — "is this enough room light"
+  is his call, and a reload per attempt is not how to answer it.
+- [x] **THE BLAST'S LIGHT DID NOT REACH — it was inverse-square by construction.**
+  Owner: *"the explosion seems to have a rather small radius of light effect"*, and
+  *"lighting the room will fix it"* for picking the gibs out of the dark. A packed probe
+  light accumulates as `intensity / d²` (`probe-dynamic.ts` and its WGSL twin), so at 2 m
+  a wall got 1/4 of the peak and at 8 m 1/64: a bright disc of floor at the crater and
+  almost nothing across the room. `DynLightInput.fill` adds the SOFT component a real
+  detonation has (the flash scattering in air, dust and smoke) at
+  `intensity · fill / (1 + d²/LIGHT_FILL_REF_M²)` — REF 4 m, so the far field is
+  **12.8x** the hard term's contribution at 8 m for the same peak. It rides in the packed
+  light's `cosInner` slot, which a POINT light never reads (the cone branch is gated on
+  `cosOuter > -1.5`), so no buffer layout changed. MEASURED in the arena: the probe
+  gather's own radiance **1476.6 → 3056 (+107%)**, peak **3.9 → 10.4**, and the CPU twin
+  agrees. `?fxspread` / panel `light reach` (default 1.2, 0 = the pure point light).
+- [x] **...and the light DOES cross the room — measured in the frame, per tile.** The new
+  `scripts/sdf-blast-light-reach.mjs` reports the presented frame as a 4x4 tile grid with
+  an `fxlight=0` control at the same frame age, because a whole-frame mean cannot tell
+  "the crater blew out" from "the room filled". Measured: the blast's own contribution is
+  **min +3.1, median +5.6, max +18.6 across ALL SIXTEEN tiles** — it lifts the far corners,
+  not just the crater. What it is NOT is large: the fill's OWN marginal effect on the frame
+  is +1 to +1.5 in a handful of mid/far tiles, because the dynamic probe layer is applied
+  at `probeDynGain 0.15` and the room's baseline lighting dominates it. **The strong lever
+  the owner wants is therefore `blast light` (`?fxlight`), which scales the mesh pool and
+  the gather together: measured +8.89 whole-frame mean at 1x and +15.19 at 2x.**
+- [x] **A THROTTLED BACKGROUND TAB MADE THE LIGHT LOOK BROKEN.** The first version of the
+  reach rig waited in wall-clock time between arms and measured a FROZEN page: the
+  explosion light sat at `age 0` and never aged, the probe readback froze at whatever the
+  last gather wrote, and every "frame" was the same stale presented image — so the fill
+  measured as exactly zero effect twice. The rig now drives frames with `step()`, prints
+  the light's age (a stalled page is visible in the output rather than inferred), boots ONE
+  ARM PER BOOT (the readback stops updating after a few gathers in one boot: measured, arms
+  4-6 all returned arm 3's value), and disables the module cache.
+- [x] **DETACHED PIECES HAD NO WALL COLLISION AT ALL.** Owner: *"it seems the gibs dont
+  bounce off the walls/have collission"* — correct, and the mechanism was that
+  `stepChunk` knew about exactly one surface: a floor plane at `y < radius`. A piece
+  thrown at a wall flew through it and out of the level. The stepper now takes the
+  LEVEL'S OWN collider boxes (`levelColliders()` — the same walls the player and the
+  wander clamp collide with, **split around every doorway and tunnel mouth**, so a gib
+  sails out of an open door and bounces off the wall beside it) plus the page's existing
+  per-enclosure `ceilingAt`, because the collider boxes stop at `WALL_H` and the ceiling
+  is not one of them. Sphere-vs-AABB with the closest-point normal, restitution
+  `wallRestitution 0.55` (mirroring the floor), and the tangential component damped by
+  the floor's own 0.72 — a gib skids along a wall exactly like it skids along the floor.
+  A piece whose CENTRE is inside a box (a fast one tunnelling a thin wall in a frame)
+  is pushed out along its shallowest penetration axis.
+  MEASURED, `scripts/sdf-gib-wall-bounce.mjs`: **771 piece-frames were in no enclosure
+  at all (inside a wall or through one) without the colliders, and 0 with them** — and
+  the highest piece centre fell from **4.87 m to 2.97 m**, i.e. pieces were also going
+  out through the 3 m rooms' roofs. Six unit tests, including the doorway gap and a
+  bit-identical check that a stepper given no geometry behaves exactly as before.
+- [x] **THE BODY TEARING IN HALF AND RUBBER-BANDING BACK — the signal's direction was
+  handed a VELOCITY.** Owner: *"its like a rubberbanding effect … the upper torso/arms/head
+  fly off leaving just the legs and then they rubberband back to the body"*, on bodies that
+  are NOT gibbed. `stagger.ts` builds the hit reaction by scaling the signal's `dir` by
+  METRE amplitudes (`lurchAmp` 0.26, `flinchAmp` 0.085) into `rootOffset` plus
+  `offsets.chest`/`offsets.neck`/shoulders — so `dir` must be a UNIT vector — and `blast()`
+  was passing the resolver's concussion **velocity**: 0.26 × 25.2 × 1.3 (gain) = **8.5 m**
+  of chest-and-neck offset. MEASURED intra-body chest-to-foot span after a point-blank
+  blast: **0.667 → 8.23 m in five frames**, easing back to 0.67 m over the next half second.
+  Fixed with `unitOrZero` at the signal boundary (the only violating caller — the pellet and
+  slug paths pass `dirN` / a `/dl`-normalized vector), and the contract is now written into
+  `stagger.ts`'s header and the `ShotSignal` type. Re-measured: **0.305 m**, which IS the
+  designed lurch (0.26 m × gain), i.e. a body that leans into a hit instead of tearing.
+  Three tests, including one that the same direction at a tenth the speed produces the same
+  reaction.
+- [x] **...AND THAT IS ALSO WHAT THE EARLIER "TELEPORT" REPORT WAS.** The `impulseAt`
+  m/s-vs-metres bug (fixed in `1d843e16`, capping the joint shove at 0.35 m) was the SMALLER
+  half: it produced a 0.35 m joint displacement with a hidden `delta/dt` = 21 m/s kick. The
+  dominant term was this lurch scale, which the cap never touched — which is exactly why the
+  same complaint came back from the other end. Two lessons: a cap on a displacement does not
+  fix a wrong unit, and `pos += delta` without `prev` is a kick of `delta/dt` (a Verlet
+  point's velocity IS `pos - prev`), so `impulseAt`'s "0.18 m" is really 10.8 m/s.
+- [x] **GORE PARTS, FIRST SLICE — the shapes and a bench to judge them on.** Owner:
+  *"i would prefer if like upon explosion the whole character became chunky meaty textured
+  and blood stained mesh parts … it doesnt really have to resemble the SDF body part shapes
+  at all … bones … classic bone silhouette shaft with knobby heads"*. Built:
+  `src/lab/sdf-zombie/gore-parts.ts` (+11 tests) — five MEAT variants (ico shell + seeded fbm
+  + QUANTIZATION onto a coarse grid, with a cut plane on the severed ones) and four BONES
+  (capped tapered shaft with TWO LOBES PER END, so a head reads as a condyle, not a ball on a
+  stick), painted through the game's own meat ramp (`bakeChunkAlbedo`) with the part's own
+  procedural wound mask and depth fields as the blood decal. De-indexed before
+  `computeVertexNormals`, so the normals are FACE normals: faceting is what separates "meaty
+  chunk" from "tube", and it is the whole point. `?goreparts=1` lays a bench of 18 parts in
+  front of the spawn through the REAL gib mesh path (shared `createBakedChunkMaterial`, same
+  `bakeColor` attribute, same router registration); `__sdfGame.goreShowcase()` re-lays it and
+  `.goreShowcaseVisible(on)` hides it. MEASURED drawn: presented-frame differential shown vs
+  hidden **1.54% of pixels** against a **0.84%** no-change control, no page errors. Capture
+  `/tmp/gore-parts/showcase.png`.
+  **NOT wired into a blast yet, and the blood/normal detail is per-VERTEX, not per-pixel** —
+  both deliberately second, so the shapes are judged first. The design note records that the
+  mesh material is shared and single-purpose, so a procedural decal/normal layer is real work
+  and belongs with the wiring.
+- [x] **THE SPRITE BENCH — the reference game's approach, wired.** Owner: *"generate
+  spritesheets based on the rendered SDF and then cut those up randomly and use them in the
+  gibs … sure you trade 3d but its not important in this case"*, then *"placeholder atlas is
+  fine to see how it feels then we can generate our own sheet"*. `?gibparts=sprite` lays
+  **54 billboards** (every frame of the reference atlas at 0.34 m and 0.2 m) through
+  `webgpu/gib-sprites.ts`: per-piece `PlaneGeometry` sized to the sprite's own aspect
+  (a leg gib is a long rectangle, a head is square), `MeshBasicNodeMaterial` with
+  `map`/`transparent`/`depthWrite:false`/`alphaTest`, billboarded CPU-side at spawn and per
+  frame (`tick` early-returns under the render lock, so a capture would otherwise shoot the
+  bench edge-on). MEASURED: 27 atlas frames load, 54 billboards, no page errors, drawn —
+  shown-vs-hidden **13.23% of pixels** against the mesh bench's 1.5%. The atlas is the
+  DEV-ONLY Blood extract (gitignored, never ship), so this path warns and degrades on a
+  fresh clone; it exists to answer one question before any generation work: does a billboard
+  read as gore in this room. **The reference sprites are 10x5 to 26x22 px** (Blood's native
+  res), which is the argument for generating our own at our own resolution. Known limits
+  recorded: sprites are UNLIT (no per-pixel room light — they read pasted-on in a dark room),
+  alpha quads with `depthWrite:false` sort by draw order, and a billboard has no side
+  silhouette.
+- [ ] **OWNER ON THE BONES AND THE "OBLONG SAUSAGES".** He reported no bones again —
+  "idk maybe its too dark in that room" — and that the chunks "still look rather like
+  weird oblong sausages". The census says the skeleton IS in the pile and drawing as bone
+  (22-30 bone pieces, 120-174 bone rows, `buriedBonePieces 0`, `bonesShadingAsMeat 0`),
+  so the two live hypotheses are (a) it is genuinely too dark to pick pale bone out of
+  gore — the new `blast light` slider tests that in ten seconds — and (b) a stale tab.
+  The SAUSAGE read is a real aesthetic gap and is NOT yet addressed: the pieces are the
+  body's own SDF prims, so they keep the body's material and read as clean flesh tubes.
+  Candidates (not started, needs his steer): tint the pieces toward blood, add a grime/
+  noise term to the chunk material, or carry the body's accumulated wounds onto the piece.
+- [ ] **OWNER LOOK CALL on the release sequence.** `node
+  scripts/sdf-gib-look.mjs 5391 9391 /tmp/gib-look` writes 10 frames (0 → 667 ms)
+  and refuses to pass if two consecutive frames are identical. Whether the body
+  reads as being torn apart is the owner's call; everything else about it is a
+  measurement.
+- [ ] Stage (c) (the ~0.1 s pre-tear bulge) needs the body to OUTLIVE the
+  swap — a gibbing blast stamps no wounds and retires the actor in the same
+  frame, so the rim-splay pump has nothing to swell yet.
+- [x] **The pool is the gib's ceiling, and the shape now degrades before the
+  count does**: `?maxchunks` caps a multi-body blast, and the greedy
+  nearest-first allocation with a floor held back per remaining body hands out
+  the richest rung that fits. Measured in the arena (a point-blank bundle gibs
+  2 bodies there, 5 when the horde is packed): 7 pieces per body of
+  `clusters+cage`, 23 of 24 views used, `bonePieces 4` with 79 packed bone rows.
+  **The last clause of that measurement is now WITHDRAWN** — "a visible ribcage
+  survives even in the cheapest rung" is true of the PILE and false of the BODY:
+  those 4 bone pieces came from the FIRST body's `parts-core` rung plus the
+  second's single cage, and the second body's own six chunks had their skeleton
+  buried (`buriedBonePieces 6`). `sdf-pile-crowding.mjs` measures it per body now.
+  The blast side is nearly free (`lastBlastMs` 17.6 / 18.4 / 17.9 ms at 24 / 48 / 64).
+- [x] **What a piece costs — FINAL, on the frame cadence.** `node
+  scripts/sdf-piece-cost.mjs 5391 9391 [qs]` alternates pieces shown/hidden in
+  30-frame bursts on the LIVE loop and reports the real inter-frame delta:
+  **16.70 ms in both arms, 22 of 22 pieces in frame, paired difference zero across
+  eight bursts.** RE-RUN AT THE NEW DEFAULT (2026-09-11, `?maxchunks=64`, 61 pieces
+  live of 64 with 4 in frame): **16.70 ms both arms again**, paired difference 0.00 ms
+  across all eight bursts, `sdf:march` 12.82 shown vs 12.42 hidden. So the pieces do not move the frame rate
+  — and the honest caveat is that a vsync-limited page hides any cost that fits
+  the budget by construction: the same run cross-references `sdf:march` at 20.19
+  shown vs 17.54 hidden, i.e. **~2.7 ms of a 16.7 ms budget**. That is the number
+  the pre-bake had to beat; it does not beat it.
+- [x] **What a piece costs, and why the MESH PRE-BAKE IS DECLINED.** `sdf:march`
+  cannot compare two states (the SAME state read 2.6, 3.8 and 18.8 ms in one
+  boot), so the earlier "5.1 → 6.7 at 24, 4.0 → 13.1 at 48" claim was inside the
+  instrument's own spread and is WITHDRAWN. Measured PAIRED and interleaved
+  instead: **~0.5 ms per frame per piece that is IN FRAME** — 24 pieces cost
+  0.50 ms, 64 pieces (9 of them in frame) cost 4.82 ms — and hiding only the
+  OFF-SCREEN pieces saves nothing (frustum culling measured −0.29 ms, so it is
+  reverted, with the reason left at the mesh itself). The pre-bake's prize is
+  therefore a few ms for the ~1 s a gib is airborne, against a pose seam at
+  release, the pieces losing the body's accumulated wounds, and a boot-time bake
+  pipeline. Seams: `__sdfGame.setChunksVisible(on)`,
+  `chunkCensus().inFrustum`. [Measurement + decision](docs/dev-notes/2026-09-11-piece-cost-and-the-pre-bake-decision/README.md).
+- [x] **§3(c) the pre-tear flesh distortion — BUILT.** The body is BENT by the
+  shockwave for `?gibtear` seconds (default 0.1, 0 = the old instant swap) before
+  it becomes pieces: `src/lab/sdf-zombie/gib-tear.ts` (+7 tests) displaces every
+  posed prim outward from the blast, weighted `e^{-d/0.6}`, shuddering at 20 Hz,
+  VIEW-ONLY (the actor's `posed()` stays clean, so the pieces are built from the
+  undistorted pose and the hand-off is exact). It is a JS prim displacement, not
+  a shader term — the design note's "a per-frame uniform plus a shader term" was
+  wrong: no uniform displaces the marched field per prim, and adding one means
+  threading `mapBody`'s 19-parameter signature, its 13 call sites and the
+  chunk-view copy list, while the POSE path already re-packs every prim row and
+  refits every cull bound each frame. Three bugs came out of the gate and the
+  look rig: a `tearing()` predicate that never went false, a clock that lived in
+  the (skippable) body step so `?frozen=1` left bodies bent for ever and never
+  gibbed, and a piece counter that counted only the blast frame. MEASURED frames
+  0-2 bending → frame 3 the hand-off to 24 pieces → waves at 4 and 6.
+- [ ] **§3(d) the body-sized debris puff — DE-PRIORITISED, and the reason is
+  the same measurement that declined the pre-bake.** The puff existed to cover
+  the ONE frame where the representation changes (§4: an SDF body becoming a
+  pre-baked MESH). With SDF pieces there is no representation change to cover:
+  frame 0 IS the body's own silhouette, measured (24 held impulses, all pieces
+  at their posed transform, union within the cluster seam). So a puff here would
+  buy nothing but a layer between the player and the gore the owner is judging,
+  after he already cut `?fxsmoke` to 0.38 for exactly that reason. Build it only
+  if he asks for debris for its own sake — the mechanism is a smoke-only burst
+  from `explosion-vfx.ts` at the body's centre, which needs a per-burst tuning
+  override.
+- [x] **The explosion: the size bug and the ball.** `?fxsize` was applied
+  TWICE on the procedural path (2.38× smaller than the atlas it is judged
+  against) and the stand-in had a third convention — one multiplier, three arms,
+  now. The ball was four terms: one isotropic spread feeding x/z/y, `stretchY ≥
+  1` in both envelopes, a centre-weighted spawn direction, and no fire role.
+  All four are gone: separate horizontal/vertical terms, a `flatten`, a rim
+  spawn, and half the fire now rides the CAP. The ring's reach and the sparks'
+  speed are bounded to the plume. `?fxplume=0` is the round-ball A/B (four
+  settings, not one). [Write-up](docs/dev-notes/2026-09-11-explosion-plume/README.md).
+- [ ] **OWNER LOOK CALL on the plume.** `EXPLOSION_FX=atlas|procedural`,
+  `FX_QS='&fxplume=0'` and `FX_TUNING='{"ringOpacity":0}'` on
+  `node scripts/sdf-explosion-fx-shot.mjs` write the PNG pairs. CORRECTED
+  2026-09-11: an earlier claim here said the reference's mass sits in the air and
+  ours at the crater (centroid 332 vs 440). **That was the ground RING.** The
+  ring is a large low-lying annulus that dominates the changed area, so a
+  whole-burst centroid mostly measures the ring. With it dropped
+  (`FX_TUNING` above) the same arm reads **centroid 362 against the atlas's 332**
+  — 30 px of 600 at 3.4 m, i.e. the plume's vertical mass distribution is already
+  where the reference's is, and there is NO measured case for raising it. The
+  centroid repeats to under a pixel across boots; the CAP-STEM BAND metric that
+  used to live beside it was removed (the same arm read 7.45 then 0.26 — its
+  boundaries come from the bounding box, which one stray pixel re-cuts).
+- [x] **The plume's shape, in metres, as its own rig** —
+  `node scripts/sdf-plume-shape.mjs 5391 9391 [qs]` reads the module's own
+  per-layer geometry (`explosionFx().layerExtents`: the box each layer DREW and
+  the mean height of its bottom/top quartiles, in world units) instead of
+  photographing it. Gated: the fire's mass RISES (0.77 → 1.92 m), the layer has
+  spread, the smoke is a late bloomer, and the cap ends wider than tall
+  (3.75 × 3.10 m against a 1.68 m reference quad). The control arm
+  (`FX_QS='&fxplume=0'`) reports fire 1.21 × 2.71 m and a cap 2.72 × 3.75 m —
+  taller than wide, no flatten — so the switch is real in geometry. CAVEAT, and
+  it is why sizing is still the owner's call: these are BILLBOARD extents and
+  the fire's round falloff means the visible fire is well inside them.
+
 ## Current focus
+
+> **Session start: read
+> [docs/dev-notes/2026-09-10-PASSOFF-3.md](docs/dev-notes/2026-09-10-PASSOFF-3.md) first**
+> (latest: R1 shipped, then TWO temporal ideas built and killed — held-row
+> reprojection and accumulation-as-reconstruction — plus the per-object motion-blur
+> idea that was then unspecced (blood/gib shutter blur is now accepted and merged;
+> see the [wrap-up](docs/dev-notes/2026-09-17-shutter-blur-game/WRAP-UP.md)), and the open items). Then
+> [docs/dev-notes/2026-09-10-PASSOFF-2.md](docs/dev-notes/2026-09-10-PASSOFF-2.md)**
+> (R1 and what it unlocked). Then
+> [docs/dev-notes/2026-09-10-PASSOFF.md](docs/dev-notes/2026-09-10-PASSOFF.md) —
+> the earlier session's, still correct except that its NEXT-ACTION ORDER is done
+> (its item 1 was R1). Both carry the CURRENT vs HISTORICAL doc map and the traps.
+> Everything below is the detail behind them.
+
+> **THE MARCH'S CHEAP TEMPORAL LEVER IS ALREADY BANKED — DO NOT REBUILD IT.**
+> Temporal START (start the ray from last frame's reprojected hit depth, margin
+> 0.25 m) SHIPS, owner-passed, `?tstart=0` to disable: room-4 march p50 17.4 → 7.3
+> ms pre-gate, 14.9 → 11.3 with the own-body gate. C2's half-rate per-pixel
+> reprojection is built and VERIFIED (raw hold lags dx=+21 px, reproject dx=0) and
+> retired to a toggle. What remains is ONE thing: the held rows of a DEEPER
+> interlace get no reprojection. Scoped experiment, first change and the numeric
+> acceptance test (dx ≈ 0 at nf=3) are in
+> [docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md](docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md)
+> §"SCOPED — 2026-09-10, session 2".
+
+> **HELD-ROW REPROJECTION: BUILT, MEASURED, AND REJECTED — DO NOT RE-DERIVE IT.**
+> Worse, the close-up that sold it: at the owner's REAL viewing range (body at
+> 4 m, walking-speed strafe) the reprojection does not move h/3 toward h/2 AT ALL
+> (h/2-vs-h/3 is 6.00 levels with it off, 6.17 with it on). It works only when a
+> body fills the frame (at 0.7 m, h/3 vs a same-pose ground truth: 15.53 → 9.25,
+> −40%), because parallax scales as 1/distance and the reprojection is
+> HORIZONTAL-only by design. The owner's verdict: "it looks exactly the same."
+> The residual at range is the ROW STRUCTURE (two rows in three are other
+> INSTANTS), which is also what "the lines are way too distracting at 3 and 4"
+> meant all along. CONSEQUENCE: the motion-vector follow-up inherits the same
+> ceiling — do not build it expecting deeper interlace. Code: `main` @ fc7c70c7
+> (inert, OFF), branch `held-row-reproj` @ 81a87262 (wiring + rig), unmerged.
+> **TEMPORAL ACCUMULATION — PROCEEDING (owner: "some ghosting is not a big deal
+> since it adds to the degraded CRT look").** The cost side is measured: a
+> **half-scale march (`setSdfScale(0.5)`, a quarter of the marched pixels) is
+> worth `sdf:march` 8.18 → 4.12 ms and the fenced frame 16.64 → 8.51 ms — ~8 ms of
+> a 16.6 ms frame**, the best single lever measured this session. Below 0.5 there
+> is nothing left (0.35 buys 0.2 ms of frame). Bench legs `sdfscale-0.75/0.5/0.35`.
+> THE OWNER LOOKED: **`setSdfScale(0.5)` alone is "too pixelated and aliased"**, so
+> the RECONSTRUCTION is the point of the exercise, not a nicety. PLAN:
+> [docs/superpowers/plans/2026-09-10-temporal-accumulation.md](docs/superpowers/plans/2026-09-10-temporal-accumulation.md).
+> Its design rests on three verified facts — the march target IS `sdfScale`'d; the
+> composite ALREADY nearest-upsamples it at output res; and the level must stay
+> CRISP (so the accumulation is FLESH-ONLY, before the composite, never of the
+> composited result). The accumulation must be at OUTPUT resolution: into the
+> low-res grid it is only a blur, and the JITTER — which changes which low-res
+> texel each output pixel reads — is what turns it into supersampling.
+> **GATE 1 PASSED (2026-09-10).** Implemented (OFF by default; turning it on turns
+> the field weave off). Still-camera convergence against a converged FULL-SCALE
+> accumulation: **5.818 → 0.347 mean |Δ| levels, settling inside the 17-frame window
+> α=0.25 predicts** — the reconstruction works. The metric matters: against the
+> UNJITTERED scale-1.0 render it reads as a catastrophic regression, because that
+> render is one aliased sample and removing aliasing must look "further away"; a
+> converged accumulation is the fair reference. A nearest reconstruction cannot work
+> (a sub-pixel jitter becomes a two-pixel texel flip; the tell was that sharpness was
+> UNCHANGED) — it is bilinear now. Resolve cost 0.05 ms against the 4.06 ms the
+> march gives up. **NEXT: a clean cost run on an idle machine, then the owner's eyes
+> in MOTION for shimmer** (ghosting is pre-accepted; shimmer is the unshippable one).
+> Camera reprojection only, no validity/clamping/object vectors in v1 (ghosting
+> pre-accepted by the owner). Frame-hash question DECIDED in
+> [docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md](docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md)
+> (keep every layer and ADD the accumulated one; the accumulator must be
+> resettable and epoch-labelled; the gate is a sequence comparison from an epoch;
+> the jitter must NOT be frozen by demoHold).
+
+> **THE MARCH'S PIXEL-WASTE METRIC IS BROKEN, AND THAT IS THE FIRST THING TO
+> FIX.** `__sdfGame.occupancy()` returns BEFORE the discard, so inside overlapping
+> proxy boxes the giving-up fragment wins the depth test and reports "no flesh":
+> room 4 read 29,588 marched pixels and ZERO hits, with 1.0 mean steps on the miss
+> rays. Rooms with 3 bodies therefore price nothing. Rig:
+> `scripts/sdf-march-occupancy.sh`; write-up in PASSOFF-2 §2.1. Fix the reader
+> (post-discard hit flag) before trusting any pixel-waste number.
+
+> **THE MARCH'S STEP AXIS IS EXHAUSTED — measure before levering.** Every step
+> lever is banked (plain sphere tracing at omega 1.0, wound step 1.0, the secant
+> last step, footprint AA) or owner-observed dead (over-relaxation → box washes;
+> the quarter-res depth prepass → visible geometry deletion, reverted the same
+> day; the cone pre-pass; deeper interlace). The missing measurement is a
+> per-pixel STEP-COUNT HISTOGRAM. See PASSOFF-2 §2.1.
+
+
+### 2026-09-10 — R1 SHIPPED: the gather is 10–32× faster
+
+**DONE, VERIFIED, BENCHED.** `compute:probe-gather` **4.00 → 0.18 ms** (room 4)
+and **4.87 → 0.15 ms** (room 3). The pass used to run one thread per PROBE (400
+threads = ~7 workgroups of 64, ~35% of one wave, no latency hiding) and measured
+near-perfectly LINEAR in ray count, i.e. unshareable per-ray work executed
+serially. It now runs one thread per (probe, ray) — 200 workgroups at 32 rays —
+with a workgroup-local reduction folded by each probe's lane 0. Labelled GPU
+total **−2.1 to −2.5 ms/frame**. Evidence, tables and the full trail:
+[docs/dev-notes/2026-09-10-r1-gather-dispatch-implemented/](docs/dev-notes/2026-09-10-r1-gather-dispatch-implemented/README.md).
+
+**EQUIVALENCE IS PROVEN, NOT ASSERTED.** Against the pre-R1 build (`49fb77ee`,
+worktree) in identical conditions: the dynamic probe layer differs by **at most
+one ulp (5.96e-8) at every ray count**, the hit structure is identical
+(non-zero float counts equal at all 11 sweep points), and **`rays=1` is
+BIT-IDENTICAL** — which, because that output depends on the whole capsule/box/
+light set, also certifies the two boots fed the gather byte-identical inputs.
+
+**READ BEFORE ACTING ON THE OLD ORDER.** R2's target was ~56% of 4 ms; the pass
+is 0.18 ms now, so R2 is worth ~0.1 ms — a poor trade, exactly as the design
+predicted. Cadence 2→4 was −5.2% at 4 ms and is ~0.2% of the frame now; the
+owner's look call should be made on the LOOK alone.
+
+**OPEN AND UNEXPLAINED: `sdf:march` reads 1.2–1.5 ms HIGHER** in four R1 runs
+across two rooms. Most of it is a pass-boundary move (the frame's unlabelled gap
+shrinks by about the same amount), but the residual is not explained, and the
+control that would settle it must gate the gather at the SOURCE: `setProbeRays(0)`
+does NOT work as a gather-off control (with no rays the march row collapses to
+~0 ms and the gap balloons to 11–12 ms).
+
+**NEW SEAMS — `?dynblend` / `?dynfall`** (+ `__sdfGame.setProbeBlend` /
+`setProbeFall`), both pinned in the bench reset block. Set BOTH to 1 for a
+history-free gather: without them no cross-run A/B of the gather is a measurement
+at all (two boots of ONE build disagree, because the afterglow depends on how many
+frames the run dispatched before the read). `?dynblend=1` alone is not enough —
+the rate is `lumNew > lumPrev ? blend : fall`.
+
+**GATES.** `scripts/sdf-gather-dispatch-check.sh` measures it (in-page FNV over
+the f32 bit patterns + the raw buffer; `--diff A B` compares two saved runs with
+NO browser). vitest pins the barrier shape (exactly one, top-level, unreachable
+behind any guard), the ABSENCE of a count guard in the kernel, the power-of-two
+`threadsPerProbe` that keeps a probe's ray group inside one workgroup, and the
+module-scope workgroup declarations in the GENERATED WGSL, not just the source.
+
+### 2026-09-10 — R1's consequence: the gather is now a QUALITY knob
+
+**THE GATHER IS NO LONGER A BUDGET LINE.** At 0.15–0.39 ms, the light count
+(1/2/4 caps) and the ray count (16/32/64) are inside the instrument's own
+resolution: six bench legs came back non-monotonic and all stayed under 0.39 ms
+(new legs `probe-lights1/2/4`, `probe-rays16/64` in `scripts/sdf-game-bench.mjs`).
+The defensible claim is the BOUND, not a slope. **Consequence: more lights, more
+rays and more frequent gathers are now affordable, and R2 is not.**
+
+**TRACERS: MEASURED, RAISED TO gain 6 / slots 4, THEN REVERTED TO 2 / 2 — same
+day, 2026-09-10.** The raise was on a real measurement (one boot, one frozen
+volley, noise floor 284 px with ZERO above 2 levels: the shipped defaults changed
+1,796 pixels by >2 levels, gain 6/slots 4 changed 369,088 = 76.9%); the REVERT is
+on the owner's look, and its reason is a limitation of the rig rather than of the
+plumbing — **the rig freezes the volley, i.e. it measures the STEADY STATE**, while
+in play the light moves and the afterglow ramps over ~4 frames; and **in the room
+you shoot FROM the muzzle flash is already lighting it**, so a faint second light
+is not what you would notice. The plumbing is proven (the light reaches the
+probes; the layer responds exactly linearly, 0.5338/gain-unit per 2 tracers; the
+light count is exactly what the cap implies). **Tracer lights would earn their
+keep in a room you are NOT in, where nothing competes with them** — revisit
+alongside the multi-room work below, and turn the SLOT CAP first (the bigger of
+the two levers: 1,796 → 207,929 pixels at shipped gain).
+[docs/dev-notes/2026-09-10-tracer-light-visibility/](docs/dev-notes/2026-09-10-tracer-light-visibility/README.md)
+(evidence, before/after images in `shots/`, and the three rig traps).
+Rig: `scripts/sdf-game-tracer-light-check.sh`.
+
+**NEXT (sketched, NOT scheduled): LIGHT ANOTHER ROOM.** Owner wants it "at some
+point... maybe some kind of basic is it in the line of sight algorithm". Sketch
+with what already exists (the `TUNNELS` room graph via `accentRoomsFor`, the
+per-room light list `levelSceneLights`, per-room grids, `segmentHitsBox` as the
+LOS primitive) and the one hard constraint — **a `probeDyn` storage node is bound
+at material creation and CANNOT be rebound**, so each receiving room needs its own
+node at build time:
+[docs/dev-notes/2026-09-10-multi-room-dynamic-light-SKETCH.md](docs/dev-notes/2026-09-10-multi-room-dynamic-light-SKETCH.md).
+Cost is no longer the obstacle (0.18 ms per room per gather, after R1).
+
+**AND THE LIMIT THAT MATTERS: the dynamic light is SINGLE-ROOM BY CONSTRUCTION.**
+Shooting INTO another room lights nothing, and no gain value changes that: the
+tracer is dropped from the light list outside the gather's room + 1.5 m
+(`tracer-lights.ts`), the probes being lit are the PLAYER'S room's
+(`dynRoom = enclosureKeyAt(player.pos)`), and there is exactly ONE 400-probe
+dynamic layer bound into the level lighting (`game-main.ts` ~2107, ~2255). The
+muzzle flash has the same gate — which is the giveaway that this is the
+architecture, not the tracer feature. Doing it for real needs a layer per lit
+room, a gather per room with a light, and per-room material binding; the GPU time
+is small (0.18 ms/room) and the bookkeeping is the work. Also note the rig above
+measures an UPPER BOUND (frozen volley = the steady state); in play the light
+moves and the afterglow ramps over ~4 frames.
+
+
+### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed
+
+**BOTH BRANCHES ARE MERGED INTO `main`** — `claude/sdf-march-perf-518bcc`
+(`a76978fa`) and `claude/determinism-stage1` (`d3a8cdb7`). Nothing is left to
+merge; continue on `main` rather than resurrecting a branch. Working tree clean.
+Cadence follow-up `f845c71b`: `probeGatherRate` 2→4 is worth **~5% (room 3)**,
+superseding the handoff's "VOID, needs one re-run". Handoff:
+[docs/dev-notes/2026-09-10-perf-session-handoff.md](docs/dev-notes/2026-09-10-perf-session-handoff.md).
+
+**SHIPPED AND MEASURED — probe gather −33%.** `compute:probe-gather` went
+**7.19 → 4.85 ms** (room 3) and **6.02 → 3.99** (room 4), with non-overlapping
+per-leg ranges and 19%/23% repeat spread. Three exact optimisations: a
+bounding-sphere cull with a `tMax` bound in `kdHitCapsule`, an any-hit
+`kdCapsuleBlocks` bounded by the light distance replacing the full nearest search
+the shadow path ran per light per ray, and testing the ≤16 boxes before the ~200
+capsules in `kdShadowed`. Equivalence is PROVEN against an independent reference
+in `probe-dynamic-cull.test.ts`, not asserted.
+
+**MEASURED — the gather's cost split, which was previously a model.** With
+diagnostic seams (`?dynrays=0` = no ray work, `?dynlights=0` = primary rays
+only): primary **2.15 / 1.82 ms**, per-light shadow **2.84 / 2.26 ms** =
+**57% / 55%**. So the shadow share is real, and R2 (sample the shadow map the
+frame already rasterises instead of sweeping analytically) targets ~56% of it.
+
+**READ THIS BEFORE QUOTING THE GATHER.** It runs every OTHER frame
+(`probeGatherRate = 2`), so its amortised cost is **~2 ms/frame**, not the 4–5 ms
+the pass row shows. The pass row prices ONE gather and is invariant to cadence by
+construction. Only `sdf:march` (6.7–9.7 ms, no cadence) is a true per-frame row.
+
+**CLOSED — do not re-open:**
+- **Cone pre-pass: DO NOT SHIP.** The documented −22% does not reproduce
+  (`sdf:march` is *higher* with it on); `TASKS.md` X1.14 already measured 0.4%
+  and X1.15 says the occluder hull supersedes it. Enabling it also reproduces a
+  CPU submission stall (`gpu:idle` 15–20 ms, negative harness gap) in two
+  independent runs.
+- **Step budget / miss-pixel 96-step tail: DEAD.** A 6× cut produces NO
+  monotonic trend in `sdf:march`, reproducing the 2026-08-31 finding on the
+  interlace config. Per-step is not the axis.
+- **The cone's −22% in `sdf-layer.ts:220-238` is stale doc-rot** (predates the
+  occluder hull).
+
+**FIXED + GATED (both were MY bugs, both owner-visible):**
+- Harness legs reset: new probe seams were not pinned in the ship-defaults
+  block, so a leg leaked into the next rep's baseline. Rule: **any new seam a leg
+  can set MUST be pinned in the reset block.**
+- `?dynrays` / `?dynlights` booted every unparameterised page with ZERO rays and
+  an empty light list (`Number(null) === 0` passed a `>= 0` guard), zeroing the
+  dynamic probe layer — characters in the player's room rendered as black
+  silhouettes. Fixed and made structural in `webgpu/boot-params.ts`
+  (`parseIntParam` reads the RAW string) with `boot-params.test.ts` as the gate.
+- **`?tracerlightslots` defaulted to 0, not 2** — the same `Number(null)` class,
+  PRE-EXISTING (not from this session), found by auditing all 18 `URLSearchParams`
+  reads after the regression rather than by another playtest. Tracer /
+  muzzle-streak lights therefore never fed the gather's dynamic light list on a
+  bare page, so gunfire contributed no indirect light. The other numeric params
+  are safe and were checked individually: `?shadowmap` uses `> 0`, and
+  `?laststep` checks `raw === null` — which is the correct pattern, and the one
+  `boot-params.ts` generalises. **Lesson: audit the bug CLASS, not the
+  instance.** All three wrong-default bugs this session had the same signature —
+  a wrong value that reads as a design choice rather than as an error.
+
+**[~] FRAME HASH — BUILT, AND IT ALREADY FAILS USEFULLY (`0ca65f62`, `b04d36e5`).**
+`frame-hash.ts` (pure, 22 tests) + `demo-hash.ts` (in-page, 13 tests) +
+`frameHash()` / `setDemoHold()` / `demoScenario()` + `scripts/sdf-demo-hash.sh`
+(`ab` | `record` | `verify` | `negative`); the bench reports frame-hash drift
+beside census drift. Hashes `marchTarget` + the gather's dynamic layer
+(target-level), NOT the composited screen.
+**Proven:** the readback is bit-stable across no-step re-reads (a mismatch is
+never an artefact); **the render sequence IS deterministic** — 24 consecutive
+positions aligned across two boots match **23/23 at a one-position offset**, all
+digests distinct; the interlaced field's two-value parity alternation is real, so
+mixed-parity recordings are REFUSED; and both boots dispatched **exactly 36
+gathers**, so the schedule is not the problem.
+**Falsified, do not retry:** pinning `frameSeed` during recordings, and anchoring
+the dispatch phase (that reset also corrupted the `seedIdle` diagnostic into
+negative values — both the reset and the diagnostic are gone).
+**[!] LOCALISED: THE ENGINE BOOTS INTO ONE OF TWO STATES.** Per-tile digests over
+the 800×300 march target: tiles 0-3, 8, 11 are **BIT-IDENTICAL in every run and
+boot** (`1109108741`); only 4,5,6,7,9,10 — the central band where the BODIES are —
+vary. The LEVEL renders identically every time. The max stat takes one of exactly
+two values (13.3995 or 0.981266, a 13.7× difference: a body lit or not). Two boots
+in ONE stored run reuse digests from EARLIER runs, so this is a discrete branch
+chosen at boot, not noise — find the BRANCH, not another clock to freeze.
+**Excluded, each by measurement:** readback, sim state, field parity, gather seed,
+dispatch schedule (36/35/18), gather inputs (byte-identical), camera (identical to
+6 dp), VHS (`setVhs(null)` over 4 boots → same 2 digests, same branch-B hash
+`3035244172`; VHS runs downstream of the march target and cannot touch it), and the
+room-probe worker bake (now gated by a new `roomProbesReady` seam — still
+diverges).
+**[x] THE PRESENTED FRAME IS HASHED (owner request).** `__sdfGame.presentedShot()`
+returns the canvas as base64 PNG; `scripts/lib/demo-presented.mjs` decodes and
+digests it; the recorder hashes it every sampled frame and compares it across runs.
+New failure path: **"GPU layers MATCH but the presented frame does NOT"** — which
+localises a difference to the post chain by elimination. Verified live (800x600,
+same nonZeroBytes, different digests `3654678759` vs `465050184`). **8-BIT by
+construction**, so sub-LSB differences do not exist here — use it for what the
+owner SEES, `frameHash` for what the renderer COMPUTED. **VHS's temporal blend
+still blocks a green screen hash** even with `setTimeFrozen` (which fixes the
+clock half only).
+**Method guards:** the recorder's duplicated FNV-1a is GATED by `frame-hash.test.ts`
+against canonical vectors (a tool-side digest skew would fake every divergence),
+and `demo-presented.test.mjs` (7 tests) covers the PNG decoder through all five
+filter types plus both false-pass cases.
+**[x] VHS time pinned anyway** via a new `postAa.setTimeFrozen(on)` driven by
+`setDemoHold`. The owner's instinct was right even though it was not this bug: VHS
+OWNS temporal blending (reads the previous frame's output) AND drives 60/24 Hz
+row-noise hashes off `performance.now()`. Freezing the time removes the clock
+dependence but NOT the history — which is the standing reason the hash measures the
+march target and not the presented image, and it must be dealt with before the hash
+can ever cover the composited frame.
+**The branch is CHARACTERISED (4 boots, 1 vs 3):** at one body pixel, R −3.3%,
+G −6.6%, B −12.1%, **ALPHA BIT-IDENTICAL** — so not coverage, not a missing body,
+not vertex position; a UNEQUAL RGB scale is lighting/colour rather than exposure.
+A control pixel in tile 0 reads identical in all four boots, so the level really is
+stable. A minority branch (1 in 4) means a two-run A/B has ~5-in-8 odds of drawing
+two different branches — which is why "record twice and compare" failed so
+reliably. **Next: the body's lighting path, blue-weighted, not geometry.**
+
+**Open — and the obvious hypothesis is FALSIFIED.** A third layer now hashes the
+gather's INPUTS (packed bone capsule instances). Result: **`instances` IDENTICAL
+across two boots** (hash `3080687726`, count 35, every sample) while `probeDyn`
+and `marchTarget` still differ. So the inputs are excluded, as are the seed
+(pinned), the schedule (36 dispatches both boots), the sim state (render-locked)
+and the readback (bit-stable). What is left is state these layers do not cover:
+the gather's own GPU-side accumulation, the **room probe grid baked in a WORKER
+at boot** (async, lands whenever it finishes — best next candidate), or the
+march's own per-frame state. Separately, a gather-independent period-2 mechanism
+remains (field jitter phase is the candidate). **Dispatch count is excluded too**
+(rate 4 → 18 dispatches: `instances` still identical, `probeDyn` still 0 shared,
+march still a two-value alternation; one run went fully stable on `probeDyn` while
+its march kept alternating, so the two layers vary independently). **Cheapest next
+pin: the room-probe grid's WORKER bake completion frame** — async, lands whenever
+it finishes, and nothing in a recording pins WHEN (the same fix the plan already
+wants for the chunk-bake worker). Full evidence: handoff, "IT IS BUILT".
+**[x] AND IT ALREADY FIRES ON THE BENCH.** `endHash` is wired into the page's
+bench, so the harness reports frame-level drift beside census drift. A
+`baseline,occluder-off` × 3 × 2 run reports **all four leg-runs drifting on BOTH
+layers** (baseline march rep0→rep1 `2990198133`→`1661108024`, max 11.13→12.55;
+probeDyn drifted too). **Stage 1 fixed the census-visible part of the drift; this
+is the part it could not see — two repeats of one leg do not just COUNT different
+things, they RENDER different frames.**
+
+**[x] DEEPER FIELDS (h/3, h/4) — MEASURED AND REJECTED ON LOOK (owner, 2026-09-10).**
+*"when it's still it's not that bad but it's when moving the lines are just way too
+distracting at 3 and 4. 2 is fine."* The still-frame softness WAS my build (steps 1-2
+shipped without step 3) and the **history ring (`8e57c278`) fixed that half**. The
+**motion tearing is structural**: at h/3 a held row reads a real sample taken 1-2
+frames ago, which is a stale image at a different camera position once you move, so
+the weave interleaves three instants down the screen. Fixing it needs temporal
+REPROJECTION on held rows — a real feature that would eat much of the saving and
+carries the desync risk that retired half-rate C2. **h/2 stays; `?fields` is an
+opt-in diagnostic, NOT a pending look decision.** The generalisation and the ring stay
+(tested, inert at 2, a prerequisite for any future temporal work).
+
+**[x] FLESH BUG RESOLVED (`43779459`) — it was ONE COMMENT, and it was mine.**
+`b1da21d1` put a `//` comment inside `COMPOSITE_WGSL`'s parameter list; three's WGSL
+parser sweeps the parameter text with `/name\s*:\s*type/` INCLUDING comments, so
+`"deliberately: these"` became a phantom input, the call gained an argument and the
+composite never compiled — no flesh on ANY page, default included. Pinned now by a
+test that runs the real parser and requires parsed inputs == declared params, plus a
+152-fn scan. **The console said it at load** (`THREE.TSL: Input 'deliberately' not
+found`); nobody read it. Second instance of the class (see `march.wgsl.test.ts`), and
+"inputs bind positionally" — which the offending comment claimed — is false: they
+bind BY NAME. **`?fieldsdemo=1` IS GONE** (removed after the fix): `?fields=N` alone now does what
+it says. Verified live — `?fields=3` → 800x200, `?fields=4` → 800x150, no errors.
+**Next: the owner's look pass at h/3 and h/4, then the history ring.**
+
+**[!] DEEPER INTERLACE — historical brief (SUPERSEDED, kept for the lesson):
+[docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md](docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md).**
+**✅ MISSING FLESH RESOLVED 2026-09-10:** a `//` comment inside `COMPOSITE_WGSL`'s
+parameter list became a phantom wgslFn input (`deliberately: these`), so the composite
+never compiled at ANY divisor. The comment moved out of the signature and the shader is
+pinned by `sdf-layer.test.ts` "no comment phantoms". The flesh is verified on screen at
+h/2, h/3 and h/4. Open: the owner's look pass at h/3 and h/4, then drop the
+`?fieldsdemo=1` gate. The history below predates the fix. The ACTUAL bug is NOT the fields: the flesh is missing on a DEFAULT page (no
+`?fields`, standing still) — a regression in the shipped config. The divisor work is
+a red herring until that is fixed, and the first action is a five-minute checkout of
+`b1da21d1~1` to see whether the default was already broken before it. **The
+output-target readback in `sdf-field-count-diag.mjs` is BROKEN** (returns `[8781,
+8992, 9230, 15360]` on an rgba32f target — impossible), so every "output lost the
+surfaces" conclusion is void; the march numbers stand. GATED OFF (`?fields=3|4` also needs `?fieldsdemo=1`);
+the flesh does not render and the ASSEMBLY is the open bug (2026-09-10).**
+Two of the three two-field constants are fixed (the bone weave's `outRow / 2`, and
+`fieldParity` defaulting to 2 fields — which made a third of the fresh rows
+unreachable), and the third (the jitter's two-field centering) with them.
+**Measured in ONE boot at held parity:** the flesh IS marched at every divisor —
+surface texels cover **3.90% / 3.91% / 3.91%** at h/2, h/3, h/4, with 0
+non-finite and 100% RGB non-zero — so culling, sizing and the march parity are
+EXONERATED. The flesh is lost between the march target and the composited frame.
+**Tool left for the next agent (committed):** `node scripts/sdf-field-count-diag.mjs`
+— reads the march AND output targets at every divisor in one boot, counting surface
+texels over every texel. **Its output verdict is not yet trustworthy:** the output
+target reads 0% surfaces at h/2 TOO, and h/2 works, so `alpha < 1` is the wrong
+marker for the output (it is full-height and publishes a different alpha). Re-base
+that side on COLOUR before trusting it. New seam for the job:
+`__sdfGame.readOutputTarget()`. **Do NOT instrument the march target again — it is
+exonerated (3.90%/3.91%/3.91%).**
+
+**[~] DEEPER INTERLACE — steps 1+2 DONE, measurement DEFERRED (2026-09-10).**
+`fieldCount` is a live uniform (LAST input, shader-clamped so a bad binding
+degrades to no-interlace rather than dividing by zero in the composite);
+`setFieldCount(n)` / `?fields=N` / `__sdfGame.setFieldCount` land with it; both
+target heights follow the divisor; `'frame'` REFUSES >2 rather than no-opping.
+**Proven live:** h/2 → 800x300 (shipped), h/3 → **800x200**, h/4 → **800x150**,
+all `nonFinite 0` and non-empty; the round trip genuinely changes the target.
+**NOT proven: the `fields = 2` bit-identity check could not run** — its control
+failed (two reads with NO field change, two steps apart, render-locked, return
+different digests), so the claim is still open. **Measurement deferred:** one
+contaminated attempt gave `sdf:march` 1.13 ms (r3) beside 8.75 (r4) — the census
+drift again; no number is quoteable. Re-measure on a QUIET machine against
+`fields=2`, reading `sdf:march`.
+
+## NEXT SESSION — full temporal reprojection on held rows (owner-deferred 2026-09-10)
+
+**Deferred by the owner, not started.** Spec:
+[docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md](docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md).
+
+Why it is on the list: the deeper fields were rejected on look for MOTION tearing
+(the history ring fixed the still half). Scope it as a general capability, not as
+"fix h/3" — if held rows reproject correctly under motion, that unlocks deep fields
+AND revisits the retired half-rate C2 path, which failed for the same reason.
+
+**The trap to read first:** `holdMode 2` already does a per-pixel reprojection, but
+it is CAMERA-ONLY — it assumes the held row is the same scene from an older camera.
+True for walls, FALSE for a body that has moved, and the bodies are what the owner
+was looking at. C2 died on exactly this axis. It needs PER-VERTEX motion vectors,
+a motion-vector target, a disocclusion validity test, and depth added to the history
+ring first (the ring stores colour only today). Order: ring depth -> motion vectors
+-> validity -> composite. Acceptance is the owner's eyes IN MOTION; a still-frame
+comparison cannot see this defect.
+
+## Gather dispatch R1 — measured, designed, ready (2026-09-10)
+
+**The scaling evidence is IN and it justifies R1.** Sweeping ray count via
+`BENCH_PRELUDE="__sdfGame.setProbeRays(N)"` (room 4, `BENCH_PASSES=1`):
+
+| rays/probe | `compute:probe-gather` p50 |
+| --- | ---: |
+| 32 (shipped) | 4.00 ms |
+| 16 | 1.83 ms |
+| 8 | 0.75 ms |
+| 4 | 0.21 ms |
+
+Near-perfectly LINEAR, so the cost is unshareable per-ray work run serially inside
+**448 threads (7 workgroups) on 1280 ALUs** — no latency hiding. `probe-norays` reads
+**0.01 ms**, so dispatch + setup + blend is negligible: essentially all 4 ms is ray
+work. The frame moves with it (room-4 median 17.7 -> 12.5 ms at 4 rays), so the
+gather is a large slice of the frame.
+
+⚠ **A LANDMINE:** there is no `probe-r4`/`probe-r8` leg in the harness. `BENCH_LEGS`
+naming a leg that does not exist SILENTLY measures `baseline`. Use the prelude.
+
+**✅ THE PROBE PASSED — OPTION A IS VIABLE, R1 IS READY TO IMPLEMENT.** Pinned as
+`src/lab/sdf-zombie/webgpu/probe-gather-workgroup.test.ts` (4 tests): `workgroupArray`
+constructs, **a workgroup array CAN be passed into a `wgslFn`**, and the generated
+function parses it as a declared typed input with no phantom. ⚠ **`workgroupBarrier`
+is NOT a TSL export in this three build** — the barrier must be declared in WGSL text,
+which the probe found and which would otherwise have been a silent compile failure.
+Option B (`subgroupAdd`) stays a fallback.
+
+**Design + verification plan:** [docs/dev-notes/2026-09-10-r1-gather-dispatch-design.md](docs/dev-notes/2026-09-10-r1-gather-dispatch-design.md).
+One thread per `(probe, ray)` = 200 workgroups. **FIRST STEP, 10 minutes:** verify
+whether three's TSL can pass `ptr<workgroup, array<...>>` into a `wgslFn` function —
+that decides between the one-dispatch shared-tree design and the workgroup-per-probe
+fallback, and it cannot be answered without a GPU round trip. Do NOT write the kernel
+before answering it: landing WGSL on an unverified binding mechanism is what caused
+the flesh regression earlier today (`43779459`).
+
+**NEXT, in order:** (1) the R1 binding-support probe, then R1 itself; (2) ~~the census-diff demo repeatability
+gate~~ **DONE 2026-09-14 (stage 1)** — `docs/dev-notes/2026-09-14-demo-recorder.md`; three of six bench
+windows this session were unusable, now the seeded+`simidle` bench is repeatable (census AND frame hash
+identical across repeats); (3) R1, widening the
+gather's 7-workgroup dispatch, now backed by the measured split; (4) far-body
+LOD, **re-aimed** — the step axis is dead, use per-pixel work.
+
+**Bench discipline, reconfirmed twice:** read the Repeatability section FIRST and
+judge each delta against its own legs' spread. Only a within-leg pass row
+survives a busy machine.
+**[x] The harness ship-truth pins are RESYNCED (2026-09-10).** `setOccluder(false)`
+and `setHullExitBound(true)` are now the pins, matching what the game runs
+(`setOccluderEnabled(false)`, `GAME_HULL_EXIT_BOUND = 1`). Before this, every
+delta the harness produced was taken with one extra pass the game does not run
+and with a march bound the game has ON switched off — so it measured a
+configuration that does not exist. The `BENCH_PRELUDE='…setOccluder(false)…'`
+workaround is now a NO-OP. **Stored bench.json files predate the flip: they stay
+internally consistent but are NOT comparable to a run from now on** — tag them
+rather than mixing the two.
 
 **[x] FRAME SPIKES SOLVED — interlaced scanline fields (`86185b01`).** Owner
 captures: worst frame **125 → 38 ms**, p99 **63 → 34.3**, over-budget frames
 **6.3% → 0.0%**, longest stall run **12 frames → 1**, avg fps pinned at the 30
-cap. The march is 75–83% of the GPU frame and its cost is covered pixels, so
+cap. The march is the dominant pass — **75–83% of the GPU frame in the
+PRE-interlace 2026-09-09 phase-0 run** — and its cost tracks covered pixels, so
 marching half the scanlines each frame halves it; the comb is the intended
-old-video look, not a cost.
+old-video look, not a cost. The shipped `'bodies'` field marches **800×300**
+(800×600 content, height halved), so those percentages are not the current
+shape of the frame; see the "Timings are stale" bullet below.
 [Result](docs/dev-notes/2026-09-09-perf-spikes/field-rendering-result.md) ·
 [spec](docs/superpowers/specs/2026-09-09-interlaced-field-rendering-design.md).
-**Ships `'frame'` at comb 0.6; `'bodies'` is FIXED (`9f205aaa`) and is the
-owner's call to flip.** `__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
+**Ships `'bodies'` at `setFieldComb(0.6)`** — the flip landed 2026-09-09
+(`game-main.ts` calls `setFieldStyle('bodies')`; it was reverted to `'frame'`
+for a day while two mesh-pass defects were diagnosed, both fixed in
+`9f205aaa`). `'frame'` remains available via
+`__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
 and `setFieldComb(x)` (one number, 0–1). 2026-09-09 review fixes on top:
 composite held rows carry the held depth (`b67999c8`), held rows bracketed by
 parity, polys unjittered in `'sdf'`/`'bodies'`, `'frame'` weaves on the output
@@ -198,6 +1651,31 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   margin, gated to the body being marched. March pass p50 14.9 → 11.3 ms on
   the room-4 bench; no visible artefacts after the own-body gate.
   [plan + result](docs/superpowers/plans/2026-09-10-temporal-march-start.md).
+  Follow-up (same day, pushed): `bodyEntry` folded into the start max,
+  recovery probes rewind instead of dropping the bound, wound-zone gate on
+  the accepted start, adaptive motion-scaled margin — floor PARKED at 0.25
+  after the owner playtest found glitches at 0.15 in real play (the frozen
+  closeup bisect missed them: static camera, VHS/weave off).
+  Owner-confirmed fixes from the same night: fresnel lint at range (graze
+  accept capped at a hard 1 cm — its first version scaled with the AA
+  epsilon, 2% of distance, a ~1.9 m band at 12 m), stacked-body
+  see-through holes (~90%: window-width refusal on the body's OWN box
+  chord + graze accept + per-body hull cap; an adversarial-review pass
+  caught the first version capping against the SHARED shellIn, which
+  silently disabled the start for non-frontmost bodies), graze-crawl cost
+  bounded by a 2 mm step floor (gib p50 15.2 -> 7.0), probe gather
+  amortized to half rate + tracer slots capped at 2 (the fire-segment
+  gather spike was TRACERS filling the slots), SSCS ships OFF (the FPV
+  weapon is inside its march volume — painted a moving weapon-silhouette
+  rectangle on melee targets), pipeline warm-up + loading screen at boot.
+  Adversarial deepseek-v4-flash review dispatched and reconciled
+  (20e7e898). Instruments: `scripts/tmp/tstart-ab.mjs`,
+  `tstart-artifact-check.mjs`, `__sdfGame.temporalDiag()` (frozen-frame
+  per-pixel ON/OFF). KNOWN-RARE: a one-frame distorted halo around wounds
+  (owner sighting 2026-09-10, once, non-reproducible) = the documented
+  wound-halo class at relax 1.0 (postmortem below / Obsidian
+  2026-08-24-wound-halo-postmortem); watch on F9 marks, fix direction is
+  the perf spec's retract-reconvergence lever.
 - [ ] **NEXT: render optimization pass, round 2** — backlog with owner notes in
   Obsidian `Claude Notes/Planning/2026-09-09-blud-render-optimization-backlog.md`.
   Done in round 1 (2026-09-10): pass timings via `__sdfGame.bench({mode:'passes'})`,
@@ -2803,8 +4281,12 @@ Key reference docs (open these before touching their area):
   wounds exposed hull spheres inside craters (fixed by wound exclusion in
   `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
   march to the clamp through interpenetrating fields; fold into `X1.10`.
-- `X1.29` [x] **Near-wound step multiplier — MEASURED, DELIBERATELY LEFT AT
-  0.6.** Owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
+- `X1.29` [x] **Near-wound step multiplier — SUPERSEDED (2026-09-05): the GAME
+  ships 1.0.** `GAME_WOUND_STEP` is 1.0 (`perfCfg.z`, `game-main.ts:1472`) on
+  the owner's look verdict; the 0.6 discussed below is now only the shader's
+  compiled `WOUND_STEP_MUL` fallback, which the lab still uses. **Read the rest
+  as the derivation behind the sound 0.4/0.48 numbers, not as ship state.**
+  Original: owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
   could not tell them apart, so the frame budget won. Everything below is why
   it is a decision now rather than an oversight, so it can be re-taken without
   re-deriving. The wounded field is not a distance bound and nobody had

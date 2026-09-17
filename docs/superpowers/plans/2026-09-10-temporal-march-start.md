@@ -12,6 +12,35 @@ with the gate 14.9 -> 11.3 ms (walk 11.0 -> 7.0, fire 14.9 -> 11.3, gib
 18.0 -> 13.8; the on-run had fewer bodies, so treat as ~25-35%). Copy
 0.02-0.04 ms. Owner: "looks good, ship it".
 
+**Aggressive follow-up (same day, session).** Four changes on top: (1)
+`bodyEntry` — the ray-box entry already computed for the accumulated-depth
+discard — joins the start max as a fifth lower bound; (2) recovery probes:
+when the one-sample check finds the start inside, rewind by twice the
+reported penetration and re-probe (≤ 3 evals) instead of dropping the
+bound; (3) the accepted start must also sit OUTSIDE a wound's near zone
+(mapBody.z — the field is not a bound beside a crater); (4) the margin is
+adaptive: measured fresh-frame-to-fresh-frame body translation × 1.5,
+capped at 0.25, floored at the shipped **0.25** — PARKED there after the
+owner playtest found glitches at the 0.15 floor in real play (motion,
+grazing silhouettes, the field weave; the static closeup bisect that
+cleared 0.15 ran VHS-off, weave-off, camera frozen, and simply did not
+cover those cases — owner verdict outranks it). The bisect remains
+valid as far as it went: at 0.10 the START beats the outer-hull face and
+the accept tolerance lands samples alternately inside/outside the skin,
+banding the tissue ramp; the shipped 0.25 never beats the hull face up
+close. Room-4 firefight A/B at the ship config (sdf:march p50, the
+shipped margin): gib 7.83 -> 7.21 ms (−8%), fire −5%, walk ~0, no
+regression leg; the 0.15-floor's gib −17% is forfeited until the
+accept/ramp fragility is fixed. Three owner telemetry recordings (on /
+off / 0.25-pinned, 2026-09-10 ~10:40Z) all pin p50 at the 30 fps cap and
+carry no pass timings, so they cannot rank the configs; late frames
+cluster at >= 4 bodies on screen in all three. A latent defect worth its
+own task: accept-tolerance + tissue-ramp fragility just inside the hull
+face (the perf spec's accept-retraction lever). Pre-existing on main,
+unrelated: surface-nets.wgsl.test.ts HULL_FIELD arity pin (17 vs 19).
+Instruments: `scripts/tmp/tstart-ab.mjs` (perf A/B driver),
+`tstart-artifact-check.mjs` (frozen-scene pixel diff, `TSTART_PIN` bisect).
+
 **Goal:** Cut the march's per-pixel step count at FULL resolution by
 starting each ray where last frame's hit at that screen position, reprojected
 through the camera's motion, says the surface was — minus a safety margin —

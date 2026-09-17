@@ -15,6 +15,7 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
 import { ROW_PRIM_BEND } from './march.wgsl';
+import { REC_ANCHOR_BAND, REC_COUNTS, REC_VEC4S } from './crowd-records';
 import { MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
@@ -104,6 +105,7 @@ describe('shared gib chunk material', () => {
   it('reconfigures a bounded mesh slot without allocating a new render object', () => {
     const shared = createSharedChunkGpuMaterial();
     const template = createZombieGpuView(body, {});
+    template.uniforms.faceCfg.value.x = 1;
     const armPrims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
     const headPrims = body.prims.filter(p => p.limb === 'head').slice(0, 4);
     const arm = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
@@ -196,10 +198,11 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     // WGSL signature, so a missing entry is a silent uniform mismatch.
     const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
     const marchCalls = src.match(/volumeWarp: u\.volumeWarp,/g) ?? [];
-    // createMarchMaterial + cone twin + depth-prepass twin (close-up task 3).
-    expect(marchCalls.length).toBe(3);
+    // createMarchMaterial + cone twin + depth-prepass twin (close-up task 3)
+    // + the crowd type's depth-prepass twin (crowd stage a task 5).
+    expect(marchCalls.length).toBe(4);
     expect(src.match(/volumeWarp: u\.volumeWarp,\s*\n\s*volumeClip: u\.volumeClip,/g)?.length)
-      .toBe(3);
+      .toBe(4);
   });
 
   it('depth-prepass twin — fog off, positionally-last inputs, fallback identity', () => {
@@ -212,7 +215,7 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     expect(src).toMatch(/depthPreMaterial\.fog = false;/);
     // MARCH_BODY's depthPre inputs are bound POSITIONALLY LAST in the entry
     // literal — after windDrift, same commit as the WGSL inputs (meltCfg rule).
-    expect(src).toMatch(/windDrift: u\.windDrift,[\s\S]*?woundBound: u\.woundBound,[\s\S]*?\/\/ Quarter-res depth prepass/);
+    expect(src).toMatch(/perfCfg: u\.perfCfg,[\s\S]*?inst: records\.node as never,[\s\S]*?instCfg,[\s\S]*?\) as unknown as \{ div/);
     expect(src).toMatch(/depthPreTex: texture\(depthPre \? depthPre\.texture : fallbackDepthPreTexture\(\)\)/);
     // Without a source, cfg is the all-zero constant — the fetch's disabled
     // identity. The 1x1 fallback texture carries value 0 so even a stray
@@ -508,6 +511,8 @@ describe('M2 task 2 — surface output options on the chunk factories', () => {
     material: { mrtNode: { outputNodes: Record<string, unknown> } | null; colorNode: unknown; outputNode: unknown };
     dataNode: BoundNode<THREE.Texture>;
     volumeNode: BoundNode<THREE.Texture>;
+    instCfgNode: BoundNode<THREE.Vector4>;
+    records: { floats: Float32Array; capacity: number };
     uniformNodes: { counts: BoundNode<THREE.Vector4> };
     dispose(): void;
   }
@@ -564,6 +569,39 @@ describe('M2 task 2 — surface output options on the chunk factories', () => {
     template.dispose();
   });
 
+  it('task 7c: shared chunk records — instCfg.z follows the chunk slot and band stays 0', () => {
+    const shared = createSharedChunkGpuMaterial(undefined, { maxChunks: 4 }) as unknown as SharedHandle;
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const template = createZombieGpuView(body, {});
+    const chunkA = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
+    const chunkB = makeChunk('armL', [-0.6, 0.7, 0.9], [-1, 1, 0], 0.1, [0, 0, 1]);
+    const viewA = createChunkGpuView(chunkA, prims, template.uniforms, undefined, undefined, shared as never);
+    const viewB = createChunkGpuView(chunkB, prims, template.uniforms, undefined, undefined, shared as never);
+
+    // Slot allocation is lowest-first off the shared pool.
+    expect((viewA.object.userData.__sdfChunkMaterialState as { slot: number }).slot).toBe(0);
+    expect((viewB.object.userData.__sdfChunkMaterialState as { slot: number }).slot).toBe(1);
+
+    // The per-draw base-slot node follows the rendered object.
+    shared.instCfgNode.update({ object: viewA.object });
+    expect(shared.instCfgNode.value.z).toBe(0);
+    shared.instCfgNode.update({ object: viewB.object });
+    expect(shared.instCfgNode.value.z).toBe(1);
+
+    // Each slot holds that chunk's counts, at band 0 (the chunk binds its own
+    // single-band data texture per draw — the slot indexes the record only).
+    const f = shared.records.floats;
+    expect(f[0 * REC_VEC4S * 4 + REC_COUNTS * 4]).toBeGreaterThan(0);
+    expect(f[1 * REC_VEC4S * 4 + REC_COUNTS * 4]).toBeGreaterThan(0);
+    expect(f[0 * REC_VEC4S * 4 + REC_ANCHOR_BAND * 4 + 3]).toBe(0);
+    expect(f[1 * REC_VEC4S * 4 + REC_ANCHOR_BAND * 4 + 3]).toBe(0);
+
+    viewA.dispose();
+    viewB.dispose();
+    shared.dispose();
+    template.dispose();
+  });
+
   it('existing calls stay lit: default chunk material and chunk views have no MRT', () => {
     const shared = createSharedChunkGpuMaterial() as unknown as SharedHandle;
     expect(shared.material.mrtNode).toBeNull();
@@ -594,5 +632,31 @@ describe('M2 task 2 — surface output options on the chunk factories', () => {
     expect(mat.surfaceClass?.value).toBe(18);
     view.dispose();
     template.dispose();
+  });
+});
+
+describe('run 5 refine twin (source pins)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
+  it('builds refineBody on the march chain and binds the four refine inputs by name', () => {
+    expect(src).toContain('export const refineBody = buildEntryFn(REFINE_BODY);');
+    expect(src).toContain('export const marchBody = buildEntryFn(MARCH_BODY);');
+    for (const k of ['marchTex:', 'cosRay:', 'nearFar:', 'refineCfg:']) expect(src).toContain(k);
+    expect(src).toContain('refineObject:');
+  });
+});
+
+describe('run 5b slim twin lighting tail (source pins)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
+  it('the refine twin is built from refineTailUniforms', () => {
+    expect(src).toContain('export function refineTailUniforms(');
+    expect(src).toContain('refineTailUniforms(u, ');
+  });
+  it('the WGSL gates the slim tail relies on still exist', async () => {
+    const { MARCH_BODY_LIGHT } = await import('./march.wgsl');
+    expect(MARCH_BODY_LIGHT).toContain('if (surfCfg.w > 0.0) {');
+    expect(MARCH_BODY_LIGHT).toContain('if (woundShadowCfg.x > 0.0 && hitNearWound)');
+    expect(MARCH_BODY_LIGHT).toContain('if (probeCfg.x > 0.0) {');
+    expect(MARCH_BODY_LIGHT).toContain('if (probeDynCfg.x > 0.0 || probeDynCfg.y > 0.0)');
+    expect(MARCH_BODY_LIGHT).toMatch(/bounceCfg\.x == 0/);
   });
 });

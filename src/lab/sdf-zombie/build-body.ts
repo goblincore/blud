@@ -8,11 +8,16 @@ import { validateBody, boneBreach, type ValidateOpts } from './validate';
 import { deriveBones, DEFAULT_BONE_RATIO } from './bone-derive';
 import type { FaceParams } from './face';
 
-export interface BuildOpts extends ValidateOpts {}
+export interface BuildOpts extends ValidateOpts {
+  /** Scale authored additive round blends before explicit per-primitive tuning.
+   * Shared by CPU fields, GPU packs, validation and offline mesh generation. */
+  roundBlendScale?: number;
+}
 
 export const DEFAULT_BUILD_OPTS: BuildOpts = {
   silhouetteNoiseAmp: 0.012,
   stepMultiplier: 0.6,
+  roundBlendScale: 0.5,
 };
 
 /**
@@ -33,6 +38,72 @@ export interface BodyOverride {
 export interface BuildResult extends BuiltBody {
   /** Empty when the body passes every check. Never throws — the panel shows these. */
   errors: string[];
+}
+
+/**
+ * COLD-START BODY-BUILD MEMO (2026-09-16 playtest follow-ups, task 1).
+ *
+ * WHY. `buildBody` is deterministic in `(def, opts, override)`, but the game
+ * called the whole build pipeline once PER ACTOR: `spawnAll` spawns 23 bodies
+ * and every one paid bone derivation plus the containment checks
+ * (`boneBreach` per derived bone and `validateBody`'s whole-body scans), which
+ * is CPU-bound SDF evaluation. Measured 26 ms per zombie and 43 ms per
+ * soldier, i.e. ~0.67 s of the boot's `room-probes-start -> player-start`
+ * block; the caller-side compile/face parse on top of it made the block
+ * ~0.86 s. The boot CPU profile's top self-time was `validate.ts`'s `sdBody`
+ * / `sdPrimitive` / `boneBreach`, not module loading.
+ *
+ * WHAT IT IS. A signature-keyed memo around an explicit builder closure. The
+ * caller owns the key (it knows which inputs actually change the result) and
+ * the builder (it knows how to derive the body). A hit returns the SAME
+ * untranslated `BuildResult`; callers that need a per-actor body translate it,
+ * which copies every mutable array (translate.ts), so the cached value is
+ * never handed out as a mutable actor body.
+ *
+ * INVALIDATION. The key is the cache's whole contract: whoever changes an
+ * input that can change `buildBody`'s output MUST fold that input into the key
+ * (the character identity + compiled face + bone ratio + override signature
+ * today). There is no time- or revision-based expiry because a page load
+ * rebuilds the registry and this cache with it; a body that would change
+ * because its `.blob`/anatomy changed gets a different key by construction.
+ *
+ * OWNERSHIP. Entries hold CPU-only structures (`prims`, `clusters`, `bones`,
+ * `bonePrims`, `errors`); they carry no GPU resources, so there is nothing to
+ * dispose per entry. `clear()` drops every reference for a hard reset.
+ */
+export interface BodyBuildCacheStats {
+  entries: number;
+  hits: number;
+  misses: number;
+  buildMs: number;
+}
+
+export class BodyBuildCache<T> {
+  readonly #map = new Map<string, T>();
+  #hits = 0;
+  #misses = 0;
+  #buildMs = 0;
+  /** Return the cached value for `key`, or build it once and memoize it. */
+  get(key: string, build: () => T): T {
+    const hit = this.#map.get(key);
+    if (hit !== undefined) { this.#hits++; return hit; }
+    const t0 = performance.now();
+    const built = build();
+    this.#buildMs += performance.now() - t0;
+    this.#misses++;
+    this.#map.set(key, built);
+    return built;
+  }
+  /** Cumulative diagnostics; never resets on its own. */
+  stats(): BodyBuildCacheStats {
+    return {
+      entries: this.#map.size,
+      hits: this.#hits,
+      misses: this.#misses,
+      buildMs: Math.round(this.#buildMs * 100) / 100,
+    };
+  }
+  clear(): void { this.#map.clear(); }
 }
 
 export function buildBody(
@@ -60,7 +131,20 @@ export function buildBody(
   const placed = placePrims(fleshDefs, bones);
   const { prims, clusters } = assignClusters(placed);
 
-  // Overrides apply AFTER clustering, so indices are stable built-array indices.
+  // Apply once to the built flesh, before bone containment and validation.
+  // Smaller round unions are the accepted character default; hard features,
+  // carves and internal anatomy retain their authored blend semantics.
+  const blendScale = opts.roundBlendScale ?? DEFAULT_BUILD_OPTS.roundBlendScale!;
+  for (let i = 0; i < prims.length; i++) {
+    const p = prims[i]!;
+    if (!p.dead && (p.op === undefined || p.op === 'add')
+      && !p.shell && !p.strand && !p.box && p.blendProfile !== 'chamfer') {
+      prims[i] = { ...p, blendK: p.blendK * blendScale };
+    }
+  }
+
+  // Overrides apply AFTER scaling and clustering, so the panel's values are
+  // absolute effective strengths and indices remain stable built-array indices.
   for (const [k, v] of Object.entries(override.primRadius ?? {}))
     if (prims[+k]) prims[+k] = { ...prims[+k]!, radius: v };
   for (const [k, v] of Object.entries(override.primBlendK ?? {}))

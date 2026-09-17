@@ -8,7 +8,7 @@ import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
 import { segmentQuat } from './rig-frames';
 import {
-  add, bendCtrl, cross, dot, len, normalize, qRotate,
+  add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
   scale as vscale, sub,
 } from './vec';
 
@@ -403,15 +403,38 @@ export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], 
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
   const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig) : null;
-  const poseEnds = (bind: PrimBind): { a: Vec3; b: Vec3 } => {
-    let a = bind.a.offset, b = bind.b.offset;
-    if (bind.armFrame) {
-      const frame = bind.armFrame;
-      const dir = normalize(sub(pos[frame.tail]!.pos, pos[frame.head]!.pos));
-      const q = segmentQuat(frame.restDir, dir, bodyYaw);
-      a = qRotate(q, a); b = qRotate(q, b);
-    }
-    return { a: add(pos[bind.a.point]!.pos, a), b: add(pos[bind.b.point]!.pos, b) };
+  // Every rib/vertebra on an axial segment uses the same rotation. Derive it
+  // once per applyRig call; a cache lasting across calls would retain a stale
+  // pose after Verlet, yaw changes, or a collapse. Check restDir too because
+  // callers can supply custom bindings for the same pair of rig points.
+  const rotations = new Map<number, { restDir: Vec3; q: Quat }>();
+  const rotationOf = (frame: { head: number; tail: number; restDir: Vec3 }): Quat => {
+    const key = frame.head * pos.length + frame.tail;
+    const cached = rotations.get(key);
+    const r = frame.restDir;
+    if (cached && cached.restDir[0] === r[0] && cached.restDir[1] === r[1] && cached.restDir[2] === r[2]) return cached.q;
+    const dir = normalize(sub(pos[frame.tail]!.pos, pos[frame.head]!.pos));
+    const q = segmentQuat(r, dir, bodyYaw);
+    rotations.set(key, { restDir: r, q });
+    return q;
+  };
+  const yawRotation: Quat = [0, Math.sin(bodyYaw / 2), 0, Math.cos(bodyYaw / 2)];
+  const posePrimitive = (p: Primitive, bind: PrimBind): Primitive => {
+    const q = bind.armFrame ? rotationOf(bind.armFrame) : yawRotation;
+    const turned = Math.abs(1 - q[3]) > 1e-6;
+    const orientedShape = p.scale[0] !== p.scale[1] || p.scale[1] !== p.scale[2]
+      || p.box || p.shell || p.strand || p.orient;
+    // Endpoint insets and anisotropic axes belong to the character, not the
+    // world. Leaving either behind made the same zombie look thin-chested
+    // and wide-footed when it faced sideways (the apparent room variants).
+    // Isotropic capsules retain the cheap un-oriented field path.
+    return {
+      ...p,
+      a: add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset)),
+      b: add(pos[bind.b.point]!.pos, qRotate(q, bind.b.offset)),
+      ...(p.bend ? { bend: qRotate(q, p.bend) } : {}),
+      ...(turned && orientedShape ? { orient: p.orient ? qMul(q, p.orient) : q } : {}),
+    };
   };
   const prims: Primitive[] = body.prims.map((p, i) => {
     const face = rigid?.prims.get(i);
@@ -422,7 +445,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // headTransform derived; reused, not recomputed.
       return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
     }
-    return { ...p, ...poseEnds(bound.binding[i]!) };
+    return posePrimitive(p, bound.binding[i]!);
   });
 
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
@@ -456,38 +479,61 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // segment is near-vertical, so a bare shortest-arc rotation between rest
       // and current direction would drop the azimuth), then the residual tilt.
       const h = pos[frame.head]!.pos;
-      const dir = normalize(sub(pos[frame.tail]!.pos, h));
-      const q = segmentQuat(frame.restDir, dir, bodyYaw);
+      const q = rotationOf(frame);
       return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q, boneSegment };
     }
-    return { ...p, ...poseEnds(bound.boneBinding[i]!), boneSegment };
+    return { ...posePrimitive(p, bound.boneBinding[i]!), boneSegment };
   });
 
-  const clusters: ClusterInfo[] = body.clusters.map(c => {
-    const members = prims.slice(c.start, c.start + c.count);
-    // Same bent-prim rule as assignClusters: the ctrl point joins the fit or
-    // a swung horn escapes the sphere the shader culls by.
-    let sum: Vec3 = [0, 0, 0];
-    let pts = 0;
-    for (const m of members) {
-      sum = add(sum, add(m.a, m.b));
+  const clusters = refitClusters(prims, body.clusters);
+
+  return { ...body, prims, bonePrims, clusters };
+}
+
+/**
+ * Recompute every cluster's centre and radius from a POSED prim set.
+ *
+ * A cluster sphere is an OUTER bound: the march culls by it and the proxy box
+ * is sized from it, so a bound left over a body whose prims have MOVED does not
+ * draw a wrong shape — it CULLS, which presents as a round see-through hole
+ * (extent.ts's header counts the eight sites that compute this recipe and warns
+ * about a ninth). It is exported for exactly that reason: the hurt-box tear
+ * (gib-tear.ts) displaces posed prims and needs the same refit, and two copies
+ * of this arithmetic is how the ninth site happens.
+ */
+export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): ClusterInfo[] {
+  return clusters.map(c => {
+    const end = Math.min(prims.length, c.start + c.count);
+    // Keep the original addition order while avoiding member slices and the
+    // two temporary vectors previously allocated for every endpoint pair.
+    let sx = 0, sy = 0, sz = 0, pts = 0;
+    for (let i = c.start; i < end; i++) {
+      const m = prims[i]!;
+      sx += m.a[0] + m.b[0]; sy += m.a[1] + m.b[1]; sz += m.a[2] + m.b[2];
       pts += 2;
-      if (m.bend !== undefined) { sum = add(sum, bendCtrl(m.a, m.b, m.bend)); pts += 1; }
+      if (m.bend !== undefined) {
+        const ctrl = bendCtrl(m.a, m.b, m.bend);
+        sx += ctrl[0]; sy += ctrl[1]; sz += ctrl[2]; pts++;
+      }
     }
-    const center = vscale(sum, 1 / pts);
+    const inv = 1 / (pts || 1);
+    const center: Vec3 = [sx * inv, sy * inv, sz * inv];
     let radius = 0;
-    for (const m of members) {
+    const distance = (v: Vec3): number => {
+      const x = v[0] - center[0], y = v[1] - center[1], z = v[2] - center[2];
+      return Math.sqrt(x * x + y * y + z * z);
+    };
+    for (let i = c.start; i < end; i++) {
+      const m = prims[i]!;
       const maxScale = Math.max(m.scale[0], m.scale[1], m.scale[2]);
-      const ends = m.bend === undefined
-        ? [m.a, m.b] : [m.a, m.b, bendCtrl(m.a, m.b, m.bend)];
       const rMax = Math.max(m.radius, m.radiusB ?? m.radius) * boxReach(m.box) * strandReach(m.strand);
-      for (const end of ends)
-        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale + shellReach(m));
+      const reach = rMax * maxScale, shell = shellReach(m);
+      radius = Math.max(radius, distance(m.a) + reach + shell);
+      radius = Math.max(radius, distance(m.b) + reach + shell);
+      if (m.bend !== undefined) radius = Math.max(radius, distance(bendCtrl(m.a, m.b, m.bend)) + reach + shell);
     }
     return { ...c, center, radius };
   });
-
-  return { ...body, prims, bonePrims, clusters };
 }
 
 /**

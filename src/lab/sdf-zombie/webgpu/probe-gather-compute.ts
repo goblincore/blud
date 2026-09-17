@@ -2,11 +2,12 @@
 //
 // THE GPU PROBE GATHER (lighting P3/P4 dynamic layer; spec
 // docs/superpowers/specs/2026-09-09-gpu-probe-gather-design.md). One compute
-// dispatch per frame, one thread per probe, writing the DYNAMIC probe layer
-// (muzzle-flash radiance + body visibility) into a storage buffer the march
-// reads next to the static grid. Modelled on tile-bin-compute.ts: storage
-// attributes at worst-case sizes, kernels as wgslFn strings, fixed dispatch
-// with the active count in a uniform, a read-only node for the march.
+// dispatch per frame, ONE THREAD PER (probe, ray) with a workgroup-local
+// reduction (R1, 2026-09-10), writing the DYNAMIC probe layer (muzzle-flash
+// radiance + body visibility) into a storage buffer the march reads next to the
+// static grid. Modelled on tile-bin-compute.ts: storage attributes at
+// worst-case sizes, kernels as wgslFn strings, a dispatch whose workgroup count
+// is this frame's, a read-only node for the march.
 //
 // The maths lives twice — probe-dynamic.ts is the tested CPU twin — and the
 // kernel is pinned by probe-dynamic.wgsl.test.ts. Nothing here is verifiable
@@ -15,7 +16,18 @@ import * as THREE from 'three/webgpu';
 import { wgslFn, uniform, storage, instanceIndex, compute } from 'three/tsl';
 import { withPassLabel } from './gpu-pass-timing';
 import { K_PROBE_GATHER } from './probe-dynamic.wgsl';
-import { DYN_VEC4_PER_PROBE, packBoxes, packCapsulesFromBoneInstances, packLights, type DynLightInput } from '../probe-dynamic';
+import { packProbeCapsuleGroups, probeCapsuleStorageVec4s } from '../probe-capsule-groups';
+import {
+  DYN_RAY_CAP,
+  DYN_VEC4_PER_PROBE,
+  PROBE_GATHER_WORKGROUP,
+  gatherThreadsPerProbe,
+  gatherWorkgroupCount,
+  packBoxes,
+  packCapsulesFromBoneInstances,
+  packLights,
+  type DynLightInput,
+} from '../probe-dynamic';
 import type { Box, Vec3 } from '../ambient';
 import type { ProbeGrid } from '../probe-grid';
 
@@ -44,6 +56,8 @@ export interface ProbeGatherFrame {
   /** 0..1, the radiance FALL rate — the afterglow tail (0.12 ≈ 0.3 s at 60 Hz). */
   fall: number;
   raysPerProbe: number;
+  /** false restores the original scan for measured A/B and output parity. */
+  optimized?: boolean;
 }
 
 export interface ProbeGatherBinding {
@@ -53,13 +67,21 @@ export interface ProbeGatherBinding {
   readonly probeDynNode: unknown;
   /** The whole dynamic buffer, for tests and debug tooling. */
   readback(): Promise<Float32Array>;
+  /**
+   * ZERO THE ACCUMULATED DYNAMIC LAYER (bench determinism, 2026-09-14). The
+   * kernel blends each dispatch into the existing values (`blend`/`fall`), so
+   * the layer is a function of the DISPATCH COUNT as well as of the scene. A
+   * bench that compares an end-of-run hash needs a known start, or the first
+   * page load and a warm one hash differently for no real reason. Bench-only.
+   */
+  reset(): void;
   readonly caps: ProbeGatherCaps;
   dispose(): void;
 }
 
 export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: ProbeGatherCaps): ProbeGatherBinding {
   const boxesN = 1 + caps.maxBoxes * 3;
-  const capsN = 1 + caps.maxCapsules * 2;
+  const capsN = probeCapsuleStorageVec4s(caps.maxCapsules);
   const lightsN = 1 + caps.maxLights * 3; // LIGHT_FLOATS / 4 vec4 per light
   const dynN = caps.maxProbes * DYN_VEC4_PER_PROBE;
   const boxesAttr = new THREE.StorageBufferAttribute(boxesN, 4);
@@ -77,11 +99,22 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
   const uGridMin = uniform(new THREE.Vector4());
   const uGridInv = uniform(new THREE.Vector4());
   const uGridDims = uniform(new THREE.Vector4(1, 1, 1, 0));
+  // gather.x = threads per probe (see `gatherThreadsPerProbe`). The kernel takes
+  // it rather than re-deriving it, so the dispatch size and the reduction shape
+  // cannot disagree; y enables the exact-work optimization, zw are spare.
+  const uGather = uniform(new THREE.Vector4(1, 0, 0, 0));
 
   const call = wgslFn(K_PROBE_GATHER)(
-    boxesBuf, capsBuf, lightsBuf, dynRw, uCfg, uGridMin, uGridInv, uGridDims, instanceIndex,
+    boxesBuf, capsBuf, lightsBuf, dynRw, uCfg, uGridMin, uGridInv, uGridDims, uGather, instanceIndex,
   );
-  const node = compute(call, caps.maxProbes, [64]);
+  // THE DISPATCH IS A WORKGROUP COUNT ARRAY, NEVER AN INVOCATION COUNT. A
+  // numeric count makes three emit `if (instanceIndex >= count) return;` ahead
+  // of the kernel call, and the kernel's workgroupBarrier would then sit behind
+  // a non-uniform guard — which Tint REJECTS at pipeline creation.
+  // surface-nets-compute.ts dispatches its barrier kernel the same way, for the
+  // same reason. The count here is the worst case (tpp = WG, i.e. one
+  // workgroup per probe); every update overrides it with this frame's count.
+  const node = compute(call, [caps.maxProbes, 1, 1] as unknown as number, [PROBE_GATHER_WORKGROUP]);
   let disposed = false;
 
   return {
@@ -98,12 +131,19 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
       boxesAttr.needsUpdate = true;
       const capsArr = capsAttr.array as Float32Array;
       packCapsulesFromBoneInstances(f.instances, f.instanceCount, f.capsuleMargin, capsArr, caps.maxCapsules);
+      if (f.optimized !== false) packProbeCapsuleGroups(capsArr, caps.maxCapsules);
+      else capsArr[1] = 0;
       capsAttr.needsUpdate = true;
       const lightsArr = lightsAttr.array as Float32Array;
       packLights(f.lights.slice(0, caps.maxLights), lightsArr);
       lightsAttr.needsUpdate = true;
 
-      (uCfg.value as THREE.Vector4).set(probes, Math.min(64, f.raysPerProbe), f.frameSeed, f.blend);
+      // Clamp exactly as the CPU twin does (probe-dynamic.ts gatherProbeDynamic)
+      // so a negative or absurd URL value cannot reach the kernel's u32 cast.
+      const rays = Math.min(Math.max(0, Math.floor(f.raysPerProbe)), DYN_RAY_CAP);
+      const tpp = gatherThreadsPerProbe(rays);
+      (uCfg.value as THREE.Vector4).set(probes, rays, f.frameSeed, f.blend);
+      (uGather.value as THREE.Vector4).set(tpp, f.optimized !== false ? 1 : 0, 0, 0);
       // gridMin.w carries the afterglow fall rate (the kernel's spare slot).
       (uGridMin.value as THREE.Vector4).set(f.grid.min[0], f.grid.min[1], f.grid.min[2], f.fall);
       (uGridInv.value as THREE.Vector4).set(
@@ -112,11 +152,20 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
         1 / Math.max(1e-6, f.grid.max[2] - f.grid.min[2]), 0,
       );
       (uGridDims.value as THREE.Vector4).set(f.grid.dims[0], f.grid.dims[1], f.grid.dims[2], 0);
-      withPassLabel('compute:probe-gather', () => renderer.compute(node));
+      // This frame's workgroups: probes * tpp threads, rounded up. A partial
+      // last workgroup is fine — the kernel tests the PROBE index, so its
+      // surplus threads contribute zeros and write nothing.
+      const groups = gatherWorkgroupCount(probes, rays);
+      withPassLabel('compute:probe-gather', () => renderer.compute(node, [groups, 1, 1] as never));
     },
     async readback() {
       if (disposed) throw new Error('probe gather binding disposed');
       return new Float32Array(await renderer.getArrayBufferAsync(dynAttr));
+    },
+    reset() {
+      if (disposed) throw new Error('probe gather binding disposed');
+      (dynAttr.array as Float32Array).fill(0);
+      dynAttr.needsUpdate = true;
     },
     dispose() {
       disposed = true;

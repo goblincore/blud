@@ -18,7 +18,7 @@ function setup(allowed = true) {
       const allocation = { width, height, disposed: 0 };
       allocations.push(allocation);
       return {
-        headerNode: {}, entryNode: {}, bin() {},
+        headerNode: {}, entryNode: {}, bin() { return true; },
         async readback() { throw new Error('No GPU readback in CPU lifecycle test'); },
         dispose() { allocation.disposed++; },
       };
@@ -34,7 +34,7 @@ function setup(allowed = true) {
       tiles: binding ? {
         setEnabled(on) { state.enabled = on; },
         setRayCull(on) { state.rayCull = on; },
-        bin(groups, camera, blend, grid) { state.bins.push({ groups, camera, blend, grid }); },
+        bin(groups, camera, blend, grid) { state.bins.push({ groups, camera, blend, grid }); return true; },
         dispose() {},
       } : undefined,
     };

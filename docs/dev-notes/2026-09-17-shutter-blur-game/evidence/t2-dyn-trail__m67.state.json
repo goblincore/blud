@@ -1,0 +1,48 @@
+{
+  "file": "t2-dyn-trail__m67",
+  "diag": {
+    "enabled": true,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.06666666666666667,
+    "exposureMs": 66.66666666666667,
+    "exposureLabel": "66.67 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 555,
+    "last": {
+      "stamps": 538,
+      "texels": 20755,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 36,
+      "maxStreakPx": 44.27944109820897,
+      "avgStreakPx": 12.854672450907701,
+      "buildMs": 0.3999999761581421
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 1,
+    "droplets": 563,
+    "splats": 256
+  },
+  "sha256_16": "a0b70e508cfe31c7"
+}

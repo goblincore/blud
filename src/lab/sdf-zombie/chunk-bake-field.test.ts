@@ -6,9 +6,11 @@
 // nearWound gate says, and the paint must follow the shipped albedo order.
 import { describe, it, expect } from 'vitest';
 import {
-  chunkBakeField, bakeChunkAlbedo, hash13, noise3, fbm, type ChunkLook,
+  chunkBakeField, bakeChunkAlbedo, bakeFaceCover, hash13, noise3, fbm,
+  type ChunkLook, type BakeFaceFrame,
 } from './chunk-bake-field';
 import { sdBody, type Body } from './validate';
+import { HEAD_EXTERIOR_GORE_KEEP } from './gib-look-tuning';
 import type { Primitive, Vec3 } from './types';
 
 /** A capsule along +x centred at the origin. */
@@ -104,7 +106,8 @@ const LOOK: ChunkLook = {
   woundDepthAmp: 1, fatDepth: 0.004, muscleDepth: 0.012, visceraAmp: 0.7, visceraDepth: 0.03,
   mottleAmp: 0.5, mottleScale: 1.5,
   organAmp: 0.6,
-  goreStrength: 1,
+  // Tissue/organ tests isolate the wound chain from the optional gib stains.
+  goreStrength: 0,
 };
 
 describe('bakeChunkAlbedo', () => {
@@ -147,6 +150,21 @@ describe('bakeChunkAlbedo', () => {
     expect(Math.abs(r - noOrgan[0]) + Math.abs(g - noOrgan[1]) + Math.abs(b - noOrgan[2])).toBeGreaterThan(0.01);
   });
 
+  it('adds dark patches to capped gibs without inventing torn-end geometry', () => {
+    const ev = chunkBakeField({ ...PARTS, torn: [] });
+    const ratios: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      const p: Vec3 = [i * .003, .02, .01];
+      const clean = bakeChunkAlbedo(p, p, ev, { ...LOOK, mottleAmp: 0 });
+      const stained = bakeChunkAlbedo(p, p, ev, { ...LOOK, mottleAmp: 0, goreStrength: 1 });
+      expect(stained[3]).toBe(0);
+      expect(ev.field(p)).toBeCloseTo(ev.preWound(p), 8);
+      ratios.push(stained[1] / clean[1]);
+    }
+    expect(Math.min(...ratios)).toBeLessThan(.3);
+    expect(Math.max(...ratios)).toBeGreaterThan(.7);
+  });
+
   it('is stable and finite over a sweep of the whole chunk', () => {
     const ev = chunkBakeField(PARTS);
     for (let i = 0; i < 500; i++) {
@@ -158,5 +176,45 @@ describe('bakeChunkAlbedo', () => {
         expect(v).toBeLessThanOrEqual(1.0001);
       }
     }
+  });
+});
+
+// ——— TASK 2: the face survives the bake ————————————————————————————————————
+describe('bakeFaceCover / face-protected gore', () => {
+  // A unit head at the origin, facing +z (forward = +1), semi-axes in metres.
+  const FACE: BakeFaceFrame = {
+    centre: [0, 0, 0], quat: [0, 0, 0, 1], axes: [0.1, 0.12, 0.1], forward: 1,
+  };
+
+  it('is high in front of the face, and keeps only the exterior share behind it', () => {
+    const front = bakeFaceCover([0, 0, 0.1], FACE);
+    const back = bakeFaceCover([0, 0, -0.1], FACE);
+    // The face itself is fully protected...
+    expect(front).toBeGreaterThan(0.8);
+    // ...while the back of the head keeps exactly the shared exterior share of
+    // the gore (so it is not a meat blob, but is still bloodied).
+    expect(back).toBeCloseTo(HEAD_EXTERIOR_GORE_KEEP, 5);
+  });
+
+  it('falls off toward the sides and past the head extent', () => {
+    const side = bakeFaceCover([0.1, 0, 0], FACE);
+    const far = bakeFaceCover([0, 0, 0.3], FACE);
+    expect(side).toBeLessThan(bakeFaceCover([0, 0, 0.1], FACE));
+    expect(side).toBeGreaterThanOrEqual(HEAD_EXTERIOR_GORE_KEEP);
+    // Off the head's extent the protection is gone entirely.
+    expect(far).toBe(0);
+  });
+
+  it('keeps the gore off the face but still stains the rest of the piece', () => {
+    const ev = chunkBakeField({ ...PARTS, torn: [] });
+    const look: ChunkLook = { ...LOOK, mottleAmp: 0, goreStrength: 1 };
+    // Same point, same gore, ONLY the face coverage differs: full coverage
+    // must leave the intact flesh colour untouched by the gore mix.
+    const p: Vec3 = [0, 0.0, 0.02];
+    const covered = bakeChunkAlbedo(p, p, ev, look, 1);
+    const bare = bakeChunkAlbedo(p, p, ev, look, 0);
+    const clean = bakeChunkAlbedo(p, p, ev, { ...look, goreStrength: 0 }, 0);
+    expect(covered).toEqual(clean);
+    expect(Math.abs(bare[0] - covered[0]) + Math.abs(bare[1] - covered[1])).toBeGreaterThan(0.05);
   });
 });

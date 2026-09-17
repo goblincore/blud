@@ -16,8 +16,10 @@
 // a group whose prims are nowhere near its pixels (wasted fold work guarded by
 // the per-step group-sphere cull, which REMAINS inside the fold); a tile must
 // never omit a group whose surface touches it. Hence: screen extent computed at
-// the sphere's NEAREST depth (the largest projection), behind-camera spheres
-// binned into every tile, and whole-tile clamping outward via floor/ceil.
+// the sphere's NEAREST depth (the largest projection), eye-plane-CROSSING
+// spheres binned into every tile, and whole-tile clamping outward via
+// floor/ceil. A sphere FULLY behind the eye plane is the one sound omission
+// (perf 7e): no forward ray reaches it, so it touches no tile (see project()).
 //
 // SOUNDNESS NOTE (spec "cull soundness rule"): the DISTORTION factor rides
 // every entry because the shader's group-sphere test compares a Euclidean
@@ -186,15 +188,26 @@ export class TileBinner {
       v.set(g.center[0], g.center[1], g.center[2]).applyMatrix4(view);
 
       let tx0: number, tx1: number, ty0: number, ty1: number;
-      // Nearest point of the sphere along the view axis. View space looks
-      // down -z, so the nearest depth is -(v.z) - r; if that is <= 0 the
-      // sphere crosses or sits behind the camera plane — project nothing,
-      // cover EVERY tile. Same for a centre behind the eye plane (clip.w<=0).
+      // Nearest and FARTHEST points of the sphere along the view axis. View
+      // space looks down -z, so the near end is -(v.z) - r and the far end is
+      // -(v.z) + r.
       const rBlend = g.radius + blendReach;
       const nearDist = -v.z - rBlend;
+      const farDist = -v.z + rBlend;
       const clipW =
         pe[3]! * v.x + pe[7]! * v.y + pe[11]! * v.z + pe[15]!;
-      if (nearDist <= 0 || clipW <= 0) {
+      if (farDist <= 0) {
+        // FULLY BEHIND THE EYE PLANE (perf 7e): the sphere's farthest point is
+        // still behind the eye, so NO forward ray can reach it and it touches
+        // no pixel. Bind zero tiles. The soundness rule forbids omitting a
+        // group whose surface touches a tile — this one touches none — so the
+        // omission is sound. Same empty-range encoding as the off-screen
+        // reject below (0..-1): both passes skip it.
+        tx0 = 0; tx1 = -1; ty0 = 0; ty1 = -1;
+      } else if (nearDist <= 0 || clipW <= 0) {
+        // The sphere CROSSES the eye plane (the near end is in front, the far
+        // end behind) or its centre is behind it: a forward ray can still clip
+        // it, so cover EVERY tile. Over-covering is the safe direction.
         tx0 = 0; tx1 = this.tilesX - 1; ty0 = 0; ty1 = this.tilesY - 1;
       } else {
         const clipX = pe[0]! * v.x + pe[4]! * v.y + pe[8]! * v.z;
