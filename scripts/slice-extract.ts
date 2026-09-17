@@ -200,7 +200,8 @@ if (process.argv[1]?.endsWith('slice-extract.ts')) {
 
   for (const b of rows) {
     const mut = b.reassigned ? 'mut ' : 'once';
-    console.log(`${String(b.line).padStart(5)}  ${(sliceFor(b.name) ?? '?').padEnd(10)} ${mut} ${b.name} = ${b.initializer.slice(0, 54)}`);
+    const init = b.initializer.replace(/\s+/g, ' ').slice(0, 54);
+    console.log(`${String(b.line).padStart(5)}  ${(sliceFor(b.name) ?? '?').padEnd(10)} ${mut} ${b.name} = ${init}`);
   }
 
   if (target) {

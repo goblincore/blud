@@ -15,8 +15,8 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import { makeRenderState, type RenderState } from './game-state-render';
 import { makeLightingState, type LightingState } from './game-state-lighting';
-import { makeProbeState, type ProbeState } from './game-state-probes';
-import { makeGibState, type GibState } from './game-state-gibs';
+import { makeProbesState, type ProbesState } from './game-state-probes';
+import { makeGibsState, type GibsState } from './game-state-gibs';
 import { makeDynamiteState, type DynamiteState } from './game-state-dynamite';
 import { makeWeaponState, type WeaponState } from './game-state-weapon';
 import { makePlayerState, type PlayerState } from './game-state-player';
@@ -26,7 +26,7 @@ import { makeBakeState, type BakeState } from './game-state-bake';
 import { makeVfxState, type VfxState } from './game-state-vfx';
 import { makeDemoState, type DemoState } from './game-state-demo';
 import { makeTelemetryState, type TelemetryState } from './game-state-telemetry';
-import { makePanelState, type PanelState } from './game-state-panels';
+import { makePanelsState, type PanelsState } from './game-state-panels';
 import { makeWorldState, type WorldState } from './game-state-world';
 import { makeBootState, type BootState } from './game-state-boot';
 
@@ -40,8 +40,8 @@ export type SliceName = typeof SLICE_NAMES[number];
 export interface GameContext {
   render: RenderState;
   lighting: LightingState;
-  probes: ProbeState;
-  gibs: GibState;
+  probes: ProbesState;
+  gibs: GibsState;
   dynamite: DynamiteState;
   weapon: WeaponState;
   player: PlayerState;
@@ -51,7 +51,7 @@ export interface GameContext {
   vfx: VfxState;
   demo: DemoState;
   telemetry: TelemetryState;
-  panels: PanelState;
+  panels: PanelsState;
   /** Entity storage — ECS component storage to be. */
   world: WorldState;
   /** DOM handles, URL params, loader and warm-up state. */
@@ -62,8 +62,8 @@ export function makeGameContext(): GameContext {
   return {
     render: makeRenderState(),
     lighting: makeLightingState(),
-    probes: makeProbeState(),
-    gibs: makeGibState(),
+    probes: makeProbesState(),
+    gibs: makeGibsState(),
     dynamite: makeDynamiteState(),
     weapon: makeWeaponState(),
     player: makePlayerState(),
@@ -73,7 +73,7 @@ export function makeGameContext(): GameContext {
     vfx: makeVfxState(),
     demo: makeDemoState(),
     telemetry: makeTelemetryState(),
-    panels: makePanelState(),
+    panels: makePanelsState(),
     world: makeWorldState(),
     boot: makeBootState(),
   };
