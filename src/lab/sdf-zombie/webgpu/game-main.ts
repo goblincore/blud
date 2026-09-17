@@ -962,6 +962,7 @@ async function main() {
   // every OTHER frame halves that cost for a one-frame lag on indirect
   // radiance the layer smooths anyway. 1 = every frame (the old behaviour;
   // setProbeGatherRate / ?proberate flip it live).
+  let probeOptimized = bootSearch.get('probeopt') !== '0';
   let probeGatherRate = 2;
   if (probeGatherRateBoot !== null) probeGatherRate = probeGatherRateBoot;
   let probeGatherTick = 0;
@@ -1922,6 +1923,7 @@ async function main() {
           })),
           instances: probeCapsuleArrays.ab, instanceCount: probeCapsuleCount,
           capsuleMargin: 0.06,
+          optimized: probeOptimized,
           // Diagnostic seams (see ?dynrays / ?dynlights above); both default to
           // the shipped values, so an unset URL is bit-identical to before.
           lights: probeLightsBoot === null ? gatherLights : gatherLights.slice(0, probeLightsBoot),
@@ -10881,6 +10883,8 @@ function performBenchAction(a: BenchAction): void {
       if (flashBoost !== undefined) probeFlashBoost = Math.max(0, flashBoost);
       return { radianceGain: probeDynGain, visStrength: probeVisStrength, flashBoost: probeFlashBoost };
     },
+    /** Exact-work A/B: capsule broad phase, visibility any-hit, cone-first shadows. */
+    setProbeOptimization(enabled: boolean) { probeOptimized = enabled; return probeOptimized; },
     setProbeGatherRate(framesPerGather: number) {
       probeGatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
       return probeGatherRate;
@@ -10899,7 +10903,7 @@ function performBenchAction(a: BenchAction): void {
       return probeLightsBoot;
     },
     get probeCostSplit() {
-      return { rays: probeRaysBoot, lights: probeLightsBoot, blend: probeBlendBoot, fall: probeFallBoot };
+      return { rays: probeRaysBoot, lights: probeLightsBoot, blend: probeBlendBoot, fall: probeFallBoot, optimized: probeOptimized };
     },
     /** The gather's afterglow rates (?dynblend / ?dynfall). Set BOTH to 1 for the
      *  PURE-ESTIMATE configuration the R1 dispatch check measures in: the record

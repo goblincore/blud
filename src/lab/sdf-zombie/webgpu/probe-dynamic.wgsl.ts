@@ -26,6 +26,7 @@ import {
   PROBE_GATHER_WORKGROUP,
   TWO_PI,
 } from '../probe-dynamic';
+import { PROBE_CAPSULE_GROUP_SIZE } from '../probe-capsule-groups';
 import { SH_A0, SH_A1, SH_Y00, SH_Y1 } from '../probe-grid';
 
 /**
@@ -130,12 +131,20 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
     // beyond the box surface can never win the comparison below, so it is
     // retired on its bounding sphere (2026-09-10). Exact, and it is the common
     // case — the room enclosure usually ends the ray before any body does.
-    let ch = kdHitCapsule(origin, dir, capsules, select(1e30, bh.t, bh.hit));
+    let wallDist = select(1e30, bh.t, bh.hit);
+    var bodyBlocks = false;
+    if (gather.y > 0.0) {
+      // Only visibility is consumed here, never the nearest point or normal.
+      bodyBlocks = kdCapsuleBlocks(origin, dir, capsules, wallDist);
+    } else {
+      let ch = kdHitCapsule(origin, dir, capsules, wallDist);
+      bodyBlocks = ch.hit && ch.t <= wallDist;
+    }
 
     var radiance = vec3<f32>(0.0, 0.0, 0.0);
     var vis = 0.0;
     var hit = false;
-    if (ch.hit && ch.t <= select(1e30, bh.t, bh.hit)) {
+    if (bodyBlocks) {
       // A body: occluded and dark. It still counts as a hit so the projection
       // divides by the same sample count as the CPU twin.
       hit = true;
@@ -162,7 +171,7 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
         let ld = dvec / d;
         let ndl = dot(bh.normal, ld);
         if (ndl <= 0.0) { continue; }
-        if (kdShadowed(o, ld, d, capsules, boxes)) { continue; }
+        if (gather.y <= 0.0 && kdShadowed(o, ld, d, capsules, boxes)) { continue; }
         // Spot cone, mirroring the analytic beam; a point light packs
         // cosOuter = -2 and takes cone = 1.
         var cone = 1.0;
@@ -172,6 +181,8 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
           cone = t * t;
           if (cone <= 0.0) { continue; }
         }
+        // Reject outside-beam samples BEFORE tracing their shadows.
+        if (gather.y > 0.0 && kdShadowed(o, ld, d, capsules, boxes)) { continue; }
         // Hard point term plus the SOFT room-fill term (CPU twin:
         // probe-dynamic.ts LIGHT_FILL_REF_M). For a point light the third vec4's
         // .w carries the fill fraction instead of cosInner, which is why the
@@ -504,7 +515,20 @@ fn kdCapsuleBlocks(
   dist: f32
 ) -> bool {
   let n = u32((*capsules)[0].x);
+  let groups = u32((*capsules)[0].y);
   for (var c = 0u; c < n; c = c + 1u) {
+    if (groups > 0u && c % ${PROBE_CAPSULE_GROUP_SIZE}u == 0u) {
+      let sphere = (*capsules)[groups + c / ${PROBE_CAPSULE_GROUP_SIZE}u];
+      let oc = origin - sphere.xyz;
+      let bq = dot(oc, dir);
+      let disc = bq * bq - (dot(oc, oc) - sphere.w * sphere.w);
+      var skip = disc < 0.0;
+      if (!skip) {
+        let sq = sqrt(disc);
+        skip = sq - bq < 0.0 || -bq - sq > dist;
+      }
+      if (skip) { c = c + ${PROBE_CAPSULE_GROUP_SIZE - 1}u; continue; }
+    }
     let cb = 1u + c * 2u;
     let a = (*capsules)[cb].xyz;
     let r = (*capsules)[cb].w;

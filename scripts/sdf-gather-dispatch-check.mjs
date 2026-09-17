@@ -71,6 +71,9 @@ const argOf = (name, dflt) => {
 const RAYS = argOf('rays', '0,1,2,3,5,8,16,31,32,47,64').split(',').map(Number);
 const OUT = argOf('out', '');
 const LABEL = argOf('label', 'run');
+// Same-boot exact output gate for the capsule/visibility/cone optimization.
+const OPTIMIZATION_AB = argv.includes('--optimization-ab');
+const ROOM = argOf('room', '1');
 const COMPARE = argOf('compare', '');
 // --diff OLD.json NEW.json: OFFLINE, no browser and no GPU. Two runs are
 // compared as files, which is what makes the evidence re-checkable by anyone
@@ -117,8 +120,9 @@ await send('Page.addScriptToEvaluateOnNewDocument', {
 });
 
 await send('Page.bringToFront');
-await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1`, fail });
+await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1&simidle=1&seed=4242&res=800`, fail });
 await applyShipDefaults(evaluate);
+await evaluate(`__sdfGame.teleport(${JSON.stringify(Number(ROOM))})`);
 await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); return 1; })()');
 await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
 // The fire flicker runs off wall-clock performance.now() INSIDE the draw path,
@@ -197,6 +201,7 @@ const READ = `(async () => {
 
 const results = [];
 for (const rays of RAYS) {
+  if (OPTIMIZATION_AB) await evaluate('__sdfGame.setProbeOptimization(false)');
   // Pin the seam under test, then settle two dispatches so the reading is not
   // taken mid-transition from the previous ray count.
   await evaluate(`(() => { __sdfGame.setProbeRays(${rays}); __sdfGame.step(4); return 1; })()`);
@@ -222,7 +227,24 @@ for (const rays of RAYS) {
       + `(max ${maxDelta.toExponential(3)}, first at float ${firstDiff} = probe ${Math.floor(firstDiff / 16)} ch ${firstDiff % 16}) `
       + `— with blend 1 nothing about the record depends on history, so this is a race or a mis-reduction, not drift`);
   }
+  let optimization = null;
+  if (OPTIMIZATION_AB) {
+    await evaluate('(() => { __sdfGame.setProbeOptimization(true); __sdfGame.step(4); return 1; })()');
+    const candidate = await evaluate(READ);
+    const repeated = await evaluate(READ);
+    const changedIndices = first.floats.flatMap((x, i) => Object.is(x, candidate.floats[i]) ? [] : [i]);
+    const repeatChanged = candidate.digest !== repeated.digest || candidate.floats.some((x, i) => !Object.is(x, repeated.floats[i]));
+    const inputsEqual = JSON.stringify(first.gates) === JSON.stringify(candidate.gates);
+    optimization = { referenceDigest: first.digest, candidateDigest: candidate.digest,
+      changed: changedIndices.length, repeatChanged, inputsEqual };
+    if (first.digest !== candidate.digest || changedIndices.length || repeatChanged || !inputsEqual || candidate.stats.nonFinite) {
+      if (OUT) writeFileSync(`${OUT}.mismatch.json`, JSON.stringify({ rays, optimization, first, candidate, repeated }));
+      fail(`optimization rays=${rays}: ${JSON.stringify(optimization)}`);
+    }
+    console.log(`optimization rays=${rays}: bit-identical, repeated candidate stable, matched inputs`);
+  }
   results.push({
+    optimization,
     rays, digest: first.digest, digest2: second.digest,
     repeat: { changed, maxDelta, identical: true },
     stats: first.stats, gates: first.gates, bound: first.bound, frames: first.frames,
@@ -261,7 +283,7 @@ console.log(`console errors/problems: ${problems.length}`);
 for (const [kind, text] of problems.slice(0, 20)) console.log(`  [${kind}] ${String(text).slice(0, 300)}`);
 
 const payload = {
-  label: LABEL, at: new Date().toISOString(), probesReady,
+  label: LABEL, optimizationAB: OPTIMIZATION_AB, room: Number(ROOM), at: new Date().toISOString(), probesReady,
   dispatchFrames, advanced, anyRadiance, finite,
   consoleProblems: problems.map(([k, t]) => [k, String(t).slice(0, 400)]),
   results: results.map(r => ({ ...r, floats: undefined })),
@@ -308,4 +330,4 @@ function diffPayloads(ref, cur, labelRef, labelCur) {
 }
 
 if (COMPARE) diffPayloads(JSON.parse(readFileSync(COMPARE, 'utf8')), payload, COMPARE, LABEL);
-process.exit(0);
+process.exit(problems.length ? 2 : 0);

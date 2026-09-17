@@ -627,6 +627,7 @@ const ALL_LEGS = {
   // (public/assets/lab/upscale/t16-rgb-v32.json); the untracked store carries the same export, which
   // is what this leg loads. 'upscale-ship-high' is `?graphics=high`: the run-5b refine head, refine
   // pass on, slim tail, boot-default medium band.
+  'probe-reference-ship': { setProbeOptimization: false, setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship': { setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship-high': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' }, setUpscaleSharpen: 0.5 },
   'upscale-t16-rgb': { setUpscale: { trained: 't16-rgb-v32' } },
@@ -677,6 +678,7 @@ async function applyLeg(name) {
     // "the harness is lying". Same class as the pin bug above. If a leg sets it,
     // pin it.
     __sdfGame.setProbeGatherRate(2);
+    __sdfGame.setProbeOptimization(true);
     __sdfGame.setProbeRays(null);
     __sdfGame.setProbeLights(null);
     __sdfGame.setProbeBlend(null);   // R1 verification seams (?dynblend / ?dynfall);

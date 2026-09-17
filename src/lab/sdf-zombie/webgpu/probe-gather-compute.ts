@@ -16,6 +16,7 @@ import * as THREE from 'three/webgpu';
 import { wgslFn, uniform, storage, instanceIndex, compute } from 'three/tsl';
 import { withPassLabel } from './gpu-pass-timing';
 import { K_PROBE_GATHER } from './probe-dynamic.wgsl';
+import { packProbeCapsuleGroups, probeCapsuleStorageVec4s } from '../probe-capsule-groups';
 import {
   DYN_RAY_CAP,
   DYN_VEC4_PER_PROBE,
@@ -55,6 +56,8 @@ export interface ProbeGatherFrame {
   /** 0..1, the radiance FALL rate — the afterglow tail (0.12 ≈ 0.3 s at 60 Hz). */
   fall: number;
   raysPerProbe: number;
+  /** false restores the original scan for measured A/B and output parity. */
+  optimized?: boolean;
 }
 
 export interface ProbeGatherBinding {
@@ -78,7 +81,7 @@ export interface ProbeGatherBinding {
 
 export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: ProbeGatherCaps): ProbeGatherBinding {
   const boxesN = 1 + caps.maxBoxes * 3;
-  const capsN = 1 + caps.maxCapsules * 2;
+  const capsN = probeCapsuleStorageVec4s(caps.maxCapsules);
   const lightsN = 1 + caps.maxLights * 3; // LIGHT_FLOATS / 4 vec4 per light
   const dynN = caps.maxProbes * DYN_VEC4_PER_PROBE;
   const boxesAttr = new THREE.StorageBufferAttribute(boxesN, 4);
@@ -98,7 +101,7 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
   const uGridDims = uniform(new THREE.Vector4(1, 1, 1, 0));
   // gather.x = threads per probe (see `gatherThreadsPerProbe`). The kernel takes
   // it rather than re-deriving it, so the dispatch size and the reduction shape
-  // cannot disagree; yzw are spare.
+  // cannot disagree; y enables the exact-work optimization, zw are spare.
   const uGather = uniform(new THREE.Vector4(1, 0, 0, 0));
 
   const call = wgslFn(K_PROBE_GATHER)(
@@ -128,6 +131,8 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
       boxesAttr.needsUpdate = true;
       const capsArr = capsAttr.array as Float32Array;
       packCapsulesFromBoneInstances(f.instances, f.instanceCount, f.capsuleMargin, capsArr, caps.maxCapsules);
+      if (f.optimized !== false) packProbeCapsuleGroups(capsArr, caps.maxCapsules);
+      else capsArr[1] = 0;
       capsAttr.needsUpdate = true;
       const lightsArr = lightsAttr.array as Float32Array;
       packLights(f.lights.slice(0, caps.maxLights), lightsArr);
@@ -138,7 +143,7 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
       const rays = Math.min(Math.max(0, Math.floor(f.raysPerProbe)), DYN_RAY_CAP);
       const tpp = gatherThreadsPerProbe(rays);
       (uCfg.value as THREE.Vector4).set(probes, rays, f.frameSeed, f.blend);
-      (uGather.value as THREE.Vector4).set(tpp, 0, 0, 0);
+      (uGather.value as THREE.Vector4).set(tpp, f.optimized !== false ? 1 : 0, 0, 0);
       // gridMin.w carries the afterglow fall rate (the kernel's spare slot).
       (uGridMin.value as THREE.Vector4).set(f.grid.min[0], f.grid.min[1], f.grid.min[2], f.fall);
       (uGridInv.value as THREE.Vector4).set(
