@@ -1,0 +1,48 @@
+{
+  "file": "t2-tier-graphics-high",
+  "diag": {
+    "enabled": true,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.04444444444444444,
+    "exposureMs": 44.444444444444436,
+    "exposureLabel": "44.44 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 136,
+    "last": {
+      "stamps": 106,
+      "texels": 10237,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 6,
+      "maxStreakPx": 120,
+      "avgStreakPx": 60.89747579890891,
+      "buildMs": 0.3999999761581421
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 6,
+    "droplets": 172,
+    "splats": 21
+  },
+  "sha256_16": "f7e1490d52482820"
+}

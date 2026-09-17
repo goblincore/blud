@@ -1,0 +1,2565 @@
+{
+  "branch": "codex/shutter-blur-task-3",
+  "gpu": "ok",
+  "shots": {
+    "r10-bleed-1-60-sharp": {
+      "reference": "sharp",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.85,
+      "droplets": 19,
+      "splats": 4,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": null
+    },
+    "r10-bleed-1-60-candidate": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.85,
+      "droplets": 19,
+      "splats": 4,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 13,
+        "texels": 125,
+        "conflicts": 0,
+        "maxStreakPx": 15.65560130321445,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r10-bleed-1-60-sampled": {
+      "reference": "sampled",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.85,
+      "droplets": 19,
+      "splats": 4,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 13,
+        "texels": 125,
+        "conflicts": 0,
+        "maxStreakPx": 15.65560130321445,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r11-trail-1-60-sharp": {
+      "reference": "sharp",
+      "exposureMs": 16.666666666666668,
+      "scenario": "trail",
+      "eventTime": 0.25,
+      "droplets": 5,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 13,
+        "texels": 125,
+        "conflicts": 0,
+        "maxStreakPx": 15.65560130321445,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r11-trail-1-60-candidate": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "trail",
+      "eventTime": 0.25,
+      "droplets": 5,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 5,
+        "texels": 247,
+        "conflicts": 0,
+        "maxStreakPx": 4.978788672302596,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r11-trail-1-60-sampled": {
+      "reference": "sampled",
+      "exposureMs": 16.666666666666668,
+      "scenario": "trail",
+      "eventTime": 0.25,
+      "droplets": 5,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 5,
+        "texels": 247,
+        "conflicts": 0,
+        "maxStreakPx": 4.978788672302596,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r12-burst-1-30-sharp": {
+      "reference": "sharp",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 5,
+        "texels": 247,
+        "conflicts": 0,
+        "maxStreakPx": 4.978788672302596,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r12-burst-1-30-candidate": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0.2999999523162842
+      }
+    },
+    "r12-burst-1-30-sampled": {
+      "reference": "sampled",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0.30000007152557373
+      }
+    },
+    "r13-crossing-1-30-sharp": {
+      "reference": "sharp",
+      "exposureMs": 33.333333333333336,
+      "scenario": "crossing",
+      "eventTime": 0.85,
+      "droplets": 552,
+      "splats": 56,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0.30000007152557373
+      }
+    },
+    "r13-crossing-1-30-candidate": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "crossing",
+      "eventTime": 0.85,
+      "droplets": 552,
+      "splats": 56,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 252,
+        "texels": 6227,
+        "conflicts": 625,
+        "maxStreakPx": 34.81158745973965,
+        "buildMs": 1.5999999046325684
+      }
+    },
+    "r13-crossing-1-30-sampled": {
+      "reference": "sampled",
+      "exposureMs": 33.333333333333336,
+      "scenario": "crossing",
+      "eventTime": 0.85,
+      "droplets": 552,
+      "splats": 56,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 252,
+        "texels": 6227,
+        "conflicts": 625,
+        "maxStreakPx": 34.81158745973965,
+        "buildMs": 0.2999999523162842
+      }
+    },
+    "r14-overlap-closeup-1-30-sharp": {
+      "reference": "sharp",
+      "exposureMs": 33.333333333333336,
+      "scenario": "overlap",
+      "eventTime": 0.28,
+      "droplets": 170,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.2
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 252,
+        "texels": 6227,
+        "conflicts": 625,
+        "maxStreakPx": 34.81158745973965,
+        "buildMs": 0.2999999523162842
+      }
+    },
+    "r14-overlap-closeup-1-30-candidate": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "overlap",
+      "eventTime": 0.28,
+      "droplets": 170,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.2
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 170,
+        "texels": 1241,
+        "conflicts": 0,
+        "maxStreakPx": 17.854989238519693,
+        "buildMs": 0.20000004768371582
+      }
+    },
+    "r14-overlap-closeup-1-30-sampled": {
+      "reference": "sampled",
+      "exposureMs": 33.333333333333336,
+      "scenario": "overlap",
+      "eventTime": 0.28,
+      "droplets": 170,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.2
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 170,
+        "texels": 1241,
+        "conflicts": 0,
+        "maxStreakPx": 17.854989238519693,
+        "buildMs": 0.3999999761581421
+      }
+    },
+    "r15-landing-contact-1-60-sharp": {
+      "reference": "sharp",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 0.45,
+      "droplets": 14,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.05,
+        "distance": 2.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 170,
+        "texels": 1241,
+        "conflicts": 0,
+        "maxStreakPx": 17.854989238519693,
+        "buildMs": 0.3999999761581421
+      }
+    },
+    "r15-landing-contact-1-60-candidate": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 0.45,
+      "droplets": 14,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.05,
+        "distance": 2.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 8,
+        "texels": 20,
+        "conflicts": 0,
+        "maxStreakPx": 4.663785514758064,
+        "buildMs": 0
+      }
+    },
+    "r15-landing-contact-1-60-sampled": {
+      "reference": "sampled",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 0.45,
+      "droplets": 14,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.05,
+        "distance": 2.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 8,
+        "texels": 20,
+        "conflicts": 0,
+        "maxStreakPx": 4.663785514758064,
+        "buildMs": 0
+      }
+    },
+    "r16-landing-settle-1-60-sharp": {
+      "reference": "sharp",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.05,
+        "distance": 2.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 8,
+        "texels": 20,
+        "conflicts": 0,
+        "maxStreakPx": 4.663785514758064,
+        "buildMs": 0
+      }
+    },
+    "r16-landing-settle-1-60-candidate": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.05,
+        "distance": 2.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 34,
+        "conflicts": 0,
+        "maxStreakPx": 6.219963028814854,
+        "buildMs": 0.09999990463256836
+      }
+    },
+    "r16-landing-settle-1-60-sampled": {
+      "reference": "sampled",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.05,
+        "distance": 2.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 34,
+        "conflicts": 0,
+        "maxStreakPx": 6.219963028814854,
+        "buildMs": 0
+      }
+    },
+    "r17-occluded-1-30-sharp": {
+      "reference": "sharp",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 1.75,
+        "pitch": 0,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 34,
+        "conflicts": 0,
+        "maxStreakPx": 6.219963028814854,
+        "buildMs": 0
+      }
+    },
+    "r17-occluded-1-30-candidate": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 1.75,
+        "pitch": 0,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 321,
+        "conflicts": 0,
+        "maxStreakPx": 17.799485790364145,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r17-occluded-1-30-sampled": {
+      "reference": "sampled",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 1.75,
+        "pitch": 0,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 321,
+        "conflicts": 0,
+        "maxStreakPx": 17.799485790364145,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r18-offcenter-1-30-sharp": {
+      "reference": "sharp",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0.55,
+        "pitch": 0.45,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 321,
+        "conflicts": 0,
+        "maxStreakPx": 17.799485790364145,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r18-offcenter-1-30-candidate": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0.55,
+        "pitch": 0.45,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 424,
+        "conflicts": 0,
+        "maxStreakPx": 16.654531216873547,
+        "buildMs": 0
+      }
+    },
+    "r18-offcenter-1-30-sampled": {
+      "reference": "sampled",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0.55,
+        "pitch": 0.45,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 424,
+        "conflicts": 0,
+        "maxStreakPx": 16.654531216873547,
+        "buildMs": 0
+      }
+    },
+    "r19-camera-turn-left-1-60-sharp": {
+      "reference": "sharp",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": -0.6,
+        "pitch": 0.1,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 55,
+        "conflicts": 0,
+        "maxStreakPx": 8.187771946481975,
+        "buildMs": 0
+      }
+    },
+    "r19-camera-turn-left-1-60-candidate": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": -0.6,
+        "pitch": 0.1,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 55,
+        "conflicts": 0,
+        "maxStreakPx": 8.187771946481975,
+        "buildMs": 0
+      }
+    },
+    "r19-camera-turn-left-1-60-sampled": {
+      "reference": "sampled",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": -0.6,
+        "pitch": 0.1,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 55,
+        "conflicts": 0,
+        "maxStreakPx": 8.187771946481975,
+        "buildMs": 0
+      }
+    },
+    "r19-camera-turn-right-1-60-sharp": {
+      "reference": "sharp",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.1,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 57,
+        "conflicts": 0,
+        "maxStreakPx": 8.190563559833429,
+        "buildMs": 0
+      }
+    },
+    "r19-camera-turn-right-1-60-candidate": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.1,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 57,
+        "conflicts": 0,
+        "maxStreakPx": 8.190563559833429,
+        "buildMs": 0
+      }
+    },
+    "r19-camera-turn-right-1-60-sampled": {
+      "reference": "sampled",
+      "exposureMs": 16.666666666666668,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.1,
+        "distance": 1.9
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 57,
+        "conflicts": 0,
+        "maxStreakPx": 8.190563559833429,
+        "buildMs": 0
+      }
+    },
+    "r20-empty-candidate-1-30": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "landing",
+      "eventTime": 0,
+      "droplets": 0,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 0,
+        "texels": 0,
+        "conflicts": 0,
+        "maxStreakPx": 0,
+        "buildMs": 0
+      }
+    },
+    "r20-empty-sharp": {
+      "reference": "sharp",
+      "exposureMs": 33.333333333333336,
+      "scenario": "landing",
+      "eventTime": 0,
+      "droplets": 0,
+      "splats": 0,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 0,
+        "texels": 0,
+        "conflicts": 0,
+        "maxStreakPx": 0,
+        "buildMs": 0
+      }
+    },
+    "r21-stopped-candidate-a": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 107,
+        "conflicts": 0,
+        "maxStreakPx": 24.322610138724116,
+        "buildMs": 0
+      }
+    },
+    "r21-stopped-candidate-b": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "landing",
+      "eventTime": 1.1,
+      "droplets": 16,
+      "splats": 16,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 107,
+        "conflicts": 0,
+        "maxStreakPx": 24.322610138724116,
+        "buildMs": 0
+      }
+    },
+    "r22-stepped-candidate": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0
+      }
+    },
+    "r22-scripted-candidate": {
+      "reference": "efficient",
+      "exposureMs": 33.333333333333336,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0.10000002384185791
+      }
+    },
+    "r00-zero-sharp": {
+      "reference": "sharp",
+      "exposureMs": 0,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0.09999990463256836
+      }
+    },
+    "r01-zero-candidate": {
+      "reference": "efficient",
+      "exposureMs": 0,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0.09999990463256836
+      }
+    },
+    "r02-zero-sampled": {
+      "reference": "sampled",
+      "exposureMs": 0,
+      "scenario": "burst",
+      "eventTime": 0.55,
+      "droplets": 51,
+      "splats": 53,
+      "camera": {
+        "yaw": 0,
+        "pitch": 0.14,
+        "distance": 1.35
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "maxStreakPx": 29.30728901181997,
+        "buildMs": 0.09999990463256836
+      }
+    },
+    "c30-cadence-30": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.6,
+      "droplets": 16,
+      "splats": 0,
+      "camera": {
+        "yaw": 0.35,
+        "pitch": 0.3,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 87,
+        "conflicts": 0,
+        "maxStreakPx": 9.558487386842,
+        "buildMs": 0
+      }
+    },
+    "c30-cadence-60": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.6000000000000002,
+      "droplets": 16,
+      "splats": 0,
+      "camera": {
+        "yaw": 0.35,
+        "pitch": 0.3,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 87,
+        "conflicts": 0,
+        "maxStreakPx": 9.558487386842,
+        "buildMs": 0
+      }
+    },
+    "c30-cadence-120": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.6000000000000003,
+      "droplets": 16,
+      "splats": 0,
+      "camera": {
+        "yaw": 0.35,
+        "pitch": 0.3,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 87,
+        "conflicts": 0,
+        "maxStreakPx": 9.558487386842,
+        "buildMs": 0
+      }
+    },
+    "c31-cadence-snap-30": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.6,
+      "droplets": 16,
+      "splats": 0,
+      "camera": {
+        "yaw": 0.35,
+        "pitch": 0.3,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 87,
+        "conflicts": 0,
+        "maxStreakPx": 9.558487386842,
+        "buildMs": 0
+      }
+    },
+    "c31-cadence-snap-60": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.6,
+      "droplets": 16,
+      "splats": 0,
+      "camera": {
+        "yaw": 0.35,
+        "pitch": 0.3,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 87,
+        "conflicts": 0,
+        "maxStreakPx": 9.558487386842,
+        "buildMs": 0
+      }
+    },
+    "c31-cadence-snap-120": {
+      "reference": "efficient",
+      "exposureMs": 16.666666666666668,
+      "scenario": "bleed",
+      "eventTime": 0.6,
+      "droplets": 16,
+      "splats": 0,
+      "camera": {
+        "yaw": 0.35,
+        "pitch": 0.3,
+        "distance": 1.6
+      },
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "candidate": {
+        "stamps": 10,
+        "texels": 87,
+        "conflicts": 0,
+        "maxStreakPx": 9.558487386842,
+        "buildMs": 0.09999990463256836
+      }
+    }
+  },
+  "hashes": {
+    "r10-bleed-1-60-sharp": "9dd039f0805a49bf",
+    "r10-bleed-1-60-candidate": "0ec84b0a66ef6dbf",
+    "r10-bleed-1-60-sampled": "03d7f35933c71887",
+    "r11-trail-1-60-sharp": "3e526c28547b6c9a",
+    "r11-trail-1-60-candidate": "0a1ee5e88d3585a7",
+    "r11-trail-1-60-sampled": "56ab8f082cc308ad",
+    "r12-burst-1-30-sharp": "a678ab11415eb0b0",
+    "r12-burst-1-30-candidate": "e4575ccfeb2035ee",
+    "r12-burst-1-30-sampled": "a660a1ac55840bd2",
+    "r13-crossing-1-30-sharp": "f7544b6677ee1bb8",
+    "r13-crossing-1-30-candidate": "77bbfbe78f713ed1",
+    "r13-crossing-1-30-sampled": "9f0288548f0a3925",
+    "r14-overlap-closeup-1-30-sharp": "02e3ab76e8c38f46",
+    "r14-overlap-closeup-1-30-candidate": "0140a14ee0981395",
+    "r14-overlap-closeup-1-30-sampled": "53c7b0791590e720",
+    "r15-landing-contact-1-60-sharp": "260f0e268e2dfde1",
+    "r15-landing-contact-1-60-candidate": "82edb3f00996c35c",
+    "r15-landing-contact-1-60-sampled": "74db05681179a24b",
+    "r16-landing-settle-1-60-sharp": "a5380723e2646a07",
+    "r16-landing-settle-1-60-candidate": "ef47d1a6dba9b13d",
+    "r16-landing-settle-1-60-sampled": "6503e4989fc95d46",
+    "r17-occluded-1-30-sharp": "e72634b46af5e5f2",
+    "r17-occluded-1-30-candidate": "18c03c31d8c32661",
+    "r17-occluded-1-30-sampled": "7e517e6defb3510b",
+    "r18-offcenter-1-30-sharp": "fa78325e1ae92fb3",
+    "r18-offcenter-1-30-candidate": "e83cea31dc284afc",
+    "r18-offcenter-1-30-sampled": "08a02d7f5107218a",
+    "r19-camera-turn-left-1-60-sharp": "bdac6a07dab3c8b0",
+    "r19-camera-turn-left-1-60-candidate": "375df84f13d2c113",
+    "r19-camera-turn-left-1-60-sampled": "c6c80d828186dcdc",
+    "r19-camera-turn-right-1-60-sharp": "16f2bfb26877fb2c",
+    "r19-camera-turn-right-1-60-candidate": "025a1cab054a1000",
+    "r19-camera-turn-right-1-60-sampled": "e8a34524f3f33d64",
+    "r20-empty-candidate-1-30": "475715444f878844",
+    "r20-empty-sharp": "475715444f878844",
+    "r21-stopped-candidate-a": "f6f33564821b970d",
+    "r21-stopped-candidate-b": "f6f33564821b970d",
+    "r22-stepped-candidate": "e4575ccfeb2035ee",
+    "r22-scripted-candidate": "e4575ccfeb2035ee",
+    "r00-zero-sharp": "a678ab11415eb0b0",
+    "r01-zero-candidate": "a678ab11415eb0b0",
+    "r02-zero-sampled": "a678ab11415eb0b0",
+    "c30-cadence-30": "7c465f212ee356b3",
+    "c30-cadence-60": "7c465f212ee356b3",
+    "c30-cadence-120": "7c465f212ee356b3",
+    "c31-cadence-snap-30": "7c465f212ee356b3",
+    "c31-cadence-snap-60": "7c465f212ee356b3",
+    "c31-cadence-snap-120": "7c465f212ee356b3"
+  },
+  "cadence": {
+    "targetSec": 0.6,
+    "playback": {
+      "30": {
+        "steps": 18,
+        "eventTimeAfterPlayback": 0.6,
+        "droplets": 16,
+        "hash": "7c465f212ee356b3",
+        "shot": "c30-cadence-30",
+        "candidate": {
+          "stamps": 10,
+          "texels": 87,
+          "maxStreakPx": 9.558487386842
+        }
+      },
+      "60": {
+        "steps": 36,
+        "eventTimeAfterPlayback": 0.6000000000000002,
+        "droplets": 16,
+        "hash": "7c465f212ee356b3",
+        "shot": "c30-cadence-60",
+        "candidate": {
+          "stamps": 10,
+          "texels": 87,
+          "maxStreakPx": 9.558487386842
+        }
+      },
+      "120": {
+        "steps": 72,
+        "eventTimeAfterPlayback": 0.6000000000000003,
+        "droplets": 16,
+        "hash": "7c465f212ee356b3",
+        "shot": "c30-cadence-120",
+        "candidate": {
+          "stamps": 10,
+          "texels": 87,
+          "maxStreakPx": 9.558487386842
+        }
+      }
+    },
+    "playbackHashesEqual": true,
+    "snappedHashes": {
+      "30": "7c465f212ee356b3",
+      "60": "7c465f212ee356b3",
+      "120": "7c465f212ee356b3"
+    },
+    "snappedHashesEqual": true,
+    "snappedMatchesPlayback": true
+  },
+  "bench": {
+    "ordinary-sharp": {
+      "reference": "sharp",
+      "scenario": "burst",
+      "seed": 12345,
+      "eventTime": 0.55,
+      "exposureMs": 16.666666666666668,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 51,
+      "splats": 53,
+      "frames": 40,
+      "warmupFrames": 8,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        7,
+        2.3000000715255737,
+        2.0999999046325684,
+        1.9000000953674316,
+        2.1999999284744263,
+        2.100000023841858,
+        2.100000023841858,
+        1.899999976158142
+      ],
+      "fenced": {
+        "p50": 2,
+        "p95": 5.699999928474426,
+        "mean": 2.3099999994039537,
+        "min": 1.6999999284744263,
+        "max": 6.099999904632568
+      },
+      "drawCpu": {
+        "p50": 0.3999999761581421,
+        "p95": 0.6000000238418579,
+        "mean": 0.42749999165534974,
+        "min": 0.2999999523162842,
+        "max": 0.6000000238418579
+      },
+      "gpuSpan": {
+        "p50": 0.9830399999991641,
+        "p95": 1.0485760000010487,
+        "mean": 1.1436032000002343,
+        "min": 0.7864320000007865,
+        "max": 5.111808000001474
+      },
+      "cpuPrep": {
+        "p50": 0.09999990463256836,
+        "p95": 0.09999990463256836,
+        "mean": 0.09999990463256836,
+        "min": 0.09999990463256836,
+        "max": 0.09999990463256836,
+        "last": 0.09999990463256836
+      },
+      "labels": [
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 6,
+          "p50": 0.39321600000039325,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.47513600000029327
+        },
+        {
+          "label": "sharp:scene",
+          "passesPerFrame": 6,
+          "p50": 0.3276799999985087,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.38010880000019825
+        },
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.19660800000201561,
+          "p95": 0.3276799999985087,
+          "exclusiveMean": 0.2571027692305133
+        },
+        {
+          "label": "goo:density",
+          "passesPerFrame": 3,
+          "p50": 0.06553599999824655,
+          "p95": 0.06553600000188453,
+          "exclusiveMean": 0.037683199999992215
+        }
+      ],
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 29.30728901181997,
+        "avgStreakPx": 26.559596734533752,
+        "width": 200,
+        "height": 150,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0.09999990463256836,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 33170969,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 4680000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "ordinary-candidate": {
+      "reference": "efficient",
+      "scenario": "burst",
+      "seed": 12345,
+      "eventTime": 0.55,
+      "exposureMs": 16.666666666666668,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 51,
+      "splats": 53,
+      "frames": 40,
+      "warmupFrames": 8,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        2.600000023841858,
+        2.1999999284744263,
+        1.9000000953674316,
+        2.1999999284744263,
+        2.200000047683716,
+        2.100000023841858,
+        2.1999999284744263,
+        6.200000047683716
+      ],
+      "fenced": {
+        "p50": 2.3000000715255737,
+        "p95": 4.300000071525574,
+        "mean": 2.625,
+        "min": 2.1999999284744263,
+        "max": 6.600000023841858
+      },
+      "drawCpu": {
+        "p50": 0.6000000238418579,
+        "p95": 0.7000000476837158,
+        "mean": 0.6174999982118606,
+        "min": 0.5,
+        "max": 0.8000000715255737
+      },
+      "gpuSpan": {
+        "p50": 1.441791999997804,
+        "p95": 1.441792000001442,
+        "mean": 1.4942207999999482,
+        "min": 1.1141119999992952,
+        "max": 5.242879999997967
+      },
+      "cpuPrep": {
+        "p50": 0,
+        "p95": 0.10000002384185791,
+        "mean": 0.045000004768371585,
+        "min": 0,
+        "max": 0.10000002384185791,
+        "last": 0
+      },
+      "labels": [
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.26214400000026217,
+          "p95": 0.26214400000026217,
+          "exclusiveMean": 0.34784492307685116
+        },
+        {
+          "label": "goo:layer",
+          "passesPerFrame": 3,
+          "p50": 0.3276799999985087,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.32276480000009544
+        },
+        {
+          "label": "cand:resolve",
+          "passesPerFrame": 6,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.2899967999999717
+        },
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 3,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.2768895999998676
+        },
+        {
+          "label": "cand:static-scene",
+          "passesPerFrame": 3,
+          "p50": 0.19660799999837764,
+          "p95": 0.26214400000026217,
+          "exclusiveMean": 0.19988480000001801
+        },
+        {
+          "label": "goo:density",
+          "passesPerFrame": 6,
+          "p50": 0.06553600000188453,
+          "p95": 0.13107200000376906,
+          "exclusiveMean": 0.06553600000006554
+        }
+      ],
+      "candidate": {
+        "stamps": 51,
+        "texels": 834,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 14.641745446819167,
+        "avgStreakPx": 13.258469297803748,
+        "width": 200,
+        "height": 150,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 33002305,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 4680000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "heavy-sharp": {
+      "reference": "sharp",
+      "scenario": "crossing",
+      "seed": 12345,
+      "eventTime": 0.85,
+      "exposureMs": 33.333333333333336,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 552,
+      "splats": 56,
+      "frames": 40,
+      "warmupFrames": 8,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        2.100000023841858,
+        1.899999976158142,
+        1.7999999523162842,
+        1.899999976158142,
+        1.7000000476837158,
+        1.899999976158142,
+        1.8000000715255737,
+        1.6999999284744263
+      ],
+      "fenced": {
+        "p50": 2.100000023841858,
+        "p95": 3.9000000953674316,
+        "mean": 2.3600000023841856,
+        "min": 1.7999999523162842,
+        "max": 6.300000071525574
+      },
+      "drawCpu": {
+        "p50": 0.3999999761581421,
+        "p95": 0.5,
+        "mean": 0.4250000059604645,
+        "min": 0.2999999523162842,
+        "max": 0.5
+      },
+      "gpuSpan": {
+        "p50": 1.0485760000010487,
+        "p95": 1.1141119999992952,
+        "mean": 1.1452415999996446,
+        "min": 0.7864320000007865,
+        "max": 5.111808000001474
+      },
+      "cpuPrep": {
+        "p50": 0,
+        "p95": 0,
+        "mean": 0,
+        "min": 0,
+        "max": 0,
+        "last": 0
+      },
+      "labels": [
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 6,
+          "p50": 0.4587519999986398,
+          "p95": 0.4587520000022778,
+          "exclusiveMean": 0.5423103999998602
+        },
+        {
+          "label": "sharp:scene",
+          "passesPerFrame": 6,
+          "p50": 0.3276799999985087,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.316211199999907
+        },
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276799999985087,
+          "exclusiveMean": 0.23861825641040177
+        },
+        {
+          "label": "goo:density",
+          "passesPerFrame": 3,
+          "p50": 0.06553599999824655,
+          "p95": 0.06553600000188453,
+          "exclusiveMean": 0.05406719999973575
+        }
+      ],
+      "candidate": {
+        "stamps": 51,
+        "texels": 834,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 14.641745446819167,
+        "avgStreakPx": 13.258469297803748,
+        "width": 200,
+        "height": 150,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 34149877,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 4680000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "heavy-candidate": {
+      "reference": "efficient",
+      "scenario": "crossing",
+      "seed": 12345,
+      "eventTime": 0.85,
+      "exposureMs": 33.333333333333336,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 552,
+      "splats": 56,
+      "frames": 40,
+      "warmupFrames": 8,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        7.800000071525574,
+        6.799999952316284,
+        4.700000047683716,
+        4.599999904632568,
+        4.600000023841858,
+        3.100000023841858,
+        2.899999976158142,
+        3.100000023841858
+      ],
+      "fenced": {
+        "p50": 3.399999976158142,
+        "p95": 6.799999952316284,
+        "mean": 3.760000002384186,
+        "min": 2.899999976158142,
+        "max": 7.399999976158142
+      },
+      "drawCpu": {
+        "p50": 1.8000000715255737,
+        "p95": 2.100000023841858,
+        "mean": 1.8325000077486038,
+        "min": 1.5,
+        "max": 2.1999999284744263
+      },
+      "gpuSpan": {
+        "p50": 2.2282240000022284,
+        "p95": 5.767167999998492,
+        "mean": 2.5804799999999886,
+        "min": 1.9660800000019663,
+        "max": 5.898239999998623
+      },
+      "cpuPrep": {
+        "p50": 0.7000000476837158,
+        "p95": 0.8999999761581421,
+        "mean": 0.7075000256299973,
+        "min": 0.6000000238418579,
+        "max": 0.9000000953674316,
+        "last": 0.9000000953674316
+      },
+      "labels": [
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.6553600000006554,
+          "p95": 0.9175040000009176,
+          "exclusiveMean": 0.7520255999997062
+        },
+        {
+          "label": "goo:layer",
+          "passesPerFrame": 3,
+          "p50": 0.4587519999986398,
+          "p95": 4.521983999999065,
+          "exclusiveMean": 0.740556800000195
+        },
+        {
+          "label": "cand:resolve",
+          "passesPerFrame": 6,
+          "p50": 0.5242880000005243,
+          "p95": 0.5898239999987709,
+          "exclusiveMean": 0.5160960000001978
+        },
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 3,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.2899967999999717
+        },
+        {
+          "label": "cand:static-scene",
+          "passesPerFrame": 3,
+          "p50": 0.19660800000201561,
+          "p95": 0.26214400000026217,
+          "exclusiveMean": 0.20971519999993687
+        },
+        {
+          "label": "goo:density",
+          "passesPerFrame": 6,
+          "p50": 0.06553600000188453,
+          "p95": 0.13107200000013108,
+          "exclusiveMean": 0.07208959999998114
+        }
+      ],
+      "candidate": {
+        "stamps": 252,
+        "texels": 24806,
+        "conflicts": 2598,
+        "oppositeConflicts": 2598,
+        "nearerWins": 57,
+        "maxStreakPx": 34.81158745973965,
+        "avgStreakPx": 21.14597113004893,
+        "width": 400,
+        "height": 300,
+        "taps": 24,
+        "seedScale": 2,
+        "depthBias": 0.02,
+        "buildMs": 0.9000000953674316,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 34891694,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 7200000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "longexposure-cap": {
+      "reference": "efficient",
+      "scenario": "burst",
+      "seed": 12345,
+      "eventTime": 0.55,
+      "exposureMs": 33.333333333333336,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 51,
+      "splats": 53,
+      "frames": 30,
+      "warmupFrames": 6,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        3.100000023841858,
+        2.1999999284744263,
+        2.200000047683716,
+        2.100000023841858,
+        2.1999999284744263,
+        2
+      ],
+      "fenced": {
+        "p50": 2.299999952316284,
+        "p95": 6.600000023841858,
+        "mean": 2.7266666690508523,
+        "min": 2.100000023841858,
+        "max": 6.799999952316284
+      },
+      "drawCpu": {
+        "p50": 0.6000000238418579,
+        "p95": 0.7999999523162842,
+        "mean": 0.6300000031789144,
+        "min": 0.5,
+        "max": 0.9000000953674316
+      },
+      "gpuSpan": {
+        "p50": 1.3762559999995574,
+        "p95": 5.439487999999983,
+        "mean": 1.6624298666664497,
+        "min": 1.3107199999976729,
+        "max": 5.636096000001999
+      },
+      "cpuPrep": {
+        "p50": 0,
+        "p95": 0.10000002384185791,
+        "mean": 0.03333333730697632,
+        "min": 0,
+        "max": 0.10000002384185791,
+        "last": 0
+      },
+      "labels": [
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 3,
+          "p50": 0.26214400000026217,
+          "p95": 1.8350080000018352,
+          "exclusiveMean": 0.46093653333336987
+        },
+        {
+          "label": "goo:layer",
+          "passesPerFrame": 3,
+          "p50": 0.3276800000021467,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.3211264000005031
+        },
+        {
+          "label": "cand:resolve",
+          "passesPerFrame": 6,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.2905429333330782
+        },
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.26214400000026217,
+          "p95": 0.26214400000026217,
+          "exclusiveMean": 0.2599594666666235
+        },
+        {
+          "label": "cand:static-scene",
+          "passesPerFrame": 3,
+          "p50": 0.19660799999837764,
+          "p95": 0.19660800000201561,
+          "exclusiveMean": 0.1966079999995903
+        },
+        {
+          "label": "goo:density",
+          "passesPerFrame": 6,
+          "p50": 0.06553599999824655,
+          "p95": 0.1310719999964931,
+          "exclusiveMean": 0.13325653333328472
+        }
+      ],
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 29.30728901181997,
+        "avgStreakPx": 26.559596734533752,
+        "width": 200,
+        "height": 150,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 34331855,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 4680000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "empty-sharp": {
+      "reference": "sharp",
+      "scenario": "landing",
+      "seed": 12345,
+      "eventTime": 0,
+      "exposureMs": 33.333333333333336,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 0,
+      "splats": 0,
+      "frames": 30,
+      "warmupFrames": 6,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        2,
+        1.5999999046325684,
+        1.4000000953674316,
+        1.5999999046325684,
+        1.4000000953674316,
+        1.5
+      ],
+      "fenced": {
+        "p50": 1.7000000476837158,
+        "p95": 3.799999952316284,
+        "mean": 1.9799999992052715,
+        "min": 1.5999999046325684,
+        "max": 5.899999976158142
+      },
+      "drawCpu": {
+        "p50": 0.2999999523162842,
+        "p95": 0.3999999761581421,
+        "mean": 0.30333333015441893,
+        "min": 0.19999992847442627,
+        "max": 0.40000009536743164
+      },
+      "gpuSpan": {
+        "p50": 0.6553600000006554,
+        "p95": 0.72089600000254,
+        "mean": 0.7733248000000458,
+        "min": 0.5898239999987709,
+        "max": 4.6530559999991965
+      },
+      "cpuPrep": {
+        "p50": 0,
+        "p95": 0,
+        "mean": 0,
+        "min": 0,
+        "max": 0,
+        "last": 0
+      },
+      "labels": [
+        {
+          "label": "sharp:scene",
+          "passesPerFrame": 6,
+          "p50": 0.3276799999985087,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.4303530666666726
+        },
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 6,
+          "p50": 0.3276800000021467,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.34297173333337316
+        }
+      ],
+      "candidate": {
+        "stamps": 51,
+        "texels": 1091,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 29.30728901181997,
+        "avgStreakPx": 26.559596734533752,
+        "width": 200,
+        "height": 150,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 36322823,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 4680000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "empty-candidate": {
+      "reference": "efficient",
+      "scenario": "landing",
+      "seed": 12345,
+      "eventTime": 0,
+      "exposureMs": 33.333333333333336,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 0,
+      "splats": 0,
+      "frames": 30,
+      "warmupFrames": 6,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        1.7999999523162842,
+        1.600000023841858,
+        1.399999976158142,
+        1.399999976158142,
+        1.5,
+        1.600000023841858
+      ],
+      "fenced": {
+        "p50": 1.399999976158142,
+        "p95": 3.3000000715255737,
+        "mean": 1.5800000031789143,
+        "min": 1.1999999284744263,
+        "max": 5.400000095367432
+      },
+      "drawCpu": {
+        "p50": 0.2999999523162842,
+        "p95": 0.3999999761581421,
+        "mean": 0.2799999992052714,
+        "min": 0.19999992847442627,
+        "max": 0.40000009536743164
+      },
+      "gpuSpan": {
+        "p50": 0.39321600000039325,
+        "p95": 0.72089600000254,
+        "mean": 0.5330261333333813,
+        "min": 0.26214400000026217,
+        "max": 4.456447999997181
+      },
+      "cpuPrep": {
+        "p50": 0,
+        "p95": 0,
+        "mean": 0,
+        "min": 0,
+        "max": 0,
+        "last": 0
+      },
+      "labels": [
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 6,
+          "p50": 0.19660799999837764,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.3233109333331716
+        },
+        {
+          "label": "sharp:scene",
+          "passesPerFrame": 6,
+          "p50": 0.19660799999837764,
+          "p95": 0.39321599999675527,
+          "exclusiveMean": 0.1856853333334584
+        },
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.06553600000188453,
+          "p95": 0.13107200000013108,
+          "exclusiveMean": 0.08009955555583777
+        }
+      ],
+      "candidate": {
+        "stamps": 0,
+        "texels": 0,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 0,
+        "avgStreakPx": 0,
+        "width": 200,
+        "height": 150,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 1,
+          "fullscreen": 0
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 38359299,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 4680000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "cold-candidate": {
+      "reference": "efficient",
+      "scenario": "burst",
+      "seed": 12345,
+      "eventTime": 0.55,
+      "exposureMs": 16.666666666666668,
+      "source": {
+        "width": 400,
+        "height": 300
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 200,
+        "densityHeight": 150,
+        "sourceWidth": 400,
+        "sourceHeight": 300,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.25,
+        "texelsPerOutputPixelY": 0.25,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 51,
+      "splats": 53,
+      "frames": 20,
+      "warmupFrames": 8,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": 12,
+      "warmupFencedMs": [
+        12,
+        3.399999976158142,
+        3,
+        6.700000047683716,
+        2.399999976158142,
+        2.3000000715255737,
+        2.5,
+        2.299999952316284
+      ],
+      "fenced": {
+        "p50": 2.8000000715255737,
+        "p95": 7,
+        "mean": 3.230000001192093,
+        "min": 2.600000023841858,
+        "max": 7.199999928474426
+      },
+      "drawCpu": {
+        "p50": 1,
+        "p95": 1.100000023841858,
+        "mean": 0.9700000047683716,
+        "min": 0.7999999523162842,
+        "max": 1.100000023841858
+      },
+      "gpuSpan": {
+        "p50": 1.441792000001442,
+        "p95": 1.572864000001573,
+        "mean": 1.6711680000000342,
+        "min": 1.3107199999976729,
+        "max": 5.636095999998361
+      },
+      "cpuPrep": {
+        "p50": 0.09999990463256836,
+        "p95": 0.10000002384185791,
+        "mean": 0.05499998927116394,
+        "min": 0,
+        "max": 0.20000004768371582,
+        "last": 0
+      },
+      "labels": [
+        {
+          "label": "goo:layer",
+          "passesPerFrame": 3,
+          "p50": 0.3276800000021467,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.5308416000007128
+        },
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.3276799999985087,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.3047423999996681
+        },
+        {
+          "label": "cand:resolve",
+          "passesPerFrame": 6,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.28508159999964844
+        },
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 3,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.2752511999997296
+        },
+        {
+          "label": "cand:static-scene",
+          "passesPerFrame": 3,
+          "p50": 0.19660800000201561,
+          "p95": 0.19660800000201561,
+          "exclusiveMean": 0.19988480000010894
+        },
+        {
+          "label": "goo:density",
+          "passesPerFrame": 6,
+          "p50": 0.06553600000188453,
+          "p95": 0.13107200000013108,
+          "exclusiveMean": 0.07536640000016633
+        }
+      ],
+      "candidate": {
+        "stamps": 51,
+        "texels": 834,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 0,
+        "maxStreakPx": 14.641745446819167,
+        "avgStreakPx": 13.258469297803748,
+        "width": 200,
+        "height": 150,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 35345753,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 4680000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    },
+    "outputres-candidate": {
+      "reference": "efficient",
+      "scenario": "burst",
+      "seed": 12345,
+      "eventTime": 0.55,
+      "exposureMs": 16.666666666666668,
+      "source": {
+        "width": 800,
+        "height": 600
+      },
+      "output": {
+        "width": 800,
+        "height": 600
+      },
+      "density": {
+        "densityWidth": 400,
+        "densityHeight": 300,
+        "sourceWidth": 800,
+        "sourceHeight": 600,
+        "outputWidth": 800,
+        "outputHeight": 600,
+        "densityScale": 0.5,
+        "texelsPerSourcePixelX": 0.5,
+        "texelsPerSourcePixelY": 0.5,
+        "texelsPerOutputPixelX": 0.5,
+        "texelsPerOutputPixelY": 0.5,
+        "smoothForcesFullResComposite": true
+      },
+      "droplets": 51,
+      "splats": 53,
+      "frames": 30,
+      "warmupFrames": 6,
+      "candidateAvailable": true,
+      "passTimingInstalled": true,
+      "coldFencedMs": null,
+      "warmupFencedMs": [
+        5.5,
+        3.5,
+        2.799999952316284,
+        3,
+        2.5,
+        6
+      ],
+      "fenced": {
+        "p50": 2.399999976158142,
+        "p95": 6.600000023841858,
+        "mean": 2.6799999992052714,
+        "min": 2.200000047683716,
+        "max": 6.700000047683716
+      },
+      "drawCpu": {
+        "p50": 1.100000023841858,
+        "p95": 1.4000000953674316,
+        "mean": 1.1633333245913187,
+        "min": 1,
+        "max": 1.4000000953674316
+      },
+      "gpuSpan": {
+        "p50": 1.5073279999996885,
+        "p95": 1.703936000001704,
+        "mean": 1.6471381333331616,
+        "min": 1.3762560000031954,
+        "max": 5.5050239999982296
+      },
+      "cpuPrep": {
+        "p50": 0.10000002384185791,
+        "p95": 0.2999999523162842,
+        "mean": 0.14666666587193808,
+        "min": 0,
+        "max": 0.30000007152557373,
+        "last": 0.10000002384185791
+      },
+      "labels": [
+        {
+          "label": "goo:surface",
+          "passesPerFrame": 3,
+          "p50": 0.26214400000026217,
+          "p95": 0.3276800000021467,
+          "exclusiveMean": 0.36918613333315686
+        },
+        {
+          "label": "goo:layer",
+          "passesPerFrame": 3,
+          "p50": 0.3276800000021467,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.356078933333265
+        },
+        {
+          "label": "cand:resolve",
+          "passesPerFrame": 6,
+          "p50": 0.3276799999985087,
+          "p95": 0.39321600000039325,
+          "exclusiveMean": 0.31675733333334694
+        },
+        {
+          "label": "gpu:idle",
+          "passesPerFrame": 0,
+          "p50": 0.26214400000026217,
+          "p95": 0.4587520000022778,
+          "exclusiveMean": 0.30583466666648745
+        },
+        {
+          "label": "cand:static-scene",
+          "passesPerFrame": 3,
+          "p50": 0.19660800000201561,
+          "p95": 0.19660800000201561,
+          "exclusiveMean": 0.24248320000018186
+        },
+        {
+          "label": "goo:density",
+          "passesPerFrame": 6,
+          "p50": 0.06553599999824655,
+          "p95": 0.13107200000376906,
+          "exclusiveMean": 0.05679786666672347
+        }
+      ],
+      "candidate": {
+        "stamps": 51,
+        "texels": 3296,
+        "conflicts": 0,
+        "oppositeConflicts": 0,
+        "nearerWins": 2,
+        "maxStreakPx": 14.641745446819167,
+        "avgStreakPx": 13.258469297803748,
+        "width": 400,
+        "height": 300,
+        "taps": 24,
+        "seedScale": 1,
+        "depthBias": 0.02,
+        "buildMs": 0.10000002384185791,
+        "passes": {
+          "sceneRenders": 1,
+          "gooChains": 2,
+          "fullscreen": 1
+        }
+      },
+      "memory": {
+        "jsHeapBytes": 36917896,
+        "geometries": 15,
+        "textures": 19,
+        "candidateBytes": 7200000
+      },
+      "gpu": {
+        "lost": false,
+        "uncaptured": 0
+      }
+    }
+  },
+  "clips": {
+    "normal-speed-bleed-candidate": {
+      "frames": 210,
+      "fps": 60,
+      "durationMs": 3500,
+      "files": [
+        "clips/normal-speed-bleed-candidate.mp4",
+        "clips/normal-speed-bleed-candidate.gif"
+      ]
+    },
+    "normal-speed-burst-candidate": {
+      "frames": 210,
+      "fps": 60,
+      "durationMs": 3500,
+      "files": [
+        "clips/normal-speed-burst-candidate.mp4",
+        "clips/normal-speed-burst-candidate.gif"
+      ]
+    },
+    "play-bleed": {
+      "frames": 120,
+      "fps": 60,
+      "durationMs": 2000,
+      "files": [
+        "clips/play-bleed.mp4",
+        "clips/play-bleed.gif"
+      ]
+    },
+    "paused-hold-bleed": {
+      "frames": 1,
+      "fps": 1,
+      "durationMs": 1500,
+      "files": [
+        "clips/paused-hold-bleed.mp4",
+        "clips/paused-hold-bleed.gif"
+      ]
+    }
+  },
+  "errors": [],
+  "parity": {
+    "sharpVsCandidate": true,
+    "sharpVsSampled": true,
+    "emptyCandidateVsSharp": true,
+    "stoppedRepeatsIdentical": true,
+    "steppedVsScripted": true
+  },
+  "gameSmoke": {
+    "booted": true,
+    "backend": "no-state",
+    "newErrors": []
+  },
+  "consoleErrors": [],
+  "only": [
+    "review",
+    "bench"
+  ]
+}

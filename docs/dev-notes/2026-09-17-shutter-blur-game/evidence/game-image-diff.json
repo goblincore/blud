@@ -1,0 +1,21 @@
+{
+  "deterministicAB": {
+    "threshold": 8,
+    "changedPxOnVsOff": 13349,
+    "changedPxOnAgainVsOff": 12748,
+    "changedMaskIoU": 0.9497,
+    "bbox": [
+      18,
+      16,
+      650,
+      599
+    ],
+    "crop": [
+      0,
+      0,
+      690,
+      599
+    ],
+    "note": "vhs=off + light clock frozen; delta is the exposure resolve"
+  }
+}

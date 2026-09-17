@@ -1,0 +1,48 @@
+{
+  "file": "t2-pools__m100",
+  "diag": {
+    "enabled": true,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.1,
+    "exposureMs": 100,
+    "exposureLabel": "100.00 ms",
+    "maxStreakPx": 120,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 0,
+    "last": {
+      "stamps": 0,
+      "texels": 0,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 0,
+      "maxStreakPx": 0,
+      "avgStreakPx": 0,
+      "buildMs": 0
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 0,
+    "droplets": 0,
+    "splats": 256
+  },
+  "sha256_16": "832b6b504f0ac5f2"
+}

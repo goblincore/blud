@@ -55,14 +55,14 @@ import { impactSplashPresets } from './impact-splash-profiles';
 // at by a human on a GPU that is not busy training.
 
 import * as THREE from 'three/webgpu';
-import { uniform, texture, vec4 } from 'three/tsl';
+import { uniform, texture, vec4, mul, oneMinus, add, uv, vec2 } from 'three/tsl';
 import { createLabRenderer, type LabRendererHandle } from './lab-renderer';
 import {
-  createGooLayer, type GooLayer, type GooDensityBlob, type GooReconstruction,
+  createGooLayer, GOO_TUNING, type GooLayer, type GooDensityBlob, type GooReconstruction,
 } from './goo-layer';
 import { applyGameGooDefaults } from './goo-presets';
 import {
-  createBloodSim, burst, spawnWoundDroplets, spawnImpactGout, stepBlood,
+  createBloodSim, burst, spawnWoundDroplets, spawnImpactGout, stepBlood, emitTrails,
   type BloodSim,
 } from '../blood-sim';
 import { connectionBlobsForSim } from './blood-connections';
@@ -71,6 +71,28 @@ import {
   createImpactSplashLayer, IMPACT_SPLASH_TUNING,
   type ImpactSplashEvent, type ImpactSplashLayer,
 } from './impact-splash';
+import {
+  SHUTTER_PRESETS, DEFAULT_REFERENCE_FPS, exposureMs, shutterPreset,
+  resolveExposureSeconds, clampSampleCount,
+  type ShutterPresetId, type ShutterMode,
+} from './shutter-timing';
+import {
+  recordTimeline, type ShutterTimeline,
+} from './shutter-timeline';
+import {
+  SHUTTER_REFERENCES, DEFAULT_SHUTTER_SAMPLES, DEFAULT_MAX_STREAK_PX,
+  planShutterSamples, splitSimForShutter, movingSimAt, referenceBudget,
+  type ShutterReferenceId,
+} from './shutter-reference';
+import {
+  createShutterResolve, planSweepStamps, rasterizeSweepSeed, seedDimsForOutput,
+  SHUTTER_CANDIDATE_TAPS, DEFAULT_DEPTH_BIAS_M, EMPTY_SEED_STATS,
+  type ShutterResolveHandle, type ShutterProjection, type SweepSeedStats, type SeedOwnership,
+} from './shutter-blur';
+import {
+  installPassTiming, beginPassFrame, setPassLabel, attributePassSamples,
+  type PassTiming,
+} from './gpu-pass-timing';
 import type { Vec3 } from '../types';
 
 // -------------------------------------------------------------------------
@@ -181,12 +203,16 @@ export function renderVariantFrame(
   gooLayer.render(camera, () => { renderScene(target); });
 }
 
-type ScenarioId = 'burst' | 'jet' | 'overlap' | 'landing';
+type ScenarioId = 'burst' | 'jet' | 'overlap' | 'landing' | 'bleed' | 'trail' | 'crossing';
 const SCENARIOS: { id: ScenarioId; label: string }[] = [
   { id: 'burst', label: 'burst (slug impact)' },
   { id: 'jet', label: 'jet (sustained wound)' },
   { id: 'overlap', label: 'overlap (two close gouts)' },
   { id: 'landing', label: 'landing (floor pools)' },
+  // Shutter fixtures (task 1): the three motion classes the plan names.
+  { id: 'bleed', label: 'bleed (slow wound dribble)' },
+  { id: 'trail', label: 'trail (fast gib-like 6 m/s)' },
+  { id: 'crossing', label: 'crossing (opposed streams)' },
 ];
 
 /** Local seeded RNG — the sim's own draw source on this page, so a seed
@@ -238,6 +264,10 @@ async function bootstrap(): Promise<void> {
   }
 
   const { renderer, scene, camera } = handle;
+  // Per-pass GPU timestamps for the task-3 cost report. trackTimestamp is on
+  // (lab-renderer) and the backend labels every render/compute pass; a no-op
+  // on a backend without the feature (which the page already rejects).
+  const passTiming: PassTiming = installPassTiming(renderer);
   scene.fog = null;
   const bgDark = new THREE.Color(0x1a1116);
   const bgNeutral = new THREE.Color(0x8a8a8a);
@@ -336,6 +366,83 @@ async function bootstrap(): Promise<void> {
   const blitSceneA = new THREE.Scene(); blitSceneA.add(blitA);
   const blitSceneB = new THREE.Scene(); blitSceneB.add(blitB);
 
+  // --- shutter sampled-reference targets (task 1) ------------------------
+  // refScene: the sharp half — fixture + static pools/guts (no selected
+  //   moving blood). refAccum: half-float accumulation of the selected moving
+  //   blood, shaded SEPARATELY at each exposure sample as working-linear
+  //   premultiplied colour+coverage (One/One into the target) and divided once
+  //   by the sample count in the composite. refAccum carries the frozen scene
+  //   DEPTH so the layer depth-tests against the fixture.
+  const refAccum = new THREE.RenderTarget(contentW, contentH, targetOpts);
+  const refScene = new THREE.RenderTarget(contentW, contentH, targetOpts);
+  // SAMPLEABLE depth for the efficient candidate's per-pixel occlusion test: a
+  // plain depth buffer is an attachment, not a texture (post-aa's precedent).
+  // three's Textures.updateRenderTarget resizes it alongside the target.
+  refScene.depthTexture = new THREE.DepthTexture(1, 1);
+  let refTargetsNeedInit = true;
+  // colourWrites off: the frozen fixture writes refAccum's depth only.
+  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+  const refScale = uniform(0);
+  const compMat = new THREE.MeshBasicNodeMaterial();
+  {
+    // The goo surface composite (and the scene render it wraps) lands in an
+    // offscreen target with the opposite vertical orientation to the canvas
+    // blit path (measured: the wipe showed the sampled half vertically
+    // mirrored against the sharp half). Sampling with Y inverted puts the
+    // reference back in the scene's orientation; the blit then treats refScene
+    // and refAccum exactly like rtA/rtB.
+    const sampleUv = vec2(uv().x, oneMinus(uv().y));
+    const sceneTex = texture(refScene.texture, sampleUv);
+    const accumTex = texture(refAccum.texture, sampleUv);
+    // out = scene*(1 - avgCoverage) + avgPremultipliedColour, all in the
+    // scene's working-linear space. Dividing coverage by the SAME sample count
+    // is what keeps the background contribution normalized: an uncovered pixel
+    // (a = 0) keeps its full background, a fully covered one loses it once.
+    const cov = mul(accumTex.a as never, refScale as never);
+    compMat.colorNode = vec4(
+      add(mul(sceneTex.rgb as never, oneMinus(cov) as never) as never,
+        mul(accumTex.rgb as never, refScale as never) as never) as never,
+      1.0,
+    ) as never;
+    compMat.depthTest = false;
+    compMat.depthWrite = false;
+    compMat.fog = false;
+  }
+  const compMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compMat);
+  compMesh.frustumCulled = false;
+  const compScene = new THREE.Scene(); compScene.add(compMesh);
+
+  // --- efficient shutter candidate state (task 2) ------------------------
+  // LAZILY created: while the candidate is not selected (or exposure is off)
+  // there is NO allocation and NO extra pass beyond task 1's established
+  // overhead. A resize disposes and rebuilds on next use, so the targets are
+  // never stale. Every buffer here is reused across frames; nothing allocates
+  // per frame.
+  let candLayer: THREE.RenderTarget | null = null;
+  let candSeedTex: THREE.DataTexture | null = null;
+  let candSeedData: Float32Array | null = null;
+  let candOwnership: SeedOwnership | null = null;
+  let candResolve: ShutterResolveHandle | null = null;
+  let candSeedW = 0;
+  let candSeedH = 0;
+  let candSeedScale = 1;
+  let candDepthBias = DEFAULT_DEPTH_BIAS_M;
+  const candViewProj = new THREE.Matrix4();
+  let lastCandidateStats: (SweepSeedStats & {
+    width: number; height: number; taps: number; seedScale: number; depthBias: number;
+    /** CPU time to plan + rasterize the seed this frame, milliseconds. */
+    buildMs: number;
+    passes: { sceneRenders: number; gooChains: number; fullscreen: number };
+  }) | null = null;
+
+  function disposeCandidate(): void {
+    candLayer?.dispose(); candLayer = null;
+    candSeedTex?.dispose(); candSeedTex = null;
+    candSeedData = null; candOwnership = null;
+    candResolve?.dispose(); candResolve = null;
+    candSeedW = 0; candSeedH = 0;
+  }
+
   // SOURCE grid (march grid), separate from the fixed output canvas.
   let sourceW = COMPARE_SOURCE_PRESETS[0]!.width;
   let sourceH = COMPARE_SOURCE_PRESETS[0]!.height;
@@ -346,6 +453,12 @@ async function bootstrap(): Promise<void> {
     rtA.setSize(contentW, contentH);
     rtB.setSize(contentW, contentH);
     rtTargetsNeedInit = true;
+    refAccum.setSize(contentW, contentH);
+    refScene.setSize(contentW, contentH);
+    refTargetsNeedInit = true;
+    // A resize invalidates the candidate's output-sized targets and seed
+    // buffer; they rebuild on the next candidate frame (and only then).
+    disposeCandidate();
     // Density target = sourceGrid * densityScale (game 0.5), NOT the output
     // size. The surface composite still runs at the output resolution.
     gooLayer.setSize(sourceW, sourceH);
@@ -365,6 +478,18 @@ async function bootstrap(): Promise<void> {
     renderer.autoClear = prevAutoClear;
   }
 
+  /** Same first-clear discipline for the two shutter reference targets. */
+  function initRefTargets(): void {
+    if (!refTargetsNeedInit) return;
+    refTargetsNeedInit = false;
+    const prevAutoClear = renderer.autoClear;
+    renderer.autoClear = true;
+    renderer.setRenderTarget(refAccum); renderer.clear(true, true, true);
+    renderer.setRenderTarget(refScene); renderer.clear(true, true, true);
+    renderer.setRenderTarget(null);
+    renderer.autoClear = prevAutoClear;
+  }
+
   // --- simulation --------------------------------------------------------
   const sim: BloodSim = createBloodSim();
   let seed = 12345;
@@ -377,6 +502,7 @@ async function bootstrap(): Promise<void> {
   let frame = 0;
   let emitterAge = 0;
   let emitterAcc = 0;
+  let emitterAccB = 0;
   let eventTimer = 0;
   let speed = 1;
   let playing = false;
@@ -394,6 +520,13 @@ async function bootstrap(): Promise<void> {
   // than a false bridge between two wounds.
   let streamSeq = 1;
   let scenarioStream = 1;
+  // Second stream for the opposed crossing fixture: ONE EMITTER IS NOT ONE
+  // STREAM for two independent wounds.
+  let scenarioStreamB = 2;
+
+  /** The trail fixture's fast source crosses the frame in this long. */
+  const TRAIL_CROSS_SEC = 0.6;
+  const TRAIL_SPEED = 6;
 
   function clearSim(): void {
     sim.droplets.length = 0;
@@ -401,56 +534,141 @@ async function bootstrap(): Promise<void> {
     for (const key of Object.keys(sim.clocks)) delete sim.clocks[Number(key)];
   }
 
-  function fireBurst(): void {
-    // Use the game wound-impact emitter, outside the proxy and aimed
-    // outward. The generic gib burst is too sparse for this comparison.
-    spawnImpactGout(sim, 'slug', [0, 1.35, 0.55], [0, 0, -1], rng, streamSeq++);
+  /**
+   * ONE scenario state shape, used by BOTH the live sim and the shutter
+   * reference's scratch sim. The live path keeps its page-level variables and
+   * marshals them through this object, so the recorded timeline is stepped by
+   * the exact same code as the visible simulation and cannot drift from it.
+   */
+  interface ScenarioState {
+    sim: BloodSim;
+    rng: () => number;
+    frame: number;
+    emitterAge: number;
+    emitterAcc: number;
+    emitterAccB: number;
+    eventTimer: number;
+    streamA: number;
+    streamB: number;
   }
 
-  function fireGout(x: number, y: number, z: number): void {
+  function liveState(): ScenarioState {
+    return {
+      sim, rng, frame, emitterAge, emitterAcc, emitterAccB, eventTimer,
+      streamA: scenarioStream, streamB: scenarioStreamB,
+    };
+  }
+  function storeState(st: ScenarioState): void {
+    rng = st.rng; frame = st.frame; emitterAge = st.emitterAge;
+    emitterAcc = st.emitterAcc; emitterAccB = st.emitterAccB; eventTimer = st.eventTimer;
+  }
+  function freshState(target: BloodSim, seedValue: number): ScenarioState {
+    return {
+      sim: target, rng: makeSeededRng(seedValue), frame: 0, emitterAge: 0,
+      emitterAcc: 0, emitterAccB: 0, eventTimer: 0, streamA: 1, streamB: 2,
+    };
+  }
+
+  function fireBurstInto(st: ScenarioState, stream: number): void {
+    // Use the game wound-impact emitter, outside the proxy and aimed
+    // outward. The generic gib burst is too sparse for this comparison.
+    spawnImpactGout(st.sim, 'slug', [0, 1.35, 0.55], [0, 0, -1], st.rng, stream);
+  }
+
+  function fireGoutInto(st: ScenarioState, x: number, y: number, z: number, stream: number): void {
     // dirN is the incoming shot direction; the gout sprays back along -dirN
     // (toward the camera at +z).
-    spawnImpactGout(sim, 'slug', [x, y, z], [0, 0, -1], rng, streamSeq++);
+    spawnImpactGout(st.sim, 'slug', [x, y, z], [0, 0, -1], st.rng, stream);
   }
 
   /** Prime one emission stream at t=0 for the current scenario. */
-  function primeScenario(): void {
+  function primeScenarioInto(st: ScenarioState): void {
     streamSeq = 1;
-    scenarioStream = streamSeq++;
-    if (scenario === 'burst') fireBurst();
-    if (scenario === 'overlap') { fireGout(-0.28, 1.25, 0.36); fireGout(0.28, 1.35, 0.36); }
+    st.streamA = streamSeq++;
+    st.streamB = streamSeq++;
+    scenarioStream = st.streamA;
+    scenarioStreamB = st.streamB;
+    if (scenario === 'burst') fireBurstInto(st, st.streamA);
+    if (scenario === 'overlap') {
+      fireGoutInto(st, -0.28, 1.25, 0.36, st.streamA);
+      fireGoutInto(st, 0.28, 1.35, 0.36, st.streamB);
+    }
   }
+  function primeScenario(): void { primeScenarioInto(liveState()); }
 
   /**
    * Advance the raw simulation by an ALREADY speed-scaled dt. Pure in
    * (seed, scenario, dt sequence), so replaying from 0 always reproduces the
-   * same frame at the same event time.
+   * same frame at the same event time — for the live sim AND for the scratch
+   * sim the shutter timeline records.
    */
-  function advanceRaw(sdt: number): void {
-    frame++;
+  function advanceScenarioState(st: ScenarioState, sdt: number): void {
+    st.frame++;
     switch (scenario) {
       case 'burst':
-        eventTimer += sdt;
-        if (eventTimer >= 1.6) { eventTimer = 0; fireBurst(); }
+        st.eventTimer += sdt;
+        if (st.eventTimer >= 1.6) { st.eventTimer = 0; fireBurstInto(st, streamSeq++); }
         break;
       case 'jet':
-        emitterAcc = spawnWoundDroplets(
-          sim, 'slug', emitterAge, [0, 1.35, 0.36], [0, 0.5, 1], sdt, emitterAcc, rng, scenarioStream,
+        st.emitterAcc = spawnWoundDroplets(
+          st.sim, 'slug', st.emitterAge, [0, 1.35, 0.36], [0, 0.5, 1], sdt, st.emitterAcc, st.rng, st.streamA,
         );
-        emitterAge += sdt;
+        st.emitterAge += sdt;
         break;
       case 'overlap':
-        eventTimer += sdt;
-        if (eventTimer >= 1.2) { eventTimer = 0; fireGout(-0.28, 1.25, 0.36); fireGout(0.28, 1.35, 0.36); }
+        st.eventTimer += sdt;
+        if (st.eventTimer >= 1.2) {
+          st.eventTimer = 0;
+          fireGoutInto(st, -0.28, 1.25, 0.36, streamSeq++);
+          fireGoutInto(st, 0.28, 1.35, 0.36, streamSeq++);
+        }
         break;
       case 'landing':
-        emitterAcc = spawnWoundDroplets(
-          sim, 'pellet', emitterAge, [0, 0.6, 0.36], [0, 0.5, 1], sdt, emitterAcc, rng, scenarioStream,
+        st.emitterAcc = spawnWoundDroplets(
+          st.sim, 'pellet', st.emitterAge, [0, 0.6, 0.36], [0, 0.5, 1], sdt, st.emitterAcc, st.rng, st.streamA,
         );
-        emitterAge += sdt;
+        st.emitterAge += sdt;
+        break;
+      case 'bleed':
+        // Slow wound dribble: the pellet profile's low speed band arcs a
+        // short cohesive stream rather than a spray.
+        st.emitterAcc = spawnWoundDroplets(
+          st.sim, 'pellet', st.emitterAge, [0, 1.15, 0.32], [0, 0.15, 1], sdt, st.emitterAcc, st.rng, st.streamA,
+        );
+        st.emitterAge += sdt;
+        break;
+      case 'trail': {
+        // Fast gib-like trail: a point crossing the frame at 6 m/s emits the
+        // production 20 Hz trail droplets (emitTrails), so the exposure
+        // streaks are the production trail's own motion.
+        st.eventTimer += sdt;
+        if (st.eventTimer >= TRAIL_CROSS_SEC) st.eventTimer -= TRAIL_CROSS_SEC;
+        const px = -1.4 + st.eventTimer * TRAIL_SPEED;
+        emitTrails(st.sim, [{
+          id: 1, pos: [px, 1.35, 0.32], vel: [TRAIL_SPEED, 0, 0], stream: st.streamA,
+        }], sdt, st.rng);
+        break;
+      }
+      case 'crossing':
+        // Opposed streams: two stump wounds face each other, so overlapping
+        // density carries genuinely opposite motion — the case a single
+        // averaged motion vector cancels.
+        st.emitterAcc = spawnWoundDroplets(
+          st.sim, 'stump', st.emitterAge, [-0.35, 1.35, 0.34], [1, 0, 0], sdt, st.emitterAcc, st.rng, st.streamA,
+        );
+        st.emitterAccB = spawnWoundDroplets(
+          st.sim, 'stump', st.emitterAge, [0.35, 1.35, 0.34], [-1, 0, 0], sdt, st.emitterAccB, st.rng, st.streamB,
+        );
+        st.emitterAge += sdt;
         break;
     }
-    stepBlood(sim, sdt, rng);
+    stepBlood(st.sim, sdt, st.rng);
+  }
+
+  function advanceRaw(sdt: number): void {
+    const st = liveState();
+    advanceScenarioState(st, sdt);
+    storeState(st);
   }
 
   /**
@@ -465,10 +683,54 @@ async function bootstrap(): Promise<void> {
     frame = 0;
     emitterAge = 0;
     emitterAcc = 0;
+    emitterAccB = 0;
     eventTimer = 0;
     primeScenario();
     const steps = Math.max(0, Math.round(seconds * 60));
     for (let i = 0; i < steps; i++) advanceRaw(1 / 60);
+  }
+
+  // --- deterministic shutter timeline (on-demand, bounded) ----------------
+  // The reference validates the RECORDED simulation, so it cannot re-step the
+  // live sim while it renders alternatives. It records this instead: a
+  // timestamped, identity-preserving timeline from a SCRATCH sim stepped with
+  // the same scenario code and the same 1/60 s integration the live sim uses.
+  // The live sim, its RNG and the stream counters are never mutated.
+  //
+  // The scratch uses a literal sim (not the createBloodSim factory) so the
+  // page keeps a single factory call site — the fixture's one-sim invariant.
+  const TIMELINE_DT = 1 / 60;
+  const timelineCache = new Map<string, ShutterTimeline>();
+  let timelineBuilds = 0;
+
+  function timelineForCurrentEvent(): ShutterTimeline {
+    const key = `${scenario}|${seed}|${eventTime.toFixed(5)}`;
+    const cached = timelineCache.get(key);
+    if (cached) return cached;
+    const scratch: BloodSim = { droplets: [], splats: [], clocks: {} };
+    const st = freshState(scratch, seed);
+    const savedSeq = streamSeq;
+    const savedStream = scenarioStream;
+    const savedStreamB = scenarioStreamB;
+    let timeline: ShutterTimeline;
+    try {
+      primeScenarioInto(st);
+      timeline = recordTimeline({
+        dt: TIMELINE_DT,
+        duration: Math.max(TIMELINE_DT, eventTime),
+        sim: scratch,
+        step: (dt) => advanceScenarioState(st, dt),
+      });
+    } finally {
+      streamSeq = savedSeq;
+      scenarioStream = savedStream;
+      scenarioStreamB = savedStreamB;
+    }
+    timelineBuilds++;
+    // Bounded cache: one event state at a time is all the reference needs.
+    timelineCache.clear();
+    timelineCache.set(key, timeline);
+    return timeline;
   }
 
   // --- render ------------------------------------------------------------
@@ -566,12 +828,371 @@ async function bootstrap(): Promise<void> {
   }
 
   function renderVariant(v: Variant, target: THREE.RenderTarget | null): void {
+    // One goo chain + the fixture scene it wraps; both labels are snapshotted
+    // by gpu-pass-timing at encode time for the task-3 pass table.
+    setPassLabel('sharp:goo');
     renderVariantFrame({
       gooLayer,
       sim,
       camera,
-      renderScene: (t) => { renderer.setRenderTarget(t); renderer.render(scene, camera); },
+      renderScene: (t) => {
+        setPassLabel('sharp:scene');
+        renderer.setRenderTarget(t);
+        renderer.render(scene, camera);
+        setPassLabel('sharp:goo');
+      },
     }, v, extrasFor(v.connections), target);
+  }
+
+  // -----------------------------------------------------------------------
+  // SHUTTER MODE (selective shutter blur, task 1)
+  //
+  // A second comparison axis on the SAME page and the SAME sim: 'surface'
+  // keeps the existing shape/filter comparison; 'shutter' compares the sharp
+  // instantaneous frame with either the sampled exposure oracle or the
+  // task-2 bounded velocity-streak candidate. Selection is never aliased:
+  // draw() dispatches on the reference id.
+  // -----------------------------------------------------------------------
+  type CompareMode = 'surface' | 'shutter';
+  let compareMode: CompareMode = 'surface';
+  let shutterRef: ShutterReferenceId = 'sampled';
+  let shutterPresetId: ShutterPresetId = '1-60';
+  let shutterSampleCount = DEFAULT_SHUTTER_SAMPLES;
+  let shutterMaxStreakPx = DEFAULT_MAX_STREAK_PX;
+  let exposureMode: ShutterMode = 'seconds';
+  let shutterAngleDeg = 180;
+  let shutterReferenceFps = DEFAULT_REFERENCE_FPS;
+  let lastRefStats: {
+    samples: number; particles: number; streakPx: number; ms: number; builds: number;
+    timelineParticles: number;
+    livePos: number[] | null; samplePos: number[] | null;
+    firstSampleT: number; lastSampleT: number;
+  } = {
+    samples: 0, particles: 0, streakPx: 0, ms: 0, builds: 0, timelineParticles: 0,
+    livePos: null, samplePos: null, firstSampleT: 0, lastSampleT: 0,
+  };
+
+  function currentExposureSeconds(): number {
+    return resolveExposureSeconds({
+      mode: exposureMode,
+      seconds: shutterPreset(shutterPresetId).seconds,
+      angleDeg: shutterAngleDeg,
+      referenceFps: shutterReferenceFps,
+    });
+  }
+
+  /** The sharp side of the shutter comparison: the accepted smooth surface. */
+  function renderSharpReference(target: THREE.RenderTarget | null): void {
+    renderVariant(variantById('smooth'), target);
+  }
+
+  /**
+   * The slow quality oracle. For each sample time it reconstructs the
+   * SELECTED moving blood from the recorded timeline, shades it through the
+   * production smooth goo surface, depth-tests it against the frozen fixture
+   * and SUMS working-linear premultiplied colour+coverage; one composite then
+   * divides by the sample count. Density is never combined across samples.
+   *
+   * On-demand and bounded: the timeline is one 1/60 s record per event state,
+   * cached until the event time or seed changes.
+   */
+  function renderSampledReference(target: THREE.RenderTarget | null): void {
+    const exposure = currentExposureSeconds();
+    const plan = planShutterSamples(eventTime, exposure, shutterSampleCount);
+    initRefTargets();
+    const { staticSim } = splitSimForShutter(sim);
+
+    // 1. SHARP half: fixture + static pools/guts, no selected moving blood.
+    //    bloodView was already synced to the LIVE sim in draw(), so mist and
+    //    ribbons stay sharp and unblurred (the plan's "unselected effects").
+    gooLayer.setReconstruction('smooth');
+    gooLayer.setExtraBlobs([]);
+    gooLayer.setOutputTarget(refScene);
+    camera.updateMatrixWorld();
+    gooLayer.sync(staticSim, camera);
+    setPassLabel('oracle:static-goo');
+    gooLayer.render(camera, () => {
+      setPassLabel('oracle:static-scene');
+      renderer.setRenderTarget(refScene);
+      renderer.render(scene, camera);
+      setPassLabel('oracle:static-goo');
+    });
+
+    // 2. ACCUMULATE the selected moving blood, one shaded sample at a time.
+    const timeline = timelineForCurrentEvent();
+    const movingScratch: BloodSim = { droplets: [], splats: [], clocks: {} };
+    const clearColor = new THREE.Color();
+    const prevClear = renderer.getClearColor(clearColor).getHex();
+    const prevClearAlpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(refAccum);
+    renderer.setClearColor(0x000000, 0);
+    renderer.autoClear = true;
+    renderer.clear(true, true, true);
+    // Frozen fixture depth into refAccum with colour writes off. The layer
+    // depth-tests against this and never writes depth.
+    setPassLabel('oracle:depth');
+    scene.overrideMaterial = depthOnly;
+    renderer.render(scene, camera);
+    scene.overrideMaterial = null;
+    setPassLabel('oracle:sample');
+    for (const t of plan.sampleTimes) {
+      movingSimAt(timeline, t, movingScratch);
+      gooLayer.sync(movingScratch, camera);
+      gooLayer.renderLayer(camera, refAccum);
+    }
+    renderer.setClearColor(prevClear, prevClearAlpha);
+    renderer.autoClear = true;
+
+    // 3. COMPOSITE scene*(1-a/N) + rgb/N in working-linear space.
+    refScale.value = plan.sampleCount > 0 ? 1 / plan.sampleCount : 0;
+    const outW = target ? target.width : renderer.domElement.width;
+    const outH = target ? target.height : renderer.domElement.height;
+    const prevAutoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(target);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, outW, outH);
+    setPassLabel('oracle:composite');
+    renderer.render(compScene, blitCam);
+    renderer.autoClear = prevAutoClear;
+
+    const budget = referenceBudget(plan, movingScratch.droplets.length, 600);
+    const liveFirst = sim.droplets[0];
+    const sampleFirst = movingScratch.droplets[0];
+    lastRefStats = {
+      samples: plan.sampleCount,
+      particles: movingScratch.droplets.length,
+      streakPx: budget.streakPx,
+      ms: exposureMs(exposure),
+      builds: timelineBuilds,
+      timelineParticles: timeline.particleCount,
+      livePos: liveFirst ? [...liveFirst.pos] : null,
+      samplePos: sampleFirst ? [...sampleFirst.pos] : null,
+      firstSampleT: plan.sampleTimes[0] ?? 0,
+      lastSampleT: plan.sampleTimes[plan.sampleTimes.length - 1] ?? 0,
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // EFFICIENT SHUTTER CANDIDATE (selective shutter blur, task 2)
+  //
+  // One bounded resolve instead of the oracle's N full goo chains:
+  //   1 clean sharp half (fixture + static pools, no selected blood)
+  //   2 selected blood shaded ONCE into a premultiplied layer, depth-tested
+  //     against the frozen scene depth
+  //   3 a CPU motion-seed field of each droplet's swept segment
+  //   4 a single fullscreen resolve that reaches outside the live silhouette
+  //
+  // Real passes per frame: 1 clean scene render, 2 goo chains (sharp half +
+  // selected layer), 1 fullscreen resolve. The sampled oracle is 1 + N goo
+  // chains; this is the point.
+  // -----------------------------------------------------------------------
+
+  /** Seed dimensions: the goo density grid scaled, both ends clamped. */
+  function candidateSeedDims(): { width: number; height: number } {
+    const d = gooLayer.densityDiagnostics;
+    return seedDimsForOutput(d.densityWidth, d.densityHeight, candSeedScale);
+  }
+
+  /** Build (or rebuild after a resize) the candidate buffers on first use. */
+  function ensureCandidate(): void {
+    const dims = candidateSeedDims();
+    if (
+      candResolve && candLayer && candSeedTex
+      && candSeedW === dims.width && candSeedH === dims.height
+      && candLayer.width === contentW && candLayer.height === contentH
+    ) return;
+    disposeCandidate();
+    candLayer = new THREE.RenderTarget(contentW, contentH, { depthBuffer: true, type: THREE.HalfFloatType });
+    candSeedW = dims.width; candSeedH = dims.height;
+    const texels = candSeedW * candSeedH;
+    candSeedData = new Float32Array(texels * 4);
+    candOwnership = {
+      stream: new Int32Array(texels),
+      vx: new Float32Array(texels),
+      vy: new Float32Array(texels),
+    };
+    candSeedTex = new THREE.DataTexture(
+      candSeedData, candSeedW, candSeedH, THREE.RGBAFormat, THREE.FloatType,
+    );
+    candSeedTex.minFilter = THREE.NearestFilter;
+    candSeedTex.magFilter = THREE.NearestFilter;
+    candSeedTex.needsUpdate = true;
+    candResolve = createShutterResolve(
+      {
+        layerTex: candLayer.texture,
+        sceneTex: refScene.texture,
+        depthTex: refScene.depthTexture!,
+        seedTex: candSeedTex,
+      },
+      { near: camera.near, far: camera.far, depthBias: candDepthBias },
+    );
+    // Warm the resolve pipeline off the capture frame; await-and-forget, the
+    // first candidate frame still works if this loses the race.
+    void renderer.compileAsync(candResolve.scene, blitCam).catch(() => {});
+  }
+
+  /** The current camera's projections for the object-only sweep. */
+  function shutterProjection(): ShutterProjection {
+    candViewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    return {
+      viewProj: candViewProj.elements,
+      viewMatrix: camera.matrixWorldInverse.elements,
+      width: contentW,
+      height: contentH,
+      near: camera.near,
+      far: camera.far,
+      tanHalfFovY: Math.tan((camera.fov * Math.PI) / 360),
+    };
+  }
+
+  /**
+   * The efficient candidate. Shadows the sampled oracle's shape (clean half +
+   * selected half + one composite) so the two are directly comparable, then
+   * replaces the N shaded samples with one motion-seeded resolve.
+   */
+  function renderCandidateReference(target: THREE.RenderTarget | null): void {
+    const exposure = currentExposureSeconds();
+    // 0. EMPTY WORK. With no selected moving blood the two-chain candidate
+    //    (static half + empty layer + resolve) draws the same pixels as the
+    //    fused sharp frame while paying for the extra chain and the resolve —
+    //    measured at ~+0.33 ms of GPU in TASK-3's empty bench. The empty
+    //    candidate frame is byte-identical to the fused sharp frame (parity
+    //    capture r20), so route it there and skip the work entirely.
+    const { staticSim, moving } = splitSimForShutter(sim);
+    if (moving.droplets.length === 0) {
+      renderSharpReference(target);
+      const dims = candidateSeedDims();
+      lastCandidateStats = {
+        ...EMPTY_SEED_STATS,
+        width: dims.width, height: dims.height,
+        taps: SHUTTER_CANDIDATE_TAPS, seedScale: candSeedScale, depthBias: candDepthBias,
+        buildMs: 0,
+        passes: { sceneRenders: 1, gooChains: 1, fullscreen: 0 },
+      };
+      lastRefStats = {
+        samples: 0, particles: 0, streakPx: 0, ms: exposureMs(exposure), builds: timelineBuilds,
+        timelineParticles: 0, livePos: null, samplePos: null,
+        firstSampleT: eventTime - exposure, lastSampleT: eventTime,
+      };
+      return;
+    }
+    ensureCandidate();
+    const resolve = candResolve!;
+    const seedTex = candSeedTex!;
+    const seedData = candSeedData!;
+    const ownership = candOwnership!;
+
+    // 1. SHARP HALF: fixture + static pools/guts, no selected moving blood.
+    gooLayer.setReconstruction('smooth');
+    gooLayer.setExtraBlobs([]);
+    gooLayer.setOutputTarget(refScene);
+    camera.updateMatrixWorld();
+    gooLayer.sync(staticSim, camera);
+    setPassLabel('cand:static-goo');
+    gooLayer.render(camera, () => {
+      setPassLabel('cand:static-scene');
+      renderer.setRenderTarget(refScene);
+      renderer.render(scene, camera);
+      setPassLabel('cand:static-goo');
+    });
+
+    // 2. SELECTED BLOOD, once, premultiplied. NO depth pre-pass: the resolve
+    //    owns per-pixel occlusion (owner depth vs the frozen scene depth at
+    //    the destination), so a droplet behind the body/wall is dropped by
+    //    the same test that drops its streak. Pre-culling here as well would
+    //    make the resolve's occlusion untestable and would double the scene
+    //    renders for no gain.
+    const clearScratch = new THREE.Color();
+    const prevClear = renderer.getClearColor(clearScratch).getHex();
+    const prevAlpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(candLayer!);
+    renderer.setClearColor(0x000000, 0);
+    renderer.autoClear = true;
+    renderer.clear(true, true, true);
+    renderer.setClearColor(prevClear, prevAlpha);
+    gooLayer.sync(moving, camera);
+    setPassLabel('cand:selected-goo');
+    gooLayer.renderLayer(camera, candLayer!);
+
+    // 3. CPU MOTION SEED: object-only projected sweeps, current camera at both
+    //    endpoints. Empty frames skip the resolve's work entirely.
+    const buildStart = performance.now();
+    const stamps = planSweepStamps(moving.droplets, shutterProjection(), exposure, {
+      maxStreakPx: shutterMaxStreakPx,
+      sizeScale: gooLayer.sizeScale,
+      quadScale: GOO_TUNING.quadScale,
+      mistMaxSize: GOO_TUNING.mistMaxSize,
+    });
+    const stats = stamps.length > 0
+      ? rasterizeSweepSeed(stamps, contentW, contentH, candSeedW, candSeedH, seedData, ownership)
+      : { ...EMPTY_SEED_STATS };
+    // An empty frame must CLEAR the seed, not re-upload last frame's sweep:
+    // stale motion would draw a ghost trail with no owner.
+    if (stamps.length === 0) seedData.fill(0);
+    seedTex.needsUpdate = true;
+    const buildMs = performance.now() - buildStart;
+
+    // 4. ONE bounded fullscreen resolve.
+    resolve.setNearFar(camera.near, camera.far);
+    resolve.setDepthBias(candDepthBias);
+    resolve.setExposure(exposure);
+    resolve.setSeedDims(candSeedW, candSeedH);
+    setPassLabel('cand:resolve');
+    resolve.render(renderer, target);
+
+    lastCandidateStats = {
+      ...stats,
+      width: candSeedW,
+      height: candSeedH,
+      taps: SHUTTER_CANDIDATE_TAPS,
+      seedScale: candSeedScale,
+      depthBias: candDepthBias,
+      buildMs,
+      // Exact per-frame pass count: one clean fixture render (which also
+      // carries the sharp half's depth) and two goo chains (static half +
+      // selected layer), then the resolve.
+      passes: { sceneRenders: 1, gooChains: 2, fullscreen: 1 },
+    };
+
+    const liveFirst = moving.droplets[0];
+    lastRefStats = {
+      samples: 1,
+      particles: moving.droplets.length,
+      streakPx: stats.maxStreakPx,
+      ms: exposureMs(exposure),
+      builds: timelineBuilds,
+      timelineParticles: moving.droplets.length,
+      livePos: liveFirst ? [...liveFirst.pos] : null,
+      samplePos: liveFirst ? [
+        liveFirst.pos[0] - liveFirst.vel[0] * exposure,
+        liveFirst.pos[1] - liveFirst.vel[1] * exposure,
+        liveFirst.pos[2] - liveFirst.vel[2] * exposure,
+      ] : null,
+      firstSampleT: eventTime - exposure,
+      lastSampleT: eventTime,
+    };
+  }
+
+  /** B wipes over A from the left at `wipePos`. Both are FULL-SIZE frames. */
+  function blitWipe(): void {
+    const w = renderer.domElement.width;
+    const h = renderer.domElement.height;
+    const cut = Math.max(1, Math.min(w - 1, Math.round(w * wipePos)));
+    renderer.autoClear = false;
+    renderer.setRenderTarget(null);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, w, h);
+    renderer.setClearColor(background);
+    renderer.clear(true, true, true);
+    renderer.setScissorTest(true);
+    renderer.setScissor(0, 0, w, h);
+    setPassLabel('blit');
+    renderer.render(blitSceneA, blitCam);
+    renderer.setScissor(0, 0, cut, h);
+    renderer.render(blitSceneB, blitCam);
+    renderer.setScissorTest(false);
+    renderer.autoClear = true;
   }
 
   function draw(): void {
@@ -581,6 +1202,34 @@ async function bootstrap(): Promise<void> {
     // crown is the only blood on screen.
     camera.updateMatrixWorld();
     bloodView.sync(sim, camera);
+    if (compareMode === 'shutter') {
+      splashLayer.setVisible(false);
+      renderer.setClearColor(background);
+      // ZERO EXPOSURE IS THE SHARP FRAME, EXACTLY, for every reference. The
+      // sampled oracle splits moving blood from static pools to average
+      // per-sample coverage; the candidate composites a motion-seeded layer.
+      // At zero samples/exposure both would differ from the fused sharp frame,
+      // so the off case is routed to the fused sharp render instead.
+      const exposureActive = currentExposureSeconds() > 0;
+      const sampled = shutterRef === 'sampled' && exposureActive;
+      const candidate = shutterRef === 'efficient' && exposureActive;
+      const renderReference = (t: THREE.RenderTarget | null): void => {
+        if (sampled) renderSampledReference(t);
+        else if (candidate) renderCandidateReference(t);
+        else renderSharpReference(t);
+      };
+      if (!wipe) {
+        renderReference(null);
+      } else {
+        // Reference vs Sharp, both full-size: A (right) sharp, B (left) reference.
+        initRenderTargets();
+        renderSharpReference(rtA);
+        renderReference(rtB);
+        blitWipe();
+      }
+      updateDiag();
+      return;
+    }
     splashLayer.setVisible(shape === 'splash');
     if (shape === 'splash') {
       splashLayer.sync(camera);
@@ -597,24 +1246,7 @@ async function bootstrap(): Promise<void> {
       initRenderTargets();
       renderVariant(variantById(wipeA), rtA);
       renderVariant(variantById(wipeB), rtB);
-      const w = renderer.domElement.width;
-      const h = renderer.domElement.height;
-      // B wipes over A from the left at `wipePos`. Both are FULL-SIZE frames:
-      // no squashing, equal aspect, equal pixel size.
-      const cut = Math.max(1, Math.min(w - 1, Math.round(w * wipePos)));
-      renderer.autoClear = false;
-      renderer.setRenderTarget(null);
-      renderer.setScissorTest(false);
-      renderer.setViewport(0, 0, w, h);
-      renderer.setClearColor(background);
-      renderer.clear(true, true, true);
-      renderer.setScissorTest(true);
-      renderer.setScissor(0, 0, w, h);
-      renderer.render(blitSceneA, blitCam);
-      renderer.setScissor(0, 0, cut, h);
-      renderer.render(blitSceneB, blitCam);
-      renderer.setScissorTest(false);
-      renderer.autoClear = true;
+      blitWipe();
     }
     updateDiag();
   }
@@ -681,10 +1313,41 @@ async function bootstrap(): Promise<void> {
     };
   }
 
+  /**
+   * The shutter axis's full state, including the candidate's bounded-work
+   * diagnostics (seed texels, sweeps, collisions, streak bounds). A reviewer
+   * can read this beside a capture and know exactly which reference produced
+   * it.
+   */
+  function shutterState(): Record<string, unknown> {
+    const exposure = currentExposureSeconds();
+    const plan = planShutterSamples(eventTime, exposure, shutterSampleCount);
+    return {
+      mode: compareMode,
+      reference: shutterRef,
+      references: SHUTTER_REFERENCES.map(r => ({ id: r.id, implemented: r.implemented })),
+      candidateAvailable: true,
+      candidate: lastCandidateStats,
+      preset: shutterPresetId,
+      exposureSeconds: exposure,
+      exposureMs: exposureMs(exposure),
+      exposureMode,
+      angleDeg: shutterAngleDeg,
+      referenceFps: shutterReferenceFps,
+      samples: plan.sampleCount,
+      sampleTimes: plan.sampleTimes,
+      interval: { from: plan.from, to: plan.to },
+      maxStreakPx: shutterMaxStreakPx,
+      last: lastRefStats,
+    };
+  }
+
   function candidateState(): Record<string, unknown> {
     return {
       seed, frame, scenario, playing, speed, splashPreset,
       shape, eventTime, splash: splashState(),
+      compare: compareMode,
+      shutter: shutterState(),
       variant, wipe, wipeA, wipeB, wipePos,
       filter: variant,
       filterApplies: shape === 'current',
@@ -703,12 +1366,45 @@ async function bootstrap(): Promise<void> {
     };
   }
 
+  /** One diagnostics line for the efficient candidate's bounded work. */
+  function candidateDiag(): string {
+    const c = lastCandidateStats;
+    if (!c) return 'efficient candidate: idle (draw once with exposure > 0 to populate stats)';
+    return `candidate: ${c.stamps} sweeps / ${c.texels} seed texels @ ${c.width}x${c.height} (scale ${c.seedScale.toFixed(2)})`
+      + `  taps ${c.taps}  conflict ${c.conflicts} (opposed ${c.oppositeConflicts}, nearer ${c.nearerWins})`
+      + `  streak max ${c.maxStreakPx.toFixed(1)} avg ${c.avgStreakPx.toFixed(1)} px  bias ${c.depthBias.toFixed(3)} m  build ${c.buildMs.toFixed(2)} ms`
+      + `  passes scene ${c.passes.sceneRenders} goo ${c.passes.gooChains} resolve ${c.passes.fullscreen}`;
+  }
+
   function updateDiag(): void {
     const d = gooLayer.densityDiagnostics;
     const v = variantById(variant);
     const filterState = shape === 'current'
       ? `filter ${v.id} (recon=${v.reconstruction} conns=${v.connections ? 'on' : 'off'}) ACTIVE`
       : `filter ${v.id} INACTIVE (applies to Current only)`;
+    if (compareMode === 'shutter') {
+      const exposure = currentExposureSeconds();
+      const plan = planShutterSamples(eventTime, exposure, shutterSampleCount);
+      const shutterLines = [
+        `SHUTTER mode ${compareMode}  reference ${shutterRef}  scenario ${scenario}  seed ${seed}`,
+        `event t ${eventTime.toFixed(3)}s  exposure ${exposureMs(exposure).toFixed(2)} ms  preset ${shutterPresetId} (${exposureMode}${exposureMode === 'angle' ? `: ${shutterAngleDeg}deg / ${shutterReferenceFps} fps explicit` : ''})`,
+        `trailing box [${plan.from.toFixed(3)}, ${plan.to.toFixed(3)}] s  samples ${plan.sampleCount}  weight 1/${plan.sampleCount || 1}`,
+        shutterRef === 'efficient'
+          ? candidateDiag()
+          : shutterRef === 'sampled'
+            ? `sampled oracle: ${lastRefStats.particles} particles/sample x ${lastRefStats.samples} samples = ${lastRefStats.particles * lastRefStats.samples} shaded particle draws`
+            : 'sharp: instantaneous frame — exposure is IGNORED on this side',
+        `streak @600 px/s = ${(plan.exposureSeconds * 600).toFixed(2)} px (cap ${shutterMaxStreakPx} px)  timeline particles ${lastRefStats.timelineParticles} (builds ${lastRefStats.builds})`,
+        `sim droplets ${sim.droplets.length}  splats ${sim.splats.length}  goo ${gooVisible ? 'on' : 'off'}  mist ${mistVisible ? 'on' : 'off'}`,
+        `source ${sourceW}x${sourceH}  output ${contentW}x${contentH}  backend ${handle.backend}`,
+      ];
+      diagEl.textContent = shutterLines.join('\n');
+      if (pausedEl) pausedEl.style.display = playing ? 'none' : '';
+      if (statusEl) {
+        statusEl.textContent = `SHUTTER ${shutterRef}  exposure ${exposureMs(exposure).toFixed(2)} ms  samples ${plan.sampleCount}  event t ${eventTime.toFixed(2)}s  ${playing ? 'playing' : 'paused'}`;
+      }
+      return;
+    }
     const lines = shape === 'splash'
       ? [
         `seed ${seed}  shape ${shape}  scenario ${scenario} (unused by splash)`,
@@ -757,13 +1453,14 @@ async function bootstrap(): Promise<void> {
 
 
   // --- controls ----------------------------------------------------------
-  function row(label: string, el: HTMLElement): void {
+  function row(label: string, el: HTMLElement): HTMLDivElement {
     const div = document.createElement('div');
     div.className = 'row';
     const lab = document.createElement('label');
     lab.textContent = label;
     div.appendChild(lab); div.appendChild(el);
     controlsEl.appendChild(div);
+    return div;
   }
   function select<T extends string>(values: { id: T; label: string }[], value: T, onChange: (v: T) => void): HTMLSelectElement {
     const s = document.createElement('select');
@@ -790,6 +1487,150 @@ async function bootstrap(): Promise<void> {
   let wipeBSelect: HTMLSelectElement | null = null;
   let filterSelect: HTMLSelectElement | null = null;
   let scenarioSelect: HTMLSelectElement | null = null;
+
+  // --- comparison MODE: surface/shape (existing) vs shutter (task 1) ------
+  let shutterRefSelect: HTMLSelectElement | null = null;
+  let shutterMsLabel: HTMLDivElement | null = null;
+  let angleRow: HTMLDivElement | null = null;
+  let fpsRow: HTMLDivElement | null = null;
+
+  function refreshShutterLabels(): void {
+    if (shutterMsLabel) {
+      const exposure = currentExposureSeconds();
+      const plan = planShutterSamples(eventTime, exposure, shutterSampleCount);
+      const candidateNote = shutterRef === 'efficient'
+        ? `  ·  candidate seed ${candSeedW || '·'}x${candSeedH || '·'} · ${SHUTTER_CANDIDATE_TAPS} taps · bias ${candDepthBias.toFixed(3)} m`
+        : '';
+      shutterMsLabel.textContent = `effective exposure ${exposureMs(exposure).toFixed(2)} ms  ·  ${plan.sampleCount} sample${plan.sampleCount === 1 ? '' : 's'}${exposureMode === 'angle' ? `  ·  ${shutterAngleDeg}deg @ ${shutterReferenceFps} fps (explicit)` : ''}${candidateNote}`;
+    }
+    if (angleRow) angleRow.style.display = exposureMode === 'angle' ? '' : 'none';
+    if (fpsRow) fpsRow.style.display = exposureMode === 'angle' ? '' : 'none';
+  }
+
+  row('mode', select(
+    [{ id: 'surface', label: 'Surface / shape (existing)' }, { id: 'shutter', label: 'Shutter (exposure)' }],
+    compareMode,
+    (m) => {
+      compareMode = m as CompareMode;
+      // The shutter reference resolves the CURRENT sim; the splash is a
+      // separate shape, so entering shutter mode selects Current.
+      if (compareMode === 'shutter' && shape === 'splash') setShape('current');
+      refreshShutterLabels();
+      updateDiag();
+      if (!playing) handle.drawOnce();
+    },
+  ));
+
+  // SHUTTER AXIS — independent of surface/shape/filter. Sharp, the sampled
+  // oracle and the efficient candidate are all selectable; selection is never
+  // aliased (draw() dispatches on the id).
+  const refSelect = select(
+    SHUTTER_REFERENCES.map(r => ({ id: r.id, label: r.label })),
+    shutterRef,
+    (v) => {
+      shutterRef = v as ShutterReferenceId;
+      // Allocation/prewarm only when the candidate can actually run: with
+      // exposure OFF the frame routes to the fused sharp path and must stay
+      // allocation-free.
+      if (shutterRef === 'efficient' && currentExposureSeconds() > 0) ensureCandidate();
+      refreshShutterLabels(); updateDiag();
+      if (!playing) handle.drawOnce();
+    },
+  );
+  refSelect.title = 'Sharp vs the slow sampled oracle vs the efficient velocity-streak candidate';
+  shutterRefSelect = refSelect;
+  row('reference', refSelect);
+
+  row('exposure', select(
+    SHUTTER_PRESETS.map(p => ({
+      id: p.id,
+      label: p.seconds > 0 ? `${p.label} = ${exposureMs(p.seconds).toFixed(2)} ms` : p.label,
+    })),
+    shutterPresetId,
+    (v) => {
+      shutterPresetId = v as ShutterPresetId;
+      refreshShutterLabels(); updateDiag();
+      if (!playing) handle.drawOnce();
+    },
+  ));
+
+  row('exposure mode', select(
+    [{ id: 'seconds', label: 'seconds (preset)' }, { id: 'angle', label: 'angle / explicit ref fps' }],
+    exposureMode,
+    (m) => {
+      exposureMode = m as ShutterMode;
+      refreshShutterLabels(); updateDiag();
+      if (!playing) handle.drawOnce();
+    },
+  ));
+
+  const angleInput = document.createElement('input');
+  angleInput.type = 'range'; angleInput.min = '0'; angleInput.max = '360'; angleInput.step = '1';
+  angleInput.value = String(shutterAngleDeg);
+  angleInput.addEventListener('input', () => {
+    shutterAngleDeg = Number(angleInput.value);
+    refreshShutterLabels(); updateDiag();
+    if (!playing) handle.drawOnce();
+  });
+  angleRow = row('shutter angle', angleInput);
+
+  const refFpsInput = document.createElement('input');
+  refFpsInput.type = 'number'; refFpsInput.value = String(shutterReferenceFps); refFpsInput.style.width = '70px';
+  refFpsInput.addEventListener('change', () => {
+    const n = Number(refFpsInput.value);
+    if (Number.isFinite(n) && n > 0) shutterReferenceFps = n;
+    refreshShutterLabels(); updateDiag();
+    if (!playing) handle.drawOnce();
+  });
+  fpsRow = row('reference fps', refFpsInput);
+
+  const samplesInput = document.createElement('input');
+  samplesInput.type = 'range'; samplesInput.min = '1'; samplesInput.max = '64'; samplesInput.step = '1';
+  samplesInput.value = String(shutterSampleCount);
+  samplesInput.addEventListener('input', () => {
+    shutterSampleCount = clampSampleCount(Number(samplesInput.value));
+    samplesInput.value = String(shutterSampleCount);
+    refreshShutterLabels(); updateDiag();
+    if (!playing) handle.drawOnce();
+  });
+  row('samples (oracle)', samplesInput);
+
+  const maxStreakInput = document.createElement('input');
+  maxStreakInput.type = 'range'; maxStreakInput.min = '4'; maxStreakInput.max = '200'; maxStreakInput.step = '4';
+  maxStreakInput.value = String(shutterMaxStreakPx);
+  maxStreakInput.addEventListener('input', () => {
+    shutterMaxStreakPx = Number(maxStreakInput.value); updateDiag();
+    if (!playing) handle.drawOnce();
+  });
+  row('max streak px', maxStreakInput);
+
+  // Candidate-only controls. They are inert for Sharp/Sampled (the oracle
+  // ignores the seed) and never touch the surface/shape defaults.
+  const seedScaleInput = document.createElement('input');
+  seedScaleInput.type = 'range'; seedScaleInput.min = '0.25'; seedScaleInput.max = '2'; seedScaleInput.step = '0.25';
+  seedScaleInput.value = String(candSeedScale);
+  seedScaleInput.addEventListener('input', () => {
+    candSeedScale = Number(seedScaleInput.value);
+    // ensureCandidate() rebuilds when the resolved dimensions change.
+    refreshShutterLabels(); updateDiag();
+    if (!playing) handle.drawOnce();
+  });
+  row('seed scale (candidate)', seedScaleInput);
+
+  const depthBiasInput = document.createElement('input');
+  depthBiasInput.type = 'range'; depthBiasInput.min = '0'; depthBiasInput.max = '0.2'; depthBiasInput.step = '0.005';
+  depthBiasInput.value = String(candDepthBias);
+  depthBiasInput.addEventListener('input', () => {
+    candDepthBias = Number(depthBiasInput.value);
+    refreshShutterLabels(); updateDiag();
+    if (!playing) handle.drawOnce();
+  });
+  row('occlusion bias m', depthBiasInput);
+
+  shutterMsLabel = document.createElement('div');
+  shutterMsLabel.id = 'hint';
+  controlsEl.appendChild(shutterMsLabel);
+  refreshShutterLabels();
 
   // SHAPE first: Current slug vs the procedural Impact splash. This is a shape
   // choice, not a filter choice, and it is independent of the reconstruction
@@ -982,13 +1823,188 @@ async function bootstrap(): Promise<void> {
   hint.id = 'hint';
   hint.textContent = [
     'drag orbit · wheel zoom',
+    'mode: Surface/shape (existing) vs Shutter (exposure) — independent axes',
     'shape: Current slug (sim + filter) vs Impact splash (layered sprites)',
     'splash opens FROZEN at the crown moment; Play loops it, Reset splash re-freezes',
     'filter (Original/Smooth) is independent of shape and applies to Current only',
-    'capture: pick shape (+filter/wipe), Play/Pause or freeze, screenshot the canvas;',
-    '__bloodCompare.state() records seed/shape/splash time + source/output/density.',
+    'SHUTTER: reference Sharp vs Sampled vs the efficient candidate; presets 1/240…1/30 show ms;',
+    'angle needs an EXPLICIT reference fps (never the measured frame rate);',
+    'the sampled oracle rebuilds on demand while paused; the efficient candidate is one bounded resolve.',
+    'candidate controls: seed scale and occlusion bias m; max streak px caps the drawn sweep.',
+    'capture: pick mode/shape (+filter/wipe), Play/Pause or freeze, screenshot the canvas;',
+    '__bloodCompare.state() records seed/scenario/exposure + source/output/density.',
   ].join('\n');
   controlsEl.appendChild(hint);
+
+  // --- task-3 bench (GPU pass timing + fenced frame cost) ----------------
+  // Drives the FROZEN frame by hand with the rAF loop off, so every draw in a
+  // batch is the same seed/time/particle count and off-vs-candidate is a
+  // like-for-like delta. Per-pass labels come from gpu-pass-timing; the fence
+  // is three's timestamp resolve, which is a completion fence (the lab-renderer
+  // note: trust the fence, not the per-pass number).
+  function benchPercentile(sorted: readonly number[], p: number): number {
+    if (sorted.length === 0) return 0;
+    const i = Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))));
+    return sorted[i]!;
+  }
+  function benchSummary(xs: readonly number[]): { p50: number; p95: number; mean: number; min: number; max: number } {
+    if (xs.length === 0) return { p50: 0, p95: 0, mean: 0, min: 0, max: 0 };
+    const s = [...xs].sort((a, b) => a - b);
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    return { p50: benchPercentile(s, 0.5), p95: benchPercentile(s, 0.95), mean, min: s[0]!, max: s[s.length - 1]! };
+  }
+
+  interface ShutterBenchOptions {
+    reference?: ShutterReferenceId;
+    scenario?: ScenarioId;
+    seed?: number;
+    eventTime?: number;
+    preset?: ShutterPresetId;
+    samples?: number;
+    maxStreakPx?: number;
+    seedScale?: number;
+    depthBias?: number;
+    camera?: { yaw?: number; pitch?: number; distance?: number };
+    source?: { width: number; height: number };
+    goo?: boolean;
+    mist?: boolean;
+    frames?: number;
+    warmup?: number;
+  }
+
+  async function benchShutter(o: ShutterBenchOptions = {}): Promise<Record<string, unknown>> {
+    // 'current' shape first: setShape forces scenario=burst, so the requested
+    // scenario must be applied AFTER it.
+    if (shape !== 'current') setShape('current');
+    if (o.reference) shutterRef = o.reference;
+    if (o.preset) shutterPresetId = o.preset;
+    if (o.samples !== undefined) shutterSampleCount = clampSampleCount(o.samples);
+    if (o.maxStreakPx !== undefined && Number.isFinite(o.maxStreakPx)) shutterMaxStreakPx = o.maxStreakPx;
+    if (o.seedScale !== undefined && Number.isFinite(o.seedScale)) {
+      candSeedScale = Math.max(0.25, Math.min(2, o.seedScale));
+      seedScaleInput.value = String(candSeedScale);
+    }
+    if (o.depthBias !== undefined && Number.isFinite(o.depthBias)) {
+      candDepthBias = Math.max(0, Math.min(50, o.depthBias));
+    }
+    if (o.scenario) { scenario = o.scenario; if (scenarioSelect) scenarioSelect.value = o.scenario; }
+    if (o.seed !== undefined && Number.isFinite(o.seed)) { seed = Math.floor(o.seed); seedInput.value = String(seed); }
+    if (o.source) {
+      sourceW = Math.max(16, Math.round(o.source.width));
+      sourceH = Math.max(16, Math.round(o.source.height));
+      gooLayer.setSize(sourceW, sourceH);
+    }
+    if (o.camera) {
+      if (o.camera.yaw !== undefined && Number.isFinite(o.camera.yaw)) orbit.yaw = o.camera.yaw;
+      if (o.camera.pitch !== undefined && Number.isFinite(o.camera.pitch)) orbit.pitch = Math.max(-0.4, Math.min(1.2, o.camera.pitch));
+      if (o.camera.distance !== undefined && Number.isFinite(o.camera.distance)) orbit.distance = Math.max(1.2, Math.min(9, o.camera.distance));
+      applyCamera();
+    }
+    if (o.goo !== undefined) gooVisible = o.goo;
+    if (o.mist !== undefined) mistVisible = o.mist;
+    if (o.goo !== undefined || o.mist !== undefined) applyLayerToggles();
+    eventTime = Math.max(0, Math.min(IMPACT_SPLASH_TUNING.lifetimeSec, o.eventTime ?? eventTime));
+    eventTimeInput.value = String(eventTime);
+    simulateCurrentTo(eventTime);
+    playing = false;
+    handle.setLoopRunning(false);
+
+    const exposure = currentExposureSeconds();
+    const candidate = shutterRef === 'efficient' && exposure > 0;
+    const coldStart = !candResolve;
+    if (candidate) ensureCandidate();
+    // Drain anything recorded before the batch so the label census is exact.
+    await passTiming.collect();
+    passTiming.countsSinceLast();
+
+    const warmup = Math.max(0, Math.floor(o.warmup ?? 6));
+    const warmupFenced: number[] = [];
+    let coldFencedMs: number | null = null;
+    for (let i = 0; i < warmup; i++) {
+      beginPassFrame();
+      const t0 = performance.now();
+      handle.drawOnce();
+      await handle.resolveGpu();
+      const ms = performance.now() - t0;
+      warmupFenced.push(ms);
+      if (i === 0 && coldStart) coldFencedMs = ms;
+    }
+    // Drain the warm-up passes so no sampled frame leaks into the timed batch.
+    await passTiming.collect();
+    passTiming.countsSinceLast();
+
+    const frames = Math.max(1, Math.floor(o.frames ?? 30));
+    const fenced: number[] = [];
+    const drawCpu: number[] = [];
+    const prep: number[] = [];
+    const spans: number[] = [];
+    const byLabel = new Map<string, number[]>();
+    for (let i = 0; i < frames; i++) {
+      beginPassFrame();
+      const t0 = performance.now();
+      handle.drawOnce();
+      drawCpu.push(performance.now() - t0);
+      const samples = await passTiming.collect();
+      fenced.push(performance.now() - t0);
+      const attr = attributePassSamples(samples);
+      for (const [, labels] of attr.exclusive) {
+        for (const [label, ms] of labels) {
+          let arr = byLabel.get(label);
+          if (!arr) { arr = []; byLabel.set(label, arr); }
+          arr.push(ms);
+        }
+      }
+      let span = 0;
+      for (const [, s] of attr.span) span += s;
+      spans.push(span);
+      if (lastCandidateStats) prep.push(lastCandidateStats.buildMs);
+    }
+    const counts = new Map(passTiming.countsSinceLast().map(c => [c.label, c.passes / frames] as const));
+    const labels = [...byLabel.entries()].map(([label, xs]) => {
+      const s = benchSummary(xs);
+      return { label, passesPerFrame: counts.get(label) ?? 0, p50: s.p50, p95: s.p95, exclusiveMean: s.mean };
+    }).sort((a, b) => b.exclusiveMean - a.exclusiveMean);
+
+    let candidateBytes = 0;
+    if (candSeedData) candidateBytes += candSeedData.byteLength;
+    if (candOwnership) {
+      candidateBytes += candOwnership.stream.byteLength + candOwnership.vx.byteLength + candOwnership.vy.byteLength;
+    }
+    if (candLayer) candidateBytes += candLayer.width * candLayer.height * 8; // RGBA16F
+    const perfMemory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+
+    return {
+      reference: shutterRef,
+      scenario,
+      seed,
+      eventTime,
+      exposureMs: exposureMs(exposure),
+      source: { width: sourceW, height: sourceH },
+      output: { width: contentW, height: contentH },
+      density: { ...gooLayer.densityDiagnostics },
+      droplets: sim.droplets.length,
+      splats: sim.splats.length,
+      frames,
+      warmupFrames: warmup,
+      candidateAvailable: candResolve !== null,
+      passTimingInstalled: passTiming.installed,
+      coldFencedMs,
+      warmupFencedMs: warmupFenced,
+      fenced: benchSummary(fenced),
+      drawCpu: benchSummary(drawCpu),
+      gpuSpan: benchSummary(spans),
+      cpuPrep: prep.length > 0 ? { ...benchSummary(prep), last: prep[prep.length - 1]! } : null,
+      labels,
+      candidate: lastCandidateStats,
+      memory: {
+        jsHeapBytes: perfMemory?.usedJSHeapSize ?? 0,
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+        candidateBytes,
+      },
+      gpu: { lost: handle.gpuDiagnostics.lost !== null, uncaptured: handle.gpuDiagnostics.uncapturedCount },
+    };
+  }
 
   // --- global API --------------------------------------------------------
   const api = {
@@ -1054,6 +2070,75 @@ async function bootstrap(): Promise<void> {
       applyLayerToggles();
       if (!playing) handle.drawOnce();
     },
+    /** Orbit the review camera (occlusion evidence needs the obstacle in front). */
+    setCamera: (o: { yaw?: number; pitch?: number; distance?: number }) => {
+      if (o.yaw !== undefined && Number.isFinite(o.yaw)) orbit.yaw = o.yaw;
+      if (o.pitch !== undefined && Number.isFinite(o.pitch)) {
+        orbit.pitch = Math.max(-0.4, Math.min(1.2, o.pitch));
+      }
+      if (o.distance !== undefined && Number.isFinite(o.distance)) {
+        orbit.distance = Math.max(1.2, Math.min(9, o.distance));
+      }
+      applyCamera();
+      if (!playing) handle.drawOnce();
+    },
+    /** Switch the comparison axis. 'shutter' resolves the Current sim. */
+    setMode: (m: CompareMode) => {
+      compareMode = m;
+      if (compareMode === 'shutter' && shape === 'splash') setShape('current');
+      refreshShutterLabels(); updateDiag();
+      if (!playing) handle.drawOnce();
+    },
+    /**
+     * Set any subset of the shutter axis. All three references are selectable;
+     * selecting 'efficient' builds (and prewarms) the candidate on demand, and
+     * `draw()` still dispatches on the id rather than aliasing anything.
+     */
+    setShutter: (o: {
+      reference?: ShutterReferenceId; preset?: ShutterPresetId;
+      samples?: number; exposureMode?: ShutterMode;
+      angleDeg?: number; referenceFps?: number; maxStreakPx?: number;
+      seedScale?: number; depthBias?: number;
+    }) => {
+      if (o.reference) shutterRef = o.reference;
+      if (o.preset) shutterPresetId = o.preset;
+      if (o.samples !== undefined) shutterSampleCount = clampSampleCount(o.samples);
+      if (o.exposureMode) exposureMode = o.exposureMode;
+      if (o.angleDeg !== undefined && Number.isFinite(o.angleDeg)) shutterAngleDeg = o.angleDeg;
+      if (o.referenceFps !== undefined && Number.isFinite(o.referenceFps) && o.referenceFps > 0) shutterReferenceFps = o.referenceFps;
+      if (o.maxStreakPx !== undefined && Number.isFinite(o.maxStreakPx)) shutterMaxStreakPx = o.maxStreakPx;
+      if (o.seedScale !== undefined && Number.isFinite(o.seedScale)) {
+        candSeedScale = Math.max(0.25, Math.min(2, o.seedScale));
+        seedScaleInput.value = String(candSeedScale);
+      }
+      if (o.depthBias !== undefined && Number.isFinite(o.depthBias)) {
+        // The slider caps at 0.2 m; the API may go far beyond so a capture can
+        // effectively disable the test for an occlusion A/B.
+        candDepthBias = Math.max(0, Math.min(50, o.depthBias));
+        depthBiasInput.value = String(Math.min(0.2, candDepthBias));
+      }
+      if (shutterRef === 'efficient' && currentExposureSeconds() > 0) ensureCandidate();
+      if (shutterRefSelect) shutterRefSelect.value = shutterRef;
+      refreshShutterLabels(); updateDiag();
+      if (!playing) handle.drawOnce();
+    },
+    shutterState,
+    benchShutter,
+    passTimingInstalled: passTiming.installed,
+    /** Present the frozen frame once without advancing the sim. */
+    present: () => { handle.drawOnce(); },
+    /**
+     * Drive the SHARED clock by explicit fixed steps — the cadence test. The
+     * step size is presentation cadence; the exposure is a fixed shutter
+     * interval, so the two must not be conflated. Stops the rAF loop first.
+     */
+    driveSteps: (dtSec: number, count: number) => {
+      if (!Number.isFinite(dtSec) || dtSec <= 0 || !Number.isFinite(count) || count <= 0) return;
+      playing = false;
+      handle.setLoopRunning(false);
+      const n = Math.floor(count);
+      for (let i = 0; i < n; i++) handle.step(dtSec);
+    },
     captureInstructions: () => [
       '1. npm run dev and open /sdf-blood-compare.html (WebGPU required).',
       '2. Default is shape=Impact splash, FROZEN at the representative crown moment (event t).',
@@ -1061,6 +2146,9 @@ async function bootstrap(): Promise<void> {
       '4. filter applies to Current only and is disabled (labelled) in Impact splash; record state().',
       '5. Press Play/Pause (or leave frozen), then record __bloodCompare.state() beside the image.',
       '6. Screenshot the canvas; compare only shots at the same seed, event t, source grid and output size.',
+      '7. SHUTTER: mode=Shutter, pick a scenario (bleed/trail/crossing/burst), reference=Sharp vs Sampled vs efficient,',
+      '   exposure preset or angle with an explicit reference fps; the sampled oracle and the candidate rebuild on demand.',
+      '8. The efficient candidate is a bounded velocity-streak resolve: watch seed texels/sweeps/conflicts in state().shutter.candidate.',
       'Visual acceptance is PENDING: not verified during the training window.',
     ],
   };
@@ -1085,6 +2173,11 @@ async function bootstrap(): Promise<void> {
     gooLayer.dispose();
     splashLayer.dispose();
     rtA.dispose(); rtB.dispose();
+    refAccum.dispose(); refScene.dispose();
+    disposeCandidate();
+    depthOnly.dispose();
+    compMesh.geometry.dispose();
+    (compMesh.material as THREE.Material).dispose();
     blitA.geometry.dispose(); blitB.geometry.dispose();
     (blitA.material as THREE.Material).dispose();
     (blitB.material as THREE.Material).dispose();

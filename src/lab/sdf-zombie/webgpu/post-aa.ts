@@ -472,6 +472,16 @@ export interface PostAaSink {
   setOutputTarget(t: THREE.RenderTarget | null): void;
 }
 
+/**
+ * A stage that composites the freshly captured scene BEFORE the post chain
+ * grades it (selective shutter blur, game integration 2026-09-17). It receives
+ * the capture target (colour + its sampleable depth) and returns the target
+ * the remaining chain should read, or null to leave the capture in place.
+ * Running it here — not on the final display-encoded image — is what keeps the
+ * accepted SSCS → FXAA → VHS → lens/blast-distortion ordering intact.
+ */
+export type PostAaCaptureStage = (capture: THREE.RenderTarget) => THREE.RenderTarget | null;
+
 export interface PostAa {
   /**
    * The frame wrapper. With every effect off this is an EXACT pass-through
@@ -482,6 +492,23 @@ export interface PostAa {
   render(chain: () => void): void;
   /** Registers a layer whose output gets captured while any effect is on. */
   addSink(s: PostAaSink): void;
+  /**
+   * The capture target the chain draws into while redirected, with the
+   * sampleable depth the capture stage and SSCS read. Exposed so a capture
+   * stage can PREWARM its own targets/pipelines against the real texture at
+   * boot instead of paying the allocation + compile on the first live frame
+   * (the shutter layer's first-use stall, measured 2026-09-17). The object
+   * identity is stable; refit() resizes it in place.
+   */
+  readonly captureTarget: THREE.RenderTarget;
+  /**
+   * PRE-POST CAPTURE STAGE. While set, the chain is always captured (the
+   * redirect is forced even with every effect off) and this runs on the
+   * capture before SSCS/FXAA/VHS. Null (the default) is the shipped chain.
+   * This is the seam the shutter integration uses; it never re-renders the
+   * scene and never samples the texture it is writing.
+   */
+  setCaptureStage(fn: PostAaCaptureStage | null): void;
   setFxaa(on: boolean): void;
   /** Exponential history blend, 0..POST_AA_SMEAR_MAX. */
   setSmear(v: number): void;
@@ -972,6 +999,14 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
 
   const sinks: PostAaSink[] = [];
   let redirected = false;
+  /**
+   * PRE-POST CAPTURE STAGE (shutter game integration, 2026-09-17). Runs after
+   * the chain has drawn the clean captured frame and BEFORE SSCS/FXAA/VHS, so
+   * an exposure resolve composites in working-linear space with the capture's
+   * own depth still intact for SSCS. Returns the target the rest of the chain
+   * should read (null = no change, keep the capture). See setCaptureStage.
+   */
+  let captureStage: PostAaCaptureStage | null = null;
   /** The history buffer the next frame's blend READS (the other is written). */
   let histRead = histA;
   let histWrite = histB;
@@ -1050,6 +1085,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   window.addEventListener('resize', refit);
 
   return {
+    get captureTarget() { return sceneTarget; },
     render(chain) {
       const smear = uSmear.value;
       const vhsOn = vhsPreset !== null;
@@ -1057,7 +1093,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // redirect, because the blit has to sample a texture rather than be one.
       // VHS is a stage too, so it forces the redirected chain even alone.
       const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn || sscsOn
-        || (blastDistortOn && liveBlastDistorts.length > 0);
+        || (blastDistortOn && liveBlastDistorts.length > 0) || captureStage !== null;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
         if (redirected) {
@@ -1084,11 +1120,22 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // The whole polygon/sdf/cone/occluder/composite/goo flow, captured.
       chain();
 
+      // PRE-POST CAPTURE STAGE. The chain has drawn the clean frame into
+      // sceneTarget; a stage may composite over it (the shutter resolve reads
+      // sceneTarget and writes its OWN target, so it never samples what it
+      // writes). sceneTarget's depth is untouched and stays the source for
+      // SSCS below, which is why the stage returns a colour target rather than
+      // resolving in place.
+      let src = sceneTarget;
+      if (captureStage !== null) {
+        const staged = captureStage(sceneTarget);
+        if (staged !== null) src = staged;
+      }
+
       // SSCS: contact shadows from the capture's own depth, run BEFORE FXAA
       // so the darkened silhouette edges are antialiased with everything
       // else. Matrices and the light position are fed per frame by the host
       // (setSscsFrame); while off this stage never renders.
-      let src = sceneTarget;
       let srcIsDisplay = false;
       if (sscsOn) {
         setPassLabel('post:sscs');
@@ -1233,6 +1280,18 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // afterwards. It also explains why toggling fxaa/smear appeared to
       // "fix" it — a toggle flips `redirected` and re-runs the loop above.
       if (redirected) s.setOutputTarget(sceneTarget);
+    },
+    setCaptureStage(fn) {
+      captureStage = fn;
+      // A stage forces the redirected (captured) path. Enabling one after the
+      // parity path is running must hand the sinks the capture target NOW, the
+      // same late-registration trap addSink documents. Disabling it leaves the
+      // redirect in place for this frame; the next render() with every effect
+      // off drops back to the canvas parity path.
+      if (captureStage !== null && !redirected) {
+        for (const s of sinks) s.setOutputTarget(sceneTarget);
+        redirected = true;
+      }
     },
     setFxaa(on) {
       fxaaOn = on;
