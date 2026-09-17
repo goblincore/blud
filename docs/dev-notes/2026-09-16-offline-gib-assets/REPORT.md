@@ -1,9 +1,8 @@
 # Offline gib assets — Task 4: closing the two blockers
 
-Branch `codex/offline-gib-assets-task-4`, baseline `30e66c84`, parent tip
-`10d7a5ff` (main history merged into the review candidate; Task 3's substantive
-commit is `f2c67c84`). Isolated dispatch worktree; **no merge, no push, primary
-checkout untouched.**
+Branch `codex/offline-gib-assets-task-4`, tip `35e81c41` (baseline `30e66c84`,
+parent `10d7a5ff`; Task 3's substantive commit is `f2c67c84`). Isolated dispatch
+worktree; **no merge, no push, primary checkout untouched.**
 
 Task 3 shipped a working asset path but left **two measured blockers** that kept
 the shipped default at `?gibrender=march`. This task closes both, re-runs the
