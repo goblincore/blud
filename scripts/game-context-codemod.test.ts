@@ -112,3 +112,21 @@ describe('applyCodemod — declaration/reference interaction', () => {
     expect(applyCodemod(src, MAP3)).toBe(`async function main() {\n  ctx.probes.weight;\n}\n`);
   });
 });
+
+describe('applyCodemod — collapse reporting', () => {
+  it('reports a multi-line type annotation as lines lost', () => {
+    const src = `async function main() {\n  let texProbe: null | {\n    a: number;\n    b: number;\n  } = null;\n}\n`;
+    const report = { collapsed: [], linesLost: 0 };
+    const out = applyCodemod(src, { texProbe: 'render.texProbe' }, report);
+    expect(out).toContain('ctx.render.texProbe = null;');
+    expect(report.linesLost).toBe(3);
+    expect(report.collapsed[0]).toMatchObject({ name: 'texProbe', linesLost: 3 });
+  });
+
+  it('reports nothing for a single-line declaration', () => {
+    const src = `async function main() {\n  let probeWeight = 0.5;\n}\n`;
+    const report = { collapsed: [], linesLost: 0 };
+    applyCodemod(src, { probeWeight: 'probes.weight' }, report);
+    expect(report.linesLost).toBe(0);
+  });
+});

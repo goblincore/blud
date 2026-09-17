@@ -1038,7 +1038,20 @@ git checkout src/lab/sdf-zombie/webgpu/game-main.ts   # then redo steps 1-2
 ```bash
 wc -l src/lab/sdf-zombie/webgpu/game-main.ts
 ```
-Expected: **14,763 ± the one `ctx` line and one import line**. A materially different count means lines moved, which violates the migration rule. Investigate before proceeding.
+Expected: `14764 + 2 (the ctx line and its import) - report.linesLost`.
+
+`report.linesLost` is printed by the codemod and comes **only** from declarations whose inline TYPE ANNOTATION spanned several lines — an assignment cannot carry a type, so those lines collapse and the type belongs in the slice interface instead. Four such declarations exist in the file:
+
+| Line | Binding | Lines lost |
+| --- | --- | --- |
+| 1159 | `texProbe` | 11 |
+| 2758 | `upscaleAb` | 6 |
+| 5423 | `liveChunks` | 10 |
+| 6509 | `pendingGibs` | 6 |
+
+So with all 16 slices mapped, expect **33** lines lost and a final count near **14,733**.
+
+**The check is `(before - after) === report.linesLost`, exactly.** Any unexplained line beyond the reported collapses means lines moved, which violates the migration rule — investigate before proceeding. Confirm each collapsed binding's type now lives in its slice interface.
 
 - [ ] **Step 5: Run the full gate**
 

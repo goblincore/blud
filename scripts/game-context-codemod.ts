@@ -17,7 +17,24 @@ export type BindingMap = Readonly<Record<string, string>>;
 
 interface Edit { start: number; end: number; text: string; }
 
-export function applyCodemod(source: string, map: BindingMap): string {
+/** Declarations whose inline TYPE ANNOTATION spanned several lines. The
+ *  annotation cannot survive the rewrite (an assignment carries no type), so
+ *  those lines collapse and the file gets shorter. That type belongs in the
+ *  slice interface instead — these are reported so the drop is auditable
+ *  rather than silent, and so each one can be checked against its slice. */
+export interface CollapsedDecl {
+  name: string;
+  line: number;
+  linesLost: number;
+}
+
+export interface CodemodReport {
+  collapsed: CollapsedDecl[];
+  /** Total lines the rewrite removes. Expected line delta for the file. */
+  linesLost: number;
+}
+
+export function applyCodemod(source: string, map: BindingMap, report?: CodemodReport): string {
   const sf = ts.createSourceFile('game-main.ts', source, ts.ScriptTarget.ES2022, true);
   const main = findMain(sf);
   if (!main?.body) return source;
@@ -48,6 +65,16 @@ export function applyCodemod(source: string, map: BindingMap): string {
       // since an assignment cannot carry one.
       const end = decl.type ? decl.type.getEnd() : decl.name.getEnd();
       const start = stmt.getStart(sf);
+
+      if (report) {
+        const a = sf.getLineAndCharacterOfPosition(start).line;
+        const b = sf.getLineAndCharacterOfPosition(end).line;
+        if (b > a) {
+          report.collapsed.push({ name: decl.name.text, line: a + 1, linesLost: b - a });
+          report.linesLost += b - a;
+        }
+      }
+
       edits.push({ start, end, text: `ctx.${path}` });
       covered.push([start, end]);
     }
