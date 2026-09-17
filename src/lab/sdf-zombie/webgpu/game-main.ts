@@ -178,6 +178,10 @@ import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-lay
 import {
   createShutterGameLayer, readShutterGameSettings, type ShutterGameLayer,
 } from './shutter-game-layer';
+import {
+  createGibShutterLayer, readGibShutterSettings,
+  type GibShutterLayer, type GibBlurSubject,
+} from './gib-shutter-layer';
 import { createShutterPanel, shutterPanelHost, type ShutterPanel } from './shutter-panel';
 import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
@@ -1370,6 +1374,51 @@ async function main() {
   // or __sdfGame.setBloodBlur(false) restores the fused sharp goo exactly.
   let shutterGame: ShutterGameLayer | null = null;
   let shutterPanel: ShutterPanel | null = null;
+  // FLYING-GIB SHUTTER BLUR (2026-09-17, shutter task 3). The gib twin of the
+  // blood layer: selected moving gibs are lifted onto a dedicated layer, drawn
+  // alone and exposure-resolved over the clean scene. Separate on/off switch,
+  // shared exposure/max-trail controls. ON by default on this feature branch.
+  let gibShutter: GibShutterLayer | null = null;
+  /** Presentation identity across frames, so a freshly spawned/reused piece
+   *  gets no pre-birth streak on its first drawn frame. Keyed by the owning
+   *  list AND id (the sprite and chunk id sequences are independent). */
+  let gibBlurPrevKeys = new Set<string>();
+
+  /**
+   * This frame's gib-blur candidates. Built from the SAME lists the renderers
+   * draw: sprite/asset/carve pieces (all `spritePieces.live`) and the marched
+   * fallback chunks (`liveChunks`). Each carries its real drawn mesh, its
+   * current `Chunk` and the layer it belongs on when NOT blurred, which is what
+   * lets the layer put it back exactly. `ageSeconds` is 0 on a piece's first
+   * presented frame (spawn OR recycled id), so the exposure clamps to that
+   * frame and no streak is drawn into an emitter that did not exist.
+   */
+  function gibBlurSubjects(): GibBlurSubject[] {
+    const out: GibBlurSubject[] = [];
+    const nextKeys = new Set<string>();
+    for (const p of spritePieces.live) {
+      if (!p.mesh.visible) continue;
+      const key = `sprite:${p.id}`;
+      nextKeys.add(key);
+      out.push({
+        id: p.id, state: p.state, mesh: p.mesh,
+        baseLayer: 0,
+        ageSeconds: gibBlurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
+      });
+    }
+    for (const c of liveChunks) {
+      if (!c.view.object.visible) continue;
+      const key = `chunk:${c.id}`;
+      nextKeys.add(key);
+      out.push({
+        id: c.id, state: c.state, mesh: c.view.object as unknown as THREE.Mesh,
+        baseLayer: SDF_LAYER,
+        ageSeconds: gibBlurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
+      });
+    }
+    gibBlurPrevKeys = nextKeys;
+    return out;
+  }
 
   /** Create the splash layer on first enable only, sharing the flesh/goo
    *  light uniform NODES so it is lit by the same rig. Returns silently if
@@ -7664,20 +7713,70 @@ async function main() {
         console.error('[shutter-game] disabled after error:', message);
       },
     });
-    postAa.setCaptureStage((capture) =>
-      gooEnabled && shutterGame ? shutterGame.capture(capture, bloodSim, camera) : null);
+    // FLYING-GIB SHUTTER BLUR (2026-09-17, shutter task 3): the gib twin,
+    // SHARING the blood exposure contract and adding its own on/off switch.
+    // `?gibblur=0` disables only the gib layer.
+    const gibSettings = readGibShutterSettings(location.search);
+    gibSettings.exposureSeconds = shutterGame.exposureSeconds;
+    gibSettings.maxStreakPx = shutterGame.maxStreakPx;
+    gibSettings.seedScale = shutterGame.seedScale;
+    gibSettings.depthBiasM = shutterGame.depthBiasM;
+    // EXPLICIT ROUTE LIMIT (task 3). The gib layer isolates pieces by rendering
+    // the LIVE scene through a dedicated layer; in the deferred route the gib
+    // meshes are G-buffer producers with route-assigned materials, and that
+    // isolated draw is neither validated nor safe (it re-triggers the deferred
+    // march shader's pre-existing pipeline errors). Rather than silently leave
+    // moving gibs excluded-but-undrawn, the gib blur is hard-off in deferred and
+    // the gibs render sharp through their normal route. Reported, not hidden.
+    const gibRouteSupported = !deferredMode;
+    if (!gibRouteSupported && gibSettings.enabled) {
+      // eslint-disable-next-line no-console
+      console.warn('[gib-shutter] deferred route: gib motion blur stays off '
+        + '(only the legacy forward route is validated); gibs render sharp');
+    }
+    gibShutter = createGibShutterLayer({
+      renderer: handle.renderer,
+      settings: gibSettings,
+      supported: gibRouteSupported,
+      onError: (message) => {
+        // eslint-disable-next-line no-console
+        console.error('[gib-shutter] disabled after error:', message);
+      },
+    });
+    // ONE capture stage chains both layers: gibs first (they are opaque and
+    // write their own depth in the layer), then blood over the gib-resolved
+    // target. The blood resolve keeps occlusion against the capture's clean
+    // static depth; the gib resolve occludes against that same depth.
+    postAa.setCaptureStage((capture) => {
+      let src: THREE.RenderTarget = capture;
+      if (gibShutter) {
+        const g = gibShutter.capture(capture, scene, camera);
+        if (g) src = g;
+      }
+      if (gooEnabled && shutterGame) {
+        // The blood resolve was built against the raw capture; point it at the
+        // gib result so a blurred gib is not painted over by the blood pass.
+        shutterGame.setSceneTexture(src.texture);
+        const b = shutterGame.capture(capture, bloodSim, camera);
+        if (b) src = b;
+      }
+      return src === capture ? null : src;
+    });
     // PREWARM against the real capture target: the layer/seed allocation and the
     // resolve/selected-layer pipeline compile happen here, at boot, instead of
-    // stalling the first live blood frame (measured ~0.26 s, 2026-09-17).
+    // stalling the first live blood/gib frame (measured ~0.26 s, 2026-09-17).
     shutterGame.prewarm(postAa.captureTarget);
+    gibShutter.prewarm(postAa.captureTarget);
     void shutterGame.precompile();
-    // Player-facing controls: on/off, exposure (ms), max trail length. Ships
-    // visible+collapsed like its sibling panels; debug seams stay on the API.
-    shutterPanel = createShutterPanel(shutterPanelHost(shutterGame));
+    // Player-facing controls: separate blood/gib switches, SHARED exposure (ms)
+    // and max-trail length. Ships visible like its sibling panels; debug seams
+    // stay on the API.
+    shutterPanel = createShutterPanel(shutterPanelHost(shutterGame, gibShutter));
     shutterPanel.setVisible(true);
     const disposeShutter = (): void => {
       postAa.setCaptureStage(null);
       shutterGame?.dispose();
+      gibShutter?.dispose();
     };
     window.addEventListener('pagehide', disposeShutter);
     import.meta.hot?.dispose(() => {
@@ -9284,6 +9383,14 @@ async function main() {
     // clears the selection, so the frame is the shipped fused goo.
     shutterGame?.poseSharp();
     gooLayer?.sync(bloodSim, camera);
+    // GIB SHUTTER PARTITION: lift this frame's moving pieces onto the blur
+    // layer BEFORE the base scene renders (the draw callback follows this tick),
+    // so the capture's clean background has no selected gib in it. When the
+    // switch is off the list is empty and every mesh is put back where it was.
+    if (gibShutter) {
+      gibShutter.select(gibShutter.enabled ? gibBlurSubjects() : []);
+      if (!gibShutter.enabled) gibBlurPrevKeys = new Set();
+    }
     telemetry.end('goo-sync', gooTiming);
   }
 
@@ -11349,15 +11456,18 @@ function performBenchAction(a: BenchAction): void {
       return next;
     },
     get bloodBlurEnabled() { return shutterGame?.enabled ?? false; },
-    /** Exposure in ms — longer = longer trails. Clamped [0, 200]. */
+    /** Exposure in ms — longer = longer trails. Clamped [0, 200]. Shared by
+     *  the blood AND gib layers (the panel control is one control). */
     setBloodBlurExposure: (ms: number) => {
       const applied = shutterGame?.setExposureMs(ms) ?? 0;
+      gibShutter?.setExposureMs(applied);
       shutterPanel?.refresh();
       return applied;
     },
-    /** Max drawn trail in CONTENT pixels. Clamped [1, 400]. */
+    /** Max drawn trail in CONTENT pixels. Clamped [1, 400]. Shared. */
     setBloodBlurMaxStreak: (px: number) => {
       const applied = shutterGame?.setMaxStreakPx(px) ?? 0;
+      gibShutter?.setMaxStreakPx(applied);
       shutterPanel?.refresh();
       return applied;
     },
@@ -11370,6 +11480,19 @@ function performBenchAction(a: BenchAction): void {
       return shutterGame
         ? shutterGame.diagnostics()
         : { enabled: false, unavailable: true, route: 'capture-stage' as const };
+    },
+    /** FLYING-GIB SHUTTER BLUR — separate switch, shared exposure. */
+    setGibBlur: (on: boolean) => {
+      const next = gibShutter?.setEnabled(on) ?? false;
+      shutterPanel?.refresh();
+      return next;
+    },
+    get gibBlurEnabled() { return gibShutter?.enabled ?? false; },
+    /** Live values, seed/layer dims, per-frame stats and any hard error. */
+    get gibBlur() {
+      return gibShutter
+        ? gibShutter.diagnostics()
+        : { enabled: false, unavailable: true };
     },
     /** Show/hide the focused shutter controls. */
     shutterPanel: (on?: boolean) => {

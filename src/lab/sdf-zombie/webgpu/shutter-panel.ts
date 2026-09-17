@@ -19,6 +19,7 @@ import {
   SHUTTER_GAME_PRESETS, SHUTTER_GAME_MAX_STREAK_PX, SHUTTER_GAME_MAX_EXPOSURE_SECONDS,
   type ShutterGameLayer,
 } from './shutter-game-layer';
+import type { GibShutterLayer } from './gib-shutter-layer';
 
 export interface ShutterPanelHost {
   readonly enabled: boolean;
@@ -27,6 +28,9 @@ export interface ShutterPanelHost {
   setEnabled(on: boolean): boolean;
   setExposureMs(ms: number): number;
   setMaxStreakPx(px: number): number;
+  /** Present only when the flying-gib layer is wired: its own on/off switch. */
+  readonly gibEnabled?: boolean;
+  setGibEnabled?(on: boolean): boolean;
 }
 
 export interface ShutterPanel {
@@ -113,8 +117,9 @@ export function createShutterPanel(
 
   function refresh(): void {
     onBox.checked = host.enabled;
+    if (gibBox) gibBox.checked = host.gibEnabled ?? false;
     exposureInput.value = String(host.exposureMs);
-    exposureOut.textContent = host.enabled ? `${host.exposureMs.toFixed(2)} ms` : 'off';
+    exposureOut.textContent = (host.enabled || host.gibEnabled) ? `${host.exposureMs.toFixed(2)} ms` : 'off';
     streakInput.value = String(host.maxStreakPx);
     streakOut.textContent = `${host.maxStreakPx} px`;
     // Preset highlight: nearest preset within half a step.
@@ -123,9 +128,10 @@ export function createShutterPanel(
       p.btn.style.borderColor = active ? '#c85a4a' : '#3a2f2d';
       p.btn.style.color = active ? '#e0917f' : '#e8ddd8';
     }
-    note.textContent = host.enabled
-      ? 'effective exposure shown; physics is untouched'
-      : 'blur off — the fused sharp goo is restored';
+    const anyOn = host.enabled || (host.gibEnabled ?? false);
+    note.textContent = anyOn
+      ? 'exposure is shared by blood + gibs; physics is untouched'
+      : 'blur off — the fused sharp goo and gibs are restored';
   }
 
   const presetBtns: { preset: (typeof SHUTTER_GAME_PRESETS)[number]; btn: HTMLButtonElement }[] = [];
@@ -141,6 +147,22 @@ export function createShutterPanel(
   }
 
   onBox.addEventListener('change', () => { host.setEnabled(onBox.checked); refresh(); });
+
+  // GIB MOTION BLUR — its own switch, sharing the exposure and max-trail
+  // controls below. Added only when the page wired the gib layer.
+  let gibBox: HTMLInputElement | null = null;
+  if (host.setGibEnabled) {
+    const gibRow = document.createElement('label');
+    gibRow.setAttribute('style', 'display:flex; align-items:center; gap:6px; margin-bottom:6px; cursor:pointer;');
+    gibBox = document.createElement('input');
+    gibBox.type = 'checkbox';
+    gibBox.checked = host.gibEnabled ?? false;
+    const gibText = document.createElement('span');
+    gibText.textContent = 'Gib motion blur';
+    gibRow.append(gibBox, gibText);
+    body.insertBefore(gibRow, presetRow);
+    gibBox.addEventListener('change', () => { host.setGibEnabled?.(gibBox!.checked); refresh(); });
+  }
   exposureInput.addEventListener('input', () => {
     host.setExposureMs(parseFloat(exposureInput.value));
     refresh();
@@ -163,14 +185,35 @@ export function createShutterPanel(
   };
 }
 
-/** The layer doubles as the panel host — same read-back contract. */
-export function shutterPanelHost(layer: ShutterGameLayer): ShutterPanelHost {
-  return {
+/** The layers double as the panel host — same read-back contract. The
+ *  exposure/max-trail setters drive BOTH layers (the controls are shared); the
+ *  gib switch is separate. */
+export function shutterPanelHost(
+  layer: ShutterGameLayer,
+  gib?: GibShutterLayer,
+): ShutterPanelHost {
+  const host: ShutterPanelHost = {
     get enabled() { return layer.enabled; },
     get exposureMs() { return layer.exposureMs; },
     get maxStreakPx() { return layer.maxStreakPx; },
     setEnabled: (on) => layer.setEnabled(on),
-    setExposureMs: (ms) => layer.setExposureMs(ms),
-    setMaxStreakPx: (px) => layer.setMaxStreakPx(px),
+    setExposureMs: (ms) => {
+      const applied = layer.setExposureMs(ms);
+      gib?.setExposureMs(applied);
+      return applied;
+    },
+    setMaxStreakPx: (px) => {
+      const applied = layer.setMaxStreakPx(px);
+      gib?.setMaxStreakPx(applied);
+      return applied;
+    },
   };
+  if (gib) {
+    // A live getter, not a spread snapshot: the panel refreshes every frame.
+    Object.defineProperty(host, 'gibEnabled', {
+      get: () => gib.enabled, enumerable: true, configurable: true,
+    });
+    host.setGibEnabled = (on: boolean) => gib.setEnabled(on);
+  }
+  return host;
 }

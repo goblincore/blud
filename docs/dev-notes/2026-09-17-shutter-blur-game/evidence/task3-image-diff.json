@@ -1,0 +1,245 @@
+{
+  "threshold": 8,
+  "scenarios": {
+    "gib": {
+      "reference": "sharp",
+      "referenceFile": "t3-gib__sharp.png",
+      "variants": {
+        "m100": {
+          "file": "t3-gib__m100.png",
+          "changedPx": 20981,
+          "bbox": [
+            18,
+            16,
+            939,
+            391
+          ],
+          "bboxDims": [
+            922,
+            376
+          ]
+        },
+        "m44": {
+          "file": "t3-gib__m44.png",
+          "changedPx": 13102,
+          "bbox": [
+            26,
+            16,
+            644,
+            360
+          ],
+          "bboxDims": [
+            619,
+            345
+          ]
+        },
+        "m44bloodonly": {
+          "file": "t3-gib__m44bloodonly.png",
+          "changedPx": 6082,
+          "bbox": [
+            18,
+            16,
+            939,
+            374
+          ],
+          "bboxDims": [
+            922,
+            359
+          ]
+        },
+        "m44both": {
+          "file": "t3-gib__m44both.png",
+          "changedPx": 17829,
+          "bbox": [
+            18,
+            16,
+            939,
+            374
+          ],
+          "bboxDims": [
+            922,
+            359
+          ]
+        },
+        "m67": {
+          "file": "t3-gib__m67.png",
+          "changedPx": 19016,
+          "bbox": [
+            18,
+            16,
+            939,
+            375
+          ],
+          "bboxDims": [
+            922,
+            360
+          ]
+        },
+        "shipped": {
+          "file": "t3-gib__shipped.png",
+          "changedPx": 17609,
+          "bbox": [
+            18,
+            16,
+            939,
+            374
+          ],
+          "bboxDims": [
+            922,
+            359
+          ]
+        }
+      },
+      "tight": "t3tight-gib-sharp-m100-m67.png",
+      "tightBox": [
+        432,
+        156,
+        651,
+        375
+      ]
+    },
+    "gibdet": {
+      "reference": "off",
+      "referenceFile": "t3-gibdet__off.png",
+      "variants": {
+        "cap200": {
+          "file": "t3-gibdet__cap200.png",
+          "changedPx": 11241,
+          "bbox": [
+            18,
+            16,
+            644,
+            358
+          ],
+          "bboxDims": [
+            627,
+            343
+          ]
+        },
+        "m67": {
+          "file": "t3-gibdet__m67.png",
+          "changedPx": 13366,
+          "bbox": [
+            18,
+            16,
+            644,
+            368
+          ],
+          "bboxDims": [
+            627,
+            353
+          ]
+        },
+        "on-a": {
+          "file": "t3-gibdet__on-a.png",
+          "changedPx": 16151,
+          "bbox": [
+            18,
+            16,
+            939,
+            359
+          ],
+          "bboxDims": [
+            922,
+            344
+          ]
+        },
+        "on-b": {
+          "file": "t3-gibdet__on-b.png",
+          "changedPx": 11485,
+          "bbox": [
+            18,
+            16,
+            644,
+            358
+          ],
+          "bboxDims": [
+            627,
+            343
+          ]
+        }
+      },
+      "tight": "t3tight-gibdet-off-on-a-m67.png",
+      "tightBox": [
+        432,
+        144,
+        651,
+        363
+      ]
+    },
+    "gibhead": {
+      "reference": "sharp",
+      "referenceFile": "t3-gibhead__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t3-gibhead__m44.png",
+          "changedPx": 10227,
+          "bbox": [
+            26,
+            0,
+            780,
+            349
+          ],
+          "bboxDims": [
+            755,
+            350
+          ]
+        }
+      },
+      "tight": "t3tight-gibhead-sharp-m44.png",
+      "tightBox": [
+        564,
+        0,
+        783,
+        219
+      ]
+    },
+    "gibmarch": {
+      "reference": "sharp",
+      "referenceFile": "t3-gibmarch__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t3-gibmarch__m44.png",
+          "changedPx": 13749,
+          "bbox": [
+            26,
+            16,
+            663,
+            368
+          ],
+          "bboxDims": [
+            638,
+            353
+          ]
+        },
+        "m67": {
+          "file": "t3-gibmarch__m67.png",
+          "changedPx": 15219,
+          "bbox": [
+            26,
+            16,
+            663,
+            382
+          ],
+          "bboxDims": [
+            638,
+            367
+          ]
+        }
+      },
+      "tight": "t3tight-gibmarch-sharp-m67-m44.png",
+      "tightBox": [
+        444,
+        156,
+        663,
+        375
+      ]
+    }
+  },
+  "deterministic": {
+    "onA_vs_onB_noisePx": 6725,
+    "onA_vs_off_changedPx": 16151,
+    "onB_vs_off_changedPx": 11485,
+    "signalToNoise": 2.4
+  }
+}

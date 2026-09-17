@@ -585,6 +585,14 @@ export interface ShutterResolveHandle {
   /** Exposure length in seconds for the bounded gather. */
   setExposure(seconds: number): void;
   setSeedDims(width: number, height: number): void;
+  /**
+   * Rebind the scene texture this resolve composites over. The game's capture
+   * stage chains the gib resolve before the blood resolve, so the blood pass
+   * must read the gib-resolved target rather than the raw capture. The texture
+   * node is updated in place (the same `src.value = tex` seam post-aa uses for
+   * its own stages), so no material is rebuilt per frame.
+   */
+  setSceneTexture(tex: THREE.Texture): void;
   /** Render the resolve. `target` null is the canvas. */
   render(renderer: THREE.WebGPURenderer, target: THREE.RenderTarget | null): void;
   dispose(): void;
@@ -607,9 +615,10 @@ export function createShutterResolve(
   ));
   const uSeedDims = uniform(new THREE.Vector2(1, 1));
   const uMotion = uniform(new THREE.Vector2(0, 0));
+  const sceneNode = texture(inputs.sceneTex);
   const out = wgslFn(SHUTTER_RESOLVE_WGSL)({
     layerTex: texture(inputs.layerTex),
-    sceneTex: texture(inputs.sceneTex),
+    sceneTex: sceneNode,
     seedTex: texture(inputs.seedTex),
     depthTex: texture(inputs.depthTex),
     texCoord: uv(),
@@ -641,6 +650,7 @@ export function createShutterResolve(
     setMinSeedWeight(w) { uCfg.value.set(uCfg.value.x, uCfg.value.y, uCfg.value.z, w); },
     setExposure(seconds) { uMotion.value.set(Number.isFinite(seconds) && seconds > 0 ? seconds : 0, 0); },
     setSeedDims(width, height) { uSeedDims.value.set(width, height); },
+    setSceneTexture(tex) { sceneNode.value = tex; },
     render(renderer, target) {
       const outW = target ? target.width : renderer.domElement.width;
       const outH = target ? target.height : renderer.domElement.height;

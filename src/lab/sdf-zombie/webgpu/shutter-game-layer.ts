@@ -259,6 +259,13 @@ export interface ShutterGameLayer {
   /** Debug seam: metric depth bias for the destination resolve. */
   setDepthBiasM(m: number): number;
   /**
+   * Rebind the scene the resolve composites over. The game's capture stage
+   * runs the gib resolve first, so the blood pass reads the gib-resolved
+   * target; passing the raw `capture.texture` restores the default. The depth
+   * the resolve occludes against stays the capture's own depth.
+   */
+  setSceneTexture(tex: THREE.Texture): void;
+  /**
    * Install the SHARP-remainder selection on the goo layer. Call it in the
    * render callback BEFORE the frame's `gooLayer.sync()`; when blur is off it
    * clears the selection so the goo frame is bit-identical to the shipped one.
@@ -507,6 +514,7 @@ export function createShutterGameLayer(opts: ShutterGameLayerOptions): ShutterGa
     setMaxStreakPx(px) { maxStreakPx = resolveMaxStreakPx(px); return maxStreakPx; },
     setSeedScale(v) { seedScale = resolveSeedScale(v); return seedScale; },
     setDepthBiasM(m) { depthBiasM = resolveDepthBiasM(m); return depthBiasM; },
+    setSceneTexture(tex) { resolve?.setSceneTexture(tex); },
     poseSharp() {
       gooLayer.setSelection(enabled && exposureSeconds > 0 ? SHUTTER_SHARP_SELECTION : null);
     },
