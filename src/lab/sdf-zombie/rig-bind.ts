@@ -8,7 +8,7 @@ import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
 import { segmentQuat } from './rig-frames';
 import {
-  add, bendCtrl, cross, dot, len, normalize, qRotate,
+  add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
   scale as vscale, sub,
 } from './vec';
 
@@ -418,14 +418,23 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     rotations.set(key, { restDir: r, q });
     return q;
   };
-  const poseEnds = (bind: PrimBind): { a: Vec3; b: Vec3 } => {
-    let a = bind.a.offset, b = bind.b.offset;
-    if (bind.armFrame) {
-      const frame = bind.armFrame;
-      const q = rotationOf(frame);
-      a = qRotate(q, a); b = qRotate(q, b);
-    }
-    return { a: add(pos[bind.a.point]!.pos, a), b: add(pos[bind.b.point]!.pos, b) };
+  const yawRotation: Quat = [0, Math.sin(bodyYaw / 2), 0, Math.cos(bodyYaw / 2)];
+  const posePrimitive = (p: Primitive, bind: PrimBind): Primitive => {
+    const q = bind.armFrame ? rotationOf(bind.armFrame) : yawRotation;
+    const turned = Math.abs(1 - q[3]) > 1e-6;
+    const orientedShape = p.scale[0] !== p.scale[1] || p.scale[1] !== p.scale[2]
+      || p.box || p.shell || p.strand || p.orient;
+    // Endpoint insets and anisotropic axes belong to the character, not the
+    // world. Leaving either behind made the same zombie look thin-chested
+    // and wide-footed when it faced sideways (the apparent room variants).
+    // Isotropic capsules retain the cheap un-oriented field path.
+    return {
+      ...p,
+      a: add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset)),
+      b: add(pos[bind.b.point]!.pos, qRotate(q, bind.b.offset)),
+      ...(p.bend ? { bend: qRotate(q, p.bend) } : {}),
+      ...(turned && orientedShape ? { orient: p.orient ? qMul(q, p.orient) : q } : {}),
+    };
   };
   const prims: Primitive[] = body.prims.map((p, i) => {
     const face = rigid?.prims.get(i);
@@ -436,7 +445,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // headTransform derived; reused, not recomputed.
       return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
     }
-    return { ...p, ...poseEnds(bound.binding[i]!) };
+    return posePrimitive(p, bound.binding[i]!);
   });
 
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
@@ -473,7 +482,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const q = rotationOf(frame);
       return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q, boneSegment };
     }
-    return { ...p, ...poseEnds(bound.boneBinding[i]!), boneSegment };
+    return { ...posePrimitive(p, bound.boneBinding[i]!), boneSegment };
   });
 
   const clusters = refitClusters(prims, body.clusters);
