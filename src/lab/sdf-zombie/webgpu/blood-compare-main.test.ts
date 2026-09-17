@@ -328,14 +328,14 @@ describe('blood comparison page — shutter mode (task 1)', () => {
     expect(VARIANTS.length).toBe(4);
   });
 
-  it('lists sharp + sampled and DISABLES the efficient candidate (no alias)', () => {
+  it('lists sharp + sampled + the efficient candidate and dispatches on the id (no alias)', () => {
     expect(src).toContain('SHUTTER_REFERENCES');
-    expect(src).toContain("o.value === 'efficient'");
-    expect(src).toContain('o.disabled = true');
-    expect(src).toContain('unavailable until task 2');
-    expect(src).toContain('candidateAvailable: false');
-    // The API refuses the efficient id rather than silently aliasing it.
-    expect(src).toContain("o.reference !== 'efficient'");
+    expect(src).toContain('candidateAvailable: true');
+    // The candidate is now selectable; draw() branches on the reference id.
+    expect(src).toContain("shutterRef === 'efficient'");
+    expect(src).toContain('renderCandidateReference');
+    // No stale "disabled until task 2" tripwire remains.
+    expect(src).not.toContain('unavailable until task 2');
   });
 
   it('uses the fixed-second presets and shows milliseconds', () => {
@@ -394,15 +394,38 @@ describe('blood comparison page — shutter mode (task 1)', () => {
     expect(src).toContain('spawnWoundDroplets');
   });
 
-  it('reuses the wipe view for Sharp vs Sampled and keeps pause/step/replay', () => {
+  it('reuses the wipe view for reference vs sharp and keeps pause/step/replay', () => {
     expect(src).toContain('renderSharpReference(rtA)');
-    expect(src).toContain('renderSampledReference(rtB)');
+    expect(src).toContain('renderReference(rtB)');
+    expect(src).toContain('renderSampledReference');
+    expect(src).toContain('renderCandidateReference');
     expect(src).toContain('blitWipe');
     // The transport rows are unchanged and shared by both modes.
     expect(src).toContain("'Play'");
     expect(src).toContain("'Pause'");
     expect(src).toContain("'Step'");
     expect(src).toContain("'Replay'");
+  });
+
+  it('implements the task-2 candidate as a bounded velocity-streak resolve', () => {
+    // The pure module owns the motion plan, seed raster and single resolve.
+    for (const needle of [
+      'planSweepStamps', 'rasterizeSweepSeed', 'createShutterResolve',
+      'seedDimsForOutput', 'SHUTTER_CANDIDATE_TAPS', 'EMPTY_SEED_STATS',
+    ]) {
+      expect(src, `${needle} must be used`).toContain(needle);
+    }
+    // Lazily built: no candidate allocation while the reference is not active.
+    expect(src).toContain('function ensureCandidate');
+    expect(src).toContain('function disposeCandidate');
+    expect(src).toContain('disposeCandidate();');
+    // Selecting the candidate with exposure OFF stays allocation-free.
+    expect(src).toContain("shutterRef === 'efficient' && currentExposureSeconds() > 0");
+    // The clean half has a SAMPLEABLE depth for the per-pixel occlusion test.
+    expect(src).toContain('refScene.depthTexture = new THREE.DepthTexture(1, 1)');
+    // Bounded work, named in the diagnostics.
+    expect(src).toContain('candidateDiag');
+    expect(src).toContain('conflict');
   });
 
   it('exposes the shutter API and reports the efficient candidate as unavailable', () => {

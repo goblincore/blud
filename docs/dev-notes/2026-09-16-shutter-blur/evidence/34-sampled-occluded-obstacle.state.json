@@ -48,26 +48,54 @@
       }
     ],
     "candidateAvailable": true,
-    "candidate": null,
-    "preset": "off",
-    "exposureSeconds": 0,
-    "exposureMs": 0,
+    "candidate": {
+      "stamps": 85,
+      "texels": 152,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 6,
+      "maxStreakPx": 8.929609315183518,
+      "avgStreakPx": 7.607387556477549,
+      "width": 200,
+      "height": 150,
+      "taps": 8,
+      "seedScale": 1,
+      "depthBias": 20,
+      "buildMs": 0.20000004768371582,
+      "passes": {
+        "sceneRenders": 1,
+        "gooChains": 2,
+        "fullscreen": 1
+      }
+    },
+    "preset": "1-30",
+    "exposureSeconds": 0.03333333333333333,
+    "exposureMs": 33.333333333333336,
     "exposureMode": "seconds",
-    "angleDeg": 180,
+    "angleDeg": 0.1,
     "referenceFps": 60,
-    "samples": 0,
-    "sampleTimes": [],
+    "samples": 8,
+    "sampleTimes": [
+      0.26875,
+      0.27291666666666664,
+      0.27708333333333335,
+      0.28125,
+      0.28541666666666665,
+      0.2895833333333333,
+      0.29375,
+      0.29791666666666666
+    ],
     "interval": {
-      "from": 0.3,
+      "from": 0.26666666666666666,
       "to": 0.3
     },
     "maxStreakPx": 40,
     "last": {
       "samples": 8,
       "particles": 85,
-      "streakPx": 10,
-      "ms": 16.666666666666668,
-      "builds": 1,
+      "streakPx": 20,
+      "ms": 33.333333333333336,
+      "builds": 8,
       "timelineParticles": 85,
       "livePos": [
         0.09497301437831528,
@@ -75,17 +103,17 @@
         0.6720814783187969
       ],
       "samplePos": [
-        0.09470485449464237,
-        1.161962211479299,
-        0.6717367766660287
+        0.09443669461096947,
+        1.1633067729475544,
+        0.6713920750132605
       ],
-      "firstSampleT": 0.284375,
-      "lastSampleT": 0.2989583333333333
+      "firstSampleT": 0.26875,
+      "lastSampleT": 0.29791666666666666
     }
   },
   "variant": "original",
   "wipe": false,
-  "wipeA": "original",
+  "wipeA": "smooth",
   "wipeB": "smooth",
   "wipePos": 0.5,
   "filter": "original",
@@ -122,9 +150,9 @@
     "height": 600
   },
   "camera": {
-    "yaw": 0,
-    "pitch": 0.14,
-    "distance": 1.35
+    "yaw": 2.41,
+    "pitch": -0.28,
+    "distance": 2.34
   },
   "backend": "webgpu"
 }

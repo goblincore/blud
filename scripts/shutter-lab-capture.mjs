@@ -169,11 +169,68 @@ await shot('11-sampled-near-zero-angle',
 await shot('12-wipe-sharp-sampled-1-30',
   `__bloodCompare.setShutter({reference:'sampled', exposureMode:'seconds', preset:'1-30', samples:8}); __bloodCompare.setWipe(true, 'smooth', 'smooth', 0.5); true`);
 
+// ---- task-2 efficient candidate -----------------------------------------
+// Zero exposure through the candidate must ALSO route to the fused sharp
+// frame: the off case allocates no candidate buffers and runs no resolve.
+await shot('20-candidate-zero-exposure',
+  `__bloodCompare.setScenario('burst'); __bloodCompare.setWipe(false); __bloodCompare.setShutter({reference:'efficient', exposureMode:'seconds', preset:'off', samples:8}); true`);
+// The burst fixture across the shutter presets.
+await shot('21-candidate-1-120',
+  `__bloodCompare.setShutter({reference:'efficient', preset:'1-120', samples:8}); true`);
+await shot('22-candidate-1-60',
+  `__bloodCompare.setShutter({reference:'efficient', preset:'1-60', samples:8}); true`);
+await shot('23-candidate-1-30',
+  `__bloodCompare.setShutter({reference:'efficient', preset:'1-30', samples:8}); true`);
+// The same frame through the sampled oracle for a like-for-like comparison.
+await shot('24-sampled-1-30-repeat',
+  `__bloodCompare.setShutter({reference:'sampled', preset:'1-30', samples:8}); true`);
+// Crossing streams: the case a single averaged velocity cancels.
+await shot('25-candidate-crossing-1-30',
+  `__bloodCompare.setScenario('crossing'); __bloodCompare.setShutter({reference:'efficient', preset:'1-30', samples:8}); true`);
+await shot('26-sampled-crossing-1-30-repeat',
+  `__bloodCompare.setShutter({reference:'sampled', preset:'1-30', samples:8}); true`);
+// Fast gib-like trail.
+await shot('27-candidate-trail-1-60',
+  `__bloodCompare.setScenario('trail'); __bloodCompare.setShutter({reference:'efficient', preset:'1-60', samples:8}); true`);
+// Slow wound dribble.
+await shot('28-candidate-bleed-1-60',
+  `__bloodCompare.setScenario('bleed'); __bloodCompare.setShutter({reference:'efficient', preset:'1-60', samples:8}); true`);
+// Obstacle in front: the streak must be occluded where the wall is nearer.
+await shot('29-candidate-burst-1-30-obstacle',
+  `__bloodCompare.setScenario('burst'); __bloodCompare.setShutter({reference:'efficient', preset:'1-30', samples:8}); true`);
+// Wipe Sharp (right) against candidate (left) so outside-silhouette trails
+// are visible against the live silhouette at the seam.
+await shot('30-wipe-sharp-candidate-1-30',
+  `__bloodCompare.setShutter({reference:'efficient', preset:'1-30', samples:8}); __bloodCompare.setWipe(true, 'smooth', 'smooth', 0.5); true`);
+// Near-zero angle: negligible displacement, so the candidate must sit in the
+// SAME place as sharp (orientation/reconstruction sanity).
+await shot('31-candidate-near-zero-angle',
+  `__bloodCompare.setScenario('burst'); __bloodCompare.setWipe(false); __bloodCompare.setShutter({reference:'efficient', exposureMode:'angle', angleDeg:0.1, referenceFps:60, samples:8}); true`);
+
+// Depth occlusion A/B. The fixture's obstacle sits behind the wound from the
+// default camera, so orbit BEHIND the obstacle first; the wound (and its
+// streak) is then behind the wall. 32 keeps the real depth test, 33 disables
+// it with a huge bias, 34 is the sampled oracle at the same angle.
+await shot('32-candidate-occluded-obstacle',
+  `__bloodCompare.setScenario('burst'); __bloodCompare.setCamera({yaw:2.41, pitch:-0.28, distance:2.34}); __bloodCompare.setShutter({reference:'efficient', exposureMode:'seconds', preset:'1-30', depthBias:0.02}); true`);
+await shot('33-candidate-occlusion-bias-off',
+  `__bloodCompare.setShutter({reference:'efficient', preset:'1-30', depthBias:20}); true`);
+await shot('34-sampled-occluded-obstacle',
+  `__bloodCompare.setShutter({reference:'sampled', preset:'1-30', samples:8}); true`);
+// Restore the default review camera.
+await shot('35-candidate-camera-restored',
+  `__bloodCompare.setCamera({yaw:0, pitch:0.14, distance:1.35}); __bloodCompare.setShutter({reference:'efficient', preset:'1-30'}); true`);
+
 // Zero-exposure parity: the sampled selection at exposure off is routed to the
 // fused sharp render, so the two PNGs must be byte-identical.
 const zeroA = readFileSync(`${OUT}/00-zero-exposure-sampled.png`);
 const zeroB = readFileSync(`${OUT}/01-zero-exposure-sharp.png`);
 console.log('zero-exposure parity byte-identical:', zeroA.equals(zeroB), `(${zeroA.length} bytes)`);
+// Task 2: the candidate's off case must be the SAME sharp frame too, with no
+// candidate allocation (the zero-exposure shot is taken before any non-zero
+// candidate frame).
+const zeroC = readFileSync(`${OUT}/20-candidate-zero-exposure.png`);
+console.log('candidate zero-exposure parity byte-identical:', zeroC.equals(zeroB), `(${zeroC.length} bytes)`);
 
 if (errors.length) console.log('console errors:', errors.length, errors.slice(-4));
 console.log('DONE');

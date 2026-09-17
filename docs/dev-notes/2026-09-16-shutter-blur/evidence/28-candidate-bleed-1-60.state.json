@@ -1,7 +1,7 @@
 {
   "seed": 12345,
   "frame": 18,
-  "scenario": "burst",
+  "scenario": "bleed",
   "playing": false,
   "speed": 1,
   "splashPreset": "spurt",
@@ -32,7 +32,7 @@
   "compare": "shutter",
   "shutter": {
     "mode": "shutter",
-    "reference": "sampled",
+    "reference": "efficient",
     "references": [
       {
         "id": "sharp",
@@ -48,44 +48,72 @@
       }
     ],
     "candidateAvailable": true,
-    "candidate": null,
-    "preset": "off",
-    "exposureSeconds": 0,
-    "exposureMs": 0,
+    "candidate": {
+      "stamps": 5,
+      "texels": 48,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 0,
+      "maxStreakPx": 6.240861822752144,
+      "avgStreakPx": 3.9434351571068396,
+      "width": 200,
+      "height": 150,
+      "taps": 8,
+      "seedScale": 1,
+      "depthBias": 0.02,
+      "buildMs": 0,
+      "passes": {
+        "sceneRenders": 1,
+        "gooChains": 2,
+        "fullscreen": 1
+      }
+    },
+    "preset": "1-60",
+    "exposureSeconds": 0.016666666666666666,
+    "exposureMs": 16.666666666666668,
     "exposureMode": "seconds",
-    "angleDeg": 180,
+    "angleDeg": 0.1,
     "referenceFps": 60,
-    "samples": 0,
-    "sampleTimes": [],
+    "samples": 8,
+    "sampleTimes": [
+      0.284375,
+      0.2864583333333333,
+      0.28854166666666664,
+      0.29062499999999997,
+      0.29270833333333335,
+      0.2947916666666667,
+      0.296875,
+      0.2989583333333333
+    ],
     "interval": {
-      "from": 0.3,
+      "from": 0.2833333333333333,
       "to": 0.3
     },
     "maxStreakPx": 40,
     "last": {
-      "samples": 8,
-      "particles": 85,
-      "streakPx": 10,
+      "samples": 1,
+      "particles": 5,
+      "streakPx": 6.240861822752144,
       "ms": 16.666666666666668,
-      "builds": 1,
-      "timelineParticles": 85,
+      "builds": 7,
+      "timelineParticles": 5,
       "livePos": [
-        0.09497301437831528,
-        1.1606176500110434,
-        0.6720814783187969
+        0.0532082698428052,
+        1.0362771311305992,
+        0.48837191788186707
       ],
       "samplePos": [
-        0.09470485449464237,
-        1.161962211479299,
-        0.6717367766660287
+        0.050231844477601324,
+        1.0532402173769742,
+        0.47895333598374923
       ],
-      "firstSampleT": 0.284375,
-      "lastSampleT": 0.2989583333333333
+      "firstSampleT": 0.2833333333333333,
+      "lastSampleT": 0.3
     }
   },
   "variant": "original",
   "wipe": false,
-  "wipeA": "original",
+  "wipeA": "smooth",
   "wipeB": "smooth",
   "wipePos": 0.5,
   "filter": "original",
@@ -97,7 +125,7 @@
   "reconstruction": "smooth",
   "connections": false,
   "extraBlobs": 0,
-  "droplets": 85,
+  "droplets": 10,
   "splats": 0,
   "density": {
     "densityWidth": 200,

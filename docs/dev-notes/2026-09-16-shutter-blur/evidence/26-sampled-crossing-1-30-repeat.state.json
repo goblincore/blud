@@ -1,7 +1,7 @@
 {
   "seed": 12345,
   "frame": 18,
-  "scenario": "burst",
+  "scenario": "crossing",
   "playing": false,
   "speed": 1,
   "splashPreset": "spurt",
@@ -48,44 +48,72 @@
       }
     ],
     "candidateAvailable": true,
-    "candidate": null,
-    "preset": "off",
-    "exposureSeconds": 0,
-    "exposureMs": 0,
+    "candidate": {
+      "stamps": 120,
+      "texels": 2018,
+      "conflicts": 946,
+      "oppositeConflicts": 943,
+      "nearerWins": 16,
+      "maxStreakPx": 25.35575193558754,
+      "avgStreakPx": 18.116816328918215,
+      "width": 200,
+      "height": 150,
+      "taps": 8,
+      "seedScale": 1,
+      "depthBias": 0.02,
+      "buildMs": 1.100000023841858,
+      "passes": {
+        "sceneRenders": 1,
+        "gooChains": 2,
+        "fullscreen": 1
+      }
+    },
+    "preset": "1-30",
+    "exposureSeconds": 0.03333333333333333,
+    "exposureMs": 33.333333333333336,
     "exposureMode": "seconds",
-    "angleDeg": 180,
+    "angleDeg": 0.1,
     "referenceFps": 60,
-    "samples": 0,
-    "sampleTimes": [],
+    "samples": 8,
+    "sampleTimes": [
+      0.26875,
+      0.27291666666666664,
+      0.27708333333333335,
+      0.28125,
+      0.28541666666666665,
+      0.2895833333333333,
+      0.29375,
+      0.29791666666666666
+    ],
     "interval": {
-      "from": 0.3,
+      "from": 0.26666666666666666,
       "to": 0.3
     },
     "maxStreakPx": 40,
     "last": {
       "samples": 8,
-      "particles": 85,
-      "streakPx": 10,
-      "ms": 16.666666666666668,
-      "builds": 1,
-      "timelineParticles": 85,
+      "particles": 114,
+      "streakPx": 20,
+      "ms": 33.333333333333336,
+      "builds": 6,
+      "timelineParticles": 360,
       "livePos": [
-        0.09497301437831528,
-        1.1606176500110434,
-        0.6720814783187969
+        0.18249012324546085,
+        1.2779266772594646,
+        0.3968774047940464
       ],
       "samplePos": [
-        0.09470485449464237,
-        1.161962211479299,
-        0.6717367766660287
+        0.17917298575076104,
+        1.2798644212041923,
+        0.3965230880399747
       ],
-      "firstSampleT": 0.284375,
-      "lastSampleT": 0.2989583333333333
+      "firstSampleT": 0.26875,
+      "lastSampleT": 0.29791666666666666
     }
   },
   "variant": "original",
   "wipe": false,
-  "wipeA": "original",
+  "wipeA": "smooth",
   "wipeB": "smooth",
   "wipePos": 0.5,
   "filter": "original",
@@ -97,7 +125,7 @@
   "reconstruction": "smooth",
   "connections": false,
   "extraBlobs": 0,
-  "droplets": 85,
+  "droplets": 360,
   "splats": 0,
   "density": {
     "densityWidth": 200,

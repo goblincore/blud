@@ -44,10 +44,11 @@
       },
       {
         "id": "efficient",
-        "implemented": false
+        "implemented": true
       }
     ],
-    "candidateAvailable": false,
+    "candidateAvailable": true,
+    "candidate": null,
     "preset": "1-60",
     "exposureSeconds": 0.0000046296296296296296,
     "exposureMs": 0.004629629629629629,

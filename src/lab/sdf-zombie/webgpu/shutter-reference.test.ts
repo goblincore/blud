@@ -35,11 +35,13 @@ function seeded(seed: number): () => number {
 }
 
 describe('shutter reference — selection and honest availability', () => {
-  it('lists sharp, sampled and an explicitly unavailable efficient candidate', () => {
+  it('lists sharp, the sampled oracle and the implemented efficient candidate', () => {
     expect(SHUTTER_REFERENCES.map(r => r.id)).toEqual(['sharp', 'sampled', 'efficient']);
     expect(SHUTTER_REFERENCES.find(r => r.id === 'sampled')!.implemented).toBe(true);
-    // The efficient candidate must never be aliased to a real implementation.
-    expect(SHUTTER_REFERENCES.find(r => r.id === 'efficient')!.implemented).toBe(false);
+    // Task 2 implements the candidate; it is a real selectable reference now,
+    // never an alias for sharp or sampled.
+    expect(SHUTTER_REFERENCES.find(r => r.id === 'efficient')!.implemented).toBe(true);
+    expect(SHUTTER_REFERENCES.find(r => r.id === 'efficient')!.label).toContain('velocity streaks');
     expect(DEFAULT_SHUTTER_SAMPLES).toBeGreaterThan(0);
   });
 

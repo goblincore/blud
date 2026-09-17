@@ -32,7 +32,7 @@
   "compare": "shutter",
   "shutter": {
     "mode": "shutter",
-    "reference": "sampled",
+    "reference": "efficient",
     "references": [
       {
         "id": "sharp",
@@ -53,7 +53,7 @@
     "exposureSeconds": 0,
     "exposureMs": 0,
     "exposureMode": "seconds",
-    "angleDeg": 180,
+    "angleDeg": 0.1,
     "referenceFps": 60,
     "samples": 0,
     "sampleTimes": [],
@@ -65,9 +65,9 @@
     "last": {
       "samples": 8,
       "particles": 85,
-      "streakPx": 10,
-      "ms": 16.666666666666668,
-      "builds": 1,
+      "streakPx": 20,
+      "ms": 33.333333333333336,
+      "builds": 5,
       "timelineParticles": 85,
       "livePos": [
         0.09497301437831528,
@@ -75,17 +75,17 @@
         0.6720814783187969
       ],
       "samplePos": [
-        0.09470485449464237,
-        1.161962211479299,
-        0.6717367766660287
+        0.09443669461096947,
+        1.1633067729475544,
+        0.6713920750132605
       ],
-      "firstSampleT": 0.284375,
-      "lastSampleT": 0.2989583333333333
+      "firstSampleT": 0.26875,
+      "lastSampleT": 0.29791666666666666
     }
   },
   "variant": "original",
   "wipe": false,
-  "wipeA": "original",
+  "wipeA": "smooth",
   "wipeB": "smooth",
   "wipePos": 0.5,
   "filter": "original",

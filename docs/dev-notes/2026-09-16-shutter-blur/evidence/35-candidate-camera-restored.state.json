@@ -32,7 +32,7 @@
   "compare": "shutter",
   "shutter": {
     "mode": "shutter",
-    "reference": "sampled",
+    "reference": "efficient",
     "references": [
       {
         "id": "sharp",
@@ -48,26 +48,54 @@
       }
     ],
     "candidateAvailable": true,
-    "candidate": null,
-    "preset": "off",
-    "exposureSeconds": 0,
-    "exposureMs": 0,
+    "candidate": {
+      "stamps": 85,
+      "texels": 721,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 0,
+      "maxStreakPx": 19.402813126223545,
+      "avgStreakPx": 16.39068699462461,
+      "width": 200,
+      "height": 150,
+      "taps": 8,
+      "seedScale": 1,
+      "depthBias": 20,
+      "buildMs": 0.20000004768371582,
+      "passes": {
+        "sceneRenders": 1,
+        "gooChains": 2,
+        "fullscreen": 1
+      }
+    },
+    "preset": "1-30",
+    "exposureSeconds": 0.03333333333333333,
+    "exposureMs": 33.333333333333336,
     "exposureMode": "seconds",
-    "angleDeg": 180,
+    "angleDeg": 0.1,
     "referenceFps": 60,
-    "samples": 0,
-    "sampleTimes": [],
+    "samples": 8,
+    "sampleTimes": [
+      0.26875,
+      0.27291666666666664,
+      0.27708333333333335,
+      0.28125,
+      0.28541666666666665,
+      0.2895833333333333,
+      0.29375,
+      0.29791666666666666
+    ],
     "interval": {
-      "from": 0.3,
+      "from": 0.26666666666666666,
       "to": 0.3
     },
     "maxStreakPx": 40,
     "last": {
-      "samples": 8,
+      "samples": 1,
       "particles": 85,
-      "streakPx": 10,
-      "ms": 16.666666666666668,
-      "builds": 1,
+      "streakPx": 19.402813126223545,
+      "ms": 33.333333333333336,
+      "builds": 8,
       "timelineParticles": 85,
       "livePos": [
         0.09497301437831528,
@@ -75,17 +103,17 @@
         0.6720814783187969
       ],
       "samplePos": [
-        0.09470485449464237,
-        1.161962211479299,
-        0.6717367766660287
+        0.08639189810078236,
+        1.2036436169952185,
+        0.6610510254302141
       ],
-      "firstSampleT": 0.284375,
-      "lastSampleT": 0.2989583333333333
+      "firstSampleT": 0.26666666666666666,
+      "lastSampleT": 0.3
     }
   },
   "variant": "original",
   "wipe": false,
-  "wipeA": "original",
+  "wipeA": "smooth",
   "wipeB": "smooth",
   "wipePos": 0.5,
   "filter": "original",

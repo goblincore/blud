@@ -31,19 +31,20 @@ export type ShutterReferenceId = 'sharp' | 'sampled' | 'efficient';
 export interface ShutterReferenceOption {
   id: ShutterReferenceId;
   label: string;
-  /** False for the Task-2 efficient candidate: visible but not selectable. */
+  /** False when the entry is listed but not selectable (never aliased). */
   implemented: boolean;
 }
 
 /**
- * The three reference choices the plan names. `efficient` is EXPLICITLY
- * unavailable until Task 2 — it is listed and disabled, never aliased to the
- * sampled reference or to sharp.
+ * The three reference choices the plan names. `sharp` and `sampled` are the
+ * task-1 oracle paths; `efficient` is the task-2 bounded velocity-streak
+ * candidate (see shutter-blur.ts). All three are selectable, and selection is
+ * never aliased: the page dispatches on the id.
  */
 export const SHUTTER_REFERENCES: readonly ShutterReferenceOption[] = [
   { id: 'sharp', label: 'Sharp (no exposure)', implemented: true },
   { id: 'sampled', label: 'Sampled reference (slow oracle)', implemented: true },
-  { id: 'efficient', label: 'Shutter candidate (unavailable until task 2)', implemented: false },
+  { id: 'efficient', label: 'Shutter candidate (velocity streaks)', implemented: true },
 ];
 
 export const DEFAULT_SHUTTER_SAMPLES = 8;
