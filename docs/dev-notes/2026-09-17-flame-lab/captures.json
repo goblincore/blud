@@ -1,0 +1,97 @@
+{
+  "url": "/sdf-flame-lab.html?seed=1",
+  "backend": "webgpu",
+  "viewport": {
+    "width": 1380,
+    "height": 820
+  },
+  "poses": [
+    "stand",
+    "walk",
+    "run",
+    "collapsed",
+    "distant"
+  ],
+  "stages": [
+    {
+      "name": "fresh",
+      "char": 0
+    },
+    {
+      "name": "charred",
+      "char": 0.6
+    }
+  ],
+  "shots": [
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "stand-fresh.png",
+      "std": 35.23
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "stand-charred.png",
+      "std": 29.25
+    },
+    {
+      "pose": "walk",
+      "stage": "fresh",
+      "char": 0,
+      "file": "walk-fresh.png",
+      "std": 35.2
+    },
+    {
+      "pose": "walk",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "walk-charred.png",
+      "std": 29.13
+    },
+    {
+      "pose": "run",
+      "stage": "fresh",
+      "char": 0,
+      "file": "run-fresh.png",
+      "std": 35.36
+    },
+    {
+      "pose": "run",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "run-charred.png",
+      "std": 29.35
+    },
+    {
+      "pose": "collapsed",
+      "stage": "fresh",
+      "char": 0,
+      "file": "collapsed-fresh.png",
+      "std": 32.45
+    },
+    {
+      "pose": "collapsed",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "collapsed-charred.png",
+      "std": 27.75
+    },
+    {
+      "pose": "distant",
+      "stage": "fresh",
+      "char": 0,
+      "file": "distant-fresh.png",
+      "std": 21.8
+    },
+    {
+      "pose": "distant",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "distant-charred.png",
+      "std": 19.59
+    }
+  ]
+}
