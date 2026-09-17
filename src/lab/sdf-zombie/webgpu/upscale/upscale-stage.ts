@@ -14,7 +14,7 @@ import {
   type UpscaleModel, type UpscaleModelId, type UpscaleModelSource, type HeadInputs,
   inputsUseNormals,
 } from './upscale-model';
-import { planUpscalePasses, UPSCALE_RECONSTRUCT_WGSL, UPSCALE_SHARPEN_WGSL, type PassSpec } from './upscale-wgsl';
+import { planUpscalePasses, UPSCALE_RECONSTRUCT_WGSL, UPSCALE_SHARPEN_WGSL, UPSCALE_TILE_SIZE, type PassSpec } from './upscale-wgsl';
 
 export interface UpscaleStage {
   readonly config: UpscaleConfig;
@@ -35,6 +35,9 @@ export interface UpscaleStage {
    *  strength = amount 0..4). */
   setSharpenMode(mode: 'cas' | 'unsharp'): void;
   readonly sharpenMode: 'cas' | 'unsharp';
+  /** Conservative empty-space culling; supported by the default t16/sp stage. */
+  setEmptyTileCulling(enabled: boolean): void;
+  readonly emptyTileCulling: boolean;
   setSize(inW: number, inH: number, outW: number, outH: number): void;
   render(renderer: THREE.WebGPURenderer, quadCam: THREE.Camera, camera: THREE.Camera): void;
   /**
@@ -72,6 +75,7 @@ export interface UpscaleInfo {
   /** Post-sharpen strength (0 = off). */
   sharpen: number;
   sharpenMode: 'cas' | 'unsharp';
+  emptyTileCulling: boolean;
   inSize: { width: number; height: number } | null;
   outSize: { width: number; height: number } | null;
 }
@@ -80,7 +84,7 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
   if (!stage) {
     return {
       on: false, model: null, layout: null, inputs: null, seed: null, weightHash: null,
-      source: null, run: null, step: null, passes: [], head: false, headInputs: null, sharpen: 0, sharpenMode: 'cas', inSize: null, outSize: null,
+      source: null, run: null, step: null, passes: [], head: false, headInputs: null, sharpen: 0, sharpenMode: 'cas', emptyTileCulling: false, inSize: null, outSize: null,
     };
   }
   return {
@@ -98,6 +102,7 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
     headInputs: stage.model.headInputs ?? null,
     sharpen: stage.sharpen,
     sharpenMode: stage.sharpenMode,
+    emptyTileCulling: stage.emptyTileCulling,
     inSize: { ...stage.inSize },
     outSize: { ...stage.outSize },
   };
@@ -120,6 +125,7 @@ export type UpscaleRefineTextures = { n: THREE.Texture; c: THREE.Texture };
 export function createUpscaleStage(
   config: UpscaleConfig, marchTexture: THREE.Texture, flipY: unknown, trained?: UpscaleModel,
   normalTexture?: THREE.Texture, detailTexture?: THREE.Texture, refine?: UpscaleRefineTextures,
+  options: { emptyTileCulling?: boolean } = {},
 ): UpscaleStage {
   if (trained && (trained.id !== config.model || trained.inputs !== config.inputs)) {
     throw new Error(`upscale: model ${trained.id}/${trained.inputs} does not match config ${config.model}/${config.inputs}`);
@@ -134,7 +140,9 @@ export function createUpscaleStage(
   if (model.headInputs === 'detail+refine' && !refine) {
     throw new Error('upscale: this model has a refine head (headInputs detail+refine) and needs the refine textures (boot with ?refine=1)');
   }
-  const passes = planUpscalePasses(model, config.layout);
+  const passes = planUpscalePasses(model, config.layout, options.emptyTileCulling ?? true);
+  const hasTileMask = passes.some((p) => p.kind === 'mask');
+  const uCullEmptyTiles = uniform(hasTileMask ? 1 : 0);
   const uNearFar = uniform(new THREE.Vector2(0.1, 100));
   const uOutSize = uniform(new THREE.Vector2(1, 1));
   const reconstructNode = wgslFn(UPSCALE_RECONSTRUCT_WGSL);
@@ -193,6 +201,10 @@ export function createUpscaleStage(
     const args: Record<string, unknown> = { texCoord: uv(), flipY };
     spec.inputs.forEach((ref, k) => { args[spec.params[k]!] = texture(textureOf(ref)); });
     if (spec.usesNearFar) args.nearFar = uNearFar;
+    if (spec.usesEmptyTileMask) {
+      args.activeTiles = texture(textureOf('activeTiles:0'));
+      args.cullEmptyTiles = uCullEmptyTiles;
+    }
     if (spec.outputRes === 'full') args.outSize = uOutSize;
 
     let target: THREE.RenderTarget;
@@ -219,12 +231,13 @@ export function createUpscaleStage(
       spec.reads.forEach((src, k) => { outs[`f${k}`] = wgslFn(src, [state] as never)({ dep: cached as never }); });
       material.mrtNode = mrt(outs as never) as never;
     } else {
-      // A full-res single-output pass: the FINAL one writes `output`; an intermediate one (the
-      // placement under a run-4 head) gets its own rgba32f target so depth survives.
+      // Single-output pass: the FINAL one writes `output`. Intermediate placement
+      // retains float depth; tile masks only store 0/1 and use small RGBA8 targets.
       target = spec.final ? output : new THREE.RenderTarget(1, 1, {
-        type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false,
+        type: spec.kind === 'mask' ? THREE.UnsignedByteType : THREE.FloatType,
+        format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false,
       });
-      const run = wgslFn(spec.run, spec.kind === 'head2' ? [] as never : [reconstructNode] as never);
+      const run = wgslFn(spec.run, spec.kind === 'head2' || spec.kind === 'mask' ? [] as never : [reconstructNode] as never);
       const out = run(args as never) as unknown as { xyz: unknown; w: unknown };
       material.colorNode = vec4(out.xyz as never, out.w as never);
       material.outputNode = vec4(out.xyz as never, out.w as never);
@@ -259,12 +272,15 @@ export function createUpscaleStage(
       (uSharpenMode.value as number) = sharpenMode === 'unsharp' ? 1 : 0;
     },
     get sharpenMode() { return sharpenMode; },
+    setEmptyTileCulling(enabled) { uCullEmptyTiles.value = hasTileMask && enabled ? 1 : 0; },
+    get emptyTileCulling() { return uCullEmptyTiles.value > 0.5; },
     setSize(inW, inH, outW, outH) {
       inSize.width = inW; inSize.height = inH;
       outSize.width = outW; outSize.height = outH;
       for (const b of built) {
         if (b.target === output) continue;
-        if (b.spec.outputRes === 'low') b.target.setSize(inW, inH); else b.target.setSize(outW, outH);
+        if (b.spec.outputRes === 'tiles') b.target.setSize(Math.ceil(inW / UPSCALE_TILE_SIZE), Math.ceil(inH / UPSCALE_TILE_SIZE));
+        else if (b.spec.outputRes === 'low') b.target.setSize(inW, inH); else b.target.setSize(outW, outH);
       }
       output.setSize(outW, outH);
       netOut.setSize(outW, outH);
@@ -278,6 +294,7 @@ export function createUpscaleStage(
       // Every pass writes every pixel (no discard), so a clear would be wasted work.
       renderer.autoClear = false;
       for (const b of built) {
+        if (b.spec.kind === 'mask' && !this.emptyTileCulling) continue;
         setPassLabel(`sdf:upscale:${b.spec.name}`);
         renderer.setRenderTarget(b.target === output ? fullResTarget() : b.target);
         void renderer.render(b.scene, quadCam);

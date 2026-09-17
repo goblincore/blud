@@ -75,3 +75,13 @@ probe-pass improvement in the blast fixture; see GPU.md for limits.
 
 Focused tests and the final build are recorded in GPU.md. CPU results from the
 prior commit remain in CPU.md; do not sum numbers across different scenarios.
+
+## Owner-accepted baseline and GPU follow-up
+
+The owner manually reviewed `cd2ded50` and reported no visual or performance
+regression. The subsequent [upscaler pass](GPU-UPSCALING.md) skips convolution
+work outside a conservative occupied-tile halo, with the same weights and
+settings. Eighteen GPU comparisons are byte-identical; 117 focused tests and the
+production build pass. Isolated stage savings are 0.3–0.5 ms, with 0.4–0.7 ms
+less GPU attribution in the profiled views. Whole-frame results vary between
+runs; this does not close the 5 ms target. Full-coverage stress adds about 0.2 ms.

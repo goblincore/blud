@@ -17,6 +17,34 @@ function fakeRenderer() {
 }
 
 describe('upscale stage wiring', () => {
+  it('culls default-model tiles, resizes partial edge tiles, and can restore dense execution', async () => {
+    const config = { model: 't16', layout: 'sp', inputs: 'rgb', seed: 1 } as const;
+    const stage = createUpscaleStage(config, new THREE.Texture(), uniform(1));
+    const dense = createUpscaleStage(config, new THREE.Texture(), uniform(1), undefined, undefined, undefined, undefined, { emptyTileCulling: false });
+    stage.setSize(401, 301, 802, 602);
+    expect(upscaleInfoOf(stage).emptyTileCulling).toBe(true);
+    const masks = ['occupiedTiles', 'activeTiles'].map(name => stage.targetFor(name));
+    expect(masks.map(t => [t.width, t.height])).toEqual([[51, 38], [51, 38]]);
+    expect(masks.every(t => t.texture.type === THREE.UnsignedByteType)).toBe(true);
+    expect(stage.targetFor('L4a').width).toBe(401);
+    expect(stage.output.width).toBe(802);
+    const { renderer, calls } = fakeRenderer();
+    stage.render(renderer, new THREE.OrthographicCamera(), new THREE.PerspectiveCamera());
+    expect(calls.slice(0, 2).map(c => c.target)).toEqual(masks);
+    stage.setEmptyTileCulling(false);
+    calls.length = 0;
+    stage.render(renderer, new THREE.OrthographicCamera(), new THREE.PerspectiveCamera());
+    expect(calls).toHaveLength(dense.passes.length);
+    expect(calls.every(c => !masks.includes(c.target!))).toBe(true);
+    stage.setEmptyTileCulling(true);
+    expect(stage.emptyTileCulling).toBe(true);
+    dense.setEmptyTileCulling(true);
+    expect(dense.emptyTileCulling).toBe(false);
+    const released = masks.map(t => vi.spyOn(t, 'dispose'));
+    stage.dispose(); dense.dispose();
+    expect(released.every(spy => spy.mock.calls.length === 1)).toBe(true);
+  });
+
   it('allocates half-float MRT feature targets at low res and one RGBA32F output at full res', () => {
     const stage = createUpscaleStage({ model: 's32', layout: 'sp', inputs: 'rgb', seed: 1 }, new THREE.Texture(), uniform(1));
     stage.setSize(400, 300, 800, 600);

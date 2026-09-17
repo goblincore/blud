@@ -12026,6 +12026,10 @@ function performBenchAction(a: BenchAction): void {
       st.setSharpenMode(mode);
       return st.sharpenMode;
     },
+    setUpscaleEmptyTileCulling: (enabled: boolean): boolean => {
+      sdfLayer.upscaleStage?.setEmptyTileCulling(enabled);
+      return sdfLayer.upscaleStage?.emptyTileCulling ?? false;
+    },
     upscaleInfo: () => ({
       ...sdfLayer.upscaleInfo,
       near: (camera as THREE.PerspectiveCamera).near,
@@ -13155,6 +13159,24 @@ function performBenchAction(a: BenchAction): void {
         return { w, h, rgba32f: btoa(binary) };
       };
       (window as unknown as { __sdfGameDebug: unknown }).__sdfGameDebug = {
+        /** Rebuild with the original dense shader for honest whole-frame A/B;
+         * the live uniform toggle still contains the culling branch. */
+        setUpscaleCullingPipeline(emptyTileCulling: boolean) {
+          const st = sdfLayer.upscaleStage;
+          if (!st) throw new Error('Upscale is off');
+          const { config, model, sharpen, sharpenMode } = st;
+          sdfLayer.setUpscale(config, model, { emptyTileCulling });
+          sdfLayer.upscaleStage!.setSharpen(sharpen);
+          sdfLayer.upscaleStage!.setSharpenMode(sharpenMode);
+          return sdfLayer.upscaleInfo;
+        },
+        async upscaleCullingCheck(opts?: { frames?: number; repeats?: number; synthetic?: boolean }) {
+          handle.setLoopRunning(false);
+          await handle.resolveGpu();
+          const { runUpscaleCullingCheck } = await import('./upscale/upscale-culling-check');
+          return runUpscaleCullingCheck({ renderer: handle.renderer, layer: sdfLayer,
+            camera: camera as THREE.PerspectiveCamera, renderFrames: () => {}, resolveGpu: () => handle.resolveGpu() }, opts);
+        },
         /** Raw float readback, row padding removed. The driver compares these
          * bytes before any composite, color conversion or antialias filtering. */
         normalCaptureState() {

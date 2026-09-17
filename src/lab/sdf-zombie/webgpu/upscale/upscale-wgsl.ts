@@ -19,18 +19,19 @@ export interface PassSpec {
   /** 'L1a', 'L2b', 'shuffle', 'deconv' — unique within a stage; also the pass label suffix. */
   name: string;
   /** 'head1'/'head2': the run-4 full-res head (conv over [net, detail, march] taps, then the residual). */
-  kind: 'conv' | 'shuffle' | 'deconv' | 'head1' | 'head2';
-  /** 'low' = the march size; 'full' = the output size. */
-  outputRes: 'low' | 'full';
+  kind: 'conv' | 'shuffle' | 'deconv' | 'head1' | 'head2' | 'mask';
+  /** 'low' = march size; 'full' = output size; 'tiles' = ceil(march size / 8). */
+  outputRes: 'low' | 'full' | 'tiles';
   /** The pass that writes the stage output (exactly one per plan). */
   final: boolean;
-  /** Render-target textures written: conv 1..4 (RGBA16F), shuffle/deconv 1 (RGBA32F). */
+  /** Targets: conv 1..4 RGBA16F, shuffle/deconv 1 RGBA32F, masks 1 RGBA8. */
   targets: number;
   /** Texture inputs in parameter order: 'march' or '<pass name>:<texture index>'. */
   inputs: string[];
   /** wgslFn parameter name for each input, same order. */
   params: string[];
   usesNearFar: boolean;
+  usesEmptyTileMask?: boolean;
   fnName: string;
   /** The pass's main function. */
   run: string;
@@ -241,7 +242,7 @@ function signature(fnName: string, params: string[]): string {
   return `fn ${fnName}(\n  ${params.join(',\n  ')}\n) -> vec4<f32> {\n`;
 }
 
-function convPass(model: UpscaleModel, layerIndex: number, passIndex: number, inputs: string[]): PassSpec {
+function convPass(model: UpscaleModel, layerIndex: number, passIndex: number, inputs: string[], cullEmptyTiles = false): PassSpec {
   const layer = model.layers[layerIndex]!;
   const first = layerIndex === 0;
   const name = `L${layerIndex + 1}${'abcdefgh'[passIndex]}`;
@@ -257,9 +258,16 @@ function convPass(model: UpscaleModel, layerIndex: number, passIndex: number, in
     'texCoord: vec2<f32>',
     'flipY: f32',
     ...(usesNearFar ? ['nearFar: vec2<f32>'] : []),
+    ...(cullEmptyTiles ? ['activeTiles: texture_2d<f32>', 'cullEmptyTiles: f32'] : []),
   ];
   const nIn = first ? (usesNearFar || usesNormal ? 2 : 1) : inputs.length;
-  let body = lowPrelude(params[0]!) + tapCoords('p', 'maxI', layer.dilation) + (first ? marchInputTaps(model) : textureTaps(inputs.length));
+  let body = lowPrelude(params[0]!);
+  if (cullEmptyTiles) {
+    body += `  if (cullEmptyTiles > 0.5 && textureLoad(activeTiles, p / ${UPSCALE_TILE_SIZE}, 0).x < 0.5) {\n`;
+    for (let t = 0; t < targets; t++) body += `    gUp${name}_${t} = vec4<f32>(0.0);\n`;
+    body += `    return vec4<f32>(0.0);\n  }\n`;
+  }
+  body += tapCoords('p', 'maxI', layer.dilation) + (first ? marchInputTaps(model) : textureTaps(inputs.length));
   const globals: string[] = [];
   for (let t = 0; t < targets; t++) {
     const outCh = [0, 1, 2, 3].map((r) => outStart + 4 * t + r);
@@ -273,7 +281,7 @@ function convPass(model: UpscaleModel, layerIndex: number, passIndex: number, in
   const reads = globals.map((g, t) => `fn upRead${name}_${t}(dep: vec4<f32>) -> vec4<f32> {\n  return ${g};\n}`);
   return {
     name, kind: 'conv', outputRes: 'low', targets, final: false,
-    inputs: first ? [...params] : [...inputs], params, usesNearFar, fnName, run, state, reads,
+    inputs: first ? [...params] : [...inputs], params, usesNearFar, usesEmptyTileMask: cullEmptyTiles, fnName, run, state, reads,
   };
 }
 
@@ -402,18 +410,67 @@ function head2Pass(model: UpscaleModel, netPassName: string): PassSpec {
  *  over the limit and every pipeline fails to compile (upscale-smoke 2026-09-12, s64d/dc). */
 export const MAX_SAMPLED_TEXTURES = 16;
 
-export function planUpscalePasses(model: UpscaleModel, layout: UpscaleLayout): PassSpec[] {
+export const UPSCALE_TILE_SIZE = 8;
+
+/** Reconstruction can only cover a pixel within one texel of a march hit. Working
+ * backwards through every layer AFTER L1 bounds the L1 outputs it can read.
+ * Keeping this conservative radius for every layer also preserves all later
+ * dependencies. Biases in empty space do not matter outside this dependency set.
+ * The first layer's own dilation is not an output-to-output dependency. */
+export function upscaleDependencyRadius(model: UpscaleModel): number {
+  return 1 + model.layers.slice(1).reduce((sum, layer) => sum + layer.dilation, 0);
+}
+
+function occupiedTilePass(): PassSpec {
+  const run = `fn upOccupiedTiles(march: texture_2d<f32>, texCoord: vec2<f32>, flipY: f32) -> vec4<f32> {
+  let dims = vec2<i32>(textureDimensions(march, 0));
+  let tileDims = (dims + vec2<i32>(${UPSCALE_TILE_SIZE - 1})) / ${UPSCALE_TILE_SIZE};
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let tile = clamp(vec2<i32>(floor(st * vec2<f32>(tileDims))), vec2<i32>(0), tileDims - vec2<i32>(1));
+  let lo = max(tile * ${UPSCALE_TILE_SIZE}, vec2<i32>(0));
+  let hi = min((tile + vec2<i32>(1)) * ${UPSCALE_TILE_SIZE}, dims);
+  for (var y = lo.y; y < hi.y; y++) {
+    for (var x = lo.x; x < hi.x; x++) {
+      if (textureLoad(march, vec2<i32>(x, y), 0).w < 1.0) { return vec4<f32>(1.0); }
+    }
+  }
+  return vec4<f32>(0.0);
+}`;
+  return { name: 'occupiedTiles', kind: 'mask', outputRes: 'tiles', targets: 1, final: false,
+    inputs: ['march'], params: ['march'], usesNearFar: false, fnName: 'upOccupiedTiles', run, state: '', reads: [] };
+}
+
+/** Expand the tiny occupancy texture instead of repeatedly scanning overlapping
+ * march neighborhoods. Whole tiles are conservative: a radius of 5 needs the
+ * adjacent tiles, including diagonals. This also keeps the all-empty case cheap. */
+function activeTilePass(model: UpscaleModel): PassSpec {
+  const radius = Math.ceil(upscaleDependencyRadius(model) / UPSCALE_TILE_SIZE);
+  let body = lowPrelude('occupiedTiles') + '  var occupied = 0.0;\n';
+  for (let y = -radius; y <= radius; y++) for (let x = -radius; x <= radius; x++) {
+    body += `  occupied = max(occupied, textureLoad(occupiedTiles, clamp(p + vec2<i32>(${x}, ${y}), vec2<i32>(0), maxI), 0).x);\n`;
+  }
+  const run = `${signature('upActiveTiles', ['occupiedTiles: texture_2d<f32>', 'texCoord: vec2<f32>', 'flipY: f32'])}${body}  return vec4<f32>(occupied);\n}`;
+  return { name: 'activeTiles', kind: 'mask', outputRes: 'tiles', targets: 1, final: false,
+    inputs: ['occupiedTiles:0'], params: ['occupiedTiles'], usesNearFar: false, fnName: 'upActiveTiles', run, state: '', reads: [] };
+}
+
+export function planUpscalePasses(model: UpscaleModel, layout: UpscaleLayout, cullEmptyTiles = false): PassSpec[] {
   const lastHidden = model.layers[model.layers.length - 2]?.outC ?? 0;
   if (layout === 'dc' && 1 + lastHidden / 4 > MAX_SAMPLED_TEXTURES) {
     throw new Error(`upscale: layout dc binds ${1 + lastHidden / 4} textures for a ${lastHidden}-wide last hidden layer (limit ${MAX_SAMPLED_TEXTURES}); use layout sp`);
   }
   const passes: PassSpec[] = [];
+  // Initially limited to the shipped default; other models/layouts keep their
+  // existing pipelines, including 64-wide layers already at the texture limit.
+  cullEmptyTiles = cullEmptyTiles && model.id === 't16' && model.inputs === 'rgb' && layout === 'sp' && !model.head;
+  if (cullEmptyTiles) passes.push(occupiedTilePass(), activeTilePass(model));
   let inputs: string[] = ['march'];
   const convLayers = layout === 'sp' ? model.layers.length : model.layers.length - 1;
   for (let l = 0; l < convLayers; l++) {
     const layer = model.layers[l]!;
     const made: PassSpec[] = [];
-    for (let p = 0; p * 16 < layer.outC; p++) made.push(convPass(model, l, p, inputs));
+    for (let p = 0; p * 16 < layer.outC; p++) made.push(convPass(model, l, p, inputs, cullEmptyTiles));
     passes.push(...made);
     inputs = made.flatMap((ps) => Array.from({ length: ps.targets }, (_, t) => `${ps.name}:${t}`));
   }
