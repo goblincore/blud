@@ -1,0 +1,154 @@
+{
+  "seed": 12345,
+  "frame": 18,
+  "scenario": "crossing",
+  "playing": false,
+  "speed": 1,
+  "splashPreset": "spurt",
+  "shape": "current",
+  "eventTime": 0.3,
+  "splash": {
+    "shape": "current",
+    "frozen": true,
+    "eventTime": 0.3,
+    "origin": [
+      0,
+      1.35,
+      0.55
+    ],
+    "direction": [
+      0,
+      0,
+      1
+    ],
+    "time": 0.3,
+    "lifetime": 1.15,
+    "progress": 0.2608695652173913,
+    "crownMoment": 0.3,
+    "events": 1,
+    "vertices": 7091,
+    "droplets": 14
+  },
+  "compare": "shutter",
+  "shutter": {
+    "mode": "shutter",
+    "reference": "sampled",
+    "references": [
+      {
+        "id": "sharp",
+        "implemented": true
+      },
+      {
+        "id": "sampled",
+        "implemented": true
+      },
+      {
+        "id": "efficient",
+        "implemented": false
+      }
+    ],
+    "candidateAvailable": false,
+    "preset": "1-30",
+    "exposureSeconds": 0.03333333333333333,
+    "exposureMs": 33.333333333333336,
+    "exposureMode": "seconds",
+    "angleDeg": 180,
+    "referenceFps": 60,
+    "samples": 24,
+    "sampleTimes": [
+      0.2673611111111111,
+      0.26875,
+      0.2701388888888889,
+      0.27152777777777776,
+      0.27291666666666664,
+      0.2743055555555556,
+      0.27569444444444446,
+      0.27708333333333335,
+      0.27847222222222223,
+      0.2798611111111111,
+      0.28125,
+      0.2826388888888889,
+      0.28402777777777777,
+      0.28541666666666665,
+      0.28680555555555554,
+      0.2881944444444444,
+      0.2895833333333333,
+      0.29097222222222224,
+      0.2923611111111111,
+      0.29375,
+      0.2951388888888889,
+      0.2965277777777778,
+      0.29791666666666666,
+      0.29930555555555555
+    ],
+    "interval": {
+      "from": 0.26666666666666666,
+      "to": 0.3
+    },
+    "maxStreakPx": 40,
+    "last": {
+      "samples": 24,
+      "particles": 114,
+      "streakPx": 20,
+      "ms": 33.333333333333336,
+      "builds": 2,
+      "timelineParticles": 360,
+      "livePos": [
+        0.18249012324546085,
+        1.2779266772594646,
+        0.3968774047940464
+      ],
+      "samplePos": [
+        0.18138441074722758,
+        1.2785725919077071,
+        0.3967592992093558
+      ],
+      "firstSampleT": 0.2673611111111111,
+      "lastSampleT": 0.29930555555555555
+    }
+  },
+  "variant": "original",
+  "wipe": false,
+  "wipeA": "original",
+  "wipeB": "smooth",
+  "wipePos": 0.5,
+  "filter": "original",
+  "filterApplies": true,
+  "strands": true,
+  "sheets": false,
+  "goo": true,
+  "mist": true,
+  "reconstruction": "smooth",
+  "connections": false,
+  "extraBlobs": 0,
+  "droplets": 360,
+  "splats": 0,
+  "density": {
+    "densityWidth": 200,
+    "densityHeight": 150,
+    "sourceWidth": 400,
+    "sourceHeight": 300,
+    "outputWidth": 800,
+    "outputHeight": 600,
+    "densityScale": 0.5,
+    "texelsPerSourcePixelX": 0.5,
+    "texelsPerSourcePixelY": 0.5,
+    "texelsPerOutputPixelX": 0.25,
+    "texelsPerOutputPixelY": 0.25,
+    "smoothForcesFullResComposite": true
+  },
+  "source": {
+    "width": 400,
+    "height": 300
+  },
+  "output": {
+    "width": 800,
+    "height": 600
+  },
+  "camera": {
+    "yaw": 0,
+    "pitch": 0.14,
+    "distance": 1.35
+  },
+  "backend": "webgpu"
+}

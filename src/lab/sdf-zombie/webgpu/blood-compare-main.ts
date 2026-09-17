@@ -55,7 +55,7 @@ import { impactSplashPresets } from './impact-splash-profiles';
 // at by a human on a GPU that is not busy training.
 
 import * as THREE from 'three/webgpu';
-import { uniform, texture, vec4, mul, oneMinus, add } from 'three/tsl';
+import { uniform, texture, vec4, mul, oneMinus, add, uv, vec2 } from 'three/tsl';
 import { createLabRenderer, type LabRendererHandle } from './lab-renderer';
 import {
   createGooLayer, type GooLayer, type GooDensityBlob, type GooReconstruction,
@@ -368,8 +368,15 @@ async function bootstrap(): Promise<void> {
   const refScale = uniform(0);
   const compMat = new THREE.MeshBasicNodeMaterial();
   {
-    const sceneTex = texture(refScene.texture);
-    const accumTex = texture(refAccum.texture);
+    // The goo surface composite (and the scene render it wraps) lands in an
+    // offscreen target with the opposite vertical orientation to the canvas
+    // blit path (measured: the wipe showed the sampled half vertically
+    // mirrored against the sharp half). Sampling with Y inverted puts the
+    // reference back in the scene's orientation; the blit then treats refScene
+    // and refAccum exactly like rtA/rtB.
+    const sampleUv = vec2(uv().x, oneMinus(uv().y));
+    const sceneTex = texture(refScene.texture, sampleUv);
+    const accumTex = texture(refAccum.texture, sampleUv);
     // out = scene*(1 - avgCoverage) + avgPremultipliedColour, all in the
     // scene's working-linear space. Dividing coverage by the SAME sample count
     // is what keeps the background contribution normalized: an uncovered pixel
@@ -797,8 +804,14 @@ async function bootstrap(): Promise<void> {
   let exposureMode: ShutterMode = 'seconds';
   let shutterAngleDeg = 180;
   let shutterReferenceFps = DEFAULT_REFERENCE_FPS;
-  let lastRefStats = {
+  let lastRefStats: {
+    samples: number; particles: number; streakPx: number; ms: number; builds: number;
+    timelineParticles: number;
+    livePos: number[] | null; samplePos: number[] | null;
+    firstSampleT: number; lastSampleT: number;
+  } = {
     samples: 0, particles: 0, streakPx: 0, ms: 0, builds: 0, timelineParticles: 0,
+    livePos: null, samplePos: null, firstSampleT: 0, lastSampleT: 0,
   };
 
   function currentExposureSeconds(): number {
@@ -877,6 +890,8 @@ async function bootstrap(): Promise<void> {
     renderer.autoClear = prevAutoClear;
 
     const budget = referenceBudget(plan, movingScratch.droplets.length, 600);
+    const liveFirst = sim.droplets[0];
+    const sampleFirst = movingScratch.droplets[0];
     lastRefStats = {
       samples: plan.sampleCount,
       particles: movingScratch.droplets.length,
@@ -884,6 +899,10 @@ async function bootstrap(): Promise<void> {
       ms: exposureMs(exposure),
       builds: timelineBuilds,
       timelineParticles: timeline.particleCount,
+      livePos: liveFirst ? [...liveFirst.pos] : null,
+      samplePos: sampleFirst ? [...sampleFirst.pos] : null,
+      firstSampleT: plan.sampleTimes[0] ?? 0,
+      lastSampleT: plan.sampleTimes[plan.sampleTimes.length - 1] ?? 0,
     };
   }
 
@@ -917,14 +936,20 @@ async function bootstrap(): Promise<void> {
     if (compareMode === 'shutter') {
       splashLayer.setVisible(false);
       renderer.setClearColor(background);
+      // ZERO EXPOSURE IS THE SHARP FRAME, EXACTLY. The sampled oracle splits
+      // moving blood from static pools to average per-sample coverage; at zero
+      // samples that split would draw NO moving blood at all, so the off case
+      // is routed to the fused sharp render instead of through the split.
+      const sampled = shutterRef === 'sampled' && currentExposureSeconds() > 0;
       if (!wipe) {
-        if (shutterRef === 'sampled') renderSampledReference(null);
+        if (sampled) renderSampledReference(null);
         else renderSharpReference(null);
       } else {
         // Sharp vs Sampled, both full-size: A (right) sharp, B (left) sampled.
         initRenderTargets();
         renderSharpReference(rtA);
-        renderSampledReference(rtB);
+        if (sampled) renderSampledReference(rtB);
+        else renderSharpReference(rtB);
         blitWipe();
       }
       updateDiag();
