@@ -22,6 +22,23 @@
   [diagnosis, census, captures, limits](docs/dev-notes/2026-09-16-playtest-followups/ANATOMY-HEADS.md).
 - [ ] Then: blast shockwave A/B + integrated rupture review (task 4); NotBlood launch dispersion (task 3);
   floating/upright settled pieces (later follow-up, not this task).
+- [~] Offline reusable gib assets 2026-09-16 — tasks 1–3 done on `codex/offline-gib-assets-task-3` (not merged):
+  generator + committed zombie/soldier sets (43 pieces, 8.4 MB, 12 mm cells) and the mesh path
+  `?gibrender=assets` (loads/deforms them, exact sim parity), but the default stays `march`: blockers are
+  `bakeColor.a == 0` on 100% of asset verts (no wet/cut mask) and the mesh head face projection is unwired
+  (head excluded, counted `head-face`). Task 3 fixed a rupture-path cut-cap spike (2,540/37,738 verts) with a
+  CPU regression test; loader 8.65 MB / 33–190 ms / 0 runtime extraction; no measurable moving-gib cadence
+  cost at 14–56 pieces. [report, captures, exact usage + blockers](docs/dev-notes/2026-09-16-offline-gib-assets/REPORT.md).
+- [~] Offline gib-asset metre poles on ANIMATED bodies 2026-09-17 — fixed on `codex/offline-gib-spikes`
+  (not merged): the owner's live-playtest poles were `sub` cut caps used as skinning targets (a point
+  sphere ~3–5 m out with no axis, so its radial could not rotate with the posed body). Bind table is now
+  additive-only (schema 3 / `GIB_ASSET_BIND_MASK`), `primTransformPoint` rotates the radial, and the
+  renderer refuses an out-of-runtime-bounds deform (counted marched fallback, pool released once).
+  Worst vertex outside the runtime additive union: **4.28 m zombie / 5.19 m soldier → 0.036 / 0.030 m**;
+  344 CPU piece-spawns, 0 fallbacks; gate cost 0.44–0.50 ms/body. Substantive tip `9b1d05d0`.
+  [report](docs/dev-notes/2026-09-17-offline-gib-spikes/REPORT.md).
+  Default stays `?gibrender=march`; the GPU/native-vision pass on live moving/damaged actors is the
+  outstanding step (GPU not approved for this task).
 
 ## Neural upscale (ESPCN family) — flesh 400×300 → 800×600 — 2026-09-11
 

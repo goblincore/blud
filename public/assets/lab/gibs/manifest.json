@@ -1,0 +1,230 @@
+{
+  "kind": "blud-gib-assets",
+  "schemaVersion": 3,
+  "generator": "scripts/build-gib-assets.ts",
+  "builtAt": "2026-09-16T21:09:07.745Z",
+  "assets": [
+    {
+      "archetype": "soldier",
+      "fingerprint": "ef6d8613c4181483",
+      "recipe": {
+        "schemaVersion": 3,
+        "generator": "scripts/build-gib-assets.ts",
+        "archetype": "soldier",
+        "blobPath": "src/lab/sdf-zombie/characters/soldier.blob",
+        "buildOpts": {
+          "silhouetteNoiseAmp": 0.012,
+          "stepMultiplier": 0.6
+        },
+        "face": {
+          "headRadius": 0.09,
+          "headWidth": 0.98,
+          "headHeight": 1.15,
+          "headDepth": 1.05,
+          "jawWidth": 0.816,
+          "jawHeight": 0.9,
+          "jawDrop": 0.072,
+          "jawJut": 0.0444,
+          "noseLength": 0.0372,
+          "noseWidth": 1.085,
+          "noseDrop": 0.0168,
+          "browHeavy": 0.0168,
+          "browRise": 0.042,
+          "headBlend": 0.006,
+          "headRise": 0,
+          "headLead": 0
+        },
+        "palette": "blob",
+        "look": {
+          "baseColor": [
+            0.522,
+            0.424,
+            0.333
+          ],
+          "deepColor": [
+            0.5,
+            0.08,
+            0.08
+          ],
+          "fatColor": [
+            0.64,
+            0.25,
+            0.18
+          ],
+          "mottleColor": [
+            0.54,
+            0.39,
+            0.28
+          ],
+          "organColor": [
+            0.72,
+            0.32,
+            0.3
+          ],
+          "visceraColor": [
+            0.28,
+            0.06,
+            0.1
+          ],
+          "woundDepthAmp": 1,
+          "fatDepth": 0.004,
+          "muscleDepth": 0.014,
+          "visceraAmp": 1,
+          "visceraDepth": 0.045,
+          "mottleAmp": 0.1,
+          "mottleScale": 1.4,
+          "organAmp": 1,
+          "goreStrength": 1
+        },
+        "surface": {
+          "legacyGamma": 1,
+          "wetness": 0.79,
+          "roughness": 0.5,
+          "specIntensity": 0.35,
+          "noiseAmp": 0.016,
+          "fresnel": 1.5
+        },
+        "boneRelease": "all",
+        "organs": true,
+        "cellSize": 0.012,
+        "maxBindPrims": 4,
+        "carveK": 0.008,
+        "gore": 1,
+        "cutMask": "planner-cut-v1",
+        "bindMask": "additive-v1"
+      },
+      "json": "soldier.gib.json",
+      "bin": "soldier.gib.bin",
+      "bytes": {
+        "json": 107745,
+        "bin": 4463376
+      },
+      "totals": {
+        "pieces": 19,
+        "verts": 42918,
+        "tris": 85820,
+        "binBytes": 4463376
+      },
+      "timing": {
+        "bakeMs": 2404.93,
+        "buildMs": 2711
+      },
+      "source": {
+        "blob": "src/lab/sdf-zombie/characters/soldier.blob",
+        "blobBytes": 15342,
+        "blobHash": "851476176d087d64"
+      }
+    },
+    {
+      "archetype": "zombie",
+      "fingerprint": "d74e110e29432853",
+      "recipe": {
+        "schemaVersion": 3,
+        "generator": "scripts/build-gib-assets.ts",
+        "archetype": "zombie",
+        "blobPath": "src/lab/sdf-zombie/characters/zombie.blob",
+        "buildOpts": {
+          "silhouetteNoiseAmp": 0.012,
+          "stepMultiplier": 0.6
+        },
+        "face": {
+          "headRadius": 0.118,
+          "headWidth": 0.76,
+          "headHeight": 1.161,
+          "headDepth": 0.894,
+          "jawWidth": 0.748,
+          "jawHeight": 0.861,
+          "jawDrop": 0.076,
+          "jawJut": 0.04,
+          "noseLength": 0.007,
+          "noseWidth": 0.379,
+          "noseDrop": 0.009,
+          "browHeavy": 0.008,
+          "browRise": 0.045,
+          "headBlend": 0.006,
+          "headRise": 0,
+          "headLead": 0
+        },
+        "palette": "default:henenlotter-latex",
+        "look": {
+          "baseColor": [
+            0.82,
+            0.44,
+            0.46
+          ],
+          "deepColor": [
+            0.74,
+            0.06,
+            0.1
+          ],
+          "fatColor": [
+            0.83,
+            0.72,
+            0.42
+          ],
+          "mottleColor": [
+            0.62,
+            0.24,
+            0.3
+          ],
+          "organColor": [
+            0.72,
+            0.32,
+            0.3
+          ],
+          "visceraColor": [
+            0.28,
+            0.06,
+            0.1
+          ],
+          "woundDepthAmp": 1,
+          "fatDepth": 0.004,
+          "muscleDepth": 0.014,
+          "visceraAmp": 1,
+          "visceraDepth": 0.045,
+          "mottleAmp": 0,
+          "mottleScale": 1.2,
+          "organAmp": 1,
+          "goreStrength": 1
+        },
+        "surface": {
+          "legacyGamma": 1,
+          "wetness": 1,
+          "roughness": 0.12,
+          "specIntensity": 0.95,
+          "noiseAmp": 0.016,
+          "fresnel": 0.85
+        },
+        "boneRelease": "all",
+        "organs": true,
+        "cellSize": 0.012,
+        "maxBindPrims": 4,
+        "carveK": 0.008,
+        "gore": 1,
+        "cutMask": "planner-cut-v1",
+        "bindMask": "additive-v1"
+      },
+      "json": "zombie.gib.json",
+      "bin": "zombie.gib.bin",
+      "bytes": {
+        "json": 141252,
+        "bin": 3925208
+      },
+      "totals": {
+        "pieces": 24,
+        "verts": 37738,
+        "tris": 75552,
+        "binBytes": 3925208
+      },
+      "timing": {
+        "bakeMs": 2888.38,
+        "buildMs": 3318
+      },
+      "source": {
+        "blob": "src/lab/sdf-zombie/characters/zombie.blob",
+        "blobBytes": 15172,
+        "blobHash": "f5cb86c185c0ba6d"
+      }
+    }
+  ]
+}

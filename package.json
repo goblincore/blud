@@ -22,7 +22,9 @@
     "blob:face-bake": "python3 scripts/blob-face-bake.py",
     "bench:sdf": "scripts/sdf-bench.sh",
     "blob:relief": "tsx scripts/blob-relief.ts",
-    "gait:curves": "tsx scripts/gait-from-clip.ts"
+    "gait:curves": "tsx scripts/gait-from-clip.ts",
+    "gib:assets": "tsx scripts/build-gib-assets.ts",
+    "gib:assets:check": "tsx scripts/build-gib-assets.ts --check"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

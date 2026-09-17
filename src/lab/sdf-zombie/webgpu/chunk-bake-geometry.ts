@@ -1,7 +1,7 @@
 // CPU extraction shared by the worker and deterministic tests. No renderer/DOM imports.
 import * as THREE from 'three';
 import { extractHullSoup, fitHullGrid } from './surface-nets-cpu';
-import { fbm, bakeAoAt, bakeChunkAlbedo, bakeFaceCover, chunkBakeField, type ChunkFieldEvals, type ChunkLook, type ChunkBakeParts, type BakeFaceFrame } from '../chunk-bake-field';
+import { fbm, bakeAoAt, bakeChunkAlbedo, bakeFaceCover, chunkBakeField, cutAwareField, type ChunkFieldEvals, type ChunkLook, type ChunkBakeParts, type BakeFaceFrame } from '../chunk-bake-field';
 import { qRotate, type Quat } from '../vec';
 import { nearestPrim } from '../validate';
 import type { Primitive, Vec3 } from '../types';
@@ -24,6 +24,16 @@ export interface ChunkBakeData {
   surface?: { legacyGamma: number; wetness: number; roughness: number; specIntensity: number; noiseAmp: number; fresnel: number };
   /** The gore/lod strength actually in effect (0 = never bake, e.g. bone-only chunks). */
   gore: number;
+  /**
+   * CUT-CAP MASK SOURCE. A planner `sub` cut cap is part of `flesh`, so the
+   * pre-wound field the carve path reads (`ev.preWound`) is ALREADY ZERO on the
+   * capped cut face — the cap is what made it. Passing the piece's ADDITIVE
+   * prims (the caps removed) lets the bake recover the real depth beneath the
+   * original skin there: `cutAwareField` turns that depth into the wound mask
+   * and the tissue ramp, so a capped cut face is wet torn meat while the outer
+   * skin stays dry. Absent on the runtime settle bake (unchanged behaviour).
+   */
+  cutMask?: { flesh: Primitive[]; bones?: Primitive[] };
   /** The detached head's face frame, when this piece wears the face projection.
    *  Its coverage attenuates the baked gore so the face is not baked under
    *  clot (2026-09-16 playtest follow-ups task 2). */
@@ -60,6 +70,15 @@ export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
   const ev: ChunkFieldEvals = chunkBakeField({
     body: data.body, flesh: data.flesh, bones: data.bones, torn: data.torn, carveK: data.carveK,
   });
+  // THE CUT MASK IS DERIVED FROM THE FIELD, NOT PAINTED ON. When a capped cut is
+  // in `flesh`, the pre-cap union is the surface that would have been there; the
+  // wound mask and the tissue depth read from it exactly as the carve path's
+  // do. `ev` itself stays the authority for the geometry and the AO.
+  const shadeEv: ChunkFieldEvals = data.cutMask
+    ? cutAwareField(ev, data.look, chunkBakeField({
+      flesh: data.cutMask.flesh, bones: data.cutMask.bones ?? [], torn: [], carveK: data.carveK,
+    }).preWound)
+    : ev;
   const grid = fitHullGrid(data.centre, data.halfExtent ?? [data.extent, data.extent, data.extent], data.cellSize ?? BAKE_CELL, 0);
   const soup = extractHullSoup(p => ev.field(p), grid, 0, 1);
 
@@ -91,7 +110,7 @@ export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
       weld.set(key, id);
       positions.push(p[0], p[1], p[2]);
       const painted = data.body ? data.body.prims[nearestPrim(p, data.body)]?.color : undefined;
-      const [r, g, b, wm] = bakeChunkAlbedo(p, localOf(p), ev,
+      const [r, g, b, wm] = bakeChunkAlbedo(p, localOf(p), shadeEv,
         painted ? { ...data.look, baseColor: painted } : data.look,
         data.face ? bakeFaceCover(p, data.face) : 0);
       colors.push(r, g, b, wm);

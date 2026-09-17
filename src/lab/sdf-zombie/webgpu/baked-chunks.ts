@@ -374,9 +374,24 @@ export const CHUNK_SURFACE_WGSL = /* wgsl */ `fn chunkSurface(albedo: vec4<f32>)
   return vec4<f32>(albedo.rgb, rough);
 }`;
 
+/** The per-material face frame uniforms, exposed so a MOVING face-carrying mesh
+ *  can re-project from its current chunk transform. The marched chunk path
+ *  re-uploads these every frame from its posed primitives; a baked/settled head
+ *  freezes them, but an offline ASSET head must drive them (offline-gib-assets
+ *  task 4). Owning materials keep them private — this is a read/update handle,
+ *  not a second owner, and `dispose` on the material still owns the lifetime. */
+export interface BakedChunkFaceUniforms {
+  headCentre: { value: THREE.Vector3 };
+  /** `MarchUniforms.headQuat` is a vec4 uniform, not a THREE.Quaternion. */
+  headQuat: { value: THREE.Vector4 };
+  headAxes: { value: THREE.Vector3 };
+}
+
 export interface BakedChunkMaterial {
   material: THREE.Material;
   uniforms: BakedChunkUniforms;
+  /** Present only when built with the `face` option. */
+  readonly faceUniforms: BakedChunkFaceUniforms | undefined;
   /** Packed emissionClass value when built with output:'surface' (M2 task
    *  2); undefined in the default lit mode. */
   readonly surfaceKind: number | undefined;
@@ -495,6 +510,15 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
   return {
     material,
     uniforms: u,
+    get faceUniforms() {
+      if (!face) return undefined;
+      const fb = faceBindings as unknown as {
+        headCentre: { value: THREE.Vector3 };
+        headQuat: { value: THREE.Vector4 };
+        headAxes: { value: THREE.Vector3 };
+      };
+      return { headCentre: fb.headCentre, headQuat: fb.headQuat, headAxes: fb.headAxes };
+    },
     get surfaceKind() { return surfaceKind; },
     dispose() { material.dispose(); },
   };

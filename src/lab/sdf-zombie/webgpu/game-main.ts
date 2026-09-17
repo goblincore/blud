@@ -197,6 +197,11 @@ import {
   type SpritePieceSet,
 } from './gib-sprite-pieces';
 import { carveBodyIntoPieces, type CarvedLibrary, type CarvedPiece } from './gib-carve';
+import { GibAssetRuntime, gibAssetMeshEligible } from './gib-asset-runtime';
+import {
+  checkGibAssetDeformBounds, gibAssetDeformBoundsOk, gibAssetRowsFromPrims,
+} from './gib-asset-deform';
+import { resetGibAssetCache } from './gib-asset-loader';
 import { compileBlob } from '../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { BONE_VARIANTS, MEAT_VARIANTS } from '../gore-parts';
@@ -1185,6 +1190,13 @@ async function main() {
     for (const [k, raw] of Object.entries(patch)) {
       if (raw === undefined || !Number.isFinite(raw)) continue;
       switch (k as DynamiteTuningKey) {
+        case 'blastdistort':
+          postAa.setBlastDistort(raw >= 0.5);
+          break;
+        case 'bdstrength':
+          blastDistortStrength = Math.max(0, Math.min(4, raw));
+          postAa.setBlastDistortStrength(blastDistortStrength);
+          break;
         case 'maxchunks':
           maxChunks = Math.max(1, Math.min(MAX_CHUNK_BUDGET, Math.round(raw)));
           break;
@@ -1281,6 +1293,8 @@ async function main() {
     const t = explosionVfx?.tuning;
     return {
       ...dynamiteDefaults(),
+      blastdistort: postAa.blastDistort ? 1 : 0,
+      bdstrength: postAa.blastDistortStrength,
       maxchunks: maxChunks,
       mode: Math.max(0, GIB_MODES.indexOf(gibMode as typeof GIB_MODES[number])),
       bones: Math.max(0, GIB_BONES.indexOf(gibBones as typeof GIB_BONES[number])),
@@ -5081,8 +5095,10 @@ async function main() {
   // outright, so the skeleton shows on a cut as MATERIAL (goreKind), not as
   // silhouette. An earlier version of this comment claimed otherwise.
   const gibRenderParam = DYN_PARAMS.get('gibrender');
-  let gibRenderMode: 'march' | 'sprite' | 'carve' =
-    gibRenderParam === 'sprite' ? 'sprite' : gibRenderParam === 'carve' ? 'carve' : 'march';
+  let gibRenderMode: 'march' | 'sprite' | 'carve' | 'assets' =
+    gibRenderParam === 'sprite' ? 'sprite'
+      : gibRenderParam === 'carve' ? 'carve'
+        : gibRenderParam === 'march' ? 'march' : 'assets';
   /** Slabs per cluster for the carved library — the GRANULARITY dial. */
   // 1 SINCE THE ANATOMICAL PARTITION (2026-09-11): `cells` used to mean slabs per
   // CLUSTER, where 3 was the owner's "more granular" ask; it now means
@@ -5277,15 +5293,10 @@ async function main() {
     neckGapM: parseFloatParam(DYN_PARAMS.get('tearneck'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.neckGapM,
     recoilM: parseFloatParam(DYN_PARAMS.get('tearrecoil'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.recoilM,
   };
-  // ——— BLAST REFRACTION (EXPERIMENT, default OFF) ———————————————————————————
-  // The owner asked for a shockwave/distortion read on the blast. This is the
-  // bounded screen-space experiment (post-aa.ts's postAaBlastWarp): `?blastdistort=1`
-  // turns it on, `?bdstrength=` scales it, and at the same seed/pose/frame an
-  // on/off pair is an honest A/B. It is NOT accepted until a normal-speed review
-  // says it improves the read; default OFF keeps the shipped frame untouched.
-  let blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 1;
+  // Owner-approved optical wave defaults; URL flags retain off/on A/B control.
+  let blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 2.7;
   postAa.setBlastDistort(
-    DYN_PARAMS.get('blastdistort') === '1' || DYN_PARAMS.get('blastdistort') === 'on');
+    DYN_PARAMS.get('blastdistort') !== '0' && DYN_PARAMS.get('blastdistort') !== 'off');
   postAa.setBlastDistortStrength(blastDistortStrength);
   /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
    *  shape a body falls back to when the pool cannot afford anything better.
@@ -5315,20 +5326,20 @@ async function main() {
   // the explosion is quite large … the area of effect should be abit more
   // focused". Both default to the reference behaviour, so nothing about the
   // shipped blast moves; they are the panel's two blast sliders.
-  let aoeRadiusScale = parseFloatParam(DYN_PARAMS.get('aoesize'), { min: 0.3, max: 1.5 }) ?? 1;
+  let aoeRadiusScale = parseFloatParam(DYN_PARAMS.get('aoesize'), { min: 0.3, max: 1.5 }) ?? .82;
   // 0.45 is EXPLOSION_LAUNCH.falloffFloor — the resolver's default, kept here so
   // the panel's read-back shows the value the blast actually uses.
   let aoeLaunchFloor = parseFloatParam(DYN_PARAMS.get('edgekick'), { min: 0, max: 1 }) ?? 0.45;
-  const fxSmoke = parseFloatParam(DYN_PARAMS.get('fxsmoke'), { min: 0, max: 2 }) ?? 0.38;
-  const fxLife = parseFloatParam(DYN_PARAMS.get('fxlife'), { min: 0.3, max: 3 }) ?? 1.15;
-  const fxGain = parseFloatParam(DYN_PARAMS.get('fxgain'), { min: 0, max: 4 }) ?? 1.25;
+  const fxSmoke = parseFloatParam(DYN_PARAMS.get('fxsmoke'), { min: 0, max: 2 }) ?? .76;
+  const fxLife = parseFloatParam(DYN_PARAMS.get('fxlife'), { min: 0.3, max: 3 }) ?? 1.55;
+  const fxGain = parseFloatParam(DYN_PARAMS.get('fxgain'), { min: 0, max: 4 }) ?? 3.3;
   // THE PLUME A/B. 1 (default) is the mushroom — the neck converges, the cap
   // rolls outward and flattens, the smoke spawns on a rim. 0 is the round
   // fireball this effect was before, blended term by term so ONE boot can A/B
   // the two on the same burst. Kept off the four size/colour knobs because it
   // is a SHAPE switch, and because `?explosionfx=atlas` is the reference the
   // shape is judged against: run 0, run 1, run atlas, in that order.
-  const fxPlume = parseFloatParam(DYN_PARAMS.get('fxplume'), { min: 0, max: 1 }) ?? 1;
+  const fxPlume = parseFloatParam(DYN_PARAMS.get('fxplume'), { min: 0, max: 1 }) ?? .1;
   // DEFERRED MODE: the shared chunk material carries the surface mode for
   // every detached chunk (one graph per output mode — the task-2 contract);
   // the legacy prev source is only bound in legacy mode.
@@ -5642,6 +5653,227 @@ async function main() {
       impulseDelay, impulseVel,
       render: 'mesh', geometry: piece.geometry, material: carvedMaterial.material,
     });
+    return true;
+  }
+
+  /**
+   * THE OFFLINE GIB ASSET RUNTIME (2026-09-16 offline-gib-assets task 2).
+   *
+   * The committed `public/assets/lab/gibs/*` sets are loaded ONCE per archetype
+   * (asynchronously, off the boot path) and their immutable rest geometry and
+   * material are shared by every piece. A spawn takes a per-instance geometry
+   * from the pool and deforms it to the pose/slough the body is being drawn
+   * with, so the first mesh frame is the last SDF frame — no rest-pose snap and
+   * no crossfade hiding a shape change.
+   *
+   * Assets are the owner-approved default; `?gibrender=march` is the control.
+   * A body gibbed before the load resolves falls
+   * back to marched pieces for that blast, never to no gore.
+   */
+  let gibAssetMaterial: BakedChunkMaterial | null = null;
+  /** ONE NEW face material per asset head. The face layer's `headCentre`,
+   *  `headQuat` and `headAxes` are WORLD-space and therefore per-actor, so a
+   *  shared material could only ever project the face at one actor's frame
+   *  ("no shared mutable face uniforms across actors"). The handle owns nothing
+   *  but the material: the face TEXTURE stays the actor's external atlas, which
+   *  is why retirement of the actor cannot blank a flying head's face. */
+  const gibAssetHeadFactory = {
+    create: (source: unknown): { material: THREE.Material; setFrame: (f: { centre: Vec3; quat: Quat; axes: Vec3 }) => void; dispose: () => void } => {
+      const u = source as import('./zombie-gpu').MarchUniforms;
+      const built = registerLitChunkMaterial(createBakedChunkMaterial({
+        goreDetail: true, bakedAo: true, fleshResponse: true, face: u,
+      }));
+      built.uniforms.goreCfg.value.set(
+        gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+      );
+      built.uniforms.goreCfg2.value.set(
+        gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+      );
+      bakedChunkSeed?.(built);
+      return {
+        material: built.material,
+        setFrame: (f) => {
+          const fu = built.faceUniforms;
+          if (!fu) return;
+          fu.headCentre.value.set(f.centre[0], f.centre[1], f.centre[2]);
+          fu.headQuat.value.set(f.quat[0], f.quat[1], f.quat[2], f.quat[3]);
+          fu.headAxes.value.set(f.axes[0], f.axes[1], f.axes[2]);
+        },
+        dispose: () => {
+          const i = litChunkMaterials.indexOf(built);
+          if (i >= 0) litChunkMaterials.splice(i, 1);
+          built.dispose();
+        },
+      };
+    },
+  };
+  const createGibAssetRuntime = (): GibAssetRuntime => new GibAssetRuntime({
+    materialFactory: {
+      create: () => {
+        // Same procedural detail layer the carve uses, plus the baked flesh
+        // response (this set carries `bakeResponse`/`bakeFresnel`/`bakeAnchor`,
+        // so the per-pixel detail rides the asset's own rest-frame anchor).
+        gibAssetMaterial = registerLitChunkMaterial(createBakedChunkMaterial({
+          goreDetail: true, bakedAo: true, fleshResponse: true,
+        }));
+        gibAssetMaterial.uniforms.goreCfg.value.set(
+          gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+        );
+        gibAssetMaterial.uniforms.goreCfg2.value.set(
+          gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+        );
+        bakedChunkSeed?.(gibAssetMaterial);
+        return gibAssetMaterial.material;
+      },
+    },
+    onLoad: (lib) => {
+      console.log(`[gib-assets] ${lib.archetype}: ${lib.pieces.length} pieces, ${lib.verts} verts, `
+        + `${lib.bytes.bin} bin bytes (library build ${lib.builtMs.toFixed(0)} ms)`);
+    },
+    headMaterialFactory: gibAssetHeadFactory,
+  });
+  let gibAssetRuntime = createGibAssetRuntime();
+
+  /** The archetype whose committed set an actor uses. */
+  function gibAssetArchetypeOf(a: ZombieActor): string {
+    return a.kind === 'soldier' ? 'soldier' : 'zombie';
+  }
+
+  /** Kick off (or join) the load for the archetypes the assets path can use. */
+  function ensureGibAssets(): Promise<unknown> {
+    return Promise.all([
+      gibAssetRuntime.ensure('zombie'),
+      gibAssetRuntime.ensure('soldier'),
+    ]);
+  }
+
+  /** True once at least one archetype's committed set is loaded and usable. */
+  function gibAssetArmed(): boolean {
+    return gibAssetRuntime.archetypeState('zombie') === 'ready'
+      || gibAssetRuntime.archetypeState('soldier') === 'ready';
+  }
+
+  /**
+   * Spawn one offline-asset mesh piece. Returns false (with a counted reason)
+   * when the archetype/part is not available or the runtime piece is damaged;
+   * the caller then falls back to the marched path for that piece.
+   *
+   * The `Chunk` state is built with EXACTLY `spawnChunkPiece`/`spawnSpriteGibPiece`
+   * arithmetic — same radius, long axis, support spheres and pre-release spin —
+   * so an asset gib settles at the same height, bounces off the same walls and
+   * topples the same way as the marched one.
+   */
+  function spawnAssetGibPiece(
+    a: ZombieActor,
+    g: GibPiece,
+    impulseVel: Vec3 | null,
+    impulseDelay: number,
+  ): boolean {
+    const lib = gibAssetRuntime.library(gibAssetArchetypeOf(a));
+    if (!lib) { gibAssetRuntime.countFallback('no-library'); return false; }
+    const piece = lib.byPart.get(g.part);
+    if (!piece) { gibAssetRuntime.countFallback('no-asset'); return false; }
+    // THE HEAD NOW KEEPS THE MESH PATH WHEN A FACE CAN RIDE IT (task 4). The
+    // face layer projects from the ACTOR's live `headCentre`/`headQuat`/
+    // `headAxes`; a per-instance material built from those uniforms and moved
+    // with the chunk gives the mesh head the same face the marched head has.
+    // Without a face texture, or with face projection off (a custom/damaged
+    // head), the piece still falls back — counted as `head-face`, never silent.
+    const faceUniforms = a.view.uniforms;
+    const faceSupported = gibAssetRuntime.headFaceAvailable()
+      && faceUniforms.faceCfg.value.x > 0.5
+      && !!faceUniforms.faceTex.value;
+    const ineligible = gibAssetMeshEligible(piece.doc, g, faceSupported);
+    if (ineligible) { gibAssetRuntime.countFallback(ineligible); return false; }
+    // ROW ALIGNMENT IS PART OF ELIGIBILITY (and now SEMANTIC, not a count).
+    // `gibAssetMeshEligible` -> `gibAssetRowsMatch` walks the bind table against
+    // the runtime rows row for row: flesh rows against `g.prims` minus the `sub`
+    // cut caps (not bind targets under `GIB_ASSET_BIND_MASK = 'additive-v1'`),
+    // bone rows against `g.bones`. A plan that kept the same source set but
+    // reordered/grew a row falls back here instead of deforming against the
+    // wrong frame.
+    const pool = gibAssetRuntime.poolFor(lib);
+    if (!pool) { gibAssetRuntime.countFallback('no-pool'); return false; }
+    const kind = g.kind ?? 'limb';
+    const boneOnly = g.prims.length === 0 && g.bones.length > 0;
+    const extentSource = boneOnly ? g.bones : g.prims;
+    const support = chunkSupportSpheres(extentSource, g.origin);
+    const state = makeChunk(
+      g.limb as never, g.origin, [0, 0, 0],
+      boneOnly ? boneChunkRadius(g.bones) : chunkExtent(g.prims, g.origin),
+      primsLongAxis(extentSource, g.origin),
+      rngStreams.misc, kind,
+      (g.spinQuat || g.spinAngVel) ? { quat: g.spinQuat, angVel: g.spinAngVel } : undefined,
+      support.length > 0 ? support : undefined,
+    );
+    // THE DEFORMATION SOURCE: THE RUNTIME PIECE'S OWN ROW-ALIGNED FRAMES.
+    //
+    // On the rupture path `g.prims`/`g.bones` are `retargetGibPieces`' output —
+    // each SOURCED row is the body's sloughed twin (so the released mesh is the
+    // geometry last drawn, no snap-back) — and `displaceGibPieces` has already
+    // added the region offset to every row AND to `g.origin`. So deforming
+    // against these rows and subtracting `g.origin` cancels that offset and
+    // leaves exactly the chunk-relative shape `spawnChunkPiece` marches.
+    //
+    // WHY NOT `gibAssetPosedRows` HERE (task 3, measured). That helper maps the
+    // bind table's SOURCE INDICES into `frame.deformedPrims`, which is equivalent
+    // for sourced rows but has NO TWIN for an unsourced `sub` cut cap: those rows
+    // fell back to the REST frame, so their vertices stayed at the REST body
+    // position while the region rotated — long spike triangles off every piece.
+    // The cap IS present row-aligned in the runtime piece (posed, +offset), so
+    // the row-aligned frames deform every row, caps included, with one contract.
+    const rows = gibAssetRowsFromPrims([...g.prims, ...g.bones]);
+    const inst = pool.acquire(g.part);
+    pool.deformRows(inst, rows, g.origin);
+    // THE DISPLAY GATE (2026-09-17). Finiteness alone cannot tell a torn piece
+    // from a spike: the pre-fix cap-bound deform was finite and 4-5 m long. The
+    // bounds are derived from the piece's RUNTIME ADDITIVE prims — the exact
+    // geometry the deform read — so a vertex outside their union, or a triangle
+    // spanning metres, is refused and this piece falls back to the marched path
+    // with a counted reason. The pooled buffers are returned exactly once here;
+    // nothing downstream has seen the mesh yet. NO clamping: a rogue vertex is
+    // never repaired, the invalid piece is not displayed as an asset.
+    const additiveWorld = [...g.prims, ...g.bones].filter(p => p.op !== 'sub');
+    const bounds = checkGibAssetDeformBounds(piece.doc, piece.decoded, inst.positions, g.origin, additiveWorld);
+    if (!gibAssetDeformBoundsOk(bounds)) {
+      pool.release(inst);
+      gibAssetRuntime.countFallback(bounds.finite ? 'deform-bounds' : 'deform-nonfinite');
+      return false;
+    }
+    // PER-INSTANCE FACE FRAME (task 4). The asset's stored `doc.face` is the
+    // REST frame; what must be projected is the POSED/sloughed frame the actor
+    // is drawing with right now — the same snapshot `spawnChunkPiece` takes from
+    // `template.uniforms`. Localise the world centre against `g.origin` (the
+    // chunk pivot) and let the resource ride the chunk's own transform through
+    // flight, squash, settle and reset. `faceSupported` was checked above.
+    let head: import('./gib-asset-head').GibAssetHeadResource | null = null;
+    if (piece.doc.face && faceSupported) {
+      const hc = faceUniforms.headCentre.value;
+      const hq = faceUniforms.headQuat.value;
+      const ax = faceUniforms.headAxes.value;
+      head = gibAssetRuntime.acquireHead(g.part, {
+        centre: [hc.x - g.origin[0], hc.y - g.origin[1], hc.z - g.origin[2]],
+        quat: [hq.x, hq.y, hq.z, hq.w],
+        axes: [ax.x, ax.y, ax.z],
+      }, faceUniforms);
+      // No material = no face: fall back rather than draw a bare-flesh head.
+      if (!head) { pool.release(inst); gibAssetRuntime.countFallback('head-face'); return false; }
+      head.setFrameFromState(state);
+    }
+    const sprite = spawnSpritePiece(spritePieces, {
+      state, render: 'mesh', geometry: inst.geometry, material: head ? (head.material as THREE.Material) : lib.material,
+      impulseDelay, impulseVel,
+    });
+    if (head) {
+      const resource = head;
+      sprite.onPose = () => resource.setFrameFromState(sprite.state);
+    }
+    // Return the per-instance buffers to the pool when this piece is retired
+    // (evicted over a cap, cleared, or reset) — the pool's whole point. A head
+    // also gives back its per-instance face material at the SAME single point.
+    sprite.onDetach = () => { pool.release(inst); head?.release(); };
+    sprite.mesh.name = `gib-asset-${g.part}`;
+    gibAssetRuntime.countAssetPiece();
     return true;
   }
 
@@ -6614,7 +6846,8 @@ async function main() {
       postAa.pushBlastDistort(
         [at[0], at[1], at[2]],
         blastRefractionBirthRadiusM(burst.heightM),
-        blastRefractionStrength(burst.heightM) * blastDistortStrength,
+        // Strength is applied by the post pass, once, including live changes.
+        blastRefractionStrength(burst.heightM),
       );
     }
     if (explosionVfx) explosionVfx.spawn(burst);
@@ -6784,7 +7017,9 @@ async function main() {
     at: Vec3,
     falloff: number,
     budget: number,
-    planned?: { pieces: GibPiece[]; body: BuildResult; tier?: string; locked?: boolean },
+    planned?: {
+      pieces: GibPiece[]; body: BuildResult; tier?: string; locked?: boolean;
+    },
   ): number {
     // A planned hand-off comes from the rupture: `body` is the pose the body was
     // last DRAWN in and `pieces` are the plan's own regions at the same offsets,
@@ -6817,6 +7052,11 @@ async function main() {
     // resolves ONCE per body (mode on AND a library that built), so a body can
     // never take the carve budget while spawning something else.
     const carveMode = gibRenderMode === 'carve' && ensureCarvedLibrary() && carvedLibrary !== null;
+    // ASSETS ARE THE FOURTH RENDERER (task 2): real reusable meshes loaded from
+    // the committed offline sets. Resolved ONCE per body, like carve, so the
+    // budget/tier decision and the spawn loop agree. Until the archetype's load
+    // resolves this is false and the body falls back to marched pieces.
+    const assetMode = gibRenderMode === 'assets' && gibAssetRuntime.library(gibAssetArchetypeOf(a)) !== null;
     if (gibRenderMode === 'sprite' && gibAtlas === null && !gibSpriteAtlasWarned) {
       gibSpriteAtlasWarned = true;
       console.warn('[gib-sprites] ?gibrender=sprite but no atlas is loaded — '
@@ -6879,6 +7119,11 @@ async function main() {
       // there is no cheaper shape to degrade to — a degraded carve would just be
       // a body with holes in it.
       tier = 'carve';
+    } else if (assetMode) {
+      // The asset path IS the whole authored split by name, so there is no
+      // cheaper shape to degrade to; a missing/damaged piece falls back
+      // per-piece inside the loop below and is counted.
+      tier = 'assets';
     } else if (spriteMode) {
       tier = 'sprite';
       // A blast bigger than the cap still slices — nearest-the-blast first, the
@@ -6962,6 +7207,18 @@ async function main() {
           if (boneOnly(g)) boneSpawned++;
         }
         continue;
+      }
+      if (assetMode) {
+        // THE OFFLINE MESH, DEFORMED ONTO THE DRAWN POSE/SLOUGH. On success the
+        // piece is a reusable mesh from the committed set; on failure (missing
+        // part, damaged source set) the SAME piece falls through to the marched
+        // path below, so damage is never silently lost. The deform subtracts
+        // `g.origin` — the same pivot `makeChunk` places the piece at.
+        if (spawnAssetGibPiece(a, g, vel, delay)) {
+          spawned++;
+          if (boneOnly(g)) boneSpawned++;
+          continue;
+        }
       }
       spawnChunkPiece({
         limb: g.limb, origin: g.origin, prims: g.prims, tornAt: g.tornAt, bones: g.bones, kind: g.kind,
@@ -7145,8 +7402,8 @@ async function main() {
         // A/B that does not move the number it exists to compare is not an A/B.
         plumeMix: fxPlume,
         fireCapShare: fxPlume,
-        capFlatten: 1 - (1 - 0.55) * fxPlume,
-        capFireFlatten: 1 - (1 - 0.5) * fxPlume,
+        capFlatten: parseFloatParam(DYN_PARAMS.get('capflat'), { min: 0, max: 1 }) ?? dynamiteDefaults().capflat,
+        capFireFlatten: Math.min(1, 0.5 + (parseFloatParam(DYN_PARAMS.get('capflat'), { min: 0, max: 1 }) ?? dynamiteDefaults().capflat) * 0.25),
       });
       characterEffects.scene.add(explosionVfx.object);
     } catch (e) {
@@ -7545,6 +7802,17 @@ async function main() {
         + `live cap ${gibSpriteLiveCap}, rest cap ${gibSpriteRestCap}, size x${gibSpriteSizeScale}`);
     });
   }
+  // `?gibrender=assets` (task 2) preloads the committed offline sets at boot, so
+  // the first detonation has meshes to deform. It is a fetch + decode, not an
+  // extraction, so unlike carve it costs no surface nets; a body gibbed before
+  // it resolves still gets marched pieces (counted), never no gore.
+  if (gibRenderMode === 'assets') {
+    mark('gib-assets-boot-scheduled');
+    void ensureGibAssets().then(() => {
+      mark('gib-assets-boot-ready');
+      console.log(`[gib-assets] blast render mode: assets, armed=${gibAssetArmed()}`);
+    });
+  }
 
   // DYNAMITE / GIB (dynamite-panel.ts). Same contract as the other three: ships
   // VISIBLE but COLLAPSED at the fourth slot, so its title bar is findable while
@@ -7555,6 +7823,7 @@ async function main() {
     get: dynamiteTuningValues,
     set: (key, v) => applyDynamiteTuning({ [key]: v } as Partial<DynamiteTuningValues>),
     presets: [
+      { label: 'optical wave', values: { blastdistort: 1, bdstrength: 2 } },
       { label: 'split', values: { mode: 2, bones: 2, maxchunks: 64, tearSec: 0.1 } },
       { label: 'tubes (old)', values: { mode: 0, bones: 0, maxchunks: 24 } },
       { label: 'plume', values: { plume: 1, capflat: 0.55, ringreach: 1.4 } },
@@ -13361,6 +13630,12 @@ function performBenchAction(a: BenchAction): void {
       pendingBake: chunkBakeJobs.pendingId,
       bakeError: chunkBakeJobs.error,
       lastBakeInfo,
+      /** THE ASSET PATH'S OWN CENSUS (task 2): asset hits, fallback reasons,
+       *  load bytes, live moving meshes and runtime extraction jobs. Included
+       *  here so a single `chunkStats()` read answers "did the offline set
+       *  actually carry this blast, and how much runtime extraction did it
+       *  remove?" without a second seam. */
+      gibAssets: gibAssetRuntime.countersSnapshot(),
       /** Baked pieces wearing the per-fragment textured HEAD material — the
        *  first non-zero value is the first textured-head draw (startup probe). */
       faceBaked: bakedChunks.filter(b => b.faceMaterial !== undefined).length,
@@ -13734,20 +14009,31 @@ function performBenchAction(a: BenchAction): void {
      *  Turning it ON loads the sheet if it is not loaded yet and reports what
      *  happened, so a caller can tell "the mode is on" from "the mode is on and
      *  armed". */
-    setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' = 'march') => {
-      gibRenderMode = mode === 'sprite' ? 'sprite' : mode === 'carve' ? 'carve' : 'march';
+    setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' | 'assets' = 'march') => {
+      gibRenderMode = mode === 'sprite' ? 'sprite'
+        : mode === 'carve' ? 'carve' : mode === 'assets' ? 'assets' : 'march';
       if (gibRenderMode === 'carve') ensureCarvedLibrary();
       if (gibRenderMode === 'sprite') await ensureGibAtlas('sheet');
-      return { mode: gibRenderMode, frames: gibAtlas?.frames.length ?? 0, ready: gibAtlas !== null };
+      // The asset path is a fetch+decode; await it so a caller can tell "mode
+      // on" from "mode on and armed" (the same contract as the sprite atlas).
+      if (gibRenderMode === 'assets') await ensureGibAssets();
+      return { mode: gibRenderMode, frames: gibAtlas?.frames.length ?? 0, ready: gibRenderMode === 'assets' ? gibAssetArmed() : gibAtlas !== null };
     },
     gibRenderMode: () => ({
       mode: gibRenderMode,
       // `ready` is per mode: the sprite path needs its ATLAS, the carve path its
-      // LIBRARY, and conflating them would report one mode armed because the
-      // other's asset loaded.
-      ready: gibRenderMode === 'carve' ? (carvedLibrary !== null) : gibAtlas !== null,
+      // LIBRARY, the assets path a loaded archetype SET — and conflating them
+      // would report one mode armed because another's asset loaded.
+      ready: gibRenderMode === 'assets'
+        ? gibAssetArmed()
+        : gibRenderMode === 'carve' ? (carvedLibrary !== null) : gibAtlas !== null,
       frames: gibAtlas?.frames.length ?? 0, atlas: gibAtlasSource,
       liveCap: gibSpriteLiveCap, restCap: gibSpriteRestCap, sizeScale: gibSpriteSizeScale,
+      assets: {
+        armed: gibAssetArmed(),
+        zombie: gibAssetRuntime.archetypeState('zombie'),
+        soldier: gibAssetRuntime.archetypeState('soldier'),
+      },
       carve: carvedLibrary ? {
         pieces: carvedLibrary.pieces.length,
         verts: carvedLibrary.totalVerts,
@@ -13787,6 +14073,44 @@ function performBenchAction(a: BenchAction): void {
     /** Drop every sprite piece (both lists) — the reset a paired rig wants
      *  between arms, so an earlier blast's pile is not in the frame. */
     clearSpritePieces: () => clearSpritePieces(spritePieces),
+    /**
+     * THE OFFLINE ASSET SEAM (task 2). `stats` is the always-available census
+     * (asset hits, per-reason fallbacks, load bytes, live moving meshes, runtime
+     * extraction jobs). `library` reports what loaded. `reset` cancels in-flight
+     * loads and drops every cached library so a rig can force a clean reload —
+     * a reset drops the sprite pieces first, which returns their pooled buffers.
+     */
+    gibAssetStats: () => gibAssetRuntime.countersSnapshot(),
+    gibAssetLibrary: () => {
+      const out: Record<string, unknown> = {};
+      for (const archetype of ['zombie', 'soldier']) {
+        const lib = gibAssetRuntime.library(archetype);
+        out[archetype] = lib ? {
+          state: gibAssetRuntime.archetypeState(archetype),
+          fingerprint: lib.fingerprint,
+          pieces: lib.pieces.length,
+          verts: lib.verts,
+          tris: lib.tris,
+          binBytes: lib.bytes.bin,
+          builtMs: lib.builtMs,
+          materials: 1,
+        } : {
+          state: gibAssetRuntime.archetypeState(archetype),
+          reason: gibAssetRuntime.failureReason(archetype),
+        };
+      }
+      return out;
+    },
+    resetGibAssets: () => {
+      const dropped = clearSpritePieces(spritePieces);
+      gibAssetRuntime.dispose();
+      resetGibAssetCache();
+      gibAssetRuntime = createGibAssetRuntime();
+      return dropped;
+    },
+    /** PRELOAD THE COMMITTED SETS without switching mode — the paired rig's
+     *  "arm both arms first" step. Returns the armed state. */
+    preloadGibAssets: async () => { await ensureGibAssets(); return gibAssetArmed(); },
     /** RELAY THE GORE-PART BENCH in front of the player: meat chunks and classic
      *  bones, rendered through the real gib mesh path. Returns how many parts. */
     goreShowcase: () => spawnGoreShowcase(),
@@ -13838,7 +14162,7 @@ function performBenchAction(a: BenchAction): void {
       if (o.wetTint !== undefined) goreLookCfg.y = o.wetTint;
       if (o.spec !== undefined) goreLookCfg.z = o.spec;
       if (o.fres !== undefined) goreLookCfg.w = o.fres;
-      for (const m of [gorePartMat, carvedMaterial]) {
+      for (const m of [gorePartMat, carvedMaterial, gibAssetMaterial]) {
         m?.uniforms.look.value.set(goreLookCfg.x, goreLookCfg.y, goreLookCfg.z, goreLookCfg.w);
       }
       return { stain: goreLookCfg.x, wetTint: goreLookCfg.y, spec: goreLookCfg.z, fres: goreLookCfg.w };
@@ -13864,7 +14188,7 @@ function performBenchAction(a: BenchAction): void {
       // bench and leaves ?gibrender=carve on its boot values. That is the same
       // shape of bug as the flashlight's: see `litChunkMaterials`, which exists
       // because the per-frame beam update had exactly this omission.
-      for (const m of [gorePartMat, carvedMaterial]) {
+      for (const m of [gorePartMat, carvedMaterial, gibAssetMaterial]) {
         m?.uniforms.goreCfg.value.set(
           gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
         );
@@ -13893,6 +14217,9 @@ function performBenchAction(a: BenchAction): void {
       ...liveChunks.map(c => ({
         id: c.id, limb: c.state.limb, kind: c.state.kind,
         pos: c.state.pos, vel: c.state.vel, radius: c.state.radius,
+        // Orientation too: a rig that frames a detached head has to know which
+        // way it is facing to photograph the face, not just its back.
+        quat: c.state.quat,
         settled: chunkSettled(c.state),
         render: 'march' as const,
       })),
@@ -14074,6 +14401,13 @@ function performBenchAction(a: BenchAction): void {
       carvedLibraryBuilt: carvedLibrary !== null,
       carvedBuildMs,
       carveCells: gibCarveCells,
+      /** Task 2: the offline-asset arm's own state + census. */
+      assetArmed: gibAssetArmed(),
+      assets: {
+        zombie: gibAssetRuntime.archetypeState('zombie'),
+        soldier: gibAssetRuntime.archetypeState('soldier'),
+      },
+      assetStats: gibAssetRuntime.countersSnapshot(),
     }),
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },

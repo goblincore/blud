@@ -56,6 +56,7 @@ export type DynamiteTuningKey =
   // ——— the BLAST (its own group: these are what the blast DOES to the world,
   //     as opposed to what it looks like — see the owner's report in the table)
   | 'aoesize' | 'edgekick'
+  | 'blastdistort' | 'bdstrength'
   // ——— the burst
   | 'fxsize' | 'fxsmoke' | 'fxlife' | 'fxgain'
   | 'plume' | 'capflat' | 'neck' | 'cap'
@@ -85,12 +86,12 @@ const _DYNAMITE_KEYS = [
   { key: 'maxchunks', label: 'piece pool', min: 1, max: 96, step: 1, value: 64 },
   { key: 'mode', label: 'piece set', min: 0, max: 2, step: 1, value: 2, labels: GIB_MODES,
     commit: 'change' },
-  { key: 'bones', label: 'skeleton', min: 0, max: 2, step: 1, value: 2, labels: GIB_BONES,
+  { key: 'bones', label: 'skeleton', min: 0, max: 2, step: 1, value: 1, labels: GIB_BONES,
     commit: 'change' },
   { key: 'stagger', label: 'release waves', min: 1, max: 8, step: 1, value: 3 },
-  { key: 'tearSec', label: 'pre-tear (s)', min: 0, max: 0.4, step: 0.01, value: 0.1 },
-  { key: 'tearAmp', label: 'tear bulge (m)', min: 0, max: 0.12, step: 0.005, value: 0.035 },
-  { key: 'tearJiggle', label: 'tear jiggle', min: 0, max: 1, step: 0.05, value: 0.4 },
+  { key: 'tearSec', label: 'pre-tear (s)', min: 0, max: 0.4, step: 0.01, value: 0.2 },
+  { key: 'tearAmp', label: 'tear bulge (m)', min: 0, max: 0.12, step: 0.005, value: 0.045 },
+  { key: 'tearJiggle', label: 'tear jiggle', min: 0, max: 1, step: 0.05, value: 0.35 },
   { key: 'gibvel', label: 'piece launch', min: 0, max: 2, step: 0.05, value: 0.35 },
   // ——— SETTLED-PIECE DETAIL. A marched chunk carries the march's per-pixel
   // micro-detail; the moment it settles it bakes to a static mesh and loses it,
@@ -122,7 +123,7 @@ const _DYNAMITE_KEYS = [
   // Toggling affects FUTURE settles only — pieces already baked stay baked until
   // they are shot or recycled, which is the trap every driver of this seam has
   // hit. Blow up a fresh body after moving it.
-  { key: 'chunkbake', label: 'settle bake', min: 0, max: 1, step: 1, value: 0,
+  { key: 'chunkbake', label: 'settle bake', min: 0, max: 1, step: 1, value: 1,
     labels: CHUNK_BAKE_MODES },
   // ——— THE BLAST ITSELF, first because it is the first thing to reach for. The
   // owner, playing this: "it seems the effective radius of the explosion is
@@ -134,16 +135,19 @@ const _DYNAMITE_KEYS = [
   // point-blank one, at 0 only the epicentre launches. Neither touches the
   // fireball's SIZE (`fxsize` owns that), so focusing the blast cannot
   // silently resize an explosion that was already tuned.
-  { key: 'aoesize', label: 'AOE size (x)', min: 0.3, max: 1.5, step: 0.02, value: 1 },
+  { key: 'aoesize', label: 'AOE size (x)', min: 0.3, max: 1.5, step: 0.02, value: 0.82 },
   { key: 'edgekick', label: 'edge fling', min: 0, max: 1, step: 0.02, value: 0.45 },
   // ——— THE BURST.
+  { key: 'blastdistort', label: 'optical wave', min: 0, max: 1, step: 1, value: 1,
+    labels: ['off', 'on'] },
+  { key: 'bdstrength', label: 'wave strength (x)', min: 0, max: 4, step: 0.1, value: 2.7 },
   { key: 'fxsize', label: 'burst size', min: 0.1, max: 2, step: 0.02, value: 0.42 },
-  { key: 'fxsmoke', label: 'smoke', min: 0, max: 1, step: 0.02, value: 0.38 },
-  { key: 'fxlife', label: 'life (s)', min: 0.3, max: 3, step: 0.05, value: 1.15 },
-  { key: 'fxgain', label: 'fire gain', min: 0, max: 4, step: 0.05, value: 1.25 },
+  { key: 'fxsmoke', label: 'smoke', min: 0, max: 1, step: 0.02, value: 0.76 },
+  { key: 'fxlife', label: 'life (s)', min: 0.3, max: 3, step: 0.05, value: 1.55 },
+  { key: 'fxgain', label: 'fire gain', min: 0, max: 4, step: 0.05, value: 3.3 },
   // The shape A/B: 1 is the plume, 0 is the round fireball this replaced.
-  { key: 'plume', label: 'plume vs ball', min: 0, max: 1, step: 0.05, value: 1 },
-  { key: 'capflat', label: 'cap flatness', min: 0, max: 1, step: 0.05, value: 0.55 },
+  { key: 'plume', label: 'plume vs ball', min: 0, max: 1, step: 0.05, value: 0.1 },
+  { key: 'capflat', label: 'cap flatness', min: 0, max: 1, step: 0.005, value: 0.955 },
   { key: 'neck', label: 'neck top (h)', min: 0, max: 4, step: 0.05, value: 1.35 },
   { key: 'cap', label: 'cap top (h)', min: 0, max: 4, step: 0.05, value: 2 },
   { key: 'ringreach', label: 'ring reach (h)', min: 0, max: 6, step: 0.1, value: 1.4 },

@@ -55,7 +55,7 @@ import type { Primitive } from '../types';
 import type { Quat } from '../vec';
 import type { BuildResult } from '../build-body';
 import type { ChunkLook, ChunkFieldEvals } from '../chunk-bake-field';
-import { bakeAoAt, bakeChunkAlbedo, chunkBakeField } from '../chunk-bake-field';
+import { bakeAoAt, bakeChunkAlbedo, chunkBakeField, cutAwareField, cutLook, CUT_BAND } from '../chunk-bake-field';
 import { sdPrimitive } from '../validate';
 import { BONE_GROUPS, groupOf, type BoneGroup } from '../melt-bones';
 import { extractHullSoup, fitHullGrid, type HullSoup } from './surface-nets-cpu';
@@ -110,85 +110,13 @@ function boxSdf(p: Vec3, centre: Vec3, half: Vec3): number {
   return Math.hypot(ox, oy, oz) + Math.min(Math.max(dx, Math.max(dy, dz)), 0);
 }
 
-/** How far beneath the ORIGINAL skin a vertex must sit before it is fully torn
- *  meat rather than skin. One and a half millimetres: the extraction puts a
- *  genuine skin vertex at preWound = 0 to well under a tenth of that (measured
- *  p50 = 0.47 mm over the whole library), and a cut face is 3-5 cells across, so
- *  this is a crisp tear rim and not a gradient smeared over the piece. */
-export const CUT_BAND = 0.0015;
-
-/**
- * THE CUT IS THE WOUND.
- *
- * `bakeChunkAlbedo` mirrors the march's albedo chain, and in that chain the
- * wound mask is the SOLE authority on whether a point is wounded:
- * `albedo = mix(baseColor, tissue, wm)`. The entire tissue ramp — dermis, fat,
- * muscle, clot, viscera — is multiplied by it.
- *
- * A rest-pose body has no torn ends, so `chunkBakeField` gets `torn: []` and its
- * mask is identically zero. Left that way, every vertex of every piece is
- * painted as intact outer skin — including the third of the surface that is a
- * slab cut face. That is a gib with no interior: one flat hue at alpha 0, which
- * the shader then renders fully matte. "Pale, grey, concrete."
- *
- * But the carve knows exactly where it cut, and it needs no new machinery to say
- * so. A piece's surface is `max(bodyField, regionField)`: on the ORIGINAL skin
- * the body field is what reached zero, so `preWound` is 0; on a CUT FACE the
- * region field is what reached zero and `preWound` is negative by however deep
- * into the meat the slab boundary fell. Depth beneath the original skin IS the
- * cut mask, and it is the same quantity the tissue ramp already reads — so the
- * mask and the colour it selects can never disagree about where the tear is.
- */
-function cutAwareField(ev: ChunkFieldEvals, look: ChunkLook): ChunkFieldEvals {
-  // THE RAMP'S KNEES DESCRIBE TISSUE LAYERS, AND LAYERS ONLY EXIST NEAR THE SKIN.
-  //
-  // fatDepth 4 mm, muscleDepth 14 mm, visceraDepth 45 mm: those are authored for a
-  // WOUND CRATER a centimetre or two deep, which is the only thing the march ever
-  // feeds them. A slab cut through a torso is 100 mm deep across its whole face
-  // (measured p99 86 mm, max 124 mm), so the raw depth drives every interior vertex
-  // clean past the last knee and paints the piece entrails-dark edge to edge.
-  // Measured before this cap: 21.2% of vertices landed nearest VISCERA and 0.0%
-  // nearest fat — an anatomy chart, not a gib, and the owner read it as a butcher's
-  // cross-section ("beef chunks I get from the Piggly Wiggly").
-  //
-  // So the depth the ALBEDO sees saturates at the clot knee: exponential, C1, and
-  // monotonic, so a deeper cut is still never lighter than a shallower one. The
-  // rim of a cut still runs dermis -> fat -> muscle and its middle still reaches
-  // clot; what it can no longer do is run off the end of the ramp it was given.
-  // The GEOMETRY is untouched — this is `preWound`, the colour's depth term only.
-  const clotKnee = Math.max(look.muscleDepth * 2.5, 1e-4);
-  return {
-    ...ev,
-    preWound(p: Vec3): number {
-      const d = -ev.preWound(p);
-      if (d <= 0) return 0;
-      return -clotKnee * (1 - Math.exp(-d / clotKnee));
-    },
-    woundMask(p: Vec3): number {
-      const depth = -ev.preWound(p);
-      if (depth <= 0) return 0;
-      const t = Math.min(1, depth / CUT_BAND);
-      return t * t * (3 - 2 * t);
-    },
-  };
-}
-
-/**
- * A SLAB CUT IS NOT A CAVITY.
- *
- * `bakeChunkAlbedo` fires the viscera lump wherever `wm > 0` and the depth clears
- * the muscle knee. The march is stricter: it gates viscera on `wmCav`, the CAVITY
- * mask, precisely because entrails belong to a hole blown INTO a body, not to
- * every wounded pixel. A settled chunk has real cavities and that collapse is fair
- * there; a rest-pose body cut into slabs has none, so on this path the gate would
- * be true across every cut face — which is where the 21.2% came from.
- *
- * Organs are not lost by this: they are authored prims, and `makeKindAt` tags their
- * vertices `goreKind = 2`, which is the material's own organ branch.
- */
-function cutLook(look: ChunkLook): ChunkLook {
-  return { ...look, visceraAmp: 0 };
-}
+/** The cut mask, the depth saturation it reads and the no-cavity look now live
+ *  in `chunk-bake-field.ts`: the OFFLINE per-piece asset bake needs the SAME
+ *  "depth beneath the original skin" contract, but derives its depth from the
+ *  piece field with the `sub` cut caps removed (see the builder), so one shared
+ *  helper keeps the carve and the committed sets from disagreeing about where a
+ *  tear is. Re-exported here because this module owned the names. */
+export { CUT_BAND, cutAwareField, cutLook };
 
 /** A bone/organ prim owns a surface point when the point is INSIDE it.
  *

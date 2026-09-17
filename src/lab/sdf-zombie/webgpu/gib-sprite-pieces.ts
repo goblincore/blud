@@ -88,6 +88,26 @@ export interface SpritePiece {
    *  release exists to show. */
   impulseDelay: number;
   impulseVel: Chunk['vel'] | null;
+  /**
+   * CALLED WHEN THIS PIECE LEAVES THE SET (evicted over a cap, or cleared).
+   *
+   * Absent for a billboard/carved piece, whose geometry is shared and has
+   * nothing to give back. The OFFLINE ASSET path sets it so a dropped piece
+   * returns its per-instance deformed geometry to the per-part pool — that is
+   * what makes the pool bounded across a firefight rather than growing with
+   * every blast. See `detach` below: this is the ONE place a piece is retired,
+   * so registering the buffer return here cannot be forgotten at a call site.
+   */
+  onDetach?: () => void;
+  /**
+   * CALLED AFTER EVERY RE-POSE (live step and resting re-pose), with this
+   * piece. The OFFLINE ASSET head uses it to re-project its face frame from the
+   * chunk's current transform: the face layer's `headCentre`/`headQuat`/
+   * `headAxes` are world-space, so they must ride the piece through flight,
+   * squash and settle exactly as `applyMeshPose` moves the geometry. Absent on
+   * every piece that does not carry a face frame.
+   */
+  onPose?: (p: SpritePiece) => void;
 }
 
 export interface SpritePieceSet {
@@ -309,6 +329,9 @@ export function spawnSpritePiece(
  *  sheet's `Source`, so one piece's clone dying would blank every sibling. */
 function detach(set: SpritePieceSet, p: SpritePiece): void {
   set.group.remove(p.mesh);
+  // The ONE retirement point (eviction over a cap, clear, or reset). An asset
+  // piece returns its per-instance geometry to the pool here.
+  p.onDetach?.();
 }
 
 export interface SpriteStepOptions {
@@ -354,6 +377,7 @@ export function stepSpritePieces(set: SpritePieceSet, o: SpriteStepOptions): {
     p.state = stepChunk(p.state, o.dt, o.collidersAt?.(p.state.pos));
     if (p.render === 'mesh') applyMeshPose(p.mesh, p.state);
     else applySpritePose(p.mesh, p.state, o.cameraQuat);
+    p.onPose?.(p);
     if (chunkSettled(p.state)) {
       p.resting = true;
       set.live.splice(i, 1);
@@ -367,6 +391,7 @@ export function stepSpritePieces(set: SpritePieceSet, o: SpriteStepOptions): {
   for (const p of set.rest) {
     if (p.render === 'mesh') applyMeshPose(p.mesh, p.state);
     else applySpritePose(p.mesh, p.state, o.cameraQuat);
+    p.onPose?.(p);
   }
 
   let dropped = 0;
@@ -416,11 +441,11 @@ export function clearSpritePieces(set: SpritePieceSet): number {
  *  that watches a gib fly does not care which render mode made it. */
 export function spritePieceStates(set: SpritePieceSet): {
   id: number; limb: string; kind: string; rest: boolean;
-  pos: Chunk['pos']; vel: Chunk['vel']; radius: number; settled: boolean;
+  pos: Chunk['pos']; vel: Chunk['vel']; quat: Chunk['quat']; radius: number; settled: boolean;
 }[] {
   return [...set.live, ...set.rest].map(p => ({
     id: p.id, limb: p.state.limb as unknown as string, kind: p.state.kind,
-    rest: p.resting, pos: p.state.pos, vel: p.state.vel, radius: p.state.radius,
+    rest: p.resting, pos: p.state.pos, vel: p.state.vel, quat: p.state.quat, radius: p.state.radius,
     settled: chunkSettled(p.state),
   }));
 }

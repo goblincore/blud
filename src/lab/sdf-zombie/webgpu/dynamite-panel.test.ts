@@ -62,10 +62,15 @@ describe('dynamite panel key table', () => {
     // (which reads them live); here they are pinned to the values this session
     // shipped so a slider default cannot drift from the committed behaviour.
     expect(d.mode).toBe(2);            // 'parts'
-    expect(d.bones).toBe(2);           // 'all'
-    expect(d.tearSec).toBeCloseTo(0.1, 6);
-    expect(d.plume).toBe(1);
+    expect(d.bones).toBe(1);           // 'core'
+    expect(d.tearSec).toBeCloseTo(0.2, 6);
+    expect(d.plume).toBe(0.1);
+    expect(d).toMatchObject({
+      tearAmp: 0.045, tearJiggle: 0.35, chunkbake: 1, aoesize: 0.82,
+      blastdistort: 1, bdstrength: 2.7, fxsmoke: 0.76, fxlife: 1.55,
+      fxgain: 3.3, capflat: 0.955,
+    });
     expect(GIB_MODES[d.mode]).toBe('parts');
-    expect(GIB_BONES[d.bones]).toBe('all');
+    expect(GIB_BONES[d.bones]).toBe('core');
   });
 });
