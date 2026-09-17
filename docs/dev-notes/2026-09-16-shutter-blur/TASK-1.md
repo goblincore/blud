@@ -42,6 +42,9 @@ npx vitest run \
   src/lab/sdf-zombie/webgpu/blood-compare-main.test.ts \
   src/lab/sdf-zombie/webgpu/goo-layer.test.ts
   -> Test Files 5 passed (5); Tests 201 passed (201)
+
+npx vitest run          # full suite (regression sweep after the goo-layer change)
+  -> Test Files 345 passed (345); Tests 5417 passed (5417); Duration 737s
 ```
 
 Covered by tests: preset seconds and ms; `angle/360/fps`; trailing interval; constant-velocity streak table (600 px/s → 2.5/5/10/20 px at 1/240…1/30); cadence independence at 30/60/120 (sample plan and reconstructed motion identical, no fps input); zero exposure collapse; birth/death/contact classification; reused-slot new-identity and no long spurious vector; timeline determinism; selected/static split; normalized premultiplied average (two half-covered samples average to 0.5, not 1); projection parity; the page's shutter tripwires and the disabled efficient candidate.
@@ -77,7 +80,6 @@ The first capture showed the sampled composite vertically mirrored against the s
 - **Visual acceptance is PENDING.** Captures exist and orientation/parity are verified, but no owner look and no quality claim. Game integration, default flips, flying-gib and actor work remain untouched.
 
 ## Reproducing the lab
-
 ```
 npm run dev            # then open http://localhost:5173/sdf-blood-compare.html (WebGPU)
 ```
