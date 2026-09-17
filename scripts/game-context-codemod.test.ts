@@ -130,3 +130,21 @@ describe('applyCodemod — collapse reporting', () => {
     expect(report.linesLost).toBe(0);
   });
 });
+
+describe('applyCodemod — multi-declarator statements', () => {
+  it('rewrites an all-mapped multi-declarator into a comma expression', () => {
+    const src = `async function main() {\n  let pendingDx = 0, pendingDy = 0;\n}\n`;
+    const out = applyCodemod(src, { pendingDx: 'player.pendingDx', pendingDy: 'player.pendingDy' });
+    expect(out).toBe(`async function main() {\n  ctx.player.pendingDx = 0, ctx.player.pendingDy = 0;\n}\n`);
+  });
+
+  it('leaves a wholly unmapped multi-declarator alone', () => {
+    const src = `async function main() {\n  const _a = v(), _b = v();\n}\n`;
+    expect(applyCodemod(src, { probeWeight: 'probes.weight' })).toBe(src);
+  });
+
+  it('refuses a MIXED multi-declarator rather than silently breaking one', () => {
+    const src = `async function main() {\n  let probeWeight = 0, keepMe = 1;\n}\n`;
+    expect(() => applyCodemod(src, { probeWeight: 'probes.weight' })).toThrow(/mixed multi-declarator/);
+  });
+});

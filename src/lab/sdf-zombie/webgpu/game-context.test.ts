@@ -20,7 +20,7 @@ describe('makeGameContext', () => {
   });
 
   it('declares no slice it does not construct', () => {
-    const ctx = makeGameContext() as Record<string, unknown>;
+    const ctx = makeGameContext() as unknown as Record<string, unknown>;
     for (const key of Object.keys(ctx)) {
       expect(SLICE_NAMES as readonly string[]).toContain(key);
     }

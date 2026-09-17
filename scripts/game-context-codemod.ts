@@ -53,18 +53,28 @@ export function applyCodemod(source: string, map: BindingMap, report?: CodemodRe
   for (const stmt of main.body.statements) {
     if (!ts.isVariableStatement(stmt)) continue;
     const decls = stmt.declarationList.declarations;
-    for (const decl of decls) {
-      if (!ts.isIdentifier(decl.name)) continue;
+
+    const named = decls.filter(ts.isVariableDeclaration).filter(d => ts.isIdentifier(d.name));
+    const hits = named.filter(d => map[(d.name as ts.Identifier).text]);
+    if (hits.length === 0) continue;
+
+    // A MIXED statement (`let a = 0, b = 1;` where only `a` is mapped) cannot be
+    // rewritten: dropping the keyword would leave `b` undeclared, and keeping it
+    // would leave `a` declared. Split it by hand. All-mapped is fine — the
+    // result is a comma expression statement, which is valid.
+    if (hits.length !== decls.length) {
+      const names = named.map(d => (d.name as ts.Identifier).text).join(', ');
+      throw new Error(`mixed multi-declarator statement [${names}] — only some are mapped; split it by hand first`);
+    }
+
+    decls.forEach((decl, i) => {
+      if (!ts.isIdentifier(decl.name)) return;
       const path = map[decl.name.text];
-      if (!path) continue;
-      if (decls.length !== 1) {
-        throw new Error(`multi-declarator statement for '${decl.name.text}' — split it by hand first`);
-      }
       owned.add(decl.name.text);
-      // `let foo: Bar = x` -> `ctx.s.foo = x`: the type annotation goes too,
-      // since an assignment cannot carry one.
+      // The first declarator's span starts at the statement, which swallows the
+      // `let`/`const` keyword; later ones start at their own name.
+      const start = i === 0 ? stmt.getStart(sf) : decl.getStart(sf);
       const end = decl.type ? decl.type.getEnd() : decl.name.getEnd();
-      const start = stmt.getStart(sf);
 
       if (report) {
         const a = sf.getLineAndCharacterOfPosition(start).line;
@@ -77,7 +87,7 @@ export function applyCodemod(source: string, map: BindingMap, report?: CodemodRe
 
       edits.push({ start, end, text: `ctx.${path}` });
       covered.push([start, end]);
-    }
+    });
   }
 
   // Pass 2 — references. Walk main(), tracking scopes that redeclare an owned
