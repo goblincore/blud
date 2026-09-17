@@ -35,7 +35,7 @@
   additive-only (schema 3 / `GIB_ASSET_BIND_MASK`), `primTransformPoint` rotates the radial, and the
   renderer refuses an out-of-runtime-bounds deform (counted marched fallback, pool released once).
   Worst vertex outside the runtime additive union: **4.28 m zombie / 5.19 m soldier → 0.036 / 0.030 m**;
-  344 CPU piece-spawns, 0 fallbacks; gate cost 0.44–0.50 ms/body. Tip `f3bdc5f1`.
+  344 CPU piece-spawns, 0 fallbacks; gate cost 0.44–0.50 ms/body. Substantive tip `9b1d05d0`.
   [report](docs/dev-notes/2026-09-17-offline-gib-spikes/REPORT.md).
   Default stays `?gibrender=march`; the GPU/native-vision pass on live moving/damaged actors is the
   outstanding step (GPU not approved for this task).

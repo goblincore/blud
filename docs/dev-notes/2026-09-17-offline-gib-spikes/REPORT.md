@@ -1,7 +1,7 @@
 # Offline gib spikes — metre-scale poles on animated gibs (2026-09-17)
 
 Worktree `2026-09-17-offline-gib-spikes`, branch `codex/offline-gib-spikes`.
-Base `ea699255`; substantive tip `f3bdc5f1` (not pushed, not merged). Node 22.
+Base `ea699255`; substantive tip `9b1d05d0` (not pushed, not merged). Node 22.
 
 ## Verdict
 
