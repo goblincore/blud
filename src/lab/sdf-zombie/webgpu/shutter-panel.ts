@@ -57,7 +57,14 @@ export function createShutterPanel(
   host: ShutterPanelHost,
   opts: { right?: number } = {},
 ): ShutterPanel {
-  const shell = createPanelShell('BLOOD MOTION BLUR', { right: opts.right ?? 782 });
+  const shell = createPanelShell('BLOOD + GIB BLUR', { right: opts.right ?? 8 });
+  // The top-row slot at right:782 belongs to DYNAMITE / GIB, which is
+  // created later and completely covers this panel. Keep blur controls in
+  // their own bottom-right dock, including on narrow playtest windows.
+  shell.el.style.top = 'auto';
+  shell.el.style.bottom = '8px';
+  shell.el.style.boxSizing = 'border-box';
+  shell.el.style.maxWidth = 'calc(100vw - 16px)';
   const body = shell.body;
 
   // ON/OFF
