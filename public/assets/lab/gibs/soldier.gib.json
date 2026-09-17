@@ -1,10 +1,10 @@
 {
   "kind": "blud-gib-assets",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "archetype": "soldier",
-  "fingerprint": "106b1bf11692e6d7",
+  "fingerprint": "7d85d00d4602e46b",
   "recipe": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "generator": "scripts/build-gib-assets.ts",
     "archetype": "soldier",
     "blobPath": "src/lab/sdf-zombie/characters/soldier.blob",
@@ -85,7 +85,8 @@
     "cellSize": 0.012,
     "maxBindPrims": 4,
     "carveK": 0.008,
-    "gore": 1
+    "gore": 1,
+    "cutMask": "planner-cut-v1"
   },
   "source": {
     "blob": "src/lab/sdf-zombie/characters/soldier.blob",
@@ -97,7 +98,8 @@
     "carveK": 0.008,
     "gore": 1,
     "boneRelease": "all",
-    "organs": true
+    "organs": true,
+    "cutMask": "planner-cut-v1"
   },
   "offsets": {
     "json": "soldier.gib.json",

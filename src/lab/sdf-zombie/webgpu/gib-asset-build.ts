@@ -36,12 +36,12 @@ import { gibPlan, GIB_CUT, type GibPiece, type GibPlan } from '../gib-parts';
 import { chunkExtent } from '../extent';
 import { boneChunkRadius } from '../melt-bones';
 import { sdPrimitive } from '../validate';
-import { chunkBakeField, type ChunkLook } from '../chunk-bake-field';
+import { chunkBakeField, cutLook, type ChunkLook } from '../chunk-bake-field';
 import { bakeChunkGeometry, type ChunkBakeData } from './chunk-bake-geometry';
 import type { Primitive, Vec3 } from '../types';
 import { cross, normalize, qFromAxisAngle, qRotate, type Quat } from '../vec';
 import {
-  GIB_ASSET_KIND, GIB_ASSET_MAX_BIND_PRIMS, GIB_ASSET_SCHEMA_VERSION,
+  GIB_ASSET_CUT_MASK, GIB_ASSET_KIND, GIB_ASSET_MAX_BIND_PRIMS, GIB_ASSET_SCHEMA_VERSION,
   fnv1a64, gibAssetRecipeFingerprint, gibAssetRecipeHeader,
   type GibAssetArchetype, type GibAssetBindingPrim, type GibAssetBounds,
   type GibAssetCut, type GibAssetFaceFrame, type GibAssetPiece,
@@ -359,6 +359,15 @@ export function buildGibAssetArchetype(opts: BuildGibAssetOptions): GibAssetBuil
       : chunkExtent(g.prims, g.origin);
     const geometryExtent = Math.max(chunkExtent(boneOnly ? g.bones : g.prims, g.origin), 0.02);
     const extent = geometryExtent;
+    // THE CUT MASK. A planner piece's cut is a capped PLANE: `g.prims` carries
+    // the additive flesh plus one `sub` cap per cut. Because the cap is part of
+    // the same `flesh` array, `ev.preWound` is already zero on the capped face,
+    // so leaving `torn: []` bakes alpha 0 over 100% of vertices and every cut
+    // reads as dry outer skin. Passing the ADDITIVE prims as `cutMask.flesh`
+    // gives `cutAwareField` the depth beneath the ORIGINAL skin (0 on the
+    // outside, deep on the cut face) that the carve path derives the same way.
+    const capCount = g.prims.reduce((n, p) => n + (p.op === 'sub' ? 1 : 0), 0);
+    const cutMask = capCount > 0 ? { flesh: g.prims.filter(p => p.op !== 'sub') } : undefined;
     const data: ChunkBakeData = {
       flesh: fieldFlesh,
       bones: fieldBones,
@@ -368,10 +377,13 @@ export function buildGibAssetArchetype(opts: BuildGibAssetOptions): GibAssetBuil
       extent,
       halfExtent: [extent, extent, extent],
       quat: [0, 0, 0, 1],
-      look: opts.look,
+      // A cap cut has no cavities, so the viscera lump is off for it exactly as
+      // it is on the carved library (see `cutLook`); the geometry is untouched.
+      look: cutMask ? cutLook(opts.look) : opts.look,
       surface: opts.surface,
       gore: 1,
       cellSize,
+      cutMask,
       face: g.part === 'head' ? face : undefined,
     };
     const baked = bakeChunkGeometry(data);
@@ -385,7 +397,9 @@ export function buildGibAssetArchetype(opts: BuildGibAssetOptions): GibAssetBuil
         + `droppedQuads=${baked.droppedQuads} — refusing to ship holed geometry`,
       );
     }
-
+    // The cut mask is a MATERIAL CONTRACT, not a nicety: a capped piece whose
+    // alpha came out entirely zero is the exact blocker this regeneration
+    // exists to fix, so fail the build loudly instead of shipping a dry cut.
     const world = baked.geometry.getAttribute('position').array as Float32Array;
     const normals = baked.geometry.getAttribute('normal').array as Float32Array;
     const colors = baked.geometry.getAttribute('bakeColor').array as Float32Array;
@@ -394,6 +408,21 @@ export function buildGibAssetArchetype(opts: BuildGibAssetOptions): GibAssetBuil
     const anchors = baked.geometry.getAttribute('bakeAnchor').array as Float32Array;
     const aos = baked.geometry.getAttribute('bakeAo').array as Float32Array;
     const indexAttr = baked.geometry.getIndex()!;
+
+    if (cutMask) {
+      let wmMax = 0, wmNonzero = 0;
+      for (let i = 3; i < colors.length; i += 4) {
+        const w = colors[i]!;
+        if (w > 0.02) wmNonzero++;
+        if (w > wmMax) wmMax = w;
+      }
+      if (wmMax < 0.5 || wmNonzero === 0) {
+        throw new Error(
+          `gib asset ${opts.archetype}/${g.part}: cut mask empty (max ${wmMax.toFixed(3)}, `
+          + `${wmNonzero}/${baked.verts} vertices > 0.02) — cut-aware bakeColor.a regressed`,
+        );
+      }
+    }
 
     // Local frame = the planner origin (see the header). `bakeAnchor.xyz` was
     // already written relative to exactly this centre, so the two agree.
@@ -534,6 +563,7 @@ export function buildGibAssetArchetype(opts: BuildGibAssetOptions): GibAssetBuil
       gore: 1,
       boneRelease: opts.bones ?? 'all',
       organs: opts.organs ?? true,
+      cutMask: GIB_ASSET_CUT_MASK,
     },
     offsets: { json: `${opts.archetype}.gib.json`, bin: `${opts.archetype}.gib.bin` },
     totals,

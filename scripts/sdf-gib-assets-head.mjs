@@ -114,7 +114,6 @@ const headState = async () => ev(`(() => {
   return { live, baked, anyBaked, faceBaked: cs.faceBaked, spriteLive: g.spriteCensus().live,
            liveChunks: cs.live, bakedCount: cs.baked, gibAssets: cs.gibAssets, mode: g.gibRenderMode().mode };
 })()`);
-
 await frameAt([t.pos[0], t.pos[1] + 1.6, t.pos[2]]);
 await shot('head-onset');
 console.log(`onset target ${t.id} at ${t.pos.map(v => v.toFixed(2)).join(', ')}`);
@@ -142,17 +141,36 @@ for (let i = 0; i < FRAMES + 20; i++) {
 // until `headState().baked` reports a face material — not merely until the live
 // chunk stops moving. That early stop is why the first run reported faceBaked 0
 // on both arms: it photographed the SAME head one step before its face existed.
+//
+// THE ASSET ARM NEVER BAKES. Its head is a sprite-piece mesh whose face material
+// is built PER INSTANCE at spawn (`gibAssetStats().headMaterials.live`), so it
+// settles in place and is done — no bake to wait for. That arm stops on
+// `settled && headMaterials.live > 0`, which is the asset path's own proof that
+// the released head carries its face.
 let settled = null;
 let settledLive = null;
+let settledAsset = null;
+let lastHeadQuat = null;
 let steps = 0;
 while (steps < SETTLE) {
   const h = await headState();
+  if (h.live?.quat) lastHeadQuat = h.live.quat;
+  const assetHead = h.mode === 'assets' && (h.gibAssets?.headMaterials?.live ?? 0) > 0;
   const c = h.live ? h.live.pos : (h.baked ? h.baked.centre : null);
   if (c) await frameAt(c);
   if (h.live?.settled && !settledLive) {
     settledLive = await shot('head-settled');
     settledLive.pos = h.live.pos;
     settledLive.settled = true;
+  }
+  if (assetHead && h.live?.settled) {
+    await frameAt(h.live.pos);
+    settledAsset = {
+      file: (await shot('head-asset-settled')).file, pos: h.live.pos,
+      headMaterials: h.gibAssets.headMaterials, faceBaked: h.faceBaked,
+      spriteLive: h.spriteLive, atSteps: steps,
+    };
+    break;
   }
   if (h.baked) {
     await frameAt(h.baked.centre);
@@ -165,6 +183,7 @@ while (steps < SETTLE) {
   await sleep(150); // let the bake worker answer between chunks
   steps += 20;
 }
+if (!settled && settledAsset) settled = settledAsset;
 if (!settled && settledLive) settled = settledLive;
 if (!settled) {
   const h = await headState();
@@ -173,10 +192,52 @@ if (!settled) {
 }
 console.log(`settle after ${steps} steps: ${JSON.stringify(settled)}`);
 
+// FACE-ON ORBIT. A settled head lands in whatever orientation it toppled into,
+// so one fixed bearing can miss the face entirely — which is exactly how a
+// faceless head hides. Orbit the settled head at a close standoff and shoot
+// every 45 degrees; if the projection is wired, at least one bearing shows the
+// eyes/mouth, and the marched arm's baked head is the control. This is the
+// visual half of the `headMaterials.live` counter.
+const finalNow = await headState();
+const orbitCentre = (settled && settled.pos) || (finalNow.live && finalNow.live.pos) || (finalNow.baked && finalNow.baked.centre);
+const orbit = [];
+if (orbitCentre) {
+  const ORBIT_DIST = Number(process.env.HEAD_ORBIT_DIST ?? 0.85);
+  const poseFrom = async (dir, name) => {
+    const px = orbitCentre[0] + dir[0] * ORBIT_DIST;
+    const pz = orbitCentre[2] + dir[2] * ORBIT_DIST;
+    const yaw = yawTo(px, pz, orbitCentre[0], orbitCentre[2]);
+    const pitch = pitchTo(px, eyeY, pz, orbitCentre[0], orbitCentre[1], orbitCentre[2]);
+    await ev(`window.__sdfGame.setPose(${JSON.stringify(px)}, ${JSON.stringify(pz)}, ${JSON.stringify(yaw)}, ${JSON.stringify(pitch)}, 0)`);
+    await ev('window.__sdfGame.setLoopRunning(false)');
+    await ev('window.__sdfGame.step(1)');
+    const s = await shot(name);
+    orbit.push({ name, file: s.file });
+  };
+  for (let k = 0; k < 8; k++) {
+    const ang = (k * Math.PI) / 4;
+    await poseFrom([Math.sin(ang), 0, Math.cos(ang)], `head-orbit-${k}`);
+  }
+  // FACE-BEARING SHOTS. `chunkStates().quat` is the chunk's own orientation, so
+  // the head's local +Z rotated by it is (for a near-identity rest head frame)
+  // the direction the face projects. Shoot both poles: if the projection is
+  // wired, one of these is a face-on portrait and the marched arm is the control.
+  const faceQ = (finalNow.live && finalNow.live.quat) || lastHeadQuat;
+  if (faceQ) {
+    const q = faceQ;    const rot = (v) => {
+      const [x, y, z, w] = q;
+      const t = [2 * (y * v[2] - z * v[1]), 2 * (z * v[0] - x * v[2]), 2 * (x * v[1] - y * v[0])];
+      return [v[0] + w * t[0] + y * t[2] - z * t[1], v[1] + w * t[1] + z * t[0] - x * t[2], v[2] + w * t[2] + x * t[1] - y * t[0]];
+    };
+    await poseFrom(rot([0, 0, 1]), 'head-face-plus');
+    await poseFrom(rot([0, 0, -1]), 'head-face-minus');
+  }
+}
+
 const finalState = await headState();
 writeFileSync(`${OUT}/head-telemetry.json`, JSON.stringify({
   qs: QS, mode: modeAtBoot.mode, dist: DIST, frames: FRAMES, seed: SEED,
-  target: t, modeAtBoot, flight, settled, finalState, pageErrors,
+  target: t, modeAtBoot, flight, settled, settledAsset, settledLive, orbit, finalState, pageErrors,
 }, null, 2));
 
 if (pageErrors.length) { console.error(`PAGE ERRORS (${pageErrors.length})`); pageErrors.slice(0, 5).forEach(e => console.error('  ' + e)); }

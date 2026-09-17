@@ -1,89 +1,152 @@
 {
-  "a": ".lab-tmp/gate/head-march",
-  "b": ".lab-tmp/gate/head-assets",
+  "a": ".lab-tmp/gate4/head-march",
+  "b": ".lab-tmp/gate4/head-assets",
   "summary": {
-    "frames": 11,
-    "meanPctGt12": 14.326,
-    "maxPctGt12": 18.893,
-    "meanMeanAbs": 5.416
+    "frames": 20,
+    "meanPctGt12": 27.35,
+    "maxPctGt12": 47.678,
+    "meanMeanAbs": 9.338
   },
   "rows": [
     {
-      "file": "head-baked.png",
-      "pctGt12": 14.711,
-      "pctGt48": 4.428,
-      "meanAbs": 3.852,
-      "max": 240
+      "file": "head-face-minus.png",
+      "pctGt12": 47.678,
+      "pctGt48": 15.157,
+      "meanAbs": 14.679,
+      "max": 248
+    },
+    {
+      "file": "head-face-plus.png",
+      "pctGt12": 43.481,
+      "pctGt48": 16.811,
+      "meanAbs": 15.814,
+      "max": 254
     },
     {
       "file": "head-flight-12.png",
-      "pctGt12": 14.05,
-      "pctGt48": 5.498,
-      "meanAbs": 6.093,
-      "max": 196
+      "pctGt12": 15.302,
+      "pctGt48": 5.989,
+      "meanAbs": 6.519,
+      "max": 198
     },
     {
       "file": "head-flight-13.png",
-      "pctGt12": 16.221,
-      "pctGt48": 6.914,
-      "meanAbs": 7.416,
-      "max": 192
+      "pctGt12": 17.303,
+      "pctGt48": 7.594,
+      "meanAbs": 8.086,
+      "max": 198
     },
     {
       "file": "head-flight-14.png",
-      "pctGt12": 18.579,
-      "pctGt48": 7.34,
-      "meanAbs": 8.003,
-      "max": 190
+      "pctGt12": 19.379,
+      "pctGt48": 7.759,
+      "meanAbs": 8.736,
+      "max": 194
     },
     {
       "file": "head-flight-15.png",
-      "pctGt12": 18.893,
-      "pctGt48": 6.747,
-      "meanAbs": 7.991,
-      "max": 226
+      "pctGt12": 19.67,
+      "pctGt48": 7.265,
+      "meanAbs": 8.584,
+      "max": 231
     },
     {
       "file": "head-flight-16.png",
-      "pctGt12": 16.957,
-      "pctGt48": 5.151,
-      "meanAbs": 6.493,
-      "max": 233
+      "pctGt12": 17.727,
+      "pctGt48": 5.356,
+      "meanAbs": 6.852,
+      "max": 238
     },
     {
       "file": "head-flight-17.png",
-      "pctGt12": 14.338,
-      "pctGt48": 4.106,
-      "meanAbs": 5.282,
-      "max": 240
+      "pctGt12": 15.048,
+      "pctGt48": 4.43,
+      "meanAbs": 5.582,
+      "max": 246
     },
     {
       "file": "head-flight-18.png",
-      "pctGt12": 13.079,
-      "pctGt48": 3.871,
-      "meanAbs": 4.754,
-      "max": 236
+      "pctGt12": 13.502,
+      "pctGt48": 4.111,
+      "meanAbs": 4.863,
+      "max": 242
     },
     {
       "file": "head-flight-19.png",
-      "pctGt12": 12.086,
-      "pctGt48": 3.783,
-      "meanAbs": 4.505,
-      "max": 221
+      "pctGt12": 12.443,
+      "pctGt48": 4,
+      "meanAbs": 4.383,
+      "max": 200
     },
     {
       "file": "head-onset.png",
       "pctGt12": 0.028,
       "pctGt48": 0.006,
-      "meanAbs": 0.11,
+      "meanAbs": 0.208,
       "max": 86
     },
     {
+      "file": "head-orbit-0.png",
+      "pctGt12": 37.893,
+      "pctGt48": 13.944,
+      "meanAbs": 14.269,
+      "max": 251
+    },
+    {
+      "file": "head-orbit-1.png",
+      "pctGt12": 43.252,
+      "pctGt48": 16.388,
+      "meanAbs": 15.318,
+      "max": 251
+    },
+    {
+      "file": "head-orbit-2.png",
+      "pctGt12": 43.983,
+      "pctGt48": 15.626,
+      "meanAbs": 15.344,
+      "max": 254
+    },
+    {
+      "file": "head-orbit-3.png",
+      "pctGt12": 38.621,
+      "pctGt48": 12.266,
+      "meanAbs": 12.327,
+      "max": 253
+    },
+    {
+      "file": "head-orbit-4.png",
+      "pctGt12": 38.154,
+      "pctGt48": 9.628,
+      "meanAbs": 11.138,
+      "max": 215
+    },
+    {
+      "file": "head-orbit-5.png",
+      "pctGt12": 39.878,
+      "pctGt48": 8.217,
+      "meanAbs": 10.701,
+      "max": 253
+    },
+    {
+      "file": "head-orbit-6.png",
+      "pctGt12": 25.603,
+      "pctGt48": 5.901,
+      "meanAbs": 6.434,
+      "max": 250
+    },
+    {
+      "file": "head-orbit-7.png",
+      "pctGt12": 39.139,
+      "pctGt48": 13.311,
+      "meanAbs": 12.026,
+      "max": 253
+    },
+    {
       "file": "head-settled.png",
-      "pctGt12": 18.642,
-      "pctGt48": 6.078,
-      "meanAbs": 5.079,
-      "max": 235
+      "pctGt12": 18.925,
+      "pctGt48": 5.769,
+      "meanAbs": 4.892,
+      "max": 250
     }
   ]
 }

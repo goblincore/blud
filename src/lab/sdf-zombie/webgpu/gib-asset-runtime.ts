@@ -25,6 +25,11 @@ import {
   GibAssetLoadError, loadGibAssetSet,
   type GibAssetFallbackReason, type GibAssetLoadedSet, type LoadGibAssetOptions,
 } from './gib-asset-loader';
+import {
+  GibAssetHeadRegistry,
+  type GibAssetHeadCounters, type GibAssetHeadFactory, type GibAssetHeadLocal,
+  type GibAssetHeadResource,
+} from './gib-asset-head';
 import type { Primitive, Vec3 } from '../types';
 
 /** The three albedo branches Task 1 records. `goreKind` is synthesised from
@@ -264,20 +269,22 @@ export function gibAssetEligible(
 
 /**
  * The MESH-path eligibility the renderer uses. It is `gibAssetEligible` plus the
- * one deliberate exclusion Task 3 added after the visual gate:
+ * face rule:
  *
- *   `head-face` — a piece carrying a FACE FRAME keeps the marched path. The face
- *   layer projects from `headCentre`/`headQuat`/`headAxes`, which the marched
- *   path re-uploads from the POSED primitives every frame; an asset mesh has only
- *   a REST face frame and one shared gore material, so an asset-built head draws
- *   faceless. Falling back keeps the marched head, which bakes into the same
- *   face-material mesh as before. Counted, never silent.
+ *   `head-face` — a piece carrying a FACE FRAME keeps the marched path UNLESS
+ *   the caller can supply a per-instance face material (`faceSupported`). The
+ *   face layer projects from `headCentre`/`headQuat`/`headAxes`, so a
+ *   shared-material asset head cannot draw a face; `GibAssetHeadRegistry` gives
+ *   each head its own frame and uniforms, and only then is the head eligible.
+ *   A face-carrying piece on a renderer (or an actor) with no face source still
+ *   falls back, and the fallback is counted, never silent.
  */
 export function gibAssetMeshEligible(
   doc: GibAssetPiece,
   gib: { part?: string; srcPrims?: readonly number[]; srcBones?: readonly number[] },
+  faceSupported = false,
 ): GibAssetIneligibleReason | null {
-  if (doc?.face) return 'head-face';
+  if (doc?.face && !faceSupported) return 'head-face';
   return gibAssetEligible(doc, gib);
 }
 
@@ -305,10 +312,19 @@ export interface GibAssetRuntimeCounters {
   /** Runtime extraction / bake jobs spawned by this path — always 0: the whole
    *  point is that assets remove extraction. Reported so the claim is checkable. */
   runtimeExtractionJobs: number;
+  /** Live per-instance head FACE materials, and their lifetime counts. Bounded
+   *  by concurrent heads, not by blasts; zero when no face factory is wired. */
+  headMaterials: GibAssetHeadCounters;
+  /** Whether a per-instance face material can be built at all. When false the
+   *  head keeps the marched `'head-face'` fallback. */
+  headFaceAvailable: boolean;
 }
 
 export interface GibAssetRuntimeOptions extends LoadGibAssetOptions {
   materialFactory: GibAssetMaterialFactory;
+  /** Optional: builds ONE NEW per-instance face material per head spawn. Absent
+   *  = the head cannot use the mesh path and keeps the marched face. */
+  headMaterialFactory?: GibAssetHeadFactory;
   /** Optional hook for tests/telemetry: called once per successful load. */
   onLoad?: (library: GibAssetLibrary) => void;
 }
@@ -324,14 +340,19 @@ export class GibAssetRuntime {
   private readonly state = new Map<string, GibAssetArchetypeState>();
   private readonly fallbackReason = new Map<string, GibAssetFallbackReason>();
   private readonly loadPromises = new Map<string, Promise<boolean>>();
+  private readonly heads: GibAssetHeadRegistry;
   private readonly counters: GibAssetRuntimeCounters = {
     assetPieces: 0, fallbacks: {}, loadBytes: 0, loading: 0,
     liveMeshes: 0, poolCreated: 0, poolFree: 0, runtimeExtractionJobs: 0,
+    headMaterials: { live: 0, created: 0, disposed: 0 }, headFaceAvailable: false,
   };
   private material: THREE.Material | null = null;
   private disposed = false;
 
-  constructor(private readonly opts: GibAssetRuntimeOptions) {}
+  constructor(private readonly opts: GibAssetRuntimeOptions) {
+    this.heads = new GibAssetHeadRegistry(opts.headMaterialFactory ?? null);
+    this.counters.headFaceAvailable = this.heads.available;
+  }
 
   /** Begin (or join) a load. Resolves true when the archetype is ready. */
   ensure(archetype: string): Promise<boolean> {
@@ -394,6 +415,13 @@ export class GibAssetRuntime {
   countFallback(reason: string): void {
     this.counters.fallbacks[reason] = (this.counters.fallbacks[reason] ?? 0) + 1;
   }
+  /** Whether the mesh path can carry a face (see `gibAssetMeshEligible`). */
+  headFaceAvailable(): boolean { return this.heads.available; }
+  /** Build a per-instance head face material. Null when no factory is wired; the
+   *  caller then keeps the marched head. */
+  acquireHead(part: string, local: GibAssetHeadLocal, source?: unknown): GibAssetHeadResource | null {
+    return this.heads.acquire(part, local, source);
+  }
   /** Called by the renderer when an instance is checked out / returned so the
    *  live count reflects ALL pools. */
   countDeform(liveDelta: number): void {
@@ -402,7 +430,11 @@ export class GibAssetRuntime {
 
   countersSnapshot(): GibAssetRuntimeCounters {
     this.refreshPoolCounters();
-    return { ...this.counters, fallbacks: { ...this.counters.fallbacks } };
+    return {
+      ...this.counters,
+      fallbacks: { ...this.counters.fallbacks },
+      headMaterials: this.heads.counters(),
+    };
   }
 
   private refreshPoolCounters(): void {
@@ -420,6 +452,7 @@ export class GibAssetRuntime {
   /** Stop honoring in-flight loads and give back every GPU resource. */
   dispose(): void {
     this.disposed = true;
+    this.heads.dispose();
     for (const p of this.pools.values()) p.dispose();
     for (const l of this.libraries.values()) l.dispose();
     this.pools.clear();

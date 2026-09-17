@@ -115,16 +115,20 @@ describe('gib-asset schema', () => {
 
   it('fingerprints the full source, so an EQUAL-LENGTH edit changes it', () => {
     const base: GibAssetRecipe = {
-      schemaVersion: 1, generator: 'g', archetype: 'zombie', blobPath: 'p',
+      schemaVersion: 2, generator: 'g', archetype: 'zombie', blobPath: 'p',
       blobSource: 'head 1\nbody 2\n', buildOpts: { silhouetteNoiseAmp: 0.012, stepMultiplier: 0.6 },
       face: {}, palette: 'default', look: {}, surface: {},
       boneRelease: 'all', organs: true, cellSize: 0.012, maxBindPrims: 4, carveK: 0.008, gore: 1,
+      cutMask: 'planner-cut-v1',
     };
     const a = gibAssetRecipeFingerprint(base);
     // One character swapped, same byte length — a length-only key would miss it.
     const edited = { ...base, blobSource: 'head 1\nbody 3\n' };
     expect(edited.blobSource.length).toBe(base.blobSource.length);
     expect(gibAssetRecipeFingerprint(edited)).not.toBe(a);
+    // The cut-mask derivation rides the fingerprint too: a set baked with the
+    // old (empty) mask must be STALE, not silently served dry.
+    expect(gibAssetRecipeFingerprint({ ...base, cutMask: 'planner-cut-v2' })).not.toBe(a);
     // ...and it is stable for an identical recipe.
     expect(gibAssetRecipeFingerprint({ ...base })).toBe(a);
   });

@@ -13,7 +13,7 @@ import { FLESH_PRESETS } from '../material';
 import type { FaceParams } from '../face';
 import type { ChunkLook } from '../chunk-bake-field';
 import type { GibSurfaceResponse } from './gib-asset-build';
-import { GIB_ASSET_SCHEMA_VERSION, type GibAssetRecipe } from './gib-asset';
+import { GIB_ASSET_CUT_MASK, GIB_ASSET_SCHEMA_VERSION, type GibAssetRecipe } from './gib-asset';
 
 /** The archetypes Task 1 ships. `blobPath` is repo-relative and must stay in
  *  step with the tracked `.blob` files (a moved source leaves the asset stale,
@@ -27,6 +27,7 @@ export const GIB_ARCHETYPES: readonly GibArchetypeDef[] = [
   { name: 'zombie', blobPath: 'src/lab/sdf-zombie/characters/zombie.blob' },
   { name: 'soldier', blobPath: 'src/lab/sdf-zombie/characters/soldier.blob' },
 ];
+
 
 /** The palette the game actually wears: the `.blob`'s own `palette` block, else
  *  the stock preset — `game-main.ts:2826` verbatim. */
@@ -115,5 +116,6 @@ export function makeGibAssetRecipe(input: MakeGibRecipeInput): GibAssetRecipe {
     maxBindPrims: input.maxBindPrims,
     carveK: input.carveK,
     gore: 1,
+    cutMask: GIB_ASSET_CUT_MASK,
   };
 }

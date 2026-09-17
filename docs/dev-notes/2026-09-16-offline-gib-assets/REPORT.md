@@ -1,19 +1,35 @@
-# Offline gib assets — Task 3: visual and performance gate
+# Offline gib assets — Task 4: closing the two blockers
 
-Branch `codex/offline-gib-assets-task-3`, baseline `30e66c84`, parents
-`a08c8f43` (Task 1) and `1d3d45c3` (Task 2). Isolated dispatch worktree; **no
-merge, no push, primary checkout untouched.**
+Branch `codex/offline-gib-assets-task-4`, baseline `30e66c84`, parent tip
+`10d7a5ff` (main history merged into the review candidate; Task 3's substantive
+commit is `f2c67c84`). Isolated dispatch worktree; **no merge, no push, primary
+checkout untouched.**
 
-Task 3 owns the GPU/visual gate and the performance numbers Tasks 1–2 explicitly
-did not produce. This report records what was measured, what was fixed because
-it failed, and the two precise blockers that keep the asset path **opt-in**.
+Task 3 shipped a working asset path but left **two measured blockers** that kept
+the shipped default at `?gibrender=march`. This task closes both, re-runs the
+gate on the regenerated sets, and records where parity now stands.
 
-**Bottom line:** the ordinary zombie and soldier body gibs pass the automated
-visual gate (matched silhouette through rupture→flight, floor contact, no
-rest-pose snap, no stuck airborne pieces, no faceless head, no revived armour)
-after fixing one real defect that made the whole path unusable. The shipped
-default stays `?gibrender=march` because two material gaps remain, both named in
-[Default decision](#default-decision--exact-blockers).
+**Bottom line.** Both blockers are fixed and verified:
+
+1. **The committed sets now carry a real wet/cut mask.** `bakeColor.a` was `0` on
+   100% of vertices; it is now derived from the planner's actual `sub` cut caps
+   via the same "depth beneath the original skin" contract the carve path uses.
+   Every cut-face vertex is fully wet (`wm > 0.5`), the outer skin stays dry, and
+   the matched A/B pixel difference **fell on every body leg**.
+2. **The moving asset head now wears the actor's face.** A per-instance face
+   material (own uniforms, own frame) follows the head through pose, slough,
+   flight, squash and settle; the `head-face` fallback is gone from ordinary
+   blasts (counted `0` where it was `1`/body), while damaged/custom heads still
+   fall back. A face-on orbit capture shows the eyes/nose/mouth on the asset
+   head, not a bare-flesh blob.
+
+The shipped default **still stays `?gibrender=march`**. The reason is no longer
+an open blocker but a judgement call recorded in
+[Default decision](#default-decision--remaining-evidence-gap): the cut-aware mask
+is a real close-range material change (asset cut faces read wet and dark where
+the marched planner caps read pale skin), the asset head's mid-flight exterior
+carries the mesh material's blood decals unattenuated by face coverage, and no
+owner has looked at either. Everything the automated gate can decide passes.
 
 ---
 
@@ -21,305 +37,293 @@ default stays `?gibrender=march` because two material gaps remain, both named in
 
 | File | Role |
 | --- | --- |
-| `scripts/sdf-gib-assets-look.mjs` | Visual/telemetry capture rig: one boot = one arm, matched `?seed=`, camera bearing (occluder-aware), detonation point and frame count. A/B is `?gibrender=march` vs `assets`. |
-| `scripts/sdf-gib-assets-head.mjs` | Detached-head follow rig, renderer-agnostic (`chunkStates()` covers live chunks *and* sprite pieces). Follows the head through flight and bake. |
-| `scripts/sdf-gib-assets-perf.mjs` | Loader / explosion / moving-gib frame cost probe (paired shown-vs-hidden rAF bursts + GPU pass rows). |
-| `scripts/gib-assets-gate.sh` | Owns vite + Chrome via `scripts/lab-servers.sh`; runs every leg; records a failed leg instead of aborting. |
-| `scripts/gib-assets-diff.mjs` | Matched-frame pixel diff (per-frame %pixels >12 levels, mean, max). |
-| `scripts/gib-assets-sheet.py` | A/B contact sheets (rows = frames, columns = arms). |
-| `src/lab/sdf-zombie/webgpu/game-main.ts` | **Evidence-driven fix**: the rupture-path deform source (see below), plus the `gibAssetMeshEligible` call. |
-| `src/lab/sdf-zombie/webgpu/gib-asset-runtime.ts` | `gibAssetMeshEligible` + the `head-face` reason. |
-| `src/lab/sdf-zombie/webgpu/gib-asset-integration.test.ts` | The CPU regression test for the cap-row spike and for the head exclusion. |
-| `docs/dev-notes/2026-09-16-offline-gib-assets/captures/` | Compact evidence: 8 A/B sheets, 8 diff JSONs, `gate-summary.json`. |
+| `src/lab/sdf-zombie/chunk-bake-field.ts` | **New shared `cutAwareField`/`cutLook`/`CUT_BAND`** — the "the cut is the wound" contract, generalised so `depthAt` can be the carve's body field OR the asset's pre-cap field. |
+| `src/lab/sdf-zombie/webgpu/chunk-bake-geometry.ts` | Optional `ChunkBakeData.cutMask`: derives the mask from the piece's additive prims with the `sub` caps removed. The runtime settle bake passes none and is unchanged. |
+| `src/lab/sdf-zombie/webgpu/gib-asset-build.ts` | Passes `cutMask` for capped pieces, uses `cutLook` (no cavities on a cap cut), and **fails the build** if a capped piece bakes an empty mask. |
+| `src/lab/sdf-zombie/webgpu/gib-asset.ts` | `GIB_ASSET_SCHEMA_VERSION = 2`, `GIB_ASSET_CUT_MASK`, `cutMask` in the recipe fingerprint and the doc's `bake` block. |
+| `public/assets/lab/gibs/*` | Regenerated zombie + soldier sets, deterministic, same vert/tri counts as Task 1. |
+| `src/lab/sdf-zombie/webgpu/gib-asset-head.ts` (+ `.test.ts`) | **New**: the chunk→world head frame and the per-instance face-material registry (idempotent release, no shared mutable uniforms). |
+| `src/lab/sdf-zombie/webgpu/baked-chunks.ts` | `BakedChunkMaterial.faceUniforms` — a read/update handle for a MOVING face-carrying mesh. |
+| `src/lab/sdf-zombie/webgpu/gib-asset-runtime.ts` | Head registry ownership, `acquireHead`, `headMaterials`/`headFaceAvailable` counters, `gibAssetMeshEligible(doc, gib, faceSupported)`. |
+| `src/lab/sdf-zombie/webgpu/gib-sprite-pieces.ts` | `SpritePiece.onPose` (re-project after every re-pose) and `quat` in `spritePieceStates`. |
+| `src/lab/sdf-zombie/webgpu/game-main.ts` | Head material factory, per-head spawn/frame/dispose, face support check, `quat` in `chunkStates`. |
+| `scripts/sdf-gib-assets-head.mjs` | Orbit + face-bearing diagnostics; asset arm settles without waiting for a bake it never performs. |
+| `docs/dev-notes/2026-09-16-offline-gib-assets/captures/` | Updated A/B sheets, cut-face close-ups, head orbit/face sheets, `gate-summary.json`. |
 
-## Exact usage
+## Blocker 1 — CLOSED: the committed sets carry a wet cut mask
 
-```bash
-# Build once (Node 22).
-npm ci
-npm run build
+**The defect (Task 3).** `bakeChunkGeometry` was called with `torn: []`, so
+`woundMask` was identically zero and `bakeColor.a == 0` on **100% of vertices**.
+Every cut face rendered as dry outer skin while the marched pieces read as torn
+meat.
 
-# Full automated gate from an isolated worktree (owns vite + Chrome).
-LAB_VITE_PORT=5297 LAB_CDP_PORT=9297 LAB_TMP=.lab-tmp \
-  scripts/gib-assets-gate.sh .lab-tmp/gate all
-#   groups: core | wound | multi | budget | reset | deferred | head | perf | all
+**The mechanism (not an alpha fill).** A planner piece's cut is a capped PLANE:
+`g.prims` is the additive flesh plus one `sub` cap per cut. Because the cap lives
+in the SAME `flesh` array, `ev.preWound` is *already zero on the capped face* —
+so the carve path's trick (`woundMask = depth beneath the original skin`) cannot
+be read from `ev` directly. The builder therefore hands `bakeChunkGeometry` a
+`cutMask.flesh` = the piece's additive prims **with the `sub` caps removed**.
+`chunkBakeGeometry` builds a second field from those and wraps the bake's field
+with `cutAwareField(ev, look, preCap.preWound)`: the wound mask and the tissue
+depth both come from how deep the cut fell below the pre-cut surface. On the
+outer skin that depth is `~0` (dry); on a cut face it is however deep the cap
+carved (wet). `cutLook` zeroes `visceraAmp` because a cap cut is not a cavity,
+so the ramp saturates at the clot knee — the same treatment the carved library
+already ships.
 
-# A/B in the running game (default is still march; assets are opt-in):
-open '/sdf-game.html?gibrender=assets'            # arm at boot, throw dynamite
-open '/sdf-game.html?gibrender=march'             # control
-# live, no reload:
-__sdfGame.setGibRenderMode('assets')              # awaits the load; returns ready
-__sdfGame.gibRenderMode()                         # mode/ready/assets{armed,zombie,soldier}
-__sdfGame.gibAssetStats()                         # hits, fallbacks by reason, bytes, live meshes
-__sdfGame.gibAssetLibrary()                       # per-archetype state/fingerprint/bytes
-__sdfGame.resetGibAssets()                        # cancel loads, drop caches + pooled pieces
-__sdfGame.preloadGibAssets()                      # arm without switching mode
-__sdfGame.chunkStats().gibAssets                  # same census inside chunk stats
-```
+The `cutAwareField`/`cutLook`/`CUT_BAND` helpers moved from `gib-carve.ts` to
+`chunk-bake-field.ts` and are shared by both paths; `gib-carve.ts` re-exports
+them, and its suite is unchanged (7 tests, same thresholds).
 
-Relevant existing knobs: `?gib=parts|clusters|pieces`, `?gibbones=all|core|off`,
-`?gibtear`, `?tearslough`, `?giblaunch`, `?gibstagger`, `?gibspritelive`,
-`?gibspriterest`, `?maxchunks`, `?renderer=deferred`, `?room=<id>`, `?seed=`.
+**Versioning / fingerprint / determinism.**
 
-## Environment and coordination
+- `GIB_ASSET_SCHEMA_VERSION` 1 → 2 and a `cutMask: 'planner-cut-v1'` recipe
+  field, so an old (dry) set is rejected as `schema`/`stale`, never served.
+- A unit test pins that changing `cutMask` changes the recipe fingerprint.
+- `npm run gib:assets -- --force` twice produces **byte-identical** `.gib.bin`
+  files (`cmp` clean), and `npm run gib:assets:check` reports
+  `all assets valid and current`. No timestamps are in the content fingerprint.
+- The geometry is unchanged by the fix: zombie 37,738 verts / 75,552 tris /
+  3,925,208 bin bytes; soldier 42,918 / 85,820 / 4,463,376 — the same totals as
+  Task 1. Only `bakeColor.a` (and the ramped albedo on cut faces) changed.
+- No extracted Blood pixels are embedded: the bin carries procedural channels
+  only and the head face texture stays an external reference.
 
-- **Playtest pause respected.** Before any GPU work the listening servers were
-  identified by `lsof`/`cwd`: `5391` (`dynamite-weapon-slot`), `5392`
-  (`playtest-followups-review`), `5393` (`soldier-gib-equipment`), `5415`
-  (`rupture-live-review`). None had an established browser connection; the gate
-  used its own pair **5297/9297** and its own `--user-data-dir`. **No user server
-  or browser was killed**, and `lab-servers.sh` only ever stops what it started.
-- **One GPU run at a time.** Every leg ran inside a single `lab-servers`
-  lifecycle; no other Chrome/GPU run was started from this worktree.
-- Headless Chrome with `--enable-unsafe-webgpu`; screenshots via
-  `presentedShot()` (canvas `toDataURL`), never `Page.captureScreenshot`.
-- During the first `core` run a source edit was made while the page was live;
-  Vite HMR reloaded the page and invalidated an A/A leg. The run was discarded
-  and re-run from frozen source. Recorded here because it is the failure mode
-  that made one earlier measurement meaningless.
+**Regression test** (`gib-asset-runtime.test.ts`, on the COMMITTED files): a
+vertex is classified "at a cut" when it sits on a stored `sub` cap's own iso
+(`|sdPrimitive(cap)| < 2 mm`) and "outer skin" when it is clear of every cap
+(> 3 cm). Measured against the regenerated bins:
 
-## Evidence-driven fix: cut-cap rows stayed at the rest pose
+| | zombie | soldier |
+| --- | ---: | ---: |
+| cut-face vertices, mask > 0.5 | 2286 / 2286 (**100%**) | 2722 / 2722 (**100%**) |
+| outer-skin vertices, mask < 0.3 | 19043 / 19948 (**95.4%**) | 25337 / 26078 (**97.2%**) |
+| max mask (was 0.0) | 1.00 | 1.00 |
 
-**Symptom (native vision, first assets capture).** Every released asset piece
-trailed metre-long thin spike triangles. The march arm did not. Second control
-`?gibrender=assets&gibtear=0` (the row-aligned immediate path) was clean; the
-`?gibrender=assets&tearslough=0` arm still spiked, which ruled out the slough.
+That is the blocker's exact shape — meaningful nonzero mask at cuts, lower away
+from them — asserted on the committed sets, so removing the `cutMask` wiring
+fails the test.
 
-**Root cause.** `spawnAssetGibPiece` deformed the mesh with
-`gibAssetPosedRows(piece.doc, frame.deformedPrims, frame.deformedBones)` — a
-per-source-index map into the whole-body slough. That is equivalent for **sourced**
-rows, but the bind table also carries **unsourced `sub` cut-cap rows**, and
-`frame.deformedPrims` has no entry for them. `deformBoundVertex` then fell back to
-the row's REST frame, so those vertices were placed at
-`restBodyPoint − runtimeCleanOrigin`. The asset was baked against the REST body,
-while the runtime plan is built on the POSED body, so those two origins differ by
-the body pose; every cap-bound vertex inherited that whole offset, which the
-region rotation then swung out as a spike. Measured on the committed zombie set:
-**2,540 of 37,738 vertices (6.7%) have their top-weight row on an unsourced cap**
-(torso.abdomen 34%, torso.chest 12%, torso.pelvis 17%).
+**Effect on parity.** The matched A/B mean `%px>12` between the marched and
+asset arms, Task 3 (dry mask) → Task 4 (wet mask):
 
-**Fix.** Deform against the runtime piece's own row-aligned frames —
-`gibAssetRowsFromPrims([...g.prims, ...g.bones])` with `g.origin` as pivot. On the
-rupture path `g.prims` are `retargetGibPieces`' output (sourced rows = the slough
-twins) plus the posed caps, and `displaceGibPieces` has already added the region
-offset to both the rows and `g.origin`, so subtracting `g.origin` cancels it. For
-a cap the runtime frame is the POSED cap, which is the same geometry
-`spawnChunkPiece` marches — one contract for every row. `gibAssetPosedRows`
-remains exported and tested for callers that only have the whole-body arrays.
+| leg | Task 3 | Task 4 |
+| --- | ---: | ---: |
+| `zombie-ab` | 2.854 | **1.209** |
+| `soldier-ab` | 6.773 | **4.905** |
+| `multi-ab` | 2.480 | **1.723** |
+| `anatomy-ab` | 12.897 | **9.480** |
+| `wounds-ab` | 13.316 | **8.087** |
+| `deferred-ab` | 0.629 | **0.107** |
 
-Also added: a row-count guard in the mesh path
-(`bind.prims.length !== g.prims.length + g.bones.length → 'row-mismatch'`
-fallback), so a plan that grew or lost a cap between the rest bake and this body
-falls back instead of silently deforming against the wrong frame.
+Every body leg moved closer. The remaining difference is concentrated at the cut
+faces and is discussed under the default decision.
 
-**Regression test.** `gib-asset-integration.test.ts` — "deforms cut-cap rows
-against the runtime frames, with no rest-origin spike": on a rigidly posed body
-it reproduces both paths and asserts the new one stays inside the rest extent
-while the old one exceeds it by >0.2 m. It passes on the fix; the old path is
-retained in the test as the failure case.
+## Blocker 2 — CLOSED: moving asset heads project the face
 
-Evidence: `captures/anatomy-ab.jpg`, `captures/zombie-ab.jpg` and
-`captures/multi-ab.jpg` are the fixed arm. The spiking "before" frames were
-produced by the discarded first run and live under `.lab-tmp/` (gitignored); the
-regression test is the durable record.
+**The defect (Task 3).** The face layer projects from world-space
+`headCentre`/`headQuat`/`headAxes`. The marched chunk path re-uploads those from
+the posed primitives every frame; the shared asset material had one frozen copy,
+so the mesh head drew as bare flesh and was excluded with the counted
+`head-face` fallback.
 
-## Visual gate: matched A/B
+**The mechanism.** `gib-asset-head.ts` adds:
 
-All legs boot `/sdf-game.html?room=<id>&frozen=1&seed=7&vhs=off` with the same
-camera bearing (chosen from the actor list to keep another body out of the shot),
-the same detonation point and the same frame count; only `gibrender` differs.
-`zombie-aa` is the noise floor from an A/A re-boot of the march arm.
+- `gibAssetHeadFrame(state, local)` — the world frame from the chunk's own
+  transform, mirroring `ChunkGpuView.apply` line for line: centre via
+  `chunkPoint` (rotate, world-axis squash, translate), quaternion
+  `qMul(state.quat, restQuat)`, semi-axes scaled by the same squash.
+- `GibAssetHeadRegistry` — one NEW face material per head spawn, with its own
+  uniform set. `release()` is idempotent and registered, so a reset that disposes
+  the registry and a later piece eviction cannot double-free; `dispose()` is
+  safe while pieces still hold a reference.
+
+`game-main.ts` builds the per-instance material from the ACTOR's live
+`MarchUniforms` (so the frame is the POSED/sloughed one at release, exactly the
+snapshot `spawnChunkPiece` takes), seeds it with the shared asset material's
+gore uniforms, and registers it for the per-frame flashlight update. The local
+head offset is `actorHeadCentre − g.origin` (the chunk pivot);
+`SpritePiece.onPose` re-projects it after every re-pose, so the face rides
+flight, squash, settle and reset. On detach the resource is released at the SAME
+single point that already returns the pooled geometry.
+
+`gibAssetMeshEligible(doc, gib, faceSupported)` now excludes the head **only**
+when no face source is available (no factory, `faceCfg.x <= 0.5`, or no face
+texture). A damaged/severed head still fails the source check and keeps the
+marched path, so custom bodies and lost damage are never silently replaced.
+
+**Counters (matched gate, `finalStats`).**
+
+| leg | asset pieces | fallbacks | live head materials | runtime extraction jobs |
+| --- | ---: | --- | ---: | ---: |
+| `zombie-march` | 0 | `{}` | 0 | 0 |
+| `zombie-assets` | **14** | `{}` | **1** | **0** |
+| `soldier-march` | 0 | `{}` | 0 | 0 |
+| `soldier-assets` | **13** | `{}` | **1** | **0** |
+| `multi-march` | 0 | `{}` | 0 | 0 |
+| `multi-assets` | **56** | `{}` | **4** | **0** |
+| `wounds-assets` | 14 | `{}` | 1 | 0 |
+| `tight-assets` | 52 | `{}` | 1 (4 created / 3 disposed) | 0 |
+| `deferred-assets` | 14 | `{}` | 1 | 0 |
+
+`fallbacks: {}` on every asset leg is the direct proof the `head-face` exclusion
+is gone: Task 3 reported `1` per body (`4` on the 3-body leg). The `tight-assets`
+row shows the pool and the head registry both recycling
+(`poolCreated 52 / poolFree 43 / liveMeshes 9`).
+
+**Native vision.** `captures/head-face-ab.jpg` photographs the settled head along
+its own local ±Z axis in both arms (the rig now reads `chunkStates().quat`, and
+`head-orbit-zoom-ab.jpg` shows eight bearings). The asset head shows the same
+eye sockets / nose / mouth as the marched bake — a face, not a bare-flesh blob —
+and `pageErrors` is 0. `head-settle-ab.jpg` is the settled follow shot,
+`head-flight-ab.jpg` the rupture→flight row.
+
+**Motion / reset / disposal / ownership tests** (`gib-asset-head.test.ts`,
+9 tests + `gib-asset-runtime.test.ts` additions): the frame matches an
+independent THREE quaternion/scale composition; it tracks a real `stepChunk`
+motion; two acquires get distinct materials and frames; locals are snapshotted;
+`release` is idempotent; a registry `dispose` disposes exactly once and a late
+release is a no-op; no factory means `acquire → null` (fallback intact); a real
+`createBakedChunkMaterial({face})` exposes a private frame handle and does NOT
+dispose the borrowed face texture.
+
+## Visual gate — matched A/B, re-run on the frozen source
+
+All body legs boot `/sdf-game.html?room=<id>&frozen=1&seed=7&vhs=off` with the
+same camera bearing, detonation point and frame count; only `gibrender` differs.
+Soldier legs run in the annex (`GA_ROOM=5 GA_DIST=3`); everything else in the
+arena (`GA_ROOM=6 GA_DIST=4`). `zombie-march-aa` is the A/A noise floor.
 
 | Leg | kind | frames | mean %px>12 | max %px>12 | mean abs/255 |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `zombie-aa` (A/A noise floor) | zombie | 92 | **0.052** | 0.172 | 0.277 |
-| `zombie-ab` | zombie | 92 | 2.854 | 67.885 | 1.151 |
-| `soldier-ab` | soldier | 92 | 6.773 | 16.784 | 2.923 |
-| `multi-ab` (3 bodies) | zombie | 92 | 2.480 | 4.369 | 0.895 |
-| `deferred-ab` | zombie | 62 | 0.629 | 1.680 | 0.165 |
-| `wounds-ab` | zombie, 4 craters | 82 | 13.316 | 100 | 7.039 |
-| `anatomy-ab` (VFX killed) | zombie | 61 | 12.897 | 100 | 7.736 |
-| `head-ab` | zombie head | 11 | 14.326 | 18.893 | 5.416 |
+| `zombie-aa` (A/A) | zombie | 92 | **0.036** | 0.129 | 0.289 |
+| `zombie-ab` | zombie | 92 | 1.209 | 2.228 | 0.572 |
+| `soldier-ab` | soldier | 92 | 4.905 | 17.151 | 2.398 |
+| `multi-ab` (3 bodies) | zombie | 92 | 1.723 | 3.106 | 0.711 |
+| `wounds-ab` (4 craters) | zombie | 82 | 8.087 | 100 | 5.456 |
+| `anatomy-ab` (VFX killed) | zombie | 61 | 9.480 | 100 | 6.564 |
+| `deferred-ab` | zombie | 62 | 0.107 | 0.503 | 0.027 |
+| `head-ab` (close follow + orbit) | zombie head | 20 | 27.35 | 47.678 | 9.338 |
 
-The single-frame 100% peaks in the wound/anatomy legs are the release frame
-landing one sub-step differently between representations; the mean is the
-readable number.
+The single-frame 100% peaks are the release frame landing one sub-step
+differently between representations; the mean is the readable number. `head-ab`
+is high by construction: the asset arm's head is now a mesh where Task 3 marched
+it in both arms.
 
-**Simulation parity is exact** (same seed, same drive). Every settle census below
-is identical between arms, and `airborne` is 0 everywhere:
+**Simulation parity is exact** (same seed, same drive). Every settle census is
+identical between arms and `airborne` is 0 everywhere (asserted: the `lowY`
+arrays are `===`):
 
-| Leg | pieces | sprite assets | marched fallback | settle | lowest y (m) |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `zombie-march` | 14 | 0 | 14 | 14/14 | −0.036, −0.012, 0.001, 0.022, … |
-| `zombie-assets` | 14 | 13 | 1 (`head-face`) | 14/14 | **same** |
-| `soldier-march` | 13 | 0 | 13 | 13/13 | −0.009, −0.002, −0.001, 0.015, … |
-| `soldier-assets` | 13 | 12 | 1 (`head-face`) | 13/13 | **same** |
-| `multi-march` | 56 | 0 | 56 | 56/56 | −0.036, −0.012, 0.001, 0.019, … |
-| `multi-assets` | 56 | 52 | 4 (`head-face`) | 56/56 | **same** |
-| `wounds-*` | 14 | 13 / 0 | 1 / 14 | 14/14 | **same** |
-| `deferred-*` | 14 | 13 / 0 | 1 / 14 | 14/14 | **same** |
+| Leg | pieces | sprite assets | settle | lowest y (m) |
+| --- | ---: | ---: | --- | --- |
+| `zombie-march` / `zombie-assets` | 14 | 0 / **14** | 14/14 | −0.036, −0.012, 0.001, 0.022, … (**same**) |
+| `soldier-march` / `soldier-assets` | 13 | 0 / **13** | 13/13 | −0.009, −0.002, −0.001, 0.015, … (**same**) |
+| `multi-march` / `multi-assets` | 56 | 0 / **56** | 56/56 | −0.036, −0.012, 0.001, 0.019, … (**same**) |
 
 **Native-vision observations** (sheets in `captures/`):
 
-- `anatomy-ab.jpg` — from f013 to f059 the mesh pieces carry the drawn
-  silhouette: the same separation order, the same limb shapes, the head a
-  distinct piece above a neck gap, no spike triangles, no rest-pose snap-back.
-  The mesh arm reads slightly smoother/harder on cut faces (see blockers).
-- `zombie-ab.jpg` / `soldier-ab.jpg` — with real fireballs/smoke on, the two arms
-  are visually close through flight and at the settled floor; the soldier keeps
-  its retired armour off (no revived/floating armour).
+- `anatomy-ab.jpg` / `cutfaces-close-ab.jpg` — from rupture to settled pile both
+  arms carry the same silhouette and separation order with no spike triangles and
+  no rest-pose snap. The asset cut faces now read as wet, dark torn meat; the
+  marched planner caps read as pale skin (see the default decision).
+- `zombie-ab.jpg` / `soldier-ab.jpg` — real fireballs + default post; the two
+  arms track through flight and settle. The soldier keeps its retired armour off.
 - `multi-ab.jpg` — three simultaneous bodies, 56 pieces, both arms settle to the
-  floor with identical heights and no stuck airborne chunk.
-- `wounds-ab.jpg` — a body with four stamped slug craters still loses nothing on
-  the mesh path (all pieces eligible; only `head-face` falls back), and its
-  craters/level of damage read the same across arms.
-- `tight-budget.jpg` (`?gibspritelive=24&gibspriterest=8`, 3 bodies) — the cap is
-  honoured (24 sprite pieces live, 28 total with the 4 marched heads), pieces are
-  evicted and returned to the pool, and nothing is left floating.
-- `head-ab.jpg` — the head is identical across arms; see below.
-
-## Head gate (no faceless heads)
-
-Task 2 left the asset face projection unwired, and the first Task 3 capture of
-`?gibrender=assets` confirmed the consequence: the shared gore material draws the
-head as bare flesh. The fix is an explicit, counted exclusion:
-`gibAssetMeshEligible` returns `'head-face'` for any piece carrying a face frame,
-so the head falls through to the **marched** piece, which settles, bakes and
-picks up its face material exactly as before.
-
-`scripts/sdf-gib-assets-head.mjs`, both arms:
-
-| | march | assets |
-| --- | --- | --- |
-| `faceBaked` at settle | 1 | 1 |
-| baked head id | 14 | 1 (march chunk) |
-| baked head position | 20.5249, 0.139, −8.6510 | 20.5255, 0.139, −8.6508 |
-| sprite pieces live | 0 | 6 |
-
-The head follows the same trajectory in both arms and bakes into a face-material
-mesh in both. `head-face` is counted `1` per body (`4` on the 3-body leg), so the
-exclusion is visible in `gibAssetStats().fallbacks`, never silent.
+  floor with identical heights and nothing stuck airborne.
+- `wounds-ab.jpg` — four stamped slug craters still lose nothing on the mesh
+  path; all pieces are eligible with no fallback.
+- `head-flight-ab.jpg`, `head-settle-ab.jpg`, `head-orbit-zoom-ab.jpg`,
+  `head-face-ab.jpg` — the head is a textured head in both arms through flight
+  and at rest; the face-on bearings show the face.
+- `tight-budget.jpg` (`?gibspritelive=24&gibspriterest=8`) — the cap is honoured
+  and pieces return to the pool and the head registry.
+- `cutfaces-ab.jpg` is retained as the **Task-3 before** state (dry mask).
 
 ## Performance
 
-Ran on the headless Chrome/Apple-GPU page, one Chrome at a time. The A/A cadence
-leg is the control for machine drift.
-
-### Loader
+One Chrome at a time, own profile, ports 5297/9297. The machine is
+**vsync-limited at ~16.7 ms**, so no moving-gib cadence win is claimed.
 
 | | value |
 | --- | --- |
-| committed bytes | **8,650,864 B** (zombie 3,925,208 bin + 147,920 json; soldier 4,463,376 bin + 114,360 json) |
-| `resetGibAssets()` + `preloadGibAssets()` | **33.9–187.5 ms** first, **38.9–161.2 ms** second (range over runs: HTTP re-fetch + decode + `BufferAttribute` wrapping; the spread is IO/GC, not parse) |
-| library `builtMs` (decode + attribute wrap) | zombie **2.1 ms**, soldier **3.9 ms** |
-| per-instance pooling | `poolCreated` bounded by concurrency, `poolFree` returns on detach; reset leaves `{live:0,rest:0,meshes:0,materials:0}` |
+| committed bytes | **8,388,584 B** bin (zombie 3,925,208 + soldier 4,463,376) + 262,412 B json = **8,650,996 B** both archetypes |
+| `resetGibAssets()` + `preloadGibAssets()` | **cold 185.1 ms**, **warm 33.9 ms** (HTTP re-fetch + decode + attribute wrap; spread is IO/GC) |
+| library `builtMs` (decode + wrap) | zombie **2.1 ms**, soldier **2.4 ms** |
+| explosion detonate wall | march 9.5 / 9.9 / 1.9 ms · march A/A 8.4 / 6.5 / 2.5 ms · **assets 8.7 / 6.8 / 2.4 ms** |
+| asset pieces carried per explosion | march 0 · **assets 14 / 28 / 14** |
+| moving-gib rAF median (pieces shown/hidden) | march 16.7 / 16.7 · march A/A 16.7 / 16.7 · **assets 16.7 / 16.7 ms** |
+| `runtimeExtractionJobs`, `totalBakes` (20-frame window) | **0** / 0 in every arm |
 
-There is **no new startup mesh-generation delay**: the loader is a fetch+decode,
-`runtimeExtractionJobs` is **0**, and no `bakeChunkGeometry` runs on this path.
+There is no new startup mesh-generation delay: the loader is fetch + decode, and
+no `bakeChunkGeometry` runs on this path. The Task-3 perf caveats stand (the
+pass-row method's noise floor is larger than the piece cost at these counts; the
+loader numbers are reset-and-reload on a warm page).
 
-### Explosion cost (three bodies, hand-stepped)
+## Default decision — remaining evidence gap
 
-| arm | detonate wall (ms) | page `lastBlastMs` (ms) | pieces | asset pieces |
-| --- | --- | --- | ---: | ---: |
-| march | 8.3 / 6.4 / 2.5 | 8.2 / 6.4 / 2.5 | +14 / +28 / +14 | 0 |
-| march A/A | 8.1 / 6.8 / 2.5 | 7.9 / 6.7 / 2.5 | +14 / +28 / +14 | 0 |
-| **assets** | 9.0 / 5.4 / 1.4 | 8.9 / 5.4 / 1.4 | +14 / +28 / +14 | **13 / 26 / 13** |
+**The shipped default stays `?gibrender=march`.** The plan's condition is
+"ordinary zombie/soldier visually pass **and no material regression**". The
+blockers are closed and every automated leg passes, but two things are real
+close-range material changes with no owner look:
 
-Comparable within noise; the assets arm's hit count proves the mesh path carried
-the blast. `totalBakes` is 0 in the 20-frame window in both arms, and
-`runtimeExtractionJobs` is 0.
+1. **Cut-face treatment.** The mask is now doing exactly what the plan asked, and
+   the A/B diff fell on every body leg — but the asset cut faces read wet and
+   dark where the marched planner caps still read pale skin, because the MARCH
+   path gives a planner cap no wound mask. Flipping the default would therefore
+   lighten every ordinary gib relative to today's march look; the two paths do
+   not yet present the same material at close range.
+2. **Mid-flight head gore.** The mesh face material's procedural blood/burn layer
+   runs before the face layer and is not attenuated by face coverage, and the
+   asset head wears that material from spawn (a settled/baked marched head wears
+   it only after settle). The face itself is correct; the exterior reads bloodier
+   during flight than the marched head's. Fixing that means re-ordering the
+   accepted baked-chunk shader, which is a separate, owner-visible change.
 
-### Moving-gib frame cost
-
-rAF cadence, 240 frames/arm, bursts of 30 alternating pieces shown/hidden:
-
-| arm | shown median | shown p95 | shown max | hidden median | paired Δ median |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| march | 16.70 | 16.70 | 16.80 | 16.70 | 0.00 |
-| march A/A | 16.70 | 16.80 | 16.80 | 16.70 | 0.00 |
-| assets | 16.70 | 16.80 | 16.80 | 16.70 | 0.00 |
-
-**The page is vsync-limited at ~16.7 ms**, so a piece cost that fits the budget is
-invisible by construction. The GPU pass rows are the intended cross-check, but
-**they are not usable as evidence here**: in the A/A control the top rows swing
-−3.76 ms … +0.82 ms with the sign flipping (pieces "hidden" reading slower), i.e.
-the row method's noise floor on this machine is larger than any piece cost at
-these counts. The honest statement is *"no measurable moving-gib cadence penalty
-at the default caps (14–56 pieces) in this configuration"*, not "free".
-
-## Default decision + exact blockers
-
-**The shipped default stays `?gibrender=march`.** Assets remain opt-in, because
-the plan's condition is "ordinary zombie/soldier visually pass **and no material
-regression**", and two measured material gaps remain:
-
-1. **The asset wound/wet mask is empty.** Measured on the committed set:
-   `bakeColor.a == 0` on **100% of vertices** (torso.chest, torso.abdomen, head,
-   armL.upper all min/mean/max 0.000). Task 1 baked it from a rest pose with
-   `torn: []`, so the cut-aware mask the carved/baked path derives is not in the
-   committed bins. The consequence is visible in `captures/cutfaces-ab.jpg`: the
-   mesh pieces read glossier/harder with dark untreated cut faces where the
-   marched pieces are a wet mottled mass. **Fix:** regenerate the sets with the
-   cut-aware mask (changes the Task-1 fingerprint), or add a runtime cut/wet
-   variant.
-2. **Head face projection is not wired for meshes.** Fixed conservatively by
-   excluding the head (`'head-face'`, counted) so nothing ships faceless, but
-   full-body asset coverage needs the per-fragment face uniforms
-   (`headCentre`/`headQuat`/`headAxes`) driven from the mesh's world transform and
-   the posed head prims, with the actor's face atlas retained past actor release.
-
-Everything else the plan asked the gate to check passes: no visible rest-pose
-snap, no faceless head, no revived/floating armour, no stuck airborne chunk,
-matched settled floor contact, and the pool/reset contract holds.
+Neither is a defect in the two fixes; both are reasons a default flip should wait
+for an owner look or a tuned parity pass. Everything else the plan asked the gate
+to check passes: no rest-pose snap, no faceless head, no revived/floating armour,
+no stuck airborne chunk, matched settled floor contact, and the pool/reset
+contract holds.
 
 ## Limitations / honest scope
 
 - No owner look pass; this is an automated native-vision gate on one machine.
-- The deferred leg used `?renderer=deferred`; assets are wired through the same
-  router as the sprite path, and the A/B diff there is 0.63% mean, but this is a
-  smoke leg, not a deferred-parity claim.
-- Soldiers only exist in rooms 1 and 5; the soldier legs ran in the annex (room 5,
-  3 soldiers + 5 zombies), not the arena.
-- The A/A noise floor (0.052% mean px>12) is for *frozen, hand-stepped* frames.
-  It does not cover frame timing under load, and the machine had other Chrome
-  sessions open (not rendering the lab).
-- The perf loader "cold/warm" labels are reset-and-reload on one already-warm
-  page, not a fresh browser profile; treat the numbers as a range, not a
-  benchmark.
-- The plan's note stands: offline meshes remove extraction, not every renderer
-  cost. No universal-fix claim; a fresh session may still freeze for unrelated
-  reasons.
+- The deferred leg is a smoke leg (`?renderer=deferred`, 0.107% mean), not a
+  deferred-parity claim.
+- Soldiers only exist in rooms 1 and 5; the soldier legs ran in the annex.
+- The A/A noise floor (0.036% mean for frozen, hand-stepped frames) does not
+  cover frame timing under load, and other Chrome sessions were open.
+- The head's face close-ups are at 0.85 m with the default flashlight; the face
+  is legible but a dedicated face close-up at owner framing was not taken.
+- Baseline perf/memory caveats are unchanged: offline meshes remove extraction,
+  not every renderer cost.
+- Body captures were produced by the same frozen source as the head; the only
+  later source edit was an additive `quat` field in `chunkStates()`, which no
+  renderer path reads.
 
-## Later candidates (with measured rationale)
-
-- **Regenerate the committed sets with a cut-aware `bakeColor.a`** (blocker 1).
-  CPU-only, ~6 s, changes the fingerprint; this is the single change that would
-  most likely clear the default-flip condition.
-- **Wire the asset head face projection** (blocker 2), removing the one
-  per-body `head-face` fallback and the last marched piece in an asset blast.
-- **Other archetypes** in `character-registry.ts`: the loader/runtime contract is
-  archetype-agnostic and the soldier set already loads, but there is no measured
-  visual or cost rationale to expand further.
-- **A real moving-gib cost measurement** would need frame-cap off and a quieter
-  machine, or a counter-based instrument; the pass-row method as run is
-  inconclusive.
-
-## Verification (all on this branch, this worktree)
+## Verification (this branch, this worktree, Node 22)
 
 - `npx tsc --noEmit` — clean.
-- `npm run build` (tsc + vite, Node 22) — clean, `built in 2.95 s`.
-- Focused suites — `gib-asset`, `gib-asset-runtime`, `gib-asset-integration`
-  **30 tests** pass, including the new cap-row regression and head-exclusion
-  tests.
-- Full `vitest run` on the committed source — **340 files, 5340 tests, all
-  passing** (158 s).
-- Full GPU gate — `scripts/gib-assets-gate.sh .lab-tmp/gate all`, exit 0, no
-  failed legs. Compact record: `captures/gate-summary.json`.
+- `npm run build` (tsc + vite) — clean.
+- Focused suites — `gib-asset`, `gib-asset-runtime`, `gib-asset-integration`,
+  `gib-asset-head`, `gib-sprite-pieces`, `chunk-bake-field`, `baked-chunks`:
+  **87 tests pass**; `gib-carve` **7 pass** on the shared helper refactor.
+- Full `vitest run` on the committed source — **341 files, 5352 tests, all
+  passing**.
+- `npm run gib:assets -- --force` twice → byte-identical bins; `npm run
+  gib:assets:check` → all valid and current.
+- Full GPU gate — `LAB_VITE_PORT=5297 LAB_CDP_PORT=9297 LAB_TMP=.lab-tmp
+  scripts/gib-assets-gate.sh .lab-tmp/gate4 all`, exit 0, no failed legs.
+  Compact record: `captures/gate-summary.json`.
+- Shared-resource safety: own vite + Chrome (`--headless=new
+  --enable-unsafe-webgpu`, own `--user-data-dir`); no user server or browser was
+  killed; no unsafe flags, no watchdog/sandbox bypass.
 
 ## Prove it
 
 ```bash
-scripts/gib-assets-gate.sh .lab-tmp/gate core     # zombie+soldier A/B, anatomy, diffs
-scripts/gib-assets-gate.sh .lab-tmp/gate head     # head bake, both arms
-scripts/gib-assets-gate.sh .lab-tmp/gate perf     # loader/explosion/cadence
+npm run gib:assets:check                                   # stale/repro check
+scripts/gib-assets-gate.sh .lab-tmp/gate core              # zombie+soldier A/B
+scripts/gib-assets-gate.sh .lab-tmp/gate head              # head bake/asset + orbit
+scripts/gib-assets-gate.sh .lab-tmp/gate multi             # simultaneous bodies
 ```

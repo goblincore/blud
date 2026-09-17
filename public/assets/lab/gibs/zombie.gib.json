@@ -1,10 +1,10 @@
 {
   "kind": "blud-gib-assets",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "archetype": "zombie",
-  "fingerprint": "9db13e4696486eaf",
+  "fingerprint": "6ce4f7104ab8f5df",
   "recipe": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "generator": "scripts/build-gib-assets.ts",
     "archetype": "zombie",
     "blobPath": "src/lab/sdf-zombie/characters/zombie.blob",
@@ -85,7 +85,8 @@
     "cellSize": 0.012,
     "maxBindPrims": 4,
     "carveK": 0.008,
-    "gore": 1
+    "gore": 1,
+    "cutMask": "planner-cut-v1"
   },
   "source": {
     "blob": "src/lab/sdf-zombie/characters/zombie.blob",
@@ -97,7 +98,8 @@
     "carveK": 0.008,
     "gore": 1,
     "boneRelease": "all",
-    "organs": true
+    "organs": true,
+    "cutMask": "planner-cut-v1"
   },
   "offsets": {
     "json": "zombie.gib.json",

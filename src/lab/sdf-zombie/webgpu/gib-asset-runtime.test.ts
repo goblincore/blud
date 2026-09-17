@@ -32,6 +32,8 @@ import {
   buildGibAssetLibrary, GibAssetInstancePool, GibAssetRuntime,
   gibAssetEligible, type GibAssetLibraryPiece,
 } from './gib-asset-runtime';
+import { sdPrimitive } from '../validate';
+import type { GibAssetBindingPrim } from './gib-asset';
 import type { Vec3 } from '../types';
 
 const GIB_DIR = resolve(process.cwd(), 'public/assets/lab/gibs');
@@ -304,5 +306,102 @@ describe('gib-asset library geometry', () => {
     expect(piece.rest.boundingSphere).toBeTruthy();
     expect(piece.rest.boundingBox).toBeTruthy();
     lib.dispose();
+  });
+});
+
+describe('gib-asset runtime head materials', () => {
+  it('reports, releases and disposes per-instance head materials', () => {
+    const disposed: number[] = [];
+    let id = 0;
+    const runtime = new GibAssetRuntime({
+      materialFactory: { create: dummyMaterial },
+      headMaterialFactory: {
+        create: () => {
+          const my = id++;
+          return { material: { my }, setFrame: () => {}, dispose: () => disposed.push(my) };
+        },
+      },
+    });
+    expect(runtime.countersSnapshot().headFaceAvailable).toBe(true);
+    const local = { centre: [0, 0, 0] as Vec3, quat: [0, 0, 0, 1] as [number, number, number, number], axes: [1, 1, 1] as Vec3 };
+    const a = runtime.acquireHead('head', local);
+    const b = runtime.acquireHead('head', local);
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    // TWO distinct materials — the no-shared-uniforms contract at the runtime.
+    expect(a!.material).not.toBe(b!.material);
+    expect(runtime.countersSnapshot().headMaterials).toEqual({ live: 2, created: 2, disposed: 0 });
+    a!.release();
+    expect(runtime.countersSnapshot().headMaterials).toEqual({ live: 1, created: 2, disposed: 1 });
+    // A reset disposes whatever a live piece still holds, exactly once.
+    runtime.dispose();
+    expect(disposed.sort((x, y) => x - y)).toEqual([0, 1]);
+    expect(runtime.countersSnapshot().headMaterials).toEqual({ live: 0, created: 2, disposed: 2 });
+  });
+
+  it('keeps the marched head fallback when no head factory is wired', () => {
+    const runtime = new GibAssetRuntime({ materialFactory: { create: dummyMaterial } });
+    expect(runtime.countersSnapshot().headFaceAvailable).toBe(false);
+    expect(runtime.acquireHead('head', {
+      centre: [0, 0, 0], quat: [0, 0, 0, 1], axes: [1, 1, 1],
+    })).toBeNull();
+    runtime.dispose();
+  });
+});
+
+// THE TASK-3 BLOCKER-1 REGRESSION (2026-09-16). The committed sets were baked
+// with `torn: []`, so `bakeColor.a` — the wound/wet mask the mesh shader turns
+// into blood-slick cut faces — was 0 on 100% of vertices; every cut face read
+// as dry outer skin. The regeneration derives the mask from the ACTUAL planner
+// cut caps (`sub` prims in the bind table), so the classification here is
+// independent of the bake: a vertex is "at a cut" when it sits on a stored cap
+// sphere's own iso (`sdPrimitive(cap) ~= 0`), and "outer skin" when it is well
+// clear of every cap. The assertion is the blocker's exact shape — meaningful
+// nonzero mask at cuts, lower away from them — on the committed files.
+describe('gib-asset cut mask — committed sets', () => {
+  it('has a wet cut face and a dry outer skin (bakeColor.a is not empty)', async () => {
+    resetGibAssetCache();
+    let total = 0, nonzero = 0, maxWm = 0;
+    let cut = 0, cutWet = 0, skin = 0, skinDry = 0;
+    let cappedPieces = 0;
+    for (const archetype of ['zombie', 'soldier'] as const) {
+      const set = await loadGibAssetSet(archetype, { fetchImpl: diskFetch() });
+      for (const { doc, decoded } of set.pieces) {
+        const caps = doc.bind.prims
+          .filter((p: GibAssetBindingPrim) => p.op === 'sub')
+          .map((p: GibAssetBindingPrim) => ({
+            limb: p.limb as never, cluster: p.cluster, op: p.op as never,
+            a: p.a, b: p.b, radius: p.radius, radiusB: p.radiusB, scale: p.scale, blendK: p.blendK,
+          }));
+        if (caps.length === 0) continue;
+        cappedPieces++;
+        for (let i = 0; i < doc.verts; i++) {
+          const p: Vec3 = [
+            decoded.positions[i * 3]! + doc.offset[0],
+            decoded.positions[i * 3 + 1]! + doc.offset[1],
+            decoded.positions[i * 3 + 2]! + doc.offset[2],
+          ];
+          let capDist = Infinity;
+          for (const c of caps) capDist = Math.min(capDist, Math.abs(sdPrimitive(p, c)));
+          const wm = decoded.bakeColor[i * 4 + 3]!;
+          total++;
+          if (wm > 0.02) nonzero++;
+          if (wm > maxWm) maxWm = wm;
+          if (capDist < 0.002) { cut++; if (wm > 0.5) cutWet++; }
+          else if (capDist > 0.03) { skin++; if (wm < 0.3) skinDry++; }
+        }
+      }
+    }
+    // Both archetypes carry capped pieces, and the mask is actually populated.
+    expect(cappedPieces).toBeGreaterThanOrEqual(20);
+    expect(total).toBeGreaterThan(40000);
+    expect(nonzero / total).toBeGreaterThan(0.5);
+    // THE BLOCKER: max was 0.0 before the regeneration.
+    expect(maxWm).toBeGreaterThan(0.9);
+    // Every vertex on a cut cap is fully wet; the outer skin stays dry.
+    expect(cut).toBeGreaterThan(2000);
+    expect(cutWet / cut).toBeGreaterThan(0.95);
+    expect(skin).toBeGreaterThan(20000);
+    expect(skinDry / skin).toBeGreaterThan(0.8);
   });
 });

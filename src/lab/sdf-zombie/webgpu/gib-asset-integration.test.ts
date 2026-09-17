@@ -236,19 +236,27 @@ describe('offline asset eligibility and split policy', () => {
     expect([...head.face!.axes].every(Number.isFinite)).toBe(true);
   });
 
-  it('excludes the face-carrying head from the mesh path (it keeps the marched face)', async () => {
+  it('carries the head on the mesh path when a per-instance face is available', async () => {
     const lib = await loaded();
     const body = zombieBody();
     const plan = gibPlan(body, { bones: 'all', organs: true });
     const head = plan.pieces.find(p => p.part === 'head')!;
+    const doc = lib.byPart.get('head')!.doc;
     // Source sets MATCH, so the plain eligibility check is happy...
-    expect(gibAssetEligible(lib.byPart.get('head')!.doc, head)).toBeNull();
-    // ...but the MESH path refuses it, so the head falls through to the marched
-    // piece and its baked face material rather than drawing as bare flesh.
-    expect(gibAssetMeshEligible(lib.byPart.get('head')!.doc, head)).toBe('head-face');
-    // A non-face piece is unaffected.
+    expect(gibAssetEligible(doc, head)).toBeNull();
+    // ...but WITHOUT a face source the mesh path still refuses it, so the head
+    // falls through to the marched piece rather than drawing as bare flesh.
+    expect(gibAssetMeshEligible(doc, head)).toBe('head-face');
+    // WITH a per-instance face material the head is an ordinary eligible mesh
+    // (task 4): the face rides the chunk's own transform.
+    expect(gibAssetMeshEligible(doc, head, true)).toBeNull();
+    // A DAMAGED/severed head is still ineligible even with a face, so no
+    // custom/damaged head silently loses its damage.
+    const damaged = { ...head, srcPrims: head.srcPrims ? head.srcPrims.slice(0, 1) : [0] };
+    expect(gibAssetMeshEligible(doc, damaged, true)).toBe('source-mismatch');
+    // A non-face piece is unaffected by the face flag.
     const chest = plan.pieces.find(p => p.part === 'torso.chest')!;
-    expect(gibAssetMeshEligible(lib.byPart.get('torso.chest')!.doc, chest)).toBeNull();
+    expect(gibAssetMeshEligible(lib.byPart.get('torso.chest')!.doc, chest, true)).toBeNull();
   });
 
   it('a low-budget plan selects a subset of pieces that all stay eligible', async () => {

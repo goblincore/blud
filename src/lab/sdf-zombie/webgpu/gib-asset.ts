@@ -39,8 +39,11 @@ export const GIB_ASSET_KIND = 'blud-gib-assets' as const;
 /**
  * Bump on ANY layout or semantic change. The loader must refuse (or fall back
  * from) a payload it does not understand rather than misread bytes.
+ *
+ * 2 — 2026-09-16: `bakeColor.a` is now the cut-aware wound mask derived from
+ *     the planner's `sub` cut caps (was uniformly 0 on 100% of vertices).
  */
-export const GIB_ASSET_SCHEMA_VERSION = 1;
+export const GIB_ASSET_SCHEMA_VERSION = 2;
 
 /** Bounded per-vertex binding count. Four is the standard skinning budget: a
  *  vertex on a smooth-union fillet between two prims blends two, and a vertex
@@ -53,6 +56,11 @@ export const GIB_ASSET_MAX_BIND_PRIMS = 4;
  *  committable (the runtime settle bake keeps its own 10 mm BAKE_CELL — see
  *  the build module and the report's size table). */
 export const GIB_ASSET_DEFAULT_CELL = 0.012;
+
+/** The cut-mask derivation the committed sets carry. Bump the string whenever
+ *  the meaning of `bakeColor.a` changes; it rides the recipe fingerprint so an
+ *  older set is STALE, not silently dry (see `GibAssetRecipe.cutMask`). */
+export const GIB_ASSET_CUT_MASK = 'planner-cut-v1';
 
 export type GibAssetDType = 'f32' | 'u32' | 'u16' | 'u8';
 
@@ -207,7 +215,7 @@ export interface GibAssetArchetype {
   /** The recipe WITHOUT the source text (see `source` for the blob hash). */
   recipe: GibAssetRecipeHeader;
   source: { blob: string; blobBytes: number; blobHash: string };
-  bake: { cellSize: number; carveK: number; gore: number; boneRelease: string; organs: boolean };
+  bake: { cellSize: number; carveK: number; gore: number; boneRelease: string; organs: boolean; cutMask: string };
   offsets: { json: string; bin: string };
   totals: GibAssetTotals;
   pieces: GibAssetPiece[];
@@ -260,6 +268,10 @@ export interface GibAssetRecipe {
   maxBindPrims: number;
   carveK: number;
   gore: number;
+  /** The cut-mask derivation version. A change here means `bakeColor.a` means
+   *  something different, so it MUST be in the fingerprint: an old set is
+   *  detected as STALE instead of served with a dry cut. */
+  cutMask: string;
 }
 
 /** Deterministic 64-bit FNV-1a over the UTF-8 bytes. Browser- and Node-safe. */

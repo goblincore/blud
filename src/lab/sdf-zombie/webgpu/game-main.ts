@@ -5665,6 +5665,42 @@ async function main() {
    * back to marched pieces for that blast, never to no gore.
    */
   let gibAssetMaterial: BakedChunkMaterial | null = null;
+  /** ONE NEW face material per asset head. The face layer's `headCentre`,
+   *  `headQuat` and `headAxes` are WORLD-space and therefore per-actor, so a
+   *  shared material could only ever project the face at one actor's frame
+   *  ("no shared mutable face uniforms across actors"). The handle owns nothing
+   *  but the material: the face TEXTURE stays the actor's external atlas, which
+   *  is why retirement of the actor cannot blank a flying head's face. */
+  const gibAssetHeadFactory = {
+    create: (source: unknown): { material: THREE.Material; setFrame: (f: { centre: Vec3; quat: Quat; axes: Vec3 }) => void; dispose: () => void } => {
+      const u = source as import('./zombie-gpu').MarchUniforms;
+      const built = registerLitChunkMaterial(createBakedChunkMaterial({
+        goreDetail: true, bakedAo: true, fleshResponse: true, face: u,
+      }));
+      built.uniforms.goreCfg.value.set(
+        gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+      );
+      built.uniforms.goreCfg2.value.set(
+        gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+      );
+      bakedChunkSeed?.(built);
+      return {
+        material: built.material,
+        setFrame: (f) => {
+          const fu = built.faceUniforms;
+          if (!fu) return;
+          fu.headCentre.value.set(f.centre[0], f.centre[1], f.centre[2]);
+          fu.headQuat.value.set(f.quat[0], f.quat[1], f.quat[2], f.quat[3]);
+          fu.headAxes.value.set(f.axes[0], f.axes[1], f.axes[2]);
+        },
+        dispose: () => {
+          const i = litChunkMaterials.indexOf(built);
+          if (i >= 0) litChunkMaterials.splice(i, 1);
+          built.dispose();
+        },
+      };
+    },
+  };
   const createGibAssetRuntime = (): GibAssetRuntime => new GibAssetRuntime({
     materialFactory: {
       create: () => {
@@ -5688,6 +5724,7 @@ async function main() {
       console.log(`[gib-assets] ${lib.archetype}: ${lib.pieces.length} pieces, ${lib.verts} verts, `
         + `${lib.bytes.bin} bin bytes (library build ${lib.builtMs.toFixed(0)} ms)`);
     },
+    headMaterialFactory: gibAssetHeadFactory,
   });
   let gibAssetRuntime = createGibAssetRuntime();
 
@@ -5730,12 +5767,18 @@ async function main() {
     if (!lib) { gibAssetRuntime.countFallback('no-library'); return false; }
     const piece = lib.byPart.get(g.part);
     if (!piece) { gibAssetRuntime.countFallback('no-asset'); return false; }
-    const ineligible = gibAssetMeshEligible(piece.doc, g);
+    // THE HEAD NOW KEEPS THE MESH PATH WHEN A FACE CAN RIDE IT (task 4). The
+    // face layer projects from the ACTOR's live `headCentre`/`headQuat`/
+    // `headAxes`; a per-instance material built from those uniforms and moved
+    // with the chunk gives the mesh head the same face the marched head has.
+    // Without a face texture, or with face projection off (a custom/damaged
+    // head), the piece still falls back — counted as `head-face`, never silent.
+    const faceUniforms = a.view.uniforms;
+    const faceSupported = gibAssetRuntime.headFaceAvailable()
+      && faceUniforms.faceCfg.value.x > 0.5
+      && !!faceUniforms.faceTex.value;
+    const ineligible = gibAssetMeshEligible(piece.doc, g, faceSupported);
     if (ineligible) { gibAssetRuntime.countFallback(ineligible); return false; }
-    // THE HEAD KEEPS THE MARCHED FACE PATH — `gibAssetMeshEligible`'s
-    // `head-face` rule; see its docstring for why the rest face frame is not
-    // enough to draw a face on a shared-material mesh.
-    //
     // ROW ALIGNMENT IS PART OF ELIGIBILITY. The deform walks the runtime piece's
     // rows (`g.prims` then `g.bones`) against the asset's bind table row for row.
     // `srcPrims`/`srcBones` equality proves the SOURCED rows line up, but not the
@@ -5778,13 +5821,38 @@ async function main() {
     const rows = gibAssetRowsFromPrims([...g.prims, ...g.bones]);
     const inst = pool.acquire(g.part);
     pool.deformRows(inst, rows, g.origin);
+    // PER-INSTANCE FACE FRAME (task 4). The asset's stored `doc.face` is the
+    // REST frame; what must be projected is the POSED/sloughed frame the actor
+    // is drawing with right now — the same snapshot `spawnChunkPiece` takes from
+    // `template.uniforms`. Localise the world centre against `g.origin` (the
+    // chunk pivot) and let the resource ride the chunk's own transform through
+    // flight, squash, settle and reset. `faceSupported` was checked above.
+    let head: import('./gib-asset-head').GibAssetHeadResource | null = null;
+    if (piece.doc.face && faceSupported) {
+      const hc = faceUniforms.headCentre.value;
+      const hq = faceUniforms.headQuat.value;
+      const ax = faceUniforms.headAxes.value;
+      head = gibAssetRuntime.acquireHead(g.part, {
+        centre: [hc.x - g.origin[0], hc.y - g.origin[1], hc.z - g.origin[2]],
+        quat: [hq.x, hq.y, hq.z, hq.w],
+        axes: [ax.x, ax.y, ax.z],
+      }, faceUniforms);
+      // No material = no face: fall back rather than draw a bare-flesh head.
+      if (!head) { pool.release(inst); gibAssetRuntime.countFallback('head-face'); return false; }
+      head.setFrameFromState(state);
+    }
     const sprite = spawnSpritePiece(spritePieces, {
-      state, render: 'mesh', geometry: inst.geometry, material: lib.material,
+      state, render: 'mesh', geometry: inst.geometry, material: head ? (head.material as THREE.Material) : lib.material,
       impulseDelay, impulseVel,
     });
+    if (head) {
+      const resource = head;
+      sprite.onPose = () => resource.setFrameFromState(sprite.state);
+    }
     // Return the per-instance buffers to the pool when this piece is retired
-    // (evicted over a cap, cleared, or reset) — the pool's whole point.
-    sprite.onDetach = () => pool.release(inst);
+    // (evicted over a cap, cleared, or reset) — the pool's whole point. A head
+    // also gives back its per-instance face material at the SAME single point.
+    sprite.onDetach = () => { pool.release(inst); head?.release(); };
     sprite.mesh.name = `gib-asset-${g.part}`;
     gibAssetRuntime.countAssetPiece();
     return true;
@@ -14128,6 +14196,9 @@ function performBenchAction(a: BenchAction): void {
       ...liveChunks.map(c => ({
         id: c.id, limb: c.state.limb, kind: c.state.kind,
         pos: c.state.pos, vel: c.state.vel, radius: c.state.radius,
+        // Orientation too: a rig that frames a detached head has to know which
+        // way it is facing to photograph the face, not just its back.
+        quat: c.state.quat,
         settled: chunkSettled(c.state),
         render: 'march' as const,
       })),
