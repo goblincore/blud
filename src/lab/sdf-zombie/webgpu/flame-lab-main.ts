@@ -38,6 +38,7 @@ import { motionProfileFor, speedForBand, type MotionProfile } from '../motion-pr
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
+import { createFlamePanel } from './flame-panel';
 
 export interface FlameLabBody {
   name: string;
@@ -366,11 +367,24 @@ async function bootstrap(): Promise<void> {
   function setDebugPanelHidden(hidden: boolean) {
     debugPanelHidden = hidden;
     applyDebugPanelVisibility(panelEl, panelToggleEl, hidden);
+    flamePanel.setVisible(!hidden);     // H hides every panel, the flame one too
   }
   function toggleDebugPanel() {
     setDebugPanelHidden(!debugPanelHidden);
   }
   panelToggleEl.addEventListener('click', toggleDebugPanel);
+  // The FLAME panel (plan task 9): one slider per BurnTuning field, its ranges
+  // read from BURN_BOUNDS, presets one click away, COPY emitting the setter
+  // call a tuning session ends in. Sliders read the APPLIED tuning back, so a
+  // clamp behind a slider shows itself. Mounted before the first
+  // setDebugPanelHidden call below -- that call now drives this panel too.
+  const flamePanel = createFlamePanel({
+    read: () => tuning,
+    apply: (patch) => (tuning = resolveBurnTuning({ ...tuning, ...patch })),
+    preset: (name) => (tuning = resolveBurnTuning(burnPresets[name])),
+  });
+  flamePanel.setVisible(true);
+  flamePanel.setCollapsed(false);
   setDebugPanelHidden(false);
   const statusBox = document.createElement('div');
   statusBox.style.marginTop = '6px';
