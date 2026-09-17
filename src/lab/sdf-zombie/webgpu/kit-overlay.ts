@@ -43,6 +43,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { setMaterialEnvironment } from './material-environment';
 import { createKitDamage, type KitDamageEvent } from './kit-damage';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
@@ -226,7 +227,10 @@ export async function loadKit(
   // reference cube, which are MeshStandardMaterial too, keep the look every
   // previous capture was judged against.
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const room = new RoomEnvironment();
+  const environment = pmrem.fromScene(room, 0.04);
+  const env = environment.texture;
+  room.dispose();
   pmrem.dispose();
   const object = new THREE.Group();
   object.add(gltf.scene);
@@ -250,7 +254,7 @@ export async function loadKit(
       if (std.isMeshStandardMaterial) {
         std.metalness = look.metalness;
         std.roughness = look.roughness;
-        std.envMap = env;
+        setMaterialEnvironment(std, env);
         std.envMapIntensity = look.envIntensity;
         const em = (look as { emissive?: [number, number, number] }).emissive;
         if (em) {
@@ -321,7 +325,7 @@ export async function loadKit(
     dispose() {
       damageView?.dispose();
       debris.removeFromParent();
-      env.dispose();
+      environment.dispose();
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
         mesh.geometry?.dispose();

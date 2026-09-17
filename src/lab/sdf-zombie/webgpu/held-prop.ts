@@ -11,6 +11,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { setMaterialEnvironment } from './material-environment';
 import type { Vec3 } from '../types';
 import { GUN_GRIP, gunPoint, muzzleRise, type GunPose } from '../carry';
 import { releaseProp, stepDrop, type DropState } from '../prop-drop';
@@ -52,7 +53,7 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
       for (const m of Array.isArray(material) ? material : material ? [material] : []) {
         const std = m as THREE.MeshStandardMaterial;
         if (std.isMeshStandardMaterial) {
-          std.envMap = environment!.texture;
+          setMaterialEnvironment(std, environment!.texture);
           std.envMapIntensity = 0.65;
         }
       }
