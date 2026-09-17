@@ -1,0 +1,1272 @@
+{
+  "threshold": 8,
+  "scenarios": {
+    "combined": {
+      "reference": "sharp",
+      "referenceFile": "t4-combined__sharp.png",
+      "variants": {
+        "blood44": {
+          "file": "t4-combined__blood44.png",
+          "changedPx": 10663,
+          "bbox": [
+            18,
+            16,
+            939,
+            396
+          ],
+          "bboxDims": [
+            922,
+            381
+          ]
+        },
+        "blood67": {
+          "file": "t4-combined__blood67.png",
+          "changedPx": 11784,
+          "bbox": [
+            18,
+            7,
+            939,
+            395
+          ],
+          "bboxDims": [
+            922,
+            389
+          ]
+        },
+        "both100": {
+          "file": "t4-combined__both100.png",
+          "changedPx": 22884,
+          "bbox": [
+            26,
+            0,
+            939,
+            395
+          ],
+          "bboxDims": [
+            914,
+            396
+          ]
+        },
+        "both44": {
+          "file": "t4-combined__both44.png",
+          "changedPx": 18071,
+          "bbox": [
+            18,
+            0,
+            939,
+            396
+          ],
+          "bboxDims": [
+            922,
+            397
+          ]
+        },
+        "both67": {
+          "file": "t4-combined__both67.png",
+          "changedPx": 20562,
+          "bbox": [
+            26,
+            0,
+            939,
+            395
+          ],
+          "bboxDims": [
+            914,
+            396
+          ]
+        },
+        "gib44": {
+          "file": "t4-combined__gib44.png",
+          "changedPx": 12387,
+          "bbox": [
+            18,
+            0,
+            939,
+            296
+          ],
+          "bboxDims": [
+            922,
+            297
+          ]
+        },
+        "gib67": {
+          "file": "t4-combined__gib67.png",
+          "changedPx": 13968,
+          "bbox": [
+            18,
+            0,
+            939,
+            296
+          ],
+          "bboxDims": [
+            922,
+            297
+          ]
+        }
+      },
+      "tight": "t4tight-combined-sharp-both100-both67.png",
+      "tightBox": [
+        630,
+        50,
+        869,
+        289
+      ]
+    },
+    "combinedclose": {
+      "reference": "sharp",
+      "referenceFile": "t4-combinedclose__sharp.png",
+      "variants": {
+        "blood44": {
+          "file": "t4-combinedclose__blood44.png",
+          "changedPx": 11777,
+          "bbox": [
+            33,
+            17,
+            831,
+            599
+          ],
+          "bboxDims": [
+            799,
+            583
+          ]
+        },
+        "blood67": {
+          "file": "t4-combinedclose__blood67.png",
+          "changedPx": 15275,
+          "bbox": [
+            33,
+            17,
+            831,
+            599
+          ],
+          "bboxDims": [
+            799,
+            583
+          ]
+        },
+        "both100": {
+          "file": "t4-combinedclose__both100.png",
+          "changedPx": 47787,
+          "bbox": [
+            33,
+            17,
+            879,
+            599
+          ],
+          "bboxDims": [
+            847,
+            583
+          ]
+        },
+        "both44": {
+          "file": "t4-combinedclose__both44.png",
+          "changedPx": 34208,
+          "bbox": [
+            33,
+            17,
+            875,
+            599
+          ],
+          "bboxDims": [
+            843,
+            583
+          ]
+        },
+        "both67": {
+          "file": "t4-combinedclose__both67.png",
+          "changedPx": 40830,
+          "bbox": [
+            33,
+            17,
+            876,
+            599
+          ],
+          "bboxDims": [
+            844,
+            583
+          ]
+        },
+        "gib44": {
+          "file": "t4-combinedclose__gib44.png",
+          "changedPx": 23964,
+          "bbox": [
+            33,
+            16,
+            875,
+            535
+          ],
+          "bboxDims": [
+            843,
+            520
+          ]
+        },
+        "gib67": {
+          "file": "t4-combinedclose__gib67.png",
+          "changedPx": 27927,
+          "bbox": [
+            33,
+            16,
+            876,
+            535
+          ],
+          "bboxDims": [
+            844,
+            520
+          ]
+        }
+      },
+      "tight": "t4tight-combinedclose-sharp-both100-both67.png",
+      "tightBox": [
+        420,
+        260,
+        659,
+        499
+      ]
+    },
+    "combineddet": {
+      "reference": "sharp",
+      "referenceFile": "t4-combineddet__sharp.png",
+      "variants": {
+        "bloodonly": {
+          "file": "t4-combineddet__bloodonly.png",
+          "changedPx": 9019,
+          "bbox": [
+            80,
+            223,
+            621,
+            599
+          ],
+          "bboxDims": [
+            542,
+            377
+          ]
+        },
+        "both44": {
+          "file": "t4-combineddet__both44.png",
+          "changedPx": 22426,
+          "bbox": [
+            80,
+            196,
+            659,
+            599
+          ],
+          "bboxDims": [
+            580,
+            404
+          ]
+        },
+        "both44b": {
+          "file": "t4-combineddet__both44b.png",
+          "changedPx": 21874,
+          "bbox": [
+            80,
+            196,
+            659,
+            599
+          ],
+          "bboxDims": [
+            580,
+            404
+          ]
+        },
+        "both67": {
+          "file": "t4-combineddet__both67.png",
+          "changedPx": 26863,
+          "bbox": [
+            80,
+            196,
+            659,
+            599
+          ],
+          "bboxDims": [
+            580,
+            404
+          ]
+        },
+        "gibonly": {
+          "file": "t4-combineddet__gibonly.png",
+          "changedPx": 14159,
+          "bbox": [
+            317,
+            196,
+            659,
+            486
+          ],
+          "bboxDims": [
+            343,
+            291
+          ]
+        },
+        "off": {
+          "file": "t4-combineddet__off.png",
+          "changedPx": 0,
+          "bbox": null,
+          "bboxDims": null
+        }
+      },
+      "tight": "t4tight-combineddet-sharp-both67-both44.png",
+      "tightBox": [
+        320,
+        226,
+        559,
+        465
+      ]
+    },
+    "combinedhead": {
+      "reference": "sharp",
+      "referenceFile": "t4-combinedhead__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-combinedhead__m44.png",
+          "changedPx": 29949,
+          "bbox": [
+            33,
+            16,
+            698,
+            564
+          ],
+          "bboxDims": [
+            666,
+            549
+          ]
+        },
+        "m67": {
+          "file": "t4-combinedhead__m67.png",
+          "changedPx": 36049,
+          "bbox": [
+            33,
+            16,
+            698,
+            564
+          ],
+          "bboxDims": [
+            666,
+            549
+          ]
+        }
+      },
+      "tight": "t4tight-combinedhead-sharp-m67-m44.png",
+      "tightBox": [
+        310,
+        260,
+        549,
+        499
+      ]
+    },
+    "fall-assets": {
+      "reference": "sharp",
+      "referenceFile": "t4-fall-assets__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-fall-assets__m44.png",
+          "changedPx": 14418,
+          "bbox": [
+            26,
+            0,
+            879,
+            412
+          ],
+          "bboxDims": [
+            854,
+            413
+          ]
+        },
+        "m67": {
+          "file": "t4-fall-assets__m67.png",
+          "changedPx": 21417,
+          "bbox": [
+            18,
+            0,
+            939,
+            412
+          ],
+          "bboxDims": [
+            922,
+            413
+          ]
+        }
+      },
+      "tight": "t4tight-fall-assets-sharp-m67-m44.png",
+      "tightBox": [
+        640,
+        50,
+        879,
+        289
+      ]
+    },
+    "fall-carve": {
+      "reference": "sharp",
+      "referenceFile": "t4-fall-carve__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-fall-carve__m44.png",
+          "changedPx": 6659,
+          "bbox": [
+            25,
+            17,
+            879,
+            413
+          ],
+          "bboxDims": [
+            855,
+            397
+          ]
+        },
+        "m67": {
+          "file": "t4-fall-carve__m67.png",
+          "changedPx": 12118,
+          "bbox": [
+            18,
+            16,
+            939,
+            413
+          ],
+          "bboxDims": [
+            922,
+            398
+          ]
+        }
+      },
+      "tight": "t4tight-fall-carve-sharp-m67-m44.png",
+      "tightBox": [
+        640,
+        10,
+        879,
+        249
+      ]
+    },
+    "fall-march": {
+      "reference": "sharp",
+      "referenceFile": "t4-fall-march__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-fall-march__m44.png",
+          "changedPx": 17155,
+          "bbox": [
+            26,
+            0,
+            879,
+            412
+          ],
+          "bboxDims": [
+            854,
+            413
+          ]
+        },
+        "m67": {
+          "file": "t4-fall-march__m67.png",
+          "changedPx": 25115,
+          "bbox": [
+            18,
+            0,
+            939,
+            412
+          ],
+          "bboxDims": [
+            922,
+            413
+          ]
+        }
+      },
+      "tight": "t4tight-fall-march-sharp-m67-m44.png",
+      "tightBox": [
+        640,
+        50,
+        879,
+        289
+      ]
+    },
+    "occl": {
+      "reference": "sharp",
+      "referenceFile": "t4-occl__sharp.png",
+      "variants": {
+        "bloodonly": {
+          "file": "t4-occl__bloodonly.png",
+          "changedPx": 42898,
+          "bbox": [
+            18,
+            16,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            584
+          ]
+        },
+        "both": {
+          "file": "t4-occl__both.png",
+          "changedPx": 84701,
+          "bbox": [
+            18,
+            16,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            584
+          ]
+        },
+        "gibonly": {
+          "file": "t4-occl__gibonly.png",
+          "changedPx": 66714,
+          "bbox": [
+            18,
+            16,
+            947,
+            595
+          ],
+          "bboxDims": [
+            930,
+            580
+          ]
+        }
+      },
+      "tight": "t4tight-occl-sharp-both-gibonly.png",
+      "tightBox": [
+        360,
+        140,
+        599,
+        379
+      ]
+    },
+    "occlab": {
+      "reference": "sharp",
+      "referenceFile": "t4-occlab__sharp.png",
+      "variants": {
+        "bloodonly": {
+          "file": "t4-occlab__bloodonly.png",
+          "changedPx": 10387,
+          "bbox": [
+            18,
+            16,
+            782,
+            599
+          ],
+          "bboxDims": [
+            765,
+            584
+          ]
+        },
+        "bothocclon": {
+          "file": "t4-occlab__bothocclon.png",
+          "changedPx": 46674,
+          "bbox": [
+            18,
+            16,
+            782,
+            599
+          ],
+          "bboxDims": [
+            765,
+            584
+          ]
+        },
+        "gibonly": {
+          "file": "t4-occlab__gibonly.png",
+          "changedPx": 37319,
+          "bbox": [
+            18,
+            16,
+            591,
+            380
+          ],
+          "bboxDims": [
+            574,
+            365
+          ]
+        }
+      },
+      "tight": "t4tight-occlab-sharp-bothocclon-gibonly.png",
+      "tightBox": [
+        360,
+        140,
+        599,
+        379
+      ]
+    },
+    "occldet": {
+      "reference": "sharp",
+      "referenceFile": "t4-occldet__sharp.png",
+      "variants": {
+        "bloodonly": {
+          "file": "t4-occldet__bloodonly.png",
+          "changedPx": 10683,
+          "bbox": [
+            18,
+            16,
+            807,
+            599
+          ],
+          "bboxDims": [
+            790,
+            584
+          ]
+        },
+        "both": {
+          "file": "t4-occldet__both.png",
+          "changedPx": 50900,
+          "bbox": [
+            18,
+            16,
+            807,
+            599
+          ],
+          "bboxDims": [
+            790,
+            584
+          ]
+        },
+        "gibonly": {
+          "file": "t4-occldet__gibonly.png",
+          "changedPx": 39004,
+          "bbox": [
+            18,
+            16,
+            807,
+            580
+          ],
+          "bboxDims": [
+            790,
+            565
+          ]
+        }
+      },
+      "tight": "t4tight-occldet-sharp-both-gibonly.png",
+      "tightBox": [
+        360,
+        140,
+        599,
+        379
+      ]
+    },
+    "occlwall": {
+      "reference": "sharp",
+      "referenceFile": "t4-occlwall__sharp.png",
+      "variants": {
+        "both": {
+          "file": "t4-occlwall__both.png",
+          "changedPx": 575,
+          "bbox": [
+            33,
+            16,
+            192,
+            599
+          ],
+          "bboxDims": [
+            160,
+            584
+          ]
+        }
+      },
+      "tight": "t4tight-occlwall-sharp-both.png",
+      "tightBox": [
+        0,
+        350,
+        239,
+        589
+      ]
+    },
+    "restdet": {
+      "reference": "sharp",
+      "referenceFile": "t4-restdet__sharp.png",
+      "variants": {
+        "off": {
+          "file": "t4-restdet__off.png",
+          "changedPx": 38,
+          "bbox": [
+            18,
+            16,
+            24,
+            25
+          ],
+          "bboxDims": [
+            7,
+            10
+          ]
+        },
+        "on-a": {
+          "file": "t4-restdet__on-a.png",
+          "changedPx": 702,
+          "bbox": [
+            33,
+            16,
+            492,
+            347
+          ],
+          "bboxDims": [
+            460,
+            332
+          ]
+        },
+        "on-b": {
+          "file": "t4-restdet__on-b.png",
+          "changedPx": 735,
+          "bbox": [
+            18,
+            16,
+            492,
+            347
+          ],
+          "bboxDims": [
+            475,
+            332
+          ]
+        }
+      },
+      "tight": "t4tight-restdet-sharp-on-b-on-a.png",
+      "tightBox": [
+        260,
+        110,
+        499,
+        349
+      ]
+    },
+    "rothead": {
+      "reference": "sharp",
+      "referenceFile": "t4-rothead__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-rothead__m44.png",
+          "changedPx": 38561,
+          "bbox": [
+            18,
+            16,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            584
+          ]
+        },
+        "m67": {
+          "file": "t4-rothead__m67.png",
+          "changedPx": 46237,
+          "bbox": [
+            18,
+            16,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            584
+          ]
+        }
+      },
+      "tight": "t4tight-rothead-sharp-m67-m44.png",
+      "tightBox": [
+        430,
+        130,
+        669,
+        369
+      ]
+    },
+    "rotheaddet": {
+      "reference": "sharp",
+      "referenceFile": "t4-rotheaddet__sharp.png",
+      "variants": {
+        "off": {
+          "file": "t4-rotheaddet__off.png",
+          "changedPx": 51,
+          "bbox": [
+            33,
+            16,
+            39,
+            25
+          ],
+          "bboxDims": [
+            7,
+            10
+          ]
+        },
+        "on-a": {
+          "file": "t4-rotheaddet__on-a.png",
+          "changedPx": 33240,
+          "bbox": [
+            33,
+            0,
+            879,
+            521
+          ],
+          "bboxDims": [
+            847,
+            522
+          ]
+        },
+        "on-b": {
+          "file": "t4-rotheaddet__on-b.png",
+          "changedPx": 32795,
+          "bbox": [
+            33,
+            0,
+            879,
+            521
+          ],
+          "bboxDims": [
+            847,
+            522
+          ]
+        }
+      },
+      "tight": "t4tight-rotheaddet-sharp-on-a-on-b.png",
+      "tightBox": [
+        320,
+        170,
+        559,
+        409
+      ]
+    },
+    "rotlimb": {
+      "reference": "sharp",
+      "referenceFile": "t4-rotlimb__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-rotlimb__m44.png",
+          "changedPx": 33477,
+          "bbox": [
+            33,
+            0,
+            855,
+            599
+          ],
+          "bboxDims": [
+            823,
+            600
+          ]
+        },
+        "m67": {
+          "file": "t4-rotlimb__m67.png",
+          "changedPx": 42138,
+          "bbox": [
+            18,
+            0,
+            855,
+            599
+          ],
+          "bboxDims": [
+            838,
+            600
+          ]
+        }
+      },
+      "tight": "t4tight-rotlimb-sharp-m67-m44.png",
+      "tightBox": [
+        400,
+        120,
+        639,
+        359
+      ]
+    },
+    "rotwide": {
+      "reference": "sharp",
+      "referenceFile": "t4-rotwide__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-rotwide__m44.png",
+          "changedPx": 32693,
+          "bbox": [
+            33,
+            0,
+            855,
+            599
+          ],
+          "bboxDims": [
+            823,
+            600
+          ]
+        },
+        "m67": {
+          "file": "t4-rotwide__m67.png",
+          "changedPx": 41193,
+          "bbox": [
+            18,
+            0,
+            855,
+            599
+          ],
+          "bboxDims": [
+            838,
+            600
+          ]
+        }
+      },
+      "tight": "t4tight-rotwide-sharp-m67-m44.png",
+      "tightBox": [
+        400,
+        120,
+        639,
+        359
+      ]
+    },
+    "settled": {
+      "reference": "sharp",
+      "referenceFile": "t4-settled__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-settled__m44.png",
+          "changedPx": 827,
+          "bbox": [
+            18,
+            16,
+            499,
+            364
+          ],
+          "bboxDims": [
+            482,
+            349
+          ]
+        },
+        "m67": {
+          "file": "t4-settled__m67.png",
+          "changedPx": 1025,
+          "bbox": [
+            18,
+            16,
+            514,
+            364
+          ],
+          "bboxDims": [
+            497,
+            349
+          ]
+        }
+      },
+      "tight": "t4tight-settled-sharp-m67-m44.png",
+      "tightBox": [
+        280,
+        130,
+        519,
+        369
+      ]
+    },
+    "slide": {
+      "reference": "sharp",
+      "referenceFile": "t4-slide__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-slide__m44.png",
+          "changedPx": 6319,
+          "bbox": [
+            18,
+            16,
+            550,
+            364
+          ],
+          "bboxDims": [
+            533,
+            349
+          ]
+        },
+        "m67": {
+          "file": "t4-slide__m67.png",
+          "changedPx": 6955,
+          "bbox": [
+            18,
+            16,
+            553,
+            364
+          ],
+          "bboxDims": [
+            536,
+            349
+          ]
+        }
+      },
+      "tight": "t4tight-slide-sharp-m67-m44.png",
+      "tightBox": [
+        320,
+        130,
+        559,
+        369
+      ]
+    },
+    "spin": {
+      "reference": "sharp",
+      "referenceFile": "t4-spin__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-spin__m44.png",
+          "changedPx": 19328,
+          "bbox": [
+            354,
+            217,
+            563,
+            399
+          ],
+          "bboxDims": [
+            210,
+            183
+          ]
+        },
+        "m67": {
+          "file": "t4-spin__m67.png",
+          "changedPx": 24862,
+          "bbox": [
+            25,
+            16,
+            579,
+            411
+          ],
+          "bboxDims": [
+            555,
+            396
+          ]
+        }
+      },
+      "tight": "t4tight-spin-sharp-m67-m44.png",
+      "tightBox": [
+        340,
+        180,
+        579,
+        419
+      ]
+    },
+    "spindet": {
+      "reference": "sharp",
+      "referenceFile": "t4-spindet__sharp.png",
+      "variants": {
+        "m67": {
+          "file": "t4-spindet__m67.png",
+          "changedPx": 27807,
+          "bbox": [
+            18,
+            16,
+            947,
+            396
+          ],
+          "bboxDims": [
+            930,
+            381
+          ]
+        },
+        "off": {
+          "file": "t4-spindet__off.png",
+          "changedPx": 4498,
+          "bbox": [
+            18,
+            16,
+            947,
+            28
+          ],
+          "bboxDims": [
+            930,
+            13
+          ]
+        },
+        "on-a": {
+          "file": "t4-spindet__on-a.png",
+          "changedPx": 22501,
+          "bbox": [
+            18,
+            16,
+            947,
+            384
+          ],
+          "bboxDims": [
+            930,
+            369
+          ]
+        },
+        "on-b": {
+          "file": "t4-spindet__on-b.png",
+          "changedPx": 22503,
+          "bbox": [
+            18,
+            16,
+            947,
+            384
+          ],
+          "bboxDims": [
+            930,
+            369
+          ]
+        }
+      },
+      "tight": "t4tight-spindet-sharp-m67-on-b.png",
+      "tightBox": [
+        330,
+        160,
+        569,
+        399
+      ]
+    },
+    "still": {
+      "reference": "sharp",
+      "referenceFile": "t4-still__sharp.png",
+      "variants": {
+        "m44": {
+          "file": "t4-still__m44.png",
+          "changedPx": 740,
+          "bbox": [
+            438,
+            275,
+            499,
+            364
+          ],
+          "bboxDims": [
+            62,
+            90
+          ]
+        },
+        "m67": {
+          "file": "t4-still__m67.png",
+          "changedPx": 1014,
+          "bbox": [
+            18,
+            17,
+            514,
+            364
+          ],
+          "bboxDims": [
+            497,
+            348
+          ]
+        }
+      },
+      "tight": "t4tight-still-sharp-m67-m44.png",
+      "tightBox": [
+        280,
+        130,
+        519,
+        369
+      ]
+    }
+  },
+  "spinRadial": {
+    "spindet:on-a": {
+      "centroid": [
+        457.0,
+        308.0
+      ],
+      "r97Px": 84.1,
+      "innerFrac": 0.145,
+      "midFrac": 0.417,
+      "outerFrac": 0.438,
+      "changedPx": 18035
+    },
+    "spindet:m67": {
+      "centroid": [
+        471.0,
+        308.0
+      ],
+      "r97Px": 92.2,
+      "innerFrac": 0.136,
+      "midFrac": 0.408,
+      "outerFrac": 0.456,
+      "changedPx": 23422
+    }
+  },
+  "rotationRadial": {
+    "rotheaddet": {
+      "centroid": [
+        482.0,
+        273.0
+      ],
+      "r97Px": 403.8,
+      "innerFrac": 0.313,
+      "midFrac": 0.481,
+      "outerFrac": 0.206,
+      "changedPx": 33203
+    },
+    "rothead": {
+      "centroid": [
+        476.0,
+        327.0
+      ],
+      "r97Px": 461.5,
+      "innerFrac": 0.438,
+      "midFrac": 0.383,
+      "outerFrac": 0.178,
+      "changedPx": 38561
+    },
+    "rotlimb": {
+      "centroid": [
+        434.0,
+        244.0
+      ],
+      "r97Px": 399.0,
+      "innerFrac": 0.221,
+      "midFrac": 0.48,
+      "outerFrac": 0.299,
+      "changedPx": 33477
+    },
+    "rotwide": {
+      "centroid": [
+        436.0,
+        247.0
+      ],
+      "r97Px": 396.0,
+      "innerFrac": 0.213,
+      "midFrac": 0.477,
+      "outerFrac": 0.31,
+      "changedPx": 32693
+    }
+  },
+  "deterministic": {
+    "combineddet": {
+      "reference": "off",
+      "vsReference": {
+        "bloodonly": 9010,
+        "both44": 22416,
+        "both44b": 21868,
+        "both67": 26843,
+        "gibonly": 14160,
+        "sharp": 0
+      },
+      "noise_onA_vs_onB": 2427,
+      "signal_onA_vs_ref": 22416,
+      "signalToNoise": 9.24
+    },
+    "spindet": {
+      "reference": "off",
+      "vsReference": {
+        "m67": 23422,
+        "on-a": 18035,
+        "on-b": 17994,
+        "sharp": 4498
+      },
+      "noise_onA_vs_onB": 147,
+      "signal_onA_vs_ref": 18035,
+      "signalToNoise": 122.69
+    },
+    "rotheaddet": {
+      "reference": "off",
+      "vsReference": {
+        "on-a": 33203,
+        "on-b": 32766,
+        "sharp": 51
+      },
+      "noise_onA_vs_onB": 3106,
+      "signal_onA_vs_ref": 33203,
+      "signalToNoise": 10.69
+    },
+    "occldet": {
+      "reference": "sharp",
+      "vsReference": {
+        "bloodonly": 10683,
+        "both": 50900,
+        "gibonly": 39004
+      }
+    }
+  },
+  "occlusion": {
+    "scenario": "occldet",
+    "gibMaskPx": 39004,
+    "bloodMaskPx": 10683,
+    "both_vs_gibonly_insideGibMask": 4058,
+    "both_vs_bloodonly_insideBloodMask": 317,
+    "both_vs_sharpPx": 50900
+  },
+  "mutualOcclusion": {
+    "gibMaskPx": 37319,
+    "bloodMaskPx": 10387,
+    "occluderOn_insideGibMask": 3399,
+    "occluderOff_insideGibMask": 5204,
+    "occluderOn_insideBloodMask": 278,
+    "occluderOff_insideBloodMask": 279,
+    "on_vs_off_allPx": 1888
+  }
+}
