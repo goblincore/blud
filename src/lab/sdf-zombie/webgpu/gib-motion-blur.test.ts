@@ -134,6 +134,18 @@ describe('gib motion — prior state / shortest arc / timing', () => {
     expect(d).toBeCloseTo(1, 10);
   });
 
+  it('is a fixed shutter interval: exposure scales, presented cadence does not', () => {
+    const s = chunk({ vel: [4, 0, 0] });
+    const oneFrameAt = (fps: number): number => gibPriorState(s, 1 / fps).pos[0]!;
+    // A 1/120 s frame advances a quarter of a 1/30 s frame's distance...
+    expect(oneFrameAt(120)).toBeCloseTo(oneFrameAt(30) / 4, 10);
+    // ...but the SHUTTER integrates one fixed interval, so the blur length is
+    // exposure * velocity at every cadence (30/60/120 alike).
+    const exposure = 0.044444;
+    expect(gibPriorState(s, exposure).pos[0]).toBeCloseTo(-4 * exposure, 10);
+    expect(gibPriorState(s, exposure).pos[0]).toBeCloseTo(gibPriorState(s, exposure).pos[0]!, 12);
+  });
+
   it('relaxes squash at the integrator rate and clamps at zero', () => {
     const s = chunk({ squash: 1, vel: [1, 0, 0] });
     const p = gibPriorState(s, 0.05);
