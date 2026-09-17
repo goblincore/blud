@@ -237,17 +237,23 @@ drives it headless with `--enable-unsafe-webgpu` on its own port pair, so the
 gates are runnable on this machine. **They have not yet been run** — capturing
 the baseline is task 0, and no GPU pass is claimed before it is observed.
 
-### 5.1 Known gate gap
+### 5.1 Why fields-off is the right regime to hash
 
-`march-hash.mjs` pins `setFieldStyle('off')`, because `sdf-layer.ts` keeps a
-private `frameIndex` with no getter or reset hook that made hashes bimodal
-across boots. The owner's play default is `bodies` — fields **on**. Nothing in
-the pixel gate covers the fields-on path; coverage there rests on
-`sdf-demo-hash` and `sdf-layer.test.ts`'s source-text pins.
+`march-hash.mjs` pins `setFieldStyle('off')`. This is **deliberate and correct**,
+not a gap:
 
-Task 0 records **one explicit fields-on demo** to close this. If that recording
-cannot be made deterministic, phase 3 extractions that touch `sdf-layer`
-interaction are flagged for owner playtest instead of auto-passing.
+- `sdf-layer.ts:1078` declares `let fieldStyle: FieldStyle = 'off'` — fields-off
+  is the **default**.
+- The production path runs the **upscaler model**, and both the upscale stage and
+  the refine pass force fields off. Hashing fields-off is hashing the regime the
+  game actually renders in.
+- The pin also removes a real source of non-determinism: `sdf-layer.ts` keeps a
+  private `frameIndex` with no getter or reset hook, which made hashes bimodal
+  across boots until the pin collapsed them to a single value.
+
+The interlaced/fields-on path keeps its own source-text pins in
+`sdf-layer.test.ts` and is not this gate's responsibility. No additional
+fields-on recording is required.
 
 ---
 
@@ -276,7 +282,7 @@ exemplar-driven (`game-weapon-slots.ts`), which suits deepseek-flash.
 
 | Phase | Work | Parallel? | Output |
 | --- | --- | --- | --- |
-| **0** | Capture baseline hashes; record a fields-**on** demo; scaffold `game-context.ts` + codemod | no — coordinator | baseline JSON committed |
+| **0** | Capture baseline hashes; scaffold `game-context.ts` + codemod | no — coordinator | baseline JSON committed |
 | **1** | 14 slice authors: interface + factory + mapping table + test | **yes, 14-wide** | 14 new module pairs |
 | **2** | Codemod run; all ~493 bindings become `ctx.*`; full gate | no — coordinator | `game-main.ts` same length, fully sliced |
 | **3** | Extract the 106 functions into `game-*.ts` by slice, in waves of ~4 | partly | ~12 new modules with tests |
@@ -284,9 +290,11 @@ exemplar-driven (`game-weapon-slots.ts`), which suits deepseek-flash.
 
 Phase 3 is where the line count drops. Phase 2 is what makes phase 3 mechanical.
 
-**Parallelism ceiling, stated honestly:** phase 3 extractions delete lines from
-`game-main.ts` and therefore contend with each other. Waves of ~4 with serial
-integration per wave is the realistic ceiling, not 14-wide.
+**Parallelism is not the binding constraint.** Dispatch-UI concurrency is
+limited, so the practical batch size is set by available workers rather than by
+the design. Phase 1 tasks are independent and may be run in any order or
+serially; phase 3 extractions contend on `game-main.ts` and are integrated one
+wave at a time. Neither phase is blocked by the other's batching.
 
 ---
 
@@ -295,7 +303,6 @@ integration per wave is the realistic ceiling, not 14-wide.
 | Risk | Mitigation |
 | --- | --- |
 | Codemod over-reach (shadowed names, strings, comments) | AST-scoped rename via the TS compiler API + `tsc --noEmit` + pixel gate. A wrong mapping table fails loudly at phase 2, not silently. |
-| Fields-on blind spot in the pixel gate | Task 0 records an explicit fields-on demo; unresolved cases escalate to owner playtest rather than auto-pass. |
 | The file keeps growing mid-refactor (7k lines in the last week) | Phases 0–2 land fast; a large feature landing mid-flight triggers a codemod **re-run**, not a hand merge. |
 | deepseek-flash output quality | Every phase-1 artifact is a new file guarded by `tsc` and its own test. A bad mapping table cannot reach `game-main.ts` without failing phase 2. Blast radius bounded by design. |
 | Initialization-order breakage | Eliminated by construction: lines are rewritten in place, never moved. |
