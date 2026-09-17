@@ -1,8 +1,13 @@
 # Default-graphics performance pass — 2026-09-17
 
-**Candidate implemented; GPU validation and performance verdict pending. No
-frame-time improvement claimed.** Target: recover approximately 5 ms without
+**GPU candidate implemented; GPU validation and performance verdict pending. No
+game frame-time improvement claimed.** Target: recover approximately 5 ms without
 reducing the default graphics quality. Primary checkout unchanged.
+
+**CPU follow-up:** [CPU.md](CPU.md) records a measured 14.6–15.9% reduction in
+offline actor-step plus packing cost (0.19–0.41 ms/update), byte-identical sampled
+output and 281 passing focused tests. Its commit is separate from the shader
+candidate below. The full-game 5 ms target remains open.
 
 Branch: `codex/perf-pass-2026-09-17`, based on `761cf8d3` (includes accepted
 offline gib assets). Worktree: `.claude/worktrees/perf-pass-2026-09-17`.
