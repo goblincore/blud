@@ -62,20 +62,100 @@ depth test along a straight line, which reads as a rectangular edge.
   **If the rectangular blocks are gone, stop here and skip to Step 6** — Cause A
   was it, and Cause B costs more than it is worth.
 
-- [ ] **Step 5: Only if seams remain — soften the depth cut.** Fade each card's
-  alpha as its fragment approaches the scene depth behind it (the standard
-  soft-particle fade), so the cut becomes a gradient instead of a straight edge.
+- [ ] **Step 5: Add the soft-particle depth fade (do this regardless).** Fade
+  each card's alpha as its fragment approaches the scene depth behind it, so a
+  card that intersects the body ends in a gradient instead of a straight cut.
+  This is what the wildfire teardown
+  (`docs/dev-notes/2026-09-18-wildfire-fire-teardown.md`) shows that game doing,
+  and it is the standard fix — do it even if the UV inset already cleaned up the
+  blocks, because it also softens cards against walls and against the other body.
+
   The effects scene renders after the composite with the depth buffer intact, so
-  the depth is available; bind it as a texture rather than turning `depthTest`
-  off, which would let flame draw through walls. Keep the fade distance tunable
-  and default it small (a few centimetres).
+  bind scene depth as a texture; do NOT turn `depthTest` off, which would let
+  flame draw through walls. Add `cardSoftFade` to `BurnTuning` (bounds
+  `[0, 0.5]` metres, default 0.08) so it is tunable from the panel.
+
+  **The trap, straight from their bundle:** if you feed the fade the CURRENT
+  fragment's depth instead of the scene depth, it computes
+  `saturate((d - d) / fade) = 0` and the entire effect renders transparent black
+  with no error and no warning. That game ships a runtime guard for exactly this.
+  In three's TSL the scene depth is `linearDepth(viewportDepthTexture())` /
+  `viewportLinearDepth`, never a bare `depth()`. After wiring it, prove flame
+  still renders before tuning anything.
 
 - [ ] **Step 6: Verify and commit.** `npm test -- flame-cards` and
   `npx tsc --noEmit`. Commit with a message saying which cause it actually was.
 
 ---
 
-## Task 2: Flame down the whole body
+## Task 2: Curl-noise volume drives the flame motion
+
+**Files:** create `src/lab/sdf-zombie/webgpu/curl-volume.ts` + test; modify `flame-cards.ts`
+
+Today each card plays the FIRE01 flipbook at its own phase and that is all the
+motion there is. The wildfire teardown's most portable idea is a small
+**curl-noise 3D texture**: curl noise is divergence-free, so it reads as *flow*
+rather than as drift, which is what makes flame look alive.
+
+Build our own — this is a standard technique, not their data.
+
+- [ ] **Step 1: Write the failing test.** Create `curl-volume.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { buildCurlVolume, CURL_VOLUME_SIZE } from './curl-volume';
+
+describe('curl volume', () => {
+  it('packs a 64-cubed RGBA8 volume deterministically from a seed', () => {
+    expect(CURL_VOLUME_SIZE).toBe(64);
+    const a = buildCurlVolume(1234);
+    const b = buildCurlVolume(1234);
+    expect(a.length).toBe(64 * 64 * 64 * 4);
+    expect(a).toEqual(b);                       // seeded, no Math.random
+    expect(buildCurlVolume(9999)).not.toEqual(a);
+  });
+
+  it('is centred so the decoded vector spans both signs', () => {
+    const v = buildCurlVolume(7);
+    let lo = 255, hi = 0;
+    for (let i = 0; i < v.length; i += 4) { lo = Math.min(lo, v[i]!); hi = Math.max(hi, v[i]!); }
+    expect(lo).toBeLessThan(110);               // decodes below 0
+    expect(hi).toBeGreaterThan(145);            // and above 0
+  });
+});
+```
+
+- [ ] **Step 2: Run it, watch it fail.** `npm test -- curl-volume`
+
+- [ ] **Step 3: Build it.** `buildCurlVolume(seed)` returns a `Uint8Array` for a
+  64³ RGBA8 volume:
+  - Generate four seeded scalar noise lattices over 64³ (reuse the repo's
+    existing value/fbm noise rather than inventing one; several octaves).
+  - Take the **curl** of three of them by finite differences with **wraparound**
+    indexing (`(x + 1) & 63`), which is what makes the field divergence-free and
+    the texture tileable.
+  - Normalise by the largest component magnitude, store the vector as
+    `rgb = v * 0.5 + 0.5`, and put the fourth noise scalar in `a`.
+  - Also export `createCurlTexture(seed)` returning a `THREE.Data3DTexture` with
+    `LinearFilter`, `RepeatWrapping` on all three axes, no mipmaps.
+  - Decode in the shader as `rgb * 2 - 1`, sampling at `position / scale` with a
+    scale around 6 metres.
+
+- [ ] **Step 4: Drive the cards with it.** Offset each card's UV lookup and its
+  world position by the curl vector sampled at the card's anchor, scaled by a new
+  `flameFlow` tuning field (bounds `[0, 1]`, default 0.35) and by time, so
+  neighbouring cards swirl together rather than each flickering alone. Keep the
+  flipbook — the curl adds motion to it, it does not replace it.
+
+- [ ] **Step 5: Capture and judge.** **Required outcome:** the flame mass moves
+  as one flowing body rather than as N independently flickering quads. Sweep
+  `flameFlow` from 0 to 1 and report where it stops helping.
+
+- [ ] **Step 6: Verify and commit.**
+
+---
+
+## Task 3: Flame down the whole body
 
 **Files:** modify `src/lab/sdf-zombie/webgpu/flame-cards.ts` and its test
 
@@ -117,7 +197,7 @@ outside whatever actually covers the limb, not to disable the depth test.
 
 ---
 
-## Task 3: Make bone read as bone
+## Task 4: Make bone read as bone
 
 **Files:** modify `src/lab/sdf-zombie/webgpu/march.wgsl.ts`, `march.wgsl.test.ts`, `burn-profiles.ts`
 
@@ -160,7 +240,7 @@ into looking like fresh flesh, which is worse).
 
 ---
 
-## Task 4: Burning death
+## Task 5: Burning death
 
 **Files:** modify `src/lab/sdf-zombie/webgpu/flame-lab-main.ts`, `flame-cards.ts`, `burn-profiles.ts`; capture script and NOTES
 

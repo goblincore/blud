@@ -125,3 +125,56 @@ The cards already beat everything else we have tried on look.
 `~/Downloads/wildfire/demo-post-Bsbd56cJ.js` (all four systems live here),
 `field-pFIyBOjr.js` (GLSL + WGSL, terrain/vegetation field), `main-C0G2_Ims.js`
 (engine bundle). The `.wasm` pair and the 1024² PNGs were not needed for this.
+
+## Where else these apply in Blud
+
+Owner asked (2026-09-18) how this transfers to gibbing and blood. Three of the
+four ideas are not fire-specific at all.
+
+### Blood spray — the strongest case
+
+Two spray attempts were abandoned as visually insufficient: scaled sprite
+droplets read as "big oval blood cells", and thin ribbon/trail geometry was "too
+thin, hard edges, not gooey". Both failures are addressed here:
+
+- **Hard edges** are what the soft-particle depth fade exists to kill. Any spray
+  card that intersects a body, a wall or the floor currently ends on a straight
+  cut; the fade turns that into a gradient. This alone may be the difference
+  between "sprite" and "wet".
+- **"Not gooey" / "reads as particles"** is the same complaint as flame reading
+  as N independent quads, and the answer is the same: drive the droplets and the
+  mist with ONE shared curl field so a spray moves as a connected volume of
+  fluid. Blood is a better fit for curl than fire is — a divergence-free field is
+  literally an incompressible-flow model.
+- The existing **goo/metaball layer** already solves cohesion in screen space.
+  Curl-driven motion feeding the goo layer's density is a cheaper path to
+  volume than a full volumetric pass, and it stacks with what is already built.
+
+### Gibbing
+
+- **Soft fade** on the blood mist and the gut/entrail cards around a gib burst,
+  for the same intersection reason.
+- **Curl volume** for the airborne mist after a blast: gibs already have
+  ballistic motion, and the mist between them is what currently reads thin.
+- The **capsule field** idea maps onto severed limbs directly — a gib is a
+  capsule, so a "wet field" around it could drive dripping and pooling without
+  per-piece authoring.
+
+### Explosions
+
+`explosion-vfx.ts` currently shapes its fire with `mx_fractal_noise_float` per
+pixel. Swapping the motion source to the curl volume is a small change with a
+likely large payoff, and it would share one texture with the flame cards.
+
+### Dynamite smoke and the VHS pass
+
+The low-res + temporal-reprojection structure is reusable for any volumetric we
+add later (smoke, dust, fog) — it is the generic way to afford volumetrics, not
+a fire trick. Note we already own a shutter-blur temporal pass, so the
+history/reprojection plumbing is not unfamiliar ground.
+
+### Order of attack, if pursued
+
+The flame polish plan takes soft fade + curl volume first. If they land well
+there, the same two modules drop straight into blood spray with no new
+research — that is the sequencing argument for doing fire first.
