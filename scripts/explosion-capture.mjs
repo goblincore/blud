@@ -13,7 +13,12 @@
 //   node scripts/explosion-capture.mjs [outDir]
 //   node scripts/explosion-capture.mjs --strength 0.85 --scale 2.6 --fade 0.35
 //   node scripts/explosion-capture.mjs --clip [outDir]   staged box/floor cut
+//   node scripts/explosion-capture.mjs --tune '{"fireCount":1,"smokeCount":0}' \
+//     --cam 1.4,2.1,7.2,0,1.2,0 [outDir]      isolation: one billboard / a new camera
 //   LAB_VITE_PORT=5255 LAB_CDP_PORT=9255 node scripts/explosion-capture.mjs
+//
+// `--tune` patches BOTH columns through setTuning (so an isolation stays
+// comparable); `--cam` overrides the framing. See the flag comments below.
 //
 // DETERMINISM. The spike boots with `?paused=1&spawn=0`: its rAF loop is off,
 // the sim clock starts at 0, and only `__explosionSpike.frame(dt)` advances it.
@@ -69,6 +74,34 @@ for (const [flag, key] of [['--strength', 'curlStrength'], ['--scale', 'curlScal
 // barely intersects anything.
 const CLIP = argv.includes('--clip');
 if (CLIP) argv.splice(argv.indexOf('--clip'), 1);
+
+// `--tune <json>` applies a SCENE/look patch to BOTH variants, so an isolation
+// capture keeps its two columns comparable (e.g. one fire billboard:
+//   --tune '{"fireCount":1,"smokeCount":0,"emberCount":0,"ringOpacity":0}'
+// ). It is applied through the same setTuning path as everything else; if it
+// names curlStrength/curlScale/softFade it overrides the variant's values.
+const TUNE = {};
+{
+  const i = argv.indexOf('--tune');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    if (!v) fail('--tune needs a JSON object');
+    try { Object.assign(TUNE, JSON.parse(v)); } catch { fail(`--tune is not JSON: ${v}`); }
+    argv.splice(i, 2);
+  }
+}
+// `--cam px,py,pz,tx,ty,tz` overrides the camera, for the geometry question
+// (does a straight seam follow the WORLD or the screen?).
+let CAM_USE = null;
+{
+  const i = argv.indexOf('--cam');
+  if (i !== -1) {
+    const v = (argv[i + 1] ?? '').split(',').map(Number);
+    if (v.length !== 6 || v.some((n) => !Number.isFinite(n))) fail('--cam needs 6 numbers');
+    CAM_USE = v;
+    argv.splice(i, 2);
+  }
+}
 
 const OUT = argv[2] ?? 'docs/dev-notes/2026-09-18-explosion-curl';
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5233);
@@ -465,10 +498,11 @@ async function shoot(name, meta) {
 
 async function captureLook(variant) {
   await freshPage(`${PAGE_BASE}${variant === 'curl' ? '&curl=1' : ''}`);
-  await evaluate(`window.__explosionSpike.setCamera(${CAM.join(',')})`);
+  await evaluate(`window.__explosionSpike.setCamera(${(CAM_USE ?? CAM).join(',')})`);
   // The curl variant's values are whatever the page's ?curl=1 flag applied
   // (read from stats), with any CLI overrides layered on. The baseline is the
-  // game's shipped zeros, pinned explicitly.
+  // game's shipped zeros, pinned explicitly. TUNE (scene shape) is layered on
+  // BOTH so the two columns stay comparable.
   let look;
   if (variant === 'curl') {
     const booted = await evaluate('window.__explosionSpike.stats()');
@@ -477,9 +511,10 @@ async function captureLook(variant) {
       curlScale: booted.curlScale,
       softFade: booted.softFade,
       ...CURL_OVERRIDE,
+      ...TUNE,
     };
   } else {
-    look = BASE_LOOK;
+    look = { ...BASE_LOOK, ...TUNE };
   }
   // Pin the look explicitly through setTuning (the ?curl flag already did for
   // the curl run) and read back the CLAMPED tuning that landed.

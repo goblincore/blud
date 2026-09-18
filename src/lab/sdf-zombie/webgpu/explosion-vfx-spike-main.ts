@@ -43,15 +43,22 @@ const MAX_STEP = 0.05;
  * (explosion-vfx.ts) and the capture driver pins the same numbers through
  * setTuning so a still is reproducible.
  *
- * `curlScale` is the shared 6 m body scale, NOT the 2.2 m the first spike used:
- * at 2.2 the warp's spatial gradient folded the noise lookup and drew a bright
- * cross through the fireball (see `curlWarpGain` and the 2026-09-18 NOTES).
- * 6 m keeps the full `curlStrength` and is cross-free; it changes at least as
- * many pixels as 2.2 did, so the billow is not given up for it.
+ * `curlScale` is 18 m, NOT the 6 m the first spike used and NOT the 2.2 m
+ * before that. Both photographs carried a straight cross through the fireball
+ * (a horizontal streak + a vertical seam) that survives when the warp's
+ * spatial gradient `curlStrength / curlScale` is too steep: the warp locally
+ * compresses the fractal-noise lookup, and a single billboard shows the
+ * resulting caustic ridge as a cross. Measured with
+ * `scripts/explosion-seam-check.mjs`, the crossed/clean boundary is near a
+ * ratio of 0.09–0.10 (12 m is clean for the full scenes) and about 0.06 for an
+ * isolated quad, so **18 m** is the scale that keeps the full 1.1 strength
+ * cross-free at `CURL_WARP_SAFE_RATIO`. The pixel change against baseline is
+ * unchanged or higher than at 6 m (ground smoke 10.95 % vs 10.47 %, fireball
+ * 4.14 % vs 3.38 %), so the billow is not given up for it.
  */
 export const SPIKE_CURL_LOOK = {
   curlStrength: 1.1,
-  curlScale: 6,
+  curlScale: 18,
   softFade: 0.4,
 } as const;
 

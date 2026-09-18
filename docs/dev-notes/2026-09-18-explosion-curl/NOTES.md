@@ -270,3 +270,172 @@ reintroducing the cross.
 off/degenerate inputs). `npx tsc --noEmit` is clean and the targeted suite
 (`explosion-vfx soft-fade curl-volume flame-cards`, 60 tests) passes.
 
+---
+
+# 2026-09-18 (third pass) — the cross, measured: the gate, the cause, the fix
+
+The second pass moved the spike to `curlScale = 6` and claimed the cross was
+gone. It was not. The reviewer's edge filter still found a straight horizontal
+line into the fireball, a straight vertical seam below the centre, and
+straight-edged wedge notches on the silhouette — and normal-contrast eyeballing
+misses them. This pass builds an instrument, proves the residue with it, finds
+what actually drives it, and ships a value the instrument clears.
+
+## 1. The gate
+
+`scripts/explosion-seam-check.mjs` (`npm run explosion:seam [captureDir]`).
+
+It scores **straight-line energy**: the strongest single-row and single-column
+edge-sum excess over the median, inside the fire/smoke region (a warm+bright
+mask unioned with the frame difference, dilated to bridge the dark core). The
+score is the **difference of the two frames' per-line profiles**:
+
+```
+dRow = rowSum(curl) - rowSum(base)      dCol = colSum(curl) - colSum(base)
+curlScore = max( max dRow - median dRow,  max dCol - median dCol )
+baseScore = the same on the negated profiles      ratio = curlScore / baseScore
+```
+
+Differencing *after* the per-line sum, not before it, is the whole point: a
+scene edge (occluder, wall, floor) sits in the same place in both frames with
+nearly the same total, so it cancels even when the smoke over it modulates the
+edge's strength. A first attempt at a gate differenced per pixel
+(`sum max(0, Ec − Eb)`) and reported the clip occluder as a curl line — it
+amplifies every sub-pixel scene-edge shift. That is the gate bug the brief
+warned about, and it is why this gate was rebuilt before the shader was touched.
+
+`--exclude x0,y0,x1,y1` blanks a screen rectangle. The clip scene passes the
+occluder box: the box is scene geometry, its silhouette is a straight line in
+*both* frames, and scoring it measures the occluder rather than the curl.
+`--selftest` draws a 300 px horizontal and a 220 px vertical line into a copy of
+the baseline and fails unless the gate flags it (observed ratio 106). `--out`
+writes `seam-<time>.png` edge maps beside the numbers.
+
+## 2. It flags the residue (before)
+
+`SPIKE_CURL_LOOK = { 1.1, 6, 0.4 }`, `CURL_WARP_SAFE_RATIO = 0.2`, against the
+unchanged baseline:
+
+| scene / time | curlH | curlV | baseH | baseV | ratio | verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| ground flash | 182 | 384 | 254 | 380 | 1.01 | clean |
+| ground fireball | 154 | 157 | 100 | 80 | 1.57 | **FLAGGED** |
+| ground smoke | 426 | 226 | 92 | 180 | 2.37 | **FLAGGED** |
+| clip flash | 229 | 96 | 85 | 571 | 0.40 | clean |
+| clip fireball | 108 | 32 | 79 | 47 | 1.36 | marginal |
+| clip smoke | 471 | 125 | 86 | 76 | 5.45 | **FLAGGED** |
+
+One fire billboard, the strongest isolation: ratio **31.11** at the old
+`curlScale 2.2`, still **4.87** (smoke) / 2.32 (fireball) at 6. Edge maps:
+`seam-before/`, `seam-before-clip/`.
+
+## 3. Root cause
+
+Not coverage pushed onto a quad edge, and not the soft fade:
+
+- `--fade 0` (curl only) still flags; `--strength 0` (fade only) is clean on
+  the ground scene and, box-excluded, on the clip scene.
+- A single fire billboard reproduces it (the second pass found this too).
+
+The cause is the curl warp's **spatial gradient**. The noise lookup is
+`aUv · 3.4 + curl(world / curlScale) · strength`; across one billboard the noise
+term travels 3.4 in noise units while the warp term travels roughly
+`strength · fieldSlope · quadSize / curlScale`. As the warp's gradient
+approaches the noise's, the lookup is locally **compressed** — a caustic ridge
+(the extreme case is the "fold" the second pass named). The ground plume's
+billboards are axis-aligned (the world-up cylindrical basis), so the ridge is a
+straight line along a quad axis: the horizontal streak and the vertical seam,
+and the compressed silhouette reads as the wedge notches.
+
+**The second pass's cap constant was too generous.** It called
+`0.4 / 2.2 ≈ 0.18` clean from one eyeballed strength/scale pair; the gate shows
+that ratio is still crossed. Sweeping `curlScale` at fixed strength 1.1, ground
+smoke:
+
+| curlScale | ratio | verdict | smoke changed |
+| --- | --- | --- | --- |
+| 6 | 2.37 | FLAGGED | 10.46 % |
+| 8 | 4.05 | FLAGGED | 12.33 % |
+| 10 | 1.31 | marginal | 9.96 % |
+| 12 | 0.72 | clean | 9.72 % |
+| 18 | 0.86 | clean | 10.95 % |
+
+The crossed/clean boundary sits near `strength / curlScale ≈ 0.09–0.10` for the
+full scenes and ≈ 0.06 for an isolated quad.
+
+## 4. Fix
+
+- `CURL_WARP_SAFE_RATIO` **0.2 → 0.06** — the measured single-quad bound.
+- `SPIKE_CURL_LOOK.curlScale` **6 → 18**, and `EXPLOSION_VFX_TUNING.curlScale`
+  likewise, so a one-line strength flip in the game cannot reintroduce the
+  cross. (`curlStrength = 0` still contributes exactly zero.)
+- `curlStrength` 1.1 and `softFade` 0.4 unchanged.
+
+Enlarging the field is what keeps the billow: the applied amplitude stays ~1.1,
+only the spatial scale of the warp changes, so the pixel change against baseline
+is equal or higher than at 6 m. The cap still bites for tighter swirls
+(`min(strength, 0.06 · curlScale)`), so the whole tuning range is
+compression-free rather than only the shipped values.
+
+## 5. After
+
+| scene / time | ratio | verdict | changed | mean \|Δ\| |
+| --- | --- | --- | --- | --- |
+| ground flash | 0.71 | clean | 1.71 % | 0.13 |
+| ground fireball | 0.86 | clean | 4.10 % | 0.28 |
+| ground smoke | 0.83 | clean | 10.88 % | 0.82 |
+| clip flash (excl.) | 0.63 | clean | 2.11 % | 0.23 |
+| clip fireball (excl.) | 0.63 | clean | 2.56 % | 0.22 |
+| clip smoke (excl.) | 0.36 | clean | 15.30 % | 1.16 |
+| ground curl-only | 0.71 / 0.86 / 0.88 | clean | | |
+
+Billow, the previous pass's pixel-change figures:
+
+| scene / time | before (scale 6) | after (scale 18) |
+| --- | --- | --- |
+| ground fireball | 3.38 % | 4.10 % |
+| ground smoke | 10.46 % | 10.88 % |
+| clip fireball | 2.43 % | 2.56 % |
+| clip smoke | 11.69 % | 15.30 % |
+
+Fixed captures are the committed `curl-*.png` and `clip/`; edge maps are
+`seam/` and `seam-clip/`.
+
+## 6. What remains (plainly)
+
+- **The one-fire isolation's fireball still scores 1.87** after the fix. Its
+  edge map shows the winning feature is a small, curved 3–4 px blob, not a
+  line: a row/column integral can register a compact region as an "excess".
+  Its smoke scores 0.83. No straight line remains; this is a gate false
+  positive on a blob, and it is not shipped (the game draws 14 fire quads, and
+  the full ground scene is 0.86).
+- **The clip scene is only clean once the occluder box is excluded.** The box
+  silhouette is a straight line in both frames; the smoke wrapping it modulates
+  that line, which any straight-line detector will see. That is the occluder,
+  not the curl; the gate takes `--exclude` for it and the clip numbers above
+  are box-excluded.
+- **The soft fade is clean under the gate** (`--strength 0`: ground 0.17; clip
+  0.87 / 0.00 box-excluded), but it visibly changes the box cut — see
+  `clip-fade-only/`. It stays a candidate for its own pass; it is not part of
+  this cross.
+
+## 7. Game values to ship
+
+`EXPLOSION_VFX_TUNING` (the game default stays `curlStrength = 0`,
+`softFade = 0`; the gate and the test pin those zeros):
+
+```
+curlStrength: 1.1,   // was 0
+curlScale: 18,       // was 6; the compression-safe scale for 1.1
+softFade: 0.4,       // was 0
+```
+
+## Tests
+
+`explosion-vfx.test.ts`'s `curlWarpGain` case is re-pinned to the measured
+`CURL_WARP_SAFE_RATIO = 0.06` (it reads the constant, so the cap and the test
+cannot drift, and it asserts the ratio is < 0.1 so the crossed 0.2 cannot come
+back). `npx tsc --noEmit` is clean and the targeted suite
+(`explosion-vfx soft-fade curl-volume flame-cards`, 60 tests) passes.
+
+
