@@ -273,6 +273,42 @@ let luma = false;
   const i = argv.indexOf('--luma');
   if (i !== -1) { luma = true; argv.splice(i, 1); }
 }
+
+// --- run fixture (burning-feedback round 2, task 4d) ------------------------
+// `--fixture run` calls __flameLab.fixture('run') after boot: one burning body
+// runs a loop across the floor with the camera parked side-on, so the volume
+// flame's trail (and its straightening when the body stops) can be judged. The
+// run branch below shoots `-live` and `-stop` frames; the pose sweep is
+// skipped. It is the LIVE sim (not --frozen), because a frozen pose has zero
+// velocity and therefore no trail.
+let fixture = null;
+{
+  const i = argv.indexOf('--fixture');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    if (v !== 'run' && v !== 'stand') fail('--fixture needs run|stand');
+    fixture = v;
+    argv.splice(i, 2);
+    if (poseList === null) poseList = [v === 'run' ? 'run' : 'stand'];
+  }
+}
+
+// --- GPU cost mode (burning-feedback round 2, task 4d step 12) --------------
+// `--cost` measures the fire pass's GPU time from the lab's timestamp queries
+// at 0.5/0.25 scale for 1/4/8 bodies (the lab has two, so the probe replicates
+// the burning capsules through __flameLab.setFireLoad), then writes cost.json.
+// It takes no PNGs and exits.
+let costMode = false;
+{
+  const i = argv.indexOf('--cost');
+  if (i !== -1) { costMode = true; argv.splice(i, 1); }
+  if (costMode) {
+    if (technique === null) technique = 'volume';
+    if (fixture === null) fixture = 'run';
+    if (poseList === null) poseList = ['run'];
+  }
+}
+
 // --clock <seconds> freezes the lab's VISUAL clock (flipbook + curl phase) for
 // the whole run, so a --flow-sweep's values share one animation instant and
 // differ only by flow. Burn integration still advances. Omit for live motion.
@@ -787,7 +823,19 @@ async function freshPage() {
     } catch { /* page still booting */ }
     if (booted) break;
   }
-  if (!booted) fail('__flameLab never appeared — the flame lab never booted');
+  if (!booted) {
+    // Boot is the one failure where the page's own diagnostics matter most:
+    // dump what the page reported before giving up (the #errors box, the last
+    // console errors, the last exceptions) — a silent "never appeared" hides
+    // the actual import/shader error for an hour.
+    let errBox = '';
+    try { errBox = String(await evaluate("document.getElementById('errors')?.textContent || ''")); }
+    catch { /* blank page */ }
+    fail('__flameLab never appeared — the flame lab never booted.'
+      + ` #errors: ${errBox.slice(0, 600)}`
+      + ` | console: ${consoleErrors.slice(-5).join(' ;; ').slice(0, 700)}`
+      + ` | exceptions: ${pageExceptions.slice(-3).join(' ;; ').slice(0, 700)}`);
+  }
   // Freeze FIRST, before the settle frames: the pristine motion record and the
   // reset orbit camera must be the state every later frame builds on.
   if (frozen) {
@@ -820,6 +868,11 @@ async function freshPage() {
   if (clockPinValue !== null) {
     const applied = await evaluate(`window.__flameLab.setClock(${clockPinValue})`);
     if (applied !== clockPinValue) fail(`setClock(${clockPinValue}) applied ${JSON.stringify(applied)}`);
+  }
+  // The run fixture (task 4d): the page's own locomotion, one burning body.
+  if (fixture !== null) {
+    const applied = await evaluate(`window.__flameLab.fixture(${JSON.stringify(fixture)})`);
+    if (applied !== fixture) fail(`fixture(${fixture}) applied ${JSON.stringify(applied)}`);
   }
   await frames(SETTLE_BOOT);
   // The backend line lives in the status box ("backend: webgpu", green) — the
@@ -866,8 +919,79 @@ async function shoot(name, meta) {
   console.log(`${name}  (luma std=${stats.std})`);
 }
 
-for (const pose of (poseList ?? POSES)) {
+/** Median of a numeric list (0 for an empty one). */
+function median(list) {
+  if (!list || list.length === 0) return 0;
+  const s = [...list].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+/**
+ * The fire pass's GPU ms from the lab's pass timings, medians over the window.
+ * Labels are the post-aa setPassLabel names; `total` sums the four fire draws.
+ */
+async function sampleFireMs(settle) {
+  await frames(settle);
+  const t = await evaluate('window.__flameLab.passTimings()');
+  const wall = await evaluate('window.__flameLab.frameMs()');
+  if (!t || t.installed !== true) return { installed: false, wall };
+  const byLabel = new Map();
+  for (const s of t.samples) {
+    const label = String(s.label);
+    if (!label.startsWith('post:fire')) continue;
+    const arr = byLabel.get(label) ?? [];
+    arr.push(s.ms);
+    byLabel.set(label, arr);
+  }
+  const out = { installed: true, march: 0, resolve: 0, composite: 0, copy: 0, total: 0, frames: 0, samples: t.samples.length, wall };
+  for (const [label, arr] of byLabel) {
+    const key = label.slice('post:fire-'.length);
+    const m = median(arr);
+    out[key] = +m.toFixed(3);
+    out.total += m;
+    out.frames = Math.max(out.frames, arr.length);
+  }
+  out.total = +out.total.toFixed(3);
+  return out;
+}
+
+if (costMode) {
   await freshPage();
+  if (backend !== 'webgpu') {
+    console.error(`flame-capture: backend is "${backend}" — cost mode needs WebGPU`);
+    await stopStarted();
+    process.exit(2);
+  }
+  const results = [];
+  for (const scale of [0.5, 0.25]) {
+    for (const load of [1, 4, 8]) {
+      await evaluate(`window.__flameLab.setVolume({ resolutionScale: ${scale}, steps: 32 })`);
+      await evaluate(`window.__flameLab.setFireLoad(${load})`);
+      const on = await sampleFireMs(60);
+      // steps 0 is the pipeline-free off switch: the four draws still run, the
+      // march early-outs, so on.total - off.total is the march itself.
+      await evaluate('window.__flameLab.setVolume({ steps: 0 })');
+      const off = await sampleFireMs(30);
+      await evaluate('window.__flameLab.setVolume({ steps: 32 })');
+      const row = { scale, bodies: load, on, off };
+      results.push(row);
+      console.log(`cost scale=${scale} bodies=${load}`
+        + ` march=${on && on.installed ? on.march : 'n/a'}`
+        + ` total=${on && on.installed ? on.total : 'n/a'}`
+        + ` wall_on=${on && on.wall ? on.wall.median.toFixed(2) : 'n/a'}`
+        + ` wall_off=${off && off.wall ? off.wall.median.toFixed(2) : 'n/a'}`);
+    }
+  }
+  writeFileSync(`${OUT}/cost.json`, JSON.stringify({
+    backend, note: 'GPU pass ms from timestamp queries; bodies replicate the burning capsules (the lab has two).',
+    results,
+  }, null, 2));
+  console.log(`cost.json written to ${OUT}`);
+  await stopStarted();
+  process.exit(0);
+}
+
+for (const pose of (poseList ?? POSES)) {  await freshPage();
   if (backend !== 'webgpu') {
     console.error(`flame-capture: backend is "${backend}" — not the WebGPU path; refusing to call these flame-lab captures`);
     await stopStarted();
@@ -898,6 +1022,43 @@ for (const pose of (poseList ?? POSES)) {
       await frames(SETTLE_STAGE);           // temporal smear shows the pinned flame
       await shoot(`${shotPrefix}death-${point.name}.png`, {
         pose, stage: point.name, technique, corpseSec: point.sec, burns: states,
+      });
+    }
+    continue;
+  }
+
+  // RUN FIXTURE (burning-feedback round 2, task 4d): a LIVE run, so the volume
+  // flame actually trails. freshPage's __flameLab.fixture('run') already lit
+  // body 0 and parked the camera; let the body reach speed and turn, shoot the
+  // live trail, then stop and shoot the straightened flame.
+  if (fixture === 'run') {
+    await frames(90);
+    // The trail is the point of this fixture, so give the lag enough strength
+    // to read at run speed (the default 0.3 s / 0.6 m is tuned for a walk).
+    await evaluate('window.__flameLab.setVolume({ lag: 0.9, lagMaxM: 1.1 })');
+    await frames(SETTLE_STAGE);
+    for (const stage of STAGES) {
+      await evaluate(`(() => {
+        window.__flameLab.capture(1, ${stage.char}, 0);
+        window.__flameLab.setTuning({ charRate: 0 });
+        return window.__flameLab.burns();
+      })()`);
+      await frames(SETTLE_STAGE);
+      await shoot(`${shotPrefix}run-live-${stage.name}.png`, {
+        pose: 'run', stage: stage.name, char: stage.char, technique, fixture: 'run',
+      });
+    }
+    await evaluate("window.__flameLab.fixture('stop')");
+    await frames(75);   // decelerate: the velocity lag straightens
+    for (const stage of STAGES) {
+      await evaluate(`(() => {
+        window.__flameLab.capture(1, ${stage.char}, 0);
+        window.__flameLab.setTuning({ charRate: 0 });
+        return window.__flameLab.burns();
+      })()`);
+      await frames(SETTLE_STAGE);
+      await shoot(`${shotPrefix}run-stop-${stage.name}.png`, {
+        pose: 'run', stage: stage.name, char: stage.char, technique, fixture: 'stop',
       });
     }
     continue;

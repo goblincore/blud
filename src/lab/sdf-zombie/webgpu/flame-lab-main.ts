@@ -51,6 +51,16 @@ import {
 } from './tongue-tuning';
 import { TONGUE_TAPS, tonguePixelLength, type TongueFrame } from './post-tongues';
 import { createFlamePanel } from './flame-panel';
+import { fireCapsules, capsuleVelocities, type FireCapsule } from './fire-capsules';
+import {
+  packFireVolume, FIRE_CAPSULE_STRIDE, FIRE_VOLUME_MAX_CAPSULES,
+  type FireVolumeBody,
+} from './fire-volume-pack';
+import {
+  FIRE_VOLUME_TUNING, resolveFireVolumeTuning, type FireVolumeTuning,
+} from './fire-volume-tuning';
+import type { FireVolumeFrame } from './fire-volume.wgsl';
+import { installPassTiming, beginPassFrame } from './gpu-pass-timing';
 import { createCharacterEffects } from './character-effects';
 import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
 import { burnDistortStrength, burnDistortRadiusM, burnWobble } from './burn-distort';
@@ -83,6 +93,10 @@ const MOTION_SEED = 1337;
 /** Each body wanders a SMALL box around its own spawn, so the pair stays side
  *  by side instead of trading places (the crowd's per-spawn bounds idea). */
 const WANDER_R = 0.35;
+/** The run fixture's loop: the first body crosses the floor and turns. */
+const RUN_BOUNDS: WanderBounds = Object.freeze({
+  minX: -2.2, maxX: 2.2, minZ: -2.2, maxZ: 2.2,
+});
 
 // The skull's centre/semi-axes (headShape) and the per-limb card anchors
 // (limbAnchors) moved to flame-anchors.ts, so the in-game burning harness rides
@@ -108,6 +122,10 @@ interface FlameLabActor {
   limbs: FlameCardAnchors | null;
   /** Last frame's floor position, for the flame cards' lean velocity. */
   lastPos: Vec3;
+  /** Fire-volume capsules from this frame's posed body, and their midpoint
+   *  velocities against the previous frame (the lag trail's source). */
+  caps: FireCapsule[] | null;
+  vels: Vec3[];
   /** Spawn and motion seed, kept so freeze() can rebuild a pristine motion
    *  record — the deterministic pose two `--frozen` capture runs must share. */
   spawn: Vec3;
@@ -125,6 +143,10 @@ async function bootstrap(): Promise<void> {
 
   const handle = await createLabRenderer(mount);
   const { scene, camera } = handle;
+  // GPU pass timing (the corpse-cost discipline): timestamps per labelled pass,
+  // so a cost claim is a measured GPU duration rather than a vsync-capped wall
+  // frame time. No-op where the feature is absent.
+  const passTiming = installPassTiming(handle.renderer);
 
   // Ground plane and a reference cube, so the raymarched bodies have polygonal
   // geometry to composite against and depth interleaving is obvious by eye.
@@ -211,6 +233,10 @@ async function bootstrap(): Promise<void> {
   let technique: TongueTechnique =
     tongueParam !== null && isTongueTechnique(tongueParam) ? tongueParam : 'screen';
   let tongue: TongueTuning = resolveTongueTuning();
+  // The volumetric fire tuning (round 2, task 4). Declared HERE, before the
+  // panel: createFlamePanel reads every record at construction, so a later
+  // declaration is a temporal-dead-zone ReferenceError at boot.
+  let volume: FireVolumeTuning = resolveFireVolumeTuning();
   // A capture-time clock pin (flame-polish task 2): when set, the visual clock
   // stops at this many seconds so two runs can be compared at the SAME flipbook
   // and curl phase. null is the live wall clock. Burn integration still uses
@@ -394,6 +420,8 @@ async function bootstrap(): Promise<void> {
       faceTex,
       limbs: null,
       lastPos: spawn,
+      caps: null,
+      vels: [],
       spawn,
       seed,
     });
@@ -428,9 +456,11 @@ async function bootstrap(): Promise<void> {
     apply: (patch) => (tuning = resolveBurnTuning({ ...tuning, ...patch })),
     preset: (name) => (tuning = resolveBurnTuning(burnPresets[name])),
     technique: () => technique,
-    setTechnique: (name) => { technique = name; },
+    setTechnique: (name) => { technique = name; fireResetRequested = true; },
     readTongue: () => tongue,
     applyTongue: (patch) => (tongue = resolveTongueTuning({ ...tongue, ...patch })),
+    readVolume: () => volume,
+    applyVolume: (patch) => (volume = resolveFireVolumeTuning({ ...volume, ...patch })),
   });
   flamePanel.setVisible(true);
   flamePanel.setCollapsed(false);
@@ -529,6 +559,41 @@ async function bootstrap(): Promise<void> {
     burn: 0,
     settle: 0,
   }));
+
+  // ——— FIRE VOLUME feed (burning-feedback round 2, task 4d). The volume
+  // technique packs each burning body's capsules into ONE preallocated buffer
+  // and feeds post-aa's pass; the record and all scratch matrices live here so
+  // the render callback allocates nothing. (`volume` itself is declared up top,
+  // before the panel.)
+  const firePackBuf = new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
+  const fireBodies: FireVolumeBody[] = FLAME_LAB_BODIES.map(() => ({
+    capsules: [], velocities: [], burn: 0, centre: [0, 1, 0] as Vec3,
+  }));
+  const fireFrame: FireVolumeFrame = {
+    tuning: FIRE_VOLUME_TUNING,
+    time: 0,
+    frame: 0,
+    invViewProj: new THREE.Matrix4(),
+    prevViewProj: new THREE.Matrix4(),
+    near: camera.near,
+    far: camera.far,
+    capsuleCount: 0,
+    boundsMin: [0, 0, 0],
+    boundsMax: [0, 0, 0],
+  };
+  const _fireView = new THREE.Matrix4();
+  const _fireVp = new THREE.Matrix4();
+  const _fireInvVp = new THREE.Matrix4();
+  const _firePrevVp = new THREE.Matrix4();
+  let fireFrameIndex = 0;
+  let fireWasOn = false;
+  /** Set by a technique/fixture switch so the next fire frame drops history. */
+  let fireResetRequested = false;
+  /** COST PROBE: 0 = the real bodies; N > 0 replicates the burning capsules N
+   *  times so the march's per-capsule cost can be measured at 1/4/8 bodies
+   *  without spawning actors (the lab only has two). */
+  let fireLoad = 0;
+  const costBodies: FireVolumeBody[] = [];
   // ATLAS OR FALLBACK, said loudly: the FIRE01 strip is a DEV PLACEHOLDER
   // (public/assets/flame-placeholder/, gitignored — build it with
   // `npm run flame:atlas`). Without it the cards run the procedural shader
@@ -654,6 +719,14 @@ async function bootstrap(): Promise<void> {
   let speedBand: 'walk' | 'run' = 'walk';
   const cruiseFor = (profile: MotionProfile) => speedForBand(profile, speedBand);
   let forcedCollapse = false;
+  /** RUN FIXTURE: hide every non-burning actor's body AND its kit/prop (both
+   *  are added to the scene outside gpu.object, and they load async, so this is
+   *  re-applied every frame rather than toggled once). */
+  let runHideOthers = false;
+  /** RUN FIXTURE: zero the wander idle pause so the body is always moving
+   *  (the wander policy stands at each arrival, which killed the live-trail
+   *  shot). Cleared on stop. */
+  let runContinuous = false;
 
   /**
    * KILL (flame-polish task 5): collapse every body, and start a burn-down on
@@ -669,6 +742,73 @@ async function bootstrap(): Promise<void> {
       if (burns[i]!.burn > 0.03) killBurning(burns[i]!);
     }
   }
+
+  /**
+   * THE RUN FIXTURE (burning-feedback round 2, task 4d). `run` sends the first
+   * body (the zombie) across the floor at run speed with a turn, lights only
+   * it, and parks the camera side-on so the flame trail is judgeable; `stop`
+   * drops the wander target (the body decelerates, the lag straightens);
+   * `stand` restores the default idle pair and the orbit spin.
+   */
+  function setFixture(name: string): string {
+    const a0 = actors[0];
+    if (!a0) return name;
+    if (name === 'run') {
+      wanderOn = true;
+      speedBand = 'run';
+      a0.bounds = { ...RUN_BOUNDS };
+      autoSpin = false;
+      camYaw = 1.15;
+      camPitch = 0.1;
+      // A wide fixed side view: the body crosses the floor inside the frame, so
+      // the trail is judged relative to the frame rather than a tracking camera
+      // (a follower hides the trail by construction).
+      camDist = 6.0;
+      // One burning body: light the zombie, put the soldier out AND hide his
+      // geometry (object visibility, never a light toggle) so the frame has a
+      // single burner to judge. Kit/prop are hidden every frame — see
+      // runHideOthers.
+      runHideOthers = true;
+      runContinuous = true;
+      for (let i = 1; i < burns.length; i++) {
+        extinguishBurn(burns[i]!);
+        actors[i]!.gpu.object.visible = false;
+        actors[i]!.gpu.coneObject.visible = false;
+        if (actors[i]!.view.kit) actors[i]!.view.kit!.object.visible = false;
+        if (actors[i]!.view.prop) actors[i]!.view.prop!.object.visible = false;
+      }
+      igniteBurn(burns[0]!);
+      forcedCollapse = false;
+      fireResetRequested = true;
+      return 'run';
+    }
+    if (name === 'stop') {
+      wanderOn = false;
+      speedBand = 'walk';
+      runContinuous = false;
+      return 'stop';
+    }
+    if (name === 'stand') {
+      wanderOn = false;
+      speedBand = 'walk';
+      runHideOthers = false;
+      a0.bounds = {
+        minX: a0.spawn[0]! - WANDER_R, maxX: a0.spawn[0]! + WANDER_R,
+        minZ: a0.spawn[2]! - WANDER_R, maxZ: a0.spawn[2]! + WANDER_R,
+      };
+      for (let i = 1; i < actors.length; i++) {
+        actors[i]!.gpu.object.visible = true;
+        actors[i]!.gpu.coneObject.visible = true;
+      }
+      autoSpin = true;
+      return 'stand';
+    }
+    return name;
+  }
+
+  // ?fixture=run boots straight into the run fixture (the capture script's
+  // --fixture flag rides the same route).
+  if (q.get('fixture') === 'run') setFixture('run');
 
   window.addEventListener('keydown', (ev) => {
     if (ev.code === 'KeyH' && !ev.repeat) {
@@ -696,6 +836,7 @@ async function bootstrap(): Promise<void> {
     if (ev.key === 't' || ev.key === 'T') {
       const at = TONGUE_TECHNIQUES.indexOf(technique);
       technique = TONGUE_TECHNIQUES[(at + 1) % TONGUE_TECHNIQUES.length]!;
+      fireResetRequested = true;
       flamePanel.el.dispatchEvent(new Event('flame:technique'));
       return;
     }
@@ -736,6 +877,18 @@ async function bootstrap(): Promise<void> {
   let lastStamp = performance.now();
 
   handle.setRenderCallback((dt) => {
+    beginPassFrame();
+    // The run fixture's one-burner frame: re-hide the others' kit/prop as they
+    // resolve (they attach to the scene, not to gpu.object).
+    if (runHideOthers) {
+      for (let i = 1; i < actors.length; i++) {
+        const a = actors[i]!;
+        a.gpu.object.visible = false;
+        a.gpu.coneObject.visible = false;
+        if (a.view.kit) a.view.kit.object.visible = false;
+        if (a.view.prop) a.view.prop.object.visible = false;
+      }
+    }
     const now = performance.now();
     frames.push(now - lastStamp);
     lastStamp = now;
@@ -766,6 +919,9 @@ async function bootstrap(): Promise<void> {
     const motionDt = frozen ? 0 : dt;
     for (const a of actors) {
       if (!a.motion.motionJoints) continue;
+      // The run fixture keeps moving: the wander policy pauses at each arrival,
+      // and a paused frame has no velocity to trail.
+      if (runContinuous && a.motion.motionState) a.motion.motionState.wander.idle = 0;
       const f = stepActorMotion(a.motion, {
         current: a.current,
         dt: motionDt,
@@ -789,6 +945,12 @@ async function bootstrap(): Promise<void> {
       const skull = headShape(posed);
       if (skull) a.gpu.setHeadShape(skull.centre, skull.axes);
       a.limbs = limbAnchors(posed);
+      // The fire volume's sources ride the SAME posed field the cards do.
+      // motionDt is 0 in a frozen capture, so the velocities go to zero and the
+      // lag straightens — the deterministic still the cards already rely on.
+      const caps = fireCapsules(posed);
+      a.vels = capsuleVelocities(a.caps, caps, motionDt);
+      a.caps = caps;
       a.gpu.setHeadRotation(
         headQuatOf(a.motion.bound, a.motion.lastBodyYaw) ?? [0, 0, 0, 1]);
     }
@@ -880,17 +1042,40 @@ async function bootstrap(): Promise<void> {
           (bodyPos[0] - a.lastPos[0]) * inv, 0, (bodyPos[2] - a.lastPos[2]) * inv,
         ];
         a.lastPos = bodyPos;
+        // Fire-volume body record: the posed capsules, their velocities, the
+        // burn level, and the torso centre the packer ranks by distance.
+        const fb = fireBodies[i]!;
+        fb.capsules = a.caps ?? [];
+        fb.velocities = a.vels;
+        fb.burn = s.burn;
+        fb.centre = a.limbs?.torso ?? [bodyPos[0], 1, bodyPos[2]];
       }
 
       // The cards draw only on their technique; setTuning every frame so the
       // tongue sliders land live, exactly like the burn uniforms above. The
       // soft-particle fade and the curl flow both ride BurnTuning (panel
       // sliders -> these calls).
-      flameCards.object.visible = technique === 'cards';
-      flameCards.setTuning(tongue);
-      flameCards.setSoftFade(tuning.cardSoftFade);
+      // The cards draw on their own technique and as ACCENTS on the volume
+      // technique: fewer per body (FIRE_VOLUME_TUNING.cardsPerBody), larger and
+      // softer, riding the same lag. Every other technique keeps today's count
+      // and tuning exactly.
+      const volumeMode = technique === 'volume';
+      flameCards.object.visible = technique === 'cards' || volumeMode;
       flameCards.setFlow(tuning.flameFlow);
-      if (technique === 'cards') flameCards.update(cardFrames, camera, clock);
+      if (volumeMode) {
+        flameCards.setMaxCardsPerBody(Math.round(volume.cardsPerBody));
+        flameCards.setTuning({
+          ...tongue,
+          length: tongue.length * 1.35,
+          gain: tongue.gain * 0.85,
+        });
+        flameCards.setSoftFade(tuning.cardSoftFade * 1.8);
+      } else {
+        flameCards.setMaxCardsPerBody(FLAME_CARD_SLOTS.length);
+        flameCards.setTuning(tongue);
+        flameCards.setSoftFade(tuning.cardSoftFade);
+      }
+      if (flameCards.object.visible) flameCards.update(cardFrames, camera, clock);
     }
 
     // Orbit camera. Either button drags; the slow spin keeps the pair framed
@@ -962,6 +1147,68 @@ async function bootstrap(): Promise<void> {
         lastTongueFeed = null;
         postAa.setTongues(false);
       }
+    }
+
+    // — VOLUMETRIC FIRE (burning-feedback round 2, task 4d). Fed from the live
+    //   volume tuning and THIS frame's camera, only on the volume technique and
+    //   only while something burns; off is an exact no-bind. The capsule buffer
+    //   is packed here (the camera ranks bodies nearest-first) and handed to
+    //   post-aa, which owns the storage upload.
+    {
+      const volumeMode = technique === 'volume';
+      if (volumeMode) {
+        camera.updateMatrixWorld();
+        _fireView.copy(camera.matrixWorld).invert();
+        _fireVp.multiplyMatrices(camera.projectionMatrix, _fireView);
+        _fireInvVp.copy(_fireVp).invert();
+        // The cost probe replicates the first body's capsules N times, nudged
+        // apart only so the packer's ranking is stable; the march cost is the
+        // capsule loop, which is exactly what this varies.
+        let sources: readonly FireVolumeBody[] = fireBodies;
+        if (fireLoad > 0) {
+          costBodies.length = 0;
+          for (let i = 0; i < fireLoad; i++) {
+            const src = fireBodies[i % fireBodies.length]!;
+            costBodies.push({
+              capsules: src.capsules,
+              velocities: src.velocities,
+              burn: src.burn,
+              centre: [src.centre[0] + i * 0.01, src.centre[1], src.centre[2]],
+            });
+          }
+          sources = costBodies;
+        }
+        const packed = packFireVolume(
+          sources, [camera.position.x, camera.position.y, camera.position.z],
+          firePackBuf, volume,
+        );
+        if (packed.capsuleCount > 0) {
+          postAa.setFireVolumeData(packed.data);
+          fireFrame.tuning = volume;
+          fireFrame.time = now * 0.001;
+          fireFrame.frame = fireFrameIndex++;
+          fireFrame.invViewProj.copy(_fireInvVp);
+          // First frame after enabling: seed the history with the CURRENT view,
+          // so the reprojection is an identity rather than a garbage matrix.
+          fireFrame.prevViewProj.copy(fireWasOn ? _firePrevVp : _fireVp);
+          fireFrame.near = camera.near;
+          fireFrame.far = camera.far;
+          fireFrame.capsuleCount = packed.capsuleCount;
+          fireFrame.boundsMin = packed.boundsMin;
+          fireFrame.boundsMax = packed.boundsMax;
+          fireFrame.resetHistory = !fireWasOn || fireResetRequested;
+          postAa.setFireVolume(true, fireFrame);
+          _firePrevVp.copy(_fireVp);
+          fireWasOn = true;
+        } else {
+          postAa.setFireVolume(false);
+          fireWasOn = false;
+        }
+      } else if (fireWasOn) {
+        postAa.setFireVolume(false);
+        fireWasOn = false;
+      }
+      fireResetRequested = false;
     }
   });
 
@@ -1060,11 +1307,56 @@ async function bootstrap(): Promise<void> {
      *  and the CURRENT technique comes back, so a capture script can call it
      *  blind and read what it actually got. Re-marks the panel row. */
     setTechnique(name: string) {
-      if (isTongueTechnique(name)) technique = name;
+      if (isTongueTechnique(name)) { technique = name; fireResetRequested = true; }
       flamePanel.el.dispatchEvent(new Event('flame:technique'));
       return technique;
     },
     technique() { return technique; },
+    /** The VOLUME tuning record (burning-feedback round 2, task 4d): partial
+     *  patch in, the clamped record back, so a capture can sweep live. */
+    setVolume(p: Partial<FireVolumeTuning> = {}) {
+      volume = resolveFireVolumeTuning({ ...volume, ...p });
+      fireResetRequested = true;
+      return { ...volume };
+    },
+    volume() { return { ...volume }; },
+    /** COST PROBE (task 4d step 12): replicate the burning capsules N times so
+     *  the march's per-capsule cost is measurable at 1/4/8 bodies in a lab with
+     *  two. 0 restores the real bodies. */
+    setFireLoad(n = 0) {
+      fireLoad = Math.max(0, Math.min(8, Math.round(n)));
+      fireResetRequested = true;
+      return fireLoad;
+    },
+    /** GPU pass timings (the corpse-cost discipline): per-labelled-pass ms. */
+    async passTimings() {
+      return { installed: passTiming.installed, samples: await passTiming.collect() };
+    },
+    /** Wall frame time (rAF delta, ms) over the rolling window, as the
+     *  timestamp fallback the cost probe cross-checks against. */
+    frameMs() {
+      const s = [...frames].sort((a, b) => a - b);
+      return { n: s.length, median: s.length > 0 ? s[Math.floor(s.length / 2)] : 0 };
+    },
+    /** The run fixture's switches (see setFixture). 'run' | 'stop' | 'stand'. */
+    fixture(name = 'run') { return setFixture(name); },
+    /** The live state a capture reads back: the technique, the three tuning
+     *  records, and the burn levels. */
+    state() {
+      return {
+        technique,
+        tongue: { ...tongue },
+        volume: { ...volume },
+        tuning: { ...tuning },
+        burns: burns.map(b => ({ ...b })),
+        actors: actors.map(a => ({
+          name: a.name,
+          visible: a.gpu.object.visible,
+          pos: [...a.lastPos],
+          caps: a.caps ? a.caps.length : 0,
+        })),
+      };
+    },
     /** Flame-cards telemetry (plan task 3): quads written last frame and the
      *  atlas mode — the two facts a capture that looks wrong needs first. */
     cards() {
@@ -1128,9 +1420,11 @@ async function bootstrap(): Promise<void> {
     },
     /** Full burn immediately, for deterministic captures. Cancels a burn-down,
      *  so a stage pin is always a live burning body again. */
-    capture(burn = 1, char = 0) {
+    capture(burn = 1, char = 0, only = -1) {
       burnPaused = false;
-      for (const s of burns) forceBurn(s, burn, char);
+      for (let i = 0; i < burns.length; i++) {
+        if (only < 0 || i === only) forceBurn(burns[i]!, burn, char);
+      }
     },
     /** KILL every body (flame-polish task 5): collapse, and start the burn-down
      *  on any body that is alight. Same path the 'k' key takes. */
