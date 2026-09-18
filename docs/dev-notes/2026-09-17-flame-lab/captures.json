@@ -6,6 +6,7 @@
     "height": 820
   },
   "poses": [
+    "close",
     "stand",
     "walk",
     "run",
@@ -22,76 +23,104 @@
       "char": 0.6
     }
   ],
+  "contact": {
+    "file": "contact.png",
+    "frames": [
+      "close-fresh.png",
+      "stand-fresh.png",
+      "stand-charred.png"
+    ],
+    "tiles": [
+      "3321.png",
+      "3323.png",
+      "3325.png"
+    ],
+    "bodyPx": 400
+  },
   "shots": [
+    {
+      "pose": "close",
+      "stage": "fresh",
+      "char": 0,
+      "file": "close-fresh.png",
+      "std": 64.76
+    },
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "close-charred.png",
+      "std": 54.99
+    },
     {
       "pose": "stand",
       "stage": "fresh",
       "char": 0,
       "file": "stand-fresh.png",
-      "std": 34.37
+      "std": 34.16
     },
     {
       "pose": "stand",
       "stage": "charred",
       "char": 0.6,
       "file": "stand-charred.png",
-      "std": 29.2
+      "std": 28.89
     },
     {
       "pose": "walk",
       "stage": "fresh",
       "char": 0,
       "file": "walk-fresh.png",
-      "std": 34.24
+      "std": 34.34
     },
     {
       "pose": "walk",
       "stage": "charred",
       "char": 0.6,
       "file": "walk-charred.png",
-      "std": 28.98
+      "std": 29.15
     },
     {
       "pose": "run",
       "stage": "fresh",
       "char": 0,
       "file": "run-fresh.png",
-      "std": 34.33
+      "std": 34.56
     },
     {
       "pose": "run",
       "stage": "charred",
       "char": 0.6,
       "file": "run-charred.png",
-      "std": 29.09
+      "std": 29.23
     },
     {
       "pose": "collapsed",
       "stage": "fresh",
       "char": 0,
       "file": "collapsed-fresh.png",
-      "std": 32.26
+      "std": 32.28
     },
     {
       "pose": "collapsed",
       "stage": "charred",
       "char": 0.6,
       "file": "collapsed-charred.png",
-      "std": 27.57
+      "std": 27.59
     },
     {
       "pose": "distant",
       "stage": "fresh",
       "char": 0,
       "file": "distant-fresh.png",
-      "std": 21.26
+      "std": 21.55
     },
     {
       "pose": "distant",
       "stage": "charred",
       "char": 0.6,
       "file": "distant-charred.png",
-      "std": 19.26
+      "std": 19.5
     }
   ]
 }

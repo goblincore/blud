@@ -3,11 +3,15 @@
 // plan's surface look becomes the baseline the three tongue plans compare
 // against (docs/superpowers/plans/2026-09-17-flame-lab-foundation.md, task 14).
 //
-//   5 poses x 2 stages = 10 PNGs -> docs/dev-notes/2026-09-17-flame-lab/
+//   6 poses x 2 stages = 12 PNGs + contact.png -> docs/dev-notes/2026-09-17-flame-lab/
+//   close-fresh.png   burn=1 char=0   (single body fills most of the frame)
 //   stand-fresh.png   burn=1 char=0   (engulfed, unburnt skin)
 //   stand-charred.png burn=1 char=0.6 (engulfed, mostly charred)
-//
-// POSES are driven through the PAGE'S OWN INPUT, not a console backdoor:
+//   contact.png       close-fresh + stand-fresh + stand-charred in a row,
+//                     then the three Blood reference tiles (3321/3323/3325)
+//                     scaled to the stand frames' body height, so the judge
+//                     is one image rather than a folder.
+//// POSES are driven through the PAGE'S OWN INPUT, not a console backdoor:
 // CDP key events for ',' (walk) / '.' (run) / 'k' (collapse), real mouse
 // press to stop the orbit spin, real wheel events for the distant framing.
 // The page's keydown handlers are the contract a player uses; if they move,
@@ -38,9 +42,9 @@
 //   LAB_VITE_PORT=5244 LAB_CDP_PORT=9244 node scripts/flame-capture.mjs
 // Exits 0 on success, 2 if it could not run (boot failure, page exception,
 // no WebGPU backend, a flat capture).
-import { mkdirSync, writeFileSync, openSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
-import { inflateSync } from 'node:zlib';
+import { inflateSync, deflateSync } from 'node:zlib';
 
 const OUT = process.argv[2] ?? 'docs/dev-notes/2026-09-17-flame-lab';
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5233);
@@ -57,12 +61,13 @@ const SETTLE_BOOT = 90;     // first-use pipeline compiles after boot
 // wander boxes are ±0.35 m, so at 60+ frames (1 s) a walker has already
 // arrived at its target and the gait reads idle. Collapse needs the full
 // fall (the 60-frame first pass caught it complete; 90 is margin).
-const SETTLE_POSE = { stand: 30, walk: 30, run: 30, collapsed: 90, distant: 15 };
+const SETTLE_POSE = { close: 30, stand: 30, walk: 30, run: 30, collapsed: 90, distant: 15 };
 const SETTLE_STAGE = 10;    // post-aa smear history flushed to <2e-6
 const ZOOM_TICKS = 25;      // wheel ticks out: 3.2 + 25*0.2 -> clamped at 8
+const CLOSE_TICKS = 9;      // wheel ticks in: 3.2 - 9*0.2 -> 1.4, one body cups the frame
 const MIN_LUMA_STD = 5;     // a flatter frame is a broken frame (melt's gate)
 
-const POSES = ['stand', 'walk', 'run', 'collapsed', 'distant'];
+const POSES = ['close', 'stand', 'walk', 'run', 'collapsed', 'distant'];
 // name -> the char value `__flameLab.capture(1, char)` pins. burn is 1 in
 // every stage — the stages differ in how charred the body is UNDER the fire.
 const STAGES = [
@@ -262,8 +267,24 @@ const keyTap = async (key, code, vk, text) => {
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk });
 };
 const mouseClick = async (x, y) => {
-  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
-  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1, pointerType: 'mouse' });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1, pointerType: 'mouse' });
+};
+// A real drag along the canvas: the orbit camera reads pointermove while a
+// button is held (camYaw -= dx * 0.008). Every event carries pointerType
+// 'mouse' — without it a press that follows another click at the same point
+// lands in Chrome's double-click window and the drag never reaches the page
+// (probed 2026-09-17 — the probe diff across a fixed drag was 16.6 luma with
+// pointerType, and the framing did not move without it). Origin is OFFSET
+// from the spin-stop click for the same reason.
+const dragBy = async (x, y, dx, dy) => {
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, pointerType: 'mouse' });
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1, pointerType: 'mouse' });
+  const steps = 8;
+  for (let i = 1; i <= steps; i++) {
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(x + (dx * i) / steps), y: Math.round(y + (dy * i) / steps), buttons: 1, pointerType: 'mouse' });
+  }
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x + dx, y: y + dy, button: 'left', buttons: 0, clickCount: 1, pointerType: 'mouse' });
 };
 const wheelAt = async (x, y, deltaY) => {
   await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY });
@@ -274,54 +295,174 @@ const frames = async (n) => {
 
 // A flat capture (stale viewport, GPU device lost) LOOKS like a normal file
 // on disk — decode and refuse (melt's pngStats, luma over a sparse grid).
-function pngStats(png) {
+// The decoder covers what this script reads: 8-bit RGB(A) screenshots and the
+// 8-bit palette Blood reference tiles (PLTE + tRNS), non-interlaced.
+function decodePng(png) {
   let off = 8, w = 0, h = 0, bitDepth = 0, colorType = 0;
   const idat = [];
+  let plte = null, trns = null;
   while (off < png.length) {
     const len = png.readUInt32BE(off); const type = png.toString('ascii', off + 4, off + 8);
     const data = png.subarray(off + 8, off + 8 + len);
     if (type === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4); bitDepth = data[8]; colorType = data[9]; }
+    if (type === 'PLTE') plte = Buffer.from(data);
+    if (type === 'tRNS') trns = Buffer.from(data);
     if (type === 'IEND') break;
     if (type === 'IDAT') idat.push(data);
     off += 12 + len;
   }
-  if (bitDepth !== 8 || (colorType !== 6 && colorType !== 2)) return { unsupported: true };
-  const chans = colorType === 6 ? 4 : 3;
+  if (bitDepth !== 8 || ![2, 3, 6].includes(colorType)) return { unsupported: true };
   const raw = inflateSync(Buffer.concat(idat));
-  const stride = w * chans;
-  const out = Buffer.alloc(h * stride);
-  let prev = Buffer.alloc(stride);
-  for (let y = 0; y < h; y++) {
-    const f = raw[y * (stride + 1)];
-    const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
-    const cur = out.subarray(y * stride, (y + 1) * stride);
-    for (let i = 0; i < stride; i++) {
-      const a = i >= chans ? cur[i - chans] : 0;
-      const b = prev[i];
-      const c = i >= chans ? prev[i - chans] : 0;
-      let v = line[i];
-      if (f === 1) v = (v + a) & 0xff;
-      else if (f === 2) v = (v + b) & 0xff;
-      else if (f === 3) v = (v + ((a + b) >> 1)) & 0xff;
-      else if (f === 4) {
-        const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
-        v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 0xff;
+  const bpp = colorType === 3 ? 1 : colorType === 6 ? 4 : 3;
+  const unfilter = (stride) => {
+    const out = Buffer.alloc(h * stride);
+    let prev = Buffer.alloc(stride);
+    for (let y = 0; y < h; y++) {
+      const f = raw[y * (stride + 1)];
+      const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+      const cur = out.subarray(y * stride, (y + 1) * stride);
+      for (let i = 0; i < stride; i++) {
+        const a = i >= bpp ? cur[i - bpp] : 0;
+        const b = prev[i];
+        const c = i >= bpp ? prev[i - bpp] : 0;
+        let v = line[i];
+        if (f === 1) v = (v + a) & 0xff;
+        else if (f === 2) v = (v + b) & 0xff;
+        else if (f === 3) v = (v + ((a + b) >> 1)) & 0xff;
+        else if (f === 4) {
+          const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          v = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 0xff;
+        }
+        cur[i] = v;
       }
-      cur[i] = v;
+      prev = cur;
     }
-    prev = cur;
+    return out;
+  };
+  if (colorType === 3) {
+    const idx = unfilter(w);
+    const rgba = Buffer.alloc(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
+      const p = idx[i];
+      rgba[i * 4] = plte[p * 3]; rgba[i * 4 + 1] = plte[p * 3 + 1]; rgba[i * 4 + 2] = plte[p * 3 + 2];
+      rgba[i * 4 + 3] = trns && p < trns.length ? trns[p] : 255;
+    }
+    return { w, h, rgba };
   }
+  const chans = colorType === 6 ? 4 : 3;
+  const out = unfilter(w * chans);
+  const rgba = Buffer.alloc(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    rgba[i * 4] = out[i * chans]; rgba[i * 4 + 1] = out[i * chans + 1]; rgba[i * 4 + 2] = out[i * chans + 2];
+    rgba[i * 4 + 3] = chans === 4 ? out[i * chans + 3] : 255;
+  }
+  return { w, h, rgba };
+}
+
+function pngStats(png) {
+  const d = decodePng(png);
+  if (d.unsupported) return d;
+  const { w, h, rgba } = d;
   let n = 0, s = 0, s2 = 0;
   const stepX = Math.max(1, Math.floor(w / 256)), stepY = Math.max(1, Math.floor(h / 256));
   for (let y = 0; y < h; y += stepY) {
     for (let x = 0; x < w; x += stepX) {
-      const i = y * stride + x * chans;
-      const l = 0.299 * out[i] + 0.587 * out[i + 1] + 0.114 * out[i + 2];
+      const i = (y * w + x) * 4;
+      const l = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
       n++; s += l; s2 += l * l;
     }
   }
   const mean = s / n;
   return { w, h, mean: +mean.toFixed(2), std: +Math.sqrt(s2 / n - mean * mean).toFixed(2) };
+}
+
+// --- contact sheet ----------------------------------------------------------
+
+const CRC_TABLE = new Int32Array(256).map((_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c;
+});
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+  const t = Buffer.from(type, 'ascii');
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([t, data])));
+  return Buffer.concat([len, t, data, crc]);
+}
+function encodePng(rgba, w, h) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 6; // 8-bit RGBA
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) rgba.copy(raw, y * (w * 4 + 1) + 1, y * w * 4, (y + 1) * w * 4);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr), pngChunk('IDAT', deflateSync(raw, { level: 6 })), pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/** Nearest-neighbour scale — the tiles are UPscaled ~2.7x, where NN's crunch
+ *  is the honest look (the page's own #reference strip draws them pixelated
+ *  too, image-rendering: pixelated). */
+function scaleNearest(src, sw, sh, dw, dh) {
+  const dst = Buffer.alloc(dw * dh * 4);
+  for (let y = 0; y < dh; y++) {
+    const sy = Math.min(sh - 1, (y * sh / dh) | 0);
+    for (let x = 0; x < dw; x++) {
+      const sx = Math.min(sw - 1, (x * sw / dw) | 0);
+      const s = (sy * sw + sx) * 4, d = (y * dw + x) * 4;
+      dst[d] = src[s]; dst[d + 1] = src[s + 1]; dst[d + 2] = src[s + 2]; dst[d + 3] = src[s + 3];
+    }
+  }
+  return dst;
+}
+
+// The tiles go in at the STAND frames' body height: the soldier spans head to
+// heel roughly 265..660 px in the 1380x820 stand frames (measured on the fix
+// pass captures), so ~400 px is "same body height" for the row's two stand
+// bodies. The close frame's body is much larger; one sheet cannot match both.
+const CONTACT_BODY_PX = 400;
+const CONTACT_GAP = 12;
+const CONTACT_BG = [16, 12, 14, 255];
+
+function composeContact(frames, tiles, outPath) {
+  const fdec = frames.map((f) => {
+    const d = decodePng(f.buf);
+    if (d.unsupported) fail(`${f.name}: not a decodable 8-bit RGB(A) PNG for the contact sheet`);
+    return d;
+  });
+  const H = fdec[0].h;
+  const tileDec = tiles.map((t) => {
+    const d = decodePng(t.buf);
+    if (d.unsupported) fail(`${t.file}: not a decodable 8-bit palette PNG`);
+    const dw = Math.max(1, Math.round(d.w * CONTACT_BODY_PX / d.h));
+    return { name: t.file, w: dw, h: CONTACT_BODY_PX, rgba: scaleNearest(d.rgba, d.w, d.h, dw, CONTACT_BODY_PX) };
+  });
+  const W = fdec.reduce((a, f) => a + f.w, 0) + tileDec.reduce((a, t) => a + t.w, 0) + CONTACT_GAP * (fdec.length + tileDec.length - 1);
+  const canvas = Buffer.alloc(W * H * 4);
+  for (let i = 0; i < W * H; i++) { canvas[i * 4] = CONTACT_BG[0]; canvas[i * 4 + 1] = CONTACT_BG[1]; canvas[i * 4 + 2] = CONTACT_BG[2]; canvas[i * 4 + 3] = 255; }
+  const blit = (src, sw, sh, dx, dypix) => {
+    for (let y = 0; y < sh; y++) {
+      if (dypix + y < 0 || dypix + y >= H) continue;
+      for (let x = 0; x < sw; x++) {
+        const s = (y * sw + x) * 4, d = ((dypix + y) * W + dx + x) * 4;
+        const a = src[s + 3] / 255;
+        canvas[d] = src[s] * a + canvas[d] * (1 - a);
+        canvas[d + 1] = src[s + 1] * a + canvas[d + 1] * (1 - a);
+        canvas[d + 2] = src[s + 2] * a + canvas[d + 2] * (1 - a);
+      }
+    }
+  };
+  let x = 0;
+  for (const f of fdec) { blit(f.rgba, f.w, f.h, x, 0); x += f.w + CONTACT_GAP; }
+  for (const t of tileDec) { blit(t.rgba, t.w, t.h, x, (H - t.h) >> 1); x += t.w + CONTACT_GAP; }
+  writeFileSync(outPath, encodePng(canvas, W, H));
+  return { w: W, h: H, entries: [...fdec.map((f) => `${f.w}x${f.h}`), ...tileDec.map((t) => `${t.w}x${t.h}`)] };
 }
 
 // --- The sweep ---------------------------------------------------------------
@@ -384,7 +525,16 @@ for (const pose of POSES) {
     process.exit(2);
   }
 
-  // Drive the pose through the page's own keys.
+  // Drive the pose through the page's own keys. The drag origin is 60 px
+  // left of centre — the spin-stop click already fired there, and a press at
+  // the same point inside Chrome's double-click window swallows the drag.
+  // Drag right ~88 px runs yaw 0.35 down to ~-0.35, putting the ZOMBIE (the
+  // burning SDF body) nearest the camera; then wheel in 9 ticks:
+  // 3.2 - 9*0.2 -> 1.4, so one body cups most of the frame.
+  if (pose === 'close') {
+    await dragBy(Math.floor(W / 2) - 60, Math.floor(H / 2), 88, 0);
+    for (let i = 0; i < CLOSE_TICKS; i++) await wheelAt(Math.floor(W / 2), Math.floor(H / 2), -120);
+  }
   if (pose === 'walk') await keyTap(',', 'Comma', 188, ',');
   if (pose === 'run') await keyTap('.', 'Period', 190, '.');
   if (pose === 'collapsed') await keyTap('k', 'KeyK', 75, 'k');
@@ -408,10 +558,27 @@ for (const pose of POSES) {
     const stats = pngStats(buf);
     if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
     if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
-    shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std });
+    shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, buf });
     console.log(`${name}  (char=${stage.char}, luma std=${stats.std})`);
   }
 }
+
+// --- Contact sheet (fix pass task 4): the judge is one image -----------------
+// close-fresh, stand-fresh and stand-charred in a row, then the three Blood
+// reference tiles at body height. Shot buffers come straight from THIS run,
+// so the sheet can never describe a stale folder.
+const byName = (n) => {
+  const s = shots.find((x) => x.file === n);
+  if (!s) fail(`contact sheet: ${n} was not captured this run`);
+  return { name: n, buf: s.buf };
+};
+const CONTACT_FRAMES = ['close-fresh.png', 'stand-fresh.png', 'stand-charred.png'].map(byName);
+const CONTACT_TILES = ['3321.png', '3323.png', '3325.png'].map((f) => {
+  const p = `public/assets/blood-tiles/${f}`;
+  return { file: f, buf: readFileSync(p) }; // tracked reference tiles — dev-safe to read
+});
+const contact = composeContact(CONTACT_FRAMES, CONTACT_TILES, `${OUT}/contact.png`);
+console.log(`contact.png  (${contact.w}x${contact.h}: ${contact.entries.join(' | ')})`);
 
 // The shutter's own error callback must have stayed silent (task 13's check,
 // enforced for every capture run — a blurred capture is not what shipped).
@@ -425,9 +592,13 @@ if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
 
 writeFileSync(`${OUT}/captures.json`, JSON.stringify({
   url: PAGE_PATH, backend, viewport: { width: W, height: H },
-  poses: POSES, stages: STAGES, shots,
+  poses: POSES, stages: STAGES, contact: {
+    file: 'contact.png', frames: CONTACT_FRAMES.map((f) => f.name),
+    tiles: CONTACT_TILES.map((t) => t.file), bodyPx: CONTACT_BODY_PX,
+  },
+  shots: shots.map(({ buf, ...rest }) => rest),
 }, null, 2));
 
 await stopStarted();
-console.log(`\n${shots.length} captures + captures.json in ${OUT}`);
+console.log(`\n${shots.length} captures + contact.png + captures.json in ${OUT}`);
 process.exit(0);
