@@ -48,6 +48,7 @@ import { fnv1aBytes } from './lib/demo-digest.mjs';
 // decodePng + hashPresented live in scripts/lib/ so they can be unit-tested
 // without executing this script's main body (which opens Chrome).
 import { hashPresented } from './lib/demo-presented.mjs';
+import { SUBLSB_TOLERANT, layerStatsAgree } from './lib/layer-tolerance.mjs';
 import { connectGame, applyShipDefaults, bootCloseupPage, sleep, StageFail } from './lib/sdf-closeup-stage.mjs';
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? process.argv[2] ?? 5277);
@@ -216,6 +217,20 @@ async function runOnce(conn, spec, label) {
   if (!march || march.stats.nonZero === 0) {
     fail(`${label}: the march target hashed to nothing (nonZero ${march?.stats.nonZero}) — refusing to trust this recording`);
   }
+  // THE DYNAMIC LAYER MUST BE LIVE TOO. This check did not exist, and its
+  // absence let a "fix" for the frame-0 divergence (2026-09-18) make two runs
+  // agree by zeroing the dynamic probe layer outright — probeDyn nonZero went
+  // 6316 -> 0 and the A/B reported OK. An all-zero dynamic layer is exactly the
+  // black-silhouette regression this tool was built for (see frame-hash.ts), so
+  // a run that reads zero must FAIL rather than quietly compare two nothings.
+  const dyn = record.hashes[0].layers.probeDyn;
+  if (!dyn || dyn.stats.nonZero === 0) {
+    fail(
+      `${label}: the dynamic probe layer hashed to ZERO (nonZero ${dyn?.stats.nonZero}).\n` +
+      '  That is the black-silhouette regression, not a passing run. Two runs that agree on an\n' +
+      '  empty layer agree on nothing. Refusing to trust this recording.',
+    );
+  }
   // PARITY: the recording is only comparable if every sample sits on the same
   // field parity. The shipped 'bodies' style marches alternate scanlines, so a
   // mixed-parity recording reports a divergence between two CORRECT frames.
@@ -321,7 +336,11 @@ function presentedDiff(a, b) {
   return { hashA: pa.hash, hashB: pb.hash, nonZeroA: pa.nonZeroBytes, nonZeroB: pb.nonZeroBytes };
 }
 
-function firstDivergence(a, b) {
+// Sub-LSB tolerance for `probeDyn`, and the reasoning behind it, live in
+// scripts/lib/layer-tolerance.mjs so the predicate can be unit-tested — this
+// module runs the whole gate at its top level and cannot be imported.
+
+function firstDivergence(a, b, tolerated = null) {
   const n = Math.min(a.record.hashes.length, b.record.hashes.length);
   for (let i = 0; i < n; i++) {
     const fa = a.record.hashes[i], fb = b.record.hashes[i];
@@ -329,7 +348,12 @@ function firstDivergence(a, b) {
     for (const key of Object.keys(fa.layers)) {
       const la = fa.layers[key], lb = fb.layers[key];
       if (!lb) { changed.push(key); continue; }
-      if (la.hash !== lb.hash || la.floats !== lb.floats) changed.push(key);
+      if (la.hash === lb.hash && la.floats === lb.floats) continue;
+      if (tolerated && SUBLSB_TOLERANT.has(key) && layerStatsAgree(la, lb)) {
+        tolerated.push({ frame: fa.frame, layer: key, hashA: la.hash, hashB: lb.hash, stats: la.stats });
+        continue;
+      }
+      changed.push(key);
     }
     if (changed.length) {
       const detail = changed.map((key) => {
@@ -383,7 +407,12 @@ try {
       // a divergence that means nothing.
       fail(`fingerprint mismatch — the stored recording is not comparable.\n  stored ${JSON.stringify(stored.fingerprint)}\n  fresh  ${JSON.stringify(fresh.fingerprint)}`);
     }
-    const d = firstDivergence(stored, fresh);
+    const vTolerated = [];
+    const d = firstDivergence(stored, fresh, vTolerated);
+    if (vTolerated.length) {
+      const layers = [...new Set(vTolerated.map((t) => t.layer))];
+      console.log(`  sub-LSB TOLERATED: ${layers.join(', ')} on ${vTolerated.length} sample(s) — stats agreed, hash did not.`);
+    }
     const pd = presentedDiff(stored, fresh);
     writeFileSync(`${OUT}/verify.json`, JSON.stringify({ path, divergence: d, presented: pd, fresh }, null, 2));
     if (pd) {
@@ -416,6 +445,8 @@ try {
     const shifted = { ...spec, warmup: spec.warmup + 7 };
     const clean = await runOnce(conn, spec, 'control-a');
     const broken = await runOnce(conn, shifted, 'control-b (warmup +7)');
+    // STRICT ON PURPOSE (no tolerance sink): this control exists to prove the
+    // gate can fail, so it must not be able to tolerate anything away.
     const d = firstDivergence(clean, broken);
     writeFileSync(`${OUT}/negative.json`, JSON.stringify({ clean, broken, divergence: d }, null, 2));
     if (!d) {
@@ -431,15 +462,30 @@ try {
   // MODE 'ab' — the primary check. Two identical runs, fresh page each.
   const a = await runOnce(conn, spec, 'run A');
   const b = await runOnce(conn, spec, 'run B');
-  const d = firstDivergence(a, b);
-  writeFileSync(`${OUT}/ab.json`, JSON.stringify({ a, b, divergence: d }, null, 2));
+  const tolerated = [];
+  const d = firstDivergence(a, b, tolerated);
+  writeFileSync(`${OUT}/ab.json`, JSON.stringify({ a, b, divergence: d, tolerated }, null, 2));
+
+  // REPORT EVERY EXERCISED TOLERANCE. Silent tolerance is how a gate rots into a
+  // green light nobody reads, and this one covers the layer whose zeroing
+  // shipped the black-silhouette bug. If this list grows, or starts naming a
+  // layer other than probeDyn, that is a finding — not noise to scroll past.
+  if (tolerated.length) {
+    const frames = [...new Set(tolerated.map((t) => t.frame))];
+    const layers = [...new Set(tolerated.map((t) => t.layer))];
+    console.log(`  sub-LSB TOLERATED: ${layers.join(', ')} on ${tolerated.length} sample(s), frames ${frames.slice(0, 8).join(',')}${frames.length > 8 ? '…' : ''}`);
+    console.log('    Hash differed; every statistic agreed (live, finite, same nonZero/sampled/zeroFraction,');
+    console.log('    min+max within 1e-5 relative). Suspected GPU accumulation order in the gather.');
+  }
+
   if (d) {
     console.error(`FAIL: TWO IDENTICAL RUNS DIVERGED at frame ${d.frame} — ${d.detail.join('; ')}`);
     console.error('  A replay is not yet reproducible. Fix that BEFORE trusting any A/B measured here.');
     console.error(`  Detail in ${OUT}/ab.json`);
     process.exit(1);
   }
-  console.log(`OK: ${a.record.hashes.length}/${a.record.hashes.length} sampled frames identical across two fresh-page runs.`);
+  const how = tolerated.length ? 'identical (probeDyn within sub-LSB tolerance)' : 'identical';
+  console.log(`OK: ${a.record.hashes.length}/${a.record.hashes.length} sampled frames ${how} across two fresh-page runs.`);
   console.log('  This is the reproducibility the bench needs: same work, frame for frame.');
   process.exit(0);
 } catch (err) {

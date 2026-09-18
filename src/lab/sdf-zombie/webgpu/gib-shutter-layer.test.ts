@@ -7,6 +7,12 @@
 //
 // The GPU factory is not instantiated here (that is the WebGPU smoke's job).
 
+// NOTE (2026-09-17, game-main decomposition): the receivers pinned below moved
+// from main()-scope locals onto the GameContext (`gooLayer` -> `ctx.goo.layer`,
+// `gibShutter` -> `ctx.gibs.shutter`, ...). Only the SPELLING changed — every
+// pinned number and method name is untouched, so this drift gate still gates
+// exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
@@ -35,6 +41,9 @@ describe('gib shutter — settings share the blood exposure contract', () => {
 describe('gib shutter — integration tripwires', () => {
   const layerSrc = readFileSync('src/lab/sdf-zombie/webgpu/gib-shutter-layer.ts', 'utf8');
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+  // The large __sdfGame members moved to game-seams-spawn-goo.ts in the
+  // 2026-09-17 decomposition; every pinned string below is byte-identical.
+  const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
   const panelSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-panel.ts', 'utf8');
   const resolveSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-blur.ts', 'utf8');
 
@@ -76,22 +85,24 @@ describe('gib shutter — integration tripwires', () => {
     expect(resolveSrc).toContain('setOccluderDepth(tex: THREE.DepthTexture | null)');
     expect(resolveSrc).toContain('occlusionClipZ');
     expect(resolveSrc).toContain('uCfg2.value.set(tex ? 1 : 0, 0)');
-    expect(gameSrc).toContain('gibDepth = gibShutter.occluderDepth');
+    expect(gameSrc).toContain('gibDepth = ctx.gibs.shutter.occluderDepth');
     // Runtime A/B control for the evidence: the shipped default is ON.
-    expect(gameSrc).toContain('shutterGame.setOccluderDepth(gibOccluderEnabled ? gibDepth : null)');
-    expect(gameSrc).toContain('setGibOccluder:');
+    expect(gameSrc).toContain('ctx.panels.shutterGame.setOccluderDepth(ctx.gibs.occluderEnabled ? gibDepth : null)');
+    // setGibOccluder moved into game-seams-fx.ts with the gibs seam group.
+    expect(readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8'))
+      .toContain('setGibOccluder:');
     expect(gameSrc).toContain("get('giboccluder') !== '0'");
   });
 
   it('game-main lifts pieces before the base draw, then chains gib -> blood', () => {
-    const selectIdx = gameSrc.indexOf('gibShutter.select(');
+    const selectIdx = gameSrc.indexOf('ctx.gibs.shutter.select(');
     const renderCbIdx = gameSrc.indexOf('handle.setRenderCallback');
     expect(selectIdx).toBeGreaterThan(-1);
     expect(renderCbIdx).toBeGreaterThan(selectIdx);
 
-    const gibCaptureIdx = gameSrc.indexOf('gibShutter.capture(capture, scene, camera)');
-    const setSceneIdx = gameSrc.indexOf('shutterGame.setSceneTexture(src.texture)');
-    const bloodCaptureIdx = gameSrc.indexOf('shutterGame.capture(capture, bloodSim, camera)');
+    const gibCaptureIdx = gameSrc.indexOf('ctx.gibs.shutter.capture(capture, scene, camera)');
+    const setSceneIdx = gameSrc.indexOf('ctx.panels.shutterGame.setSceneTexture(src.texture)');
+    const bloodCaptureIdx = gameSrc.indexOf('ctx.panels.shutterGame.capture(capture, ctx.vfx.bloodSim, camera)');
     expect(gibCaptureIdx).toBeGreaterThan(-1);
     expect(setSceneIdx).toBeGreaterThan(gibCaptureIdx);
     expect(bloodCaptureIdx).toBeGreaterThan(setSceneIdx);
@@ -104,14 +115,14 @@ describe('gib shutter — integration tripwires', () => {
     expect(panelSrc).toContain('gib?.setMaxStreakPx(applied)');
     expect(gameSrc).toContain('readGibShutterSettings(location.search)');
     expect(gameSrc).toContain('setGibBlur');
-    expect(gameSrc).toContain('gibShutter?.setExposureMs(applied)');
-    expect(gameSrc).toContain('gibShutter?.setMaxStreakPx(applied)');
-    expect(gameSrc).toContain('shutterPanelHost(shutterGame, gibShutter)');
+    expect(gameSrc).toContain('ctx.gibs.shutter?.setExposureMs(applied)');
+    expect(gameSrc).toContain('ctx.gibs.shutter?.setMaxStreakPx(applied)');
+    expect(gameSrc).toContain('shutterPanelHost(ctx.panels.shutterGame, ctx.gibs.shutter)');
   });
 
   it('prewarms the gib targets against the real capture at boot', () => {
     expect(layerSrc).toContain('prewarm(capture: THREE.RenderTarget): boolean');
-    expect(gameSrc).toContain('gibShutter.prewarm(postAa.captureTarget)');
+    expect(gameSrc).toContain('ctx.gibs.shutter.prewarm(ctx.render.postAa.captureTarget)');
   });
 
   it('explicitly excludes the deferred route rather than excluding-but-undrawn', () => {
@@ -119,7 +130,7 @@ describe('gib shutter — integration tripwires', () => {
     // the switch is hard-off there so gibs render sharp through their own route
     // instead of vanishing. Reported, not silent. The gate lives in the layer
     // (`supported`) so the API/panel cannot re-enable it either.
-    expect(gameSrc).toContain('const gibRouteSupported = !deferredMode');
+    expect(gameSrc).toContain('const gibRouteSupported = !ctx.boot.deferredMode');
     expect(gameSrc).toContain('supported: gibRouteSupported');
     expect(gameSrc).toContain('deferred route: gib motion blur stays off');
     expect(layerSrc).toContain('supported = opts.supported !== false');
@@ -137,12 +148,15 @@ describe('gib shutter — integration tripwires', () => {
     // upward kick cancels one frame of gravity, so after `step(1)` the piece
     // has ~zero linear velocity while still turning. Without this the rotation
     // claim could only be tested on the random blast.
-    expect(gameSrc).toContain('spawnSpinFixture:');
-    expect(gameSrc).toContain('spinAngVel: spin');
-    expect(gameSrc).toContain('CHUNK_TUNING.gravity / 60');
+    // spawnSpinFixture moved into game-seams-spawn-goo.ts with the rest of the
+    // large __sdfGame members (2026-09-17 decomposition); the seam itself is
+    // unchanged.
+    expect(seamSrc).toContain('spawnSpinFixture:');
+    expect(seamSrc).toContain('spinAngVel: spin');
+    expect(seamSrc).toContain('CHUNK_TUNING.gravity / 60');
     // The generic fixture seam also returns a stable id and accepts a velocity
     // so a rig can stage a slow slide and track it across the settle.
-    expect(gameSrc).toContain('spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3)');
-    expect(gameSrc).toContain('velocity ?? (stationary ? [0, 0, 0] : undefined)');
+    expect(seamSrc).toContain('spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3)');
+    expect(seamSrc).toContain('velocity ?? (stationary ? [0, 0, 0] : undefined)');
   });
 });

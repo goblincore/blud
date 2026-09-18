@@ -15,7 +15,12 @@ import {
 
 // Repo-relative, like dynamite-prop.test.ts's REAL_GLB: vitest's import.meta.url
 // is not a file: URL in this setup, so `new URL(..., import.meta.url)` throws.
-const pageSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+// applyDynamiteTuning / dynamiteTuningValues moved out of game-main.ts's
+// main() closure into game-dynamite-tuning.ts (2026-09-17 decomposition).
+// The assertions below are unchanged — they still require every panel key to
+// be handled by the setter and reported by the read-back; only the file that
+// holds those two functions moved.
+const pageSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-dynamite-tuning.ts', 'utf8');
 
 describe('dynamite panel key table', () => {
   it('every key in the table is a case the page setter handles', () => {

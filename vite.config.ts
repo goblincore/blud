@@ -140,6 +140,7 @@ export default defineConfig({
       'scripts/**/*.test.ts',
       'scripts/census-diff.test.mjs',
       'scripts/lib/demo-digest.test.mjs',
+      'scripts/lib/layer-tolerance.test.mjs',
       'scripts/lib/demo-presented.test.mjs',
       'scripts/lib/png-write.test.mjs',
     ],

@@ -159,6 +159,44 @@ export function diffFrameHash(doc) {
 }
 
 /** Human-readable frame-hash report. Returns the number of drifted entries. */
+/**
+ * Hashed leg-runs whose DYNAMIC PROBE LAYER read zero while the scene had
+ * bodies.
+ *
+ * WHY THIS IS SEPARATE FROM DRIFT. A layer that is zero on ONE repeat drifts,
+ * and the drift report already prints its stats. A layer that is zero on EVERY
+ * repeat does not drift at all — so the report says "FRAME HASH IDENTICAL
+ * across repeats" and returns 0. Two empty buffers agree perfectly. That is a
+ * clean pass on precisely the bug `endHash` exists to catch: the 2026-09-10
+ * zeroed probe layer that rendered characters as black silhouettes and was
+ * caught by the owner playtesting.
+ *
+ * Measured 2026-09-18 on the sibling gate: a "fix" for demoScenario's replay
+ * divergence made two runs agree by zeroing this layer (probeDyn nonZero
+ * 6316 -> 0) and sdf-demo-hash reported OK. That gate now refuses a zero layer;
+ * this is the same guard for the bench path.
+ *
+ * BODIES GATE. `?simidle` boots a bodyless scene on purpose and its dynamic
+ * layer is legitimately empty, so a run with no bodies is not flagged.
+ */
+export function deadDynamicLayers(doc) {
+  const out = [];
+  for (const r of Array.isArray(doc?.results) ? doc.results : []) {
+    const dyn = r?.endHash?.layers?.probeDyn;
+    if (!dyn) continue;
+    const counts = (r.segments ?? []).flatMap((s) => [
+      s?.census?.first?.bodies ?? 0,
+      s?.census?.last?.bodies ?? 0,
+    ]);
+    const bodies = counts.length ? Math.max(...counts) : 0;
+    if (bodies <= 0) continue;
+    if ((dyn.stats?.nonZero ?? 0) === 0) {
+      out.push({ leg: r.leg, room: r.room, rep: r.rep, bodies });
+    }
+  }
+  return out;
+}
+
 export function reportFrameHashDrift(path, doc, log = console.log) {
   const drift = diffFrameHash(doc);
   const withHash = (Array.isArray(doc?.results) ? doc.results : []).filter((r) => r?.endHash?.layers).length;
@@ -168,9 +206,21 @@ export function reportFrameHashDrift(path, doc, log = console.log) {
     return 0;
   }
   log(`    ${withHash} leg-run(s) hashed`);
+
+  // Liveness BEFORE drift: two empty buffers agree perfectly, so a dead layer
+  // would otherwise be reported as "IDENTICAL" and pass.
+  const dead = deadDynamicLayers(doc);
+  for (const d of dead) {
+    log(`    DYNAMIC PROBE LAYER READ ZERO — ${d.leg}/room${d.room}/rep${d.rep}, with ${d.bodies} bodies on screen.`);
+    log('      That is the black-silhouette regression, not a passing run. A hash of an empty');
+    log('      layer agrees with every other empty layer, so drift cannot see it.');
+  }
+
   if (drift.length === 0) {
-    log('    FRAME HASH IDENTICAL across repeats — the same leg rendered the same frame.');
-    return 0;
+    if (dead.length === 0) {
+      log('    FRAME HASH IDENTICAL across repeats — the same leg rendered the same frame.');
+    }
+    return dead.length;
   }
   log(`    FRAME HASH DRIFTED in ${drift.length} layer(s) — the same leg rendered DIFFERENT frames:`);
   for (const d of drift) {
@@ -180,7 +230,7 @@ export function reportFrameHashDrift(path, doc, log = console.log) {
       log(`        ${k}: ${vals.map((v, i) => `rep${d.reps[i]}=${v}`).join('  ')}`);
     }
   }
-  return drift.length;
+  return drift.length + dead.length;
 }
 
 /** Human-readable report. Returns the number of drifted fields. */

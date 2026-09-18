@@ -14,15 +14,91 @@
   Polish: seams, curl flow, leg coverage, burn-down, dark scorched bone. [Plans](docs/superpowers/plans/2026-09-18-flame-polish.md).
 - [x] In-game test harness: slot `3` ignites what you hit, `__sdfGame.igniteAll()` / `extinguishAll()`. Throwaway, not the weapon.
   Needs the atlas + `public/assets/lab/flaregun-placeholder.glb` (both untracked). [Notes](docs/dev-notes/2026-09-18-flare-ingame-test/NOTES.md).
-- [ ] **Next session — owner playtest feedback (2026-09-18):** tiles read disjointed; wildfire looks more fluid (field vs cards) + add smoke;
-  flames don't light the room (in-game only feeds `bodyFlash`, no PointLight — cause found); no skeleton; non-burning crowd zombies
-  show moving molten look (suspected per-view `burnCfg` bleed into shared crowd draws — verify); burning enemies should run/stumble;
-  flames should trail/lean with body motion. [Handoff with leads](docs/dev-notes/2026-09-18-flame-playtest-feedback.md).
+- [~] **Owner playtest feedback pass (2026-09-18):** room light via probe gather, neighbour molten look, burning AI (soldiers flee,
+  zombies push on), readable skeleton, volumetric fire + smoke + trailing. [Spec](docs/superpowers/specs/2026-09-18-burning-feedback-pass-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-18-burning-feedback-pass.md) · [feedback](docs/dev-notes/2026-09-18-flame-playtest-feedback.md). Dispatched; harness ported to `game-burning.ts` / `game-flare.ts` after the main refactor.
 - [ ] Then: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
 - [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
   **Explosion curl: seam fixed and verified** (edge-map gate `npm run explosion:seam`, all scenes clean, billow kept; ship values
   curlStrength 1.1 / curlScale 18 / softFade 0.4 — game default still OFF, one-line flip). Blood: DENSITY spike reads as goo;
   per-stream fusion landed (correct, +0.2 ms, lab-only) but crossing sprays still read as one mass — next: rope-not-fan emission, then capsule field.
+
+## game-main.ts decomposition — migration phase merged 2026-09-17
+
+- [x] All **395** `main()`-scope bindings migrated to a feature-sliced `GameContext` (16 slices), codemod-applied
+  with lines rewritten in place. `game-main.ts` 14,763 → 14,548. Gates: `tsc` clean; vitest **15 failed / 5,640
+  passed** = baseline exactly (those 15 predate this work, verified at base `8f70d26f`); `march-hash` room1
+  byte-identical before and after; owner smoke-tested the running game.
+  [Spec](docs/superpowers/specs/2026-09-17-game-main-decomposition-design.md) ·
+  [Plan](docs/superpowers/plans/2026-09-17-game-main-decomposition.md) ·
+  [Baseline + gate evidence](docs/dev-notes/2026-09-17-game-main-decomposition/baseline.md)
+- [x] Tooling: `scripts/slice-extract.ts` (AST binding inventory + role classifier + `--functions` reporter),
+  `scripts/game-context-codemod.ts` (scope-aware rename, 29 tests), `scripts/extract-leaf.ts` (leaf extractor),
+  `scripts/game-context-coverage.test.ts` (gate: `ctx` must stay the ONLY state binding in `main()`).
+- [x] Extraction wave 1: `applyDynamiteTuning` + `dynamiteTuningValues` → `game-dynamite-tuning.ts`.
+- [x] Tooling: `scripts/integrate-seams.ts` (seam spread integrator, refuses on a missing member).
+- [x] `__sdfGame` seam extraction: the 22 largest members (**2,012 lines**) lifted into
+  `game-seams-{debug-probe,bench,render-diag,shell-diag,spawn-goo}.ts`, spread back as
+  `createXSeams(ctx, deps)`. Authored in parallel by 5 dispatch agents (new files only, no `game-main.ts`
+  edits, zero conflicts); `scripts/integrate-seams.ts` did the single integration edit and refuses to write
+  unless every named member is found. **game-main.ts 14,549 → 12,568.** Runtime-verified: all 400 seams and
+  all 22 moved members present, game renders.
+- [x] The remaining **256 members (~1,400 lines)** lifted into six slice modules
+  (`game-seams-{world,render,boot,weapon-player,fx,misc}.ts`) by `scripts/extract-seam-group.ts` — an AST
+  cut-and-paste, not agents: the members averaged 8 lines and 325/378 needed only `ctx`, so a verbatim move by
+  script beats six parallel hand-copies whose failure mode (an altered literal that still type-checks) the pixel
+  gate cannot localise. **game-main.ts 12,569 → 11,170.**
+- [ ] ~**52 members (~570 lines)** remain in the literal: the ones still closing over `main()`-scope functions
+  (`spillVerdict`, `rebuildCast`, `spawnEnemy`, `updateHud`, `playerRoomId`, `ZOMBIE_RADIUS`, …). They need
+  explicit deps objects — extract their dependencies first, bottom-up.
+- [ ] Then the giants: `tick` (907 lines, 12 slices), `handle.setDrawFn` closure (589), `spawnEnemy` (260),
+  `gibActor` (245), `detonateAt` (167).
+- [ ] Then the remaining leaves (63 functions, 848 lines) and the giants (`tick` 907, `setDrawFn` 589,
+  `spawnEnemy` 260). Extraction must run **bottom-up** — free names are mostly other `main()`-scope functions.
+- [x] **Both gates repaired 2026-09-18.** `march-hash.mjs`'s three canonicals were stale since 2026-09-15;
+  bisecting all 163 commits with the gate itself identified **`3662c1ca`** ("half-strength round blends for
+  character builds") as the single mover — owner-accepted character-geometry work, so the drift was legitimate.
+  Re-pinned (default `8f2b74e7…`, crowd `c77f9008…`, per-body `2c5dac0d…`), each reproduced on two independent
+  runs; the bisect table and the re-pinning discipline are recorded in the script. The gate exits 0 and still
+  sees change (`room1-wounded` ≠ `room1`).
+- [x] `sdf-demo-hash.sh ab` no longer dies before comparing: the final-frame sample was itself introducing the
+  odd parity gap its own comment warned about (frames 96 / every 4 → samples at 0,4,…,92 parity 1, then frame 95
+  at parity 0). It is now taken only when it agrees with the established parity.
+- [x] **Capsule-phase divergence FIXED 2026-09-18 (one of two causes).** The gather packs capsules only on a
+  due tick and writes `lastCapsules`/`capsuleArrays` only then, so the first recorded frame was a function of
+  the absolute tick counter that boot leaves at an arbitrary phase — one run packed the live cast (240
+  instances), the next read a stale warm-up leftover (35). `bench` already reset that phase; `demoScenario`,
+  the member the hash tool actually drives, never did. Fix: `ctx.probes.gatherTick = 0` in `demoScenario`.
+  **Verified:** `instances` at frame 0 is now identical across runs (240/240, same min and zero fraction).
+- [x] **Sub-LSB tolerance added for `probeDyn`** (`scripts/lib/layer-tolerance.mjs`, 12 tests). A hash may differ
+  ONLY when every statistic still agrees: both sides live (`nonZero > 0`, checked first), finite, equal
+  `nonZero`/`sampled`/`floats`/`zeroFraction`, and min/max within 1e-5 relative. `marchTarget` and `instances`
+  stay EXACT. It is opt-in per call site — the negative control stays strict so it cannot tolerate away the
+  break it injects — and every exercised tolerance is printed, because a silent tolerance is how a gate rots.
+- [ ] **STILL FAILING, and now REPRODUCIBLE — it is a cold-vs-warm page difference, not GPU noise.** Three
+  consecutive `sdf-demo-hash ab` runs failed identically: run A (first page load) always reports probeDyn
+  nonZero **6388**, run B (second load) always **6316**, with
+  `marchTarget [min 0.00111522→0.000199939, max 0.980713→13.4053] tiles 4,5,6,7,9,10`. A **13× swing in
+  marchTarget max** is not sub-LSB, so the tolerance correctly does NOT mask it — that is the tolerance working.
+  The earlier "identical stats, different hash" sample was one case of a larger effect. This is the failure
+  `bench`'s own comment predicted ("between a first page load and a warm one"), so the recorder's warm-up is
+  not reaching a settled state before frame 0 despite `warmup: 90`. Being systematic, it is now tractable.
+  **Until it is resolved, no A/B measured through `sdf-demo-hash` is trustworthy.**
+- [x] **Guard added after a near-miss.** Copying `bench`'s full reset (`pendingGather = null` +
+  `gather?.reset()`) also made the runs agree — by zeroing the dynamic probe layer outright (probeDyn nonZero
+  6316 → 0), which is the black-silhouette regression `frame-hash.ts` exists to catch. `sdf-demo-hash.mjs` now
+  FAILS a run whose dynamic layer reads zero, and that guard was verified to fire by reintroducing the bad fix.
+  Tripwires in `demo-scenario-determinism.test.ts` pin both halves.
+- [x] **Bench path checked 2026-09-18 — it is FINE.** Drove `bench({ demo })` against the synthetic recording
+  and read its `endHash`: `marchTarget` nonZero 120000, **`probeDyn` nonZero 2236 — live, not zero**. Its
+  `gather?.reset()` rebuilds because the replay drives `tick()` normally, unlike `demoScenario` which steps via
+  `handle.step()` under `simLocked`. (`?simidle`, the other trigger, boots a bodyless scene, so its layer is
+  empty by design and the reset is irrelevant there.)
+- [x] **But the bench path had the same blind spot, now closed.** Neither `sdf-game-bench.mjs` nor
+  `census-diff.mjs` checked `nonZero` anywhere, and a layer that is zero on EVERY repeat does not drift — so
+  `reportFrameHashDrift` called it "FRAME HASH IDENTICAL" and returned 0. Two empty buffers agree perfectly.
+  `deadDynamicLayers()` now flags a zero dynamic layer when the scene had bodies (bodyless `?simidle` is
+  exempt) and feeds the exit code; five tests in `census-diff.test.mjs` pin it.
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 

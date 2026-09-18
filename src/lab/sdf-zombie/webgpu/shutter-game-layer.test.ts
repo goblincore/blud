@@ -9,6 +9,12 @@
 //
 // The GPU factory is not instantiated here (that is the WebGPU smoke's job).
 
+// NOTE (2026-09-17, game-main decomposition): the receivers pinned below moved
+// from main()-scope locals onto the GameContext (`gooLayer` -> `ctx.goo.layer`,
+// `gibShutter` -> `ctx.gibs.shutter`, ...). Only the SPELLING changed — every
+// pinned number and method name is untouched, so this drift gate still gates
+// exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
@@ -190,6 +196,7 @@ describe('shutter game — query flags', () => {
 describe('shutter game — integration tripwires', () => {
   const layerSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-game-layer.ts', 'utf8');
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+  const miscSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-misc.ts', 'utf8');
   const postSrc = readFileSync('src/lab/sdf-zombie/webgpu/post-aa.ts', 'utf8');
   const gooSrc = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
 
@@ -230,16 +237,20 @@ describe('shutter game — integration tripwires', () => {
   });
 
   it('game-main poses the sharp half, installs the stage and exposes live setters', () => {
-    expect(gameSrc).toContain('shutterGame?.poseSharp()');
-    expect(gameSrc).toContain('postAa.setCaptureStage');
+    expect(gameSrc).toContain('ctx.panels.shutterGame?.poseSharp()');
+    expect(gameSrc).toContain('ctx.render.postAa.setCaptureStage');
     expect(gameSrc).toContain('readShutterGameSettings(location.search)');
     expect(gameSrc).toContain('setBloodBlurExposure');
     expect(gameSrc).toContain('setBloodBlurMaxStreak');
-    expect(gameSrc).toContain('setBloodBlurSeedScale');
-    expect(gameSrc).toContain('setBloodBlurDepthBias');
+    // setBloodBlurSeedScale and setBloodBlurDepthBias moved into
+    // game-seams-misc.ts in the 2026-09-17 decomposition; setBloodBlurExposure
+    // and setBloodBlurMaxStreak stayed in game-main.ts. Both setters are
+    // byte-identical — only the holding file differs.
+    expect(miscSrc).toContain('setBloodBlurSeedScale');
+    expect(miscSrc).toContain('setBloodBlurDepthBias');
     // The pose must precede the sync it partitions.
-    const poseIdx = gameSrc.indexOf('shutterGame?.poseSharp()');
-    const syncIdx = gameSrc.indexOf('gooLayer?.sync(bloodSim, camera)', poseIdx);
+    const poseIdx = gameSrc.indexOf('ctx.panels.shutterGame?.poseSharp()');
+    const syncIdx = gameSrc.indexOf('ctx.goo.layer?.sync(ctx.vfx.bloodSim, camera)', poseIdx);
     expect(syncIdx).toBeGreaterThan(poseIdx);
   });
 
@@ -251,6 +262,6 @@ describe('shutter game — integration tripwires', () => {
     expect(postSrc).toContain('get captureTarget() { return sceneTarget; }');
     expect(layerSrc).toContain('prewarm(capture: THREE.RenderTarget): boolean');
     expect(layerSrc).toContain('ensureTargets(capture, diag.densityWidth, diag.densityHeight)');
-    expect(gameSrc).toContain('shutterGame.prewarm(postAa.captureTarget)');
+    expect(gameSrc).toContain('ctx.panels.shutterGame.prewarm(ctx.render.postAa.captureTarget)');
   });
 });

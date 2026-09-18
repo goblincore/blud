@@ -66,10 +66,43 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from '.
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default = crowd, BOXES dispatch, 2026-09-15):
-//   shipped default (crowd, boxes, tiles on)        = 0b84c119e04fc8b2f7a3fe2f69b85737448ec86c
-//   crowd quad (?crowddispatch=quad, tiles on)      = a350361d6a223946a4cb8aac9bc2a3a70ee15bfd
-//   per-body (?crowd=0, tiles off)                  = a8ab4efac15fc0376c3e4e05420f13e34d1511bd
+// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-18):
+//   shipped default (crowd, boxes, tiles on)        = 8f2b74e71ff18dd04a99c05fe19392b96dd80c9d
+//   crowd quad (?crowddispatch=quad, tiles on)      = c77f9008d44cb016dcb887361391690f6f6b3484
+//   per-body (?crowd=0, tiles off)                  = 2c5dac0da44c7a3aa96a4ee0f33385c6f463b6dc
+//
+// WHY THESE MOVED, and how it was established. The previous pins (2026-09-15,
+// 0b84c119… / a350361d… / a8ab4efa…) were set by 2b396068 and then went STALE:
+// every run of this gate exited FAIL for a reason that had nothing to do with
+// the change being tested, which is how a real regression gets waved through.
+//
+// The mover was found by bisecting all 163 commits from 2b396068 to HEAD with
+// this script, two probes at a time:
+//
+//   2b396068 (the pin itself)                 0b84c119…   <- pin reproduced
+//   index  82  f4588548 shutter blur task 2   0b84c119…
+//   index  93  4ce1e826 docs: close out …     0b84c119…
+//   index  98  75545d2b fix(rendering): …     0b84c119…
+//   index  99  efdb5eb2 Merge reviewed …      0b84c119…
+//   index 100  3662c1ca half-strength round blends for character builds
+//                                             8f2b74e7…   <- MOVED HERE
+//   index 103  1cd6b041                       8f2b74e7…
+//   HEAD                                      8f2b74e7…
+//
+// ONE commit, 3662c1ca, moved all three canonicals and nothing since has moved
+// them again. It changes character flesh blend geometry, so a staged character
+// close-up MUST change — and it is owner-accepted work (see TASKS.md,
+// "Character blends and zombie heading — owner accepted 2026-09-17"). The drift
+// is therefore explained and intentional, not a regression.
+//
+// Each new value was reproduced on two independent runs (separate vite + Chrome
+// on separate ports) before being pinned. A value that is not deterministic must
+// NEVER be pinned: a flaky canonical is worse than a stale one.
+//
+// RE-PINNING DISCIPLINE. Do not update these to make a red run pass. Bisect to
+// the commit that moved the value, confirm that commit intended to change what
+// is rendered, reproduce the new value twice, and record the evidence here — as
+// above. If you cannot name the commit, you have a regression, not a stale pin.
 // Each stays reachable in one command:
 //   node scripts/march-hash.mjs                       (default, pinned)
 //   MARCH_HASH_CROWD=1 node scripts/march-hash.mjs    (quad, pinned)
@@ -77,7 +110,7 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
-const PERBODY_HASH = 'a8ab4efac15fc0376c3e4e05420f13e34d1511bd';
+const PERBODY_HASH = '2c5dac0da44c7a3aa96a4ee0f33385c6f463b6dc';
 // MARCH_HASH_PERBODY — the per-body opt-out gate (task 8). Boots `?crowd=0`
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
@@ -86,8 +119,8 @@ const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
 // by DEFAULT_HASH whenever neither override is set and no extra query is given.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
-const CROWD_HASH = 'a350361d6a223946a4cb8aac9bc2a3a70ee15bfd';
-const DEFAULT_HASH = '0b84c119e04fc8b2f7a3fe2f69b85737448ec86c';
+const CROWD_HASH = 'c77f9008d44cb016dcb887361391690f6f6b3484';
+const DEFAULT_HASH = '8f2b74e71ff18dd04a99c05fe19392b96dd80c9d';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.

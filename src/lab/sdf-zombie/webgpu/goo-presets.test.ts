@@ -4,6 +4,12 @@
 // actually applies. A source scan, in the style of the goo-layer tripwires —
 // nothing here constructs a renderer.
 
+// NOTE (2026-09-17, game-main decomposition): the receivers pinned below moved
+// from main()-scope locals onto the GameContext (`gooLayer` -> `ctx.goo.layer`,
+// `gibShutter` -> `ctx.gibs.shutter`, ...). Only the SPELLING changed — every
+// pinned number and method name is untouched, so this drift gate still gates
+// exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
@@ -27,12 +33,12 @@ describe('GAME_GOO_DEFAULTS (mirror of the game page)', () => {
       ['setShadowRed', '0.19'],
     ];
     for (const [setter, value] of checks) {
-      expect(src, `game-main must apply gooLayer.${setter}(${value})`).toContain(`gooLayer.${setter}(${value})`);
+      expect(src, `game-main must apply ctx.goo.layer.${setter}(${value})`).toContain(`ctx.goo.layer.${setter}(${value})`);
     }
   });
 
   it('matches the game mode and carries the same numbers', () => {
-    expect(src).toContain("gooLayer.setMode('depth')");
+    expect(src).toContain("ctx.goo.layer.setMode('depth')");
     expect(GAME_GOO_DEFAULTS.mode).toBe('depth');
     expect(GAME_GOO_DEFAULTS).toEqual({
       sizeScale: 0.14, threshold: 0.65, blurPx: 0, mode: 'depth',
