@@ -84,7 +84,7 @@
     "fireCapShare": 0.5,
     "capFireFlatten": 0.5,
     "curlStrength": 0,
-    "curlScale": 2.2,
+    "curlScale": 18,
     "softFade": 0.4
   },
   "diffs": [
@@ -234,7 +234,7 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 0,
-        "curlScale": 2.2,
+        "curlScale": 18,
         "softFade": 0.4
       },
       "bootFlag": true,
@@ -267,7 +267,7 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 0,
-        "curlScale": 2.2,
+        "curlScale": 18,
         "softFade": 0.4
       },
       "bootFlag": true,
@@ -300,7 +300,7 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 0,
-        "curlScale": 2.2,
+        "curlScale": 18,
         "softFade": 0.4
       },
       "bootFlag": true,

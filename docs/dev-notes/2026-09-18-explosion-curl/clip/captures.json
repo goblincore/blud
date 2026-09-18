@@ -84,24 +84,24 @@
     "fireCapShare": 0.5,
     "capFireFlatten": 0.5,
     "curlStrength": 1.1,
-    "curlScale": 6,
+    "curlScale": 18,
     "softFade": 0.4
   },
   "diffs": [
     {
       "time": "flash",
-      "changedFrac": 0.01625839519264758,
-      "meanAbs": 0.178023128313886
+      "changedFrac": 0.02108872393071757,
+      "meanAbs": 0.23120926299044928
     },
     {
       "time": "fireball",
-      "changedFrac": 0.024243548957228703,
-      "meanAbs": 0.20959114351358663
+      "changedFrac": 0.02565747613997879,
+      "meanAbs": 0.2174771968893311
     },
     {
       "time": "smoke",
-      "changedFrac": 0.11701484623541887,
-      "meanAbs": 0.9728031937084178
+      "changedFrac": 0.15297631671968895,
+      "meanAbs": 1.1565285012382713
     }
   ],
   "sheet": {
@@ -234,7 +234,7 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 1.1,
-        "curlScale": 6,
+        "curlScale": 18,
         "softFade": 0.4
       },
       "bootFlag": true,
@@ -267,12 +267,12 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 1.1,
-        "curlScale": 6,
+        "curlScale": 18,
         "softFade": 0.4
       },
       "bootFlag": true,
       "file": "curl-fireball.png",
-      "std": 46.57
+      "std": 46.51
     },
     {
       "variant": "curl",
@@ -300,12 +300,12 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 1.1,
-        "curlScale": 6,
+        "curlScale": 18,
         "softFade": 0.4
       },
       "bootFlag": true,
       "file": "curl-smoke.png",
-      "std": 47.5
+      "std": 47.06
     }
   ]
 }
