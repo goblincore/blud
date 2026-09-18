@@ -14,9 +14,10 @@
   Polish: seams, curl flow, leg coverage, burn-down, dark scorched bone. [Plans](docs/superpowers/plans/2026-09-18-flame-polish.md).
 - [x] In-game test harness: slot `3` ignites what you hit, `__sdfGame.igniteAll()` / `extinguishAll()`. Throwaway, not the weapon.
   Needs the atlas + `public/assets/lab/flaregun-placeholder.glb` (both untracked). [Notes](docs/dev-notes/2026-09-18-flare-ingame-test/NOTES.md).
-- [~] **Owner playtest feedback pass (2026-09-18):** room light via probe gather, neighbour molten look, burning AI (soldiers flee,
-  zombies push on), readable skeleton, volumetric fire + smoke + trailing. [Spec](docs/superpowers/specs/2026-09-18-burning-feedback-pass-design.md) ·
-  [plan](docs/superpowers/plans/2026-09-18-burning-feedback-pass.md) · [feedback](docs/dev-notes/2026-09-18-flame-playtest-feedback.md). Dispatched; harness ported to `game-burning.ts` / `game-flare.ts` after the main refactor.
+- [~] **Owner playtest feedback pass (2026-09-18):** [spec](docs/superpowers/specs/2026-09-18-burning-feedback-pass-design.md) · [plan](docs/superpowers/plans/2026-09-18-burning-feedback-pass.md) · [notes](docs/dev-notes/2026-09-18-burning-feedback/).
+  Round 1 merged: fire PointLight pool lights the floor (gather slot wired but self-shadowed by the body — walls unlit); neighbour molten look = bodyFlash
+  flicker (cut 10x); burning soldiers flee / zombies close faster, both stumble; ivory bone at full char (no ribs). Round 2 (lab volume) merged but
+  NOT there yet: reads as a soft glow shell, no visible smoke, trail unproven, cost table untrustworthy (all passes ~equal). Next: volume look/cost pass before the game port.
 - [ ] Then: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
 - [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
   **Explosion curl: seam fixed and verified** (edge-map gate `npm run explosion:seam`, all scenes clean, billow kept; ship values
