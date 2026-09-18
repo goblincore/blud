@@ -216,6 +216,20 @@ async function runOnce(conn, spec, label) {
   if (!march || march.stats.nonZero === 0) {
     fail(`${label}: the march target hashed to nothing (nonZero ${march?.stats.nonZero}) — refusing to trust this recording`);
   }
+  // THE DYNAMIC LAYER MUST BE LIVE TOO. This check did not exist, and its
+  // absence let a "fix" for the frame-0 divergence (2026-09-18) make two runs
+  // agree by zeroing the dynamic probe layer outright — probeDyn nonZero went
+  // 6316 -> 0 and the A/B reported OK. An all-zero dynamic layer is exactly the
+  // black-silhouette regression this tool was built for (see frame-hash.ts), so
+  // a run that reads zero must FAIL rather than quietly compare two nothings.
+  const dyn = record.hashes[0].layers.probeDyn;
+  if (!dyn || dyn.stats.nonZero === 0) {
+    fail(
+      `${label}: the dynamic probe layer hashed to ZERO (nonZero ${dyn?.stats.nonZero}).\n` +
+      '  That is the black-silhouette regression, not a passing run. Two runs that agree on an\n' +
+      '  empty layer agree on nothing. Refusing to trust this recording.',
+    );
+  }
   // PARITY: the recording is only comparable if every sample sits on the same
   // field parity. The shipped 'bodies' style marches alternate scanlines, so a
   // mixed-parity recording reports a divergence between two CORRECT frames.

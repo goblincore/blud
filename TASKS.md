@@ -45,11 +45,21 @@
 - [x] `sdf-demo-hash.sh ab` no longer dies before comparing: the final-frame sample was itself introducing the
   odd parity gap its own comment warned about (frames 96 / every 4 → samples at 0,4,…,92 parity 1, then frame 95
   at parity 0). It is now taken only when it agrees with the established parity.
-- [ ] **Newly surfaced by that fix — a real one.** `sdf-demo-hash ab` now runs to completion and reports that
-  **two identical runs diverge at frame 0** in the dynamic probe layer (instances 240 → 35, tiles 8–11).
-  Verified pre-existing: the session base `1cd6b041` with only the parity fix diverges too, in **both**
-  `marchTarget` and `probeDyn`. A replay is not yet reproducible, so no A/B measured through this tool can be
-  trusted until it is. Likely suspects: goo instance upload (`cd2ded50`) and probe-gather warm-up timing.
+- [x] **Replay reproducibility FIXED 2026-09-18.** `sdf-demo-hash ab` now reports
+  `OK: 24/24 sampled frames identical across two fresh-page runs`. Root cause: the gather packs capsules only
+  on a due tick and writes `lastCapsules`/`capsuleArrays` only then, so the first recorded frame is a function
+  of the absolute tick counter that boot leaves at an arbitrary phase — one run packed the live cast (240
+  instances), the next read a stale warm-up leftover (35). `bench` already reset that phase; `demoScenario`,
+  the member the hash tool actually drives, never did. Fix: `ctx.probes.gatherTick = 0` in `demoScenario`.
+- [x] **Guard added after a near-miss.** Copying `bench`'s full reset (`pendingGather = null` +
+  `gather?.reset()`) also made the runs agree — by zeroing the dynamic probe layer outright (probeDyn nonZero
+  6316 → 0), which is the black-silhouette regression `frame-hash.ts` exists to catch. `sdf-demo-hash.mjs` now
+  FAILS a run whose dynamic layer reads zero, and that guard was verified to fire by reintroducing the bad fix.
+  Tripwires in `demo-scenario-determinism.test.ts` pin both halves.
+- [ ] **Worth checking:** `bench` still calls `gather?.reset()` (game-seams-bench.ts:158). In `demoScenario`
+  that measurably zeroed the dynamic layer. `bench` sits on a narrower path (`o.demo || hasSimIdle`) and its
+  comment says its reset was measured, so this is not assumed to be a bug — but nothing checks probeDyn
+  liveness on the bench path, so it would look identical if it were.
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 

@@ -312,6 +312,27 @@ export function createBenchSeams(ctx: GameContext, d: BenchDeps) {
       const every = Math.max(1, Math.floor(o.every ?? 4));
       if (o.hold !== false) ctx.demo.hold = true;
 
+      // GATHER CADENCE PHASE — the root cause of a long-standing gate failure.
+      //
+      // `sdf-demo-hash ab` reported two identical runs diverging at frame 0
+      // (instances 240 vs 35, probeDyn tiles 8-11). The gather packs capsules
+      // only every `probeGatherRate` ticks, and `lastCapsules` /
+      // `capsuleArrays` are ONLY written on a due tick — so what the first
+      // recorded frame hashes is a function of the ABSOLUTE tick counter, which
+      // boot and warm-up leave at an arbitrary phase. One run packed the live
+      // cast, the next read a stale warm-up leftover. `bench` above already
+      // resets this; demoScenario never did.
+      //
+      // ONLY the phase. `bench` also does `pendingGather = null` and
+      // `gather?.reset()`, and doing the same here was MEASURED to be wrong:
+      // it made the two runs agree by zeroing the dynamic probe layer
+      // (probeDyn nonZero 6316 -> 0) and it never rebuilt — which is precisely
+      // the black-silhouette regression frame-hash.ts exists to catch. A gate
+      // that passes by destroying the thing it measures is worse than a gate
+      // that fails. Resetting the phase alone gives identical runs with the
+      // layer still live, so that is all this does.
+      ctx.probes.gatherTick = 0;
+
       // Frames must be driven by hand: the rAF loop would race the recorder
       // and a hidden/visible page would change which frames exist at all.
       ctx.boot.handle.setLoopRunning(false);
