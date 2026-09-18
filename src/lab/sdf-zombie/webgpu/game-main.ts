@@ -4505,10 +4505,56 @@ async function main() {
       // idle main-thread time behind the loader (measured 79 s idle, drawOnce
       // 1.2 s after it); cached, it is a few hundred ms. drawOnce stays: it
       // still compiles the main pass / post chain in their live context.
+      // THE GIB / CHUNK MARCH VARIANT (2026-09-18). Detached pieces march
+      // through the SHARED chunk material — its own ~240 KB shader, which no
+      // boot object uses, so nothing above or below ever compiled it. The first
+      // dismemberment of a session then built it SYNCHRONOUSLY mid-game, once
+      // per context it draws in (the gib shutter's half-float layer, then the
+      // march MRT): measured 47.8 s + a second stall with a cold Metal cache —
+      // the owner's "freeze after switching slug/pellets" (the slug is simply
+      // what severs first), and the same watchdog exposure as the boot stall.
+      // A throwaway view on the SDF layer puts the material in front of the
+      // async march compile below; the gib shutter context is compiled right
+      // after it. Constant rng: the shared rngStreams must not advance here.
+      let warmChunkView: ChunkGpuView | null = null;
+      try {
+        const a0 = ctx.world.actors[0];
+        const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
+        const warmFirst = warmPrims[0];
+        if (a0 && ctx.bake.material && warmFirst) {
+          const warmOrigin: Vec3 = [0, 1, 0];
+          const warmState = makeChunk(
+            warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
+          );
+          warmChunkView = createChunkGpuView(
+            warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
+            ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+          );
+          warmChunkView.object.layers.set(SDF_LAYER);
+          scene.add(warmChunkView.object);
+        }
+      } catch (err) {
+        console.warn('[warm] gib-variant warm view could not be built — first gib will compile live', err);
+      }
       tp = performance.now();
-      await ctx.render.sdfLayer.precompilePasses(scene, camera, { passTimeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS });
-      phases.asyncFirst = performance.now() - tp;
-      mark('warm-async-first-done');
+      try {
+        await ctx.render.sdfLayer.precompilePasses(scene, camera, { passTimeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS });
+        phases.asyncFirst = performance.now() - tp;
+        mark('warm-async-first-done');
+        tp = performance.now();
+        if (warmChunkView && ctx.gibs.shutter) {
+          await ctx.gibs.shutter.precompileSubject(
+            warmChunkView.object, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
+          );
+        }
+        phases.gibVariant = performance.now() - tp;
+        mark('warm-gib-variant-done');
+      } finally {
+        if (warmChunkView) {
+          scene.remove(warmChunkView.object);
+          warmChunkView.dispose();
+        }
+      }
       tp = performance.now();
       ctx.boot.handle.drawOnce();
       phases.drawOnce = performance.now() - tp;
