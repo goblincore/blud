@@ -154,3 +154,119 @@ std 44.31 (stand-fresh) / 76.14 (close-fresh) against the 2026-09-17 reference's
 43.43 / 73.86 (the reference was not clock-frozen, so this is a visual/structural
 match, not a pixel diff). The CPU seed is provably the same field
 (`CURL_NODE_SEED = 0x51c0ff` = the cards' previous default).
+
+---
+
+# 2026-09-18 (later) — the curl cross: isolated, root-caused, fixed
+
+The first pass shipped a curl look whose captures had an unreported bright cross
+(a horizontal streak and a vertical seam) through the fireball. This section is
+the follow-up: what produced it, the fix, and the look to ship.
+
+## 1. Isolation — it is the curl, and only the curl
+
+Same ground burst, same pinned seed, smoke frame (t = 1.15 s), 1380×820, each
+run against the unchanged baseline (curlStrength 0, softFade 0):
+
+| run | curlStrength | softFade | smoke changed | fireball changed | cross? |
+| --- | --- | --- | --- | --- | --- |
+| fade only | 0 | 0.4 | 1.98 % | 0.06 % | **no** |
+| curl only | 1.1 | 0 | 9.21 % | 2.68 % | **yes** |
+| both | 1.1 | 0.4 | 10.67 % | 2.74 % | **yes** |
+
+`--strength 0` (fade only) leaves the frame essentially at baseline — its 1.98 %
+of changed smoke is the floor/box contact the fade exists for — and shows no
+cross; `--fade 0` (curl only) still shows it at full strength. **The cross is
+100 % the curl domain warp; the soft fade is not involved.**
+
+Three more probes narrowed it:
+
+- **One fire billboard reproduces it.** With `--fire-count 1` and the smoke,
+  ember and ring layers off, the single quad draws the same bright horizontal
+  streak and vertical seam (`isolation-prefix/one-fire/curl-smoke.png`). So it
+  is not two quads meeting and not a quad seen edge-on: every fire billboard of
+  a plume burst shares one orientation (the world-up cylindrical basis), so they
+  are all parallel, and the radial `edge` falloff already multiplies the
+  **UN-warped** UV (`p = aUv·2 − 1`), so coverage is exactly 0 at the quad
+  border with or without the warp.
+- **It is the fire layer.** A smoke-only run (`--fire-count 0`) is clean; a
+  fire-only run carries the cross.
+- **It scales with the warp's gradient, not with coverage.** At the smoke time,
+  curl only: absent at (strength 0.4, scale 2.2), faint at 0.7, severe at 1.1
+  and 2.0; **absent at (1.1, scale 6)**. That is the signature of the warp's
+  spatial slope (`strength / scale`), not of an edge.
+
+The pre-fix frames are kept under `isolation-prefix/` (taken at the old spike
+scale of 2.2 m); the re-shot, fixed versions are under `isolation-fixed/`.
+
+## 2. Root cause
+
+The curl domain warp **folds the fractal-noise lookup** inside a single fire
+billboard. The noise coordinate travels `scale` (3.4) across the billboard's UV,
+while the warp moves the lookup by up to `curlStrength` noise units; at
+`curlScale = 2.2 m` the warp changes by about a whole Perlin feature across one
+billboard, so the lookup map stops being injective. The compressed and inverted
+pattern reads as a bright horizontal streak and a vertical seam. On the shared
+64³ field the finite-difference Jacobian reaches ≈ 0.9 per texel (≈ 57 per
+volume repeat), so at 2.2 m its steepest cells are metres-scale features sitting
+inside the fireball.
+
+The brief's leading hypothesis — coverage being pushed onto a quad edge — is
+therefore **not** the cause: the falloff is already on the un-warped UV, and the
+artifact survives on a single, parallel, camera-facing billboard.
+
+## 3. Fix
+
+`curlWarpGain(curlStrength, curlScale)` (`explosion-vfx.ts`) with
+`CURL_WARP_SAFE_RATIO = 0.2`, mirrored in the TSL graph: the applied warp
+amplitude is `min(curlStrength, 0.2 · curlScale)`. The fold is governed by the
+warp's gradient (amplitude / scale), so capping it at the measured-safe gradient
+lets the shared 6 m scale apply the full shipped strength, while a tighter swirl
+gets a proportionally smaller amplitude instead of folding. `curlStrength = 0`
+is still exactly zero, so the game default frame is untouched.
+
+`SPIKE_CURL_LOOK.curlScale` moves 2.2 → **6** (the shared, flame-cards body
+scale): that is the value that carries the full `curlStrength` through the cap.
+`curlStrength` 1.1 and `softFade` 0.4 are unchanged.
+
+## 4. What the frames show now
+
+Post-fix `npm run explosion:capture` and `--clip` (curlScale 6, curlStrength
+1.1, softFade 0.4):
+
+| scene / time | smoke changed | fireball changed |
+| --- | --- | --- |
+| ground, both | 10.47 % (mean \|Δ\| 0.75) | 3.38 % |
+| clip, both | 11.70 % (0.97) | 2.42 % |
+| ground, curl only | 9.14 % (0.67) | 3.31 % |
+
+The ground smoke change is within noise of the pre-fix 10.67 %, and the
+**fireball changes 3.38 % against 2.74 % pre-fix** — the billow is kept and then
+some. At full size there is no cross or seam in any frame (`curl-*.png`,
+`clip/curl-*.png`, and the smoke frames in `isolation-fixed/`).
+
+The stress settings that still crossed with only a proportional budget are now
+clean: `--strength 2.0 --scale 2.2` (capped to 0.44) and `--strength 2.0
+--scale 6` (capped to 1.2) both photograph without a cross, and a single fire
+quad at scale 6 is clean.
+
+## 5. Recommended game values
+
+In `EXPLOSION_VFX_TUNING`:
+
+```
+curlStrength: 1.1,   // was 0
+curlScale: 6,        // already the default (the fold-safe shared scale)
+softFade: 0.4,       // was 0
+```
+
+That is exactly `SPIKE_CURL_LOOK`; lifting the game default is setting
+`curlStrength` and `softFade`. `curlWarpGain` keeps any future tightening from
+reintroducing the cross.
+
+## Tests
+
+`explosion-vfx.test.ts` gains a `curlWarpGain` test (cap, monotonicity,
+off/degenerate inputs). `npx tsc --noEmit` is clean and the targeted suite
+(`explosion-vfx soft-fade curl-volume flame-cards`, 60 tests) passes.
+

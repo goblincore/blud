@@ -74,7 +74,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, clamp, float, length, linearDepth, mix, mx_fractal_noise_float,
+  attribute, clamp, float, length, linearDepth, min, mix, mx_fractal_noise_float,
   positionWorld, smoothstep, uniform, vec2, vec3, vec4,
 } from 'three/tsl';
 import { mulberry32 } from './game-weapon';
@@ -173,7 +173,10 @@ export interface ExplosionVfxTuning {
    * lookup, in noise-domain units. 0 is the game's default and contributes
    * EXACTLY zero — the pre-curl scrolling look, unchanged — so the new swirl
    * is opt-in; the spike page turns it on and the owner decides whether to
-   * lift the game default. Bounds [0, 2].
+   * lift the game default. Bounds [0, 2]. The applied amplitude is budgeted by
+   * `curlWarpGain` so that a tight `curlScale` cannot fold the lookup (the
+   * bright-cross defect); at `curlScale >= CURL_SCALE` (6 m) the full value is
+   * applied.
    */
   curlStrength: number;
   /**
@@ -182,6 +185,13 @@ export interface ExplosionVfxTuning {
    * fireball is a few metres across, so ~2.5 reads as a rolling ball where the
    * flame cards' ~6 m body scale would be one cell). Only meaningful when
    * `curlStrength > 0`.
+   *
+   * IT ALSO SETS THE FOLD BUDGET: the warp's spatial gradient grows as
+   * `curlStrength / curlScale`, and once it folds the noise lookup a single
+   * fire billboard shows a bright cross. Below the shared `CURL_SCALE` (6 m)
+   * the applied amplitude is therefore scaled down with `curlScale`
+   * (`curlWarpGain`) — a tighter swirl reads as finer detail rather than
+   * folding. Ship at 6.
    */
   curlScale: number;
   /**
@@ -656,6 +666,40 @@ export function clampTuning(t: ExplosionVfxTuning): ExplosionVfxTuning {
   };
 }
 
+/**
+ * THE WARP'S GRADIENT CAP (explosion-curl cross fix, 2026-09-18).
+ *
+ * A curl domain warp folds the noise lookup once its spatial gradient reaches
+ * the lookup's own: the noise coordinate travels `~3.4` across one billboard,
+ * while the warp travels about `curlStrength × fieldSlope / curlScale` per world
+ * metre. With the field's slope fixed, the fold is governed by the warp's
+ * gradient, i.e. by `appliedAmplitude / curlScale`.
+ *
+ * MEASURED on the capture rig: at curlScale 2.2 a warp amplitude of 0.4 is
+ * clean, 0.7 is faintly crossed and 1.1 is severe; a SINGLE fire billboard
+ * reproduces it, so it is the warp folding the lookup within a quad — not
+ * coincident quad edges, not the radial coverage falloff (which already uses
+ * the UN-warped UV). That puts the safe gradient at about 0.4 / 2.2 ≈ 0.18; the
+ * constant below carries a little margin. At the shared 6 m scale the cap is
+ * 1.2, so the shipped `curlStrength = 1.1` is applied in full and the whole
+ * spike look is fold-free.
+ *
+ * So the applied amplitude is CAPPED at `CURL_WARP_SAFE_RATIO × curlScale`: a
+ * request below the cap is applied in full, and a tighter swirl gets a
+ * proportionally smaller amplitude instead of folding. That is what makes the
+ * whole tuning range fold-free rather than only the shipped values.
+ *
+ * The TSL side mirrors this expression in {@link explosionLookColor}; keep the
+ * two in step.
+ */
+export const CURL_WARP_SAFE_RATIO = 0.2;
+
+export function curlWarpGain(curlStrength: number, curlScale: number): number {
+  if (!(curlStrength > 0) || !(curlScale > 0)) return 0;
+  const cap = CURL_WARP_SAFE_RATIO * curlScale;
+  return curlStrength < cap ? curlStrength : cap;
+}
+
 /** Uniform-ish sample inside the unit ball. Cube-root radius keeps the points
  *  EVEN through the volume rather than clumped at the centre — the difference
  *  between a fireball and a bright dot with stray licks. */
@@ -772,12 +816,26 @@ export function explosionLookColor(
   // mass. `curlStrength = 0` (the game default) contributes EXACTLY zero — the
   // pre-curl look is unchanged. Ring and embers are not a gas plume, so they
   // keep their own motion and never sample the volume.
+  //
+  // THE GRADIENT CAP (the cross fix — see curlWarpGain). A domain warp folds
+  // the noise lookup when the warp moves it by ~a whole Perlin feature across
+  // one billboard; the fold photographed as a bright horizontal streak + a
+  // vertical seam through a SINGLE fire quad (NOTES 2026-09-18). The fold is
+  // governed by the warp's gradient, i.e. amplitude / curlScale, so the applied
+  // amplitude is capped at `CURL_WARP_SAFE_RATIO * curlScale`. The shared 6 m
+  // scale therefore allows the full shipped strength; a tighter swirl gets a
+  // proportionally smaller amplitude instead of folding. TSL twin of
+  // curlWarpGain() — keep in step.
+  const curlGain = min(
+    u.curlStrength as never,
+    (u.curlScale as unknown as Tsl).mul(CURL_WARP_SAFE_RATIO) as never,
+  ) as unknown as Tsl;
   const curlWarp = (isSmoke || (!isRing && !isEmber))
     ? (curlVector(
         positionWorld as never,
         u.time as never,
         u.curlScale as never,
-      ) as unknown as Tsl).mul(u.curlStrength as unknown as Tsl)
+      ) as unknown as Tsl).mul(curlGain as never)
     : (vec3(0) as unknown as Tsl);
   const noisePos = vec3(
     aUv.x.mul(scale).add(seed.mul(17.31) as N).add(curlWarp.x as N) as N,

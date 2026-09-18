@@ -15,6 +15,7 @@ import {
   createExplosionVfx, findFreeSlot, fireEnvelope, lightEnvelope,
   makeExplosionLookUniforms, randomInUnitSphere, ringEnvelope, smokeEnvelope,
   smoothstep01, stepEmber,
+  curlWarpGain,
   extentQuartiles,
 } from './explosion-vfx';
 import type { BurstVisual } from '../explosion-aoe';
@@ -484,6 +485,42 @@ describe('createExplosionVfx', () => {
     expect(vfx.tuning.curlScale).toBe(0.25);   // clamped to the floor
     expect(vfx.tuning.softFade).toBe(0);
     vfx.dispose();
+  });
+
+  it('curlWarpGain caps the warp amplitude at the fold-safe gradient', () => {
+    // 2026-09-18 cross fix. A domain warp folds the noise lookup when its
+    // spatial gradient reaches the lookup's own; the gradient goes as
+    // appliedAmplitude / curlScale. The shipped look is below the cap, so it is
+    // unchanged; tighter swirls are capped instead of folding.
+    // At the shared 6 m scale the whole shipped strength applies.
+    expect(curlWarpGain(1.1, 6)).toBeCloseTo(1.1, 12);
+    expect(curlWarpGain(1.1, 12)).toBeCloseTo(1.1, 12);
+    expect(curlWarpGain(1.1, 60)).toBeCloseTo(1.1, 12);
+    // A strong request at 6 m is capped at the safe gradient, not passed on.
+    expect(curlWarpGain(2.0, 6)).toBeCloseTo(0.2 * 6, 12);
+    expect(curlWarpGain(2.0, 60)).toBeCloseTo(2.0, 12);
+    // Below the reference scale the cap bites, but never below a request that
+    // already sits under it.
+    expect(curlWarpGain(1.1, 2.2)).toBeCloseTo(0.2 * 2.2, 12);
+    expect(curlWarpGain(2.0, 2.2)).toBeCloseTo(0.2 * 2.2, 12);
+    expect(curlWarpGain(0.4, 2.2)).toBeCloseTo(0.4, 12);
+    // Off is off, and degenerate inputs never divide by zero.
+    expect(curlWarpGain(0, 2.2)).toBe(0);
+    expect(curlWarpGain(0, 0)).toBe(0);
+    expect(curlWarpGain(-1, 2.2)).toBe(0);
+    expect(curlWarpGain(1.1, 0)).toBe(0);
+    // Monotone in scale, and never above the requested strength.
+    let prev = -Infinity;
+    for (const s of [0.25, 1, 2.2, 4, 6, 16, 64]) {
+      const g = curlWarpGain(1.1, s);
+      expect(g).toBeGreaterThanOrEqual(prev);
+      expect(g).toBeLessThanOrEqual(1.1);
+      prev = g;
+    }
+    // The old tight-spike scale folds at full strength; the recommended 6 m
+    // scale keeps the whole strength and is cross-free.
+    expect(curlWarpGain(1.1, 2.2)).toBeLessThan(1.1);
+    expect(curlWarpGain(1.1, 6)).toBeGreaterThan(curlWarpGain(1.1, 2.2));
   });
 
   it('spawn -> live -> retire, with the light trailing the fire', () => {

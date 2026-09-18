@@ -43,14 +43,14 @@
     "gain": 1.35,
     "fireScale": 1,
     "lifeSec": 1.5,
-    "fireCount": 14,
-    "smokeCount": 8,
-    "emberCount": 12,
+    "fireCount": 1,
+    "smokeCount": 0,
+    "emberCount": 0,
     "ringSpeedMps": 9,
     "lightIntensity": 5,
     "seed": 1592594996,
     "smokeOpacity": 1,
-    "ringOpacity": 1,
+    "ringOpacity": 0,
     "plumeNeckH": 1.35,
     "plumeCapH": 2,
     "capFlatten": 0.55,
@@ -67,14 +67,14 @@
     "gain": 1.35,
     "fireScale": 1,
     "lifeSec": 1.5,
-    "fireCount": 14,
-    "smokeCount": 8,
-    "emberCount": 12,
+    "fireCount": 1,
+    "smokeCount": 0,
+    "emberCount": 0,
     "ringSpeedMps": 9,
     "lightIntensity": 5,
     "seed": 1592594996,
     "smokeOpacity": 1,
-    "ringOpacity": 1,
+    "ringOpacity": 0,
     "plumeNeckH": 1.35,
     "plumeCapH": 2,
     "capFlatten": 0.55,
@@ -84,24 +84,24 @@
     "fireCapShare": 0.5,
     "capFireFlatten": 0.5,
     "curlStrength": 1.1,
-    "curlScale": 6,
+    "curlScale": 2.2,
     "softFade": 0.4
   },
   "diffs": [
     {
       "time": "flash",
-      "changedFrac": 0.01730823612583952,
-      "meanAbs": 0.14836756627782813
+      "changedFrac": 0,
+      "meanAbs": 0
     },
     {
       "time": "fireball",
-      "changedFrac": 0.03376458112407211,
-      "meanAbs": 0.20387093495930764
+      "changedFrac": 0.014434429126899965,
+      "meanAbs": 0.0934867833156503
     },
     {
       "time": "smoke",
-      "changedFrac": 0.1047083775185578,
-      "meanAbs": 0.7476944750794513
+      "changedFrac": 0.03335100742311771,
+      "meanAbs": 0.2274557122657661
     }
   ],
   "sheet": {
@@ -118,14 +118,14 @@
         "gain": 1.35,
         "fireScale": 1,
         "lifeSec": 1.5,
-        "fireCount": 14,
-        "smokeCount": 8,
-        "emberCount": 12,
+        "fireCount": 1,
+        "smokeCount": 0,
+        "emberCount": 0,
         "ringSpeedMps": 9,
         "lightIntensity": 5,
         "seed": 1592594996,
         "smokeOpacity": 1,
-        "ringOpacity": 1,
+        "ringOpacity": 0,
         "plumeNeckH": 1.35,
         "plumeCapH": 2,
         "capFlatten": 0.55,
@@ -140,7 +140,7 @@
       },
       "bootFlag": false,
       "file": "baseline-flash.png",
-      "std": 37.65
+      "std": 29.91
     },
     {
       "variant": "baseline",
@@ -151,14 +151,14 @@
         "gain": 1.35,
         "fireScale": 1,
         "lifeSec": 1.5,
-        "fireCount": 14,
-        "smokeCount": 8,
-        "emberCount": 12,
+        "fireCount": 1,
+        "smokeCount": 0,
+        "emberCount": 0,
         "ringSpeedMps": 9,
         "lightIntensity": 5,
         "seed": 1592594996,
         "smokeOpacity": 1,
-        "ringOpacity": 1,
+        "ringOpacity": 0,
         "plumeNeckH": 1.35,
         "plumeCapH": 2,
         "capFlatten": 0.55,
@@ -173,7 +173,7 @@
       },
       "bootFlag": false,
       "file": "baseline-fireball.png",
-      "std": 41.11
+      "std": 30.99
     },
     {
       "variant": "baseline",
@@ -184,14 +184,14 @@
         "gain": 1.35,
         "fireScale": 1,
         "lifeSec": 1.5,
-        "fireCount": 14,
-        "smokeCount": 8,
-        "emberCount": 12,
+        "fireCount": 1,
+        "smokeCount": 0,
+        "emberCount": 0,
         "ringSpeedMps": 9,
         "lightIntensity": 5,
         "seed": 1592594996,
         "smokeOpacity": 1,
-        "ringOpacity": 1,
+        "ringOpacity": 0,
         "plumeNeckH": 1.35,
         "plumeCapH": 2,
         "capFlatten": 0.55,
@@ -206,7 +206,7 @@
       },
       "bootFlag": false,
       "file": "baseline-smoke.png",
-      "std": 42.21
+      "std": 33.26
     },
     {
       "variant": "curl",
@@ -217,14 +217,14 @@
         "gain": 1.35,
         "fireScale": 1,
         "lifeSec": 1.5,
-        "fireCount": 14,
-        "smokeCount": 8,
-        "emberCount": 12,
+        "fireCount": 1,
+        "smokeCount": 0,
+        "emberCount": 0,
         "ringSpeedMps": 9,
         "lightIntensity": 5,
         "seed": 1592594996,
         "smokeOpacity": 1,
-        "ringOpacity": 1,
+        "ringOpacity": 0,
         "plumeNeckH": 1.35,
         "plumeCapH": 2,
         "capFlatten": 0.55,
@@ -234,12 +234,12 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 1.1,
-        "curlScale": 6,
+        "curlScale": 2.2,
         "softFade": 0.4
       },
       "bootFlag": true,
       "file": "curl-flash.png",
-      "std": 37.59
+      "std": 29.91
     },
     {
       "variant": "curl",
@@ -250,14 +250,14 @@
         "gain": 1.35,
         "fireScale": 1,
         "lifeSec": 1.5,
-        "fireCount": 14,
-        "smokeCount": 8,
-        "emberCount": 12,
+        "fireCount": 1,
+        "smokeCount": 0,
+        "emberCount": 0,
         "ringSpeedMps": 9,
         "lightIntensity": 5,
         "seed": 1592594996,
         "smokeOpacity": 1,
-        "ringOpacity": 1,
+        "ringOpacity": 0,
         "plumeNeckH": 1.35,
         "plumeCapH": 2,
         "capFlatten": 0.55,
@@ -267,12 +267,12 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 1.1,
-        "curlScale": 6,
+        "curlScale": 2.2,
         "softFade": 0.4
       },
       "bootFlag": true,
       "file": "curl-fireball.png",
-      "std": 41.1
+      "std": 30.97
     },
     {
       "variant": "curl",
@@ -283,14 +283,14 @@
         "gain": 1.35,
         "fireScale": 1,
         "lifeSec": 1.5,
-        "fireCount": 14,
-        "smokeCount": 8,
-        "emberCount": 12,
+        "fireCount": 1,
+        "smokeCount": 0,
+        "emberCount": 0,
         "ringSpeedMps": 9,
         "lightIntensity": 5,
         "seed": 1592594996,
         "smokeOpacity": 1,
-        "ringOpacity": 1,
+        "ringOpacity": 0,
         "plumeNeckH": 1.35,
         "plumeCapH": 2,
         "capFlatten": 0.55,
@@ -300,12 +300,12 @@
         "fireCapShare": 0.5,
         "capFireFlatten": 0.5,
         "curlStrength": 1.1,
-        "curlScale": 6,
+        "curlScale": 2.2,
         "softFade": 0.4
       },
       "bootFlag": true,
       "file": "curl-smoke.png",
-      "std": 41.95
+      "std": 33.17
     }
   ]
 }

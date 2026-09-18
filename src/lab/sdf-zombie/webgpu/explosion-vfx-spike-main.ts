@@ -41,12 +41,17 @@ const MAX_STEP = 0.05;
  * THE NEW LOOK, in one place. `?curl=1` boots with the shared curl domain-warp
  * and the soft-particle depth fade on these values; the game's default stays 0
  * (explosion-vfx.ts) and the capture driver pins the same numbers through
- * setTuning so a still is reproducible. `curlScale` is small because a fireball
- * is a few metres across — the flame cards' 6 m body scale would be one cell.
+ * setTuning so a still is reproducible.
+ *
+ * `curlScale` is the shared 6 m body scale, NOT the 2.2 m the first spike used:
+ * at 2.2 the warp's spatial gradient folded the noise lookup and drew a bright
+ * cross through the fireball (see `curlWarpGain` and the 2026-09-18 NOTES).
+ * 6 m keeps the full `curlStrength` and is cross-free; it changes at least as
+ * many pixels as 2.2 did, so the billow is not given up for it.
  */
 export const SPIKE_CURL_LOOK = {
   curlStrength: 1.1,
-  curlScale: 2.2,
+  curlScale: 6,
   softFade: 0.4,
 } as const;
 
