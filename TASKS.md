@@ -17,11 +17,14 @@
   `scripts/game-context-codemod.ts` (scope-aware rename, 29 tests), `scripts/extract-leaf.ts` (leaf extractor),
   `scripts/game-context-coverage.test.ts` (gate: `ctx` must stay the ONLY state binding in `main()`).
 - [x] Extraction wave 1: `applyDynamiteTuning` + `dynamiteTuningValues` → `game-dynamite-tuning.ts`.
-- [ ] **Next, and by far the biggest win:** the `window.__sdfGame` object literal is **4,577 lines — 31% of the
-  file** — in one statement. It closes over 16 ctx slices + 54 callables, so it needs
-  `createSdfGameSeams(ctx, deps)`. It does NOT split cleanly by slice (75 multi-slice members hold 2,683 of the
-  4,577 lines); split it by its large diagnostic members instead (`installDebugProbe` 335, `bench` 206,
-  `texRoundTrip` 198, `demoScenario` 177, `shellDiag` 103).
+- [x] Tooling: `scripts/integrate-seams.ts` (seam spread integrator, refuses on a missing member).
+- [x] `__sdfGame` seam extraction: the 22 largest members (**2,012 lines**) lifted into
+  `game-seams-{debug-probe,bench,render-diag,shell-diag,spawn-goo}.ts`, spread back as
+  `createXSeams(ctx, deps)`. Authored in parallel by 5 dispatch agents (new files only, no `game-main.ts`
+  edits, zero conflicts); `scripts/integrate-seams.ts` did the single integration edit and refuses to write
+  unless every named member is found. **game-main.ts 14,549 → 12,568.** Runtime-verified: all 400 seams and
+  all 22 moved members present, game renders.
+- [ ] The `__sdfGame` literal still holds **378 smaller members (~2,963 lines)**. Same recipe, more groups.
 - [ ] Then the remaining leaves (63 functions, 848 lines) and the giants (`tick` 907, `setDrawFn` 589,
   `spawnEnemy` 260). Extraction must run **bottom-up** — free names are mostly other `main()`-scope functions.
 - [ ] **Filed, not fixed (both predate this work):** `march-hash.mjs`'s pinned canonical is STALE
