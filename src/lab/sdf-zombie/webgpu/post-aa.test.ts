@@ -176,7 +176,7 @@ describe('post-aa module wiring', () => {
 
   it('every target gets the explicit first clear after (re)allocation', () => {
     expect(src).toContain(
-      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB])',
+      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB, fireOut])',
     );
     expect(src).toContain('targetsNeedInit = true;');
   });
@@ -299,6 +299,60 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(calls.render).toBe(0);
     // …and the sink was never redirected away from the canvas.
     expect(sink.target).toBe('unset');
+  });
+
+  it('setFireVolume(false) is a no-op on the all-off parity path', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setFireVolume(false);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(chainCalls).toBe(1);
+    expect(calls.setRenderTarget).toBe(0);
+    expect(calls.render).toBe(0);
+  });
+
+  it('setFireVolume(true) runs the four fire passes into the capture', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    const frame = {
+      tuning: {
+        resolutionScale: 0.5, steps: 32, tempGain: 1.6, sootGain: 0.6,
+        rise: 1.1, sootRise: 2.2, curlStrength: 0.35, curlScale: 1.2,
+        lag: 0.3, lagMaxM: 0.6, history: 0.85, cardsPerBody: 5, smokeTailSec: 2,
+      },
+      time: 1, frame: 3,
+      invViewProj: new THREE.Matrix4(),
+      prevViewProj: new THREE.Matrix4(),
+      near: 0.05, far: 60, capsuleCount: 2,
+      boundsMin: [-1, 0, -1] as [number, number, number],
+      boundsMax: [1, 3, 1] as [number, number, number],
+    };
+    post.setFireVolume(true, frame);
+    // The first render settles the target init loop; then the four passes are
+    // the ONLY draws for a frame with every other effect off.
+    post.render(() => {});
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+    calls.passes.length = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(chainCalls).toBe(1);
+    // Four fire draws, then the chain's own final blit.
+    expect(calls.render).toBe(5);
+    expect(calls.passes.slice(0, 4)).toEqual([
+      'post:fire-march', 'post:fire-resolve', 'post:fire-composite', 'post:fire-copy',
+    ]);
   });
 
   it('exposes the real capture target with sampleable depth (prewarm seam)', () => {
