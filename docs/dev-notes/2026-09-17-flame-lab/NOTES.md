@@ -181,3 +181,57 @@ than to NotBlood's full flame column.
 flow tearing above ~0.7; unburnt mesh kit on both characters; ribs never read;
 bright bone at full char makes the cold death corpse look lit; the death heap is
 low rather than a collapsing column.
+
+# Bone fix — scorched bone, capped reveal (2026-09-18)
+
+Captures: `npm run flame:capture -- --technique cards`, overwriting the same
+`cards-<pose>-<stage>.png` set plus `cards-death-*` and `cards-contact.png`.
+This worktree had no placeholder atlas, so it was rebuilt from the primary
+checkout's extraction with `npm run flame:atlas` first (gitignored either way).
+
+**What changed** (`march.wgsl.ts`, the bone-reveal block; test in
+`march.wgsl.test.ts`, "scorches the revealed bone with char and caps the reveal
+at skeletonShow"):
+
+1. **Scorched albedo.** `let boneShade = mix(boneColor, scorchedBone, charAmt)
+   * mix(0.8, 1.0, nearBone);` with `scorchedBone = vec3(0.16, 0.13, 0.11)`.
+   Bone that has been in a fire is dark grey-brown, not ivory: at char 1 the
+   revealed bone lands at ~1.4x the surrounding char, so a burnt body no longer
+   reads pale. The depth term can now only DARKEN (0.8..1.0) — shape comes from
+   the bone normal and the gloss difference, never from lifting albedo.
+2. **Capped reveal.** `boneMat = clamp(nearBone * 3.5, 0.0, 1.0) * skelK;`,
+   where `skelK = charAmt * burnSkeleton`. The old unconditional
+   `clamp(showBone * 3.5, ...)` saturated to a full bone mix above showBone
+   ~0.29, which is what turned whole thin forearms bone-coloured end to end.
+   Scaling by `skelK` makes `skeletonShow` a hard ceiling, so a fragment can
+   only ever be PART bone.
+3. **Steeper depth falloff.** `nearBone` is the squared linear smoothstep ramp,
+   so bone well under the surface contributes very little.
+4. **Nothing emissive.** `gBurnEmit` is multiplied by `(1.0 - boneMat)`, so
+   revealed bone does not pick up the fire emission; at boneMat 0 the factor is
+   1.0 and the line is unchanged. Bone gloss dropped 0.45 → 0.3 so a specular
+   highlight does not make cold bone read as lit.
+5. Gate unchanged: still `charAmt * burnSkeleton`, so char 0 is byte-identical
+   (boneMat stays 0, the emission factor stays 1).
+
+**What the captures show.**
+
+- `cards-close-charred.png`: the zombie reads **black/charred** with ember
+  cracks between the flames and only a faint bone sheen along an arm edge. The
+  pre-fix frame had the whole body pale ivory with hard bone tubes; this is the
+  regression reversed. (Luma std 73.2 → 56.26; the orbit camera drifts between
+  loads, so judge the two side by side rather than by pixel diff.)
+- `cards-death-out.png`: the corpse is a **cold, dark charred mass** with bone
+  at most faintly speckled. The pre-fix frame showed a bright ivory skeleton
+  (std 23.34 → 20.03).
+- `cards-*-fresh.png`: no bone, as before — the gate is 0 at char 0. The pale
+  tubes still visible on the soldier in `cards-close-fresh` are its mesh
+  kit/flesh and are present identically in the charred frame; they are not the
+  SDF bone reveal.
+
+**Still not right.** Ribs still do not read (unchanged from task 4 — the chest
+flesh is deeper than 0.08). The reveal is now deliberately subtle; if the owner
+wants the skull more legible, that should come from `skeletonShow`/char rather
+than from brightening the bone albedo, which is the trap this fix removes. The
+soldier's mesh kit is still unburnt green, the close-view card-quad silhouettes
+and the low death heap are unchanged.

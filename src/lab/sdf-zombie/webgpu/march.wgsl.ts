@@ -3965,6 +3965,11 @@ ${FACE_LAYER_WGSL}
     // a freshly lit body is still opaque; zero on a body that never burned, so
     // no other pixel pays for the probe.
     let skelK = charAmt * burnSkeleton;
+    // How much of the bone material actually reaches this fragment, 0..
+    // skeletonShow. Declared out here because the fire emission below is
+    // damped by it: revealed bone is not on fire and must not pick up
+    // gBurnEmit, or a cold burnt corpse reads as glowing bone.
+    var boneMat = 0.0;
     if (skelK > 0.0) {
       let boneProbe = applyBones(1e9, p, data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
       // Reveal depth (0.08 default; fix pass task 3 history): the plan's 0.045
@@ -3976,7 +3981,13 @@ ${FACE_LAYER_WGSL}
       // 8 cm keeps the falloff ON the skeleton (nearest-bone ridge brightest,
       // smoothstep to zero). The ribs sit deeper than 8 cm under chest flesh.
       let revealDepth = burnSkeletonDepth;
-      let nearBone = 1.0 - smoothstep(0.0, revealDepth, max(boneProbe, 0.0));
+      // STEEPER FALLOFF (bone-fix pass). The linear ramp left too much reveal
+      // for bone sitting well under the surface; squaring it pulls deep bone
+      // toward zero while the nearest-bone ridge (the skull, a forearm edge)
+      // still reads. A thin limb's capsule runs its whole length at a shallow
+      // depth, so the depth term alone cannot save it -- the cap below does.
+      let nearBoneLin = 1.0 - smoothstep(0.0, revealDepth, max(boneProbe, 0.0));
+      let nearBone = nearBoneLin * nearBoneLin;
       let showBone = clamp(nearBone * skelK, 0.0, 1.0);
       // BONE, NOT A PALE TINT (flame-polish task 4). The old branch lerped
       // albedo straight toward boneColor and left the flesh normal and gloss
@@ -4008,28 +4019,35 @@ ${FACE_LAYER_WGSL}
           // skelK, so even a faint reveal has the tube's own shading.
           n = normalize(mix(n, boneN, clamp(nearBone * 0.95, 0.0, 0.95)));
         }
-        // The bone albedo recesses with probe distance (nearest ridge
-        // brightest) so the tube reads round rather than as a pasted patch.
-        // The core is lifted above the raw boneColor: through charred flesh the
-        // bone reads a stop brighter than directly exposed bone, which is what
-        // separates it from soot instead of leaving a grey stain.
-        let boneShade = boneColor * mix(0.45, 1.3, nearBone);
-        // showBone carries a gain above skelK so a found bone becomes BONE
-        // (full material) rather than a 40 percent tint of charred flesh; the
-        // master gate stays charAmt * burnSkeleton, which is exactly 0 on a
-        // fresh body and is what the effect scales from. 3.5 saturates the
-        // core of the reveal (bone within ~60 percent of skeletonDepth) while
-        // the outer ramp still fades to char, so a found bone is bone rather
-        // than a grey stain, without widening the reveal itself.
-        let boneMat = clamp(showBone * 3.5, 0.0, 1.0);
+        // SCORCHED BONE (bone-fix pass). Bone that has been in a fire is dark
+        // grey-brown, not ivory. Mix the clean bone colour toward a scorched
+        // tone as charAmt rises, so at char 1 the revealed bone is only a
+        // little lighter than the surrounding char instead of undoing the
+        // char and making a burnt body read pale. The depth term now only
+        // DARKENS (0.8..1.0) -- shape comes from the bone normal and the gloss
+        // difference, never from lifting the albedo above the char.
+        let scorchedBone = vec3<f32>(0.16, 0.13, 0.11);
+        let boneShade = mix(boneColor, scorchedBone, charAmt) * mix(0.8, 1.0, nearBone);
+        // CAP THE REVEAL at skelK (which is charAmt * skeletonShow, so never
+        // above skeletonShow). The old unconditional 3.5 gain saturated any
+        // showBone above ~0.29 to a full bone mix, which is what turned a
+        // whole thin forearm bone-coloured end to end. The gain still sharpens
+        // the core, but the cap means a limb can only ever be PART bone, so it
+        // stays a charred limb with bone hinted along it.
+        boneMat = clamp(nearBone * 3.5, 0.0, 1.0) * skelK;
         albedo = mix(albedo, boneShade, boneMat);
-        // Bone is matte but not dead-flat like char, and the lifted gloss also
-        // suppresses the flesh pore noise in surface prep. Mixing (never
-        // multiplying) lets bone recover a sheen that the soot kill above took.
-        gloss = mix(gloss, 0.45, boneMat);
+        // Bone is matte but not dead-flat like char; a slight gloss difference
+        // from the soot-killed flesh is what keeps the tube's shape readable.
+        // Mixing (never multiplying) lets bone recover a sheen. Lowered from
+        // 0.45: a stronger sheen caught the key light and read as lit bone on
+        // the cold death corpse.
+        gloss = mix(gloss, 0.3, boneMat);
       }
     }
-    gBurnEmit = fireRamp(fire) * fire * burnFireGain;
+    // Revealed bone is not on fire. Damp the fire emission by the bone mix so
+    // a bone patch does not glow through the flames or on a corpse; at
+    // boneMat 0 the factor is exactly 1.0 and the line is byte-identical.
+    gBurnEmit = fireRamp(fire) * fire * burnFireGain * (1.0 - boneMat);
     // The burn mask rides out to the tongue pass with the emissive write
     // (flame-tongues task 2): burn, char and the same fire term the ramp
     // consumed, so the screen-space tongues shape off exactly what the

@@ -52,7 +52,7 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-close-fresh.png",
-      "std": 73.86,
+      "std": 58.9,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -64,7 +64,7 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-close-charred.png",
-      "std": 73.2,
+      "std": 56.26,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -76,7 +76,7 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-stand-fresh.png",
-      "std": 43.43,
+      "std": 43.66,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -88,7 +88,7 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-stand-charred.png",
-      "std": 41.11,
+      "std": 38.42,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -100,7 +100,7 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-walk-fresh.png",
-      "std": 44.03,
+      "std": 44.09,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -112,7 +112,7 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-walk-charred.png",
-      "std": 40.59,
+      "std": 37.71,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -124,7 +124,7 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-run-fresh.png",
-      "std": 44,
+      "std": 44.06,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -136,7 +136,7 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-run-charred.png",
-      "std": 41.03,
+      "std": 37.59,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -160,7 +160,7 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-collapsed-charred.png",
-      "std": 33.66,
+      "std": 32.47,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -172,7 +172,7 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-distant-fresh.png",
-      "std": 23.96,
+      "std": 23.78,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -184,7 +184,7 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-distant-charred.png",
-      "std": 22.65,
+      "std": 21.41,
       "flow": null,
       "kit": null,
       "skeletonShow": null,
@@ -196,7 +196,7 @@
       "stage": "lit",
       "technique": "cards",
       "file": "cards-death-lit.png",
-      "std": 41.69
+      "std": 41.12
     },
     {
       "pose": "death",
@@ -207,7 +207,7 @@
         {
           "burn": 0.5,
           "burnSec": 3,
-          "char": 0.9534925266783949,
+          "char": 0.9532841819946442,
           "alight": false,
           "dying": true,
           "corpseSec": 3
@@ -215,14 +215,14 @@
         {
           "burn": 0.5,
           "burnSec": 3,
-          "char": 0.9534925266783949,
+          "char": 0.9532841819946442,
           "alight": false,
           "dying": true,
           "corpseSec": 3
         }
       ],
       "file": "cards-death-midburn.png",
-      "std": 25.8
+      "std": 23.04
     },
     {
       "pose": "death",
@@ -248,7 +248,7 @@
         }
       ],
       "file": "cards-death-out.png",
-      "std": 23.34
+      "std": 20.03
     }
   ]
 }
