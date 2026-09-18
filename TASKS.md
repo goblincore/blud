@@ -103,6 +103,7 @@
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
+- [x] Platform decided (2026-09-18): develop on the web stack, **release as a Rust + wgpu port**. Spike first (one zombie through `march.wgsl` natively). [Scope §4.6 / GR](docs/game/production-scope.md).
 - [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Vision](docs/game/vision.md).
 - [ ] Production scope draft 1 (milestones G0–G10, asset inventory). Level route: Blender (B/D), proven on the Wake + flat. [Scope](docs/game/production-scope.md).
 - [ ] First content in flight: the Flat ([tasks](docs/game/flat/tasks.md)) and level 0 The Wake ([tasks](docs/game/levels/00-the-wake/tasks.md)). Start with the render-to-texture spike (F-T2) and the melee prototype (W-B4).
