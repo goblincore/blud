@@ -256,6 +256,73 @@ export function orderIndicesByAreaDesc(
 }
 
 // -------------------------------------------------------------------------
+// PER-STREAM FUSION (blood-per-stream spike, 2026-09-18)
+//
+// The stream-blind density field is one additive buffer: two independent
+// wounds near each other SUM, cross one global threshold, and invent a shape
+// neither spray produced (the crossing fixture's butterfly). The fix is to
+// keep the accumulation per SOURCE and only let a pixel's own dominant stream
+// decide whether it is goo. Droplets already carry a stable `stream` id
+// (blood-sim.ts), so the layer can partition them.
+//
+// Channels are packed into the RGB of ONE extra density target — a small,
+// FIXED number, because screen-space density passes are fill-bound: the
+// per-stream field costs exactly one more density pass and one more blur
+// chain, not one per wound. Two streams get a dedicated channel each; every
+// further stream shares the third. `max(channels)` then means "does the
+// pixel's strongest single stream clear the threshold", which is per-channel
+// thresholding without a per-channel pass.
+// -------------------------------------------------------------------------
+
+/** Packed density channels: `GOO_STREAM_DEDICATED` dedicated + one shared. */
+export const GOO_STREAM_CHANNELS = 3;
+/** Streams with their own channel; the rest fall back to the shared one. */
+export const GOO_STREAM_DEDICATED = 2;
+/** Overflow / untagged / pool channel (the colour target's BLUE). */
+export const GOO_STREAM_SHARED_CHANNEL = GOO_STREAM_CHANNELS - 1;
+
+/**
+ * The channel a droplet's stream splats into, assigning dedicated channels on
+ * first sight and falling back to the shared one once they are taken. PURE
+ * given `assignment`; callers clear the map once per sync so the assignment is
+ * rebuilt for the frame's actual droplet order (channels are scratch storage,
+ * recomputed every frame — a reassignment between frames is invisible because
+ * the whole field is, too).
+ *
+ * `undefined` (untagged lab bursts / old fixtures) is deliberately the shared
+ * channel: guessing a source from proximity is exactly the bug this exists to
+ * avoid.
+ */
+export function streamChannelFor(
+  stream: number | undefined, assignment: Map<number, number>,
+): number {
+  if (stream === undefined) return GOO_STREAM_SHARED_CHANNEL;
+  const existing = assignment.get(stream);
+  if (existing !== undefined) return existing;
+  if (assignment.size < GOO_STREAM_DEDICATED) {
+    const ch = assignment.size;
+    assignment.set(stream, ch);
+    return ch;
+  }
+  return GOO_STREAM_SHARED_CHANNEL;
+}
+
+/**
+ * Optional launch fuse ramp: a stream's density is scaled from `minFactor` at
+ * age 0 up to 1 at `rampSec`, so a packed launch pulse ramps in over its first
+ * few frames instead of fusing the whole cluster at once (the saturated
+ * ring/torus). `rampSec <= 0` (the default) is off and returns exactly 1.
+ */
+export function streamFusionRamp(age: number, rampSec: number, minFactor = 0.35): number {
+  if (!(rampSec > 0)) return 1;
+  if (!(age > 0)) return minFactor;
+  if (age >= rampSec) return 1;
+  const t = age / rampSec;
+  const s = t * t * (3 - 2 * t); // smoothstep
+  return minFactor + (1 - minFactor) * s;
+}
+
+// -------------------------------------------------------------------------
 // SMOOTH RECONSTRUCTION (blood-surface comparison task, 2026-09-13)
 //
 // The baseline surface pass floors the texture coordinate, reads ONE nearest
@@ -972,6 +1039,51 @@ export const GOO_BLUR_WGSL = /* wgsl */ `fn gooBlur(
 }`;
 
 /**
+ * PER-STREAM COMBINE (blood-per-stream spike). Reads the stream-blind field
+ * (canonical layout, for the reconstructed depth and gut ratios) and the
+ * per-stream density channels, and writes ONE field in the canonical layout
+ * whose density is the dominant stream's.
+ *
+ * `max(channels)` is per-channel thresholding in disguise: `max >= thresh`
+ * holds iff SOME single stream clears the threshold, so two sprays that only
+ * overlap additively can never cross it together. The density MAGNITUDE is the
+ * strongest stream's own, so thickness and the soft edge shade the dominant
+ * mass rather than their invented sum. Depth and gut are the density-weighted
+ * means the canonical field already carries (both streams are the same red
+ * fluid, so the mean is an acceptable approximation on the overlap pixels).
+ */
+export const GOO_STREAM_COMBINE_WGSL = /* wgsl */ `fn gooStreamCombine(
+  canonTex: texture_2d<f32>,
+  streamTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  debug: f32
+) -> vec4<f32> {
+  // ONE target-to-target pass, unlike the canonical two-pass blur chain (whose
+  // two flips cancel). Read the sources pre-flipped so the combine's own single
+  // flip lands the output in the SAME orientation the surface pass expects of
+  // the blurred field — otherwise the whole goo mass renders upside down.
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let dims = vec2<f32>(textureDimensions(canonTex, 0));
+  let maxP = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let px = clamp(vec2<i32>(floor(st * dims)), vec2<i32>(0, 0), maxP);
+  let c = textureLoad(canonTex, px, 0);
+  let s = textureLoad(streamTex, px, 0);
+  // LAB DIAGNOSTIC ONLY (setStreamDebug): show the raw per-stream channels as
+  // colour — R = stream 0, G = stream 1, B = shared — so a capture can prove
+  // the partition is real rather than assuming it.
+  if (debug > 0.5) { return vec4<f32>(s.r, s.g, s.b, 1.0); }
+  // Per-source density: the strongest single stream, never the sum.
+  let dens = max(max(s.r, s.g), s.b);
+  // Depth/gut stay the canonical field's density-weighted means; the same
+  // droplets fed both passes, so c.r > 0 wherever dens > 0.
+  let depth = c.g / max(c.r, 1e-4);
+  let gutFrac = clamp(c.b / max(c.r, 1e-4), 0.0, 1.0);
+  return vec4<f32>(dens, dens * depth, dens * gutFrac, 0.0);
+}`;
+
+/**
  * ITEM 1's upsample (close-up task 4): the final composite that runs when
  * setSurfaceAtDensityRes(true) — reads the density-resolution shaded target
  * and writes it out at output resolution.
@@ -1175,6 +1287,32 @@ export interface GooLayer {
    * restores the shipped one-pass pose. Does not touch any tuning.
    */
   setSelection(sel: GooSelection | null): void;
+  /**
+   * PER-STREAM FUSION (blood-per-stream spike). OFF (the shipped one-field
+   * path, bit-identical) by default. ON adds one per-stream density pass, its
+   * blur chain and a combine pass whose field is the dominant source's own
+   * density — droplets of one spray fuse with each other, droplets of
+   * different sprays never sum into a shared shape.
+   *
+   * The game never calls this; it exists for the comparison lab.
+   */
+  setPerStream(on: boolean): void;
+  readonly perStream: boolean;
+  /**
+   * Optional launch fuse ramp for the per-stream path: a droplet's stream
+   * density is scaled from 0.35 at age 0 to 1 at `sec` (smoothstep), so a
+   * packed launch pulse ramps in over its first frames instead of saturating
+   * the absorption range. 0 (default) = off, weight exactly 1.
+   */
+  setStreamRamp(sec: number): void;
+  readonly streamRamp: number;
+  /**
+   * LAB DIAGNOSTIC ONLY: draw the combine's raw per-stream channels straight
+   * to the canvas (R = stream 0, G = stream 1, B = shared). Used to prove the
+   * partition is real in a capture. Inert unless setPerStream(true).
+   */
+  setStreamDebug(on: boolean): void;
+  readonly streamDebug: boolean;
   /** Exact-work A/B: upload only the instances the next draw consumes. */
   setUploadOptimization(on: boolean): void;
   /**
@@ -1310,10 +1448,31 @@ export function createGooLayer(
   const blurA = new THREE.RenderTarget(1, 1, blurOpts);
   const blurB = new THREE.RenderTarget(1, 1, blurOpts);
 
+  // PER-STREAM FUSION targets (blood-per-stream spike). `streamTarget` packs
+  // up to three source densities into RGB (see GOO_STREAM_CHANNELS); the pair
+  // beneath it is its own separable blur, so each stream is fused with itself
+  // BEFORE any cross-stream decision. `perStreamField` is the combine's output
+  // in the canonical layout the surface pass already reads, so the shipped
+  // surface materials need only a texture swap, no shader fork. All four are
+  // allocated eagerly (cheap, half-res) but only cleared/rendered while the
+  // experiment is on, so the shipped frame is untouched.
+  const streamTarget = new THREE.RenderTarget(1, 1, blurOpts);
+  const streamBlurA = new THREE.RenderTarget(1, 1, blurOpts);
+  const streamBlurB = new THREE.RenderTarget(1, 1, blurOpts);
+  const perStreamField = new THREE.RenderTarget(1, 1, blurOpts);
+
   // Same backend property sdf-layer pinned: render targets come back
   // y-inverted relative to the canvas, flipped on with a uniform so a future
   // three can be corrected from the console rather than the source.
   const uFlipY = uniform(1);
+  // Separate orientation uniform for the per-stream COMBINE, whose single
+  // target-to-target pass needs a pre-flip the two-pass blur chain does not
+  // (see GOO_STREAM_COMBINE_WGSL). Default 1 = flip, the correct orientation.
+  const uStreamFlipY = uniform(1);
+  // LAB DIAGNOSTIC ONLY (setStreamDebug): makes the combine emit the raw
+  // per-stream channels instead of the combined field; the surface pass then
+  // draws them straight. Default 0 = the real field.
+  const uStreamDebug = uniform(0);
   const uThresh = uniform(GOO_TUNING.threshold);
   /** Runtime sizeScale — see setSizeScale. */
   let sizeScale: number = GOO_TUNING.sizeScale;
@@ -1383,6 +1542,28 @@ export function createGooLayer(
   densMat.depthTest = false;
   densMat.fog = false;
 
+  // PER-STREAM DENSITY MATERIAL (blood-per-stream spike). Same geometry, same
+  // falloff, different destination: each instance routes `weightedFall` into
+  // the RGB channel of its stream (packed vec4, .w unused — the density pass
+  // alpha is forced to opacity). Additive blending then SUMS each stream's
+  // droplets into its channel and NOT into its neighbours', which is the whole
+  // mechanism: one stream fuses with itself, two streams never share a peak.
+  // Never rendered unless setPerStream(true); the shipped frame uses densMat.
+  const streamMask = attribute<'vec4'>('streamMask', 'vec4');
+  const densStreamMat = new MeshBasicNodeMaterial();
+  densStreamMat.colorNode = vec4(
+    weightedFall.mul(streamMask.x),
+    weightedFall.mul(streamMask.y),
+    weightedFall.mul(streamMask.z),
+    1,
+  );
+  densStreamMat.blending = THREE.AdditiveBlending;
+  densStreamMat.premultipliedAlpha = true;
+  densStreamMat.transparent = true;
+  densStreamMat.depthWrite = false;
+  densStreamMat.depthTest = false;
+  densStreamMat.fog = false;
+
   const quads = new THREE.InstancedMesh(
     new THREE.PlaneGeometry(1, 1), densMat, GOO_TUNING.maxParticles,
   );
@@ -1401,6 +1582,14 @@ export function createGooLayer(
   );
   quads.geometry.setAttribute('fallMask', fallAttr);
   const fallArr = fallAttr.array as Float32Array;
+  // The per-stream channel mask (blood-per-stream spike): one packed vec4 per
+  // instance, exactly one component 1 (its channel) and the rest 0. Only
+  // written while setPerStream is on, so the shipped upload path is untouched.
+  const streamAttr = new THREE.InstancedBufferAttribute(
+    new Float32Array(GOO_TUNING.maxParticles * 4), 4,
+  );
+  quads.geometry.setAttribute('streamMask', streamAttr);
+  const streamArr = streamAttr.array as Float32Array;
   const gooScene = new THREE.Scene();
   gooScene.add(quads);
 
@@ -1481,6 +1670,37 @@ export function createGooLayer(
     overlay: { raw: makeOverlayMat(target.texture), blur: makeOverlayMat(blurB.texture) },
     depth: { raw: makeDepthMat(target.texture), blur: makeDepthMat(blurB.texture) },
   };
+  // PER-STREAM surface materials: the same shading graphs bound to the
+  // combine's output, which is already fused and in the canonical layout, so
+  // there is no shader fork — only a texture. Kept separate so the shipped
+  // table literal above is untouched.
+  const surfMatsStream = {
+    overlay: makeOverlayMat(perStreamField.texture),
+    depth: makeDepthMat(perStreamField.texture),
+  };
+  // LAB DIAGNOSTIC (setStreamDebug): pass the combine's raw output straight to
+  // the canvas, unshaded, so a capture can see the packed channels as colour.
+  const streamDebugFn = wgslFn(`fn gooStreamDebug(
+  streamTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32
+) -> vec4<f32> {
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let dims = vec2<f32>(textureDimensions(streamTex, 0));
+  let maxP = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let px = clamp(vec2<i32>(floor(st * dims)), vec2<i32>(0, 0), maxP);
+  return textureLoad(streamTex, px, 0);
+}`);
+  const streamDebugMat = new MeshBasicNodeMaterial();
+  streamDebugMat.colorNode = streamDebugFn({
+    streamTex: texture(perStreamField.texture),
+    texCoord: uv(),
+    flipY: uFlipY,
+  }) as never;
+  streamDebugMat.depthWrite = false;
+  streamDebugMat.depthTest = false;
+  streamDebugMat.fog = false;
   let mode: 'overlay' | 'depth' = 'overlay';
 
   // ---------------------------------------------------------------
@@ -1557,6 +1777,11 @@ export function createGooLayer(
   const smoothSurfMats = {
     overlay: { raw: makeSmoothOverlayMat(target.texture), blur: makeSmoothOverlayMat(blurB.texture) },
     depth: { raw: makeSmoothDepthMat(target.texture), blur: makeSmoothDepthMat(blurB.texture) },
+  };
+  // PER-STREAM smooth variants — see surfMatsStream.
+  const smoothSurfMatsStream = {
+    overlay: makeSmoothOverlayMat(perStreamField.texture),
+    depth: makeSmoothDepthMat(perStreamField.texture),
   };
   let reconstruction: GooReconstruction = 'original';
 
@@ -1699,6 +1924,18 @@ export function createGooLayer(
   let lastOutputW = 0;
   let lastOutputH = 0;
   const passGate = { density: true, blur: true, surface: true };
+  // PER-STREAM FUSION state (blood-per-stream spike). OFF by default: the
+  // shipped frame never renders the stream target and the game is untouched.
+  // `streamTargetsNeedInit` carries the same explicit-first-clear discipline
+  // the other targets use, but lazily — only the experiment pays for it.
+  let perStreamOn = false;
+  let streamTargetsNeedInit = true;
+  let streamDebugOn = false;
+  // `rampSec > 0` down-weights young droplets in the STREAM channel only (the
+  // canonical depth/gut pass keeps full weight), so a packed launch ramps in.
+  let streamRampSec = 0;
+  // Reused across syncs — cleared per sync, never reallocated per frame.
+  const streamChannelMap = new Map<number, number>();
   // SELECTION SEAM state (shutter game integration). null = pose everything.
   let selection: GooSelection | null = null;
   let uploadOptimization = true;
@@ -1713,6 +1950,10 @@ export function createGooLayer(
   const candRoll = new Float32Array(candCap);
   const candGut = new Float32Array(candCap);
   const candArea = new Float32Array(candCap);
+  // Per-stream channel + fuse-ramp weight, carried through area-priority
+  // ordering exactly like candGut. Only read while perStreamOn.
+  const candStream = new Int32Array(candCap);
+  const candStreamW = new Float32Array(candCap);
   const candOrder: number[] = [];
 
   // CONNECTION BLOBS (candidate). Stored in flat scratch arrays copied on
@@ -1790,6 +2031,36 @@ export function createGooLayer(
   }
   const blurH = fullscreenScene(blurHMat);
   const blurV = fullscreenScene(blurVMat);
+
+  // PER-STREAM blur + combine (blood-per-stream spike). The blur pair mirrors
+  // the canonical one but follows the stream target; the combine material
+  // reads the two fields that match the current blur setting (blurred or raw)
+  // and writes `perStreamField` in the canonical layout. None of these run
+  // unless setPerStream(true).
+  const streamBlurHMat = makeBlurMat(streamTarget.texture, 1, 0);
+  const streamBlurVMat = makeBlurMat(streamBlurA.texture, 0, 1);
+  const streamBlurH = fullscreenScene(streamBlurHMat);
+  const streamBlurV = fullscreenScene(streamBlurVMat);
+
+  const combineFn = wgslFn(GOO_STREAM_COMBINE_WGSL);
+  function makeCombineMat(canonTexture: THREE.Texture, streamTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = combineFn({
+      canonTex: texture(canonTexture),
+      streamTex: texture(streamTexture),
+      texCoord: uv(),
+      flipY: uStreamFlipY,
+      debug: uStreamDebug,
+    }) as never;
+    m.depthWrite = false;
+    m.depthTest = false;
+    m.fog = false;
+    return m;
+  }
+  const combineBlurMat = makeCombineMat(blurB.texture, streamBlurB.texture);
+  const combineRawMat = makeCombineMat(target.texture, streamTarget.texture);
+  const combineBlur = fullscreenScene(combineBlurMat);
+  const combineRaw = fullscreenScene(combineRawMat);
 
   /** Explicit first clear after every (re)allocation — see file header. */
   let targetsNeedInit = true;
@@ -1882,6 +2153,9 @@ export function createGooLayer(
       renderer.setClearColor(0x000000);
       setPassLabel('goo:density');
       renderer.setRenderTarget(target);
+      // The per-stream pass below swaps this mesh's material; restore the
+      // canonical one here. A no-op in the shipped path (same material).
+      if (quads.material !== densMat) quads.material = densMat;
       if (passGate.density) void renderer.render(gooScene, camera);
       renderer.setClearColor(prevClear);
       camera.layers.mask = restore;
@@ -1897,6 +2171,43 @@ export function createGooLayer(
         void renderer.render(blurH.scene, quadCam);
         renderer.setRenderTarget(blurB);
         void renderer.render(blurV.scene, quadCam);
+      }
+
+      // Pass A3 — PER-STREAM density + blur + combine (blood-per-stream
+      // spike). Runs only while the experiment is on. The canonical pass just
+      // above still supplies depth/gut; this pass supplies the per-source
+      // density the combine picks its dominant stream from. Bounded and
+      // FIXED: one density pass, its blur pair and one fullscreen combine,
+      // whatever the wound count — channels are packed (GOO_STREAM_CHANNELS)
+      // and overflow shares one.
+      if (perStreamOn) {
+        if (streamTargetsNeedInit) {
+          streamTargetsNeedInit = false;
+          setPassLabel('init');
+          const prevStreamClear = renderer.getClearColor(clearColorScratch).getHex();
+          renderer.setClearColor(0x000000);
+          for (const t of [streamTarget, streamBlurA, streamBlurB, perStreamField]) {
+            renderer.setRenderTarget(t);
+            void renderer.render(emptyScene, camera);
+          }
+          renderer.setClearColor(prevStreamClear);
+        }
+        if (quads.material !== densStreamMat) quads.material = densStreamMat;
+        renderer.setClearColor(0x000000);
+        setPassLabel('goo:stream-density');
+        renderer.setRenderTarget(streamTarget);
+        if (passGate.density) void renderer.render(gooScene, camera);
+        renderer.setClearColor(prevClear);
+        if (blurred && passGate.blur) {
+          setPassLabel('goo:stream-blur');
+          renderer.setRenderTarget(streamBlurA);
+          void renderer.render(streamBlurH.scene, quadCam);
+          renderer.setRenderTarget(streamBlurB);
+          void renderer.render(streamBlurV.scene, quadCam);
+        }
+        setPassLabel('goo:stream-combine');
+        renderer.setRenderTarget(perStreamField);
+        void renderer.render((blurred ? combineBlur : combineRaw).scene, quadCam);
       }
 
       // The middle of the frame belongs to whoever composed us — the whole
@@ -1920,7 +2231,9 @@ export function createGooLayer(
         // see densityDiagnostics.smoothForcesFullResComposite). The material
         // swap keeps a steady frame from mutating anything while
         // setReconstruction still takes effect on the very next frame.
-        const wantSmooth = smoothSurfMats[mode][blurred ? 'blur' : 'raw'];
+        const wantSmooth = perStreamOn
+          ? (streamDebugOn ? streamDebugMat : smoothSurfMatsStream[mode])
+          : smoothSurfMats[mode][blurred ? 'blur' : 'raw'];
         if (quad.material !== wantSmooth) quad.material = wantSmooth;
         renderer.setRenderTarget(outputTarget);
         const prevAutoClearSmooth = renderer.autoClear;
@@ -1929,7 +2242,7 @@ export function createGooLayer(
         renderer.autoClear = prevAutoClearSmooth;
         return;
       }
-      if (surfaceAtDensityRes) {
+      if (surfaceAtDensityRes && !perStreamOn) {
         // ITEM 1 path. Stage 1: the SAME shading graphs (makeOverlayMat /
         // makeLowDepthMat over the same density texture and uniform nodes)
         // render into surfaceLow at density resolution. The low target must
@@ -1958,7 +2271,14 @@ export function createGooLayer(
         renderer.autoClear = prevAutoClear;
         return;
       }
-      const wantMat = surfMats[mode][blurred ? 'blur' : 'raw'];
+      // PER-STREAM reads the combine's output (already fused, canonical
+      // layout); otherwise the shipped raw/blurred pick. The `surfaceAtDensityRes`
+      // perf seam is deliberately not combined with the experiment (the
+      // combine already runs at density resolution; the surface must composite
+      // at full res for the material tables to stay one texture swap).
+      const wantMat = perStreamOn
+        ? (streamDebugOn ? streamDebugMat : surfMatsStream[mode])
+        : surfMats[mode][blurred ? 'blur' : 'raw'];
       if (quad.material !== wantMat) quad.material = wantMat;
       renderer.setRenderTarget(outputTarget);
       const prevAutoClear = renderer.autoClear;
@@ -1996,6 +2316,10 @@ export function createGooLayer(
       renderer.setClearColor(0x000000);
       setPassLabel('goo:density');
       renderer.setRenderTarget(target);
+      // renderLayer is the shutter reference and always uses the shipped
+      // canonical field; restore the canonical material a per-stream render()
+      // may have left behind. (Per-stream and renderLayer are not combined.)
+      if (quads.material !== densMat) quads.material = densMat;
       if (passGate.density) void renderer.render(gooScene, camera);
       renderer.setClearColor(prevClear);
       camera.layers.mask = restore;
@@ -2044,6 +2368,22 @@ export function createGooLayer(
         const dist = Math.hypot(x - camPos.x, y - camPos.y, z - camPos.z);
         return projectedTexelRadius(worldHalfH, dist, tanHalfFovY, densityH) < minTexelRadius;
       };
+      // PER-STREAM channel assignment (blood-per-stream spike). Rebuilt every
+      // sync: channels are per-frame scratch, so a stream shifting between
+      // frames is invisible (the whole field is recomputed). Off => all zeros,
+      // never written/uploaded.
+      streamChannelMap.clear();
+      const streamChannelOf = (d: Droplet): number =>
+        perStreamOn ? streamChannelFor(d.stream, streamChannelMap) : GOO_STREAM_SHARED_CHANNEL;
+      const streamWeightOf = (d: Droplet): number =>
+        perStreamOn && streamRampSec > 0 ? streamFusionRamp(d.age, streamRampSec) : 1;
+      const writeStreamMask = (i: number, ch: number, weight: number): void => {
+        const b = i * 4;
+        streamArr[b] = ch === 0 ? weight : 0;
+        streamArr[b + 1] = ch === 1 ? weight : 0;
+        streamArr[b + 2] = ch === 2 ? weight : 0;
+        streamArr[b + 3] = 0;
+      };
       let n = 0;
       if (areaPriority) {
         // ITEM 2b path: collect every qualifying candidate with its projected
@@ -2071,6 +2411,10 @@ export function createGooLayer(
           candHalfH[count] = halfH;
           candRoll[count] = Math.atan2(vCam.y, vCam.x);
           candGut[count] = d.kind === 'gut' ? 1 : 0;
+          if (perStreamOn) {
+            candStream[count] = streamChannelOf(d);
+            candStreamW[count] = streamWeightOf(d);
+          }
           const dist = Math.hypot(x - camPos.x, y - camPos.y, z - camPos.z);
           const ax = projectedTexelRadius(halfW, dist, tanHalfFovY, densityH);
           const ay = projectedTexelRadius(halfH, dist, tanHalfFovY, densityH);
@@ -2094,6 +2438,7 @@ export function createGooLayer(
           candHalfH[count] = halfH;
           candRoll[count] = sp.yaw;
           candGut[count] = 0; // floor pools are blood, never gut
+          if (perStreamOn) { candStream[count] = GOO_STREAM_SHARED_CHANNEL; candStreamW[count] = 1; }
           const dist = Math.hypot(x - camPos.x, y - camPos.y, z - camPos.z);
           const ax = projectedTexelRadius(halfW, dist, tanHalfFovY, densityH);
           const ay = projectedTexelRadius(halfH, dist, tanHalfFovY, densityH);
@@ -2113,6 +2458,7 @@ export function createGooLayer(
           fallArr[n] = c >= dropletCount
             ? splatDensityWeight(sim.splats.length - 1 - (c - dropletCount), sim.splats.length, splatFadeTail)
             : 1;
+          if (perStreamOn) writeStreamMask(n, candStream[c]!, candStreamW[c]!);
           quads.setMatrixAt(n++, m);
         }
       } else {
@@ -2144,6 +2490,7 @@ export function createGooLayer(
           m.compose(p, q, s);
           gutArr[n] = d.kind === 'gut' ? 1 : 0;
           fallArr[n] = 1;
+          if (perStreamOn) writeStreamMask(n, streamChannelOf(d), streamWeightOf(d));
           quads.setMatrixAt(n++, m);
         }
         // Floor pools: every splat becomes an elongated density blob at its
@@ -2172,6 +2519,7 @@ export function createGooLayer(
           fallArr[n] = splatDensityWeight(
             sim.splats.length - 1 - i, sim.splats.length, splatFadeTail,
           );
+          if (perStreamOn) writeStreamMask(n, GOO_STREAM_SHARED_CHANNEL, 1);
           quads.setMatrixAt(n++, m);
         }
       }
@@ -2192,6 +2540,7 @@ export function createGooLayer(
         m.compose(p, q, s);
         gutArr[n] = extraGut[e]!;
         fallArr[n] = extraWeight[e]!;
+        if (perStreamOn) writeStreamMask(n, GOO_STREAM_SHARED_CHANNEL, 1);
         quads.setMatrixAt(n++, m);
       }
       if (!uploadOptimization) {
@@ -2222,6 +2571,13 @@ export function createGooLayer(
         gutAttr.needsUpdate = true;
         fallAttr.needsUpdate = true;
       }
+      // PER-STREAM mask upload (blood-per-stream spike): only while on, and
+      // only the live range. Skipped entirely on the shipped path.
+      if (perStreamOn && n > 0) {
+        streamAttr.clearUpdateRanges();
+        streamAttr.addUpdateRange(0, n * 4);
+        streamAttr.needsUpdate = true;
+      }
       // Draw only the live instances. At 0 the pass still runs (and clears),
       // which the first-clear discipline depends on.
       quads.count = n;
@@ -2248,6 +2604,15 @@ export function createGooLayer(
       // ITEM 1's target lives at the density resolution by definition — it is
       // the surface pass running at density res.
       surfaceLow.setSize(w, h);
+      // PER-STREAM targets (blood-per-stream spike): sized with the field so
+      // they are ready the moment setPerStream(true) first renders. Their
+      // explicit-first-clear is lazy (streamTargetsNeedInit), so the shipped
+      // path pays neither the clears nor a changed init loop.
+      streamTarget.setSize(w, h);
+      streamBlurA.setSize(w, h);
+      streamBlurB.setSize(w, h);
+      perStreamField.setSize(w, h);
+      streamTargetsNeedInit = true;
       // setSize reallocates the backing texture — the lazy-init conflict
       // would return on the next frame without a fresh explicit clear.
       targetsNeedInit = true;
@@ -2308,6 +2673,13 @@ export function createGooLayer(
     },
     // SELECTION SEAM (shutter game integration): see GooSelection.
     setSelection(sel) { selection = sel; },
+    // PER-STREAM FUSION (blood-per-stream spike): see the interface docs.
+    setPerStream(on) { perStreamOn = !!on; },
+    get perStream() { return perStreamOn; },
+    setStreamRamp(sec) { streamRampSec = Math.max(0, Math.min(4, sec)); },
+    get streamRamp() { return streamRampSec; },
+    setStreamDebug(on) { streamDebugOn = !!on; uStreamDebug.value = on ? 1 : 0; },
+    get streamDebug() { return streamDebugOn; },
     setUploadOptimization(on) { uploadOptimization = !!on; },
     async precompileLayer() {
       // Compile the reference layer graphs in the SAME scene/target shape
@@ -2390,8 +2762,13 @@ export function createGooLayer(
       blurA.dispose();
       blurB.dispose();
       surfaceLow.dispose();
+      streamTarget.dispose();
+      streamBlurA.dispose();
+      streamBlurB.dispose();
+      perStreamField.dispose();
       quads.geometry.dispose();
       densMat.dispose();
+      densStreamMat.dispose();
       quad.geometry.dispose();
       lowQuad.geometry.dispose();
       for (const byMode of Object.values(surfMats)) {
@@ -2400,6 +2777,9 @@ export function createGooLayer(
       for (const byMode of Object.values(smoothSurfMats)) {
         for (const m of Object.values(byMode)) m.dispose();
       }
+      for (const m of Object.values(surfMatsStream)) m.dispose();
+      for (const m of Object.values(smoothSurfMatsStream)) m.dispose();
+      streamDebugMat.dispose();
       for (const byMode of Object.values(lowMats)) {
         for (const m of Object.values(byMode)) m.dispose();
       }
@@ -2409,6 +2789,14 @@ export function createGooLayer(
       blurV.quad.geometry.dispose();
       blurHMat.dispose();
       blurVMat.dispose();
+      streamBlurH.quad.geometry.dispose();
+      streamBlurV.quad.geometry.dispose();
+      streamBlurHMat.dispose();
+      streamBlurVMat.dispose();
+      combineBlur.quad.geometry.dispose();
+      combineRaw.quad.geometry.dispose();
+      combineBlurMat.dispose();
+      combineRawMat.dispose();
     },
   };
 }

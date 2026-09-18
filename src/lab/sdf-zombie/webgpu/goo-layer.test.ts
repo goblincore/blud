@@ -641,8 +641,12 @@ describe('goo perf seams (source tripwires)', () => {
   });
 
   it('the item-1 branch returns after the upsample — the shipped pass B is the else arm', () => {
-    expect(src).toContain('if (surfaceAtDensityRes) {');
-    expect(src).toContain('const wantMat = surfMats[mode][blurred ? \'blur\' : \'raw\'];');
+    // PER-STREAM is deliberately not combined with the density-res seam, so
+    // the branch is now guarded on it too; the shipped full-res else arm below
+    // is unchanged.
+    expect(src).toContain('if (surfaceAtDensityRes && !perStreamOn) {');
+    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
+    expect(src).toContain('surfMatsStream[mode]');
   });
 
   it('the minTexel skip is inert at 0 without touching the mist gates', () => {
@@ -712,6 +716,11 @@ import {
   sampleGooField, silhouetteCoverage, gooFieldGradient, neighborDensityUsable,
   densityTexelsPerOutputPixel,
   type GooDensityBlob,
+} from './goo-layer';
+
+import {
+  GOO_STREAM_COMBINE_WGSL, GOO_STREAM_CHANNELS, GOO_STREAM_DEDICATED,
+  GOO_STREAM_SHARED_CHANNEL, streamChannelFor, streamFusionRamp,
 } from './goo-layer';
 
 /** Builds an interleaved RGBA field from per-texel [r,g,b] triples. */
@@ -1032,9 +1041,11 @@ describe('smooth reconstruction wiring (source tripwires)', () => {
 
   it('the smooth composite returns after the full-res draw (density-res not combined)', () => {
     expect(src).toContain("if (reconstruction === 'smooth') {");
-    expect(src).toContain("const wantSmooth = smoothSurfMats[mode][blurred ? 'blur' : 'raw'];");
-    // The baseline composite line must still be present below it.
-    expect(src).toContain("const wantMat = surfMats[mode][blurred ? 'blur' : 'raw'];");
+    // The shipped raw/blurred lookups are still the else arms of the
+    // per-stream pick; the per-stream tables are the opt-in then arms.
+    expect(src).toContain("smoothSurfMats[mode][blurred ? 'blur' : 'raw']");
+    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
+    expect(src).toContain('smoothSurfMatsStream[mode]');
   });
 
   it('the candidate reports why the density-res seam is bypassed', () => {
@@ -1080,5 +1091,194 @@ describe('connection blob shape', () => {
     const weighted: GooDensityBlob = { ...blob, weight: 0.5, gut: 1 };
     expect(weighted.weight).toBe(0.5);
     expect(weighted.gut).toBe(1);
+  });
+});
+
+// -------------------------------------------------------------------------
+// PER-STREAM FUSION (blood-per-stream spike, 2026-09-18). The mechanism is
+// pure decision code (channel assignment + fuse ramp) plus one WGSL combine
+// pass; the render path itself needs a WebGPU device and is pinned as source
+// tripwires, the same discipline the rest of this file uses.
+// -------------------------------------------------------------------------
+
+describe('streamChannelFor (per-stream partition)', () => {
+  it('gives the first streams dedicated channels and shares the rest', () => {
+    const a = new Map<number, number>();
+    expect(streamChannelFor(1, a)).toBe(0);
+    expect(streamChannelFor(2, a)).toBe(1);
+    // Only GOO_STREAM_DEDICATED channels exist; the third stream and beyond
+    // fall back to the shared channel rather than growing the field.
+    expect(streamChannelFor(3, a)).toBe(GOO_STREAM_SHARED_CHANNEL);
+    expect(streamChannelFor(99, a)).toBe(GOO_STREAM_SHARED_CHANNEL);
+  });
+
+  it('is stable within a frame: one stream always maps to one channel', () => {
+    const a = new Map<number, number>();
+    const first = streamChannelFor(7, a);
+    expect(streamChannelFor(7, a)).toBe(first);
+    expect(streamChannelFor(7, a)).toBe(first);
+  });
+
+  it('sends untagged droplets to the shared channel (never guesses a source)', () => {
+    const a = new Map<number, number>();
+    expect(streamChannelFor(undefined, a)).toBe(GOO_STREAM_SHARED_CHANNEL);
+    expect(a.size).toBe(0);
+  });
+
+  it('reuses a cleared map, so a fresh frame re-assigns the same first stream', () => {
+    const a = new Map<number, number>();
+    streamChannelFor(4, a);
+    a.clear();
+    expect(streamChannelFor(4, a)).toBe(0);
+  });
+});
+
+describe('streamFusionRamp (launch pulse tame)', () => {
+  it('ramp 0 is off and returns exactly 1', () => {
+    expect(streamFusionRamp(0, 0)).toBe(1);
+    expect(streamFusionRamp(0.5, 0)).toBe(1);
+    expect(streamFusionRamp(5, -1)).toBe(1);
+  });
+
+  it('starts at minFactor and reaches 1 at rampSec, monotonically', () => {
+    expect(streamFusionRamp(0, 0.5)).toBeCloseTo(0.35, 6);
+    expect(streamFusionRamp(0.5, 0.5)).toBe(1);
+    expect(streamFusionRamp(9, 0.5)).toBe(1);
+    let prev = -1;
+    for (let age = 0; age <= 0.5; age += 0.02) {
+      const w = streamFusionRamp(age, 0.5);
+      expect(w).toBeGreaterThanOrEqual(prev);
+      expect(w).toBeGreaterThanOrEqual(0.35 - 1e-9);
+      expect(w).toBeLessThanOrEqual(1);
+      prev = w;
+    }
+  });
+});
+
+describe('per-stream combine: the behavioural requirement, at the maths level', () => {
+  it('two sub-threshold sprays cannot invent a shared goo pixel (max, not sum)', () => {
+    const thresh = 0.65;
+    const a = 0.5, b = 0.5; // neither stream alone clears the threshold
+    // Stream-blind additive: a + b = 1.0 fuses them into one shape.
+    expect(silhouetteCoverage(a + b, thresh, 0.1, 1)).toBe(1);
+    // Per-stream: the dominant single stream is still 0.5 — no goo.
+    expect(silhouetteCoverage(Math.max(a, b), thresh, 0.1, 1)).toBe(0);
+  });
+
+  it('one stream above threshold still reads as connected goo', () => {
+    expect(silhouetteCoverage(Math.max(0.9, 0.1), 0.65, 0.1, 1)).toBe(1);
+  });
+});
+
+describe('goo combine WGSL', () => {
+  it('starts with fn (three anchors its parse to ^)', () => {
+    expect(/^fn\s+gooStreamCombine\s*\(/.test(GOO_STREAM_COMBINE_WGSL)).toBe(true);
+  });
+
+  it('declares nothing reserved', () => {
+    const clashes = declaredNames(GOO_STREAM_COMBINE_WGSL).filter(d => RESERVED_WORDS.includes(d));
+    expect(clashes).toEqual([]);
+  });
+
+  it('takes the strongest SINGLE channel, never their sum', () => {
+    // Three packed channels (GOO_STREAM_CHANNELS); the shared one is BLUE, so
+    // the alpha channel is never read.
+    expect(GOO_STREAM_CHANNELS).toBe(3);
+    expect(GOO_STREAM_DEDICATED).toBe(2);
+    expect(GOO_STREAM_SHARED_CHANNEL).toBe(2);
+    expect(GOO_STREAM_COMBINE_WGSL).toMatch(/let dens = max\(max\(s\.r, s\.g\), s\.b\);/);
+    expect(GOO_STREAM_COMBINE_WGSL).not.toMatch(/s\.a/);
+  });
+
+  it('keeps the canonical layout so the surface pass needs no fork', () => {
+    // r = density, g = density*viewDepth, b = density*gut.
+    expect(GOO_STREAM_COMBINE_WGSL).toContain('c.g / max(c.r, 1e-4)');
+    expect(GOO_STREAM_COMBINE_WGSL).toContain('c.b / max(c.r, 1e-4)');
+    expect(GOO_STREAM_COMBINE_WGSL).toMatch(/return vec4<f32>\(dens, dens \* depth, dens \* gutFrac, 0\.0\);/);
+  });
+
+  it('pre-flips its single-pass sampling so the goo is not upside down', () => {
+    // The canonical blur is two passes (flip twice = none); this combine is
+    // one, so it must read flipped to land the output in the blur's
+    // orientation. Without this the whole goo mass renders vertically mirrored
+    // (captured and measured on the crossing/landing frames).
+    expect(GOO_STREAM_COMBINE_WGSL).toMatch(/flipY: f32/);
+    expect(GOO_STREAM_COMBINE_WGSL).toContain('if (flipY > 0.5) { st.y = 1.0 - st.y; }');
+    expect(GOO_STREAM_COMBINE_WGSL).toContain('floor(st * dims)');
+  });
+});
+
+describe('per-stream wiring (source tripwires)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+
+  it('defaults OFF, so the shipped stream-blind frame is byte-identical', () => {
+    expect(src).toContain('let perStreamOn = false;');
+    expect(src).toContain('let streamRampSec = 0;');
+    // The shipped density material is UNCHANGED: its colourNode still writes
+    // density/depth/gut from the same weightedFall expression.
+    expect(src).toContain(
+      'densMat.colorNode = vec4(weightedFall, weightedFall.mul(viewDepth), weightedFall.mul(gutMask), 1);',
+    );
+  });
+
+  it('exposes the switch and the ramp on the layer API', () => {
+    expect(src).toContain('setPerStream(on: boolean): void;');
+    expect(src).toContain('setPerStream(on) { perStreamOn = !!on; },');
+    expect(src).toContain('get perStream() { return perStreamOn; },');
+    expect(src).toContain('setStreamRamp(sec) { streamRampSec = Math.max(0, Math.min(4, sec)); },');
+    expect(src).toContain('get streamRamp() { return streamRampSec; },');
+  });
+
+  it('exposes the raw-channel diagnostic, default off', () => {
+    // Used to PROVE the partition in a capture (R/G streams, yellow overlap).
+    expect(src).toContain('setStreamDebug(on) { streamDebugOn = !!on; uStreamDebug.value = on ? 1 : 0; },');
+    expect(src).toContain('get streamDebug() { return streamDebugOn; },');
+    expect(src).toContain('let streamDebugOn = false;');
+    expect(GOO_STREAM_COMBINE_WGSL).toContain('if (debug > 0.5) { return vec4<f32>(s.r, s.g, s.b, 1.0); }');
+    expect(GOO_STREAM_COMBINE_WGSL).toMatch(/debug: f32/);
+  });
+
+  it('routes each instance into its stream channel and uploads the mask only while on', () => {
+    expect(src).toContain("const streamMask = attribute<'vec4'>('streamMask', 'vec4');");
+    expect(src).toContain("quads.geometry.setAttribute('streamMask', streamAttr);");
+    expect(src).toContain('if (perStreamOn) writeStreamMask(');
+    expect(src).toContain('if (perStreamOn && n > 0) {');
+    expect(src).toContain('streamAttr.addUpdateRange(0, n * 4);');
+    // The channel map is rebuilt every sync (channels are per-frame scratch).
+    expect(src).toContain('streamChannelMap.clear();');
+  });
+
+  it('runs the extra density/blur/combine passes only under the switch', () => {
+    expect(src).toContain('if (perStreamOn) {');
+    expect(src).toContain("setPassLabel('goo:stream-density');");
+    expect(src).toContain("setPassLabel('goo:stream-blur');");
+    expect(src).toContain("setPassLabel('goo:stream-combine');");
+    // The combine writes a field the surface reads; it uses the blurred pair
+    // when the canonical blur ran and the raw pair when it did not.
+    expect(src).toContain('const combineBlurMat = makeCombineMat(blurB.texture, streamBlurB.texture);');
+    expect(src).toContain('const combineRawMat = makeCombineMat(target.texture, streamTarget.texture);');
+    // The combine's orientation uniform is explicit and separable from uFlipY.
+    expect(src).toContain('const uStreamFlipY = uniform(1);');
+    expect(src).toContain('flipY: uStreamFlipY,');
+  });
+
+  it('the lazy first clear covers every new target (the submit-rejection trap)', () => {
+    expect(src).toContain('for (const t of [streamTarget, streamBlurA, streamBlurB, perStreamField])');
+    expect(src).toContain('streamTargetsNeedInit = true;');
+  });
+
+  it('the surface picks the per-stream field via a separate material table', () => {
+    expect(src).toContain('const surfMatsStream = {');
+    expect(src).toContain('const smoothSurfMatsStream = {');
+    expect(src).toContain('makeOverlayMat(perStreamField.texture)');
+    expect(src).toContain('makeSmoothOverlayMat(perStreamField.texture)');
+  });
+
+  it('the GAME never turns it on (byte-identical pin, source side)', () => {
+    const game = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+    expect(game).not.toContain('setPerStream');
+    expect(game).not.toContain('setStreamRamp');
+    // The game goo defaults are not touched by this spike either.
+    expect(src).not.toContain('GAME_GOO_DEFAULTS.perStream');
   });
 });

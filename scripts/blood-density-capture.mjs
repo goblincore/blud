@@ -18,6 +18,12 @@
 //        --gooRadius 0.28 --gooThreshold 0.45 --gooBlur 1.5
 //   LAB_VITE_PORT=5237 LAB_CDP_PORT=9227 node scripts/blood-density-capture.mjs
 //
+// PER-STREAM MODE (blood-per-stream spike):
+//   node scripts/blood-density-capture.mjs --per-stream
+// Shoots the single-spray (jet) and crossing fixtures at launch/mid/landing
+// for the DENSE look stream-blind vs dense per-stream, plus the per-stream
+// wipe and a cost bench, into docs/dev-notes/2026-09-18-blood-per-stream/.
+//
 // DETERMINISM. The page boots paused (rAF off) and rebuilds the Current sim
 // from t=0 at a fixed 1/60 s on every seek, seeded from the page's own seed
 // (12345). baseline and dense are two SIMS at the SAME seed/scenario/event
@@ -74,7 +80,13 @@ for (const [flag, key] of BEST_KEYS) {
   BEST_LOOK[key] = v;
   argv.splice(i, 2);
 }
-const OUT = argv[2] ?? 'docs/dev-notes/2026-09-18-blood-density';
+// PER-STREAM mode (blood-per-stream spike): a separate, focused capture set.
+const PER_STREAM = argv.includes('--per-stream');
+{
+  const i = argv.indexOf('--per-stream');
+  if (i !== -1) argv.splice(i, 1);
+}
+const OUT = argv[2] ?? (PER_STREAM ? 'docs/dev-notes/2026-09-18-blood-per-stream' : 'docs/dev-notes/2026-09-18-blood-density');
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5237);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9227);
 const LAB_TMP = process.env.LAB_TMP ?? '/tmp';
@@ -460,12 +472,16 @@ async function shoot(name, meta) {
 }
 
 /** Set the density look through the API and return the CLAMPED values. */
-const DENSITY_KEYS = new Set(['spread', 'count', 'size', 'gooRadius', 'gooThreshold', 'gooBlur']);
+const DENSITY_KEYS = new Set(['spread', 'count', 'size', 'gooRadius', 'gooThreshold', 'gooBlur', 'perStream', 'streamRamp']);
 async function applyDensity(partial) {
   const look = Object.fromEntries(Object.entries(partial).filter(([k]) => DENSITY_KEYS.has(k)));
   const applied = await evaluate(`window.__bloodCompare.setDensity(${JSON.stringify(look)})`);
   for (const [k, v] of Object.entries(look)) {
     if (v === undefined) continue;
+    if (typeof v === 'boolean') {
+      if (applied[k] !== v) fail(`setDensity ${k}=${v} applied ${applied[k]}`);
+      continue;
+    }
     if (typeof applied[k] !== 'number' || Math.abs(applied[k] - v) > 1e-9) {
       fail(`setDensity ${k}=${v} applied ${applied[k]}`);
     }
@@ -513,6 +529,202 @@ await evaluate(`window.__bloodCompare.setShape('current')`);
 await evaluate(`window.__bloodCompare.setScenario(${JSON.stringify(SCENARIO)})`);
 await evaluate(`window.__bloodCompare.setCamera(${JSON.stringify(CAM)})`);
 await evaluate('window.__bloodCompare.setSource(400, 300)');
+
+// =========================================================================
+// PER-STREAM MODE (blood-per-stream spike, 2026-09-18)
+//
+// The dense look stream-blind vs dense per-stream, on the SAME seed/scenario/
+// event time in ONE page load. The single-spray fixture proves per-stream does
+// not re-fragment one connected mass; the crossing fixture is the one the
+// stream-blind field merged into an invented butterfly. Every number is a gate,
+// the frames are the evidence.
+// =========================================================================
+if (PER_STREAM) {
+  const DENSE = { ...BEST_LOOK };
+  const BLIND = { ...DENSE, perStream: false, streamRamp: 0 };
+  const STREAM = { ...DENSE, perStream: true, streamRamp: 0 };
+  const STREAM_RAMP = { ...STREAM, streamRamp: 0.35 };
+
+  // --- single spray (jet): launch / mid / landing -------------------------
+  await applyFlow(CURL_OFF);
+  await applyDensity(BLIND);
+  for (const spec of TIMES) {
+    await shootCurrentAt(spec.sec, `perstream-blind-${spec.name}.png`, { look: 'dense-blind', time: spec.name });
+  }
+  // Determinism pin BEFORE the per-stream run.
+  await shootCurrentAt(TIMES[1].sec, 'perstream-blind-mid-again.png', { look: 'dense-blind', time: 'mid', repeat: true });
+
+  await applyDensity(STREAM);
+  for (const spec of TIMES) {
+    await shootCurrentAt(spec.sec, `perstream-on-${spec.name}.png`, { look: 'dense-perstream', time: spec.name });
+  }
+  // Optional launch fuse ramp: the same per-stream look, ramped in over 0.35 s.
+  await applyDensity(STREAM_RAMP);
+  await shootCurrentAt(TIMES[0].sec, 'perstream-ramp-launch.png', { look: 'dense-perstream-ramp', time: 'launch' });
+
+  // --- crossing fixture: two opposed sprays -------------------------------
+  // At launch the two wounds are clearly separate; by mid they have travelled
+  // into each other; the 0.6 s `cross` frame is the previous spike's failed
+  // merge. The task asks for launch/mid/landing, so shoot all three plus it.
+  await evaluate(`window.__bloodCompare.setScenario('crossing')`);
+  await evaluate(`window.__bloodCompare.setCamera(${JSON.stringify(CROSS_CAM)})`);
+  await applyDensity(BLIND);
+  for (const spec of TIMES) {
+    await shootCurrentAt(spec.sec, `crossing-blind-${spec.name}.png`, { look: 'dense-blind', scenario: 'crossing', time: spec.name });
+  }
+  await shootCurrentAt(CROSS_SEC, 'crossing-blind.png', { look: 'dense-blind', scenario: 'crossing', time: 'cross' });
+  await applyDensity(STREAM);
+  for (const spec of TIMES) {
+    await shootCurrentAt(spec.sec, `crossing-on-${spec.name}.png`, { look: 'dense-perstream', scenario: 'crossing', time: spec.name });
+  }
+  await shootCurrentAt(CROSS_SEC, 'crossing-on.png', { look: 'dense-perstream', scenario: 'crossing', time: 'cross' });
+  // LAB DIAGNOSTIC: raw packed channels (R=stream 0, G=stream 1, B=shared), so
+  // the capture proves the partition is real rather than assuming it.
+  await evaluate('window.__bloodCompare.setStreamDebug(true)');
+  await shootCurrentAt(CROSS_SEC, 'crossing-debug-channels.png', { look: 'stream-debug', scenario: 'crossing', time: 'cross' });
+  await evaluate('window.__bloodCompare.setStreamDebug(false)');
+  await applyDensity(STREAM_RAMP);
+  await shootCurrentAt(CROSS_SEC, 'crossing-ramp.png', { look: 'dense-perstream-ramp', scenario: 'crossing', time: 'cross' });
+  await applyDensity(STREAM);
+
+  // --- SECONDARY: dense emission, SHIPPED (thin) goo ----------------------
+  // The dense goo's radius/threshold/blur make each stream an absorbing fan
+  // that fills its whole cone; a thinner goo makes each stream a rope, so the
+  // streams may read as two. Same emission, same A/B; this isolates whether the
+  // fan is the reason the crossing still merges.
+  const THIN = { ...DENSE, gooRadius: 0.14, gooThreshold: 0.65, gooBlur: 0 };
+  await applyDensity({ ...THIN, perStream: false });
+  await shootCurrentAt(CROSS_SEC, 'crossing-thin-blind.png', { look: 'thin-blind', scenario: 'crossing', time: 'cross' });
+  await applyDensity({ ...THIN, perStream: true });
+  await shootCurrentAt(CROSS_SEC, 'crossing-thin-on.png', { look: 'thin-perstream', scenario: 'crossing', time: 'cross' });
+  await evaluate(`window.__bloodCompare.setScenario(${JSON.stringify(SCENARIO)})`);
+  await evaluate(`window.__bloodCompare.setCamera(${JSON.stringify(CAM)})`);
+  await applyDensity({ ...THIN, perStream: false });
+  await shootCurrentAt(TIMES[1].sec, 'jet-thin-blind.png', { look: 'thin-blind', time: 'mid' });
+  await applyDensity({ ...THIN, perStream: true });
+  await shootCurrentAt(TIMES[1].sec, 'jet-thin-on.png', { look: 'thin-perstream', time: 'mid' });
+  await applyDensity(STREAM);
+
+  // --- per-stream wipe: dense blind | dense per-stream on ONE frame -------
+  await evaluate(`window.__bloodCompare.setScenario('crossing')`);
+  await evaluate(`window.__bloodCompare.setCamera(${JSON.stringify(CROSS_CAM)})`);
+  await applyDensity(STREAM);
+  await applyFlow({ ...CURL_OFF, wipeAxis: 'perStream' });
+  await evaluate('window.__bloodCompare.setWipe(true, "original", "smooth", 0.5)');
+  await shootCurrentAt(CROSS_SEC, 'wipe-perstream-crossing.png', { look: 'wipe-perstream', scenario: 'crossing' });
+  await evaluate('window.__bloodCompare.setWipe(false)');
+  await applyFlow({ ...CURL_OFF, wipeAxis: 'variant' });
+
+  // --- determinism: the blind baseline must still reproduce ----------------
+  await evaluate(`window.__bloodCompare.setScenario(${JSON.stringify(SCENARIO)})`);
+  await evaluate(`window.__bloodCompare.setCamera(${JSON.stringify(CAM)})`);
+  await applyDensity(BLIND);
+  await shootCurrentAt(TIMES[1].sec, 'perstream-blind-mid-after.png', { look: 'dense-blind', time: 'mid', repeat: true });
+
+  const byFile = new Map(shots.map((s) => [s.file, s]));
+  const determinism = frameDiff(
+    byFile.get('perstream-blind-mid-again.png').buf, byFile.get('perstream-blind-mid-after.png').buf,
+  );
+  console.log(`determinism blind mid repeat: changed=${(determinism.changedFrac * 100).toFixed(3)}% meanAbs=${determinism.meanAbs.toFixed(3)}`);
+  if (determinism.changedFrac > 0.0005) {
+    fail(`blind mid did not reproduce (${(determinism.changedFrac * 100).toFixed(3)}%) — the per-stream run leaked state`);
+  }
+
+  // Single spray: per-stream is EXPECTED to be ~identical (one stream -> the
+  // max IS its own sum), which is the "must not re-fragment" result.
+  const jetDiffs = TIMES.map((spec) => ({
+    time: spec.name,
+    ...frameDiff(byFile.get(`perstream-blind-${spec.name}.png`).buf, byFile.get(`perstream-on-${spec.name}.png`).buf),
+  }));
+  for (const d of jetDiffs) {
+    console.log(`diff jet ${d.time} (per-stream): changed=${(d.changedFrac * 100).toFixed(2)}% meanAbs=${d.meanAbs.toFixed(3)}`);
+  }
+  const crossDiffs = TIMES.map((spec) => ({
+    time: spec.name,
+    ...frameDiff(byFile.get(`crossing-blind-${spec.name}.png`).buf, byFile.get(`crossing-on-${spec.name}.png`).buf),
+  }));
+  for (const d of crossDiffs) {
+    console.log(`diff crossing ${d.time}: changed=${(d.changedFrac * 100).toFixed(2)}% meanAbs=${d.meanAbs.toFixed(3)}`);
+  }
+  const crossingDiff = frameDiff(byFile.get('crossing-blind.png').buf, byFile.get('crossing-on.png').buf);
+  console.log(`diff crossing @${CROSS_SEC}s: changed=${(crossingDiff.changedFrac * 100).toFixed(2)}% meanAbs=${crossingDiff.meanAbs.toFixed(3)}`);
+  const thinCrossDiff = frameDiff(byFile.get('crossing-thin-blind.png').buf, byFile.get('crossing-thin-on.png').buf);
+  const thinJetDiff = frameDiff(byFile.get('jet-thin-blind.png').buf, byFile.get('jet-thin-on.png').buf);
+  console.log(`diff crossing THIN goo: changed=${(thinCrossDiff.changedFrac * 100).toFixed(2)}% meanAbs=${thinCrossDiff.meanAbs.toFixed(3)}`);
+  console.log(`diff jet THIN goo:      changed=${(thinJetDiff.changedFrac * 100).toFixed(2)}% meanAbs=${thinJetDiff.meanAbs.toFixed(3)}`);
+  // The switch must reach the render SOMEWHERE. It changes a crossing frame
+  // (a single spray is allowed to be identical); a totally inert run is the
+  // silent failure this guards.
+  const crossChanged = Math.max(...crossDiffs.map((d) => d.changedFrac), crossingDiff.changedFrac);
+  if (crossChanged < 0.0005) {
+    fail(`per-stream changed no crossing frame (${(crossChanged * 100).toFixed(3)}%) — the switch did not reach the render`);
+  }
+
+  // --- COST: dense blind vs dense per-stream, the lab's own pass timing ----
+  // Same scenario/seed/event time/camera/source; the only difference is the
+  // switch, so the label deltas are the price of the extra density pass, its
+  // blur pair and the combine.
+  const benchOpts = JSON.stringify({
+    reference: 'sharp', scenario: 'crossing', eventTime: CROSS_SEC,
+    frames: 60, warmup: 12, source: { width: 400, height: 300 }, camera: CROSS_CAM,
+  });
+  await applyDensity(BLIND);
+  const benchBlind = await evaluate(`window.__bloodCompare.benchShutter(${benchOpts})`);
+  await applyDensity(STREAM);
+  const benchStream = await evaluate(`window.__bloodCompare.benchShutter(${benchOpts})`);
+  const benchRow = (b) => ({
+    fencedP50: b.fenced.p50, fencedP95: b.fenced.p95, gpuSpanP50: b.gpuSpan.p50,
+    labels: b.labels.map((l) => ({ label: l.label, passes: l.passesPerFrame, p50: l.p50, mean: l.exclusiveMean })),
+  });
+  console.log('cost blind  ', JSON.stringify(benchRow(benchBlind)));
+  console.log('cost stream ', JSON.stringify(benchRow(benchStream)));
+
+  // --- sheets + json -------------------------------------------------------
+  const sheetStream = composeSheet(TIMES.map((spec) => [
+    byFile.get(`perstream-blind-${spec.name}.png`).buf,
+    byFile.get(`perstream-on-${spec.name}.png`).buf,
+  ]), `${OUT}/sheet-per-stream.png`);
+  console.log(`sheet-per-stream.png  (${sheetStream.w}x${sheetStream.h}: rows launch/mid/landing, columns stream-blind | per-stream)`);
+  const sheetCross = composeSheet(TIMES.map((spec) => [
+    byFile.get(`crossing-blind-${spec.name}.png`).buf,
+    byFile.get(`crossing-on-${spec.name}.png`).buf,
+  ]), `${OUT}/sheet-per-stream-crossing.png`);
+  console.log(`sheet-per-stream-crossing.png  (${sheetCross.w}x${sheetCross.h}: rows launch/mid/landing, columns stream-blind | per-stream)`);
+  const sheetCross06 = composeSheet([[
+    byFile.get('crossing-blind.png').buf,
+    byFile.get('crossing-on.png').buf,
+    byFile.get('crossing-ramp.png').buf,
+  ]], `${OUT}/sheet-per-stream-crossing-06.png`);
+  console.log(`sheet-per-stream-crossing-06.png  (${sheetCross06.w}x${sheetCross06.h}: @${CROSS_SEC}s blind | per-stream | per-stream+ramp)`);
+  const sheetThin = composeSheet([
+    [byFile.get('crossing-thin-blind.png').buf, byFile.get('crossing-thin-on.png').buf],
+    [byFile.get('jet-thin-blind.png').buf, byFile.get('jet-thin-on.png').buf],
+  ], `${OUT}/sheet-per-stream-thin.png`);
+  console.log(`sheet-per-stream-thin.png  (${sheetThin.w}x${sheetThin.h}: rows crossing/jet, columns blind | per-stream, dense emission + thin goo)`);
+
+  // --- guards --------------------------------------------------------------
+  const rendererErrors = consoleErrors.filter((t) => /THREE\.WebGPURenderer.*(pipeline|ShaderModule|fragment error|unresolved value)/i.test(t));
+  if (rendererErrors.length > 0) fail(`renderer pipeline error: ${rendererErrors[0].slice(0, 300)}`);
+  const realExceptions = pageExceptions.filter((t) => !/NotFoundError|setPointerCapture/.test(t));
+  if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
+
+  writeFileSync(`${OUT}/captures.json`, JSON.stringify({
+    url: PAGE_BASE, backend, mode: 'per-stream', viewport: { width: W, height: H },
+    scenario: SCENARIO, camera: CAM, times: TIMES,
+    crossCamera: CROSS_CAM, crossSec: CROSS_SEC,
+    baseLook: BASE_LOOK, denseLook: DENSE,
+    blind: BLIND, perStream: STREAM, perStreamRamp: STREAM_RAMP,
+    determinism: { changedFrac: determinism.changedFrac, meanAbs: determinism.meanAbs },
+    diffs: { jet: jetDiffs, crossing: crossDiffs, crossingAt06: crossingDiff, thinCross: thinCrossDiff, thinJet: thinJetDiff },
+    cost: { blind: benchRow(benchBlind), perStream: benchRow(benchStream) },
+    sheetStream, sheetCross, sheetCross06, sheetThin,
+    screenshots: shots.map(({ buf, ...rest }) => rest),
+  }, null, 2));
+
+  await stopStarted();
+  console.log(`\n${shots.length} per-stream captures + sheets + captures.json in ${OUT}`);
+  process.exit(0);
+}
 
 // --- baseline: the shipped look ---------------------------------------------
 await applyDensity(BASE_LOOK);
