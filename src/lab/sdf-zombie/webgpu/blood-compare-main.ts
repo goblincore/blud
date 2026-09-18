@@ -549,10 +549,10 @@ async function bootstrap(): Promise<void> {
   // 0 is inert, i.e. today's look.
   let softFadeM = 0;
   // The wipe can straddle a VARIANT (Original vs Smooth), the FLOW look
-  // (baseline | curl+fade) or the DENSITY look (baseline | packed). 'flow' and
-  // 'density' are what let the owner judge those techniques on the SAME frame
-  // and filter.
-  type WipeAxis = 'variant' | 'flow' | 'density';
+  // (baseline | curl+fade), the DENSITY look (baseline | packed) or the
+  // PER-STREAM look (packed stream-blind | packed per-stream). The last three
+  // are what let the owner judge those techniques on the SAME frame and filter.
+  type WipeAxis = 'variant' | 'flow' | 'density' | 'perStream';
   let wipeAxis: WipeAxis = 'variant';
 
   // --- DENSITY (packing) settings — blood-density spike ------------------
@@ -565,17 +565,27 @@ async function bootstrap(): Promise<void> {
   // boot with no change renders exactly the current frame, and the game (which
   // never reads any of this) is byte-identical (blood-sim.test.ts pins the
   // neutral pack).
-  interface DensityGooPack { sizeScale: number; threshold: number; blurPx: number }
+  interface DensityGooPack {
+    sizeScale: number; threshold: number; blurPx: number;
+    /** PER-STREAM FUSION (blood-per-stream spike): the layer flag plus its
+     *  optional launch fuse ramp. Default OFF/0 = the shipped stream-blind
+     *  field exactly. */
+    perStream: boolean; streamRamp: number;
+  }
   const SHIPPED_GOO: DensityGooPack = {
     sizeScale: GAME_GOO_DEFAULTS.sizeScale,
     threshold: GAME_GOO_DEFAULTS.threshold,
     blurPx: GAME_GOO_DEFAULTS.blurPx,
+    perStream: false,
+    streamRamp: 0,
   };
   const DENSITY_DEFAULTS = {
     coneScale: 1, countMul: 1, sizeMul: 1,
     gooSizeScale: SHIPPED_GOO.sizeScale,
     gooThreshold: SHIPPED_GOO.threshold,
     gooBlurPx: SHIPPED_GOO.blurPx,
+    perStream: false,
+    streamRamp: 0,
   };
   const density = { ...DENSITY_DEFAULTS };
 
@@ -585,19 +595,26 @@ async function bootstrap(): Promise<void> {
   }
   /** The goo half of the pack, for the layer's fusion knobs. */
   function densityGoo(): DensityGooPack {
-    return { sizeScale: density.gooSizeScale, threshold: density.gooThreshold, blurPx: density.gooBlurPx };
+    return {
+      sizeScale: density.gooSizeScale, threshold: density.gooThreshold, blurPx: density.gooBlurPx,
+      perStream: density.perStream, streamRamp: density.streamRamp,
+    };
   }
   function applyGooDensity(p: DensityGooPack): void {
     gooLayer.setSizeScale(p.sizeScale);
     gooLayer.setThreshold(p.threshold);
     gooLayer.setBlurPx(p.blurPx);
+    gooLayer.setPerStream(p.perStream);
+    gooLayer.setStreamRamp(p.streamRamp);
   }
   /** True when packing is not the shipped look, so the second sim is needed. */
   function densityActive(): boolean {
     return density.coneScale !== 1 || density.countMul !== 1 || density.sizeMul !== 1
       || density.gooSizeScale !== SHIPPED_GOO.sizeScale
       || density.gooThreshold !== SHIPPED_GOO.threshold
-      || density.gooBlurPx !== SHIPPED_GOO.blurPx;
+      || density.gooBlurPx !== SHIPPED_GOO.blurPx
+      || density.perStream !== SHIPPED_GOO.perStream
+      || density.streamRamp !== SHIPPED_GOO.streamRamp;
   }
 
   /** The curl base for one rebuild, or null for the shipped no-flow sim. */
@@ -613,7 +630,7 @@ async function bootstrap(): Promise<void> {
    *  separate comparison and deliberately stays on the shipped baseline sim. */
   function flowSimNeeded(): boolean {
     if (shape !== 'current' || compareMode !== 'surface') return false;
-    return curlOn || densityActive() || (wipe && (wipeAxis === 'flow' || wipeAxis === 'density'));
+    return curlOn || densityActive() || (wipe && (wipeAxis === 'flow' || wipeAxis === 'density' || wipeAxis === 'perStream'));
   }
 
   /** Does the second ("look") sim carry the DENSITY pack on this view? The
@@ -1440,6 +1457,15 @@ async function bootstrap(): Promise<void> {
       renderVariant(variantById(variant), rtA, flowSim, softFadeM, densityGoo());
       renderVariant(variantById(variant), rtB, sim, 0, SHIPPED_GOO);
       blitWipe();
+    } else if (wipeAxis === 'perStream') {
+      // PER-STREAM A/B (blood-per-stream spike): both sides carry the SAME
+      // dense emission + goo and the SAME sim; the ONLY difference is whether
+      // fusion is decided per stream. A (right) = per-stream, B (left) =
+      // stream-blind dense. A single frame, a single wipe.
+      initRenderTargets();
+      renderVariant(variantById(variant), rtA, flowSim, softFadeM, { ...densityGoo(), perStream: true });
+      renderVariant(variantById(variant), rtB, flowSim, 0, { ...densityGoo(), perStream: false });
+      blitWipe();
     } else {
       // Variant A/B at the CURRENT look, so the two axes compose.
       const side = lookActive ? flowSim : sim;
@@ -1567,6 +1593,8 @@ async function bootstrap(): Promise<void> {
       packing: {
         coneScale: density.coneScale, countMul: density.countMul, sizeMul: density.sizeMul,
         gooSizeScale: density.gooSizeScale, gooThreshold: density.gooThreshold, gooBlurPx: density.gooBlurPx,
+        perStream: density.perStream, streamRamp: density.streamRamp,
+        streamDebug: gooLayer.streamDebug,
         shipped: { ...DENSITY_DEFAULTS },
         active: densityActive(),
         baselineDroplets: sim.droplets.length,
@@ -1648,7 +1676,7 @@ async function bootstrap(): Promise<void> {
             : `wipe at ${wipePos.toFixed(2)} (${wipeAxis} axis): left=B(baseline) right=A(${wipeAxis})`)
           : filterState,
         `flow curl ${curlOn ? 'ON' : 'off'} strength ${curlStrength} scale ${curlScale} drift ${curlDrift}  soft fade ${softFadeM.toFixed(2)} m`,
-        `packing ${densityActive() ? 'ON' : 'off (shipped)'}  spread×${density.coneScale} count×${density.countMul} size×${density.sizeMul}  goo radius ${density.gooSizeScale} threshold ${density.gooThreshold} blur ${density.gooBlurPx}px`,
+        `packing ${densityActive() ? 'ON' : 'off (shipped)'}  spread×${density.coneScale} count×${density.countMul} size×${density.sizeMul}  goo radius ${density.gooSizeScale} threshold ${density.gooThreshold} blur ${density.gooBlurPx}px  per-stream ${density.perStream ? `ON (ramp ${density.streamRamp}s)` : 'off'}`,
         `sim droplets base ${sim.droplets.length} / look ${flowSim.droplets.length}  splats base ${sim.splats.length} / look ${flowSim.splats.length}`,
         `strands ${enableStrands ? 'on' : 'off'}  sheets ${enableSheets ? 'on' : 'off'} (experimental)  extras ${gooLayer.extraBlobCount}`,
         `goo ${gooVisible ? 'on' : 'off'}  mist ${mistVisible ? 'on' : 'off'} (beads/ribbons hidden as in game)`,
@@ -1954,6 +1982,7 @@ async function bootstrap(): Promise<void> {
       { id: 'variant', label: 'variant A/B' },
       { id: 'flow', label: 'flow A/B (baseline | flow)' },
       { id: 'density', label: 'density A/B (baseline | dense)' },
+      { id: 'perStream', label: 'per-stream A/B (dense | dense per-stream)' },
     ],
     wipeAxis,
     (v) => {
@@ -1961,7 +1990,7 @@ async function bootstrap(): Promise<void> {
       // Entering a look axis needs the second sim built at this event time
       // (with or without the packing pack, see flowUseDensity); leaving it is
       // a plain redraw.
-      if (wipeAxis === 'flow' || wipeAxis === 'density') simulateFlowTo(eventTime);
+      if (wipeAxis === 'flow' || wipeAxis === 'density' || wipeAxis === 'perStream') simulateFlowTo(eventTime);
       updateDiag();
       if (!playing) handle.drawOnce();
     },
@@ -2058,6 +2087,23 @@ async function bootstrap(): Promise<void> {
   gooSlider('goo radius', 'gooSizeScale', 0.05, 0.6, 0.01);
   gooSlider('goo threshold', 'gooThreshold', 0.05, 1.5, 0.05);
   gooSlider('goo blur px', 'gooBlurPx', 0, 8, 0.5);
+  // PER-STREAM FUSION toggle (blood-per-stream spike). OFF = the shipped
+  // stream-blind field exactly; ON = each spray's droplets fuse only with
+  // their own source. The optional ramp tames the saturated launch pulse by
+  // down-weighting a stream's first `ramp` seconds in the per-stream channel.
+  const perStreamToggle = checkbox('per-stream fusion', density.perStream, (v) => {
+    density.perStream = v;
+    densityChanged();
+  });
+  row('', perStreamToggle);
+  const streamRampInput = document.createElement('input');
+  streamRampInput.type = 'range'; streamRampInput.min = '0'; streamRampInput.max = '0.6'; streamRampInput.step = '0.05';
+  streamRampInput.value = String(density.streamRamp);
+  streamRampInput.addEventListener('input', () => {
+    density.streamRamp = Number(streamRampInput.value);
+    densityChanged();
+  });
+  row('stream fuse ramp s', streamRampInput);
   const densityResetBtn = document.createElement('button');
   densityResetBtn.textContent = 'Reset packing';
   densityResetBtn.addEventListener('click', () => {
@@ -2196,6 +2242,9 @@ async function bootstrap(): Promise<void> {
     'DENSITY (blood-density spike): cohesion is metaball PACKING, not motion. spread/count/size × pack the emission;',
     'goo radius/threshold/blur widen fusion. All default to the shipped game look. wipe axis=density straddles',
     'baseline | dense on the SAME frame (emission + goo on the dense side only); setDensity({...}) drives it.',
+    'PER-STREAM FUSION (blood-per-stream spike): droplets fuse only with their own source, so two sprays cannot',
+    'invent a shared shape. wipe axis=perStream straddles dense stream-blind | dense per-stream on one frame;',
+    'setDensity({perStream, streamRamp}) and state().packing record it. Default OFF = the shipped field exactly.',
     'capture: pick mode/shape (+filter/wipe), Play/Pause or freeze, screenshot the canvas;',
     '__bloodCompare.state() records seed/scenario/exposure + flow + packing + source/output/density.',
   ].join('\n');
@@ -2455,6 +2504,7 @@ async function bootstrap(): Promise<void> {
     setDensity: (o: {
       spread?: number; count?: number; size?: number;
       gooRadius?: number; gooThreshold?: number; gooBlur?: number;
+      perStream?: boolean; streamRamp?: number;
     }) => {
       if (o.spread !== undefined && Number.isFinite(o.spread)) density.coneScale = Math.max(0.2, Math.min(1.5, o.spread));
       if (o.count !== undefined && Number.isFinite(o.count)) density.countMul = Math.max(0.5, Math.min(4, o.count));
@@ -2462,10 +2512,13 @@ async function bootstrap(): Promise<void> {
       if (o.gooRadius !== undefined && Number.isFinite(o.gooRadius)) density.gooSizeScale = Math.max(0.05, Math.min(0.6, o.gooRadius));
       if (o.gooThreshold !== undefined && Number.isFinite(o.gooThreshold)) density.gooThreshold = Math.max(0.05, Math.min(1.5, o.gooThreshold));
       if (o.gooBlur !== undefined && Number.isFinite(o.gooBlur)) density.gooBlurPx = Math.max(0, Math.min(8, o.gooBlur));
+      if (o.perStream !== undefined) density.perStream = !!o.perStream;
+      if (o.streamRamp !== undefined && Number.isFinite(o.streamRamp)) density.streamRamp = Math.max(0, Math.min(4, o.streamRamp));
       densityChanged();
       return {
         spread: density.coneScale, count: density.countMul, size: density.sizeMul,
         gooRadius: density.gooSizeScale, gooThreshold: density.gooThreshold, gooBlur: density.gooBlurPx,
+        perStream: density.perStream, streamRamp: density.streamRamp,
         active: densityActive(),
       };
     },
@@ -2476,6 +2529,8 @@ async function bootstrap(): Promise<void> {
       if (!playing) handle.drawOnce();
     },
     setDensityScale: (v: number) => { gooLayer.setDensityScale(v); if (!playing) handle.drawOnce(); },
+    /** LAB DIAGNOSTIC: show the raw per-stream channels (R/G/B) on the canvas. */
+    setStreamDebug: (on: boolean) => { gooLayer.setStreamDebug(on); if (!playing) handle.drawOnce(); },
     setSource: (w: number, h: number) => {
       sourceW = Math.max(16, Math.round(w)); sourceH = Math.max(16, Math.round(h));
       gooLayer.setSize(sourceW, sourceH);

@@ -538,6 +538,27 @@ describe('blood comparison page — density axis (blood-density spike)', () => {
     expect(src).toContain('gooThreshold');
     expect(src).toContain('gooBlur');
   });
+
+  it('carries the per-stream switch through setDensity, state() and the panel', () => {
+    // The lab control: a DENSITY-section toggle and ramp, an API field, and
+    // the recorded state, so a capture can replay the exact look.
+    expect(src).toContain('perStream?: boolean; streamRamp?: number;');
+    expect(src).toContain('perStream: density.perStream, streamRamp: density.streamRamp,');
+    expect(src).toContain("checkbox('per-stream fusion'");
+    expect(src).toContain("row('stream fuse ramp s'");
+    expect(src).toContain('gooLayer.setPerStream(p.perStream);');
+    expect(src).toContain('gooLayer.setStreamRamp(p.streamRamp);');
+    // Default is the shipped stream-blind field.
+    expect(src).toContain('perStream: false,');
+    expect(src).toContain('streamRamp: 0,');
+  });
+
+  it('adds a per-stream wipe axis that compares dense | dense per-stream', () => {
+    expect(src).toContain("wipeAxis === 'perStream'");
+    expect(src).toContain("{ ...densityGoo(), perStream: true }");
+    expect(src).toContain("{ ...densityGoo(), perStream: false }");
+    expect(src).toContain("label: 'per-stream A/B (dense | dense per-stream)'");
+  });
 });
 
 describe('blood comparison page — task 3 bench + pass labels', () => {  it('installs labeled pass timing and labels the candidate passes', () => {
