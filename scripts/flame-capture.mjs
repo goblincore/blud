@@ -617,7 +617,7 @@ if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
 writeFileSync(`${OUT}/captures.json`, JSON.stringify({
   url: PAGE_PATH, backend, viewport: { width: W, height: H }, technique,
   poses: POSES, stages: STAGES, contact: {
-    file: 'contact.png', frames: CONTACT_FRAMES.map((f) => f.name),
+    file: `${shotPrefix}contact.png`, frames: CONTACT_FRAMES.map((f) => f.name),
     tiles: CONTACT_TILES.map((t) => t.file), bodyPx: CONTACT_BODY_PX,
   },
   shots: shots.map(({ buf, ...rest }) => rest),

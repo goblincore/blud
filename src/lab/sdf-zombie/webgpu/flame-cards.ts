@@ -89,10 +89,11 @@ export const FLAME_CARD_SLOTS: readonly FlameCardSlot[] = Object.freeze([
   { name: 'thighR', limb: 'legR', off: [0, 0.25, 0.04] },
   { name: 'shinL', limb: 'legL', off: [0, -0.28, 0.03] },
   { name: 'shinR', limb: 'legR', off: [0, -0.28, 0.03] },
-  // Boot level: the leg cluster's centre is its fattest (thigh) mass, so the
-  // lower leg needs a longer reach. The floor's own depth clips whatever
-  // pokes below ground on a lying body, and the flame above it hugs the
-  // corpse — the reference burns top to bottom, not to the knee.
+  // Boot level: the leg anchors at the posed cluster's MEAN centre (roughly
+  // mid-thigh, see limbAnchors in flame-lab-main.ts), so the lower leg needs a
+  // longer reach than an arm. The floor's own depth clips whatever pokes below
+  // ground on a lying body, and the flame above it hugs the corpse — the
+  // reference burns top to bottom, not to the knee.
   { name: 'bootL', limb: 'legL', off: [0, -0.58, 0.03] },
   { name: 'bootR', limb: 'legR', off: [0, -0.58, 0.03] },
 ] as const);

@@ -130,6 +130,21 @@ function limbCentre(b: BuildResult, limb: LimbId): Vec3 | null {
   return best;
 }
 
+/** The posed centre of a limb's WHOLE prim cluster — the refitClusters mean of
+ *  its endpoints, which applyRig recomputes every frame, so it rides a
+ *  collapse exactly as the fattest-prim rule does. Why legs need it: the
+ *  fattest-prim rule above is right for the head (hair/hats out-size the
+ *  skull) but wrong for a limb whose fattest prim is an end mass — the
+ *  soldier's leg cluster fattest prim is the hip ball and the zombie's is the
+ *  splayed foot, which anchored the soldier's leg cards at the waist and the
+ *  zombie's at the ankle. FLAME_CARD_SLOTS' offsets are authored against this
+ *  mean centre, so a bare lower leg is the symptom of feeding them the wrong
+ *  one. */
+function limbClusterCentre(b: BuildResult, limb: LimbId): Vec3 | null {
+  const cluster = b.clusters.find(c => c.limb === limb);
+  return cluster && cluster.alive ? cluster.center : null;
+}
+
 /** Every posed limb centre the cards anchor to, computed once per body per
  *  frame from the posed field. Missing limbs fall back to the torso's centre
  *  (a card that rides a severed limb's last known spot is worse than one
@@ -139,7 +154,13 @@ function limbAnchors(b: BuildResult): FlameCardAnchors {
   const out = { torso } as FlameCardAnchors;
   for (const limb of CLUSTER_ORDER) {
     if (limb === 'torso') continue;
-    out[limb] = limbCentre(b, limb) ?? torso;
+    // Only the legs switch rules for now: they are the one limb the captures
+    // showed under-covered, and the change is deliberately scoped so the good
+    // upper-body engulfment is untouched.
+    const centre = limb === 'legL' || limb === 'legR'
+      ? (limbClusterCentre(b, limb) ?? limbCentre(b, limb))
+      : limbCentre(b, limb);
+    out[limb] = centre ?? torso;
   }
   return out;
 }
@@ -158,10 +179,9 @@ interface FlameLabActor {
   /** Own face sheet while its texture lives — disposed on nothing today (the
    *  page runs until the tab closes, like the lab). */
   faceTex: THREE.Texture | null;
-  /** World Y of the posed skull centre, refreshed per frame — the flame
-   *  cards' head slot rides it so a collapsed body's flames come down too. */
-  headY: number;
-  /** The posed limb centres the flame cards anchor to, refreshed per frame. */
+  /** The posed limb centres the flame cards anchor to, refreshed per frame.
+   *  This is the post-anchor-fix model: every slot rides its posed limb centre
+   *  (head included), so a collapsed body's flames come down with it. */
   limbs: FlameCardAnchors | null;
   /** Last frame's floor position, for the flame cards' lean velocity. */
   lastPos: Vec3;
@@ -246,8 +266,8 @@ async function bootstrap(): Promise<void> {
     : resolveBurnTuning(BURN_TUNING);
   // The TONGUE TECHNIQUE (flame-tongues plan task 1): which tongue pass draws,
   // plus the tongue tuning all three passes will share. Default 'screen';
-  // ?tongue=<name> overrides at boot. Nothing consumes these yet — the
-  // screen/cards/volume passes land in tasks 2-4 and read them per frame.
+  // ?tongue=<name> overrides at boot. The cards pass (task 3) consumes the
+  // record this frame; screen/volume land on their own branches.
   const tongueParam = q.get('tongue');
   let technique: TongueTechnique =
     tongueParam !== null && isTongueTechnique(tongueParam) ? tongueParam : 'screen';
@@ -427,7 +447,6 @@ async function bootstrap(): Promise<void> {
       rng: makeRng(motionSeed + i * 7919),
       signals: emptyActorSignals(),
       faceTex,
-      headY: skull ? skull.centre[1] : 1.6,
       limbs: null,
       lastPos: spawn,
     });
@@ -760,7 +779,6 @@ async function bootstrap(): Promise<void> {
       a.gpu.setRootShift(rs[0]!, rs[2]!, a.motion.lastBodyYaw);
       const skull = headShape(posed);
       if (skull) a.gpu.setHeadShape(skull.centre, skull.axes);
-      a.headY = skull ? skull.centre[1] : a.headY;
       a.limbs = limbAnchors(posed);
       a.gpu.setHeadRotation(
         headQuatOf(a.motion.bound, a.motion.lastBodyYaw) ?? [0, 0, 0, 1]);
