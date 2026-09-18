@@ -102,4 +102,20 @@ describe('flame lab page', () => {
     // Tiles 3321-3326 are the burning-run frames and ARE tracked in the repo.
     expect(html).toContain('assets/blood-tiles/3321.png');
   });
+
+  it('feeds the volumetric fire pass from posed capsules on the volume technique', () => {
+    // Round 2, task 4d: technique 'volume' = the fire volume ON plus the cards
+    // trimmed to FIRE_VOLUME_TUNING.cardsPerBody; the capsules ride the SAME
+    // posed field the cards do, packed through one preallocated buffer.
+    expect(src).toContain('fireCapsules(posed)');
+    expect(src).toContain('capsuleVelocities(a.caps, caps, motionDt)');
+    expect(src).toContain('packFireVolume(');
+    expect(src).toContain('postAa.setFireVolumeData(');
+    expect(src).toContain('postAa.setFireVolume(true, fireFrame)');
+    expect(src).toContain('postAa.setFireVolume(false)');
+    expect(src).toContain('volume.cardsPerBody');
+    expect(src).toContain('setVolume(p: Partial<FireVolumeTuning>');
+    expect(src).toContain("q.get('fixture')");
+    expect(src).toContain("fixture(name = 'run')");
+  });
 });

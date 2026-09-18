@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  placeFlameCards, cardFrame, cardCellUv, cardCurlOffset, cardStandoff, cardAnchorDrop,
-  cardSettleAnchor, FLAME_CARD_SLOTS, FLAME_PILE_LIFT,
+  placeFlameCards, limitFlameCards, cardFrame, cardCellUv, cardCurlOffset, cardStandoff,
+  cardAnchorDrop, cardSettleAnchor, FLAME_CARD_SLOTS, FLAME_PILE_LIFT,
 } from './flame-cards';
 import { buildCurlVolume } from './curl-volume';
 
@@ -12,6 +12,22 @@ describe('flame cards', () => {
     expect(few.length).toBeLessThan(many.length);
     expect(many.length).toBeLessThanOrEqual(FLAME_CARD_SLOTS.length);
     expect(placeFlameCards(0, 1234)).toEqual([]);
+  });
+
+  it('limits cards per body, evenly across the lit slots', () => {
+    const all = placeFlameCards(1, 99);
+    expect(all.length).toBeGreaterThan(6);
+    // max >= the lit count is the untouched list (the old default).
+    expect(limitFlameCards(all, FLAME_CARD_SLOTS.length)).toEqual(all);
+    const five = limitFlameCards(all, 5);
+    expect(five.length).toBe(5);
+    // Evenly spread: first and last slots are kept, and the slots ascend.
+    expect(five[0]).toBe(all[0]);
+    expect(five[4]).toBe(all[all.length - 1]);
+    for (let i = 1; i < five.length; i++) {
+      expect(five[i]!.slot).toBeGreaterThan(five[i - 1]!.slot);
+    }
+    expect(limitFlameCards(all, 0)).toEqual([]);
   });
 
   it('is deterministic for a seed and varied across cards', () => {

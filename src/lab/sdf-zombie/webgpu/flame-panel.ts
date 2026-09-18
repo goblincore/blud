@@ -13,6 +13,9 @@ import { BURN_BOUNDS, burnPresets, type BurnTuning } from './burn-profiles';
 import {
   TONGUE_BOUNDS, TONGUE_TECHNIQUES, type TongueTechnique, type TongueTuning,
 } from './tongue-tuning';
+import {
+  FIRE_VOLUME_BOUNDS, FIRE_VOLUME_TUNING, type FireVolumeTuning,
+} from './fire-volume-tuning';
 
 export interface FlameKey {
   key: keyof BurnTuning;
@@ -27,6 +30,15 @@ export interface TongueKey {
   key: keyof TongueTuning;
   label: string;
   /** Read from TONGUE_BOUNDS, never restated — the clamp is the authority. */
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface VolumeKey {
+  key: keyof FireVolumeTuning;
+  label: string;
+  /** Read from FIRE_VOLUME_BOUNDS, never restated — the clamp is the authority. */
   min: number;
   max: number;
   step: number;
@@ -76,14 +88,41 @@ export const TONGUE_KEYS: readonly TongueKey[] = Object.freeze(
   })),
 );
 
+/** Label and slider step per fire-volume field; the RANGE comes from
+ *  FIRE_VOLUME_BOUNDS. The keys test pins this names every tuning field. */
+const VOLUME_LABELS: Record<keyof FireVolumeTuning, { label: string; step: number }> = {
+  resolutionScale: { label: 'vol scale', step: 0.05 },
+  steps: { label: 'vol steps', step: 1 },
+  tempGain: { label: 'vol temp', step: 0.05 },
+  sootGain: { label: 'vol soot', step: 0.05 },
+  rise: { label: 'vol rise', step: 0.05 },
+  sootRise: { label: 'soot rise', step: 0.1 },
+  curlStrength: { label: 'vol curl', step: 0.02 },
+  curlScale: { label: 'curl scale', step: 0.05 },
+  lag: { label: 'vol lag', step: 0.02 },
+  lagMaxM: { label: 'lag max m', step: 0.02 },
+  history: { label: 'vol history', step: 0.02 },
+  cardsPerBody: { label: 'cards/body', step: 1 },
+  smokeTailSec: { label: 'smoke tail s', step: 0.1 },
+};
+
+export const VOLUME_KEYS: readonly VolumeKey[] = Object.freeze(
+  (Object.keys(VOLUME_LABELS) as (keyof FireVolumeTuning)[]).map((key) => ({
+    key, ...VOLUME_LABELS[key], min: FIRE_VOLUME_BOUNDS[key][0], max: FIRE_VOLUME_BOUNDS[key][1],
+  })),
+);
+
 export function copyText(
   t: BurnTuning, technique: TongueTechnique, tongue: TongueTuning,
+  volume: FireVolumeTuning = FIRE_VOLUME_TUNING,
 ): string {
   const tongueBody = TONGUE_KEYS.map(k => `${k.key}: ${Number(tongue[k.key].toFixed(4))}`).join(', ');
   const body = FLAME_KEYS.map(k => `${k.key}: ${Number(t[k.key].toFixed(4))}`).join(', ');
+  const volumeBody = VOLUME_KEYS.map(k => `${k.key}: ${Number(volume[k.key].toFixed(4))}`).join(', ');
   return [
     `__sdfGame.setTechnique('${technique}')`,
     `__sdfGame.setTongueTuning({${tongueBody}})`,
+    `__sdfGame.setVolume({${volumeBody}})`,
     `__sdfGame.setBurnTuning({${body}})`,
   ].join(';');
 }
@@ -97,6 +136,8 @@ export interface FlamePanelOpts {
   setTechnique(name: TongueTechnique): void;
   readTongue(): TongueTuning;
   applyTongue(patch: Partial<TongueTuning>): TongueTuning;
+  readVolume(): FireVolumeTuning;
+  applyVolume(patch: Partial<FireVolumeTuning>): FireVolumeTuning;
   onCopy?(text: string): void;
 }
 
@@ -158,6 +199,14 @@ export function createFlamePanel(opts: FlamePanelOpts): PanelShell {
   shell.body.append(techRow);
   sliderRows(shell.body, FLAME_KEYS, () => opts.read(), (p) => opts.apply(p));
   sliderRows(shell.body, TONGUE_KEYS, () => opts.readTongue(), (p) => opts.applyTongue(p));
+  // VOLUME (burning-feedback round 2, task 4d): the fire-volume record's own
+  // section, one slider per field, ranges from FIRE_VOLUME_BOUNDS.
+  const volumeHeader = document.createElement('div');
+  volumeHeader.textContent = 'VOLUME';
+  volumeHeader.style.marginTop = '4px';
+  volumeHeader.style.opacity = '0.75';
+  shell.body.append(volumeHeader);
+  sliderRows(shell.body, VOLUME_KEYS, () => opts.readVolume(), (p) => opts.applyVolume(p));
   for (const name of Object.keys(burnPresets) as (keyof typeof burnPresets)[]) {
     const b = document.createElement('button');
     b.type = 'button'; b.textContent = name;

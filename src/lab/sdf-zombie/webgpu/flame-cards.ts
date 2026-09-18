@@ -171,6 +171,26 @@ export function placeFlameCards(burn: number, seed: number): FlameCardPlacement[
 }
 
 /**
+ * Keep at most `max` placements, spread EVENLY across the lit slots (torso
+ * through boots) rather than the first N, so the volume technique's few card
+ * accents still read top to bottom. `max` at or above the lit count returns the
+ * list untouched — the default, which reproduces the old order exactly.
+ */
+export function limitFlameCards(
+  placements: readonly FlameCardPlacement[], max: number,
+): FlameCardPlacement[] {
+  const m = Math.max(0, Math.min(placements.length, Math.round(max)));
+  if (m >= placements.length) return placements.slice();
+  if (m <= 0) return [];
+  if (m === 1) return [placements[0]!];
+  const out: FlameCardPlacement[] = [];
+  for (let k = 0; k < m; k++) {
+    out.push(placements[Math.round(k * (placements.length - 1) / (m - 1))]!);
+  }
+  return out;
+}
+
+/**
  * The flipbook frame at `time` for a card offset `phase` (seconds), at `fps`
  * over `frames`, wrapping — the atlas is a loop, not a one-shot.
  */
@@ -484,6 +504,9 @@ export interface FlameCards {
   setSoftFade(metres: number): void;
   /** Curl-flow strength 0..1 (BurnTuning.flameFlow); 0 is the old flicker. */
   setFlow(flow: number): void;
+  /** Cap the cards written per body (the volume technique keeps only a few
+   *  accents). Defaults to every slot, so the other techniques are unchanged. */
+  setMaxCardsPerBody(n: number): void;
   /** Swap the procedural fallback for the FIRE01 atlas (no recompile).
    *  `padTexels` is the atlas builder's transparent gutter per cell side. */
   setAtlas(tex: THREE.Texture, frames: number, cellW: number, cellH: number, padTexels?: number): void;
@@ -496,9 +519,16 @@ export interface FlameCards {
   dispose(): void;
 }
 
-export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards {
+export function createFlameCards(
+  opts: { maxBodies?: number; maxCardsPerBody?: number } = {},
+): FlameCards {
   const maxBodies = Math.max(1, opts.maxBodies ?? 2);
+  // The geometry is allocated for every slot (so the cap can move live without
+  // a reallocation); only how many quads update() WRITES is capped.
   const capacity = maxBodies * FLAME_CARD_SLOTS.length;
+  let maxCardsPerBody = Math.max(
+    0, Math.min(FLAME_CARD_SLOTS.length, opts.maxCardsPerBody ?? FLAME_CARD_SLOTS.length),
+  );
 
   const u = makeFlameCardUniforms();
   // The TSL-typed aliases of the same uniform objects the setters write.
@@ -731,8 +761,13 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
         const groundY = f.groundY ?? 0;
         const pileCentre = f.anchors.torso;
         const pilePull = settle * FLAME_PILE_PULL;
-        for (const p of placements) {
+        // maxCardsPerBody keeps the volume technique's few accents EVENLY
+        // spread over the lit slots (torso through boots) rather than the first
+        // N, so a 5-card body still reads top to bottom (limitFlameCards).
+        const picked = limitFlameCards(placements, maxCardsPerBody);
+        for (let pi = 0; pi < picked.length; pi++) {
           if (quad >= capacity) break;
+          const p = picked[pi]!;
           const slot = FLAME_CARD_SLOTS[p.slot]!;
           // Limb-centred anchor: the posed limb's world centre plus the
           // body-local offset rotated by the body yaw. The pose is in the
@@ -844,6 +879,9 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
     },
     setFlow(flow) {
       u.flow.value = flow < 0 ? 0 : flow > 1 ? 1 : flow;
+    },
+    setMaxCardsPerBody(n) {
+      maxCardsPerBody = Math.max(0, Math.min(FLAME_CARD_SLOTS.length, Math.round(n)));
     },
     setAtlas(tex, frames, cellW, cellH, padTexels = 0) {
       atlasFrames = Math.max(1, frames);
