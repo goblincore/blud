@@ -14,7 +14,7 @@ spec `2026-09-17-burning-enemies-flame-lab-design.md`.
 - **Execution:** everything dispatched (`deepseek-flash` on `dsh`), in three
   rounds, reviewed by Claude against captures and numbers after each.
 - **Not in scope:** burn damage/death (belongs to the real flare-gun pass),
-  in-SDF-march fire, room-wide smoke accumulation, probe/bounce fire light.
+  in-SDF-march fire, room-wide smoke accumulation.
 
 ## Rounds
 
@@ -37,25 +37,36 @@ Cause (confirmed): in-game fire only feeds `directFlashes` → each SDF body's
 `bodyFlash`; no light reaches walls/floor. The lab uses a real
 `THREE.PointLight` per burner.
 
-- A pool of **4 `THREE.PointLight`s**, created at boot, **always `visible`**,
-  `intensity = 0` when idle — copy `explosionLightPool` in `game-main.ts`
-  (~662, ~7915). Never toggle `.visible` (recompiles every lit material,
-  180–230 ms stalls measured).
-- Each frame, the **4 nearest-to-camera burning bodies** get a light at their
-  torso anchor; colour/intensity/flicker from `burn-light.ts` (the lab's rule).
-  Surplus lights go to 0.
+The room (walls/floor) is SDF and is lit by the **probe gather's dynamic
+light list** (`gatherLights`, max 8 slots, `game-main.ts` ~2100–2140);
+explosions light the room through it (`EXPLOSION_LIGHT.gatherPeak`) and light
+mesh props through an always-visible `PointLight` pool (`explosionLightPool`,
+~662 / ~7915). Fire needs **both**:
+
+- **Gather side (the room):** up to **2 gather slots** for fire, placed after
+  explosions and before tracers; the nearest burners to the player's room
+  win, and more burners than slots are merged into the nearest slot (summed
+  intensity at the intensity-weighted position). Colour/flicker from
+  `burn-light.ts`; peak is new tuning (`burnTuning.lightGatherPeak`).
+- **Mesh side (props):** a pool of **4 `THREE.PointLight`s**, created at boot,
+  **always `visible`**, `intensity = 0` when idle. Never toggle `.visible`
+  (recompiles every lit material, 180–230 ms stalls measured).
 - Keep the existing `directFlashes` push (lights the burning body itself).
-- **Done:** a capture of floor/wall next to a burning body is measurably
-  brighter (mean luminance of a fixed floor crop) than the same frame with the
-  pool forced to 0; boot shows no new pipeline compile after warm-up.
+- **Done:** a floor/wall crop next to a burning body is measurably brighter
+  (mean luminance) than the same frame with fire light forced to 0; the gather
+  cost with 4 burners is reported against 0 burners; boot shows no new
+  pipeline compile after warm-up.
 
 ### A2. Molten look on non-burning neighbours (item 4b)
 
 The feedback note's suspected route (crowd `burnCfg` bleed) did **not** hold up
 on reading: crowd records carry burn per instance and the shared crowd
-uniforms stay 0. Remaining candidates: the heat-distortion post pass
-(`burn-distort.ts`) warping neighbours, the fire's flicker light on nearby
-bodies, or a real burn value on the wrong body.
+uniforms stay 0. Remaining candidates, most likely first: the burning body's
+**flickering `directFlashes` light, which by design also lights its
+neighbours** (`game-main.ts` ~2195 comment: "lights itself and its
+neighbours") — a fast warm flicker on a body reads as moving molten skin; the
+heat-distortion post pass (`burn-distort.ts`) warping neighbours; or a real
+burn value on the wrong body.
 
 - **Diagnose first:** ignite ONE zombie in a group (`__sdfGame`), capture a
   neighbour's screen crop over ~1 s, measure frame-to-frame change. Repeat with
@@ -63,7 +74,9 @@ bodies, or a real burn value on the wrong body.
   logged for the neighbour.
 - Fix what the numbers point at. If it is the distortion, bound its footprint
   to the burner's flame region (not a neighbour's surface) rather than turning
-  it off.
+  it off. If it is the flicker light, neighbours keep a steady warm light
+  (the flicker applies only to the burning body's own flash, or the flicker
+  depth falls off with distance).
 - **Done:** a non-burning body beside a burning one shows no animated change
   of its **own surface** (burn noise, char). Distortion visibly passing over it
   from the flames in front is acceptable; the notes state which was the cause.
@@ -144,10 +157,14 @@ read. Target: bone reads **as bone** without pale limbs returning.
   `scene × transmittance + emission` — smoke is normal-blended darkening, fire
   is additive.
 - `steps = 0` disables without a pipeline change (wildfire's trick).
-- **Chain position:** a post-aa **capture-stage** composite right after scene
-  capture, **before glow, heat distortion and shutter blur**, so all three
-  apply to it. It must compose with the existing selective-shutter capture
-  stage (`shutter-game-layer.ts`), which stays behaviourally unchanged.
+- **Chain position:** a post-aa pass on the **same seam as the screen-space
+  tongue pass** (`setTongues` in `post-aa.ts`): runs right after the chain's
+  capture, **before the shutter capture stage and the glow extract**, marches
+  into its own low-res target (it samples the capture's depth, so it cannot
+  write the capture directly), then composites into the capture. Glow, heat
+  distortion and shutter blur all apply to it. Off never binds its material,
+  so the all-off parity path stays exact. The selective-shutter capture stage
+  is untouched.
 - Never sample the target being written (the screen-space-pass bug).
   WebGPU rules: alpha in `colorNode.w`, no `alphaHash`/`alphaTest`.
 
