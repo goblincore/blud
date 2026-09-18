@@ -47,14 +47,38 @@ import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:f
 import { spawn, execFileSync } from 'node:child_process';
 import { inflateSync, deflateSync } from 'node:zlib';
 
-const OUT = process.argv[2] ?? 'docs/dev-notes/2026-09-17-flame-lab';
+const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(2); };
+
+// --- technique switch (flame-tongues plan task 3) ---------------------------
+// `--technique <none|screen|cards|volume>` boots the page with &tongue=<name>
+// and prefixes every written PNG (and the contact sheet) with the technique,
+// so a per-technique run never overwrites the molten baseline. No flag = the
+// baseline run, byte-identical behaviour and names.
+const TONGUE_TECHNIQUES = ['none', 'screen', 'cards', 'volume'];
+const argv = [...process.argv];
+let technique = null;
+{
+  const i = argv.indexOf('--technique');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    if (v === undefined || !TONGUE_TECHNIQUES.includes(v)) {
+      fail(`--technique needs one of ${TONGUE_TECHNIQUES.join('|')}`);
+    }
+    technique = v;
+    argv.splice(i, 2);
+  }
+}
+const pagePath = technique ? `/sdf-flame-lab.html?seed=1&tongue=${technique}` : null;
+const shotPrefix = technique ? `${technique}-` : '';
+
+const OUT = argv[2] ?? 'docs/dev-notes/2026-09-17-flame-lab';
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5233);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9223);
 const LAB_TMP = process.env.LAB_TMP ?? '/tmp';
 const LAB_CHROME = process.env.LAB_CHROME
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const W = 1380, H = 820;                       // melt-capture's viewport
-const PAGE_PATH = '/sdf-flame-lab.html?seed=1';
+const PAGE_PATH = pagePath ?? '/sdf-flame-lab.html?seed=1';
 // Fixed frame counts, not wall-clock sleeps — the rAF clock is what the
 // render loop and the post chain's temporal smear live on.
 const SETTLE_BOOT = 90;     // first-use pipeline compiles after boot
@@ -75,8 +99,6 @@ const STAGES = [
   { name: 'fresh', char: 0 },
   { name: 'charred', char: 0.6 },
 ];
-
-const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(2); };
 setTimeout(() => { console.error('FAIL: watchdog (10 min)'); process.exit(2); }, 10 * 60_000).unref();
 mkdirSync(OUT, { recursive: true });
 mkdirSync(LAB_TMP, { recursive: true });
@@ -554,7 +576,7 @@ for (const pose of POSES) {
     await frames(SETTLE_STAGE);
     const shot = await send('Page.captureScreenshot', { format: 'png' });
     const buf = Buffer.from(shot.result.data, 'base64');
-    const name = `${pose}-${stage.name}.png`;
+    const name = `${shotPrefix}${pose}-${stage.name}.png`;
     writeFileSync(`${OUT}/${name}`, buf);
     const stats = pngStats(buf);
     if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
@@ -573,12 +595,13 @@ const byName = (n) => {
   if (!s) fail(`contact sheet: ${n} was not captured this run`);
   return { name: n, buf: s.buf };
 };
-const CONTACT_FRAMES = ['close-fresh.png', 'stand-fresh.png', 'stand-charred.png'].map(byName);
+const CONTACT_FRAMES = ['close-fresh.png', 'stand-fresh.png', 'stand-charred.png']
+  .map((n) => byName(`${shotPrefix}${n}`));
 const CONTACT_TILES = ['3321.png', '3323.png', '3325.png'].map((f) => {
   const p = `public/assets/blood-tiles/${f}`;
   return { file: f, buf: readFileSync(p) }; // tracked reference tiles — dev-safe to read
 });
-const contact = composeContact(CONTACT_FRAMES, CONTACT_TILES, `${OUT}/contact.png`);
+const contact = composeContact(CONTACT_FRAMES, CONTACT_TILES, `${OUT}/${shotPrefix}contact.png`);
 console.log(`contact.png  (${contact.w}x${contact.h}: ${contact.entries.join(' | ')})`);
 
 // The shutter's own error callback must have stayed silent (task 13's check,
@@ -592,7 +615,7 @@ const realExceptions = pageExceptions.filter((t) => !/NotFoundError|setPointerCa
 if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
 
 writeFileSync(`${OUT}/captures.json`, JSON.stringify({
-  url: PAGE_PATH, backend, viewport: { width: W, height: H },
+  url: PAGE_PATH, backend, viewport: { width: W, height: H }, technique,
   poses: POSES, stages: STAGES, contact: {
     file: 'contact.png', frames: CONTACT_FRAMES.map((f) => f.name),
     tiles: CONTACT_TILES.map((t) => t.file), bodyPx: CONTACT_BODY_PX,
@@ -601,5 +624,5 @@ writeFileSync(`${OUT}/captures.json`, JSON.stringify({
 }, null, 2));
 
 await stopStarted();
-console.log(`\n${shots.length} captures + contact.png + captures.json in ${OUT}`);
+console.log(`\n${shots.length} captures + ${shotPrefix}contact.png + captures.json in ${OUT}`);
 process.exit(0);

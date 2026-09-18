@@ -37,12 +37,18 @@ import { MOTION_TUNING } from '../motion';
 import { motionProfileFor, speedForBand, type MotionProfile } from '../motion-profile';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
+import { CLUSTER_ORDER, type LimbId } from '../types';
+import {
+  createFlameCards, FLAME_CARD_SLOTS,
+  type FlameCardAnchors, type FlameCardFrame,
+} from './flame-cards';
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
 import {
   TONGUE_TECHNIQUES, isTongueTechnique, resolveTongueTuning,
   type TongueTechnique, type TongueTuning,
 } from './tongue-tuning';
 import { createFlamePanel } from './flame-panel';
+import { createCharacterEffects } from './character-effects';
 import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
 import { burnDistortStrength, burnDistortRadiusM, burnWobble } from './burn-distort';
 import { createGooLayer } from './goo-layer';
@@ -101,6 +107,43 @@ function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
   return best === null || bestAxes === null ? null : { centre: best, axes: bestAxes };
 }
 
+/** The centre of a limb's fattest flesh primitive in the POSED field — the
+ *  same rule headShape applies to the head, generalized to every limb. This
+ *  is what the flame cards ride instead of standing-height anchors: a
+ *  collapsed body's torso centre is where the torso actually IS. Null when
+ *  the cluster is missing or fully subtracted (a severed limb, say). */
+function limbCentre(b: BuildResult, limb: LimbId): Vec3 | null {
+  const cluster = b.clusters.find(c => c.limb === limb);
+  if (!cluster || !cluster.alive) return null;
+  let best: Vec3 | null = null;
+  let bestR = -Infinity;
+  const prims = b.prims.slice(cluster.start, cluster.start + cluster.count);
+  const flesh = prims.filter(p => p.op !== 'sub' && p.color === undefined);
+  for (const p of (flesh.length > 0 ? flesh : prims)) {
+    if (p.op === 'sub') continue;
+    const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    if (r > bestR) {
+      bestR = r;
+      best = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+    }
+  }
+  return best;
+}
+
+/** Every posed limb centre the cards anchor to, computed once per body per
+ *  frame from the posed field. Missing limbs fall back to the torso's centre
+ *  (a card that rides a severed limb's last known spot is worse than one
+ *  that keeps burning at the trunk). */
+function limbAnchors(b: BuildResult): FlameCardAnchors {
+  const torso = limbCentre(b, 'torso') ?? [0, 1, 0];
+  const out = { torso } as FlameCardAnchors;
+  for (const limb of CLUSTER_ORDER) {
+    if (limb === 'torso') continue;
+    out[limb] = limbCentre(b, limb) ?? torso;
+  }
+  return out;
+}
+
 /** One lab body's runtime record: view + motion + wander policy. */
 interface FlameLabActor {
   name: string;
@@ -115,6 +158,13 @@ interface FlameLabActor {
   /** Own face sheet while its texture lives — disposed on nothing today (the
    *  page runs until the tab closes, like the lab). */
   faceTex: THREE.Texture | null;
+  /** World Y of the posed skull centre, refreshed per frame — the flame
+   *  cards' head slot rides it so a collapsed body's flames come down too. */
+  headY: number;
+  /** The posed limb centres the flame cards anchor to, refreshed per frame. */
+  limbs: FlameCardAnchors | null;
+  /** Last frame's floor position, for the flame cards' lean velocity. */
+  lastPos: Vec3;
 }
 
 // Everything lives inside an async bootstrap rather than using top-level await.
@@ -377,6 +427,9 @@ async function bootstrap(): Promise<void> {
       rng: makeRng(motionSeed + i * 7919),
       signals: emptyActorSignals(),
       faceTex,
+      headY: skull ? skull.centre[1] : 1.6,
+      limbs: null,
+      lastPos: spawn,
     });
   }
 
@@ -489,11 +542,74 @@ async function bootstrap(): Promise<void> {
   // (game-main's measured ~0.26 s).
   shutterGame.prewarm(postAa.captureTarget);
 
-  // The frame's draw: the SDF pass composites over the polygonal scene inside
-  // the post chain. No goo, no effects scene — the flame lab has nothing else
-  // to render (yet; the tongue plans add their own passes).
+  // ——— THE EFFECTS SCENE + FLAME CARDS (flame-tongues plan task 3) ————
+  // The lab had no translucent-effects tenant until now; character-effects is
+  // the repo's routing for exactly that (see its header): rendered AFTER the
+  // sdf composite inside the capture (below), against the completed depth
+  // buffer, so the additive cards compose over the finished frame and
+  // walls/bodies still occlude them.
+  const characterEffects = createCharacterEffects(handle.renderer);
+  const flameCards = createFlameCards({ maxBodies: FLAME_LAB_BODIES.length });
+  characterEffects.scene.add(flameCards.object);
+  flameCards.object.visible = false;   // only the 'cards' technique shows it
+  // The cards' per-frame feed, filled by the burn step below. Preallocated —
+  // the render callback allocates nothing.
+  const cardFrames: FlameCardFrame[] = FLAME_LAB_BODIES.map(() => ({
+    yaw: 0,
+    anchors: {
+      head: [0, 1.6, 0], torso: [0, 1.1, 0], armL: [-0.3, 1.1, 0],
+      armR: [0.3, 1.1, 0], legL: [-0.1, 0.5, 0], legR: [0.1, 0.5, 0],
+    },
+    burn: 0,
+  }));
+  // ATLAS OR FALLBACK, said loudly: the FIRE01 strip is a DEV PLACEHOLDER
+  // (public/assets/flame-placeholder/, gitignored — build it with
+  // `npm run flame:atlas`). Without it the cards run the procedural shader
+  // and this line says so, per the plan's panel requirement.
+  {
+    const cardsEl = document.createElement('div');
+    cardsEl.style.fontSize = '11px';
+    cardsEl.style.color = '#f96';
+    cardsEl.textContent = 'tongue cards: loading atlas…';
+    statusBox.appendChild(cardsEl);
+    const fallback = (why: string) => {
+      cardsEl.textContent = `tongue cards: PROCEDURAL fallback (${why}) — npm run flame:atlas`;
+    };
+    fetch('/assets/flame-placeholder/fire01.json')
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`http ${r.status}`))))
+      .then((t) => {
+        try { return JSON.parse(t) as { frames: number; cellW: number; cellH: number }; }
+        catch { throw new Error('manifest not found'); }
+      })
+      .then((info) => {
+        new THREE.TextureLoader().load(
+          '/assets/flame-placeholder/fire01.png',
+          (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;  // decode into working space
+            tex.magFilter = THREE.NearestFilter;    // the pixel-art read
+            tex.minFilter = THREE.LinearFilter;
+            tex.generateMipmaps = false;
+            tex.flipY = true;                       // v=0 is the flame's base
+            flameCards.setAtlas(tex, info.frames, info.cellW, info.cellH);
+            cardsEl.textContent = `tongue cards: atlas (${info.frames} frames of ${info.cellW}x${info.cellH})`;
+            cardsEl.style.color = '#9c9';
+          },
+          undefined,
+          () => fallback('atlas png failed to load'),
+        );
+      })
+      .catch((err: unknown) =>
+        fallback(err instanceof Error ? err.message : 'manifest fetch failed'));
+  }
+
+  // The frame's draw: the SDF pass composites over the polygonal scene, and
+  // the effects scene (the flame cards) renders after the composite inside
+  // the same capture, so the post chain grades the fire with the frame.
   handle.setDrawFn(() => postAa.render(
-    () => { sdfLayer.render(scene, camera); },
+    () => {
+      sdfLayer.render(scene, camera);
+      characterEffects.render(camera);
+    },
   ));
 
   // -------------------------------------------------------------------------
@@ -644,6 +760,8 @@ async function bootstrap(): Promise<void> {
       a.gpu.setRootShift(rs[0]!, rs[2]!, a.motion.lastBodyYaw);
       const skull = headShape(posed);
       if (skull) a.gpu.setHeadShape(skull.centre, skull.axes);
+      a.headY = skull ? skull.centre[1] : a.headY;
+      a.limbs = limbAnchors(posed);
       a.gpu.setHeadRotation(
         headQuatOf(a.motion.bound, a.motion.lastBodyYaw) ?? [0, 0, 0, 1]);
     }
@@ -698,7 +816,26 @@ async function bootstrap(): Promise<void> {
             anchor, burnDistortRadiusM(1.8), s2 * (1 + 0.35 * burnWobble(clock, i * 2.7)),
           );
         }
+        // FLAME CARDS feed (flame-tongues plan task 3): the same burn level
+        // and floor position the light rides, plus the pose-derived head Y
+        // and a velocity for the lean trail. Only the 'cards' technique draws
+        // them — the group's visible is the switch (checked after the loop).
+        const cf = cardFrames[i]!;
+        const inv = dt > 1e-4 ? 1 / dt : 0;
+        cf.yaw = a.motion.lastBodyYaw;
+        cf.anchors = a.limbs ?? limbAnchors(a.current);
+        cf.burn = s.burn;
+        cf.vel = [
+          (bodyPos[0] - a.lastPos[0]) * inv, 0, (bodyPos[2] - a.lastPos[2]) * inv,
+        ];
+        a.lastPos = bodyPos;
       }
+
+      // The cards draw only on their technique; setTuning every frame so the
+      // tongue sliders land live, exactly like the burn uniforms above.
+      flameCards.object.visible = technique === 'cards';
+      flameCards.setTuning(tongue);
+      if (technique === 'cards') flameCards.update(cardFrames, camera, clock);
     }
 
     // Orbit camera. Either button drags; the slow spin keeps the pair framed
@@ -730,6 +867,13 @@ async function bootstrap(): Promise<void> {
       return technique;
     },
     technique() { return technique; },
+    /** Flame-cards telemetry (plan task 3): quads written last frame and the
+     *  atlas mode — the two facts a capture that looks wrong needs first. */
+    cards() {
+      return { live: flameCards.liveCards, atlas: flameCards.atlasMode,
+        visible: flameCards.object.visible,
+        capacity: FLAME_LAB_BODIES.length * FLAME_CARD_SLOTS.length };
+    },
     setTongueTuning(p: Partial<TongueTuning> = {}) { tongue = resolveTongueTuning({ ...tongue, ...p }); return tongue; },
     tongue() { return { ...tongue }; },
     /** Full burn immediately, for deterministic captures. */

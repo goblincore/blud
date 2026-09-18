@@ -17,6 +17,7 @@
     "blob:silview": "tsx scripts/blob-silview.ts",
     "blob:inspect": "tsx scripts/blob-inspect.ts",
     "melt:shot": "scripts/melt-shot.sh",
+    "flame:atlas": "node scripts/build-flame-atlas.mjs",
     "flame:capture": "node scripts/flame-capture.mjs",
     "blob:render-check": "scripts/blob-render-check.sh",
     "test:watch": "vitest",
