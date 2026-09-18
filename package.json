@@ -19,6 +19,8 @@
     "melt:shot": "scripts/melt-shot.sh",
     "flame:atlas": "node scripts/build-flame-atlas.mjs",
     "flame:capture": "node scripts/flame-capture.mjs",
+    "explosion:capture": "node scripts/explosion-capture.mjs",
+    "blood:capture": "node scripts/blood-curl-capture.mjs",
     "blob:render-check": "scripts/blob-render-check.sh",
     "test:watch": "vitest",
     "blob:face-bake": "python3 scripts/blob-face-bake.py",

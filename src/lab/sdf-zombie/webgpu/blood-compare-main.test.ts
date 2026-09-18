@@ -258,8 +258,10 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
     expect(src).toContain('simulateCurrentTo(eventTime)');
     expect(src).toContain('function simulateCurrentTo(seconds: number)');
     // The Current side is rebuilt from t=0 at a fixed 1/60 s, so a seek is
-    // exact and reproducible (never a drifting live frame count).
-    expect(src).toContain('advanceRaw(1 / 60)');
+    // exact and reproducible (never a drifting live frame count). The curl
+    // (blood-curl-spike) is threaded through the SAME fixed-step rebuild, so
+    // the baseline and flow sims reach the event time on identical steps.
+    expect(src).toContain('advanceScenarioState(st, 1 / 60, flowBase)');
     // Splash is posed from the same clock.
     expect(src).toContain('splashEvent.time = Math.min(splashEvent.lifetime, eventTime)');
     // Both shapes loop through one shared event clock while playing.
@@ -433,6 +435,47 @@ describe('blood comparison page — shutter mode (task 1)', () => {
       expect(src, `${needle} must be exposed`).toContain(needle);
     }
     expect(src).toContain("mode: compareMode");
+  });
+});
+
+describe('blood comparison page — flow axis (blood-curl-spike)', () => {
+  it('ships the flow OFF so the baseline look is unchanged', () => {
+    // Every switch defaults to the shipped look; the game never sets them.
+    expect(src).toContain('let curlOn = false;');
+    expect(src).toContain('let softFadeM = 0;');
+    expect(src).toContain("let wipeAxis: WipeAxis = 'variant';");
+  });
+
+  it('builds a SECOND sim for the flow side without a second factory call', () => {
+    // The page's one-factory invariant still holds; the flow A/B needs a
+    // literal second sim at the same seed/scenario/event time.
+    expect((src.match(/createBloodSim\(/g) ?? []).length).toBe(1);
+    expect(src).toContain('const flowSim: BloodSim = { droplets: [], splats: [], clocks: {} };');
+    expect(src).toContain('function simulateFlowTo');
+    expect(src).toContain('simulateStateInto(st, seconds, curlBase(false))');
+  });
+
+  it('threads the shared curl volume into stepBlood through the API', () => {
+    expect(src).toContain('getCurlVolumeData');
+    expect(src).toContain('function curlBase');
+    expect(src).toContain('setFlow');
+    expect(src).toContain('flow: {');
+  });
+
+  it('wipes baseline against flow with the SAME filter variant on both sides', () => {
+    expect(src).toContain("wipeAxis === 'flow'");
+    expect(src).toContain('renderVariant(variantById(variant), rtA, flowSim, softFadeM)');
+    expect(src).toContain('renderVariant(variantById(variant), rtB, sim, 0)');
+    expect(src).toContain("label: 'flow A/B (baseline | flow)'");
+  });
+
+  it('applies the soft fade to both translucent element families', () => {
+    expect(src).toContain('bloodView.setSoftFade');
+    expect(src).toContain('splashLayer.setSoftFade');
+    // The flow panel exposes all four knobs plus the on/off switch.
+    for (const needle of ['curl on (sim advection)', "'strength m/s²'", "'scale m/cell'", "'drift /s'", "'soft fade m'"]) {
+      expect(src, `${needle} must be present`).toContain(needle);
+    }
   });
 });
 

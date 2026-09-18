@@ -14,10 +14,11 @@ import { impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProf
 import { createImpactSplashSprites } from './impact-splash-sprites';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, cameraPosition, clamp, cos, dot, faceDirection, float, max,
+  attribute, cameraPosition, clamp, cos, dot, faceDirection, float, linearDepth, max,
   mix, mx_noise_float, normalize, normalWorld, positionWorld, pow, sin,
   smoothstep, uniform, uv as surfaceUv, vec3, vec4,
 } from 'three/tsl';
+import { softParticleFade } from './soft-fade';
 import { basisFromAxis } from '../vec';
 import type { Vec3 } from '../types';
 
@@ -950,6 +951,12 @@ export interface ImpactSplashLayer {
   /** Rebuild the geometry from the current event list. Call once per frame,
    *  after the camera is final. */
   sync(camera: THREE.Camera): void;
+  /** Soft-particle fade distance in metres (soft-fade.ts): every TRANSLUCENT
+   *  blood element of the burst — the sprite cards, the membranes and the
+   *  mist — fades as it approaches the scene surface behind it, so a card
+   *  meeting the floor/body ends in a gradient instead of a straight cut.
+   *  0 (the default) is fully inert, i.e. today's look. */
+  setSoftFade(metres: number): void;
   setVisible(v: boolean): void;
   dispose(): void;
 }
@@ -971,6 +978,15 @@ function defaultRig(): ImpactSplashLightRig {
  */
 export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } = {}): ImpactSplashLayer {
   const rig = options.rig ?? defaultRig();
+
+  // SOFT-PARTICLE DEPTH FADE (soft-fade.ts). One uniform for every translucent
+  // element of the burst; the helper reads the SCENE depth itself from
+  // `viewportLinearDepth`, so the wildfire teardown's `(d - d) / fade = 0`
+  // transparent-black trap cannot be reached from here. 0 is inert.
+  const uSoftFade = uniform(0);
+  const depthFade = softParticleFade(
+    linearDepth() as never, uSoftFade as never,
+  ) as never;
 
   const maxVertsPerEvent = impactSplashMaxVerticesPerEvent();
   const maxVerts = maxVertsPerEvent * IMPACT_SPLASH_MAX_EVENTS;
@@ -1041,7 +1057,8 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
   // build density. This is coverage, not simply a paler RGB value.
   const thickness = clamp(maskNode.mul(0.65).add(0.10), 0.15, 0.78);
   membraneMaterial.opacityNode = sheetShade.alpha.mul(thickness)
-    .mul(float(1).sub(disNode.mul(0.5))) as never;
+    .mul(float(1).sub(disNode.mul(0.5)))
+    .mul(depthFade) as never;
   membraneMaterial.transparent = true;
   membraneMaterial.depthWrite = false;
   membraneMaterial.depthTest = true;
@@ -1096,7 +1113,7 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
   const mistUv = surfaceUv().sub(0.5).mul(2);
   const feather = float(1).sub(smoothstep(0.1, 1.0, mistUv.length()));
   mistMaterial.colorNode = vec3(0.08, 0.001, 0.003) as never;
-  mistMaterial.opacityNode = feather.mul(feather).mul(0.10) as never;
+  mistMaterial.opacityNode = feather.mul(feather).mul(0.10).mul(depthFade) as never;
   mistMaterial.transparent = true;
   mistMaterial.depthWrite = false;
   mistMaterial.depthTest = true;
@@ -1109,7 +1126,7 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
   mist.count = 0;
   mist.renderOrder = 3;
 
-  const sprites = createImpactSplashSprites(rig);
+  const sprites = createImpactSplashSprites(rig, depthFade);
   const group = new THREE.Group();
   group.add(sprites.object);
   sheet.visible = false;
@@ -1252,6 +1269,11 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
     step,
     clear,
     sync,
+    setSoftFade(metres: number) {
+      // Clamped like the other live tuning: a negative distance is inert, not a
+      // divide-by-zero, and a huge one would erase the burst.
+      uSoftFade.value = Number.isFinite(metres) ? Math.max(0, Math.min(4, metres)) : 0;
+    },
     setVisible(v: boolean) { group.visible = v; },
     dispose() {
       sprites.dispose();

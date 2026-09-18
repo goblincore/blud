@@ -74,10 +74,12 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, clamp, float, length, mix, mx_fractal_noise_float, smoothstep,
-  uniform, vec2, vec3, vec4,
+  attribute, clamp, float, length, linearDepth, mix, mx_fractal_noise_float,
+  positionWorld, smoothstep, uniform, vec2, vec3, vec4,
 } from 'three/tsl';
 import { mulberry32 } from './game-weapon';
+import { curlVector } from './curl-volume-node';
+import { softParticleFade } from './soft-fade';
 import type { Vec3 } from '../types';
 import type { BurstVisual } from '../explosion-aoe';
 
@@ -165,6 +167,31 @@ export interface ExplosionVfxTuning {
    * flattens; this is what stops the top of the plume being a sphere.
    */
   capFireFlatten: number;
+  /**
+   * CURL MOTION (explosion-curl task). How hard the SHARED divergence-free
+   * curl volume (curl-volume-node.ts) domain-warps the fire and smoke noise
+   * lookup, in noise-domain units. 0 is the game's default and contributes
+   * EXACTLY zero — the pre-curl scrolling look, unchanged — so the new swirl
+   * is opt-in; the spike page turns it on and the owner decides whether to
+   * lift the game default. Bounds [0, 2].
+   */
+  curlStrength: number;
+  /**
+   * World metres per curl-volume repeat: the shader samples the field at
+   * `fragmentWorld / curlScale`. Smaller is more, tighter swirl cells (a
+   * fireball is a few metres across, so ~2.5 reads as a rolling ball where the
+   * flame cards' ~6 m body scale would be one cell). Only meaningful when
+   * `curlStrength > 0`.
+   */
+  curlScale: number;
+  /**
+   * SOFT-PARTICLE FADE distance in metres (soft-fade.ts): translucent fire and
+   * smoke fade out as they approach the scene surface behind them, so the hard
+   * straight cut where a quad meets the floor or a wall becomes a gradient.
+   * 0 is the game's default and is fully inert (the identical frame). Bounds
+   * [0, 2] metres.
+   */
+  softFade: number;
 }
 
 export const EXPLOSION_VFX_TUNING: ExplosionVfxTuning = {
@@ -196,6 +223,11 @@ export const EXPLOSION_VFX_TUNING: ExplosionVfxTuning = {
   plumeMix: 1,
   fireCapShare: 0.5,
   capFireFlatten: 0.5,
+  // BOTH NEW SWITCHES SHIP OFF: the game's explosions are the pre-curl look
+  // until the owner flips these (one line each). See the interface above.
+  curlStrength: 0,
+  curlScale: 6,
+  softFade: 0,
 };
 
 export interface ExplosionVfx {
@@ -615,6 +647,12 @@ export function clampTuning(t: ExplosionVfxTuning): ExplosionVfxTuning {
     plumeMix: clampNum(t.plumeMix, 0, 1),
     fireCapShare: clampNum(t.fireCapShare, 0, 1),
     capFireFlatten: clampNum(t.capFireFlatten, 0, 1),
+    curlStrength: clampNum(t.curlStrength, 0, 2),
+    // The fireball is a few metres across; 0.25 m cells is the tightest that
+    // still reads as flow rather than noise, and 64 m is the flame cards' own
+    // body scale and beyond.
+    curlScale: clampNum(t.curlScale, 0.25, 64),
+    softFade: clampNum(t.softFade, 0, 2),
   };
 }
 
@@ -652,10 +690,19 @@ interface Tsl {
 /** An opaque TSL node value, for calls into the library functions. */
 type N = never;
 
-/** The two uniforms the look graph reads. `time` drives noise advection and
- *  the fine flicker; `gain` is the tuning seam. */
+/** The look graph's uniforms. `time` drives noise advection and the fine
+ *  flicker; `gain` is the tuning seam; `curlStrength`/`curlScale` are the
+ *  shared curl-volume seam and `softFade` the soft-particle depth fade. The
+ *  defaults come from EXPLOSION_VFX_TUNING, so the graph boots on the game's
+ *  unchanged look. */
 export function makeExplosionLookUniforms() {
-  return { time: uniform(0), gain: uniform(1) };
+  return {
+    time: uniform(0),
+    gain: uniform(1),
+    curlStrength: uniform(EXPLOSION_VFX_TUNING.curlStrength),
+    curlScale: uniform(EXPLOSION_VFX_TUNING.curlScale),
+    softFade: uniform(EXPLOSION_VFX_TUNING.softFade),
+  };
 }
 export type ExplosionLookUniforms = ReturnType<typeof makeExplosionLookUniforms>;
 
@@ -716,9 +763,26 @@ export function explosionLookColor(
   //   stamped onto every billboard in the burst.
   const riseRate = isSmoke ? 0.35 : isEmber ? 2.4 : 1.7;
   const scale = isSmoke ? 2.6 : 3.4;
+  // — CURL DOMAIN WARP (fire and smoke only) ——————————————————————————
+  // The SHARED divergence-free curl volume (curl-volume-node.ts), sampled at
+  // the fragment's WORLD position and time, displaces the fractal-noise lookup
+  // so the fireball and the smoke billow and swirl instead of scrolling in one
+  // direction. Divergence-free is the point: it reads as flow, not drift, and
+  // neighbouring fragments sample neighbouring cells, so the plume moves as one
+  // mass. `curlStrength = 0` (the game default) contributes EXACTLY zero — the
+  // pre-curl look is unchanged. Ring and embers are not a gas plume, so they
+  // keep their own motion and never sample the volume.
+  const curlWarp = (isSmoke || (!isRing && !isEmber))
+    ? (curlVector(
+        positionWorld as never,
+        u.time as never,
+        u.curlScale as never,
+      ) as unknown as Tsl).mul(u.curlStrength as unknown as Tsl)
+    : (vec3(0) as unknown as Tsl);
   const noisePos = vec3(
-    aUv.x.mul(scale).add(seed.mul(17.31) as N) as N,
-    aUv.y.mul(scale).sub((u.time as N as Tsl).mul(riseRate) as N).add(seed.mul(9.13) as N) as N,
+    aUv.x.mul(scale).add(seed.mul(17.31) as N).add(curlWarp.x as N) as N,
+    aUv.y.mul(scale).sub((u.time as N as Tsl).mul(riseRate) as N).add(seed.mul(9.13) as N)
+      .add(curlWarp.y as N) as N,
     (u.time as N as Tsl).mul(isSmoke ? 0.1 : 0.5) as N,
   ) as unknown as Tsl;
   const fractal = mx_fractal_noise_float(noisePos as N, isSmoke ? 3 : 2, 2.0, 0.5) as unknown as Tsl;
@@ -763,6 +827,18 @@ export function explosionLookColor(
   const breakUp = n01.mul(isSmoke ? 0.8 : 1.15).add(isSmoke ? 0.2 : 0.02) as unknown as Tsl;
   const coverage = clamp(edge.mul(breakUp as N) as N, 0.0, 1.0) as unknown as Tsl;
 
+  // — SOFT-PARTICLE DEPTH FADE (soft-fade.ts) —————————————————————————
+  // Fire and smoke fade out as they approach the scene surface BEHIND them, so
+  // the straight depth-test cut where a quad meets the floor (or a wall) turns
+  // into a gradient — the classic explosion-on-a-floor artifact. The helper
+  // reads the scene side itself, from `viewportLinearDepth`; only the CURRENT
+  // fragment's `linearDepth()` is passed, so the wildfire teardown's
+  // `(d - d) / fade = 0` transparent-black trap is unreachable here.
+  // `softFade = 0` (the game default) is fully inert.
+  const depthFade = softParticleFade(
+    linearDepth() as never, u.softFade as never,
+  ) as unknown as Tsl;
+
   if (isSmoke) {
     // Dark, warm, and briefly lit from inside by the fireball it came out of.
     const shade = mix(vec3(0.04, 0.034, 0.032) as N, vec3(0.2, 0.17, 0.16) as N,
@@ -770,7 +846,7 @@ export function explosionLookColor(
     const emberLight = vec3(1.0, 0.3, 0.05).mul(glow.mul(0.7) as N) as unknown as Tsl;
     return vec4(
       shade.add(emberLight as N) as N,
-      coverage.mul(heat as N) as N,
+      coverage.mul(heat as N).mul(depthFade as N) as N,
     ) as unknown as Tsl;
   }
 
@@ -786,7 +862,10 @@ export function explosionLookColor(
   // merely dark, it is GONE — which is what gives the wisps their soft edges.
   const extinction = smoothstep(0.02, 0.22, t as N) as unknown as Tsl;
   const rgb = blackbody(t).mul(extinction as N) as unknown as Tsl;
-  return vec4(rgb.mul(u.gain as N) as N, coverage.mul(heat as N) as N) as unknown as Tsl;
+  return vec4(
+    rgb.mul(u.gain as N) as N,
+    coverage.mul(heat as N).mul(depthFade as N) as N,
+  ) as unknown as Tsl;
 }
 
 /**
@@ -1122,6 +1201,17 @@ export function createExplosionVfx(): ExplosionVfx {
   );
 
   const tuning: ExplosionVfxTuning = { ...EXPLOSION_VFX_TUNING };
+  // Push the tuning's look switches into the material uniforms. Called once at
+  // construction (so the graph boots on the shipped defaults) and on every
+  // setTuning. The uniform factory also defaults to EXPLOSION_VFX_TUNING, so
+  // this is a belt-and-braces sync, not the only source of the default.
+  const syncLookUniforms = (): void => {
+    uniforms.gain.value = tuning.gain;
+    uniforms.curlStrength.value = tuning.curlStrength;
+    uniforms.curlScale.value = tuning.curlScale;
+    uniforms.softFade.value = tuning.softFade;
+  };
+  syncLookUniforms();
   let sequence = 0;
   let simTime = 0;
   let peakLight = 0;
@@ -1359,7 +1449,7 @@ export function createExplosionVfx(): ExplosionVfx {
 
     setTuning(patch: Partial<ExplosionVfxTuning>): void {
       Object.assign(tuning, clampTuning({ ...tuning, ...patch }));
-      uniforms.gain.value = tuning.gain;
+      syncLookUniforms();
     },
 
     spawn(visual: BurstVisual, seed?: number): void {

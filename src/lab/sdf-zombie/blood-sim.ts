@@ -14,6 +14,7 @@
 import type { Vec3 } from './types';
 import { BLOOD_TRAIL, GIB_BURST, BLOOD_SPLAT } from '../../game/gibs/tuning';
 import { add, basisFromAxis, dot, normalize, scale } from './vec';
+import { curlAccelAt, type CurlFlow } from './curl-sample';
 
 const MAX_DROPLETS = 600;
 const MAX_SPLATS = 256;
@@ -465,8 +466,27 @@ function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap
   while (sim.splats.length > MAX_SPLATS) sim.splats.shift();
 }
 
-/** Integrate droplets; floor hits and expiry both stamp splats (cascade). */
-export function stepBlood(sim: BloodSim, dt: number, rng: () => number): void {
+/**
+ * Integrate droplets; floor hits and expiry both stamp splats (cascade).
+ *
+ * `flow` is OPTIONAL. When supplied with a non-zero `strength`, every AIRBORNE
+ * droplet (drop, mist, scrap — everything except the chain-owned `gut` kind)
+ * gets the shared curl volume's vector at its own position added as an
+ * acceleration: `vel += curl(pos / scale + time * drift) * strength * dt`. The
+ * curl field is divergence-free, so neighbouring droplets get near-identical
+ * vectors and a spray advects as one connected volume instead of N particles
+ * (blood-curl-spike; the wildfire teardown's §2 idea,
+ * docs/dev-notes/2026-09-18-wildfire-fire-teardown.md).
+ *
+ * BYTE-IDENTICAL WHEN OFF. A missing `flow` or `strength === 0` skips the curl
+ * block entirely, so no velocity, position or RNG draw changes and the shipped
+ * sim is untouched (pinned by blood-sim.test.ts). Determinism is preserved
+ * because the curl sample is pure arithmetic — no Math.random.
+ */
+export function stepBlood(
+  sim: BloodSim, dt: number, rng: () => number, flow?: CurlFlow,
+): void {
+  const curl = flow !== undefined && flow.strength !== 0 ? flow : null;
   for (let i = sim.droplets.length - 1; i >= 0; i--) {
     const d = sim.droplets[i]!;
     // Guts are chain-driven, not ballistic — see Droplet.kind.
@@ -475,6 +495,12 @@ export function stepBlood(sim: BloodSim, dt: number, rng: () => number): void {
     const drag = Math.max(0, 1 - BLOOD_TRAIL.airdrag
       * (d.kind === 'scrap' ? SCRAP_TUNING.dragMul : d.kind === 'mist' ? 3 : 1) * dt);
     d.vel[1] -= BLOOD_TRAIL.gravity * dt;
+    if (curl) {
+      // Acceleration, not a velocity override: the divergence-free field nudges
+      // the existing ballistic motion, so gravity and drag still own the arc.
+      const a = curlAccelAt(curl, d.pos[0], d.pos[1], d.pos[2]);
+      d.vel[0] += a[0] * dt; d.vel[1] += a[1] * dt; d.vel[2] += a[2] * dt;
+    }
     d.vel[0] *= drag; d.vel[1] *= drag; d.vel[2] *= drag;
     d.pos[0] += d.vel[0] * dt; d.pos[1] += d.vel[1] * dt; d.pos[2] += d.vel[2] * dt;
     d.age += dt;
