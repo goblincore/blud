@@ -88,7 +88,9 @@ describe('gib shutter — integration tripwires', () => {
     expect(gameSrc).toContain('gibDepth = ctx.gibs.shutter.occluderDepth');
     // Runtime A/B control for the evidence: the shipped default is ON.
     expect(gameSrc).toContain('ctx.panels.shutterGame.setOccluderDepth(ctx.gibs.occluderEnabled ? gibDepth : null)');
-    expect(gameSrc).toContain('setGibOccluder:');
+    // setGibOccluder moved into game-seams-fx.ts with the gibs seam group.
+    expect(readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8'))
+      .toContain('setGibOccluder:');
     expect(gameSrc).toContain("get('giboccluder') !== '0'");
   });
 

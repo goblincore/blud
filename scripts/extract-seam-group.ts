@@ -1,0 +1,282 @@
+// scripts/extract-seam-group.ts
+//
+// Lifts a GROUP of members out of game-main.ts's `window.__sdfGame` literal into
+// a new module, verbatim, and spreads the factory back in.
+//
+//   npx tsx scripts/extract-seam-group.ts <module> <Factory> --slices world,render [--write]
+//   npx tsx scripts/extract-seam-group.ts <module> <Factory> --members a,b,c     [--write]
+//
+// WHY A SCRIPT AND NOT AN AGENT. The remaining members are small and almost all
+// need nothing but `ctx`. The work is a verbatim move, so the failure mode of a
+// hand-copy — a silently altered numeric literal that still type-checks — is the
+// one thing the pixel gate cannot localise. A cut-and-paste at the AST level
+// cannot make that mistake.
+//
+// Only members whose FREE NAMES are empty are eligible: anything still closing
+// over a main()-scope function or const is skipped and reported, so it can be
+// handled deliberately with an explicit deps object.
+//
+// Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+import * as ts from 'typescript';
+import { readFileSync, writeFileSync } from 'node:fs';
+
+const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
+
+interface Member {
+  name: string;
+  text: string;
+  slices: string[];
+  free: string[];
+  fullStart: number;
+  end: number;
+  lines: number;
+}
+
+/** name -> { module, typeOnly } for every top-level import in game-main.ts.
+ *  The moved members reference these freely; without re-emitting them the new
+ *  module cannot compile. They are NOT "free names" in the closure sense, which
+ *  is why the free-name scan does not see them. */
+function importTable(sf: ts.SourceFile): Map<string, ImportEntry> {
+  const t = new Map<string, ImportEntry>();
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st) || !st.importClause) continue;
+    const mod = (st.moduleSpecifier as ts.StringLiteral).text;
+    const clause = st.importClause;
+    const blanket = clause.isTypeOnly;
+    if (clause.name) t.set(clause.name.text, { mod, typeOnly: blanket });
+    const b = clause.namedBindings;
+    if (b && ts.isNamedImports(b)) {
+      for (const el of b.elements) {
+        t.set(el.name.text, { mod, typeOnly: blanket || el.isTypeOnly,
+                              propertyName: el.propertyName?.text });
+      }
+    } else if (b && ts.isNamespaceImport(b)) {
+      t.set(b.name.text, { mod, typeOnly: blanket, star: true });
+    }
+  }
+  return t;
+}
+
+/** Import statements covering every imported name the picked members use. */
+interface ImportEntry { mod: string; typeOnly: boolean; star?: boolean;
+  /** Original export name when the import is aliased: `{ X as Y }`. */
+  propertyName?: string }
+
+function neededImports(source: string, picked: Member[], table: Map<string, ImportEntry>): string[] {
+  const used = new Set<string>();
+  for (const m of picked) {
+    const frag = ts.createSourceFile('frag.ts', `const o = {${m.text}};`, ts.ScriptTarget.ES2022, true);
+    const walk = (n: ts.Node): void => {
+      if (ts.isIdentifier(n)) {
+        const p = n.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node };
+        const isName = p.name === n || p.propertyName === n;
+        const isMem = ts.isPropertyAccessExpression(p) && p.name === n;
+        if (!isName && !isMem && table.has(n.text)) used.add(n.text);
+      }
+      n.forEachChild(walk);
+    };
+    walk(frag);
+  }
+  const byMod = new Map<string, { value: string[]; type: string[] }>();
+  const out: string[] = [];
+  for (const name of [...used].sort()) {
+    const e = table.get(name)!;
+    if (e.star) { out.push(`import * as ${name} from '${e.mod}';`); continue; }
+    const g = byMod.get(e.mod) ?? { value: [], type: [] };
+    // Re-emit `{ X as Y }` rather than `{ Y }`, which would not resolve.
+    const spec = e.propertyName ? `${e.propertyName} as ${name}` : name;
+    (e.typeOnly ? g.type : g.value).push(spec);
+    byMod.set(e.mod, g);
+  }
+  for (const [mod, g] of [...byMod].sort()) {
+    const parts = [...g.value, ...g.type.map(t => `type ${t}`)];
+    out.push(`import { ${parts.join(', ')} } from '${mod}';`);
+  }
+  return out;
+}
+
+/** Module-scope `type X = ...` / `interface X {}` declared in game-main.ts and
+ *  not exported. A moved member referencing one cannot compile without it, and
+ *  it is not an import so the import table never sees it. Copy the declaration. */
+function localTypes(source: string, sf: ts.SourceFile): Map<string, string> {
+  const t = new Map<string, string>();
+  for (const st of sf.statements) {
+    if (ts.isTypeAliasDeclaration(st) || ts.isInterfaceDeclaration(st)) {
+      t.set(st.name.text, source.slice(st.getStart(sf), st.getEnd()));
+    }
+  }
+  return t;
+}
+
+function usedLocalTypes(picked: Member[], types: Map<string, string>): string[] {
+  const used = new Set<string>();
+  for (const m of picked) {
+    for (const [name] of types) {
+      if (new RegExp(`(^|[^A-Za-z0-9_.])${name}([^A-Za-z0-9_]|$)`).test(m.text)) used.add(name);
+    }
+  }
+  return [...used].sort().map(n => types.get(n)!);
+}
+
+function mainOf(sf: ts.SourceFile): ts.FunctionDeclaration {
+  let m: ts.FunctionDeclaration | undefined;
+  sf.forEachChild(n => { if (ts.isFunctionDeclaration(n) && n.name?.text === 'main') m = n; });
+  if (!m) throw new Error('main() not found');
+  return m;
+}
+
+export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; sf: ts.SourceFile; members: Member[] } {
+  const sf = ts.createSourceFile('game-main.ts', source, ts.ScriptTarget.ES2022, true);
+  const main = mainOf(sf);
+  const scope = new Set<string>();
+  for (const st of main.body!.statements) {
+    if (ts.isVariableStatement(st)) for (const d of st.declarationList.declarations) if (ts.isIdentifier(d.name)) scope.add(d.name.text);
+    if (ts.isFunctionDeclaration(st) && st.name) scope.add(st.name.text);
+  }
+  const cands = main.body!.statements.filter(s => ts.isExpressionStatement(s) && s.getText(sf).includes('__sdfGame'));
+  const target = cands.sort((a, b) => (b.getEnd() - b.getStart(sf)) - (a.getEnd() - a.getStart(sf)))[0] as ts.ExpressionStatement;
+  const obj = (target.expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression;
+
+  const members: Member[] = [];
+  for (const m of obj.properties) {
+    if (ts.isSpreadAssignment(m) || !m.name || !ts.isIdentifier(m.name)) continue;
+    const local = new Set<string>(); const free = new Set<string>(); const slices = new Set<string>();
+    const col = (n: ts.Node): void => {
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name)) local.add(n.name.text);
+      if (ts.isParameter(n) && ts.isIdentifier(n.name)) local.add(n.name.text);
+      n.forEachChild(col);
+    };
+    col(m);
+    const sc = (n: ts.Node): void => {
+      if (ts.isPropertyAccessExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'ctx') slices.add(n.name.text);
+      if (ts.isIdentifier(n)) {
+        const p = n.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node };
+        const isName = p.name === n || p.propertyName === n;
+        const isMem = ts.isPropertyAccessExpression(p) && p.name === n;
+        if (!isName && !isMem && scope.has(n.text) && !local.has(n.text) && n.text !== 'ctx') free.add(n.text);
+      }
+      n.forEachChild(sc);
+    };
+    sc(m);
+    const a = sf.getLineAndCharacterOfPosition(m.getFullStart()).line;
+    const b = sf.getLineAndCharacterOfPosition(m.getEnd()).line;
+    members.push({
+      name: m.name.text, text: source.slice(m.getFullStart(), m.getEnd()).replace(/^\n+/, ''),
+      slices: [...slices].sort(), free: [...free].sort(),
+      fullStart: m.getFullStart(), end: m.getEnd(), lines: b - a + 1,
+    });
+  }
+  return { obj, sf, members };
+}
+
+export interface GroupResult {
+  module: string;
+  main: string;
+  picked: Member[];
+  skipped: Member[];
+}
+
+export function extractGroup(
+  source: string, moduleName: string, factory: string,
+  pick: (m: Member) => boolean, extraImports: readonly string[],
+): GroupResult {
+  const { obj, sf, members } = readMembers(source);
+  const wanted = members.filter(pick);
+  const picked = wanted.filter(m => m.free.length === 0);
+  const skipped = wanted.filter(m => m.free.length > 0);
+  if (!picked.length) return { module: '', main: source, picked, skipped };
+
+  const edits: Array<{ start: number; end: number; text: string }> = [];
+  for (const m of picked) {
+    let end = m.end;
+    while (end < source.length && /[\s,]/.test(source[end])) {
+      if (source[end] === ',') { end++; break; }
+      end++;
+    }
+    edits.push({ start: m.fullStart, end, text: '' });
+  }
+  edits.push({ start: obj.getStart(sf) + 1, end: obj.getStart(sf) + 1, text: `\n    ...${factory}(ctx),` });
+  const lastImport = [...source.matchAll(/^import .*?;$/gms)].at(-1);
+  if (!lastImport) throw new Error('no import block');
+  const at = lastImport.index! + lastImport[0].length + 1;
+  edits.push({ start: at, end: at, text: `import { ${factory} } from './${moduleName}';\n` });
+
+  let main = source;
+  for (const e of edits.sort((a, b) => b.start - a.start)) {
+    main = main.slice(0, e.start) + e.text + main.slice(e.end);
+  }
+
+  // De-indent one level (members sat at 4 spaces inside the literal; they sit at
+  // 4 inside the returned object here too, so the text is reused as-is).
+  // Each slice ends at the member node, which EXCLUDES its trailing comma, so
+  // the object literal needs one put back between members.
+  const body = picked.map(m => m.text).join(',\n');
+  const autoImports = neededImports(source, picked, importTable(sf));
+  const carriedTypes = usedLocalTypes(picked, localTypes(source, sf));
+  // main() does `const { scene, camera } = ctx.boot.handle`. Members that use
+  // those names are not closing over a main()-scope DECLARATION, so the
+  // free-name scan does not flag them. Re-create the destructure here rather
+  // than substituting inside the bodies, which must stay byte-identical.
+  const handleNames = ['scene', 'camera'].filter(
+    n => picked.some(m => new RegExp(`(^|[^A-Za-z0-9_.])${n}([^A-Za-z0-9_]|$)`).test(m.text)));
+  const handleLine = handleNames.length
+    ? `  const { ${handleNames.join(', ')} } = ctx.boot.handle;\n` : '';
+  const module = [
+    `// src/lab/sdf-zombie/webgpu/${moduleName}.ts`,
+    `//`,
+    `// Members lifted verbatim out of game-main.ts's \`window.__sdfGame\` literal.`,
+    `// Every one needed nothing but the GameContext, so this factory takes no deps.`,
+    `//`,
+    `// Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md`,
+    ``,
+    `import type { GameContext } from './game-context';`,
+    ...autoImports,
+    ...extraImports,
+    ``,
+    ...(carriedTypes.length
+      ? ['// Type aliases copied from game-main.ts, where they are module-scope and',
+         '// not exported.', ...carriedTypes, '']
+      : []),
+    `export function ${factory}(ctx: GameContext) {`,
+    ...(handleLine ? [handleLine.replace(/\n$/, '')] : []),
+    `  return {`,
+    body,
+    `  };`,
+    `}`,
+    ``,
+  ].join('\n');
+
+  return { module, main, picked, skipped };
+}
+
+if (process.argv[1]?.endsWith('extract-seam-group.ts')) {
+  const [moduleName, factory] = process.argv.slice(2, 4);
+  const si = process.argv.indexOf('--slices');
+  const mi = process.argv.indexOf('--members');
+  const ii = process.argv.indexOf('--imports');
+  const slices = si > 0 ? new Set(process.argv[si + 1].split(',')) : null;
+  const names = mi > 0 ? new Set(process.argv[mi + 1].split(',')) : null;
+  const extraImports = ii > 0 ? process.argv[ii + 1].split(';') : [];
+  if (!slices && !names) throw new Error('pass --slices or --members');
+
+  const src = readFileSync(GAME_MAIN, 'utf8');
+  const pick = (m: Member) =>
+    names ? names.has(m.name)
+          : m.slices.length > 0 && m.slices.every(s => slices!.has(s));
+
+  const r = extractGroup(src, moduleName, factory, pick, extraImports);
+  console.log(`module  : src/lab/sdf-zombie/webgpu/${moduleName}.ts`);
+  console.log(`picked  : ${r.picked.length} members, ${r.picked.reduce((s, m) => s + m.lines, 0)} lines`);
+  if (r.skipped.length) {
+    console.log(`skipped : ${r.skipped.length} (still have free names)`);
+    for (const m of r.skipped) console.log(`   ${m.name} [${m.free.join(', ')}]`);
+  }
+  console.log(`game-main: ${src.split('\n').length} -> ${r.main.split('\n').length}`);
+  if (process.argv.includes('--write') && r.picked.length) {
+    writeFileSync(`src/lab/sdf-zombie/webgpu/${moduleName}.ts`, r.module);
+    writeFileSync(GAME_MAIN, r.main);
+    console.log('\nwrote both files');
+  } else {
+    console.log('\ndry run — pass --write to apply');
+  }
+}

@@ -687,11 +687,12 @@ describe('goo upsample WGSL (item 1)', () => {
 });
 
 describe('goo perf page seam (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
-  // `setGooPerf` moved out of the __sdfGame literal into game-seams-spawn-goo.ts
-  // (2026-09-17 decomposition). The `goo` getter it reports through stayed in
-  // game-main.ts, so these tripwires now read both files.
+  // The whole goo seam group moved out of the __sdfGame literal in the
+  // 2026-09-17 decomposition: `setGooPerf` into game-seams-spawn-goo.ts, and the
+  // `goo` getter plus setGooTuning/setGooCandidate into game-seams-fx.ts. Every
+  // pinned string below is byte-identical — only the holding file changed.
   const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
 
   it('exposes setGooPerf and reports the lever state in the goo getter', () => {
     expect(seamSrc).toContain('setGooPerf(o: {');
