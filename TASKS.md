@@ -14,7 +14,11 @@
   Polish: seams, curl flow, leg coverage, burn-down, dark scorched bone. [Plans](docs/superpowers/plans/2026-09-18-flame-polish.md).
 - [x] In-game test harness: slot `3` ignites what you hit, `__sdfGame.igniteAll()` / `extinguishAll()`. Throwaway, not the weapon.
   Needs the atlas + `public/assets/lab/flaregun-placeholder.glb` (both untracked). [Notes](docs/dev-notes/2026-09-18-flare-ingame-test/NOTES.md).
-- [ ] Next: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
+- [ ] **Next session — owner playtest feedback (2026-09-18):** tiles read disjointed; wildfire looks more fluid (field vs cards) + add smoke;
+  flames don't light the room (in-game only feeds `bodyFlash`, no PointLight — cause found); no skeleton; non-burning crowd zombies
+  show moving molten look (suspected per-view `burnCfg` bleed into shared crowd draws — verify); burning enemies should run/stumble;
+  flames should trail/lean with body motion. [Handoff with leads](docs/dev-notes/2026-09-18-flame-playtest-feedback.md).
+- [ ] Then: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
 - [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
   **Explosion curl: seam fixed and verified** (edge-map gate `npm run explosion:seam`, all scenes clean, billow kept; ship values
   curlStrength 1.1 / curlScale 18 / softFade 0.4 — game default still OFF, one-line flip). Blood: DENSITY spike reads as goo;
