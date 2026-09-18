@@ -25,13 +25,14 @@ function run(state: WeaponSlotState, sec: number, press?: WeaponSlot): WeaponSlo
 }
 
 describe('slot mapping', () => {
-  it('maps 1 and 2 and nothing else', () => {
+  it('maps 1, 2 and 3 and nothing else', () => {
     expect(slotForKey('Digit1')).toBe('shotgun');
     expect(slotForKey('Digit2')).toBe('dynamite');
-    expect(slotForKey('Digit3')).toBeNull();
+    expect(slotForKey('Digit3')).toBe('flare');
+    expect(slotForKey('Digit4')).toBeNull();
     expect(slotForKey('KeyE')).toBeNull();
-    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(2);
-    expect(WEAPON_SLOTS).toEqual(['shotgun', 'dynamite']);
+    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(3);
+    expect(WEAPON_SLOTS).toEqual(['shotgun', 'dynamite', 'flare']);
   });
 });
 
@@ -126,5 +127,29 @@ describe('cancel and retarget', () => {
     let s = run(requestSlot(makeWeaponSlotState(), 'dynamite'), 1.0);
     const settled = stepWeaponSlot(s, STEP);
     expect(settled).toBe(s);
+  });
+});
+
+describe('flare (slot 3)', () => {
+  it('settles on the flare and holsters both other slots', () => {
+    let s = requestSlot(makeWeaponSlotState(), 'flare');
+    s = run(s, WEAPON_SWITCH.lowerSec + WEAPON_SWITCH.raiseSec + STEP);
+    expect(s.live).toBe('flare');
+    expect(slotReady(s)).toBe(true);
+    expect(slotLowerAmount(s, 'flare')).toBe(0);
+    expect(slotLowerAmount(s, 'shotgun')).toBe(1);
+    expect(slotLowerAmount(s, 'dynamite')).toBe(1);
+  });
+
+  it('never has two of the three slots in frame at once', () => {
+    let s = requestSlot(makeWeaponSlotState(), 'flare');
+    for (let i = 0; i < 180; i++) {
+      s = stepWeaponSlot(s, STEP);
+      const lowers = WEAPON_SLOTS.map((w) => slotLowerAmount(s, w));
+      const inFrame = lowers.filter((v) => v <= 0).length;
+      // At rest exactly one slot is at 0; mid-switch the travels sum to >= 1.
+      expect(inFrame).toBeLessThanOrEqual(1);
+      expect(lowers.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(1 - 1e-9);
+    }
   });
 });

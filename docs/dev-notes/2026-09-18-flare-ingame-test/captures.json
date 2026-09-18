@@ -1,0 +1,565 @@
+{
+  "branch": "dispatch/2026-09-18-flare-ingame-test",
+  "shots": {
+    "flare-00-cold": {
+      "note": "boot + spawned bodies, nothing burning",
+      "lumaStd": 50.44,
+      "burning": [],
+      "cards": {
+        "created": false,
+        "active": 0,
+        "live": 0,
+        "atlas": false
+      }
+    },
+    "flare-10-one-burning": {
+      "note": "one actor ignited by fireFlare()",
+      "lumaStd": 72.01,
+      "burning": [
+        {
+          "id": 9,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.1925000000000002,
+          "alight": true,
+          "dying": false
+        }
+      ],
+      "cards": {
+        "created": true,
+        "active": 1,
+        "live": 18,
+        "atlas": false
+      }
+    },
+    "flare-20-crowd-burning": {
+      "note": "igniteAll(): a room on fire",
+      "lumaStd": 82.21,
+      "burning": [
+        {
+          "id": 9,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.5958333333333338,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 1,
+          "kind": "soldier",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 2,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 3,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 4,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 5,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 6,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 7,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 8,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 10,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 11,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 12,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 13,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 14,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 15,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 16,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 17,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 18,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 19,
+          "kind": "soldier",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 20,
+          "kind": "soldier",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 21,
+          "kind": "soldier",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 22,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 23,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 24,
+          "kind": "soldier",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 25,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        },
+        {
+          "id": 26,
+          "kind": "zombie",
+          "burn": 1,
+          "char": 0.3538333333333333,
+          "alight": true,
+          "dying": false
+        }
+      ],
+      "cards": {
+        "created": true,
+        "active": 26,
+        "live": 468,
+        "atlas": false
+      }
+    },
+    "flare-30-extinguished": {
+      "note": "extinguishAll(): fire out, char remains",
+      "lumaStd": 35.71,
+      "burning": [
+        {
+          "id": 9,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.6837951388888893,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 1,
+          "kind": "soldier",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 2,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 3,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 4,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 5,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 6,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 7,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 8,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 10,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 11,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 12,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 13,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 14,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 15,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 16,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 17,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 18,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 19,
+          "kind": "soldier",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 20,
+          "kind": "soldier",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 21,
+          "kind": "soldier",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 22,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 23,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 24,
+          "kind": "soldier",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 25,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        },
+        {
+          "id": 26,
+          "kind": "zombie",
+          "burn": 0,
+          "char": 0.4417951388888885,
+          "alight": false,
+          "dying": false
+        }
+      ],
+      "cards": {
+        "created": true,
+        "active": 0,
+        "live": 0,
+        "atlas": false
+      }
+    }
+  },
+  "checks": {
+    "cold": {
+      "cards": {
+        "created": false,
+        "active": 0,
+        "live": 0,
+        "atlas": false
+      },
+      "burning": []
+    },
+    "spawned": [
+      {
+        "id": 24,
+        "room": 4,
+        "errors": []
+      },
+      {
+        "id": 25,
+        "room": 4,
+        "errors": []
+      },
+      {
+        "id": 26,
+        "room": 4,
+        "errors": []
+      }
+    ],
+    "one": {
+      "aim": {
+        "id": 26,
+        "dist": 3.41,
+        "yaw": 1.8828916661161499,
+        "pitch": -0.13792367932732696
+      },
+      "lit": [
+        {
+          "id": 9,
+          "kind": "zombie",
+          "burn": 0.2222222222222222,
+          "char": 0.0024444444444444444,
+          "alight": true,
+          "dying": false
+        }
+      ]
+    },
+    "igniteAll": 26,
+    "crowd": {
+      "aim": {
+        "id": 4,
+        "dist": 7.26,
+        "yaw": 1.6368100344238248,
+        "pitch": -0.06702359317738013
+      },
+      "tracked": 26,
+      "active": 26
+    },
+    "extinguished": {
+      "tracked": 26,
+      "active": 0,
+      "maxChar": 0.6837951388888893
+    },
+    "cost": {
+      "pose": {
+        "id": 24,
+        "dist": 3.31,
+        "yaw": 1.532524899782386,
+        "pitch": -0.15029477120761847
+      },
+      "firedOne": true,
+      "activeOne": 1,
+      "activeAll": 26,
+      "cold": {
+        "frames": 90,
+        "totalMs": 4117.7,
+        "msPerFrame": 45.752
+      },
+      "one": {
+        "frames": 90,
+        "totalMs": 3877,
+        "msPerFrame": 43.078
+      },
+      "all": {
+        "frames": 90,
+        "totalMs": 4131.7,
+        "msPerFrame": 45.908
+      }
+    }
+  },
+  "consoleErrors": []
+}

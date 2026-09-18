@@ -39,11 +39,11 @@ import { makeRng, type Rng, type WanderBounds } from '../wander';
 import {
   createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn, killBurning,
 } from '../burn-state';
-import { CLUSTER_ORDER, type LimbId } from '../types';
 import {
   createFlameCards, FLAME_CARD_SLOTS, SOLDIER_LEG_KIT_RADIUS,
   type FlameCardAnchors, type FlameCardFrame,
 } from './flame-cards';
+import { headShape, limbAnchors } from './flame-anchors';
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
 import {
   TONGUE_TECHNIQUES, isTongueTechnique, resolveTongueTuning,
@@ -84,89 +84,9 @@ const MOTION_SEED = 1337;
  *  by side instead of trading places (the crowd's per-spawn bounds idea). */
 const WANDER_R = 0.35;
 
-/**
- * The skull's centre and its three SEMI-AXES: the fattest additive primitive
- * in the head cluster, measured per axis. Copied from lab-main.ts (the
- * painted-prims skip is load-bearing — hair/hats out-size the skull they
- * cover and the face would project onto the hat).
- */
-function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
-  const head = b.clusters.find(c => c.limb === 'head');
-  if (!head) return null;
-  let best: Vec3 | null = null;
-  let bestAxes: Vec3 | null = null;
-  let bestR = -Infinity;
-  const headPrims = b.prims.slice(head.start, head.start + head.count);
-  const flesh = headPrims.filter(p => p.op !== 'sub' && p.color === undefined);
-  for (const p of (flesh.length > 0 ? flesh : headPrims)) {
-    if (p.op === 'sub') continue;
-    const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    if (r > bestR) {
-      bestR = r;
-      best = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
-      bestAxes = [p.radius * p.scale[0], p.radius * p.scale[1], p.radius * p.scale[2]];
-    }
-  }
-  return best === null || bestAxes === null ? null : { centre: best, axes: bestAxes };
-}
-
-/** The centre of a limb's fattest flesh primitive in the POSED field — the
- *  same rule headShape applies to the head, generalized to every limb. This
- *  is what the flame cards ride instead of standing-height anchors: a
- *  collapsed body's torso centre is where the torso actually IS. Null when
- *  the cluster is missing or fully subtracted (a severed limb, say). */
-function limbCentre(b: BuildResult, limb: LimbId): Vec3 | null {
-  const cluster = b.clusters.find(c => c.limb === limb);
-  if (!cluster || !cluster.alive) return null;
-  let best: Vec3 | null = null;
-  let bestR = -Infinity;
-  const prims = b.prims.slice(cluster.start, cluster.start + cluster.count);
-  const flesh = prims.filter(p => p.op !== 'sub' && p.color === undefined);
-  for (const p of (flesh.length > 0 ? flesh : prims)) {
-    if (p.op === 'sub') continue;
-    const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    if (r > bestR) {
-      bestR = r;
-      best = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
-    }
-  }
-  return best;
-}
-
-/** The posed centre of a limb's WHOLE prim cluster — the refitClusters mean of
- *  its endpoints, which applyRig recomputes every frame, so it rides a
- *  collapse exactly as the fattest-prim rule does. Why legs need it: the
- *  fattest-prim rule above is right for the head (hair/hats out-size the
- *  skull) but wrong for a limb whose fattest prim is an end mass — the
- *  soldier's leg cluster fattest prim is the hip ball and the zombie's is the
- *  splayed foot, which anchored the soldier's leg cards at the waist and the
- *  zombie's at the ankle. FLAME_CARD_SLOTS' offsets are authored against this
- *  mean centre, so a bare lower leg is the symptom of feeding them the wrong
- *  one. */
-function limbClusterCentre(b: BuildResult, limb: LimbId): Vec3 | null {
-  const cluster = b.clusters.find(c => c.limb === limb);
-  return cluster && cluster.alive ? cluster.center : null;
-}
-
-/** Every posed limb centre the cards anchor to, computed once per body per
- *  frame from the posed field. Missing limbs fall back to the torso's centre
- *  (a card that rides a severed limb's last known spot is worse than one
- *  that keeps burning at the trunk). */
-function limbAnchors(b: BuildResult): FlameCardAnchors {
-  const torso = limbCentre(b, 'torso') ?? [0, 1, 0];
-  const out = { torso } as FlameCardAnchors;
-  for (const limb of CLUSTER_ORDER) {
-    if (limb === 'torso') continue;
-    // Only the legs switch rules for now: they are the one limb the captures
-    // showed under-covered, and the change is deliberately scoped so the good
-    // upper-body engulfment is untouched.
-    const centre = limb === 'legL' || limb === 'legR'
-      ? (limbClusterCentre(b, limb) ?? limbCentre(b, limb))
-      : limbCentre(b, limb);
-    out[limb] = centre ?? torso;
-  }
-  return out;
-}
+// The skull's centre/semi-axes (headShape) and the per-limb card anchors
+// (limbAnchors) moved to flame-anchors.ts, so the in-game burning harness rides
+// the identical placement rule. See that module's header for the contract.
 
 /** One lab body's runtime record: view + motion + wander policy. */
 interface FlameLabActor {

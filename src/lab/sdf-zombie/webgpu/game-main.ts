@@ -163,6 +163,18 @@ import {
   WEAPON_SLOTS, makeWeaponSlotState, requestSlot, slotForKey, slotLowerAmount, slotReady,
   stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
 } from './game-weapon-slots';
+// ——— IN-GAME BURNING (2026-09-18 flare test harness). The burn model and its
+// tuning are the flame lab's, unchanged; `burning` is the lazy per-actor bag.
+import type { BurnState } from '../burn-state';
+import { BURN_TUNING, resolveBurnTuning, type BurnTuning } from './burn-profiles';
+import { createBurnRegistry } from './burn-registry';
+import { burnLightAnchor, burnLightIntensity, burnLightFlicker } from './burn-light';
+import { limbAnchors } from './flame-anchors';
+import {
+  createFlameCards, SOLDIER_LEG_KIT_RADIUS,
+  type FlameCardFrame, type FlameCards,
+} from './flame-cards';
+import { resolveTongueTuning, type TongueTuning } from './tongue-tuning';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
@@ -819,6 +831,156 @@ async function main() {
     postAa.setVhs('blud');
   }
   const characterEffects = createCharacterEffects(handle.renderer);
+
+  // ——— IN-GAME BURNING (2026-09-18 flare test harness) ————————————————————
+  // Slot 3 ignites an actor; this is the flame lab's per-body burn loop
+  // (flame-lab-main.ts) ported onto the game's actors. LAZY BY DESIGN: the
+  // registry allocates no BurnState until the first ignite, and the flame
+  // cards are not even created until then, so a session that never selects
+  // slot 3 and never calls igniteAll() pays for none of it.
+  const burning = createBurnRegistry<ZombieActor>();
+  const burnTuning: BurnTuning = resolveBurnTuning(BURN_TUNING);
+  const burnTongue: TongueTuning = resolveTongueTuning();
+  let flameCards: FlameCards | null = null;
+  /** Card-pool body cap. One draw call for N bodies; bounded so an igniteAll()
+   *  over a big crowd cannot size an unbounded quad buffer. */
+  const FLAME_CARD_BODY_CAP = 32;
+  /** Per-body card input, rebuilt each draw from the posed body. The array is
+   *  reused; only its entries are re-pushed. */
+  const cardFrames: FlameCardFrame[] = [];
+  const cardLastPos = new Map<ZombieActor, Vec3>();
+  /** Last tick's dt, so the cards' lean velocity is metres per SIM second. */
+  let burnFrameDt = 1 / 60;
+
+  function ensureFlameCards(): FlameCards {
+    if (flameCards) return flameCards;
+    flameCards = createFlameCards({ maxBodies: FLAME_CARD_BODY_CAP });
+    characterEffects.scene.add(flameCards.object);
+    flameCards.setTuning(burnTongue);
+    flameCards.setSoftFade(burnTuning.cardSoftFade);
+    flameCards.setFlow(burnTuning.flameFlow);
+    // Best-effort FIRE01 atlas (a gitignored dev placeholder; absent in a fresh
+    // clone). Without it the cards run their procedural shader — the module's
+    // shipped fallback. The swap needs no recompile, same as the lab.
+    fetch('/assets/flame-placeholder/fire01.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`http ${r.status}`))))
+      .then((info: { frames: number; cellW: number; cellH: number; pad?: number }) => {
+        new THREE.TextureLoader().load('/assets/flame-placeholder/fire01.png', (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.magFilter = THREE.LinearFilter;
+          tex.minFilter = THREE.LinearFilter;
+          tex.generateMipmaps = false;
+          tex.flipY = true;   // v = 0 is the flame's base
+          flameCards?.setAtlas(tex, info.frames, info.cellW, info.cellH, info.pad ?? 0);
+        }, undefined, () => { /* no atlas png: keep the procedural look */ });
+      })
+      .catch(() => { /* no atlas manifest: keep the procedural look */ });
+    return flameCards;
+  }
+
+  /** Slot 3's one verb: set this actor alight. Idempotent. */
+  function igniteActor(a: ZombieActor): void {
+    burning.ignite(a);
+    ensureFlameCards();
+  }
+
+  /** Forget an actor (removed/gibbed) and drop its card bookkeeping. */
+  function releaseBurning(a: ZombieActor): void {
+    burning.release(a);
+    cardLastPos.delete(a);
+  }
+
+  /** An actor was killed while burning: start the lab's burn-down so it chars
+   *  down on the floor rather than snapping off. */
+  function killBurningActor(a: ZombieActor): void {
+    burning.kill(a);
+  }
+
+  /** Burn-state → the actor view's uniforms. Burn/char ride burnCfg (which the
+   *  crowd copies into the per-instance record), the look scalars ride the
+   *  view. */
+  function writeBurnUniforms(a: ZombieActor, s: BurnState): void {
+    const u = a.view.uniforms;
+    u.burnCfg.value.set(s.burn, s.burnSec, s.char, 0);
+    u.burnNoiseScale.value = burnTuning.noiseScale;
+    u.burnRiseSpeed.value = burnTuning.riseSpeed;
+    u.burnCharPatch.value = burnTuning.charPatch;
+    u.burnFireGain.value = burnTuning.fireGain;
+    u.burnFireCoverage.value = burnTuning.fireCoverage;
+    u.burnSkeleton.value = burnTuning.skeletonShow;
+    u.burnSkeletonDepth.value = burnTuning.skeletonDepth;
+  }
+
+  /** A crowd shares one material, so its look scalars are per TYPE while
+   *  burn/char ride each instance's record. Written only while something burns. */
+  function writeCrowdBurnScalars(): void {
+    for (const t of crowdTypes.values()) {
+      const u = t.uniforms;
+      u.burnNoiseScale.value = burnTuning.noiseScale;
+      u.burnRiseSpeed.value = burnTuning.riseSpeed;
+      u.burnCharPatch.value = burnTuning.charPatch;
+      u.burnFireGain.value = burnTuning.fireGain;
+      u.burnFireCoverage.value = burnTuning.fireCoverage;
+      u.burnSkeleton.value = burnTuning.skeletonShow;
+      u.burnSkeletonDepth.value = burnTuning.skeletonDepth;
+    }
+  }
+
+  /** One tick of the burn sim. An empty registry is a single size check: no
+   *  stepping, no uniform writes, nothing allocated. */
+  function stepBurning(dt: number): void {
+    if (burning.size === 0) return;
+    burnFrameDt = dt;
+    burning.step(Math.min(dt, 1 / 30), burnTuning);
+    let any = false;
+    burning.forEachActive((a, s) => { any = true; writeBurnUniforms(a, s); });
+    if (any) writeCrowdBurnScalars();
+  }
+
+  /** The draw-side half: one card frame per active body, then the pool's one
+   *  update. Called from the draw callback, where the camera is current. */
+  function updateFlameCards(camera: THREE.Camera, clock: number): void {
+    const cards = flameCards;
+    if (!cards) return;
+    cardFrames.length = 0;
+    const inv = burnFrameDt > 1e-4 ? 1 / burnFrameDt : 0;
+    burning.forEachActive((a, s) => {
+      const p = a.pose();
+      const pos: Vec3 = [p.pos[0], 0, p.pos[2]];
+      const last = cardLastPos.get(a) ?? pos;
+      cardFrames.push({
+        yaw: p.yaw,
+        anchors: limbAnchors(a.posed()),
+        burn: s.burn,
+        vel: [(pos[0] - last[0]) * inv, 0, (pos[2] - last[2]) * inv],
+        // The soldier's greaves cover his SDF shins; the cards stand off.
+        kitRadius: a.kind === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0,
+        // Burn-down pile, exactly as the lab's death capture reads it.
+        settle: s.dying
+          ? Math.min(1, s.corpseSec / Math.max(1e-3, burnTuning.corpseBurnSec))
+          : 0,
+        groundY: 0,
+      });
+      cardLastPos.set(a, pos);
+    });
+    cards.object.visible = cardFrames.length > 0;
+    cards.update(cardFrames, camera, clock);
+  }
+
+  /** Console/testing seams: light or put out every live actor. */
+  function igniteAllActors(): number {
+    for (const a of actors) igniteActor(a);
+    return burning.size;
+  }
+  function extinguishAllActors(): void {
+    burning.extinguishAll();
+  }
+  function activeBurnCount(): number {
+    let n = 0;
+    burning.forEachActive(() => { n++; });
+    return n;
+  }
+
   // GPU PROBE GATHER (P3/P4 dynamic layer). Declared here, ahead of the draw
   // callback, so the frame can test it without a temporal dead zone; created
   // next to the room probes once the level exists. ?probedyn=0 zeroes both
@@ -2030,6 +2192,25 @@ async function main() {
         const k = 1 - age / 0.14;
         directFlashes.push({ pos: [m[0], m[1], m[2]], intensity: 35 * k * k });
       }
+      // BURNING BODIES feed the SAME bodyFlash slot (flare test harness): each
+      // body already takes the strongest source by I/d^2, so an alight actor
+      // lights itself and its neighbours. This is the cheapest correct fire
+      // light — no new light object, and therefore nothing to toggle (the
+      // `.visible` recompile trap the guardrail names).
+      if (burning.size > 0) {
+        const burnClock = lightClockFrozen ? flickerClockFrozenAt : performance.now() * 0.001;
+        burning.forEachActive((a, s) => {
+          if (s.burn <= 0.02) return;
+          const p = a.pose().pos;
+          directFlashes.push({
+            pos: burnLightAnchor([p[0], p[1], p[2]]),
+            intensity: burnLightIntensity(
+              s.burn, s.char, burnTuning.lightPeak, burnTuning.lightFlicker,
+              burnLightFlicker(burnClock, burnTuning.lightFlicker, a.id * 2.7),
+            ),
+          });
+        });
+      }
       // The level's rooms take the same dynamic cfg as the bodies: the room
       // the gather serves reads it, every other room reads 0 — and with the
       // level probes off the level never reads the buffer at all.
@@ -2252,6 +2433,14 @@ async function main() {
       telemetry.end('crowd-sdf-inner', inner);
     }
     telemetry.end('crowd-sdf-render', sdfRenderTiming);
+    // BURNING BODIES' FLAME CARDS (flare test harness): pose the pool before
+    // the effects scene draws, against the same camera the frame uses. An
+    // uncreated pool (nothing has ever ignited) skips this entirely — no
+    // allocation, no draw, no uniform write.
+    if (flameCards) {
+      const burnClock = lightClockFrozen ? flickerClockFrozenAt : performance.now() * 0.001;
+      updateFlameCards(camera, burnClock);
+    }
     characterEffects.render(camera);
     });
   });
@@ -3861,6 +4050,9 @@ async function main() {
   /** Edge events for the frame about to tick: 0 = none, 1 = one barrel,
    *  2 = both; `pendingReload` = a reload started this frame. */
   let pendingFire: 0 | 1 | 2 = 0;
+  /** Slot 3's fire edge. Not part of DemoFrame: the flare harness is not a
+   *  recorded verb, so this is a plain flag consumed by the next tick. */
+  let pendingFlare = false;
   let pendingReload = false;
   /** TRUE while a recording is being replayed. The listeners still fire but
    *  inject nothing — the player owns the frame. */
@@ -4006,6 +4198,8 @@ async function main() {
     }
     if (f.fire === 1) fire(1);
     else if (f.fire === 2) fire(2);
+    // Slot 3's edge, consumed on the tick like every other verb.
+    if (pendingFlare) { pendingFlare = false; fireFlare(); }
     // The KeyR edge above already covers a live press; this covers a recorded
     // frame whose reload was folded into the flag rather than the keys.
     if (f.reload && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) startReload();
@@ -4024,6 +4218,12 @@ async function main() {
     if (!slotReady(slotState)) return;            // mid-switch: no verbs at all
     if (slotState.live === 'dynamite') {
       if (e.button === 0) dynPress = true;        // light it
+      return;
+    }
+    // SLOT 3: left click only. Its one verb is ignite-what-you-hit; there is no
+    // second barrel and no projectile to aim.
+    if (slotState.live === 'flare') {
+      if (e.button === 0) pendingFlare = true;
       return;
     }
     // Deferred to the tick (see the input seam note): an edge event must land
@@ -4070,6 +4270,91 @@ async function main() {
   const gunRig = new THREE.Group();
   gunRig.name = 'gun-rig';
   aimRig.add(gunRig);
+
+  // ——— WEAPON SLOT 3: THE FLARE TEST HARNESS (2026-09-18) —————————————————
+  // Deliberately minimal: a placeholder model in hand and an ignite-on-hit
+  // verb. No projectile, no damage, no stagger. The rig is slot 3's whole
+  // subtree, so the switch is one transform exactly like the other two.
+  const flareRig = new THREE.Group();
+  flareRig.name = 'flare-rig';
+  aimRig.add(flareRig);
+  const FLARE_GLB = '/assets/lab/flaregun-placeholder.glb';
+  const FLARE_REST = {
+    pos: new THREE.Vector3(0.055, -0.135, -0.30), rollDeg: 0,
+  } as const;
+  // PRIMITIVE FIRST, GLB OVER IT. The reference GLB is a gitignored dev
+  // placeholder, so a fresh clone has no file at all — the game must never
+  // fail to boot for want of one. This orange cylinder + grip box is the
+  // fallback and is replaced (and hidden) the instant the GLB loads.
+  const flarePlaceholder = new THREE.Group();
+  flarePlaceholder.name = 'flare-placeholder';
+  {
+    const orange = new THREE.MeshStandardMaterial({
+      color: 0xff6a22, roughness: 0.55, metalness: 0.0,
+      emissive: 0x531400, emissiveIntensity: 1,
+    });
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.16, 16), orange);
+    barrel.rotation.x = Math.PI / 2;           // cylinder axis → view -Z
+    barrel.position.set(0, 0, -0.02);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.10, 0.05), orange);
+    grip.position.set(0, -0.075, 0.035);
+    grip.rotation.x = THREE.MathUtils.degToRad(-18);
+    flarePlaceholder.add(barrel, grip);
+  }
+  flarePlaceholder.position.copy(FLARE_REST.pos);
+  flarePlaceholder.rotation.y = Math.PI;   // primitive's cylinder axis → -Z
+  flareRig.add(flarePlaceholder);
+  if (deferredApi) deferredApi.router.register(flareRig, 'mesh', 'level-only');
+  // Probe, don't gate: load the reference model in the background and swap it
+  // in when it arrives. A miss logs once and leaves the primitive in place.
+  void (async () => {
+    try {
+      const gltf = await new GLTFLoader().loadAsync(FLARE_GLB);
+      const root = gltf.scene;
+      // Same per-material env the grapeshot takes: PBR metal is black without
+      // something to reflect and this page has no environment.
+      const pmrem = new THREE.PMREMGenerator(handle.renderer);
+      const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+      root.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+          const std = mat as THREE.MeshStandardMaterial;
+          if (std.isMeshStandardMaterial) {
+            std.envMap = env; std.envMapIntensity = 1.1; std.needsUpdate = true;
+          }
+        }
+      });
+      // Normalise an unknown-unit placeholder: longest axis → 0.24 m, centred
+      // on its bounding box, then posed roughly like the grapeshot. The model
+      // ships in an unknown orientation, so its LONGEST axis is taken as the
+      // barrel and rotated to point down the camera's -Z. Longest-axis order is
+      // scale-invariant, and the uniform scale below cannot change it.
+      const box = new THREE.Box3().setFromObject(root);
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      root.scale.setScalar(0.24 / maxDim);
+      const centred = new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3());
+      root.position.sub(centred);
+      const holder = new THREE.Group();
+      holder.name = 'flare-model';
+      holder.add(root);
+      holder.position.copy(FLARE_REST.pos);
+      const longY = size.y >= size.x && size.y >= size.z;
+      const longX = !longY && size.x >= size.z;
+      if (longY) holder.rotation.x = -Math.PI / 2;      // +Y → -Z
+      // The reference GLB's barrel is the -X end (measured: the bores face the
+      // camera at +90°), so -90° sends it down -Z. Re-measure before flipping
+      // this if the placeholder asset is replaced.
+      else holder.rotation.y = longX ? -Math.PI / 2 : Math.PI;
+      holder.rotation.z = THREE.MathUtils.degToRad(FLARE_REST.rollDeg);
+      flareRig.add(holder);
+      flarePlaceholder.visible = false;
+    } catch {
+      // Absent on a fresh clone, which is expected — the primitive is the gun.
+      console.warn('[sdf-game] flaregun-placeholder.glb absent or unreadable — using the orange primitive');
+    }
+  })();
   camera.add(viewModelAnchor);
   scene.add(camera);
 
@@ -4941,6 +5226,9 @@ async function main() {
    *  which is intended: the point is that a divergence is traceable to ONE
    *  subsystem rather than to a single shared counter. Do NOT reseed mid-run. */
   let cooldown = 0;
+  /** Slot 3's fire cooldown, in seconds. Ignition is idempotent, so this is
+   *  feel only — it stops one held click from re-firing every frame. */
+  let flareCooldown = 0;
   /** Shells in the gun. The reload animation only means something if running
    *  dry is a state the player can be in. */
   let shells = MAGAZINE_CAPACITY;
@@ -5048,6 +5336,34 @@ async function main() {
     // spawnPellets spreads around `dir`; convergence just re-centres the cone.
     // One `misc` draw per volley is the pellet seed (mulberry32 inside).
     pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
+    return true;
+  }
+
+  /** Seconds between flare shots. */
+  const FLARE_COOLDOWN_SEC = 0.3;
+
+  /**
+   * WEAPON SLOT 3's only verb (2026-09-18 flare test harness): run the SAME
+   * ballistic hit test the grapeshot slug uses (`traceSlugHitFrom`, the march
+   * `predictSlugHitNow` wraps) and, if it names an actor, set that actor alight.
+   *
+   * Deliberately NOT a projectile and NOT a hit: no damage, no stagger, no
+   * wound. The actor keeps doing exactly what it was doing, on fire.
+   */
+  function fireFlare(): boolean {
+    if (slotState.live !== 'flare' || !slotReady(slotState)) return false;
+    if (flareCooldown > 0) return false;
+    flareCooldown = FLARE_COOLDOWN_SEC;
+    // It is still a weapon: the shot makes a noise and turns heads.
+    shotAlert = true;
+    // FROM THE EYE, not the grapeshot muzzle: the shotgun is holstered while
+    // slot 3 is live, so its muzzle has dropped out of frame. Same ballistic
+    // march, same gravity — just the ray the player is actually aiming.
+    const hit = traceSlugHitFrom(eyeOf(player), aimDir());
+    if (hit.actorId >= 0) {
+      const a = actors.find(x => x.id === hit.actorId);
+      if (a) igniteActor(a);
+    }
     return true;
   }
 
@@ -7330,6 +7646,13 @@ async function main() {
   /** Take a gibbed actor out of the world: hidden from every pass, out of the
    *  router, out of the roster. The view is retained — see gibActor. */
   function retireActor(a: ZombieActor): void {
+    // A burning body leaving the world: mark it killed-while-burning (the lab's
+    // burn-down verb) and release its cards. NOTE the shipped game has no
+    // health, so the only exit is a dynamite gib, where the body becomes
+    // pieces — there is no body left to char down. The burn-down wiring is
+    // here for the real weapon pass; today a gib releases.
+    if (burning.has(a)) killBurningActor(a);
+    releaseBurning(a);
     // Equipment is a scene sibling of the flesh proxies, not their child.
     // This actor stops ticking here, so its attachments must retire too.
     a.character?.retireEquipment();
@@ -7513,6 +7836,13 @@ async function main() {
     // Only the LIVE weapon's model is drawn: during the drop the bundle is
     // still holstered, and it appears the instant the frame changes hands.
     bundleRig.visible = slotState.live === 'dynamite' && heldProp !== null;
+
+    // Slot 3 (flare test harness): the same one-transform holster travel the
+    // grapeshot takes, so a switch to and from it reads as putting a gun away.
+    const flareLower = slotLowerAmount(slotState, 'flare');
+    flareRig.position.set(0, -0.42 * flareLower, 0.06 * flareLower);
+    flareRig.rotation.set(THREE.MathUtils.degToRad(38) * flareLower, 0, 0);
+    flareRig.visible = flareLower < 0.999;
   }
 
   /**
@@ -8440,11 +8770,14 @@ async function main() {
         ? `2 DYNAMITE ${cook.phase === 'cooking'
           ? `${(dynCharge * 100).toFixed(0)}% LIT`
           : `${liveBundles.length} out`}`
-        : '1 GRAPESHOT';
+        : slotState.live === 'flare'
+          ? '3 FLARE'
+          : '1 GRAPESHOT';
     hudEl.textContent =
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
       ` · [${slot}]` +
+      (burning.size > 0 ? ` · burning ${activeBurnCount()}` : '') +
       (slotState.live === 'shotgun'
         ? infiniteAmmo ? ' · shells ∞' : ` · shells ${shells}/${MAGAZINE_CAPACITY}`
         : '') +
@@ -8675,6 +9008,10 @@ async function main() {
       // figure incomparable to every new one, which is worse than the counter
       // being slightly narrow than it ought to be.
       telemetry.end('body-step', bodyTiming);
+      // BURNING BODIES (flare test harness): step each alight actor AFTER the
+      // bodies have stepped, so the uniforms the draw reads are this frame's.
+      // A registry with nothing in it is one size check.
+      stepBurning(dt);
       // POLYGON HALVES RIDE THE RIG. Armour from per-bone frames, the gun from
       // the motion frame's gun pose; collapse and gib release the gun while the
       // kit keeps following the fallen rig. One call, because character-view
@@ -8776,6 +9113,7 @@ async function main() {
     // detached pieces fly ballistically through the shared chunk path.
     // ---------------------------------------------------------------
     cooldown = Math.max(0, cooldown - dt);
+    flareCooldown = Math.max(0, flareCooldown - dt);
     recoilPitch *= Math.exp(-9 * dt);
     // ——— FREE AIM ————————————————————————————————————————————————————
     // The reticle only turns the camera once it is shoved past the dead zone;
@@ -9439,13 +9777,11 @@ async function main() {
   // builds on this: zombies are addressable by id, the player pose is
   // settable, frames are steppable, wanderers freezable.
   // -----------------------------------------------------------------------
-  /** Where a slug fired RIGHT NOW would hit — the shared predictor.
-   *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
-   *  with the same code the placement gate uses, rather than trusting a
-   *  cluster centre. No state mutated. */
-  function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
-      const origin = muzzleWorld();
-      const dir = convergedDir(origin);
+  /** The ballistic slug march itself, parameterised by the firing ray. The
+   *  grapeshot's wrapper below calls it from the muzzle; slot 3's flare calls
+   *  it from the EYE, because its own gun is holstered when it fires. No state
+   *  mutated. */
+  function traceSlugHitFrom(origin: Vec3, dir: Vec3): { actorId: number; hit: Vec3 | null } {
       let bestD = Infinity;
       let hitActorId = -1;
       let hitPoint: Vec3 | null = null;
@@ -9481,7 +9817,17 @@ async function main() {
           vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
         }
       }
-      return { origin, dir, actorId: hitActorId, hit: hitPoint };
+      return { actorId: hitActorId, hit: hitPoint };
+  }
+
+  /** Where a slug fired RIGHT NOW would hit — the shared predictor.
+   *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
+   *  with the same code the placement gate uses, rather than trusting a
+   *  cluster centre. No state mutated. */
+  function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
+      const origin = muzzleWorld();
+      const dir = convergedDir(origin);
+      return { origin, dir, ...traceSlugHitFrom(origin, dir) };
   }
 
   /**
@@ -10962,6 +11308,25 @@ function performBenchAction(a: BenchAction): void {
     get slugMode() { return slugMode; },
     setSlugMode(on: boolean) { slugMode = on; updateHud(); },
     fireSlug: () => { const keep = slugMode; slugMode = true; try { return fire(1); } finally { slugMode = keep; } },
+    // ---------------------------------------------------------------
+    // FLARE TEST HARNESS (slot 3). The weapon verb plus the two crowd
+    // helpers the owner asked for, so a full room can be set alight without
+    // aiming at each body.
+    // ---------------------------------------------------------------
+    fireFlare: () => fireFlare(),
+    /** Set EVERY live actor alight. Returns how many bodies are tracked. */
+    igniteAll: () => igniteAllActors(),
+    /** Put every tracked body out (char stays). */
+    extinguishAll: () => { extinguishAllActors(); },
+    /** Read-only burn telemetry: one entry per tracked actor, in insertion
+     *  order. `active` is burn > 0 or a burn-down running. */
+    burning: () => burning.keys().map((a) => {
+      const s = burning.get(a)!;
+      return { id: a.id, kind: a.kind, burn: s.burn, char: s.char, alight: s.alight, dying: s.dying };
+    }),
+    flameCards: () => flameCards
+      ? { created: true, active: activeBurnCount(), live: flameCards.liveCards, atlas: flameCards.atlasMode }
+      : { created: false, active: 0, live: 0, atlas: false },
     // ---------------------------------------------------------------
     // BLEED seams (bleeding-wounds). Ships ON; setBleed(false) is the
     // off gate — it freezes AND clears the blood sim so OFF is pixel-
