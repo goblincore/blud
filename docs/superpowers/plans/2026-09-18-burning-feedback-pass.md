@@ -19,6 +19,7 @@
 - WebGPU: alpha in `colorNode.w`, never `alphaHash`/`alphaTest`. Never toggle a light's `.visible`. Never sample the render target you are writing. In `march.wgsl.ts`'s positional uniform lists (`MARCH_BODY_PARAMS`) never put a `:` inside a comment.
 - Game running: `npx vite --port <free port> --strictPort`, page `/sdf-game.html`. The game's flame cards need the untracked atlas: run `npm run flame:atlas` once in your worktree. Console helpers: `__sdfGame.igniteAll()`, `extinguishAll()`, `burning()`, `flameCards()`.
 - Kill anything you start outside a capture script in the same step.
+- **`game-main.ts` is decomposed (main, merged 2026-09-18):** every piece of `main()` state lives on `ctx` (`GameContext`, slices in `game-state-*.ts`), and `scripts/game-context-coverage.test.ts` fails if `main()` gains any other state binding. The burn harness lives BESIDE it: `webgpu/game-burning.ts` (registry, cards, uniforms, flashes; held as `ctx.vfx.burning`) and `webgpu/game-flare.ts` (slot 3; `ctx.weapon.flare`). Put new burn logic in those modules (or a new module) and leave only one-line call sites in `game-main.ts`. Line numbers below are approximate — grep for the named markers. Run `npm test -- game-context-coverage` whenever you touch `game-main.ts` or a slice.
 - Commit with the trailer `Co-Authored-By: DeepSeek Flash <noreply@deepseek.com>`.
 
 ---
@@ -28,11 +29,12 @@
 **Files:**
 - Create: `src/lab/sdf-zombie/webgpu/burn-room-light.ts`, `src/lab/sdf-zombie/webgpu/burn-room-light.test.ts`
 - Modify: `src/lab/sdf-zombie/webgpu/burn-profiles.ts` (+ its test) — add `lightGatherPeak`, `lightMeshPeak`
-- Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` — gather lights (~2100–2140), burn `directFlashes` push (~2195–2212), a new fire PointLight pool next to `explosionLightPool` (~662) and its per-frame writer next to ~7915
+- Modify: `src/lab/sdf-zombie/webgpu/game-burning.ts` — the fire light logic (gather list feed, mesh PointLight pool, flash flicker)
+- Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` — call sites only: after the "(3b) LIVE EXPLOSIONS" gather loop (~1819), and next to the explosion pool writer (`ctx.vfx.explosionLightPool` loop, ~7404)
 - Create: `scripts/burn-light-capture.mjs`
 - Notes: `docs/dev-notes/2026-09-18-burning-feedback/A-light-and-neighbours.md`
 
-**Off-limits:** `game-actor.ts`, `motion.ts`, `march.wgsl.ts`, `flame-lab-main.ts`, `post-aa.ts` (other tasks own them).
+**Off-limits:** `game-actor.ts`, `motion.ts`, `march.wgsl.ts`, `flame-lab-main.ts`, `post-aa.ts` (other tasks own them). Task 2 also edits `game-burning.ts` (its `step()` only) — keep your changes to new methods plus `pushFlashes`.
 
 ### Background
 
@@ -138,15 +140,15 @@ export function assignFirePool(
   - `lightMeshPeak` — default `40`, bounds `[0, 400]` (braziers are 9–13, explosion 320).
   Update `burn-profiles.test.ts` if it pins the field list. `npm test -- burn-profiles`.
 
-- [ ] **Step 6: Wire the gather side** in `game-main.ts`. Right after the "(3b) LIVE EXPLOSIONS" loop and before `tracerSlots`, build `FireLightSource[]` from `burning.forEachActive` (skip `s.burn <= 0.02`; pos = `burnLightAnchor(pose pos)`; intensity = `burnLightIntensity(s.burn, s.char, burnTuning.lightGatherPeak, burnTuning.lightFlicker, burnLightFlicker(burnClock, …, a.id * 2.7))` — same clock as the directFlashes block), filter with `nearRoomPoint(pos, dynRoom)`, then push `fireGatherLights(list, player.pos, Math.min(2, 8 - gatherLights.length))` as `{ pos, color: [1.0, 0.5, 0.18], intensity, fill: fxSpread * 0.5 }`. Guard the whole block with `if (burning.size > 0)`.
+- [ ] **Step 6: Wire the gather side.** Add to `GameBurning` (in `game-burning.ts`) a method `pushGatherLights(out: GatherLight[], eye: Vec3, room: <the dynRoom type>, cap: number, spread: number): void` (import the gather light type and `nearRoomPoint` from wherever `game-main.ts` gets them; if `nearRoomPoint` is a local function in `game-main.ts`, pass it in as a parameter instead). It returns immediately when nothing burns; otherwise builds `FireLightSource[]` from `registry.forEachActive` (skip `s.burn <= 0.02`; pos = `burnLightAnchor(pose pos)`; intensity = `burnLightIntensity(s.burn, s.char, tuning.lightGatherPeak, tuning.lightFlicker, burnLightFlicker(clock, …, a.id * 2.7))` — the same clock `pushFlashes` uses), filters by the room test, then pushes `fireGatherLights(list, eye, cap)` as `{ pos, color: [1.0, 0.5, 0.18], intensity, fill: spread * 0.5 }`. In `game-main.ts`, right after the "(3b) LIVE EXPLOSIONS" loop and before `tracerSlots`, add ONE call: `ctx.vfx.burning.pushGatherLights(gatherLights, ctx.player.player.pos, dynRoom, Math.min(2, 8 - gatherLights.length), ctx.vfx.spread);`
 
-- [ ] **Step 7: Wire the mesh side.** Next to `explosionLightPool`: `const FIRE_MESH_LIGHTS = 4; const fireLightPool: THREE.PointLight[] = []`, each `new THREE.PointLight(0xff8a3a, 0, 0, 2)`, `visible = true`, added to `accentGroup`. Next to the explosion pool writer (~7915): if `burning.size === 0` set all intensities to 0 (only when previously non-zero — track a boolean) else `assignFirePool(list, player.pos, 4)` with `burnTuning.lightMeshPeak` and write `position`/`intensity`. Never touch `.visible`.
+- [ ] **Step 7: Wire the mesh side.** In `game-burning.ts`, create the pool lazily inside `ensureCards()`'s first-ignite path is NOT allowed (adding a light later re-keys the lights node — a recompile). Instead add `createFireLightPool(parent: THREE.Object3D): void`, called ONCE from `game-main.ts` right after the explosion pool is built (`ctx.world.accentGroup` as parent): 4 × `new THREE.PointLight(0xff8a3a, 0, 0, 2)`, `visible = true`. Add `updateFireLightPool(eye: Vec3): void` — zero every light when nothing burns (only on the transition; keep a boolean), else `assignFirePool(list, eye, 4)` with `tuning.lightMeshPeak`, writing `position`/`intensity`. Call it from `game-main.ts` next to the explosion pool writer loop. Never touch `.visible`. **Check the boot pipeline count before and after** (the warm-up must compile the lit materials with 3 + 4 point lights; confirm no compile on first ignite).
 
 - [ ] **Step 8: Capture script** `scripts/burn-light-capture.mjs` (copy the harness of `scripts/flare-ingame-capture.mjs`, same positional args `<vitePort> <cdpPort> <outDir>`): after warm gate `ready`, ignite one zombie near the player (`__sdfGame.igniteAll()` then `extinguishAll` all but the nearest, or add a `__sdfGame.igniteNearest()` helper if simpler), wait 2 s, screenshot; then set `__sdfGame.setBurnTuning?.({ lightGatherPeak: 0, lightMeshPeak: 0 })` (add this console helper if absent, routing through `resolveBurnTuning`) and screenshot the same frame. Print the mean luminance of a fixed floor/wall crop for both. Freeze light flicker for the pair (`lightClockFrozen` seam) so the two frames are comparable.
 
 - [ ] **Step 9: Run it.** Expected: crop luminance with fire light clearly above without (report both numbers). Also report the gather cost with 4 burners vs 0 (the game's existing gather timing, `__sdfGame` perf stats / `probe` timings — find and cite which).
 
-- [ ] **Step 10: Diagnose the neighbour molten look.** Leading suspect: the burn `directFlashes` push — the comment there says the burning body "lights itself and its neighbours", so a fast warm flicker lands on nearby bodies. Measure in the capture script: ignite ONE zombie that has a non-burning zombie within ~2 m; project the neighbour's torso to screen; record 30 frames (~1 s) of a 40×40 crop over it; report mean absolute frame-to-frame change. Repeat with (a) burn distortion off (`burn-distort` strength 0 via its existing seam), (b) flicker depth 0 for the directFlashes push, (c) log `REC_BURN`/`burnCfg` values for the neighbour (must be 0). Write the table into the notes.
+- [ ] **Step 10: Diagnose the neighbour molten look.** Leading suspect: the burn `directFlashes` push (`pushFlashes` in `game-burning.ts`) — its comment says the burning body "lights itself and its neighbours", so a fast warm flicker lands on nearby bodies. Measure in the capture script: ignite ONE zombie that has a non-burning zombie within ~2 m; project the neighbour's torso to screen; record 30 frames (~1 s) of a 40×40 crop over it; report mean absolute frame-to-frame change. Repeat with (a) burn distortion off (`burn-distort` strength 0 via its existing seam), (b) flicker depth 0 for the directFlashes push, (c) log `REC_BURN`/`burnCfg` values for the neighbour (must be 0). Write the table into the notes.
 
 - [ ] **Step 11: Fix what the numbers point at.**
   - If the flicker: one `directFlashes` entry lights every nearby body, so it cannot flicker for the burner and stay steady for neighbours. Push it with a much smaller flicker depth (`lightFlicker * 0.25`); the burning body still flickers through its own animated surface-fire emissive, and the room lights from Steps 6–7 carry the visible flicker. Re-measure.
@@ -164,11 +166,11 @@ export function assignFirePool(
 - Create: `src/lab/sdf-zombie/burn-behaviour.ts`, `src/lab/sdf-zombie/burn-behaviour.test.ts`
 - Modify: `src/lab/sdf-zombie/motion.ts` — optional `cruiseScale` on `MotionSignals` (default 1, byte-identical when absent)
 - Modify: `src/lab/sdf-zombie/webgpu/game-actor.ts` — `setBurning(on)` on `ZombieActor`, override next to the `doomed` block (~910)
-- Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` — call `a.setBurning(...)` from the burn registry (ignite/extinguish/burn-out) ONLY; no other edits (Task 1 also edits this file — keep your change to that call site to avoid conflicts)
+- Modify: `src/lab/sdf-zombie/webgpu/game-burning.ts` — `step()` only: call `a.setBurning(...)` on transitions (Task 1 edits other parts of this file)
 - Create: `scripts/burn-behaviour-trace.mjs`
 - Notes: `docs/dev-notes/2026-09-18-burning-feedback/C-behaviour.md`
 
-**Off-limits:** `march.wgsl.ts`, `flame-lab-main.ts`, `post-aa.ts`, `burn-room-light*`.
+**Off-limits:** `march.wgsl.ts`, `flame-lab-main.ts`, `post-aa.ts`, `burn-room-light*`, and `game-main.ts` except for console seams in the `__sdfGame` literal (keep those additions in one contiguous block).
 
 - [ ] **Step 1: Write the failing tests** in `burn-behaviour.test.ts`:
 
@@ -319,7 +321,7 @@ export function stepBurnPanic(s: BurnPanicState, i: BurnPanicInput, dt: number):
   - Arm flail: look for an existing additive arm-pose seam (carry / aim / `motion.ts` arm terms). If one exists, drive both arms with a raised, fast (~3 Hz) seeded wobble while burning. If none exists, emit a `burn` (shudder) shot signal every 0.35 s instead as the flail stand-in, and say so in the notes.
   - While burning a soldier must not fire: also force `signals.fire = false` after it is computed.
 
-- [ ] **Step 7: Registry → actor.** In `game-main.ts`, at the burn registry's ignite / extinguish / extinguishAll / burn-out / release call sites, call `a.setBurning(true|false)`. Burning = `state.burn > 0.02`; the simplest correct place is `stepBurning`: track the previous set and call `setBurning` on changes (allocation-free: a `Set<ZombieActor>` reused).
+- [ ] **Step 7: Registry → actor.** In `game-burning.ts`'s `step(dt)`: keep a reused `Set<ZombieActor>` of bodies currently burning (`state.burn > 0.02`); after `registry.step`, call `a.setBurning(true)` for newly burning bodies and `a.setBurning(false)` for bodies that dropped out (extinguished, burnt down, or released — also call it in `retire(a)`). Allocation-free per frame: two reused sets swapped.
 
 - [ ] **Step 8: Trace script** `scripts/burn-behaviour-trace.mjs` (harness from `flare-ingame-capture.mjs`): after warm gate ready, find one soldier and one zombie that can see the player (add `__sdfGame.igniteActor(id)` and an `__sdfGame.actorTrace()` returning `{id, kind, pos, speed, firing, staggerKind}` for all actors if absent), record 3 s unburnt, ignite both, record 6 s. Print per actor: mean speed before/after, distance-to-player trend (soldier must grow, zombie must shrink), shots fired while burning (must be 0 for the soldier), and stumble count (≥ 2 in 6 s). Save a contact sheet of 4 frames.
 
