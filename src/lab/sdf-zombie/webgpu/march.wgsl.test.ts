@@ -697,9 +697,9 @@ describe('ported features reach the entry point', () => {
     const moduleSrc = readFileSync('src/lab/sdf-zombie/webgpu/march.wgsl.ts', 'utf8');
     expect(moduleSrc.split('var<private> gInstBurn: vec4<f32>').length).toBe(2);
     expect(moduleSrc.split('var<private> gBurnEmit: vec3<f32>').length).toBe(2);
-    const params = MARCH_BODY_PARAMS.replace(/\s+/g, ' ');
+    const params = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
     expect(params).toContain('burnCfg: vec4<f32>,');
-    expect(params).toMatch(/burnFireGain: f32,?\s*\)/);
+    expect(params).toMatch(/burnFireGain: f32, burnFireCoverage: f32\s*\)/);
   });
 
   it('paints fire and char on a burning body from the rest-space anchor', () => {
@@ -714,20 +714,35 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY.indexOf('albedo = mix(albedo, charColor, cm);'))
       .toBeLessThan(MARCH_BODY.indexOf('let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);'));
     expect(MARCH_BODY).toContain('gBurnEmit = fireRamp(fire)');
-    // The char mix sits OUTSIDE the fire gate: char is monotonic, so a body
-    // put out mid-burn stays charred (a burnt corpse, not a clean body). The
-    // mix is an exact identity at charAmt 0, so non-burning bodies are
-    // unchanged; only fire, the glow kills and the emissive fold gate.
+    // The soot mix sits INSIDE the gate, but the gate opens on char too
+    // (fix pass): char is monotonic, so a body put out mid-burn stays charred
+    // (a burnt corpse, not a clean body). The mix is an exact identity at
+    // sootMask 0, so non-burning bodies are unchanged; only fire, the glow
+    // kills and the emissive fold gate on live flame.
     {
-      const gate = MARCH_BODY.indexOf('if (burnAmt > 0.0)');
-      const burnCharMix = MARCH_BODY.indexOf('albedo = mix(albedo, charColor, charAmt);');
+      const gate = MARCH_BODY.indexOf('if (burnAmt > 0.0 || charAmt > 0.0)');
+      const burnCharMix = MARCH_BODY.indexOf('albedo = mix(albedo, charColor, sootMask);');
       expect(gate).toBeGreaterThan(-1);
       expect(burnCharMix).toBeGreaterThan(-1);
-      expect(burnCharMix).toBeLessThan(gate);
+      expect(burnCharMix).toBeGreaterThan(gate);
     }
     // The emissive fold: burning fire adds light, and a burning face is fire.
     expect(MARCH_BODY).toContain('+ glow + gBurnEmit');
     expect(MARCH_BODY).toContain('faceGlow = faceGlow * (1.0 - burnAmt);');
+  });
+
+  it('drives char from the same noise as the fire, not from time alone', () => {
+    // The reference sprites show dark char BETWEEN the flames from the first
+    // frame. Char that only comes from charAmt makes a freshly lit body a
+    // uniformly glowing statue, which is what the first captures showed.
+    expect(MARCH_BODY).toContain('let fireN = fbm(');
+    expect(MARCH_BODY).toContain('let coverBias = mix(0.85, -0.15, burnFireCoverage);');
+    expect(MARCH_BODY).toContain('let fire = clamp(fireN - coverBias, 0.0, 1.0)');
+    // Dark where the noise is LOW, deepened by time-based char.
+    expect(MARCH_BODY).toContain('let sootMask = clamp((1.0 - fire) * burnCharPatch + charAmt, 0.0, 1.0);');
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, charColor, sootMask);');
+    // A charred body must stop looking like wet latex.
+    expect(MARCH_BODY).toContain('gloss = gloss * (1.0 - sootMask');
   });
 });
 
@@ -846,15 +861,17 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // +5 burning body (burnCfg, burnNoiseScale, burnRiseSpeed, burnCharPatch,
     // burnFireGain) after instHalf — flame lab task 5, POSITIONALLY LAST to
     // match createMarchMaterial's binding tail.
-    expect(names.length).toBe(96);
+    // +1 burnFireCoverage (fix pass) after burnFireGain, same positional rule.
+    expect(names.length).toBe(97);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-26)).toEqual([
+    expect(names.slice(-27)).toEqual([
       'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
       'probeDyn', 'probeDynCfg',
       'lastTex', 'lastInvVp', 'temporalCfg', 'inst', 'instCfg', 'instCentre', 'instHalf',
       'burnCfg', 'burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain',
+      'burnFireCoverage',
     ]);
     // The temporal start folds in AFTER preStart, with bodyEntry as the
     // sixth lower-bound term (see the other pin above for the argument).
@@ -882,12 +899,13 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // crowd stage a task 5: instCentre/instHalf follow them (the proxy box).
     // flame lab task 5: the burn tail (5 slots) follows THEM — burn is per-view,
     // so the per-instance params stay directly ahead of it.
-    expect(names.indexOf('instCfg')).toBe(names.length - 8);
-    expect(names.indexOf('inst')).toBe(names.length - 9);
-    expect(names.indexOf('instCentre')).toBe(names.length - 7);
-    expect(names.indexOf('instHalf')).toBe(names.length - 6);
-    expect(names.indexOf('burnCfg')).toBe(names.length - 5);
-    expect(names.indexOf('burnFireGain')).toBe(names.length - 1);
+    expect(names.indexOf('instCfg')).toBe(names.length - 9);
+    expect(names.indexOf('inst')).toBe(names.length - 10);
+    expect(names.indexOf('instCentre')).toBe(names.length - 8);
+    expect(names.indexOf('instHalf')).toBe(names.length - 7);
+    expect(names.indexOf('burnCfg')).toBe(names.length - 6);
+    expect(names.indexOf('burnFireGain')).toBe(names.length - 2);
+    expect(names.indexOf('burnFireCoverage')).toBe(names.length - 1);
   });
 });
 
@@ -2654,7 +2672,7 @@ describe('crowd instance state', () => {
     // Strip comments first: the crowd proxy-box comment sits between instCfg
     // and instCentre, and the wgslFn parser sees it as ordinary text.
     const sig = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
-    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>, burnCfg: vec4<f32>, burnNoiseScale: f32, burnRiseSpeed: f32, burnCharPatch: f32, burnFireGain: f32\s*\)/);
+    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>, burnCfg: vec4<f32>, burnNoiseScale: f32, burnRiseSpeed: f32, burnCharPatch: f32, burnFireGain: f32, burnFireCoverage: f32\s*\)/);
   });
   it('bands the damage folds', () => {
     expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');

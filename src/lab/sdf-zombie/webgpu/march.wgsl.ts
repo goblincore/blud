@@ -2572,7 +2572,11 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   burnNoiseScale: f32,
   burnRiseSpeed: f32,
   burnCharPatch: f32,
-  burnFireGain: f32
+  burnFireGain: f32,
+  // Fire coverage - flame lab fix pass - POSITIONALLY LAST after burnFireGain.
+  // Slides the noise threshold so one field picks flame versus soot. Bound in
+  // the same slot order in zombie-gpu.ts. NO COLONS in this comment.
+  burnFireCoverage: f32
 ) -> vec4<f32> {
 `;
 
@@ -3906,26 +3910,33 @@ ${FACE_LAYER_WGSL}
 
   albedo = mix(albedo, charColor, cm);
 
-  // BURNING BODY (flame lab). burnCfg.x is the per-view ramp and gInstBurn.x the
-  // per-instance one; max() makes one shader serve single and crowd draws, as
-  // goreStrength does above. The noise rides the anchor (REST space) and scrolls
-  // along -y, so fire climbs the body and stays ON the body as it walks -- in
-  // world space it would swim through the skin. char blackens the albedo and
-  // holds fire off the parts already burnt out.
-  //
-  // THE CHAR MIX IS OUTSIDE THE FIRE GATE, deliberately. char is monotonic
-  // (burn-state.ts) -- a body that burned and was put out is a CHARRED CORPSE,
-  // not a clean one -- so the blackening must survive burnAmt reaching 0. Only
-  // the fire, the glow kills and the emissive fold are gated on live fire; for
-  // charAmt 0 the mix is an exact identity (x*1 + y*0), so a non-burning body
-  // shades unchanged.
+  // BURNING BODY. One noise field decides both halves of the look: where it is
+  // high there is flame, where it is low there is soot. That is what the Blood
+  // sprites do -- dark char shows BETWEEN the flames from the first frame, so
+  // char cannot come from elapsed time alone or a freshly lit body reads as a
+  // uniformly glowing statue. The noise rides the anchor (REST space) and
+  // scrolls along -y, so fire climbs the body and stays ON the body as it
+  // walks. burnCfg is the per-view ramp, gInstBurn the per-instance one; max()
+  // makes one shader serve single and crowd draws, as goreStrength does above.
+  // char is monotonic (burn-state.ts) -- a body that burned and was put out is
+  // a CHARRED CORPSE, not a clean one -- so the gate opens on char too and the
+  // soot mix inside it is an exact identity (x*1 + y*0) at sootMask 0, keeping
+  // a non-burning body unchanged.
   let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);
   let charAmt = clamp(max(burnCfg.z, gInstBurn.z), 0.0, 1.0);
-  albedo = mix(albedo, charColor, charAmt);
-  if (burnAmt > 0.0) {
+  if (burnAmt > 0.0 || charAmt > 0.0) {
     let burnPhase = max(burnCfg.y, gInstBurn.y) * burnRiseSpeed;
     let fireN = fbm(anchor * burnNoiseScale + vec3<f32>(0.0, -burnPhase, 0.0));
-    let fire = clamp(fireN * 1.45 - 0.22, 0.0, 1.0) * burnAmt * (1.0 - charAmt * burnCharPatch);
+    // coverBias slides the threshold: at coverage 1 almost the whole surface is
+    // above it, at 0 almost none is.
+    let coverBias = mix(0.85, -0.15, burnFireCoverage);
+    let fire = clamp(fireN - coverBias, 0.0, 1.0) * burnAmt * (1.0 - charAmt * 0.55);
+    let sootMask = clamp((1.0 - fire) * burnCharPatch + charAmt, 0.0, 1.0);
+    albedo = mix(albedo, charColor, sootMask);
+    // Burnt meat is not wet latex. Killing gloss and metal is most of what
+    // makes a charred body read as charred rather than as a dark body.
+    gloss = gloss * (1.0 - sootMask * 0.9);
+    metal = metal * (1.0 - sootMask * 0.9);
     gBurnEmit = fireRamp(fire) * fire * burnFireGain;
     faceGlow = faceGlow * (1.0 - burnAmt);
     primGlow = primGlow * (1.0 - burnAmt);

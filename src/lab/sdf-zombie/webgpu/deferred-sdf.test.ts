@@ -66,7 +66,7 @@ describe('surface-entry wgslFn parse contract', () => {
     }
   });
 
-  it('the real parser sees EXACTLY marchBody’s 100 inputs, in the same order — one binding block serves both', () => {
+  it('the real parser sees EXACTLY marchBody’s 101 inputs, in the same order — one binding block serves both', () => {
     // marchSurface shares MARCH_BODY_PARAMS textually, so createMarchMaterial's
     // positional binding cannot drift between the modes. Running the REAL
     // parser (not a grep) also proves no comment phantom crept into the shared
@@ -84,7 +84,8 @@ describe('surface-entry wgslFn parse contract', () => {
     // match createMarchMaterial's binding tail. marchSurface inherits the tail
     // through the shared MARCH_BODY_PARAMS, so the equality pin below keeps
     // the one-binding-block contract on the deferred path too.
-    expect(legacy.length).toBe(96); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    // +1 burnFireCoverage (flame lab fix pass) after burnFireGain, same rule.
+    expect(legacy.length).toBe(97); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });

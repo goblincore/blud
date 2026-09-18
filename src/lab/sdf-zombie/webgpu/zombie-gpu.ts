@@ -635,9 +635,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     /** Rest-space units per second the fire noise scrolls upward. */
     burnRiseSpeed: uniform(1.8),
     /** How much of a charred surface stays dark instead of burning, 0..1. */
-    burnCharPatch: uniform(0.35),
+    burnCharPatch: uniform(0.55),
     /** Emissive multiplier on the surface fire. */
-    burnFireGain: uniform(1.6),
+    burnFireGain: uniform(2.8),
+    /** Fraction of the surface carrying flame at once, 0..1 — slides the fire
+     *  noise threshold, so one field decides flame vs soot. */
+    burnFireCoverage: uniform(0.9),
   };
 }
 
@@ -1383,6 +1386,7 @@ export function createMarchMaterial(
     burnRiseSpeed: u.burnRiseSpeed,
     burnCharPatch: u.burnCharPatch,
     burnFireGain: u.burnFireGain,
+    burnFireCoverage: u.burnFireCoverage,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 

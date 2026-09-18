@@ -647,6 +647,7 @@ async function bootstrap(): Promise<void> {
         gpu.uniforms.burnRiseSpeed.value = tuning.riseSpeed;
         gpu.uniforms.burnCharPatch.value = tuning.charPatch;
         gpu.uniforms.burnFireGain.value = tuning.fireGain;
+        gpu.uniforms.burnFireCoverage.value = tuning.fireCoverage;
         // The body's floor position: the pelvis base (its spawn x) plus the
         // walk displacement the motion record measured. The light rides it at
         // chest height, inside the flames, and per-body phase keeps the pair

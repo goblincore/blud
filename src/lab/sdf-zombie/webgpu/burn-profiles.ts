@@ -40,11 +40,15 @@ export interface BurnTuning {
 
 export const BURN_TUNING: BurnTuning = Object.freeze({
   igniteSec: 0.45, extinguishSec: 0.8, charRate: 0.22,
-  fireGain: 1.6, noiseScale: 7, riseSpeed: 1.8, charPatch: 0.35,
+  // 2026-09-17 fix pass: gain and charPatch raised from 1.6/0.35 after the
+  // probe captures -- at the old values a fresh body read as pink flesh with
+  // sparse fire dots instead of the engulfed reference look (dark char between
+  // flames). charPatch 0.55 is what makes between-flame skin read as soot.
+  fireGain: 2.8, noiseScale: 7, riseSpeed: 1.8, charPatch: 0.55,
   lightPeak: 26, lightFlicker: 0.35,
   glowGain: 0.5, glowThreshold: 0.75,
   distortStrength: 0.006,
-  fireCoverage: 0.75, skeletonShow: 0.5,
+  fireCoverage: 0.9, skeletonShow: 0.5,
 });
 
 /** The clamp range for every field, as data.
@@ -75,7 +79,7 @@ export const burnPresets: Readonly<Record<'blood' | 'ember' | 'inferno', BurnTun
   // Late-stage: mostly charred with fire only in the cracks.
   ember: Object.freeze({ ...BURN_TUNING, charRate: 0.5, fireGain: 1.1, charPatch: 0.6, lightPeak: 14, glowGain: 0.35, fireCoverage: 0.5, skeletonShow: 0.8 }),
   // Over the top, for judging the ceiling of the effect.
-  inferno: Object.freeze({ ...BURN_TUNING, fireGain: 2.6, noiseScale: 5, riseSpeed: 2.6, charPatch: 0.2, lightPeak: 42, glowGain: 0.8, distortStrength: 0.012, fireCoverage: 0.95, skeletonShow: 0.35 }),
+  inferno: Object.freeze({ ...BURN_TUNING, fireGain: 3.4, noiseScale: 5, riseSpeed: 2.6, charPatch: 0.2, lightPeak: 42, glowGain: 0.8, distortStrength: 0.012, fireCoverage: 0.95, skeletonShow: 0.35 }),
 });
 
 const BURN_FIELDS = Object.keys(BURN_TUNING) as (keyof BurnTuning)[];

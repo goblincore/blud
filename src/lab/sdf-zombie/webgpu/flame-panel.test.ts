@@ -33,7 +33,7 @@ describe('flame panel', () => {
   it('copies a setter call the game will understand', () => {
     const text = copyText(BURN_TUNING);
     expect(text.startsWith('__sdfGame.setBurnTuning({')).toBe(true);
-    expect(text).toContain('fireGain: 1.6');
+    expect(text).toContain(`fireGain: ${BURN_TUNING.fireGain}`);
     expect(text.endsWith('})')).toBe(true);
   });
 });
