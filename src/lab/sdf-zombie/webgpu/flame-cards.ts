@@ -71,14 +71,14 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, cameraFar, cameraNear, clamp, float, linearDepth, mix,
-  mx_fractal_noise_float, positionWorld, smoothstep, texture, texture3D, uniform,
-  vec2, vec3, vec4, viewportLinearDepth,
+  attribute, clamp, float, linearDepth, mix,
+  mx_fractal_noise_float, positionWorld, smoothstep, texture, uniform,
+  vec2, vec3, vec4,
 } from 'three/tsl';
 import { mulberry32 } from './game-weapon';
-import {
-  buildCurlVolume, createCurlTextureFromVolume, sampleCurlVolume, CURL_SCALE,
-} from './curl-volume';
+import { sampleCurlVolume, CURL_SCALE } from './curl-volume';
+import { curlVector, getCurlVolumeData } from './curl-volume-node';
+import { softParticleFade } from './soft-fade';
 import type { Vec3 } from '../types';
 import type { TongueTuning } from './tongue-tuning';
 
@@ -496,7 +496,7 @@ export interface FlameCards {
   dispose(): void;
 }
 
-export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number } = {}): FlameCards {
+export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards {
   const maxBodies = Math.max(1, opts.maxBodies ?? 2);
   const capacity = maxBodies * FLAME_CARD_SLOTS.length;
 
@@ -512,11 +512,11 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
   const uSoftFade = u.softFade as unknown as Tsl;
   const uFlow = u.flow as unknown as Tsl;
 
-  // The shared curl volume: built once (memoised by seed), uploaded once, and
-  // kept as the CPU array too so update() can displace an anchor with the SAME
-  // field the fragment shader warps its UV with.
-  const curlData = buildCurlVolume(opts.curlSeed ?? 0x51c0ff);
-  const curlTexture = createCurlTextureFromVolume(curlData);
+  // The SHARED curl volume (module singleton, curl-volume-node.ts): one
+  // Data3DTexture for every effect, plus the CPU array update() displaces
+  // anchors with. This module neither builds nor disposes it — the old
+  // per-effect texture is gone, so cards and explosions swirl through one field.
+  const curlData = getCurlVolumeData();
 
   // Atlas texture NODE, built over a 1x1 transparent fallback and repointed
   // by setAtlas — the post-aa swap pattern (a texture binding is baked per
@@ -554,11 +554,12 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
   // neighbourhood and neighbouring cards sample neighbouring cells — that is
   // what ties the flame into one flowing body. The CPU half (update()) samples
   // the identical field to displace each whole anchor.
-  const curlScroll = vec3(0, uTime.mul(FLAME_CURL_RISE) as N, 0) as unknown as Tsl;
-  const curlUv = (positionWorld as unknown as Tsl)
-    .div(CURL_SCALE).sub(curlScroll as N) as unknown as Tsl;
-  const curlTexNode = texture3D(curlTexture, curlUv as N) as unknown as Tsl;
-  const curl = (curlTexNode.rgb as unknown as Tsl).mul(2).sub(1) as unknown as Tsl;
+  //
+  // The sampling itself is the SHARED helper (curl-volume-node.ts): one
+  // texture for every effect. The decoded vector is `rgb * 2 - 1`.
+  const curl = curlVector(
+    positionWorld as unknown as Tsl, uTime, CURL_SCALE, FLAME_CURL_RISE,
+  ) as unknown as Tsl;
   // Atlas-cell-fraction shifts (bounded so a warped tap stays in the gutter).
   const flowUv = curl.x.mul(uFlow).mul(FLAME_FLOW_UV) as unknown as Tsl;
   const flowV = curl.y.mul(uFlow).mul(FLAME_FLOW_UV) as unknown as Tsl;
@@ -616,27 +617,16 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
   // Fade its alpha as the fragment approaches the scene surface behind it, so
   // the cut becomes a gradient instead of a seam.
   //
-  // THE TRAP (docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): the SCENE
-  // side must come from the depth TEXTURE (viewportLinearDepth /
-  // linearDepth(viewportDepthTexture())). Feeding a bare depth()/linearDepth()
-  // to BOTH sides is the current fragment's own depth, so the difference is
-  // identically zero AND the whole effect renders transparent black with no
-  // error. `linearDepth()` with no argument IS the current fragment — correct
-  // for the near side here, fatal for the far side.
-  const sceneLin = viewportLinearDepth as unknown as Tsl;   // 0..1 linear scene depth
-  const fragLin = linearDepth() as unknown as Tsl;          // 0..1 linear fragment depth
-  // Both are normalized over [near, far]; convert back to view-space metres so
-  // `cardSoftFade` is a real distance and the panel bounds mean something.
-  const nearM = cameraNear as unknown as Tsl;
-  const spanM = (cameraFar as unknown as Tsl).sub(nearM as N) as unknown as Tsl;
-  const sceneM = nearM.add(sceneLin.mul(spanM as N)) as unknown as Tsl;
-  const fragM = nearM.add(fragLin.mul(spanM as N)) as unknown as Tsl;
-  // fadeOn keeps a 0 metre setting fully inert — no divide, no change.
-  const fadeOn = smoothstep(0.0, 1e-5, uSoftFade as N) as unknown as Tsl;
-  const soft = clamp(
-    sceneM.sub(fragM as N).div(uSoftFade.max(1e-4) as N) as N, 0.0, 1.0,
+  // The fade itself is the SHARED helper (soft-fade.ts), which reads the SCENE
+  // side from `viewportLinearDepth` — the depth TEXTURE — for every caller. We
+  // pass only the CURRENT fragment's `linearDepth()`; the trap the wildfire
+  // teardown documents (feeding the fragment depth to both sides, so
+  // `(d - d) / fade = 0` renders the whole effect transparent black with no
+  // error) is impossible to reach through the helper's API, and soft-fade's
+  // own test guards the helper's source.
+  const depthFade = softParticleFade(
+    linearDepth() as never, uSoftFade as never,
   ) as unknown as Tsl;
-  const depthFade = mix(float(1) as N, soft as N, fadeOn as N) as unknown as Tsl;
 
   // — Combined: the atlas uniform mixes the two paths with no recompile. —
   // A two-rate breathe per card, the fire-light's own wobble shape
@@ -877,7 +867,8 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
       geo.dispose();
       material.dispose();
       atlasFallback.dispose();
-      curlTexture.dispose();
+      // The curl texture is the SHARED module singleton (curl-volume-node.ts);
+      // this instance does not own it and must not dispose it.
       object.removeFromParent();
     },
   };

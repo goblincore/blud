@@ -37,14 +37,28 @@ import type { BurstVisual } from '../explosion-aoe';
  *  so the control material's noise advection stays in step with the module's. */
 const MAX_STEP = 0.05;
 
+/**
+ * THE NEW LOOK, in one place. `?curl=1` boots with the shared curl domain-warp
+ * and the soft-particle depth fade on these values; the game's default stays 0
+ * (explosion-vfx.ts) and the capture driver pins the same numbers through
+ * setTuning so a still is reproducible. `curlScale` is small because a fireball
+ * is a few metres across — the flame cards' 6 m body scale would be one cell.
+ */
+export const SPIKE_CURL_LOOK = {
+  curlStrength: 1.1,
+  curlScale: 2.2,
+  softFade: 0.4,
+} as const;
+
 interface SpikeApi {
   ready: boolean;
   backend: string;
   /** Stop/start the rAF loop (the default). The driver pauses first. */
   pause(): void;
   resume(): void;
-  /** Advance the sim by dt and render one frame. */
-  frame(dt: number): void;
+  /** Advance the sim by dt and render one frame. The returned promise resolves
+   *  after the render, so a capture driver can screenshot the exact frame. */
+  frame(dt: number): Promise<void>;
   /** Render the current state again without advancing. */
   renderOnly(): void;
   /** Spawn one burst. `seed` pins the per-billboard randomness. */
@@ -55,7 +69,8 @@ interface SpikeApi {
   /** The three bursts the default scene poses (air + ground + occluded). */
   spawnDefaultScene(): void;
   reset(): void;
-  setTuning(patch: Record<string, number>): void;
+  /** Apply a tuning patch and return the fully-clamped tuning that landed. */
+  setTuning(patch: Record<string, number>): Record<string, number>;
   setControl(mode: 'none' | 'hash' | 'test'): void;
   setCamera(px: number, py: number, pz: number, tx: number, ty: number, tz: number): void;
   resize(w: number, h: number): void;
@@ -63,6 +78,7 @@ interface SpikeApi {
     activeBursts: number; lightIntensity: number;
     fireQuads: number; smokeQuads: number; emberQuads: number; ringSegments: number;
     drawCalls: number; triangles: number; clock: number; control: string;
+    curlStrength: number; curlScale: number; softFade: number;
   };
   measureRender(frames?: number): Promise<{ meanMs: number; minMs: number; maxMs: number; gpuMs: number }>;
 }
@@ -156,13 +172,18 @@ async function main() {
     renderer.autoClear = true;
   };
 
-  function frame(dt: number) {
+  async function frame(dt: number) {
     const step = dt > 0 ? Math.min(dt, MAX_STEP) : 0;
     clock += step;
+    // The control material shares the look graph, so it needs the same look
+    // switches as the module's own uniforms.
     controlUniforms.time.value = clock;
     controlUniforms.gain.value = vfx.tuning.gain;
+    controlUniforms.curlStrength.value = vfx.tuning.curlStrength;
+    controlUniforms.curlScale.value = vfx.tuning.curlScale;
+    controlUniforms.softFade.value = vfx.tuning.softFade;
     vfx.update(step, camera);
-    void render();
+    await render();
   }
 
   const spawnAt = (o: {
@@ -201,7 +222,7 @@ async function main() {
   const loop = () => {
     if (!running) return;
     const now = performance.now();
-    frame((now - last) / 1000);
+    void frame((now - last) / 1000);
     last = now;
     rafId = requestAnimationFrame(loop);
   };
@@ -223,7 +244,10 @@ async function main() {
     spawn: spawnAt,
     spawnDefaultScene,
     reset,
-    setTuning: (patch) => vfx.setTuning(patch as never),
+    setTuning: (patch) => {
+      vfx.setTuning(patch as never);
+      return { ...vfx.tuning };
+    },
     setControl,
     setCamera(px, py, pz, tx, ty, tz) {
       camera.position.set(px, py, pz);
@@ -254,6 +278,9 @@ async function main() {
         triangles: info.render?.triangles ?? -1,
         clock,
         control: controlMode,
+        curlStrength: vfx.tuning.curlStrength,
+        curlScale: vfx.tuning.curlScale,
+        softFade: vfx.tuning.softFade,
       };
     },
     async measureRender(frames = 40) {
@@ -293,14 +320,19 @@ async function main() {
   const params = new URLSearchParams(location.search);
   const ctrl = params.get('control');
   if (ctrl === 'hash' || ctrl === 'test') setControl(ctrl);
+  // ?curl=1 turns on the new look (shared curl domain-warp + soft-particle
+  // depth fade). OFF is the game default and the capture baseline.
+  if (params.get('curl') === '1') vfx.setTuning(SPIKE_CURL_LOOK);
   // ?spawn=0 boots the scene empty (the background-only control frame).
   if (params.get('spawn') !== '0') spawnDefaultScene();
 
   api.ready = true;
   say(`backend: ${backend}, ${vfx.activeBursts} bursts posed`);
-  say('drive with __explosionSpike.frame(dt) · ?control=hash|test · ?spawn=0');
+  say('drive with __explosionSpike.frame(dt) · ?curl=1 · ?paused=1 · ?control=hash|test · ?spawn=0');
   if (statsEl) statsEl.textContent = JSON.stringify(api.stats());
-  resume();
+  // ?paused=1 boots stopped so a capture driver owns every frame: the sim clock
+  // starts at 0 and only frame(dt) advances it, so two loads are comparable.
+  if (params.get('paused') === '1') pause(); else resume();
 }
 
 main().catch((err) => {

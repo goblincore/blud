@@ -462,6 +462,30 @@ describe('createExplosionVfx', () => {
     vfx.dispose();
   });
 
+  it('ships the curl and soft-fade switches OFF, so the game look is unchanged', () => {
+    // game-main.ts uses these explosions. The curl domain-warp and the
+    // soft-particle fade are opt-in until the owner flips them: a default of 0
+    // contributes exactly zero to the node graph, which is what makes the
+    // game's frame identical to the pre-curl one.
+    expect(EXPLOSION_VFX_TUNING.curlStrength).toBe(0);
+    expect(EXPLOSION_VFX_TUNING.softFade).toBe(0);
+
+    const vfx = createExplosionVfx();
+    expect(vfx.tuning.curlStrength).toBe(0);
+    expect(vfx.tuning.softFade).toBe(0);
+
+    // The live seam really applies them, and clamps them into bounds.
+    vfx.setTuning({ curlStrength: 0.85, curlScale: 2.5, softFade: 0.35 });
+    expect(vfx.tuning.curlStrength).toBeCloseTo(0.85, 12);
+    expect(vfx.tuning.curlScale).toBeCloseTo(2.5, 12);
+    expect(vfx.tuning.softFade).toBeCloseTo(0.35, 12);
+    vfx.setTuning({ curlStrength: -5, curlScale: 0, softFade: -1 });
+    expect(vfx.tuning.curlStrength).toBe(0);
+    expect(vfx.tuning.curlScale).toBe(0.25);   // clamped to the floor
+    expect(vfx.tuning.softFade).toBe(0);
+    vfx.dispose();
+  });
+
   it('spawn -> live -> retire, with the light trailing the fire', () => {
     const vfx = createExplosionVfx();
     const camera = new THREE.PerspectiveCamera();
