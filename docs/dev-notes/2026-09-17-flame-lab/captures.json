@@ -1,10 +1,11 @@
 {
-  "url": "/sdf-flame-lab.html?seed=1",
+  "url": "/sdf-flame-lab.html?seed=1&tongue=cards",
   "backend": "webgpu",
   "viewport": {
     "width": 1380,
     "height": 820
   },
+  "technique": "cards",
   "poses": [
     "close",
     "stand",
@@ -24,11 +25,11 @@
     }
   ],
   "contact": {
-    "file": "contact.png",
+    "file": "cards-contact.png",
     "frames": [
-      "close-fresh.png",
-      "stand-fresh.png",
-      "stand-charred.png"
+      "cards-close-fresh.png",
+      "cards-stand-fresh.png",
+      "cards-stand-charred.png"
     ],
     "tiles": [
       "3321.png",
@@ -42,85 +43,85 @@
       "pose": "close",
       "stage": "fresh",
       "char": 0,
-      "file": "close-fresh.png",
-      "std": 64.76
+      "file": "cards-close-fresh.png",
+      "std": 72.28
     },
     {
       "pose": "close",
       "stage": "charred",
       "char": 0.6,
-      "file": "close-charred.png",
-      "std": 54.99
+      "file": "cards-close-charred.png",
+      "std": 62.07
     },
     {
       "pose": "stand",
       "stage": "fresh",
       "char": 0,
-      "file": "stand-fresh.png",
-      "std": 34.16
+      "file": "cards-stand-fresh.png",
+      "std": 40.9
     },
     {
       "pose": "stand",
       "stage": "charred",
       "char": 0.6,
-      "file": "stand-charred.png",
-      "std": 28.89
+      "file": "cards-stand-charred.png",
+      "std": 36.61
     },
     {
       "pose": "walk",
       "stage": "fresh",
       "char": 0,
-      "file": "walk-fresh.png",
-      "std": 34.34
+      "file": "cards-walk-fresh.png",
+      "std": 41.62
     },
     {
       "pose": "walk",
       "stage": "charred",
       "char": 0.6,
-      "file": "walk-charred.png",
-      "std": 29.15
+      "file": "cards-walk-charred.png",
+      "std": 38.78
     },
     {
       "pose": "run",
       "stage": "fresh",
       "char": 0,
-      "file": "run-fresh.png",
-      "std": 34.56
+      "file": "cards-run-fresh.png",
+      "std": 43.15
     },
     {
       "pose": "run",
       "stage": "charred",
       "char": 0.6,
-      "file": "run-charred.png",
-      "std": 29.23
+      "file": "cards-run-charred.png",
+      "std": 40.47
     },
     {
       "pose": "collapsed",
       "stage": "fresh",
       "char": 0,
-      "file": "collapsed-fresh.png",
-      "std": 32.28
+      "file": "cards-collapsed-fresh.png",
+      "std": 37.37
     },
     {
       "pose": "collapsed",
       "stage": "charred",
       "char": 0.6,
-      "file": "collapsed-charred.png",
-      "std": 27.59
+      "file": "cards-collapsed-charred.png",
+      "std": 33.49
     },
     {
       "pose": "distant",
       "stage": "fresh",
       "char": 0,
-      "file": "distant-fresh.png",
-      "std": 21.55
+      "file": "cards-distant-fresh.png",
+      "std": 23.31
     },
     {
       "pose": "distant",
       "stage": "charred",
       "char": 0.6,
-      "file": "distant-charred.png",
-      "std": 19.5
+      "file": "cards-distant-charred.png",
+      "std": 22.24
     }
   ]
 }
