@@ -1,0 +1,424 @@
+# THE SUMP — a big, lumbering, formerly human brute for the FPS roster.
+#
+# AUTHORED FROM PROSE (PRDs/001-sump-body-horror-brute.md). There is no
+# reference mesh and no reference plate — the owner explicitly wants an
+# original interpretation from the prose — so, exactly as gnasher.blob
+# records of itself, blob:measure and blob:rings do not apply and NO number
+# below is "measured". Every one is a design decision; the comment on each
+# non-obvious number says WHY (or names the prose beat it serves, or the
+# turntable round that forced it).
+#
+# WHO IT IS. A tragic living prosthetic effect: flesh stretched around a body
+# that has grown in the wrong directions. The weight of a Quake 1 ogre,
+# Dead Space's anatomical disruption, Basket Case's grotesque. NOT an athlete,
+# NOT a balloon: heavy, grounded, and asymmetrical in the OUTLINE, not just
+# the surface colour.
+#
+# ROUND 2 (turntable r1): the first body validated clean and still read as a
+# SCRAWNY humanoid on sticks — thin limbs, a slab torso, ball-jointed legs,
+# tiny feet. Every mass below was fattened 15-30%, the torso blends were
+# raised so the masses read as ONE sagging column rather than stacked balls,
+# the legs took a wider stance (side 0.17) under the extra girth, and the
+# belly was carried FORWARD (z 0.19) so it hangs under the chest, ahead of
+# the thighs, instead of swallowing them.
+#
+# THE FIVE BEATS, made concrete:
+#   1. HUNCHED MASS. ~2.2 m of body carried on two SHORT legs (hip line 1.05,
+#      48% of height). The spine chain leans the shoulders well ahead of the
+#      hips; the neck disappears into a raised back, so there is no visible
+#      neck column. The yoke spans ~0.72 m across the shoulders — the widest
+#      thing above the hips.
+#   2. THE HANGING BELLY. A heavy sag carried FORWARD of the thighs: bottom
+#      ~0.75 (below the crotch at 0.90, well above the knee at 0.555), front
+#      surface at z ~0.45 level with the hunched chest — the profile reads as
+#      a belly leading, thighs behind (pinned in sump-blob.test.ts).
+#   3. UNEQUAL ARMS. The +x arm has overgrown into a dragging, knotted
+#      striking limb: a huge deltoid, crooked shaft, elbow and wrist knots,
+#      and an oversized fist that hangs just above the knee line (fist bottom
+#      ~0.75 vs the human hand at ~1.05). The -x arm stays recognizably human
+#      — thick, misshapen, human length. Both arms ride the same (symmetric)
+#      rig bones — the mirror block — and the asymmetry is authored in FLESH
+#      with `side=l` / `side=r` prims (in this rig `.l` bones land at +x, the
+#      same side as the torso offsets that carry the second face — the two
+#      must agree), so the gait/carry rig keeps working unchanged. The
+#      outline difference is the point: one arm is a limb, the other a verdict.
+#   4. THE FACE IN THE SHOULDER. The defining horror: a second, INCOMPLETE
+#      face compressed into the swollen shoulder above the overgrown arm — a
+#      collapsed brow (one end drooping), ONE recessed eye, and a crooked
+#      mouth-like fold (two stepped grooves). Attached anatomy on the torso
+#      cluster, not a separate head and not a decal; it must read at
+#      inspection distance without out-competing the main face, so it is
+#      smaller, dimmer, and has no teeth.
+#   5. THE SMALL UGLY MAIN FACE. Low heavy brow, crushed nose, one sagging
+#      cheek (the -x side), an off-centre heavy jaw with a few irregular
+#      teeth behind a mostly CLOSED dark mouth line. Dim recognition and
+#      discomfort — deliberately NOT a giant toothy grin.
+#
+# PALETTE. Sickly, desaturated, thick and dull: waxy grey-beige base, bruised
+# plum mottle (hue-different from the base, so it reads as bruising IN the
+# skin), raw red only where tissue is exposed. wetness is LOW — highlights
+# are reserved for the mouth and one irritated seam, which carry their own
+# `gloss=`. NOTHING glows on this character: the eyes are small, inset, and
+# non-glowing (pinned as zero glow prims in the test).
+#
+# LANDMARKS, NOT TUMORS. The back and shoulder carry a few strong stretched
+# ridges and compressed folds (five pieces) that explain where the extra mass
+# came from. No fields of boils, no spikes.
+#
+# NOT THE OTHER ROSTER HEAVIES. No maw (gnasher), no ball body (bloatmaw),
+# no machinery (cyberdemon), no wings/tail (gargoyle), no horns (minotaur —
+# abandoned, but the silhouette lesson stands).
+model sump
+  # Declared standing height = the crown as authored (2.19 measured). Bottom
+  # of the PRD's 2.2-2.5 m band: the hunch IS the crouch that reduces the
+  # apparent height, so the silhouette reads heavier than tall.
+  height 2.20
+  # Declared, not implied: humanoid knees (slight forward fold), verified by
+  # checkStance. Omitting the line would mean "not checked", not "humanoid".
+  stance humanoid
+
+skeleton
+  # Hip line at 1.05 (root 0.90 + len 0.15; children attach at the TAIL).
+  # SHORT load-bearing legs on a 2.2 m body: the pelvis len restores the
+  # crotch-to-hip segment, as gnasher.blob does.
+  root pelvis at 0.90 len=0.15
+
+  # The hunched chain. PITCH IS PER-BONE (absolute from vertical), not
+  # accumulated — the r2 chain said 18/16/34/24 and leaned only 24 deg at the
+  # skull, so the head sat ON TOP of the shoulder ball and the torso read
+  # upright. Now: 26+24 puts the shoulder line ahead of the hips, and the
+  # steep neck/skull (38/26) shove the head forward out of the raised back —
+  # the small head leads, the big body looms behind it. The skull stops at 26
+  # (a first draft at 40 aimed the face at the FLOOR: no camera angle, in the
+  # lab or in-game, could see the face) — enough down-tilt to glower, not
+  # enough to hide it.
+  bone spine parent=pelvis dir=up pitch=26 len=0.46
+  bone chest parent=spine  dir=up pitch=24 len=0.42
+  bone neck  parent=chest  dir=up pitch=38 len=0.12
+  bone skull parent=neck   dir=up pitch=26 len=0.19
+
+  mirror
+    # Shoulder yoke. tilt=10 lifts the clavicle into the trap slope; the 0.26
+    # reach plus the flesh yoke mass (not the bone) is what makes the
+    # shoulder line read as enormous.
+    bone clavicle parent=chest    dir=side tilt=10 len=0.26
+    # Human-scale arm bones on BOTH sides — the overgrown +x arm is authored
+    # in flesh (see the body block), so the rig poses both arms identically
+    # and the silhouette carries the asymmetry. tilt=24 splays both arms out
+    # under the yoke: a heavy brute's arms rest ON the lats, and the elbow
+    # needs the air (two rounds bought this number — see the upper-arm line).
+    bone upperArm parent=clavicle dir=down pitch=10 tilt=24 len=0.34
+    bone foreArm  parent=upperArm dir=down pitch=8  tilt=5  len=0.32
+    bone hand     parent=foreArm  dir=down pitch=12         len=0.13
+    # Legs: near-vertical thigh, slight forward knee fold (humanoid —
+    # checkStance verifies the knee sits in FRONT of the hip->ankle line; a
+    # first draft at thigh 5 / shin 6 folded 4 mm BACKWARD), then a short
+    # foot bone pitched down-forward to a broad flat pad. side=0.17: the wide
+    # pillar stance the r2 girth needs — thin legs under a hanging belly
+    # merged with it; these clear it.
+    bone thigh    parent=pelvis dir=down pitch=7  tilt=4 side=0.17 len=0.50
+    bone shin     parent=thigh  dir=down pitch=2            len=0.44
+    bone foot     parent=shin   dir=down pitch=58           len=0.14
+  end
+
+body
+  # ============================================================
+  # TORSO — one sagging hunched column, NOT a stack of balls: the r1
+  # turntable read the r1 masses as separate lumps, so r2 fattens each mass
+  # AND raises the blends (0.024-0.030) until neighbours overlap into flesh.
+  # Kept narrower in x than the yoke: the arms take their air from the chest
+  # width, and the brute's mass reads in DEPTH and shoulder line (the
+  # gnasher/goblin lesson).
+  # ============================================================
+  # Haunch: the seat the short legs root into, deep enough to carry the
+  # profile under the belly.
+  blob torso on pelvis at=0.35 r=0.215 wide=1.15 tall=1.05 deep=1.20 blend=0.024
+  # Lower spine mass: fills the y band between haunch and chest so the torso
+  # is ONE column (a first draft left an 8 cm gap at y ~1.38 and the legs
+  # failed their fuse probe through it).
+  blob torso on spine  at=0.30 r=0.235 wide=1.00 tall=1.10 deep=1.10 blend=0.024
+  # Upper belly: bridges the waist->chest seam at z ~0.12 (the fuse probe
+  # threaded exactly between the two ellipsoids there) and reads as the
+  # diaphragm mass under the hunched chest.
+  blob torso on spine  at=0.76 offset=(0,-0.005,-0.030) r=0.225 wide=1.05 tall=1.00 deep=1.05 blend=0.026
+  # Chest barrel: the biggest mass, deep in z — the hunch reads in profile.
+  # Narrow in x (semi 0.306) and trimmed in z for the overgrown arm's elbow
+  # (two rounds bought this number — see the upper-arm line).
+  blob torso on chest  at=0.55 r=0.255 wide=1.20 tall=1.15 deep=1.10 blend=0.026 core
+  # Shoulder yoke: the enormous hunched shoulder line — semi-x 0.361, the
+  # widest span on the body (~0.72 m), what the hunched read stands on.
+  blob torso on chest  at=0.95 r=0.195 wide=1.85 tall=0.80 deep=1.10 blend=0.020
+  # RAISED BACK: the hump behind/above the yoke that swallows the neck. Pushed
+  # to -z and up so the profile shows a continuous back line into the skull.
+  blob torso on chest  at=0.80 offset=(0,0.050,-0.155) r=0.215 wide=1.35 tall=0.95 deep=1.05 blend=0.026
+  # HANGING BELLY: deep in +z and dropped — carried FORWARD of the thighs
+  # (offset z 0.19), which is what lets it hang low without swallowing them.
+  # Bottom ~0.78, below the crotch (0.90), well above the knee (0.555);
+  # pinned as a band in sump-blob.test.ts.
+  blob torso on spine  at=0.02 offset=(0,-0.005,0.190) r=0.235 wide=1.00 tall=1.00 deep=1.05 blend=0.028
+  # Belly sag: the underside roll, where the weight gathers above the crotch.
+  blob torso on pelvis at=0.30 offset=(0,0.015,0.175) r=0.205 wide=1.00 tall=0.80 deep=1.10 blend=0.026
+  # Glutes: heavy masses directly OVER the hip joints — anatomically where a
+  # brute carries the short legs, and structurally the weld that lets the
+  # thigh fuse past the haunch's x-edge (the legs' fuse probe failed by
+  # 7 mm without them).
+  blob torso on pelvis at=0.42 offset=(0.150,0.020,-0.030) r=0.135 wide=1.05 tall=1.00 deep=1.15 blend=0.022 both
+  # SWOLLEN +x SHOULDER: the host mass for the second face. Sits high on the
+  # shoulder, proud of the yoke — the asymmetry that makes that side read
+  # heavier before you even find the face.
+  blob torso on chest  at=0.92 offset=(0.215,0.045,0.015) r=0.215 wide=1.30 tall=0.78 deep=0.72 blend=0.022
+
+  # ============================================================
+  # THE SECOND FACE — compressed into the swollen shoulder above the
+  # overgrown arm. Incomplete ON PURPOSE: collapsed brow, ONE recessed eye,
+  # a crooked mouth-like fold. No teeth, no second jaw — it is another person
+  # being ABSORBED, suggested rather than stated, and it must not out-shout
+  # the main face. All on the torso cluster (attached anatomy, not a head).
+  # PLACEMENT: every offset below was computed by ray-marching the HOST
+  # mass's own field along +z at the feature's (x, y) — three rounds of hand
+  # arithmetic placed these features floating ahead of the shoulder, buried
+  # inside it, or under a lid that had grown over the whole eye. Don't hand-
+  # place features on a pitched bone; march the host surface and paste.
+  # ============================================================
+  # Collapsed brow: a shelf over the eye whose far end DROOPS (negative tip
+  # y) — the fold of a brow that caved. Chamfer keeps the crease.
+  bar torso on chest from=0.92 to=0.92 offset=(0.360,0.185,0.104) tip=(-0.190,-0.050,-0.005) r=0.052 wide=1.10 tall=0.50 deep=0.80 blend=0.006 chamfer
+  # Eye socket: a dark crater (the bloatmaw idiom — a painted pit so the small
+  # eye reads OUT of shadow rather than as a speck on flesh). Its front sits
+  # ~0.03 proud of the swelling so it owns its pixels.
+  blob torso on chest  at=0.92 offset=(0.330,0.112,0.192) r=0.070 wide=1.00 tall=0.90 deep=0.40 blend=0.006 color=241511
+  # The recessed eye itself: small, dim, wet, NOT glowing, and set BEHIND the
+  # socket's rim so it reads as sunk into the swelling.
+  blob torso on chest  at=0.92 offset=(0.330,0.110,0.200) r=0.028 wide=0.90 tall=0.90 deep=0.55 blend=0.004 color=e0d6c2 gloss=0.80
+  # Lid fold: a flesh blob rising over the eye's top half — half-closed, tired.
+  blob torso on chest  at=0.92 offset=(0.330,0.142,0.170) r=0.050 wide=1.05 tall=0.55 deep=0.70 blend=0.006
+  # The crooked mouth-like fold: TWO stepped groove segments (a short branch
+  # dropping off the main crease) — a fold that ALMOST makes a mouth.
+  # Groove arithmetic (reference.md): real half-width = width / min(scale).
+  # Main crease: r=0.030, wide=2.0 tall=0.05 deep=0.70 -> min 0.05; a 4 mm
+  # half-width band is width = 0.004 x 0.05 = 0.0002. depth 2.5 mm is the cut.
+  groove torso on chest at=0.92 r=0.040 wide=2.00 tall=0.05 deep=0.70 depth=0.0050 width=0.00027 offset=(0.325,0.070,0.170) tip=(-0.110,-0.012,-0.005)
+  # Branch: shorter, stepping DOWN toward the cheek, the "crooked" in the fold.
+  groove torso on chest at=0.92 r=0.030 wide=1.40 tall=0.05 deep=0.60 depth=0.0040 width=0.00027 offset=(0.258,0.054,0.178) tip=(-0.055,0.014,-0.006)
+  # Mouth aperture: a small dark mass at the main fold's inner end, so the
+  # fold reads as a slightly parted mouth rather than a scratch (the
+  # bloatmaw darks-own-their-pixels rule: the aperture protrudes past the
+  # swelling and paints near-black with a wet catch).
+  blob torso on chest  at=0.92 offset=(0.295,0.087,0.166) r=0.026 wide=1.40 tall=0.70 deep=0.50 blend=0.005 color=1a0b0a gloss=0.40
+
+  # ============================================================
+  # BACK AND SHOULDER LANDMARKS — stretched ridges and compressed folds, a
+  # few strong pieces that explain the extra mass. Restrained by design.
+  # ============================================================
+  # Stretched ridge, upper back: a long low diagonal bar, chamfered so it
+  # keeps a crease — skin stretched OVER the growth.
+  bar torso on spine from=0.60 to=0.60 offset=(-0.120,0.105,-0.180) tip=(0.235,-0.055,0.015) bend=(0,-0.025,0.020) r=0.028 wide=1.10 tall=0.55 deep=0.85 blend=0.006 chamfer
+  # Stretched ridge, lower: the counter-diagonal, so the back reads as pulled
+  # from two directions, not stamped.
+  bar torso on spine from=0.25 to=0.25 offset=(0.125,0.060,-0.190) tip=(-0.220,-0.040,0.015) r=0.026 wide=1.00 tall=0.50 deep=0.80 blend=0.006 chamfer
+  # Belly crease: the horizontal fold where the overhang turns under. Painted
+  # bruised plum — the PRD puts bruising in the compressed folds.
+  bar torso on spine from=0.05 to=0.05 offset=(0,-0.245,0.215) tip=(0.155,0.020,0.030) r=0.030 wide=1.15 tall=0.50 deep=0.80 blend=0.005 chamfer color=4a3244
+  # +x flank fold: a vertical compressed roll where belly meets hip.
+  blob torso on pelvis at=0.42 offset=(0.195,0.045,0.120) r=0.075 wide=0.55 tall=1.05 deep=1.00 blend=0.008 color=443040
+  # Irritated seam: ONE raw-red line where the fold weeps, with the only
+  # strong gloss on the body — the PRD's "wet highlights reserved for the
+  # mouth and a few irritated seams".
+  bar torso on pelvis from=0.40 to=0.40 offset=(0.140,-0.075,0.185) tip=(-0.010,-0.075,0.010) r=0.015 wide=0.70 tall=0.40 deep=0.50 blend=0.004 color=6e211d gloss=0.40
+
+  # ============================================================
+  # NECK + HEAD — small and ugly, shoved forward out of the raised back.
+  # All prims (no reference mesh to bake; the painted-face road is the
+  # documented failure), so the face block below is a nub. The head is
+  # SMALL on the body (~0.21 m cranium on 2.2 m) — that ratio is the beat.
+  # Order matters: masses first, then the mouth interior, teeth, and eyes
+  # last so the brow still shadows them.
+  # ============================================================
+  # Neck: a short thick column, mostly SWALLOWED by the raised back and yoke;
+  # it exists to fuse the head into the torso without a gap.
+  bar head on neck from=0.05 to=0.95 r=0.105 deep=0.95 blend=0.012
+  # Cranium: the small dome.
+  blob head on skull at=0.55 r=0.115 wide=0.95 tall=1.00 deep=1.05 blend=0.008 core
+  # Low heavy brow: a wide low shelf, PLUS a droopier second piece over the
+  # +x eye — the asymmetric scowl of dim recognition.
+  bar head on skull from=0.50 to=0.50 offset=(0,0.091,0.082) tip=(0,-0.008,0.028) r=0.030 wide=1.45 tall=0.50 deep=0.70 blend=0.005 chamfer
+  blob head on skull at=0.50 offset=(0.052,0.078,0.056) r=0.046 wide=0.90 tall=0.60 deep=0.75 blend=0.005
+  # Crushed nose: squat, wide, flattened, nudged off centre — it reads as
+  # having been broken more than once.
+  blob head on skull at=0.44 offset=(0.010,-0.009,0.144) r=0.040 wide=1.35 tall=0.75 deep=0.80 blend=0.005
+  # Sagging cheek: the -x side, a drooping jowl pulled down by the same
+  # gravity as everything else.
+  blob head on skull at=0.44 offset=(-0.062,-0.049,0.041) r=0.052 wide=0.90 tall=1.20 deep=0.90 blend=0.008
+  # Heavy jaw: off-centre (+x) and jutted — the bite is wrong, which is part
+  # of the discomfort.
+  blob head on skull at=0.26 offset=(0.018,-0.075,0.066) r=0.078 wide=1.05 tall=0.85 deep=1.05 blend=0.008
+  # Chin mass: pushes the jut further forward under the mouth line.
+  blob head on skull at=0.22 offset=(0.024,-0.102,0.112) r=0.049 wide=1.00 tall=0.80 deep=0.90 blend=0.006
+  # Upper-lip ridge: flesh, proud of the jaw above the mouth line, so the
+  # mouth is a crease BETWEEN reliefs, not paint on a flat.
+  bar head on skull from=0.32 to=0.32 offset=(0.012,-0.021,0.115) tip=(0.052,0.006,-0.012) r=0.011 wide=1.30 tall=0.40 deep=0.50 blend=0.003
+  # MOUTH: a mostly closed, slightly parted dark line, crooked (the tip makes
+  # it slant down toward the sagging side), WET — one of the reserved glosses.
+  # It sits BETWEEN the lip ridge above and the jaw mass below.
+  bar head on skull from=0.32 to=0.32 offset=(0.012,-0.033,0.088) tip=(0.052,-0.010,-0.014) r=0.012 wide=1.35 tall=0.45 deep=0.50 blend=0.003 color=200a08 gloss=0.60
+  # Mouth corner: closes the aperture at the +x end so the line reads as a
+  # mouth, not a slash.
+  blob head on skull at=0.30 offset=(0.052,-0.029,0.066) r=0.017 wide=0.90 tall=0.90 deep=0.80 blend=0.004 color=200a08
+  # A FEW irregular teeth, small, breaking the dark line — not a grin. Sizes
+  # and spacing deliberately uneven; dull ivory, low gloss. Rooted IN the
+  # mouth line's own mass (a first draft rooted them on the jaw's front
+  # surface and stranded 2 cm clear of it).
+  blob head on skull at=0.31 offset=(0.030,-0.039,0.104) r=0.0085 r2=0.004 blend=0.002 tip=(0.002,-0.014,-0.002) color=cfc3a4 gloss=0.25
+  blob head on skull at=0.33 offset=(-0.004,-0.044,0.100) r=0.0105 r2=0.004 blend=0.002 tip=(-0.003,-0.017,-0.002) color=c8bb9c gloss=0.25
+  blob head on skull at=0.33 offset=(-0.022,-0.043,0.093) r=0.0075 r2=0.003 blend=0.002 tip=(0.001,-0.012,-0.003) color=cfc3a4 gloss=0.25
+  # EYES: small, inset, uneven, NON-GLOWING. Dark socket craters first (the
+  # bloatmaw idiom), then small wet eyeballs RECESSED behind the rim, then
+  # heavy lid folds that half-cover them. The -x eye (under the sagging
+  # cheek) sits lower — nothing about this face is level.
+  blob head on skull at=0.50 offset=(0.054,0.046,0.102) r=0.026 wide=1.00 tall=0.90 deep=0.40 blend=0.005 color=241a15
+  blob head on skull at=0.50 offset=(0.054,0.044,0.079) r=0.017 wide=0.90 tall=0.90 deep=0.55 blend=0.004 color=d8cdb8 gloss=0.55
+  blob head on skull at=0.50 offset=(0.054,0.070,0.066) r=0.028 wide=1.05 tall=0.55 deep=0.70 blend=0.005
+  blob head on skull at=0.50 offset=(-0.050,0.038,0.106) r=0.024 wide=1.00 tall=0.90 deep=0.40 blend=0.005 color=241a15
+  blob head on skull at=0.50 offset=(-0.050,0.036,0.085) r=0.0155 wide=0.90 tall=0.90 deep=0.55 blend=0.004 color=d0c5b0 gloss=0.55
+  blob head on skull at=0.50 offset=(-0.050,0.061,0.078) r=0.026 wide=1.05 tall=0.55 deep=0.70 blend=0.005
+  # (A crushed ear remnant was authored here and cut: on camera it read as a
+  # black curled horn, which is worse than no ear at all.)
+
+  # ============================================================
+  # THE OVERGROWN ARM — the +x arm (side=l), directly under the swollen
+  # shoulder and its second face. Every prim is side=l. The outline must
+  # change: a deltoid twice the human arm's, a crooked knotted shaft, and a
+  # forearm that runs PAST the wrist bone (to=1.75) so the oversized fist
+  # hangs just above the knee line (fist bottom ~0.75, knee 0.555, hand bone
+  # tail 1.18) — the bones stay human-length; the flesh is the verdict.
+  # ============================================================
+  # Deltoid: the biggest arm mass on the body, welded into the swollen
+  # shoulder above it. `core`: the fuse probe's anchor.
+  blob arm on clavicle at=1.00 r=0.175 blend=0.014 side=l core
+  # Upper arm: a crooked heavy tube — the bend makes the knot visible in
+  # silhouette, not just in surface. Girth is tuned against the chest wall
+  # (a first draft at r 0.115 pressed the elbow into the chest and cost the
+  # arm its daylight; the tilt=21 splay bought the air back for r 0.125).
+  bar  arm on upperArm from=0.02 to=0.95 r=0.125 r2=0.105 blend=0.012 bend=(0.045,-0.050,0.020) side=l
+  # Knot: a swelling mid-shaft where the growth knotted.
+  blob arm on upperArm at=0.55 offset=(0.022,-0.010,0.032) r=0.110 wide=1.05 tall=1.10 deep=1.05 blend=0.012 side=l
+  # Elbow: a fused-looking knot, wider than the shafts it joins. Slimmer than
+  # a first draft (r 0.110 / wide 1.15) which pressed the elbow INTO the
+  # chest wall and cost the arm its daylight.
+  blob arm on upperArm at=1.00 r=0.098 wide=1.05 tall=1.05 deep=1.05 blend=0.012 side=l
+  # Forearm: thick, drooping, and LONG — the bar runs well past the wrist
+  # bone, and the bend carries it forward-out so the fist clears the thigh.
+  bar  arm on foreArm  from=0.10 to=1.75 r=0.118 r2=0.100 blend=0.010 bend=(0.060,0.030,0.035) side=l
+  # Wrist knot above the fist: the "fused-looking" continue.
+  blob arm on foreArm  at=1.60 r=0.112 wide=1.10 tall=1.05 deep=1.05 blend=0.010 side=l
+  # OVERSIZED FIST: broader than tall, hung low (offset y -0.32 from the hand
+  # bone's head region) ahead of the thigh.
+  blob arm on hand     at=0.20 offset=(0.020,-0.320,0.040) r=0.170 wide=1.20 tall=0.85 deep=1.10 blend=0.010 side=l
+  # Knuckle ridge: proud across the fist's front — reads knuckle-forward.
+  bar  arm on hand     from=0.35 to=0.35 r=0.065 wide=1.30 tall=0.75 deep=0.90 blend=0.005 chamfer offset=(0.020,-0.330,0.145) tip=(0,-0.020,0.020) side=l
+  # Fused finger masses: two blunt rolls below the ridge, never separated
+  # fingers — the fist fused into a club.
+  bar  arm on hand     from=0.45 to=0.62 r=0.045 r2=0.032 blend=0.005 chamfer offset=(0.075,-0.415,0.115) tip=(0.008,-0.045,0.020) side=l
+  bar  arm on hand     from=0.45 to=0.62 r=0.043 r2=0.030 blend=0.005 chamfer offset=(-0.035,-0.415,0.110) tip=(-0.006,-0.045,0.018) side=l
+
+  # ============================================================
+  # THE HUMAN ARM — the -x arm (side=r): recognizably human, thick and
+  # misshapen. One bulge on the forearm is the "misshapen"; everything else
+  # is a heavy human arm that could one day close around a chainsaw grip.
+  # ============================================================
+  blob arm on clavicle at=0.95 r=0.095 blend=0.012 side=r core
+  bar  arm on upperArm from=0.05 to=0.95 r=0.072 r2=0.058 blend=0.008 side=r
+  bar  arm on foreArm  from=0.05 to=0.92 r=0.060 r2=0.046 blend=0.008 side=r
+  # The misshapen note: a bulge just below the outer elbow.
+  blob arm on foreArm  at=0.42 offset=(-0.008,-0.008,0.014) r=0.056 wide=1.05 tall=1.10 deep=1.05 blend=0.008 side=r
+  # Hand: a thick mitt with a stub of a thumb — grip-ready, not sculpted.
+  blob arm on hand     at=0.50 r=0.060 wide=1.05 tall=0.65 deep=1.15 blend=0.008 side=r
+  bar  arm on hand     from=0.75 to=1.00 r=0.018 r2=0.013 blend=0.004 offset=(-0.034,0.020,0.034) tip=(-0.012,-0.022,0.034) side=r
+
+  # ============================================================
+  # LEGS — short, load-bearing pillars. Thick through the thigh, tapering to
+  # a heavy ankle, into BROAD FLATTENED feet: wide, squat pads built for the
+  # mass above them. No claws, no digitigrade geometry. The r1 legs were
+  # sticks with ball joints; r2 fattens every segment and raises the blends
+  # so knee and ankle read as fused weight-bearers, not beads.
+  # ============================================================
+  blob leg on thigh at=0.05 r=0.170 blend=0.018 mirror core
+  bar  leg on thigh from=0.10 to=0.95 r=0.155 r2=0.125 deep=1.05 blend=0.018 mirror
+  bar  leg on shin  from=0.05 to=0.90 r=0.115 r2=0.095 blend=0.016 mirror
+  # Calf: a mass at the BACK of the shin, so the leg is a leg, not a peg.
+  blob leg on shin  at=0.25 offset=(0,-0.005,-0.048) r=0.095 wide=1.00 tall=1.10 deep=0.90 blend=0.014 mirror
+  # Ankle: heavy, fused-looking.
+  blob leg on shin  at=0.98 r=0.090 wide=1.05 tall=0.95 deep=1.05 blend=0.014 mirror
+  # FOOT: the broad flattened pad — wide in x, squat in y, long in z. Dropped
+  # so the sole rests at y ~0.01.
+  blob leg on foot  at=0.55 offset=(0,-0.008,0.020) r=0.105 wide=1.90 tall=0.50 deep=1.90 blend=0.012 mirror
+  # Toes: one blunt wide mass closing the pad's front — flattened, not clawed.
+  bar  leg on foot  from=0.95 to=1.05 r=0.058 wide=1.70 tall=0.50 deep=0.80 blend=0.006 chamfer offset=(0,-0.004,0.100) mirror
+
+# Sheet block: a HAND-AUTHORED face decal (public/assets/lab/faces/
+# sump-face.png, generated by scripts/make-sump-face.py) worn at MULTIPLY —
+# the gargoyle road, third try. The head is small and same-colour SDF prims
+# cannot budget it contrast: two geometry-only rounds read as a lumpy egg,
+# and a first no-sheet-block draft painted two RED glowing zombie eyes just
+# off the authored sockets (the registry-face path never sets eyeGlowCut, so
+# the flat sheet's bright spots clear the 0.88 default cut). The decal is
+# alpha-masked facial shading only — brow shadow, eye pits with a pale
+# glint on the authored eyeballs, crushed-nose flanks, nasolabial folds,
+# crooked mouth line, sagging -x cheek — over a neutral base normalised so
+# the base luma equals the measured mean (base = no-op; only features
+# deviate). Positions were derived in the cranium hs frame: the generator's
+# hs() is the same (world - cranium centre) / semi-axes the shader projects.
+# eyeGlowCut 0.99 + eyeGlowAmp 0 gate the sheet's glow off entirely (the
+# white-sheet trap — nothing in this texture may glow; the PRD's eyes do not).
+sheet
+  image       sump-face.png
+  decal       0
+  projScaleX  0.19
+  projScaleY  0.22
+  projCentreX 0.50
+  projCentreY 0.47
+  eyeGlowCut  0.99
+  eyeGlowAmp  0
+
+# Face block: SHRUNK TO A NUB — the head is authored prims above (no reference
+# mesh to bake; the generated sheet reads as the zombie). Same idiom as
+# gnasher.blob and bloatmaw.blob.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+# Sickly, thick and DULL. Waxy grey-beige base (near-equal channels, warm
+# slightly); bruised plum mottle — hue-different from the base (r > b > g
+# against a neutral base) so it reads as bruising IN the skin, not dirt ON
+# it; raw red kept for wounds and the mouth interior. specRoughness high and
+# wetness LOW — the shine lives on the painted mouth/seam prims, which carry
+# their own gloss=. Translucency near zero (thick hide) — the r1 turntable
+# rendered warmer/pinker than intended until this came down. Mottle amp 0.45
+# lifts the mean toward the mottle, so the base sits a touch brighter to
+# compensate.
+palette
+  baseColor     0.40 0.385 0.355
+  deepColor     0.50 0.07 0.06
+  charColor     0.06 0.05 0.04
+  specIntensity 0.50
+  specRoughness 0.55
+  fresnelBoost  0.22
+  translucency  0.06
+  wetness       0.15
+  surfaceNoiseAmp    0.07
+  silhouetteNoiseAmp 0.02
+  mottleAmp     0.45
+  mottleScale   1.6
+  mottleColor   0.13 0.065 0.105
