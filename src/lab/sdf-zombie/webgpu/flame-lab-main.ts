@@ -233,6 +233,10 @@ async function bootstrap(): Promise<void> {
   let technique: TongueTechnique =
     tongueParam !== null && isTongueTechnique(tongueParam) ? tongueParam : 'screen';
   let tongue: TongueTuning = resolveTongueTuning();
+  // The volumetric fire tuning (round 2, task 4). Declared HERE, before the
+  // panel: createFlamePanel reads every record at construction, so a later
+  // declaration is a temporal-dead-zone ReferenceError at boot.
+  let volume: FireVolumeTuning = resolveFireVolumeTuning();
   // A capture-time clock pin (flame-polish task 2): when set, the visual clock
   // stops at this many seconds so two runs can be compared at the SAME flipbook
   // and curl phase. null is the live wall clock. Burn integration still uses
@@ -559,8 +563,8 @@ async function bootstrap(): Promise<void> {
   // ——— FIRE VOLUME feed (burning-feedback round 2, task 4d). The volume
   // technique packs each burning body's capsules into ONE preallocated buffer
   // and feeds post-aa's pass; the record and all scratch matrices live here so
-  // the render callback allocates nothing.
-  let volume: FireVolumeTuning = resolveFireVolumeTuning();
+  // the render callback allocates nothing. (`volume` itself is declared up top,
+  // before the panel.)
   const firePackBuf = new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
   const fireBodies: FireVolumeBody[] = FLAME_LAB_BODIES.map(() => ({
     capsules: [], velocities: [], burn: 0, centre: [0, 1, 0] as Vec3,
@@ -715,6 +719,14 @@ async function bootstrap(): Promise<void> {
   let speedBand: 'walk' | 'run' = 'walk';
   const cruiseFor = (profile: MotionProfile) => speedForBand(profile, speedBand);
   let forcedCollapse = false;
+  /** RUN FIXTURE: hide every non-burning actor's body AND its kit/prop (both
+   *  are added to the scene outside gpu.object, and they load async, so this is
+   *  re-applied every frame rather than toggled once). */
+  let runHideOthers = false;
+  /** RUN FIXTURE: zero the wander idle pause so the body is always moving
+   *  (the wander policy stands at each arrival, which killed the live-trail
+   *  shot). Cleared on stop. */
+  let runContinuous = false;
 
   /**
    * KILL (flame-polish task 5): collapse every body, and start a burn-down on
@@ -747,10 +759,24 @@ async function bootstrap(): Promise<void> {
       a0.bounds = { ...RUN_BOUNDS };
       autoSpin = false;
       camYaw = 1.15;
-      camPitch = 0.16;
-      camDist = 4.4;
-      // One burning body: light the zombie, put the soldier out.
-      for (let i = 1; i < burns.length; i++) extinguishBurn(burns[i]!);
+      camPitch = 0.1;
+      // A wide fixed side view: the body crosses the floor inside the frame, so
+      // the trail is judged relative to the frame rather than a tracking camera
+      // (a follower hides the trail by construction).
+      camDist = 6.0;
+      // One burning body: light the zombie, put the soldier out AND hide his
+      // geometry (object visibility, never a light toggle) so the frame has a
+      // single burner to judge. Kit/prop are hidden every frame — see
+      // runHideOthers.
+      runHideOthers = true;
+      runContinuous = true;
+      for (let i = 1; i < burns.length; i++) {
+        extinguishBurn(burns[i]!);
+        actors[i]!.gpu.object.visible = false;
+        actors[i]!.gpu.coneObject.visible = false;
+        if (actors[i]!.view.kit) actors[i]!.view.kit!.object.visible = false;
+        if (actors[i]!.view.prop) actors[i]!.view.prop!.object.visible = false;
+      }
       igniteBurn(burns[0]!);
       forcedCollapse = false;
       fireResetRequested = true;
@@ -759,15 +785,21 @@ async function bootstrap(): Promise<void> {
     if (name === 'stop') {
       wanderOn = false;
       speedBand = 'walk';
+      runContinuous = false;
       return 'stop';
     }
     if (name === 'stand') {
       wanderOn = false;
       speedBand = 'walk';
+      runHideOthers = false;
       a0.bounds = {
         minX: a0.spawn[0]! - WANDER_R, maxX: a0.spawn[0]! + WANDER_R,
         minZ: a0.spawn[2]! - WANDER_R, maxZ: a0.spawn[2]! + WANDER_R,
       };
+      for (let i = 1; i < actors.length; i++) {
+        actors[i]!.gpu.object.visible = true;
+        actors[i]!.gpu.coneObject.visible = true;
+      }
       autoSpin = true;
       return 'stand';
     }
@@ -846,6 +878,17 @@ async function bootstrap(): Promise<void> {
 
   handle.setRenderCallback((dt) => {
     beginPassFrame();
+    // The run fixture's one-burner frame: re-hide the others' kit/prop as they
+    // resolve (they attach to the scene, not to gpu.object).
+    if (runHideOthers) {
+      for (let i = 1; i < actors.length; i++) {
+        const a = actors[i]!;
+        a.gpu.object.visible = false;
+        a.gpu.coneObject.visible = false;
+        if (a.view.kit) a.view.kit.object.visible = false;
+        if (a.view.prop) a.view.prop.object.visible = false;
+      }
+    }
     const now = performance.now();
     frames.push(now - lastStamp);
     lastStamp = now;
@@ -876,6 +919,9 @@ async function bootstrap(): Promise<void> {
     const motionDt = frozen ? 0 : dt;
     for (const a of actors) {
       if (!a.motion.motionJoints) continue;
+      // The run fixture keeps moving: the wander policy pauses at each arrival,
+      // and a paused frame has no velocity to trail.
+      if (runContinuous && a.motion.motionState) a.motion.motionState.wander.idle = 0;
       const f = stepActorMotion(a.motion, {
         current: a.current,
         dt: motionDt,
@@ -1286,6 +1332,12 @@ async function bootstrap(): Promise<void> {
     async passTimings() {
       return { installed: passTiming.installed, samples: await passTiming.collect() };
     },
+    /** Wall frame time (rAF delta, ms) over the rolling window, as the
+     *  timestamp fallback the cost probe cross-checks against. */
+    frameMs() {
+      const s = [...frames].sort((a, b) => a - b);
+      return { n: s.length, median: s.length > 0 ? s[Math.floor(s.length / 2)] : 0 };
+    },
     /** The run fixture's switches (see setFixture). 'run' | 'stop' | 'stand'. */
     fixture(name = 'run') { return setFixture(name); },
     /** The live state a capture reads back: the technique, the three tuning
@@ -1297,6 +1349,12 @@ async function bootstrap(): Promise<void> {
         volume: { ...volume },
         tuning: { ...tuning },
         burns: burns.map(b => ({ ...b })),
+        actors: actors.map(a => ({
+          name: a.name,
+          visible: a.gpu.object.visible,
+          pos: [...a.lastPos],
+          caps: a.caps ? a.caps.length : 0,
+        })),
       };
     },
     /** Flame-cards telemetry (plan task 3): quads written last frame and the

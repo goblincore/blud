@@ -142,11 +142,16 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       if (h > cfg0.z) { continue; }
       let q = p - fireLag(rec2.xyz, h, cfg1.y, cfg1.z) + cv;
       let d = fireSdCapsule(q, a, b) - radius;
-      temp = temp + burn * exp(-max(d, 0.0) / 0.08) * fireFalloff(h / rise);
+      temp = temp + burn * exp(-max(d, 0.0) / 0.06) * fireFalloff(h / rise);
       soot = soot + burn * fireSoot(d, h, rise, cfg0.z);
     }
-    emission = emission + T * fireRamp(temp) * cfg1.w * stepM;
-    T = T * exp(-soot * cfg2.x * stepM);
+    // Emission needs a real heat core: the smoothstep kills the exp tail's
+    // long-path red haze (the AABB used to fill with a solid glow), and the
+    // temp term below self-absorbs the dense core so it cannot accumulate
+    // without bound along a grazing ray.
+    let heat = smoothstep(0.08, 0.5, temp);
+    emission = emission + T * fireRamp(temp) * heat * cfg1.w * stepM;
+    T = T * exp(-(soot * cfg2.x + temp * 1.4) * stepM);
     if (T < 0.003) { break; }
     t = t + stepM;
   }

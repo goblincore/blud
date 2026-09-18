@@ -38,7 +38,7 @@ export interface FireVolumeTuning {
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   resolutionScale: 0.5,
   steps: 32,
-  tempGain: 1.6,
+  tempGain: 0.7,
   sootGain: 0.6,
   rise: 1.1,
   sootRise: 2.2,
