@@ -12,7 +12,7 @@
 // file stays independent of large committed artifacts.
 
 import { describe, it, expect } from 'vitest';
-import { collectCensus, diffCensus, reportCensusDrift, diffFrameHash, reportFrameHashDrift } from './census-diff.mjs';
+import { collectCensus, deadDynamicLayers, diffCensus, reportCensusDrift, diffFrameHash, reportFrameHashDrift } from './census-diff.mjs';
 
 /** One leg-run, with a census per segment. */
 function run(leg, room, rep, segments) {
@@ -248,5 +248,66 @@ describe('reportFrameHashDrift', () => {
     const { n, text } = lines(doc);
     expect(n).toBe(0);
     expect(text).toContain('FRAME HASH IDENTICAL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DEAD DYNAMIC LAYER. The false negative this file exists to guard against, in
+// its nastiest form: a layer that is zero on EVERY repeat does not drift, so
+// the drift report calls it "IDENTICAL" and returns 0. Two empty buffers agree
+// perfectly. Measured on the sibling gate 2026-09-18 — a determinism "fix"
+// zeroed probeDyn (nonZero 6316 -> 0) and sdf-demo-hash reported OK.
+// ---------------------------------------------------------------------------
+
+/** One hashed leg-run WITH a census, so the bodies gate can see it. The
+ *  existing `hashedRun` above carries `segments: []` (no bodies), which is why
+ *  it is never flagged by the liveness guard. */
+function bodiedRun(nonZero, bodies, rep = 0) {
+  return {
+    leg: 'baseline', room: 4, rep,
+    segments: [{ name: 'fire', census: { first: { bodies }, last: { bodies } } }],
+    endHash: {
+      version: 1, frame: 42, tilesX: 1, tilesY: 1,
+      layers: { probeDyn: layer('h', nonZero) },
+      tiles: { probeDyn: [1, 2, 3, 4] },
+    },
+  };
+}
+
+describe('deadDynamicLayers', () => {
+  it('flags a zero dynamic layer when the scene had bodies', () => {
+    const got = deadDynamicLayers({ results: [bodiedRun(0, 4)] });
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ leg: 'baseline', room: 4, rep: 0, bodies: 4 });
+  });
+
+  it('does NOT flag a bodyless run — ?simidle is empty by design', () => {
+    expect(deadDynamicLayers({ results: [bodiedRun(0, 0)] })).toEqual([]);
+  });
+
+  it('does not flag a live layer', () => {
+    expect(deadDynamicLayers({ results: [bodiedRun(6316, 4)] })).toEqual([]);
+  });
+});
+
+describe('reportFrameHashDrift with a dead layer', () => {
+  it('does not report IDENTICAL, and returns non-zero, when the layer is dead', () => {
+    const lines = [];
+    // Two repeats, both zero: they AGREE, so drift is empty and the old report
+    // called this identical.
+    const doc = { results: [bodiedRun(0, 4, 0), bodiedRun(0, 4, 1)] };
+    const n = reportFrameHashDrift('t', doc, (l) => lines.push(l));
+    expect(n).toBeGreaterThan(0);
+    const text = lines.join('\n');
+    expect(text).toContain('DYNAMIC PROBE LAYER READ ZERO');
+    expect(text).not.toContain('FRAME HASH IDENTICAL');
+  });
+
+  it('still reports IDENTICAL when the layer is live and agrees', () => {
+    const lines = [];
+    const doc = { results: [bodiedRun(6316, 4, 0), bodiedRun(6316, 4, 1)] };
+    const n = reportFrameHashDrift('t', doc, (l) => lines.push(l));
+    expect(n).toBe(0);
+    expect(lines.join('\n')).toContain('FRAME HASH IDENTICAL');
   });
 });

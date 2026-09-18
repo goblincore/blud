@@ -45,21 +45,36 @@
 - [x] `sdf-demo-hash.sh ab` no longer dies before comparing: the final-frame sample was itself introducing the
   odd parity gap its own comment warned about (frames 96 / every 4 → samples at 0,4,…,92 parity 1, then frame 95
   at parity 0). It is now taken only when it agrees with the established parity.
-- [x] **Replay reproducibility FIXED 2026-09-18.** `sdf-demo-hash ab` now reports
-  `OK: 24/24 sampled frames identical across two fresh-page runs`. Root cause: the gather packs capsules only
-  on a due tick and writes `lastCapsules`/`capsuleArrays` only then, so the first recorded frame is a function
-  of the absolute tick counter that boot leaves at an arbitrary phase — one run packed the live cast (240
+- [x] **Capsule-phase divergence FIXED 2026-09-18 (one of two causes).** The gather packs capsules only on a
+  due tick and writes `lastCapsules`/`capsuleArrays` only then, so the first recorded frame was a function of
+  the absolute tick counter that boot leaves at an arbitrary phase — one run packed the live cast (240
   instances), the next read a stale warm-up leftover (35). `bench` already reset that phase; `demoScenario`,
   the member the hash tool actually drives, never did. Fix: `ctx.probes.gatherTick = 0` in `demoScenario`.
+  **Verified:** `instances` at frame 0 is now identical across runs (240/240, same min and zero fraction).
+- [ ] **NOT fully fixed — residual sub-LSB divergence in `probeDyn`.** `sdf-demo-hash ab` is INTERMITTENT: it
+  passed twice (`OK: 24/24`, probeDyn nonZero 6316) and then failed (`DIVERGED at frame 0`, nonZero 6388).
+  On the failing run, frame 0's probeDyn summary stats are **identical to six significant figures** across both
+  runs — nonZero 6388, min −0.540611, max 3.54491, zeroFraction 1875 — while the **hash differs**
+  (2143084656 vs 4125444763), and `instances` matches exactly. So this is a sub-LSB float difference in the
+  gather's output, which `frame-hash.ts` preserves on purpose, not a CPU sequencing bug. Suspect GPU
+  accumulation order inside the gather (ray/light accumulation, workgroup scheduling). It may be inherent to
+  the hardware, in which case the gate needs a tolerance for this layer rather than a fix.
+  **Until this is resolved, no A/B measured through `sdf-demo-hash` is trustworthy.**
 - [x] **Guard added after a near-miss.** Copying `bench`'s full reset (`pendingGather = null` +
   `gather?.reset()`) also made the runs agree — by zeroing the dynamic probe layer outright (probeDyn nonZero
   6316 → 0), which is the black-silhouette regression `frame-hash.ts` exists to catch. `sdf-demo-hash.mjs` now
   FAILS a run whose dynamic layer reads zero, and that guard was verified to fire by reintroducing the bad fix.
   Tripwires in `demo-scenario-determinism.test.ts` pin both halves.
-- [ ] **Worth checking:** `bench` still calls `gather?.reset()` (game-seams-bench.ts:158). In `demoScenario`
-  that measurably zeroed the dynamic layer. `bench` sits on a narrower path (`o.demo || hasSimIdle`) and its
-  comment says its reset was measured, so this is not assumed to be a bug — but nothing checks probeDyn
-  liveness on the bench path, so it would look identical if it were.
+- [x] **Bench path checked 2026-09-18 — it is FINE.** Drove `bench({ demo })` against the synthetic recording
+  and read its `endHash`: `marchTarget` nonZero 120000, **`probeDyn` nonZero 2236 — live, not zero**. Its
+  `gather?.reset()` rebuilds because the replay drives `tick()` normally, unlike `demoScenario` which steps via
+  `handle.step()` under `simLocked`. (`?simidle`, the other trigger, boots a bodyless scene, so its layer is
+  empty by design and the reset is irrelevant there.)
+- [x] **But the bench path had the same blind spot, now closed.** Neither `sdf-game-bench.mjs` nor
+  `census-diff.mjs` checked `nonZero` anywhere, and a layer that is zero on EVERY repeat does not drift — so
+  `reportFrameHashDrift` called it "FRAME HASH IDENTICAL" and returned 0. Two empty buffers agree perfectly.
+  `deadDynamicLayers()` now flags a zero dynamic layer when the scene had bodies (bodyless `?simidle` is
+  exempt) and feeds the exit code; five tests in `census-diff.test.mjs` pin it.
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
