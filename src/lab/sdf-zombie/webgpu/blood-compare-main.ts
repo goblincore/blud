@@ -60,10 +60,10 @@ import { createLabRenderer, type LabRendererHandle } from './lab-renderer';
 import {
   createGooLayer, GOO_TUNING, type GooLayer, type GooDensityBlob, type GooReconstruction,
 } from './goo-layer';
-import { applyGameGooDefaults } from './goo-presets';
+import { applyGameGooDefaults, GAME_GOO_DEFAULTS } from './goo-presets';
 import {
   createBloodSim, burst, spawnWoundDroplets, spawnImpactGout, stepBlood, emitTrails,
-  type BloodSim,
+  type BloodSim, type DensityPack,
 } from '../blood-sim';
 import { connectionBlobsForSim } from './blood-connections';
 import { createBloodView, type BloodView } from './blood-view-gpu';
@@ -548,11 +548,57 @@ async function bootstrap(): Promise<void> {
   // Soft-particle fade distance (metres) on the translucent blood elements.
   // 0 is inert, i.e. today's look.
   let softFadeM = 0;
-  // The wipe can straddle a VARIANT (Original vs Smooth) or the FLOW look
-  // (baseline | curl+fade). 'flow' is what lets the owner judge the two
-  // techniques on the SAME frame and filter.
-  type WipeAxis = 'variant' | 'flow';
+  // The wipe can straddle a VARIANT (Original vs Smooth), the FLOW look
+  // (baseline | curl+fade) or the DENSITY look (baseline | packed). 'flow' and
+  // 'density' are what let the owner judge those techniques on the SAME frame
+  // and filter.
+  type WipeAxis = 'variant' | 'flow' | 'density';
   let wipeAxis: WipeAxis = 'variant';
+
+  // --- DENSITY (packing) settings — blood-density spike ------------------
+  // Cohesion is a metaball-packing problem: the goo only fuses neighbours
+  // whose density peaks overlap, so a spray reads as connected only when it is
+  // emitted TIGHTER / DENSER / BIGGER, or the goo blobs are widened (sizeScale,
+  // threshold, blur). These are the two halves of that family. EVERY value
+  // defaults to the shipped game look — emission multipliers all 1, goo at
+  // GAME_GOO_DEFAULTS (sizeScale 0.14, threshold 0.65, blur 0) — so a page
+  // boot with no change renders exactly the current frame, and the game (which
+  // never reads any of this) is byte-identical (blood-sim.test.ts pins the
+  // neutral pack).
+  interface DensityGooPack { sizeScale: number; threshold: number; blurPx: number }
+  const SHIPPED_GOO: DensityGooPack = {
+    sizeScale: GAME_GOO_DEFAULTS.sizeScale,
+    threshold: GAME_GOO_DEFAULTS.threshold,
+    blurPx: GAME_GOO_DEFAULTS.blurPx,
+  };
+  const DENSITY_DEFAULTS = {
+    coneScale: 1, countMul: 1, sizeMul: 1,
+    gooSizeScale: SHIPPED_GOO.sizeScale,
+    gooThreshold: SHIPPED_GOO.threshold,
+    gooBlurPx: SHIPPED_GOO.blurPx,
+  };
+  const density = { ...DENSITY_DEFAULTS };
+
+  /** The emission half of the pack, for the sim rebuild. */
+  function densityEmission(): DensityPack {
+    return { coneScale: density.coneScale, countMul: density.countMul, sizeMul: density.sizeMul };
+  }
+  /** The goo half of the pack, for the layer's fusion knobs. */
+  function densityGoo(): DensityGooPack {
+    return { sizeScale: density.gooSizeScale, threshold: density.gooThreshold, blurPx: density.gooBlurPx };
+  }
+  function applyGooDensity(p: DensityGooPack): void {
+    gooLayer.setSizeScale(p.sizeScale);
+    gooLayer.setThreshold(p.threshold);
+    gooLayer.setBlurPx(p.blurPx);
+  }
+  /** True when packing is not the shipped look, so the second sim is needed. */
+  function densityActive(): boolean {
+    return density.coneScale !== 1 || density.countMul !== 1 || density.sizeMul !== 1
+      || density.gooSizeScale !== SHIPPED_GOO.sizeScale
+      || density.gooThreshold !== SHIPPED_GOO.threshold
+      || density.gooBlurPx !== SHIPPED_GOO.blurPx;
+  }
 
   /** The curl base for one rebuild, or null for the shipped no-flow sim. */
   function curlBase(enabled: boolean): Omit<CurlFlow, 'time'> | null {
@@ -567,7 +613,14 @@ async function bootstrap(): Promise<void> {
    *  separate comparison and deliberately stays on the shipped baseline sim. */
   function flowSimNeeded(): boolean {
     if (shape !== 'current' || compareMode !== 'surface') return false;
-    return curlOn || (wipe && wipeAxis === 'flow');
+    return curlOn || densityActive() || (wipe && (wipeAxis === 'flow' || wipeAxis === 'density'));
+  }
+
+  /** Does the second ("look") sim carry the DENSITY pack on this view? The
+   *  FLOW axis isolates curl, so it deliberately keeps the shipped packing;
+   *  the DENSITY axis and the single experiment view carry it. */
+  function flowUseDensity(): boolean {
+    return !(wipe && wipeAxis === 'flow');
   }
 
   /** The trail fixture's fast source crosses the frame in this long. */
@@ -598,12 +651,15 @@ async function bootstrap(): Promise<void> {
     streamB: number;
     /** Seconds this state's sim has been stepped (drives the curl drift). */
     simTime: number;
+    /** Emission density pack for this state (blood-density spike). Absent =
+     *  the shipped profile exactly; the baseline sim never carries one. */
+    pack?: DensityPack;
   }
 
   function liveState(): ScenarioState {
     return {
       sim, rng, frame, emitterAge, emitterAcc, emitterAccB, eventTimer,
-      streamA: scenarioStream, streamB: scenarioStreamB, simTime,
+      streamA: scenarioStream, streamB: scenarioStreamB, simTime, pack: undefined,
     };
   }
   function storeState(st: ScenarioState): void {
@@ -615,19 +671,20 @@ async function bootstrap(): Promise<void> {
     return {
       sim: target, rng: makeSeededRng(seedValue), frame: 0, emitterAge: 0,
       emitterAcc: 0, emitterAccB: 0, eventTimer: 0, streamA: 1, streamB: 2, simTime: 0,
+      pack: undefined,
     };
   }
 
   function fireBurstInto(st: ScenarioState, stream: number): void {
     // Use the game wound-impact emitter, outside the proxy and aimed
     // outward. The generic gib burst is too sparse for this comparison.
-    spawnImpactGout(st.sim, 'slug', [0, 1.35, 0.55], [0, 0, -1], st.rng, stream);
+    spawnImpactGout(st.sim, 'slug', [0, 1.35, 0.55], [0, 0, -1], st.rng, stream, st.pack);
   }
 
   function fireGoutInto(st: ScenarioState, x: number, y: number, z: number, stream: number): void {
     // dirN is the incoming shot direction; the gout sprays back along -dirN
     // (toward the camera at +z).
-    spawnImpactGout(st.sim, 'slug', [x, y, z], [0, 0, -1], st.rng, stream);
+    spawnImpactGout(st.sim, 'slug', [x, y, z], [0, 0, -1], st.rng, stream, st.pack);
   }
 
   /** Prime one emission stream at t=0 for the current scenario. */
@@ -657,6 +714,10 @@ async function bootstrap(): Promise<void> {
   function advanceScenarioState(
     st: ScenarioState, sdt: number, flowBase: Omit<CurlFlow, 'time'> | null = null,
   ): void {
+    // The state's own emission pack (blood-density spike). Undefined on the
+    // baseline sim: every spawn below then calls the shipped profile with no
+    // extra rng draw.
+    const pack = st.pack;
     st.frame++;
     st.simTime += sdt;
     switch (scenario) {
@@ -666,7 +727,7 @@ async function bootstrap(): Promise<void> {
         break;
       case 'jet':
         st.emitterAcc = spawnWoundDroplets(
-          st.sim, 'slug', st.emitterAge, [0, 1.35, 0.36], [0, 0.5, 1], sdt, st.emitterAcc, st.rng, st.streamA,
+          st.sim, 'slug', st.emitterAge, [0, 1.35, 0.36], [0, 0.5, 1], sdt, st.emitterAcc, st.rng, st.streamA, pack,
         );
         st.emitterAge += sdt;
         break;
@@ -680,7 +741,7 @@ async function bootstrap(): Promise<void> {
         break;
       case 'landing':
         st.emitterAcc = spawnWoundDroplets(
-          st.sim, 'pellet', st.emitterAge, [0, 0.6, 0.36], [0, 0.5, 1], sdt, st.emitterAcc, st.rng, st.streamA,
+          st.sim, 'pellet', st.emitterAge, [0, 0.6, 0.36], [0, 0.5, 1], sdt, st.emitterAcc, st.rng, st.streamA, pack,
         );
         st.emitterAge += sdt;
         break;
@@ -688,7 +749,7 @@ async function bootstrap(): Promise<void> {
         // Slow wound dribble: the pellet profile's low speed band arcs a
         // short cohesive stream rather than a spray.
         st.emitterAcc = spawnWoundDroplets(
-          st.sim, 'pellet', st.emitterAge, [0, 1.15, 0.32], [0, 0.15, 1], sdt, st.emitterAcc, st.rng, st.streamA,
+          st.sim, 'pellet', st.emitterAge, [0, 1.15, 0.32], [0, 0.15, 1], sdt, st.emitterAcc, st.rng, st.streamA, pack,
         );
         st.emitterAge += sdt;
         break;
@@ -709,10 +770,10 @@ async function bootstrap(): Promise<void> {
         // density carries genuinely opposite motion — the case a single
         // averaged motion vector cancels.
         st.emitterAcc = spawnWoundDroplets(
-          st.sim, 'stump', st.emitterAge, [-0.35, 1.35, 0.34], [1, 0, 0], sdt, st.emitterAcc, st.rng, st.streamA,
+          st.sim, 'stump', st.emitterAge, [-0.35, 1.35, 0.34], [1, 0, 0], sdt, st.emitterAcc, st.rng, st.streamA, pack,
         );
         st.emitterAccB = spawnWoundDroplets(
-          st.sim, 'stump', st.emitterAge, [0.35, 1.35, 0.34], [-1, 0, 0], sdt, st.emitterAccB, st.rng, st.streamB,
+          st.sim, 'stump', st.emitterAge, [0.35, 1.35, 0.34], [-1, 0, 0], sdt, st.emitterAccB, st.rng, st.streamB, pack,
         );
         st.emitterAge += sdt;
         break;
@@ -736,6 +797,7 @@ async function bootstrap(): Promise<void> {
    */
   function simulateStateInto(
     st: ScenarioState, seconds: number, flowBase: Omit<CurlFlow, 'time'> | null,
+    pack?: DensityPack,
   ): void {
     clearSimObject(st.sim);
     st.rng = makeSeededRng(seed);
@@ -745,6 +807,10 @@ async function bootstrap(): Promise<void> {
     st.emitterAcc = 0;
     st.emitterAccB = 0;
     st.eventTimer = 0;
+    // The emission pack must be set BEFORE priming: the t=0 gout/impact is a
+    // spawn too, and a missing pack would make the first pulse the shipped one
+    // (a subtle mismatch with the rest of the dense arc).
+    st.pack = pack;
     primeScenarioInto(st);
     const steps = Math.max(0, Math.round(seconds * 60));
     for (let i = 0; i < steps; i++) advanceScenarioState(st, 1 / 60, flowBase);
@@ -752,10 +818,14 @@ async function bootstrap(): Promise<void> {
 
   const flowState: ScenarioState = freshState(flowSim, seed);
 
-  /** Rebuild the flow-side sim at the shared event time, if the view needs it. */
+  /** Rebuild the flow-side sim at the shared event time, if the view needs it.
+   *  The DENSITY axis (and the single experiment view) carries the packing
+   *  pack; the FLOW axis keeps the shipped packing so it isolates curl. Curl
+   *  itself follows the curlOn toggle, so a density-only experiment (curl off)
+   *  is genuinely curl-free on BOTH sides of the wipe. */
   function simulateFlowTo(seconds: number): void {
     if (!flowSimNeeded()) return;
-    simulateStateInto(flowState, seconds, curlBase(true));
+    simulateStateInto(flowState, seconds, curlBase(curlOn), flowUseDensity() ? densityEmission() : undefined);
   }
 
   /**
@@ -918,7 +988,13 @@ async function bootstrap(): Promise<void> {
    */
   function renderVariant(
     v: Variant, target: THREE.RenderTarget | null, simForSide: BloodSim, fadeM: number,
+    gooPack?: DensityGooPack,
   ): void {
+    // Packing is a GLOBAL goo setting (sizeScale / threshold / blur are
+    // uniforms), but the two wipe sides render in sequence into separate
+    // targets, so each side can carry its own fusion knobs — that is what
+    // makes a same-frame baseline|dense wipe honest.
+    if (gooPack) applyGooDensity(gooPack);
     // One goo chain + the fixture scene it wraps; both labels are snapshotted
     // by gpu-pass-timing at encode time for the task-3 pass table.
     setPassLabel('sharp:goo');
@@ -1342,24 +1418,34 @@ async function bootstrap(): Promise<void> {
       return;
     }
     renderer.setClearColor(background);
-    // Single view: the flow look (curl sim + fade) or the shipped baseline;
-    // the fade applies whenever its distance is non-zero, so curl-only and
-    // fade-only are both reachable (set the other to 0/off).
+    // Single view: the look (curl and/or packed sim + fade) or the shipped
+    // baseline; the fade applies whenever its distance is non-zero, so
+    // curl-only, density-only and fade-only are all reachable.
+    const lookActive = curlOn || densityActive();
     if (!wipe) {
-      renderVariant(variantById(variant), null, curlOn ? flowSim : sim, softFadeM);
+      renderVariant(variantById(variant), null, lookActive ? flowSim : sim, softFadeM, densityGoo());
     } else if (wipeAxis === 'flow') {
       // Same filter variant on both sides; the ONLY difference is the flow
-      // look. A (right) = flow, B (left) = baseline.
+      // look. A (right) = flow, B (left) = baseline. The FLOW axis isolates
+      // curl, so both sides keep the SHIPPED goo packing.
+      applyGooDensity(SHIPPED_GOO);
       initRenderTargets();
       renderVariant(variantById(variant), rtA, flowSim, softFadeM);
       renderVariant(variantById(variant), rtB, sim, 0);
       blitWipe();
-    } else {
-      // Variant A/B at the CURRENT flow look, so the two axes compose.
-      const side = curlOn ? flowSim : sim;
+    } else if (wipeAxis === 'density') {
+      // Same filter variant on both sides; the ONLY difference is the PACKING
+      // look (emission + goo). A (right) = dense, B (left) = shipped.
       initRenderTargets();
-      renderVariant(variantById(wipeA), rtA, side, softFadeM);
-      renderVariant(variantById(wipeB), rtB, side, softFadeM);
+      renderVariant(variantById(variant), rtA, flowSim, softFadeM, densityGoo());
+      renderVariant(variantById(variant), rtB, sim, 0, SHIPPED_GOO);
+      blitWipe();
+    } else {
+      // Variant A/B at the CURRENT look, so the two axes compose.
+      const side = lookActive ? flowSim : sim;
+      initRenderTargets();
+      renderVariant(variantById(wipeA), rtA, side, softFadeM, densityGoo());
+      renderVariant(variantById(wipeB), rtB, side, softFadeM, densityGoo());
       blitWipe();
     }
     updateDiag();
@@ -1475,6 +1561,17 @@ async function bootstrap(): Promise<void> {
         baselineDroplets: sim.droplets.length,
         flowDroplets: flowSim.droplets.length,
       },
+      // DENSITY AXIS (blood-density spike): the packing look under test, the
+      // shipped values it must default to, and whether it is active. A capture
+      // records this beside the PNG so a tuned packing can be replayed exactly.
+      packing: {
+        coneScale: density.coneScale, countMul: density.countMul, sizeMul: density.sizeMul,
+        gooSizeScale: density.gooSizeScale, gooThreshold: density.gooThreshold, gooBlurPx: density.gooBlurPx,
+        shipped: { ...DENSITY_DEFAULTS },
+        active: densityActive(),
+        baselineDroplets: sim.droplets.length,
+        packingDroplets: flowSim.droplets.length,
+      },
       strands: enableStrands, sheets: enableSheets,
       goo: gooVisible, mist: mistVisible,
       reconstruction: gooLayer.reconstruction,
@@ -1546,10 +1643,13 @@ async function bootstrap(): Promise<void> {
         `seed ${seed}  frame ${frame}  scenario ${scenario}  event t ${eventTime.toFixed(2)}s`,
         `shape ${shape} (current slug)  playing ${playing}  speed ${speed.toFixed(2)}`,
         wipe
-          ? `wipe at ${wipePos.toFixed(2)} (${wipeAxis} axis): left=B(${wipeAxis === 'flow' ? 'baseline' : wipeB}) right=A(${wipeAxis === 'flow' ? 'flow' : wipeA})`
+          ? (wipeAxis === 'variant'
+            ? `wipe at ${wipePos.toFixed(2)} (variant axis): left=B(${wipeB}) right=A(${wipeA})`
+            : `wipe at ${wipePos.toFixed(2)} (${wipeAxis} axis): left=B(baseline) right=A(${wipeAxis})`)
           : filterState,
         `flow curl ${curlOn ? 'ON' : 'off'} strength ${curlStrength} scale ${curlScale} drift ${curlDrift}  soft fade ${softFadeM.toFixed(2)} m`,
-        `sim droplets base ${sim.droplets.length} / flow ${flowSim.droplets.length}  splats base ${sim.splats.length} / flow ${flowSim.splats.length}`,
+        `packing ${densityActive() ? 'ON' : 'off (shipped)'}  spread×${density.coneScale} count×${density.countMul} size×${density.sizeMul}  goo radius ${density.gooSizeScale} threshold ${density.gooThreshold} blur ${density.gooBlurPx}px`,
+        `sim droplets base ${sim.droplets.length} / look ${flowSim.droplets.length}  splats base ${sim.splats.length} / look ${flowSim.splats.length}`,
         `strands ${enableStrands ? 'on' : 'off'}  sheets ${enableSheets ? 'on' : 'off'} (experimental)  extras ${gooLayer.extraBlobCount}`,
         `goo ${gooVisible ? 'on' : 'off'}  mist ${mistVisible ? 'on' : 'off'} (beads/ribbons hidden as in game)`,
         `source ${sourceW}x${sourceH}  output ${contentW}x${contentH}`,
@@ -1845,17 +1945,23 @@ async function bootstrap(): Promise<void> {
   wipePosInput.addEventListener('input', () => { wipePos = Number(wipePosInput.value); if (!playing) handle.drawOnce(); });
   row('wipe pos', wipePosInput);
 
-  // Wipe axis: the variant pair above, or baseline | flow. The flow axis keeps
-  // the SAME filter variant on both sides so the only difference on screen is
-  // the curl advection + soft fade — how the owner judges the two techniques.
+  // Wipe axis: the variant pair above, baseline | flow, or baseline | dense.
+  // The flow/density axes keep the SAME filter variant on both sides so the
+  // only difference on screen is the technique under test — how the owner
+  // judges it.
   row('wipe axis', select(
-    [{ id: 'variant', label: 'variant A/B' }, { id: 'flow', label: 'flow A/B (baseline | flow)' }],
+    [
+      { id: 'variant', label: 'variant A/B' },
+      { id: 'flow', label: 'flow A/B (baseline | flow)' },
+      { id: 'density', label: 'density A/B (baseline | dense)' },
+    ],
     wipeAxis,
     (v) => {
       wipeAxis = v as WipeAxis;
-      // Entering the flow axis needs the flow-side sim built at this event
-      // time; leaving it is a plain redraw.
-      if (wipeAxis === 'flow') simulateFlowTo(eventTime);
+      // Entering a look axis needs the second sim built at this event time
+      // (with or without the packing pack, see flowUseDensity); leaving it is
+      // a plain redraw.
+      if (wipeAxis === 'flow' || wipeAxis === 'density') simulateFlowTo(eventTime);
       updateDiag();
       if (!playing) handle.drawOnce();
     },
@@ -1911,6 +2017,54 @@ async function bootstrap(): Promise<void> {
     updateDiag(); if (!playing) handle.drawOnce();
   });
   row('soft fade m', softFadeInput);
+
+  // --- DENSITY section (blood-density spike) -----------------------------
+  // Cohesion is metaball PACKING, not motion: the goo fuses neighbours whose
+  // density peaks overlap, so the spray has to be emitted tighter/denser/
+  // bigger, or the goo blobs widened. Six knobs, two halves:
+  //   emission  spread (cone ×), count ×, size ×  — feeds the sim
+  //   goo       radius (sizeScale), threshold, blur px — feeds the fusion
+  // Every one defaults to the shipped game look, so the page boots identical
+  // and the game (which never reads them) is untouched.
+  section('DENSITY — packing: emission + goo fusion');
+  /** One handler for every density knob: sim rebuild + goo apply + redraw. */
+  function densityChanged(): void {
+    applyGooDensity(densityGoo());
+    if (shape === 'current' && compareMode === 'surface') simulateFlowTo(eventTime);
+    updateDiag();
+    if (!playing) handle.drawOnce();
+  }
+  const densitySlider = (
+    label: string, key: 'coneScale' | 'countMul' | 'sizeMul', min: number, max: number, step: number,
+  ): void => {
+    const el = document.createElement('input');
+    el.type = 'range'; el.min = String(min); el.max = String(max); el.step = String(step);
+    el.value = String(density[key]);
+    el.addEventListener('input', () => { density[key] = Number(el.value); densityChanged(); });
+    row(label, el);
+  };
+  densitySlider('spread ×', 'coneScale', 0.2, 1.5, 0.05);
+  densitySlider('count ×', 'countMul', 0.5, 4, 0.25);
+  densitySlider('size ×', 'sizeMul', 0.5, 3, 0.05);
+  const gooSlider = (
+    label: string, key: 'gooSizeScale' | 'gooThreshold' | 'gooBlurPx', min: number, max: number, step: number,
+  ): void => {
+    const el = document.createElement('input');
+    el.type = 'range'; el.min = String(min); el.max = String(max); el.step = String(step);
+    el.value = String(density[key]);
+    el.addEventListener('input', () => { density[key] = Number(el.value); densityChanged(); });
+    row(label, el);
+  };
+  gooSlider('goo radius', 'gooSizeScale', 0.05, 0.6, 0.01);
+  gooSlider('goo threshold', 'gooThreshold', 0.05, 1.5, 0.05);
+  gooSlider('goo blur px', 'gooBlurPx', 0, 8, 0.5);
+  const densityResetBtn = document.createElement('button');
+  densityResetBtn.textContent = 'Reset packing';
+  densityResetBtn.addEventListener('click', () => {
+    Object.assign(density, DENSITY_DEFAULTS);
+    densityChanged();
+  });
+  row('', densityResetBtn);
 
   scenarioSelect = select(SCENARIOS, scenario, (s) => {
     scenario = s;
@@ -2022,7 +2176,7 @@ async function bootstrap(): Promise<void> {
     gooLayer.setDensityScale(Number(densityInput.value));
     if (!playing) handle.drawOnce();
   });
-  row('density scale', densityInput);
+  row('grid density', densityInput);
 
   const hint = document.createElement('div');
   hint.id = 'hint';
@@ -2039,8 +2193,11 @@ async function bootstrap(): Promise<void> {
     'FLOW (blood-curl-spike): curl advects airborne droplets through one shared divergence-free field;',
     'soft fade grades the mist/splash cards where they meet a body or the floor. Both default OFF (= shipped look).',
     'wipe axis=flow straddles baseline | flow on the SAME frame: strength 0 = fade-only, soft fade 0 = curl-only.',
+    'DENSITY (blood-density spike): cohesion is metaball PACKING, not motion. spread/count/size × pack the emission;',
+    'goo radius/threshold/blur widen fusion. All default to the shipped game look. wipe axis=density straddles',
+    'baseline | dense on the SAME frame (emission + goo on the dense side only); setDensity({...}) drives it.',
     'capture: pick mode/shape (+filter/wipe), Play/Pause or freeze, screenshot the canvas;',
-    '__bloodCompare.state() records seed/scenario/exposure + flow + source/output/density.',
+    '__bloodCompare.state() records seed/scenario/exposure + flow + packing + source/output/density.',
   ].join('\n');
   controlsEl.appendChild(hint);
 
@@ -2285,6 +2442,33 @@ async function bootstrap(): Promise<void> {
         softFade: softFadeM, wipeAxis,
       };
     },
+    /**
+     * DENSITY AXIS (blood-density spike). Set any subset of the packing look:
+     * the emission multipliers (spread / count / size) that make the spray
+     * overlap, and the goo fusion knobs (radius / threshold / blur) that make
+     * neighbours fuse more readily. Everything defaults to the shipped game
+     * look, so an unset capture is the baseline frame. Sim-side values rebuild
+     * the second sim at the shared event time (deterministic from the seed);
+     * goo-side values are applied to the layer immediately. Returns the clamped
+     * values that landed, for logging beside a capture.
+     */
+    setDensity: (o: {
+      spread?: number; count?: number; size?: number;
+      gooRadius?: number; gooThreshold?: number; gooBlur?: number;
+    }) => {
+      if (o.spread !== undefined && Number.isFinite(o.spread)) density.coneScale = Math.max(0.2, Math.min(1.5, o.spread));
+      if (o.count !== undefined && Number.isFinite(o.count)) density.countMul = Math.max(0.5, Math.min(4, o.count));
+      if (o.size !== undefined && Number.isFinite(o.size)) density.sizeMul = Math.max(0.5, Math.min(3, o.size));
+      if (o.gooRadius !== undefined && Number.isFinite(o.gooRadius)) density.gooSizeScale = Math.max(0.05, Math.min(0.6, o.gooRadius));
+      if (o.gooThreshold !== undefined && Number.isFinite(o.gooThreshold)) density.gooThreshold = Math.max(0.05, Math.min(1.5, o.gooThreshold));
+      if (o.gooBlur !== undefined && Number.isFinite(o.gooBlur)) density.gooBlurPx = Math.max(0, Math.min(8, o.gooBlur));
+      densityChanged();
+      return {
+        spread: density.coneScale, count: density.countMul, size: density.sizeMul,
+        gooRadius: density.gooSizeScale, gooThreshold: density.gooThreshold, gooBlur: density.gooBlurPx,
+        active: densityActive(),
+      };
+    },
     setScenario: (s: ScenarioId) => {
       scenario = s;
       if (scenarioSelect) scenarioSelect.value = s;
@@ -2385,6 +2569,10 @@ async function bootstrap(): Promise<void> {
       '9. FLOW: shape=Current slug, then setFlow({curlOn, strength, scale, drift, softFade}) or the FLOW panel.',
       '   Set wipe=true, wipeAxis="flow" to straddle baseline (left) | flow (right) on the SAME frame and filter.',
       '   strength 0 isolates the soft fade; softFade 0 isolates the curl. state().flow records exactly what applied.',
+      '10. DENSITY: setDensity({spread, count, size, gooRadius, gooThreshold, gooBlur}) or the DENSITY panel.',
+      '    Set wipe=true, wipeAxis="density" to straddle baseline (left) | dense (right) on the SAME frame and filter.',
+      '    The dense side carries BOTH the packed emission and the widened goo; curl composes on top when curlOn.',
+      '    state().packing records the applied values and the shipped defaults they reset to.',
       'Visual acceptance is PENDING: not verified during the training window.',
     ],
   };

@@ -479,8 +479,68 @@ describe('blood comparison page — flow axis (blood-curl-spike)', () => {
   });
 });
 
-describe('blood comparison page — task 3 bench + pass labels', () => {
-  it('installs labeled pass timing and labels the candidate passes', () => {
+describe('blood comparison page — density axis (blood-density spike)', () => {
+  it('ships the packing OFF so the baseline look is unchanged', () => {
+    // Every knob defaults to the shipped game look: neutral emission
+    // multipliers and GAME_GOO_DEFAULTS. A page boot is the baseline frame.
+    expect(src).toContain('const density = { ...DENSITY_DEFAULTS };');
+    expect(src).toContain('coneScale: 1, countMul: 1, sizeMul: 1,');
+    expect(src).toContain('gooSizeScale: SHIPPED_GOO.sizeScale,');
+    expect(src).toContain('gooThreshold: SHIPPED_GOO.threshold,');
+    expect(src).toContain('gooBlurPx: SHIPPED_GOO.blurPx,');
+    expect(src).toContain('GAME_GOO_DEFAULTS');
+  });
+
+  it('threads the emission pack through every spawn site of the second sim', () => {
+    // The pack rides the ScenarioState, so the baseline sim never carries one.
+    expect(src).toContain('pack?: DensityPack;');
+    expect(src).toContain('st.pack');
+    expect(src).toContain('spawnWoundDroplets(');
+    expect(src).toContain('spawnImpactGout(st.sim, \'slug\', [0, 1.35, 0.55], [0, 0, -1], st.rng, stream, st.pack)');
+    // The pack must be set BEFORE the t=0 prime.
+    const m = src.match(/st\.pack = pack;[\s\S]{0,200}?primeScenarioInto\(st\)/);
+    expect(m).not.toBeNull();
+  });
+
+  it('rebuilds the second sim with the current packing (and curl only when on)', () => {
+    expect(src).toContain('function densityEmission()');
+    expect(src).toContain('simulateStateInto(flowState, seconds, curlBase(curlOn)');
+    expect(src).toContain('densityActive()');
+    expect(src).toContain('function flowUseDensity()');
+  });
+
+  it('wipes baseline against dense on the SAME filter variant', () => {
+    expect(src).toContain("wipeAxis === 'density'");
+    expect(src).toContain('renderVariant(variantById(variant), rtA, flowSim, softFadeM, densityGoo())');
+    expect(src).toContain('renderVariant(variantById(variant), rtB, sim, 0, SHIPPED_GOO)');
+    expect(src).toContain("label: 'density A/B (baseline | dense)'");
+    // The flow axis keeps its isolated-curl semantics (shipped packing).
+    expect(src).toContain('applyGooDensity(SHIPPED_GOO);');
+  });
+
+  it('applies the goo half of the pack to the layer and exposes both halves', () => {
+    expect(src).toContain('function applyGooDensity');
+    expect(src).toContain('gooLayer.setSizeScale(p.sizeScale)');
+    expect(src).toContain('gooLayer.setThreshold(p.threshold)');
+    expect(src).toContain('gooLayer.setBlurPx(p.blurPx)');
+    for (const needle of [
+      "'spread ×'", "'count ×'", "'size ×'", "'goo radius'", "'goo threshold'", "'goo blur px'",
+    ]) {
+      expect(src, `${needle} must be present`).toContain(needle);
+    }
+  });
+
+  it('records the packing in state() and exposes setDensity beside setFlow', () => {
+    expect(src).toContain('packing: {');
+    expect(src).toContain('shipped: { ...DENSITY_DEFAULTS }');
+    expect(src).toContain('setDensity:');
+    expect(src).toContain('gooRadius');
+    expect(src).toContain('gooThreshold');
+    expect(src).toContain('gooBlur');
+  });
+});
+
+describe('blood comparison page — task 3 bench + pass labels', () => {  it('installs labeled pass timing and labels the candidate passes', () => {
     for (const needle of ['installPassTiming', 'beginPassFrame', 'setPassLabel', 'attributePassSamples']) {
       expect(src, `${needle} must be imported/used`).toContain(needle);
     }
