@@ -649,6 +649,10 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  show-through strength. Scaled by char in the shader, so a freshly lit
      *  body stays opaque. */
     burnSkeleton: uniform(0.5),
+    /** Metres the bone probe reads through before its falloff hits zero
+     *  (flame-polish task 4). The old shader constant was 0.08; exposed so the
+     *  panel and capture can trade limb clutter for rib coverage. */
+    burnSkeletonDepth: uniform(0.08),
   };
 }
 
@@ -1396,6 +1400,7 @@ export function createMarchMaterial(
     burnFireGain: u.burnFireGain,
     burnFireCoverage: u.burnFireCoverage,
     burnSkeleton: u.burnSkeleton,
+    burnSkeletonDepth: u.burnSkeletonDepth,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 

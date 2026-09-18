@@ -2587,7 +2587,14 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // burnFireCoverage. Strength of the bone bleed through charring flesh, and
   // the shader scales it by char so a fresh body stays opaque. Bound in the
   // same slot order in zombie-gpu.ts. NO COLONS in this comment either.
-  burnSkeleton: f32
+  burnSkeleton: f32,
+  // Skeleton reveal depth - flame polish task 4 - POSITIONALLY LAST after
+  // burnSkeleton. Metres of flesh the bone probe reads through before its
+  // smoothstep falloff reaches zero; the old shader constant 0.08 is now
+  // BurnTuning.skeletonDepth so the panel can trade limb clutter for rib
+  // coverage. Bound in the same slot order in zombie-gpu.ts. NO COLONS and NO
+  // PARENS in this comment either.
+  burnSkeletonDepth: f32
 ) -> vec4<f32> {
 `;
 
@@ -3960,18 +3967,49 @@ ${FACE_LAYER_WGSL}
     let skelK = charAmt * burnSkeleton;
     if (skelK > 0.0) {
       let boneProbe = applyBones(1e9, p, data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
-      // 0.08 (fix pass task 3): the plan's 0.045 hugged the bones so tightly
-      // that only the shin and shoulder edge read through soot. Probed 0.1:
-      // a whole limb then sits within reach of its bone capsule and reads
-      // pale pink -- FRESH flesh, killing the char. 8 cm keeps the falloff
-      // ON the skeleton (nearest-bone ridge brightest, smoothstep to zero).
-      // Cost of honesty -- the ribs sit deeper than 8 cm under chest flesh
-      // and do not read; the skull, forearms and shins do.
-      let revealDepth = 0.08;
+      // Reveal depth (0.08 default; fix pass task 3 history): the plan's 0.045
+      // hugged the bones so tightly that only the shin and shoulder edge read
+      // through soot. Probed 0.1 under the old flat tint: a whole limb then sat
+      // within reach of its bone capsule and read pale pink -- FRESH flesh,
+      // killing the char. The constant is now BurnTuning.skeletonDepth so the
+      // panel can trade that limb clutter for rib coverage without a rebuild;
+      // 8 cm keeps the falloff ON the skeleton (nearest-bone ridge brightest,
+      // smoothstep to zero). The ribs sit deeper than 8 cm under chest flesh.
+      let revealDepth = burnSkeletonDepth;
       let nearBone = 1.0 - smoothstep(0.0, revealDepth, max(boneProbe, 0.0));
       let showBone = clamp(nearBone * skelK, 0.0, 1.0);
-      albedo = mix(albedo, boneColor, showBone);
-      gloss = gloss * (1.0 - showBone * 0.5);
+      // BONE, NOT A PALE TINT (flame-polish task 4). The old branch lerped
+      // albedo straight toward boneColor and left the flesh normal and gloss
+      // alone, so the result was a flat pale patch with skin bumps in it --
+      // pale skin, not bone. Where the probe finds bone, shade the fragment
+      // with the bone material: a depth-shaded bone albedo, a near-matte bone
+      // gloss, and a normal taken from the ISOLATED BONE FIELD's own gradient
+      // so the highlight follows the tube under the skin instead of the flesh.
+      if (showBone > 0.0) {
+        // calcNormal's four-tap tetrahedron, applied to the bone fold alone.
+        // applyBones returns the dIn it was handed, so 1e9 isolates bone from
+        // flesh; each tap is the signed distance to the nearest bone surface
+        // and the tetrahedron weights recover its outward gradient there.
+        let be = max(revealDepth * 0.03, 0.0015);
+        let b0 = applyBones(1e9, p + vec3<f32>(be, -be, -be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let b1 = applyBones(1e9, p + vec3<f32>(-be, -be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let b2 = applyBones(1e9, p + vec3<f32>(-be, be, -be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let b3 = applyBones(1e9, p + vec3<f32>(be, be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let boneN = normalize(vec3<f32>(b0 - b1 - b2 + b3, -b0 - b1 + b2 + b3, -b0 + b1 - b2 + b3));
+        // Bias hard toward the bone normal where the probe is close: hardness
+        // is what makes it read as bone, and the flesh normal only has to
+        // survive at the reveal edge. The albedo stays gated by showBone, so
+        // the same charAmt * burnSkeleton gate still owns the whole effect.
+        n = normalize(mix(n, boneN, clamp(showBone * 1.8, 0.0, 0.92)));
+        // The bone albedo recesses with probe distance (nearest ridge
+        // brightest) so the tube reads round rather than as a pasted patch.
+        let boneShade = boneColor * mix(0.5, 1.0, nearBone);
+        albedo = mix(albedo, boneShade, showBone);
+        // Bone is matte but not dead-flat like char, and the lifted gloss also
+        // suppresses the flesh pore noise in surface prep. Mixing (never
+        // multiplying) lets bone recover a sheen that the soot kill above took.
+        gloss = mix(gloss, 0.45, showBone);
+      }
     }
     gBurnEmit = fireRamp(fire) * fire * burnFireGain;
     // The burn mask rides out to the tongue pass with the emissive write

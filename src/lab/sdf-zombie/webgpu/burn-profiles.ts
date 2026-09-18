@@ -36,6 +36,11 @@ export interface BurnTuning {
   fireCoverage: number;
   /** How far the flesh thins to show bone at full char, 0..1. */
   skeletonShow: number;
+  /** Metres of flesh the bone probe reads through before its smoothstep
+   *  falloff reaches zero. The old shader constant was 0.08; deeper values
+   *  reveal ribs but can put a whole limb within reach of its bone capsule
+   *  (flame-polish task 4). */
+  skeletonDepth: number;
   /** Flame-card soft-particle fade distance in METRES: a card's alpha fades
    *  out over this distance as it approaches the scene surface behind it, so
    *  a card intersecting the body ends in a gradient instead of a straight
@@ -67,6 +72,11 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   // the late-stage more-bone look). skelK is 0 on a fresh body by
   // construction, so this never paints an unburnt body.
   skeletonShow: 0.7,
+  // flame-polish task 4: the shader's old reveal-depth constant, now a field.
+  // 0.08 keeps the falloff ON the skeleton (the skull, forearms and shins
+  // read; ribs sit deeper). The capture sweeps it now that bone is shaded
+  // rather than tinted -- deeper values reach the ribs but can pale a limb.
+  skeletonDepth: 0.08,
   // flame-polish task 1: 8 cm of soft-particle fade kills the hard card seam
   // where a flame quad crosses the body edge. 0 is the escape hatch. (At the
   // 0.5 m rail the flame visibly pulls off the body — 8 cm only rounds the cut.)
@@ -96,6 +106,7 @@ export const BURN_BOUNDS: Readonly<Record<keyof BurnTuning, readonly [number, nu
   glowGain: [0, 2], glowThreshold: [0, 4],
   distortStrength: [0, BLAST_REFRACTION.maxOffsetUv],
   fireCoverage: [0, 1], skeletonShow: [0, 1],
+  skeletonDepth: [0, 0.15],
   cardSoftFade: [0, 0.5],
   flameFlow: [0, 1],
 });

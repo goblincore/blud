@@ -63,6 +63,9 @@
 // sweep's values share one animation instant. --poses limits the pose set; a
 // subset that omits the contact-sheet frames skips the sheet instead of
 // failing. Shoot a single --flow value into its own outDir.
+// --skeleton-depth <0..0.15> / --skeleton-sweep a,b,c pin BurnTuning.skeletonDepth
+// through setTuning; sweep values get a -d<value> tag and are shot at one
+// camera, which is how the bone-reveal A/B is judged (flame-polish task 4).
 // Exits 0 on success, 2 if it could not run (boot failure, page exception,
 // no WebGPU backend, a flat capture).
 import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:fs';
@@ -170,6 +173,35 @@ let kitStandoff = null;
     const v = Number(argv[i + 1]);
     if (!Number.isFinite(v) || v < 0) fail('--kit-standoff needs a non-negative number');
     kitStandoff = v;
+    argv.splice(i, 2);
+  }
+}
+
+// --- skeleton-depth sweep (flame-polish task 4) -----------------------------
+// `--skeleton-sweep a,b,c` changes BurnTuning.skeletonDepth LIVE inside one
+// page load so the bone reveal depth A/B is shot at the SAME camera and pose.
+// Values are metres of flesh the probe reads through; `--skeleton-depth x`
+// pins a single one.
+let skeletonSweep = null;
+{
+  const i = argv.indexOf('--skeleton-sweep');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    const vals = v === undefined ? [] : v.split(',').map((s) => Number(s.trim()));
+    if (vals.length < 2 || vals.some((x) => !Number.isFinite(x) || x < 0)) {
+      fail('--skeleton-sweep needs >= 2 comma-separated non-negative numbers');
+    }
+    skeletonSweep = vals;
+    argv.splice(i, 2);
+  }
+}
+let skeletonDepth = null;
+{
+  const i = argv.indexOf('--skeleton-depth');
+  if (i !== -1) {
+    const v = Number(argv[i + 1]);
+    if (!Number.isFinite(v) || v < 0) fail('--skeleton-depth needs a non-negative number');
+    skeletonDepth = v;
     argv.splice(i, 2);
   }
 }
@@ -771,22 +803,34 @@ for (const pose of (poseList ?? POSES)) {
         }
         const ftag = fv === null ? '' : `-f${String(fv).replace('.', 'p')}`;
         const ktag = kv === null ? '' : `-k${String(kv).replace('.', 'p')}`;
-        const tag = `${ftag}${ktag}`;
-        // --burst > 1 takes a short time series at this stage: the flow is
-        // animated on the wall clock, so a single still cannot show that the
-        // flame MOVES as one body. b0 keeps the canonical name the contact sheet
-        // and prior plans read.
-        for (let bfi = 0; bfi < burst; bfi++) {
-          if (bfi > 0) await frames(BURST_GAP);
-          const shot = await send('Page.captureScreenshot', { format: 'png' });
-          const buf = Buffer.from(shot.result.data, 'base64');
-          const name = `${shotPrefix}${pose}-${stage.name}${tag}${bfi === 0 ? '' : `-b${bfi}`}.png`;
-          writeFileSync(`${OUT}/${name}`, buf);
-          const stats = pngStats(buf);
-          if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
-          if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
-          shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, kit: kv, burstFrame: bfi, buf });
-          console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, kit=${kv ?? 'default'}, luma std=${stats.std})`);
+        // Skeleton reveal depth (flame-polish task 4): a --skeleton-sweep list
+        // A/Bs values at one camera; null keeps the page default and the
+        // canonical filename.
+        const depths = skeletonSweep ?? [skeletonDepth];
+        for (const dv of depths) {
+          if (dv !== null) {
+            const applied = await evaluate(`window.__flameLab.setTuning({ skeletonDepth: ${dv} }).skeletonDepth`);
+            if (applied !== dv) fail(`setTuning({ skeletonDepth: ${dv} }) applied ${JSON.stringify(applied)}`);
+            await frames(SETTLE_STAGE);
+          }
+          const dtag = dv === null ? '' : `-d${String(dv).replace('.', 'p')}`;
+          const tag = `${ftag}${ktag}${dtag}`;
+          // --burst > 1 takes a short time series at this stage: the flow is
+          // animated on the wall clock, so a single still cannot show that the
+          // flame MOVES as one body. b0 keeps the canonical name the contact sheet
+          // and prior plans read.
+          for (let bfi = 0; bfi < burst; bfi++) {
+            if (bfi > 0) await frames(BURST_GAP);
+            const shot = await send('Page.captureScreenshot', { format: 'png' });
+            const buf = Buffer.from(shot.result.data, 'base64');
+            const name = `${shotPrefix}${pose}-${stage.name}${tag}${bfi === 0 ? '' : `-b${bfi}`}.png`;
+            writeFileSync(`${OUT}/${name}`, buf);
+            const stats = pngStats(buf);
+            if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
+            if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
+            shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, kit: kv, skeletonDepth: dv, burstFrame: bfi, buf });
+            console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, kit=${kv ?? 'default'}, depth=${dv ?? 'default'}, luma std=${stats.std})`);
+          }
         }
       }
     }

@@ -86,7 +86,8 @@ describe('surface-entry wgslFn parse contract', () => {
     // the one-binding-block contract on the deferred path too.
     // +1 burnFireCoverage (flame lab fix pass) after burnFireGain, same rule.
     // +1 burnSkeleton (flame lab fix pass task 3) after burnFireCoverage.
-    expect(legacy.length).toBe(98); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    // +1 skeletonDepth (flame polish task 4) after burnSkeleton.
+    expect(legacy.length).toBe(99); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });

@@ -699,7 +699,7 @@ describe('ported features reach the entry point', () => {
     expect(moduleSrc.split('var<private> gBurnEmit: vec3<f32>').length).toBe(2);
     const params = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
     expect(params).toContain('burnCfg: vec4<f32>,');
-    expect(params).toMatch(/burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32\s*\)/);
+    expect(params).toMatch(/burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32, burnSkeletonDepth: f32\s*\)/);
   });
 
   it('paints fire and char on a burning body from the rest-space anchor', () => {
@@ -754,6 +754,15 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('burnSkeleton');
     // Builds with char, per the owner's decision: opaque when freshly lit.
     expect(MARCH_BODY).toContain('charAmt * burnSkeleton');
+  });
+
+  it('shades the bone probe as bone, not as a pale tint of flesh', () => {
+    // The probe already finds bone; the look failed because the result was
+    // mixed into albedo as a flat colour, so it read as pale skin rather than
+    // as a hard, shaped surface under the flesh.
+    expect(MARCH_BODY).toContain('boneProbe');
+    expect(MARCH_BODY).toContain('boneShade');
+    expect(MARCH_BODY).toContain('gloss = mix(gloss');
   });
 });
 
@@ -875,16 +884,18 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // +1 burnFireCoverage (fix pass) after burnFireGain, same positional rule.
     // +1 burnSkeleton (fix pass task 3) after burnFireCoverage — the skeleton
     // show-through strength, last so the tail keeps growing in commit order.
-    expect(names.length).toBe(98);
+    // +1 skeletonDepth (flame-polish task 4) after burnSkeleton — the reveal
+    // depth, same positional rule.
+    expect(names.length).toBe(99);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-28)).toEqual([
+    expect(names.slice(-29)).toEqual([
       'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
       'probeDyn', 'probeDynCfg',
       'lastTex', 'lastInvVp', 'temporalCfg', 'inst', 'instCfg', 'instCentre', 'instHalf',
       'burnCfg', 'burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain',
-      'burnFireCoverage', 'burnSkeleton',
+      'burnFireCoverage', 'burnSkeleton', 'burnSkeletonDepth',
     ]);
     // The temporal start folds in AFTER preStart, with bodyEntry as the
     // sixth lower-bound term (see the other pin above for the argument).
@@ -912,14 +923,15 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // crowd stage a task 5: instCentre/instHalf follow them (the proxy box).
     // flame lab task 5: the burn tail (5 slots) follows THEM — burn is per-view,
     // so the per-instance params stay directly ahead of it.
-    expect(names.indexOf('instCfg')).toBe(names.length - 10);
-    expect(names.indexOf('inst')).toBe(names.length - 11);
-    expect(names.indexOf('instCentre')).toBe(names.length - 9);
-    expect(names.indexOf('instHalf')).toBe(names.length - 8);
-    expect(names.indexOf('burnCfg')).toBe(names.length - 7);
-    expect(names.indexOf('burnFireGain')).toBe(names.length - 3);
-    expect(names.indexOf('burnFireCoverage')).toBe(names.length - 2);
-    expect(names.indexOf('burnSkeleton')).toBe(names.length - 1);
+    expect(names.indexOf('instCfg')).toBe(names.length - 11);
+    expect(names.indexOf('inst')).toBe(names.length - 12);
+    expect(names.indexOf('instCentre')).toBe(names.length - 10);
+    expect(names.indexOf('instHalf')).toBe(names.length - 9);
+    expect(names.indexOf('burnCfg')).toBe(names.length - 8);
+    expect(names.indexOf('burnFireGain')).toBe(names.length - 4);
+    expect(names.indexOf('burnFireCoverage')).toBe(names.length - 3);
+    expect(names.indexOf('burnSkeleton')).toBe(names.length - 2);
+    expect(names.indexOf('burnSkeletonDepth')).toBe(names.length - 1);
   });
 });
 
@@ -2686,7 +2698,7 @@ describe('crowd instance state', () => {
     // Strip comments first: the crowd proxy-box comment sits between instCfg
     // and instCentre, and the wgslFn parser sees it as ordinary text.
     const sig = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
-    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>, burnCfg: vec4<f32>, burnNoiseScale: f32, burnRiseSpeed: f32, burnCharPatch: f32, burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32\s*\)/);
+    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>, burnCfg: vec4<f32>, burnNoiseScale: f32, burnRiseSpeed: f32, burnCharPatch: f32, burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32, burnSkeletonDepth: f32\s*\)/);
   });
   it('bands the damage folds', () => {
     expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');

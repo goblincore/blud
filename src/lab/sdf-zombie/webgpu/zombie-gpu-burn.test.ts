@@ -8,7 +8,7 @@ import { MARCH_BODY_PARAMS } from './march.wgsl';
 
 const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
 
-const BURN_SCALARS = ['burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain', 'burnFireCoverage', 'burnSkeleton'];
+const BURN_SCALARS = ['burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain', 'burnFireCoverage', 'burnSkeleton', 'burnSkeletonDepth'];
 
 describe('burn uniform plumbing', () => {
   it('declares the burn uniforms', () => {
@@ -17,7 +17,7 @@ describe('burn uniform plumbing', () => {
   });
 
   it('binds the burn uniforms last, in the same order as the WGSL tail', () => {
-    // The WGSL parameter list ends with burnCfg then the five scalars, so every
+    // The WGSL parameter list ends with burnCfg then the six scalars, so every
     // positional binding object must end with them in that order.
     const params = MARCH_BODY_PARAMS.replace(/\s+/g, ' ');
     const order = ['burnCfg: vec4<f32>', ...BURN_SCALARS.map(n => `${n}: f32`)];
@@ -27,7 +27,7 @@ describe('burn uniform plumbing', () => {
       expect(next, p).toBeGreaterThan(at);
       at = next;
     }
-    expect(params).toMatch(/burnSkeleton: f32\s*\)/);
+    expect(params).toMatch(/burnSkeletonDepth: f32\s*\)/);
     const binds = [...src.matchAll(/burnCfg: u\.burnCfg,/g)];
     expect(binds.length).toBeGreaterThan(0);
     for (const name of BURN_SCALARS) expect(src).toContain(`${name}: u.${name},`);
