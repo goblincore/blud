@@ -353,7 +353,21 @@ export function createBenchSeams(ctx: GameContext, d: BenchDeps) {
           // it: `frame % every === 0 || frame === total - 1` could sample one
           // frame twice with an odd gap between, which flips the field parity
           // mid-recording and makes the whole run incomparable.
-          if (frame % every === 0 || (frame === total - 1 && (total - 1) % every !== 0)) {
+          //
+          // FIXED 2026-09-18: that final-frame branch was ITSELF introducing the
+          // odd gap it warns about. With the shipped spec (frames 96, every 4)
+          // the regular samples land on frames 0,4,…,92 — stepsTaken f+1, all
+          // odd, parity 1 — and the extra sample at frame 95 lands on stepsTaken
+          // 96, parity 0. The gap 92→95 is 3. Every `ab` run therefore died with
+          // "the recording sampled BOTH field parities" before comparing
+          // anything, so this gate had been reporting nothing at all.
+          //
+          // Take the final frame only when it agrees with the parity the regular
+          // cadence established. Dropping a trailing sample costs one frame of
+          // coverage; mixing parities costs the entire recording.
+          const wouldMissFinal = frame === total - 1 && (total - 1) % every !== 0;
+          const finalKeepsParity = parity.length === 0 || (stepsTaken % 2) === parity[0];
+          if (frame % every === 0 || (wouldMissFinal && finalKeepsParity)) {
             await ctx.boot.handle.resolveGpu();
             hashes.push(await hashFrame(ctx.boot.frameHashDeps, frame));
             parity.push(parityOf());
