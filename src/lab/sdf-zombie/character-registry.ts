@@ -37,6 +37,7 @@ import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
+import sumpBlobSrc from './characters/sump.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -266,6 +267,22 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     kit: '/assets/lab/gnasher-kit.gltf',
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('gnasher'),
+  },
+  sump: {
+    name: 'sump', src: sumpBlobSrc,
+    // A bare organic body (PRD 001): the hunched brute's asymmetry — the
+    // overgrown arm and the second face in its shoulder — is all SDF flesh.
+    // No kit, no prop. The MAIN face wears a hand-authored decal (generated
+    // by scripts/make-sump-face.py; same road as gargoyle — no reference
+    // mesh to bake and same-colour prims cannot budget a small head
+    // contrast), declared in the .blob's sheet block. mean is the declared
+    // sRGB-luma value from the generator; the face step re-measures off the
+    // decoded pixels.
+    face: { url: '/assets/lab/faces/sump-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 0.49449586062970086 },
+    // The zombie shamble, deliberately, as cyberdemon/bloatmaw/gnasher: the
+    // heavy lumber IS the read, and a bespoke gait is a rig change outside a
+    // character-authoring task.
+    profile: motionProfileFor('sump'),
   },
 };
 
