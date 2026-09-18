@@ -47,6 +47,19 @@ describe('flame lab page', () => {
     expect(src).toContain('capture');
   });
 
+  it('holds the tongue technique switch the tongue passes will hang off', () => {
+    // ?tongue=<name> validated at boot, key t cycling, console setTechnique
+    // validating and echoing — and the panel row re-marking through the same
+    // event the panel's own buttons fire (flame-tongues plan task 1).
+    expect(src).toContain("q.get('tongue')");
+    expect(src).toContain('isTongueTechnique(tongueParam)');
+    expect(src).toContain('resolveTongueTuning');
+    expect(src).toContain('TONGUE_TECHNIQUES.indexOf(technique)');
+    expect(src).toContain("new Event('flame:technique')");
+    expect(src).toContain('setTechnique(name: string)');
+    expect(src).toContain('technique() { return technique; }');
+  });
+
   it('installs the game shutter through the post capture stage', () => {
     expect(src).toContain('createShutterGameLayer');
     expect(src).toContain('postAa.setCaptureStage(');

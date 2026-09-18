@@ -4,13 +4,29 @@
 // BurnTuning field exactly once, its test pins that both ways, and COPY emits a
 // setter call whose keys are the same names -- which is what stops a tuning
 // session ending in numbers nothing reads (dynamite-panel.ts:190 has the scars).
+// The TONGUE keys (plan 2026-09-18 flame-tongues task 1) ride the same contract
+// one table down: TONGUE_KEYS names every TongueTuning field, ranges come from
+// TONGUE_BOUNDS, and COPY emits the technique plus the tongue values alongside
+// the burn values.
 import { createPanelShell, type PanelShell } from './panel-chrome';
 import { BURN_BOUNDS, burnPresets, type BurnTuning } from './burn-profiles';
+import {
+  TONGUE_BOUNDS, TONGUE_TECHNIQUES, type TongueTechnique, type TongueTuning,
+} from './tongue-tuning';
 
 export interface FlameKey {
   key: keyof BurnTuning;
   label: string;
   /** Read from BURN_BOUNDS, never restated — the clamp is the authority. */
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface TongueKey {
+  key: keyof TongueTuning;
+  label: string;
+  /** Read from TONGUE_BOUNDS, never restated — the clamp is the authority. */
   min: number;
   max: number;
   step: number;
@@ -41,38 +57,103 @@ export const FLAME_KEYS: readonly FlameKey[] = Object.freeze(
   })),
 );
 
-export function copyText(t: BurnTuning): string {
+/** Label and slider step per tongue field; the RANGE comes from TONGUE_BOUNDS. */
+const TONGUE_LABELS: Record<keyof TongueTuning, { label: string; step: number }> = {
+  length: { label: 'tongue len', step: 0.02 },
+  ragged: { label: 'ragged', step: 0.02 },
+  rise: { label: 'tongue rise', step: 0.1 },
+  gain: { label: 'tongue gain', step: 0.05 },
+  lean: { label: 'lean', step: 0.02 },
+};
+
+export const TONGUE_KEYS: readonly TongueKey[] = Object.freeze(
+  (Object.keys(TONGUE_LABELS) as (keyof TongueTuning)[]).map((key) => ({
+    key, ...TONGUE_LABELS[key], min: TONGUE_BOUNDS[key][0], max: TONGUE_BOUNDS[key][1],
+  })),
+);
+
+export function copyText(
+  t: BurnTuning, technique: TongueTechnique, tongue: TongueTuning,
+): string {
+  const tongueBody = TONGUE_KEYS.map(k => `${k.key}: ${Number(tongue[k.key].toFixed(4))}`).join(', ');
   const body = FLAME_KEYS.map(k => `${k.key}: ${Number(t[k.key].toFixed(4))}`).join(', ');
-  return `__sdfGame.setBurnTuning({${body}})`;
+  return [
+    `__sdfGame.setTechnique('${technique}')`,
+    `__sdfGame.setTongueTuning({${tongueBody}})`,
+    `__sdfGame.setBurnTuning({${body}})`,
+  ].join(';');
 }
 
 export interface FlamePanelOpts {
   read(): BurnTuning;
   apply(patch: Partial<BurnTuning>): BurnTuning;
   preset(name: keyof typeof burnPresets): BurnTuning;
+  /** The live technique — which technique button is the marked one. */
+  technique(): TongueTechnique;
+  setTechnique(name: TongueTechnique): void;
+  readTongue(): TongueTuning;
+  applyTongue(patch: Partial<TongueTuning>): TongueTuning;
   onCopy?(text: string): void;
 }
 
-export function createFlamePanel(opts: FlamePanelOpts): PanelShell {
-  const shell = createPanelShell('FLAME', { right: 8 });
-  for (const k of FLAME_KEYS) {
+/** One slider row per key, ranges from the keys table, output reading BACK
+ *  from the live record so a clamp behind a slider shows itself. Shared by the
+ *  burn rows and the tongue rows so the two cannot drift. */
+function sliderRows<K extends string>(
+  body: HTMLElement,
+  keys: readonly { key: K; label: string; min: number; max: number; step: number }[],
+  read: () => Record<K, number>,
+  apply: (patch: { [P in K]?: number }) => unknown,
+): void {
+  for (const k of keys) {
     const row = document.createElement('div');
     const label = document.createElement('span');
     label.textContent = k.label;
     const input = document.createElement('input');
     input.type = 'range';
     input.min = String(k.min); input.max = String(k.max); input.step = String(k.step);
-    input.value = String(opts.read()[k.key]);
+    input.value = String(read()[k.key]);
     const out = document.createElement('span');
-    const show = () => { out.textContent = String(Number(opts.read()[k.key].toFixed(4))); };
+    const show = () => { out.textContent = String(Number(read()[k.key].toFixed(4))); };
     input.addEventListener('input', () => {
-      opts.apply({ [k.key]: Number(input.value) } as Partial<BurnTuning>);
+      apply({ [k.key]: Number(input.value) } as { [P in K]?: number });
       show();                           // read BACK, never echo the slider
     });
     show();
     row.append(label, input, out);
-    shell.body.append(row);
+    body.append(row);
   }
+}
+
+export function createFlamePanel(opts: FlamePanelOpts): PanelShell {
+  const shell = createPanelShell('FLAME', { right: 8 });
+  // The technique row: one button per TongueTechnique, the ACTIVE one marked
+  // with brackets (panel buttons have no CSS to style a class with). The
+  // marking re-renders on a `flame:technique` event on the shell element, so
+  // key-t and the console API flip the marking too — the panel is not the
+  // only writer of the technique, it only shows whoever won.
+  const techRow = document.createElement('div');
+  const techButtons = new Map<TongueTechnique, HTMLButtonElement>();
+  for (const name of TONGUE_TECHNIQUES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.technique = name;
+    b.addEventListener('click', () => {
+      opts.setTechnique(name);
+      shell.el.dispatchEvent(new Event('flame:technique'));
+    });
+    techButtons.set(name, b);
+    techRow.append(b);
+  }
+  const markTechnique = () => {
+    const cur = opts.technique();
+    for (const [name, b] of techButtons) b.textContent = name === cur ? `[${name}]` : name;
+  };
+  markTechnique();
+  shell.el.addEventListener('flame:technique', markTechnique);
+  shell.body.append(techRow);
+  sliderRows(shell.body, FLAME_KEYS, () => opts.read(), (p) => opts.apply(p));
+  sliderRows(shell.body, TONGUE_KEYS, () => opts.readTongue(), (p) => opts.applyTongue(p));
   for (const name of Object.keys(burnPresets) as (keyof typeof burnPresets)[]) {
     const b = document.createElement('button');
     b.type = 'button'; b.textContent = name;
@@ -82,7 +163,7 @@ export function createFlamePanel(opts: FlamePanelOpts): PanelShell {
   const copy = document.createElement('button');
   copy.type = 'button'; copy.textContent = 'COPY';
   copy.addEventListener('click', () => {
-    const text = copyText(opts.read());
+    const text = copyText(opts.read(), opts.technique(), opts.readTongue());
     // Caught: a clipboard write rejects loudly on a denied/non-secure origin
     // (measured in headless Chrome) and the console line below is the copy
     // that always lands -- dynamite-panel.ts's reason for logging as well.

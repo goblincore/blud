@@ -38,6 +38,10 @@ import { motionProfileFor, speedForBand, type MotionProfile } from '../motion-pr
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
+import {
+  TONGUE_TECHNIQUES, isTongueTechnique, resolveTongueTuning,
+  type TongueTechnique, type TongueTuning,
+} from './tongue-tuning';
 import { createFlamePanel } from './flame-panel';
 import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
 import { burnDistortStrength, burnDistortRadiusM, burnWobble } from './burn-distort';
@@ -190,6 +194,14 @@ async function bootstrap(): Promise<void> {
   let tuning: BurnTuning = preset && Object.hasOwn(burnPresets, preset)
     ? resolveBurnTuning(burnPresets[preset as keyof typeof burnPresets])
     : resolveBurnTuning(BURN_TUNING);
+  // The TONGUE TECHNIQUE (flame-tongues plan task 1): which tongue pass draws,
+  // plus the tongue tuning all three passes will share. Default 'screen';
+  // ?tongue=<name> overrides at boot. Nothing consumes these yet — the
+  // screen/cards/volume passes land in tasks 2-4 and read them per frame.
+  const tongueParam = q.get('tongue');
+  let technique: TongueTechnique =
+    tongueParam !== null && isTongueTechnique(tongueParam) ? tongueParam : 'screen';
+  let tongue: TongueTuning = resolveTongueTuning();
   const burns = FLAME_LAB_BODIES.map(() => createBurnState());
   if (startLit) for (const s of burns) igniteBurn(s);
   const actors: FlameLabActor[] = [];
@@ -396,6 +408,10 @@ async function bootstrap(): Promise<void> {
     read: () => tuning,
     apply: (patch) => (tuning = resolveBurnTuning({ ...tuning, ...patch })),
     preset: (name) => (tuning = resolveBurnTuning(burnPresets[name])),
+    technique: () => technique,
+    setTechnique: (name) => { technique = name; },
+    readTongue: () => tongue,
+    applyTongue: (patch) => (tongue = resolveTongueTuning({ ...tongue, ...patch })),
   });
   flamePanel.setVisible(true);
   flamePanel.setCollapsed(false);
@@ -544,9 +560,17 @@ async function bootstrap(): Promise<void> {
       return;
     }
     // Burn: I lights both bodies, O puts them out (the char STAYS — the
-    // difference between a burnt corpse and a clean one).
+    // difference between a burnt corpse and a clean one). T cycles the tongue
+    // technique — the switch the tongue passes hang off — and re-marks the
+    // panel's technique row via the same event the panel's own buttons fire.
     if (ev.key === 'i' || ev.key === 'I') { for (const s of burns) igniteBurn(s); return; }
     if (ev.key === 'o' || ev.key === 'O') { for (const s of burns) extinguishBurn(s); return; }
+    if (ev.key === 't' || ev.key === 'T') {
+      const at = TONGUE_TECHNIQUES.indexOf(technique);
+      technique = TONGUE_TECHNIQUES[(at + 1) % TONGUE_TECHNIQUES.length]!;
+      flamePanel.el.dispatchEvent(new Event('flame:technique'));
+      return;
+    }
   });
 
   // ——— THE FIRE LIGHTS (plan task 10). One per body, allocated ONCE at
@@ -697,6 +721,17 @@ async function bootstrap(): Promise<void> {
     ignite(on = true) { for (const s of burns) (on ? igniteBurn : extinguishBurn)(s); },
     setTuning(p: Partial<BurnTuning> = {}) { tuning = resolveBurnTuning({ ...tuning, ...p }); return tuning; },
     preset(name: keyof typeof burnPresets) { tuning = resolveBurnTuning(burnPresets[name]); return tuning; },
+    /** The tongue switch (flame-tongues plan task 1). Junk names are ignored
+     *  and the CURRENT technique comes back, so a capture script can call it
+     *  blind and read what it actually got. Re-marks the panel row. */
+    setTechnique(name: string) {
+      if (isTongueTechnique(name)) technique = name;
+      flamePanel.el.dispatchEvent(new Event('flame:technique'));
+      return technique;
+    },
+    technique() { return technique; },
+    setTongueTuning(p: Partial<TongueTuning> = {}) { tongue = resolveTongueTuning({ ...tongue, ...p }); return tongue; },
+    tongue() { return { ...tongue }; },
     /** Full burn immediately, for deterministic captures. */
     capture(burn = 1, char = 0) {
       for (const s of burns) forceBurn(s, burn, char);
