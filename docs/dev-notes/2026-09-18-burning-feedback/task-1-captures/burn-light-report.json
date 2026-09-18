@@ -1,0 +1,448 @@
+{
+  "branch": "dispatch/2026-09-18-burning-burn-room-light",
+  "shots": {
+    "burn-light-10-both-on": {
+      "note": "gather + mesh",
+      "w": 960,
+      "h": 600,
+      "mean": 49.31,
+      "std": 50.6
+    },
+    "burn-light-20-mesh-off": {
+      "note": "lightMeshPeak 0, gather on",
+      "w": 960,
+      "h": 600,
+      "mean": 43.77,
+      "std": 51.2
+    },
+    "burn-light-30-both-off": {
+      "note": "both peaks 0",
+      "w": 960,
+      "h": 600,
+      "mean": 43.77,
+      "std": 51.19
+    }
+  },
+  "checks": {
+    "coldCards": {
+      "created": false,
+      "active": 0,
+      "live": 0,
+      "atlas": false
+    },
+    "coldBurning": [],
+    "spawned": [
+      {
+        "id": 24,
+        "room": 4,
+        "errors": []
+      },
+      {
+        "id": 25,
+        "room": 4,
+        "errors": []
+      },
+      {
+        "id": 26,
+        "room": 4,
+        "errors": []
+      },
+      {
+        "id": 27,
+        "room": 4,
+        "errors": []
+      }
+    ],
+    "pipelines": {
+      "before": {
+        "total": 205,
+        "compileMs": 643,
+        "evictions": 79
+      },
+      "after": {
+        "total": 207,
+        "compileMs": 643,
+        "evictions": 79
+      },
+      "delta": 2,
+      "evictionDelta": 0,
+      "rebuilds": 0,
+      "longFrames": 0
+    },
+    "floorCrop": {
+      "x": 682.6858560970285,
+      "y": 503.4370407140277,
+      "size": 60
+    },
+    "tuneDefaults": {
+      "lightGatherPeak": 120,
+      "lightMeshPeak": 40,
+      "lightFlicker": 0.35
+    },
+    "dynBuffer": {
+      "fireOn": {
+        "points": 400,
+        "lit": 139,
+        "meanLit": 0.2667,
+        "max": 2.4526,
+        "radianceAbsSum": 115.95
+      },
+      "gatherDebug": {
+        "sources": 1,
+        "inRoom": 1,
+        "pushed": 1,
+        "cap": 2,
+        "maxIntensity": 87.12342830788933
+      },
+      "gatesOn": {
+        "bound": true,
+        "dynKey": "room4",
+        "room": 4,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 2
+      },
+      "dispatchesOn": 164,
+      "fireOff": {
+        "points": 400,
+        "lit": 139,
+        "meanLit": 0.2667,
+        "max": 2.4526,
+        "radianceAbsSum": 115.95
+      },
+      "gatherDebugOff": {
+        "sources": 1,
+        "inRoom": 1,
+        "pushed": 0,
+        "cap": 2,
+        "maxIntensity": 0
+      },
+      "gatesOff": {
+        "bound": true,
+        "dynKey": "room4",
+        "room": 4,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "dispatchesOff": 176
+    },
+    "roomLight": {
+      "crop": {
+        "x": 682.6858560970285,
+        "y": 503.4370407140277,
+        "size": 60
+      },
+      "mean": {
+        "bothOn": 29.126,
+        "meshOff": 20.999,
+        "bothOff": 20.999
+      },
+      "frameMean": {
+        "bothOn": 49.31,
+        "meshOff": 43.77,
+        "bothOff": 43.77
+      },
+      "delta": {
+        "total": 8.127,
+        "gather": 0,
+        "mesh": 8.127
+      }
+    },
+    "neighbourScreen": {
+      "x": 480.0000000000001,
+      "y": 299.99999999999994
+    },
+    "neighbour": {
+      "fireOn": {
+        "label": "burn-light-40-neighbour-fire-on",
+        "frames": 30,
+        "crop": {
+          "x": 460,
+          "y": 280,
+          "size": 40
+        },
+        "meanLuma": 217.138,
+        "changePerFrame": 0.0152
+      },
+      "bodyFlashOff": {
+        "label": "burn-light-50-neighbour-bodyflash-0",
+        "frames": 30,
+        "crop": {
+          "x": 460,
+          "y": 280,
+          "size": 40
+        },
+        "meanLuma": 214.58,
+        "changePerFrame": 0.0001
+      },
+      "flickerOff": {
+        "label": "burn-light-55-neighbour-flicker-0",
+        "frames": 30,
+        "crop": {
+          "x": 460,
+          "y": 280,
+          "size": 40
+        },
+        "meanLuma": 217.141,
+        "changePerFrame": 0
+      },
+      "lightsOff": {
+        "label": "burn-light-60-neighbour-lights-off",
+        "frames": 30,
+        "crop": {
+          "x": 460,
+          "y": 280,
+          "size": 40
+        },
+        "meanLuma": 214.577,
+        "changePerFrame": 0
+      },
+      "ratioFireVsBaseline": 152
+    },
+    "neighbourBurn": {
+      "perView": {
+        "burnCfg": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 0
+        },
+        "burning": null
+      },
+      "crowdRecords": {
+        "stride": 64,
+        "views": [
+          {
+            "key": "body:1",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:2",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:3",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:4",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:5",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:6",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:7",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:8",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:9",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:10",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:11",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:12",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:13",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:14",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:15",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:16",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:17",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:18",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:19",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:20",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:21",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:22",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:23",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:24",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:25",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:26",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          },
+          {
+            "key": "body:27",
+            "instances": 1,
+            "hot": 0,
+            "maxBurn": 0
+          }
+        ]
+      }
+    },
+    "burnDistortion": {
+      "wiredInGame": false,
+      "note": "burn-distort.ts is used only by flame-lab-main.ts; no game seam pushes it"
+    },
+    "gatherCost": {
+      "burnerCount": 0,
+      "cold": {
+        "available": true,
+        "frames": 30,
+        "gather": {
+          "name": "compute:probe-gather",
+          "n": 15,
+          "p50": 0,
+          "p95": 0.06553600000188453,
+          "p99": 0.06553600000188453,
+          "max": 0.06553600000188453,
+          "mean": 0.030583466666575986
+        },
+        "span": {
+          "name": "span",
+          "n": 30,
+          "p50": 20.054016000001866,
+          "p95": 26.67315200000303,
+          "p99": 35.71712000000116,
+          "max": 35.71712000000116,
+          "mean": 21.18997333333367
+        },
+        "meanWall": 21.292499999981374
+      },
+      "hot": {
+        "available": true,
+        "frames": 30,
+        "gather": {
+          "name": "compute:probe-gather",
+          "n": 15,
+          "p50": 0.06553599999460857,
+          "p95": 0.32767999999487074,
+          "p99": 0.32767999999487074,
+          "max": 0.32767999999487074,
+          "mean": 0.06990506666479632
+        },
+        "span": {
+          "name": "span",
+          "n": 30,
+          "p50": 19.857407999996212,
+          "p95": 28.114943999993557,
+          "p99": 28.37708799999382,
+          "max": 28.37708799999382,
+          "mean": 20.55427413333309
+        },
+        "meanWall": 20.61250000002328
+      },
+      "deltaMeanMs": 0.0393,
+      "deltaP50Ms": 0.0655
+    }
+  },
+  "consoleErrors": []
+}

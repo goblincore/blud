@@ -26,6 +26,13 @@ export interface BurnTuning {
   lightPeak: number;
   /** Fire-light flicker depth, 0..1. */
   lightFlicker: number;
+  /** Peak intensity of each fire light merged into the probe gather's room
+   *  list (walls/floor). Explosion gather peak is 220 for a half-second blast;
+   *  a sustained fire sits lower. */
+  lightGatherPeak: number;
+  /** Peak intensity of each always-visible mesh-side fire PointLight (props and
+   *  kit). Braziers are 9–13, the explosion mesh peak 320. */
+  lightMeshPeak: number;
   /** Glow (bloom) gain applied to the extracted bright pass. */
   glowGain: number;
   /** Luminance above which a pixel contributes to glow. */
@@ -66,6 +73,12 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   // flames). charPatch 0.55 is what makes between-flame skin read as soot.
   fireGain: 2.8, noiseScale: 7, riseSpeed: 1.8, charPatch: 0.55,
   lightPeak: 26, lightFlicker: 0.35,
+  // 2026-09-18 burning-feedback task 1: the two ROOM paths. The probe gather's
+  // list is 8 slots shared with flashes/explosions/tracers, so fire caps at 2
+  // and merges surplus burners into the nearest slot (burn-room-light.ts). The
+  // mesh pool is four always-visible PointLights at ~1/3 the gather peak so a
+  // burning body lights nearby props without blowing out at arm's length.
+  lightGatherPeak: 120, lightMeshPeak: 40,
   glowGain: 0.5, glowThreshold: 0.75,
   distortStrength: 0.006,
   fireCoverage: 0.9,
@@ -112,6 +125,7 @@ export const BURN_BOUNDS: Readonly<Record<keyof BurnTuning, readonly [number, nu
   igniteSec: [0.05, 4], extinguishSec: [0.05, 4], charRate: [0, 2],
   fireGain: [0, 4], noiseScale: [0.5, 40], riseSpeed: [0, 8], charPatch: [0, 1],
   lightPeak: [0, 120], lightFlicker: [0, 1],
+  lightGatherPeak: [0, 400], lightMeshPeak: [0, 400],
   glowGain: [0, 2], glowThreshold: [0, 4],
   distortStrength: [0, BLAST_REFRACTION.maxOffsetUv],
   fireCoverage: [0, 1], skeletonShow: [0, 1],
