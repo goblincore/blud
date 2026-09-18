@@ -11,7 +11,8 @@
 //                     then the three Blood reference tiles (3321/3323/3325)
 //                     scaled to the stand frames' body height, so the judge
 //                     is one image rather than a folder.
-//// POSES are driven through the PAGE'S OWN INPUT, not a console backdoor:
+//
+// POSES are driven through the PAGE'S OWN INPUT, not a console backdoor:
 // CDP key events for ',' (walk) / '.' (run) / 'k' (collapse), real mouse
 // press to stop the orbit spin, real wheel events for the distant framing.
 // The page's keydown handlers are the contract a player uses; if they move,
