@@ -688,9 +688,13 @@ describe('goo upsample WGSL (item 1)', () => {
 
 describe('goo perf page seam (source tripwires)', () => {
   const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+  // `setGooPerf` moved out of the __sdfGame literal into game-seams-spawn-goo.ts
+  // (2026-09-17 decomposition). The `goo` getter it reports through stayed in
+  // game-main.ts, so these tripwires now read both files.
+  const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
 
   it('exposes setGooPerf and reports the lever state in the goo getter', () => {
-    expect(src).toContain('setGooPerf(o: {');
+    expect(seamSrc).toContain('setGooPerf(o: {');
     expect(src).toContain('surfaceAtDensityRes: ctx.goo.layer.surfaceAtDensityRes,');
     expect(src).toContain('passGate: ctx.goo.layer.passGate,');
   });
@@ -698,7 +702,17 @@ describe('goo perf page seam (source tripwires)', () => {
   it('keeps the perf seams OUT of setGooTuning', () => {
     // The goo panel's copy button emits setGooTuning keys; a perf lever in
     // that schema would let a tuning paste silently move a bench seam.
-    const block = src.slice(src.indexOf('setGooTuning(o: {'), src.indexOf('setGooPerf(o: {'));
+    //
+    // The end boundary used to be `setGooPerf(o: {`, which now lives in another
+    // file. `setGooCandidate(o: {` is the member that actually follows
+    // setGooTuning, so this slice is TIGHTER than the original rather than
+    // looser — it isolates setGooTuning's own block instead of everything up to
+    // setGooPerf.
+    const start = src.indexOf('setGooTuning(o: {');
+    const end = src.indexOf('setGooCandidate(o: {', start);
+    expect(start, 'setGooTuning must still be in game-main.ts').toBeGreaterThan(-1);
+    expect(end, 'setGooCandidate must follow setGooTuning').toBeGreaterThan(start);
+    const block = src.slice(start, end);
     expect(block).not.toContain('surfaceAtDensityRes');
     expect(block).not.toContain('minTexelRadius');
   });

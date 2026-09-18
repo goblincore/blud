@@ -41,6 +41,9 @@ describe('gib shutter — settings share the blood exposure contract', () => {
 describe('gib shutter — integration tripwires', () => {
   const layerSrc = readFileSync('src/lab/sdf-zombie/webgpu/gib-shutter-layer.ts', 'utf8');
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+  // The large __sdfGame members moved to game-seams-spawn-goo.ts in the
+  // 2026-09-17 decomposition; every pinned string below is byte-identical.
+  const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
   const panelSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-panel.ts', 'utf8');
   const resolveSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-blur.ts', 'utf8');
 
@@ -143,12 +146,15 @@ describe('gib shutter — integration tripwires', () => {
     // upward kick cancels one frame of gravity, so after `step(1)` the piece
     // has ~zero linear velocity while still turning. Without this the rotation
     // claim could only be tested on the random blast.
-    expect(gameSrc).toContain('spawnSpinFixture:');
-    expect(gameSrc).toContain('spinAngVel: spin');
-    expect(gameSrc).toContain('CHUNK_TUNING.gravity / 60');
+    // spawnSpinFixture moved into game-seams-spawn-goo.ts with the rest of the
+    // large __sdfGame members (2026-09-17 decomposition); the seam itself is
+    // unchanged.
+    expect(seamSrc).toContain('spawnSpinFixture:');
+    expect(seamSrc).toContain('spinAngVel: spin');
+    expect(seamSrc).toContain('CHUNK_TUNING.gravity / 60');
     // The generic fixture seam also returns a stable id and accepts a velocity
     // so a rig can stage a slow slide and track it across the settle.
-    expect(gameSrc).toContain('spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3)');
-    expect(gameSrc).toContain('velocity ?? (stationary ? [0, 0, 0] : undefined)');
+    expect(seamSrc).toContain('spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3)');
+    expect(seamSrc).toContain('velocity ?? (stationary ? [0, 0, 0] : undefined)');
   });
 });
