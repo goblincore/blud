@@ -586,6 +586,33 @@ describe('soldier actor combat wiring', () => {
 });
 
 
+describe('burning soldier panic (Task 2)', () => {
+  it('setBurning flees the player and stops the gun; setBurning(false) releases', () => {
+    const { actor, shots } = soldier();
+    actor.setBrainInput({ x: 5, z: 0, room: 1 }, true);
+    for (let i = 0; i < 30; i++) actor.step(1 / 60);
+    const before = actor.pose().pos;
+    const d0 = Math.hypot(before[0] - 5, before[2]);
+    const shotsBefore = shots.length;
+
+    actor.setBurning(true);
+    for (let i = 0; i < 150; i++) actor.step(1 / 60);   // 2.5 s alight
+    const after = actor.pose().pos;
+    const d1 = Math.hypot(after[0] - 5, after[2]);
+    // Ran AWAY from the player at +x (the pre-burn mind walked toward him).
+    expect(d1).toBeGreaterThan(d0 + 0.3);
+    // A burning soldier must not fire, whatever the mind wanted.
+    expect(shots.length).toBe(shotsBefore);
+    expect(actor.debug().phase).toBe('standing');
+
+    // Extinguishing releases the override; the mind resumes without throwing.
+    actor.setBurning(false);
+    for (let i = 0; i < 60; i++) actor.step(1 / 60);
+    expect(actor.debug().phase).toBe('standing');
+  });
+});
+
+
 describe('solid geometry sight and projectile segments', () => {
   const box: Aabb = { min: [-1, 0, 1], max: [1, 1, 2] };
   it('blocks a shot crossing a thin obstacle even when both endpoints are outside', () => {

@@ -45,7 +45,7 @@ import {
   applyFloorContact, MOTION_TUNING, STANDING_RIG,
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
-import { makeRng, type Rng, type WanderBounds } from '../wander';
+import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
@@ -61,6 +61,9 @@ import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
 import { add, qMul, qRotate, sub } from '../vec';
+import {
+  BURN_BEHAVIOUR, createBurnPanic, stepBurnPanic, type BurnPanicState,
+} from '../burn-behaviour';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
 const CALM: Omit<MotionSignals, 'dt'> = {
@@ -355,6 +358,19 @@ export interface ZombieActor {
   /** Encounter perception and routing verdict. Set BEFORE step(). */
   setEncounterOrder(order: EncounterOrder): void;
   setBrainInput(player: BrainPlayer | null, alerted: boolean): void;
+  /**
+   * BURNING PANIC (2026-09-18). Called by game-burning.ts on registry
+   * transitions: true on the frame the body starts burning, false when it is
+   * extinguished, burnt down or retired. While on, the mind's verdict is
+   * overridden (the `doomed` pattern) — a soldier flees the player without
+   * firing, a zombie keeps chasing with a jittered heading, both stumble.
+   * Idempotent: repeating the current state is a no-op.
+   */
+  setBurning(on: boolean): void;
+  /** Monotonic count of burn stumbles since the current ignite began (0 when
+   *  not burning). The capture-trace oracle — pose-level `staggerKind` cannot
+   *  tell a burn stumble from a hit reaction. */
+  burnStumbles(): number;
   /** The decision layer — callers that must distinguish kinds, and the
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
@@ -581,6 +597,27 @@ export function createZombieActor(opts: {
    *  resolved the kill), it just has not finished coming apart. It must not keep
    *  attacking or moving while it tears. */
   let doomed = false;
+  /**
+   * BURNING PANIC (Task 2, 2026-09-18). Non-null from the frame the body is
+   * set alight until it is put out. The per-substep step overrides the mind's
+   * target/fire verdict — the `doomed` pattern — so neither brain learns a
+   * "burning" state. `burnCruiseScale` is the speed multiplier handed to
+   * motion; `burnFlailT` counts down to the next flail shudder (the arm-flail
+   * stand-in, since motion.ts has no additive arm channel).
+   */
+  let burnPanic: BurnPanicState | null = null;
+  let burnCruiseScale = 1;
+  let burnFlailT = 0;
+  /** Monotonic count of burn stumbles — the trace's unambiguous oracle. */
+  let burnStumbles = 0;
+  /**
+   * Last world position the actor saw the player at. game-main does not call
+   * setBrainInput (the encounter director feeds the mind instead), so the
+   * burn-panic flee target reads the director's player when visible and this
+   * cached point when the player is out of sight — a burning soldier must
+   * still run away from where the player was, not a fixed axis.
+   */
+  let lastPlayerPos: Vec3 | null = null;
   let bodyYaw = 0;
   const soldierDamage = opts.profile?.name === 'soldier';
   let soldierFatal = false;
@@ -901,6 +938,11 @@ export function createZombieActor(opts: {
           canMoveTo: (target: Vec3) => clearCombatMove(state.wander.pos, target, opts.furniture),
         } : {}),
       });
+      // The MIND's own target, captured before the encounter director's halt
+      // (a ring hold with `holdSecs > 0` nulls the post-encounter target). A
+      // burning zombie's chase must follow the mind's intent, not a ring hold
+      // that would freeze it at range.
+      const mindTarget = think.target;
       // A DOOMED BODY KEEPS NO AGENDA. It is already dead for gameplay — the
       // blast resolved that on impact — it just has not finished coming apart,
       // so it must not keep chasing, swinging or shooting during the window.
@@ -924,6 +966,59 @@ export function createZombieActor(opts: {
           think={...think,target:routed,halt:think.halt || routed===null};
         }
       }
+      // A BURNING BODY PANICS. This is an OVERRIDE of the mind's (and the
+      // encounter director's) verdict, the same pattern as `doomed`, so
+      // neither brain grows a burn state. It runs AFTER the encounter block on
+      // purpose: the director emits `halt: true` for an idle actor and a
+      // moveTarget in combat, either of which would erase the flee / chase
+      // target on nearly every frame if the override ran first.
+      if (burnPanic && !doomed) {
+        // The encounter director (not setBrainInput) feeds the game's minds,
+        // so read the player from the order when present and remember the
+        // last seen point for when sight is lost.
+        const playerNow = encounterOrder?.player ?? brainPlayer;
+        if (playerNow) lastPlayerPos = [playerNow.x, 0, playerNow.z];
+        const bp = stepBurnPanic(burnPanic, {
+          kind: mind.kind,
+          self: state.wander.pos,
+          player: lastPlayerPos,
+          // A held zombie (ring token / blast recovery) reports a null mind
+          // target; its chase falls back to the last seen player point so the
+          // panic keeps it closing instead of freezing at range.
+          chaseTarget: mindTarget ?? lastPlayerPos,
+        }, sdt);
+        think = {
+          ...think,
+          target: bp.target,
+          halt: bp.target === null,
+          fire: false,
+          weaponUp: false,
+          // A zombie keeps its swipe; a soldier drops the attack (no aiming).
+          attack: mind.kind === 'zombie' ? think.attack : null,
+          faceHeading: null,
+        };
+        burnCruiseScale = bp.cruiseScale;
+        burnFlailT -= sdt;
+        // A soldier's `small` soldier reaction must lap before it can restart
+        // (equal level does not restart an active one) — see burn-behaviour.ts.
+        const flailPeriod = soldierDamage
+          ? BURN_BEHAVIOUR.soldierFlailPeriodSec : BURN_BEHAVIOUR.flailPeriodSec;
+        if (bp.stumble) {
+          burnStumbles++;
+          signals.shot = burnStumbleShot();
+          burnFlailT = flailPeriod;
+        } else if (burnFlailT <= 0 && signals.shot === null) {
+          // The arm-flail stand-in (see burn-behaviour.ts's note): a burn
+          // shudder re-emitted on a timer. A real hit signal wins the frame.
+          signals.shot = burnFlailShot();
+          burnFlailT = flailPeriod;
+        }
+      } else {
+        burnCruiseScale = 1;
+      }
+      // The burn override's speed multiplier rides the same signals object
+      // stepMotion consumes; 1 (absent-equivalent) when not burning.
+      signals.cruiseScale = burnCruiseScale;
       brainAlerted = false;   // one-shot: the first sub-step consumes it
       lastEngaged = think.engaged;
       lastCommitted = think.committed;
@@ -950,6 +1045,9 @@ export function createZombieActor(opts: {
         signals.fire &&= !soldierFatal && !signals.downed;
         signals.headAlive = current.clusters.find(c => c.limb === 'head')?.alive ?? false;
       }
+      // A burning soldier must never fire, whatever the mind or the injury
+      // path computed above (the panic override is the last word).
+      if (burnPanic && !doomed) signals.fire = false;
       if (think.halt && (soldierDamage || !mind.meleeCapable)) {
         state = { ...state, wander: { ...state.wander, target: null, speed: 0, idle: 0 } };
       }
@@ -1286,6 +1384,48 @@ export function createZombieActor(opts: {
     return [x / n, y / n, z / n];
   }
 
+  // ---- burning panic motion signals (Task 2) ------------------------------
+  // These are POSE reactions only. They ride `signals.shot`, which stepMotion
+  // routes to stagger.ts (lurch / shudder) and the localized recoil — no
+  // wound is stamped and `freshWounds` is never touched, so a burn stumble
+  // cannot bleed or gib the body.
+  /** The burning body's forward (unit), world space. */
+  const burnForward = (): Vec3 => headingDir(bodyYaw);
+  /**
+   * The stumble: a `blast` signal → stagger.ts's directional lurch. For a
+   * soldier it is `medium`, not `small`: the periodic flail already keeps a
+   * `small` soldier reaction alive, and `stepSoldierStagger` will not restart
+   * an equal-level reaction, so a `small` stumble would vanish behind the
+   * flail. `medium` ranks up and lands; it is still a lurch (fullStagger is
+   * false), never a knockdown.
+   */
+  function burnStumbleShot(): NonNullable<MotionSignals['shot']> {
+    return {
+      type: 'blast',
+      dirWorld: burnForward(),
+      woundWorld: [...bodyCentreWorld()] as Vec3,
+      torso: true,
+      gain: BURN_BEHAVIOUR.stumbleGain,
+      ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
+    };
+  }
+  /**
+   * The arm-flail stand-in: a `burn` signal → stagger.ts's shudder (and, for
+   * a soldier, a `small` soldier arm-open on the same signal). `small` keeps
+   * it a wave, not a stagger; motion.ts has no additive arm channel, so this
+   * is the seam the plan names as the stand-in.
+   */
+  function burnFlailShot(): NonNullable<MotionSignals['shot']> {
+    return {
+      type: 'burn',
+      dirWorld: burnForward(),
+      woundWorld: [...bodyCentreWorld()] as Vec3,
+      torso: true,
+      gain: BURN_BEHAVIOUR.flailGain,
+      ...(soldierDamage ? { soldierLevel: 'small' as const } : {}),
+    };
+  }
+
   /** Shared post-impact choreography: stamp wound, flinch signal, recoil
    *  shove, sever checks, pose + upload refresh. `field`/"posed" snapshot is
    *  the actor's CURRENT posed body at call time. Returns the stamped wound. */
@@ -1496,6 +1636,22 @@ export function createZombieActor(opts: {
       // Sticky until a step consumes it: the shot may land between frames.
       if (alerted) brainAlerted = true;
     },
+    setBurning: (on: boolean) => {
+      // Edge-triggered: game-burning only calls this on transitions, but a
+      // repeated call must not re-seed the panic (that would reset the RNG
+      // and restart every stumble/repick clock).
+      if (on === (burnPanic !== null)) return;
+      if (on) {
+        // The id seed keeps two bodies lit on the same frame out of phase.
+        burnPanic = createBurnPanic(opts.id * 7919 + 1);
+        burnFlailT = 0;
+        burnStumbles = 0;
+      } else {
+        burnPanic = null;
+        burnCruiseScale = 1;
+      }
+    },
+    burnStumbles: () => burnStumbles,
     mind: () => mind,
     kind: mind.kind,
     meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),

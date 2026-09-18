@@ -1,0 +1,116 @@
+{
+  "branch": "dispatch/2026-09-18-burning-burn-behaviour",
+  "checks": {
+    "warmGate": "ready",
+    "spawned": [
+      {
+        "id": 24,
+        "room": 4,
+        "errors": []
+      },
+      {
+        "id": 25,
+        "room": 4,
+        "errors": []
+      }
+    ],
+    "picked": [
+      {
+        "id": 24,
+        "kind": "soldier",
+        "alerted": true,
+        "dist": 4.53
+      },
+      {
+        "id": 25,
+        "kind": "zombie",
+        "alerted": true,
+        "dist": 4.51
+      }
+    ],
+    "soldier": {
+      "before": {
+        "frames": 45,
+        "meanSpeed": 0,
+        "maxSpeed": 0,
+        "meanDistHead": 4.525,
+        "meanDistTail": 4.525,
+        "distDelta": 0,
+        "shots": 2,
+        "stumbles": 0,
+        "staggerLurches": 0,
+        "shudderFrames": 0,
+        "holdMax": 0,
+        "targetNullFrames": 45,
+        "mindStates": {
+          "engage": 7,
+          "aim": 20,
+          "fire": 2,
+          "recover": 12,
+          "settle": 4
+        }
+      },
+      "burning": {
+        "frames": 180,
+        "meanSpeed": 2.972,
+        "maxSpeed": 12.083,
+        "meanDistHead": 4.346,
+        "meanDistTail": 4.941,
+        "distDelta": 0.595,
+        "shots": 0,
+        "stumbles": 2,
+        "staggerLurches": 46,
+        "shudderFrames": 24,
+        "holdMax": 0,
+        "targetNullFrames": 64,
+        "mindStates": {
+          "settle": 2,
+          "engage": 70,
+          "aim": 108
+        }
+      }
+    },
+    "zombie": {
+      "before": {
+        "frames": 45,
+        "meanSpeed": 0.816,
+        "maxSpeed": 1.15,
+        "meanDistHead": 4.413,
+        "meanDistTail": 3.862,
+        "distDelta": -0.552,
+        "shots": 0,
+        "stumbles": 0,
+        "staggerLurches": 0,
+        "shudderFrames": 0,
+        "holdMax": 0,
+        "targetNullFrames": 0,
+        "mindStates": {
+          "pursue": 45
+        }
+      },
+      "burning": {
+        "frames": 180,
+        "meanSpeed": 1.386,
+        "maxSpeed": 1.438,
+        "meanDistHead": 3.697,
+        "meanDistTail": 2.662,
+        "distDelta": -1.036,
+        "shots": 0,
+        "stumbles": 2,
+        "staggerLurches": 48,
+        "shudderFrames": 128,
+        "holdMax": 0,
+        "targetNullFrames": 0,
+        "mindStates": {
+          "pursue": 74,
+          "encircle": 106
+        }
+      }
+    },
+    "speedGain": {
+      "soldier": null,
+      "zombie": 1.7
+    }
+  },
+  "consoleErrors": []
+}

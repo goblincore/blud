@@ -10034,14 +10034,35 @@ function performBenchAction(a: BenchAction): void {
     fireFlare: () => ctx.weapon.flare?.fire() ?? false,
     /** Set EVERY live actor alight. Returns how many bodies are tracked. */
     igniteAll: () => ctx.vfx.burning.igniteAll(),
-    /** Ignite exactly one actor by id (deterministic neighbour diagnosis:
-     *  one burner, one clean neighbour). Returns false for an unknown id. */
+    /** Ignite exactly one actor by id (neighbour diagnosis, behaviour trace).
+     *  Returns false for an unknown id. */
     igniteActor: (id: number) => {
       const a = ctx.world.actors.find((x) => x.id === id);
       if (!a) return false;
       ctx.vfx.burning.igniteActor(a);
       return true;
     },
+    /** Per-actor burn-behaviour trace (scripts/burn-behaviour-trace.mjs):
+     *  ground position, motion speed, whether a shot left the muzzle THIS
+     *  frame (motion resets sinceFire to 0 on a firing step), the active
+     *  stagger kind, and whether it is currently alight. */
+    actorTrace: () => ctx.world.actors.map((a) => {
+      const d = a.debug();
+      const md = a.mind().debug();
+      return {
+        id: a.id, kind: a.kind,
+        pos: [...a.pose().pos] as Vec3,
+        speed: d.speed,
+        firing: a.sinceFire() <= 1e-6,
+        staggerKind: d.staggerKind,
+        stumbles: a.burnStumbles(),
+        burning: (ctx.vfx.burning.registry.get(a)?.burn ?? 0) > 0.02,
+        alerted: md.alert,
+        mindState: md.state,
+        holdSecs: md.holdSecs,
+        target: d.target ? [...d.target] as Vec3 : null,
+      };
+    }),
     /** Put every tracked body out (char stays). */
     extinguishAll: () => { ctx.vfx.burning.extinguishAll(); },
     /** Read-only burn telemetry, one entry per tracked actor. */

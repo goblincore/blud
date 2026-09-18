@@ -620,6 +620,38 @@ function makeTestActor(over: Partial<Parameters<typeof createZombieActor>[0]> = 
 }
 
 // ---------------------------------------------------------------------------
+// Burning panic (Task 2): the actor applies the pure burn-behaviour step as an
+// override of its mind, so a burning zombie keeps closing on the player.
+// ---------------------------------------------------------------------------
+describe('createZombieActor — burning panic override', () => {
+  it('a burning zombie closes on the player', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    a.setBrainInput({ x: 8, z: 0, room: 1 }, true);
+    for (let i = 0; i < 60; i++) a.step(1 / 60);
+    const p0 = a.pose().pos;
+    const d0 = Math.hypot(p0[0] - 8, p0[2]);
+    a.setBurning(true);
+    for (let i = 0; i < 60; i++) a.step(1 / 60);
+    const p1 = a.pose().pos;
+    const d1 = Math.hypot(p1[0] - 8, p1[2]);
+    expect(d1).toBeLessThan(d0);
+  });
+
+  it('setBurning is edge-triggered (repeat calls keep the same panic clock)', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    a.setBrainInput({ x: 8, z: 0, room: 1 }, true);
+    a.setBurning(true);
+    for (let i = 0; i < 30; i++) a.step(1 / 60);
+    const first = a.pose().pos;
+    a.setBurning(true);   // no-op: must NOT reseed the panic
+    for (let i = 0; i < 30; i++) a.step(1 / 60);
+    const second = a.pose().pos;
+    // The body kept moving in the same direction across the repeat call.
+    expect(Math.hypot(second[0] - first[0], second[2] - first[2])).toBeGreaterThan(0.1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The brain and the crowd (zombie-crowd task 5). The actor is the WIRING for
 // brain.ts (notice/chase/attack) and crowd.ts (separation nudges): the brain
 // steps inside the sub-step loop and its target overrides the wander's; a
