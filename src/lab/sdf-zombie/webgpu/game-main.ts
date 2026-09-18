@@ -35,7 +35,7 @@ import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
 import { WOUND_STEP_MUL, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAPE, ROW_PRIM_COLOR, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS } from './march.wgsl';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, REFINE_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, REFINE_LAYER, PRECOMPILE_COLD_PASS_TIMEOUT_MS } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { ProbeLightingNode, createProbeLevelSlots, levelLightsNode, levelMatchedGain } from './probe-lighting-node';
 import { GOBLIN_SKIN } from './goblin-skin';
@@ -4521,6 +4521,28 @@ async function main() {
       // here FIRST, the crowd pipeline is created synchronously inside the
       // march submit and precompilePasses below becomes a cache-hit
       // confirmation pass.
+      //
+      // COLD-COMPILE CORRECTION (2026-09-18). That "51 s under load" was not
+      // load: it is what the march pipelines cost whenever the OS Metal shader
+      // cache has no entry for them, i.e. after ANY edit to the march WGSL.
+      // Measured by changing one smin constant on unchanged code: drawOnce
+      // 1.8 s cached -> 80-101 s cold, 83 s of it the main thread blocked in
+      // createShaderModule behind the GPU process's SYNCHRONOUS pipeline
+      // builds. Headed Chrome's GPU watchdog kills the GPU process during that
+      // stall ("device lost" on the loader), so the compile never completes,
+      // is never cached, and every reload fails the same way until something
+      // that survives the stall (a headless probe) fills the cache.
+      //
+      // So the async compile now runs FIRST and is genuinely AWAITED, with the
+      // cold per-pass bound instead of the 8 s one whose give-up is what left
+      // the queued pipeline not-ready for the real frame. Cold, the wait is
+      // idle main-thread time behind the loader (measured 79 s idle, drawOnce
+      // 1.2 s after it); cached, it is a few hundred ms. drawOnce stays: it
+      // still compiles the main pass / post chain in their live context.
+      tp = performance.now();
+      await ctx.render.sdfLayer.precompilePasses(scene, camera, { passTimeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS });
+      phases.asyncFirst = performance.now() - tp;
+      mark('warm-async-first-done');
       tp = performance.now();
       ctx.boot.handle.drawOnce();
       phases.drawOnce = performance.now() - tp;

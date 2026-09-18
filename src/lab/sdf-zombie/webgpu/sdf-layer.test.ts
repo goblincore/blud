@@ -5,7 +5,7 @@ import * as THREE from 'three/webgpu';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (same as march.wgsl.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
-import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, TEMPORAL_ACCUM_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, TEMPORAL_ACCUM_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize, PRECOMPILE_COLD_PASS_TIMEOUT_MS } from './sdf-layer';
 import { createUpscaleModel } from './upscale/upscale-model';
 
 describe('depth prepass sizing (close-up task 3)', () => {
@@ -178,6 +178,58 @@ describe('SDF-layer whole-pass precompile (mid-game shader stalls)', () => {
 
     layer.dispose();
     previousTarget.dispose();
+  });
+
+  it('awaits a slow (cold) march compile under the cold bound instead of abandoning it at 8 s', async () => {
+    // A cold march compile takes 80-100 s. Abandoned at the default 8 s, the
+    // first real draw rebuilds it SYNCHRONOUSLY and stalls the GPU process
+    // until Chrome's watchdog kills it. The boot warm-up passes the cold bound.
+    vi.useFakeTimers();
+    try {
+      let currentTarget: THREE.RenderTarget | null = null;
+      const camera = new THREE.PerspectiveCamera();
+      const scene = new THREE.Scene();
+      const SLOW_MS = 60000;
+      const run = async (opts?: { passTimeoutMs?: number }) => {
+        let slowSettled = false;
+        let first = true;
+        const compileAsync = vi.fn(() => {
+          if (!first) return Promise.resolve();
+          first = false; // the march pass is compiled first
+          return new Promise<void>((r) => setTimeout(() => { slowSettled = true; r(); }, SLOW_MS));
+        });
+        const renderer = {
+          getRenderTarget: () => currentTarget,
+          setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+          compileAsync,
+        } as unknown as THREE.WebGPURenderer;
+        const layer = createSdfLayer(renderer);
+        let slowSettledAtSecondCompile: boolean | null = null;
+        const p = layer.precompilePasses(scene, camera, opts);
+        const watch = setInterval(() => {
+          if (slowSettledAtSecondCompile === null && compileAsync.mock.calls.length >= 2) slowSettledAtSecondCompile = slowSettled;
+        }, 100);
+        await vi.advanceTimersByTimeAsync(SLOW_MS + 1000);
+        clearInterval(watch);
+        const n = await p;
+        layer.dispose();
+        return { n, calls: compileAsync.mock.calls.length, slowSettledAtSecondCompile };
+      };
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const dflt = await run();
+      const cold = await run({ passTimeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS });
+      warn.mockRestore();
+      // Default bound: the march is abandoned (not counted) and the next pass
+      // starts while it is still compiling.
+      expect(dflt.slowSettledAtSecondCompile).toBe(false);
+      expect(dflt.n).toBe(dflt.calls - 1);
+      // Cold bound: the next pass starts only after the march really settled.
+      expect(cold.slowSettledAtSecondCompile).toBe(true);
+      expect(cold.n).toBe(cold.calls);
+      expect(PRECOMPILE_COLD_PASS_TIMEOUT_MS).toBeGreaterThanOrEqual(120000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

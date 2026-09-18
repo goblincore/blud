@@ -220,6 +220,19 @@ export const REFINE_LAYER = 9;
 /** Per-pass ceiling for precompilePasses (see the bounded race there). */
 const PRECOMPILE_PASS_TIMEOUT_MS = 8000;
 
+/**
+ * Per-pass ceiling for a COLD compile (2026-09-18). The march pipelines take
+ * 80-100 s to build when the OS Metal shader cache has no entry for them —
+ * i.e. after ANY edit to the march WGSL — against ~2 s cached. Measured by
+ * changing one smin constant on otherwise unchanged code. The boot warm-up
+ * passes this so the async compile is actually awaited instead of being
+ * abandoned at 8 s and rebuilt SYNCHRONOUSLY by the first real draw, which
+ * stalls Chrome's GPU process long enough for its watchdog to kill it
+ * ("device lost" at the loader). Still bounded: an unsettled compileAsync must
+ * not hold the loader forever.
+ */
+export const PRECOMPILE_COLD_PASS_TIMEOUT_MS = 180000;
+
 /** The depth prepass's linear downsample factor per axis. 4 → one coarse
  *  texel per 4x4 block of SDF pixels → ~1/16 of the march work. */
 export const DEPTH_PREPASS_DIV = 4;
@@ -769,7 +782,7 @@ export interface SdfLayer {
    * The render context is part of a pipeline's cache key (attachment formats,
    * MRT), so each compile sets the same target and MRT the real pass sets.
    */
-  precompilePasses(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<number>;
+  precompilePasses(scene: THREE.Scene, camera: THREE.PerspectiveCamera, opts?: { passTimeoutMs?: number }): Promise<number>;
   /**
    * Redirects the two passes that normally go to the canvas (the polygonal
    * scene and the final composite) into this target instead; null restores
@@ -1776,7 +1789,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         camera.layers.mask = previousMask;
       }
     },
-    async precompilePasses(scene, camera) {
+    async precompilePasses(scene, camera, opts) {
+      const passTimeoutMs = opts?.passTimeoutMs ?? PRECOMPILE_PASS_TIMEOUT_MS;
       const previousTarget = renderer.getRenderTarget();
       const previousMask = camera.layers.mask;
       let n = 0;
@@ -1800,10 +1814,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
             // warm-up (and the loader behind it) forever. A pass that does not
             // settle here is simply left to compile the way it always did.
             let timer: ReturnType<typeof setTimeout> | undefined;
-            const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), PRECOMPILE_PASS_TIMEOUT_MS); });
+            const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), passTimeoutMs); });
             const outcome = await Promise.race([renderer.compileAsync(s, cam).then(() => 'ok' as const), timeout]);
             if (timer !== undefined) clearTimeout(timer);
-            if (outcome === 'timeout') { console.warn(`[sdf-layer] precompile ${what} did not settle in ${PRECOMPILE_PASS_TIMEOUT_MS} ms — skipped`); return; }
+            if (outcome === 'timeout') { console.warn(`[sdf-layer] precompile ${what} did not settle in ${passTimeoutMs} ms — skipped`); return; }
           } finally { if (mrtNode) renderer.setMRT(null); }
           n++;
         } catch (err) {

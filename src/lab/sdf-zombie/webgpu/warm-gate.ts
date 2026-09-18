@@ -117,7 +117,7 @@ export async function coordinateWarmGate(opts: WarmGateOptions): Promise<WarmGat
   // changes the message, so the prereq is still awaited.
   await prereq;
   if (bound === 'timeout' && !settled) {
-    handlers.setLoader('still compiling pipelines — the game starts when this finishes', false);
+    handlers.setLoader('still compiling pipelines — the first boot after a shader change can take 1–2 min; the game starts when this finishes', false);
     await warmTracked;
   }
 
