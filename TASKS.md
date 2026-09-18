@@ -16,7 +16,9 @@
   Needs the atlas + `public/assets/lab/flaregun-placeholder.glb` (both untracked). [Notes](docs/dev-notes/2026-09-18-flare-ingame-test/NOTES.md).
 - [ ] Next: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
 - [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
-  Explosion curl look (game default OFF; faint residual cross remains) · blood DENSITY lab spike reads as goo (not shippable: needs per-stream goo fields).
+  **Explosion curl: seam fixed and verified** (edge-map gate `npm run explosion:seam`, all scenes clean, billow kept; ship values
+  curlStrength 1.1 / curlScale 18 / softFade 0.4 — game default still OFF, one-line flip). Blood: DENSITY spike reads as goo;
+  per-stream fusion landed (correct, +0.2 ms, lab-only) but crossing sprays still read as one mass — next: rope-not-fan emission, then capsule field.
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
