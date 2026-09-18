@@ -36,11 +36,20 @@
   `gibActor` (245), `detonateAt` (167).
 - [ ] Then the remaining leaves (63 functions, 848 lines) and the giants (`tick` 907, `setDrawFn` 589,
   `spawnEnemy` 260). Extraction must run **bottom-up** — free names are mostly other `main()`-scope functions.
-- [ ] **Filed, not fixed (both predate this work):** `march-hash.mjs`'s pinned canonical is STALE
-  (`0b84c119…` pinned 2026-09-15; HEAD renders `8f2b74e7…` deterministically, 11+ commits touched
-  march/sdf-layer/post-aa since) — needs someone to confirm which commit legitimately moved it before re-pinning.
-  And `scripts/sdf-demo-hash.sh ab` fails during recording (samples both field parities), producing no
-  comparison; identical at base.
+- [x] **Both gates repaired 2026-09-18.** `march-hash.mjs`'s three canonicals were stale since 2026-09-15;
+  bisecting all 163 commits with the gate itself identified **`3662c1ca`** ("half-strength round blends for
+  character builds") as the single mover — owner-accepted character-geometry work, so the drift was legitimate.
+  Re-pinned (default `8f2b74e7…`, crowd `c77f9008…`, per-body `2c5dac0d…`), each reproduced on two independent
+  runs; the bisect table and the re-pinning discipline are recorded in the script. The gate exits 0 and still
+  sees change (`room1-wounded` ≠ `room1`).
+- [x] `sdf-demo-hash.sh ab` no longer dies before comparing: the final-frame sample was itself introducing the
+  odd parity gap its own comment warned about (frames 96 / every 4 → samples at 0,4,…,92 parity 1, then frame 95
+  at parity 0). It is now taken only when it agrees with the established parity.
+- [ ] **Newly surfaced by that fix — a real one.** `sdf-demo-hash ab` now runs to completion and reports that
+  **two identical runs diverge at frame 0** in the dynamic probe layer (instances 240 → 35, tiles 8–11).
+  Verified pre-existing: the session base `1cd6b041` with only the parity fix diverges too, in **both**
+  `marchTarget` and `probeDyn`. A replay is not yet reproducible, so no A/B measured through this tool can be
+  trusted until it is. Likely suspects: goo instance upload (`cd2ded50`) and probe-gather warm-up timing.
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
