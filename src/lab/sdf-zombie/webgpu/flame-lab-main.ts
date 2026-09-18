@@ -1228,8 +1228,11 @@ async function bootstrap(): Promise<void> {
       burnPaused = true;
       killBurningBodies();
       for (const s of burns) {
-        if (s.burn <= 0) forceBurn(s, 1, s.char);
-        killBurning(s);                     // restart the window at sec 0
+        // Always restart from FULL burn: the collapse between the kill and this
+        // pin has already eaten into the window, so without this a "half" pin
+        // lands near cold. Then `sec` is the exact point in the burn-down.
+        forceBurn(s, 1, s.char);
+        killBurning(s);
         stepBurn(s, Math.max(0, sec), tuning);
       }
       return burns.map(b => ({ ...b }));

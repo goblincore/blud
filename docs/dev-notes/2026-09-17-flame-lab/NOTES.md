@@ -103,3 +103,81 @@ unchanged so the good upper-body look is untouched. The same end-mass bias
 applies to the arms (fattest prim is the shoulder; offsets want the elbow); it
 is left alone deliberately — arms are not the reported gap and are part of the
 upper-body look the owner likes.
+
+# Flame polish pass (plan tasks 1–5, 2026-09-18)
+
+Captures: `npm run flame:capture -- --technique cards` → `cards-<pose>-<stage>.png`
+for `close|stand|walk|run|collapsed|distant` × `fresh|charred`, the three
+`cards-death-*` frames, and `cards-contact.png` (close-fresh, stand-fresh,
+stand-charred beside Blood tiles 3321/3323/3325). This section is written from
+those images plus the `flow-sweep/` and `bone-sweep/` A/B folders; the commits
+are `d89df81e`, `64befd71`, `3a4a1e6a`, `492c7216`, `afe78c1d`, and this pass's
+task-5 commit.
+
+**1. Close-range card seams — fixed; the guess in the plan was wrong.**
+The plan blamed atlas-UV bleed (Cause A) or hard depth clipping (Cause B). The
+actual cause was the atlas texture NODE being built over a 1×1 `DataTexture`
+whose default filters are Nearest; `WGSLNodeBuilder.isUnfilterable()` then baked
+`textureLoad` into the compiled shader, and because `setAtlas()` swaps by
+`.value` there is no recompile — so the real 31×25 FIRE01 atlas was ALWAYS
+point-sampled and every texel became a ~10 px flat block. All three fixes
+shipped: the Linear/Linear fallback (the fix), a half-texel UV inset plus a 2 px
+atlas gutter, and the soft-particle depth fade (`cardSoftFade`, 0.08 m). In
+`cards-close-fresh` the point-block mosaic at the body edge is gone and the
+flame reads as continuous licks. **Still not right:** at the `close` framing the
+cards' own quad silhouette is visible as flat-topped rectangles against the dark
+(see the upper-left card in `cards-contact.png`). That is the cell art reaching
+the top of the quad, not atlas bleed, and no UV inset can remove it.
+
+**2. Curl-noise flow.** A 64³ seeded RGBA8 curl volume (`curl-volume.ts`) both
+warps each card's atlas UV (bounded to the gutter) and displaces its CPU anchor,
+so a limb's cards move from one field instead of flickering alone; `flameFlow`
+default 0.35. In `flow-sweep/cards-stand-fresh-f0.png` the licks are separate
+quads; at `-f1.png` the whole mass leans and warps together. The sweep stops
+helping near the top: above roughly 0.7 the displacement is large enough to pull
+cards off the flesh and the mass reads sparse/torn, which is why the default is
+0.35.
+
+**3. Flame down the kit-covered legs.** `cardStandoff(slot, {kitRadius})` pushes
+a leg card out past the covering shell and `cardAnchorDrop` lowers the boot slot
+to the boot; the lab feeds the soldier `SOLDIER_LEG_KIT_RADIUS = 0.14` (measured
+from `soldier-kit.gltf`), 0 for the zombie. `--frozen` plus `__flameLab.pose()`
+finally made the A/B pixel-comparable. In `cards-stand-fresh` (soldier legs)
+flame now runs down the greaves and wraps the boot instead of stopping at the
+knee — no visible float off the leg at this framing. **Still not right:** the kit
+is mesh and does not char, so green greave still shows through the flame.
+
+**4. Bone reads as bone.** The old probe result was lerped into albedo as a flat
+pale tint. The probe now drives the bone material: bone albedo with a
+depth-recessed core, near-matte bone gloss, and a normal taken from the isolated
+bone field's own gradient; `skeletonDepth` (default 0.08) is the tunable reveal
+depth. On `cards-close-charred` the skull cap and the forearm tubes read as hard
+shaped bone rather than blotches. **Still not right:** the ribcage still does not
+come through at any `skeletonDepth` in `bone-sweep/` that does not also pale a
+whole limb into looking like fresh flesh (the 0.12/0.15 frames trade ribs for
+that); the accepted compromise is 0.08.
+
+**5. Burning death.** `killBurning()` in `burn-state.ts` starts a
+`corpseBurnSec` (default 6) window in which the char drives to 1 while the fire
+fades linearly to 0; the lab's 'k' key now enters it on every alight body (and
+still collapses), and the card frame carries the burn-down progress as `settle`,
+which pulls the cards horizontally over the corpse's footprint and down to a
+`FLAME_PILE_LIFT` heap while shortening them. `__flameLab.death(sec)` pins an
+exact point in the window and pauses burn integration so the capture is
+repeatable. `cards-death-lit.png` shows both bodies standing in fire;
+`cards-death-midburn.png` shows the killed bodies down with the particles gone:
+the zombie is a dark charred mass under a low band of warm card licks and the
+floor still carries the fire-light pool; `cards-death-out.png` is the same pair
+with the pool dark and `cards.live = 0`, so the flame visibly dies rather than
+snapping off. **Still not right:** at `death-out` the task-4 bone reveal at
+`char = 1` is bright enough (near-white tubes) that the cold zombie reads as
+glowing bone, not as a purely charred corpse; dimming that would change task 4's
+accepted bone look, so it is left as-is. The soldier's mesh kit is still green
+lying in the dark. The mid-burn heap is a low band over the corpse rather than a
+tall column collapsing, which reads closer to the retired `GroundFlame` heap
+than to NotBlood's full flame column.
+
+**Still not right across the pass, in one list:** card quad silhouettes at close;
+flow tearing above ~0.7; unburnt mesh kit on both characters; ribs never read;
+bright bone at full char makes the cold death corpse look lit; the death heap is
+low rather than a collapsing column.
