@@ -40,7 +40,8 @@ early-outs the march with no pipeline change.
 ## Field tuning corrections (deviations from the plan's first pass)
 
 The plan's field produced a **solid saturated orange AABB wall** on the first
-capture (frame above / first screenshot). Two additions fixed it:
+capture (the emission's `exp(-d/0.06)` tail accumulated along the long AABB path
+until the whole box glowed). Two additions fixed it:
 
 - **heat gate**: `emission` is multiplied by `smoothstep(0.08, 0.5, temp)` so
   the `exp(-d/0.06)` tail cannot accumulate a red haze along a long AABB path;
@@ -113,12 +114,12 @@ absolute ms as an upper bound, not the owner's-machine figure.
 
 | scale | bodies | march | resolve | composite | copy | total |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0.5 | 1 | 2.64 | 2.68 | 2.64 | 2.67 | 10.63 |
-| 0.5 | 4 | 3.26 | 3.36 | 3.36 | 3.30 | 13.28 |
-| 0.5 | 8 | 3.80 | 4.03 | 4.02 | 4.02 | 15.87 |
-| 0.25 | 1 | 2.58 | 2.57 | 2.60 | 2.58 | 10.33 |
-| 0.25 | 4 | 3.97 | 4.13 | 4.11 | 4.12 | 16.33 |
-| 0.25 | 8 | 4.01 | 4.10 | 4.08 | 4.06 | 16.25 |
+| 0.5 | 1 | 2.64 | 2.65 | 2.67 | 2.67 | 10.63 |
+| 0.5 | 4 | 3.26 | 3.34 | 3.35 | 3.33 | 13.28 |
+| 0.5 | 8 | 3.80 | 3.98 | 4.06 | 4.03 | 15.87 |
+| 0.25 | 1 | 2.58 | 2.46 | 2.60 | 2.69 | 10.33 |
+| 0.25 | 4 | 3.97 | 4.11 | 4.14 | 4.10 | 16.33 |
+| 0.25 | 8 | 4.01 | 4.08 | 4.10 | 4.06 | 16.25 |
 
 (ms; medians of per-frame timestamp samples.)
 
