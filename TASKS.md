@@ -24,7 +24,16 @@
   edits, zero conflicts); `scripts/integrate-seams.ts` did the single integration edit and refuses to write
   unless every named member is found. **game-main.ts 14,549 → 12,568.** Runtime-verified: all 400 seams and
   all 22 moved members present, game renders.
-- [ ] The `__sdfGame` literal still holds **378 smaller members (~2,963 lines)**. Same recipe, more groups.
+- [x] The remaining **256 members (~1,400 lines)** lifted into six slice modules
+  (`game-seams-{world,render,boot,weapon-player,fx,misc}.ts`) by `scripts/extract-seam-group.ts` — an AST
+  cut-and-paste, not agents: the members averaged 8 lines and 325/378 needed only `ctx`, so a verbatim move by
+  script beats six parallel hand-copies whose failure mode (an altered literal that still type-checks) the pixel
+  gate cannot localise. **game-main.ts 12,569 → 11,170.**
+- [ ] ~**52 members (~570 lines)** remain in the literal: the ones still closing over `main()`-scope functions
+  (`spillVerdict`, `rebuildCast`, `spawnEnemy`, `updateHud`, `playerRoomId`, `ZOMBIE_RADIUS`, …). They need
+  explicit deps objects — extract their dependencies first, bottom-up.
+- [ ] Then the giants: `tick` (907 lines, 12 slices), `handle.setDrawFn` closure (589), `spawnEnemy` (260),
+  `gibActor` (245), `detonateAt` (167).
 - [ ] Then the remaining leaves (63 functions, 848 lines) and the giants (`tick` 907, `setDrawFn` 589,
   `spawnEnemy` 260). Extraction must run **bottom-up** — free names are mostly other `main()`-scope functions.
 - [ ] **Filed, not fixed (both predate this work):** `march-hash.mjs`'s pinned canonical is STALE
