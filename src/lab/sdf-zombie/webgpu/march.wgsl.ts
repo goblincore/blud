@@ -3950,6 +3950,14 @@ ${FACE_LAYER_WGSL}
     let coverBias = mix(0.85, -0.15, burnFireCoverage);
     let fire = clamp(fireN - coverBias, 0.0, 1.0) * burnAmt * (1.0 - charAmt * 0.55);
     let sootMask = clamp((1.0 - fire) * burnCharPatch + charAmt, 0.0, 1.0);
+    // SOOT NOISE, the same fbm that drives the char/soot split placed on its
+    // soot side: the fbm is signed (noise3 returns -1..1), so fireN < 0 is
+    // where the flesh chars. Remap it to 1 at the soot end and 0 at the flame
+    // end. The bone streaks below read this, so a dark streak in the bone lines
+    // up with the soot patch on the flesh beside it. Kept separate from
+    // sootMask because charAmt drives sootMask to 1 on a fully charred body,
+    // which would flatten the streaks out.
+    let sootNoise = clamp(0.5 - 0.5 * fireN, 0.0, 1.0);
     albedo = mix(albedo, charColor, sootMask);
     // Burnt meat is not wet latex. Killing gloss and metal is most of what
     // makes a charred body read as charred rather than as a dark body.
@@ -3988,7 +3996,15 @@ ${FACE_LAYER_WGSL}
       // depth, so the depth term alone cannot save it -- the cap below does.
       let nearBoneLin = 1.0 - smoothstep(0.0, revealDepth, max(boneProbe, 0.0));
       let nearBone = nearBoneLin * nearBoneLin;
-      let showBone = clamp(nearBone * skelK, 0.0, 1.0);
+      // REVEAL GATE (skeleton pass D). Bone only shows through flesh that has
+      // actually burnt through: char must pass 0.55 and the same soot mask that
+      // darkens the flesh must be high, so the reveal rides charred patches
+      // instead of lifting a whole limb. Both gates are 1 at char 1, so the
+      // full-char corpse keeps the reveal; they only trim the mid stages.
+      let charGate = smoothstep(0.55, 0.62, charAmt);
+      let sootGate = smoothstep(0.35, 0.8, sootMask);
+      let revealGate = charGate * sootGate;
+      let showBone = clamp(nearBone * skelK * revealGate, 0.0, 1.0);
       // BONE, NOT A PALE TINT (flame-polish task 4). The old branch lerped
       // albedo straight toward boneColor and left the flesh normal and gloss
       // alone, so the result was a flat pale patch with skin bumps in it --
@@ -4019,29 +4035,37 @@ ${FACE_LAYER_WGSL}
           // skelK, so even a faint reveal has the tube's own shading.
           n = normalize(mix(n, boneN, clamp(nearBone * 0.95, 0.0, 0.95)));
         }
-        // SCORCHED BONE (bone-fix pass). Bone that has been in a fire is dark
-        // grey-brown, not ivory. Mix the clean bone colour toward a scorched
-        // tone as charAmt rises, so at char 1 the revealed bone is only a
-        // little lighter than the surrounding char instead of undoing the
-        // char and making a burnt body read pale. The depth term now only
-        // DARKENS (0.8..1.0) -- shape comes from the bone normal and the gloss
-        // difference, never from lifting the albedo above the char.
-        let scorchedBone = vec3<f32>(0.16, 0.13, 0.11);
-        let boneShade = mix(boneColor, scorchedBone, charAmt) * mix(0.8, 1.0, nearBone);
+        // BONE AS BONE (skeleton pass D). Scorched grey kept a charred body
+        // from reading pale, but it also killed the skeleton read: the bone
+        // landed at ~1.4x the surrounding char with no ivory anywhere. The
+        // reveal is now restricted (char > 0.55 and soot-high patches, see
+        // revealGate), so the bone can carry an actual ivory tone again without
+        // paling a whole limb. THREE terms, all needed:
+        //   ivory        -- clean bone colour, the thing that reads as skeleton;
+        //   sootStreak   -- the SAME fbm that drives the char/soot split, taken
+        //                   on its soot side, so a dark streak in the bone lines
+        //                   up with the soot on the flesh beside it;
+        //   cavity       -- nearBone 1 on the bone surface, 0 deep in the gap
+        //                   toward the charred flesh, which is what gives the
+        //                   tube its rounded, recessed read.
+        let boneIvory = vec3<f32>(0.72, 0.66, 0.55);
+        let sootStreak = mix(1.0, 0.25, sootNoise);
+        let cavity = mix(0.12, 1.0, nearBone);
+        let boneShade = boneIvory * sootStreak * cavity;
         // CAP THE REVEAL at skelK (which is charAmt * skeletonShow, so never
         // above skeletonShow). The old unconditional 3.5 gain saturated any
         // showBone above ~0.29 to a full bone mix, which is what turned a
         // whole thin forearm bone-coloured end to end. The gain still sharpens
         // the core, but the cap means a limb can only ever be PART bone, so it
-        // stays a charred limb with bone hinted along it.
-        boneMat = clamp(nearBone * 3.5, 0.0, 1.0) * skelK;
+        // stays a charred limb with bone hinted along it. revealGate trims the
+        // whole mix to the burnt-through patches.
+        boneMat = clamp(nearBone * 2.2, 0.0, 1.0) * skelK * revealGate;
         albedo = mix(albedo, boneShade, boneMat);
-        // Bone is matte but not dead-flat like char; a slight gloss difference
-        // from the soot-killed flesh is what keeps the tube's shape readable.
-        // Mixing (never multiplying) lets bone recover a sheen. Lowered from
-        // 0.45: a stronger sheen caught the key light and read as lit bone on
-        // the cold death corpse.
-        gloss = mix(gloss, 0.3, boneMat);
+        // Bone is matte but not dead-flat like char; a low, non-zero gloss with
+        // no metal is enough for the rounded shape to catch the key light and
+        // read as a tube rather than a flat ivory patch.
+        gloss = mix(gloss, 0.25, boneMat);
+        metal = mix(metal, 0.0, boneMat);
       }
     }
     // Revealed bone is not on fire. Damp the fire emission by the bone mix so
