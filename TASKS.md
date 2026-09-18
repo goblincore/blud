@@ -51,15 +51,20 @@
   instances), the next read a stale warm-up leftover (35). `bench` already reset that phase; `demoScenario`,
   the member the hash tool actually drives, never did. Fix: `ctx.probes.gatherTick = 0` in `demoScenario`.
   **Verified:** `instances` at frame 0 is now identical across runs (240/240, same min and zero fraction).
-- [ ] **NOT fully fixed — residual sub-LSB divergence in `probeDyn`.** `sdf-demo-hash ab` is INTERMITTENT: it
-  passed twice (`OK: 24/24`, probeDyn nonZero 6316) and then failed (`DIVERGED at frame 0`, nonZero 6388).
-  On the failing run, frame 0's probeDyn summary stats are **identical to six significant figures** across both
-  runs — nonZero 6388, min −0.540611, max 3.54491, zeroFraction 1875 — while the **hash differs**
-  (2143084656 vs 4125444763), and `instances` matches exactly. So this is a sub-LSB float difference in the
-  gather's output, which `frame-hash.ts` preserves on purpose, not a CPU sequencing bug. Suspect GPU
-  accumulation order inside the gather (ray/light accumulation, workgroup scheduling). It may be inherent to
-  the hardware, in which case the gate needs a tolerance for this layer rather than a fix.
-  **Until this is resolved, no A/B measured through `sdf-demo-hash` is trustworthy.**
+- [x] **Sub-LSB tolerance added for `probeDyn`** (`scripts/lib/layer-tolerance.mjs`, 12 tests). A hash may differ
+  ONLY when every statistic still agrees: both sides live (`nonZero > 0`, checked first), finite, equal
+  `nonZero`/`sampled`/`floats`/`zeroFraction`, and min/max within 1e-5 relative. `marchTarget` and `instances`
+  stay EXACT. It is opt-in per call site — the negative control stays strict so it cannot tolerate away the
+  break it injects — and every exercised tolerance is printed, because a silent tolerance is how a gate rots.
+- [ ] **STILL FAILING, and now REPRODUCIBLE — it is a cold-vs-warm page difference, not GPU noise.** Three
+  consecutive `sdf-demo-hash ab` runs failed identically: run A (first page load) always reports probeDyn
+  nonZero **6388**, run B (second load) always **6316**, with
+  `marchTarget [min 0.00111522→0.000199939, max 0.980713→13.4053] tiles 4,5,6,7,9,10`. A **13× swing in
+  marchTarget max** is not sub-LSB, so the tolerance correctly does NOT mask it — that is the tolerance working.
+  The earlier "identical stats, different hash" sample was one case of a larger effect. This is the failure
+  `bench`'s own comment predicted ("between a first page load and a warm one"), so the recorder's warm-up is
+  not reaching a settled state before frame 0 despite `warmup: 90`. Being systematic, it is now tractable.
+  **Until it is resolved, no A/B measured through `sdf-demo-hash` is trustworthy.**
 - [x] **Guard added after a near-miss.** Copying `bench`'s full reset (`pendingGather = null` +
   `gather?.reset()`) also made the runs agree — by zeroing the dynamic probe layer outright (probeDyn nonZero
   6316 → 0), which is the black-silhouette regression `frame-hash.ts` exists to catch. `sdf-demo-hash.mjs` now
