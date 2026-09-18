@@ -10,8 +10,13 @@
   [Spec](docs/superpowers/specs/2026-09-17-burning-enemies-flame-lab-design.md) ·
   [plan](docs/superpowers/plans/2026-09-17-flame-lab-foundation.md) ·
   [captures](docs/dev-notes/2026-09-17-flame-lab/NOTES.md).
-- [ ] Next: the three tongue techniques (screen-space, flame cards, volumetric), then the owner picks a look, then measure.
-- [ ] Then: flare gun + burning behaviour (second spec, not yet written).
+- [x] Tongues: owner chose **flame cards** (Blood FIRE01 atlas, `npm run flame:atlas`, untracked). Screen-space stays switchable; volumetric skipped.
+  Polish: seams, curl flow, leg coverage, burn-down, dark scorched bone. [Plans](docs/superpowers/plans/2026-09-18-flame-polish.md).
+- [x] In-game test harness: slot `3` ignites what you hit, `__sdfGame.igniteAll()` / `extinguishAll()`. Throwaway, not the weapon.
+  Needs the atlas + `public/assets/lab/flaregun-placeholder.glb` (both untracked). [Notes](docs/dev-notes/2026-09-18-flare-ingame-test/NOTES.md).
+- [ ] Next: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
+- [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
+  Explosion curl look (game default OFF; faint residual cross remains) · blood DENSITY lab spike reads as goo (not shippable: needs per-stream goo fields).
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
