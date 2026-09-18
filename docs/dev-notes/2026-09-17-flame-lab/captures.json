@@ -25,7 +25,7 @@
     }
   ],
   "contact": {
-    "file": "contact.png",
+    "file": "cards-contact.png",
     "frames": [
       "cards-close-fresh.png",
       "cards-stand-fresh.png",
@@ -44,84 +44,84 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-close-fresh.png",
-      "std": 66.03
+      "std": 72.28
     },
     {
       "pose": "close",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-close-charred.png",
-      "std": 58.53
+      "std": 62.07
     },
     {
       "pose": "stand",
       "stage": "fresh",
       "char": 0,
       "file": "cards-stand-fresh.png",
-      "std": 42.95
+      "std": 40.9
     },
     {
       "pose": "stand",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-stand-charred.png",
-      "std": 38.35
+      "std": 36.61
     },
     {
       "pose": "walk",
       "stage": "fresh",
       "char": 0,
       "file": "cards-walk-fresh.png",
-      "std": 42.01
+      "std": 41.62
     },
     {
       "pose": "walk",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-walk-charred.png",
-      "std": 39.57
+      "std": 38.78
     },
     {
       "pose": "run",
       "stage": "fresh",
       "char": 0,
       "file": "cards-run-fresh.png",
-      "std": 42.22
+      "std": 43.15
     },
     {
       "pose": "run",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-run-charred.png",
-      "std": 38.76
+      "std": 40.47
     },
     {
       "pose": "collapsed",
       "stage": "fresh",
       "char": 0,
       "file": "cards-collapsed-fresh.png",
-      "std": 37.27
+      "std": 37.37
     },
     {
       "pose": "collapsed",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-collapsed-charred.png",
-      "std": 32.61
+      "std": 33.49
     },
     {
       "pose": "distant",
       "stage": "fresh",
       "char": 0,
       "file": "cards-distant-fresh.png",
-      "std": 23.65
+      "std": 23.31
     },
     {
       "pose": "distant",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-distant-charred.png",
-      "std": 21.41
+      "std": 22.24
     }
   ]
 }

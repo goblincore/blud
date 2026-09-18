@@ -61,3 +61,45 @@ The fix pass ran as dispatch tasks `2026-09-17-flame-fix-task-a` (done) and
 captures; this note and a mangled comment in the capture script were the
 unfinished remainder, completed by hand). Reports are in
 `~/.claude/dispatch/reports/`.
+
+## Flame cards (plan task 3, verified 2026-09-18)
+
+Captures: `npm run flame:capture -- --technique cards` →
+`cards-<pose>-<stage>.png` + `cards-contact.png` (close-fresh, stand-fresh and
+stand-charred beside tiles 3321/3323/3325). Atlas: `npm run flame:atlas` packs
+FIRE01 tiles 3532-3539 into the untracked `public/assets/flame-placeholder/`
+(gitignored; never committed).
+
+**What the frames actually show.**
+
+- **Stand / walk / run read as fire, not particles.** The FIRE01 flipbook at a
+  Nearest mag filter gives crisp, ragged licks with dark gaps between them;
+  they rise past the silhouette and do not pulse in step. This is the closest
+  any technique has come to the reference tiles.
+- **Upper body is the strongest part.** Heads and torsos are well engulfed;
+  the flame licks read as fire in motion.
+- **The lower body is still thin and the soldier's is bare below the knee.**
+  Root cause is the soldier's MESH greaves: `depthTest` stays on (walls and
+  bodies must occlude), and the kit writes depth several centimetres outside
+  the SDF shin, so the shin/boot cards are occluded. A per-slot camera-bias
+  experiment that pushed those cards forward was tried and abandoned: the
+  lab's camera/pose drift between runs made the A/B unjudgeable and the frame
+  contrast dropped.
+- **Close-ups show hard card seams.** At `close` the atlas cells read as
+  rectangular pixel blocks where a card crosses the body edge — the documented
+  card-clipping failure mode, worst at close.
+- **Collapsed poses keep the flame on the body** (the posed-anchor fix holds);
+  the legs stay sparse there too.
+- **Distant is unaffected** (luma std ~22): the cards add without wrecking
+  readability.
+
+**Leg anchor correction.** `limbCentre` used a limb's FATTEST prim; for a leg
+that is an end mass — the soldier's hip ball at y≈1.12, the zombie's splayed
+foot at y≈0.24 — so the `FLAME_CARD_SLOTS` offsets, which are authored against
+the mid-limb centre, landed at the waist or the ankle. `limbAnchors` now feeds
+the legs the posed cluster MEAN centre (`refitClusters`): soldier y≈0.80,
+zombie y≈0.52, moving the leg cards ~0.3 m onto the leg. Head/torso/arms are
+unchanged so the good upper-body look is untouched. The same end-mass bias
+applies to the arms (fattest prim is the shoulder; offsets want the elbow); it
+is left alone deliberately — arms are not the reported gap and are part of the
+upper-body look the owner likes.
