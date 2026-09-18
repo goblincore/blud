@@ -129,6 +129,15 @@
   awaits `sdfLayer.precompilePasses` (async pipeline creation, `PRECOMPILE_COLD_PASS_TIMEOUT_MS` = 180 s per pass) BEFORE
   `drawOnce`. Headed A/B, cold cache: unfixed = `device-lost` after a 73.8 s blocked `drawOnce`; fixed = 75.8 s idle wait,
   `drawOnce` 1.1 s, gate `ready`. Cached boot unchanged (~2.3 s warm). The in-app-browser GPU loss above is likely the same.
+- [x] **Mid-game "freeze after switching slug/pellets" — root-caused and fixed 2026-09-18.** Not the ammo switch: the first
+  DISMEMBERMENT of a session (the slug is just what severs first) drew the shared gib/chunk march material — its own ~240 KB
+  shader variant that no boot object uses — and three built it SYNCHRONOUSLY mid-game, once per context (gib shutter
+  half-float layer, then the march MRT). Measured on a cold Metal cache: a 47.8 s no-frames stall, then a second one. The
+  warm-up now adds a throwaway chunk view on the shared material before the async march compile, and
+  `gibShutter.precompileSubject` compiles the shutter context. Probe after: zero large sync pipeline creations in play, worst
+  frame 187 ms. This is also the old "first-use gib-material compile hitch" item above.
+- [ ] Residual 100-190 ms hitches remain on the first slug hit / a later pellet hit (one small pipeline created each) — not
+  yet attributed.
 - [ ] The cold march compile itself is still ~75 s (now a wait behind the loader, not a crash). Worth attributing: which march
   variant / which Metal-compiler pathology (loop nest? inlining of `mapBody`?) and whether it can be cut. The flare-gun branch
   needs this fix merged — its dev server is where the owner hit the loss.

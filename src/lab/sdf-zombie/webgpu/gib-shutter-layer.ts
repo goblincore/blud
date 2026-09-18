@@ -136,6 +136,18 @@ export interface GibShutterLayer {
   ): THREE.RenderTarget | null;
   /** Allocate targets against the real capture size and compile the resolve. */
   prewarm(capture: THREE.RenderTarget): boolean;
+  /**
+   * Compile `object`'s material in THIS layer's selected-piece context (the
+   * half-float layer target, camera on GIB_BLUR_LAYER) through the ASYNC
+   * pipeline API. The gib march material is a ~240 KB shader; first drawn here
+   * by `capture` it was built SYNCHRONOUSLY mid-game, a 45 s GPU-process stall
+   * on a cold Metal cache (measured 2026-09-18). Bounded by `timeoutMs`; the
+   * object's layer mask is restored. Resolves false when nothing was compiled.
+   */
+  precompileSubject(
+    object: THREE.Object3D, capture: THREE.RenderTarget, scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera, timeoutMs: number,
+  ): Promise<boolean>;
   diagnostics(): GibShutterDiagnostics;
   /** Put every subject back on its base layer (dispose / hard failure). */
   restoreLayers(): void;
@@ -397,6 +409,39 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     setDepthBiasM(m) { depthBiasM = resolveDepthBiasM(m); return depthBiasM; },
     select,
     capture,
+    async precompileSubject(object, cap, scene, camera, timeoutMs) {
+      if (!supported) return false;
+      const prevTarget = renderer.getRenderTarget();
+      const prevCamMask = camera.layers.mask;
+      const prevObjMask = object.layers.mask;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        ensureTargets(cap);
+        if (!layerTarget) return false;
+        object.layers.set(GIB_BLUR_LAYER);
+        camera.layers.set(GIB_BLUR_LAYER);
+        renderer.setRenderTarget(layerTarget);
+        const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), timeoutMs); });
+        const outcome = await Promise.race([renderer.compileAsync(object, camera, scene).then(() => 'ok' as const), timeout]);
+        if (outcome === 'timeout') {
+          // eslint-disable-next-line no-console
+          console.warn(`[gib-shutter] subject precompile did not settle in ${timeoutMs} ms — skipped`);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        // Best-effort, like every warm step: NOT routed through fail(), which
+        // would disable the layer over a warm-up that merely did not help.
+        // eslint-disable-next-line no-console
+        console.warn('[gib-shutter] subject precompile failed', err);
+        return false;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        renderer.setRenderTarget(prevTarget);
+        camera.layers.mask = prevCamMask;
+        object.layers.mask = prevObjMask;
+      }
+    },
     prewarm(capture) {
       if (!supported) return false;
       try {
