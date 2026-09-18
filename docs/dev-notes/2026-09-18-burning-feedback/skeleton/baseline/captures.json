@@ -1,0 +1,253 @@
+{
+  "url": "/sdf-flame-lab.html?seed=1&tongue=cards",
+  "backend": "webgpu",
+  "viewport": {
+    "width": 1380,
+    "height": 820
+  },
+  "technique": "cards",
+  "flow": null,
+  "flowSweep": null,
+  "kitStandoff": null,
+  "kitSweep": null,
+  "clock": 0,
+  "frozen": true,
+  "burst": 1,
+  "poses": [
+    "close",
+    "stand"
+  ],
+  "stages": [
+    {
+      "name": "fresh",
+      "char": 0
+    },
+    {
+      "name": "charred",
+      "char": 0.6
+    },
+    {
+      "name": "full",
+      "char": 1
+    }
+  ],
+  "luma": true,
+  "lumaReport": [
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "bodyPx": 166611,
+      "off": {
+        "px": 166611,
+        "mean": 67.58,
+        "median": 57.03,
+        "boneFrac": 0.1281,
+        "max": 255
+      },
+      "on": {
+        "px": 166611,
+        "mean": 116.75,
+        "median": 105.07,
+        "boneFrac": 0.1017,
+        "max": 255
+      }
+    },
+    {
+      "pose": "close",
+      "stage": "full",
+      "char": 1,
+      "bodyPx": 168776,
+      "off": {
+        "px": 168776,
+        "mean": 60.04,
+        "median": 45.26,
+        "boneFrac": 0.1803,
+        "max": 255
+      },
+      "on": {
+        "px": 168776,
+        "mean": 104.46,
+        "median": 83.07,
+        "boneFrac": 0.2421,
+        "max": 255
+      }
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "bodyPx": 26893,
+      "off": {
+        "px": 26893,
+        "mean": 66.71,
+        "median": 59.03,
+        "boneFrac": 0.0861,
+        "max": 255
+      },
+      "on": {
+        "px": 26893,
+        "mean": 119.46,
+        "median": 108.84,
+        "boneFrac": 0.0684,
+        "max": 255
+      }
+    },
+    {
+      "pose": "stand",
+      "stage": "full",
+      "char": 1,
+      "bodyPx": 27021,
+      "off": {
+        "px": 27021,
+        "mean": 59.64,
+        "median": 49.42,
+        "boneFrac": 0.1289,
+        "max": 255
+      },
+      "on": {
+        "px": 27021,
+        "mean": 108.08,
+        "median": 88.99,
+        "boneFrac": 0.203,
+        "max": 255
+      }
+    }
+  ],
+  "contact": {
+    "file": "cards-contact.png",
+    "frames": [
+      "cards-close-fresh.png",
+      "cards-stand-fresh.png",
+      "cards-stand-charred.png"
+    ],
+    "tiles": [
+      "3321.png",
+      "3323.png",
+      "3325.png"
+    ],
+    "bodyPx": 400
+  },
+  "shots": [
+    {
+      "pose": "close",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-close-fresh.png",
+      "std": 77.04,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "close",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-close-fresh-off.png",
+      "std": 57.13,
+      "off": true
+    },
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-close-charred.png",
+      "std": 72.13,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-close-charred-off.png",
+      "std": 36.35,
+      "off": true
+    },
+    {
+      "pose": "close",
+      "stage": "full",
+      "char": 1,
+      "file": "cards-close-full.png",
+      "std": 71.97,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "close",
+      "stage": "full",
+      "char": 1,
+      "file": "cards-close-full-off.png",
+      "std": 35.68,
+      "off": true
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh.png",
+      "std": 44.31,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh-off.png",
+      "std": 28.92,
+      "off": true
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred.png",
+      "std": 39.6,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred-off.png",
+      "std": 21.6,
+      "off": true
+    },
+    {
+      "pose": "stand",
+      "stage": "full",
+      "char": 1,
+      "file": "cards-stand-full.png",
+      "std": 38.14,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "full",
+      "char": 1,
+      "file": "cards-stand-full-off.png",
+      "std": 21.36,
+      "off": true
+    }
+  ]
+}

@@ -765,20 +765,27 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('gloss = mix(gloss');
   });
 
-  it('scorches the revealed bone with char and caps the reveal at skeletonShow', () => {
-    // The bone-as-bone pass overshot: a thin limb's capsule runs its whole
-    // length at a shallow depth, so every fragment along it saturated to a
-    // full bone mix and a fully charred body read PALE -- undoing the char.
-    // Bone that has been in a fire is dark grey-brown, not ivory, so the
-    // albedo must mix from the clean bone colour toward a scorched tone as
-    // charAmt rises (this is the line the fix adds). Shape comes from the
-    // normal and the gloss difference, not from brightness.
-    expect(MARCH_BODY).toContain('let scorchedBone = vec3<f32>(0.16, 0.13, 0.11);');
-    expect(MARCH_BODY).toContain('let boneShade = mix(boneColor, scorchedBone, charAmt)');
-    // CAP THE REVEAL. Scaling the mix by skelK -- charAmt * burnSkeleton --
-    // makes skeletonShow a hard ceiling, so no fragment can ever become fully
-    // bone and a whole thin limb stays a charred limb with bone hinted in it.
-    expect(MARCH_BODY).toContain('boneMat = clamp(nearBone * 3.5, 0.0, 1.0) * skelK;');
+  it('shades revealed bone as ivory with soot streaks, gated to burnt-through patches', () => {
+    // The bone-fix pass made revealed bone dark/scorched so a fully charred
+    // body stayed black -- which also killed the skeleton read. The reveal is
+    // now gated to char > 0.55 and soot-high patches, so an ivory bone can
+    // read again without paling a whole limb.
+    expect(MARCH_BODY).toContain('let charGate = smoothstep(0.55, 0.62, charAmt);');
+    expect(MARCH_BODY).toContain('let sootGate = smoothstep(0.35, 0.8, sootMask);');
+    expect(MARCH_BODY).toContain('let revealGate = charGate * sootGate;');
+    // Ivory, soot streaks from the same fbm that drives the char pattern, and
+    // a cavity term that darkens toward the gap between bone and flesh.
+    expect(MARCH_BODY).toContain('let boneIvory = vec3<f32>(0.72, 0.66, 0.55);');
+    expect(MARCH_BODY).toContain('let sootNoise = clamp(0.5 - 0.5 * fireN, 0.0, 1.0);');
+    expect(MARCH_BODY).toContain('let sootStreak = mix(1.0, 0.25, sootNoise);');
+    expect(MARCH_BODY).toContain('let cavity = mix(0.12, 1.0, nearBone);');
+    expect(MARCH_BODY).toContain('let boneShade = boneIvory * sootStreak * cavity;');
+    // CAP THE REVEAL at skelK (charAmt * skeletonShow), now also trimmed by
+    // revealGate, so no fragment can ever become fully bone.
+    expect(MARCH_BODY).toContain('boneMat = clamp(nearBone * 2.2, 0.0, 1.0) * skelK * revealGate;');
+    // Low non-zero gloss, no metal: enough for the rounded tube to read.
+    expect(MARCH_BODY).toContain('gloss = mix(gloss, 0.25, boneMat);');
+    expect(MARCH_BODY).toContain('metal = mix(metal, 0.0, boneMat);');
     // Nothing emissive: revealed bone must not pick up the fire emission, or
     // the cold death corpse reads as glowing bone.
     expect(MARCH_BODY).toContain('gBurnEmit = fireRamp(fire) * fire * burnFireGain * (1.0 - boneMat);');

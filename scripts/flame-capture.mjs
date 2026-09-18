@@ -68,6 +68,12 @@
 // and are shot at one camera, which is how the bone-reveal A/B is judged
 // (flame-polish task 4). --skeleton-show <0..1> pins the strength for the run
 // (-s<value> tag) so the reveal ceiling can be judged beyond its 0.7 default.
+// --stages fresh,charred,full selects the pinned char stages (full = char 1);
+// --luma shoots a fire-off twin of each stage and prints the body-silhouette
+// mean/median luminance and the 2x-median "bone" fraction per pose. Use --luma
+// with --frozen: the silhouette mask is a char diff between two frames, so it
+// needs the camera and pose pinned. This is the skeleton pass's before/after
+// gate; normal runs are unchanged.
 // Exits 0 on success, 2 if it could not run (boot failure, page exception,
 // no WebGPU backend, a flat capture).
 import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:fs';
@@ -79,10 +85,16 @@ const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(2); };
 // The fixed pose set, and the stage names a stage's char value pins. Declared
 // before arg parsing so --poses can validate against it.
 const POSES = ['close', 'stand', 'walk', 'run', 'collapsed', 'distant', 'death'];
-const STAGES = [
-  { name: 'fresh', char: 0 },
-  { name: 'charred', char: 0.6 },
-];
+// The named char stages. `full` (char 1) is opt-in through --stages so the
+// canonical fresh/charred capture set is unchanged; it exists for the skeleton
+// pass, whose bone reveal only fully engages once flesh has burnt through
+// (step 3's char > 0.55 gate).
+const STAGE_BY_NAME = Object.freeze({
+  fresh: { name: 'fresh', char: 0 },
+  charred: { name: 'charred', char: 0.6 },
+  full: { name: 'full', char: 1 },
+});
+const STAGES = [STAGE_BY_NAME.fresh, STAGE_BY_NAME.charred];
 
 // --- technique switch (flame-tongues plan task 3) ---------------------------
 // `--technique <none|screen|cards|volume>` boots the page with &tongue=<name>
@@ -232,6 +244,34 @@ let poseList = null;{
     poseList = names;
     argv.splice(i, 2);
   }
+}
+// --- stage selection + body-luminance report (skeleton pass) ----------------
+// `--stages fresh,charred,full` replaces the default stage list; `full` pins
+// char 1. `--luma` additionally shoots a fire-off twin of every stage
+// (`<name>-off.png`, burn 0 at the same pinned char, so no flame and no fire
+// light — the clean surface) and reports, per pose, the mean luminance, median
+// and "brighter than 2x the charred-flesh median" fraction of the BODY
+// SILHOUETTE. The silhouette is the pixel diff between the char-0 off frame and
+// the stage's off frame at the frozen camera/pose, so the dark lab background
+// and the mesh kit (which does not char) drop out. Use with --frozen: the mask
+// is only meaningful when two runs frame and pose identically.
+const STAGE_NAMES = Object.keys(STAGE_BY_NAME);
+let stageList = null;{
+  const i = argv.indexOf('--stages');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    const names = v === undefined ? [] : v.split(',').map((s) => s.trim()).filter(Boolean);
+    if (names.length === 0 || names.some((n) => !STAGE_NAMES.includes(n))) {
+      fail(`--stages must be a comma-separated subset of ${STAGE_NAMES.join(',')}`);
+    }
+    stageList = names.map((n) => STAGE_BY_NAME[n]);
+    argv.splice(i, 2);
+  }
+}
+let luma = false;
+{
+  const i = argv.indexOf('--luma');
+  if (i !== -1) { luma = true; argv.splice(i, 1); }
 }
 // --clock <seconds> freezes the lab's VISUAL clock (flipbook + curl phase) for
 // the whole run, so a --flow-sweep's values share one animation instant and
@@ -590,6 +630,55 @@ function pngStats(png) {
   return { w, h, mean: +mean.toFixed(2), std: +Math.sqrt(s2 / n - mean * mean).toFixed(2) };
 }
 
+// --- body-silhouette luminance report (skeleton pass) -----------------------
+// The per-shot pngStats above is the WHOLE frame: the dark room dominates it, so
+// a change confined to a body moves it by hundredths. These helpers measure the
+// body itself. Everything is 0..255 luma; the mask comes from the char change
+// (unburnt vs charred), not from the flames, so it is the body silhouette.
+
+/** Luma (0..255) per pixel of a decoded RGB(A) PNG. */
+function lumaOf(rgba) {
+  const out = new Float32Array(rgba.length / 4);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = 0.299 * rgba[i * 4] + 0.587 * rgba[i * 4 + 1] + 0.114 * rgba[i * 4 + 2];
+  }
+  return out;
+}
+
+/** Silhouette mask: pixels whose luma moved between the unburnt reference and
+ *  the stage frame by more than `threshold`. Char darkens the whole body, so
+ *  this marks flesh; the static room and the unburnt mesh kit do not move. */
+function charMask(refLuma, stageLuma, threshold = 8) {
+  const mask = new Uint8Array(refLuma.length);
+  let n = 0;
+  for (let i = 0; i < mask.length; i++) {
+    if (Math.abs(refLuma[i] - stageLuma[i]) > threshold) { mask[i] = 1; n++; }
+  }
+  return { mask, n };
+}
+
+/** Stats over the masked (body) pixels of one image. `boneFrac` is the fraction
+ *  brighter than 2x the masked median — the pass's skeleton-read gate. */
+function maskStats(luma, mask) {
+  let n = 0, sum = 0;
+  const vals = [];
+  for (let i = 0; i < luma.length; i++) {
+    if (!mask[i]) continue;
+    n++; sum += luma[i]; vals.push(luma[i]);
+  }
+  if (n === 0) return { px: 0, mean: 0, median: 0, boneFrac: 0, max: 0 };
+  vals.sort((a, b) => a - b);
+  const m = vals.length >> 1;
+  const med = vals.length % 2 ? vals[m] : (vals[m - 1] + vals[m]) / 2;
+  const thr = 2 * med;
+  let bone = 0;
+  for (const v of vals) if (v > thr) bone++;
+  return {
+    px: n, mean: +(sum / n).toFixed(2), median: +med.toFixed(2),
+    boneFrac: +(bone / n).toFixed(4), max: +vals[vals.length - 1].toFixed(1),
+  };
+}
+
 // --- contact sheet ----------------------------------------------------------
 
 const CRC_TABLE = new Int32Array(256).map((_, n) => {
@@ -839,7 +928,7 @@ for (const pose of (poseList ?? POSES)) {
   }
   await frames(SETTLE_POSE[pose]);
 
-  for (const stage of STAGES) {
+  for (const stage of (stageList ?? STAGES)) {
     // Pin the stage, then stop the char creep (see HOLDING A STAGE above).
     await evaluate(`(() => {
       window.__flameLab.capture(1, ${stage.char});
@@ -898,6 +987,67 @@ for (const pose of (poseList ?? POSES)) {
         }
       }
     }
+    // FIRE-OFF TWIN (--luma): burn 0 at the same pinned char, so the frame has
+    // no flame emission and no fire light — the pure charred/bone surface the
+    // report measures. char is monotonic, so this never rewinds a later stage.
+    if (luma) {
+      await evaluate(`window.__flameLab.capture(0, ${stage.char})`);
+      await frames(SETTLE_STAGE);
+      const offShot = await send('Page.captureScreenshot', { format: 'png' });
+      const offBuf = Buffer.from(offShot.result.data, 'base64');
+      const offName = `${shotPrefix}${pose}-${stage.name}-off.png`;
+      writeFileSync(`${OUT}/${offName}`, offBuf);
+      const offStats = pngStats(offBuf);
+      if (offStats.unsupported) fail(`${offName}: not a decodable 8-bit RGB(A) PNG`);
+      if ((offStats.std ?? 0) < MIN_LUMA_STD) fail(`${offName}: flat frame (luma std ${offStats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
+      shots.push({ pose, stage: stage.name, char: stage.char, file: offName, std: offStats.std, off: true, buf: offBuf });
+      console.log(`${offName}  (char=${stage.char}, fire OFF, luma std=${offStats.std})`);
+    }
+  }
+}
+
+// --- body-luminance report (--luma) -----------------------------------------
+// Pairs each stage's fire-off frame with the char-0 fire-off reference at the
+// same pose. The mask is the char diff, so it is the body silhouette; mean,
+// median and the 2x-median "bone" fraction are then read off the same stage's
+// on and off frames. `off` is the pure surface (no flame emission), which is
+// what the bone-shading pass has to move without tripping the +15% gate.
+let lumaReport = null;
+if (luma) {
+  const lumaCache = new Map();
+  const lumaFor = (file) => {
+    if (!lumaCache.has(file)) {
+      const s = shots.find((x) => x.file === file);
+      if (!s) return null;
+      const d = decodePng(s.buf);
+      if (d.unsupported) fail(`${file}: not decodable for the luma report`);
+      lumaCache.set(file, lumaOf(d.rgba));
+    }
+    return lumaCache.get(file);
+  };
+  lumaReport = [];
+  for (const pose of (poseList ?? POSES)) {
+    const ref = lumaFor(`${shotPrefix}${pose}-fresh-off.png`);
+    if (!ref) continue;                       // --stages omitted fresh
+    for (const stage of (stageList ?? STAGES)) {
+      if (stage.name === 'fresh') continue;
+      const offL = lumaFor(`${shotPrefix}${pose}-${stage.name}-off.png`);
+      if (!offL) continue;
+      const onL = lumaFor(`${shotPrefix}${pose}-${stage.name}.png`);
+      const { mask, n } = charMask(ref, offL);
+      if (n === 0) { lumaReport.push({ pose, stage: stage.name, char: stage.char, bodyPx: 0 }); continue; }
+      lumaReport.push({
+        pose, stage: stage.name, char: stage.char, bodyPx: n,
+        off: maskStats(offL, mask),
+        on: onL ? maskStats(onL, mask) : null,
+      });
+    }
+  }
+  console.log('\nBODY-SILHOUETTE LUMINANCE (mask = char diff vs fresh-off; boneFrac = px > 2x median):');
+  console.log('  pose  stage     char  bodyPx  off.mean  off.med  off.boneFrac  off.max  on.mean  on.boneFrac');
+  for (const r of lumaReport) {
+    if (!r.off) { console.log(`  ${r.pose}  ${r.stage}  ${r.char}  (no body pixels)`); continue; }
+    console.log(`  ${r.pose.padEnd(5)} ${r.stage.padEnd(9)} ${String(r.char).padEnd(5)} ${String(r.bodyPx).padEnd(7)} ${String(r.off.mean).padEnd(9)} ${String(r.off.median).padEnd(8)} ${String(r.off.boneFrac).padEnd(13)} ${String(r.off.max).padEnd(8)} ${String(r.on?.mean ?? '-').padEnd(8)} ${r.on?.boneFrac ?? '-'}`);
   }
 }
 
@@ -946,7 +1096,7 @@ if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
 
 writeFileSync(`${OUT}/captures.json`, JSON.stringify({
   url: PAGE_PATH, backend, viewport: { width: W, height: H }, technique,
-  flow, flowSweep, kitStandoff, kitSweep, clock: clockPinValue, frozen, burst, poses: poseList ?? POSES, stages: STAGES, contact,
+  flow, flowSweep, kitStandoff, kitSweep, clock: clockPinValue, frozen, burst, poses: poseList ?? POSES, stages: stageList ?? STAGES, luma, lumaReport, contact,
   shots: shots.map(({ buf, ...rest }) => rest),
 }, null, 2));
 
