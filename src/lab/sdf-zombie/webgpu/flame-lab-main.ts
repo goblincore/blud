@@ -36,7 +36,9 @@ import {
 import { MOTION_TUNING } from '../motion';
 import { motionProfileFor, speedForBand, type MotionProfile } from '../motion-profile';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
-import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
+import {
+  createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn, killBurning,
+} from '../burn-state';
 import { CLUSTER_ORDER, type LimbId } from '../types';
 import {
   createFlameCards, FLAME_CARD_SLOTS, SOLDIER_LEG_KIT_RADIUS,
@@ -605,6 +607,7 @@ async function bootstrap(): Promise<void> {
       armR: [0.3, 1.1, 0], legL: [-0.1, 0.5, 0], legR: [0.1, 0.5, 0],
     },
     burn: 0,
+    settle: 0,
   }));
   // ATLAS OR FALLBACK, said loudly: the FIRE01 strip is a DEV PLACEHOLDER
   // (public/assets/flame-placeholder/, gitignored — build it with
@@ -684,6 +687,11 @@ async function bootstrap(): Promise<void> {
   // camera-bias A/B because cross-run camera and pose drift made every diff
   // unreadable; this is the fix.
   let frozen = false;
+  // BURN-DOWN CAPTURE HOLD (flame-polish task 5): `death()` pins every body's
+  // burn state to one point in its burn-down and pauses burn integration (the
+  // burnDt below becomes 0) so the pinned progress holds while the screenshot
+  // is taken. The MOTION clock keeps running, so the body still collapses.
+  let burnPaused = false;
   // The camera pose freeze() restores. Same defaults the page boots with, so a
   // frozen run's scripted drag/wheel starts from the same yaw every time.
   const FROZEN_CAM = Object.freeze({ yaw: 0.35, pitch: 0.12, dist: 3.2 });
@@ -727,6 +735,21 @@ async function bootstrap(): Promise<void> {
   const cruiseFor = (profile: MotionProfile) => speedForBand(profile, speedBand);
   let forcedCollapse = false;
 
+  /**
+   * KILL (flame-polish task 5): collapse every body, and start a burn-down on
+   * any body that is currently alight so a burning death ends as a charred
+   * corpse in a dying pile rather than simply collapsing. A body that is NOT
+   * burning just collapses, exactly as before — killBurning on a cold body
+   * would char it to ash for free, which the brief does not ask for.
+   */
+  function killBurningBodies(): void {
+    forcedCollapse = true;
+    for (let i = 0; i < actors.length; i++) {
+      actors[i]!.signals.forcedCollapse = true;
+      if (burns[i]!.burn > 0.03) killBurning(burns[i]!);
+    }
+  }
+
   window.addEventListener('keydown', (ev) => {
     if (ev.code === 'KeyH' && !ev.repeat) {
       ev.preventDefault();
@@ -739,8 +762,9 @@ async function bootstrap(): Promise<void> {
     if (ev.key === ',') { speedBand = 'walk'; wanderOn = true; return; }
     if (ev.key === '.') { speedBand = 'run'; wanderOn = true; return; }
     if (ev.key === 'k' || ev.key === 'K') {
-      forcedCollapse = true;
-      for (const a of actors) a.signals.forcedCollapse = true;
+      // Kill: collapse, and burn a body that was alight down to a charred
+      // corpse (flame-polish task 5).
+      killBurningBodies();
       return;
     }
     // Burn: I lights both bodies, O puts them out (the char STAYS — the
@@ -858,8 +882,10 @@ async function bootstrap(): Promise<void> {
     {
       // Frozen passes burn dt 0: stepBurn is a no-op at dt <= 0, so the
       // surface fire's noise phase (burnSec, reset by forceBurn) cannot creep
-      // and two runs grade the same surface behind the cards.
-      const burnDt = frozen ? 0 : Math.min(dt, 1 / 30);
+      // and two runs grade the same surface behind the cards. A death capture
+      // (`death()`, flame-polish task 5) pauses the same clock so a pinned
+      // burn-down point holds for the screenshot.
+      const burnDt = frozen || burnPaused ? 0 : Math.min(dt, 1 / 30);
       // Wall-clock seconds, as game-main's flicker clock — never dt-integrated,
       // so a stall cannot jump the wobble phase. A capture's clock pin
       // overrides it so two flow values can be shot at the same phase; frozen
@@ -918,6 +944,12 @@ async function bootstrap(): Promise<void> {
         cf.yaw = a.motion.lastBodyYaw;
         cf.anchors = a.limbs ?? limbAnchors(a.current);
         cf.burn = s.burn;
+        // BURN-DOWN PILE (flame-polish task 5): as a killed body's fire dies
+        // down, the cards collapse into a ground heap proportional to progress
+        // through corpseBurnSec. 0 for the living, so tasks 1-4 are untouched.
+        cf.settle = s.dying
+          ? Math.min(1, s.corpseSec / Math.max(1e-3, tuning.corpseBurnSec))
+          : 0;
         // The soldier's greaves cover his SDF shins (flame-polish task 3): feed
         // his measured kit radius so the shin/boot cards are placed outside the
         // mesh shell. The zombie has no kit, so his leg cards keep the old bias.
@@ -1064,7 +1096,10 @@ async function bootstrap(): Promise<void> {
   // burn/char pair for deterministic screenshots; `burns()`/`tuning()` echo
   // the live state back.
   (window as unknown as { __flameLab: unknown }).__flameLab = {
-    ignite(on = true) { for (const s of burns) (on ? igniteBurn : extinguishBurn)(s); },
+    ignite(on = true) {
+      burnPaused = false;
+      for (const s of burns) (on ? igniteBurn : extinguishBurn)(s);
+    },
     setTuning(p: Partial<BurnTuning> = {}) { tuning = resolveBurnTuning({ ...tuning, ...p }); return tuning; },
     /** Capture clock pin: a number freezes the visual clock at that many
      *  seconds (same flipbook + curl phase across runs), null restores the
@@ -1171,9 +1206,33 @@ async function bootstrap(): Promise<void> {
         })(),
       };
     },
-    /** Full burn immediately, for deterministic captures. */
+    /** Full burn immediately, for deterministic captures. Cancels a burn-down,
+     *  so a stage pin is always a live burning body again. */
     capture(burn = 1, char = 0) {
+      burnPaused = false;
       for (const s of burns) forceBurn(s, burn, char);
+    },
+    /** KILL every body (flame-polish task 5): collapse, and start the burn-down
+     *  on any body that is alight. Same path the 'k' key takes. */
+    kill() {
+      killBurningBodies();
+      return burns.map(b => ({ ...b }));
+    },
+    /** BURN-DOWN CAPTURE (flame-polish task 5). Pins every body to a killed-
+     *  while-burning state advanced `sec` seconds into its burn-down and pauses
+     *  burn integration, so a screenshot at `sec` is repeatable. The motion
+     *  clock keeps running, so the body is still free to collapse. A body the
+     *  caller left cold is lit first, so `death(sec)` always has fire to lose.
+     *  Returns the resulting states. */
+    death(sec = 0) {
+      burnPaused = true;
+      killBurningBodies();
+      for (const s of burns) {
+        if (s.burn <= 0) forceBurn(s, 1, s.char);
+        killBurning(s);                     // restart the window at sec 0
+        stepBurn(s, Math.max(0, sec), tuning);
+      }
+      return burns.map(b => ({ ...b }));
     },
     tuning() { return { ...tuning }; },
     burns() { return burns.map(b => ({ ...b })); },

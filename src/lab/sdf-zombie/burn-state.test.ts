@@ -1,12 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from './burn-state';
+import {
+  createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn, killBurning,
+} from './burn-state';
+import { BURN_TUNING } from './webgpu/burn-profiles';
 
-const T = { igniteSec: 0.5, extinguishSec: 0.25, charRate: 0.4 };
+const T = {
+  igniteSec: 0.5, extinguishSec: 0.25, charRate: 0.4,
+  corpseBurnSec: BURN_TUNING.corpseBurnSec,
+};
+/** The plan's name for the rates the burning-death test steps against. */
+const RATES = T;
 
 describe('burn state', () => {
   it('starts cold', () => {
     const s = createBurnState();
-    expect(s).toEqual({ burn: 0, burnSec: 0, char: 0, alight: false });
+    expect(s).toEqual({ burn: 0, burnSec: 0, char: 0, alight: false, dying: false, corpseSec: 0 });
   });
 
   it('ramps burn to 1 over igniteSec and no further', () => {
@@ -121,5 +129,39 @@ describe('forceBurn', () => {
     expect(s.char).toBe(0.8);
     forceBurn(s, 1, 0.3);                   // a lower but valid char still can't lower it
     expect(s.char).toBe(0.8);
+  });
+});
+
+describe('burning death (flame-polish task 5)', () => {
+  it('burns down after death and goes out', () => {
+    // A corpse keeps burning briefly, then the fire dies while the char stays.
+    const s = createBurnState();
+    igniteBurn(s); stepBurn(s, 2, RATES);
+    killBurning(s);                       // death starts the burn-down
+    stepBurn(s, BURN_TUNING.corpseBurnSec / 2, RATES);
+    expect(s.burn).toBeGreaterThan(0);
+    stepBurn(s, BURN_TUNING.corpseBurnSec, RATES);
+    expect(s.burn).toBe(0);
+    expect(s.char).toBe(1);               // fully charred corpse
+  });
+
+  it('never lowers char during the burn-down and clears the death flag at the end', () => {
+    const s = createBurnState();
+    igniteBurn(s); stepBurn(s, 2, RATES);
+    const charAtDeath = s.char;
+    killBurning(s);
+    stepBurn(s, BURN_TUNING.corpseBurnSec / 2, RATES);
+    expect(s.char).toBeGreaterThanOrEqual(charAtDeath);
+    expect(s.dying).toBe(true);
+    stepBurn(s, BURN_TUNING.corpseBurnSec, RATES);
+    expect(s.dying).toBe(false);          // corpse done: burn 0, char 1
+    expect(s.burn).toBe(0);
+    expect(s.char).toBe(1);
+  });
+
+  it('starts cold as not-dying', () => {
+    const s = createBurnState();
+    expect(s.dying).toBe(false);
+    expect(s.corpseSec).toBe(0);
   });
 });

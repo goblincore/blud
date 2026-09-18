@@ -78,7 +78,7 @@ const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(2); };
 
 // The fixed pose set, and the stage names a stage's char value pins. Declared
 // before arg parsing so --poses can validate against it.
-const POSES = ['close', 'stand', 'walk', 'run', 'collapsed', 'distant'];
+const POSES = ['close', 'stand', 'walk', 'run', 'collapsed', 'distant', 'death'];
 const STAGES = [
   { name: 'fresh', char: 0 },
   { name: 'charred', char: 0.6 },
@@ -285,7 +285,7 @@ const SETTLE_BOOT = 90;     // first-use pipeline compiles after boot
 // wander boxes are ±0.35 m, so at 60+ frames (1 s) a walker has already
 // arrived at its target and the gait reads idle. Collapse needs the full
 // fall (the 60-frame first pass caught it complete; 90 is margin).
-const SETTLE_POSE = { close: 30, stand: 30, walk: 30, run: 30, collapsed: 90, distant: 15 };
+const SETTLE_POSE = { close: 30, stand: 30, walk: 30, run: 30, collapsed: 90, distant: 15, death: 90 };
 const SETTLE_STAGE = 10;    // post-aa smear history flushed to <2e-6
 const ZOOM_TICKS = 25;      // wheel ticks out: 3.2 + 25*0.2 -> clamped at 8
 const CLOSE_TICKS = 9;      // wheel ticks in: 3.2 - 9*0.2 -> 1.4, one body cups the frame
@@ -764,12 +764,54 @@ async function freshPage() {
 let backend = 'unknown';
 const shots = [];
 
+/** Screenshot, write, gate on luma, and record — the one shutter so the death
+ *  sequence (flame-polish task 5) and the pose sweep cannot drift apart. */
+async function shoot(name, meta) {
+  const shot = await send('Page.captureScreenshot', { format: 'png' });
+  const buf = Buffer.from(shot.result.data, 'base64');
+  writeFileSync(`${OUT}/${name}`, buf);
+  const stats = pngStats(buf);
+  if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
+  if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
+  shots.push({ ...meta, file: name, std: stats.std, buf });
+  console.log(`${name}  (luma std=${stats.std})`);
+}
+
 for (const pose of (poseList ?? POSES)) {
   await freshPage();
   if (backend !== 'webgpu') {
     console.error(`flame-capture: backend is "${backend}" — not the WebGPU path; refusing to call these flame-lab captures`);
     await stopStarted();
     process.exit(2);
+  }
+
+  // BURNING DEATH (flame-polish task 5): light the bodies, let the fire
+  // establish, kill them through the page's own 'k' key (collapse + burn-down),
+  // then pin two deterministic points in the burn-down and shoot each. The
+  // timer comes from the live tuning, so this follows corpseBurnSec rather
+  // than a script constant. The stage loop below is skipped for this pose:
+  // its forceBurn pin would cancel the burn-down.
+  if (pose === 'death') {
+    await evaluate('window.__flameLab.ignite(true)');
+    await frames(60);                       // burn ramps to 1, char accumulates
+    await shoot(`${shotPrefix}death-lit.png`, { pose, stage: 'lit', technique });
+    await keyTap('k', 'KeyK', 75, 'k');     // kill: collapse + burn-down
+    await frames(SETTLE_POSE.death);        // the body falls
+    const corpseSec = await evaluate('window.__flameLab.tuning().corpseBurnSec');
+    if (!Number.isFinite(corpseSec) || corpseSec <= 0) {
+      fail(`tuning().corpseBurnSec is ${JSON.stringify(corpseSec)} — cannot shoot a burn-down`);
+    }
+    for (const point of [
+      { name: 'midburn', sec: corpseSec / 2 },
+      { name: 'out', sec: corpseSec },
+    ]) {
+      const states = await evaluate(`window.__flameLab.death(${point.sec})`);
+      await frames(SETTLE_STAGE);           // temporal smear shows the pinned flame
+      await shoot(`${shotPrefix}death-${point.name}.png`, {
+        pose, stage: point.name, technique, corpseSec: point.sec, burns: states,
+      });
+    }
+    continue;
   }
 
   // Drive the pose through the page's own keys. The drag origin is 60 px

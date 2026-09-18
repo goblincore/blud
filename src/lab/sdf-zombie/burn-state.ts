@@ -11,12 +11,20 @@
 //   char    0..1  accumulated blackening. MONOTONIC: a body that burned and was
 //                 put out stays charred, which is the difference between a
 //                 burnt corpse and a clean one.
+//   dying         a KILLED body whose fire is burning down (flame-polish task
+//                 5): over corpseBurnSec the char completes and the fire fades
+//                 to nothing, then the flag clears — the corpse stays charred
+//                 and cold. `corpseSec` is the seconds elapsed in that window.
 
 export interface BurnState {
   burn: number;
   burnSec: number;
   char: number;
   alight: boolean;
+  /** Killed while burning: burn-down is running (flame-polish task 5). */
+  dying: boolean;
+  /** Seconds elapsed into the burn-down; 0 unless `dying`. */
+  corpseSec: number;
 }
 
 /** The subset of BurnTuning this module needs; BurnTuning is a superset. */
@@ -24,6 +32,8 @@ export interface BurnRates {
   igniteSec: number;
   extinguishSec: number;
   charRate: number;
+  /** Seconds a killed, burning body takes to char fully and go out. */
+  corpseBurnSec: number;
 }
 
 // NaN-safe clamp to [0, 1]. Any non-numeric input (NaN from a bad tuning
@@ -35,20 +45,48 @@ export interface BurnRates {
 const clamp01 = (v: number) => (v > 0 ? (v < 1 ? v : 1) : 0);
 
 export function createBurnState(): BurnState {
-  return { burn: 0, burnSec: 0, char: 0, alight: false };
+  return { burn: 0, burnSec: 0, char: 0, alight: false, dying: false, corpseSec: 0 };
 }
 
 /**
  * Start ramping `burn` toward 1 on the next `stepBurn` call(s).
  * Does not change `burn` itself — only takes effect once stepped.
+ *
+ * Also cancels a burn-down: re-lighting a corpse returns it to normal burning,
+ * so `dying` never fights the ignite/extinguish verbs.
  */
-export function igniteBurn(s: BurnState): void { s.alight = true; }
+export function igniteBurn(s: BurnState): void {
+  s.alight = true;
+  s.dying = false;
+  s.corpseSec = 0;
+}
 
 /**
  * Start decaying `burn` toward 0 on the next `stepBurn` call(s).
  * Does not change `burn` itself — only takes effect once stepped.
+ *
+ * Also cancels a burn-down (see igniteBurn).
  */
-export function extinguishBurn(s: BurnState): void { s.alight = false; }
+export function extinguishBurn(s: BurnState): void {
+  s.alight = false;
+  s.dying = false;
+  s.corpseSec = 0;
+}
+
+/**
+ * A body was KILLED while burning (flame-polish task 5). Unlike `extinguishBurn`
+ * this does NOT drop the fire at once: over the next `corpseBurnSec` the char
+ * drives to 1 and the fire fades linearly out, so the capture shows a flame
+ * that dies down instead of snapping off. The body stays charred afterwards; the
+ * `dying` flag clears itself at the end so nothing keeps stepping it.
+ *
+ * Does not change `burn` itself — only takes effect once stepped.
+ */
+export function killBurning(s: BurnState): void {
+  s.alight = false;
+  s.dying = true;
+  s.corpseSec = 0;
+}
 
 /**
  * Advance one body's burn state by `dt` seconds.
@@ -69,6 +107,28 @@ export function extinguishBurn(s: BurnState): void { s.alight = false; }
 export function stepBurn(s: BurnState, dt: number, rates: BurnRates): BurnState {
   if (!Number.isFinite(dt) || dt <= 0) return s;
   const before = s.burn;
+  if (s.dying) {
+    // BURN-DOWN (flame-polish task 5). A killed body's fire fades linearly to
+    // nothing over corpseBurnSec while its char drives to 1, so a capture sees
+    // the flame die down rather than snap off. Both use dt/corpseBurnSec — a
+    // rate, not a frame count — so the window is the same at any frame rate.
+    // `before` only matters for the burn fade: a body killed at burn < 1 has
+    // proportionally less fire to lose, which is the honest reading.
+    const corpseSec = Math.max(1e-3, rates.corpseBurnSec);
+    s.corpseSec += dt;
+    s.burn = clamp01(before - dt / corpseSec);
+    s.char = clamp01(s.char + dt / corpseSec);
+    s.burnSec = s.burn > 0 ? s.burnSec + dt : 0;
+    if (s.corpseSec >= corpseSec) {
+      // The window is over: a fully charred, cold corpse. Clear `dying` so
+      // nothing keeps stepping the death state (burns() in the lab reads this).
+      s.burn = 0;
+      s.char = 1;
+      s.dying = false;
+      s.burnSec = 0;
+    }
+    return s;
+  }
   if (s.alight) {
     s.burn = clamp01(s.burn + dt / Math.max(1e-3, rates.igniteSec));
   } else {
@@ -91,7 +151,8 @@ export function stepBurn(s: BurnState, dt: number, rates: BurnRates): BurnState 
 
 /**
  * Set a body straight to a burn/char pair, for deterministic captures.
- * Clamped, and char still cannot go backwards.
+ * Clamped, and char still cannot go backwards. Cancels any burn-down: a stage
+ * pin is a live burning body, and the `death` capture re-kills it explicitly.
  *
  * Like `stepBurn`, mutates `s` in place and returns that same object.
  */
@@ -99,6 +160,8 @@ export function forceBurn(s: BurnState, burn: number, char: number): BurnState {
   const b = clamp01(burn);
   s.burn = b;
   s.alight = b > 0;
+  s.dying = false;
+  s.corpseSec = 0;
   s.burnSec = 0;
   s.char = Math.max(s.char, clamp01(char));
   return s;

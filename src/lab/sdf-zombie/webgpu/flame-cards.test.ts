@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   placeFlameCards, cardFrame, cardCellUv, cardCurlOffset, cardStandoff, cardAnchorDrop,
-  FLAME_CARD_SLOTS,
+  cardSettleAnchor, FLAME_CARD_SLOTS, FLAME_PILE_LIFT,
 } from './flame-cards';
 import { buildCurlVolume } from './curl-volume';
 
@@ -84,4 +84,17 @@ describe('flame cards', () => {
     expect(Math.hypot(full[0], full[1], full[2]))
       .toBeCloseTo(2 * Math.hypot(half[0], half[1], half[2]), 6);
   }, 30_000);
+
+  it('sinks a dying body\'s cards into a ground pile as it settles', () => {
+    // flame-polish task 5: a body killed while burning collapses into a
+    // ground-level flame heap; `settle` is the burn-down progress (0..1).
+    const live = cardSettleAnchor([0.4, 1.0, 0.2], [0, 1.0, 0], 0, 0);
+    expect(live).toEqual([0.4, 1.0, 0.2]);          // settle 0 is a no-op
+    const mid = cardSettleAnchor([0.4, 1.0, 0.2], [0, 1.0, 0], 0, 0.5);
+    expect(mid[1]).toBeLessThan(1.0);               // coming down
+    expect(Math.abs(mid[0])).toBeLessThan(0.4);     // pulled over the corpse
+    const pile = cardSettleAnchor([0.4, 1.0, 0.2], [0, 1.0, 0], 0, 1);
+    expect(pile[1]).toBeCloseTo(FLAME_PILE_LIFT, 6);
+    expect(pile[1]).toBeGreaterThan(0);             // above the floor, not in it
+  });
 });

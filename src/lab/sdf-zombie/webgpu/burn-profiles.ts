@@ -52,6 +52,10 @@ export interface BurnTuning {
    *  divergence-free field, so neighbouring cards swirl together as a body
    *  instead of flickering alone (flame-polish task 2). */
   flameFlow: number;
+  /** Seconds a body killed WHILE BURNING takes to char fully and for its fire
+   *  to fade out (flame-polish task 5). The corpse stays charred and cold
+   *  afterwards; 0 is the old instant-collapse/no-burn-down behaviour. */
+  corpseBurnSec: number;
 }
 
 export const BURN_TUNING: BurnTuning = Object.freeze({
@@ -85,6 +89,11 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   // cards into one flowing body without tearing them off the flesh; the flow
   // sweep (docs/dev-notes/2026-09-17-flame-lab/NOTES.md) covers the rails.
   flameFlow: 0.35,
+  // flame-polish task 5: six seconds of burn-down is long enough to read as a
+  // fire dying down (the reference NotBlood burn-death is a collapsing column,
+  // not a cut) and short enough that the corpse is cold quickly. The death
+  // capture pins half and full of this window.
+  corpseBurnSec: 6,
 });
 
 /** The clamp range for every field, as data.
@@ -109,6 +118,7 @@ export const BURN_BOUNDS: Readonly<Record<keyof BurnTuning, readonly [number, nu
   skeletonDepth: [0, 0.15],
   cardSoftFade: [0, 0.5],
   flameFlow: [0, 1],
+  corpseBurnSec: [0, 20],
 });
 
 export const burnPresets: Readonly<Record<'blood' | 'ember' | 'inferno', BurnTuning>> = Object.freeze({

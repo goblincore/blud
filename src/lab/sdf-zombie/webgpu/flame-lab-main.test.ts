@@ -55,8 +55,19 @@ describe('flame lab page', () => {
     expect(src).toContain('freeze(on = true)');
     expect(src).toContain('FROZEN_CAM');
     expect(src).toContain('const motionDt = frozen ? 0 : dt;');
-    expect(src).toContain('const burnDt = frozen ? 0 : Math.min(dt, 1 / 30);');
+    // The death capture (flame-polish task 5) pauses the same burn clock.
+    expect(src).toContain('const burnDt = frozen || burnPaused ? 0 : Math.min(dt, 1 / 30);');
     expect(src).toContain('makeActorMotion(a.view.body, { seed: a.seed, start: a.spawn })');
+  });
+
+  it('kills a burning body into a burn-down and feeds the card pile', () => {
+    // flame-polish task 5: 'k' both collapses and starts the burn-down, the
+    // settle progress rides the card frame, and the console opens a
+    // deterministic burn-down point for the death capture.
+    expect(src).toContain('killBurning');
+    expect(src).toContain('killBurningBodies');
+    expect(src).toContain('death(sec = 0)');
+    expect(src).toContain('cf.settle = s.dying');
   });
 
   it('feeds the soldier his measured kit radius for the leg-card standoff', () => {

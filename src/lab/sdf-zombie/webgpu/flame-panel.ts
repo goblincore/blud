@@ -52,6 +52,7 @@ const LABELS: Record<keyof BurnTuning, { label: string; step: number }> = {
   skeletonDepth: { label: 'skeleton depth', step: 0.005 },
   cardSoftFade: { label: 'card soft fade', step: 0.01 },
   flameFlow: { label: 'flame flow', step: 0.02 },
+  corpseBurnSec: { label: 'corpse burn s', step: 0.1 },
 };
 
 export const FLAME_KEYS: readonly FlameKey[] = Object.freeze(

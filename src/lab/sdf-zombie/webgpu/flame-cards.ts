@@ -294,6 +294,47 @@ export function cardAnchorDrop(slot: string, opts: { kitRadius?: number } = {}):
   return BOOT_SLOT.test(slot) && kit > 0 ? FLAME_CARD_BOOT_DROP : 0;
 }
 
+/** Metres the base of a corpse's flame pile sits above the ground, so the heap
+ *  reads as ON the floor rather than half-sunk into it (flame-polish task 5). */
+export const FLAME_PILE_LIFT = 0.06;
+
+/** Fraction of the way from a card's live anchor to the body's ground centre
+ *  that a fully-settled (settle = 1) pile pulls it. 0.75 keeps a little of each
+ *  limb's spread so the heap still has a shape; 1 would collapse every card
+ *  onto one point and read as a single quad. */
+export const FLAME_PILE_PULL = 0.75;
+
+/** Fraction a settled pile card's HEIGHT is shortened by, so the column that
+ *  stood over the body comes down into a low heap of licks rather than a
+ *  full-height wall of flame lying on its side (flame-polish task 5). */
+export const FLAME_PILE_SHRINK = 0.5;
+
+/**
+ * Where a dying body's card anchor moves as the corpse settles into a ground
+ * pile (flame-polish task 5). `anchor` is the live posed anchor (metres),
+ * `centre` the body's ground-plan centre (its torso anchor), `groundY` the
+ * floor height and `settle` the burn-down progress 0..1.
+ *
+ * At settle 0 this is the identity — a body that is merely alight keeps exactly
+ * the look tasks 1-4 tuned. As `settle` rises the anchor is pulled toward the
+ * centre of the body's footprint and lowered to `groundY + FLAME_PILE_LIFT`, so
+ * a killed body's fire collapses into a heap at its feet instead of standing
+ * over a corpse. Pure and exported for the unit test; the GPU half just calls
+ * it per card.
+ */
+export function cardSettleAnchor(
+  anchor: Vec3, centre: Vec3, groundY: number, settle: number,
+): Vec3 {
+  const t = clamp01(settle);
+  if (t <= 0) return [anchor[0], anchor[1], anchor[2]];
+  const pull = t * FLAME_PILE_PULL;
+  return [
+    anchor[0] + (centre[0] - anchor[0]) * pull,
+    anchor[1] + (groundY + FLAME_PILE_LIFT - anchor[1]) * t,
+    anchor[2] + (centre[2] - anchor[2]) * pull,
+  ];
+}
+
 /**
  * The world-space displacement a card ANCHOR takes from the shared curl field
  * (flame-polish task 2) — the CPU half of the flow. `flow` is 0..1
@@ -424,6 +465,12 @@ export interface FlameCardFrame {
    *  lab feeds SOLDIER_LEG_KIT_RADIUS for him and 0 for the zombie. Only leg
    *  slots consume it, so the approved upper-body engulfment is untouched. */
   kitRadius?: number;
+  /** Burn-down progress 0..1 for a KILLED body (flame-polish task 5). At 0 a
+   *  live burning body is untouched; as it rises the cards collapse into a
+   *  ground pile (cardSettleAnchor). Omit for the living. */
+  settle?: number;
+  /** Floor height the settled pile's base sits above, metres. Omit for 0. */
+  groundY?: number;
 }
 
 export interface FlameCards {
@@ -685,6 +732,15 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
         const vel = f.vel;
         const tx = vel ? -vel[0]! * LEAN_TRAIL_SEC * lean : 0;
         const tz = vel ? -vel[2]! * LEAN_TRAIL_SEC * lean : 0;
+        // The ground pile a corpse's fire collapses into (flame-polish task 5).
+        // settle 0 leaves a live body exactly as tasks 1-4 tuned it; as it
+        // rises the card anchors are pulled over the body's ground footprint and
+        // down to the floor. Inlined (not cardSettleAnchor) to keep update()
+        // allocation-free; cardSettleAnchor is the tested pure twin of this.
+        const settle = clamp01(f.settle ?? 0);
+        const groundY = f.groundY ?? 0;
+        const pileCentre = f.anchors.torso;
+        const pilePull = settle * FLAME_PILE_PULL;
         for (const p of placements) {
           if (quad >= capacity) break;
           const slot = FLAME_CARD_SLOTS[p.slot]!;
@@ -702,6 +758,11 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
           // card's fixed offset lands at the boot's TOP, so lower the anchor
           // until the flame base covers the boot. 0 everywhere else.
           wy -= cardAnchorDrop(slot.name, { kitRadius: f.kitRadius ?? 0 });
+          if (settle > 0) {
+            wx += (pileCentre[0]! - wx) * pilePull;
+            wz += (pileCentre[2]! - wz) * pilePull;
+            wy += (groundY + FLAME_PILE_LIFT - wy) * settle;
+          }
           // Shared curl displacement: the anchor moves with the divergence-free
           // field, so a limb's cards move together rather than independently.
           // Sampled exactly where the fragment shader samples it.
@@ -742,9 +803,11 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
           const ax = wx + ndx * bias + tx;
           const ay = wy;
           const az = wz + ndz * bias + tz;
-          // Size: length x per-card scale, atlas aspect, stretched tall.
-          const h = len * p.scale;
-          const w = (h * aspect) / CARD_STRETCH;
+          // Size: length x per-card scale, atlas aspect, stretched tall. A
+          // settled pile card keeps its WIDTH but loses height, so the standing
+          // column comes down into a low heap rather than a wall on its side.
+          const h = len * p.scale * (1 - FLAME_PILE_SHRINK * settle);
+          const w = (len * p.scale * aspect) / CARD_STRETCH;
           // Flipbook frame — the phase fraction spans the whole clip. The
           // cell's uv range is INSET by half a texel (and skips the atlas
           // builder's transparent gutter) so a boundary tap cannot land on the
