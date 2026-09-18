@@ -57,6 +57,11 @@ The old `/index.html` still serves legacy until Stage 2.
   `assets-source/blood-extracted/`, `public/assets/post-fx/`,
   `public/assets/map-research/`). `scripts/link-dev-assets.sh` links them from the
   primary checkout into a worktree; it does not extract them for a fresh clone.
+- **Plans:** start every implementation plan from
+  [`docs/superpowers/plan-template.md`](docs/superpowers/plan-template.md) and
+  carry its **Rules for every task** block into the plan. The key rule: game
+  logic in pure, renderer-free, tested modules; load-bearing rendering in
+  hand-written WGSL — the release is a Rust + wgpu port (production scope §4.6).
 - **Shared modules:** some `src/game/*` modules are shared by both projects
   (e.g. `game/gibs/tuning.ts`, `game/weapons/muzzle-pos.ts`). Pay attention to
   provenance — do not move the old tree blindly. See the repository map.
