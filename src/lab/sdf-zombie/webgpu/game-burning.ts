@@ -56,6 +56,11 @@ export function createGameBurning(ctx: GameContext): GameBurning {
    *  reused; only its entries are re-pushed. */
   const cardFrames: FlameCardFrame[] = [];
   const cardLastPos = new Map<ZombieActor, Vec3>();
+  /** Transition tracking for the actors' burn-panic override (Task 2): the
+   *  previous step's alight set and a scratch set to build this step's, swapped
+   *  each step so the per-frame cost is set membership, not allocation. */
+  let burnPrev = new Set<ZombieActor>();
+  let burnCur = new Set<ZombieActor>();
   /** Last tick's dt, so the cards' lean velocity is metres per SIM second. */
   let frameDt = 1 / 60;
 
@@ -143,12 +148,27 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       if (burning.has(a)) burning.kill(a);
       burning.release(a);
       cardLastPos.delete(a);
+      // The body is leaving the world: release the panic override at once and
+      // drop it from the transition sets, so a later reuse of the same actor
+      // (or a stale set entry) cannot keep it fleeing.
+      burnPrev.delete(a);
+      burnCur.delete(a);
+      a.setBurning(false);
     },
     step(dt) {
       // An empty registry is a single size check: nothing stepped or written.
       if (burning.size === 0) return;
       frameDt = dt;
       burning.step(Math.min(dt, 1 / 30), tuning);
+      // BURNING-BEHAVIOUR TRANSITIONS (Task 2). Push only the EDGE to the
+      // actor: setBurning(true) on the frame a body crosses into alight,
+      // false when it drops out (extinguished, burnt down or released). The
+      // 0.02 floor is pushFlashes' own "actually on fire" threshold.
+      burnCur.clear();
+      burning.forEachActive((a, s) => { if (s.burn > 0.02) burnCur.add(a); });
+      for (const a of burnCur) if (!burnPrev.has(a)) a.setBurning(true);
+      for (const a of burnPrev) if (!burnCur.has(a)) a.setBurning(false);
+      const swap = burnPrev; burnPrev = burnCur; burnCur = swap;
       let any = false;
       burning.forEachActive((a, s) => { any = true; writeUniforms(a, s); });
       if (any) writeCrowdScalars();
