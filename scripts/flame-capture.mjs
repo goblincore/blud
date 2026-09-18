@@ -43,6 +43,8 @@
 //   node scripts/flame-capture.mjs --technique screen [outDir]
 //   node scripts/flame-capture.mjs --technique cards --flow 0.35 --burst 3 \
 //     --poses close [outDir]      # flame-polish task 2 flow sweep
+//   node scripts/flame-capture.mjs --technique cards --frozen --poses stand,close \
+//     [outDir]                    # flame-polish task 3: pixel-comparable A/B
 //   LAB_VITE_PORT=5244 LAB_CDP_PORT=9244 node scripts/flame-capture.mjs
 // --technique (flame-tongues task 2) pins the lab's tongue technique for the
 // whole run: it rides the ?tongue= boot param AND __flameLab.setTechnique, so
@@ -143,8 +145,36 @@ let flowSweep = null;
     argv.splice(i, 2);
   }
 }
-let poseList = null;
+// --- kit-standoff sweep (flame-polish task 3) -------------------------------
+// `--kit-sweep a,b,c` changes the soldier's leg-kit standoff LIVE inside one
+// page load, so the shin/boot coverage A/B is shot at the SAME camera and pose
+// — the failure mode the plan names (cross-run drift) is designed out. Values
+// are metres of covering radius; `--kit-standoff x` pins a single one.
+let kitSweep = null;
 {
+  const i = argv.indexOf('--kit-sweep');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    const vals = v === undefined ? [] : v.split(',').map((s) => Number(s.trim()));
+    if (vals.length < 2 || vals.some((x) => !Number.isFinite(x) || x < 0)) {
+      fail('--kit-sweep needs >= 2 comma-separated non-negative numbers');
+    }
+    kitSweep = vals;
+    argv.splice(i, 2);
+  }
+}
+let kitStandoff = null;
+{
+  const i = argv.indexOf('--kit-standoff');
+  if (i !== -1) {
+    const v = Number(argv[i + 1]);
+    if (!Number.isFinite(v) || v < 0) fail('--kit-standoff needs a non-negative number');
+    kitStandoff = v;
+    argv.splice(i, 2);
+  }
+}
+
+let poseList = null;{
   const i = argv.indexOf('--poses');
   if (i !== -1) {
     const v = argv[i + 1];
@@ -169,6 +199,22 @@ let clock = null;
     argv.splice(i, 2);
   }
 }
+
+// --- frozen A/B mode (flame-polish task 3, step 1) --------------------------
+// `--frozen` calls __flameLab.freeze(true) right after boot: the motion clock
+// (dt 0, pristine binding), the burn clock and the visual clock pin, and the
+// orbit camera resets to its boot pose with auto-spin off. Two runs then frame
+// and pose identically, which is the only way a per-slot standoff A/B is
+// judgeable — the previous pass abandoned exactly that because the orbit yaw
+// and the idle pose drifted between page loads. Implies --clock 0 unless
+// --clock was given, so the flipbook/curl phase matches too.
+let frozen = false;
+{
+  const i = argv.indexOf('--frozen');
+  if (i !== -1) { frozen = true; argv.splice(i, 1); }
+}
+// The clock a run pins: an explicit --clock wins, else frozen pins 0.
+const clockPinValue = clock ?? (frozen ? 0 : null);
 
 // The boot flow: the sweep starts at its first value, a single run at --flow.
 const bootFlow = flowSweep ? flowSweep[0] : flow;
@@ -606,6 +652,12 @@ async function freshPage() {
     if (booted) break;
   }
   if (!booted) fail('__flameLab never appeared — the flame lab never booted');
+  // Freeze FIRST, before the settle frames: the pristine motion record and the
+  // reset orbit camera must be the state every later frame builds on.
+  if (frozen) {
+    const applied = await evaluate('window.__flameLab.freeze(true)');
+    if (applied !== true) fail(`freeze(true) applied ${JSON.stringify(applied)}`);
+  }
   // Pin the technique through the console contract too (the boot param
   // already set it) — the run proves BOTH routes land the same switch, and
   // setTechnique echoes what is actually applied. The flag is `technique`
@@ -621,10 +673,11 @@ async function freshPage() {
     const applied = await evaluate(`window.__flameLab.setTuning({ flameFlow: ${bootFlow} }).flameFlow`);
     if (applied !== bootFlow) fail(`setTuning({ flameFlow: ${bootFlow} }) applied ${JSON.stringify(applied)}`);
   }
-  // Freeze the visual clock for a same-phase --flow-sweep A/B.
-  if (clock !== null) {
-    const applied = await evaluate(`window.__flameLab.setClock(${clock})`);
-    if (applied !== clock) fail(`setClock(${clock}) applied ${JSON.stringify(applied)}`);
+  // Freeze the visual clock for a same-phase --flow-sweep A/B (and for every
+  // --frozen run — the flipbook and curl must share one instant).
+  if (clockPinValue !== null) {
+    const applied = await evaluate(`window.__flameLab.setClock(${clockPinValue})`);
+    if (applied !== clockPinValue) fail(`setClock(${clockPinValue}) applied ${JSON.stringify(applied)}`);
   }
   await frames(SETTLE_BOOT);
   // The backend line lives in the status box ("backend: webgpu", green) — the
@@ -682,6 +735,13 @@ for (const pose of (poseList ?? POSES)) {
   if (pose === 'distant') {
     for (let i = 0; i < ZOOM_TICKS; i++) await wheelAt(Math.floor(W / 2), Math.floor(H / 2), 120);
   }
+  // Frozen runs cannot use the keys: the pose is a deterministic fixed-step
+  // simulation (__flameLab.pose), so walk/run/collapsed still develop but the
+  // exact same way on every load. See --frozen above.
+  if (frozen) {
+    const applied = await evaluate(`window.__flameLab.pose(${JSON.stringify(pose)})`);
+    if (applied !== pose) fail(`pose(${pose}) applied ${JSON.stringify(applied)}`);
+  }
   await frames(SETTLE_POSE[pose]);
 
   for (const stage of STAGES) {
@@ -696,28 +756,38 @@ for (const pose of (poseList ?? POSES)) {
     // camera; otherwise a single value (null = the page default, no tag so the
     // canonical filenames and contact sheet are untouched).
     const flows = flowSweep ?? [flow];
+    const kits = kitSweep ?? [kitStandoff];
     for (const fv of flows) {
       if (fv !== null) {
         const applied = await evaluate(`window.__flameLab.setTuning({ flameFlow: ${fv} }).flameFlow`);
         if (applied !== fv) fail(`setTuning({ flameFlow: ${fv} }) applied ${JSON.stringify(applied)}`);
         await frames(SETTLE_STAGE);   // let the temporal smear show the new flow
       }
-      const tag = fv === null ? '' : `-f${String(fv).replace('.', 'p')}`;
-      // --burst > 1 takes a short time series at this stage: the flow is
-      // animated on the wall clock, so a single still cannot show that the
-      // flame MOVES as one body. b0 keeps the canonical name the contact sheet
-      // and prior plans read.
-      for (let bfi = 0; bfi < burst; bfi++) {
-        if (bfi > 0) await frames(BURST_GAP);
-        const shot = await send('Page.captureScreenshot', { format: 'png' });
-        const buf = Buffer.from(shot.result.data, 'base64');
-        const name = `${shotPrefix}${pose}-${stage.name}${tag}${bfi === 0 ? '' : `-b${bfi}`}.png`;
-        writeFileSync(`${OUT}/${name}`, buf);
-        const stats = pngStats(buf);
-        if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
-        if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
-        shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, burstFrame: bfi, buf });
-        console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, luma std=${stats.std})`);
+      for (const kv of kits) {
+        if (kv !== null) {
+          const applied = await evaluate(`window.__flameLab.setKitStandoff(${kv})`);
+          if (applied !== kv) fail(`setKitStandoff(${kv}) applied ${JSON.stringify(applied)}`);
+          await frames(SETTLE_STAGE);
+        }
+        const ftag = fv === null ? '' : `-f${String(fv).replace('.', 'p')}`;
+        const ktag = kv === null ? '' : `-k${String(kv).replace('.', 'p')}`;
+        const tag = `${ftag}${ktag}`;
+        // --burst > 1 takes a short time series at this stage: the flow is
+        // animated on the wall clock, so a single still cannot show that the
+        // flame MOVES as one body. b0 keeps the canonical name the contact sheet
+        // and prior plans read.
+        for (let bfi = 0; bfi < burst; bfi++) {
+          if (bfi > 0) await frames(BURST_GAP);
+          const shot = await send('Page.captureScreenshot', { format: 'png' });
+          const buf = Buffer.from(shot.result.data, 'base64');
+          const name = `${shotPrefix}${pose}-${stage.name}${tag}${bfi === 0 ? '' : `-b${bfi}`}.png`;
+          writeFileSync(`${OUT}/${name}`, buf);
+          const stats = pngStats(buf);
+          if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
+          if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
+          shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, kit: kv, burstFrame: bfi, buf });
+          console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, kit=${kv ?? 'default'}, luma std=${stats.std})`);
+        }
       }
     }
   }
@@ -768,7 +838,7 @@ if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
 
 writeFileSync(`${OUT}/captures.json`, JSON.stringify({
   url: PAGE_PATH, backend, viewport: { width: W, height: H }, technique,
-  flow, flowSweep, clock, burst, poses: poseList ?? POSES, stages: STAGES, contact,
+  flow, flowSweep, kitStandoff, kitSweep, clock: clockPinValue, frozen, burst, poses: poseList ?? POSES, stages: STAGES, contact,
   shots: shots.map(({ buf, ...rest }) => rest),
 }, null, 2));
 

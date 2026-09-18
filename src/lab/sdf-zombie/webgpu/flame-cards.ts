@@ -217,6 +217,83 @@ export function cardCellUv(
   };
 }
 
+/** The smallest distance a card's plane sits from its anchor, metres, before
+ *  any covering geometry is accounted for — the old toward-camera bias floor. */
+export const FLAME_CARD_MIN_STANDOFF = 0.02;
+
+/** Leg slots need a hair more: their anchor is the limb cluster's MEAN centre
+ *  rather than the limb surface, so a leg card can graze the limb's own
+ *  surface even with no kit. */
+export const FLAME_CARD_LEG_MIN_STANDOFF = 0.03;
+
+/** The gap kept between a covering shell's outer radius and the card plane, so
+ *  the card's depth clears the armour rather than z-fighting it. */
+export const FLAME_CARD_KIT_CLEARANCE = 0.045;
+
+/** Which slots a per-character kit radius applies to — the greaves are the
+ *  covering mesh the captures show occluding. */
+const LEG_SLOT = /shin|boot|thigh|leg/i;
+
+/** The boot is not just the shin with more radius: the armoured boot's toe
+ *  reaches ~0.31 m forward of the ankle axis (measured on soldier-kit.gltf),
+ *  further than the greave around the shin, so a boot card needs a
+ *  proportionally larger standoff to clear it. */
+const BOOT_SLOT = /boot/i;
+export const FLAME_CARD_BOOT_GAIN = 2.1;
+
+/** Metres the boot card's anchor is lowered toward the foot when a greave
+ *  covers the limb. The soldier's boot slot anchors at y≈0.14 (measured from
+ *  the posed leg cluster: mean 0.72 − 0.58), which is the boot's TOP; without
+ *  this the flame's base stops above the boot and the boot stays green no
+ *  matter how far the card is pushed forward. */
+export const FLAME_CARD_BOOT_DROP = 0.12;
+
+/**
+ * The soldier greave's outer radius from the shin axis, metres.
+ *
+ * MEASURED from the shipped kit mesh (`public/assets/lab/soldier-kit.gltf`),
+ * not guessed: bind-pose vertices in the shin band (y 0.28..0.80) reach 0.14 m
+ * from the shin bone's vertical axis (bulk 0.08..0.14, z within ±0.108). The
+ * card's fixed 0.09 m toward-camera bias therefore sat INSIDE that shell and
+ * the greave's depth test erased the shin and boot cards.
+ *
+ * The kit is a skinned mesh with no per-limb bounds reachable from this module
+ * (character-view only exposes the posed `KitOverlay`), so this is the plan's
+ * sanctioned per-character constant, not runtime per-limb bounds. Re-measure
+ * with the accessor walk in the task notes if the kit art changes.
+ */
+export const SOLDIER_LEG_KIT_RADIUS = 0.14;
+
+/**
+ * How far a card's plane must sit from its anchor along its outward normal
+ * (the horizontal direction to the camera — the camera-facing quad's own
+ * normal) so covering geometry cannot occlude it.
+ *
+ * `slot` picks the floor (legs vs everything else); `kitRadius` is the covering
+ * shell's outer radius around the limb, 0 when bare. A bare limb keeps the
+ * floor; a clad one is pushed to `kitRadius + FLAME_CARD_KIT_CLEARANCE`. This
+ * is the fix the plan calls for: move the card outside what actually covers
+ * the limb, never touch `depthTest`.
+ */
+export function cardStandoff(slot: string, opts: { kitRadius?: number } = {}): number {
+  const floor = LEG_SLOT.test(slot) ? FLAME_CARD_LEG_MIN_STANDOFF : FLAME_CARD_MIN_STANDOFF;
+  const kit = Math.max(0, opts.kitRadius ?? 0);
+  const need = BOOT_SLOT.test(slot) ? kit * FLAME_CARD_BOOT_GAIN : kit;
+  return kit > 0 ? Math.max(floor, need + FLAME_CARD_KIT_CLEARANCE) : floor;
+}
+
+/**
+ * How far a card's anchor drops toward the foot, metres. Only a boot slot on a
+ * kit-covered limb: the greave reaches down to the boot, and the boot slot's
+ * fixed offset from the leg cluster's mean centre lands at the boot's top, so
+ * the flame base must be lowered to sit over the boot. Everything else is 0,
+ * which keeps the zombie (no kit) and the whole upper body exactly as tuned.
+ */
+export function cardAnchorDrop(slot: string, opts: { kitRadius?: number } = {}): number {
+  const kit = Math.max(0, opts.kitRadius ?? 0);
+  return BOOT_SLOT.test(slot) && kit > 0 ? FLAME_CARD_BOOT_DROP : 0;
+}
+
 /**
  * The world-space displacement a card ANCHOR takes from the shared curl field
  * (flame-polish task 2) — the CPU half of the flow. `flow` is 0..1
@@ -342,6 +419,11 @@ export interface FlameCardFrame {
   burn: number;
   /** World velocity m/s, for the lean trail. Optional; defaults to still. */
   vel?: Vec3;
+  /** Covering-mesh outer radius around the LEGS, metres (0 = bare). The soldier
+   *  greaves are the case the captures show occluding the shin/boot cards; the
+   *  lab feeds SOLDIER_LEG_KIT_RADIUS for him and 0 for the zombie. Only leg
+   *  slots consume it, so the approved upper-body engulfment is untouched. */
+  kitRadius?: number;
 }
 
 export interface FlameCards {
@@ -616,6 +698,10 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
           let wx = base[0]! + lx * cy + lz * sy;
           let wz = base[2]! - lx * sy + lz * cy;
           let wy = base[1]! + ly;
+          // Boot reach (flame-polish task 3): on a kit-covered limb the boot
+          // card's fixed offset lands at the boot's TOP, so lower the anchor
+          // until the flame base covers the boot. 0 everywhere else.
+          wy -= cardAnchorDrop(slot.name, { kitRadius: f.kitRadius ?? 0 });
           // Shared curl displacement: the anchor moves with the divergence-free
           // field, so a limb's cards move together rather than independently.
           // Sampled exactly where the fragment shader samples it.
@@ -640,7 +726,19 @@ export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number }
           // Toward-camera bias: sit the card's plane just in front of the
           // flesh it burns, so the body's own republished depth cannot slice
           // it (the seam failure mode). The vertical is left alone.
-          const bias = FLAME_CARD_TOWARD_CAM * (0.6 + 0.4 * p.scale);
+          //
+          // THE KIT STANDOFF (flame-polish task 3): the soldier's greaves are
+          // a mesh shell ~0.14 m outside the SDF shin, so the fixed 0.09 m
+          // bias sat INSIDE the armour and the shin/boot cards were depth-
+          // tested away. Leg slots now take the per-character kit radius from
+          // the frame (0 for the zombie), raising the bias to clear the shell.
+          // Only leg slots — the upper body's engulfment is approved as-is.
+          const kitRadius = slot.limb === 'legL' || slot.limb === 'legR'
+            ? (f.kitRadius ?? 0) : 0;
+          const bias = Math.max(
+            FLAME_CARD_TOWARD_CAM * (0.6 + 0.4 * p.scale),
+            cardStandoff(slot.name, { kitRadius }),
+          );
           const ax = wx + ndx * bias + tx;
           const ay = wy;
           const az = wz + ndz * bias + tz;

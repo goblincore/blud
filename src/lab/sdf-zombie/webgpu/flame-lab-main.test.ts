@@ -47,6 +47,27 @@ describe('flame lab page', () => {
     expect(src).toContain('capture');
   });
 
+  it('freezes pose and camera so two capture runs are pixel-comparable', () => {
+    // flame-polish task 3, step 1: the per-slot standoff A/B was abandoned
+    // last pass because the orbit yaw and idle pose drifted between loads.
+    // freeze() pins both clocks plus the camera, and each body's motion
+    // record is rebuilt from its seed so the pose is the pristine binding.
+    expect(src).toContain('freeze(on = true)');
+    expect(src).toContain('FROZEN_CAM');
+    expect(src).toContain('const motionDt = frozen ? 0 : dt;');
+    expect(src).toContain('const burnDt = frozen ? 0 : Math.min(dt, 1 / 30);');
+    expect(src).toContain('makeActorMotion(a.view.body, { seed: a.seed, start: a.spawn })');
+  });
+
+  it('feeds the soldier his measured kit radius for the leg-card standoff', () => {
+    // flame-polish task 3, step 3: the zombie has no kit, so only the soldier
+    // gets the radius; a live override lets a capture sweep it in one load.
+    expect(src).toContain('SOLDIER_LEG_KIT_RADIUS');
+    expect(src).toContain("a.view.entry.name === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0");
+    expect(src).toContain('kitStandoffOverride');
+    expect(src).toContain('setKitStandoff(m: number | null)');
+  });
+
   it('holds the tongue technique switch the tongue passes will hang off', () => {
     // ?tongue=<name> validated at boot, key t cycling, console setTechnique
     // validating and echoing — and the panel row re-marking through the same

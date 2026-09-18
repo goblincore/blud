@@ -39,7 +39,7 @@ import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
 import { CLUSTER_ORDER, type LimbId } from '../types';
 import {
-  createFlameCards, FLAME_CARD_SLOTS,
+  createFlameCards, FLAME_CARD_SLOTS, SOLDIER_LEG_KIT_RADIUS,
   type FlameCardAnchors, type FlameCardFrame,
 } from './flame-cards';
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
@@ -186,6 +186,10 @@ interface FlameLabActor {
   limbs: FlameCardAnchors | null;
   /** Last frame's floor position, for the flame cards' lean velocity. */
   lastPos: Vec3;
+  /** Spawn and motion seed, kept so freeze() can rebuild a pristine motion
+   *  record — the deterministic pose two `--frozen` capture runs must share. */
+  spawn: Vec3;
+  seed: number;
 }
 
 // Everything lives inside an async bootstrap rather than using top-level await.
@@ -451,22 +455,25 @@ async function bootstrap(): Promise<void> {
     if (skull) gpu.setHeadShape(skull.centre, skull.axes);
 
     const spawn: Vec3 = [slot.x, 0, 0];
+    const seed = motionSeed + i * 7919;
     actors.push({
       name,
       view,
       gpu,
       current: view.body,
-      motion: makeActorMotion(view.body, { seed: motionSeed + i * 7919, start: spawn }),
+      motion: makeActorMotion(view.body, { seed, start: spawn }),
       profile: motionProfileFor(name),
       bounds: {
         minX: spawn[0]! - WANDER_R, maxX: spawn[0]! + WANDER_R,
         minZ: spawn[2]! - WANDER_R, maxZ: spawn[2]! + WANDER_R,
       },
-      rng: makeRng(motionSeed + i * 7919),
+      rng: makeRng(seed),
       signals: emptyActorSignals(),
       faceTex,
       limbs: null,
       lastPos: spawn,
+      spawn,
+      seed,
     });
   }
 
@@ -668,6 +675,23 @@ async function bootstrap(): Promise<void> {
   let lastX = 0;
   let lastY = 0;
   let autoSpin = true;
+  // FROZEN MODE (flame-polish task 3, step 1): a capture-only hold that pins
+  // everything two runs must share to be pixel-comparable — the motion clock
+  // (dt 0, so the pose holds at the deterministic applyFrozenPose result), the
+  // burn clock (dt 0, so the surface noise phase does not creep), the visual
+  // clock (see the burn step) and the orbit camera (auto-spin OFF, and
+  // yaw/pitch/distance reset). The previous pass abandoned a per-slot
+  // camera-bias A/B because cross-run camera and pose drift made every diff
+  // unreadable; this is the fix.
+  let frozen = false;
+  // The camera pose freeze() restores. Same defaults the page boots with, so a
+  // frozen run's scripted drag/wheel starts from the same yaw every time.
+  const FROZEN_CAM = Object.freeze({ yaw: 0.35, pitch: 0.12, dist: 3.2 });
+  // Live kit-radius override (flame-polish task 3): lets a capture sweep the
+  // standoff in ONE page load at one camera and pose — the judgeable A/B the
+  // plan wants — instead of guessing across reloads. null = the per-character
+  // default (SOLDIER_LEG_KIT_RADIUS for the soldier, 0 for the zombie).
+  let kitStandoffOverride: number | null = null;
 
   const canvas = handle.canvas;
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -792,11 +816,15 @@ async function bootstrap(): Promise<void> {
     //    lab's hero and crowd run. Real dt (sub-stepped inside), empty
     //    signals (nothing here shoots), per-body seed (no marching band) and
     //    small per-spawn wander boxes so the pair stays side by side.
+    //    Frozen captures pass dt 0: planSubSteps(0) is empty, so stepActorMotion
+    //    is a no-op and the pose holds at the pristine binding — the exact
+    //    state two runs must share for the diff to mean anything.
+    const motionDt = frozen ? 0 : dt;
     for (const a of actors) {
       if (!a.motion.motionJoints) continue;
       const f = stepActorMotion(a.motion, {
         current: a.current,
-        dt,
+        dt: motionDt,
         wander: wanderOn,
         armStyle: undefined,
         headingFollow: MOTION_TUNING.headingFollow,
@@ -809,7 +837,7 @@ async function bootstrap(): Promise<void> {
       // Polygon halves ride the rig — kit and prop pose from the same rig
       // solve (soldier's helmet and gun; the zombie has neither).
       a.view.pose(a.current, a.motion.bound, a.motion.lastBodyYaw, Infinity,
-        f, dt, MOTION_SEED);
+        f, motionDt, MOTION_SEED);
       const posed = applyRig(a.current, a.motion.bound, a.motion.lastBodyYaw);
       a.gpu.update(posed, a.current);
       const rs = a.motion.lastRootShift;
@@ -828,11 +856,15 @@ async function bootstrap(): Promise<void> {
     //    tuning scalars rewrite every frame, so setTuning takes effect live
     //    with no re-upload path.
     {
-      const burnDt = Math.min(dt, 1 / 30);
+      // Frozen passes burn dt 0: stepBurn is a no-op at dt <= 0, so the
+      // surface fire's noise phase (burnSec, reset by forceBurn) cannot creep
+      // and two runs grade the same surface behind the cards.
+      const burnDt = frozen ? 0 : Math.min(dt, 1 / 30);
       // Wall-clock seconds, as game-main's flicker clock — never dt-integrated,
       // so a stall cannot jump the wobble phase. A capture's clock pin
-      // overrides it so two flow values can be shot at the same phase.
-      const clock = clockPin ?? now * 0.001;
+      // overrides it so two flow values can be shot at the same phase; frozen
+      // defaults to 0 so an un-pinned frozen run is still deterministic.
+      const clock = clockPin ?? (frozen ? 0 : now * 0.001);
       // GLOW (plan task 11): the pass is fed from the live tuning every
       // frame, so a slider move takes effect at once. Gain 0 keeps it fully
       // inert — the draws are skipped and the frame is bit-identical.
@@ -885,6 +917,12 @@ async function bootstrap(): Promise<void> {
         cf.yaw = a.motion.lastBodyYaw;
         cf.anchors = a.limbs ?? limbAnchors(a.current);
         cf.burn = s.burn;
+        // The soldier's greaves cover his SDF shins (flame-polish task 3): feed
+        // his measured kit radius so the shin/boot cards are placed outside the
+        // mesh shell. The zombie has no kit, so his leg cards keep the old bias.
+        // A live override (a --kit-sweep capture) wins for tuning.
+        cf.kitRadius = kitStandoffOverride
+          ?? (a.view.entry.name === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0);
         cf.vel = [
           (bodyPos[0] - a.lastPos[0]) * inv, 0, (bodyPos[2] - a.lastPos[2]) * inv,
         ];
@@ -974,6 +1012,52 @@ async function bootstrap(): Promise<void> {
     }
   });
 
+  /**
+   * Deterministic pose for `--frozen` captures (flame-polish task 3, step 1).
+   * Rebuilds each body's motion record from its seed and steps it a FIXED
+   * number of FIXED-dt frames — the crowd's own determinism contract — so the
+   * pose is a pure function of `name` and two runs match frame-for-frame.
+   * `freeze(true)` then holds the result (motion dt 0 in the loop). Without
+   * this, freezing could only ever show the binding pose: walk/run/collapsed
+   * would not develop at all.
+   */
+  function applyFrozenPose(name: string): string {
+    const FIXED_DT = 1 / 60;
+    // Frame counts match the capture script's real-frame SETTLE_POSE holds
+    // (walk/run 30, collapsed 90), so a frozen capture frames the same stride
+    // and the same completed fall the live pose set already judged.
+    const FRAMES: Record<string, number> = { stand: 30, walk: 30, run: 30, collapsed: 90 };
+    const n = FRAMES[name] ?? FRAMES.stand!;
+    const band = name === 'walk' || name === 'run' ? name : null;
+    for (const a of actors) {
+      a.current = a.view.body;
+      a.motion = makeActorMotion(a.view.body, { seed: a.seed, start: a.spawn });
+      a.rng = makeRng(a.seed);
+      a.signals = emptyActorSignals();
+      a.limbs = null;
+      a.lastPos = a.spawn;
+      if (name === 'collapsed') a.signals.forcedCollapse = true;
+      const profile = band
+        ? { ...a.profile, cruise: speedForBand(a.profile, band) }
+        : { ...a.profile };
+      for (let k = 0; k < n; k++) {
+        stepActorMotion(a.motion, {
+          current: a.current,
+          dt: FIXED_DT,
+          wander: band !== null,
+          armStyle: undefined,
+          headingFollow: MOTION_TUNING.headingFollow,
+          gazeFollow: MOTION_TUNING.gazeFollow,
+          bounds: a.bounds,
+          rng: a.rng,
+          signals: a.signals,
+          profile,
+        });
+      }
+    }
+    return name;
+  }
+
   // Console API — the capture and tuning entry point until the tuning panel
   // lands (plan task 9). `__flameLab.capture()` pins a body straight to a
   // burn/char pair for deterministic screenshots; `burns()`/`tuning()` echo
@@ -985,6 +1069,36 @@ async function bootstrap(): Promise<void> {
      *  seconds (same flipbook + curl phase across runs), null restores the
      *  live wall clock. Burn integration is unaffected. */
     setClock(t: number | null) { clockPin = t !== null && Number.isFinite(t) ? t : null; return clockPin; },
+    /** Live kit-standoff override for a tuning sweep (flame-polish task 3).
+     *  Non-negative metres, or null to restore the per-character default.
+     *  Returns what was applied so a capture can read it back. */
+    setKitStandoff(m: number | null) {
+      kitStandoffOverride = m === null ? null : Math.max(0, Number(m));
+      return kitStandoffOverride;
+    },
+    /** FROZEN POSE + CAMERA (flame-polish task 3, step 1). true pins the
+     *  motion clock, the burn clock, the visual clock and the orbit camera,
+     *  and rebuilds each body's pristine motion record — so two capture runs
+     *  are pixel-comparable and a per-slot standoff A/B is judgeable (the
+     *  previous pass abandoned exactly that because the orbit yaw and the
+     *  idle pose drifted between loads). false restores the live sim and the
+     *  auto-spin. Returns the applied state. */
+    freeze(on = true) {
+      frozen = on === true;
+      autoSpin = !frozen;
+      if (!frozen) return false;
+      camYaw = FROZEN_CAM.yaw;
+      camPitch = FROZEN_CAM.pitch;
+      camDist = FROZEN_CAM.dist;
+      applyFrozenPose('stand');
+      return true;
+    },
+    /** Deterministic pose for a frozen capture (stand|walk|run|collapsed).
+     *  No-op unless frozen, so the live sim is untouched. */
+    pose(name = 'stand') { return frozen ? applyFrozenPose(name) : name; },
+    /** The live leg anchors — the numbers the card slots are placed against,
+     *  for a capture that needs to know where a limb's cards actually sit. */
+    anchors() { return actors.map((a) => ({ name: a.name, limbs: a.limbs })); },
     preset(name: keyof typeof burnPresets) { tuning = resolveBurnTuning(burnPresets[name]); return tuning; },
     /** The tongue switch (flame-tongues plan task 1). Junk names are ignored
      *  and the CURRENT technique comes back, so a capture script can call it

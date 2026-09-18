@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { placeFlameCards, cardFrame, cardCellUv, cardCurlOffset, FLAME_CARD_SLOTS } from './flame-cards';
+import {
+  placeFlameCards, cardFrame, cardCellUv, cardCurlOffset, cardStandoff, cardAnchorDrop,
+  FLAME_CARD_SLOTS,
+} from './flame-cards';
 import { buildCurlVolume } from './curl-volume';
 
 describe('flame cards', () => {
@@ -39,6 +42,28 @@ describe('flame cards', () => {
     expect(a.u1).toBeLessThan(32 / 272);        // inside the right gutter
     expect(b.u0).toBeGreaterThan(34 / 272);     // across the 4 px cell gap
     expect(a.u1).toBeLessThan(b.u0);            // and still no overlap
+  });
+
+  it('pushes cards out past a kit that covers the limb', () => {
+    const bare = cardStandoff('shin', { kitRadius: 0 });
+    const clad = cardStandoff('shin', { kitRadius: 0.06 });
+    expect(clad).toBeGreaterThan(bare);
+    expect(clad).toBeGreaterThanOrEqual(0.06);   // outside the armour
+  });
+
+  it('drops a kit-covered boot card toward the foot, and only that', () => {
+    // The boot slot's fixed offset lands at the boot's TOP (measured: the
+    // soldier's leg mean y 0.72 - 0.58 = 0.14); without the drop the flame
+    // base stops above the boot and the boot stays green at any standoff.
+    expect(cardAnchorDrop('bootL', { kitRadius: 0.14 })).toBeGreaterThan(0);
+    expect(cardAnchorDrop('bootL', { kitRadius: 0 })).toBe(0);      // bare: no drop
+    expect(cardAnchorDrop('shinL', { kitRadius: 0.14 })).toBe(0);   // shin unchanged
+  });
+
+  it('needs a larger standoff for the boot than the shin', () => {
+    // The armoured boot's toe reaches further forward than the greave.
+    expect(cardStandoff('bootL', { kitRadius: 0.14 }))
+      .toBeGreaterThan(cardStandoff('shinL', { kitRadius: 0.14 }));
   });
 
   it('gives nearby anchors near-identical curl offsets (one shared flow)', () => {
