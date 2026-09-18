@@ -48,7 +48,14 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   lightPeak: 26, lightFlicker: 0.35,
   glowGain: 0.5, glowThreshold: 0.75,
   distortStrength: 0.006,
-  fireCoverage: 0.9, skeletonShow: 0.5,
+  fireCoverage: 0.9,
+  // 0.7 (fix pass task 3): at the plan's 0.5 the probe capture showed pale
+  // hints on shoulder and shin only -- the skull did not read. 0.7 at char
+  // 0.6 gives skelK 0.42, which reads as bone through soot; probed 0.8 and
+  // it stayed legible, but 0.7 leaves the preset room above it (ember is
+  // the late-stage more-bone look). skelK is 0 on a fresh body by
+  // construction, so this never paints an unburnt body.
+  skeletonShow: 0.7,
 });
 
 /** The clamp range for every field, as data.

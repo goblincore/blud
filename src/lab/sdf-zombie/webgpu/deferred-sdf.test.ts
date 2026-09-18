@@ -85,7 +85,8 @@ describe('surface-entry wgslFn parse contract', () => {
     // through the shared MARCH_BODY_PARAMS, so the equality pin below keeps
     // the one-binding-block contract on the deferred path too.
     // +1 burnFireCoverage (flame lab fix pass) after burnFireGain, same rule.
-    expect(legacy.length).toBe(97); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    // +1 burnSkeleton (flame lab fix pass task 3) after burnFireCoverage.
+    expect(legacy.length).toBe(98); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });

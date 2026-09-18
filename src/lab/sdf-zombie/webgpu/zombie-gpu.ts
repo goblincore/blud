@@ -641,6 +641,10 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     /** Fraction of the surface carrying flame at once, 0..1 — slides the fire
      *  noise threshold, so one field decides flame vs soot. */
     burnFireCoverage: uniform(0.9),
+    /** How far the flesh thins to show bone at full char, 0..1 — the skeleton
+     *  show-through strength. Scaled by char in the shader, so a freshly lit
+     *  body stays opaque. */
+    burnSkeleton: uniform(0.5),
   };
 }
 
@@ -1387,6 +1391,7 @@ export function createMarchMaterial(
     burnCharPatch: u.burnCharPatch,
     burnFireGain: u.burnFireGain,
     burnFireCoverage: u.burnFireCoverage,
+    burnSkeleton: u.burnSkeleton,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 

@@ -8,7 +8,7 @@ import { MARCH_BODY_PARAMS } from './march.wgsl';
 
 const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
 
-const BURN_SCALARS = ['burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain', 'burnFireCoverage'];
+const BURN_SCALARS = ['burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain', 'burnFireCoverage', 'burnSkeleton'];
 
 describe('burn uniform plumbing', () => {
   it('declares the burn uniforms', () => {
@@ -27,7 +27,7 @@ describe('burn uniform plumbing', () => {
       expect(next, p).toBeGreaterThan(at);
       at = next;
     }
-    expect(params).toMatch(/burnFireCoverage: f32\s*\)/);
+    expect(params).toMatch(/burnSkeleton: f32\s*\)/);
     const binds = [...src.matchAll(/burnCfg: u\.burnCfg,/g)];
     expect(binds.length).toBeGreaterThan(0);
     for (const name of BURN_SCALARS) expect(src).toContain(`${name}: u.${name},`);

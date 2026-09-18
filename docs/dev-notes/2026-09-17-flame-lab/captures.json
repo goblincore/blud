@@ -28,70 +28,70 @@
       "stage": "fresh",
       "char": 0,
       "file": "stand-fresh.png",
-      "std": 34.5
+      "std": 34.37
     },
     {
       "pose": "stand",
       "stage": "charred",
       "char": 0.6,
       "file": "stand-charred.png",
-      "std": 28.3
+      "std": 29.2
     },
     {
       "pose": "walk",
       "stage": "fresh",
       "char": 0,
       "file": "walk-fresh.png",
-      "std": 34.41
+      "std": 34.24
     },
     {
       "pose": "walk",
       "stage": "charred",
       "char": 0.6,
       "file": "walk-charred.png",
-      "std": 28.3
+      "std": 28.98
     },
     {
       "pose": "run",
       "stage": "fresh",
       "char": 0,
       "file": "run-fresh.png",
-      "std": 34.55
+      "std": 34.33
     },
     {
       "pose": "run",
       "stage": "charred",
       "char": 0.6,
       "file": "run-charred.png",
-      "std": 28.34
+      "std": 29.09
     },
     {
       "pose": "collapsed",
       "stage": "fresh",
       "char": 0,
       "file": "collapsed-fresh.png",
-      "std": 32.17
+      "std": 32.26
     },
     {
       "pose": "collapsed",
       "stage": "charred",
       "char": 0.6,
       "file": "collapsed-charred.png",
-      "std": 27.18
+      "std": 27.57
     },
     {
       "pose": "distant",
       "stage": "fresh",
       "char": 0,
       "file": "distant-fresh.png",
-      "std": 21.69
+      "std": 21.26
     },
     {
       "pose": "distant",
       "stage": "charred",
       "char": 0.6,
       "file": "distant-charred.png",
-      "std": 19.34
+      "std": 19.26
     }
   ]
 }

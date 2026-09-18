@@ -2576,7 +2576,12 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // Fire coverage - flame lab fix pass - POSITIONALLY LAST after burnFireGain.
   // Slides the noise threshold so one field picks flame versus soot. Bound in
   // the same slot order in zombie-gpu.ts. NO COLONS in this comment.
-  burnFireCoverage: f32
+  burnFireCoverage: f32,
+  // Skeleton show-through - flame lab fix pass - POSITIONALLY LAST after
+  // burnFireCoverage. Strength of the bone bleed through charring flesh, and
+  // the shader scales it by char so a fresh body stays opaque. Bound in the
+  // same slot order in zombie-gpu.ts. NO COLONS in this comment either.
+  burnSkeleton: f32
 ) -> vec4<f32> {
 `;
 
@@ -3937,6 +3942,31 @@ ${FACE_LAYER_WGSL}
     // makes a charred body read as charred rather than as a dark body.
     gloss = gloss * (1.0 - sootMask * 0.9);
     metal = metal * (1.0 - sootMask * 0.9);
+    // SKELETON SHOW-THROUGH. The bone capsules are already in the field but sit
+    // at least 4 mm inside the flesh, so flesh depth alone always hides them.
+    // Probe the bone field alone at the shading point instead -- folding into an
+    // empty distance returns the bone distance, since min of 1e9 and bone is
+    // bone -- and let a bone within revealDepth of the surface bleed through as
+    // the flesh chars. Reads the instance globals the hit slot loaded in the
+    // trace post, so counts and band are THIS instance's. Builds with char, so
+    // a freshly lit body is still opaque; zero on a body that never burned, so
+    // no other pixel pays for the probe.
+    let skelK = charAmt * burnSkeleton;
+    if (skelK > 0.0) {
+      let boneProbe = applyBones(1e9, p, data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+      // 0.08 (fix pass task 3): the plan's 0.045 hugged the bones so tightly
+      // that only the shin and shoulder edge read through soot. Probed 0.1:
+      // a whole limb then sits within reach of its bone capsule and reads
+      // pale pink -- FRESH flesh, killing the char. 8 cm keeps the falloff
+      // ON the skeleton (nearest-bone ridge brightest, smoothstep to zero).
+      // Cost of honesty -- the ribs sit deeper than 8 cm under chest flesh
+      // and do not read; the skull, forearms and shins do.
+      let revealDepth = 0.08;
+      let nearBone = 1.0 - smoothstep(0.0, revealDepth, max(boneProbe, 0.0));
+      let showBone = clamp(nearBone * skelK, 0.0, 1.0);
+      albedo = mix(albedo, boneColor, showBone);
+      gloss = gloss * (1.0 - showBone * 0.5);
+    }
     gBurnEmit = fireRamp(fire) * fire * burnFireGain;
     faceGlow = faceGlow * (1.0 - burnAmt);
     primGlow = primGlow * (1.0 - burnAmt);
