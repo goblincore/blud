@@ -42,6 +42,7 @@ import {
   TONGUE_TECHNIQUES, isTongueTechnique, resolveTongueTuning,
   type TongueTechnique, type TongueTuning,
 } from './tongue-tuning';
+import { TONGUE_TAPS, tonguePixelLength, type TongueFrame } from './post-tongues';
 import { createFlamePanel } from './flame-panel';
 import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
 import { burnDistortStrength, burnDistortRadiusM, burnWobble } from './burn-distort';
@@ -147,8 +148,10 @@ async function bootstrap(): Promise<void> {
 
   // The render targets the character views are constructed with. The raymarched
   // bodies render into their own target at their own scale and composite back
-  // over the polygonal scene.
-  const sdfLayer = createSdfLayer(handle.renderer);
+  // over the polygonal scene. marchBurn (flame-tongues task 2) adds the fourth
+  // attachment: the per-pixel burn mask the screen-space tongue pass grows its
+  // flame out of. Opt-in and dev-only; off leaves the target byte-identical.
+  const sdfLayer = createSdfLayer(handle.renderer, { marchBurn: true });
   // Post chain (X1.25): FXAA + temporal smear + sharp-bilinear upscale. It
   // owns the frame's tail — with every effect off it is an exact
   // pass-through, so the pre-X1.25 draw path is untouched by default-off.
@@ -156,6 +159,10 @@ async function bootstrap(): Promise<void> {
   // contentSize (the capped render size).
   const postAa = createPostAa(handle.renderer);
   postAa.addSink(sdfLayer);
+  // THE BURN MASK (flame-tongues task 2): hand the tongue pass the march's
+  // fourth attachment — a single rebind at boot, then the texture follows its
+  // target through resizes (the sscsFleshTex discipline).
+  if (sdfLayer.marchBurnTexture) postAa.setBurnMaskTexture(sdfLayer.marchBurnTexture);
   // HEAT DISTORTION (plan task 12): the blit's bounded blast warp doubles as
   // the burning bodies' heat band. setBlastDistort just opens the uniform
   // gate — nothing recompiles (the blit comment explains why that matters);
@@ -588,6 +595,18 @@ async function bootstrap(): Promise<void> {
     return pl;
   });
 
+  // SCREEN-SPACE TONGUES feed state (flame-tongues task 2), preallocated —
+  // the render callback allocates nothing. The burn loop records which bodies
+  // are alight and where they stand; the tail of the callback (after the
+  // camera moves) projects the world-up direction and feeds postAa.
+  const tongueLit: boolean[] = FLAME_LAB_BODIES.map(() => false);
+  const tonguePos: [number, number, number][] = FLAME_LAB_BODIES.map(() => [0, 0, 0]);
+  const _tongueA = new THREE.Vector3();
+  const _tongueB = new THREE.Vector3();
+  /** The last tongue feed, for __flameLab.tongueDebug() — tuning wants the
+   *  actual numbers the pass is running on, not a reconstruction of them. */
+  let lastTongueFeed: TongueFrame | null = null;
+
   // -------------------------------------------------------------------------
   // Frame loop. setRenderCallback REPLACES rather than appends, so everything
   // per-frame has to live in this one function.
@@ -680,6 +699,10 @@ async function bootstrap(): Promise<void> {
         const a = actors[i]!;
         const rs = a.motion.lastRootShift;
         const bodyPos: Vec3 = [FLAME_LAB_BODIES[i]!.x + rs[0]!, 0, rs[2]!];
+        // The tongue pass's per-body record (screen-space tongues, task 2):
+        // lit or not, and where the body stands this frame.
+        tongueLit[i] = s.burn > 0.03;
+        tonguePos[i]![0] = bodyPos[0]; tonguePos[i]![1] = 1.0; tonguePos[i]![2] = bodyPos[2];
         const anchor = burnLightAnchor(bodyPos);
         fireLights[i]!.position.set(anchor[0], anchor[1], anchor[2]);
         fireLights[i]!.intensity = burnLightIntensity(
@@ -711,6 +734,66 @@ async function bootstrap(): Promise<void> {
       camTarget.z + Math.cos(camYaw) * cp * camDist,
     );
     camera.lookAt(camTarget);
+
+    // — SCREEN-SPACE TONGUES (flame-tongues task 2). Fed from the LIVE tongue
+    //    tuning and THIS frame's camera, only when the technique is 'screen'
+    //    and something is actually burning — off is an exact no-bind. The
+    //    world-up direction and the body distance are projected here, where
+    //    the camera lives; the pass itself stays camera-free uniforms.
+    {
+      let lit = -1;
+      for (let i = 0; i < tongueLit.length; i++) {
+        if (tongueLit[i]) { lit = i; break; }
+      }
+      const tongueOn = technique === 'screen' && lit >= 0;
+      if (tongueOn) {
+        camera.updateMatrixWorld();
+        const p = tonguePos[lit]!;
+        // Two world points 0.25 m apart vertically at the body, projected to
+        // capture pixels: their delta is the projected world-up (y negative
+        // up in pixel space, where row 0 is the top).
+        _tongueA.set(p[0], p[1], p[2]).project(camera);
+        _tongueB.set(p[0], p[1] + 0.25, p[2]).project(camera);
+        const cw = Math.max(1, postAa.contentSize.width);
+        const ch = Math.max(1, postAa.contentSize.height);
+        const ax = (_tongueA.x + 1) * 0.5 * cw;
+        const ay = (1 - _tongueA.y) * 0.5 * ch;
+        const bx = (_tongueB.x + 1) * 0.5 * cw;
+        const by = (1 - _tongueB.y) * 0.5 * ch;
+        const dx = bx - ax;
+        const dy = by - ay;
+        const len = Math.hypot(dx, dy);
+        const depthM = camera.position.distanceTo(_tongueB.set(p[0], p[1], p[2]));
+        const fovTan = Math.tan((camera.fov * Math.PI) / 360);
+        if (len > 1e-3 && depthM > camera.near) {
+          const feed: TongueFrame = {
+            // The world length in pixels at the body's depth, split across
+            // the pass's fixed tap count — the constant-WORLD-size rule.
+            stepPx: tonguePixelLength(tongue.length, depthM, ch, fovTan) / TONGUE_TAPS,
+            near: camera.near,
+            far: camera.far,
+            fovTan,
+            refDepthM: depthM,
+            length: tongue.length,
+            ragged: tongue.ragged,
+            rise: tongue.rise,
+            gain: tongue.gain,
+            lean: tongue.lean,
+            upX: dx / len,
+            upY: dy / len,
+            time: now * 0.001,
+          };
+          lastTongueFeed = feed;
+          postAa.setTongues(true, feed);
+        } else {
+          lastTongueFeed = null;
+          postAa.setTongues(false);
+        }
+      } else {
+        lastTongueFeed = null;
+        postAa.setTongues(false);
+      }
+    }
   });
 
   // Console API — the capture and tuning entry point until the tuning panel
@@ -732,6 +815,58 @@ async function bootstrap(): Promise<void> {
     technique() { return technique; },
     setTongueTuning(p: Partial<TongueTuning> = {}) { tongue = resolveTongueTuning({ ...tongue, ...p }); return tongue; },
     tongue() { return { ...tongue }; },
+    /** TUNING PROBE (flame-tongues task 2): the tongue pass's live feed plus a
+     *  32x18-cell max-burn summary of the march's burn-mask attachment, so a
+     *  tuning session can see the mask and the numbers without a GPU capture.
+     *  Readback is async; resolves null when the attachment is absent. */
+    async tongueDebug() {
+      const tex = sdfLayer.marchBurnTexture;
+      if (!tex) return { feed: lastTongueFeed, mask: null };
+      const t = sdfLayer.targetSize;
+      const read = async (textureIndex: number) => {
+        const buf = await handle.renderer.readRenderTargetPixelsAsync(
+          sdfLayer.marchTarget, 0, 0, t.width, t.height, textureIndex,
+        );
+        return new Float32Array(buf);
+      };
+      const px = await read(sdfLayer.marchTarget.textures.length - 1);
+      const px0 = await read(0);
+      const CELLS_X = 32, CELLS_Y = 18;
+      const cells = new Array<number>(CELLS_X * CELLS_Y).fill(0);
+      const cells0 = new Array<number>(CELLS_X * CELLS_Y).fill(0);
+      let maxBurn = 0;
+      let litTexels = 0;
+      let maxLit0 = 0;
+      for (let y = 0; y < t.height; y++) {
+        const cy = Math.min(CELLS_Y - 1, (y * CELLS_Y / t.height) | 0);
+        for (let x = 0; x < t.width; x++) {
+          const i = (y * t.width + x) * 4;
+          const burn = px[i]!;
+          const lit0 = px0[i]! + px0[i + 1]! + px0[i + 2]!;
+          if (lit0 > maxLit0) maxLit0 = lit0;
+          if (burn > 0.02) litTexels++;
+          if (burn > maxBurn) maxBurn = burn;
+          const ci = cy * CELLS_X + Math.min(CELLS_X - 1, (x * CELLS_X / t.width) | 0);
+          if (burn > cells[ci]!) cells[ci] = burn;
+          if (lit0 > cells0[ci]!) cells0[ci] = lit0;
+        }
+      }
+      return {
+        feed: lastTongueFeed ? { ...lastTongueFeed } : null,
+        target: { ...t },
+        mask: { cells: cells.map((c) => +c.toFixed(2)), maxBurn: +maxBurn.toFixed(3), litTexels },
+        outputProbe: { maxLit0: +maxLit0.toFixed(3), cells: cells0.map((c) => +c.toFixed(1)) },
+        diffProbe: (() => {
+          let maxDiff = 0, sum = 0;
+          for (let i = 0; i < px.length; i += 4) {
+            const d = Math.abs(px[i]! - px0[i]!);
+            if (d > maxDiff) maxDiff = d;
+            sum += d;
+          }
+          return { maxDiff: +maxDiff.toFixed(4), meanDiff: +(sum / (px.length / 4)).toFixed(5) };
+        })(),
+      };
+    },
     /** Full burn immediately, for deterministic captures. */
     capture(burn = 1, char = 0) {
       for (const s of burns) forceBurn(s, burn, char);

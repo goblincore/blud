@@ -115,6 +115,7 @@ import {
   SSCS_TERM_RANGES,
   type SscsTerms,
 } from './post-sscs';
+import { POST_TONGUES_WGSL, type TongueFrame } from './post-tongues';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -574,6 +575,26 @@ export interface PostAa {
   /** Whether the SSCS stage runs. */
   readonly sscs: boolean;
   /**
+   * THE SCREEN-SPACE TONGUE PASS (flame-tongues task 2, post-tongues.ts),
+   * default OFF. Runs FIRST of the post passes — right after the chain's
+   * capture and BEFORE the shutter capture stage and the glow extract — so
+   * tongues are both shutter-blurred and bloomed like everything else in
+   * the frame. Additive draw straight into the capture (the glow-blur
+   * pattern: autoClear off, no extra target, alpha 1); off never binds the
+   * material and the all-off parity path stays exact.
+   *
+   * The per-frame feed is the whole state: stepPx (tonguePixelLength / taps,
+   * host-computed at the body's depth), camera near/far/fovTan, the body
+   * distance, the tuning record and the projected world-up in pixels.
+   */
+  setTongues(on: boolean, uniforms?: TongueFrame): void;
+  /** Points the tongue pass at the march's burn-mask attachment (sdf-layer's
+   *  `marchBurn`), exactly once at host boot — the sscsFleshTex discipline
+   *  (a second texture() node over one texture would collapse into one
+   *  binding a later .value write cannot split). Null restores the inert
+   *  fallback. */
+  setBurnMaskTexture(tex: THREE.Texture | null): void;
+  /**
    * THE GLOW STAGE (post-glow.ts), default OFF — the flame lab enables it
    * while its tuning's glowGain is above zero. Bright-pass + separable blur
    * off the working-space capture, added back into it BEFORE FXAA, so glow
@@ -902,6 +923,42 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const uGlowExtractCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uGlowBlurCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
 
+  // --- TONGUES state (post-tongues.ts). Inert while `tonguesOn` is false —
+  // the factory default — so the parity path never binds the material. The
+  // burn-mask slot starts on an OWNED 1x1 fallback (rgb 0 = no burn) and is
+  // repointed ONCE at host boot by setBurnMaskTexture.
+  let tonguesOn = false;
+  const tongueBurnFallback = new THREE.DataTexture(
+    new Float32Array([0, 0, 0, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType,
+  );
+  tongueBurnFallback.needsUpdate = true;
+  const tongueBurnTex = texture(tongueBurnFallback);
+  const uTongueUp = uniform(new THREE.Vector2(0, -1));
+  // cfg0 = (stepPx, near, far, fovTan); cfg1 = (ragged, rise, gain, lean);
+  // cfg2 = (refDepthM, lengthM, time, spare) — the packing POST_TONGUES_WGSL reads.
+  const uTongueCfg0 = uniform(new THREE.Vector4(0, 0.05, 60, 1));
+  const uTongueCfg1 = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uTongueCfg2 = uniform(new THREE.Vector4(3, 0.45, 0, 0));
+  const tongueOut = wgslFn(POST_TONGUES_WGSL)({
+    burnTex: tongueBurnTex,
+    depthTex: texture(sceneTarget.depthTexture!),
+    texCoord: uv(),
+    upPx: uTongueUp,
+    cfg0: uTongueCfg0,
+    cfg1: uTongueCfg1,
+    cfg2: uTongueCfg2,
+  }) as unknown as Swizzled;
+  const tongueMat = new MeshBasicNodeMaterial();
+  tongueMat.name = 'post:tongues';
+  tongueMat.colorNode = vec4(0.25, 0.0, 0.0, 1.0); // TEMP BISECT
+  tongueMat.depthWrite = false;
+  tongueMat.depthTest = false;
+  tongueMat.fog = false;
+  // Additive fire (the transparency rule: alpha in colorNode.w is 1, the
+  // colour carries the whole term — never alphaHash, never alphaTest).
+  tongueMat.blending = THREE.AdditiveBlending;
+  const tongueScene = quadScene(tongueMat);
+
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
@@ -1199,6 +1256,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // redirect, because the blit has to sample a texture rather than be one.
       // VHS is a stage too, so it forces the redirected chain even alone.
       const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn || sscsOn || glowOn
+        || tonguesOn
         || (blastDistortOn && liveBlastDistorts.length > 0) || captureStage !== null;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
@@ -1225,6 +1283,20 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
 
       // The whole polygon/sdf/cone/occluder/composite/goo flow, captured.
       chain();
+
+      // TONGUES (flame-tongues task 2): first of the post passes, drawn
+      // additively straight into the fresh capture BEFORE the shutter capture
+      // stage and the glow extract below, so tongues are both shutter-blurred
+      // and bloomed like the rest of the frame. autoClear off — a clear here
+      // would wipe the frame from under the flame (the glow-blur dance).
+      if (tonguesOn) {
+        setPassLabel('post:tongues');
+        renderer.setRenderTarget(sceneTarget);
+        const prevAutoClearTongues = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(tongueScene, quadCam);
+        renderer.autoClear = prevAutoClearTongues;
+      }
 
       // PRE-POST CAPTURE STAGE. The chain has drawn the clean frame into
       // sceneTarget; a stage may composite over it (the shutter resolve reads
@@ -1561,6 +1633,31 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     },
     get sscs() { return sscsOn; },
     get sscsTerms(): SscsTerms { return { ...sscsTerms }; },
+    // --- TONGUES (post-tongues.ts), default OFF. The per-frame feed is the
+    // whole state (see the interface); non-finite fields fall back to the
+    // last good values rather than poisoning the uniforms.
+    setTongues(on: boolean, u?: TongueFrame) {
+      tonguesOn = on && u !== undefined;
+      if (!u) return;
+      if (Number.isFinite(u.upX) && Number.isFinite(u.upY) && (u.upX !== 0 || u.upY !== 0)) {
+        const l = Math.hypot(u.upX, u.upY);
+        uTongueUp.value.set(u.upX / l, u.upY / l);
+      }
+      if (Number.isFinite(u.stepPx) && u.stepPx > 0) uTongueCfg0.value.x = u.stepPx;
+      if (Number.isFinite(u.near) && u.near > 0) uTongueCfg0.value.y = u.near;
+      if (Number.isFinite(u.far) && u.far > (uTongueCfg0.value.y)) uTongueCfg0.value.z = u.far;
+      if (Number.isFinite(u.fovTan) && u.fovTan > 0) uTongueCfg0.value.w = u.fovTan;
+      if (Number.isFinite(u.refDepthM) && u.refDepthM > 0) uTongueCfg2.value.x = u.refDepthM;
+      if (Number.isFinite(u.length) && u.length > 0) uTongueCfg2.value.y = u.length;
+      if (Number.isFinite(u.time)) uTongueCfg2.value.z = u.time;
+      if (Number.isFinite(u.ragged)) uTongueCfg1.value.x = Math.min(1, Math.max(0, u.ragged));
+      if (Number.isFinite(u.rise)) uTongueCfg1.value.y = Math.min(8, Math.max(0, u.rise));
+      if (Number.isFinite(u.gain)) uTongueCfg1.value.z = Math.min(4, Math.max(0, u.gain));
+      if (Number.isFinite(u.lean)) uTongueCfg1.value.w = Math.min(1, Math.max(0, u.lean));
+    },
+    /** Repoint the burn-mask slot at the march's fourth attachment — ONCE at
+     *  host boot (the sscsFleshTex trap: one owned node, one rebind). */
+    setBurnMaskTexture(t: THREE.Texture | null) { tongueBurnTex.value = t ?? tongueBurnFallback; },
     // --- GLOW (post-glow.ts), default OFF; the flame lab feeds it from its
     // live burn tuning every frame. Non-finite arguments fall back rather
     // than poisoning the uniforms.

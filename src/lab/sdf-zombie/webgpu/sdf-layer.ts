@@ -35,7 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, marchNormalRead, marchAnchorRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, marchNormalRead, marchAnchorRead, marchBurnRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
@@ -940,6 +940,9 @@ export interface SdfLayer {
   readonly marchNormalTexture: THREE.Texture | null;
   /** Run 4: the march's third attachment (rest-space noise anchor.xyz, w = detail gate), normals boots only. */
   readonly marchAnchorTexture: THREE.Texture | null;
+  /** Flame tongues (flame-tongues task 2): the march's fourth attachment, the per-pixel burn
+   *  mask (rgb = burn, char, fire); null unless created with `marchBurn`. */
+  readonly marchBurnTexture: THREE.Texture | null;
   /** Run 4: the output-res skin-detail noise (xyz, w = gate), rgba32f; null unless normals are on. */
   readonly detailTarget: THREE.RenderTarget | null;
   /** Run 4: the same-body anchor jump limit (metres) for the detail pass's gradient extrapolation. */
@@ -1032,11 +1035,19 @@ export interface SdfLayerOptions {
   marchNormals?: boolean;
   /** Run 5: allocate the output-res refine targets and run the per-body refine pass; implies `marchNormals`. */
   refine?: boolean;
+  /** Flame tongues (flame-tongues task 2): allocate a FOURTH march attachment carrying the
+   *  per-pixel burn mask (rgb = burn, char, fire) and expose it as `marchBurnTexture` for the
+   *  post-aa tongue pass. Dev-only like `marchNormals`; off leaves the target and its frame
+   *  byte-identical to the shipped boot. Independent of `marchNormals` (the lab runs it alone). */
+  marchBurn?: boolean;
 }
 
 export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayerOptions = {}): SdfLayer {
   const refineOn = options.refine === true;
   const marchNormals = options.marchNormals === true || refineOn;
+  // Flame tongues (flame-tongues task 2): the fourth attachment is OPT-IN and
+  // independent of the normals pair — the flame lab runs the burn mask alone.
+  const marchBurnOn = options.marchBurn === true;
   let scale = DEFAULT_SDF_SCALE;
   let fullW = 1;
   let fullH = 1;
@@ -1187,7 +1198,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     type: THREE.FloatType,
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
-    count: marchNormals ? 3 : 1,
+    // Flame tongues (flame-tongues task 2): the burn mask is the LAST
+    // attachment — index 3 beside the normals pair, index 1 when it runs
+    // alone. It can NOT keep a fixed index 3 with normals off: three's
+    // MRTNode builds its output members BY ATTACHMENT INDEX and an unnamed
+    // hole at 1/2 crashes the pipeline build (measured, 'getNodeType' of
+    // undefined). Consumers read the mask through marchBurnTexture, never a
+    // raw index. Bonus of the alone shape: 2 rgba32f attachments = 32
+    // bytes/sample, inside even the default WebGPU attachment budget.
+    count: marchNormals ? (marchBurnOn ? 4 : 3) : (marchBurnOn ? 2 : 1),
   });
   // RUNTIME NORMALS (2026-09-12): with two attachments every material drawn into `target` must
   // emit both, so the MRT is set on the RENDERER around the march renders (three's MRTNode maps
@@ -1202,10 +1221,21 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     // Run 4: rest-space noise anchor + detail gate, for the output-res detail pass below.
     target.textures[2]!.name = 'marchAnchor';
     const n = marchNormalRead({ dep: output as never }) as unknown as { xyz: unknown; w: unknown };
+    if (marchBurnOn) target.textures[3]!.name = 'marchBurn';
     marchMrt = mrt({
       output,
       marchNormal: vec4(mul(mat3(cameraViewMatrix as never), n.xyz as never) as never, n.w as never),
       marchAnchor: marchAnchorRead({ dep: output as never }),
+      ...(marchBurnOn ? { marchBurn: marchBurnRead({ dep: output as never }) } : {}),
+    });
+  } else if (marchBurnOn) {
+    // Burn mask ALONE (the flame lab's boot): the mask rides slot 1 — three's
+    // MRTNode cannot leave attachment holes (see the count comment above).
+    target.textures[0]!.name = 'output';
+    target.textures[1]!.name = 'marchBurn';
+    marchMrt = mrt({
+      output,
+      marchBurn: marchBurnRead({ dep: output as never }),
     });
   }
   // RUN 4 DETAIL PASS (plan 2026-09-12-neural-upscale-run4-relief): the skin-detail noise evaluated
@@ -2443,6 +2473,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     },
     get marchNormalTexture() { return marchNormals ? target.textures[1]! : null; },
     get marchAnchorTexture() { return marchNormals ? target.textures[2]! : null; },
+    // Last attachment: slot 3 beside the normals pair, slot 1 when alone —
+    // the same slot rule the naming above follows.
+    get marchBurnTexture() { return marchBurnOn ? target.textures[target.textures.length - 1]! : null; },
     get detailTarget() { return detailScene ? detailTarget : null; },
     setDetailJumpMax(m) { (uDetailJumpMax.value as number) = Math.max(0.001, m); },
     get upscaleInfo() { return upscaleInfoOf(upscale); },

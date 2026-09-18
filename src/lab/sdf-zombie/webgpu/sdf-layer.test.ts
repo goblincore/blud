@@ -40,6 +40,49 @@ describe('sortFrontToBack', () => {
   });
 });
 
+describe('marchBurn attachment (flame-tongues task 2)', () => {
+  /** The stub renderer the precompile tests use — createSdfLayer only needs
+   *  the target getters at construction time. */
+  function stubRenderer(): THREE.WebGPURenderer {
+    let currentTarget: THREE.RenderTarget | null = null;
+    return {
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      compileAsync: vi.fn(async () => { /* nothing to compile here */ }),
+    } as unknown as THREE.WebGPURenderer;
+  }
+
+  it('is opt-in: the shipped boot keeps its exact attachment counts', () => {
+    const base = createSdfLayer(stubRenderer());
+    expect(base.marchTarget.textures.length).toBe(1);
+    expect(base.marchBurnTexture).toBeNull();
+    base.dispose();
+
+    // marchNormals ALONE must stay exactly as today: 3 attachments, no burn.
+    const normals = createSdfLayer(stubRenderer(), { marchNormals: true });
+    expect(normals.marchTarget.textures.length).toBe(3);
+    expect(normals.marchBurnTexture).toBeNull();
+    normals.dispose();
+  });
+
+  it('when on, the burn mask is the LAST attachment, named and exposed', () => {
+    // Alone: the mask rides slot 1 (three's MRTNode builds output members by
+    // attachment index — an unnamed hole at 1/2 crashes the pipeline build).
+    const burn = createSdfLayer(stubRenderer(), { marchBurn: true });
+    expect(burn.marchTarget.textures.length).toBe(2);
+    expect(burn.marchTarget.textures[1]!.name).toBe('marchBurn');
+    expect(burn.marchBurnTexture).toBe(burn.marchTarget.textures[1]);
+    burn.dispose();
+
+    // And it composes with the normals pair, as the FOURTH attachment.
+    const both = createSdfLayer(stubRenderer(), { marchNormals: true, marchBurn: true });
+    expect(both.marchTarget.textures.length).toBe(4);
+    expect(both.marchTarget.textures[3]!.name).toBe('marchBurn');
+    expect(both.marchBurnTexture).toBe(both.marchTarget.textures[3]);
+    both.dispose();
+  });
+});
+
 describe('SDF-layer material precompile', () => {
   it('compiles in the real float-target context and restores renderer/camera state', async () => {
     const previousTarget = new THREE.RenderTarget(2, 2);

@@ -40,21 +40,34 @@
 //
 // Usage:
 //   node scripts/flame-capture.mjs [outDir]
+//   node scripts/flame-capture.mjs --technique screen [outDir]
 //   LAB_VITE_PORT=5244 LAB_CDP_PORT=9244 node scripts/flame-capture.mjs
+// --technique (flame-tongues task 2) pins the lab's tongue technique for the
+// whole run: it rides the ?tongue= boot param AND __flameLab.setTechnique, so
+// the run exercises both routes and captures.json records which one ran. The
+// default is 'none' — the molten SURFACE baseline — so a bare run still
+// reproduces the foundation captures (the page's own boot default is
+// 'screen', so without the pin a bare run would silently capture tongues and
+// overwrite the baseline the tongue plans compare against). Filenames do NOT
+// carry the technique — shoot each technique into its own outDir.
 // Exits 0 on success, 2 if it could not run (boot failure, page exception,
 // no WebGPU backend, a flat capture).
 import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
 import { inflateSync, deflateSync } from 'node:zlib';
 
-const OUT = process.argv[2] ?? 'docs/dev-notes/2026-09-17-flame-lab';
+const argv = process.argv.slice(2);
+const techAt = argv.indexOf('--technique');
+const TECHNIQUE = techAt >= 0 ? String(argv[techAt + 1] ?? '') : 'none';
+const OUT = argv.filter((a, i) => a !== '--technique' && i !== techAt + 1)[0]
+  ?? 'docs/dev-notes/2026-09-17-flame-lab';
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5233);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9223);
 const LAB_TMP = process.env.LAB_TMP ?? '/tmp';
 const LAB_CHROME = process.env.LAB_CHROME
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const W = 1380, H = 820;                       // melt-capture's viewport
-const PAGE_PATH = '/sdf-flame-lab.html?seed=1';
+const PAGE_PATH = `/sdf-flame-lab.html?seed=1&tongue=${encodeURIComponent(TECHNIQUE)}`;
 // Fixed frame counts, not wall-clock sleeps — the rAF clock is what the
 // render loop and the post chain's temporal smear live on.
 const SETTLE_BOOT = 90;     // first-use pipeline compiles after boot
@@ -486,6 +499,13 @@ async function freshPage() {
     if (booted) break;
   }
   if (!booted) fail('__flameLab never appeared — the flame lab never booted');
+  // Pin the technique through the console contract too (the boot param
+  // already set it) — the run proves BOTH routes land the same switch, and
+  // setTechnique echoes what is actually applied.
+  if (TECHNIQUE !== 'none') {
+    const applied = await evaluate(`window.__flameLab.setTechnique(${JSON.stringify(TECHNIQUE)})`);
+    if (applied !== TECHNIQUE) fail(`setTechnique(${TECHNIQUE}) applied ${JSON.stringify(applied)}`);
+  }
   await frames(SETTLE_BOOT);
   // The backend line lives in the status box ("backend: webgpu", green) — the
   // single most important fact about these captures (lab-main's own note).
@@ -592,7 +612,7 @@ const realExceptions = pageExceptions.filter((t) => !/NotFoundError|setPointerCa
 if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
 
 writeFileSync(`${OUT}/captures.json`, JSON.stringify({
-  url: PAGE_PATH, backend, viewport: { width: W, height: H },
+  url: PAGE_PATH, backend, viewport: { width: W, height: H }, technique: TECHNIQUE,
   poses: POSES, stages: STAGES, contact: {
     file: 'contact.png', frames: CONTACT_FRAMES.map((f) => f.name),
     tiles: CONTACT_TILES.map((t) => t.file), bodyPx: CONTACT_BODY_PX,

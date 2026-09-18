@@ -1530,7 +1530,13 @@ var<private> gInstGore: f32 = 0.0;
 var<private> gInstBurn: vec4<f32> = vec4<f32>(0.0);
 // The surface fire's emissive contribution, written in the surface prep and
 // read by the lighting tail, which is a separate WGSL export.
-var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);`;
+var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);
+// FLAME TONGUES (flame-tongues task 2): the per-pixel burn mask the layer
+// publishes as its fourth MRT attachment. Written in the surface prep's burn
+// block, read by marchBurnRead (MARCH_BURN_OUT). rgb = burn, char, surface
+// fire; w = 1 on a written pixel and is NEVER a hit gate -- the attachment's
+// cleared alpha is 1 too (the sdf-layer MRT note), so readers gate on rgb.
+var<private> gBurnOut: vec4<f32> = vec4<f32>(0.0);`;
 
 // Per-instance state, loaded from the record buffer by slot. Everything that
 // used to be a per-body uniform parameter is a private global now, so the
@@ -3968,6 +3974,12 @@ ${FACE_LAYER_WGSL}
       gloss = gloss * (1.0 - showBone * 0.5);
     }
     gBurnEmit = fireRamp(fire) * fire * burnFireGain;
+    // The burn mask rides out to the tongue pass with the emissive write
+    // (flame-tongues task 2): burn, char and the same fire term the ramp
+    // consumed, so the screen-space tongues shape off exactly what the
+    // surface lit with. Unburned bodies leave the private at vec4(0), which
+    // is what their fragments then write over any burning body behind them.
+    gBurnOut = vec4<f32>(burnAmt, charAmt, fire, 1.0);
     faceGlow = faceGlow * (1.0 - burnAmt);
     primGlow = primGlow * (1.0 - burnAmt);
   }
@@ -4115,6 +4127,16 @@ var<private> gMarchAnchor: vec4<f32>;
  *  private declared in MARCH_NORMAL_OUT — include that node, never redeclare the var. */
 export const MARCH_ANCHOR_READ = /* wgsl */ `fn readMarchAnchor(dep: vec4<f32>) -> vec4<f32> {
   return gMarchAnchor;
+}`;
+
+/** Flame tongues (flame-tongues task 2): the burn mask of the hit (rgb =
+ *  burn, char, fire) for the layer's fourth MRT attachment. The private it
+ *  reads is declared beside gBurnEmit in the FOLD_GROUP helper chunk, which
+ *  every march-chain shader already carries -- do NOT redeclare it here; and
+ *  include marchAnchorRead so this read keeps the same lineage (and therefore
+ *  the same eval order after the march output) as the anchor read above. */
+export const MARCH_BURN_OUT = /* wgsl */ `fn readMarchBurn(dep: vec4<f32>) -> vec4<f32> {
+  return gBurnOut;
 }`;
 
 export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
