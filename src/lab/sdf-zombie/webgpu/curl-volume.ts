@@ -41,16 +41,12 @@
 
 import * as THREE from 'three/webgpu';
 import { mulberry32 } from './game-weapon';
-import type { Vec3 } from '../types';
+import { CURL_VOLUME_SIZE, CURL_SCALE } from '../curl-sample';
 
-/** Edge length of the cubic volume, texels. Named so the test and the GPU
- *  side cannot drift from the packer. */
-export const CURL_VOLUME_SIZE = 64;
-
-/** World metres per volume repeat: the shader samples `position / CURL_SCALE`.
- *  ~6 m is the wildfire bundle's figure and about two body heights, so a
- *  burning body sees a couple of flow cells across itself. */
-export const CURL_SCALE = 6;
+// The pure trilinear decode lives in ../curl-sample.ts (three-free, so the CPU
+// droplet sim can share it). Re-exported here so existing callers keep their
+// import path and there is exactly one implementation.
+export { CURL_VOLUME_SIZE, CURL_SCALE, CURL_ALPHA_CHANNEL, sampleCurlVolume } from '../curl-sample';
 
 /** Octaves per scalar lattice. Three is "several" and keeps the boot build
  *  under a second; the base field carries the large swirl, the octaves add
@@ -66,9 +62,6 @@ const S = CURL_VOLUME_SIZE;
 const S2 = S * S;
 const N = S * S * S;
 const MASK = S - 1;   // 64 is a power of two; & MASK wraps a non-negative index
-
-/** The fourth scalar's channel index in the packed RGBA8 volume. */
-export const CURL_ALPHA_CHANNEL = 3;
 
 // ── The scalar noise (the repo's value noise, allocation-free) ──────────
 // curl-volume is built with ~3 million noise samples per field, and the
@@ -225,52 +218,6 @@ export function buildCurlVolume(seed: number): Uint8Array {
 function packUnit(v: number): number {
   const b = Math.round(v * 255);
   return b < 0 ? 0 : b > 255 ? 255 : b;
-}
-
-/** Wrap a volume coordinate into [0, S). */
-function wrapCoord(v: number): number {
-  const w = v % S;
-  return w < 0 ? w + S : w;
-}
-
-/** Decode one channel of a packed texel to its -1..1 (or 0..1 for A) value. */
-function decodeTexel(data: Uint8Array, xi: number, yi: number, zi: number, c: number): number {
-  return data[(((xi + yi * S + zi * S2) << 2) + c)]! * (2 / 255) - 1;
-}
-
-/**
- * CPU trilinear sample of the packed volume, with RepeatWrapping on all three
- * axes. Coordinates are in VOLUME space (`world / CURL_SCALE`), so adding
- * CURL_VOLUME_SIZE to any axis returns the same value. Returns the decoded
- * RGB vector in roughly -1..1.
- *
- * The card host uses this to displace each card's anchor by the SAME field the
- * fragment shader warps its atlas UV with, so the whole card both moves and
- * flows, and neighbouring anchors get near-identical vectors.
- */
-export function sampleCurlVolume(
-  data: Uint8Array, x: number, y: number, z: number,
-): Vec3 {
-  const x0f = Math.floor(x), y0f = Math.floor(y), z0f = Math.floor(z);
-  const fx = x - x0f, fy = y - y0f, fz = z - z0f;
-  const x0 = wrapCoord(x0f), y0 = wrapCoord(y0f), z0 = wrapCoord(z0f);
-  const x1 = (x0 + 1) & MASK, y1 = (y0 + 1) & MASK, z1 = (z0 + 1) & MASK;
-  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-  const out: number[] = [];
-  for (let c = 0; c < 3; c++) {
-    const c000 = decodeTexel(data, x0, y0, z0, c);
-    const c100 = decodeTexel(data, x1, y0, z0, c);
-    const c010 = decodeTexel(data, x0, y1, z0, c);
-    const c110 = decodeTexel(data, x1, y1, z0, c);
-    const c001 = decodeTexel(data, x0, y0, z1, c);
-    const c101 = decodeTexel(data, x1, y0, z1, c);
-    const c011 = decodeTexel(data, x0, y1, z1, c);
-    const c111 = decodeTexel(data, x1, y1, z1, c);
-    const c00 = lerp(c000, c100, fx), c10 = lerp(c010, c110, fx);
-    const c01 = lerp(c001, c101, fx), c11 = lerp(c011, c111, fx);
-    out.push(lerp(lerp(c00, c10, fy), lerp(c01, c11, fy), fz));
-  }
-  return out as unknown as Vec3;
 }
 
 /** A 3D texture from an already-built volume (the app builds once, then keeps

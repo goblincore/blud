@@ -345,6 +345,22 @@ describe('impact splash — dissolve ramp, droplets and material alpha plumbing'
     }
   });
 
+  it('exposes a soft-particle fade switch that is inert at 0 (blood-curl-spike)', () => {
+    const layer = createImpactSplashLayer();
+    try {
+      // The layer builds the translucent membranes/mist/cards with the shared
+      // soft-fade node multiplied in; the uniform defaults to 0 (inert) and
+      // setSoftFade clamps a live value. No GPU is needed for either.
+      expect(typeof layer.setSoftFade).toBe('function');
+      layer.setSoftFade(0.4);
+      layer.setSoftFade(-1);   // clamps, never a divide-by-zero
+      layer.setSoftFade(Number.NaN);
+      expect(layer.sheetMaterial.opacityNode).not.toBeNull();
+    } finally {
+      layer.dispose();
+    }
+  });
+
   it('emits many small droplets spread across the tear window (trailing spray)', () => {
     const f = frame(12345, UP, 0.9);
     expect(f.dropletCount).toBeGreaterThanOrEqual(60);

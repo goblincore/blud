@@ -98,7 +98,7 @@ function makeNormalAtlas(atlas: THREE.DataTexture): THREE.DataTexture {
   return result;
 }
 
-export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
+export function createImpactSplashSprites(rig: ImpactSplashLightRig, softFade?: unknown) {
   const atlas=makeAtlas();
   const normals=makeNormalAtlas(atlas);
   const geometry=new THREE.PlaneGeometry(1,1);
@@ -122,7 +122,9 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
   const material=new THREE.MeshBasicNodeMaterial();
   material.colorNode=vec4(sample.rgb.mul(diffuse.mul(0.65).add(0.40))
     .add(vec3(rig.keyColor as never).mul(sheen.add(fresnel))),1) as never;
-  material.opacityNode=sample.a.mul(attribute('splashOpacity','float')) as never;
+  material.opacityNode=(softFade
+    ? sample.a.mul(attribute('splashOpacity','float')).mul(softFade as never)
+    : sample.a.mul(attribute('splashOpacity','float'))) as never;
   material.transparent=true; material.depthWrite=false; material.depthTest=true;
   material.side=THREE.DoubleSide; material.forceSinglePass=true;
   const mesh=new THREE.InstancedMesh(geometry,material,CAPACITY);

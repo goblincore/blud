@@ -5,6 +5,7 @@ import {
 } from './blood-sim';
 import type { Vec3 } from './types';
 import type { Droplet } from './blood-sim';
+import type { CurlFlow } from './curl-sample';
 import { BLOOD_TRAIL, GIB_BURST } from '../../game/gibs/tuning';
 
 function seeded(seed = 1): () => number {
@@ -522,3 +523,74 @@ describe('emitter stream provenance (blood-connections)', () => {
     expect(b.calls()).toBe(a.calls());
   });
 });
+
+describe('curl flow in the sim (blood-curl-spike, optional)', () => {
+  // A deterministic fake packed volume, so the flow tests cost no 64^3 build
+  // and do not need three. The decode/wrap contract lives in curl-sample.test.
+  function fakeVolume(): Uint8Array {
+    const d = new Uint8Array(64 * 64 * 64 * 4);
+    let s = 0x1234abcd;
+    for (let i = 0; i < d.length; i++) { s = (s * 1664525 + 1013904223) >>> 0; d[i] = s >>> 24; }
+    return d;
+  }
+  const flow = (over: Partial<CurlFlow> = {}): CurlFlow => ({
+    data: fakeVolume(), strength: 3, scale: 6, drift: 0.5, time: 0, ...over,
+  });
+
+  function staged(): ReturnType<typeof createBloodSim> {
+    const sim = createBloodSim();
+    burst(sim, [0, 1.2, 0], seeded(11));
+    addScraps(sim, [{ pos: [0.1, 1.2, 0.1], size: 0.06 }], [0, 1.2, 0], seeded(12));
+    return sim;
+  }
+
+  it('is BYTE-IDENTICAL to today when flow is absent or strength is 0', () => {
+    const a = staged(); const b = staged(); const c = staged();
+    const fa = seeded(5), fb = seeded(5), fc = seeded(5);
+    for (let i = 0; i < 90; i++) {
+      stepBlood(a, 1 / 60, fa);
+      stepBlood(b, 1 / 60, fb, undefined);
+      stepBlood(c, 1 / 60, fc, flow({ strength: 0 }));
+    }
+    // Every droplet, every position/velocity/age, plus the stamped splats and
+    // the RNG-driven splat offsets: identical bytes.
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+    expect(JSON.stringify(c)).toBe(JSON.stringify(a));
+  });
+
+  it('a non-zero strength bends the same seeded spray (the switch reaches the sim)', () => {
+    const a = staged(); const b = staged();
+    const fa = seeded(5), fb = seeded(5);
+    for (let i = 0; i < 20; i++) {
+      stepBlood(a, 1 / 60, fa);
+      stepBlood(b, 1 / 60, fb, flow());
+    }
+    expect(a.droplets.length).toBe(b.droplets.length);
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+  });
+
+  it('stays deterministic with flow on (no Math.random)', () => {
+    const a = staged(); const b = staged();
+    const fa = seeded(5), fb = seeded(5);
+    for (let i = 0; i < 40; i++) {
+      stepBlood(a, 1 / 60, fa, flow({ time: i / 60 }));
+      stepBlood(b, 1 / 60, fb, flow({ time: i / 60 }));
+    }
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('moves every AIRBORNE kind but never the chain-owned gut', () => {
+    const sim = createBloodSim();
+    const mk = (kind: Droplet['kind']): Droplet => ({
+      pos: [0.3, 1.5, 0.2], vel: [0, 0, 0], age: 0, life: 5, size: 0.08, kind,
+    });
+    sim.droplets.push(mk('drop'), mk('mist'), mk('scrap'), mk('gut'));
+    const gutBefore = JSON.stringify(sim.droplets[3]);
+    stepBlood(sim, 1 / 60, seeded(1), flow());
+    const [drop, mist, scrap, gut] = sim.droplets;
+    // drop/mist/scrap each left the origin; the gut is chain-owned and did not.
+    for (const d of [drop!, mist!, scrap!]) expect(d.pos).not.toEqual([0.3, 1.5, 0.2]);
+    expect(JSON.stringify(gut)).toBe(gutBefore);
+  });
+});
+

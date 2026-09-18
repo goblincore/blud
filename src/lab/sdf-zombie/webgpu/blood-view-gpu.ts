@@ -9,8 +9,11 @@
 // this view keeps the fine burst beads too small to fuse into a surface,
 // and the floor splats, which already read well.
 import * as THREE from 'three/webgpu';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { linearDepth, texture, uniform, vec4 } from 'three/tsl';
 import { TRAIL_HIST, type BloodSim } from '../blood-sim';
 import { GOO_TUNING } from './goo-layer';
+import { softParticleFade } from './soft-fade';
 
 const MAX_DROPLETS = 600;
 const MAX_SPLATS = 256;
@@ -77,6 +80,18 @@ export interface BloodView {
    *  with the goo surface on they are themselves "little oval drops" — the
    *  thing the goo exists to stop looking like. */
   setMistVisible(v: boolean): void;
+  /**
+   * SOFT-PARTICLE FADE on the MIST (soft-fade.ts), in metres. At 0 (the
+   * default) the mist keeps its shipped opaque CUTOUT material — bit-for-bit
+   * today's look. Above 0 the mist swaps to a transparent node material whose
+   * coverage is multiplied by the fade, so a haze sprite meeting the floor or
+   * a body ends in a gradient rather than a hard depth-test cut.
+   *
+   * The alpha goes through the node material's `colorNode.w` (the repo's
+   * WebGPU transparency rule); the scene depth side is read by the shared
+   * helper from `viewportLinearDepth`, never passed in by the caller.
+   */
+  setSoftFade(metres: number): void;
   /** Re-pose every instance from sim state; call once per frame. */
   sync(sim: BloodSim, camera: THREE.Camera): void;
   dispose(): void;
@@ -147,22 +162,45 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
 
   // Mist: its own mesh + material. alphaHash needs no sorted transparency
   // and WRITES DEPTH — see BloodViewOpts.mist for why that is load-bearing.
-  const mist = opts.mist
+  //
+  // TWO materials, one mesh. The shipped CUTOUT is the default (0 fade). The
+  // SOFT twin is created alongside and swapped in only when a caller sets a
+  // fade distance, so the default path is untouched (the blood-curl-spike
+  // requirement: "default 0 = today's look"). The soft twin carries alpha in
+  // `colorNode.w` and reads the scene depth through soft-fade's guard.
+  const mistTex = opts.mist ? dropletTexture() : null;
+  const mistCutoutMaterial = opts.mist
+    ? new THREE.MeshBasicMaterial({
+      map: mistTex!,
+      alphaTest: 0.45,
+      depthWrite: true,
+    })
+    : null;
+  const mistFadeUniform = uniform(0);
+  const mistSoftMaterial = opts.mist
+    ? (() => {
+      const tex = texture(mistTex!);
+      const mat = new MeshBasicNodeMaterial();
+      mat.colorNode = vec4(
+        tex.rgb as never,
+        (tex.a as never as { mul(v: unknown): unknown })
+          .mul(softParticleFade(linearDepth() as never, mistFadeUniform as never)) as never,
+      ) as never;
+      mat.transparent = true;
+      // Keep the cutout's occlusion contract: a faded mist sprite still writes
+      // depth, so it does not vanish behind a body the way a depthWrite:false
+      // translucent quad would (BloodViewOpts.mist).
+      mat.depthWrite = true;
+      mat.depthTest = true;
+      mat.side = THREE.DoubleSide;
+      mat.fog = false;
+      return mat;
+    })()
+    : null;
+  const mist: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.Material> | null = opts.mist
     ? new THREE.InstancedMesh(
       new THREE.PlaneGeometry(1, 1),
-      (() => {
-        // Cutout, not alphaHash: hashed coverage rendered the quads as
-        // unshaped translucent SQUARES on the WebGPU backend (the map's
-        // alpha never gated coverage) — capture round 3. Same recipe as the
-        // beads instead; at mist sizes the hard edge reads as specks, which
-        // is the wanted graininess anyway.
-        const mat = new THREE.MeshBasicMaterial({
-          map: dropletTexture(),
-          alphaTest: 0.45,
-          depthWrite: true,
-        });
-        return mat;
-      })(),
+      mistCutoutMaterial!,
       MAX_DROPLETS,
     )
     : null;
@@ -364,6 +402,11 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
     objects,
     setBeadsVisible(v) { beadsVisible = v; },
     setMistVisible(v) { mistVisible = v; },
+    setSoftFade(metres: number) {
+      const m = Number.isFinite(metres) ? Math.max(0, Math.min(4, metres)) : 0;
+      mistFadeUniform.value = m;
+      if (mist) mist.material = (m > 0 ? mistSoftMaterial! : mistCutoutMaterial!);
+    },
     sync,
     dispose() {
       for (const o of [drops, splats, mist, ribbons?.mesh]) {
@@ -371,6 +414,12 @@ export function createBloodView(opts: BloodViewOpts = {}): BloodView {
         (o as THREE.Mesh).geometry.dispose();
         ((o as THREE.Mesh).material as THREE.Material).dispose();
       }
+      // The mist mesh can only hold ONE of the two materials at a time, so the
+      // other is disposed explicitly (disposing the same material twice is a
+      // no-op, not an error).
+      if (mistCutoutMaterial) mistCutoutMaterial.dispose();
+      if (mistSoftMaterial) mistSoftMaterial.dispose();
+      if (mistTex) mistTex.dispose();
     },
   };
 }
