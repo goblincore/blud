@@ -121,7 +121,7 @@ export const POST_TONGUES_WGSL = /* wgsl */ `fn postTongues(
   // Interior pixels (burning body AT this pixel) contribute nothing — the
   // surface pass already owns them; the tongues only exist OFF the body.
   let here = textureLoad(burnTex, clamp(vec2<i32>(floor(tc * bDims)), vec2<i32>(0, 0), bMax), 0);
-  return vec4<f32>(0.0, here.x, 0.0, 1.0); // TEMP: G = here.x
+  if (here.x > 0.02) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
 
   // The bounded walk: 16 taps DOWN the projected world-up, at the host's
   // per-tap pixel step (the world length divided by the tap count, so the
@@ -143,7 +143,7 @@ export const POST_TONGUES_WGSL = /* wgsl */ `fn postTongues(
       break;
     }
   }
-  if (!found) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); } // TEMP BISECT notfound=black
+  if (!found) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
   let t = tapK / 16.0;
 
   // OCCLUSION against the capture's own depth: the flame lives at the
@@ -158,8 +158,7 @@ export const POST_TONGUES_WGSL = /* wgsl */ `fn postTongues(
   let dstClip = textureLoad(depthTex, pix, 0);
   if (dstClip < 1.0) {
     let dstZ = (n * f) / (f - dstClip * (f - n));
-    if (dstZ < srcZ - 0.06) { return vec4<f32>(0.0, 0.0, 0.4, 1.0); } // TEMP BISECT occluded=blue
-    return vec4<f32>(0.0, 0.35, 0.0, 1.0); // TEMP BISECT found=green
+    if (dstZ < srcZ - 0.06) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
   }
 
   // PHASE, per coarse screen cell of the source: bodies (and well-separated
@@ -172,25 +171,33 @@ export const POST_TONGUES_WGSL = /* wgsl */ `fn postTongues(
   let lengthM = max(cfg2.y, 0.01);
 
   // Per-column tip height: tongues of different lengths are the skeleton of
-  // the look — without this the flame is one uniform fringe.
-  let colJit = clamp(0.45 + 1.1 * tongueFbm(vec2<f32>(colM.x * 2.3, phase * 41.0)), 0.3, 1.45);
+  // the look — without this the flame is one uniform fringe. The 5.0/m
+  // frequency is ~0.2 m wide (~70 px at the close framing), so neighbouring
+  // columns really do end at different heights rather than one smooth arc.
+  let colJit = clamp(0.35 + 1.25 * tongueFbm(vec2<f32>(colM.x * 5.0, phase * 41.0)), 0.25, 1.5);
   let tt = min(t / colJit, 1.5);
 
   // Upward-scrolling fbm, domain-warped by ragged, leaning sideways with
   // height (the tip wavers, the base does not). Scroll rides the WORLD
   // height t * lengthM plus rise * time, so a feature moves toward the body
-  // — flame rises — at the tuning's metres per second.
-  var nc = vec2<f32>(colM.x * 3.1, (t * lengthM + cfg1.y * cfg2.z) * 3.4);
-  nc.x = nc.x + (tongueFbm(nc * 0.55 + vec2<f32>(31.7, 11.9)) - 0.5) * (1.0 + 5.0 * ragged)
+  // — flame rises — at the tuning's metres per second. The x frequency is
+  // higher than y so the noise lobes are TALL and NARROW: vertical licks
+  // rather than round blobs or horizontal bands.
+  var nc = vec2<f32>(colM.x * 6.0, (t * lengthM + cfg1.y * cfg2.z) * 2.4);
+  nc.x = nc.x + (tongueFbm(nc * 0.55 + vec2<f32>(31.7, 11.9)) - 0.5) * (1.0 + 5.0 * cfg1.x)
        + cfg1.w * sin(tt * 4.0 + cfg2.z * 1.9 + phase * 6.283) * 0.45;
   let fnz = tongueFbm(nc);
 
-  let flameK = tongueProfile(tt, ragged) * (0.30 + 0.95 * fnz);
+  // Lobes: the base of each tongue is solid, the tip is torn into licks with
+  // real dark gaps between them (the earlier (0.30 + 0.95 * fbm) envelope
+  // never reached zero, which is why the first cut read as a smooth curtain).
+  let lobes = mix(1.0, smoothstep(0.30, 0.70, fnz), clamp(tt, 0.0, 1.0));
+  let flameK = tongueProfile(tt, cfg1.x) * lobes;
   let flick = 0.78 + 0.22 * sin(cfg2.z * (8.0 + 5.0 * phase) + phase * 19.0);
   // Burn drives the tongues; a charred body's are damped (the soot has less
   // left to give), and the surface's own fire channel leads the base.
   let bodyK = srcMask.x * (1.0 - srcMask.y * 0.45);
-  let rampIn = clamp(1.12 - tt - 0.30 * fnz, 0.0, 1.0);
+  let rampIn = clamp(1.05 - tt * 0.9 - 0.25 * fnz, 0.0, 1.0);
   let col = tongueFireRamp(rampIn) * (flameK * bodyK * cfg1.z * flick);
   return vec4<f32>(col, 1.0);
 }

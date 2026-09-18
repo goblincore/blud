@@ -605,6 +605,13 @@ console.log(`contact.png  (${contact.w}x${contact.h}: ${contact.entries.join(' |
 // enforced for every capture run — a blurred capture is not what shipped).
 const shutterErrors = consoleErrors.filter((t) => t.includes('[shutter-game]'));
 if (shutterErrors.length > 0) fail(`shutter errored mid-run: ${shutterErrors[0]}`);
+// A render pipeline that FAILS to compile draws nothing and logs through
+// console.error — the flame-tongues task-2 pass shipped with an undefined
+// WGSL identifier and rendered black while this script stayed silent because
+// nothing here inspected the console. Refuse a run whose renderer reported a
+// pipeline/shader error: a compile failure is never an acceptable capture.
+const rendererErrors = consoleErrors.filter((t) => /THREE\.WebGPURenderer.*(pipeline|ShaderModule|fragment error|unresolved value)/i.test(t));
+if (rendererErrors.length > 0) fail(`renderer pipeline error: ${rendererErrors[0].slice(0, 300)}`);
 // Exceptions in page listeners surface here, not through evaluate. The orbit
 // stop-click can report a benign setPointerCapture NotFoundError under CDP's
 // synthetic pointer — ignore exactly that, fail on anything else.

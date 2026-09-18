@@ -579,9 +579,10 @@ export interface PostAa {
    * default OFF. Runs FIRST of the post passes — right after the chain's
    * capture and BEFORE the shutter capture stage and the glow extract — so
    * tongues are both shutter-blurred and bloomed like everything else in
-   * the frame. Additive draw straight into the capture (the glow-blur
-   * pattern: autoClear off, no extra target, alpha 1); off never binds the
-   * material and the all-off parity path stays exact.
+   * the frame. It shapes into its own target (it samples the capture's depth,
+   * which cannot be a binding while the capture is the render target) and an
+   * additive composite lands it in the capture; off never binds the material
+   * and the all-off parity path stays exact.
    *
    * The per-frame feed is the whole state: stepPx (tonguePixelLength / taps,
    * host-computed at the body's depth), camera near/far/fovTan, the body
@@ -939,6 +940,15 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const uTongueCfg0 = uniform(new THREE.Vector4(0, 0.05, 60, 1));
   const uTongueCfg1 = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uTongueCfg2 = uniform(new THREE.Vector4(3, 0.45, 0, 0));
+  // The pass READS sceneTarget.depthTexture, so it can NOT write into
+  // sceneTarget: WebGPU forbids one subresource being both a render
+  // attachment and a binding in the same pass, and sceneTarget's depth is
+  // always an attachment (its depthTexture). Every other pass in this chain
+  // obeys the same "never sample what you write" rule by writing its own
+  // target; the tongues do too, and a second additive draw lands the result in
+  // the capture. Writing straight into sceneTarget made the whole pass a
+  // validation no-op — its taps read zero and nothing appeared.
+  const tongueTarget = new THREE.RenderTarget(1, 1, passOpts);
   const tongueOut = wgslFn(POST_TONGUES_WGSL)({
     burnTex: tongueBurnTex,
     depthTex: texture(sceneTarget.depthTexture!),
@@ -950,14 +960,32 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   }) as unknown as Swizzled;
   const tongueMat = new MeshBasicNodeMaterial();
   tongueMat.name = 'post:tongues';
-  tongueMat.colorNode = vec4(0.25, 0.0, 0.0, 1.0); // TEMP BISECT
+  tongueMat.colorNode = vec4(tongueOut.xyz as never, 1.0);
   tongueMat.depthWrite = false;
   tongueMat.depthTest = false;
   tongueMat.fog = false;
-  // Additive fire (the transparency rule: alpha in colorNode.w is 1, the
-  // colour carries the whole term — never alphaHash, never alphaTest).
-  tongueMat.blending = THREE.AdditiveBlending;
+  // The shaping pass WRITES its value (the quad covers every pixel); only the
+  // composite below is additive. Additive here would fold the target's clear
+  // colour — the lab background — into every frame the technique is on.
+  tongueMat.blending = THREE.NoBlending;
   const tongueScene = quadScene(tongueMat);
+
+  // The additive composite of tongueTarget into the capture. POST_AA_COPY_WGSL
+  // is the module's textureLoad copy (no sampler needed), and its entry flip
+  // cancels the pass's own read flip, so the flame lands exactly where it was
+  // shaped. Drawn into sceneTarget with autoClear off.
+  const tongueCompositeOut = wgslFn(POST_AA_COPY_WGSL)({
+    srcTex: texture(tongueTarget.texture),
+    texCoord: uv(),
+  }) as unknown as Swizzled;
+  const tongueCompositeMat = new MeshBasicNodeMaterial();
+  tongueCompositeMat.name = 'post:tongues-composite';
+  tongueCompositeMat.colorNode = vec4(tongueCompositeOut.xyz as never, 1.0);
+  tongueCompositeMat.depthWrite = false;
+  tongueCompositeMat.depthTest = false;
+  tongueCompositeMat.fog = false;
+  tongueCompositeMat.blending = THREE.AdditiveBlending;
+  const tongueCompositeScene = quadScene(tongueCompositeMat);
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
@@ -1230,6 +1258,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     vhsInB.setSize(content.width, content.height);
     vhsTarget.setSize(content.width, content.height);
     sscsTarget.setSize(content.width, content.height);
+    // Tongues shape at the capture resolution (the pass is per-pixel flame).
+    tongueTarget.setSize(content.width, content.height);
     // The glow pair runs at HALF content size: a bloom's footprint is wide
     // relative to one pixel, so the blur does not need full resolution, and
     // the two draws cost a quarter of one each.
@@ -1284,17 +1314,21 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // The whole polygon/sdf/cone/occluder/composite/goo flow, captured.
       chain();
 
-      // TONGUES (flame-tongues task 2): first of the post passes, drawn
-      // additively straight into the fresh capture BEFORE the shutter capture
-      // stage and the glow extract below, so tongues are both shutter-blurred
-      // and bloomed like the rest of the frame. autoClear off — a clear here
-      // would wipe the frame from under the flame (the glow-blur dance).
+      // TONGUES (flame-tongues task 2): first of the post passes, before the
+      // shutter capture stage and the glow extract below, so tongues are both
+      // shutter-blurred and bloomed like the rest of the frame. Two draws: the
+      // shaping pass into its own target (it samples the capture's depth), then
+      // an additive composite into the capture with autoClear off — a clear
+      // there would wipe the frame from under the flame (the glow-blur dance).
       if (tonguesOn) {
         setPassLabel('post:tongues');
+        renderer.setRenderTarget(tongueTarget);
+        void renderer.render(tongueScene, quadCam);
+        setPassLabel('post:tongues-composite');
         renderer.setRenderTarget(sceneTarget);
         const prevAutoClearTongues = renderer.autoClear;
         renderer.autoClear = false;
-        void renderer.render(tongueScene, quadCam);
+        void renderer.render(tongueCompositeScene, quadCam);
         renderer.autoClear = prevAutoClearTongues;
       }
 
@@ -1691,12 +1725,15 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     vhsInB.dispose();
     vhsTarget.dispose();
     sscsTarget.dispose();
+    tongueTarget.dispose();
     glowA.dispose();
     glowB.dispose();
     sscsFleshFallback.dispose();
     sscsMat.dispose();
     glowExtractMat.dispose();
     glowBlurMat.dispose();
+    tongueMat.dispose();
+    tongueCompositeMat.dispose();
     fxaaMat.dispose();
       blendMat.dispose();
       vhsCopyMat.dispose();
