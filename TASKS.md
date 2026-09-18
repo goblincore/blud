@@ -99,6 +99,18 @@
 - [x] Hidden blur-panel bug fixed: **BLOOD + GIB BLUR** docks bottom-right, clear of Dynamite / Gib; H toggles visibility.
 - [ ] Quiet-machine combined blur cost measurement; prior loaded-machine marginal timings are inconclusive.
 - [ ] Investigate first-use gib-material compile hitch and in-app-browser GPU loss during warm-up; Chrome boots successfully.
+- [x] **Boot stuck on "compiling pipelines" then WebGPU device lost — root-caused and fixed 2026-09-18** (uncommitted on
+  `claude/webgpu-shader-compile-timeout-a59a9d`). NOT machine state: the march pipelines cost 75-100 s to compile whenever the
+  OS-level Metal shader cache is cold, which is after ANY march WGSL edit (measured by changing one `smin` constant: `drawOnce`
+  1.8 s cached -> 80-101 s cold, main thread blocked in `createShaderModule`). The warm-up built them SYNCHRONOUSLY in
+  `drawOnce`; headed Chrome's GPU watchdog killed the GPU process mid-stall (Crashpad: gpu-process, `gpu_watchdog_thread.cc`),
+  so the compile never finished, never cached, and every reload failed until a headless run filled the cache. Fix: the warm-up
+  awaits `sdfLayer.precompilePasses` (async pipeline creation, `PRECOMPILE_COLD_PASS_TIMEOUT_MS` = 180 s per pass) BEFORE
+  `drawOnce`. Headed A/B, cold cache: unfixed = `device-lost` after a 73.8 s blocked `drawOnce`; fixed = 75.8 s idle wait,
+  `drawOnce` 1.1 s, gate `ready`. Cached boot unchanged (~2.3 s warm). The in-app-browser GPU loss above is likely the same.
+- [ ] The cold march compile itself is still ~75 s (now a wait behind the loader, not a crash). Worth attributing: which march
+  variant / which Metal-compiler pathology (loop nest? inlining of `mapBody`?) and whether it can be cut. The flare-gun branch
+  needs this fix merged — its dev server is where the owner hit the loss.
 
 ## Dynamite gib appearance — owner accepted 2026-09-16
 
