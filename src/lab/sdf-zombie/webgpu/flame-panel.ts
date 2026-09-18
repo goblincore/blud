@@ -49,6 +49,7 @@ const LABELS: Record<keyof BurnTuning, { label: string; step: number }> = {
   distortStrength: { label: 'heat warp', step: 0.001 },
   fireCoverage: { label: 'coverage', step: 0.02 },
   skeletonShow: { label: 'skeleton', step: 0.02 },
+  cardSoftFade: { label: 'card soft fade', step: 0.01 },
 };
 
 export const FLAME_KEYS: readonly FlameKey[] = Object.freeze(

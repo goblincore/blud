@@ -22,13 +22,24 @@
 // (renders as solid squares on this backend) and NO alphaTest (a cutout kills
 // exactly the soft glow a flame is made of).
 //
+// ── CARD SEAMS (flame-polish task 1, 2026-09-18) ────────────────────────
+// The close captures read as a mosaic of hard rectangles. Three fixes landed:
+// (1) the atlas fallback DataTexture is now Linear/Linear — a Nearest fallback
+// makes WGSLNodeBuilder bake `textureLoad` into the shader, so the swapped-in
+// atlas was ALWAYS point-sampled and each 31x25 FIRE01 texel became a ~10 px
+// flat block. This was the actual cause; the filter now applies.
+// (2) cardCellUv insets each frame's uv by half a texel and skips the atlas
+// builder's 2 px gutter, so a boundary tap cannot read the neighbouring frame.
+// (3) a soft-particle depth fade (BurnTuning.cardSoftFade) rounds the straight
+// depth-test cut where a card crosses the body.
+//
 // The known card failure modes this design pushes against, both judged on the
 // captures: cards CLIPPING INTO the body leave hard seams (so every anchor is
 // biased a fraction toward the camera — the fire sits just in front of the
 // flesh it burns), and sparse round BLOBS reading as particles rather than
 // fire (so the procedural fallback is a domain-warped, tapered, blackbody-
 // ramped flame — crisp licks, not soft balls — and the atlas path is real
-// FIRE01 frames at a pixel-art Nearest mag filter).
+// FIRE01 frames, linearly filtered at close range).
 //
 // ── DETERMINISM ─────────────────────────────────────────────────────────
 // No Math.random() anywhere. All per-card randomness is drawn from a seeded
@@ -46,8 +57,9 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, clamp, float, mix, mx_fractal_noise_float, smoothstep,
-  texture, uniform, vec2, vec3, vec4,
+  attribute, cameraFar, cameraNear, clamp, float, linearDepth, mix,
+  mx_fractal_noise_float, smoothstep, texture, uniform, vec2, vec3, vec4,
+  viewportLinearDepth,
 } from 'three/tsl';
 import { mulberry32 } from './game-weapon';
 import type { Vec3 } from '../types';
@@ -150,6 +162,44 @@ export function cardFrame(time: number, phase: number, frames: number, fps: numb
   return ((f % frames) + frames) % frames;
 }
 
+/**
+ * The u-range of one frame in a horizontal-strip flipbook atlas, inset by half
+ * a texel on each side.
+ *
+ * A strip packs its cells edge to edge, so the card's `0..1` across-face uv is
+ * scaled into a cell. Any rounding at the boundary then samples the NEIGHBOURING
+ * frame — a hard-edged rectangle of a different flame, the "card seam" the close
+ * captures show. Pulling both ends in by half a texel keeps every tap inside its
+ * own cell.
+ *
+ * `padTexels` matches the transparent gutter build-flame-atlas.mjs now puts
+ * around each cell: cells are pitched at `cellWidthTexels + 2 * padTexels` and
+ * the frame content starts `padTexels` in, so the gap between two cells is
+ * `2 * padTexels` wide. With `padTexels = 0` this reduces to the gapless strip
+ * the unit test pins.
+ *
+ * @param frame           0-based frame index
+ * @param frames          frames in the strip
+ * @param atlasWidth      atlas width in texels
+ * @param padTexels       transparent gutter on each side of a cell
+ * @param cellWidthTexels content width in texels (defaults to a gapless strip)
+ */
+export function cardCellUv(
+  frame: number,
+  frames: number,
+  atlasWidth: number,
+  padTexels = 0,
+  cellWidthTexels = atlasWidth / frames - 2 * padTexels,
+): { u0: number; u1: number } {
+  const pitch = cellWidthTexels + 2 * padTexels;
+  const left = frame * pitch + padTexels;
+  const inset = 0.5 / atlasWidth;
+  return {
+    u0: left / atlasWidth + inset,
+    u1: (left + cellWidthTexels) / atlasWidth - inset,
+  };
+}
+
 // ————————————————————————————————————————————————————————————————————————
 // The GPU half — one material, one refilled quad buffer.
 // ————————————————————————————————————————————————————————————————————————
@@ -210,6 +260,12 @@ export function makeFlameCardUniforms() {
     rise: uniform(2.2),
     ragged: uniform(0.6),
     atlasOn: uniform(0),
+    /** The v range of the cell CONTENT inside the (gutter-padded) atlas; with no
+     *  gutter this is exactly 0..1, so the padding never shrinks the flame. */
+    atlasV0: uniform(0),
+    atlasV1: uniform(1),
+    /** Soft-particle fade distance in METRES; 0 disables it (inert). */
+    softFade: uniform(0.08),
   };
 }
 export type FlameCardUniforms = ReturnType<typeof makeFlameCardUniforms>;
@@ -233,8 +289,11 @@ export interface FlameCards {
   update(bodies: readonly FlameCardFrame[], camera: THREE.Camera, time: number): void;
   /** The shared tongue tuning seam (length/gain/rise/ragged/lean). */
   setTuning(t: TongueTuning): void;
-  /** Swap the procedural fallback for the FIRE01 atlas (no recompile). */
-  setAtlas(tex: THREE.Texture, frames: number, cellW: number, cellH: number): void;
+  /** Soft-particle fade distance in metres; 0 disables it (BurnTuning.cardSoftFade). */
+  setSoftFade(metres: number): void;
+  /** Swap the procedural fallback for the FIRE01 atlas (no recompile).
+   *  `padTexels` is the atlas builder's transparent gutter per cell side. */
+  setAtlas(tex: THREE.Texture, frames: number, cellW: number, cellH: number, padTexels?: number): void;
   /** Whether the atlas is live (false = procedural fallback). */
   readonly atlasMode: boolean;
   /** The atlas cell aspect, once known. */
@@ -255,13 +314,29 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
   const uRise = u.rise as unknown as Tsl;
   const uRagged = u.ragged as unknown as Tsl;
   const uAtlasOn = u.atlasOn as unknown as Tsl;
+  const uAtlasV0 = u.atlasV0 as unknown as Tsl;
+  const uAtlasV1 = u.atlasV1 as unknown as Tsl;
+  const uSoftFade = u.softFade as unknown as Tsl;
 
   // Atlas texture NODE, built over a 1x1 transparent fallback and repointed
   // by setAtlas — the post-aa swap pattern (a texture binding is baked per
   // material; the node identity must never change, only its .value).
+  //
+  // THE FALLBACK'S FILTERS ARE LOAD-BEARING, and this is the card-seam root
+  // cause (flame-polish task 1). A THREE.DataTexture defaults to Nearest on
+  // BOTH filters, and WGSLNodeBuilder.isUnfilterable() then bakes
+  // `textureLoad` (integer texel fetch, no filtering) into the compiled
+  // shader. The atlas is swapped in later by writing `.value`, which never
+  // recompiles the shader — so the loaded PNG's own magFilter was silently
+  // ignored and the 31x25 FIRE01 cells were ALWAYS point-sampled. At the
+  // close framing each texel becomes a ~10 px flat rectangle. Forcing the
+  // fallback to Linear makes the builder emit a real filtering sampler, so
+  // the bound atlas's filter finally decides the look.
   const atlasFallback = new THREE.DataTexture(
     new Uint8Array([0, 0, 0, 0]), 1, 1, THREE.RGBAFormat,
   );
+  atlasFallback.magFilter = THREE.LinearFilter;
+  atlasFallback.minFilter = THREE.LinearFilter;
   atlasFallback.needsUpdate = true;
 
   const aUv = attribute('aUv', 'vec2') as unknown as Tsl;
@@ -298,15 +373,46 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
   ) as unknown as Tsl;
 
   // — ATLAS FIRE (the FIRE01 flipbook) ————————————————————————————
+  // u comes per-card (the flipbook frame); v spans the cell content, which the
+  // gutter-padded atlas records in atlasV0/atlasV1 (0..1 when there is no
+  // gutter, so the padding never scales the flame down).
   const atlasUv = vec2(
     frameU0.add(aUv.x.mul(frameDu)) as N,
-    aUv.y as N,
+    uAtlasV0.add(aUv.y.mul((uAtlasV1.sub(uAtlasV0)) as N)) as N,
   );
   const atlasTexNode = texture(atlasFallback, atlasUv as N) as unknown as Tsl & {
     value: THREE.Texture;
   };
   const atlasRgb = atlasTexNode.rgb as unknown as Tsl;
   const atlasA = atlasTexNode.a as unknown as Tsl;
+
+  // — SOFT-PARTICLE DEPTH FADE (flame-polish task 1) ————————————————————
+  // A card that INTERSECTS the body (or a wall, or the other body) is cut by
+  // the depth test along a straight line, which reads as a rectangular edge.
+  // Fade its alpha as the fragment approaches the scene surface behind it, so
+  // the cut becomes a gradient instead of a seam.
+  //
+  // THE TRAP (docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): the SCENE
+  // side must come from the depth TEXTURE (viewportLinearDepth /
+  // linearDepth(viewportDepthTexture())). Feeding a bare depth()/linearDepth()
+  // to BOTH sides is the current fragment's own depth, so the difference is
+  // identically zero AND the whole effect renders transparent black with no
+  // error. `linearDepth()` with no argument IS the current fragment — correct
+  // for the near side here, fatal for the far side.
+  const sceneLin = viewportLinearDepth as unknown as Tsl;   // 0..1 linear scene depth
+  const fragLin = linearDepth() as unknown as Tsl;          // 0..1 linear fragment depth
+  // Both are normalized over [near, far]; convert back to view-space metres so
+  // `cardSoftFade` is a real distance and the panel bounds mean something.
+  const nearM = cameraNear as unknown as Tsl;
+  const spanM = (cameraFar as unknown as Tsl).sub(nearM as N) as unknown as Tsl;
+  const sceneM = nearM.add(sceneLin.mul(spanM as N)) as unknown as Tsl;
+  const fragM = nearM.add(fragLin.mul(spanM as N)) as unknown as Tsl;
+  // fadeOn keeps a 0 metre setting fully inert — no divide, no change.
+  const fadeOn = smoothstep(0.0, 1e-5, uSoftFade as N) as unknown as Tsl;
+  const soft = clamp(
+    sceneM.sub(fragM as N).div(uSoftFade.max(1e-4) as N) as N, 0.0, 1.0,
+  ) as unknown as Tsl;
+  const depthFade = mix(float(1) as N, soft as N, fadeOn as N) as unknown as Tsl;
 
   // — Combined: the atlas uniform mixes the two paths with no recompile. —
   // A two-rate breathe per card, the fire-light's own wobble shape
@@ -316,7 +422,7 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
   const rgb = mix(procRgb as N, atlasRgb as N, uAtlasOn as N)
     .mul(uGain as N).mul(heat as N).mul(breathe as N) as unknown as Tsl;
   const cov = mix(procA as N, atlasA as N, uAtlasOn as N)
-    .mul(heat as N).mul(breathe as N) as unknown as Tsl;
+    .mul(heat as N).mul(breathe as N).mul(depthFade as N) as unknown as Tsl;
 
   const material = new MeshBasicNodeMaterial();
   material.name = 'flame-cards';
@@ -368,6 +474,9 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
 
   // Live state.
   let atlasFrames = 8;
+  let atlasCellW = 31;    // FIRE01 content width, the gapless default
+  let atlasPad = 0;       // transparent gutter per cell side (JSON `pad`)
+  let atlasWidthPx = 31 * 8;
   let aspect = 31 / 25;   // the FIRE01 cell aspect the atlas ships with
   let atlasLive = false;
   let liveCards = 0;
@@ -429,10 +538,14 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
           // Size: length x per-card scale, atlas aspect, stretched tall.
           const h = len * p.scale;
           const w = (h * aspect) / CARD_STRETCH;
-          // Flipbook frame — the phase fraction spans the whole clip.
+          // Flipbook frame — the phase fraction spans the whole clip. The
+          // cell's uv range is INSET by half a texel (and skips the atlas
+          // builder's transparent gutter) so a boundary tap cannot land on the
+          // neighbouring frame: that is the "card seam" rectangle.
           const frame = cardFrame(time, p.phase * clipSec, atlasFrames, FLAME_CARD_FPS);
-          const u0 = frame / atlasFrames;
-          const du = 1 / atlasFrames;
+          const cell = cardCellUv(frame, atlasFrames, atlasWidthPx, atlasPad, atlasCellW);
+          const u0 = cell.u0;
+          const du = cell.u1 - cell.u0;
           const vBase = quad * VERTS_PER_QUAD;
           for (let k = 0; k < 4; k++) {
             const c = QUAD_CORNERS[k]!;
@@ -466,8 +579,19 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
       u.rise.value = t.rise;
       u.ragged.value = t.ragged;
     },
-    setAtlas(tex, frames, cellW, cellH) {
+    setSoftFade(metres) {
+      u.softFade.value = Math.max(0, metres);
+    },
+    setAtlas(tex, frames, cellW, cellH, padTexels = 0) {
       atlasFrames = Math.max(1, frames);
+      atlasCellW = cellW;
+      atlasPad = Math.max(0, Math.round(padTexels));
+      atlasWidthPx = (cellW + 2 * atlasPad) * atlasFrames;
+      // The cell content sits inside the gutter: sample exactly that band so
+      // the transparent padding neither shrinks nor lifts the flame.
+      const atlasH = cellH + 2 * atlasPad;
+      u.atlasV0.value = atlasPad / atlasH;
+      u.atlasV1.value = (atlasPad + cellH) / atlasH;
       aspect = cellW / cellH;
       atlasTexNode.value = tex;
       u.atlasOn.value = 1;

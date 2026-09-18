@@ -519,10 +519,12 @@ async function freshPage() {
   if (!booted) fail('__flameLab never appeared — the flame lab never booted');
   // Pin the technique through the console contract too (the boot param
   // already set it) — the run proves BOTH routes land the same switch, and
-  // setTechnique echoes what is actually applied.
-  if (TECHNIQUE !== 'none') {
-    const applied = await evaluate(`window.__flameLab.setTechnique(${JSON.stringify(TECHNIQUE)})`);
-    if (applied !== TECHNIQUE) fail(`setTechnique(${TECHNIQUE}) applied ${JSON.stringify(applied)}`);
+  // setTechnique echoes what is actually applied. The flag is `technique`
+  // (null when no flag): a `TECHNIQUE` name here was a rename leftover that
+  // crashed every --technique run before its first capture.
+  if (technique !== null) {
+    const applied = await evaluate(`window.__flameLab.setTechnique(${JSON.stringify(technique)})`);
+    if (applied !== technique) fail(`setTechnique(${technique}) applied ${JSON.stringify(applied)}`);
   }
   await frames(SETTLE_BOOT);
   // The backend line lives in the status box ("backend: webgpu", green) — the

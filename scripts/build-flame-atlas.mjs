@@ -6,7 +6,13 @@
 //
 // Writes (both gitignored — `public/assets/**/*-placeholder/`):
 //   public/assets/flame-placeholder/fire01.png    8 frames in one row
-//   public/assets/flame-placeholder/fire01.json   { frames, cellW, cellH }
+//   public/assets/flame-placeholder/fire01.json   { frames, cellW, cellH, pad, atlasW, atlasH }
+//
+// GUTTER (flame-polish task 1): every cell is separated by a 2 px transparent
+// gutter, so even a minified/mip or a rounding tap at a cell boundary lands in
+// transparent padding rather than the neighbouring frame. `pad` is recorded in
+// the sidecar and read back by flame-cards.ts's cardCellUv, which skips it when
+// it computes a frame's uv range.
 //
 // The extraction is a DEV PLACEHOLDER (never commit, never ship): a fresh
 // clone has no assets-source/, so this script exits 2 with a clear message
@@ -133,6 +139,9 @@ function encodePng(rgba, w, h) {
 // the grid cells are the max across frames and each frame is bottom-centre
 // aligned inside its cell: a flame stays planted at its base while it burns,
 // and the padding is transparent (tRNS) — free under additive blending.
+// A PAD-px transparent gutter separates adjacent cells (see the header).
+
+const PAD = 2;   // texels of transparent gutter on each side of every cell
 
 const frames = [];
 let cellW = -1, cellH = -1;
@@ -145,13 +154,14 @@ for (let i = 0; i < FRAMES; i++) {
   frames.push({ rgba: d.rgba, w: d.w, h: d.h });
 }
 
-const atlasW = cellW * FRAMES;
-const atlasH = cellH;
+const pitch = cellW + 2 * PAD;
+const atlasW = pitch * FRAMES;
+const atlasH = cellH + 2 * PAD;
 const atlas = Buffer.alloc(atlasW * atlasH * 4);
 for (let f = 0; f < FRAMES; f++) {
   const { rgba, w, h } = frames[f];
-  const x0 = f * cellW + ((cellW - w) >> 1);   // horizontal centre
-  const y0 = atlasH - h;                        // bottom-aligned (fire base)
+  const x0 = f * pitch + PAD + ((cellW - w) >> 1);   // centre inside the cell
+  const y0 = PAD + (cellH - h);                       // bottom-aligned (fire base)
   for (let y = 0; y < h; y++) {
     rgba.copy(atlas, ((y0 + y) * atlasW + x0) * 4, (y * w) * 4, (y * w + w) * 4);
   }
@@ -160,7 +170,7 @@ for (let f = 0; f < FRAMES; f++) {
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(`${OUT_DIR}/fire01.png`, encodePng(atlas, atlasW, atlasH));
 writeFileSync(`${OUT_DIR}/fire01.json`, JSON.stringify({
-  frames: FRAMES, cellW, cellH,
+  frames: FRAMES, cellW, cellH, pad: PAD, atlasW, atlasH,
   source: `tiles013 tiles ${FIRST_TILE}-${FIRST_TILE + FRAMES - 1} (dev placeholder)`,
 }, null, 2));
-console.log(`flame:atlas — wrote ${OUT_DIR}/fire01.png (${atlasW}x${atlasH}, ${FRAMES} frames of ${cellW}x${cellH})`);
+console.log(`flame:atlas — wrote ${OUT_DIR}/fire01.png (${atlasW}x${atlasH}, ${FRAMES} frames of ${cellW}x${cellH}, pad ${PAD})`);

@@ -44,84 +44,84 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-close-fresh.png",
-      "std": 72.28
+      "std": 61.76
     },
     {
       "pose": "close",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-close-charred.png",
-      "std": 62.07
+      "std": 58.71
     },
     {
       "pose": "stand",
       "stage": "fresh",
       "char": 0,
       "file": "cards-stand-fresh.png",
-      "std": 40.9
+      "std": 41.33
     },
     {
       "pose": "stand",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-stand-charred.png",
-      "std": 36.61
+      "std": 35.98
     },
     {
       "pose": "walk",
       "stage": "fresh",
       "char": 0,
       "file": "cards-walk-fresh.png",
-      "std": 41.62
+      "std": 39.93
     },
     {
       "pose": "walk",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-walk-charred.png",
-      "std": 38.78
+      "std": 35.1
     },
     {
       "pose": "run",
       "stage": "fresh",
       "char": 0,
       "file": "cards-run-fresh.png",
-      "std": 43.15
+      "std": 40.89
     },
     {
       "pose": "run",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-run-charred.png",
-      "std": 40.47
+      "std": 35.65
     },
     {
       "pose": "collapsed",
       "stage": "fresh",
       "char": 0,
       "file": "cards-collapsed-fresh.png",
-      "std": 37.37
+      "std": 46.05
     },
     {
       "pose": "collapsed",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-collapsed-charred.png",
-      "std": 33.49
+      "std": 39.95
     },
     {
       "pose": "distant",
       "stage": "fresh",
       "char": 0,
       "file": "cards-distant-fresh.png",
-      "std": 23.31
+      "std": 22.7
     },
     {
       "pose": "distant",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-distant-charred.png",
-      "std": 22.24
+      "std": 21.08
     }
   ]
 }

@@ -36,6 +36,11 @@ export interface BurnTuning {
   fireCoverage: number;
   /** How far the flesh thins to show bone at full char, 0..1. */
   skeletonShow: number;
+  /** Flame-card soft-particle fade distance in METRES: a card's alpha fades
+   *  out over this distance as it approaches the scene surface behind it, so
+   *  a card intersecting the body ends in a gradient instead of a straight
+   *  depth-test cut. 0 disables it (flame-polish task 1). */
+  cardSoftFade: number;
 }
 
 export const BURN_TUNING: BurnTuning = Object.freeze({
@@ -56,6 +61,10 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   // the late-stage more-bone look). skelK is 0 on a fresh body by
   // construction, so this never paints an unburnt body.
   skeletonShow: 0.7,
+  // flame-polish task 1: 8 cm of soft-particle fade kills the hard card seam
+  // where a flame quad crosses the body edge. 0 is the escape hatch. (At the
+  // 0.5 m rail the flame visibly pulls off the body — 8 cm only rounds the cut.)
+  cardSoftFade: 0.08,
 });
 
 /** The clamp range for every field, as data.
@@ -77,6 +86,7 @@ export const BURN_BOUNDS: Readonly<Record<keyof BurnTuning, readonly [number, nu
   glowGain: [0, 2], glowThreshold: [0, 4],
   distortStrength: [0, BLAST_REFRACTION.maxOffsetUv],
   fireCoverage: [0, 1], skeletonShow: [0, 1],
+  cardSoftFade: [0, 0.5],
 });
 
 export const burnPresets: Readonly<Record<'blood' | 'ember' | 'inferno', BurnTuning>> = Object.freeze({

@@ -604,7 +604,7 @@ async function bootstrap(): Promise<void> {
     fetch('/assets/flame-placeholder/fire01.json')
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`http ${r.status}`))))
       .then((t) => {
-        try { return JSON.parse(t) as { frames: number; cellW: number; cellH: number }; }
+        try { return JSON.parse(t) as { frames: number; cellW: number; cellH: number; pad?: number }; }
         catch { throw new Error('manifest not found'); }
       })
       .then((info) => {
@@ -612,12 +612,19 @@ async function bootstrap(): Promise<void> {
           '/assets/flame-placeholder/fire01.png',
           (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;  // decode into working space
-            tex.magFilter = THREE.NearestFilter;    // the pixel-art read
+            // Linear mag (flame-polish task 1): the FIRE01 cells are 31x25, so
+            // at the close framing point sampling turns each texel into a ~10 px
+            // flat rectangle — the "card seam" blockiness. NOTE this only works
+            // because flame-cards.ts makes its fallback DataTexture filterable;
+            // a Nearest fallback makes WGSLNodeBuilder bake textureLoad into the
+            // shader and this filter is silently ignored.
+            tex.magFilter = THREE.LinearFilter;
             tex.minFilter = THREE.LinearFilter;
             tex.generateMipmaps = false;
             tex.flipY = true;                       // v=0 is the flame's base
-            flameCards.setAtlas(tex, info.frames, info.cellW, info.cellH);
-            cardsEl.textContent = `tongue cards: atlas (${info.frames} frames of ${info.cellW}x${info.cellH})`;
+            flameCards.setAtlas(tex, info.frames, info.cellW, info.cellH, info.pad ?? 0);
+            cardsEl.textContent = `tongue cards: atlas (${info.frames} frames of ${info.cellW}x${info.cellH}`
+              + `${info.pad ? `, pad ${info.pad}` : ''})`;
             cardsEl.style.color = '#9c9';
           },
           undefined,
@@ -873,9 +880,11 @@ async function bootstrap(): Promise<void> {
       }
 
       // The cards draw only on their technique; setTuning every frame so the
-      // tongue sliders land live, exactly like the burn uniforms above.
+      // tongue sliders land live, exactly like the burn uniforms above. The
+      // soft-particle fade rides BurnTuning (panel slider -> this call).
       flameCards.object.visible = technique === 'cards';
       flameCards.setTuning(tongue);
+      flameCards.setSoftFade(tuning.cardSoftFade);
       if (technique === 'cards') flameCards.update(cardFrames, camera, clock);
     }
 
