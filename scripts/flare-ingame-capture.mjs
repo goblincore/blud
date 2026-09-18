@@ -223,16 +223,22 @@ async function bootGame(query = '') {
     ok = await evaluate('typeof window.__sdfGame === "object"').catch(() => false);
   }
   if (!ok) throw new Error(`__sdfGame never booted (${query || 'no query'})`);
-  for (let i = 0; i < 180; i++) {
-    const ready = await evaluate(`(() => {
-      const l = document.getElementById('loader');
-      const warm = window.__warmGate;
-      return (l && l.classList.contains('loader-hidden'))
-        || (warm && warm.phase === 'ready')
-        || (l && getComputedStyle(l).display === 'none');
-    })()`).catch(() => false);
-    if (ready) break;
-    await sleep(500);
+  // Wait for the warm gate's REAL outcome. A hidden loader is not success: the
+  // gate also hides it (after 2.5 s) on 'warm-failed' and 'device-lost', so
+  // keying on visibility captured failed boots as if they had worked — and a
+  // gate that never settled used to fall through silently after 90 s.
+  let gate = null;
+  for (let i = 0; i < 180 && !gate; i++) {
+    gate = await evaluate('window.__warmGate ?? null').catch(() => null);
+    if (!gate) await sleep(500);
+  }
+  if (!gate) {
+    const loader = await evaluate(`document.getElementById('loader')?.textContent?.trim() ?? ''`).catch(() => '?');
+    throw new Error(`warm gate never settled after 90 s (${query || 'no query'}); loader says: ${loader.slice(0, 120)}`);
+  }
+  if (gate.phase !== 'ready') {
+    throw new Error(`boot did not reach READY (${query || 'no query'}): warm gate phase '${gate.phase}'`
+      + (gate.phase === 'device-lost' ? ' — often GPU contention from another WebGPU page or capture running at the same time' : ''));
   }
   await sleep(1500);
   await evaluate(`(() => {
