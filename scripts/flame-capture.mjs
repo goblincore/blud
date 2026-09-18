@@ -63,9 +63,11 @@
 // sweep's values share one animation instant. --poses limits the pose set; a
 // subset that omits the contact-sheet frames skips the sheet instead of
 // failing. Shoot a single --flow value into its own outDir.
-// --skeleton-depth <0..0.15> / --skeleton-sweep a,b,c pin BurnTuning.skeletonDepth
-// through setTuning; sweep values get a -d<value> tag and are shot at one
-// camera, which is how the bone-reveal A/B is judged (flame-polish task 4).
+// --skeleton-depth <0..0.15> / --skeleton-sweep a,b,c pin and sweep
+// BurnTuning.skeletonDepth through setTuning; sweep values get a -d<value> tag
+// and are shot at one camera, which is how the bone-reveal A/B is judged
+// (flame-polish task 4). --skeleton-show <0..1> pins the strength for the run
+// (-s<value> tag) so the reveal ceiling can be judged beyond its 0.7 default.
 // Exits 0 on success, 2 if it could not run (boot failure, page exception,
 // no WebGPU backend, a flat capture).
 import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:fs';
@@ -202,6 +204,19 @@ let skeletonDepth = null;
     const v = Number(argv[i + 1]);
     if (!Number.isFinite(v) || v < 0) fail('--skeleton-depth needs a non-negative number');
     skeletonDepth = v;
+    argv.splice(i, 2);
+  }
+}
+// `--skeleton-show <0..1>` pins BurnTuning.skeletonShow for the whole run so
+// the ceiling of the bone reveal can be judged (the panel's slider lives at
+// 0.7 by default); the filename gets an -s<value> tag.
+let skeletonShow = null;
+{
+  const i = argv.indexOf('--skeleton-show');
+  if (i !== -1) {
+    const v = Number(argv[i + 1]);
+    if (!Number.isFinite(v) || v < 0 || v > 1) fail('--skeleton-show needs a number in [0, 1]');
+    skeletonShow = v;
     argv.splice(i, 2);
   }
 }
@@ -705,6 +720,12 @@ async function freshPage() {
     const applied = await evaluate(`window.__flameLab.setTuning({ flameFlow: ${bootFlow} }).flameFlow`);
     if (applied !== bootFlow) fail(`setTuning({ flameFlow: ${bootFlow} }) applied ${JSON.stringify(applied)}`);
   }
+  // Pin the skeleton show-through strength for the whole run so the bone
+  // reveal ceiling can be judged (--skeleton-show; the depth sweep stays live).
+  if (skeletonShow !== null) {
+    const applied = await evaluate(`window.__flameLab.setTuning({ skeletonShow: ${skeletonShow} }).skeletonShow`);
+    if (applied !== skeletonShow) fail(`setTuning({ skeletonShow: ${skeletonShow} }) applied ${JSON.stringify(applied)}`);
+  }
   // Freeze the visual clock for a same-phase --flow-sweep A/B (and for every
   // --frozen run — the flipbook and curl must share one instant).
   if (clockPinValue !== null) {
@@ -803,6 +824,7 @@ for (const pose of (poseList ?? POSES)) {
         }
         const ftag = fv === null ? '' : `-f${String(fv).replace('.', 'p')}`;
         const ktag = kv === null ? '' : `-k${String(kv).replace('.', 'p')}`;
+        const stag = skeletonShow === null ? '' : `-s${String(skeletonShow).replace('.', 'p')}`;
         // Skeleton reveal depth (flame-polish task 4): a --skeleton-sweep list
         // A/Bs values at one camera; null keeps the page default and the
         // canonical filename.
@@ -814,7 +836,7 @@ for (const pose of (poseList ?? POSES)) {
             await frames(SETTLE_STAGE);
           }
           const dtag = dv === null ? '' : `-d${String(dv).replace('.', 'p')}`;
-          const tag = `${ftag}${ktag}${dtag}`;
+          const tag = `${ftag}${ktag}${stag}${dtag}`;
           // --burst > 1 takes a short time series at this stage: the flow is
           // animated on the wall clock, so a single still cannot show that the
           // flame MOVES as one body. b0 keeps the canonical name the contact sheet
@@ -828,8 +850,8 @@ for (const pose of (poseList ?? POSES)) {
             const stats = pngStats(buf);
             if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
             if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
-            shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, kit: kv, skeletonDepth: dv, burstFrame: bfi, buf });
-            console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, kit=${kv ?? 'default'}, depth=${dv ?? 'default'}, luma std=${stats.std})`);
+            shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, kit: kv, skeletonShow, skeletonDepth: dv, burstFrame: bfi, buf });
+            console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, kit=${kv ?? 'default'}, skeleton=${skeletonShow ?? 'default'}, depth=${dv ?? 'default'}, luma std=${stats.std})`);
           }
         }
       }

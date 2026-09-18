@@ -3995,20 +3995,38 @@ ${FACE_LAYER_WGSL}
         let b1 = applyBones(1e9, p + vec3<f32>(-be, -be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
         let b2 = applyBones(1e9, p + vec3<f32>(-be, be, -be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
         let b3 = applyBones(1e9, p + vec3<f32>(be, be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
-        let boneN = normalize(vec3<f32>(b0 - b1 - b2 + b3, -b0 - b1 + b2 + b3, -b0 + b1 - b2 + b3));
-        // Bias hard toward the bone normal where the probe is close: hardness
-        // is what makes it read as bone, and the flesh normal only has to
-        // survive at the reveal edge. The albedo stays gated by showBone, so
-        // the same charAmt * burnSkeleton gate still owns the whole effect.
-        n = normalize(mix(n, boneN, clamp(showBone * 1.8, 0.0, 0.92)));
+        let boneG = vec3<f32>(b0 - b1 - b2 + b3, -b0 - b1 + b2 + b3, -b0 + b1 - b2 + b3);
+        // A bone fold can have a zero gradient at its medial axis or where two
+        // capsules meet; normalize(0) is NaN and a NaN normal blackens the
+        // fragment. Guard it and keep the flesh normal there.
+        let boneG2 = dot(boneG, boneG);
+        if (boneG2 > 1e-12) {
+          let boneN = boneG * inverseSqrt(boneG2);
+          // Bias hard toward the bone normal where the probe is close: hardness
+          // is what makes it read as bone, and the flesh normal only has to
+          // survive at the reveal edge. Geometry-driven (nearBone), not gated by
+          // skelK, so even a faint reveal has the tube's own shading.
+          n = normalize(mix(n, boneN, clamp(nearBone * 0.95, 0.0, 0.95)));
+        }
         // The bone albedo recesses with probe distance (nearest ridge
         // brightest) so the tube reads round rather than as a pasted patch.
-        let boneShade = boneColor * mix(0.5, 1.0, nearBone);
-        albedo = mix(albedo, boneShade, showBone);
+        // The core is lifted above the raw boneColor: through charred flesh the
+        // bone reads a stop brighter than directly exposed bone, which is what
+        // separates it from soot instead of leaving a grey stain.
+        let boneShade = boneColor * mix(0.45, 1.3, nearBone);
+        // showBone carries a gain above skelK so a found bone becomes BONE
+        // (full material) rather than a 40 percent tint of charred flesh; the
+        // master gate stays charAmt * burnSkeleton, which is exactly 0 on a
+        // fresh body and is what the effect scales from. 3.5 saturates the
+        // core of the reveal (bone within ~60 percent of skeletonDepth) while
+        // the outer ramp still fades to char, so a found bone is bone rather
+        // than a grey stain, without widening the reveal itself.
+        let boneMat = clamp(showBone * 3.5, 0.0, 1.0);
+        albedo = mix(albedo, boneShade, boneMat);
         // Bone is matte but not dead-flat like char, and the lifted gloss also
         // suppresses the flesh pore noise in surface prep. Mixing (never
         // multiplying) lets bone recover a sheen that the soot kill above took.
-        gloss = mix(gloss, 0.45, showBone);
+        gloss = mix(gloss, 0.45, boneMat);
       }
     }
     gBurnEmit = fireRamp(fire) * fire * burnFireGain;

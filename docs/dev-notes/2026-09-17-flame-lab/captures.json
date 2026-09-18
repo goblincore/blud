@@ -51,9 +51,11 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-close-fresh.png",
-      "std": 77.04,
+      "std": 84.92,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -61,9 +63,11 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-close-charred.png",
-      "std": 72.58,
+      "std": 86.2,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -71,9 +75,11 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-stand-fresh.png",
-      "std": 44.31,
+      "std": 48.17,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -81,9 +87,11 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-stand-charred.png",
-      "std": 40.16,
+      "std": 47.1,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -91,9 +99,11 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-walk-fresh.png",
-      "std": 44.31,
+      "std": 48.22,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -101,9 +111,11 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-walk-charred.png",
-      "std": 40.16,
+      "std": 47.12,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -111,9 +123,11 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-run-fresh.png",
-      "std": 44.31,
+      "std": 48.22,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -121,9 +135,11 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-run-charred.png",
-      "std": 40.16,
+      "std": 47.12,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -131,9 +147,11 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-collapsed-fresh.png",
-      "std": 35.75,
+      "std": 36.26,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -141,9 +159,11 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-collapsed-charred.png",
-      "std": 31.77,
+      "std": 33.64,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -151,9 +171,11 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-distant-fresh.png",
-      "std": 24.26,
+      "std": 25.56,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     },
     {
@@ -161,9 +183,11 @@
       "stage": "charred",
       "char": 0.6,
       "file": "cards-distant-charred.png",
-      "std": 22.6,
+      "std": 24.93,
       "flow": null,
       "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
       "burstFrame": 0
     }
   ]
