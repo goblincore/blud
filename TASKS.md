@@ -4,6 +4,32 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## game-main.ts decomposition — migration phase merged 2026-09-17
+
+- [x] All **395** `main()`-scope bindings migrated to a feature-sliced `GameContext` (16 slices), codemod-applied
+  with lines rewritten in place. `game-main.ts` 14,763 → 14,548. Gates: `tsc` clean; vitest **15 failed / 5,640
+  passed** = baseline exactly (those 15 predate this work, verified at base `8f70d26f`); `march-hash` room1
+  byte-identical before and after; owner smoke-tested the running game.
+  [Spec](docs/superpowers/specs/2026-09-17-game-main-decomposition-design.md) ·
+  [Plan](docs/superpowers/plans/2026-09-17-game-main-decomposition.md) ·
+  [Baseline + gate evidence](docs/dev-notes/2026-09-17-game-main-decomposition/baseline.md)
+- [x] Tooling: `scripts/slice-extract.ts` (AST binding inventory + role classifier + `--functions` reporter),
+  `scripts/game-context-codemod.ts` (scope-aware rename, 29 tests), `scripts/extract-leaf.ts` (leaf extractor),
+  `scripts/game-context-coverage.test.ts` (gate: `ctx` must stay the ONLY state binding in `main()`).
+- [x] Extraction wave 1: `applyDynamiteTuning` + `dynamiteTuningValues` → `game-dynamite-tuning.ts`.
+- [ ] **Next, and by far the biggest win:** the `window.__sdfGame` object literal is **4,577 lines — 31% of the
+  file** — in one statement. It closes over 16 ctx slices + 54 callables, so it needs
+  `createSdfGameSeams(ctx, deps)`. It does NOT split cleanly by slice (75 multi-slice members hold 2,683 of the
+  4,577 lines); split it by its large diagnostic members instead (`installDebugProbe` 335, `bench` 206,
+  `texRoundTrip` 198, `demoScenario` 177, `shellDiag` 103).
+- [ ] Then the remaining leaves (63 functions, 848 lines) and the giants (`tick` 907, `setDrawFn` 589,
+  `spawnEnemy` 260). Extraction must run **bottom-up** — free names are mostly other `main()`-scope functions.
+- [ ] **Filed, not fixed (both predate this work):** `march-hash.mjs`'s pinned canonical is STALE
+  (`0b84c119…` pinned 2026-09-15; HEAD renders `8f2b74e7…` deterministically, 11+ commits touched
+  march/sdf-layer/post-aa since) — needs someone to confirm which commit legitimately moved it before re-pinning.
+  And `scripts/sdf-demo-hash.sh ab` fails during recording (samples both field parities), producing no
+  comparison; identical at base.
+
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
 - [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Vision](docs/game/vision.md).
