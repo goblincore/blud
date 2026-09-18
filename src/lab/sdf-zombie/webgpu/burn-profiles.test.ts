@@ -54,6 +54,16 @@ describe('burn tuning', () => {
     expect(BURN_BOUNDS.skeletonShow).toEqual([0, 1]);
   });
 
+  it('carries the fire-light peaks for both room paths', () => {
+    // The gather peak feeds the probe gather's shared 8-slot list (walls/floor);
+    // the mesh peak feeds the always-visible PointLight pool (props/kit). Both
+    // are needed or half the room stays dark — see burn-room-light.ts.
+    expect(BURN_TUNING.lightGatherPeak).toBe(120);
+    expect(BURN_TUNING.lightMeshPeak).toBe(40);
+    expect(BURN_BOUNDS.lightGatherPeak).toEqual([0, 400]);
+    expect(BURN_BOUNDS.lightMeshPeak).toEqual([0, 400]);
+  });
+
   it('is accepted by stepBurn as a BurnRates value (BurnTuning is a structural superset)', () => {
     // The type annotation is the compile-level half of this; the assertions are
     // the runtime half, so the test fails if the relationship stops meaning

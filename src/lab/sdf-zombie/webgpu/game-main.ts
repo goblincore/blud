@@ -843,6 +843,12 @@ async function main() {
   ctx.vfx.characterEffects = createCharacterEffects(ctx.boot.handle.renderer);
   // Lazy: allocates nothing until the first ignite (game-burning.ts).
   ctx.vfx.burning = createGameBurning(ctx);
+  // THE MESH-SIDE FIRE LIGHTS. Built ONCE here, before the warm-up's drawOnce,
+  // so the lit materials compile with the pool present (3 explosion + 4 fire
+  // point lights) and the FIRST IGNITE does not re-key the LightsNode — the
+  // 180–230 ms recompile stall the explosion pool's comment measured. The lights
+  // are permanently visible; updateFireLightPool drives intensity (0 when idle).
+  ctx.vfx.burning.createFireLightPool(ctx.world.accentGroup);
   // GPU PROBE GATHER (P3/P4 dynamic layer). Declared here, ahead of the draw
   // callback, so the frame can test it without a temporal dead zone; created
   // next to the room probes once the level exists. ?probedyn=0 zeroes both
@@ -1838,6 +1844,15 @@ async function main() {
             fill: ctx.vfx.spread,
           });
         }
+        // (3c) BURNING BODIES feed the same list (≤2 slots; surplus burners
+        // merge into the nearest slot) so a future anchor or shadow fix lights
+        // the room here. NOTE: at the chest anchor the light self-shadows on
+        // the burner's own capsules and contributes no visible radiance — see
+        // pushGatherLights; the mesh pool carries the shipped room light.
+        ctx.vfx.burning.pushGatherLights(
+          gatherLights, ctx.player.player.pos, nearRoomPoint, dynRoom,
+          Math.min(2, 8 - gatherLights.length), ctx.vfx.spread,
+        );
         const tracerSlots = Math.min(ctx.lighting.tracerLightSlots, 8 - gatherLights.length);
         if (tracerSlots > 0 && ctx.lighting.tracerLightGain > 0) {
           gatherLights.push(...tracerGatherLights(ctx.lighting.liveTracers?.() ?? [], {
@@ -7409,6 +7424,12 @@ async function main() {
       pl.position.set(e.pos[0], e.pos[1], e.pos[2]);
       pl.intensity = EXPLOSION_LIGHT.meshPeak * k * ctx.lighting.fxLightScale;
     }
+    // THE FIRE-SIDE MESH LIGHTS, beside the explosion pool writer for the same
+    // reason. These four permanent PointLights are the SHIPPED room light for
+    // fire: they have no shadow test, while the gather path self-shadows on the
+    // burner's own capsules (see pushGatherLights). Zeroes only on the no-fire
+    // transition.
+    ctx.vfx.burning.updateFireLightPool(ctx.player.player.pos);
   }
 
   // -----------------------------------------------------------------------
@@ -10013,6 +10034,14 @@ function performBenchAction(a: BenchAction): void {
     fireFlare: () => ctx.weapon.flare?.fire() ?? false,
     /** Set EVERY live actor alight. Returns how many bodies are tracked. */
     igniteAll: () => ctx.vfx.burning.igniteAll(),
+    /** Ignite exactly one actor by id (deterministic neighbour diagnosis:
+     *  one burner, one clean neighbour). Returns false for an unknown id. */
+    igniteActor: (id: number) => {
+      const a = ctx.world.actors.find((x) => x.id === id);
+      if (!a) return false;
+      ctx.vfx.burning.igniteActor(a);
+      return true;
+    },
     /** Put every tracked body out (char stays). */
     extinguishAll: () => { ctx.vfx.burning.extinguishAll(); },
     /** Read-only burn telemetry, one entry per tracked actor. */
@@ -10026,6 +10055,13 @@ function performBenchAction(a: BenchAction): void {
         ? { created: true, active: ctx.vfx.burning.activeCount(), live: c.liveCards, atlas: c.atlasMode }
         : { created: false, active: 0, live: 0, atlas: false };
     },
+    /** Live burn tuning, clamped through resolveBurnTuning. The fire-light
+     *  capture drops `lightGatherPeak`/`lightMeshPeak` to 0 for the paired
+     *  with/without-room-light frames; `burnTuning()` reads the live record. */
+    setBurnTuning: (patch: Partial<import('./burn-profiles').BurnTuning>) => ctx.vfx.burning.setTuning(patch),
+    burnTuning: () => ({ ...ctx.vfx.burning.tuning }),
+    /** Last pushGatherLights census (sources seen / in room / slots pushed). */
+    burnGatherDebug: () => ctx.vfx.burning.gatherDebug(),
     ...createWeaponPlayerSeams(ctx),
     ...createBootSeams(ctx),
     ...createRenderSeams(ctx),

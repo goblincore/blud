@@ -84,6 +84,12 @@ export function createFxSeams(ctx: GameContext) {
     get probeCostSplit() {
       return { rays: ctx.probes.raysBoot, lights: ctx.probes.lightsBoot, blend: ctx.probes.blendBoot, fall: ctx.probes.fallBoot, optimized: ctx.probes.optimized };
     },
+    /** LIVE probe-gather state (the `probeDynamic` getter is a boot snapshot:
+     *  object spread evaluates it once). `gates.lights` is the packed-light
+     *  count from the last gather frame — the seam that separates "the fire
+     *  light was pushed" from "the kernel saw it". */
+    probeGates: () => ctx.probes.lastGates,
+    probeDispatchCount: () => ctx.probes.frame,
     /** The gather's afterglow rates (?dynblend / ?dynfall). Set BOTH to 1 for the
      *  PURE-ESTIMATE configuration the R1 dispatch check measures in: the record
      *  becomes exactly this frame's estimate, so the dynamic layer stops

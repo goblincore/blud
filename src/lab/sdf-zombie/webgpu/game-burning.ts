@@ -16,6 +16,9 @@ import type { BurnState } from '../burn-state';
 import { BURN_TUNING, resolveBurnTuning, type BurnTuning } from './burn-profiles';
 import { createBurnRegistry, type BurnRegistry } from './burn-registry';
 import { burnLightAnchor, burnLightIntensity, burnLightFlicker } from './burn-light';
+import { fireGatherLights, assignFirePool, type FireLightSource } from './burn-room-light';
+import type { DynLightInput } from '../probe-dynamic';
+import type { RoomDef } from './game-level';
 import { limbAnchors } from './flame-anchors';
 import {
   createFlameCards, SOLDIER_LEG_KIT_RADIUS,
@@ -26,6 +29,10 @@ import { resolveTongueTuning, type TongueTuning } from './tongue-tuning';
 /** Card-pool body cap. One draw call for N bodies; bounded so an igniteAll()
  *  over a big crowd cannot size an unbounded quad buffer. */
 const FLAME_CARD_BODY_CAP = 32;
+
+/** The always-visible mesh-side PointLight pool. Four is the brazier-scale
+ *  budget (spec A1); slots beyond the active burner count sit at intensity 0. */
+const FIRE_LIGHT_POOL = 4;
 
 export interface GameBurning {
   readonly registry: BurnRegistry<ZombieActor>;
@@ -42,6 +49,24 @@ export interface GameBurning {
   updateCards(camera: THREE.Camera): void;
   /** Push each alight body into the bodyFlash source list. */
   pushFlashes(out: { pos: Vec3; intensity: number }[]): void;
+  /** Push the ROOM's gather light slots for the burning bodies in `room`.
+   *  Merges surplus burners into the nearest slot (see burn-room-light.ts). */
+  pushGatherLights(
+    out: DynLightInput[], eye: Vec3,
+    nearRoomPoint: (q: Vec3, r: RoomDef, margin?: number) => boolean,
+    room: RoomDef, cap: number, spread: number,
+  ): void;
+  /** Build the always-visible mesh-side PointLight pool ONCE (adding a light
+   *  later re-keys the lights node and recompiles every lit material). Parent
+   *  it to the accent group so props/kit read it through the same registration. */
+  createFireLightPool(parent: THREE.Object3D): void;
+  /** Write the pool's positions/intensities for this frame. Zeroes the slots
+   *  on the transition to no-fire only; `.visible` is never touched. */
+  updateFireLightPool(eye: Vec3): void;
+  /** Live tuning (capture seam): patches through resolveBurnTuning's clamp. */
+  setTuning(patch: Partial<BurnTuning>): BurnTuning;
+  /** Capture diagnostic: what the last pushGatherLights saw/did. */
+  gatherDebug(): { sources: number; inRoom: number; pushed: number; cap: number; maxIntensity: number };
   igniteAll(): number;
   extinguishAll(): void;
   activeCount(): number;
@@ -58,11 +83,39 @@ export function createGameBurning(ctx: GameContext): GameBurning {
   const cardLastPos = new Map<ZombieActor, Vec3>();
   /** Last tick's dt, so the cards' lean velocity is metres per SIM second. */
   let frameDt = 1 / 60;
+  /** The mesh-side fire light pool (created once at boot, see
+   *  createFireLightPool) and whether its slots are currently zeroed. */
+  const fireLights: THREE.PointLight[] = [];
+  let firePoolIdle = true;
+  /** Last pushGatherLights census, for the capture diagnostic. */
+  let gatherDebugData = { sources: 0, inRoom: 0, pushed: 0, cap: 0, maxIntensity: 0 };
 
   /** The flicker clock: the practicals' clock, so a frozen-light capture
    *  freezes fire too. */
   const clock = (): number => (ctx.lighting.clockFrozen
     ? ctx.lighting.flickerClockFrozenAt : performance.now() * 0.001);
+
+  /** Every alight body as a light source at `peak`, anchored by
+   *  `burnLightAnchor` (chest height). Allocates, and runs at most twice a
+   *  frame while something burns. Both callers use the same flicker
+   *  clock/phase, so the room and the props agree about the fire's
+   *  brightness. */
+  function collectFireSources(peak: number): FireLightSource[] {
+    const list: FireLightSource[] = [];
+    const t = clock();
+    burning.forEachActive((a, s) => {
+      if (s.burn <= 0.02) return;
+      const p = a.pose().pos;
+      list.push({
+        pos: burnLightAnchor([p[0], p[1], p[2]]),
+        intensity: burnLightIntensity(
+          s.burn, s.char, peak, tuning.lightFlicker,
+          burnLightFlicker(t, tuning.lightFlicker, a.id * 2.7),
+        ),
+      });
+    });
+    return list;
+  }
 
   function ensureCards(): FlameCards {
     if (cards) return cards;
@@ -185,20 +238,98 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       // Each body already takes the strongest source by I/d^2, so an alight
       // actor lights itself and its neighbours. No new light object, therefore
       // nothing to toggle (the `.visible` recompile trap).
+      //
+      // FLICKER DEPTH IS QUARTERED (burning-feedback task 1, A2). This one
+      // light lands on the BURNING body and every non-burning neighbour alike
+      // (the bodyFlash slot picks one source per body), so a full-depth flicker
+      // here reads as moving molten skin on a neighbour that is not on fire
+      // (measured: 0.151 luma/frame on a neighbour vs 0.0001 with flicker off).
+      // The burning body keeps its animated surface-fire emissive and the room
+      // lights carry the visible flicker; the neighbour gets a near-steady warm
+      // light instead.
       if (burning.size === 0) return;
       const t = clock();
+      const flickerDepth = tuning.lightFlicker * 0.25;
       burning.forEachActive((a, s) => {
         if (s.burn <= 0.02) return;
         const p = a.pose().pos;
         out.push({
           pos: burnLightAnchor([p[0], p[1], p[2]]),
           intensity: burnLightIntensity(
-            s.burn, s.char, tuning.lightPeak, tuning.lightFlicker,
-            burnLightFlicker(t, tuning.lightFlicker, a.id * 2.7),
+            s.burn, s.char, tuning.lightPeak, flickerDepth,
+            burnLightFlicker(t, flickerDepth, a.id * 2.7),
           ),
         });
       });
     },
+    pushGatherLights(out, eye, nearRoomPoint, room, cap, spread) {
+      // Nothing burns (or no slot left): the gather list is untouched, so a
+      // session with no fire is bit-identical to before this feature.
+      //
+      // SELF-SHADOW FINDING (task-1 capture, 2026-09-18): the chest anchor sits
+      // inside the burning body's own torso capsule, so every probe ray to this
+      // light is self-shadowed by the gather's `kdShadowed` and the packed light
+      // contributes ZERO dynamic radiance (measured: packed-light count 2 vs 1,
+      // identical 400-probe buffer). Lifting the anchor 1.8 m above the crown
+      // makes the gather path light the room (+4.2 luma on the floor crop) but
+      // re-introduces a ~10x larger flicker on non-burning neighbours
+      // (0.016 -> 0.16 luma/frame) — a direct A2 regression. The mesh pool
+      // (below) has no shadow test, so it is the shipped room light; this path
+      // stays wired and is reported honestly in the task-1 notes.
+      if (burning.size === 0 || cap <= 0) {
+        gatherDebugData = { sources: 0, inRoom: 0, pushed: 0, cap, maxIntensity: 0 };
+        return;
+      }
+      const all = collectFireSources(tuning.lightGatherPeak);
+      const list = all.filter(l => nearRoomPoint(l.pos, room));
+      const lamps = list.length === 0 ? [] : fireGatherLights(list, eye, cap);
+      gatherDebugData = {
+        sources: all.length, inRoom: list.length, pushed: lamps.length, cap,
+        maxIntensity: lamps.reduce((m, l) => Math.max(m, l.intensity), 0),
+      };
+      for (const l of lamps) {
+        out.push({ pos: l.pos, color: [1.0, 0.5, 0.18], intensity: l.intensity, fill: spread * 0.5 });
+      }
+    },
+    createFireLightPool(parent) {
+      // Idempotent: a second call would add 4 more lights and re-key the
+      // LightsNode, which is the stall this pool exists to avoid.
+      if (fireLights.length > 0) return;
+      for (let i = 0; i < FIRE_LIGHT_POOL; i++) {
+        const pl = new THREE.PointLight(0xff8a3a, 0, 0, 2);
+        // PERMANENTLY visible (see the explosion pool): `.visible` is never
+        // toggled, an idle slot just sits at intensity 0.
+        pl.visible = true;
+        parent.add(pl);
+        fireLights.push(pl);
+      }
+      firePoolIdle = true;
+    },
+    updateFireLightPool(eye) {
+      if (fireLights.length === 0) return;
+      const list = burning.size === 0 ? [] : collectFireSources(tuning.lightMeshPeak);
+      if (list.length === 0) {
+        // Zero only on the transition; a permanently zeroed pool still pays
+        // the idle point-light iterations, which is the documented trade.
+        if (firePoolIdle) return;
+        for (const pl of fireLights) pl.intensity = 0;
+        firePoolIdle = true;
+        return;
+      }
+      const slots = assignFirePool(list, eye, fireLights.length);
+      for (let i = 0; i < fireLights.length; i++) {
+        const s = slots[i]!;
+        const pl = fireLights[i]!;
+        pl.position.set(s.pos[0], s.pos[1], s.pos[2]);
+        pl.intensity = s.intensity;
+      }
+      firePoolIdle = false;
+    },
+    setTuning(patch) {
+      Object.assign(tuning, resolveBurnTuning({ ...tuning, ...patch }));
+      return tuning;
+    },
+    gatherDebug() { return { ...gatherDebugData }; },
     igniteAll() {
       for (const a of ctx.world.actors) { burning.ignite(a); ensureCards(); }
       return burning.size;

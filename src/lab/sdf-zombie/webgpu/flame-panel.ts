@@ -44,6 +44,8 @@ const LABELS: Record<keyof BurnTuning, { label: string; step: number }> = {
   charPatch: { label: 'char patch', step: 0.02 },
   lightPeak: { label: 'light', step: 1 },
   lightFlicker: { label: 'flicker', step: 0.02 },
+  lightGatherPeak: { label: 'room fire light', step: 1 },
+  lightMeshPeak: { label: 'prop fire light', step: 1 },
   glowGain: { label: 'glow', step: 0.02 },
   glowThreshold: { label: 'glow thr', step: 0.05 },
   distortStrength: { label: 'heat warp', step: 0.001 },
