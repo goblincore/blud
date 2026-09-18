@@ -21,6 +21,7 @@
     "flame:capture": "node scripts/flame-capture.mjs",
     "explosion:capture": "node scripts/explosion-capture.mjs",
     "blood:capture": "node scripts/blood-curl-capture.mjs",
+    "blood:density": "node scripts/blood-density-capture.mjs",
     "blob:render-check": "scripts/blob-render-check.sh",
     "test:watch": "vitest",
     "blob:face-bake": "python3 scripts/blob-face-bake.py",

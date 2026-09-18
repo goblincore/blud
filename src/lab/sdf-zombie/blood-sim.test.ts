@@ -594,3 +594,84 @@ describe('curl flow in the sim (blood-curl-spike, optional)', () => {
   });
 });
 
+describe('emission density pack (blood-density spike, optional)', () => {
+  const anchor: Vec3 = [0, 1.35, 0.55];
+  const dir: Vec3 = [0, 0, -1];
+  /** The exact profile values the page's DENSITY defaults use: neutral. */
+  const NEUTRAL = { coneScale: 1, countMul: 1, sizeMul: 1 };
+  /** Regenerated ONLY with an intentional default-tuning change (see below). */
+  const GOLDEN_SIM_DIGEST = '93ac4a8c';
+
+  /** A full seeded scenario: one-shot gout + a sustained wound + integration. */
+  function runScenario(pack?: Parameters<typeof spawnImpactGout>[6]): ReturnType<typeof createBloodSim> {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded(9), 1, pack);
+    let acc = 0;
+    const r = seeded(21);
+    for (let i = 0; i < 90; i++) {
+      acc = spawnWoundDroplets(sim, 'slug', i / 60, [0, 1.2, 0.4], [0, 0, 1], 1 / 60, acc, r, 2, pack);
+      stepBlood(sim, 1 / 60, r);
+    }
+    return sim;
+  }
+
+  /** FNV-1a over the full serialized sim — every droplet, every field. */
+  function digest(sim: ReturnType<typeof createBloodSim>): string {
+    const s = JSON.stringify(sim);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  }
+
+  it('is BYTE-IDENTICAL to today when no pack is passed', () => {
+    const a = runScenario();
+    const b = runScenario(undefined);
+    // Every droplet position/velocity/age/size, both emission sites and the
+    // integration between them: identical bytes.
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+
+  it('a NEUTRAL pack (all 1s) is byte-identical to the shipped profiles', () => {
+    // The game never passes a pack; a page that passes the neutral pack must
+    // not move a single bit either — this is the "defaults are today" pin.
+    const a = runScenario();
+    const b = runScenario(NEUTRAL);
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+
+  it('pins the shipped seeded scenario with a golden digest', () => {
+    // Guards the DEFAULT bands themselves: if a future edit changes
+    // IMPACT_GOUT / WOUND_BLEED (or the pack's neutral arithmetic), this
+    // digest moves and the change has to be argued for, not slipped in.
+    // Regenerate deliberately, never to make a red test green.
+    expect(digest(runScenario())).toBe(GOLDEN_SIM_DIGEST);
+  });
+
+  it('a non-neutral pack actually reaches the spray (the switch is not inert)', () => {
+    const base = runScenario();
+    const dense = runScenario({ coneScale: 0.5, countMul: 2, sizeMul: 2 });
+    expect(dense.droplets.length).not.toBe(base.droplets.length);
+    expect(JSON.stringify(dense)).not.toBe(JSON.stringify(base));
+  });
+
+  it('stays deterministic with a pack on (no Math.random)', () => {
+    const pack = { coneScale: 0.6, countMul: 1.5, sizeMul: 1.4 };
+    expect(digest(runScenario(pack))).toBe(digest(runScenario(pack)));
+  });
+
+  it('countMul raises a gout\'s droplet budget linearly, cone/size stay bounded', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded(3), 1, { countMul: 2, sizeMul: 2 });
+    expect(sim.droplets).toHaveLength(IMPACT_GOUT.slug.count * 2);
+    // Sizes remain inside the profile band times the pack multiplier.
+    const sizeMul = 2;
+    for (const d of sim.droplets) {
+      expect(d.size).toBeGreaterThanOrEqual(IMPACT_GOUT.slug.sizeMin * sizeMul);
+      expect(d.size).toBeLessThanOrEqual(IMPACT_GOUT.slug.sizeMax * sizeMul);
+    }
+  });
+});
+

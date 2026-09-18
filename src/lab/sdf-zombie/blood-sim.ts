@@ -82,6 +82,35 @@ export const SCRAP_TUNING = {
   speedBandScale: 0.5,
 } as const;
 
+/**
+ * EMISSION PACKING OVERRIDES (blood-density spike, 2026-09-18).
+ *
+ * The two failure modes blood spray was abandoned for — droplets that read as
+ * "big oval blood cells", and ribbons that were "too thin, hard edges, not
+ * gooey" — are a DENSITY problem (metaball packing), not a motion problem
+ * (blood-curl-spike). Cohesion happens when neighbouring droplets' density
+ * peaks overlap, which needs the spray emitted TIGHTER, with MORE, LARGER
+ * droplets — or the goo layer fusing more readily (its own sizeScale /
+ * threshold / blur, see GOO_TUNING).
+ *
+ * These three knobs are the emission half of that. They MULTIPLY the shipped
+ * per-calibre bands; every field is optional and absent means exactly the
+ * shipped profile, so the game (which never passes a pack) is byte-identical
+ * and draws the same number of RNG values (pinned by blood-sim.test.ts).
+ */
+export interface DensityPack {
+  /** Multiplier on the emission cone HALF-angle (the spread). < 1 tightens
+   *  the spray so droplets leave along one another, > 1 fans it wider. */
+  coneScale?: number;
+  /** Multiplier on the droplet count. > 1 packs more droplets per pulse /
+   *  raises the sustained-emitter rate, which is what makes neighbours
+   *  overlap. One rng draw per extra droplet, as usual. */
+  countMul?: number;
+  /** Multiplier on the per-droplet size band (metres). Bigger beads both
+   *  overlap sooner and cross the goo layer's mist cutoff. */
+  sizeMul?: number;
+}
+
 export interface Splat { pos: Vec3; size: number; yaw: number }
 
 export interface BloodSim {
@@ -335,15 +364,23 @@ const WOUND_SPAWN_OFFSET = 0.02;
  * which the caller must feed back in next frame (rates below 1/step must
  * still emit eventually). Dead past the profile's lifetime; draws exactly
  * 4 rng values per droplet in a fixed order, so seeded streams pin it.
+ *
+ * `pack` (optional, blood-density spike) multiplies the cone / rate / size
+ * bands for a DENSER spray; absent = the shipped profile exactly.
  */
 export function spawnWoundDroplets(
   sim: BloodSim, kind: BleedKind, ageSec: number,
   anchor: Vec3, normal: Vec3, dt: number, acc: number, rng: () => number,
-  stream?: number,
+  stream?: number, pack?: DensityPack,
 ): number {
   const p = WOUND_BLEED[kind];
   if (ageSec > p.lifetimeSec || dt <= 0) return acc;
-  const rate = p.tailHz + (p.baseHz - p.tailHz) * Math.exp(-ageSec / p.decayTauSec);
+  // Density pack (blood-density spike): multiplying by the neutral 1 leaves
+  // every arithmetic result bit-identical, and a missing pack skips nothing.
+  const countMul = pack?.countMul ?? 1;
+  const coneScale = pack?.coneScale ?? 1;
+  const sizeMul = pack?.sizeMul ?? 1;
+  const rate = (p.tailHz + (p.baseHz - p.tailHz) * Math.exp(-ageSec / p.decayTauSec)) * countMul;
   const carry = acc + rate * dt;
   const count = Math.floor(carry);
   if (count <= 0) return carry;
@@ -354,13 +391,13 @@ export function spawnWoundDroplets(
   for (let i = 0; i < count; i++) {
     // Uniform-in-disc cone sample (r = θmax·sqrt(u)), matching the house
     // spreadDirections pattern — flat density, not centre-crowded.
-    const r = p.coneRad * Math.sqrt(rng());
+    const r = p.coneRad * coneScale * Math.sqrt(rng());
     const theta = rng() * Math.PI * 2;
     const cr = Math.cos(r);
     const sr = Math.sin(r);
     const dir = normalize(add(add(scale(w, cr), scale(u, Math.cos(theta) * sr)), scale(v, Math.sin(theta) * sr)));
     const speed = p.speedMin + rng() * (p.speedMax - p.speedMin);
-    const size = p.sizeMin + rng() * (p.sizeMax - p.sizeMin);
+    const size = (p.sizeMin + rng() * (p.sizeMax - p.sizeMin)) * sizeMul;
     push(sim, {
       pos: [anchor[0] + dir[0] * WOUND_SPAWN_OFFSET,
         anchor[1] + dir[1] * WOUND_SPAWN_OFFSET, anchor[2] + dir[2] * WOUND_SPAWN_OFFSET],
@@ -416,9 +453,16 @@ export function spawnWoundDroplets(
  */
 export function spawnImpactGout(
   sim: BloodSim, kind: BleedKind, anchor: Vec3, dirN: Vec3, rng: () => number,
-  stream?: number,
+  stream?: number, pack?: DensityPack,
 ): void {
   const p = IMPACT_GOUT[kind];
+  // Density pack (blood-density spike): `p.count` when no pack, so the shipped
+  // gout is bit-identical — including the deterministic speed ramp's divisor.
+  const count = pack?.countMul !== undefined
+    ? Math.max(0, Math.round(p.count * pack.countMul))
+    : p.count;
+  const coneScale = pack?.coneScale ?? 1;
+  const sizeMul = pack?.sizeMul ?? 1;
   // Back along the shot. A zero/degenerate direction falls back to straight
   // up, the same guard spawnWoundDroplets uses for a degenerate normal.
   const back: Vec3 = [-dirN[0], -dirN[1], -dirN[2]];
@@ -426,15 +470,15 @@ export function spawnImpactGout(
     Math.hypot(back[0], back[1], back[2]) < 1e-9 ? [0, 1, 0] as Vec3 : back,
   );
   const { u, v, w } = basisFromAxis(axis);
-  for (let i = 0; i < p.count; i++) {
-    const r = p.coneRad * Math.sqrt(rng());
+  for (let i = 0; i < count; i++) {
+    const r = p.coneRad * coneScale * Math.sqrt(rng());
     const theta = rng() * Math.PI * 2;
     const cr = Math.cos(r);
     const sr = Math.sin(r);
     const dir = normalize(add(add(scale(w, cr), scale(u, Math.cos(theta) * sr)), scale(v, Math.sin(theta) * sr)));
-    const size = p.sizeMin + rng() * (p.sizeMax - p.sizeMin);
+    const size = (p.sizeMin + rng() * (p.sizeMax - p.sizeMin)) * sizeMul;
     const life = p.lifeMin + rng() * (p.lifeMax - p.lifeMin);
-    const t = p.count > 1 ? i / (p.count - 1) : 0;
+    const t = count > 1 ? i / (count - 1) : 0;
     const speed = p.speedMax + (p.speedMin - p.speedMax) * t;
     push(sim, {
       pos: [anchor[0] + dir[0] * WOUND_SPAWN_OFFSET,
