@@ -41,6 +41,8 @@
 // Usage:
 //   node scripts/flame-capture.mjs [outDir]
 //   node scripts/flame-capture.mjs --technique screen [outDir]
+//   node scripts/flame-capture.mjs --technique cards --flow 0.35 --burst 3 \
+//     --poses close [outDir]      # flame-polish task 2 flow sweep
 //   LAB_VITE_PORT=5244 LAB_CDP_PORT=9244 node scripts/flame-capture.mjs
 // --technique (flame-tongues task 2) pins the lab's tongue technique for the
 // whole run: it rides the ?tongue= boot param AND __flameLab.setTechnique, so
@@ -50,6 +52,15 @@
 // 'screen', so without the pin a bare run would silently capture tongues and
 // overwrite the baseline the tongue plans compare against). Filenames do NOT
 // carry the technique — shoot each technique into its own outDir.
+// --flow <0..1> pins BurnTuning.flameFlow at boot (?flow=) and via setTuning,
+// and --burst N shoots N frames BURST_GAP apart per stage (b1..bN) so the
+// animated flow can be judged from stills. --flow-sweep a,b,c changes the flow
+// LIVE within one page load and captures each value at the SAME camera and pose
+// (the only judgeable A/B here, since the orbit yaw drifts between loads) —
+// filenames get an -f<value> tag. --clock <sec> freezes the visual clock so a
+// sweep's values share one animation instant. --poses limits the pose set; a
+// subset that omits the contact-sheet frames skips the sheet instead of
+// failing. Shoot a single --flow value into its own outDir.
 // Exits 0 on success, 2 if it could not run (boot failure, page exception,
 // no WebGPU backend, a flat capture).
 import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:fs';
@@ -57,6 +68,14 @@ import { spawn, execFileSync } from 'node:child_process';
 import { inflateSync, deflateSync } from 'node:zlib';
 
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(2); };
+
+// The fixed pose set, and the stage names a stage's char value pins. Declared
+// before arg parsing so --poses can validate against it.
+const POSES = ['close', 'stand', 'walk', 'run', 'collapsed', 'distant'];
+const STAGES = [
+  { name: 'fresh', char: 0 },
+  { name: 'charred', char: 0.6 },
+];
 
 // --- technique switch (flame-tongues plan task 3) ---------------------------
 // `--technique <none|screen|cards|volume>` boots the page with &tongue=<name>
@@ -77,7 +96,86 @@ let technique = null;
     argv.splice(i, 2);
   }
 }
-const pagePath = technique ? `/sdf-flame-lab.html?seed=1&tongue=${technique}` : null;
+
+// --- flame-flow sweep switch (flame-polish plan task 2) ---------------------
+// `--flow <0..1>` pins BurnTuning.flameFlow for the whole run through BOTH
+// routes the page offers: the ?flow= boot param and __flameLab.setTuning. The
+// curl field is wall-clock animated, so two runs are only comparable in SHAPE,
+// not pixel-for-pixel; --burst captures a short time series at each stage so
+// the flow's motion is judgeable from stills (the whole point of the change).
+const BURST_GAP = 8;   // frames between burst frames (~0.13 s at 60 fps)
+let flow = null;
+{
+  const i = argv.indexOf('--flow');
+  if (i !== -1) {
+    const v = Number(argv[i + 1]);
+    if (!Number.isFinite(v) || v < 0 || v > 1) fail('--flow needs a number in [0, 1]');
+    flow = v;
+    argv.splice(i, 2);
+  }
+}
+let burst = 1;
+{
+  const i = argv.indexOf('--burst');
+  if (i !== -1) {
+    const v = Number(argv[i + 1]);
+    if (!Number.isInteger(v) || v < 1 || v > 12) fail('--burst needs an integer in [1, 12]');
+    burst = v;
+    argv.splice(i, 2);
+  }
+}
+// `--flow-sweep 0,0.35,0.7,1` changes flameFlow LIVE inside one page load and
+// captures each value at the SAME camera and pose. That is the only judgeable
+// A/B here: the orbit camera's yaw accumulates wall-clock auto-spin before the
+// stop-click, so two page loads do not frame identically (the drift Task 3
+// fixes). Each value settles SETTLE_STAGE frames so the post chain's temporal
+// smear is showing the new flow, not a blend of the old one.
+let flowSweep = null;
+{
+  const i = argv.indexOf('--flow-sweep');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    const vals = v === undefined ? [] : v.split(',').map((s) => Number(s.trim()));
+    if (vals.length < 2 || vals.some((x) => !Number.isFinite(x) || x < 0 || x > 1)) {
+      fail('--flow-sweep needs >= 2 comma-separated numbers in [0, 1]');
+    }
+    flowSweep = vals;
+    argv.splice(i, 2);
+  }
+}
+let poseList = null;
+{
+  const i = argv.indexOf('--poses');
+  if (i !== -1) {
+    const v = argv[i + 1];
+    const names = v === undefined ? [] : v.split(',').map((s) => s.trim()).filter(Boolean);
+    if (names.length === 0 || names.some((n) => !POSES.includes(n))) {
+      fail(`--poses must be a comma-separated subset of ${POSES.join(',')}`);
+    }
+    poseList = names;
+    argv.splice(i, 2);
+  }
+}
+// --clock <seconds> freezes the lab's VISUAL clock (flipbook + curl phase) for
+// the whole run, so a --flow-sweep's values share one animation instant and
+// differ only by flow. Burn integration still advances. Omit for live motion.
+let clock = null;
+{
+  const i = argv.indexOf('--clock');
+  if (i !== -1) {
+    const v = Number(argv[i + 1]);
+    if (!Number.isFinite(v) || v < 0) fail('--clock needs non-negative seconds');
+    clock = v;
+    argv.splice(i, 2);
+  }
+}
+
+// The boot flow: the sweep starts at its first value, a single run at --flow.
+const bootFlow = flowSweep ? flowSweep[0] : flow;
+const bootParams = ['seed=1'];
+if (technique) bootParams.push(`tongue=${technique}`);
+if (bootFlow !== null) bootParams.push(`flow=${bootFlow}`);
+const PAGE_PATH = `/sdf-flame-lab.html?${bootParams.join('&')}`;
 const shotPrefix = technique ? `${technique}-` : '';
 
 const OUT = argv[2] ?? 'docs/dev-notes/2026-09-17-flame-lab';
@@ -87,7 +185,6 @@ const LAB_TMP = process.env.LAB_TMP ?? '/tmp';
 const LAB_CHROME = process.env.LAB_CHROME
   ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const W = 1380, H = 820;                       // melt-capture's viewport
-const PAGE_PATH = pagePath ?? '/sdf-flame-lab.html?seed=1';
 // Fixed frame counts, not wall-clock sleeps — the rAF clock is what the
 // render loop and the post chain's temporal smear live on.
 const SETTLE_BOOT = 90;     // first-use pipeline compiles after boot
@@ -100,14 +197,6 @@ const SETTLE_STAGE = 10;    // post-aa smear history flushed to <2e-6
 const ZOOM_TICKS = 25;      // wheel ticks out: 3.2 + 25*0.2 -> clamped at 8
 const CLOSE_TICKS = 9;      // wheel ticks in: 3.2 - 9*0.2 -> 1.4, one body cups the frame
 const MIN_LUMA_STD = 5;     // a flatter frame is a broken frame (melt's gate)
-
-const POSES = ['close', 'stand', 'walk', 'run', 'collapsed', 'distant'];
-// name -> the char value `__flameLab.capture(1, char)` pins. burn is 1 in
-// every stage — the stages differ in how charred the body is UNDER the fire.
-const STAGES = [
-  { name: 'fresh', char: 0 },
-  { name: 'charred', char: 0.6 },
-];
 setTimeout(() => { console.error('FAIL: watchdog (10 min)'); process.exit(2); }, 10 * 60_000).unref();
 mkdirSync(OUT, { recursive: true });
 mkdirSync(LAB_TMP, { recursive: true });
@@ -526,6 +615,17 @@ async function freshPage() {
     const applied = await evaluate(`window.__flameLab.setTechnique(${JSON.stringify(technique)})`);
     if (applied !== technique) fail(`setTechnique(${technique}) applied ${JSON.stringify(applied)}`);
   }
+  // Pin the curl flow through the console contract too (the ?flow= boot param
+  // already set it), so a sweep run proves both routes.
+  if (bootFlow !== null) {
+    const applied = await evaluate(`window.__flameLab.setTuning({ flameFlow: ${bootFlow} }).flameFlow`);
+    if (applied !== bootFlow) fail(`setTuning({ flameFlow: ${bootFlow} }) applied ${JSON.stringify(applied)}`);
+  }
+  // Freeze the visual clock for a same-phase --flow-sweep A/B.
+  if (clock !== null) {
+    const applied = await evaluate(`window.__flameLab.setClock(${clock})`);
+    if (applied !== clock) fail(`setClock(${clock}) applied ${JSON.stringify(applied)}`);
+  }
   await frames(SETTLE_BOOT);
   // The backend line lives in the status box ("backend: webgpu", green) — the
   // single most important fact about these captures (lab-main's own note).
@@ -558,7 +658,7 @@ async function freshPage() {
 let backend = 'unknown';
 const shots = [];
 
-for (const pose of POSES) {
+for (const pose of (poseList ?? POSES)) {
   await freshPage();
   if (backend !== 'webgpu') {
     console.error(`flame-capture: backend is "${backend}" — not the WebGPU path; refusing to call these flame-lab captures`);
@@ -592,35 +692,62 @@ for (const pose of POSES) {
       return window.__flameLab.burns();
     })()`);
     await frames(SETTLE_STAGE);
-    const shot = await send('Page.captureScreenshot', { format: 'png' });
-    const buf = Buffer.from(shot.result.data, 'base64');
-    const name = `${shotPrefix}${pose}-${stage.name}.png`;
-    writeFileSync(`${OUT}/${name}`, buf);
-    const stats = pngStats(buf);
-    if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
-    if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
-    shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, buf });
-    console.log(`${name}  (char=${stage.char}, luma std=${stats.std})`);
+    // The values to shoot at this stage: a --flow-sweep list A/Bs them at one
+    // camera; otherwise a single value (null = the page default, no tag so the
+    // canonical filenames and contact sheet are untouched).
+    const flows = flowSweep ?? [flow];
+    for (const fv of flows) {
+      if (fv !== null) {
+        const applied = await evaluate(`window.__flameLab.setTuning({ flameFlow: ${fv} }).flameFlow`);
+        if (applied !== fv) fail(`setTuning({ flameFlow: ${fv} }) applied ${JSON.stringify(applied)}`);
+        await frames(SETTLE_STAGE);   // let the temporal smear show the new flow
+      }
+      const tag = fv === null ? '' : `-f${String(fv).replace('.', 'p')}`;
+      // --burst > 1 takes a short time series at this stage: the flow is
+      // animated on the wall clock, so a single still cannot show that the
+      // flame MOVES as one body. b0 keeps the canonical name the contact sheet
+      // and prior plans read.
+      for (let bfi = 0; bfi < burst; bfi++) {
+        if (bfi > 0) await frames(BURST_GAP);
+        const shot = await send('Page.captureScreenshot', { format: 'png' });
+        const buf = Buffer.from(shot.result.data, 'base64');
+        const name = `${shotPrefix}${pose}-${stage.name}${tag}${bfi === 0 ? '' : `-b${bfi}`}.png`;
+        writeFileSync(`${OUT}/${name}`, buf);
+        const stats = pngStats(buf);
+        if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
+        if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
+        shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, burstFrame: bfi, buf });
+        console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, luma std=${stats.std})`);
+      }
+    }
   }
 }
 
 // --- Contact sheet (fix pass task 4): the judge is one image -----------------
 // close-fresh, stand-fresh and stand-charred in a row, then the three Blood
 // reference tiles at body height. Shot buffers come straight from THIS run,
-// so the sheet can never describe a stale folder.
-const byName = (n) => {
-  const s = shots.find((x) => x.file === n);
-  if (!s) fail(`contact sheet: ${n} was not captured this run`);
-  return { name: n, buf: s.buf };
-};
-const CONTACT_FRAMES = ['close-fresh.png', 'stand-fresh.png', 'stand-charred.png']
-  .map((n) => byName(`${shotPrefix}${n}`));
-const CONTACT_TILES = ['3321.png', '3323.png', '3325.png'].map((f) => {
-  const p = `public/assets/blood-tiles/${f}`;
-  return { file: f, buf: readFileSync(p) }; // tracked reference tiles — dev-safe to read
-});
-const contact = composeContact(CONTACT_FRAMES, CONTACT_TILES, `${OUT}/${shotPrefix}contact.png`);
-console.log(`contact.png  (${contact.w}x${contact.h}: ${contact.entries.join(' | ')})`);
+// so the sheet can never describe a stale folder. A --poses subset that omits
+// one of those frames (a flow sweep shoots close only) skips the sheet rather
+// than failing a valid partial run.
+const captured = new Set(shots.map((s) => s.file));
+const CONTACT_NAMES = ['close-fresh.png', 'stand-fresh.png', 'stand-charred.png'];
+const haveContact = CONTACT_NAMES.every((n) => captured.has(`${shotPrefix}${n}`));
+let contact = null;
+if (haveContact) {
+  const CONTACT_FRAMES = CONTACT_NAMES.map((n) => ({ name: `${shotPrefix}${n}`, buf: shots.find((s) => s.file === `${shotPrefix}${n}`).buf }));
+  const CONTACT_TILES = ['3321.png', '3323.png', '3325.png'].map((f) => {
+    const p = `public/assets/blood-tiles/${f}`;
+    return { file: f, buf: readFileSync(p) }; // tracked reference tiles — dev-safe to read
+  });
+  const composed = composeContact(CONTACT_FRAMES, CONTACT_TILES, `${OUT}/${shotPrefix}contact.png`);
+  console.log(`contact.png  (${composed.w}x${composed.h}: ${composed.entries.join(' | ')})`);
+  contact = {
+    file: `${shotPrefix}contact.png`, frames: CONTACT_FRAMES.map((f) => f.name),
+    tiles: CONTACT_TILES.map((t) => t.file), bodyPx: CONTACT_BODY_PX,
+  };
+} else {
+  console.log('contact.png skipped — --poses omitted a contact frame');
+}
 
 // The shutter's own error callback must have stayed silent (task 13's check,
 // enforced for every capture run — a blurred capture is not what shipped).
@@ -641,13 +768,10 @@ if (realExceptions.length > 0) fail(`page threw: ${realExceptions[0]}`);
 
 writeFileSync(`${OUT}/captures.json`, JSON.stringify({
   url: PAGE_PATH, backend, viewport: { width: W, height: H }, technique,
-  poses: POSES, stages: STAGES, contact: {
-    file: `${shotPrefix}contact.png`, frames: CONTACT_FRAMES.map((f) => f.name),
-    tiles: CONTACT_TILES.map((t) => t.file), bodyPx: CONTACT_BODY_PX,
-  },
+  flow, flowSweep, clock, burst, poses: poseList ?? POSES, stages: STAGES, contact,
   shots: shots.map(({ buf, ...rest }) => rest),
 }, null, 2));
 
 await stopStarted();
-console.log(`\n${shots.length} captures + ${shotPrefix}contact.png + captures.json in ${OUT}`);
+console.log(`\n${shots.length} captures${contact ? ` + ${shotPrefix}contact.png` : ''} + captures.json in ${OUT}`);
 process.exit(0);

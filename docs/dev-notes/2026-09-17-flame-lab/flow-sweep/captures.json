@@ -1,0 +1,125 @@
+{
+  "url": "/sdf-flame-lab.html?seed=1&tongue=cards&flow=0",
+  "backend": "webgpu",
+  "viewport": {
+    "width": 1380,
+    "height": 820
+  },
+  "technique": "cards",
+  "flow": null,
+  "flowSweep": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1
+  ],
+  "clock": 20,
+  "burst": 1,
+  "poses": [
+    "stand"
+  ],
+  "stages": [
+    {
+      "name": "fresh",
+      "char": 0
+    },
+    {
+      "name": "charred",
+      "char": 0.6
+    }
+  ],
+  "contact": null,
+  "shots": [
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh-f0.png",
+      "std": 43.46,
+      "flow": 0,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh-f0p25.png",
+      "std": 42.84,
+      "flow": 0.25,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh-f0p5.png",
+      "std": 42.42,
+      "flow": 0.5,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh-f0p75.png",
+      "std": 42.8,
+      "flow": 0.75,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh-f1.png",
+      "std": 42.68,
+      "flow": 1,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred-f0.png",
+      "std": 39.58,
+      "flow": 0,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred-f0p25.png",
+      "std": 39.07,
+      "flow": 0.25,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred-f0p5.png",
+      "std": 38.7,
+      "flow": 0.5,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred-f0p75.png",
+      "std": 38.81,
+      "flow": 0.75,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred-f1.png",
+      "std": 38.96,
+      "flow": 1,
+      "burstFrame": 0
+    }
+  ]
+}

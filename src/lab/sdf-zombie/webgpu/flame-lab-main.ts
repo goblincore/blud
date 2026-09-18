@@ -271,6 +271,12 @@ async function bootstrap(): Promise<void> {
   let tuning: BurnTuning = preset && Object.hasOwn(burnPresets, preset)
     ? resolveBurnTuning(burnPresets[preset as keyof typeof burnPresets])
     : resolveBurnTuning(BURN_TUNING);
+  // ?flow=<0..1> pins the curl-flow strength at boot (flame-polish task 2), the
+  // URL half of the capture sweep — the console half is setTuning({ flameFlow }).
+  const flowParam = q.get('flow');
+  if (flowParam !== null && Number.isFinite(Number(flowParam))) {
+    tuning = resolveBurnTuning({ ...tuning, flameFlow: Number(flowParam) });
+  }
   // The TONGUE TECHNIQUE (flame-tongues plan task 1): which tongue pass draws,
   // plus the tongue tuning all three passes will share. Default 'screen';
   // ?tongue=<name> overrides at boot. The cards pass (task 3) consumes the
@@ -279,6 +285,11 @@ async function bootstrap(): Promise<void> {
   let technique: TongueTechnique =
     tongueParam !== null && isTongueTechnique(tongueParam) ? tongueParam : 'screen';
   let tongue: TongueTuning = resolveTongueTuning();
+  // A capture-time clock pin (flame-polish task 2): when set, the visual clock
+  // stops at this many seconds so two runs can be compared at the SAME flipbook
+  // and curl phase. null is the live wall clock. Burn integration still uses
+  // dt, so pinning does not freeze ignition/char.
+  let clockPin: number | null = null;
   const burns = FLAME_LAB_BODIES.map(() => createBurnState());
   if (startLit) for (const s of burns) igniteBurn(s);
   const actors: FlameLabActor[] = [];
@@ -819,8 +830,9 @@ async function bootstrap(): Promise<void> {
     {
       const burnDt = Math.min(dt, 1 / 30);
       // Wall-clock seconds, as game-main's flicker clock — never dt-integrated,
-      // so a stall cannot jump the wobble phase.
-      const clock = now * 0.001;
+      // so a stall cannot jump the wobble phase. A capture's clock pin
+      // overrides it so two flow values can be shot at the same phase.
+      const clock = clockPin ?? now * 0.001;
       // GLOW (plan task 11): the pass is fed from the live tuning every
       // frame, so a slider move takes effect at once. Gain 0 keeps it fully
       // inert — the draws are skipped and the frame is bit-identical.
@@ -881,10 +893,12 @@ async function bootstrap(): Promise<void> {
 
       // The cards draw only on their technique; setTuning every frame so the
       // tongue sliders land live, exactly like the burn uniforms above. The
-      // soft-particle fade rides BurnTuning (panel slider -> this call).
+      // soft-particle fade and the curl flow both ride BurnTuning (panel
+      // sliders -> these calls).
       flameCards.object.visible = technique === 'cards';
       flameCards.setTuning(tongue);
       flameCards.setSoftFade(tuning.cardSoftFade);
+      flameCards.setFlow(tuning.flameFlow);
       if (technique === 'cards') flameCards.update(cardFrames, camera, clock);
     }
 
@@ -967,6 +981,10 @@ async function bootstrap(): Promise<void> {
   (window as unknown as { __flameLab: unknown }).__flameLab = {
     ignite(on = true) { for (const s of burns) (on ? igniteBurn : extinguishBurn)(s); },
     setTuning(p: Partial<BurnTuning> = {}) { tuning = resolveBurnTuning({ ...tuning, ...p }); return tuning; },
+    /** Capture clock pin: a number freezes the visual clock at that many
+     *  seconds (same flipbook + curl phase across runs), null restores the
+     *  live wall clock. Burn integration is unaffected. */
+    setClock(t: number | null) { clockPin = t !== null && Number.isFinite(t) ? t : null; return clockPin; },
     preset(name: keyof typeof burnPresets) { tuning = resolveBurnTuning(burnPresets[name]); return tuning; },
     /** The tongue switch (flame-tongues plan task 1). Junk names are ignored
      *  and the CURRENT technique comes back, so a capture script can call it

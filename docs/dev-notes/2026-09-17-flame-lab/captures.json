@@ -6,6 +6,10 @@
     "height": 820
   },
   "technique": "cards",
+  "flow": null,
+  "flowSweep": null,
+  "clock": null,
+  "burst": 1,
   "poses": [
     "close",
     "stand",
@@ -44,84 +48,108 @@
       "stage": "fresh",
       "char": 0,
       "file": "cards-close-fresh.png",
-      "std": 61.76
+      "std": 73.6,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "close",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-close-charred.png",
-      "std": 58.71
+      "std": 64.73,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "stand",
       "stage": "fresh",
       "char": 0,
       "file": "cards-stand-fresh.png",
-      "std": 41.33
+      "std": 42.56,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "stand",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-stand-charred.png",
-      "std": 35.98
+      "std": 37.63,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "walk",
       "stage": "fresh",
       "char": 0,
       "file": "cards-walk-fresh.png",
-      "std": 39.93
+      "std": 42.8,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "walk",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-walk-charred.png",
-      "std": 35.1
+      "std": 38.53,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "run",
       "stage": "fresh",
       "char": 0,
       "file": "cards-run-fresh.png",
-      "std": 40.89
+      "std": 43.04,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "run",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-run-charred.png",
-      "std": 35.65
+      "std": 37.71,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "collapsed",
       "stage": "fresh",
       "char": 0,
       "file": "cards-collapsed-fresh.png",
-      "std": 46.05
+      "std": 36.68,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "collapsed",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-collapsed-charred.png",
-      "std": 39.95
+      "std": 32.59,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "distant",
       "stage": "fresh",
       "char": 0,
       "file": "cards-distant-fresh.png",
-      "std": 22.7
+      "std": 23.75,
+      "flow": null,
+      "burstFrame": 0
     },
     {
       "pose": "distant",
       "stage": "charred",
       "char": 0.6,
       "file": "cards-distant-charred.png",
-      "std": 21.08
+      "std": 21.57,
+      "flow": null,
+      "burstFrame": 0
     }
   ]
 }

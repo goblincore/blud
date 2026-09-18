@@ -33,6 +33,20 @@
 // (3) a soft-particle depth fade (BurnTuning.cardSoftFade) rounds the straight
 // depth-test cut where a card crosses the body.
 //
+// ── CURL FLOW (flame-polish task 2, 2026-09-18) ─────────────────────────
+// The flipbook alone gives each card its own phase, which reads as N quads
+// flickering alone. A shared 64^3 curl-noise volume (curl-volume.ts) now drives
+// the motion: the fragment shader samples it at `positionWorld / 6` scrolled
+// upward by time and warps the atlas UV by the decoded vector, and update()
+// displaces each card's whole anchor by the SAME field sampled on the CPU. The
+// field is divergence-free (curl noise) and smooth, so a limb full of cards
+// gets near-identical vectors and the flame mass flows as one body. flameFlow
+// (BurnTuning, 0..1, default 0.35) scales both; 0 is the old flicker.
+//
+// The UV warp is bounded to FLAME_FLOW_UV of a cell so a warped tap can never
+// leave the atlas gutter and read the neighbouring frame — the seam this file
+// just fixed.
+//
 // The known card failure modes this design pushes against, both judged on the
 // captures: cards CLIPPING INTO the body leave hard seams (so every anchor is
 // biased a fraction toward the camera — the fire sits just in front of the
@@ -58,10 +72,13 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   attribute, cameraFar, cameraNear, clamp, float, linearDepth, mix,
-  mx_fractal_noise_float, smoothstep, texture, uniform, vec2, vec3, vec4,
-  viewportLinearDepth,
+  mx_fractal_noise_float, positionWorld, smoothstep, texture, texture3D, uniform,
+  vec2, vec3, vec4, viewportLinearDepth,
 } from 'three/tsl';
 import { mulberry32 } from './game-weapon';
+import {
+  buildCurlVolume, createCurlTextureFromVolume, sampleCurlVolume, CURL_SCALE,
+} from './curl-volume';
 import type { Vec3 } from '../types';
 import type { TongueTuning } from './tongue-tuning';
 
@@ -200,6 +217,30 @@ export function cardCellUv(
   };
 }
 
+/**
+ * The world-space displacement a card ANCHOR takes from the shared curl field
+ * (flame-polish task 2) — the CPU half of the flow. `flow` is 0..1
+ * (BurnTuning.flameFlow) and `time` is the same wall clock the shader's UV warp
+ * uses, so a card both moves and flows from one field.
+ *
+ * Kept pure and exported so the contract that matters — neighbours get
+ * near-identical offsets, so a limb's cards move together — is testable
+ * without a GPU.
+ */
+export function cardCurlOffset(
+  data: Uint8Array, anchor: Vec3, time: number, flow: number,
+): Vec3 {
+  if (!(flow > 0)) return [0, 0, 0];
+  const amp = FLAME_FLOW_WORLD * Math.min(1, flow);
+  const c = sampleCurlVolume(
+    data,
+    anchor[0] / CURL_SCALE,
+    anchor[1] / CURL_SCALE - time * FLAME_CURL_RISE,
+    anchor[2] / CURL_SCALE,
+  );
+  return [c[0] * amp, c[1] * amp, c[2] * amp];
+}
+
 // ————————————————————————————————————————————————————————————————————————
 // The GPU half — one material, one refilled quad buffer.
 // ————————————————————————————————————————————————————————————————————————
@@ -231,6 +272,25 @@ const LEAN_TRAIL_SEC = 0.16;
 /** Vertical stretch on the atlas cell — FIRE01's cells are wider than tall,
  *  but a rising lick must be taller than wide. */
 const CARD_STRETCH = 1.5;
+
+/** Volume units per second the curl field scrolls upward: the flow rises. The
+ *  shimmer has to be slower than the flipbook (15 fps) or it reads as noise. */
+const FLAME_CURL_RISE = 0.45;
+
+/** Peak card WORLD displacement in metres at flameFlow = 1. Cards are ~0.45 m
+ *  long, so this is a visible sway at the default without unhooking them. */
+const FLAME_FLOW_WORLD = 0.5;
+
+/** Atlas-cell fraction the per-fragment UV warp reaches at flameFlow = 1.
+ *  The atlas gutter is 2 px per cell side (31x25 cells), so 0.06 of a cell is
+ *  ~1.9 px and stays inside the gutter; beyond that a warped tap would sample
+ *  the neighbouring frame — the very seam task 1 fixed. */
+const FLAME_FLOW_UV = 0.055;
+
+/** Procedural-path warp amplitude (in the mx_fractal_noise_float domain) at
+ *  flameFlow = 1. The atlas needs the tight bound above; this path has no
+ *  neighbouring cell to bleed into, so the flow can push harder. */
+const FLAME_FLOW_PROC = 0.9;
 
 const VERTS_PER_QUAD = 4;
 const INDICES_PER_QUAD = 6;
@@ -266,6 +326,8 @@ export function makeFlameCardUniforms() {
     atlasV1: uniform(1),
     /** Soft-particle fade distance in METRES; 0 disables it (inert). */
     softFade: uniform(0.08),
+    /** Curl-flow strength 0..1 (BurnTuning.flameFlow); 0 is the old flicker. */
+    flow: uniform(0.35),
   };
 }
 export type FlameCardUniforms = ReturnType<typeof makeFlameCardUniforms>;
@@ -291,6 +353,8 @@ export interface FlameCards {
   setTuning(t: TongueTuning): void;
   /** Soft-particle fade distance in metres; 0 disables it (BurnTuning.cardSoftFade). */
   setSoftFade(metres: number): void;
+  /** Curl-flow strength 0..1 (BurnTuning.flameFlow); 0 is the old flicker. */
+  setFlow(flow: number): void;
   /** Swap the procedural fallback for the FIRE01 atlas (no recompile).
    *  `padTexels` is the atlas builder's transparent gutter per cell side. */
   setAtlas(tex: THREE.Texture, frames: number, cellW: number, cellH: number, padTexels?: number): void;
@@ -303,7 +367,7 @@ export interface FlameCards {
   dispose(): void;
 }
 
-export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards {
+export function createFlameCards(opts: { maxBodies?: number; curlSeed?: number } = {}): FlameCards {
   const maxBodies = Math.max(1, opts.maxBodies ?? 2);
   const capacity = maxBodies * FLAME_CARD_SLOTS.length;
 
@@ -317,6 +381,13 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
   const uAtlasV0 = u.atlasV0 as unknown as Tsl;
   const uAtlasV1 = u.atlasV1 as unknown as Tsl;
   const uSoftFade = u.softFade as unknown as Tsl;
+  const uFlow = u.flow as unknown as Tsl;
+
+  // The shared curl volume: built once (memoised by seed), uploaded once, and
+  // kept as the CPU array too so update() can displace an anchor with the SAME
+  // field the fragment shader warps its UV with.
+  const curlData = buildCurlVolume(opts.curlSeed ?? 0x51c0ff);
+  const curlTexture = createCurlTextureFromVolume(curlData);
 
   // Atlas texture NODE, built over a 1x1 transparent fallback and repointed
   // by setAtlas — the post-aa swap pattern (a texture binding is baked per
@@ -347,16 +418,37 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
   const frameU0 = aCard.z;
   const frameDu = aCard.w;
 
+  // — THE SHARED CURL FLOW (flame-polish task 2) ————————————————————————
+  // One divergence-free 3D field, sampled per fragment at world/scale scrolled
+  // upward in time. `positionWorld` is the world-space vertex (the geometry is
+  // world-space under an identity root), so a card's fragments sample a small
+  // neighbourhood and neighbouring cards sample neighbouring cells — that is
+  // what ties the flame into one flowing body. The CPU half (update()) samples
+  // the identical field to displace each whole anchor.
+  const curlScroll = vec3(0, uTime.mul(FLAME_CURL_RISE) as N, 0) as unknown as Tsl;
+  const curlUv = (positionWorld as unknown as Tsl)
+    .div(CURL_SCALE).sub(curlScroll as N) as unknown as Tsl;
+  const curlTexNode = texture3D(curlTexture, curlUv as N) as unknown as Tsl;
+  const curl = (curlTexNode.rgb as unknown as Tsl).mul(2).sub(1) as unknown as Tsl;
+  // Atlas-cell-fraction shifts (bounded so a warped tap stays in the gutter).
+  const flowUv = curl.x.mul(uFlow).mul(FLAME_FLOW_UV) as unknown as Tsl;
+  const flowV = curl.y.mul(uFlow).mul(FLAME_FLOW_UV) as unknown as Tsl;
+  // The procedural path has no neighbouring cell to bleed into, so it may push
+  // harder in its own domain.
+  const flowProc = uFlow.mul(FLAME_FLOW_PROC) as unknown as Tsl;
+
   // — PROCEDURAL FIRE (the atlas-absent fallback) ————————————————
   // A flame lick, not a blob: a tapering silhouette, a domain-warped noise
   // field advected upward, and the blackbody ramp with a hard extinction at
   // the cold end. The warp and the tip cut carry `ragged`; the advection
-  // carries `rise`; per-card `seed` decorrelates the whole field.
+  // carries `rise`; per-card `seed` decorrelates the whole field. The curl
+  // field warps the domain too, so the fallback flows like the atlas path.
   const warp = mx_fractal_noise_float(
     vec3(
-      aUv.x.mul(3.1).add(seed.mul(19.7)) as N,
-      aUv.y.mul(2.4).sub(uTime.mul(uRise).mul(0.55)) .add(seed.mul(7.3)) as N,
-      uTime.mul(0.4).add(seed.mul(3.1)) as N,
+      aUv.x.mul(3.1).add(seed.mul(19.7)).add(curl.x.mul(flowProc)) as N,
+      aUv.y.mul(2.4).sub(uTime.mul(uRise).mul(0.55)).add(seed.mul(7.3))
+        .add(curl.y.mul(flowProc)) as N,
+      uTime.mul(0.4).add(seed.mul(3.1)).add(curl.z.mul(flowProc)) as N,
     ) as N, 3, 2.0, 0.5) as unknown as Tsl;
   const taper = (float(0.95) as unknown as Tsl)
     .sub(aUv.y.mul(0.85)).max(0.12) as unknown as Tsl;
@@ -375,10 +467,13 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
   // — ATLAS FIRE (the FIRE01 flipbook) ————————————————————————————
   // u comes per-card (the flipbook frame); v spans the cell content, which the
   // gutter-padded atlas records in atlasV0/atlasV1 (0..1 when there is no
-  // gutter, so the padding never scales the flame down).
+  // gutter, so the padding never scales the flame down). The curl's xy warps
+  // both axes by a bounded fraction of the cell; that slides the flame inside
+  // its own frame without reading a neighbour (see FLAME_FLOW_UV).
+  const vSpan = (uAtlasV1.sub(uAtlasV0)) as unknown as Tsl;
   const atlasUv = vec2(
-    frameU0.add(aUv.x.mul(frameDu)) as N,
-    uAtlasV0.add(aUv.y.mul((uAtlasV1.sub(uAtlasV0)) as N)) as N,
+    frameU0.add(aUv.x.mul(frameDu)).add(flowUv.mul(frameDu)) as N,
+    uAtlasV0.add(aUv.y.mul(vSpan as N)).add(flowV.mul(vSpan as N)) as N,
   );
   const atlasTexNode = texture(atlasFallback, atlasUv as N) as unknown as Tsl & {
     value: THREE.Texture;
@@ -490,6 +585,9 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
       const len = tuning?.length ?? 0.45;
       const lean = tuning?.lean ?? 0.4;
       u.time.value = time;
+      // The curl flow, read once: the CPU displacement below and the shader's
+      // UV warp share the field, so the whole card both moves and flows.
+      const flow = u.flow.value as number;
       const clipSec = atlasFrames / FLAME_CARD_FPS;
       camera.getWorldPosition(camPos);
       let quad = 0;
@@ -515,9 +613,20 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
           const lx = slot.off[0]!;
           const ly = slot.off[1]!;
           const lz = slot.off[2]!;
-          const wx = base[0]! + lx * cy + lz * sy;
-          const wz = base[2]! - lx * sy + lz * cy;
-          const wy = base[1]! + ly;
+          let wx = base[0]! + lx * cy + lz * sy;
+          let wz = base[2]! - lx * sy + lz * cy;
+          let wy = base[1]! + ly;
+          // Shared curl displacement: the anchor moves with the divergence-free
+          // field, so a limb's cards move together rather than independently.
+          // Sampled exactly where the fragment shader samples it.
+          if (flow > 0) {
+            const cv = cardCurlOffset(
+              curlData, [wx, wy, wz], time, flow,
+            );
+            wx += cv[0];
+            wy += cv[1];
+            wz += cv[2];
+          }
           // Camera-facing basis with the up axis pinned to world vertical
           // (a flame must not lean with the camera pitch): the horizontal
           // direction to the camera gives right = (dz, 0, -dx) normalised.
@@ -582,6 +691,9 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
     setSoftFade(metres) {
       u.softFade.value = Math.max(0, metres);
     },
+    setFlow(flow) {
+      u.flow.value = flow < 0 ? 0 : flow > 1 ? 1 : flow;
+    },
     setAtlas(tex, frames, cellW, cellH, padTexels = 0) {
       atlasFrames = Math.max(1, frames);
       atlasCellW = cellW;
@@ -604,6 +716,7 @@ export function createFlameCards(opts: { maxBodies?: number } = {}): FlameCards 
       geo.dispose();
       material.dispose();
       atlasFallback.dispose();
+      curlTexture.dispose();
       object.removeFromParent();
     },
   };

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { placeFlameCards, cardFrame, cardCellUv, FLAME_CARD_SLOTS } from './flame-cards';
+import { placeFlameCards, cardFrame, cardCellUv, cardCurlOffset, FLAME_CARD_SLOTS } from './flame-cards';
+import { buildCurlVolume } from './curl-volume';
 
 describe('flame cards', () => {
   it('places cards on the body, more of them as burn rises', () => {
@@ -39,4 +40,23 @@ describe('flame cards', () => {
     expect(b.u0).toBeGreaterThan(34 / 272);     // across the 4 px cell gap
     expect(a.u1).toBeLessThan(b.u0);            // and still no overlap
   });
+
+  it('gives nearby anchors near-identical curl offsets (one shared flow)', () => {
+    // The whole point of flameFlow (task 2): cards on one limb must move
+    // together, not each flicker alone. A smooth field guarantees it.
+    const data = buildCurlVolume(7);
+    const a = cardCurlOffset(data, [0, 0.5, 0], 3, 1);
+    const b = cardCurlOffset(data, [0.05, 0.5, 0], 3, 1);
+    const spread = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    expect(spread).toBeLessThan(0.05);          // 5 cm apart -> almost the same push
+  }, 30_000);
+
+  it('is inert at flameFlow 0 and scales with flow', () => {
+    const data = buildCurlVolume(7);
+    expect(cardCurlOffset(data, [0, 0.5, 0], 3, 0)).toEqual([0, 0, 0]);
+    const half = cardCurlOffset(data, [0, 0.5, 0], 3, 0.5);
+    const full = cardCurlOffset(data, [0, 0.5, 0], 3, 1);
+    expect(Math.hypot(full[0], full[1], full[2]))
+      .toBeCloseTo(2 * Math.hypot(half[0], half[1], half[2]), 6);
+  }, 30_000);
 });

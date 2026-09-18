@@ -41,6 +41,12 @@ export interface BurnTuning {
    *  a card intersecting the body ends in a gradient instead of a straight
    *  depth-test cut. 0 disables it (flame-polish task 1). */
   cardSoftFade: number;
+  /** How strongly the shared curl-noise volume drives the flame cards, 0..1.
+   *  At 0 each card is the old independent flipbook flicker; as it rises the
+   *  cards' world positions and atlas UVs are displaced by one shared
+   *  divergence-free field, so neighbouring cards swirl together as a body
+   *  instead of flickering alone (flame-polish task 2). */
+  flameFlow: number;
 }
 
 export const BURN_TUNING: BurnTuning = Object.freeze({
@@ -65,6 +71,10 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   // where a flame quad crosses the body edge. 0 is the escape hatch. (At the
   // 0.5 m rail the flame visibly pulls off the body — 8 cm only rounds the cut.)
   cardSoftFade: 0.08,
+  // flame-polish task 2: 0.35 is where the shared curl field visibly ties the
+  // cards into one flowing body without tearing them off the flesh; the flow
+  // sweep (docs/dev-notes/2026-09-17-flame-lab/NOTES.md) covers the rails.
+  flameFlow: 0.35,
 });
 
 /** The clamp range for every field, as data.
@@ -87,6 +97,7 @@ export const BURN_BOUNDS: Readonly<Record<keyof BurnTuning, readonly [number, nu
   distortStrength: [0, BLAST_REFRACTION.maxOffsetUv],
   fireCoverage: [0, 1], skeletonShow: [0, 1],
   cardSoftFade: [0, 0.5],
+  flameFlow: [0, 1],
 });
 
 export const burnPresets: Readonly<Record<'blood' | 'ember' | 'inferno', BurnTuning>> = Object.freeze({
