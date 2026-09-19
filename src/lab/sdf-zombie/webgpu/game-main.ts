@@ -263,6 +263,7 @@ import { stampLevelProbeRoom } from './game-world-leaves';
 import { applyBoneCull, restampLevelProbes } from './game-render-leaves2';
 import { spawnAssetGibPiece, spawnSpriteGibPiece } from './game-gibs-leaves2';
 import { gateRefineTwin, woundStreamId } from './game-world-leaves2';
+import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, updateDemoHud } from './game-demo-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -3727,24 +3728,6 @@ async function main() {
       ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
       updateHud();
     }
-  }
-
-  /** Snapshot the listeners' accumulated input as the frame the next tick will
-   *  consume. Zeroes the accumulators: a delta belongs to exactly one frame. */
-  function readInputFrame(): DemoFrame {
-    const frame: DemoFrame = {
-      keys: [...ctx.player.keys],
-      dx: ctx.player.pendingDx,
-      dy: ctx.player.pendingDy,
-      fire: ctx.weapon.pendingFire,
-      reload: ctx.weapon.pendingReload,
-      look: [ctx.player.player.yaw, ctx.player.player.pitch],
-    };
-    ctx.player.pendingDx = 0;
-    ctx.player.pendingDy = 0;
-    ctx.weapon.pendingFire = 0;
-    ctx.weapon.pendingReload = false;
-    return frame;
   }
 
   /** Apply one frame of input. THE single mutation point for player input —
@@ -7905,18 +7888,18 @@ async function main() {
     // through applyInputFrame, so the input path is identical either way; and
     // while recording, the frame the tick CONSUMED is what gets logged (not a
     // re-read after the fact, which could see a later event).
-    const inputFrame = ctx.demo.replayActive ? ctx.player.currentInputFrame : readInputFrame();
+    const inputFrame = ctx.demo.replayActive ? ctx.player.currentInputFrame : readInputFrame(ctx);
     applyInputFrame(inputFrame);
     if (ctx.demo.replayActive) {
       // A recorded frame is consumed by exactly ONE tick. Reset to a neutral
       // frame (keeping the last look) so a repeated step — the bench's warmup,
       // say — cannot re-fire the same shot.
-      ctx.player.currentInputFrame = neutralInput(inputFrame);
+      ctx.player.currentInputFrame = neutralInput(ctx, inputFrame);
       ctx.demo.replayFrame++;
     } else {
       // The frame the tick CONSUMED, not a re-read after the fact: a live
       // event that lands mid-tick must belong to the next frame, not this one.
-      if (ctx.demo.recorder) { ctx.demo.recorder.push(inputFrame); updateDemoHud(); }
+      if (ctx.demo.recorder) { ctx.demo.recorder.push(inputFrame); updateDemoHud(ctx); }
     }
     const held = inputFrame.keys;
     let input: MoveInput = ctx.player.holdPlayerPose
@@ -8553,7 +8536,7 @@ async function main() {
             if (ctx.telemetry.telemetry.active) ctx.telemetry.telemetry.event('impact', {
               actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
               world: hitPoint, direction: dirN, actorPose: hitActor.pose(),
-              wound: stamped ? describeRecordedWound(hitActor, stamped) : null,
+              wound: stamped ? describeRecordedWound(ctx, hitActor, stamped) : null,
               woundCount: hitActor.wounds().length,
             });
             if (stamped) registerBleed(hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
@@ -8565,7 +8548,7 @@ async function main() {
       const flushTiming = ctx.telemetry.telemetry.begin();
       for (const a of hitThisFrame) a.endHits();
       if (ctx.telemetry.telemetry.active) for (const a of hitThisFrame) ctx.telemetry.telemetry.event('actor-wounds', {
-        actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(a, w)),
+        actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(ctx, a, w)),
         aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
       });
       ctx.world.soldierCorpses?.update(ctx.world.actors,0); // restore damaged snapshots before this draw
@@ -8934,14 +8917,6 @@ async function main() {
     ctx.player.player.pitch = pitch0;
     return false;
   }
-
-  function describeRecordedWound(a: ZombieActor, w: Wound) {
-    const prims = a.posed().prims;
-    const prim = prims[w.primIdx];
-    return { ...w, world: prim ? woundWorldPos(prims, w, a.pose().yaw) : null,
-      bone: prim?.bone ?? null, sourceLine: prim?.src ?? null,
-      region: prim ? a.posed().clusters[prim.cluster]?.limb ?? null : null };
-  }
   function captureTelemetryScene(name: string) {
     if (!ctx.telemetry.telemetry.active) return;
     const started = performance.now();
@@ -8955,7 +8930,7 @@ async function main() {
         // Already-posed CPU data: no ray queries, GPU fence or texture readback.
         return { id: a.id, model: 'zombie', room: a.room, pose: a.pose(),
           prims: body.prims, clusters: body.clusters, bonePrims: body.bonePrims,
-          wounds: a.wounds().map(w => describeRecordedWound(a, w)),
+          wounds: a.wounds().map(w => describeRecordedWound(ctx, a, w)),
           uniforms: Object.fromEntries(Object.entries(a.view.uniforms).flatMap<[string, number | boolean | number[]]>(([key, u]) => {
             const v = (u as { value: unknown }).value;
             if (typeof v === 'number' || typeof v === 'boolean') return [[key, v]];
@@ -9216,29 +9191,6 @@ function performBenchAction(a: BenchAction): void {
     }
   }
 
-  /** Put the player where the recording's frame 0 starts. meta.startPose wins:
-   *  the scripted standoff is computed from where the bodies happen to be and
-   *  cannot be re-derived from a room id. Room centre is the fallback. */
-  function placeFromDemo(file: DemoFile): void {
-    const sp = file.meta?.startPose as { x?: number; z?: number; yaw?: number; pitch?: number } | undefined;
-    if (sp && Number.isFinite(sp.x) && Number.isFinite(sp.z)) {
-      ctx.player.player.pos = [sp.x as number, 0, sp.z as number];
-      ctx.player.player.vel = [0, 0, 0];
-      ctx.player.player.yaw = Number.isFinite(sp.yaw) ? (sp.yaw as number) : 0;
-      ctx.player.player.pitch = Number.isFinite(sp.pitch) ? (sp.pitch as number) : 0;
-      ctx.player.player.grounded = true;
-      return;
-    }
-    const r = ROOMS.find(x => x.id === file.room);
-    if (r) {
-      ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
-      ctx.player.player.vel = [0, 0, 0];
-      ctx.player.player.yaw = 0;
-      ctx.player.player.pitch = 0;
-      ctx.player.player.grounded = true;
-    }
-  }
-
   /** Turn a recording into a bench Scenario: one `input` action per frame, and
    *  equal thirds as segments (t0/t1/t2) because a live recording does not
    *  carry the scripted walk/fire/gib boundaries. Feeding it through runBench
@@ -9263,32 +9215,8 @@ function performBenchAction(a: BenchAction): void {
     };
   }
 
-  /** A neutral frame for the tick after a recorded one is consumed: it keeps
-   *  the last look (so a repeat step cannot snap the camera) but drops every
-   *  event, so a warmup step cannot re-fire a shot. */
-  function neutralInput(prev: DemoFrame): DemoFrame {
-    return { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [prev.look[0], prev.look[1]] };
-  }
-
   /** The F7 HUD line, created lazily and parked above the telemetry controls. */
   ctx.demo.hudEl = null;
-  function updateDemoHud(): void {
-    if (!ctx.demo.recorder) {
-      if (ctx.demo.hudEl) ctx.demo.hudEl.hidden = true;
-      return;
-    }
-    if (!ctx.demo.hudEl) {
-      ctx.demo.hudEl = document.createElement('div');
-      ctx.demo.hudEl.id = 'demo-rec-status';
-      ctx.demo.hudEl.setAttribute('style',
-        'position:fixed;bottom:52px;left:12px;z-index:10001;padding:4px 8px;'
-        + 'background:#2a0d0dee;color:#ffb4b4;font:12px monospace;border:1px solid #a04a4a;'
-        + 'border-radius:5px;pointer-events:none');
-      document.body.appendChild(ctx.demo.hudEl);
-    }
-    ctx.demo.hudEl.hidden = false;
-    ctx.demo.hudEl.textContent = `REC \u25cf  frames: ${ctx.demo.recorder.frames}`;
-  }
 
   /** F7 / `__sdfGame.demoRecord('start')`. The header is snapshotted at START,
    *  not stop: the seed and query must be the ones the run BEGAN under, or a
@@ -9310,7 +9238,7 @@ function performBenchAction(a: BenchAction): void {
         label: 'live',
       },
     });
-    updateDemoHud();
+    updateDemoHud(ctx);
     return true;
   }
 
@@ -9320,7 +9248,7 @@ function performBenchAction(a: BenchAction): void {
     if (!ctx.demo.recorder) return null;
     const file = ctx.demo.recorder.stop();
     ctx.demo.recorder = null;
-    updateDemoHud();
+    updateDemoHud(ctx);
     if (save) {
       try {
         await fetch('/__lab/save-demo', {
@@ -9401,7 +9329,7 @@ function performBenchAction(a: BenchAction): void {
       resetSimClock();
       setRngSeed(file.seed);
       applyDemoQuery(file.query);
-      placeFromDemo(file);
+      placeFromDemo(ctx, file);
       ctx.demo.simLocked = false;
       ctx.player.prevInputKeys = new Set<string>();
       ctx.player.currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [ctx.player.player.yaw, ctx.player.player.pitch] };
@@ -9438,7 +9366,7 @@ function performBenchAction(a: BenchAction): void {
       ctx.render.adaptiveEnabled = hadAdaptive;
       ctx.player.holdPlayerPose = hadHoldPlayer;
       ctx.player.freeAimOn = hadFreeAim;
-      ctx.player.currentInputFrame = neutralInput(ctx.player.currentInputFrame);
+      ctx.player.currentInputFrame = neutralInput(ctx, ctx.player.currentInputFrame);
     }
     return {
       frames,
@@ -9540,7 +9468,7 @@ function performBenchAction(a: BenchAction): void {
       ctx.demo.simLocked = hadLock;
       ctx.render.adaptiveEnabled = hadAdaptive;
       ctx.demo.hold = hadHold;
-      ctx.player.currentInputFrame = neutralInput(ctx.player.currentInputFrame);
+      ctx.player.currentInputFrame = neutralInput(ctx, ctx.player.currentInputFrame);
     }
     if (!rec) throw new Error('demoSynthesize: recorder was never created');
     return rec.stop();
