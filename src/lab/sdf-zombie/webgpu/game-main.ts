@@ -129,7 +129,7 @@ import {
 import { runBench, type BenchDeps, type BenchMode } from './game-bench';
 import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timing';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
-import { getPipelineLog, setPipelineLogEnabled } from './pipeline-log';
+import { getPipelineCensus, getPipelineLog, getPipelineShaderSource, setPipelineLogEnabled } from './pipeline-log';
 import { coordinateWarmGate, createLoopController, type WarmOutcome } from './warm-gate';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
@@ -10167,6 +10167,17 @@ function performBenchAction(a: BenchAction): void {
      *  each, plus the totals and the renderer.compute() per-frame census. */
     setPipelineLog: (on: boolean) => setPipelineLogEnabled(on),
     pipelineLog: () => getPipelineLog(),
+    /** COMPILE CENSUS (2026-09-19 shader-compile-time task, MEASURE ONLY).
+     *  Every pipeline creation recorded while `?pipelinelog=1` is on, with
+     *  start/end timestamps, WGSL module byte lengths, three's render-cache
+     *  key and the descriptor signature, plus the shader-module fingerprint
+     *  census. `scripts/compile-census.mjs` is the driver; `pipelineLog()` is
+     *  the older long-frame hitch view and is unchanged. Payload is empty
+     *  (and costs nothing) unless the log is enabled. */
+    pipelineCensus: () => getPipelineCensus(),
+    /** The WGSL source for one module hash from the compile census, so a
+     *  driver can diff two variants offline. Undefined unless the log is on. */
+    pipelineShaderSource: (hash: string) => getPipelineShaderSource(hash),
     /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
      *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
      *  POST /__lab/save-demo. F7 does the same toggle. */
