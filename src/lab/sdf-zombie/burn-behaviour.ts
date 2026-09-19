@@ -9,6 +9,10 @@
 import type { Vec3 } from './types';
 
 export const BURN_BEHAVIOUR = Object.freeze({
+  /** OFF (owner playtest 2026-09-18): the flee + stumble read as jerky on the
+   *  soldier, so a burning soldier keeps behaving exactly as unburnt. The panic
+   *  logic below stays for the real flare-gun pass. Zombies are unaffected. */
+  soldierPanic: false,
   soldierSpeed: 1.4,
   zombieSpeed: 1.25,
   /** Soldier flee target: this far from self, re-picked every repickMin..Max s. */

@@ -1641,6 +1641,9 @@ export function createZombieActor(opts: {
       // repeated call must not re-seed the panic (that would reset the RNG
       // and restart every stumble/repick clock).
       if (on === (burnPanic !== null)) return;
+      // Soldier panic is switched off for now (BURN_BEHAVIOUR.soldierPanic):
+      // a burning soldier keeps his mind, speed and gun, with no stumbles.
+      if (on && mind.kind === 'soldier' && !BURN_BEHAVIOUR.soldierPanic) return;
       if (on) {
         // The id seed keeps two bodies lit on the same frame out of phase.
         burnPanic = createBurnPanic(opts.id * 7919 + 1);
