@@ -266,6 +266,8 @@ import { gateRefineTwin, woundStreamId } from './game-world-leaves2';
 import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, updateDemoHud } from './game-demo-leaves';
 import { applyMouseDelta } from './game-player-leaves';
 import { setLoader } from './game-boot-leaves';
+import { registerBleed, stepGutRopes } from './game-world-leaves3';
+import { demoRecordStop } from './game-demo-leaves2';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -7524,127 +7526,10 @@ async function main() {
   // this rope's 'gut' droplets — stepBlood skips that kind — so the goo pass
   // draws the rope as fused metaballs riding the wound's emit point.
   ctx.vfx.gutRopes = new Map<number, { chain: GutChain; wound: Wound; droplets: Droplet[] }>();
-
-  /** Per-frame rope sim, BEFORE the bleed block (so stepBlood sees the same
-   *  frame it does): pin to the wound's current emit point — the anchor is
-   *  recomputed from the CURRENT posed prims, which is what makes the rope
-   *  ride the gait — step the chain, then copy node positions into the
-   *  rope's persistent 'gut' droplets. Uses only the actor's already-posed
-   *  prims; never re-poses. Runs regardless of bleedEnabled: a hanging gut
-   *  is body state, not spray, and stepping spends no RNG. */
-  function stepGutRopes(dt: number): void {
-    for (const a of ctx.world.actors) {
-      let entry = ctx.vfx.gutRopes.get(a.id);
-      if (!entry) continue;
-      // Body down (falling or settled) → the rope tears free. It keeps its
-      // verlet momentum, falls, settles, freezes (entrails.ts).
-      if (entry.chain.attached && a.debug().phase !== 'standing') {
-        entry = { ...entry, chain: detachGutChain(entry.chain) };
-        ctx.vfx.gutRopes.set(a.id, entry);
-      }
-      if (entry.chain.attached) {
-        const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound, a.pose().yaw);
-        entry = { ...entry, chain: pinGutChain(entry.chain, anchor) };
-        ctx.vfx.gutRopes.set(a.id, entry);
-      }
-      entry = { ...entry, chain: stepGutChain(entry.chain, dt) };
-      ctx.vfx.gutRopes.set(a.id, entry);
-
-      // Keep the rope's droplets in the sim. They are created once and then
-      // MOVED (Droplet.pos is mutable by contract; stepBlood skips 'gut'),
-      // unless particle pressure evicted them (MAX_DROPLETS shift) — then
-      // rebuild at the nodes' current positions.
-      const nodes = entry.chain.nodes;
-      const live = entry.droplets.length === nodes.length
-        && entry.droplets[0] !== undefined
-        && ctx.vfx.bloodSim.droplets.includes(entry.droplets[0]);
-      if (!live) {
-        const fresh: Droplet[] = nodes.map(n => ({
-          pos: [...n.pos] as [number, number, number],
-          vel: [0, 0, 0] as [number, number, number],
-          age: 0, life: Infinity,
-          size: ctx.vfx.woundTuning.gutSize,
-          kind: 'gut',
-          // The rope belongs to the wound that spilled it: reuse that wound's
-          // stable stream id so the gut nodes are attributed like every other
-          // emitter rather than falling through as untagged.
-          stream: woundStreamId(ctx, entry!.wound),
-        }));
-        for (const d of fresh) ctx.vfx.bloodSim.droplets.push(d);
-        entry = { ...entry, droplets: fresh };
-        ctx.vfx.gutRopes.set(a.id, entry);
-      } else {
-        const invDt = dt > 1e-6 ? 1 / dt : 0;
-        for (let i = 0; i < nodes.length; i++) {
-          const n = nodes[i]!;
-          const d = entry.droplets[i]!;
-          // Honest velocity — the goo stretch follows node motion, so a
-          // swinging rope smears, a settled one doesn't.
-          d.vel[0] = (n.pos[0] - n.prev[0]) * invDt;
-          d.vel[1] = (n.pos[1] - n.prev[1]) * invDt;
-          d.vel[2] = (n.pos[2] - n.prev[2]) * invDt;
-          d.pos[0] = n.pos[0];
-          d.pos[1] = n.pos[1];
-          d.pos[2] = n.pos[2];
-        }
-      }
-    }
-  }
   /** Bleed's own sim clock — an accumulator, never wall time, so hand-
    *  stepped captures are deterministic. */
   ctx.vfx.bleedClock = 0;
   ctx.vfx.lastSplashShot = new WeakMap<ZombieActor, number>();
-  function registerBleed(
-    a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump',
-    contact?: { point: Vec3; incoming: Vec3 },
-  ): void {
-    if (!ctx.vfx.bleedEnabled) return;
-    ctx.vfx.bleed.register(a.id, wound, kind, ctx.vfx.bleedClock);
-    // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
-    // the wound's own anchor so it leaves the body where the hole is. Fired
-    // here rather than at each call site because both the impact path and
-    // the sever path already funnel through this function, and two copies
-    // would drift. Uses the SAME bleedRng, so setBleed(false) freezes gouts
-    // and the trickle together and captures stay deterministic.
-    const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
-    // The gout sprays back along the incoming shot; spawnImpactGout negates
-    // what it is handed, and the wound normal already points OUT of the
-    // body, so pass the inward direction. The wound's stable stream id tags
-    // the gout so it fuses with this wound's per-frame droplets and no
-    // other emitter's.
-    const streamId = woundStreamId(ctx, wound);
-    spawnImpactGout(ctx.vfx.bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
-    // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
-    // use the contact and incoming shot below; stumps use their outward
-    // wound normal. The seed is
-    // derived from the wound's stable stream id, NOT from bleedRng, so it
-    // draws no random numbers and leaves the shipped gout/bleed stream
-    // bit-identical.
-    const shotgunShot = wound.shot?.weapon === 'shotgun' ? wound.shot.shotId : undefined;
-    const repeatedPellet = shotgunShot !== undefined && ctx.vfx.lastSplashShot.get(a) === shotgunShot;
-    if (ctx.panels.impactSplashEnabled && ctx.panels.impactSplashLayer && !repeatedPellet) {
-      if (shotgunShot !== undefined) ctx.vfx.lastSplashShot.set(a, shotgunShot);
-      // An immediate entry splash belongs to the projectile's actual surface
-      // contact, not the wound's reconstructed/carved anchor. Send it back
-      // toward the incoming shot and start just outside the contacted skin.
-      // Stumps have no projectile contact and retain their wound-normal path.
-      const splashDirection: Vec3 = contact
-        ? [-contact.incoming[0], -contact.incoming[1], -contact.incoming[2]]
-        : normal;
-      const splashOrigin: Vec3 = contact
-        ? [contact.point[0] + splashDirection[0] * 0.035,
-           contact.point[1] + splashDirection[1] * 0.035,
-           contact.point[2] + splashDirection[2] * 0.035]
-        : anchor;
-      ctx.panels.impactSplashLayer.emit(splashOrigin, splashDirection, (streamId * 2654435761) >>> 0, { profile: impactSplashProfiles[kind] });
-    }
-    // Gut-rope decision for this stamped wound — placed BELOW the
-    // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
-    // invariant above (OFF mid-stream = ON-stream-paused) only holds if
-    // nothing advances the stream while bleed is frozen. The capture twins
-    // (stampWoundAt/explode) call spillVerdict directly instead.
-    spillVerdict(ctx, a, wound);
-  }
 
   // Wire every actor's severs into the chunk spawner (template = that
   // actor's own look — the chunk shades like the flesh it came from), and
@@ -7653,7 +7538,7 @@ async function main() {
   ctx.boot.onSeverDispatch = (a, piece, stumpWound) => {
     ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
     spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
-    if (stumpWound) registerBleed(a, stumpWound, 'stump');
+    if (stumpWound) registerBleed(ctx, a, stumpWound, 'stump');
   };
 
   // -----------------------------------------------------------------------
@@ -8520,7 +8405,7 @@ async function main() {
               wound: stamped ? describeRecordedWound(ctx, hitActor, stamped) : null,
               woundCount: hitActor.wounds().length,
             });
-            if (stamped) registerBleed(hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+            if (stamped) registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
             dead = true;
           }
         }
@@ -8586,7 +8471,7 @@ async function main() {
       const cdt = Math.min(dt, 1 / 30);
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
-      stepGutRopes(cdt);
+      stepGutRopes(ctx, cdt);
       // Bodies whose pre-tear window has closed become pieces HERE — after the
       // actors stepped above (so the pieces take the pose the body was drawn
       // in) and before the chunk step (so their impulses are released in the
@@ -9223,26 +9108,6 @@ function performBenchAction(a: BenchAction): void {
     return true;
   }
 
-  /** Stop and (optionally) save. Returns the file so a caller keeps it in
-   *  memory; the POST is best-effort — a failed save must not lose the run. */
-  async function demoRecordStop(save = true): Promise<DemoFile | null> {
-    if (!ctx.demo.recorder) return null;
-    const file = ctx.demo.recorder.stop();
-    ctx.demo.recorder = null;
-    updateDemoHud(ctx);
-    if (save) {
-      try {
-        await fetch('/__lab/save-demo', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(file),
-          signal: AbortSignal.timeout(15000),
-        });
-      } catch { /* keep the file; the caller still has it */ }
-    }
-    return file;
-  }
-
   /** WAIT FOR OUTSTANDING BAKE WORKERS (determinism, 2026-09-14). The gib
    *  swap is pinned to the frame after its submit and the corpse swap to the
    *  frame the reply arrives — both only if the reply HAS arrived. Two replays
@@ -9459,7 +9324,7 @@ function performBenchAction(a: BenchAction): void {
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'F7' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
-    if (ctx.demo.recorder) void demoRecordStop(true);
+    if (ctx.demo.recorder) void demoRecordStop(ctx, true);
     else demoRecordStart();
   });
 
@@ -9563,7 +9428,7 @@ function performBenchAction(a: BenchAction): void {
     /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
      *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
      *  POST /__lab/save-demo. F7 does the same toggle. */
-    demoRecord: (action: 'start' | 'stop') => (action === 'start' ? demoRecordStart() : demoRecordStop(true)),
+    demoRecord: (action: 'start' | 'stop') => (action === 'start' ? demoRecordStart() : demoRecordStop(ctx, true)),
     /** What the recorder/player is doing right now. `frame` is frames recorded
      *  (live) or frames replayed (replay) — never a wall-clock measure. */
     demoInfo: () => ({
