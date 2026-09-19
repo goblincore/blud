@@ -51,7 +51,11 @@
   cut-and-paste, not agents: the members averaged 8 lines and 325/378 needed only `ctx`, so a verbatim move by
   script beats six parallel hand-copies whose failure mode (an altered literal that still type-checks) the pixel
   gate cannot localise. **game-main.ts 12,569 → 11,170.**
-- [ ] ~**52 members (~570 lines)** remain in the literal: the ones still closing over `main()`-scope functions
+- [x] **Leaves wave 1 (2026-09-19, merged):** 46 leaf functions → `game-*-leaves*.ts`, 96 ctx-only members →
+  `game-seams-leftover.ts`. **game-main.ts 11,598 → 9,721.** 45 members remain. Next wave, tool fixes first
+  (`extract-leaf` generics/shorthand/typed wrapper/real leaf check; `extract-seam-group` `readMembers`), then
+  `--consts` blockers and `updateHud`; consolidate the `*-leaves2/3` files. [Notes](docs/dev-notes/2026-09-19-game-main-leaves-1/NOTES.md)
+- [ ] (superseded by the wave-1 row above) ~**52 members (~570 lines)** remain in the literal: the ones still closing over `main()`-scope functions
   (`spillVerdict`, `rebuildCast`, `spawnEnemy`, `updateHud`, `playerRoomId`, `ZOMBIE_RADIUS`, …). They need
   explicit deps objects — extract their dependencies first, bottom-up.
 - [ ] Then the giants: `tick` (907 lines, 12 slices), `handle.setDrawFn` closure (589), `spawnEnemy` (260),
