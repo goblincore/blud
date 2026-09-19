@@ -495,6 +495,40 @@ describe('fire volume tuning', () => {
 
 ---
 
+## Task 4b (round 2b, lab): Make the volume read as flame, make smoke visible, fix the cost
+
+**Why (owner playtest + review, 2026-09-18):** round 2's volume reads as a soft orange glow shell and nobody can see smoke. Two root causes in `fire-volume.wgsl.ts`:
+1. `temp` is a pure capsule-distance falloff (`exp(-d/0.06) * fireFalloff(h/rise)`); the curl only displaces the sample point a little (`curlStrength 0.35`). Nothing ERODES the shape, so it cannot form tongues or licks.
+2. Soot only multiplies transmittance. Darkening an already-dark room is invisible. Smoke must SCATTER light (ambient grey + fire-lit orange from below) to be seen.
+Also: the round-2 cost table is not credible (march, resolve, composite and a plain copy all measured ~2.6 ms — a copy cannot cost what a 32-step march does), and the three full-res passes do not shrink with `resolutionScale`.
+
+**Files:**
+- Modify: `src/lab/sdf-zombie/webgpu/fire-volume.wgsl.ts` (+ `.wgsl.test.ts`), `fire-volume-tuning.ts` (+ test), `post-aa.ts` (+ test, the fire pass wiring only), `flame-lab-main.ts` / `flame-panel.ts` (new sliders), `scripts/flame-capture.mjs`
+- Notes: `docs/dev-notes/2026-09-18-burning-feedback/B2-volume-look.md`
+
+**Off-limits:** `game-main.ts`, `game-burning.ts`, `game-actor.ts`, `march.wgsl.ts` / `march/` (a split refactor is planned there), `curl-volume-node.ts` API.
+
+- [ ] **Step 1: Trustworthy cost first.** Fix the timing: verify each labelled pass's timestamp pair brackets only that pass (read how `__flameLab.passTimings()` collects them). Sanity checks that must hold before any number is reported: `steps 0` drops the march to near zero while the copy stays; the copy (a single full-res texture copy) is far below the march. Record a corrected baseline for 1/4/8 bodies at 0.5 scale.
+- [ ] **Step 2: Cheaper passes.** Composite directly into the capture target with premultiplied blending (`out = scene * T + emission`: blend `One` for src colour, `SrcAlpha` for dst, output alpha = T) instead of composite-then-copy — if the seam cannot blend into the capture, explain why in the notes. Resolve (temporal reprojection) at the MARCH resolution, and upsample once in the composite. Re-measure with the Step 1 method; report per pass.
+- [ ] **Step 3: Erode the flame into tongues.** In the march, per sample:
+  - Build a flame-space coordinate `fq = (q - base) * vec3(freqXZ, freqY, freqXZ)` with `freqY < freqXZ` (vertically stretched noise, ~0.5×) scrolling DOWN over time at `rise` (so features rise), advected by the curl field (larger `curlStrength`, ~0.8–1.2 as a starting point, tunable).
+  - `erosion = fbm(fq)` — use the existing WGSL noise (`noise3`/`fbm` from the march helpers are not importable here; write a 3–4 octave value-noise fbm in this module or sample the curl texture's alpha channel at 2–3 scales).
+  - `shape = saturate(exp(-max(d,0)/coreR) * falloff(h/rise))`; `density = saturate((shape - erosion * erodeAmt(h)) * edgeSharp)` where `erodeAmt` grows with height (solid near the limb, torn into licks above it) and `edgeSharp` controls how crisp the lick edges are.
+  - Temperature for the colour ramp = `density` scaled by a height cool-off, so tips go dark red and bases yellow-white.
+  - New tuning (with bounds + panel sliders): `noiseScale`, `noiseStretch`, `erode`, `erodeRise`, `edgeSharp`, `coreR`. Start from values that visibly produce separate tongues in the `stand` fixture.
+- [ ] **Step 4: Visible smoke.** Soot gets an albedo and is lit: `inscatter = soot * (smokeAmbient * ambientColour + smokeFireLit * fireGlow(h))` where `fireGlow` is the flame's emission strength just below (approximate as a function of height above the flame top and the body's burn), accumulated front-to-back like emission: `emission += T * inscatter * stepM`, `T *= exp(-soot * sootGain * stepM)`. Smoke rises past `rise`, widens with height (radius grows with `h`), and is curl-advected more strongly than flame. New tuning: `smokeAlbedo`, `smokeAmbient`, `smokeFireLit`, `smokeSpread`. Smoke must be visible against the lab's dark background as grey-brown billows, lit orange at their base.
+- [ ] **Step 5: Measure the look, not just eyeball it.** In `flame-capture.mjs` add, per capture:
+  - **Structure:** inside the flame's screen bounds, the ratio of high-frequency energy (e.g. mean abs Laplacian of luma) volume-vs-round-2-baseline — must rise clearly (tongues and gaps vs a smooth shell).
+  - **Gaps:** fraction of pixels inside the flame bounds that are dark (luma below the flame median × 0.3) — licks have gaps; a shell has none.
+  - **Smoke:** mean luma of a crop 0.5–1.5 m above the head vs the same crop with `sootGain 0` — must differ clearly (smoke is visible).
+  - **Motion:** mean frame-to-frame change inside the flame bounds over 20 frames with the body STANDING still — must be well above round 2's (the fire moves by itself).
+  Report all four for `stand` and `close`, round-2 settings vs new.
+- [ ] **Step 6: The trail, properly.** Replace the wander-driven run fixture with a scripted straight dash: the body translates at a constant 3 m/s across the frame for 1.5 s, then stops; side camera fixed. Capture mid-dash and 0.5 s after the stop; report the flame's horizontal centroid offset from the body centroid in both (dash: trailing offset > 0.15 m opposite to motion; stop: < 0.05 m).
+- [ ] **Step 7: Captures + sheet.** `stand`, `close`, `walk`, dash-mid, dash-stop, plus a sheet: round-2 volume | new volume | cards | wildfire references. Look at them. Commit with the notes (numbers, what still looks off).
+- [ ] **Step 8: Tests.** `npm test -- fire-volume fire-capsules flame-cards flame-lab-main flame-panel post-aa post-tongues` + `npx tsc --noEmit`. Commit.
+
+---
+
 ## Task 5 (round 3, on Task 4's branch): Volume in the game, smoke tail, card trim
 
 **Files:**
