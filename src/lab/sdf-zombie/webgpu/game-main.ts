@@ -262,6 +262,7 @@ import { breechInRig, locatorInView, newTracerQuad, setQuadMatrix, startReload, 
 import { stampLevelProbeRoom } from './game-world-leaves';
 import { applyBoneCull, restampLevelProbes } from './game-render-leaves2';
 import { spawnAssetGibPiece, spawnSpriteGibPiece } from './game-gibs-leaves2';
+import { gateRefineTwin, woundStreamId } from './game-world-leaves2';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -7101,11 +7102,6 @@ async function main() {
   // -----------------------------------------------------------------------
   ctx.boot.nextEmitterStream = 1;
   ctx.vfx.woundStreamIds = new WeakMap<Wound, number>();
-  function woundStreamId(wound: Wound): number {
-    let s = ctx.vfx.woundStreamIds.get(wound);
-    if (s === undefined) { s = ctx.boot.nextEmitterStream++; ctx.vfx.woundStreamIds.set(wound, s); }
-    return s;
-  }
   const TRAIL_STREAM_BASE = 0x40000000;
   function trailStreamId(chunkId: number): number {
     return TRAIL_STREAM_BASE + (chunkId >>> 0);
@@ -7608,7 +7604,7 @@ async function main() {
           // The rope belongs to the wound that spilled it: reuse that wound's
           // stable stream id so the gut nodes are attributed like every other
           // emitter rather than falling through as untagged.
-          stream: woundStreamId(entry!.wound),
+          stream: woundStreamId(ctx, entry!.wound),
         }));
         for (const d of fresh) ctx.vfx.bloodSim.droplets.push(d);
         entry = { ...entry, droplets: fresh };
@@ -7652,7 +7648,7 @@ async function main() {
     // body, so pass the inward direction. The wound's stable stream id tags
     // the gout so it fuses with this wound's per-frame droplets and no
     // other emitter's.
-    const streamId = woundStreamId(wound);
+    const streamId = woundStreamId(ctx, wound);
     spawnImpactGout(ctx.vfx.bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
     // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
     // use the contact and incoming shot below; stumps use their outward
@@ -7729,95 +7725,6 @@ async function main() {
   mark('boot-time');
   ctx.boot.time = performance.now();
 
-  // ---- ACTOR VISIBILITY CULL (2026-09-09) --------------------------------
-  //
-  // Before this, `setBodies` took EVERY actor in the level. The SDF proxy
-  // boxes ship `frustumCulled = false` ("the proxy IS the bound") so three
-  // culls nothing, and the GPU occluder pre-pass has been off since
-  // 2026-09-01 — so an enemy behind you, or behind a wall, marched like any
-  // other. That matters more than it used to: enemies now pursue across
-  // rooms, so the player's room holds more bodies than it spawns (bench
-  // census: room 3 spawns 3, saw 8).
-  //
-  // WHAT THIS IS NOT. Phase 0 measured the mesh-skeleton path at 0.5 ms and
-  // the encounter director at 0.2 ms, so there is deliberately NO simulation
-  // LOD here — AI, motion and rig run for every actor exactly as before, and
-  // cross-room pursuit is untouched. This culls only what gets MARCHED, which
-  // is 75-83% of the frame.
-  //
-  // WHERE THE WIN ACTUALLY IS. An off-screen proxy box clips to no fragments
-  // and was already nearly free, so the frustum half buys little on its own.
-  // The occluded case is the real one: on-screen but behind a wall, which
-  // rasterises a full box and marches it. Hence the clearSight test.
-  //
-  // SAFETY. A wrongly culled visible body is a visible bug; a wrongly kept one
-  // is only a cost. So: two sight probes (torso and head — a body leaning out
-  // from cover shows its head first), and becoming visible is INSTANT while
-  // going invisible must persist for CULL_DWELL_MS. Both biases point at
-  // drawing too much, never too little.
-  /** id -> the last time this actor was seen. Keyed by id, not index: actors
-   *  are spawned and gibbed, and an index would transfer one body's grace
-   *  period to another. */
-  /**
-   * SCREEN COVERAGE ESTIMATE (2026-09-09), for telemetry only.
-   *
-   * The march is the dominant pass, and the one lever with a measured large
-   * number is PIXEL COUNT (quartering the pixels bought -54%), so its cost
-   * tracks COVERED PIXELS, not body count. NOTE the model once quoted here
-   * (18.6 ms + 0.237 ms per 1k px, X1.4) predates the `'bodies'` interlace
-   * halving the march target, and a 6x cut in the step budget bought only
-   * -6..-31% (mostly single-digit) — the cost is per-PIXEL, not per-step. See
-   * docs/dev-notes/2026-08-31-game-perf-baseline/notes.md:204-238.
-   *
-   * Captures record
-   * `bodiesOnScreen` and `totalWounds` but nothing about area, which makes the
-   * two candidate explanations for the close-up spikes indistinguishable:
-   * "wounds are expensive" vs "a body filling the screen is expensive and you
-   * happen to shoot things that are close".
-   *
-   * This is a CPU ESTIMATE, deliberately not the GPU occupancy probe: that one
-   * is a readback, and the telemetry contract is no GPU waits or reads during
-   * live play — measuring with it would distort what it measures. Each visible
-   * body's bounding sphere is projected to screen and its disc area summed.
-   *
-   * KNOWN AND ACCEPTED IMPRECISION: overlapping bodies double-count, and no
-   * occlusion is applied, so this OVERESTIMATES when bodies stack. It is a
-   * monotonic proxy for "how much of the view is flesh", not a pixel count —
-   * read it as a trend against frame time, never as an absolute.
-   */
-
-  /** Recompute this frame's visible set. Called once, before the draw.
-   *
-   *  Dwell is measured on SIM time, not wall time (2026-09-10). In live play
-   *  `tick` is called once per frame with the real frame delta, so simClockMs
-   *  tracks elapsed wall time almost exactly and the 250 ms grace behaves as it
-   *  always has. Under a fixed-step replay or a hand-stepped capture it becomes
-   *  EXACT instead of approximate, which is the entire point. The one visible
-   *  consequence: while the render lock is engaged `tick` does not run, so the
-   *  clock does not advance and nothing expires out of the dwell — a frozen
-   *  scene stays frozen, which is what the lock means. */
-  /** Run 5b: the per-body refine gate, shared by both cull modes. `centre` is
-   *  the torso centre (null = no torso cluster: nothing to measure, so no
-   *  twin); `kept` is the cull's verdict (always true with the cull off).
-   *  Reads `sightA` for the camera. Rule: the twin is drawn only for a
-   *  STANDING body (dead never refines — in either mode) inside the medium
-   *  band, on screen, with hysteresis so an edge-walking body cannot flicker.
-   *  Returns whether the twin is drawn. */
-  function gateRefineTwin(a: ZombieActor, centre: Vec3 | null, kept: boolean): boolean {
-    const twin = a.view.refineObject;
-    if (!twin) return false;
-    if (!centre) { twin.visible = false; return false; }
-    const dx = centre[0] - ctx.world.sightA[0], dy = centre[1] - ctx.world.sightA[1], dz = centre[2] - ctx.world.sightA[2];
-    const d = Math.hypot(dx, dy, dz);
-    const wasOn = twin.visible;
-    const inBand = wasOn
-      ? d >= ctx.render.refineBand.near - ctx.render.refineBand.hysteresis && d <= ctx.render.refineBand.far + ctx.render.refineBand.hysteresis
-      : d >= ctx.render.refineBand.near && d <= ctx.render.refineBand.far;
-    const on = kept && ctx.render.sdfLayer.refine && a.refineEligible() && inBand;
-    twin.visible = on;
-    return on;
-  }
-
   function updateVisibleActors(): void {
     const now = simTimeMs();
     ctx.world.cullCounts.total = ctx.world.actors.length;
@@ -7832,7 +7739,7 @@ async function main() {
       ctx.render.refinedBodies = 0;
       for (const a of ctx.world.actors) {
         const torso = a.posed().clusters.find(c => c.limb === 'torso');
-        if (gateRefineTwin(a, torso ? torso.center as Vec3 : null, true)) ctx.render.refinedBodies++;
+        if (gateRefineTwin(ctx, a, torso ? torso.center as Vec3 : null, true)) ctx.render.refinedBodies++;
       }
       ctx.world.coverage.screenFrac = 0; ctx.world.coverage.nearestM = 0; ctx.world.coverage.biggestFrac = 0;
       return;
@@ -7854,7 +7761,7 @@ async function main() {
       // the refine twin stays off for it.
       if (!torso) {
         out.push(a); ctx.world.lastSeenMs.set(a.id, now);
-        gateRefineTwin(a, null, true);
+        gateRefineTwin(ctx, a, null, true);
         continue;
       }
       const c = torso.center;
@@ -7872,7 +7779,7 @@ async function main() {
       if (kept) out.push(a);
 
       // Run 5b: the per-body refine gate (see gateRefineTwin).
-      if (gateRefineTwin(a, c as Vec3, kept)) ctx.render.refinedBodies++;
+      if (gateRefineTwin(ctx, a, c as Vec3, kept)) ctx.render.refinedBodies++;
 
       // Coverage estimate — only for bodies actually seen this frame, so a
       // body coasting on its dwell grace does not inflate the area.
@@ -8778,7 +8685,7 @@ async function main() {
           const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
             ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
-            woundStreamId(e.wound),
+            woundStreamId(ctx, e.wound),
           );
         }
         // EVERY FLYING PIECE IS AN EMITTER, IN EITHER RENDER MODE. The owner,
