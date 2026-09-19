@@ -107,7 +107,7 @@ describe('flame lab page', () => {
     // Round 2, task 4d: technique 'volume' = the fire volume ON plus the cards
     // trimmed to FIRE_VOLUME_TUNING.cardsPerBody; the capsules ride the SAME
     // posed field the cards do, packed through one preallocated buffer.
-    expect(src).toContain('fireCapsules(posed)');
+    expect(src).toContain('fireCapsules(posed, {');
     expect(src).toContain('capsuleVelocities(a.caps, caps, motionDt)');
     expect(src).toContain('packFireVolume(');
     expect(src).toContain('postAa.setFireVolumeData(');

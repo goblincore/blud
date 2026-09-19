@@ -1000,7 +1000,9 @@ async function bootstrap(): Promise<void> {
       // The fire volume's sources ride the SAME posed field the cards do.
       // motionDt is 0 in a frozen capture, so the velocities go to zero and the
       // lag straightens — the deterministic still the cards already rely on.
-      const caps = fireCapsules(posed);
+      const caps = fireCapsules(posed, {
+        legKitRadius: a.view.entry.name === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0,
+      });
       a.vels = capsuleVelocities(a.caps, caps, motionDt);
       a.caps = caps;
       a.gpu.setHeadRotation(

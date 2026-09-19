@@ -71,15 +71,29 @@ export function fireCrown(b: BuildResult): FireCapsule | null {
  * fatness with index order as the tiebreak, so two runs of the same pose are
  * bit-identical (a capture A/B depends on it).
  */
-export function fireCapsules(b: BuildResult): FireCapsule[] {
+/**
+ * `legKitRadius`: a body whose shins are wrapped in a KIT MESH (the soldier's
+ * greaves, flame-cards.ts SOLDIER_LEG_KIT_RADIUS) passes that mesh's radius
+ * from the shin axis. The fire's rays stop at the mesh's depth, so a flame
+ * shell sized to the bare SDF shin burns INSIDE the greave and never shows;
+ * widening the leg capsules to the greave puts the shell on its surface.
+ */
+export function fireCapsules(b: BuildResult, opts: { legKitRadius?: number } = {}): FireCapsule[] {
+  const legKit = Math.max(0, opts.legKitRadius ?? 0);
   const out: FireCapsule[] = [];
   for (const limb of CLUSTER_ORDER) {
     const cluster = b.clusters.find(c => c.limb === limb);
     if (!cluster || !cluster.alive) continue;
     const prims = b.prims.slice(cluster.start, cluster.start + cluster.count);
-    // The headShape filter, exactly: additive, unpainted. Dead (severed) prims
-    // are skipped as the field skips them.
-    const flesh = prims.filter(p => p.op !== 'sub' && p.color === undefined && !p.dead);
+    // Additive, live prims. The UNPAINTED rule is the headShape one (hats and
+    // hair out-size the skull) and applies to the HEAD only: elsewhere a
+    // painted prim is clothing on a limb that burns — the soldier's legs are
+    // painted end to end, and the head-only rule left him with no leg flame at
+    // all (owner playtest 2026-09-19). Dead (severed) prims are skipped as the
+    // field skips them.
+    const additive = prims.filter(p => p.op !== 'sub' && !p.dead);
+    const unpainted = additive.filter(p => p.color === undefined);
+    const flesh = limb === 'head' && unpainted.length > 0 ? unpainted : additive;
     // Fattest first (fatness desc, index asc) — slice is stable in modern V8,
     // but the explicit index tiebreak documents the determinism contract.
     const ranked = flesh
@@ -95,7 +109,10 @@ export function fireCapsules(b: BuildResult): FireCapsule[] {
         // min semi-axis, so radius * max(scale) is the generous engulfing
         // bound a fire volume wants (a bare `radius` would leave thin limbs
         // with no flame).
-        radius: p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]),
+        radius: Math.max(
+          p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]),
+          limb === 'legL' || limb === 'legR' ? legKit : 0,
+        ),
         limb, crown: false, source: 'add',
       });
       if (out.length >= FIRE_CAPSULES_PER_BODY) break;

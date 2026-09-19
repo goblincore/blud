@@ -330,7 +330,10 @@ export function createGameBurning(ctx: GameContext): GameBurning {
         writeUniforms(a, s);
         // The fire volume's sources ride the same posed field the cards do.
         if (technique === 'volume') {
-          const caps = fireCapsules(a.posed());
+          // The soldier's greaves are a kit mesh over his shins: burn on them.
+          const caps = fireCapsules(a.posed(), {
+            legKitRadius: a.kind === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0,
+          });
           const prev = fireSrc.get(a);
           fireSrc.set(a, { caps, vels: capsuleVelocities(prev?.caps ?? null, caps, simDt) as [number, number, number][] });
         }
