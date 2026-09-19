@@ -1,0 +1,144 @@
+# march.wgsl.ts split — Task 1 (golden gate + leaf modules)
+
+Plan: `docs/superpowers/plans/2026-09-18-march-wgsl-split.md`
+Spec: `docs/superpowers/specs/2026-09-18-march-wgsl-refactor-design.md` (phase 1)
+
+This is a MOVE-ONLY refactor: every export keeps its exact name and exact
+string value; `march.wgsl.ts` becomes a barrel. The sha1 golden snapshot
+(`src/lab/sdf-zombie/webgpu/march/__snapshots__/march-golden.test.ts.snap`)
+was written at `11fffe13` before the first move and must never change.
+
+## Step 2 — baselines (base commit `11fffe13`, shader text unmodified)
+
+`scripts/march-hash.mjs` (headless Chrome + vite on 5323/9323, fresh
+`.lab-tmp` profile). Exact-float readback of the march target:
+
+```json
+{"room1":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-repeat":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-wounded":"1381a866703b827745486a1062240a46bee5c73f"}
+```
+
+`room1` matches the script's pinned `DEFAULT_HASH`; `room1-repeat == room1`
+(determinism proof holds); `room1-wounded != room1` (the gate sees the wound).
+
+Room 2 (crowd-parity diagnostic, `MARCH_HASH_ROOM=2`). `march-hash.mjs` runs
+its shipped-default canonical pin even under `MARCH_HASH_ROOM=2`, where the
+captured hash is room 2's and cannot equal the room-1 pin — a script
+limitation. There are two ways to bypass the pin; the URL-neutral one is
+`MARCH_HASH_TILES=0` (it skips the pin and, unlike `MARCH_HASH_TILES=1`, never
+calls `setTiles`, so the scene is the page default). Baseline, URL unchanged:
+
+```json
+{"room2":"35b6d5619f7f85a52e852056a09f6c0fbfacf2c5","room2-repeat":"35b6d5619f7f85a52e852056a09f6c0fbfacf2c5"}
+```
+
+One baseline sample taken with the other bypass (`MARCH_HASH_QUERY=upscale=0`,
+which appends a duplicate `upscale=0` to the URL) read `76ada45a…`. That value
+never reproduced: the URL-neutral baseline and every after run give
+`35b6d561…`. Room 2 is the diagnostic, not the pinned canonical (the script's
+header only pins room 1), so treat room 2 as a repeat-stable but
+boot-sensitive instrument and compare like-for-like URLs.
+
+Cold-boot (`scripts/boot-time.mjs`, own vite + headless Chrome, FRESH
+`--user-data-dir` per run, waits for `__warmGate.phase === 'ready'`):
+
+| run | drawOnce (ms) | warmMs |
+| --- | ---: | ---: |
+| 1 | 1261.6 | 2579 |
+| 2 | 1242.5 | 2549 |
+
+`drawOnce` is `__warmDone.phases.drawOnce`; `warmMs` is `__warmDone.ms`.
+
+## Sizes before
+
+| file | bytes | lines |
+| --- | ---: | ---: |
+| `webgpu/march.wgsl.ts` | 277753 | 4800 |
+
+## Step 7 — after
+
+### Golden gate
+
+Snapshot unchanged since `11fffe13` (`git diff 11fffe13 HEAD -- <snap>` is
+empty); `npm test -- march-golden` passes. Every string export, the joined
+`HELPERS`, and the export-name set are byte-identical.
+
+### Pixel gate (`scripts/march-hash.mjs`)
+
+Room 1 (pinned canonical), after:
+
+```json
+{"room1":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-repeat":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-wounded":"1381a866703b827745486a1062240a46bee5c73f"}
+```
+
+Identical to Step 2 in all three fields.
+
+Room 2 (URL-neutral `MARCH_HASH_TILES=0`, three fresh-Chrome runs):
+`35b6d5619f7f85a52e852056a09f6c0fbfacf2c5` every time, with
+`room2-repeat == room2`. Identical to the Step 2 URL-neutral baseline.
+
+### Cold boot — interleaved A/B (code vs thermal drift)
+
+The after-state sample taken right after the pixel gate read higher
+(`drawOnce` 1630/2314 ms) than the early Step 2 numbers (1243/1262 ms), but the
+shader text is provably byte-identical. To separate code from machine state the
+base commit `11fffe13` was checked out into a temporary worktree (same
+`node_modules` symlink, same `boot-time.mjs`) and run interleaved with the
+after tree, three pairs, both on fresh profiles:
+
+| pair | base drawOnce | after drawOnce | base warmMs | after warmMs |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 2487.9 | 2861.3 | 135434 | 6392 |
+| 2 | 2910.8 | 2772.5 | 5712 | 6475 |
+| 3 | 2617.9 | 2375.7 | 6732 | 5588 |
+
+`drawOnce` distributions overlap (base 2376–2911, after 2376–2861) — no code
+effect. `warmMs` is dominated by driver shader-cache state: one base run hit a
+135 s cold compile (the documented 104 s-class regression), the rest sat at
+5.6–6.7 s for both trees. The Step 2 drawOnce of ~1.25 s was simply a faster
+machine state than the A/B window; the controlled comparison is the A/B, and it
+shows after within noise of base.
+
+The temporary worktree was removed; `git worktree list` no longer shows it.
+
+### Sizes after
+
+| file | bytes | lines |
+| --- | ---: | ---: |
+| `webgpu/march.wgsl.ts` (barrel) | 229859 | 3869 |
+| `webgpu/march/layout.ts` | 9103 | 165 |
+| `webgpu/march/math.wgsl.ts` | 3168 | 70 |
+| `webgpu/march/primitives.wgsl.ts` | 30839 | 611 |
+| `webgpu/march/melt.ts` | 3628 | 64 |
+| `webgpu/march/shade-helpers.wgsl.ts` | 3697 | 72 |
+
+Barrel: 277753 → 229859 bytes, 4800 → 3869 lines.
+
+### VERIFY
+
+`npx tsc --noEmit && npm test -- march crowd-atlas crowd-records deferred-sdf
+game-actor-bounded-wounds normal-gradient surface-nets write-wounds zombie-gpu`
+→ 2 failed / 407 passed. Both failures pre-exist the move and reproduce on the
+untouched base (`march.wgsl.ts` restored from `11fffe13`, `layout.ts` removed):
+
+- `march-step-soundness.test.ts` — 1 test (`at06.hit` expected true).
+- `surface-nets-cpu.test.ts` — 1 test (band coverage 0.01189 > 0.01).
+
+The task brief named only `game-actor-torso-slug` as a known failure; these two
+are additional pre-existing failures on this branch base, not regressions.
+`march.wgsl.test.ts` (240 tests) stays green.
+
+### Forced test-pointer edit
+
+`march.wgsl.test.ts` reads `./march.wgsl?raw` to pin the `ROW_PRIM_CLIP`
+docstring ("no longer documents w as spare"). That docstring moved to
+`layout.ts` with its declaration, so the raw-source pin now reads both modules
+(`moduleSource + layoutSource`). The assertion itself is unchanged; Task 3 moves
+this test next to `layout.ts`. No other importer or test was edited.
+
+### Circular-import check
+
+No `march/*` module imports `../march.wgsl`. `primitives.wgsl.ts` imports only
+`./layout`; `melt.ts` imports only `../../gib-look-tuning`; `layout.ts`,
+`math.wgsl.ts` and `shade-helpers.wgsl.ts` import nothing. Only the golden test
+(and the other importers) read the barrel.
+
