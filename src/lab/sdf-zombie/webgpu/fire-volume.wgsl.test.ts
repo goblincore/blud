@@ -61,21 +61,22 @@ describe('fire volume march WGSL', () => {
   it('emits and absorbs with ONE coefficient, so thick flame cannot blow out to white', () => {
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('let alphaF = 1.0 - exp(-density * FIRE_FLAME_SIGMA * dtFine);');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('emission = emission + T * fireRamp(temp) * alphaF * cfg1.w;');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('T = T * (1.0 - alphaF) * exp(-soot * cfg2.x * dtFine);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('T = T * (1.0 - alphaF);');
   });
   it('scrolls the flame noise down so features rise with the flame', () => {
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('fq.y = fq.y - cfg2.z * FIRE_FLAME_SPEED * freq * stretch;');
   });
-  it('scatters lit smoke instead of only darkening (round 2b)', () => {
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let inscatter = soot * smokeGain * smokeAlbedo');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('smokeAmbient * ambientCol');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('smokeFireLit * glow * fireLitCol');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('emission = emission + T * inscatter * dtFine;');
-    // sootGain 0 must be a true smoke-off switch (the look metric's twin).
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let smokeGain = clamp(cfg2.x, 0.0, 1.0);');
-    // The column widens with height, and smoke is advected harder than flame.
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('dS = fireSdCapsule(p + cv * 3.0 - lag, a, b) - radius;');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('spread * max(h - 0.4 * rise, 0.0)');
+  it('has no smoke (owner call 2026-09-19: smoke comes from a cheaper effect)', () => {
+    expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('fireSoot');
+    expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('inscatter');
+  });
+  it('culls capsules per ray and marches only the union of their intervals', () => {
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('var hitIdx: array<i32, FIRE_RAY_CAPS>;');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let fi = fireRaySphere(origin, rayDir, fc, fR, tNear, tFar);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('if (hitN == 0) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let stepM = (tMax - tMin) / f32(steps);');
+    // Overflow falls back to the full list, so a crowded ray is slower, never wrong.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let flameN = select(hitN, capsuleCount, flameAll);');
   });
 });
 

@@ -6,8 +6,8 @@
 // input cannot get through. `steps = 0` is the pipeline-free off switch the
 // spec asks for (the march early-outs without a pipeline change).
 //
-// Round 2b added the tongue-erosion block (noiseScale .. coreR) and the smoke
-// scattering block (smokeAlbedo .. smokeSpread). Round 2's fields keep their
+// Round 2b added the tongue-erosion block (noiseScale .. coreR) and a smoke
+// block, removed 2026-09-19 (owner: smoke will come from a cheaper effect). Round 2's fields keep their
 // names; `curlStrength`'s default and range grew because the round-2 0.35 was
 // too weak to advect a tongue.
 //
@@ -24,12 +24,8 @@ export interface FireVolumeTuning {
   steps: number;
   /** Flame brightness: a thick flame converges to ramp colour x this. */
   tempGain: number;
-  /** Extinction gain on the soot field. */
-  sootGain: number;
   /** Length (m) of the flame sheet each limb sweeps upward; it tapers to a point. */
   rise: number;
-  /** Metres of soot above the flame core. */
-  sootRise: number;
   /** Curl wobble amplitude in world metres (a few cm; it displaces the whole field). */
   curlStrength: number;
   /** Curl domain scale: world metres per volume repeat. */
@@ -42,8 +38,9 @@ export interface FireVolumeTuning {
   history: number;
   /** Flame cards kept per body when the volume carries the mass. */
   cardsPerBody: number;
-  /** Seconds an extinguished body keeps smoking (round 3 consumes it). */
-  smokeTailSec: number;
+  /** Burning bodies (nearest first) that get the volume; the rest keep their
+   *  surface fire and cards. The volume's cost scales with this. */
+  maxBodies: number;
   /** Flame-space noise cycles per metre (higher = smaller tongues). */
   noiseScale: number;
   /** Vertical frequency of the flame noise relative to XZ (< 1 stretches). */
@@ -56,40 +53,26 @@ export interface FireVolumeTuning {
   edgeSharp: number;
   /** Thickness (m) of the flame shell around each limb; thins as the sheet climbs. */
   coreR: number;
-  /** Smoke scattering gain (0 = round 2's darkening-only soot). */
-  smokeAlbedo: number;
-  /** Ambient (grey) share of the smoke's inscatter. */
-  smokeAmbient: number;
-  /** Fire-lit (orange from below) share of the smoke's inscatter. */
-  smokeFireLit: number;
-  /** Metres the smoke column widens per metre of height above the flame. */
-  smokeSpread: number;
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   resolutionScale: 0.4,
   steps: 48,
   tempGain: 2.0,
-  sootGain: 0.6,
   rise: 0.55,
-  sootRise: 2.0,
   curlStrength: 0.07,
   curlScale: 1.5,
   lag: 0.3,
   lagMaxM: 0.6,
   history: 0.7,
   cardsPerBody: 5,
-  smokeTailSec: 2,
+  maxBodies: 4,
   noiseScale: 11,
   noiseStretch: 0.33,
   erode: 1.4,
   erodeRise: 0.6,
   edgeSharp: 4,
   coreR: 0.16,
-  smokeAlbedo: 0.5,
-  smokeAmbient: 0.45,
-  smokeFireLit: 1.0,
-  smokeSpread: 0.3,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider
@@ -99,26 +82,20 @@ export const FIRE_VOLUME_BOUNDS: Readonly<Record<keyof FireVolumeTuning, readonl
     resolutionScale: [0.25, 1],
     steps: [0, 64],
     tempGain: [0, 6],
-    sootGain: [0, 2],
     rise: [0, 3],
-    sootRise: [0, 5],
     curlStrength: [0, 0.4],
     curlScale: [0.2, 6],
     lag: [0, 1],
     lagMaxM: [0, 1.5],
     history: [0, 0.97],
     cardsPerBody: [0, 16],
-    smokeTailSec: [0, 6],
+    maxBodies: [1, 8],
     noiseScale: [0.5, 16],
     noiseStretch: [0.15, 1.5],
     erode: [0, 3],
     erodeRise: [0.05, 2],
     edgeSharp: [0.5, 8],
     coreR: [0.03, 0.4],
-    smokeAlbedo: [0, 2],
-    smokeAmbient: [0, 2],
-    smokeFireLit: [0, 3],
-    smokeSpread: [0, 1.5],
   });
 
 const FIRE_VOLUME_FIELDS = Object.keys(FIRE_VOLUME_TUNING) as (keyof FireVolumeTuning)[];

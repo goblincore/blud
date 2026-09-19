@@ -67,8 +67,8 @@ function distanceSq(a: Vec3, b: Vec3): number {
  * Rank the burning bodies nearest-first, pack their capsules into `out` (or a
  * fresh buffer when omitted), and return the buffer plus the AABB the march
  * intersects. The bounds are padded SIDEWAYS by the capsule radius PLUS the
- * flame's own reach (coreR) and the smoke column's widening, and upward by
- * `rise + sootRise`. Round 2b added the reach padding: without it a fatter
+ * flame's own reach (coreR, the curl wobble and the lag), and upward by
+ * `rise` (the flame sheet). The smoke padding went with the smoke (2026-09-19). Round 2b added the reach padding: without it a fatter
  * flame (coreR > the capsule radius) was CLIPPED by the AABB and read as a
  * hard-edged box, which is why raising coreR changed nothing on screen.
  */
@@ -76,24 +76,20 @@ export function packFireVolume(
   bodies: readonly FireVolumeBody[],
   eye: Vec3,
   out?: Float32Array,
-  tuning: { rise: number; sootRise: number; coreR?: number; smokeSpread?: number } = FIRE_VOLUME_TUNING,
+  tuning: { rise: number; coreR?: number; curlStrength?: number; lagMaxM?: number; maxBodies?: number } = FIRE_VOLUME_TUNING,
 ): FireVolumePack {
   const data = out ?? new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
   const coreR = Math.max(0, tuning.coreR ?? 0.15);
-  const smokeSpread = Math.max(0, tuning.smokeSpread ?? 0);
-  // The smoke's radial falloff widens with height above 0.4*rise; pad to where
-  // it has faded to a few percent of its peak (3 e-foldings of the widest
-  // denominator). At 1.5 the column hit the AABB side and cut a hard vertical
-  // seam down the plume (visible in the first shipping capture).
-  const smokeReach = 3.0 * smokeSpread * Math.max(0, tuning.sootRise - 0.4 * tuning.rise);
-  const sidePad = coreR + smokeReach;
+  const sidePad = coreR + Math.max(0, tuning.curlStrength ?? 0) + Math.max(0, tuning.lagMaxM ?? 0);
   // Rank by squared distance to the eye; the stable index tiebreak keeps two
   // equidistant bodies in a deterministic order.
   const ranked = bodies
     .map((b, i) => ({ b, i }))
     .filter(x => x.b.burn > 0)
     .sort((x, y) => distanceSq(x.b.centre, eye) - distanceSq(y.b.centre, eye) || x.i - y.i)
-    .slice(0, FIRE_VOLUME_MAX_BODIES);
+    // The nearest `maxBodies` get the volume; the rest keep their surface fire
+    // and cards (the volume's cost scales with bodies on screen).
+    .slice(0, Math.max(1, Math.min(FIRE_VOLUME_MAX_BODIES, Math.round(tuning.maxBodies ?? FIRE_VOLUME_MAX_BODIES))));
 
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
@@ -115,7 +111,7 @@ export function packFireVolume(
       data[write + 8] = v[0];
       data[write + 9] = v[1];
       data[write + 10] = v[2];
-      data[write + 11] = 0;   // pad (round 3: body smoke)
+      data[write + 11] = 0;   // pad
       write += FIRE_CAPSULE_STRIDE;
       capsuleCount++;
       const r = c.radius + sidePad;
@@ -127,7 +123,7 @@ export function packFireVolume(
         if (p[1] - r < minY) minY = p[1] - r;
         if (p[2] - r < minZ) minZ = p[2] - r;
         if (p[2] + r > maxZ) maxZ = p[2] + r;
-        const top = p[1] + sidePad + tuning.rise + tuning.sootRise;
+        const top = p[1] + sidePad + tuning.rise;
         if (top > maxY) maxY = top;
       }
     }

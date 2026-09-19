@@ -1904,27 +1904,21 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       const t = u.tuning;
       if (Number.isFinite(t.steps)) uFireCfg0.value.x = Math.max(0, t.steps);
       if (Number.isFinite(t.rise)) uFireCfg0.value.y = Math.max(0, t.rise);
-      if (Number.isFinite(t.sootRise)) uFireCfg0.value.z = Math.max(0, t.sootRise);
       if (Number.isFinite(t.curlScale) && t.curlScale > 0) uFireCfg0.value.w = t.curlScale;
       if (Number.isFinite(t.curlStrength)) uFireCfg1.value.x = Math.max(0, t.curlStrength);
       if (Number.isFinite(t.lag)) uFireCfg1.value.y = Math.max(0, t.lag);
       if (Number.isFinite(t.lagMaxM)) uFireCfg1.value.z = Math.max(0, t.lagMaxM);
       if (Number.isFinite(t.tempGain)) uFireCfg1.value.w = Math.max(0, t.tempGain);
-      if (Number.isFinite(t.sootGain)) uFireCfg2.value.x = Math.max(0, t.sootGain);
       if (Number.isFinite(u.capsuleCount)) uFireCfg2.value.y = Math.max(0, u.capsuleCount);
       if (Number.isFinite(u.time)) uFireCfg2.value.z = u.time;
       if (Number.isFinite(u.frame)) uFireCfg2.value.w = u.frame;
-      // Round 2b's tongue-erosion + smoke-scatter block.
+      // Round 2b's tongue-erosion block (its smoke block was removed 2026-09-19).
       if (Number.isFinite(t.noiseScale) && t.noiseScale > 0) uFireCfg4.value.x = t.noiseScale;
       if (Number.isFinite(t.noiseStretch) && t.noiseStretch > 0) uFireCfg4.value.y = t.noiseStretch;
       if (Number.isFinite(t.erode)) uFireCfg4.value.z = Math.max(0, t.erode);
       if (Number.isFinite(t.erodeRise) && t.erodeRise > 0) uFireCfg4.value.w = t.erodeRise;
       if (Number.isFinite(t.edgeSharp) && t.edgeSharp > 0) uFireCfg5.value.x = t.edgeSharp;
       if (Number.isFinite(t.coreR) && t.coreR > 0) uFireCfg5.value.y = t.coreR;
-      if (Number.isFinite(t.smokeAlbedo)) uFireCfg5.value.z = Math.max(0, t.smokeAlbedo);
-      if (Number.isFinite(t.smokeAmbient)) uFireCfg5.value.w = Math.max(0, t.smokeAmbient);
-      if (Number.isFinite(t.smokeFireLit)) uFireCfg6.value.x = Math.max(0, t.smokeFireLit);
-      if (Number.isFinite(t.smokeSpread)) uFireCfg6.value.y = Math.max(0, t.smokeSpread);
       // History resets on the first frame after enabling, on a host camera
       // jump, and whenever nothing has been written yet (a stale previous
       // frame would smear across a scene change).

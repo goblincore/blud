@@ -11,10 +11,8 @@
 //     subtracted from the capsule shape: density = (shape - fbm * erodeAmt) *
 //     edgeSharp. The erosion grows with height (erodeRise), so the base stays
 //     solid and the top tears into separate licks with gaps between them.
-//   * VISIBLE SMOKE. Soot gets an albedo and scatters: it is lit by ambient
-//     grey plus the fire's own glow from below, accumulated front-to-back like
-//     emission, and its radial envelope widens with height (smokeSpread) and is
-//     advected by a stronger curl than the flame.
+//   * NO SMOKE (2026-09-19, owner call). Round 2b's lit smoke column was the
+//     volume's biggest reach and cost; smoke will come from a cheaper effect.
 //
 // THREE PASSES, each its own WGSL entry (round 2b: the composite blends into
 // the capture instead of writing its own target + copy, and the resolve runs at
@@ -65,12 +63,12 @@ export interface FireVolumeFrame {
  * a ray/AABB test over the packed capsules' bounds early-outs most pixels;
  * the scene depth texture caps the far end (NEVER the fragment's own depth).
  *
- * cfg0 = (steps, rise, sootRise, curlScale)
+ * cfg0 = (steps, rise, unused, curlScale)
  * cfg1 = (curlStrength, lag, lagMaxM, tempGain)
- * cfg2 = (sootGain, capsuleCount, time, frame)
+ * cfg2 = (unused, capsuleCount, time, frame)
  * cfg4 = (noiseScale, noiseStretch, erode, erodeRise)
- * cfg5 = (edgeSharp, coreR, smokeAlbedo, smokeAmbient)
- * cfg6 = (smokeFireLit, smokeSpread, spare, spare)
+ * cfg5 = (edgeSharp, coreR, unused, unused)
+ * cfg6 = (unused x4; kept so the binding list is unchanged)
  * nearFar = (near, far, spare, spare)
  */
 export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
@@ -131,35 +129,60 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
 
   // Per-pixel, per-frame jittered start (interleaved gradient noise).
   let ppx = tc * 4096.0 + vec2<f32>(cfg2.w * 5.588238, cfg2.w * 3.123);
-  let stepM = (tFar - tNear) / f32(steps);
-  var t = tNear + fireIgn(ppx) * stepM;
   var emission = vec3<f32>(0.0);
   var T = 1.0;
   let capsuleCount = i32(cfg2.y + 0.5);
   let rise = max(cfg0.y, 1e-3);
-  let sootRise = max(cfg0.z, rise + 1e-3);
   let freq = max(cfg4.x, 1e-3);
   let stretch = clamp(cfg4.y, 0.05, 4.0);
   let erode = clamp(cfg4.z, 0.0, 4.0);
   let erodeRise = max(cfg4.w, 1e-3);
   let edgeSharp = max(cfg5.x, 0.01);
   let coreR = max(cfg5.y, 1e-3);
-  let smokeAlbedo = max(cfg5.z, 0.0);
-  let smokeAmbient = max(cfg5.w, 0.0);
-  let smokeFireLit = max(cfg6.x, 0.0);
-  let smokeSpread = max(cfg6.y, 0.0);
   // The flame-space origin is the field's AABB corner, so the tongues travel
   // WITH the body instead of the body swimming through a world-locked field.
   let base = boundsMin.xyz;
-  let ambientCol = vec3<f32>(0.62, 0.58, 0.55);
-  let fireLitCol = vec3<f32>(1.0, 0.42, 0.10);
+
+  // PER-RAY CULLING. The AABB spans every burner, so in a room of burning
+  // bodies most of it is empty and every sample would loop over all capsules.
+  // Test the ray against a small sphere per capsule (the limb, its flame sheet,
+  // the shell, wobble and lag), keep the ones it crosses (up to
+  // FIRE_RAY_CAPS), and march only the union of their intervals. A ray between
+  // two burners costs nothing; each sample loops over the few capsules that
+  // can reach it. (Smoke was removed from the volume, 2026-09-19: its 2.5 m
+  // reach on every limb made every sphere huge and defeated this cull.)
+  let lagPad = cfg1.x + cfg1.z;
+  var hitIdx: array<i32, FIRE_RAY_CAPS>;
+  var hitN = 0;
+  var tMin = tFar;
+  var tMax = tNear;
+  for (var i: i32 = 0; i < capsuleCount; i = i + 1) {
+    let r0 = (*caps)[i * 3];
+    let r1 = (*caps)[i * 3 + 1];
+    if (r1.w <= 0.0) { continue; }
+    let fc = (r0.xyz + r1.xyz) * 0.5 + vec3<f32>(0.0, rise * 0.5, 0.0);
+    let fR = length(r1.xyz - r0.xyz) * 0.5 + r0.w + coreR + lagPad + rise * 0.5;
+    let fi = fireRaySphere(origin, rayDir, fc, fR, tNear, tFar);
+    if (fi.y > fi.x) {
+      if (hitN < FIRE_RAY_CAPS) { hitIdx[hitN] = i; }
+      hitN = hitN + 1;
+      tMin = min(tMin, fi.x);
+      tMax = max(tMax, fi.y);
+    }
+  }
+  if (hitN == 0) { return vec4<f32>(0.0, 0.0, 0.0, 1.0); }
+  // Overflow falls back to the full list for that ray (correct, just slower).
+  let flameAll = hitN > FIRE_RAY_CAPS;
+  let flameN = select(hitN, capsuleCount, flameAll);
+  let stepM = (tMax - tMin) / f32(steps);
+  var t = tMin + fireIgn(ppx) * stepM;
 
   // EMPTY-SPACE SKIPPING: stepM is the FINE step, taken only where there is
-  // flame or smoke; elsewhere the step grows with the distance to the nearest
-  // flame shell (capped at 6 fine steps), so the tall smoke-padded AABB costs
-  // a handful of samples instead of all of them. The loop bound is a cap.
+  // flame; elsewhere the step grows with the distance to the nearest flame
+  // shell (capped at 6 fine steps), so empty stretches of the culled interval
+  // cost a handful of samples instead of all of them. The loop bound is a cap.
   for (var s: i32 = 0; s < steps * 2; s = s + 1) {
-    if (t > tFar) { break; }
+    if (t > tMax) { break; }
     let p = origin + rayDir * t;
     // The curl warp is a property of the sample point, not of one capsule, and
     // a 3D texture fetch is the march's dominant cost: fetch it ONCE per
@@ -181,10 +204,9 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     // vertical torso (s ~ 0 there) and streams up off arms, shoulders and head.
     var shape = 0.0;
     var uBest = 1.0;
-    var sootRaw = 0.0;
     var minOut = 1e6;
-    var glow = 0.0;
-    for (var i: i32 = 0; i < capsuleCount; i = i + 1) {
+    for (var j: i32 = 0; j < flameN; j = j + 1) {
+      let i = select(hitIdx[min(j, FIRE_RAY_CAPS - 1)], j, flameAll);
       let rec0 = (*caps)[i * 3];
       let rec1 = (*caps)[i * 3 + 1];
       let rec2 = (*caps)[i * 3 + 2];
@@ -196,7 +218,7 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       let k = clamp(dot(qw - a, ab) / max(dot(ab, ab), 1e-9), 0.0, 1.0);
       let under = a + ab * k;
       let sRaw = qw.y - under.y;
-      if (sRaw > sootRise + rise) { continue; }
+      if (sRaw > rise + coreR) { continue; }
       let sH = clamp(sRaw, 0.0, rise);
       let u = sH / rise;
       let lag = fireLag(rec2.xyz, sH, cfg1.y, cfg1.z);
@@ -208,16 +230,9 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       let env = burn * saturate(1.0 - max(dd, 0.0) / max(w, 1e-3)) * (1.0 - u * u);
       if (env > shape) { shape = env; uBest = u; }
       minOut = min(minOut, max(dd - w, 0.0));
-      // Smoke above the flame tip, from the unswept capsule's top.
-      let top = max(a.y, b.y);
-      let h = max(0.0, p.y - top);
-      let dS = fireSdCapsule(p + cv * 3.0 - lag, a, b) - radius;
-      let sootShape = fireSoot(dS, h, rise, sootRise, smokeSpread);
-      sootRaw = sootRaw + burn * sootShape;
-      glow = max(glow, burn * exp(-max(h - 0.15 * rise, 0.0) / (0.45 * rise)));
     }
     let dtFine = stepM;
-    if (shape < 1e-3 && sootRaw < 2e-3) {
+    if (shape < 1e-3) {
       // Nothing here: skip toward the nearest flame shell. The swept field is
       // not an exact distance, so only half of it is trusted.
       t = t + clamp(minOut * 0.5, stepM, stepM * 6.0);
@@ -227,20 +242,9 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     // scrolling UP at the flame speed, so the tears climb the tongues.
     // Contrast: a 3-octave value fbm lives in ~0.3..0.7, so stretch it to the
     // full 0..1 or the erosion can only dim the flame, never cut a gap in it.
-    var erosion = 1.0;
-    if (shape > 1e-3) {
-      var fq = (qw - base) * vec3<f32>(freq, freq * stretch, freq);
-      fq.y = fq.y - cfg2.z * FIRE_FLAME_SPEED * freq * stretch;
-      erosion = smoothstep(0.3, 0.7, fireFbm(fq));
-    }
-    // Smoke billows on a larger, more strongly advected copy, only where the
-    // column is.
-    var soot = 0.0;
-    if (sootRaw > 2e-3) {
-      var smokeFq = (p + cv * 3.0 - base) * vec3<f32>(freq * 0.35, freq * stretch * 0.35, freq * 0.35);
-      smokeFq.y = smokeFq.y - cfg2.z * FIRE_FLAME_SPEED * 0.6 * freq * stretch * 0.35;
-      soot = sootRaw * (0.35 + 1.1 * fireFbm(smokeFq));
-    }
+    var fq = (qw - base) * vec3<f32>(freq, freq * stretch, freq);
+    fq.y = fq.y - cfg2.z * FIRE_FLAME_SPEED * freq * stretch;
+    let erosion = smoothstep(0.3, 0.7, fireFbm(fq));
     // EROSION: subtractive against the plateau-shaped envelope, so the noise
     // cuts CRISP tongues with real gaps between them. Least at the limb (a
     // solid burning core), growing with height up the sheet.
@@ -258,14 +262,7 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     // thin edges stay translucent. alphaF is this step's flame opacity.
     let alphaF = 1.0 - exp(-density * FIRE_FLAME_SIGMA * dtFine);
     emission = emission + T * fireRamp(temp) * alphaF * cfg1.w;
-    // SMOKE SCATTERS. Round 2 only darkened through T; an albedo lit by ambient
-    // grey plus the fire glow is what makes the column visible at all. The
-    // inscatter is gated by sootGain (clamped to 1) as well as the extinction,
-    // so sootGain 0 is a true smoke-off switch — the look metric's twin.
-    let smokeGain = clamp(cfg2.x, 0.0, 1.0);
-    let inscatter = soot * smokeGain * smokeAlbedo * (smokeAmbient * ambientCol + smokeFireLit * glow * fireLitCol);
-    emission = emission + T * inscatter * dtFine;
-    T = T * (1.0 - alphaF) * exp(-soot * cfg2.x * dtFine);
+    T = T * (1.0 - alphaF);
     if (T < 0.003) { break; }
     t = t + stepM;
   }
@@ -273,6 +270,16 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
 }
 
 // The shared curl volume decode: rgb * 2 - 1, the curl-volume-node contract.
+// Ray vs sphere, clipped to [tLo, tHi]: returns (t0, t1); t1 <= t0 is a miss.
+fn fireRaySphere(o: vec3<f32>, d: vec3<f32>, c: vec3<f32>, r: f32, tLo: f32, tHi: f32) -> vec2<f32> {
+  let oc = o - c;
+  let bq = dot(oc, d);
+  let disc = bq * bq - (dot(oc, oc) - r * r);
+  if (disc <= 0.0) { return vec2<f32>(1.0, 0.0); }
+  let sq = sqrt(disc);
+  return vec2<f32>(max(-bq - sq, tLo), min(-bq + sq, tHi));
+}
+
 fn fireCurl(tex: texture_3d<f32>, samp: sampler, uvw: vec3<f32>) -> vec3<f32> {
   return textureSampleLevel(tex, samp, uvw, 0.0).rgb * 2.0 - 1.0;
 }
@@ -290,19 +297,6 @@ fn fireLag(vel: vec3<f32>, h: f32, lag: f32, lagMaxM: f32) -> vec3<f32> {
 fn fireFalloff(u: f32) -> f32 {
   let k = clamp(1.0 - u, 0.0, 1.0);
   return k * k;
-}
-
-// Soot: the same radial falloff, but only above 0.4 * rise and fading out by
-// sootRise. The radial denominator grows with height (spread metres of width
-// per metre of height), so the column widens as it rises instead of staying a
-// pencil.
-fn fireSoot(d: f32, h: f32, rise: f32, sootRise: f32, spread: f32) -> f32 {
-  let wide = 0.15 + spread * max(h - 0.4 * rise, 0.0);
-  let radial = exp(-max(d, 0.0) / max(wide, 1e-3));
-  let start = 0.4 * rise;
-  let lo = smoothstep(start, start + 0.25 * rise + 1e-3, h);
-  let hi = 1.0 - smoothstep(sootRise * 0.55, max(sootRise, start + 1e-3), h);
-  return radial * lo * hi;
 }
 
 // The Blood palette: dark red -> orange -> yellow.
@@ -380,6 +374,9 @@ fn fireFbm(p: vec3<f32>) -> f32 {
 // per unit density (per metre): ~10 cm of full-density flame is ~94% opaque,
 // so a sheet hides the body behind it and the gaps between tongues show it.
 const FIRE_FLAME_SPEED: f32 = 1.4;
+// Capsules one ray may keep after culling (one body is <= 16; two overlapping
+// bodies fit). More than this falls back to the full list for that ray.
+const FIRE_RAY_CAPS: i32 = 32;
 const FIRE_FLAME_SIGMA: f32 = 28.0;
 
 fn fireIgn(p: vec2<f32>) -> f32 {

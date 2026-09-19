@@ -7,10 +7,17 @@ const body = (x: number, burn = 1) => ({ capsules: [cap(x)], velocities: [[1, 0,
 describe('packFireVolume', () => {
   it('ranks bodies nearest the camera first and caps at FIRE_VOLUME_MAX_BODIES', () => {
     const bodies = Array.from({ length: 12 }, (_, i) => body(12 - i));
-    const p = packFireVolume(bodies, [0, 1, 0]);
+    const p = packFireVolume(bodies, [0, 1, 0], undefined, { rise: 0.55, maxBodies: 99 });
     expect(p.bodyCount).toBe(FIRE_VOLUME_MAX_BODIES);
     expect(p.capsuleCount).toBe(FIRE_VOLUME_MAX_BODIES);
     expect(p.data[0]).toBeCloseTo(1);                       // nearest body's capsule a.x first
+  });
+  it('gives the volume to only the nearest maxBodies (default tuning: 4)', () => {
+    const bodies = Array.from({ length: 12 }, (_, i) => body(12 - i));
+    expect(packFireVolume(bodies, [0, 1, 0]).bodyCount).toBe(4);
+    const p2 = packFireVolume(bodies, [0, 1, 0], undefined, { rise: 0.55, maxBodies: 2 });
+    expect(p2.bodyCount).toBe(2);
+    expect(p2.data[0]).toBeCloseTo(1);
   });
   it('writes a, radius, b, burn, velocity per capsule at FIRE_CAPSULE_STRIDE', () => {
     const p = packFireVolume([body(2, 0.5)], [0, 1, 0]);

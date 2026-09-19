@@ -424,11 +424,30 @@ try {
   await evaluate('window.__sdfGame.step(30)');
   const costAll = await benchFrames('all-burning');
   const allState = await evaluate('window.__sdfGame.burning()');
+  // COST BREAKDOWN with everything alight: switch the fire's parts off one at a
+  // time, cumulatively, so each delta is that part's share. Restored after.
+  const breakdown = {};
+  const hasVolume = await evaluate('typeof window.__sdfGame.setVolume === "function"');
+  if (hasVolume) {
+    const vol0 = await evaluate('window.__sdfGame.volume()');
+    const burn0 = await evaluate('window.__sdfGame.burnTuning()');
+    const tongue0 = await evaluate('window.__sdfGame.tongue()');
+    await evaluate('window.__sdfGame.setVolume({ steps: 0 })');
+    breakdown.volumeMarchOff = await benchFrames('all, volume march off (steps 0)');
+    await evaluate('window.__sdfGame.setTechnique("cards"); window.__sdfGame.setVolume({ cardsPerBody: 0 })');
+    await evaluate('window.__sdfGame.setTongueTuning({ gain: 0 })');
+    breakdown.volumeAndCardsOff = await benchFrames('all, + volume pass unbound, cards 0 gain');
+    await evaluate('window.__sdfGame.setBurnTuning({ fireGain: 0, fireCoverage: 0 })');
+    breakdown.surfaceFireOff = await benchFrames('all, + surface fire off');
+    await evaluate('window.__sdfGame.setBurnTuning({ lightPeak: 0, lightGatherPeak: 0, lightMeshPeak: 0 })');
+    breakdown.lightsOff = await benchFrames('all, + fire lights off');
+    await evaluate(`window.__sdfGame.setTechnique("volume"); window.__sdfGame.setVolume(${JSON.stringify(vol0)}); window.__sdfGame.setBurnTuning(${JSON.stringify(burn0)}); window.__sdfGame.setTongueTuning(${JSON.stringify(tongue0)})`);
+  }
   report.checks.cost = {
     pose: costAim, firedOne,
     activeOne: oneState.filter((s) => s.burn > 0 || s.dying).length,
     activeAll: allState.filter((s) => s.burn > 0 || s.dying).length,
-    cold: costCold, one: costOne, all: costAll,
+    cold: costCold, one: costOne, all: costAll, breakdown,
   };
   console.log('cost:', JSON.stringify(report.checks.cost));
 
