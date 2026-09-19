@@ -148,6 +148,21 @@ export interface GibShutterLayer {
     object: THREE.Object3D, capture: THREE.RenderTarget, scene: THREE.Scene,
     camera: THREE.PerspectiveCamera, timeoutMs: number,
   ): Promise<boolean>;
+  /**
+   * `precompileSubject` for a call made WHILE THE LIVE LOOP IS RUNNING
+   * (defer-compile task, 2026-09-19). `precompileSubject` sets the SHARED
+   * camera's layer mask to GIB_BLUR_LAYER for its whole await and holds the
+   * layer's private target; a live frame in between reads that mask in
+   * `sdf-layer.render` and would draw an empty polygonal pass. This compiles
+   * through a camera CLONE and restores the renderer's target immediately
+   * after `compileAsync`'s synchronous prologue (three captures the render
+   * context before its first await; the camera is never part of the pipeline
+   * cache key). Returns false on a throw or an unsettled bounded wait.
+   */
+  precompileSubjectInBackground(
+    object: THREE.Object3D, capture: THREE.RenderTarget, scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera, timeoutMs: number,
+  ): Promise<boolean>;
   diagnostics(): GibShutterDiagnostics;
   /** Put every subject back on its base layer (dispose / hard failure). */
   restoreLayers(): void;
@@ -439,6 +454,44 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
         if (timer !== undefined) clearTimeout(timer);
         renderer.setRenderTarget(prevTarget);
         camera.layers.mask = prevCamMask;
+        object.layers.mask = prevObjMask;
+      }
+    },
+    async precompileSubjectInBackground(object, cap, scene, camera, timeoutMs) {
+      if (!supported) return false;
+      const prevTarget = renderer.getRenderTarget();
+      const prevObjMask = object.layers.mask;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        ensureTargets(cap);
+        if (!layerTarget) return false;
+        // A CLONE: the live camera's mask must not become GIB_BLUR_LAYER for the
+        // whole compile (see the interface note). The object is the temporary
+        // warm view, so mutating ITS layers is harmless.
+        const bgCamera = camera.clone();
+        bgCamera.layers.set(GIB_BLUR_LAYER);
+        object.layers.set(GIB_BLUR_LAYER);
+        renderer.setRenderTarget(layerTarget);
+        const compile = renderer.compileAsync(object, bgCamera, scene);
+        renderer.setRenderTarget(prevTarget);
+        object.layers.mask = prevObjMask;
+        const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), timeoutMs); });
+        const outcome = await Promise.race([compile.then(() => 'ok' as const), timeout]);
+        if (timer !== undefined) clearTimeout(timer);
+        if (outcome === 'timeout') {
+          // eslint-disable-next-line no-console
+          console.warn(`[gib-shutter] subject background precompile did not settle in ${timeoutMs} ms — degrading`);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        // Best-effort like every warm step: NOT routed through fail().
+        // eslint-disable-next-line no-console
+        console.warn('[gib-shutter] subject background precompile failed', err);
+        return false;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        renderer.setRenderTarget(prevTarget);
         object.layers.mask = prevObjMask;
       }
     },

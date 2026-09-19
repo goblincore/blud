@@ -131,6 +131,7 @@ import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timi
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { getPipelineCensus, getPipelineLog, getPipelineShaderSource, setPipelineLogEnabled } from './pipeline-log';
 import { coordinateWarmGate, createLoopController, type WarmOutcome } from './warm-gate';
+import { createWarmBackgroundTracker } from './warm-background';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
@@ -410,6 +411,18 @@ async function main() {
   if (ctx.boot.mode.warning) console.warn(`[sdf-game] ${ctx.boot.mode.warning}`);
   if (ctx.boot.mode.fatal) throw new Error(ctx.boot.mode.fatal);
   ctx.boot.deferredMode = ctx.boot.mode.mode === 'deferred';
+
+  // BACKGROUND-COMPILE POLICY (defer-compile task, 2026-09-19). A cold boot was
+  // four ~48 s serialized march compiles behind the loader (body, crowd,
+  // chunk-MRT, chunk-shutter). Only body + level + gun + post + fire are needed
+  // for frame 1, so in the LEGACY route the crowd and gib/chunk programs are
+  // compiled AFTER `ready`, and until each is READY its consumer degrades —
+  // `gibDraw()` skips the pieces (they still simulate), `crowdPath()` keeps the
+  // crowd VISIBLE through the already-compiled per-body path. The DEFERRED
+  // route keeps the old behind-the-loader warm: its G-buffer router draws the
+  // crowd/chunk meshes directly, so the setBodies fallback does not exist there.
+  ctx.boot.backgroundMode = !ctx.boot.deferredMode;
+  ctx.boot.warmBackground = createWarmBackgroundTracker();
 
   // FRAME PACING. Present on a 30 fps cadence instead of taking whatever slot
   // rAF hands us. Unpaced, a ~33 ms frame on a 60 Hz display alternates between
@@ -2070,6 +2083,7 @@ async function main() {
     // level every frame and the cost tracked the cast, not the bodies on
     // screen. The per-body path is untouched — it already draws only
     // visibleActors.
+    const crowdMarch = ctx.crowd.on && ctx.boot.warmBackground.crowdPath() === 'crowd';
     if (ctx.crowd.on && ctx.crowd.types.size > 0) {
       const csize = ctx.render.sdfLayer.targetSize;
       const grid = {
@@ -2103,9 +2117,24 @@ async function main() {
           if (ctx.world.soldierCorpses?.bakedState(a.id) === 'headless') continue;
           vis.add(a.crowd.slot);
         }
+        // ALWAYS sync, ready or not: sync() is what flushes the shared atlas
+        // and record buffer the per-body FALLBACK also reads (the crowd-attached
+        // views are built on the crowd sink, so their own march samples this
+        // same data — see spawnEnemy). Skipping it while the crowd program
+        // compiles would leave the fallback reading the boot-time upload.
         t.sync(camera, grid, vis);
       }
       ctx.telemetry.telemetry.end('crowd-sync', crowdTiming);
+      // DEGRADE, NEVER STALL (defer-compile task). While the crowd program is
+      // not ready, keep the type meshes invisible so the boot precompile and
+      // the live draw cannot reach them; the actors are drawn instead through
+      // their per-body views via setBodies below. `compileAsync`-queued
+      // pipelines read NOT READY and three SKIPS them, but a live `getForRender`
+      // on an UNCACHED mesh builds the 48 s pipeline SYNCHRONOUSLY — so the
+      // exclusion has to be the draw list (and visibility for the boot pass).
+      if (!crowdMarch) {
+        for (const t of ctx.crowd.types.values()) { t.mesh.visible = false; t.depthPreMesh.visible = false; }
+      }
     }
     // Crowd stage a: one instanced mesh per type replaces its N hidden
     // per-body proxies; unattached (or crowd-off) actors keep their proxies.
@@ -2113,11 +2142,15 @@ async function main() {
     // NOT the per-type sync so the bench can attribute a cpu:draw climb.
     const setBodiesTiming = ctx.telemetry.telemetry.begin();
     ctx.render.sdfLayer.setBodies(
-      ctx.crowd.on
+      crowdMarch
         ? ([...ctx.crowd.types.values()].map(t => t.mesh) as THREE.Object3D[])
             .concat(ctx.render.visibleActors.filter(a => !a.crowd).map(a => a.view.object))
         : ctx.render.visibleActors.map(a => a.view.object),
-      chunkObjects());
+      // GIBS DEGRADE (defer-compile task): the chunk/gib material is the only
+      // user of the chunk program, and a draw before it is ready is the 47.8 s
+      // synchronous freeze 87b8f71c exists to prevent. The pieces keep
+      // simulating; they are simply not submitted until the program is ready.
+      ctx.boot.warmBackground.gibDraw() === 'draw' ? chunkObjects() : []);
     ctx.telemetry.telemetry.end('crowd-set-bodies', setBodiesTiming);
     const sdfRenderTiming = ctx.telemetry.telemetry.begin();
     if (ctx.goo.enabled && ctx.goo.layer) {
@@ -3202,10 +3235,34 @@ async function main() {
     // bit-identical without them. LEVEL-ONLY receiver: a character's own
     // inflated hull casts onto the ROOM (the full map) but must not swallow
     // its own illumination (the level-only map).
+    // CROWD SLOT, RESERVED BEFORE THE VIEW IS BUILT (defer-compile task,
+    // 2026-09-19). A material binds its data texture at CREATION, so a view
+    // built on its own single-band atlas and later `rebind`-ed to the type's
+    // shared atlas still samples the stale own atlas. That is fine while the
+    // crowd mesh draws, but it breaks the per-body FALLBACK that keeps crowd
+    // members visible while the crowd program compiles. Reserve the slot here
+    // and hand the shared sink/records/slot to createZombieGpuView; attachAt()
+    // below only marks the slot and stores the view.
+    let crowdAttach: { type: CrowdType; slot: number } | null = null;
+    if (ctx.crowd.on) {
+      const t = crowdTypeFor(name, room.id);
+      const slot = t.reserveSlot();
+      if (slot < 0) console.warn('[crowd] type full', name);
+      else crowdAttach = { type: t, slot };
+    }
+    const crowdViewOpts: GpuViewOpts = crowdAttach
+      ? {
+          sink: crowdAttach.type.atlas.sink(crowdAttach.slot),
+          sinkTexture: crowdAttach.type.atlas.texture,
+          records: crowdAttach.type.records,
+          slot: crowdAttach.slot,
+        }
+      : {};
     const viewGpuOpts: GpuViewOpts = {
       // The dynamic probe layer's storage node (P3/P4). Bound at material
       // creation like the tile binding — a storage node cannot be rebound.
       ...(ctx.probes.gather ? { probeDyn: { node: ctx.probes.gather.probeDynNode } } : {}),
+      ...crowdViewOpts,
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU
       // lazy-init submit conflict that rejects the WHOLE producer pass
@@ -3338,31 +3395,34 @@ async function main() {
     ctx.world.roomProbes.bind(view.uniforms, room.id);
     // CROWD STAGE A: attach BEFORE the layers/registration block so the
     // deferred router can skip the per-body producer, and before the actor
-    // exists (a slot is actor-independent). attach() rebinds the view's sink
-    // and record slot into the type's shared atlas/buffer.
-    let crowdAttach: { type: CrowdType; slot: number } | null = null;
-    if (ctx.crowd.on) {
-      const t = crowdTypeFor(name, room.id);
-      const slot = t.attach(view);
-      if (slot < 0) console.warn('[crowd] type full', name);
-      else {
-        crowdAttach = { type: t, slot };
-        if (!ctx.crowd.sourceView.has(t)) ctx.crowd.sourceView.set(t, view);
-        // attach/detach is the crowd's visibility gate, so the per-body proxy
-        // and its depth-pre twin stay in the scene but hidden (cheap to show
-        // again only via a rebuild — see setCrowd).
-        view.object.visible = false;
-        if (view.depthPreObject) view.depthPreObject.visible = false;
-        // Stage-a gap: one segVolumeMeta per type, so only the first instance
-        // can bone-cull in 'segment' pose mode. Cluster culling needs no
-        // per-instance pose and stays honest for every instance.
-        view.setBoneCullMode('cluster');
-        if (view.refineObject) {
-          view.refineObject.visible = false;
-          if (!ctx.crowd.refineWarned) {
-            ctx.crowd.refineWarned = true;
-            console.warn('[crowd] refine twins are not supported in crowd mode (stage 3)');
-          }
+    // exists (a slot is actor-independent). The slot was reserved above and the
+    // view was BUILT on that same shared atlas band, so attachAt() only marks
+    // it (rebind is idempotent here) — the per-body fallback can then draw the
+    // view's OWN material against the shared data.
+    if (crowdAttach) {
+      const t = crowdAttach.type;
+      t.attachAt(view, crowdAttach.slot);
+      if (!ctx.crowd.sourceView.has(t)) ctx.crowd.sourceView.set(t, view);
+      // attach/detach is the crowd's visibility gate, so the per-body proxy
+      // and its depth-pre twin stay in the scene but hidden. They ARE drawn
+      // while the crowd program is not ready: `setBodies` re-shows them for the
+      // march pass, which is the degrade that keeps members visible.
+      view.object.visible = false;
+      if (view.depthPreObject) view.depthPreObject.visible = false;
+      // The per-body fallback marches out of the SHARED record buffer, so tell
+      // the view's own material which record slot it owns: instCfg.z is the
+      // base slot mapBody loads (z = 0 only for the old single-owner case).
+      // instCfg.y stays 0 (the per-body entry) and instCfg.x is 1.
+      (view.instCfg.value as THREE.Vector4).z = crowdAttach.slot;
+      // Stage-a gap: one segVolumeMeta per type, so only the first instance
+      // can bone-cull in 'segment' pose mode. Cluster culling needs no
+      // per-instance pose and stays honest for every instance.
+      view.setBoneCullMode('cluster');
+      if (view.refineObject) {
+        view.refineObject.visible = false;
+        if (!ctx.crowd.refineWarned) {
+          ctx.crowd.refineWarned = true;
+          console.warn('[crowd] refine twins are not supported in crowd mode (stage 3)');
         }
       }
     }
@@ -4461,13 +4521,14 @@ async function main() {
     // folded into the warm.
     await ctx.weapon.gunReadyPromise;
     const t0 = performance.now();
+    ctx.boot.warmT0 = t0;
     mark('warm-steps-start');
     let passesCompiled = 0;
     let computesWarmed = 0;
     // A warm that throws is a FAILED warm: the loader gate must say so rather
     // than presenting the resolved promise as success (reviewer fix 2026-09-16b).
     let didFail = false;
-    const phases: Record<string, number | number[]> = {};
+    const phases: Record<string, number | number[] | Record<string, number>> = {};
     try {
       let tp = performance.now();
       scene.traverse((o) => {
@@ -4539,36 +4600,47 @@ async function main() {
       // idle main-thread time behind the loader (measured 79 s idle, drawOnce
       // 1.2 s after it); cached, it is a few hundred ms. drawOnce stays: it
       // still compiles the main pass / post chain in their live context.
-      // THE GIB / CHUNK MARCH VARIANT (2026-09-18). Detached pieces march
-      // through the SHARED chunk material — its own ~240 KB shader, which no
-      // boot object uses, so nothing above or below ever compiled it. The first
-      // dismemberment of a session then built it SYNCHRONOUSLY mid-game, once
-      // per context it draws in (the gib shutter's half-float layer, then the
-      // march MRT): measured 47.8 s + a second stall with a cold Metal cache —
-      // the owner's "freeze after switching slug/pellets" (the slug is simply
-      // what severs first), and the same watchdog exposure as the boot stall.
-      // A throwaway view on the SDF layer puts the material in front of the
-      // async march compile below; the gib shutter context is compiled right
-      // after it. Constant rng: the shared rngStreams must not advance here.
+      // HIDE THE CROWD MESHES BEFORE THE BOOT COMPILE (defer-compile task,
+      // 2026-09-19). The boot precompile walks VISIBLE objects, so a visible
+      // crowd type mesh would queue the crowd program and put its ~48 s cold
+      // compile back behind the loader. The background crowd job flips a mesh
+      // visible only across its own compileAsync prologue, then hides it again.
+      if (ctx.boot.backgroundMode && ctx.crowd.on) {
+        for (const t of ctx.crowd.types.values()) { t.mesh.visible = false; t.depthPreMesh.visible = false; }
+      }
+      // THE GIB / CHUNK MARCH VARIANT (2026-09-18) now compiles in the
+      // BACKGROUND set (2026-09-19): detached pieces march through the SHARED
+      // chunk material, whose ~240 KB shader no boot object uses. It used to be
+      // warmed here behind the loader because the first dismemberment built it
+      // SYNCHRONOUSLY mid-game (47.8 s + a second stall, cold). The protection
+      // stays; only the WAITING moves — `startBackgroundCompiles` rebuilds this
+      // throwaway view right after `ready` and compiles both contexts, and the
+      // chunk draw is SKIPPED until the tracker says ready.
+      //
+      // DEFERRED ROUTE keeps the old behind-the-loader warm: its G-buffer router
+      // draws the chunk mesh directly, so the setBodies skip does not cover it.
+      // Constant rng: the shared rngStreams must not advance here.
       let warmChunkView: ChunkGpuView | null = null;
-      try {
-        const a0 = ctx.world.actors[0];
-        const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
-        const warmFirst = warmPrims[0];
-        if (a0 && ctx.bake.material && warmFirst) {
-          const warmOrigin: Vec3 = [0, 1, 0];
-          const warmState = makeChunk(
-            warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
-          );
-          warmChunkView = createChunkGpuView(
-            warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
-            ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
-          );
-          warmChunkView.object.layers.set(SDF_LAYER);
-          scene.add(warmChunkView.object);
+      if (!ctx.boot.backgroundMode) {
+        try {
+          const a0 = ctx.world.actors[0];
+          const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
+          const warmFirst = warmPrims[0];
+          if (a0 && ctx.bake.material && warmFirst) {
+            const warmOrigin: Vec3 = [0, 1, 0];
+            const warmState = makeChunk(
+              warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
+            );
+            warmChunkView = createChunkGpuView(
+              warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
+              ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+            );
+            warmChunkView.object.layers.set(SDF_LAYER);
+            scene.add(warmChunkView.object);
+          }
+        } catch (err) {
+          console.warn('[warm] gib-variant warm view could not be built — first gib will compile live', err);
         }
-      } catch (err) {
-        console.warn('[warm] gib-variant warm view could not be built — first gib will compile live', err);
       }
       tp = performance.now();
       try {
@@ -4576,13 +4648,19 @@ async function main() {
         phases.asyncFirst = performance.now() - tp;
         mark('warm-async-first-done');
         tp = performance.now();
-        if (warmChunkView && ctx.gibs.shutter) {
-          await ctx.gibs.shutter.precompileSubject(
-            warmChunkView.object, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
-          );
+        if (!ctx.boot.backgroundMode) {
+          if (warmChunkView && ctx.gibs.shutter) {
+            await ctx.gibs.shutter.precompileSubject(
+              warmChunkView.object, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
+            );
+          }
+          phases.gibVariant = performance.now() - tp;
+          mark('warm-gib-variant-done');
+        } else {
+          // Moved off the loader path; the real number lands in
+          // backgroundDone.gib once startBackgroundCompiles settles it.
+          phases.gibVariant = 0;
         }
-        phases.gibVariant = performance.now() - tp;
-        mark('warm-gib-variant-done');
       } finally {
         if (warmChunkView) {
           scene.remove(warmChunkView.object);
@@ -4609,6 +4687,16 @@ async function main() {
       passesCompiled = await ctx.render.sdfLayer.precompilePasses(scene, camera);
       phases.precompile = performance.now() - tp;
       mark('warm-precompile-done');
+      // BACKGROUND-SET TIMINGS (defer-compile task). These OBJECTS are shared
+      // into `__warmDone.phases`, so a driver that grabbed __warmDone at ready
+      // still sees each value as the background job settles. The deferred route
+      // defers nothing, so settle the tracker ready here and leave them empty.
+      phases.backgroundStart = ctx.boot.warmBackgroundTimes.start;
+      phases.backgroundDone = ctx.boot.warmBackgroundTimes.done;
+      if (!ctx.boot.backgroundMode) {
+        ctx.boot.warmBackground.settle('gib', true);
+        if (ctx.crowd.on) ctx.boot.warmBackground.settle('crowd', true);
+      }
       const done = {
         ms: Math.round(performance.now() - t0),
         bootBeforeWarmMs: Math.round(t0 - tInvoke),
@@ -4643,6 +4731,112 @@ async function main() {
     }
     return didFail ? 'failed' : 'ok';
   };
+
+  /**
+   * Compiles the gib/chunk march variant in BOTH contexts it draws in (the
+   * march MRT and the gib-shutter half-float layer) after the loader. Uses the
+   * same throwaway view the boot warm used; removed and disposed when done.
+   * Nothing awaits this.
+   */
+  const compileGibVariantInBackground = async (): Promise<boolean> => {
+    let warmChunkView: ChunkGpuView | null = null;
+    try {
+      const a0 = ctx.world.actors[0];
+      const warmPrims = a0 ? a0.posed().prims.filter((p) => p.op !== 'sub').slice(0, 2) : [];
+      const warmFirst = warmPrims[0];
+      if (!a0 || !ctx.bake.material || !warmFirst) return false;
+      const warmOrigin: Vec3 = [0, 1, 0];
+      const warmState = makeChunk(
+        warmFirst.limb, warmOrigin, [0, 0, 0], chunkExtent(warmPrims, warmOrigin), [0, 1, 0], () => 0.5,
+      );
+      warmChunkView = createChunkGpuView(
+        warmState, warmPrims, a0.view.uniforms, undefined, a0.view.volumeTexture, ctx.bake.material, [],
+        undefined,
+      );
+      warmChunkView.object.layers.set(SDF_LAYER);
+      scene.add(warmChunkView.object);
+      // The march MRT context (rgba32float). Then the gib-shutter context
+      // (rgba16float) — the second cold per-SHAPE target; a shape compiles once
+      // per (shape x target), so both must be warmed before `gib` is ready.
+      const mrtOk = await ctx.render.sdfLayer.precompileInBackground(
+        warmChunkView.object, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
+      );
+      let shutterOk = true;
+      if (ctx.gibs.shutter) {
+        shutterOk = await ctx.gibs.shutter.precompileSubjectInBackground(
+          warmChunkView.object, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
+        );
+      }
+      return mrtOk && shutterOk;
+    } catch (err) {
+      console.warn('[warm] gib-variant background compile failed', err);
+      return false;
+    } finally {
+      if (warmChunkView) {
+        scene.remove(warmChunkView.object);
+        warmChunkView.dispose();
+      }
+    }
+  };
+
+  /**
+   * Compiles the crowd march program (rgba32float, 5-location instanced) after
+   * the loader, one type mesh at a time. The meshes are hidden while the job is
+   * pending so the live draw never reaches them; each is flipped visible only
+   * across its own `compileAsync` synchronous prologue.
+   */
+  const compileCrowdInBackground = async (): Promise<boolean> => {
+    let ok = true;
+    for (const t of ctx.crowd.types.values()) {
+      t.mesh.visible = true;
+      const p = ctx.render.sdfLayer.precompileInBackground(
+        t.mesh, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
+      );
+      // The prologue (which projects the object into the render context) has
+      // already run synchronously; visibility no longer matters, and keeping it
+      // hidden is what lets the live draw skip the pending pipeline safely.
+      t.mesh.visible = false;
+      const r = await p;
+      ok = ok && r;
+      if (!ok) break;
+    }
+    return ok;
+  };
+
+  /**
+   * Starts the background set. Called ONLY once the loader gate reaches
+   * `ready`; nothing awaits the chain. Sequential: the driver serializes these
+   * compiles anyway (async compiles do not overlap) and both jobs share the
+   * renderer's transient target state.
+   */
+  const startBackgroundCompiles = (): void => {
+    if (!ctx.boot.backgroundMode || !ctx.boot.warmRequested) return;
+    void (async () => {
+      try {
+        ctx.boot.warmBackgroundTimes.start.gib = Math.round(performance.now() - ctx.boot.warmT0);
+        ctx.boot.warmBackground.start('gib');
+        const gibOk = await compileGibVariantInBackground();
+        ctx.boot.warmBackgroundTimes.done.gib = Math.round(performance.now() - ctx.boot.warmT0);
+        ctx.boot.warmBackground.settle('gib', gibOk);
+
+        if (ctx.crowd.on && ctx.crowd.types.size > 0) {
+          ctx.boot.warmBackgroundTimes.start.crowd = Math.round(performance.now() - ctx.boot.warmT0);
+          ctx.boot.warmBackground.start('crowd');
+          const crowdOk = await compileCrowdInBackground();
+          ctx.boot.warmBackgroundTimes.done.crowd = Math.round(performance.now() - ctx.boot.warmT0);
+          ctx.boot.warmBackground.settle('crowd', crowdOk);
+        }
+        mark('warm-background-done');
+      } catch (err) {
+        console.warn('[warm] background compile chain failed', err);
+        // Never leave a job `compiling`: a consumer would degrade forever with
+        // no recorded reason. `failed` is the honest, still-safe state.
+        ctx.boot.warmBackground.settle('gib', false);
+        ctx.boot.warmBackground.settle('crowd', false);
+      }
+    })();
+  };
+
   // ?warm=0 skips the warm-up (A/B: the first-shot freeze it removes).
   // Adversarial review 794a7cfc: a compileAsync that never settles would hold
   // the loader (and the flipped meshes) forever — bound the LOADER, never the
@@ -4656,6 +4850,14 @@ async function main() {
   // `device-lost` honestly, and on the 15 s bound only changes the wording —
   // it never reveals the game before the work settles.
   ctx.boot.warmRequested = new URLSearchParams(location.search).get('warm') !== '0';
+  // `?warm=0` means NO warm-up at all: the degraded policies exist only to
+  // protect the AWAITED warm's guarantee, so with no warm the consumers must
+  // use their normal paths and accept the first-use compile — exactly the A/B
+  // the flag documents. Settling ready is what restores that.
+  if (!ctx.boot.warmRequested) {
+    ctx.boot.warmBackground.settle('gib', true);
+    ctx.boot.warmBackground.settle('crowd', true);
+  }
   ctx.boot.warmPromise = ctx.boot.warmRequested ? warmPipelines() : Promise.resolve<WarmOutcome>('ok');
   void coordinateWarmGate({
     warm: ctx.boot.warmPromise,
@@ -4679,6 +4881,11 @@ async function main() {
   }).then((gate) => {
     (window as unknown as Record<string, unknown>).__warmGate = { phase: gate.phase, timedOut: gate.timedOut };
     if (gate.phase !== 'ready') console.warn(`[warm] loader gate settled ${gate.phase}${gate.timedOut ? ' (after the 15 s bound)' : ''}`);
+    // THE BACKGROUND SET (defer-compile task, 2026-09-19). The loader is gone
+    // (or failed) and the loop is released, so the crowd and gib/chunk programs
+    // compile from here without holding anything up. `failed` is the honest,
+    // still-safe state: the shared background times live on __warmDone.phases.
+    if (gate.phase === 'ready') startBackgroundCompiles();
   });
 
   /** Scratch, so the per-shot path allocates nothing. */
@@ -7678,7 +7885,12 @@ async function main() {
     ctx.render.postAa.setCaptureStage((capture) => {
       let src: THREE.RenderTarget = capture;
       let gibDepth: THREE.DepthTexture | null = null;
-      if (ctx.gibs.shutter) {
+      // GIBS DEGRADE (defer-compile task): the gib shutter draws the SAME
+      // chunk material in its rgba16float context, so while the chunk program
+      // is not ready its `capture` must not run — that draw would build the
+      // second cold pipeline synchronously mid-frame. Nothing is selected, so
+      // the blood pass sees the clean capture exactly as with gib blur off.
+      if (ctx.gibs.shutter && ctx.boot.warmBackground.gibDraw() === 'draw') {
         const g = ctx.gibs.shutter.capture(capture, scene, camera);
         if (g) {
           src = g;
@@ -11336,6 +11548,10 @@ function performBenchAction(a: BenchAction): void {
       return { id: actor.id, room: room.id, errors: errs };
     },
     warmDone: () => (window as unknown as Record<string, unknown>).__warmDone ?? null,
+    /** DEFER-COMPILE (2026-09-19): the background-compile state machine —
+     *  `{ gib, crowd }` each pending|compiling|ready|failed. A driver reads it
+     *  to know whether a gib/crowd draw will use the fast path or degrade. */
+    warmBackground: () => ctx.boot.warmBackground.snapshot(),
     /** Re-run the warm-up on demand. The startup probe uses this to prove the
      *  loop-restore contract: pause the loop, call rewarm(), assert it is still
      *  paused. Warm steps are cache hits after boot, so this is cheap. */

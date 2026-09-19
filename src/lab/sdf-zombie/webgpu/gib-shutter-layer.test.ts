@@ -13,10 +13,11 @@
 // pinned number and method name is untouched, so this drift gate still gates
 // exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
-import { readGibShutterSettings } from './gib-shutter-layer';
+import * as THREE from 'three/webgpu';
+import { createGibShutterLayer, readGibShutterSettings } from './gib-shutter-layer';
 import { SHUTTER_GAME_DEFAULTS, SHUTTER_GAME_MAX_STREAK_PX } from './shutter-game-layer';
 import { GIB_BLUR_LAYER, GIB_BLUR_MAX_PIECES, GIB_SHUTTER_DEFAULT_ENABLED } from './gib-motion-blur';
 
@@ -158,5 +159,54 @@ describe('gib shutter — integration tripwires', () => {
     // so a rig can stage a slow slide and track it across the settle.
     expect(seamSrc).toContain('spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3)');
     expect(seamSrc).toContain('velocity ?? (stationary ? [0, 0, 0] : undefined)');
+  });
+});
+
+describe('gib shutter — background subject precompile', () => {
+  it('compiles the subject through a camera clone and restores state before yielding', async () => {
+    // Defer-compile task (2026-09-19): the subject compile now runs while the
+    // live loop draws, so it must not leave the SHARED camera on GIB_BLUR_LAYER
+    // (or hold the layer target) across the await. Same contract as
+    // SdfLayer.precompileInBackground.
+    const previousTarget = new THREE.RenderTarget(4, 4, { type: THREE.HalfFloatType });
+    let currentTarget: THREE.RenderTarget | null = previousTarget;
+    let resolveSubject!: () => void;
+    const calls: { cam: THREE.Camera; target: THREE.RenderTarget | null }[] = [];
+    const compileAsync = vi.fn((_scene: unknown, cam: THREE.Camera) => {
+      calls.push({ cam, target: currentTarget });
+      return new Promise<void>((r) => { resolveSubject = r; });
+    });
+    const renderer = {
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      compileAsync,
+    } as unknown as THREE.WebGPURenderer;
+    const layer = createGibShutterLayer({ renderer, settings: readGibShutterSettings('') });
+    const capture = new THREE.RenderTarget(8, 8, { type: THREE.HalfFloatType });
+    capture.depthTexture = new THREE.DepthTexture(8, 8);
+    const camera = new THREE.PerspectiveCamera();
+    camera.layers.set(3);
+    const liveMask = camera.layers.mask;
+    const object = new THREE.Object3D();
+
+    const p = layer.precompileSubjectInBackground(object, capture, new THREE.Scene(), camera, 5000);
+
+    // The subject compile is the SECOND compileAsync (the first is the resolve
+    // warm-up inside ensureTargets); it must use a clone on GIB_BLUR_LAYER.
+    const subject = calls[calls.length - 1]!;
+    expect(subject.cam).not.toBe(camera);
+    expect(subject.cam.layers.mask).toBe(1 << GIB_BLUR_LAYER);
+    expect(camera.layers.mask).toBe(liveMask);
+    // The layer target is already restored before the compile resolves.
+    expect(currentTarget).toBe(previousTarget);
+
+    resolveSubject();
+    await expect(p).resolves.toBe(true);
+    expect(camera.layers.mask).toBe(liveMask);
+    expect(currentTarget).toBe(previousTarget);
+    expect(object.layers.mask).toBe(1);
+
+    layer.dispose();
+    previousTarget.dispose();
   });
 });
