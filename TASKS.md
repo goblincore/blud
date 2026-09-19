@@ -14,10 +14,9 @@
   Polish: seams, curl flow, leg coverage, burn-down, dark scorched bone. [Plans](docs/superpowers/plans/2026-09-18-flame-polish.md).
 - [x] In-game test harness: slot `3` ignites what you hit, `__sdfGame.igniteAll()` / `extinguishAll()`. Throwaway, not the weapon.
   Needs the atlas + `public/assets/lab/flaregun-placeholder.glb` (both untracked). [Notes](docs/dev-notes/2026-09-18-flare-ingame-test/NOTES.md).
-- [~] **Owner playtest feedback pass (2026-09-18/19):** [spec](docs/superpowers/specs/2026-09-18-burning-feedback-pass-design.md) · [plan](docs/superpowers/plans/2026-09-18-burning-feedback-pass.md) · [notes](docs/dev-notes/2026-09-18-burning-feedback/).
-  Done: room fire light, neighbour flicker fix, zombie burn panic (soldier panic OFF), ivory bone. **Volumetric fire is the game default** (owner pick):
-  swept flame sheets + card accents, per-ray capsule culling, nearest `maxBodies` 4, no smoke (owner: smoke from a cheaper effect). Owner tuning baked in.
-  Next: card LOD for burners past maxBodies (they read barely alight), cheap smoke, close-up softness at 0.4 scale, soldier kit legs unburnt.
+- [x] **Owner playtest feedback pass (2026-09-18/19) — merged to main.** **Handoff: [2026-09-19-burning-fire-handoff](docs/dev-notes/2026-09-19-burning-fire-handoff.md)** (state, learnings, open list).
+  Volumetric fire is the game default (swept flame sheets, card accents, nearest-4 volume + crossfaded full-card LOD, skin 0.3, rise 0.45, no smoke);
+  room fire light; zombie burn panic (soldier OFF); ivory bone; soldier legs burn. Open: cheap smoke, head flame (optional), real flare gun.
 - [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-2 merged, task 3 (feature blocks) not started.
