@@ -1,0 +1,314 @@
+{
+  "task": "defer-compile task 1",
+  "createdAt": "2026-09-19T05:13:03.429Z",
+  "host": "",
+  "label": "after-cold-1 (defer, hash13 0.10313)",
+  "page": "/sdf-game.html?pipelinelog=1&seed=20260919",
+  "runs": [
+    {
+      "index": 1,
+      "wallStart": "2026-09-19T05:10:21.742Z",
+      "label": "after-cold-1 (defer, hash13 0.10313)",
+      "gate": {
+        "phase": "ready",
+        "timedOut": true
+      },
+      "warm": {
+        "ms": 46524,
+        "bootBeforeWarmMs": 137,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 13,
+        "computes": 7,
+        "phases": {
+          "flip": 0.09999999776482582,
+          "crowdBinsPerType": [
+            2.5,
+            1.4,
+            1.3,
+            1.3,
+            1.3,
+            1.1,
+            1.3
+          ],
+          "crowdBins": 10.200000002980232,
+          "goo": 102.29999999701977,
+          "asyncFirst": 45103.89999999851,
+          "gibVariant": 0,
+          "drawOnce": 1206.1000000014901,
+          "precompile": 101,
+          "backgroundStart": {
+            "gib": 46524
+          },
+          "backgroundDone": {}
+        }
+      },
+      "warmMs": 46524,
+      "bgAtReady": {
+        "gib": "compiling",
+        "crowd": "pending"
+      },
+      "bgSettled": {
+        "gib": "ready",
+        "crowd": "compiling"
+      },
+      "frameBefore": {
+        "max": 43.69999999925494,
+        "count": 167
+      },
+      "frameAfter": {
+        "max": 46.5,
+        "count": 164
+      },
+      "detonateBefore": {
+        "radiusM": 3.8437499999999996,
+        "actorsBefore": 23,
+        "actorsAfter": 23,
+        "chunksBefore": 1,
+        "chunksAfter": 1,
+        "gibbed": 1,
+        "gibPieces": 0,
+        "lastBlastMs": 3.5
+      },
+      "detonateAfter": {
+        "radiusM": 3.8437499999999996,
+        "actorsBefore": 22,
+        "actorsAfter": 22,
+        "chunksBefore": 1,
+        "chunksAfter": 1,
+        "gibbed": 3,
+        "gibPieces": 13,
+        "lastBlastMs": 8
+      },
+      "longFrames": [],
+      "syncMarchAfterWarm": [],
+      "bootMarks": [
+        {
+          "n": "main-start",
+          "t": 269
+        },
+        {
+          "n": "renderer-ready",
+          "t": 275
+        },
+        {
+          "n": "world-start",
+          "t": 281
+        },
+        {
+          "n": "gallery-start",
+          "t": 349
+        },
+        {
+          "n": "dungeon-start",
+          "t": 351
+        },
+        {
+          "n": "drawchain-start",
+          "t": 351
+        },
+        {
+          "n": "deferred-start",
+          "t": 354
+        },
+        {
+          "n": "adaptive-start",
+          "t": 354
+        },
+        {
+          "n": "zombies-start",
+          "t": 361
+        },
+        {
+          "n": "room-probes-start",
+          "t": 363
+        },
+        {
+          "n": "player-start",
+          "t": 467
+        },
+        {
+          "n": "gun-start",
+          "t": 467
+        },
+        {
+          "n": "gun-ready",
+          "t": 653
+        },
+        {
+          "n": "warm-invoked",
+          "t": 653
+        },
+        {
+          "n": "dynamite-start",
+          "t": 656
+        },
+        {
+          "n": "detonation-start",
+          "t": 657
+        },
+        {
+          "n": "burst-start",
+          "t": 657
+        },
+        {
+          "n": "bleed-start",
+          "t": 781
+        },
+        {
+          "n": "goo-start",
+          "t": 781
+        },
+        {
+          "n": "gib-assets-boot-scheduled",
+          "t": 785
+        },
+        {
+          "n": "hud-start",
+          "t": 788
+        },
+        {
+          "n": "boot-time",
+          "t": 788
+        },
+        {
+          "n": "frameloop-start",
+          "t": 788
+        },
+        {
+          "n": "api-start",
+          "t": 788
+        },
+        {
+          "n": "demo-start",
+          "t": 788
+        },
+        {
+          "n": "draw-ready",
+          "t": 788
+        },
+        {
+          "n": "main-end",
+          "t": 790
+        },
+        {
+          "n": "warm-steps-start",
+          "t": 790
+        },
+        {
+          "n": "warm-flip-done",
+          "t": 790
+        },
+        {
+          "n": "warm-crowd-bins-done",
+          "t": 800
+        },
+        {
+          "n": "warm-goo-done",
+          "t": 902
+        },
+        {
+          "n": "gib-assets-boot-ready",
+          "t": 931
+        },
+        {
+          "n": "warm-async-first-done",
+          "t": 46006
+        },
+        {
+          "n": "mesh-sync-start",
+          "t": 46007
+        },
+        {
+          "n": "mesh-sync-end",
+          "t": 46688
+        },
+        {
+          "n": "warm-draw-once-done",
+          "t": 47212
+        },
+        {
+          "n": "warm-precompile-done",
+          "t": 47313
+        },
+        {
+          "n": "warm-finally",
+          "t": 47313
+        }
+      ],
+      "censusCount": 208,
+      "readyWallMs": 47731,
+      "error": null,
+      "spawnBefore": 1,
+      "phaseBefore": {
+        "gib": "compiling",
+        "crowd": "pending"
+      },
+      "spawnAfter": 2,
+      "phaseAfter": {
+        "gib": "ready",
+        "crowd": "compiling"
+      },
+      "warmFinallyT": 47313
+    }
+  ]
+}

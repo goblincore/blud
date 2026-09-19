@@ -766,6 +766,30 @@ export interface SdfLayer {
     camera: THREE.PerspectiveCamera,
   ): Promise<void>;
   /**
+   * `precompile` for a call made WHILE THE LIVE LOOP IS RUNNING (defer-compile
+   * task, 2026-09-19). `precompile` mutates the SHARED renderer and camera:
+   * `camera.layers.set(SDF_LAYER)` for the whole await, and the layer's private
+   * target/MRT until its `finally`. A live frame in between reads that camera
+   * mask (`sdf-layer.render` disables SDF_LAYER for the polygonal pass), so it
+   * would draw an empty level, and it could observe the layer's target/MRT.
+   *
+   * This method compiles through a CLONE of the camera and restores the
+   * renderer's target/MRT immediately after `compileAsync`'s synchronous
+   * prologue — three captures the render context (target + MRT, which are part
+   * of the pipeline cache key) before its first await, and the live camera is
+   * never touched. The pipeline is byte-for-byte the one the live draw will
+   * use: three's cache key is geometry+material+render-context, never camera.
+   *
+   * Returns false on a throw or when the bounded wait times out; the caller
+   * degrades (the object's draw is skipped) rather than stalling.
+   */
+  precompileInBackground(
+    object: THREE.Object3D,
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    opts?: { timeoutMs?: number },
+  ): Promise<boolean>;
+  /**
    * Compiles EVERY pipeline this layer draws with, in the render-target context
    * it really draws them in, and returns how many compiles ran.
    *
@@ -1787,6 +1811,42 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       } finally {
         renderer.setRenderTarget(previousTarget);
         camera.layers.mask = previousMask;
+      }
+    },
+    async precompileInBackground(object, scene, camera, opts) {
+      const timeoutMs = opts?.timeoutMs ?? PRECOMPILE_COLD_PASS_TIMEOUT_MS;
+      const previousTarget = renderer.getRenderTarget();
+      // A CLONE, deliberately: the live loop is drawing between awaits, and the
+      // real camera's layer mask must not be SDF_LAYER for the whole compile.
+      const bgCamera = camera.clone();
+      bgCamera.layers.set(SDF_LAYER);
+      bgCamera.updateMatrixWorld();
+      bgCamera.matrixWorldInverse.copy(bgCamera.matrixWorld).invert();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        renderer.setRenderTarget(target);
+        if (marchMrt) renderer.setMRT(marchMrt as never);
+        // Restore the renderer's globals IMMEDIATELY after the synchronous
+        // prologue: compileAsync has already snapshot the render context
+        // (target + MRT) that the pipeline descriptor is built against.
+        const compile = renderer.compileAsync(object, bgCamera, scene);
+        if (marchMrt) renderer.setMRT(null);
+        renderer.setRenderTarget(previousTarget);
+        const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), timeoutMs); });
+        const outcome = await Promise.race([compile.then(() => 'ok' as const), timeout]);
+        if (timer !== undefined) clearTimeout(timer);
+        if (outcome === 'timeout') {
+          console.warn(`[sdf-layer] background precompile did not settle in ${timeoutMs} ms — degrading`);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('[sdf-layer] background precompile failed', err);
+        return false;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        if (marchMrt) renderer.setMRT(null);
+        renderer.setRenderTarget(previousTarget);
       }
     },
     async precompilePasses(scene, camera, opts) {

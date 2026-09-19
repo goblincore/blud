@@ -128,6 +128,40 @@ describe('crowd type visible-only packing (perf 7e)', () => {
   });
 });
 
+describe('crowd type reserve/attach split (defer-compile fallback)', () => {
+  it('reserves the lowest free slot and binds a later view to exactly that slot', () => {
+    const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256);
+
+    const reserved = t.reserveSlot();
+    expect(reserved).toBe(0);
+    // Reserved is not attached: the view has not been built yet.
+    expect(t.info().attached).toBe(0);
+
+    const rebinds: number[] = [];
+    const view = stubView(0, []);
+    (view as unknown as { rebind: (r: { slot: number }) => void }).rebind = (r) => { rebinds.push(r.slot); };
+    t.attachAt(view, reserved);
+    expect(rebinds).toEqual([0]);
+    expect(t.info().attached).toBe(1);
+
+    // Attaching a second view to the same slot is the misuse the split can
+    // invite, so it throws instead of silently overwriting a live instance.
+    expect(() => t.attachAt(stubView(0, []), reserved)).toThrow(/already occupied/);
+  });
+
+  it('detach recycles a reserved-but-unattached slot instead of leaking it', () => {
+    const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256);
+
+    expect(t.attach(stubView(0, []))).toBe(0);
+    const reserved = t.reserveSlot();
+    expect(reserved).toBe(1);
+    t.detach(reserved);
+    expect(t.reserveSlot()).toBe(1);
+  });
+});
+
 describe('crowd type dispatch switch (stage a-2)', () => {
   it('swaps the screen quad in for the proxy boxes and stamps instCfg.y', () => {
     const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
