@@ -62,7 +62,7 @@ export interface FireVolumeTuning {
   /** Sheet-length scale for the HEAD (and its crown), and the CEILING over the
    *  head for every limb's sheet (headTop + headRise * rise): < 1 keeps the flame over
    *  the head short so the head stays readable; the body keeps `rise`. */
-  headRise: number;
+  headRise: number;   // default 1 = OFF (owner 2026-09-19: lower `rise` instead)
   /** Flame strength left right around the head (0..1), from EVERY limb's
    *  sheet: the shoulder flame otherwise climbs over the face. */
   headClear: number;
@@ -72,7 +72,7 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   resolutionScale: 0.4,
   steps: 48,
   tempGain: 2.0,
-  rise: 0.55,
+  rise: 0.45,
   curlStrength: 0.07,
   curlScale: 1.5,
   lag: 0.3,
@@ -88,8 +88,8 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   coreR: 0.16,
   density: 1,
   skin: 0.3,
-  headRise: 0.35,
-  headClear: 0.25,
+  headRise: 1,
+  headClear: 1,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider

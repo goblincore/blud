@@ -242,7 +242,9 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     // curl field (+-35 %, in space and time) so the tips end at scattered,
     // flickering heights. The sheet's own taper brings each to a point.
     let headCol = 1.0 - smoothstep(0.15, 0.45, colR);
-    let headShrink = mix(1.0, clamp(abs(headRiseK) * (1.0 + 0.35 * curl.y), 0.05, 1.0), headCol);
+    // The wobble scales with the shrink itself, so headRise 1 is exactly OFF.
+    let hk = clamp(abs(headRiseK), 0.0, 1.0);
+    let headShrink = mix(1.0, clamp(hk * (1.0 + 0.35 * (1.0 - hk) * curl.y), 0.05, 1.0), headCol);
     for (var j: i32 = 0; j < flameN; j = j + 1) {
       let i = select(hitIdx[min(j, FIRE_RAY_CAPS - 1)], j, flameAll);
       let rec0 = (*caps)[i * 3];
