@@ -60,7 +60,7 @@ const MARCH_DIR = 'src/lab/sdf-zombie/webgpu/march';
 const MARCH_TREE_SRC = [
   readFileSync('src/lab/sdf-zombie/webgpu/march.wgsl.ts', 'utf8'),
   ...readdirSync(MARCH_DIR, { recursive: true })
-    .filter((f: string) => f.endsWith('.ts'))
+    .filter((f: string) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
     .sort()
     .map((f: string) => readFileSync(`${MARCH_DIR}/${f}`, 'utf8')),
 ].join('\n');
