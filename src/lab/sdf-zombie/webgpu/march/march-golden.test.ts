@@ -5,6 +5,7 @@
 // points, hashed. Recorded before the first move; it must never change during
 // phase 1. A diff here means a move altered shader text — fix the move, never
 // update this snapshot.
+// @ts-expect-error — node:crypto available in vitest via happy-dom/node
 import { createHash } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import * as M from '../march.wgsl';
