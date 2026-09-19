@@ -176,9 +176,26 @@ describe('post-aa module wiring', () => {
 
   it('every target gets the explicit first clear after (re)allocation', () => {
     expect(src).toContain(
-      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB, fireOut])',
+      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB])',
     );
     expect(src).toContain('targetsNeedInit = true;');
+  });
+
+  it('round 2b: the fire composite blends into the capture, no copy draw', () => {
+    // out = scene * T + emission via dstFactor = srcAlpha (srcAlpha is T).
+    expect(src).toContain('fireCompositeMat.blending = THREE.CustomBlending;');
+    expect(src).toContain('fireCompositeMat.blendSrc = THREE.OneFactor;');
+    expect(src).toContain('fireCompositeMat.blendDst = THREE.SrcAlphaFactor;');
+    expect(src).toContain('fireCompositeMat.blendSrcAlpha = THREE.OneFactor;');
+    expect(src).toContain('fireCompositeMat.blendDstAlpha = THREE.ZeroFactor;');
+    // The separate full-res composite target and its copy draw are gone.
+    expect(src).not.toContain('fireOut');
+    expect(src).not.toContain('fireCopyMat');
+  });
+
+  it('round 2b: the fire resolve + history run at the march resolution', () => {
+    expect(src).toContain('fireHistA.setSize(fireTarget.width, fireTarget.height);');
+    expect(src).toContain('fireHistB.setSize(fireTarget.width, fireTarget.height);');
   });
 
   it('a sink added AFTER the redirect is handed the current target', () => {
@@ -318,7 +335,7 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(calls.render).toBe(0);
   });
 
-  it('setFireVolume(true) runs the four fire passes into the capture', () => {
+  it('setFireVolume(true) runs the three fire passes into the capture', () => {
     const { renderer, calls } = stubRenderer();
     const post = createPostAa(renderer);
     post.setFxaa(false);
@@ -328,6 +345,9 @@ describe('post-aa all-off parity (the hard gate)', () => {
         resolutionScale: 0.5, steps: 32, tempGain: 1.6, sootGain: 0.6,
         rise: 1.1, sootRise: 2.2, curlStrength: 0.35, curlScale: 1.2,
         lag: 0.3, lagMaxM: 0.6, history: 0.85, cardsPerBody: 5, smokeTailSec: 2,
+        noiseScale: 2.4, noiseStretch: 0.5, erode: 0.55, erodeRise: 0.6,
+        edgeSharp: 2.5, coreR: 0.12, smokeAlbedo: 0.5, smokeAmbient: 0.55,
+        smokeFireLit: 1.0, smokeSpread: 0.4,
       },
       time: 1, frame: 3,
       invViewProj: new THREE.Matrix4(),
@@ -337,7 +357,7 @@ describe('post-aa all-off parity (the hard gate)', () => {
       boundsMax: [1, 3, 1] as [number, number, number],
     };
     post.setFireVolume(true, frame);
-    // The first render settles the target init loop; then the four passes are
+    // The first render settles the target init loop; then the fire passes are
     // the ONLY draws for a frame with every other effect off.
     post.render(() => {});
     calls.setRenderTarget = 0;
@@ -348,10 +368,12 @@ describe('post-aa all-off parity (the hard gate)', () => {
     post.render(() => { chainCalls++; });
 
     expect(chainCalls).toBe(1);
-    // Four fire draws, then the chain's own final blit.
-    expect(calls.render).toBe(5);
-    expect(calls.passes.slice(0, 4)).toEqual([
-      'post:fire-march', 'post:fire-resolve', 'post:fire-composite', 'post:fire-copy',
+    // Three fire draws (march, resolve, composite-into-capture), then the
+    // chain's own final blit. Round 2's separate composite target + copy draw
+    // are gone: the composite BLENDS into the capture.
+    expect(calls.render).toBe(4);
+    expect(calls.passes.slice(0, 3)).toEqual([
+      'post:fire-march', 'post:fire-resolve', 'post:fire-composite',
     ]);
   });
 

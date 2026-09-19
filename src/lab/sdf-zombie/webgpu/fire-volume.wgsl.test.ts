@@ -42,6 +42,31 @@ describe('fire volume march WGSL', () => {
     expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('alphaHash');
     expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('alphaTest');
   });
+  it('erodes the shape into tongues (round 2b)', () => {
+    // A noise fbm sampled in flame space, MULTIPLICATIVELY subtracted from the
+    // capsule shape with a height-growing amount, then contrast-stretched.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('fireFbm(fq)');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let erodeAmt = erode * smoothstep(0.0, rise * erodeRise, hErode);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let density = saturate(shape * saturate(1.0 - erosion * erodeAmt) * edgeSharp);');
+    // The fbm is normalised so the erosion can actually reach the core value.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('return v * 1.142857;');
+    // Temperature for the ramp is the eroded density, cooled with height.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let temp = density * cool;');
+  });
+  it('scrolls the flame noise down so features rise with the flame', () => {
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('fq.y = fq.y - cfg2.z * rise * freq * stretch;');
+  });
+  it('scatters lit smoke instead of only darkening (round 2b)', () => {
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let inscatter = soot * smokeGain * smokeAlbedo');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('smokeAmbient * ambientCol');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('smokeFireLit * glow * fireLitCol');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('emission = emission + T * inscatter * stepM;');
+    // sootGain 0 must be a true smoke-off switch (the look metric's twin).
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let smokeGain = clamp(cfg2.x, 0.0, 1.0);');
+    // The column widens with height, and smoke is advected harder than flame.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('dS = fireSdCapsule(p + cv * 1.7 - lag, a, b) - radius;');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('spread * max(h - 0.4 * rise, 0.0)');
+  });
 });
 
 describe('fire volume resolve WGSL', () => {
@@ -56,8 +81,11 @@ describe('fire volume resolve WGSL', () => {
 });
 
 describe('fire volume composite WGSL', () => {
-  it('starts with its main fn and is scene * T + emission', () => {
+  it('returns (emission, transmittance) for the blend and never reads the scene', () => {
     expect(/^fn\s+fireVolumeComposite\s*\(/.test(FIRE_VOLUME_COMPOSITE_WGSL)).toBe(true);
-    expect(FIRE_VOLUME_COMPOSITE_WGSL).toContain('scene * fire.a + fire.rgb');
+    // The blend factors (One, SrcAlpha) turn this into scene * T + emission in
+    // the capture target, so the pass must not sample the target it writes.
+    expect(FIRE_VOLUME_COMPOSITE_WGSL).toContain('return vec4<f32>(fire.rgb, fire.a);');
+    expect(FIRE_VOLUME_COMPOSITE_WGSL).not.toContain('sceneTex');
   });
 });

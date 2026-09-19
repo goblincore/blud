@@ -1,0 +1,403 @@
+{
+  "url": "/sdf-flame-lab.html?seed=1&tongue=volume",
+  "backend": "webgpu",
+  "viewport": {
+    "width": 1380,
+    "height": 820
+  },
+  "technique": "volume",
+  "flow": null,
+  "flowSweep": null,
+  "kitStandoff": null,
+  "kitSweep": null,
+  "clock": null,
+  "frozen": false,
+  "burst": 1,
+  "poses": [
+    "stand",
+    "close",
+    "walk"
+  ],
+  "stages": [
+    {
+      "name": "fresh",
+      "char": 0
+    },
+    {
+      "name": "charred",
+      "char": 0.6
+    }
+  ],
+  "luma": false,
+  "lumaReport": null,
+  "contact": {
+    "file": "volume-contact.png",
+    "frames": [
+      "volume-close-fresh.png",
+      "volume-stand-fresh.png",
+      "volume-stand-charred.png"
+    ],
+    "tiles": [
+      "3321.png",
+      "3323.png",
+      "3325.png"
+    ],
+    "bodyPx": 400
+  },
+  "shots": [
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "volume-stand-fresh.png",
+      "std": 35.09,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0,
+      "probe": {
+        "torso": [
+          630.9080821109176,
+          360.7353102720242
+        ],
+        "head": [
+          617.1865545795314,
+          320.6579407490274
+        ],
+        "right": [
+          713.7155080145254,
+          365.07946581527335
+        ],
+        "pxPerM": 82.92129685530398,
+        "bounds": [
+          0,
+          0,
+          1379,
+          819
+        ],
+        "world": [
+          -0.7123142537119107,
+          1.3276174287006026,
+          0.03228883668204817
+        ],
+        "vel": [
+          0,
+          0,
+          0
+        ]
+      },
+      "metrics": {
+        "boxPx": 1131600,
+        "flamePx": 543512,
+        "flameFrac": 0.4803,
+        "median": 60.77,
+        "structure": 2.39,
+        "gaps": 0.0011
+      },
+      "metricsTight": {
+        "boxPx": 1131600,
+        "flamePx": 543512,
+        "flameFrac": 0.4803,
+        "median": 60.77,
+        "structure": 2.39,
+        "gaps": 0.0011
+      }
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "volume-stand-charred.png",
+      "std": 31.58,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0,
+      "probe": {
+        "torso": [
+          632.6719906768014,
+          361.0627943476107
+        ],
+        "head": [
+          617.2085826161945,
+          320.91169621552837
+        ],
+        "right": [
+          716.649249429221,
+          365.53616668602734
+        ],
+        "pxPerM": 84.09632006008901,
+        "bounds": [
+          0,
+          0,
+          1379,
+          819
+        ],
+        "world": [
+          -0.6846248679261198,
+          1.3260024693810926,
+          0.032540354102465245
+        ],
+        "vel": [
+          0,
+          0,
+          0
+        ]
+      },
+      "metrics": {
+        "boxPx": 1131600,
+        "flamePx": 520668,
+        "flameFrac": 0.4601,
+        "median": 57.1,
+        "structure": 2.28,
+        "gaps": 0.0018
+      },
+      "metricsTight": {
+        "boxPx": 1131600,
+        "flamePx": 520668,
+        "flameFrac": 0.4601,
+        "median": 57.1,
+        "structure": 2.28,
+        "gaps": 0.0018
+      }
+    },
+    {
+      "pose": "close",
+      "stage": "fresh",
+      "char": 0,
+      "file": "volume-close-fresh.png",
+      "std": 61.3,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0,
+      "probe": {
+        "torso": [
+          538.3839834246826,
+          313.5910390988849
+        ],
+        "head": [
+          504.99663757416727,
+          225.89370169052467
+        ],
+        "right": [
+          782.0773530891554,
+          293.94010100225836
+        ],
+        "pxPerM": 244.48439170323908,
+        "bounds": [
+          0,
+          0,
+          1379,
+          819
+        ],
+        "world": [
+          -0.6948555529216689,
+          1.3261741037272279,
+          0.0324006633334628
+        ],
+        "vel": [
+          0,
+          0,
+          0
+        ]
+      },
+      "metrics": {
+        "boxPx": 1131600,
+        "flamePx": 735247,
+        "flameFrac": 0.6497,
+        "median": 93.1,
+        "structure": 4.914,
+        "gaps": 0.0574
+      },
+      "metricsTight": {
+        "boxPx": 1131600,
+        "flamePx": 735247,
+        "flameFrac": 0.6497,
+        "median": 93.1,
+        "structure": 4.914,
+        "gaps": 0.0574
+      }
+    },
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "volume-close-charred.png",
+      "std": 53.46,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0,
+      "probe": {
+        "torso": [
+          539.7109622316075,
+          313.85341308113055
+        ],
+        "head": [
+          505.0668273359511,
+          226.42603331738368
+        ],
+        "right": [
+          785.5623148823843,
+          294.2566752008108
+        ],
+        "pxPerM": 246.631141050287,
+        "bounds": [
+          0,
+          0,
+          1379,
+          819
+        ],
+        "world": [
+          -0.6859084795127596,
+          1.324919066736561,
+          0.03255425524916479
+        ],
+        "vel": [
+          0,
+          0,
+          0
+        ]
+      },
+      "metrics": {
+        "boxPx": 1131600,
+        "flamePx": 709416,
+        "flameFrac": 0.6269,
+        "median": 80.29,
+        "structure": 4.51,
+        "gaps": 0.0303
+      },
+      "metricsTight": {
+        "boxPx": 1131600,
+        "flamePx": 709416,
+        "flameFrac": 0.6269,
+        "median": 80.29,
+        "structure": 4.51,
+        "gaps": 0.0303
+      }
+    },
+    {
+      "pose": "walk",
+      "stage": "fresh",
+      "char": 0,
+      "file": "volume-walk-fresh.png",
+      "std": 34.65,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0,
+      "probe": {
+        "torso": [
+          627.3590362359563,
+          360.78281184105657
+        ],
+        "head": [
+          614.0126392141569,
+          320.5377833171975
+        ],
+        "right": [
+          715.1302969486842,
+          365.0211726647444
+        ],
+        "pxPerM": 87.87353361264941,
+        "bounds": [
+          0,
+          0,
+          1379,
+          819
+        ],
+        "world": [
+          -0.7148164626079528,
+          1.3276832532211666,
+          0.032538048534308854
+        ],
+        "vel": [
+          0,
+          0,
+          0
+        ]
+      },
+      "metrics": {
+        "boxPx": 1131600,
+        "flamePx": 544817,
+        "flameFrac": 0.4815,
+        "median": 60.91,
+        "structure": 2.372,
+        "gaps": 0.0017
+      },
+      "metricsTight": {
+        "boxPx": 1131600,
+        "flamePx": 544817,
+        "flameFrac": 0.4815,
+        "median": 60.91,
+        "structure": 2.372,
+        "gaps": 0.0017
+      }
+    },
+    {
+      "pose": "walk",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "volume-walk-charred.png",
+      "std": 31.59,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0,
+      "probe": {
+        "torso": [
+          629.1256744526789,
+          361.0341101756495
+        ],
+        "head": [
+          614.0173637583679,
+          320.6563192463411
+        ],
+        "right": [
+          718.011060097911,
+          365.3728473661004
+        ],
+        "pxPerM": 88.99121541876721,
+        "bounds": [
+          0,
+          0,
+          1379,
+          819
+        ],
+        "world": [
+          -0.6894594304828856,
+          1.3265282584979863,
+          0.03242742475402366
+        ],
+        "vel": [
+          0,
+          0,
+          0
+        ]
+      },
+      "metrics": {
+        "boxPx": 1131600,
+        "flamePx": 520162,
+        "flameFrac": 0.4597,
+        "median": 57.1,
+        "structure": 2.275,
+        "gaps": 0.0025
+      },
+      "metricsTight": {
+        "boxPx": 1131600,
+        "flamePx": 520162,
+        "flameFrac": 0.4597,
+        "median": 57.1,
+        "structure": 2.275,
+        "gaps": 0.0025
+      }
+    }
+  ]
+}
