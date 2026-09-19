@@ -259,6 +259,7 @@ import { applyBoneCullMode, applyBoneMesh, copyUniformValues, fisheyeReport, gib
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
 import { applyChunkKindLook, ensureGibAssets, gibAssetArchetypeOf, gibAssetArmed, newBlastProfile, primsLongAxis, reacquireHeldProp, retireActor, scheduleGib, stepPendingGibImpulses } from './game-gibs-leaves';
 import { breechInRig, locatorInView, newTracerQuad, setQuadMatrix, startReload, stepBursts, viewToRig } from './game-weapon-leaves';
+import { stampLevelProbeRoom } from './game-world-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -2874,7 +2875,7 @@ async function main() {
     workerFactory: () => new Worker(new URL('../probe-grid.worker.ts', import.meta.url), { type: 'module' }) as unknown as ProbeWorkerLike,
     onReady: (roomId) => {
       if (import.meta.env.DEV) console.info(`[room-probes] room ${roomId} baked`);
-      stampLevelProbeRoom(roomId);
+      stampLevelProbeRoom(ctx, roomId);
     },
   });
   if (ctx.probes.probesOff) ctx.world.roomProbes.setProbes(0, -1);
@@ -2950,7 +2951,7 @@ async function main() {
         probeTex: slots.probeTex, probeMin: slots.probeMin, probeInvExtent: slots.probeInvExtent,
         probeDims: slots.probeDims, probeCfg: { value: new THREE.Vector4() },
       }, r.id);
-      stampLevelProbeRoom(r.id);
+      stampLevelProbeRoom(ctx, r.id);
     }
     for (const [roomId, node] of ctx.lighting.levelProbeNodes) ctx.world.levelLightLists.set(roomId, levelLightsNode(levelSceneLights(roomId), node));
     // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
@@ -2967,24 +2968,8 @@ async function main() {
       ctx.world.levelNodeMaterials.push(nm);
     }
   }
-  /** The room's level cfg: weight, and the gain that puts the probe level at
-   *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
-  function stampLevelProbeRoom(roomId: number) {
-    const node = ctx.lighting.levelProbeNodes.get(roomId);
-    if (!node) return;
-    const grid = ctx.world.roomProbes.gridOf(roomId);
-    let gain = 0;
-    if (grid) {
-      gain = ctx.lighting.levelProbeGain >= 0 ? ctx.lighting.levelProbeGain : levelMatchedGain(grid, {
-        sky: [ctx.lighting.hemi.color.r, ctx.lighting.hemi.color.g, ctx.lighting.hemi.color.b],
-        ground: [ctx.lighting.hemi.groundColor.r, ctx.lighting.hemi.groundColor.g, ctx.lighting.hemi.groundColor.b],
-        intensity: ctx.lighting.hemiBase,
-      });
-    }
-    node.slots.probeCfg.value.set(ctx.lighting.levelProbeWeight, gain, 0, 0);
-  }
   function restampLevelProbes() {
-    for (const roomId of ctx.lighting.levelProbeNodes.keys()) stampLevelProbeRoom(roomId);
+    for (const roomId of ctx.lighting.levelProbeNodes.keys()) stampLevelProbeRoom(ctx, roomId);
   }
   /** Re-list the scene's lights on every room (a light was added — the
    *  muzzle flash with the gun) and force the level pipelines to rebuild. */
