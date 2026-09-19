@@ -256,6 +256,7 @@ import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createMiscSeams } from './game-seams-misc';
 import { applyBoneCullMode, applyBoneMesh, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
+import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -2722,29 +2723,6 @@ async function main() {
    *  him in the zombie's face — and one bad key in his sheet block already
    *  cost an hour on 2026-09-04 producing exactly that symptom. */
   ctx.vfx.faceCache = new Map<string, { tex: THREE.Texture; atlas: THREE.Vector4; mean: number }>();
-  function faceFor(name: string) {
-    const hit = ctx.vfx.faceCache.get(name);
-    if (hit) return hit;
-    const sheet = compileCharacterSheet(characterEntry(name));
-    if (sheet.error) {
-      console.error(`[sdf-game] ${name}: sheet block failed to compile, falling `
-        + `back to the zombie face. Fix it:\n  ${sheet.error}`);
-    }
-    const f = sheet.face;
-    const tex = new THREE.TextureLoader().load(f.url);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    tex.flipY = true;
-    const [x, y, w, h, sw, sh] = f.rect;
-    const entry = {
-      tex,
-      atlas: new THREE.Vector4(w / sw, h / sh, x / sw, y / sh),
-      mean: f.mean,
-    };
-    ctx.vfx.faceCache.set(name, entry);
-    return entry;
-  }
 
   ctx.probes.weight = DEFAULT_PROBE_WEIGHT;
 
@@ -2833,37 +2811,6 @@ async function main() {
    *  the requested semantics, so there is no extra flag machinery. */
   ctx.render.boneRatioOverride = null;
 
-  /** Push the panel's tissue ramp into one view's surfCfg3, plus the cavity
-   *  pair. Component order is pinned by zombie-gpu's uniform table (x
-   *  depthAmp, y fat, z muscle, w visceraAmp) — the same order applyMaterial
-   *  writes the material defaults, so this is a re-apply, not a second
-   *  writer with its own opinion. visceraDepth is its own uniform. Until
-   *  entrails task 7 w stayed where applyMaterial left it; the panel's
-   *  viscera knob now owns it, and its default (1) matches the preset, so
-   *  an untouched panel still shades identically. */
-  function applyWoundRamp(view: ZombieGpuView): void {
-    const c = view.uniforms.surfCfg3.value;
-    c.x = ctx.vfx.woundTuning.woundDepthAmp;
-    c.y = ctx.vfx.woundTuning.fatDepth;
-    c.z = ctx.vfx.woundTuning.muscleDepth;
-    c.w = ctx.vfx.woundTuning.visceraAmp;
-    view.uniforms.visceraDepth.value = ctx.vfx.woundTuning.visceraDepth;
-    // organAmp rides the same re-apply (organs r3): applyMaterial stamps the
-    // preset default on every rebuild, so the panel's value must be
-    // re-stamped after it or a cast rebuild would silently reset the knob.
-    view.uniforms.organAmp.value = ctx.vfx.woundTuning.organAmp;
-    // MEAT DETAIL (2026-09-12): the four MEAT sliders → meatCfg (x amp, y clot, z glint, w crevice).
-    view.uniforms.meatCfg.value.set(ctx.vfx.woundTuning.meatAmp, ctx.vfx.woundTuning.meatClot, ctx.vfx.woundTuning.meatGlint, ctx.vfx.woundTuning.meatCrevice);
-  }
-
-  /** The applied tuning record plus body 1's live surfCfg3 — the shader
-   *  truth half of the seam's woundTuning getter/setWoundTuning return, so
-   *  "did the slider reach the field" is one read, not a hope. */
-  function woundTuningNow(): WoundTuningValues & { surfCfg3: number[] | null } {
-    const c = ctx.world.actors[0]?.view.uniforms.surfCfg3.value;
-    return { ...ctx.vfx.woundTuning, surfCfg3: c ? [c.x, c.y, c.z, c.w] : null };
-  }
-
   /** The panel → field entry point, exposed on __sdfGame.setWoundTuning.
    *  The ramp trio, the viscera pair and organAmp write uniforms live; gutSize,
    *  spillChance, coilTightness and springiness take effect on the next spawn
@@ -2883,7 +2830,7 @@ async function main() {
     for (const k of ['meatAmp', 'meatClot', 'meatGlint', 'meatCrevice'] as const) {
       if (o[k] !== undefined) { ctx.vfx.woundTuning[k] = o[k]!; ramp = true; }
     }
-    if (ramp) for (const a of ctx.world.actors) applyWoundRamp(a.view);   // chunks copy the body template's meatCfg at spawn
+    if (ramp) for (const a of ctx.world.actors) applyWoundRamp(ctx, a.view);   // chunks copy the body template's meatCfg at spawn
     if (o.gutSize !== undefined) ctx.vfx.woundTuning.gutSize = o.gutSize;
     // Spring knobs (organs r3): read at makeGutChain time in spillVerdict, so
     // they shape every rope spawned from now on; existing ropes keep theirs.
@@ -3222,7 +3169,7 @@ async function main() {
     // wrote the preset defaults, so a tuned panel must re-stamp its values
     // or a rebuild would silently reset the ramp (the silent-reset class
     // of bug this panel exists to kill).
-    applyWoundRamp(view);
+    applyWoundRamp(ctx, view);
     // Relaxation, explicit rather than inherited from the uniform default —
     // see GAME_RELAX for why it is 1.0 and what happened when it was 1.4.
     view.uniforms.woundCfg2.value.y = GAME_RELAX;
@@ -3237,7 +3184,7 @@ async function main() {
     view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
     const face = name === 'zombie'
       ? { tex: ctx.vfx.faceTex, atlas: ctx.vfx.faceAtlas, mean: ZOMBIE_FLAT.mean }
-      : faceFor(name);
+      : faceFor(ctx, name);
     view.setFaceTexture(face.tex, face.atlas, face.mean);
     view.uniforms.faceCfg.value.x = 1;
     view.uniforms.faceCfg.value.y = 1.0;
@@ -6870,7 +6817,7 @@ async function main() {
       const tw = performance.now();
       a.blast({ wounds: pb.wounds, meterCredit: pb.meterCredit, impulse: pb.rigImpulse });
       // Guts, on the same stamp-time rule the pellet path uses.
-      for (const w of pb.wounds) spillVerdict(a, w);
+      for (const w of pb.wounds) spillVerdict(ctx, a, w);
       prof.wound += performance.now() - tw;
     }
     ctx.dynamite.gibbed += gibbed;
@@ -6896,7 +6843,7 @@ async function main() {
     // corridor still gets a light (it does nothing useful, but consistency beats
     // a distance gate nobody can see).
     igniteExplosionLight(at);
-    const burst = scaleBurstVisual(fx.burst);
+    const burst = scaleBurstVisual(ctx, fx.burst);
     // BLAST REFRACTION (experiment, default OFF): feed the bounded post-aa ring
     // the blast's WORLD position, the shell's birth radius and its peak screen
     // offset. The ring reprojects every frame from its world position and a
@@ -7482,16 +7429,6 @@ async function main() {
       console.error('[sdf-game] explosion-vfx unavailable, using the stand-in:', e);
       ctx.vfx.explosionVfx = null;
     }
-  }
-
-  /** The resolver's `BurstVisual` with the owner's size multiplier applied —
-   *  the ONE place `?fxsize` enters, for all three modes. The procedural module
-   *  reads the height it is handed times its own `fireScale`, which is left at
-   *  1.0 on this page precisely so this line is the only multiplier (see the
-   *  setTuning comment above: applying it in both places made the procedural
-   *  burst 2.38x smaller than the atlas it is the reference against). */
-  function scaleBurstVisual(visual: BurstVisual): BurstVisual {
-    return { ...visual, heightM: visual.heightM * ctx.vfx.size };
   }
 
   function stepWeaponSlots(dt: number): void {
@@ -8088,29 +8025,6 @@ async function main() {
   // this rope's 'gut' droplets — stepBlood skips that kind — so the goo pass
   // draws the rope as fused metaballs riding the wound's emit point.
   ctx.vfx.gutRopes = new Map<number, { chain: GutChain; wound: Wound; droplets: Droplet[] }>();
-  /** The one spill decision, taken at stamp time where cluster membership is
-   *  free. Call for EVERY stamped wound (live fire routes through
-   *  registerBleed; the capture twins stamp through stampBlast, so they call
-   *  this directly). Rolls bleedRng — see the freeze note on registerBleed. */
-  function spillVerdict(a: ZombieActor, wound: Wound): void {
-    const entry = ctx.vfx.gutRopes.get(a.id);
-    const verdict = shouldSpill(wound, entry !== undefined, rngStreams.bleed);
-    if (verdict === 'none') return;
-    if (verdict === 'tear') {
-      // Keep the entry: the detached chain keeps falling/settling in
-      // stepGutRopes, and its presence still blocks a second rope.
-      if (entry) ctx.vfx.gutRopes.set(a.id, { ...entry, chain: detachGutChain(entry.chain) });
-      return;
-    }
-    const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
-    ctx.vfx.gutRopes.set(a.id, {
-      chain: makeGutChain(anchor, {
-        coilTightness: ctx.vfx.woundTuning.coilTightness,
-        springiness: ctx.vfx.woundTuning.springiness,
-      }),
-      wound, droplets: [],
-    });
-  }
 
   /** Per-frame rope sim, BEFORE the bleed block (so stepBlood sees the same
    *  frame it does): pin to the wound's current emit point — the anchor is
@@ -8230,7 +8144,7 @@ async function main() {
     // invariant above (OFF mid-stream = ON-stream-paused) only holds if
     // nothing advances the stream while bleed is frozen. The capture twins
     // (stampWoundAt/explode) call spillVerdict directly instead.
-    spillVerdict(a, wound);
+    spillVerdict(ctx, a, wound);
   }
 
   // Wire every actor's severs into the chunk spawner (template = that
@@ -10712,10 +10626,10 @@ function performBenchAction(a: BenchAction): void {
      *  the verify-the-panel-drives-the-shader check, one call, no guessing. */
     setWoundTuning(o: Partial<WoundTuningValues>) {
       applyWoundTuning(o);
-      return woundTuningNow();
+      return woundTuningNow(ctx);
     },
     get woundTuning() {
-      return woundTuningNow();
+      return woundTuningNow(ctx);
     },
     /** Bone tubes (2026-09-02-bone-tubes, task 5): OFF ships as the field's
      *  bones; ON draws every posed bone as an instanced polygonal tube and
@@ -11211,7 +11125,7 @@ function performBenchAction(a: BenchAction): void {
       // Capture twins must spill too — task 8 judges the rope from exactly
       // this seam. Rolls bleedRng deterministically: same command sequence,
       // same rope-or-not.
-      spillVerdict(a, w);
+      spillVerdict(ctx, a, w);
       return hit;
     },
     /** Diagnostic detonation: one blast stamped through resolveExplosion
@@ -11230,7 +11144,7 @@ function performBenchAction(a: BenchAction): void {
         // One decision PER stamped wound: the first cavity wound spawns,
         // the rest tear — a blast blows the gut out rather than growing
         // multiple ropes (shouldSpill's one-rope-per-body rule).
-        for (const w of pb.wounds) spillVerdict(a, w);
+        for (const w of pb.wounds) spillVerdict(ctx, a, w);
         totalWounds += pb.wounds.length;
       }
       return { radiusM: fx.radiusM, bodiesHit: fx.perBody.length, totalWounds };
@@ -11279,7 +11193,7 @@ function performBenchAction(a: BenchAction): void {
     /** Force a burst at a point, for a capture that must not wait for a throw. */
     spawnExplosionFx: (x: number, y: number, z: number, heightM = 2, kind: 'air' | 'ground' = 'ground') => {
       const visual = { kind, at: [x, y, z] as Vec3, heightM };
-      const scaled = scaleBurstVisual(visual);
+      const scaled = scaleBurstVisual(ctx, visual);
       igniteExplosionLight(visual.at);
       if (ctx.vfx.explosionVfx) ctx.vfx.explosionVfx.spawn(scaled);
       else if (ctx.vfx.burstLayer) ctx.vfx.burstLayer.spawn(scaled);
