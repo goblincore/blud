@@ -220,10 +220,28 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     var shape = 0.0;
     var uBest = 1.0;
     var minOut = 1e6;
+    // HEAD PASS: the nearest head capsule (pad < 0) in plan view, its top, and
+    // the distance to it (headClear). Needed BEFORE the flame loop, which
+    // shortens every sheet over the head column.
     var dHead = 1e6;
-    // The nearest head's top and axis, for the ceiling over it.
     var headTop = 1e6;
-    var headXZ = vec2<f32>(1e6, 1e6);
+    var colR = 1e6;
+    for (var j: i32 = 0; j < flameN; j = j + 1) {
+      let i = select(hitIdx[min(j, FIRE_RAY_CAPS - 1)], j, flameAll);
+      let pad = (*caps)[i * 3 + 2].w;
+      if (pad >= 0.0) { continue; }
+      let r0 = (*caps)[i * 3];
+      let r1 = (*caps)[i * 3 + 1];
+      dHead = min(dHead, fireSdCapsule(qw, r0.xyz, r1.xyz) - r0.w);
+      let cr = length(qw.xz - (r0.xz + r1.xz) * 0.5);
+      if (cr < colR) { colR = cr; headTop = max(r0.y, r1.y) + r0.w; }
+    }
+    // Over the head column, every limb's sheet ENDS at headTop + headRise*rise
+    // (owner: the flame straight above the head was too tall). The sheet is
+    // SHORTENED, not cut, so its width/density taper still brings the tongues
+    // to points at the lower height (a hard ceiling read as a flat top).
+    let headCol = 1.0 - smoothstep(0.18, 0.4, colR);
+    let headCeil = headTop + rise * abs(headRiseK);
     for (var j: i32 = 0; j < flameN; j = j + 1) {
       let i = select(hitIdx[min(j, FIRE_RAY_CAPS - 1)], j, flameAll);
       let rec0 = (*caps)[i * 3];
@@ -237,15 +255,9 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       let k = clamp(dot(qw - a, ab) / max(dot(ab, ab), 1e-9), 0.0, 1.0);
       let under = a + ab * k;
       let sRaw = qw.y - under.y;
-      let riseC = max(rise * abs(rec2.w), 1e-3);
-      if (rec2.w < 0.0) {
-        let dh = fireSdCapsule(qw, a, b) - radius;
-        if (dh < dHead) {
-          dHead = dh;
-          headTop = max(a.y, b.y) + radius;
-          headXZ = (a.xz + b.xz) * 0.5;
-        }
-      }
+      let riseFull = max(rise * abs(rec2.w), 1e-3);
+      let riseHead = clamp(headCeil - under.y, 0.05, riseFull);
+      let riseC = max(mix(riseFull, riseHead, headCol), 1e-3);
       if (sRaw > riseC + coreR) { continue; }
       let sH = clamp(sRaw, 0.0, riseC);
       let u = sH / riseC;
@@ -261,13 +273,6 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       minOut = min(minOut, max(dd - w, 0.0));
     }
     shape = shape * mix(headClear, 1.0, smoothstep(0.0, 0.15, dHead));
-    // CEILING OVER THE HEAD (owner: the flame straight above the head is too
-    // tall). The shoulder / torso / arm sheets each climb the full rise and
-    // end far above the head; in a ~35 cm column over the head, cut ALL flame
-    // above headTop + headRise*rise. Away from the head nothing changes.
-    let colR = length(qw.xz - headXZ);
-    let over = qw.y - (headTop + rise * abs(headRiseK));
-    shape = shape * (1.0 - smoothstep(0.0, 0.12, over) * (1.0 - smoothstep(0.18, 0.35, colR)));
     let dtFine = stepM;
     if (shape < 1e-3) {
       // Nothing here: skip toward the nearest flame shell. The swept field is
