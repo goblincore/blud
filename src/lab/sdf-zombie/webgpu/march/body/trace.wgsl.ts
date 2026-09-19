@@ -8,6 +8,7 @@ import { DATA_ROWS, QUAD_ENTRY_SLACK, RAY_CULL_SLACK, ROW_PRIM_CLIP, ROW_PRIM_CO
 import { FACE_LAYER_WGSL } from './face.wgsl';
 import { MELT_BLOCK } from './blocks/post/melt.wgsl';
 import { BURN_BLOCK } from './blocks/post/burn.wgsl';
+import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
 
 /**
  * SECTION 2 of 4 — the trace: ray setup and pre-pass gates, the march loop,
@@ -1144,33 +1145,7 @@ ${FACE_LAYER_WGSL}
   }
   albedo = mix(albedo, gooRed, soldierWound * 0.72);
 
-  // PER-PRIMITIVE COLOUR. The fold already reports the nearest primitive at
-  // the hit (hitBest, the noise anchor); a painted one replaces the flesh
-  // albedo outright, mottle and face sheet included — a lens is not tinted
-  // skin. The gloss/painted VALUES were resolved — and the row read, once —
-  // up above calcNormal, where the noise suppression needs them; the
-  // OVERWRITE itself stays HERE, after the face pass, because a painted
-  // prim replaces everything the flesh passes laid down. Char still wins
-  // below, because burnt is burnt.
-  //
-  // GLOW PRECEDENCE (hard-surface task 3): the eye-glow kill two lines down
-  // applies to the FACE glow only — the baked sheet's own emission, which is
-  // zeroed on paint for the same reason the sheet is: the painted eyes sit
-  // exactly where a pair of sunglasses goes, and they must not shine through
-  // the lenses. Per-prim glow (primGlow, primClip.w) is AUTHORED emission on
-  // the prim itself, packed per prim, and deliberately SURVIVES this kill:
-  // the whole point of glow= is a prim that emits — the minotaur's red eyes
-  // — and those prims are painted (glow= is parse-gated on color=). The face
-  // sheet under a painted prim contributes exactly what it always did here
-  // (zero); the prim's own authored emission is a separate additive term at
-  // the composite. Nothing in that kill reads primGlow, so the sunglasses
-  // rule is intact BY CONSTRUCTION, not by a second kill that could drift.
-  if (painted > 0.0) {
-    albedo = primAlbedo;
-  }
-  faceGlow = faceGlow * (1.0 - painted);
-
-  albedo = mix(albedo, charColor, cm);
+${PAINT_CHAR_BLOCK}
 
 ${BURN_BLOCK}
 
