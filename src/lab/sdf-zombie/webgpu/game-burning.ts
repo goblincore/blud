@@ -25,6 +25,17 @@ import {
   type FlameCardFrame, type FlameCards,
 } from './flame-cards';
 import { resolveTongueTuning, type TongueTuning } from './tongue-tuning';
+import { fireCapsules, capsuleVelocities, type FireCapsule } from './fire-capsules';
+import {
+  packFireVolume, FIRE_CAPSULE_STRIDE, FIRE_VOLUME_MAX_CAPSULES, type FireVolumeBody,
+} from './fire-volume-pack';
+import { resolveFireVolumeTuning, type FireVolumeTuning } from './fire-volume-tuning';
+import type { FireVolumeFrame } from './fire-volume.wgsl';
+
+/** How a burning body's flame is drawn in the game. 'volume' (the owner's
+ *  pick, 2026-09-19) is the volumetric fire + smoke pass with a few flame cards
+ *  as accents; 'cards' is the flame-card-only look it replaced. */
+export type GameFireTechnique = 'cards' | 'volume';
 
 /** Card-pool body cap. One draw call for N bodies; bounded so an igniteAll()
  *  over a big crowd cannot size an unbounded quad buffer. */
@@ -70,12 +81,103 @@ export interface GameBurning {
   igniteAll(): number;
   extinguishAll(): void;
   activeCount(): number;
+  /** Fire technique (console seam; the flame panel's copy line calls it). */
+  setTechnique(name: GameFireTechnique): GameFireTechnique;
+  technique(): GameFireTechnique;
+  /** Volumetric fire tuning, clamped by FIRE_VOLUME_BOUNDS. */
+  setVolume(patch: Partial<FireVolumeTuning>): FireVolumeTuning;
+  volume(): FireVolumeTuning;
+  /** Flame-card tuning, clamped by TONGUE_BOUNDS. */
+  setTongueTuning(patch: Partial<TongueTuning>): TongueTuning;
+  tongue(): TongueTuning;
+  /**
+   * WARM-UP: switch the fire pass on with one dummy capsule far out of view,
+   * so the warm-up's real frame (drawOnce) compiles its three pipelines behind
+   * the loader instead of on the first ignite. Returns the undo.
+   */
+  warmVolume(): () => void;
 }
 
 export function createGameBurning(ctx: GameContext): GameBurning {
   const burning = createBurnRegistry<ZombieActor>();
   const tuning: BurnTuning = resolveBurnTuning(BURN_TUNING);
-  const tongue: TongueTuning = resolveTongueTuning();
+  let tongue: TongueTuning = resolveTongueTuning();
+  let technique: GameFireTechnique = 'volume';
+  let volume: FireVolumeTuning = resolveFireVolumeTuning();
+  /** Per burning body: its fire capsules and their velocities, refreshed on
+   *  the sim step from the posed body (the lab's rule, fire-capsules.ts). */
+  const fireSrc = new Map<ZombieActor, { caps: FireCapsule[]; vels: [number, number, number][] }>();
+  const fireBodies: FireVolumeBody[] = [];
+  const firePackBuf = new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
+  const _fireView = new THREE.Matrix4();
+  const _fireVp = new THREE.Matrix4();
+  const _firePrevVp = new THREE.Matrix4();
+  let fireWasOn = false;
+  let fireFrameIndex = 0;
+  const fireFrame: FireVolumeFrame = {
+    tuning: volume, time: 0, frame: 0,
+    invViewProj: new THREE.Matrix4(), prevViewProj: new THREE.Matrix4(),
+    near: 0.05, far: 100, capsuleCount: 0, boundsMin: [0, 0, 0], boundsMax: [0, 0, 0],
+  };
+  /** The cards' look per technique: as ACCENTS over the volume they are few,
+   *  longer and softer (the flame lab's rule); alone they are the full set. */
+  function applyCardLook(c: FlameCards): void {
+    c.setFlow(tuning.flameFlow);
+    if (technique === 'volume') {
+      c.setMaxCardsPerBody(Math.round(volume.cardsPerBody));
+      c.setTuning({ ...tongue, length: tongue.length * 1.35, gain: tongue.gain * 0.85 });
+      c.setSoftFade(tuning.cardSoftFade * 1.8);
+    } else {
+      c.setMaxCardsPerBody(Number.MAX_SAFE_INTEGER);
+      c.setTuning(tongue);
+      c.setSoftFade(tuning.cardSoftFade);
+    }
+  }
+  /** Feed (or switch off) the volumetric pass for this frame. */
+  function updateVolume(camera: THREE.Camera): void {
+    const postAa = ctx.render.postAa;
+    fireBodies.length = 0;
+    if (technique === 'volume') {
+      burning.forEachActive((a, s) => {
+        const src = fireSrc.get(a);
+        if (!src || s.burn <= 0.02) return;
+        const p = a.pose().pos;
+        fireBodies.push({ capsules: src.caps, velocities: src.vels, burn: s.burn, centre: [p[0], p[1] + 1, p[2]] });
+      });
+    }
+    if (fireBodies.length === 0) {
+      if (fireWasOn) { postAa.setFireVolume(false); fireWasOn = false; }
+      return;
+    }
+    const cam = camera as THREE.PerspectiveCamera;
+    cam.updateMatrixWorld();
+    _fireView.copy(cam.matrixWorld).invert();
+    _fireVp.multiplyMatrices(cam.projectionMatrix, _fireView);
+    const packed = packFireVolume(
+      fireBodies, [cam.position.x, cam.position.y, cam.position.z], firePackBuf, volume,
+    );
+    if (packed.capsuleCount === 0) {
+      if (fireWasOn) { postAa.setFireVolume(false); fireWasOn = false; }
+      return;
+    }
+    postAa.setFireVolumeData(packed.data);
+    fireFrame.tuning = volume;
+    fireFrame.time = clock();
+    fireFrame.frame = fireFrameIndex++;
+    fireFrame.invViewProj.copy(_fireVp).invert();
+    // First frame after enabling: the history reprojects through the CURRENT
+    // view, an identity, rather than a stale matrix.
+    fireFrame.prevViewProj.copy(fireWasOn ? _firePrevVp : _fireVp);
+    fireFrame.near = cam.near;
+    fireFrame.far = cam.far;
+    fireFrame.capsuleCount = packed.capsuleCount;
+    fireFrame.boundsMin = packed.boundsMin;
+    fireFrame.boundsMax = packed.boundsMax;
+    fireFrame.resetHistory = !fireWasOn;
+    postAa.setFireVolume(true, fireFrame);
+    _firePrevVp.copy(_fireVp);
+    fireWasOn = true;
+  }
   let cards: FlameCards | null = null;
   /** Per-body card input, rebuilt each draw from the posed body. The array is
    *  reused; only its entries are re-pushed. */
@@ -127,9 +229,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
     const c = createFlameCards({ maxBodies: FLAME_CARD_BODY_CAP });
     cards = c;
     ctx.vfx.characterEffects.scene.add(c.object);
-    c.setTuning(tongue);
-    c.setSoftFade(tuning.cardSoftFade);
-    c.setFlow(tuning.flameFlow);
+    applyCardLook(c);
     // Best-effort FIRE01 atlas (a gitignored dev placeholder; absent in a fresh
     // clone). Without it the cards run their procedural shader — the module's
     // shipped fallback. The swap needs no recompile, same as the lab.
@@ -201,6 +301,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       if (burning.has(a)) burning.kill(a);
       burning.release(a);
       cardLastPos.delete(a);
+      fireSrc.delete(a);
       // The body is leaving the world: release the panic override at once and
       // drop it from the transition sets, so a later reuse of the same actor
       // (or a stale set entry) cannot keep it fleeing.
@@ -223,13 +324,27 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       for (const a of burnPrev) if (!burnCur.has(a)) a.setBurning(false);
       const swap = burnPrev; burnPrev = burnCur; burnCur = swap;
       let any = false;
-      burning.forEachActive((a, s) => { any = true; writeUniforms(a, s); });
+      const simDt = Math.min(dt, 1 / 30);
+      burning.forEachActive((a, s) => {
+        any = true;
+        writeUniforms(a, s);
+        // The fire volume's sources ride the same posed field the cards do.
+        if (technique === 'volume') {
+          const caps = fireCapsules(a.posed());
+          const prev = fireSrc.get(a);
+          fireSrc.set(a, { caps, vels: capsuleVelocities(prev?.caps ?? null, caps, simDt) as [number, number, number][] });
+        }
+      });
       if (any) writeCrowdScalars();
     },
     updateCards(camera) {
+      // The volume first: it is a post pass fed per frame, and must switch
+      // itself off once nothing burns.
+      updateVolume(camera);
       // An uncreated pool (nothing has ever ignited) skips this entirely.
       const c = cards;
       if (!c) return;
+      applyCardLook(c);
       cardFrames.length = 0;
       const inv = frameDt > 1e-4 ? 1 / frameDt : 0;
       burning.forEachActive((a, s) => {
@@ -348,6 +463,29 @@ export function createGameBurning(ctx: GameContext): GameBurning {
     setTuning(patch) {
       Object.assign(tuning, resolveBurnTuning({ ...tuning, ...patch }));
       return tuning;
+    },
+    setTechnique(name) {
+      if (name === 'cards' || name === 'volume') technique = name;
+      if (technique !== 'volume') fireSrc.clear();
+      return technique;
+    },
+    technique: () => technique,
+    setVolume(patch) { volume = resolveFireVolumeTuning({ ...volume, ...patch }); return { ...volume }; },
+    volume: () => ({ ...volume }),
+    setTongueTuning(patch) { tongue = resolveTongueTuning({ ...tongue, ...patch }); return { ...tongue }; },
+    tongue: () => ({ ...tongue }),
+    warmVolume() {
+      const postAa = ctx.render.postAa;
+      // One capsule 50 m under the floor with a matching tiny AABB: every ray
+      // misses and early-outs, but all three fire pipelines are created.
+      firePackBuf.fill(0);
+      firePackBuf.set([0, -50, 0, 0.1, 0, -49.9, 0, 1, 0, 0, 0, 0]);
+      postAa.setFireVolumeData(firePackBuf);
+      postAa.setFireVolume(true, {
+        ...fireFrame, tuning: volume, capsuleCount: 1,
+        boundsMin: [-0.2, -50.2, -0.2], boundsMax: [0.2, -49.7, 0.2], resetHistory: true,
+      });
+      return () => { postAa.setFireVolume(false); fireWasOn = false; };
     },
     gatherDebug() { return { ...gatherDebugData }; },
     igniteAll() {

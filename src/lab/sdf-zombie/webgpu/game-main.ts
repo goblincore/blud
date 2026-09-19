@@ -4590,7 +4590,15 @@ async function main() {
         }
       }
       tp = performance.now();
-      ctx.boot.handle.drawOnce();
+      // The fire volume is a post pass that only binds while something burns:
+      // switch it on (a dummy capsule, out of view) for this one real frame so
+      // its pipelines compile here, not on the first ignite.
+      const unwarmFire = ctx.vfx.burning.warmVolume();
+      try {
+        ctx.boot.handle.drawOnce();
+      } finally {
+        unwarmFire();
+      }
       phases.drawOnce = performance.now() - tp;
       mark('warm-draw-once-done');
       // The SDF layer's own passes: the twins in their real target/MRT context,
@@ -10149,6 +10157,14 @@ function performBenchAction(a: BenchAction): void {
      *  with/without-room-light frames; `burnTuning()` reads the live record. */
     setBurnTuning: (patch: Partial<import('./burn-profiles').BurnTuning>) => ctx.vfx.burning.setTuning(patch),
     burnTuning: () => ({ ...ctx.vfx.burning.tuning }),
+    // The flame panel's "copy" line pastes straight into the game: technique,
+    // tongue (card) tuning and the volumetric-fire tuning.
+    setTechnique: (name: import('./game-burning').GameFireTechnique) => ctx.vfx.burning.setTechnique(name),
+    technique: () => ctx.vfx.burning.technique(),
+    setVolume: (patch: Partial<import('./fire-volume-tuning').FireVolumeTuning>) => ctx.vfx.burning.setVolume(patch),
+    volume: () => ctx.vfx.burning.volume(),
+    setTongueTuning: (patch: Partial<import('./tongue-tuning').TongueTuning>) => ctx.vfx.burning.setTongueTuning(patch),
+    tongue: () => ctx.vfx.burning.tongue(),
     /** Last pushGatherLights census (sources seen / in room / slots pushed). */
     burnGatherDebug: () => ctx.vfx.burning.gatherDebug(),
     ...createWeaponPlayerSeams(ctx),

@@ -1090,7 +1090,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   }) as unknown as Swizzled;
   const fireMarchMat = new MeshBasicNodeMaterial();
   fireMarchMat.name = 'post:fire-march';
-  fireMarchMat.colorNode = vec4(fireMarchOut as never, 1.0);
+  // The march already returns vec4(emission, T); wrapping it in vec4(.., 1.0)
+  // passed five components (the console's 'exceeds maximum length' warning).
+  fireMarchMat.colorNode = fireMarchOut as never;
   fireMarchMat.depthWrite = false;
   fireMarchMat.depthTest = false;
   fireMarchMat.fog = false;
