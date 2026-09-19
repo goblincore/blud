@@ -258,6 +258,7 @@ import { createMiscSeams } from './game-seams-misc';
 import { applyBoneCullMode, applyBoneMesh, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
 import { applyChunkKindLook, ensureGibAssets, gibAssetArchetypeOf, gibAssetArmed, newBlastProfile, primsLongAxis, reacquireHeldProp, retireActor, scheduleGib, stepPendingGibImpulses } from './game-gibs-leaves';
+import { breechInRig, locatorInView, newTracerQuad, setQuadMatrix, startReload, stepBursts, viewToRig } from './game-weapon-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -3738,7 +3739,7 @@ async function main() {
     // Manual reload. Dead under unlimited ammo BY CONSTRUCTION (the magazine is
     // never partial), which is why ?ammo=finite is the way to exercise it.
     if (pressed('KeyR') && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) {
-      startReload();
+      startReload(ctx);
     }
     if (pressed('KeyT')) {
       ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
@@ -3784,7 +3785,7 @@ async function main() {
     ctx.weapon.flare?.consumeEdge();
     // The KeyR edge above already covers a live press; this covers a recorded
     // frame whose reload was folded into the flag rather than the keys.
-    if (f.reload && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload();
+    if (f.reload && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);
     ctx.player.prevInputKeys = next;
   }
 
@@ -3933,18 +3934,10 @@ async function main() {
   const BEND_L_VIEW = new THREE.Vector3(-1, -0.4, 0);
   const BEND_R_VIEW = new THREE.Vector3(1, -0.4, 0);
   const _sh = new THREE.Vector3(), _bd = new THREE.Vector3(), _o = new THREE.Vector3();
-  /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
-   *  the anchor's world matrices first when the rig moved this frame. */
-  function viewToRig(view: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-    out.copy(view);
-    ctx.weapon.viewModelAnchor.localToWorld(out);
-    (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).worldToLocal(out);
-    return out;
-  }
   /** A view-space DIRECTION in rig space (two points, subtracted). */
   function viewDirToRig(view: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-    viewToRig(_o.set(0, 0, 0), out);
-    const tip = viewToRig(view, _bd);
+    viewToRig(ctx, _o.set(0, 0, 0), out);
+    const tip = viewToRig(ctx, view, _bd);
     return out.sub(tip).negate().normalize();
   }
   /** Aim both arms at their shoulders. Called every frame after the rig pose
@@ -3954,11 +3947,11 @@ async function main() {
     ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
     if (ctx.weapon.gripHandGroup) {
       viewDirToRig(BEND_R_VIEW, _bendR);
-      aimArm(ctx.weapon.gripHandGroup, viewToRig(SHOULDER_R_VIEW, _sh), _bendR);
+      aimArm(ctx.weapon.gripHandGroup, viewToRig(ctx, SHOULDER_R_VIEW, _sh), _bendR);
     }
     if (ctx.weapon.foreHandGroup) {
       viewDirToRig(BEND_L_VIEW, _bendL);
-      aimArm(ctx.weapon.foreHandGroup, viewToRig(SHOULDER_L_VIEW, _sh), _bendL);
+      aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL);
     }
   }
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
@@ -3984,31 +3977,6 @@ async function main() {
    *  real muzzle -- so it burned halfway down the barrel instead of at the
    *  bores, which is a good part of why it read wrong. */
   const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
-  /** Fill a VIEW-space vector from a named locator inside the loaded GLB. */
-  function locatorInView(root: THREE.Object3D, name: string, out: THREE.Vector3): boolean {
-    let found: THREE.Object3D | null = null;
-    root.traverse((o) => { if (o.name === name) found = o; });
-    if (!found) return false;
-    ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
-    out.copy((found as THREE.Object3D).getWorldPosition(new THREE.Vector3()));
-    (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).worldToLocal(out);
-    return true;
-  }
-  /** A breech locator's position in aim-rig space RIGHT NOW. Unlike
-   *  locatorInView this is called every frame, so it assumes the caller has
-   *  already refreshed the view-model's matrices this frame.
-   *
-   *  This is what replaces the hardcoded breech vector. That constant was both
-   *  4 cm right of the real chambers (it predated the gun being centred) and
-   *  static, so it could not follow the barrels through their swing -- which is
-   *  the whole of "the shells don't come out of the right location". */
-  function breechInRig(i: 0 | 1, out: THREE.Vector3): boolean {
-    const n = ctx.weapon.breechNodes[i];
-    if (!n) return false;
-    n.getWorldPosition(out);
-    (ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor).worldToLocal(out);
-    return true;
-  }
   /** The bore's basis in RIG space this frame: `out` runs from the muzzles to
    *  the breeches (the way a case leaves a chamber), `side` from the left
    *  chamber to the right. Read off the same live locators as breechInRig, so
@@ -4151,16 +4119,16 @@ async function main() {
     ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
     {
       const mL = new THREE.Vector3(), mR = new THREE.Vector3();
-      if (locatorInView(gltf.scene, 'Muzzle_L', mL) && locatorInView(gltf.scene, 'Muzzle_R', mR)) {
+      if (locatorInView(ctx, gltf.scene, 'Muzzle_L', mL) && locatorInView(ctx, gltf.scene, 'Muzzle_R', mR)) {
         MUZZLE_VIEW.copy(mL).add(mR).multiplyScalar(0.5);
       }
       const nL = gltf.scene.getObjectByName('Muzzle_L');
       const nR = gltf.scene.getObjectByName('Muzzle_R');
       if (nL && nR) ctx.weapon.muzzleNodes = [nL, nR];
-      if (!locatorInView(gltf.scene, 'Grip_Hand', GRIP_HAND_REST)) {
+      if (!locatorInView(ctx, gltf.scene, 'Grip_Hand', GRIP_HAND_REST)) {
         GRIP_HAND_REST.set(GUN_REST.pos.x + 0.02, GUN_REST.pos.y - 0.04, GUN_REST.pos.z + 0.05);
       }
-      if (!locatorInView(gltf.scene, 'Fore_Hand', FORE_HAND_REST)) {
+      if (!locatorInView(ctx, gltf.scene, 'Fore_Hand', FORE_HAND_REST)) {
         FORE_HAND_REST.set(GUN_REST.pos.x, GUN_REST.pos.y - 0.05, GUN_REST.pos.z - 0.15);
       }
       // Sit each hand just off its locator so the orb WRAPS the wood rather
@@ -4863,17 +4831,8 @@ async function main() {
    *  each fades independently by distance and angle, the same way the smoke
    *  puffs above each own their opacity. */
   interface TracerView { streak: THREE.Mesh; ember: THREE.Mesh }
-  function newTracerQuad(map: THREE.Texture): THREE.Mesh {
-    const mesh = new THREE.Mesh(ctx.weapon.pelletGeo, new THREE.MeshBasicMaterial({
-      map, transparent: true, opacity: 1, blending: THREE.AdditiveBlending,
-      depthWrite: false, side: THREE.DoubleSide,
-    }));
-    mesh.frustumCulled = false;
-    mesh.matrixAutoUpdate = false;
-    return mesh;
-  }
   function newTracerView(): TracerView {
-    const view = { streak: newTracerQuad(ctx.vfx.tracerTex), ember: newTracerQuad(ctx.vfx.emberTex) };
+    const view = { streak: newTracerQuad(ctx, ctx.vfx.tracerTex), ember: newTracerQuad(ctx, ctx.vfx.emberTex) };
     // The EFFECTS overlay, not the main scene: the overlay draws after the
     // SDF composite against the completed depth buffer, so a streak crossing
     // in front of a body stays visible and one behind it is occluded. In the
@@ -4883,20 +4842,6 @@ async function main() {
     ctx.vfx.characterEffects.scene.add(view.streak);
     ctx.vfx.characterEffects.scene.add(view.ember);
     return view;
-  }
-  /** Compose one quad's world matrix from a basis, two axis scales and a centre. */
-  function setQuadMatrix(
-    m: THREE.Mesh, b: TracerBasis, sx: number, sy: number, cx: number, cy: number, cz: number,
-  ): void {
-    const { x, y, z } = b;
-    // Row-major to Matrix4.set: the COLUMNS are (x*sx, y*sy, z, centre).
-    m.matrix.set(
-      x[0] * sx, y[0] * sy, z[0], cx,
-      x[1] * sx, y[1] * sy, z[1], cy,
-      x[2] * sx, y[2] * sy, z[2], cz,
-      0, 0, 0, 1,
-    );
-    m.matrixWorldNeedsUpdate = true;
   }
   /**
    * Point one pooled view at one live projectile, from an eye at `eye`.
@@ -4920,7 +4865,7 @@ async function main() {
     const wid = p.radius * TRACER.widthScale * near;
     v.streak.visible = true;
     (v.streak.material as THREE.MeshBasicMaterial).opacity = fade;
-    setQuadMatrix(v.streak, basis, len, wid,
+    setQuadMatrix(ctx, v.streak, basis, len, wid,
       p.pos[0] - basis.x[0] * len * 0.5,
       p.pos[1] - basis.x[1] * len * 0.5,
       p.pos[2] - basis.x[2] * len * 0.5);
@@ -4931,7 +4876,7 @@ async function main() {
     const d = p.radius * TRACER.emberScale * near;
     v.ember.visible = true;
     (v.ember.material as THREE.MeshBasicMaterial).opacity = headOn;
-    setQuadMatrix(v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);
+    setQuadMatrix(ctx, v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);
   }
   function hideTracer(v: TracerView): void {
     v.streak.visible = false;
@@ -4977,10 +4922,6 @@ async function main() {
    *  can watch a case leave the bore frame by frame ("could slow it down to
    *  make it easier to see"). Inspection only: nothing else keys off it. */
   ctx.weapon.reloadSpeed = 1;
-  function startReload(): void {
-    ctx.weapon.reloadAge = 0;
-    ctx.weapon.reloadSeed = ctx.weapon.pinnedReloadSeed ?? 1 + Math.floor(rngStreams.reload() * 1e6);
-  }
   ctx.weapon.recoilPitch = 0;
 
   /** SLUG MODE — one big projectile, one big crater. Diagnostic first: eight
@@ -4996,7 +4937,7 @@ async function main() {
     if (ctx.weapon.slotState.live !== 'shotgun' || !slotReady(ctx.weapon.slotState)) return false;
     if (!ctx.weapon.gunReady || ctx.weapon.cooldown > 0) return false;
     if (ctx.weapon.reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
-    if (!ctx.weapon.infiniteAmmo && ctx.weapon.shells <= 0) { startReload(); return false; } // click -> start reloading
+    if (!ctx.weapon.infiniteAmmo && ctx.weapon.shells <= 0) { startReload(ctx); return false; } // click -> start reloading
     // Gunfire in a room turns every head in it, cone or no cone. Placed after
     // the guards on purpose: a dry click or a shot during a reload must not
     // alert anything, or the flag fires on inputs that made no noise.
@@ -5007,7 +4948,7 @@ async function main() {
     ctx.weapon.recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
     if (!ctx.weapon.infiniteAmmo) {
       ctx.weapon.shells = magazineAfterFire(ctx.weapon.shells, barrels);
-      if (ctx.weapon.shells <= 0) startReload();
+      if (ctx.weapon.shells <= 0) startReload(ctx);
     }
     updateHud();
     ctx.weapon.flashAge = 0;
@@ -7151,28 +7092,6 @@ async function main() {
     const y = kind === 'ground' ? at[1] + heightM * 0.35 : at[1];
     for (const m of [s.core, s.halo, s.smoke]) { m.position.set(at[0], y, at[2]); m.visible = true; }
   }
-  function stepBursts(dt: number): void {
-    for (const s of ctx.weapon.burstSlots) {
-      if (s.age === Infinity) continue;
-      s.age += dt;
-      const u = s.age / s.life;
-      if (u >= 1) {
-        s.age = Infinity;
-        for (const m of [s.core, s.halo, s.smoke]) m.visible = false;
-        continue;
-      }
-      // A fast hot core, a slower halo, and a dark smoke card that outlives both.
-      const fade = 1 - u;
-      s.core.material.opacity = Math.pow(fade, 2.4);
-      s.halo.material.opacity = 0.75 * Math.pow(fade, 1.3);
-      s.smoke.material.opacity = 0.55 * Math.min(1, u * 2.2) * fade;
-      const grow = 0.35 + 1.25 * Math.sqrt(u);
-      s.core.scale.setScalar(s.h * 1.25 * grow);
-      s.halo.scale.setScalar(s.h * 2.1 * grow);
-      s.smoke.scale.setScalar(s.h * 2.6 * grow);
-      s.smoke.position.y += dt * s.h * 0.55;
-    }
-  }
 
   /**
    * One frame of the slot machine and the holster travel it drives.
@@ -7322,7 +7241,7 @@ async function main() {
       }
       b.prop?.pose({ mode: 'flight', pos: b.state.pos, spin: b.state.spin, fuseBurning: true });
     }
-    stepBursts(dt);
+    stepBursts(ctx, dt);
     ctx.vfx.explosionVfx?.update(dt, camera);
     ctx.vfx.burstLayer?.update(dt, camera);
 
@@ -8679,7 +8598,7 @@ async function main() {
       let hold: HandHold | undefined;
       if (haveBore) {
         const mL = new THREE.Vector3(), mR = new THREE.Vector3();
-        breechInRig(0, mL); breechInRig(1, mR);
+        breechInRig(ctx, 0, mL); breechInRig(ctx, 1, mR);
         const mid: Vec3 = [(mL.x + mR.x) / 2, (mL.y + mR.y) / 2, (mL.z + mR.z) / 2];
         const h = loadHold(mid, outV, frame.side, GOBLIN_SKIN.handRadius);
         const asDelta = (p: Vec3): HandDelta => ({
@@ -8735,7 +8654,7 @@ async function main() {
         if (!m) continue;
         const k: 0 | 1 = i === 0 ? 0 : 1;
         const e = ejectedShell(ctx.weapon.reloadAge, k, frame, ctx.weapon.reloadSeed);
-        if (!e || !haveBore || !breechInRig(k, breech)) { m.visible = false; continue; }
+        if (!e || !haveBore || !breechInRig(ctx, k, breech)) { m.visible = false; continue; }
         m.visible = true;
         const origin = breech.clone().addScaledVector(out, SHELL_LEN_M / 2);
         m.position.set(origin.x + e.x, origin.y + e.y, origin.z + e.z);
@@ -8756,7 +8675,7 @@ async function main() {
         const m = ctx.weapon.loadShells[i];
         if (!m) continue;
         const k: 0 | 1 = i === 0 ? 0 : 1;
-        if (carry === null || !haveBore || !hold || !breechInRig(k, breech)) {
+        if (carry === null || !haveBore || !hold || !breechInRig(ctx, k, breech)) {
           m.visible = false; continue;
         }
         m.visible = true;
