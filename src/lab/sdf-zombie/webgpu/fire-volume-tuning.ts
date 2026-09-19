@@ -59,7 +59,8 @@ export interface FireVolumeTuning {
   /** Flame coating the body surface (0..1); the sheets rising off it stay
    *  full. Lower keeps the body's form readable inside the fire. */
   skin: number;
-  /** Sheet-length scale for the HEAD (and its crown): < 1 keeps the flame over
+  /** Sheet-length scale for the HEAD (and its crown), and the CEILING over the
+   *  head for every limb's sheet (headTop + headRise * rise): < 1 keeps the flame over
    *  the head short so the head stays readable; the body keeps `rise`. */
   headRise: number;
   /** Flame strength left right around the head (0..1), from EVERY limb's
@@ -87,7 +88,7 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   coreR: 0.16,
   density: 1,
   skin: 0.3,
-  headRise: 0.45,
+  headRise: 0.35,
   headClear: 0.25,
 });
 
