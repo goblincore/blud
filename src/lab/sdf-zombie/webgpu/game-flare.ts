@@ -110,10 +110,10 @@ export function createFlareHarness(ctx: GameContext, deps: FlareHarnessDeps): Fl
       const longY = size.y >= size.x && size.y >= size.z;
       const longX = !longY && size.x >= size.z;
       if (longY) holder.rotation.x = -Math.PI / 2;      // +Y → -Z
-      // The reference GLB's barrel is the -X end (measured: the bores face the
-      // camera at +90°), so -90° sends it down -Z. Re-measure before flipping
-      // this if the placeholder asset is replaced.
-      else holder.rotation.y = longX ? -Math.PI / 2 : Math.PI;
+      // The reference GLB's barrel is the +X end (owner playtest 2026-09-19:
+      // at -90° the barrel pointed back at the player), so +90° sends it down
+      // -Z. Re-measure before flipping this if the placeholder asset is replaced.
+      else holder.rotation.y = longX ? Math.PI / 2 : Math.PI;
       holder.rotation.z = THREE.MathUtils.degToRad(FLARE_REST.rollDeg);
       flareRig.add(holder);
       placeholder.visible = false;

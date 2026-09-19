@@ -347,7 +347,7 @@ describe('post-aa all-off parity (the hard gate)', () => {
         lag: 0.3, lagMaxM: 0.6, history: 0.85, cardsPerBody: 5, smokeTailSec: 2,
         noiseScale: 2.4, noiseStretch: 0.5, erode: 0.55, erodeRise: 0.6,
         edgeSharp: 2.5, coreR: 0.12, smokeAlbedo: 0.5, smokeAmbient: 0.55,
-        smokeFireLit: 1.0, smokeSpread: 0.4, maxBodies: 4,
+        smokeFireLit: 1.0, smokeSpread: 0.4, maxBodies: 4, density: 1, skin: 1,
       },
       time: 1, frame: 3,
       invViewProj: new THREE.Matrix4(),

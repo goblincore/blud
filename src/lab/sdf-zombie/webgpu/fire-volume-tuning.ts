@@ -53,6 +53,12 @@ export interface FireVolumeTuning {
   edgeSharp: number;
   /** Thickness (m) of the flame shell around each limb; thins as the sheet climbs. */
   coreR: number;
+  /** Flame opacity scale (1 = ~94% opaque per 10 cm of full flame). Lower
+   *  lets the body's form read through the fire. */
+  density: number;
+  /** Flame coating the body surface (0..1); the sheets rising off it stay
+   *  full. Lower keeps the body's form readable inside the fire. */
+  skin: number;
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
@@ -73,6 +79,8 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   erodeRise: 0.6,
   edgeSharp: 4,
   coreR: 0.16,
+  density: 1,
+  skin: 0.3,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider
@@ -96,6 +104,8 @@ export const FIRE_VOLUME_BOUNDS: Readonly<Record<keyof FireVolumeTuning, readonl
     erodeRise: [0.05, 2],
     edgeSharp: [0.5, 8],
     coreR: [0.03, 0.4],
+    density: [0.05, 2],
+    skin: [0, 1],
   });
 
 const FIRE_VOLUME_FIELDS = Object.keys(FIRE_VOLUME_TUNING) as (keyof FireVolumeTuning)[];

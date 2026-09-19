@@ -67,7 +67,7 @@ export interface FireVolumeFrame {
  * cfg1 = (curlStrength, lag, lagMaxM, tempGain)
  * cfg2 = (unused, capsuleCount, time, frame)
  * cfg4 = (noiseScale, noiseStretch, erode, erodeRise)
- * cfg5 = (edgeSharp, coreR, unused, unused)
+ * cfg5 = (edgeSharp, coreR, density, skin)
  * cfg6 = (unused x4; kept so the binding list is unchanged)
  * nearFar = (near, far, spare, spare)
  */
@@ -139,6 +139,13 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
   let erodeRise = max(cfg4.w, 1e-3);
   let edgeSharp = max(cfg5.x, 0.01);
   let coreR = max(cfg5.y, 1e-3);
+  // Opacity scale on the flame's extinction: < 1 lets the body's form read
+  // through the fire (owner: at 1 the flame is too thick to see the body).
+  let densityK = max(cfg5.z, 0.0);
+  // How much flame COATS the body surface itself (the sheet's base, u ~ 0).
+  // < 1 leaves the body's form readable as a dark shape with the flame
+  // streaming up and off it; the SDF surface fire still burns on the skin.
+  let skin = clamp(cfg5.w, 0.0, 1.0);
   // The flame-space origin is the field's AABB corner, so the tongues travel
   // WITH the body instead of the body swimming through a world-locked field.
   let base = boundsMin.xyz;
@@ -227,7 +234,8 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       // thins with it, so tongues come to points instead of ending in slabs.
       let dd = fireSdCapsule(q2, a, b) - radius * (1.0 - 0.55 * u);
       let w = coreR * (1.0 - 0.7 * u);
-      let env = burn * saturate(1.0 - max(dd, 0.0) / max(w, 1e-3)) * (1.0 - u * u);
+      let env = burn * saturate(1.0 - max(dd, 0.0) / max(w, 1e-3)) * (1.0 - u * u)
+        * mix(skin, 1.0, smoothstep(0.0, 0.3, u));
       if (env > shape) { shape = env; uBest = u; }
       minOut = min(minOut, max(dd - w, 0.0));
     }
@@ -260,7 +268,7 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     // same sigma means a thick flame converges to exactly its ramp colour
     // (times the brightness, tempGain) instead of summing past 1 into white;
     // thin edges stay translucent. alphaF is this step's flame opacity.
-    let alphaF = 1.0 - exp(-density * FIRE_FLAME_SIGMA * dtFine);
+    let alphaF = 1.0 - exp(-density * FIRE_FLAME_SIGMA * densityK * dtFine);
     emission = emission + T * fireRamp(temp) * alphaF * cfg1.w;
     T = T * (1.0 - alphaF);
     if (T < 0.003) { break; }

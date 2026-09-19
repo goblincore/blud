@@ -1919,6 +1919,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (Number.isFinite(t.erodeRise) && t.erodeRise > 0) uFireCfg4.value.w = t.erodeRise;
       if (Number.isFinite(t.edgeSharp) && t.edgeSharp > 0) uFireCfg5.value.x = t.edgeSharp;
       if (Number.isFinite(t.coreR) && t.coreR > 0) uFireCfg5.value.y = t.coreR;
+      if (Number.isFinite(t.density)) uFireCfg5.value.z = Math.max(0, t.density);
+      if (Number.isFinite(t.skin)) uFireCfg5.value.w = Math.min(1, Math.max(0, t.skin));
       // History resets on the first frame after enabling, on a host camera
       // jump, and whenever nothing has been written yet (a stale previous
       // frame would smear across a scene change).

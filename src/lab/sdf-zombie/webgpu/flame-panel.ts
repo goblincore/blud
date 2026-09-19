@@ -110,6 +110,8 @@ const VOLUME_LABELS: Record<keyof FireVolumeTuning, { label: string; step: numbe
   erodeRise: { label: 'erode rise', step: 0.02 },
   edgeSharp: { label: 'edge sharp', step: 0.1 },
   coreR: { label: 'core radius', step: 0.005 },
+  density: { label: 'flame density', step: 0.05 },
+  skin: { label: 'flame skin', step: 0.05 },
 };
 
 export const VOLUME_KEYS: readonly VolumeKey[] = Object.freeze(
