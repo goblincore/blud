@@ -260,6 +260,7 @@ import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow
 import { applyChunkKindLook, ensureGibAssets, gibAssetArchetypeOf, gibAssetArmed, newBlastProfile, primsLongAxis, reacquireHeldProp, retireActor, scheduleGib, stepPendingGibImpulses } from './game-gibs-leaves';
 import { breechInRig, locatorInView, newTracerQuad, setQuadMatrix, startReload, stepBursts, viewToRig } from './game-weapon-leaves';
 import { stampLevelProbeRoom } from './game-world-leaves';
+import { applyBoneCull, restampLevelProbes } from './game-render-leaves2';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -790,7 +791,7 @@ async function main() {
     applyHemi();
     ctx.lighting.hemi.color.setRGB(...rig.hemiSky);
     ctx.lighting.hemi.groundColor.setRGB(...rig.hemiGround);
-    restampLevelProbes();
+    restampLevelProbes(ctx);
     for (const child of scene.children) {
       if (child instanceof THREE.DirectionalLight) child.intensity = rig.sunIntensity;
       if (child instanceof THREE.AmbientLight) {
@@ -2467,9 +2468,6 @@ async function main() {
   // Three-way cull state (bone-segment spheres): boneCull stays the boolean
   // view (off vs any cull) the old seam reports.
   ctx.render.boneCullMode = GAME_BONE_CULL_MODE;
-  function applyBoneCull(on: boolean): void {
-    applyBoneCullMode(ctx, on ? 'cluster' : 'off');
-  }
 
   /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
    *  by the depth nearer passes already recorded at each pixel.
@@ -2967,9 +2965,6 @@ async function main() {
       mesh.material = nm;
       ctx.world.levelNodeMaterials.push(nm);
     }
-  }
-  function restampLevelProbes() {
-    for (const roomId of ctx.lighting.levelProbeNodes.keys()) stampLevelProbeRoom(ctx, roomId);
   }
   /** Re-list the scene's lights on every room (a light was added — the
    *  muzzle flash with the gun) and force the level pipelines to rebuild. */
@@ -10189,7 +10184,7 @@ function performBenchAction(a: BenchAction): void {
      *  weight so the flip does not brighten the room. */
     setLevelProbes: (weight: number, gain = -1) => {
       ctx.lighting.levelProbeWeight = Math.max(0, Math.min(1, weight)); ctx.lighting.levelProbeGain = gain;
-      applyHemi(); restampLevelProbes();
+      applyHemi(); restampLevelProbes(ctx);
       return { weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain };
     },
     get levelProbes() {
@@ -10700,7 +10695,7 @@ function performBenchAction(a: BenchAction): void {
     /** Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
      *  bone loop; the bench's bone-cull-on leg flips it for A/B. Takes effect
      *  on the next per-frame pack, so a live flip needs a frame to land. */
-    setBoneCull(on: boolean) { applyBoneCull(on); },
+    setBoneCull(on: boolean) { applyBoneCull(ctx, on); },
     /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
      *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
      *  setBoneCull(on) is the boolean shorthand for off/cluster. */
