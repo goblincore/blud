@@ -68,7 +68,7 @@ export interface FireVolumeFrame {
  * cfg2 = (unused, capsuleCount, time, frame)
  * cfg4 = (noiseScale, noiseStretch, erode, erodeRise)
  * cfg5 = (edgeSharp, coreR, density, skin)
- * cfg6 = (unused x4; kept so the binding list is unchanged)
+ * cfg6 = (headClear, unused x3; kept so the binding list is unchanged)
  * nearFar = (near, far, spare, spare)
  */
 export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
@@ -146,6 +146,9 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
   // < 1 leaves the body's form readable as a dark shape with the flame
   // streaming up and off it; the SDF surface fire still burns on the skin.
   let skin = clamp(cfg5.w, 0.0, 1.0);
+  // Flame strength left within ~15 cm of a HEAD capsule (pad < 0), from every
+  // limb's sheet: the shoulders' flame otherwise sweeps up over the face.
+  let headClear = clamp(cfg6.x, 0.0, 1.0);
   // The flame-space origin is the field's AABB corner, so the tongues travel
   // WITH the body instead of the body swimming through a world-locked field.
   let base = boundsMin.xyz;
@@ -167,8 +170,11 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     let r0 = (*caps)[i * 3];
     let r1 = (*caps)[i * 3 + 1];
     if (r1.w <= 0.0) { continue; }
-    let fc = (r0.xyz + r1.xyz) * 0.5 + vec3<f32>(0.0, rise * 0.5, 0.0);
-    let fR = length(r1.xyz - r0.xyz) * 0.5 + r0.w + coreR + lagPad + rise * 0.5;
+    // Per-capsule sheet length: the pack's pad slot scales rise (the head and
+    // its crown burn shorter, headRise).
+    let riseC = max(rise * abs((*caps)[i * 3 + 2].w), 1e-3);
+    let fc = (r0.xyz + r1.xyz) * 0.5 + vec3<f32>(0.0, riseC * 0.5, 0.0);
+    let fR = length(r1.xyz - r0.xyz) * 0.5 + r0.w + coreR + lagPad + riseC * 0.5;
     let fi = fireRaySphere(origin, rayDir, fc, fR, tNear, tFar);
     if (fi.y > fi.x) {
       if (hitN < FIRE_RAY_CAPS) { hitIdx[hitN] = i; }
@@ -212,6 +218,7 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
     var shape = 0.0;
     var uBest = 1.0;
     var minOut = 1e6;
+    var dHead = 1e6;
     for (var j: i32 = 0; j < flameN; j = j + 1) {
       let i = select(hitIdx[min(j, FIRE_RAY_CAPS - 1)], j, flameAll);
       let rec0 = (*caps)[i * 3];
@@ -225,9 +232,11 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       let k = clamp(dot(qw - a, ab) / max(dot(ab, ab), 1e-9), 0.0, 1.0);
       let under = a + ab * k;
       let sRaw = qw.y - under.y;
-      if (sRaw > rise + coreR) { continue; }
-      let sH = clamp(sRaw, 0.0, rise);
-      let u = sH / rise;
+      let riseC = max(rise * abs(rec2.w), 1e-3);
+      if (rec2.w < 0.0) { dHead = min(dHead, fireSdCapsule(qw, a, b) - radius); }
+      if (sRaw > riseC + coreR) { continue; }
+      let sH = clamp(sRaw, 0.0, riseC);
+      let u = sH / riseC;
       let lag = fireLag(rec2.xyz, sH, cfg1.y, cfg1.z);
       let q2 = qw - lag - vec3<f32>(0.0, sH, 0.0);
       // Taper: the sheet narrows as it climbs, and the shell it lives in
@@ -239,6 +248,7 @@ export const FIRE_VOLUME_MARCH_WGSL = /* wgsl */ `fn fireVolumeMarch(
       if (env > shape) { shape = env; uBest = u; }
       minOut = min(minOut, max(dd - w, 0.0));
     }
+    shape = shape * mix(headClear, 1.0, smoothstep(0.0, 0.15, dHead));
     let dtFine = stepM;
     if (shape < 1e-3) {
       // Nothing here: skip toward the nearest flame shell. The swept field is

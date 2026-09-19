@@ -23,7 +23,7 @@ describe('packFireVolume', () => {
     const p = packFireVolume([body(2, 0.5)], [0, 1, 0]);
     // Float32 rounds 0.1, so compare at the buffer's own precision.
     const got = Array.from(p.data.slice(0, FIRE_CAPSULE_STRIDE)).map(v => +v.toFixed(5));
-    expect(got).toEqual([2, 0, 0, 0.1, 2, 1, 0, 0.5, 1, 0, 0, 0]);
+    expect(got).toEqual([2, 0, 0, 0.1, 2, 1, 0, 0.5, 1, 0, 0, 1]);   // pad = rise scale (1: not the head)
   });
   it('drops bodies with burn 0 and returns an AABB around the rest', () => {
     const p = packFireVolume([body(2, 0), body(3, 1)], [0, 1, 0]);
@@ -35,6 +35,19 @@ describe('packFireVolume', () => {
     const out = new Float32Array(4096);
     const p = packFireVolume([body(2, 1)], [0, 1, 0], out);
     expect(p.data).toBe(out);
+  });
+});
+
+describe('packFireVolume headRise', () => {
+  it('writes the head and crown capsules\' sheet-length scale into the pad slot', () => {
+    const head = { a: [0, 1.7, 0], b: [0, 1.8, 0], radius: 0.1, limb: 'head', crown: false } as const;
+    const crown = { a: [0, 1.9, 0], b: [0, 2.1, 0], radius: 0.1, limb: 'crown', crown: true } as const;
+    const arm = { a: [0.3, 1.4, 0], b: [0.6, 1.4, 0], radius: 0.05, limb: 'armR', crown: false } as const;
+    const b = { capsules: [head, crown, arm], velocities: [[0, 0, 0], [0, 0, 0], [0, 0, 0]], burn: 1, centre: [0, 1, 0] } as any;
+    const p = packFireVolume([b], [0, 1, 3], undefined, { rise: 0.55, headRise: 0.4 });
+    expect(p.data[11]).toBeCloseTo(-0.4);   // negative: the head itself (cleared around)
+    expect(p.data[FIRE_CAPSULE_STRIDE + 11]).toBeCloseTo(0.4);
+    expect(p.data[2 * FIRE_CAPSULE_STRIDE + 11]).toBe(1);
   });
 });
 

@@ -59,6 +59,12 @@ export interface FireVolumeTuning {
   /** Flame coating the body surface (0..1); the sheets rising off it stay
    *  full. Lower keeps the body's form readable inside the fire. */
   skin: number;
+  /** Sheet-length scale for the HEAD (and its crown): < 1 keeps the flame over
+   *  the head short so the head stays readable; the body keeps `rise`. */
+  headRise: number;
+  /** Flame strength left right around the head (0..1), from EVERY limb's
+   *  sheet: the shoulder flame otherwise climbs over the face. */
+  headClear: number;
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
@@ -81,6 +87,8 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   coreR: 0.16,
   density: 1,
   skin: 0.3,
+  headRise: 0.45,
+  headClear: 0.25,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider
@@ -106,6 +114,8 @@ export const FIRE_VOLUME_BOUNDS: Readonly<Record<keyof FireVolumeTuning, readonl
     coreR: [0.03, 0.4],
     density: [0.05, 2],
     skin: [0, 1],
+    headRise: [0, 1.5],
+    headClear: [0, 1],
   });
 
 const FIRE_VOLUME_FIELDS = Object.keys(FIRE_VOLUME_TUNING) as (keyof FireVolumeTuning)[];

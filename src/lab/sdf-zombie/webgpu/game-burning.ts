@@ -27,7 +27,7 @@ import {
 import { resolveTongueTuning, type TongueTuning } from './tongue-tuning';
 import { fireCapsules, capsuleVelocities, type FireCapsule } from './fire-capsules';
 import {
-  packFireVolume, FIRE_CAPSULE_STRIDE, FIRE_VOLUME_MAX_CAPSULES, type FireVolumeBody,
+  packFireVolume, FIRE_CAPSULE_STRIDE, FIRE_VOLUME_MAX_BODIES, FIRE_VOLUME_MAX_CAPSULES, type FireVolumeBody,
 } from './fire-volume-pack';
 import { resolveFireVolumeTuning, type FireVolumeTuning } from './fire-volume-tuning';
 import type { FireVolumeFrame } from './fire-volume.wgsl';
@@ -40,6 +40,16 @@ export type GameFireTechnique = 'cards' | 'volume';
 /** Card-pool body cap. One draw call for N bodies; bounded so an igniteAll()
  *  over a big crowd cannot size an unbounded quad buffer. */
 const FLAME_CARD_BODY_CAP = 32;
+
+/** LEVEL OF DETAIL: bodies past the volume's `maxBodies` burn with the FULL
+ *  card set at the pre-volume card look (the owner's accent tuning is tiny on
+ *  purpose, so it cannot carry a body on its own). */
+const LOD_TONGUE: TongueTuning = Object.freeze({ length: 0.45, ragged: 0.6, rise: 2.2, gain: 1.8, lean: 0.4 });
+/** Volume <-> cards crossfade rate (1/s): ~0.33 s to hand a body over. */
+const LOD_FADE_PER_SEC = 3;
+/** A body already in the volume ranks as this much nearer (squared distance
+ *  x0.72 = 15% nearer), so two burners at similar range do not flicker. */
+const LOD_HYSTERESIS_SQ = 0.72;
 
 /** The always-visible mesh-side PointLight pool. Four is the brazier-scale
  *  budget (spec A1); slots beyond the active burner count sit at intensity 0. */
@@ -108,6 +118,12 @@ export function createGameBurning(ctx: GameContext): GameBurning {
    *  the sim step from the posed body (the lab's rule, fire-capsules.ts). */
   const fireSrc = new Map<ZombieActor, { caps: FireCapsule[]; vels: [number, number, number][] }>();
   const fireBodies: FireVolumeBody[] = [];
+  /** Per burning body: how much it is drawn by the VOLUME (1) vs the full
+   *  LOD cards (0), eased toward its target each draw. */
+  const volW = new Map<ZombieActor, number>();
+  const lodRank: { a: ZombieActor; d: number }[] = [];
+  const inVolume = new Set<ZombieActor>();
+  let lodLastT = -1;
   const firePackBuf = new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
   const _fireView = new THREE.Matrix4();
   const _fireVp = new THREE.Matrix4();
@@ -137,14 +153,38 @@ export function createGameBurning(ctx: GameContext): GameBurning {
   function updateVolume(camera: THREE.Camera): void {
     const postAa = ctx.render.postAa;
     fireBodies.length = 0;
+    // LOD SELECTION: the nearest maxBodies burners (with hysteresis) get the
+    // volume; each body's weight eases toward in/out so the hand-over to the
+    // full cards is a crossfade, not a pop. Real time, not sim time: a frozen
+    // sim still finishes a fade.
+    const nowT = performance.now() * 0.001;
+    const fadeDt = lodLastT < 0 ? 0 : Math.min(0.1, Math.max(0, nowT - lodLastT));
+    lodLastT = nowT;
+    const eye = camera.position;
+    lodRank.length = 0;
+    inVolume.clear();
     if (technique === 'volume') {
       burning.forEachActive((a, s) => {
-        const src = fireSrc.get(a);
-        if (!src || s.burn <= 0.02) return;
+        if (!fireSrc.get(a) || s.burn <= 0.02) return;
         const p = a.pose().pos;
-        fireBodies.push({ capsules: src.caps, velocities: src.vels, burn: s.burn, centre: [p[0], p[1] + 1, p[2]] });
+        const d = (p[0] - eye.x) ** 2 + (p[1] + 1 - eye.y) ** 2 + (p[2] - eye.z) ** 2;
+        lodRank.push({ a, d: (volW.get(a) ?? 0) > 0.5 ? d * LOD_HYSTERESIS_SQ : d });
       });
+      lodRank.sort((x, y) => x.d - y.d);
+      const n = Math.max(1, Math.round(volume.maxBodies));
+      for (let i = 0; i < Math.min(n, lodRank.length); i++) inVolume.add(lodRank[i]!.a);
     }
+    burning.forEachActive((a, s) => {
+      const target = inVolume.has(a) ? 1 : 0;
+      const w0 = volW.get(a) ?? 0;
+      const step = LOD_FADE_PER_SEC * fadeDt;
+      const w = target > w0 ? Math.min(target, w0 + step) : Math.max(target, w0 - step);
+      volW.set(a, w);
+      const src = fireSrc.get(a);
+      if (!src || w <= 0.001 || s.burn <= 0.02) return;
+      const p = a.pose().pos;
+      fireBodies.push({ capsules: src.caps, velocities: src.vels, burn: s.burn * w, centre: [p[0], p[1] + 1, p[2]] });
+    });
     if (fireBodies.length === 0) {
       if (fireWasOn) { postAa.setFireVolume(false); fireWasOn = false; }
       return;
@@ -153,8 +193,11 @@ export function createGameBurning(ctx: GameContext): GameBurning {
     cam.updateMatrixWorld();
     _fireView.copy(cam.matrixWorld).invert();
     _fireVp.multiplyMatrices(cam.projectionMatrix, _fireView);
+    // Selection (and the fade-outs past it) is decided above, so the packer
+    // may take up to its hard cap here.
     const packed = packFireVolume(
-      fireBodies, [cam.position.x, cam.position.y, cam.position.z], firePackBuf, volume,
+      fireBodies, [cam.position.x, cam.position.y, cam.position.z], firePackBuf,
+      { ...volume, maxBodies: FIRE_VOLUME_MAX_BODIES },
     );
     if (packed.capsuleCount === 0) {
       if (fireWasOn) { postAa.setFireVolume(false); fireWasOn = false; }
@@ -179,6 +222,9 @@ export function createGameBurning(ctx: GameContext): GameBurning {
     fireWasOn = true;
   }
   let cards: FlameCards | null = null;
+  /** The LOD pool: full card set for burners outside the volume. */
+  let lodCards: FlameCards | null = null;
+  const lodFrames: FlameCardFrame[] = [];
   /** Per-body card input, rebuilt each draw from the posed body. The array is
    *  reused; only its entries are re-pushed. */
   const cardFrames: FlameCardFrame[] = [];
@@ -230,6 +276,10 @@ export function createGameBurning(ctx: GameContext): GameBurning {
     cards = c;
     ctx.vfx.characterEffects.scene.add(c.object);
     applyCardLook(c);
+    const lod = createFlameCards({ maxBodies: FLAME_CARD_BODY_CAP });
+    lodCards = lod;
+    ctx.vfx.characterEffects.scene.add(lod.object);
+    lod.object.visible = false;
     // Best-effort FIRE01 atlas (a gitignored dev placeholder; absent in a fresh
     // clone). Without it the cards run their procedural shader — the module's
     // shipped fallback. The swap needs no recompile, same as the lab.
@@ -243,6 +293,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
           tex.generateMipmaps = false;
           tex.flipY = true;   // v = 0 is the flame's base
           c.setAtlas(tex, info.frames, info.cellW, info.cellH, info.pad ?? 0);
+          lod.setAtlas(tex, info.frames, info.cellW, info.cellH, info.pad ?? 0);
         }, undefined, () => { /* no atlas png: keep the procedural look */ });
       })
       .catch(() => { /* no atlas manifest: keep the procedural look */ });
@@ -302,6 +353,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       burning.release(a);
       cardLastPos.delete(a);
       fireSrc.delete(a);
+      volW.delete(a);
       // The body is leaving the world: release the panic override at once and
       // drop it from the transition sets, so a later reuse of the same actor
       // (or a stale set entry) cannot keep it fleeing.
@@ -349,15 +401,31 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       if (!c) return;
       applyCardLook(c);
       cardFrames.length = 0;
+      lodFrames.length = 0;
+      const volumeMode = technique === 'volume';
       const inv = frameDt > 1e-4 ? 1 / frameDt : 0;
       burning.forEachActive((a, s) => {
         const p = a.pose();
         const pos: Vec3 = [p.pos[0], 0, p.pos[2]];
         const last = cardLastPos.get(a) ?? pos;
+        // Accents ride the volume's weight, the LOD set the rest. Both pools
+        // list EVERY body in the same order (burn 0 draws nothing), because a
+        // card's seed is its body's index: the pattern holds through a fade.
+        const w = volumeMode ? (volW.get(a) ?? 0) : 1;
+        const anchors = limbAnchors(a.posed());
+        if (volumeMode) {
+          lodFrames.push({
+            yaw: p.yaw, anchors, burn: s.burn * (1 - w),
+            vel: [(pos[0] - last[0]) * inv, 0, (pos[2] - last[2]) * inv],
+            kitRadius: a.kind === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0,
+            settle: s.dying ? Math.min(1, s.corpseSec / Math.max(1e-3, tuning.corpseBurnSec)) : 0,
+            groundY: 0,
+          });
+        }
         cardFrames.push({
           yaw: p.yaw,
-          anchors: limbAnchors(a.posed()),
-          burn: s.burn,
+          anchors,
+          burn: s.burn * w,
           vel: [(pos[0] - last[0]) * inv, 0, (pos[2] - last[2]) * inv],
           // The soldier's greaves cover his SDF shins; the cards stand off.
           kitRadius: a.kind === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0,
@@ -371,6 +439,18 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       });
       c.object.visible = cardFrames.length > 0;
       c.update(cardFrames, camera, clock());
+      const lod = lodCards;
+      if (lod) {
+        const any = volumeMode && lodFrames.some((f) => f.burn > 0.001);
+        lod.object.visible = any;
+        if (any) {
+          lod.setFlow(tuning.flameFlow);
+          lod.setMaxCardsPerBody(Number.MAX_SAFE_INTEGER);
+          lod.setTuning(LOD_TONGUE);
+          lod.setSoftFade(tuning.cardSoftFade);
+          lod.update(lodFrames, camera, clock());
+        }
+      }
     },
     pushFlashes(out) {
       // Each body already takes the strongest source by I/d^2, so an alight

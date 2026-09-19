@@ -47,7 +47,11 @@ describe('fire volume march WGSL', () => {
     // sheet length, and the sample pulled back DOWN by it before the capsule
     // distance: flame clings to vertical limbs and streams up off the rest.
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('let under = a + ab * k;');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let sH = clamp(sRaw, 0.0, rise);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let sH = clamp(sRaw, 0.0, riseC);');
+    // Per-capsule sheet length from the pack's pad slot (headRise on the head).
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let riseC = max(rise * abs(rec2.w), 1e-3);');
+    // Head clearing: every limb's flame thins within ~15 cm of a head capsule.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('shape = shape * mix(headClear, 1.0, smoothstep(0.0, 0.15, dHead));');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('let q2 = qw - lag - vec3<f32>(0.0, sH, 0.0);');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('radius * (1.0 - 0.55 * u)');
   });

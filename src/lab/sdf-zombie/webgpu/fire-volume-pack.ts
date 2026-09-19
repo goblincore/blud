@@ -19,7 +19,7 @@ export const FIRE_VOLUME_MAX_CAPSULES = FIRE_VOLUME_MAX_BODIES * 16;
 
 /** One body's contribution to the field. */
 export interface FireVolumeBody {
-  capsules: readonly Pick<FireCapsule, 'a' | 'b' | 'radius'>[];
+  capsules: readonly (Pick<FireCapsule, 'a' | 'b' | 'radius'> & Partial<Pick<FireCapsule, 'limb' | 'crown'>>)[];
   /** Midpoint velocity per capsule (capsuleVelocities' output). */
   velocities: readonly Vec3[];
   /** 0..1 burn level; <= 0 is dropped. */
@@ -76,11 +76,12 @@ export function packFireVolume(
   bodies: readonly FireVolumeBody[],
   eye: Vec3,
   out?: Float32Array,
-  tuning: { rise: number; coreR?: number; curlStrength?: number; lagMaxM?: number; maxBodies?: number } = FIRE_VOLUME_TUNING,
+  tuning: { rise: number; coreR?: number; curlStrength?: number; lagMaxM?: number; maxBodies?: number; headRise?: number } = FIRE_VOLUME_TUNING,
 ): FireVolumePack {
   const data = out ?? new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
   const coreR = Math.max(0, tuning.coreR ?? 0.15);
   const sidePad = coreR + Math.max(0, tuning.curlStrength ?? 0) + Math.max(0, tuning.lagMaxM ?? 0);
+  const headRise = Math.max(0, tuning.headRise ?? 1);
   // Rank by squared distance to the eye; the stable index tiebreak keeps two
   // equidistant bodies in a deterministic order.
   const ranked = bodies
@@ -111,7 +112,11 @@ export function packFireVolume(
       data[write + 8] = v[0];
       data[write + 9] = v[1];
       data[write + 10] = v[2];
-      data[write + 11] = 0;   // pad
+      // Per-capsule SHEET-LENGTH scale: the head and its crown burn shorter
+      // (headRise) so the flame over the head does not hide it (owner, 2026-09-19).
+      // NEGATIVE marks the head capsule itself: the march clears flame around
+      // it (headClear) so the head reads inside the fire. |pad| is the scale.
+      data[write + 11] = c.limb === 'head' ? -Math.max(headRise, 1e-3) : c.crown ? headRise : 1;
       write += FIRE_CAPSULE_STRIDE;
       capsuleCount++;
       const r = c.radius + sidePad;
