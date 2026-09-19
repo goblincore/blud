@@ -142,3 +142,101 @@ No `march/*` module imports `../march.wgsl`. `primitives.wgsl.ts` imports only
 `math.wgsl.ts` and `shade-helpers.wgsl.ts` import nothing. Only the golden test
 (and the other importers) read the barrel.
 
+---
+
+# march.wgsl.ts split — Task 2 (fields, map, cone march, helpers, body)
+
+Branch `dispatch/2026-09-18-march-split-2`, base `3b75b2a8` (Task 1 merged).
+Same MOVE-ONLY contract: golden snapshot unchanged since `11fffe13`.
+
+## Module map after Task 2
+
+`march.wgsl.ts` is now 103 lines: 20 `export *` lines plus its header comment
+(the wgslFn parse rules, copied to `march/README.md`).
+
+| module | bytes | lines |
+| --- | ---: | ---: |
+| `march.wgsl.ts` (barrel) | 6009 | 103 |
+| `march/layout.ts` | 9103 | 165 |
+| `march/math.wgsl.ts` | 3168 | 70 |
+| `march/primitives.wgsl.ts` | 30839 | 611 |
+| `march/melt.ts` | 3628 | 64 |
+| `march/shade-helpers.wgsl.ts` | 3697 | 72 |
+| `march/fields/carves.wgsl.ts` | 6599 | 122 |
+| `march/fields/wounds.wgsl.ts` | 13128 | 231 |
+| `march/fields/tissue.wgsl.ts` | 3126 | 62 |
+| `march/fields/volume.wgsl.ts` | 6678 | 110 |
+| `march/fields/groups.wgsl.ts` | 16704 | 286 |
+| `march/fields/bones.wgsl.ts` | 8346 | 145 |
+| `march/map-body.wgsl.ts` | 15540 | 266 |
+| `march/cone-march.wgsl.ts` | 11972 | 230 |
+| `march/body/params.wgsl.ts` | 14460 | 278 |
+| `march/body/trace.wgsl.ts` | 85392 | 1373 |
+| `march/body/face.wgsl.ts` | 11161 | 175 |
+| `march/body/surface.wgsl.ts` | 6541 | 114 |
+| `march/body/light.wgsl.ts` | 19896 | 322 |
+| `march/body/entry.wgsl.ts` | 6736 | 106 |
+| `march/helpers.ts` | 3415 | 52 |
+
+Before: `march.wgsl.ts` 229859 bytes / 3869 lines.
+
+## Golden gate
+
+`git diff 11fffe13 HEAD -- <snap>` is empty; `npm test -- march-golden` passes.
+Every string export, the joined `HELPERS`, and the export-name set are
+byte-identical across all eight Task-2 commits.
+
+## Pixel gate (`scripts/march-hash.mjs`)
+
+Room 1 (pinned canonical), identical to Task 1 Step 2 in all three fields:
+
+```json
+{"room1":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-repeat":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-wounded":"1381a866703b827745486a1062240a46bee5c73f"}
+```
+
+Room 2 (URL-neutral `MARCH_HASH_ROOM=2 MARCH_HASH_TILES=0`), identical:
+
+```json
+{"room2":"35b6d5619f7f85a52e852056a09f6c0fbfacf2c5","room2-repeat":"35b6d5619f7f85a52e852056a09f6c0fbfacf2c5"}
+```
+
+## Cold boot — interleaved A/B (fresh profile each run)
+
+Base worktree checked out at `3b75b2a8` (same `node_modules` symlink, same
+`boot-time.mjs`), run alternately with the after tree, three pairs:
+
+| pair | base drawOnce | after drawOnce | base warmMs | after warmMs |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1598.9 | 1371.8 | 3214 | 3137 |
+| 2 | 1420.7 | 1301.1 | 2744 | 2588 |
+| 3 | 1340.8 | 1651.6 | 2794 | 3799 |
+
+Base `drawOnce` 1341–1599, after 1301–1652 — overlapping, no code effect (the
+absolute level differs from Task 1's window; the controlled A/B is the
+comparison). The temporary base worktree was removed.
+
+## VERIFY
+
+`npx tsc --noEmit` passes; the VERIFY suite is 2 failed / 407 passed at every
+commit — the same two pre-existing failures documented in Task 1
+(`march-step-soundness` near-wound multiplier, `surface-nets-cpu` BAND
+COVERAGE).
+
+## Forced test-pointer edit
+
+`march.wgsl.test.ts` read `./march.wgsl?raw` for three structural pins that
+Task 2 moves out of the barrel (`FOLD_GROUP`'s `gInstBurn`/`gBurnEmit`,
+`CHAR_MASK`'s `fireRamp`, `MARCH_TRACE_POST`/`MARCH_BODY_LIGHT`'s `primGlow`).
+A prep commit replaced those raw reads with `MARCH_TREE_SRC` — the barrel plus
+every `.ts` file under `march/`, read via `readdirSync({recursive:true})`. The
+assertions themselves are unchanged; Task 3 relocates them next to their
+modules. The `ROW_PRIM_CLIP` docstring pin already read `moduleSource +
+layoutSource` from Task 1 and is untouched.
+
+## Circular-import check
+
+`madge` is not installed and `npx` cannot fetch it here. Grep confirms no
+`march/*` module imports `../march.wgsl` (the only hit is
+`march/march-golden.test.ts`, the gate that is supposed to read the barrel).
+Each new module imports its dependencies directly, so there is no cycle.
+
