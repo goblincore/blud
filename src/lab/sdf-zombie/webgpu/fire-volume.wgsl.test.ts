@@ -59,7 +59,8 @@ describe('fire volume march WGSL', () => {
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('return v * 1.142857;');
   });
   it('emits and absorbs with ONE coefficient, so thick flame cannot blow out to white', () => {
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let alphaF = 1.0 - exp(-density * FIRE_FLAME_SIGMA * dtFine);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let alphaF = 1.0 - exp(-density * FIRE_FLAME_SIGMA * densityK * dtFine);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('* mix(skin, 1.0, smoothstep(0.0, 0.3, u));');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('emission = emission + T * fireRamp(temp) * alphaF * cfg1.w;');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('T = T * (1.0 - alphaF);');
   });
