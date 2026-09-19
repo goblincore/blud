@@ -3,6 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): surface prep and output readers.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
+import { GLOW_BLOCK } from './blocks/surface/glow.wgsl';
 
 /**
  * SECTION 3 of 4 — SURFACE PREP: the light-independent material terms the
@@ -46,30 +47,7 @@ export const MARCH_BODY_SURFACE_PREP = /* wgsl */ `
   // shared light pass's exponent mapping against exactly this value.
   let specPow = mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss);
 
-  // The eye REPLACES the flesh rather than adding to it.
-  //
-  // This used to be a pure addition, and it could not produce a red eye. Lit
-  // flesh is already bright — roughly (1.16, 0.60, 0.62) with the key on it —
-  // so adding a red emissive on top gives something like (4.2, 0.62, 0.63).
-  // The output sRGB encode then clamps red at 1.0 while lifting the low
-  // channels hard (0.62 encodes to 0.81), and the eye lands at RGB(255, 206,
-  // 208): a pale cream, with the red only visible where it spilled onto the
-  // darker skin around the socket. Exactly the reported symptom.
-  //
-  // Fading the flesh out under the glow also matches what the GLSL header
-  // always claimed — "an eye should not be lit by the key light at all" — a
-  // statement the code never actually implemented.
-  let glow = faceGlowColor * faceGlow * faceCfg2.w
-           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm)
-           // PER-PRIM GLOW (hard-surface task 3): the same two lines keyed
-           // off the prim row instead of the face texture. The colour is the
-           // prim's OWN albedo (design C — a prim with color=ff2200 glow=0.9
-           // glows red because it IS red), the strength is the authored
-           // 0..1 from primClip.w. No faceCfg2.w global (the authored value
-           // IS the strength) and no flicker (that is the face sheet's
-           // heartbeat). Char kills it exactly as it kills the face glow:
-           // burnt is burnt.
-           + primAlbedo * primGlow * (1.0 - cm);
+${GLOW_BLOCK}
 `;
 
 /**
