@@ -14,6 +14,7 @@ import { GORE_BLOCK } from './blocks/post/gore.wgsl';
 import { MOTTLE_BLOCK } from './blocks/post/mottle.wgsl';
 import { ORGAN_BLOCK } from './blocks/post/organ.wgsl';
 import { TISSUE_BLOCK } from './blocks/post/tissue.wgsl';
+import { WOUND_MASKS_BLOCK } from './blocks/post/wound-masks.wgsl';
 
 /**
  * SECTION 2 of 4 — the trace: ray setup and pre-pass gates, the march loop,
@@ -951,23 +952,7 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
     return vec4<f32>(f32(ngReason + 1), select(0.0, ngScalar - hitField.x, ngValid), f32(hitBest), t);
   }
   if (normalGradientCfg.y > 0.5) { return vec4<f32>(n * 0.5 + 0.5, t); }
-  gWoundShadePrim = select(-1.0, f32(hitBest), hitBest >= 0 && hitBest < i32(gInstCounts.x));
-  let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
-  let wm = wmBoth.x;      // colouring / wet / cavity shading
-  let wmRim = wmBoth.y;   // fresnel fade, covers the lip
-  let wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
-  let cm = charMask(p, data, woundCfg);
-  let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
-  // Run 4: hand the anchor + gate to the output-res detail pass (MARCH_ANCHOR_READ).
-  gMarchAnchor = vec4<f32>(anchor, detailAmp);
-  if (detailAmp > 0.0) {
-    let detailNoise = vec3<f32>(
-      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0));
-    // Reuse the existing samples: Soldier wounds amplify their response into
-    // shallow pits without another noise call or global change.
-    let soldierPit = faceGlowRedOnly * smoothstep(0.08, 0.72, wm);
-    n = normalize(n + detailNoise * detailAmp * mix(1.0, 1.45, soldierPit));
-  }
+${WOUND_MASKS_BLOCK}
 ${TISSUE_BLOCK}
 
 ${ORGAN_BLOCK}
