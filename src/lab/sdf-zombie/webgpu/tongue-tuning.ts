@@ -28,7 +28,8 @@ export interface TongueTuning {
 }
 
 export const TONGUE_TUNING: TongueTuning = Object.freeze({
-  length: 0.45, ragged: 0.6, rise: 2.2, gain: 1.8, lean: 0.4,
+  // Owner tuning 2026-09-19 (the cards are now accents over the volume).
+  length: 0.08, ragged: 0.58, rise: 1.2, gain: 1.75, lean: 0.38,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider

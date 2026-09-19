@@ -65,14 +65,17 @@ export interface BurnTuning {
   corpseBurnSec: number;
 }
 
+// OWNER TUNING 2026-09-19 (flame lab, volume technique): the values below are
+// the owner's panel export after the volumetric-fire pass. The per-field
+// comments record why each was first set; the numbers are the owner's.
 export const BURN_TUNING: BurnTuning = Object.freeze({
-  igniteSec: 0.45, extinguishSec: 0.8, charRate: 0.22,
+  igniteSec: 0.3, extinguishSec: 0.65, charRate: 0.4,
   // 2026-09-17 fix pass: gain and charPatch raised from 1.6/0.35 after the
   // probe captures -- at the old values a fresh body read as pink flesh with
   // sparse fire dots instead of the engulfed reference look (dark char between
   // flames). charPatch 0.55 is what makes between-flame skin read as soot.
-  fireGain: 2.8, noiseScale: 7, riseSpeed: 1.8, charPatch: 0.55,
-  lightPeak: 26, lightFlicker: 0.35,
+  fireGain: 2.4, noiseScale: 22.5, riseSpeed: 3.4, charPatch: 0.56,
+  lightPeak: 106, lightFlicker: 0.68,
   // 2026-09-18 burning-feedback task 1: the two ROOM paths. The probe gather's
   // list is 8 slots shared with flashes/explosions/tracers, so fire caps at 2
   // and merges surplus burners into the nearest slot (burn-room-light.ts). The
@@ -80,15 +83,15 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   // burning body lights nearby props without blowing out at arm's length.
   lightGatherPeak: 120, lightMeshPeak: 40,
   glowGain: 0.5, glowThreshold: 0.75,
-  distortStrength: 0.006,
-  fireCoverage: 0.9,
+  distortStrength: 0.019,
+  fireCoverage: 0.42,
   // 0.7 (fix pass task 3): at the plan's 0.5 the probe capture showed pale
   // hints on shoulder and shin only -- the skull did not read. 0.7 at char
   // 0.6 gives skelK 0.42, which reads as bone through soot; probed 0.8 and
   // it stayed legible, but 0.7 leaves the preset room above it (ember is
   // the late-stage more-bone look). skelK is 0 on a fresh body by
   // construction, so this never paints an unburnt body.
-  skeletonShow: 0.7,
+  skeletonShow: 0.74,
   // flame-polish task 4: the shader's old reveal-depth constant, now a field.
   // 0.08 keeps the falloff ON the skeleton (the skull, forearms and shins
   // read; ribs sit deeper). The capture sweeps it now that bone is shaded
@@ -97,16 +100,16 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   // flame-polish task 1: 8 cm of soft-particle fade kills the hard card seam
   // where a flame quad crosses the body edge. 0 is the escape hatch. (At the
   // 0.5 m rail the flame visibly pulls off the body — 8 cm only rounds the cut.)
-  cardSoftFade: 0.08,
+  cardSoftFade: 0.13,
   // flame-polish task 2: 0.35 is where the shared curl field visibly ties the
   // cards into one flowing body without tearing them off the flesh; the flow
   // sweep (docs/dev-notes/2026-09-17-flame-lab/NOTES.md) covers the rails.
-  flameFlow: 0.35,
+  flameFlow: 0.62,
   // flame-polish task 5: six seconds of burn-down is long enough to read as a
   // fire dying down (the reference NotBlood burn-death is a collapsing column,
   // not a cut) and short enough that the corpse is cold quickly. The death
   // capture pins half and full of this window.
-  corpseBurnSec: 6,
+  corpseBurnSec: 9.4,
 });
 
 /** The clamp range for every field, as data.
