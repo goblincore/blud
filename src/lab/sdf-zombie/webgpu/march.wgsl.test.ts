@@ -33,7 +33,7 @@ import {
 import { MAX_WOUNDS } from '../damage';
 import { REC_VEC4S, REC_ANCHOR_BAND, REC_COUNTS } from './crowd-records';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 // Raw source import: the row-table docstrings are TS comments, invisible to
 // every exported WGSL string, and the Done-when "docstring no longer lies"
@@ -50,6 +50,20 @@ import { sdBody, sdPrimitive, MAX_PRIMS } from '../validate';
 import { packBody } from '../pack';
 import { add, cross, scale as vscale, sub, qFromAxisAngle, qNormalize } from '../vec';
 import type { Primitive, Vec3 } from '../types';
+
+// Phase-1 split (2026-09-18): the march shader text now lives in per-module
+// files under ./march/. These structural pins read the WHOLE split tree (the
+// barrel plus every march module) so a pin does not depend on which module
+// happens to hold a chunk. The Task-3 test split relocates each assertion next
+// to the module it pins.
+const MARCH_DIR = 'src/lab/sdf-zombie/webgpu/march';
+const MARCH_TREE_SRC = [
+  readFileSync('src/lab/sdf-zombie/webgpu/march.wgsl.ts', 'utf8'),
+  ...readdirSync(MARCH_DIR, { recursive: true })
+    .filter((f: string) => f.endsWith('.ts'))
+    .sort()
+    .map((f: string) => readFileSync(`${MARCH_DIR}/${f}`, 'utf8')),
+].join('\n');
 
 // Every WGSL source in the file. Anything new MUST be added here: the
 // reserved-word and parse-contract checks are the only thing standing between
@@ -698,7 +712,7 @@ describe('ported features reach the entry point', () => {
     // declaration is an implementation detail -- that it exists exactly once is
     // not.
     expect(INSTANCE_STATE).toContain('gInstBurn = (*inst)[base + ');
-    const moduleSrc = readFileSync('src/lab/sdf-zombie/webgpu/march.wgsl.ts', 'utf8');
+    const moduleSrc = MARCH_TREE_SRC;
     expect(moduleSrc.split('var<private> gInstBurn: vec4<f32>').length).toBe(2);
     expect(moduleSrc.split('var<private> gBurnEmit: vec3<f32>').length).toBe(2);
     const params = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
@@ -711,7 +725,7 @@ describe('ported features reach the entry point', () => {
     // through the skin as the body walks (the same reason the gore mottle uses
     // `anchor`). The char mix must come AFTER the wound char mix so a burnt
     // body reads burnt, and the fire must be emissive, not albedo.
-    expect(readFileSync('src/lab/sdf-zombie/webgpu/march.wgsl.ts', 'utf8'))
+    expect(MARCH_TREE_SRC)
       .toContain('fn fireRamp(t: f32) -> vec3<f32> {');
     expect(MARCH_BODY).toContain('let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);');
     expect(MARCH_BODY).toContain('fbm(anchor * burnNoiseScale');
@@ -2519,7 +2533,7 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     // FOURTH assignment — e.g. a separate `primGlow = primGlow * (1.0 -
     // painted)` kill line — would be the resurrected sunglasses rule wearing
     // a different hat (this exact mutation was run and killed).
-    expect((moduleSource.match(/primGlow =/g) ?? []).length).toBe(3);
+    expect((MARCH_TREE_SRC.match(/primGlow =/g) ?? []).length).toBe(3);
   });
 });
 
