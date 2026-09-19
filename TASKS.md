@@ -19,7 +19,7 @@
   room fire light; zombie burn panic (soldier OFF); ivory bone; soldier legs burn. Open: cheap smoke, head flame (optional), real flare gun.
 - [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
-  Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-2 merged, task 3 (feature blocks) not started.
+  Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](docs/dev-notes/2026-09-18-march-split/NOTES.md)).
 - [ ] Then: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
 - [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
   **Explosion curl: seam fixed and verified** (edge-map gate `npm run explosion:seam`, all scenes clean, billow kept; ship values

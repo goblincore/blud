@@ -284,3 +284,50 @@ lines and the emission compose line.
 `FACE_LAYER_WGSL` (`body/face.wgsl.ts`) was already its own block. Block
 modules are NOT re-exported from the barrel: the golden test hashes the barrel's
 export names, and blocks are internal to the body strings.
+
+## Results (task 3)
+
+**Blocks:** 25 feature blocks under `march/body/blocks/{setup,loop,post,surface,light}/`,
+one commit each, each gated by `tsc` + the golden + the march shader-text tests.
+`body/trace.wgsl.ts` 1,373 → 325 lines, `body/light.wgsl.ts` 322 → 65,
+`body/surface.wgsl.ts` 114 → 62. Largest block: `post/burn` (159 lines incl. header).
+What stays in the parents is glue: string openers, the post-hit preamble, the
+key/spec/fresnel lines, the emission line, and the march walk itself
+(`MARCH_TRACE_LOOP`'s `for` body, ~175 lines — the next candidate if phase 2
+wants the walk as its own function).
+
+Cutter lesson: the first pass located blocks by LINE NUMBER, and every block
+import added at the top shifted the lines below it — the text stayed
+byte-identical (golden green), but every cut after the first landed off its
+feature boundary. The golden cannot see a misplaced cut, only a changed byte.
+Redone from the melt commit, locating each block by its exact original line run
+(must match exactly once); the interpolation counts per block then matched the
+inventory (prim-material 3 row constants, wound-list 2, …).
+
+**Test split:** `march.wgsl.test.ts` (2,790 lines) → 30 test files beside their
+modules (3,177 lines incl. headers/imports) + `webgpu/march-test-support.ts`
+(`MARCH_TREE_SRC`, `ALL`, `declaredName`). Support lives OUTSIDE `march/`, and
+`MARCH_TREE_SRC` now skips `*.test.ts` (own commit, 240 green before the move):
+a test file inside the tree would otherwise match its own needle and turn every
+positive pin vacuous. The grab-bag `ported features reach the entry point`
+describe is split by `it()` across the files it pins, keeping its title.
+Counts: 187 `it()` declarations (240 with `it.each` expansion) and 650
+`expect()` calls, before and after; sorted title lists identical.
+
+**Gates at `fa7bd796`:**
+- golden: unchanged (every barrel export, joined `HELPERS`, export names).
+- VERIFY: 407 passed / 2 failed — the two pre-existing failures; 409 total as base.
+- Pixel (`march-hash.mjs`, base `e3077f7c` and after, same machine):
+  room1 `8f2b74e71ff18dd04a99c05fe19392b96dd80c9d` (repeat identical, wounded
+  `1381a866…`), room2 (`MARCH_HASH_ROOM=2 MARCH_HASH_TILES=0`)
+  `35b6d5619f7f85a52e852056a09f6c0fbfacf2c5` — identical, and equal to the
+  task-1/2 values.
+
+**Pixel-gate false alarm (worth knowing):** three runs during this task read
+room1 `b6422b41…` / repeat `9871c2c2…` ("not deterministic within boot") and
+once "canonical moved: ce7045ac…", reproducibly enough to look like a code
+bisect hit (it even "bisected" to the test-split commit). It was a concurrent
+headless capture — a game-main dispatch agent running its own lab-servers +
+march-hash on other ports, same GPU. Re-run alone, every commit gives the pinned
+hashes. Never run two pixel gates at once; check for other
+`--remote-debugging-port=93xx` Chromes before believing a pixel-gate failure.
