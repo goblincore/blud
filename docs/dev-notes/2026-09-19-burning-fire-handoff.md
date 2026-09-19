@@ -65,8 +65,10 @@ learned, and what is open. Pick up from here.
 3. **Compile time next steps** — merge the crowd + body march programs (one
    program, runtime flag); march phase 2 (shrink the 2,100-line `marchBody`,
    named uniform structs) — see `docs/superpowers/specs/2026-09-18-march-wgsl-refactor-design.md`.
-4. **march split task 3** (feature blocks out of the big strings + test split) —
-   planned, not started (`docs/superpowers/plans/2026-09-18-march-wgsl-split.md`).
+4. ~~**march split task 3**~~ — DONE 2026-09-19, merged (`006fd7ac`): 25 feature
+   blocks under `march/body/blocks/`, tests split beside their modules
+   (`docs/dev-notes/2026-09-18-march-split/NOTES.md`). game-main leaves wave 1
+   merged alongside (11,598 → 9,721 lines; next wave in TASKS.md).
 5. **Real flare gun** (projectile, damage, burn death) — owner's separate pass.
 6. Fire gather light is self-shadowed at the chest anchor (walls get only the
    PointLight pool) — see `docs/dev-notes/2026-09-18-burning-feedback/A-light-and-neighbours.md`.
