@@ -7,6 +7,7 @@ import { DISPLAY_DEBUG_BLOCK } from './blocks/light/display-debug.wgsl';
 import { COMPOSE_BLOCK } from './blocks/light/compose.wgsl';
 import { AMBIENT_BLOCK } from './blocks/light/ambient.wgsl';
 import { OCCLUSION_BLOCK } from './blocks/light/occlusion.wgsl';
+import { FLASHLIGHT_BLOCK } from './blocks/light/flashlight.wgsl';
 
 export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
   // Run 5b: the normal attachment's alpha carries a per-body KEY (gInstCentre is the record's per-body centre, read from the
@@ -24,58 +25,7 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
   if (debugCfg.x > 8.5 && debugCfg.x < 9.5) {
     return vec4<f32>(normalize(n), t);
   }
-  // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
-  // The world's SpotLight is invisible to the march — SDF bodies are shaded
-  // here, not by three — so the beam is re-evaluated analytically per pixel.
-  //
-  // PER-PIXEL, not per-body, so the cone edge cuts ACROSS a figure instead of
-  // the whole zombie popping on at once.
-  //
-  // ZERO field taps: a normalise, two dots and a divide. This is the
-  // constraint that let character self-shadowing be cut rather than paid for.
-  //
-  // It drives L and keyColor — NOT albedo. ambientAt renormalises bounce to
-  // unit luminance, so an albedo boost would change hue and leave brightness
-  // untouched. Brightness must ride the key.
-  var L = normalize(lightDir);
-  var keyC = keyColor;
-  var keyI = lightCfg.x;
-  var beamAmt = 0.0;
-  if (spotCfg.x > 0.0) {
-    let toLamp = spotPos - p;
-    let dist = length(toLamp);
-    let Ls = toLamp / max(dist, 1e-4);
-    let cone = dot(-Ls, normalize(spotAxis));
-    let coneFall = clamp((cone - spotCfg.z) / max(spotCfg.y - spotCfg.z, 1e-4), 0.0, 1.0);
-    let distFall = clamp(1.0 - dist / max(spotCfg.w, 1e-4), 0.0, 1.0);
-    let beam = coneFall * coneFall * distFall * distFall * spotCfg.x;
-    // Blend the key TOWARD the beam. At beam 0 this is exactly the old key,
-    // which keeps the lab and every existing preset bit-identical.
-    L = normalize(mix(L, Ls, clamp(beam, 0.0, 1.0)));
-    keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
-    // spotCfg2.x is the beam's KEY GAIN, a live knob. The 2.2 it replaces
-    // blew a lit body clean past 1.0 on every channel, and a clipped
-    // body has no wound in it: crater, lip and char all saturate to the
-    // same white. See the shoulder below.
-    // THE BEAM IS THE KEY, NOT A BONUS ON TOP OF IT (spotCfg2.z).
-    //
-    // This used to be lightCfg.x + beam*gain, which left the preset's own key
-    // — 2.4 for practical-hard-key — burning at full strength from a fixed
-    // direction that nothing could switch off. So a character standing in an
-    // unlit corridor was still brightly lit from nowhere (owner, 2026-09-01:
-    // "the unlit characters seem still to be lit ... bright in the darkness
-    // without light"). In a dungeon the lamp you carry has to be the reason a
-    // body is visible.
-    //
-    // spotCfg2.z is what survives of the preset key when the beam is off: a
-    // floor, not a fill. It is NOT zero on purpose — ambientAt carries hue
-    // rather than brightness (bounce is renormalised to unit luminance), so a
-    // character lit by nothing but bounce has no level at all and disappears
-    // completely rather than reading as a shape in the dark.
-    keyI = lightCfg.x * spotCfg2.z + beam * spotCfg2.x;
-    beamAmt = beam;
-  }
-  // ---- END ANALYTIC FLASHLIGHT --------------------------------------------
+${FLASHLIGHT_BLOCK}
   let V = -rd;
   let H = normalize(L + V);
   let diff = max(dot(n, L), 0.0);
