@@ -1,0 +1,872 @@
+{
+  "backend": "webgpu",
+  "note": "EXCLUSIVE GPU ms (gpu-pass-timing completion-order attribution); rawMarch/rawCopy are the end-minus-start residency medians round 2 reported. Bodies replicate the burning capsules (the lab has two).",
+  "sanity": {
+    "marchCollapsesAtSteps0": false,
+    "copyCheaperThanMarch": false,
+    "rawBoundariesPresent": true,
+    "marchPassesPerFrame": [
+      {
+        "bodies": 1,
+        "passes": 465,
+        "frames": 160
+      },
+      {
+        "bodies": 4,
+        "passes": 186,
+        "frames": 61
+      },
+      {
+        "bodies": 8,
+        "passes": 186,
+        "frames": 61
+      }
+    ]
+  },
+  "results": [
+    {
+      "scale": 0.5,
+      "bodies": 1,
+      "on": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 160,
+        "samples": 2146,
+        "wall": {
+          "n": 120,
+          "median": 16.600000001490116
+        },
+        "counts": [
+          {
+            "label": "init",
+            "passes": 69
+          },
+          {
+            "label": "sdf:polys",
+            "passes": 480
+          },
+          {
+            "label": "sdf:march",
+            "passes": 480
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 480
+          },
+          {
+            "label": "effects",
+            "passes": 480
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 480
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 480
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 480
+          },
+          {
+            "label": "post:smear",
+            "passes": 480
+          },
+          {
+            "label": "post:blit",
+            "passes": 1134
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 465
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 465
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 465
+          }
+        ],
+        "rawMarch": 6.342,
+        "rawResolve": 6.379,
+        "rawComposite": 6.403
+      },
+      "off": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 31,
+        "samples": 403,
+        "wall": {
+          "n": 120,
+          "median": 16.600000001490116
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 93
+          },
+          {
+            "label": "sdf:march",
+            "passes": 93
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 93
+          },
+          {
+            "label": "effects",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 93
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 93
+          },
+          {
+            "label": "post:smear",
+            "passes": 93
+          },
+          {
+            "label": "post:blit",
+            "passes": 186
+          }
+        ],
+        "rawMarch": 0.243,
+        "rawResolve": 0.28,
+        "rawComposite": 0.302
+      }
+    },
+    {
+      "scale": 0.5,
+      "bodies": 4,
+      "on": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 61,
+        "samples": 793,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 186
+          },
+          {
+            "label": "sdf:march",
+            "passes": 186
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 186
+          },
+          {
+            "label": "effects",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 186
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 186
+          },
+          {
+            "label": "post:smear",
+            "passes": 186
+          },
+          {
+            "label": "post:blit",
+            "passes": 372
+          }
+        ],
+        "rawMarch": 6.887,
+        "rawResolve": 6.931,
+        "rawComposite": 6.95
+      },
+      "off": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 31,
+        "samples": 403,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 90
+          },
+          {
+            "label": "sdf:march",
+            "passes": 90
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 90
+          },
+          {
+            "label": "effects",
+            "passes": 90
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 90
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 90
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 90
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 90
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 90
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 90
+          },
+          {
+            "label": "post:smear",
+            "passes": 90
+          },
+          {
+            "label": "post:blit",
+            "passes": 180
+          }
+        ],
+        "rawMarch": 0.257,
+        "rawResolve": 0.278,
+        "rawComposite": 0.285
+      }
+    },
+    {
+      "scale": 0.5,
+      "bodies": 8,
+      "on": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 61,
+        "samples": 793,
+        "wall": {
+          "n": 120,
+          "median": 16.600000001490116
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 186
+          },
+          {
+            "label": "sdf:march",
+            "passes": 186
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 186
+          },
+          {
+            "label": "effects",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 186
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 186
+          },
+          {
+            "label": "post:smear",
+            "passes": 186
+          },
+          {
+            "label": "post:blit",
+            "passes": 372
+          }
+        ],
+        "rawMarch": 8.858,
+        "rawResolve": 8.879,
+        "rawComposite": 8.896
+      },
+      "off": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 31,
+        "samples": 403,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 90
+          },
+          {
+            "label": "sdf:march",
+            "passes": 90
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 90
+          },
+          {
+            "label": "effects",
+            "passes": 90
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 90
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 90
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 90
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 90
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 90
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 90
+          },
+          {
+            "label": "post:smear",
+            "passes": 90
+          },
+          {
+            "label": "post:blit",
+            "passes": 180
+          }
+        ],
+        "rawMarch": 2.105,
+        "rawResolve": 2.125,
+        "rawComposite": 2.139
+      }
+    },
+    {
+      "scale": 0.25,
+      "bodies": 1,
+      "on": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 61,
+        "samples": 793,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 186
+          },
+          {
+            "label": "sdf:march",
+            "passes": 186
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 186
+          },
+          {
+            "label": "effects",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 186
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 186
+          },
+          {
+            "label": "post:smear",
+            "passes": 186
+          },
+          {
+            "label": "post:blit",
+            "passes": 372
+          }
+        ],
+        "rawMarch": 2.179,
+        "rawResolve": 2.179,
+        "rawComposite": 2.206
+      },
+      "off": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 31,
+        "samples": 403,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 93
+          },
+          {
+            "label": "sdf:march",
+            "passes": 93
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 93
+          },
+          {
+            "label": "effects",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 93
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 93
+          },
+          {
+            "label": "post:smear",
+            "passes": 93
+          },
+          {
+            "label": "post:blit",
+            "passes": 186
+          }
+        ],
+        "rawMarch": 0.279,
+        "rawResolve": 0.286,
+        "rawComposite": 0.306
+      }
+    },
+    {
+      "scale": 0.25,
+      "bodies": 4,
+      "on": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 62,
+        "samples": 806,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 183
+          },
+          {
+            "label": "sdf:march",
+            "passes": 183
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 183
+          },
+          {
+            "label": "effects",
+            "passes": 183
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 183
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 183
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 183
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 183
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 183
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 183
+          },
+          {
+            "label": "post:smear",
+            "passes": 183
+          },
+          {
+            "label": "post:blit",
+            "passes": 366
+          }
+        ],
+        "rawMarch": 2.892,
+        "rawResolve": 2.91,
+        "rawComposite": 2.938
+      },
+      "off": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 31,
+        "samples": 403,
+        "wall": {
+          "n": 120,
+          "median": 16.600000001490116
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 93
+          },
+          {
+            "label": "sdf:march",
+            "passes": 93
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 93
+          },
+          {
+            "label": "effects",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 93
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 93
+          },
+          {
+            "label": "post:smear",
+            "passes": 93
+          },
+          {
+            "label": "post:blit",
+            "passes": 186
+          }
+        ],
+        "rawMarch": 0.279,
+        "rawResolve": 0.282,
+        "rawComposite": 0.301
+      }
+    },
+    {
+      "scale": 0.25,
+      "bodies": 8,
+      "on": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 61,
+        "samples": 793,
+        "wall": {
+          "n": 120,
+          "median": 16.600000001490116
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 186
+          },
+          {
+            "label": "sdf:march",
+            "passes": 186
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 186
+          },
+          {
+            "label": "effects",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 186
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 186
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 186
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 186
+          },
+          {
+            "label": "post:smear",
+            "passes": 186
+          },
+          {
+            "label": "post:blit",
+            "passes": 372
+          }
+        ],
+        "rawMarch": 6.435,
+        "rawResolve": 6.451,
+        "rawComposite": 6.475
+      },
+      "off": {
+        "installed": true,
+        "raw": true,
+        "march": 0,
+        "resolve": 0,
+        "composite": 0,
+        "copy": 0,
+        "total": 0,
+        "frames": 31,
+        "samples": 403,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        },
+        "counts": [
+          {
+            "label": "sdf:polys",
+            "passes": 93
+          },
+          {
+            "label": "sdf:march",
+            "passes": 93
+          },
+          {
+            "label": "sdf:composite",
+            "passes": 93
+          },
+          {
+            "label": "effects",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-march",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-resolve",
+            "passes": 93
+          },
+          {
+            "label": "post:fire-composite",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-extract",
+            "passes": 93
+          },
+          {
+            "label": "post:glow-blur",
+            "passes": 93
+          },
+          {
+            "label": "post:fxaa",
+            "passes": 93
+          },
+          {
+            "label": "post:smear",
+            "passes": 93
+          },
+          {
+            "label": "post:blit",
+            "passes": 186
+          }
+        ],
+        "rawMarch": 0.285,
+        "rawResolve": 0.294,
+        "rawComposite": 0.314
+      }
+    }
+  ]
+}

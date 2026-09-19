@@ -76,7 +76,7 @@
 // gate; normal runs are unchanged.
 // Exits 0 on success, 2 if it could not run (boot failure, page exception,
 // no WebGPU backend, a flat capture).
-import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, openSync, rmSync, readFileSync, statSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
 import { inflateSync, deflateSync } from 'node:zlib';
 
@@ -286,10 +286,50 @@ let fixture = null;
   const i = argv.indexOf('--fixture');
   if (i !== -1) {
     const v = argv[i + 1];
-    if (v !== 'run' && v !== 'stand') fail('--fixture needs run|stand');
-    fixture = v;
+    if (v !== 'run' && v !== 'stand' && v !== 'dash' && v !== 'dash-stop') fail('--fixture needs run|stand|dash|dash-stop');
+    // 'dash' is the page's 'run' fixture (the scripted straight dash); the page
+    // echoes the name it applied, so keep the wire name 'run'.
+    fixture = (v === 'dash' || v === 'dash-stop') ? 'run' : v;
     argv.splice(i, 2);
-    if (poseList === null) poseList = [v === 'run' ? 'run' : 'stand'];
+    if (poseList === null) poseList = [v === 'stand' ? 'stand' : 'run'];
+  }
+}
+
+// --- sheet mode (round 2b task 4b step 7) -----------------------------------
+// `--sheet <out.png> <in1.png> <in2.png> ...` composes a row of already-written
+// captures at one height, so the round-2 volume, the new volume, the cards and
+// the Blood wildfire tiles can be judged in one image. It starts no page.
+// `--sheet-tiles a.png,b.png` appends scaled reference tiles (the Blood
+// wildfire sprite tiles) to the sheet's right-hand side. Parsed BEFORE --sheet,
+// which takes the remaining positionals.
+let sheetTiles = null;
+{
+  const i = argv.indexOf('--sheet-tiles');
+  if (i !== -1) { sheetTiles = String(argv[i + 1] ?? '').split(',').filter(Boolean); argv.splice(i, 2); }
+}
+let sheetArgs = null;
+{
+  const i = argv.indexOf('--sheet');
+  if (i !== -1) { sheetArgs = argv.slice(i + 1); argv.splice(i, 1); }
+}
+
+// --- look A/B mode (round 2b task 4b step 5) --------------------------------
+// `--look` captures the four LOOK metrics for stand and close: the
+// round-2-emulated tuning vs the new round-2b tuning, both on the SAME page
+// load, camera and pose (frozen), plus a sootGain-0 twin for the smoke metric
+// and a 20-frame standing burst for the motion metric. Writes look.json and
+// takes no pose sweep. The emulated baseline is the round-2b shader with
+// erode 0 / smoke 0 / the round-2 falloff — it is labelled as such, because
+// the exact round-2 shader is not in the tree any more (the committed round-2
+// PNGs are measured separately for the structure/gaps check).
+let lookMode = false;
+{
+  const i = argv.indexOf('--look');
+  if (i !== -1) { lookMode = true; argv.splice(i, 1); }
+  if (lookMode) {
+    if (technique === null) technique = 'volume';
+    if (poseList === null) poseList = ['stand', 'close'];
+    // frozen is set after its declaration below (--look implies it).
   }
 }
 
@@ -336,6 +376,9 @@ let frozen = false;
   const i = argv.indexOf('--frozen');
   if (i !== -1) { frozen = true; argv.splice(i, 1); }
 }
+// --look implies a frozen camera/pose (the A/B must share framing), so set it
+// here where `frozen` exists; the clock pin below then picks up 0.
+if (lookMode) frozen = true;
 // The clock a run pins: an explicit --clock wins, else frozen pins 0.
 const clockPinValue = clock ?? (frozen ? 0 : null);
 
@@ -507,6 +550,9 @@ async function serversUp() {
     if (verdict !== 'ok') fail(`reused chrome on ${CDP} has no working WebGPU: ${verdict}`);
   }
 }
+
+// SHEET MODE is handled after the contact-sheet consts, below (it needs
+// CONTACT_BODY_PX).
 
 // Servers BEFORE the CDP prologue: melt-capture's prologue could assume its
 // shell wrapper had already started them; this script owns the lifecycle.
@@ -715,6 +761,192 @@ function maskStats(luma, mask) {
   };
 }
 
+// --- flame look metrics (round 2b task 4b step 5) ---------------------------
+// The judge for "does the volume read as flame": a smooth glow shell and an
+// eroded tongue field can have the same mean brightness, so these measure the
+// SHAPE. All operate inside the flame's screen bounds (the projected fire AABB,
+// volumeProbe().bounds), in 0..255 luma.
+
+/** A hot flame pixel: red-dominant and not the room. The lab's background is a
+ *  near-black brown and the floor is desaturated, so this is robust; the
+ *  reference-tile strip is OUTSIDE the projected fire bounds by construction. */
+function isFirePixel(r, g, b) {
+  return r > 50 && r > b + 22 && r > g * 0.75;
+}
+
+/** Structure (mean |Laplacian| of luma), gaps (dark fraction) and flame
+ *  coverage inside a screen rect. `structure` rises when the flame tears into
+ *  tongues and falls for a smooth shell; `gaps` is the fraction of the rect
+ *  darker than 30% of the flame's own median luma — a shell has none. */
+function flameMetrics(png, box) {
+  const d = decodePng(png);
+  if (d.unsupported) return { unsupported: true };
+  const { w, h, rgba } = d;
+  if (!box) return { boxPx: 0 };
+  const x0 = Math.max(0, Math.min(w - 1, box[0] | 0));
+  const y0 = Math.max(0, Math.min(h - 1, box[1] | 0));
+  const x1 = Math.max(0, Math.min(w - 1, box[2] | 0));
+  const y1 = Math.max(0, Math.min(h - 1, box[3] | 0));
+  if (x1 <= x0 + 2 || y1 <= y0 + 2) return { boxPx: 0 };
+  const luma = lumaOf(rgba);
+  const vals = [];
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = (y * w + x) * 4;
+      if (isFirePixel(rgba[i], rgba[i + 1], rgba[i + 2])) vals.push(luma[y * w + x]);
+    }
+  }
+  let boxPx = 0, dark = 0;
+  let median = 0;
+  if (vals.length > 8) {
+    vals.sort((a, b) => a - b);
+    median = vals.length % 2 ? vals[vals.length >> 1] : (vals[(vals.length >> 1) - 1] + vals[vals.length >> 1]) / 2;
+    const darkThr = median * 0.3;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        boxPx++;
+        if (luma[y * w + x] < darkThr) dark++;
+      }
+    }
+  }
+  let lapSum = 0, lapN = 0;
+  for (let y = y0 + 1; y <= y1 - 1; y++) {
+    for (let x = x0 + 1; x <= x1 - 1; x++) {
+      const i = y * w + x;
+      const lap = luma[i - 1] + luma[i + 1] + luma[i - w] + luma[i + w] - 4 * luma[i];
+      lapSum += Math.abs(lap);
+      lapN++;
+    }
+  }
+  return {
+    boxPx,
+    flamePx: vals.length,
+    flameFrac: boxPx > 0 ? +(vals.length / boxPx).toFixed(4) : 0,
+    median: +median.toFixed(2),
+    structure: lapN > 0 ? +(lapSum / lapN).toFixed(3) : 0,
+    gaps: boxPx > 0 ? +(dark / boxPx).toFixed(4) : 0,
+  };
+}
+
+/** Mean luma (0..255) over a screen rect — the smoke crop's reading. */
+function cropMeanLuma(png, box) {
+  const d = decodePng(png);
+  if (d.unsupported) return null;
+  const { w, h, rgba } = d;
+  const x0 = Math.max(0, Math.min(w - 1, Math.round(box[0])));
+  const y0 = Math.max(0, Math.min(h - 1, Math.round(box[1])));
+  const x1 = Math.max(0, Math.min(w - 1, Math.round(box[2])));
+  const y1 = Math.max(0, Math.min(h - 1, Math.round(box[3])));
+  if (x1 <= x0 || y1 <= y0) return { mean: 0, px: 0 };
+  let sum = 0, n = 0;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = (y * w + x) * 4;
+      sum += 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+      n++;
+    }
+  }
+  return { mean: +(sum / n).toFixed(2), px: n };
+}
+
+/** Mean absolute per-pixel luma change between two decoded frames, inside a
+ *  rect — the "fire moves by itself" measurement while the body stands still. */
+function frameDiffInBox(aPng, bPng, box) {
+  const a = decodePng(aPng); const b = decodePng(bPng);
+  if (a.unsupported || b.unsupported || !box) return 0;
+  const { w, h } = a;
+  const la = lumaOf(a.rgba); const lb = lumaOf(b.rgba);
+  const x0 = Math.max(0, Math.min(w - 1, box[0] | 0));
+  const y0 = Math.max(0, Math.min(h - 1, box[1] | 0));
+  const x1 = Math.max(0, Math.min(w - 1, box[2] | 0));
+  const y1 = Math.max(0, Math.min(h - 1, box[3] | 0));
+  let sum = 0, n = 0;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      sum += Math.abs(la[y * w + x] - lb[y * w + x]);
+      n++;
+    }
+  }
+  return n > 0 ? +(sum / n).toFixed(3) : 0;
+}
+
+/** The smoke crop: 0.5..1.5 m above the head, half a metre either side. */
+function smokeCrop(probe) {
+  const s = probe.pxPerM;
+  const hx = probe.head[0], hy = probe.head[1];
+  return [hx - 0.5 * s, hy - 1.5 * s, hx + 0.5 * s, hy - 0.5 * s];
+}
+
+/** The flame's horizontal centroid minus the body's projected x, in METRES
+ *  along world +x (positive = flame is ahead of the body). The trail test: a
+ *  dashed body leaves it negative (opposite the +x motion); a stopped body
+ *  centres it near zero. `probe.right` gives the screen direction of world +x.
+ *
+ *  The sample band is ABOVE THE TORSO and the reference strip is excluded: the
+ *  fire's light pool on the floor and the strip's orange art both pass the hot
+ *  test and dragged the whole-frame centroid forward in the first dash run
+ *  (a +1.06 m "trail" in the wrong direction). */
+function flameCentroidOffsetM(png, probe) {
+  if (!probe || !probe.bounds) return null;
+  const d = decodePng(png);
+  if (d.unsupported) return null;
+  const { w, h, rgba } = d;
+  const [bx0, by0, bx1, by1] = probe.bounds;
+  const s = probe.pxPerM > 0 ? probe.pxPerM : 1;
+  // Above the torso: from 2.0 m above down to 0.2 m above (screen y grows down).
+  const y0 = Math.max(by0, Math.round(probe.torso[1] - 2.0 * s));
+  const y1 = Math.min(by1, Math.round(probe.torso[1] - 0.2 * s));
+  let sx = 0, n = 0;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = bx0; x <= bx1; x++) {
+      if (REFERENCE_STRIP(x, y, w, h)) continue;
+      const i = (y * w + x) * 4;
+      const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+      if (!isFirePixel(r, g, b)) continue;
+      const l = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (l < 55) continue;
+      sx += x; n++;
+    }
+  }
+  if (n < 16 || !probe.pxPerM) return { flamePx: n };
+  const sign = probe.right[0] - probe.torso[0] >= 0 ? 1 : -1;
+  const cx = sx / n;
+  return {
+    flamePx: n,
+    centroidPx: +cx.toFixed(1),
+    bodyPx: +probe.torso[0].toFixed(1),
+    offsetM: +(((cx - probe.torso[0]) / probe.pxPerM) * sign).toFixed(4),
+    band: [y0, y1],
+    velX: probe.vel ? +probe.vel[0].toFixed(3) : null,
+  };
+}
+
+/** The Blood reference-tile strip's screen region (bottom-right): orange flame
+ *  art that a hot-pixel mask would otherwise read as fire. */
+const REFERENCE_STRIP = (x, y, w, h) => x > 0.70 * w && y > 0.78 * h;
+
+/** Bounding box of hot flame pixels, with an optional exclusion predicate —
+ *  used on a saved PNG (a committed round-2 capture) where no page probe is
+ *  available to project the fire AABB. The reference-tile strip is excluded by
+ *  the caller (it is orange fire art and would swallow the box). */
+function imageFireBox(png, exclude) {
+  const d = decodePng(png);
+  if (d.unsupported) return null;
+  const { w, h, rgba } = d;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1, n = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (exclude && exclude(x, y, w, h)) continue;
+      const i = (y * w + x) * 4;
+      if (!isFirePixel(rgba[i], rgba[i + 1], rgba[i + 2])) continue;
+      n++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  return n > 32 ? [x0, y0, x1, y1] : null;
+}
+
 // --- contact sheet ----------------------------------------------------------
 
 const CRC_TABLE = new Int32Array(256).map((_, n) => {
@@ -806,6 +1038,21 @@ function composeContact(frames, tiles, outPath) {
 
 // --- The sweep ---------------------------------------------------------------
 
+// SHEET MODE: compose a row of already-written PNGs and exit. Runs here because
+// composeContact needs CONTACT_BODY_PX; the servers are up by now and the exit
+// handler reaps them. The trailing positional is OUT (a directory).
+if (sheetArgs) {
+  if (sheetArgs.length < 2) fail('--sheet needs <name.png> <in1.png> [in2.png ...] (OUT dir is the positional)');
+  const [name, ...rest] = sheetArgs;
+  const inputs = rest.filter((f) => { try { return statSync(f).isFile(); } catch { return false; } });
+  const frames = inputs.map((f) => ({ name: f.split('/').pop(), buf: readFileSync(f) }));
+  const tiles = (sheetTiles ?? []).map((f) => ({ file: f.split('/').pop(), buf: readFileSync(f) }));
+  const outPath = `${OUT}/${name}`;
+  const composed = composeContact(frames, tiles, outPath);
+  console.log(`sheet ${outPath} (${composed.w}x${composed.h}: ${composed.entries.join(' | ')})`);
+  process.exit(0);
+}
+
 await send('Page.enable');
 await send('Runtime.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
@@ -813,7 +1060,8 @@ await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceSc
 // FRESH PAGE PER POSE: the page has no "stop wandering" key (',' and '.' only
 // set wanderOn), and char is MONOTONIC within a page — a new load resets both,
 // so every pose starts from the same clean idle state.
-async function freshPage() {
+async function freshPage(frozenOverride) {
+  const useFrozen = frozenOverride === undefined ? frozen : frozenOverride;
   await send('Page.navigate', { url: `http://localhost:${VITE}${PAGE_PATH}` });
   let booted = false;
   for (let i = 0; i < 160; i++) {
@@ -838,7 +1086,7 @@ async function freshPage() {
   }
   // Freeze FIRST, before the settle frames: the pristine motion record and the
   // reset orbit camera must be the state every later frame builds on.
-  if (frozen) {
+  if (useFrozen) {
     const applied = await evaluate('window.__flameLab.freeze(true)');
     if (applied !== true) fail(`freeze(true) applied ${JSON.stringify(applied)}`);
   }
@@ -865,7 +1113,7 @@ async function freshPage() {
   }
   // Freeze the visual clock for a same-phase --flow-sweep A/B (and for every
   // --frozen run — the flipbook and curl must share one instant).
-  if (clockPinValue !== null) {
+  if (clockPinValue !== null && useFrozen) {
     const applied = await evaluate(`window.__flameLab.setClock(${clockPinValue})`);
     if (applied !== clockPinValue) fail(`setClock(${clockPinValue}) applied ${JSON.stringify(applied)}`);
   }
@@ -909,14 +1157,27 @@ const shots = [];
 /** Screenshot, write, gate on luma, and record — the one shutter so the death
  *  sequence (flame-polish task 5) and the pose sweep cannot drift apart. */
 async function shoot(name, meta) {
+  // The look probe rides the same frame as the screenshot (the camera/limbs it
+  // reads are the ones just rendered), so the metrics' screen bounds match.
+  const probe = technique === 'volume'
+    ? await evaluate('window.__flameLab.volumeProbe()')
+    : null;
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   const buf = Buffer.from(shot.result.data, 'base64');
   writeFileSync(`${OUT}/${name}`, buf);
   const stats = pngStats(buf);
   if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
   if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
-  shots.push({ ...meta, file: name, std: stats.std, buf });
-  console.log(`${name}  (luma std=${stats.std})`);
+  const metrics = probe ? flameMetrics(buf, probe.bounds) : null;
+  // The tight box is derived from THIS frame's hot pixels (minus the
+  // reference-tile strip, which is orange flame art in the bottom-right). It is
+  // the sensitive structure/gaps judge: a diffuse shell bounds itself tightly
+  // and fills its box, a tongue field leaves gaps between the licks.
+  const metricsTight = technique === 'volume'
+    ? flameMetrics(buf, imageFireBox(buf, REFERENCE_STRIP))
+    : null;
+  shots.push({ ...meta, file: name, std: stats.std, probe, metrics, metricsTight, buf });
+  console.log(`${name}  (luma std=${stats.std}${metrics ? `, structure=${metrics.structure}, gaps=${metrics.gaps}, flamePx=${metrics.flamePx}` : ''}${metricsTight ? `, tight structure=${metricsTight.structure}, gaps=${metricsTight.gaps}` : ''})`);
 }
 
 /** Median of a numeric list (0 for an empty one). */
@@ -928,30 +1189,54 @@ function median(list) {
 
 /**
  * The fire pass's GPU ms from the lab's pass timings, medians over the window.
- * Labels are the post-aa setPassLabel names; `total` sums the four fire draws.
+ * Labels are the post-aa setPassLabel names.
+ *
+ * THE EXCLUSIVE CHARGE IS THE NUMBER. three's raw `ms` is end-minus-start, and
+ * on a tile GPU every pass's pair starts at the command buffer's schedule time,
+ * so a full-res copy reads the same residency as the 32-step march it queued
+ * behind (round 2's "a copy costs 2.6 ms" table). `passTimings().exclusive` is
+ * gpu-pass-timing's completion-order attribution, which partitions the frame's
+ * GPU span exactly; it is what `march`/`resolve`/`composite`/`copy` report
+ * here. The raw residency medians ride along as `raw*` for the cross-check.
+ * `counts` is the per-label pass census — a label whose count is not one per
+ * frame is re-rendering, and no per-pass ms can be trusted then.
  */
 async function sampleFireMs(settle) {
   await frames(settle);
   const t = await evaluate('window.__flameLab.passTimings()');
   const wall = await evaluate('window.__flameLab.frameMs()');
   if (!t || t.installed !== true) return { installed: false, wall };
+  const key = (label) => label.slice('post:fire-'.length);
   const byLabel = new Map();
-  for (const s of t.samples) {
+  const perFrameTotals = [];
+  for (const fr of (t.exclusive ?? [])) {
+    let sum = 0;
+    for (const { label, ms } of fr.labels) {
+      if (!label.startsWith('post:fire')) continue;
+      const arr = byLabel.get(key(label)) ?? [];
+      arr.push(ms);
+      byLabel.set(key(label), arr);
+      sum += ms;
+    }
+    perFrameTotals.push(sum);
+  }
+  // Raw residency, for the cross-check that the exclusive numbers did something.
+  const rawByLabel = new Map();
+  for (const s of (t.samples ?? [])) {
     const label = String(s.label);
     if (!label.startsWith('post:fire')) continue;
-    const arr = byLabel.get(label) ?? [];
+    const arr = rawByLabel.get(key(label)) ?? [];
     arr.push(s.ms);
-    byLabel.set(label, arr);
+    rawByLabel.set(key(label), arr);
   }
-  const out = { installed: true, march: 0, resolve: 0, composite: 0, copy: 0, total: 0, frames: 0, samples: t.samples.length, wall };
-  for (const [label, arr] of byLabel) {
-    const key = label.slice('post:fire-'.length);
-    const m = median(arr);
-    out[key] = +m.toFixed(3);
-    out.total += m;
-    out.frames = Math.max(out.frames, arr.length);
-  }
-  out.total = +out.total.toFixed(3);
+  const out = {
+    installed: true, raw: t.raw === true, march: 0, resolve: 0, composite: 0, copy: 0,
+    total: 0, frames: 0, samples: (t.samples ?? []).length, wall, counts: t.counts ?? [],
+  };
+  for (const [k, arr] of byLabel) out[k] = +median(arr).toFixed(3);
+  for (const [k, arr] of rawByLabel) out[`raw${k[0].toUpperCase()}${k.slice(1)}`] = +median(arr).toFixed(3);
+  out.total = +median(perFrameTotals).toFixed(3);
+  out.frames = perFrameTotals.length;
   return out;
 }
 
@@ -963,30 +1248,197 @@ if (costMode) {
     process.exit(2);
   }
   const results = [];
+  const fmt = (r) => (r && r.installed
+    ? `march=${r.march} resolve=${r.resolve} composite=${r.composite} copy=${r.copy}`
+      + ` total=${r.total} (raw march=${r.rawMarch ?? 'n/a'} copy=${r.rawCopy ?? 'n/a'})`
+      + ` frames=${r.frames} raw=${r.raw}`
+    : 'n/a');
   for (const scale of [0.5, 0.25]) {
     for (const load of [1, 4, 8]) {
       await evaluate(`window.__flameLab.setVolume({ resolutionScale: ${scale}, steps: 32 })`);
       await evaluate(`window.__flameLab.setFireLoad(${load})`);
       const on = await sampleFireMs(60);
-      // steps 0 is the pipeline-free off switch: the four draws still run, the
-      // march early-outs, so on.total - off.total is the march itself.
+      // steps 0 is the pipeline-free off switch: the draws still run, the march
+      // early-outs, so on.march - off.march is the march itself. The copy (a
+      // single full-res texture copy) must hold its cost: a "march" that does
+      // not collapse to ~0 here is a mislabelled timestamp pair, not a fast one.
       await evaluate('window.__flameLab.setVolume({ steps: 0 })');
       const off = await sampleFireMs(30);
       await evaluate('window.__flameLab.setVolume({ steps: 32 })');
       const row = { scale, bodies: load, on, off };
       results.push(row);
-      console.log(`cost scale=${scale} bodies=${load}`
-        + ` march=${on && on.installed ? on.march : 'n/a'}`
-        + ` total=${on && on.installed ? on.total : 'n/a'}`
-        + ` wall_on=${on && on.wall ? on.wall.median.toFixed(2) : 'n/a'}`
-        + ` wall_off=${off && off.wall ? off.wall.median.toFixed(2) : 'n/a'}`);
+      console.log(`cost scale=${scale} bodies=${load} on:  ${fmt(on)}`);
+      console.log(`cost scale=${scale} bodies=${load} steps0: ${fmt(off)}`);
+      const marchLabel = (on.counts ?? []).find((c) => c.label === 'post:fire-march');
+      console.log(`cost scale=${scale} bodies=${load} sanity:`
+        + ` march_steps32=${on.march} >> march_steps0=${off.march}`
+        + ` | copy_steps32=${on.copy} copy_steps0=${off.copy}`
+        + ` | march passes=${marchLabel?.passes ?? 'n/a'} over ${on.frames} frames`);
     }
   }
+  // The two sanity checks Step 1 requires before ANY number is reported:
+  // (1) steps 0 drops the march to near zero while the copy stays; (2) the copy
+  // is far below the march. Both are printed above and stored here.
+  const base = results.filter((r) => r.scale === 0.5);
+  const sanity = {
+    marchCollapsesAtSteps0: base.every((r) => r.on.march > 0.05 && r.off.march < r.on.march * 0.25),
+    copyCheaperThanMarch: base.every((r) => !r.on.installed || r.on.copy < r.on.march * 0.5),
+    rawBoundariesPresent: results.every((r) => r.on.raw === true),
+    marchPassesPerFrame: base.map((r) => ({
+      bodies: r.bodies,
+      passes: (r.on.counts ?? []).find((c) => c.label === 'post:fire-march')?.passes ?? null,
+      frames: r.on.frames,
+    })),
+  };
+  console.log(`cost sanity: ${JSON.stringify(sanity)}`);
   writeFileSync(`${OUT}/cost.json`, JSON.stringify({
-    backend, note: 'GPU pass ms from timestamp queries; bodies replicate the burning capsules (the lab has two).',
+    backend,
+    note: 'EXCLUSIVE GPU ms (gpu-pass-timing completion-order attribution); '
+      + 'rawMarch/rawCopy are the end-minus-start residency medians round 2 reported. '
+      + 'Bodies replicate the burning capsules (the lab has two).',
+    sanity,
     results,
   }, null, 2));
   console.log(`cost.json written to ${OUT}`);
+  await stopStarted();
+  process.exit(0);
+}
+
+// --- look A/B mode (round 2b task 4b step 5) --------------------------------
+// Four metrics for stand and close, round-2-emulated vs new. The structure and
+// gaps numbers come from the projected fire bounds (volumeProbe), so both
+// tunings are measured through the SAME rect on the SAME page/camera. The
+// committed round-2 PNG is measured too, with an image-derived box (the page
+// probe cannot reach a file), as the independent baseline.
+if (lookMode) {
+  // The new arm is THE PAGE'S OWN DEFAULT RECORD (read after boot), so this
+  // script cannot drift from fire-volume-tuning.ts. Cards off: the metrics
+  // judge the VOLUME, and the cards would supply the tongues regardless.
+  let NEW_VOLUME = null;
+  let ROUND2_VOLUME = null;
+  const VOLUME_NOTE = 'round-2-emulated = round-2b shader with erode 0, edgeSharp 1, coreR 0.06, curlStrength 0.35, tempGain 0.7, no smoke (not the round-2 shader itself)';
+  const applyVolume = async (rec) => evaluate(`window.__flameLab.setVolume(${JSON.stringify(rec)})`);
+  const LOOK_POSES = poseList ?? ['stand', 'close'];
+  /** Mean frame-to-frame luma change inside the fire bounds over `n` frames. */
+  async function motionMeasure(n, gapFrames) {
+    const probe = await evaluate('window.__flameLab.volumeProbe()');
+    let prev = null, sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      if (i > 0 && gapFrames) await frames(gapFrames);
+      const shot = await send('Page.captureScreenshot', { format: 'png' });
+      const buf = Buffer.from(shot.result.data, 'base64');
+      if (prev) { sum += frameDiffInBox(prev, buf, probe.bounds); count++; }
+      prev = buf;
+    }
+    return { motion: count > 0 ? +(sum / count).toFixed(3) : 0, frames: n, box: probe.bounds, pxPerM: probe.pxPerM };
+  }
+  /** The close framing, matching the pose sweep's drag + wheel. */
+  async function framePose(pose) {
+    if (pose === 'close') {
+      await dragBy(Math.floor(W / 2) - 60, Math.floor(H / 2), 88, 0);
+      for (let i = 0; i < CLOSE_TICKS; i++) await wheelAt(Math.floor(W / 2), Math.floor(H / 2), -120);
+    }
+  }
+
+  const look = [];
+  for (const pose of LOOK_POSES) {
+    await freshPage();
+    if (backend !== 'webgpu') { console.error(`flame-capture: backend is "${backend}" — look mode needs WebGPU`); await stopStarted(); process.exit(2); }
+    await evaluate('window.__flameLab.capture(1, 0, 0)');
+    await evaluate('window.__flameLab.setTuning({ charRate: 0 })');
+    // ISOLATE THE VOLUME: the SDF body's own surface fire (burn fireGain /
+    // coverage) and the bloom are NOT what this A/B judges, and they dominate
+    // the frame's high-frequency energy. Zero them so the four metrics read the
+    // volumetric pass alone.
+    await evaluate('window.__flameLab.setTuning({ fireGain: 0, fireCoverage: 0, glowGain: 0 })');
+    if (NEW_VOLUME === null) {
+      NEW_VOLUME = { ...(await evaluate('window.__flameLab.volume()')), cardsPerBody: 0 };
+      ROUND2_VOLUME = {
+        ...NEW_VOLUME, erode: 0, edgeSharp: 1, coreR: 0.06,
+        curlStrength: 0.35, tempGain: 0.7, smokeAlbedo: 0,
+      };
+    }
+    // FLAME-ONLY arms (sootGain 0 AND smokeAlbedo 0) isolate the ERODED SHAPE
+    // from the smoke: comparing gaps/structure with smoke on would measure the
+    // plume, not the tongues. The smoke metric compares the smoke arm against
+    // the flame-only arm at the same crop.
+    const NEW_FLAME_VOLUME = { ...NEW_VOLUME, smokeAlbedo: 0, sootGain: 0 };
+    const ROUND2_FLAME_VOLUME = { ...ROUND2_VOLUME, smokeAlbedo: 0, sootGain: 0 };
+    await framePose(pose);
+    await frames(SETTLE_POSE[pose] ?? 30);
+    await applyVolume(ROUND2_FLAME_VOLUME); await frames(20);
+    await shoot(`${shotPrefix}look-${pose}-r2.png`, { pose, stage: 'fresh', technique, mode: 'round2-emulated-flameonly' });
+    const r2 = shots[shots.length - 1];
+    await applyVolume(NEW_FLAME_VOLUME); await frames(20);
+    await shoot(`${shotPrefix}look-${pose}-new-flame.png`, { pose, stage: 'fresh', technique, mode: 'new-flameonly' });
+    const nf = shots[shots.length - 1];
+    await applyVolume(NEW_VOLUME); await frames(20);
+    await shoot(`${shotPrefix}look-${pose}-new.png`, { pose, stage: 'fresh', technique, mode: 'new' });
+    const nw = shots[shots.length - 1];
+    await applyVolume(NEW_VOLUME);
+    const smoke = {
+      withSmoke: nw ? (cropMeanLuma(nw.buf, smokeCrop(nw.probe))?.mean ?? null) : null,
+      withoutSmoke: nf ? (cropMeanLuma(nf.buf, smokeCrop(nf.probe))?.mean ?? null) : null,
+      crop: nw ? smokeCrop(nw.probe) : null,
+      cropPx: nw ? (cropMeanLuma(nw.buf, smokeCrop(nw.probe))?.px ?? 0) : 0,
+    };
+    smoke.delta = smoke.withSmoke !== null && smoke.withoutSmoke !== null ? +(smoke.withSmoke - smoke.withoutSmoke).toFixed(2) : null;
+    // The committed round-2 PNG, measured with an image-derived box. The
+    // reference-tile strip (bottom-right, orange flame art) is excluded, and so
+    // is the soldier (both bodies burn in the round-2 captures; the look arm
+    // burns body 0 only, which is the LEFT body). Framing differs from the look
+    // page, so this is a cross-check, not the primary number.
+    let committed = null;
+    try {
+      const cbuf = readFileSync(`docs/dev-notes/2026-09-18-burning-feedback/captures/volume-${pose}-fresh.png`);
+      const cbox = imageFireBox(cbuf, (x, y, w, h) => x > 0.55 * w || REFERENCE_STRIP(x, y, w, h));
+      committed = { box: cbox, metrics: flameMetrics(cbuf, cbox) };
+    } catch (err) { committed = { error: String(err).slice(0, 80) }; }
+    look.push({
+      pose,
+      box: nf?.probe?.bounds ?? null,
+      tightBox: nf ? imageFireBox(nf.buf, REFERENCE_STRIP) : null,
+      r2: r2?.metrics ?? null, newFlame: nf?.metrics ?? null, new: nw?.metrics ?? null,
+      r2Tight: r2?.metricsTight ?? null, newFlameTight: nf?.metricsTight ?? null,
+      smoke, committedRound2: committed,
+    });
+  }
+
+  // MOTION: the fire must animate, so this runs on an UNFROZEN page (the
+  // frozen clock pins the curl phase). The body stands idle, so every change
+  // inside the bounds is the fire moving by itself.
+  for (const pose of LOOK_POSES) {
+    await freshPage(false);
+    if (backend !== 'webgpu') { console.error(`flame-capture: backend is "${backend}" — look mode needs WebGPU`); await stopStarted(); process.exit(2); }
+    await evaluate('window.__flameLab.capture(1, 0, 0)');
+    await evaluate('window.__flameLab.setTuning({ charRate: 0 })');
+    await evaluate('window.__flameLab.setTuning({ fireGain: 0, fireCoverage: 0, glowGain: 0 })');
+    await framePose(pose);
+    await frames(60);
+    await applyVolume(ROUND2_VOLUME); await frames(30);
+    const mR2 = await motionMeasure(20, 1);
+    await applyVolume(NEW_VOLUME); await frames(30);
+    const mNew = await motionMeasure(20, 1);
+    const rec = look.find((r) => r.pose === pose);
+    if (rec) rec.motion = { round2: mR2, new: mNew };
+    console.log(`look motion ${pose}: round2=${mR2.motion} new=${mNew.motion} box=${JSON.stringify(mNew.box)}`);
+  }
+
+  const summary = look.map((r) => ({
+    pose: r.pose,
+    structure: { r2: r.r2?.structure, newFlame: r.newFlame?.structure, ratio: r.r2?.structure ? +(r.newFlame.structure / r.r2.structure).toFixed(3) : null },
+    gaps: { r2: r.r2?.gaps, newFlame: r.newFlame?.gaps },
+    tightStructure: { r2: r.r2Tight?.structure, newFlame: r.newFlameTight?.structure },
+    tightGaps: { r2: r.r2Tight?.gaps, newFlame: r.newFlameTight?.gaps },
+    projectedBox: r.box, tightBox: r.tightBox,
+    committedRound2: r.committedRound2?.metrics ?? null,
+    smoke: r.smoke,
+    motion: r.motion ? { r2: r.motion.round2.motion, new: r.motion.new.motion } : null,
+  }));
+  writeFileSync(`${OUT}/look.json`, JSON.stringify({ technique, viewport: { width: W, height: H }, volumeNote: VOLUME_NOTE, look, summary }, null, 2));
+  console.log('\nLOOK METRICS (round-2-emulated vs new):');
+  for (const s of summary) console.log('  ' + JSON.stringify(s));
+  console.log(`look.json written to ${OUT}`);
   await stopStarted();
   process.exit(0);
 }
@@ -1027,39 +1479,41 @@ for (const pose of (poseList ?? POSES)) {  await freshPage();
     continue;
   }
 
-  // RUN FIXTURE (burning-feedback round 2, task 4d): a LIVE run, so the volume
-  // flame actually trails. freshPage's __flameLab.fixture('run') already lit
-  // body 0 and parked the camera; let the body reach speed and turn, shoot the
-  // live trail, then stop and shoot the straightened flame.
+  // DASH FIXTURE (round 2b task 4b step 6): a SCRIPTED straight dash — the body
+  // translates at a constant 3 m/s along +x for 1.5 s, then holds, with a fixed
+  // side camera. freshPage's fixture('run') parked the body at x0 and armed the
+  // dash; here we start it, shoot mid-dash, wait for the auto-stop, wait 0.5 s,
+  // and shoot the straightened flame. The trailing offset is the flame's
+  // horizontal centroid minus the body's projected x, in metres.
   if (fixture === 'run') {
-    await frames(90);
-    // The trail is the point of this fixture, so give the lag enough strength
-    // to read at run speed (the default 0.3 s / 0.6 m is tuned for a walk).
-    await evaluate('window.__flameLab.setVolume({ lag: 0.9, lagMaxM: 1.1 })');
-    await frames(SETTLE_STAGE);
     for (const stage of STAGES) {
       await evaluate(`(() => {
         window.__flameLab.capture(1, ${stage.char}, 0);
         window.__flameLab.setTuning({ charRate: 0 });
         return window.__flameLab.burns();
       })()`);
-      await frames(SETTLE_STAGE);
-      await shoot(`${shotPrefix}run-live-${stage.name}.png`, {
-        pose: 'run', stage: stage.name, char: stage.char, technique, fixture: 'run',
+      await frames(60);   // let the flame establish at the parked start
+      const started = await evaluate('window.__flameLab.dashStart()');
+      if (!started || started.active !== true) fail('dashStart() did not start the dash');
+      // Wait on the PAGE's clock, not a frame count: headless frame rate varies.
+      await evaluate("new Promise((r) => { const t = () => { const d = window.__flameLab.dash(); if (d.t >= 0.8) return r(d); requestAnimationFrame(t); }; t(); })");
+      const midState = await evaluate('window.__flameLab.dash()');
+      await shoot(`${shotPrefix}dash-mid-${stage.name}.png`, {
+        pose: 'run', stage: stage.name, char: stage.char, technique, fixture: 'dash-mid', dash: midState,
       });
-    }
-    await evaluate("window.__flameLab.fixture('stop')");
-    await frames(75);   // decelerate: the velocity lag straightens
-    for (const stage of STAGES) {
-      await evaluate(`(() => {
-        window.__flameLab.capture(1, ${stage.char}, 0);
-        window.__flameLab.setTuning({ charRate: 0 });
-        return window.__flameLab.burns();
-      })()`);
-      await frames(SETTLE_STAGE);
-      await shoot(`${shotPrefix}run-stop-${stage.name}.png`, {
-        pose: 'run', stage: stage.name, char: stage.char, technique, fixture: 'stop',
+      shots[shots.length - 1].centroid = flameCentroidOffsetM(shots[shots.length - 1].buf, shots[shots.length - 1].probe);
+      const mid = shots[shots.length - 1];
+      console.log(`dash-mid  t=${midState.t.toFixed(2)}s x=${midState.x.toFixed(2)} centroid=${JSON.stringify(mid.centroid)}`);
+      // Auto-stop, then 0.5 s of settling (the gait blend ramps down too).
+      await evaluate("new Promise((r) => { const t = () => { const d = window.__flameLab.dash(); if (!d.active) return r(d); requestAnimationFrame(t); }; t(); })");
+      await frames(30);
+      const stopState = await evaluate('window.__flameLab.dash()');
+      await shoot(`${shotPrefix}dash-stop-${stage.name}.png`, {
+        pose: 'run', stage: stage.name, char: stage.char, technique, fixture: 'dash-stop', dash: stopState,
       });
+      shots[shots.length - 1].centroid = flameCentroidOffsetM(shots[shots.length - 1].buf, shots[shots.length - 1].probe);
+      const st = shots[shots.length - 1];
+      console.log(`dash-stop t=${stopState.t.toFixed(2)}s x=${stopState.x.toFixed(2)} centroid=${JSON.stringify(st.centroid)}`);
     }
     continue;
   }
@@ -1135,6 +1589,9 @@ for (const pose of (poseList ?? POSES)) {  await freshPage();
           // and prior plans read.
           for (let bfi = 0; bfi < burst; bfi++) {
             if (bfi > 0) await frames(BURST_GAP);
+            const bProbe = technique === 'volume'
+              ? await evaluate('window.__flameLab.volumeProbe()')
+              : null;
             const shot = await send('Page.captureScreenshot', { format: 'png' });
             const buf = Buffer.from(shot.result.data, 'base64');
             const name = `${shotPrefix}${pose}-${stage.name}${tag}${bfi === 0 ? '' : `-b${bfi}`}.png`;
@@ -1142,8 +1599,10 @@ for (const pose of (poseList ?? POSES)) {  await freshPage();
             const stats = pngStats(buf);
             if (stats.unsupported) fail(`${name}: not a decodable 8-bit RGB(A) PNG`);
             if ((stats.std ?? 0) < MIN_LUMA_STD) fail(`${name}: flat frame (luma std ${stats.std} < ${MIN_LUMA_STD}) — nothing rendered`);
-            shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, kit: kv, skeletonShow, skeletonDepth: dv, burstFrame: bfi, buf });
-            console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, kit=${kv ?? 'default'}, skeleton=${skeletonShow ?? 'default'}, depth=${dv ?? 'default'}, luma std=${stats.std})`);
+            const bMetrics = bProbe ? flameMetrics(buf, bProbe.bounds) : null;
+            const bTight = technique === 'volume' ? flameMetrics(buf, imageFireBox(buf, REFERENCE_STRIP)) : null;
+            shots.push({ pose, stage: stage.name, char: stage.char, file: name, std: stats.std, flow: fv, kit: kv, skeletonShow, skeletonDepth: dv, burstFrame: bfi, probe: bProbe, metrics: bMetrics, metricsTight: bTight, buf });
+            console.log(`${name}  (char=${stage.char}, flow=${fv ?? 'default'}, kit=${kv ?? 'default'}, skeleton=${skeletonShow ?? 'default'}, depth=${dv ?? 'default'}, luma std=${stats.std}${bMetrics ? `, structure=${bMetrics.structure}, gaps=${bMetrics.gaps}` : ''})`);
           }
         }
       }

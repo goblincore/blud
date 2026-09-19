@@ -60,7 +60,7 @@ import {
   FIRE_VOLUME_TUNING, resolveFireVolumeTuning, type FireVolumeTuning,
 } from './fire-volume-tuning';
 import type { FireVolumeFrame } from './fire-volume.wgsl';
-import { installPassTiming, beginPassFrame } from './gpu-pass-timing';
+import { installPassTiming, beginPassFrame, attributePassSamples } from './gpu-pass-timing';
 import { createCharacterEffects } from './character-effects';
 import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
 import { burnDistortStrength, burnDistortRadiusM, burnWobble } from './burn-distort';
@@ -93,10 +93,6 @@ const MOTION_SEED = 1337;
 /** Each body wanders a SMALL box around its own spawn, so the pair stays side
  *  by side instead of trading places (the crowd's per-spawn bounds idea). */
 const WANDER_R = 0.35;
-/** The run fixture's loop: the first body crosses the floor and turns. */
-const RUN_BOUNDS: WanderBounds = Object.freeze({
-  minX: -2.2, maxX: 2.2, minZ: -2.2, maxZ: 2.2,
-});
 
 // The skull's centre/semi-axes (headShape) and the per-limb card anchors
 // (limbAnchors) moved to flame-anchors.ts, so the in-game burning harness rides
@@ -122,6 +118,8 @@ interface FlameLabActor {
   limbs: FlameCardAnchors | null;
   /** Last frame's floor position, for the flame cards' lean velocity. */
   lastPos: Vec3;
+  /** Last frame's root-plane velocity (m/s), for the dash/trail probe. */
+  vel: Vec3;
   /** Fire-volume capsules from this frame's posed body, and their midpoint
    *  velocities against the previous frame (the lag trail's source). */
   caps: FireCapsule[] | null;
@@ -420,6 +418,7 @@ async function bootstrap(): Promise<void> {
       faceTex,
       limbs: null,
       lastPos: spawn,
+      vel: [0, 0, 0],
       caps: null,
       vels: [],
       spawn,
@@ -585,6 +584,7 @@ async function bootstrap(): Promise<void> {
   const _fireVp = new THREE.Matrix4();
   const _fireInvVp = new THREE.Matrix4();
   const _firePrevVp = new THREE.Matrix4();
+  const _probeV = new THREE.Vector3();
   let fireFrameIndex = 0;
   let fireWasOn = false;
   /** Set by a technique/fixture switch so the next fire frame drops history. */
@@ -727,6 +727,20 @@ async function bootstrap(): Promise<void> {
    *  (the wander policy stands at each arrival, which killed the live-trail
    *  shot). Cleared on stop. */
   let runContinuous = false;
+  // DASH FIXTURE (round 2b task 4b step 6): a SCRIPTED straight-line dash,
+  // replacing the wander-driven run. The body translates at a constant
+  // DASH_SPEED m/s along +x for DASH_SEC s and then holds still; the side
+  // camera is fixed, so the flame's lag is measurable as a horizontal offset
+  // from the body. The wander controller cannot do this (it brakes inside
+  // brakeDist and picks random targets), so the dash writes the motion state's
+  // wander position directly while wander stepping stays OFF.
+  const DASH_SEC = 1.5;
+  const DASH_SPEED = 3.0;
+  const DASH_X0 = -2.0;
+  let dashT = 0;
+  let dashOn = false;
+  let dashHold = false;
+  let dashX = DASH_X0;
 
   /**
    * KILL (flame-polish task 5): collapse every body, and start a burn-down on
@@ -744,32 +758,28 @@ async function bootstrap(): Promise<void> {
   }
 
   /**
-   * THE RUN FIXTURE (burning-feedback round 2, task 4d). `run` sends the first
-   * body (the zombie) across the floor at run speed with a turn, lights only
-   * it, and parks the camera side-on so the flame trail is judgeable; `stop`
-   * drops the wander target (the body decelerates, the lag straightens);
-   * `stand` restores the default idle pair and the orbit spin.
+   * THE DASH FIXTURE (burning-feedback round 2b, task 4b step 6). `dash`
+   * (alias `run`) sets the first body (the zombie) on a scripted straight line:
+   * constant 3 m/s along +x for 1.5 s, side camera fixed. `dash-stop` (alias
+   * `stop`) ends the dash and holds the body, so the lag can straighten;
+   * `stand` restores the default idle pair and the orbit spin. Lights only the
+   * zombie and hides the soldier's body AND kit/prop so the frame has a single
+   * burner to judge.
    */
   function setFixture(name: string): string {
     const a0 = actors[0];
     if (!a0) return name;
-    if (name === 'run') {
-      wanderOn = true;
+    if (name === 'dash' || name === 'run') {
+      wanderOn = false;
       speedBand = 'run';
-      a0.bounds = { ...RUN_BOUNDS };
       autoSpin = false;
-      camYaw = 1.15;
+      // Side-on, roughly level: the camera sits on +z looking at the origin, so
+      // world +x is screen-right and the body crosses the frame horizontally.
+      camYaw = 0.0;
       camPitch = 0.1;
-      // A wide fixed side view: the body crosses the floor inside the frame, so
-      // the trail is judged relative to the frame rather than a tracking camera
-      // (a follower hides the trail by construction).
-      camDist = 6.0;
-      // One burning body: light the zombie, put the soldier out AND hide his
-      // geometry (object visibility, never a light toggle) so the frame has a
-      // single burner to judge. Kit/prop are hidden every frame — see
-      // runHideOthers.
+      camDist = 5.5;
       runHideOthers = true;
-      runContinuous = true;
+      runContinuous = false;
       for (let i = 1; i < burns.length; i++) {
         extinguishBurn(burns[i]!);
         actors[i]!.gpu.object.visible = false;
@@ -779,16 +789,37 @@ async function bootstrap(): Promise<void> {
       }
       igniteBurn(burns[0]!);
       forcedCollapse = false;
+      // Script the line: reset the timer and face +x immediately (heading 0 is
+      // +z, +pi/2 is +x), so no turn-in skews the first half second. The dash
+      // is ARMED here, not started: the page still has to settle its fire
+      // pipeline, and a dash that began at boot would be over before the first
+      // capture. `dashStart()` begins it.
+      dashT = 0;
+      dashOn = false;
+      dashHold = false;
+      dashX = DASH_X0;
+      if (a0.motion.motionState) {
+        a0.motion.motionState.wander.pos = [DASH_X0, 0, 0];
+        a0.motion.motionState.wander.heading = Math.PI / 2;
+        a0.motion.motionState.wander.target = null;
+        a0.motion.motionState.wander.speed = 0;
+        a0.motion.motionState.wander.idle = 0;
+        a0.motion.motionState.bodyYaw = Math.PI / 2;
+      }
       fireResetRequested = true;
       return 'run';
     }
-    if (name === 'stop') {
+    if (name === 'dash-stop' || name === 'stop') {
+      dashOn = false;
+      dashHold = true;
       wanderOn = false;
       speedBand = 'walk';
       runContinuous = false;
       return 'stop';
     }
     if (name === 'stand') {
+      dashOn = false;
+      dashHold = false;
       wanderOn = false;
       speedBand = 'walk';
       runHideOthers = false;
@@ -922,6 +953,24 @@ async function bootstrap(): Promise<void> {
       // The run fixture keeps moving: the wander policy pauses at each arrival,
       // and a paused frame has no velocity to trail.
       if (runContinuous && a.motion.motionState) a.motion.motionState.wander.idle = 0;
+      // THE DASH (round 2b): drive body 0's root straight down +x at a constant
+      // speed, bypassing the wander controller entirely (wanderOn stays false,
+      // so stepMotion never steps it and reads the position we write here).
+      if ((dashOn || dashHold) && a === actors[0]) {
+        if (dashOn && motionDt > 0) {
+          dashT = Math.min(DASH_SEC, dashT + motionDt);
+          if (dashT >= DASH_SEC) { dashOn = false; dashHold = true; }
+        }
+        dashX = DASH_X0 + DASH_SPEED * dashT;
+        const ms = a.motion.motionState;
+        if (ms) {
+          ms.wander.pos = [dashX, 0, 0];
+          ms.wander.heading = Math.PI / 2;
+          ms.wander.target = null;
+          ms.wander.idle = 0;
+          ms.wander.speed = dashOn ? DASH_SPEED : 0;
+        }
+      }
       const f = stepActorMotion(a.motion, {
         current: a.current,
         dt: motionDt,
@@ -933,6 +982,9 @@ async function bootstrap(): Promise<void> {
         rng: a.rng,
         signals: a.signals,
         profile: { ...a.profile, cruise: cruiseFor(a.profile) },
+        // The dash is a treadmill for the gait: full run blend while moving,
+        // 0 once it stops, so the legs stop driving as the flame straightens.
+        forceSpeed: dashOn ? DASH_SPEED : (dashHold ? 0 : undefined),
       });
       // Polygon halves ride the rig — kit and prop pose from the same rig
       // solve (soldier's helmet and gun; the zombie has neither).
@@ -1041,6 +1093,7 @@ async function bootstrap(): Promise<void> {
         cf.vel = [
           (bodyPos[0] - a.lastPos[0]) * inv, 0, (bodyPos[2] - a.lastPos[2]) * inv,
         ];
+        a.vel = cf.vel;
         a.lastPos = bodyPos;
         // Fire-volume body record: the posed capsules, their velocities, the
         // burn level, and the torso centre the packer ranks by distance.
@@ -1328,9 +1381,36 @@ async function bootstrap(): Promise<void> {
       fireResetRequested = true;
       return fireLoad;
     },
-    /** GPU pass timings (the corpse-cost discipline): per-labelled-pass ms. */
+    /** GPU pass timings (the corpse-cost discipline): per-labelled-pass ms.
+     *
+     *  TWO NUMBERS PER PASS, because the raw one lies on a tile GPU: three's
+     *  timestamp pair starts at the command buffer's schedule time for EVERY
+     *  pass, so a full-res copy reports the same residency as the 32-step march
+     *  it queued behind. `samples[].ms` is that residency. `exclusive` is the
+     *  attribution that actually partitions the frame (gpu-pass-timing's
+     *  completion-order charge, the number to read): frame -> label -> ms.
+     *  `counts` is the per-label pass census since the last call, so a label
+     *  that multiplies (a re-render) shows up even when its ms looks small. */
     async passTimings() {
-      return { installed: passTiming.installed, samples: await passTiming.collect() };
+      const samples = await passTiming.collect();
+      const { exclusive, span } = attributePassSamples(samples);
+      const frames = [...exclusive.entries()]
+        .map(([frame, byLabel]) => ({
+          frame,
+          span: +(span.get(frame) ?? 0).toFixed(4),
+          labels: [...byLabel.entries()].map(([label, ms]) => ({ label, ms: +ms.toFixed(4) })),
+        }))
+        .sort((a, b) => a.frame - b.frame);
+      const counts = passTiming.countsSinceLast();
+      return {
+        installed: passTiming.installed,
+        // Attribution needs the raw query boundaries; without them
+        // attributePassSamples falls back to residency and says so.
+        raw: samples.length > 0 && samples.every((s) => s.start !== undefined && s.end !== undefined),
+        samples,
+        exclusive: frames,
+        counts,
+      };
     },
     /** Wall frame time (rAF delta, ms) over the rolling window, as the
      *  timestamp fallback the cost probe cross-checks against. */
@@ -1340,6 +1420,66 @@ async function bootstrap(): Promise<void> {
     },
     /** The run fixture's switches (see setFixture). 'run' | 'stop' | 'stand'. */
     fixture(name = 'run') { return setFixture(name); },
+    /** THE DASH PROBE (round 2b task 4b step 6): the scripted dash's progress,
+     *  so a capture can wait for mid-dash / post-stop without guessing frames. */
+    dash() { return { t: dashT, x: dashX, active: dashOn, hold: dashHold, speed: DASH_SPEED, sec: DASH_SEC }; },
+    /** Begin the armed scripted dash (fixture 'dash' parks the body at x0). */
+    dashStart() { dashT = 0; dashOn = true; dashHold = false; dashX = DASH_X0; return { t: dashT, x: dashX, active: dashOn, hold: dashHold, speed: DASH_SPEED, sec: DASH_SEC }; },
+    /** End the dash and hold the body where it is (the lag straightens). */
+    dashStop() { dashOn = false; dashHold = true; return { t: dashT, x: dashX, active: dashOn, hold: dashHold, speed: DASH_SPEED, sec: DASH_SEC }; },
+    /** TRAIL/LOOK PROBE (round 2b task 4b steps 5-6): the first body's torso,
+     *  head and one-metre-right world points projected to CAPTURE pixels, the
+     *  horizontal px-per-metre at the torso's depth, and the body's root
+     *  velocity. The capture script uses these to convert an image-space flame
+     *  centroid into a metres-behind-the-body trail and to place the smoke
+     *  crop. */
+    volumeProbe() {
+      const a = actors[0];
+      if (!a) return null;
+      camera.updateMatrixWorld();
+      // SCREENSHOT pixels, not content pixels: the capture is the canvas's CSS
+      // size (the post chain upscales the ~909x540 content to the 1380x820
+      // window), so the projected rect must use the canvas client size.
+      const cw = Math.max(1, canvas.clientWidth || window.innerWidth);
+      const ch = Math.max(1, canvas.clientHeight || window.innerHeight);
+      const pt = (x: number, y: number, z: number) => {
+        _probeV.set(x, y, z).project(camera);
+        return [(_probeV.x + 1) * 0.5 * cw, (1 - _probeV.y) * 0.5 * ch] as [number, number];
+      };
+      const t = a.limbs?.torso ?? [a.lastPos[0], 1.0, a.lastPos[2]];
+      const head = a.limbs?.head ?? [a.lastPos[0], 1.7, a.lastPos[2]];
+      const torso = pt(t[0], t[1], t[2]);
+      const headPx = pt(head[0], head[1], head[2]);
+      const right = pt(t[0]! + 1, t[1]!, t[2]!);
+      const pxPerM = Math.hypot(right[0] - torso[0], right[1] - torso[1]);
+      // The projected screen bounds of the fire AABB (the last packed frame):
+      // the look metrics' "inside the flame's screen bounds" rect. Clamped to
+      // the content rect so a corner behind the camera cannot blow it up.
+      let bounds: [number, number, number, number] | null = null;
+      if (fireFrame.capsuleCount > 0) {
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const bx of [fireFrame.boundsMin[0], fireFrame.boundsMax[0]]) {
+          for (const by of [fireFrame.boundsMin[1], fireFrame.boundsMax[1]]) {
+            for (const bz of [fireFrame.boundsMin[2], fireFrame.boundsMax[2]]) {
+              const s = pt(bx, by, bz);
+              if (s[0] < x0) x0 = s[0];
+              if (s[0] > x1) x1 = s[0];
+              if (s[1] < y0) y0 = s[1];
+              if (s[1] > y1) y1 = s[1];
+            }
+          }
+        }
+        bounds = [
+          Math.max(0, Math.floor(x0)), Math.max(0, Math.floor(y0)),
+          Math.min(cw - 1, Math.ceil(x1)), Math.min(ch - 1, Math.ceil(y1)),
+        ];
+      }
+      return {
+        torso, head: headPx, right, pxPerM, bounds,
+        world: [t[0], t[1], t[2]],
+        vel: [a.vel[0], a.vel[1], a.vel[2]],
+      };
+    },
     /** The live state a capture reads back: the technique, the three tuning
      *  records, and the burn levels. */
     state() {

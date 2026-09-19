@@ -1048,17 +1048,24 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const uFireCfg1 = uniform(new THREE.Vector4(0.35, 0.3, 0.6, 1.6));
   const uFireCfg2 = uniform(new THREE.Vector4(0.6, 0, 0, 0));
   const uFireCfg3 = uniform(new THREE.Vector4(0.85, 0, 0.05, 60));
+  // Round 2b's tongue-erosion + smoke-scatter block: the march reads these
+  // (the resolve keeps cfg3).
+  const uFireCfg4 = uniform(new THREE.Vector4(2.4, 0.5, 0.55, 0.6));
+  const uFireCfg5 = uniform(new THREE.Vector4(2.5, 0.12, 0.5, 0.55));
+  const uFireCfg6 = uniform(new THREE.Vector4(1.0, 0.4, 0, 0));
   const uFireBoundsMin = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uFireBoundsMax = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uFireNearFar = uniform(new THREE.Vector4(0.05, 60, 0, 0));
   // fireTarget is the low-res march (Linear so the resolve can upsample it);
-  // the history pair and the composite output are full-res. The history is a
-  // ping-pong because each resolve reads the previous frame and writes the
-  // next, never the same target.
+  // round 2b runs the history/resolve at the SAME low resolution (the field is
+  // low-frequency, so a full-res resolve only bought pixels) and the composite
+  // bilinearly upsamples it into the capture once. The history is a ping-pong
+  // because each resolve reads the previous frame and writes the next, never
+  // the same target. There is NO separate full-res composite target: the
+  // composite blends directly into the capture.
   const fireTarget = new THREE.RenderTarget(1, 1, vhsPairOpts);
   const fireHistA = new THREE.RenderTarget(1, 1, vhsPairOpts);
   const fireHistB = new THREE.RenderTarget(1, 1, vhsPairOpts);
-  const fireOut = new THREE.RenderTarget(1, 1, passOpts);
   let fireHistRead = fireHistA;
   let fireHistWrite = fireHistB;
   const fireHistReadTex = texture(fireHistRead.texture);
@@ -1074,6 +1081,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     cfg0: uFireCfg0,
     cfg1: uFireCfg1,
     cfg2: uFireCfg2,
+    cfg4: uFireCfg4,
+    cfg5: uFireCfg5,
+    cfg6: uFireCfg6,
     boundsMin: uFireBoundsMin,
     boundsMax: uFireBoundsMax,
     nearFar: uFireNearFar,
@@ -1107,8 +1117,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   fireResolveMat.blending = THREE.NoBlending;
   const fireResolveScene = quadScene(fireResolveMat);
 
+  // COMPOSITE = the capture blend. src = emission (rgb), srcAlpha = T; with
+  // dstFactor = SrcAlpha the target becomes emission + scene * T in place, so
+  // this pass never samples the target it writes and no copy draw is needed.
+  // Alpha output = T (One/Zero on the alpha channel), as the plan specifies.
   const fireCompositeOut = wgslFn(FIRE_VOLUME_COMPOSITE_WGSL)({
-    sceneTex: texture(sceneTarget.texture),
     fireTex: fireResolvedTex,
     fireSamp: fireResolvedTex,
     texCoord: uv(),
@@ -1119,21 +1132,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   fireCompositeMat.depthWrite = false;
   fireCompositeMat.depthTest = false;
   fireCompositeMat.fog = false;
-  fireCompositeMat.blending = THREE.NoBlending;
+  fireCompositeMat.blending = THREE.CustomBlending;
+  fireCompositeMat.blendSrc = THREE.OneFactor;
+  fireCompositeMat.blendDst = THREE.SrcAlphaFactor;
+  fireCompositeMat.blendEquation = THREE.AddEquation;
+  fireCompositeMat.blendSrcAlpha = THREE.OneFactor;
+  fireCompositeMat.blendDstAlpha = THREE.ZeroFactor;
   const fireCompositeScene = quadScene(fireCompositeMat);
-
-  const fireCopyOut = wgslFn(POST_AA_COPY_WGSL)({
-    srcTex: texture(fireOut.texture),
-    texCoord: uv(),
-  }) as unknown as Swizzled;
-  const fireCopyMat = new MeshBasicNodeMaterial();
-  fireCopyMat.name = 'post:fire-copy';
-  fireCopyMat.colorNode = vec4(fireCopyOut as never, 1.0);
-  fireCopyMat.depthWrite = false;
-  fireCopyMat.depthTest = false;
-  fireCopyMat.fog = false;
-  fireCopyMat.blending = THREE.NoBlending;
-  const fireCopyScene = quadScene(fireCopyMat);
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
@@ -1409,15 +1414,16 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     // Tongues shape at the capture resolution (the pass is per-pixel flame).
     tongueTarget.setSize(content.width, content.height);
     // Fire volume: the march runs at resolutionScale of the content size (the
-    // field is low-frequency, so 0.5 is invisible and a quarter of the pixels);
-    // the resolve/history/composite run full-res so the smoke edge is sharp.
+    // field is low-frequency, so 0.5 is invisible and a quarter of the pixels).
+    // Round 2b runs the resolve + history pair at the SAME low resolution and
+    // upsamples once in the blend-into-capture composite, so all three fire
+    // draws shrink with the scale.
     fireTarget.setSize(
       Math.max(1, Math.floor(content.width * fireResolutionScale)),
       Math.max(1, Math.floor(content.height * fireResolutionScale)),
     );
-    fireHistA.setSize(content.width, content.height);
-    fireHistB.setSize(content.width, content.height);
-    fireOut.setSize(content.width, content.height);
+    fireHistA.setSize(fireTarget.width, fireTarget.height);
+    fireHistB.setSize(fireTarget.width, fireTarget.height);
     // The glow pair runs at HALF content size: a bloom's footprint is wide
     // relative to one pixel, so the blur does not need full resolution, and
     // the two draws cost a quarter of one each.
@@ -1464,7 +1470,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (targetsNeedInit) {
         targetsNeedInit = false;
         setPassLabel('init');
-        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB, fireOut]) {
+        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, quadCam);
         }
@@ -1491,13 +1497,14 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
         renderer.autoClear = prevAutoClearTongues;
       }
 
-      // FIRE VOLUME (burning-feedback round 2, task 4c): the SAME seam as the
-      // tongues — after the capture, before the shutter stage and the glow
-      // extract. Four draws, each its own target, so no pass samples what it
-      // writes: the low-res march (reads the capture depth), the full-res
-      // resolve (reads the march output + the previous history), the composite
-      // (reads the capture + the resolved field), and a raw copy of the
-      // composite back into the capture.
+      // FIRE VOLUME (burning-feedback round 2, task 4c; round 2b task 4b): the
+      // SAME seam as the tongues — after the capture, before the shutter stage
+      // and the glow extract. THREE draws now: the low-res march (reads the
+      // capture depth), the low-res resolve (reads the march output + the
+      // previous history), and the composite, which BLENDS into the capture
+      // with (One, SrcAlpha). Round 2's separate full-res composite target and
+      // its copy draw are gone: the blend does `emission + scene * T` in place,
+      // so the pass still never samples the target it writes.
       if (fireOn) {
         setPassLabel('post:fire-march');
         renderer.setRenderTarget(fireTarget);
@@ -1508,13 +1515,10 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
         void renderer.render(fireResolveScene, quadCam);
         fireResolvedTex.value = fireHistWrite.texture;
         setPassLabel('post:fire-composite');
-        renderer.setRenderTarget(fireOut);
-        void renderer.render(fireCompositeScene, quadCam);
-        setPassLabel('post:fire-copy');
         renderer.setRenderTarget(sceneTarget);
         const prevAutoClearFire = renderer.autoClear;
         renderer.autoClear = false;
-        void renderer.render(fireCopyScene, quadCam);
+        void renderer.render(fireCompositeScene, quadCam);
         renderer.autoClear = prevAutoClearFire;
         const fireSwap = fireHistRead;
         fireHistRead = fireHistWrite;
@@ -1908,6 +1912,17 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (Number.isFinite(u.capsuleCount)) uFireCfg2.value.y = Math.max(0, u.capsuleCount);
       if (Number.isFinite(u.time)) uFireCfg2.value.z = u.time;
       if (Number.isFinite(u.frame)) uFireCfg2.value.w = u.frame;
+      // Round 2b's tongue-erosion + smoke-scatter block.
+      if (Number.isFinite(t.noiseScale) && t.noiseScale > 0) uFireCfg4.value.x = t.noiseScale;
+      if (Number.isFinite(t.noiseStretch) && t.noiseStretch > 0) uFireCfg4.value.y = t.noiseStretch;
+      if (Number.isFinite(t.erode)) uFireCfg4.value.z = Math.max(0, t.erode);
+      if (Number.isFinite(t.erodeRise) && t.erodeRise > 0) uFireCfg4.value.w = t.erodeRise;
+      if (Number.isFinite(t.edgeSharp) && t.edgeSharp > 0) uFireCfg5.value.x = t.edgeSharp;
+      if (Number.isFinite(t.coreR) && t.coreR > 0) uFireCfg5.value.y = t.coreR;
+      if (Number.isFinite(t.smokeAlbedo)) uFireCfg5.value.z = Math.max(0, t.smokeAlbedo);
+      if (Number.isFinite(t.smokeAmbient)) uFireCfg5.value.w = Math.max(0, t.smokeAmbient);
+      if (Number.isFinite(t.smokeFireLit)) uFireCfg6.value.x = Math.max(0, t.smokeFireLit);
+      if (Number.isFinite(t.smokeSpread)) uFireCfg6.value.y = Math.max(0, t.smokeSpread);
       // History resets on the first frame after enabling, on a host camera
       // jump, and whenever nothing has been written yet (a stale previous
       // frame would smear across a scene change).
@@ -1921,7 +1936,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       uFireNearFar.value.set(uFireCfg3.value.z, uFireCfg3.value.w, 0, 0);
       uFireInvVp.value.copy(u.invViewProj);
       uFirePrevVp.value.copy(u.prevViewProj);
-      // resolutionScale is live; a change resizes the low-res march target.
+      // resolutionScale is live; a change resizes the low-res march target AND
+      // its history pair (both run at the same scale in round 2b).
       if (Number.isFinite(t.resolutionScale) && t.resolutionScale > 0
         && t.resolutionScale !== fireResolutionScale) {
         fireResolutionScale = t.resolutionScale;
@@ -1930,6 +1946,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
           Math.max(1, Math.floor(c.width * fireResolutionScale)),
           Math.max(1, Math.floor(c.height * fireResolutionScale)),
         );
+        fireHistA.setSize(fireTarget.width, fireTarget.height);
+        fireHistB.setSize(fireTarget.width, fireTarget.height);
         fireHistValid = false;
       }
     },
@@ -1975,7 +1993,6 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     fireTarget.dispose();
     fireHistA.dispose();
     fireHistB.dispose();
-    fireOut.dispose();
     fireCurlFallback.dispose();
     glowA.dispose();
     glowB.dispose();
@@ -1988,7 +2005,6 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     fireMarchMat.dispose();
     fireResolveMat.dispose();
     fireCompositeMat.dispose();
-    fireCopyMat.dispose();
     fxaaMat.dispose();
       blendMat.dispose();
       vhsCopyMat.dispose();

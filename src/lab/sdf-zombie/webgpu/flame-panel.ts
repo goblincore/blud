@@ -106,6 +106,16 @@ const VOLUME_LABELS: Record<keyof FireVolumeTuning, { label: string; step: numbe
   history: { label: 'vol history', step: 0.02 },
   cardsPerBody: { label: 'cards/body', step: 1 },
   smokeTailSec: { label: 'smoke tail s', step: 0.1 },
+  noiseScale: { label: 'flame noise', step: 0.05 },
+  noiseStretch: { label: 'noise stretch', step: 0.02 },
+  erode: { label: 'erode', step: 0.02 },
+  erodeRise: { label: 'erode rise', step: 0.02 },
+  edgeSharp: { label: 'edge sharp', step: 0.1 },
+  coreR: { label: 'core radius', step: 0.005 },
+  smokeAlbedo: { label: 'smoke albedo', step: 0.02 },
+  smokeAmbient: { label: 'smoke ambient', step: 0.02 },
+  smokeFireLit: { label: 'smoke firelit', step: 0.02 },
+  smokeSpread: { label: 'smoke spread', step: 0.02 },
 };
 
 export const VOLUME_KEYS: readonly VolumeKey[] = Object.freeze(
