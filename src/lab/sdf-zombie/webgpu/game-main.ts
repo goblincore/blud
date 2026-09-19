@@ -264,6 +264,7 @@ import { applyBoneCull, restampLevelProbes } from './game-render-leaves2';
 import { spawnAssetGibPiece, spawnSpriteGibPiece } from './game-gibs-leaves2';
 import { gateRefineTwin, woundStreamId } from './game-world-leaves2';
 import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, updateDemoHud } from './game-demo-leaves';
+import { applyMouseDelta } from './game-player-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -3647,21 +3648,6 @@ async function main() {
   window.addEventListener('keyup', (e) => ctx.player.keys.delete(e.code));
   ctx.player.parked = DEFAULT_PROBE_WEIGHT;
 
-  /** The mouse delta's effect, extracted so the live handler and the replay
-   *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
-   *  from the tick); otherwise it turns the camera directly. */
-  function applyMouseDelta(dx: number, dy: number): void {
-    if (ctx.player.freeAimOn) {
-      // The mouse moves the RETICLE, not the camera. Turning is a consequence
-      // of shoving the reticle past the dead zone, handled in the tick.
-      ctx.weapon.aim = moveAim(ctx.weapon.aim, dx, dy);
-    } else {
-      ctx.player.player.yaw += dx * 0.0022;
-      ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
-        Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch - dy * 0.0022));
-    }
-  }
-
   /** Every keydown side effect, as RISING EDGES over a held-key snapshot. The
    *  listeners no longer do these inline: doing them here is what lets a
    *  replayed key set toggle slug mode exactly as a live press did. */
@@ -3737,7 +3723,7 @@ async function main() {
   function applyInputFrame(f: DemoFrame): void {
     const next = new Set(f.keys);
     applyInputEdges(next);
-    if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(f.dx, f.dy);
+    if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(ctx, f.dx, f.dy);
     // Anti-drift absolute pin. Skipped in free aim, where the pose is a
     // consequence of the reticle rather than a thing the mouse set directly.
     if (!ctx.player.freeAimOn) {
