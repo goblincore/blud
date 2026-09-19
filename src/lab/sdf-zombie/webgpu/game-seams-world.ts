@@ -172,6 +172,15 @@ export function createWorldSeams(ctx: GameContext) {
       const c = a?.posed().clusters.find((cc) => cc.limb === limb && cc.alive)?.center;
       return c ? ([c[0], c[1], c[2]] as Vec3) : null;
     },
+    /** Burning-feedback task 1: project a WORLD point to output px (row 0 =
+     *  top), or null behind the camera. The neighbour diagnosis crops a fixed
+     *  box on the returned (x, y) and measures frame-to-frame change over it;
+     *  the fire-light pair crops a floor point computed from it. */
+    worldToScreen: (x: number, y: number, z: number, width: number, height: number) => {
+      const ndc = new THREE.Vector3(x, y, z).project(camera);
+      if (ndc.z > 1) return null;
+      return { x: (ndc.x + 1) * 0.5 * width, y: (1 - ndc.y) * 0.5 * height };
+    },
     /** P3 capture: an actor's wounds in world space — the transform rendering uses. */
     actorWounds: (actorId: number) => {
       const a = ctx.world.actors.find((q) => q.id === actorId);

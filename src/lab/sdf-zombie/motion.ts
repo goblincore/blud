@@ -432,6 +432,8 @@ export interface MotionSignals {
   /** Soldier-specific loss of mobility versus terminal injury. */
   downed?: boolean;
   fatal?: boolean;
+  /** Burning-panic speed multiplier on the cruise speed; absent = 1. */
+  cruiseScale?: number;
   /** Every wound ADDED since the last frame (shots + stumps) — meter fuel. */
   freshWounds: readonly Wound[];
 }
@@ -598,9 +600,9 @@ export function stepMotion(
   const protectiveCrouchPosture = clamp((state.protectiveCrouchPosture ?? 0)
     + clamp(protectiveTarget - (state.protectiveCrouchPosture ?? 0), -1.4 * dt, 2.8 * dt), 0, 1);
   const crouchPosture = Math.max(mobilityPosture, protectiveCrouchPosture);
-  const travelCruise = profile.name === 'soldier'
+  const travelCruise = (profile.name === 'soldier'
     ? profile.cruise * (sig.wounded.legL || sig.wounded.legR ? 0.55 : 1) * (1 - .65 * mobilityPosture)
-    : profile.cruise;
+    : profile.cruise) * (sig.cruiseScale ?? 1);
   if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, travelCruise,
     cfg.faceHeading === undefined ? undefined : { faceHeading: cfg.faceHeading });
   if (!collapsed && profile.name === 'soldier' && soldierStagger.active) {

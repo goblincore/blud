@@ -136,6 +136,13 @@ export interface CrowdType {
   /** Attaches a view to the lowest free slot; returns the slot, -1 when full.
    *  The view rebinds to this type's atlas band and record buffer. */
   attach(view: ZombieGpuView): number;
+  /** Reserves the lowest free slot WITHOUT a view, so a caller can build that
+   *  view already bound to the type's atlas band (defer-compile task: the
+   *  per-body fallback must read the SHARED atlas, which only happens when the
+   *  view is constructed with the crowd sink). -1 when full. */
+  reserveSlot(): number;
+  /** Attaches a view to an already-reserved slot (see reserveSlot). */
+  attachAt(view: ZombieGpuView, slot: number): void;
   /** Frees a slot and marks its record dead. */
   detach(slot: number): void;
   /** Per frame: repack instance attrs, bin the type's tile lists, flush the
@@ -315,20 +322,35 @@ export function createCrowdType(
     get dispatch() { return dispatch; },
 
     attach(view) {
-      const slot = allocateSlot(free);
+      const slot = this.reserveSlot();
       if (slot < 0) return -1;
-      // Re-point the view's pack at this type's band + record before writing
-      // anything, then mark it alive (syncRecord writes the whole record with
-      // alive 1, so this is the belt to that braces).
-      view.rebind({ sink: atlas.sink(slot), records, slot });
-      records.alive(slot, true);
-      slots[slot] = view;
+      this.attachAt(view, slot);
       return slot;
     },
 
+    reserveSlot() {
+      return allocateSlot(free);
+    },
+
+    attachAt(view, slot) {
+      if (slot < 0 || slot >= MAX_CROWD_INSTANCES) {
+        throw new Error(`[crowd] attachAt: slot ${slot} out of range`);
+      }
+      if (slots[slot] !== undefined) {
+        throw new Error(`[crowd] attachAt: slot ${slot} already occupied`);
+      }
+      // The slot was already taken out of `free` by reserveSlot; attachAt only
+      // binds the view to it. (attach() is reserveSlot + attachAt.)
+      view.rebind({ sink: atlas.sink(slot), records, slot });
+      records.alive(slot, true);
+      slots[slot] = view;
+    },
+
     detach(slot) {
-      if (!slots[slot]) return;
-      records.alive(slot, false);
+      // A RESERVED-but-unattached slot (reserveSlot without attachAt, e.g. a
+      // view that failed to build) is recycled too, not leaked: only the view
+      // is optional, the slot itself is not.
+      if (slots[slot]) records.alive(slot, false);
       slots[slot] = undefined;
       free.add(slot);
     },

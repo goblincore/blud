@@ -15,6 +15,7 @@ import {
   createExplosionVfx, findFreeSlot, fireEnvelope, lightEnvelope,
   makeExplosionLookUniforms, randomInUnitSphere, ringEnvelope, smokeEnvelope,
   smoothstep01, stepEmber,
+  CURL_WARP_SAFE_RATIO, curlWarpGain,
   extentQuartiles,
 } from './explosion-vfx';
 import type { BurstVisual } from '../explosion-aoe';
@@ -460,6 +461,71 @@ describe('createExplosionVfx', () => {
       expect((child as THREE.Mesh).frustumCulled).toBe(false);
     }
     vfx.dispose();
+  });
+
+  it('ships the curl and soft-fade switches OFF, so the game look is unchanged', () => {
+    // game-main.ts uses these explosions. The curl domain-warp and the
+    // soft-particle fade are opt-in until the owner flips them: a default of 0
+    // contributes exactly zero to the node graph, which is what makes the
+    // game's frame identical to the pre-curl one.
+    expect(EXPLOSION_VFX_TUNING.curlStrength).toBe(0);
+    expect(EXPLOSION_VFX_TUNING.softFade).toBe(0);
+
+    const vfx = createExplosionVfx();
+    expect(vfx.tuning.curlStrength).toBe(0);
+    expect(vfx.tuning.softFade).toBe(0);
+
+    // The live seam really applies them, and clamps them into bounds.
+    vfx.setTuning({ curlStrength: 0.85, curlScale: 2.5, softFade: 0.35 });
+    expect(vfx.tuning.curlStrength).toBeCloseTo(0.85, 12);
+    expect(vfx.tuning.curlScale).toBeCloseTo(2.5, 12);
+    expect(vfx.tuning.softFade).toBeCloseTo(0.35, 12);
+    vfx.setTuning({ curlStrength: -5, curlScale: 0, softFade: -1 });
+    expect(vfx.tuning.curlStrength).toBe(0);
+    expect(vfx.tuning.curlScale).toBe(0.25);   // clamped to the floor
+    expect(vfx.tuning.softFade).toBe(0);
+    vfx.dispose();
+  });
+
+  it('curlWarpGain caps the warp amplitude at the compression-safe gradient', () => {
+    // 2026-09-18 cross fix, re-measured the same day. A domain warp compresses
+    // the noise lookup as its spatial gradient reaches the lookup's own; the
+    // gradient goes as appliedAmplitude / curlScale. The shipped look is below
+    // the cap, so it is unchanged; tighter swirls are capped instead of
+    // crossing. The safe ratio is the measured one, not a copy.
+    const R = CURL_WARP_SAFE_RATIO;
+    // The shipped 18 m scale carries the full 1.1; 12 m is capped, but only
+    // slightly, and the earlier 6 m / 2.2 m scales are capped hard.
+    expect(curlWarpGain(1.1, 18)).toBeCloseTo(R * 18, 12); // R*18 = 1.08 < 1.1
+    expect(curlWarpGain(1.1, 6)).toBeCloseTo(R * 6, 12);
+    expect(curlWarpGain(1.1, 12)).toBeCloseTo(R * 12, 12);
+    expect(curlWarpGain(1.1, 60)).toBeCloseTo(1.1, 12);
+    // A strong request at 6 m is capped at the safe gradient, not passed on.
+    expect(curlWarpGain(2.0, 6)).toBeCloseTo(R * 6, 12);
+    expect(curlWarpGain(2.0, 60)).toBeCloseTo(2.0, 12);
+    // Below the reference scale the cap bites, but never below a request that
+    // already sits under it.
+    expect(curlWarpGain(2.0, 2.2)).toBeCloseTo(R * 2.2, 12);
+    expect(curlWarpGain(0.1, 2.2)).toBeCloseTo(0.1, 12);
+    // Off is off, and degenerate inputs never divide by zero.
+    expect(curlWarpGain(0, 2.2)).toBe(0);
+    expect(curlWarpGain(0, 0)).toBe(0);
+    expect(curlWarpGain(-1, 2.2)).toBe(0);
+    expect(curlWarpGain(1.1, 0)).toBe(0);
+    // Monotone in scale, and never above the requested strength.
+    let prev = -Infinity;
+    for (const s of [0.25, 1, 2.2, 4, 6, 16, 18, 64]) {
+      const g = curlWarpGain(1.1, s);
+      expect(g).toBeGreaterThanOrEqual(prev);
+      expect(g).toBeLessThanOrEqual(1.1);
+      prev = g;
+    }
+    // The safe ratio is the single-quad bound measured by the seam-check gate:
+    // the previously shipped 0.2 still crossed at 6 m, so it must not come back.
+    expect(R).toBeLessThan(0.1);
+    // A tighter scale always applies LESS warp than a looser one.
+    expect(curlWarpGain(1.1, 6)).toBeGreaterThan(curlWarpGain(1.1, 2.2));
+    expect(curlWarpGain(1.1, 18)).toBeGreaterThan(curlWarpGain(1.1, 6));
   });
 
   it('spawn -> live -> retire, with the light trailing the fire', () => {

@@ -1,0 +1,81 @@
+{
+  "url": "/sdf-flame-lab.html?seed=1&tongue=cards",
+  "backend": "webgpu",
+  "viewport": {
+    "width": 1380,
+    "height": 820
+  },
+  "technique": "cards",
+  "flow": null,
+  "flowSweep": null,
+  "kitStandoff": null,
+  "kitSweep": null,
+  "clock": 0,
+  "frozen": true,
+  "burst": 1,
+  "poses": [
+    "close",
+    "collapsed"
+  ],
+  "stages": [
+    {
+      "name": "fresh",
+      "char": 0
+    },
+    {
+      "name": "charred",
+      "char": 0.6
+    }
+  ],
+  "contact": null,
+  "shots": [
+    {
+      "pose": "close",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-close-fresh-s1-d0p15.png",
+      "std": 84.41,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": 1,
+      "skeletonDepth": 0.15,
+      "burstFrame": 0
+    },
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-close-charred-s1-d0p15.png",
+      "std": 89.59,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": 1,
+      "skeletonDepth": 0.15,
+      "burstFrame": 0
+    },
+    {
+      "pose": "collapsed",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-collapsed-fresh-s1-d0p15.png",
+      "std": 35.54,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": 1,
+      "skeletonDepth": 0.15,
+      "burstFrame": 0
+    },
+    {
+      "pose": "collapsed",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-collapsed-charred-s1-d0p15.png",
+      "std": 34.47,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": 1,
+      "skeletonDepth": 0.15,
+      "burstFrame": 0
+    }
+  ]
+}

@@ -4,6 +4,28 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Burning enemies — flame look + flame lab — 2026-09-17
+
+- [x] Foundation: `sdf-flame-lab.html` + per-body burn + surface fire/char + glow, heat warp, shutter, fire light.
+  [Spec](docs/superpowers/specs/2026-09-17-burning-enemies-flame-lab-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-17-flame-lab-foundation.md) ·
+  [captures](docs/dev-notes/2026-09-17-flame-lab/NOTES.md).
+- [x] Tongues: owner chose **flame cards** (Blood FIRE01 atlas, `npm run flame:atlas`, untracked). Screen-space stays switchable; volumetric skipped.
+  Polish: seams, curl flow, leg coverage, burn-down, dark scorched bone. [Plans](docs/superpowers/plans/2026-09-18-flame-polish.md).
+- [x] In-game test harness: slot `3` ignites what you hit, `__sdfGame.igniteAll()` / `extinguishAll()`. Throwaway, not the weapon.
+  Needs the atlas + `public/assets/lab/flaregun-placeholder.glb` (both untracked). [Notes](docs/dev-notes/2026-09-18-flare-ingame-test/NOTES.md).
+- [x] **Owner playtest feedback pass (2026-09-18/19) — merged to main.** **Handoff: [2026-09-19-burning-fire-handoff](docs/dev-notes/2026-09-19-burning-fire-handoff.md)** (state, learnings, open list).
+  Volumetric fire is the game default (swept flame sheets, card accents, nearest-4 volume + crossfaded full-card LOD, skin 0.3, rise 0.45, no smoke);
+  room fire light; zombie burn panic (soldier OFF); ivory bone; soldier legs burn. Open: cheap smoke, head flame (optional), real flare gun.
+- [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
+  deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
+  Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-2 merged, task 3 (feature blocks) not started.
+- [ ] Then: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
+- [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
+  **Explosion curl: seam fixed and verified** (edge-map gate `npm run explosion:seam`, all scenes clean, billow kept; ship values
+  curlStrength 1.1 / curlScale 18 / softFade 0.4 — game default still OFF, one-line flip). Blood: DENSITY spike reads as goo;
+  per-stream fusion landed (correct, +0.2 ms, lab-only) but crossing sprays still read as one mass — next: rope-not-fan emission, then capsule field.
+
 ## game-main.ts decomposition — migration phase merged 2026-09-17
 
 - [x] All **395** `main()`-scope bindings migrated to a feature-sliced `GameContext` (16 slices), codemod-applied
@@ -83,6 +105,7 @@
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
+- [x] Platform decided (2026-09-18): develop on the web stack, **release as a Rust + wgpu port**. Spike first (one zombie through `march.wgsl` natively). [Scope §4.6 / GR](docs/game/production-scope.md).
 - [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Vision](docs/game/vision.md).
 - [ ] Production scope draft 1 (milestones G0–G10, asset inventory). Level route: Blender (B/D), proven on the Wake + flat. [Scope](docs/game/production-scope.md).
 - [ ] First content in flight: the Flat ([tasks](docs/game/flat/tasks.md)) and level 0 The Wake ([tasks](docs/game/levels/00-the-wake/tasks.md)). Start with the render-to-texture spike (F-T2) and the melee prototype (W-B4).

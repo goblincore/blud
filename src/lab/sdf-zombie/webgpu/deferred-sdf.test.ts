@@ -66,7 +66,7 @@ describe('surface-entry wgslFn parse contract', () => {
     }
   });
 
-  it('the real parser sees EXACTLY marchBody’s 100 inputs, in the same order — one binding block serves both', () => {
+  it('the real parser sees EXACTLY marchBody’s 101 inputs, in the same order — one binding block serves both', () => {
     // marchSurface shares MARCH_BODY_PARAMS textually, so createMarchMaterial's
     // positional binding cannot drift between the modes. Running the REAL
     // parser (not a grep) also proves no comment phantom crept into the shared
@@ -79,7 +79,15 @@ describe('surface-entry wgslFn parse contract', () => {
     // (the plan wrote 88; the signature has 13 removable params, not 14 — the record
     //   itself is 14 vec4s, but woundCfg/lodCfg/faceCfg3 stay as per-type vec4 params).
     // crowd stage a task 5: +instCentre +instHalf (the instanced proxy box).
-    expect(legacy.length).toBe(91); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    // +5 burning body (burnCfg, burnNoiseScale, burnRiseSpeed, burnCharPatch,
+    // burnFireGain) after instHalf — flame lab task 5, POSITIONALLY LAST to
+    // match createMarchMaterial's binding tail. marchSurface inherits the tail
+    // through the shared MARCH_BODY_PARAMS, so the equality pin below keeps
+    // the one-binding-block contract on the deferred path too.
+    // +1 burnFireCoverage (flame lab fix pass) after burnFireGain, same rule.
+    // +1 burnSkeleton (flame lab fix pass task 3) after burnFireCoverage.
+    // +1 skeletonDepth (flame polish task 4) after burnSkeleton.
+    expect(legacy.length).toBe(99); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });
@@ -241,8 +249,10 @@ describe('legacy expansion preserved', () => {
     expect(MARCH_BODY_SURFACE_PREP).toContain(
       'let glow = faceGlowColor * faceGlow * faceCfg2.w\n           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm)',
     );
-    // …and the legacy lighting tail consumes them, with the compose untouched.
-    expect(MARCH_BODY_LIGHT).toContain('var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;');
+    // …and the legacy lighting tail consumes them, with the compose untouched
+    // except for the burn emissive carrier — gBurnEmit is 0 on every
+    // non-burning body, so adding it is an exact identity there.
+    expect(MARCH_BODY_LIGHT).toContain('var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow + gBurnEmit;');
     expect(MARCH_BODY.indexOf('let wetWound')).toBeLessThan(MARCH_BODY.indexOf('ANALYTIC FLASHLIGHT'));
     expect(MARCH_BODY.indexOf('let glow')).toBeLessThan(MARCH_BODY.indexOf('ANALYTIC FLASHLIGHT'));
     // Each hoisted symbol is defined exactly once across the whole entry.

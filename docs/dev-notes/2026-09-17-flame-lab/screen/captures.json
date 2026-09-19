@@ -1,0 +1,127 @@
+{
+  "url": "/sdf-flame-lab.html?seed=1&tongue=screen",
+  "backend": "webgpu",
+  "viewport": {
+    "width": 1380,
+    "height": 820
+  },
+  "technique": "screen",
+  "poses": [
+    "close",
+    "stand",
+    "walk",
+    "run",
+    "collapsed",
+    "distant"
+  ],
+  "stages": [
+    {
+      "name": "fresh",
+      "char": 0
+    },
+    {
+      "name": "charred",
+      "char": 0.6
+    }
+  ],
+  "contact": {
+    "file": "contact.png",
+    "frames": [
+      "close-fresh.png",
+      "stand-fresh.png",
+      "stand-charred.png"
+    ],
+    "tiles": [
+      "3321.png",
+      "3323.png",
+      "3325.png"
+    ],
+    "bodyPx": 400
+  },
+  "shots": [
+    {
+      "pose": "close",
+      "stage": "fresh",
+      "char": 0,
+      "file": "close-fresh.png",
+      "std": 53.77
+    },
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "close-charred.png",
+      "std": 48.01
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "stand-fresh.png",
+      "std": 34.3
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "stand-charred.png",
+      "std": 29.84
+    },
+    {
+      "pose": "walk",
+      "stage": "fresh",
+      "char": 0,
+      "file": "walk-fresh.png",
+      "std": 34.75
+    },
+    {
+      "pose": "walk",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "walk-charred.png",
+      "std": 29.54
+    },
+    {
+      "pose": "run",
+      "stage": "fresh",
+      "char": 0,
+      "file": "run-fresh.png",
+      "std": 34.52
+    },
+    {
+      "pose": "run",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "run-charred.png",
+      "std": 28.93
+    },
+    {
+      "pose": "collapsed",
+      "stage": "fresh",
+      "char": 0,
+      "file": "collapsed-fresh.png",
+      "std": 39.48
+    },
+    {
+      "pose": "collapsed",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "collapsed-charred.png",
+      "std": 34.04
+    },
+    {
+      "pose": "distant",
+      "stage": "fresh",
+      "char": 0,
+      "file": "distant-fresh.png",
+      "std": 20.85
+    },
+    {
+      "pose": "distant",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "distant-charred.png",
+      "std": 19.53
+    }
+  ]
+}

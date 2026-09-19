@@ -57,4 +57,7 @@ concepts** — do not conflate them.
 
 - Extracted Blood assets: dev placeholders only, never commit/ship.
 - Prefer focused tests; don't claim a build/test/GPU pass from lightweight checks.
+- Plans start from [`docs/superpowers/plan-template.md`](docs/superpowers/plan-template.md):
+  logic in pure renderer-free modules, rendering in hand-written WGSL (release
+  is a Rust + wgpu port).
 - When in doubt, update `TASKS.md` to reflect new state.

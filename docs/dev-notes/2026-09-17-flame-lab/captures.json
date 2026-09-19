@@ -1,0 +1,254 @@
+{
+  "url": "/sdf-flame-lab.html?seed=1&tongue=cards",
+  "backend": "webgpu",
+  "viewport": {
+    "width": 1380,
+    "height": 820
+  },
+  "technique": "cards",
+  "flow": null,
+  "flowSweep": null,
+  "kitStandoff": null,
+  "kitSweep": null,
+  "clock": null,
+  "frozen": false,
+  "burst": 1,
+  "poses": [
+    "close",
+    "stand",
+    "walk",
+    "run",
+    "collapsed",
+    "distant",
+    "death"
+  ],
+  "stages": [
+    {
+      "name": "fresh",
+      "char": 0
+    },
+    {
+      "name": "charred",
+      "char": 0.6
+    }
+  ],
+  "contact": {
+    "file": "cards-contact.png",
+    "frames": [
+      "cards-close-fresh.png",
+      "cards-stand-fresh.png",
+      "cards-stand-charred.png"
+    ],
+    "tiles": [
+      "3321.png",
+      "3323.png",
+      "3325.png"
+    ],
+    "bodyPx": 400
+  },
+  "shots": [
+    {
+      "pose": "close",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-close-fresh.png",
+      "std": 58.9,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "close",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-close-charred.png",
+      "std": 56.26,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-stand-fresh.png",
+      "std": 43.66,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "stand",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-stand-charred.png",
+      "std": 38.42,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "walk",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-walk-fresh.png",
+      "std": 44.09,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "walk",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-walk-charred.png",
+      "std": 37.71,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "run",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-run-fresh.png",
+      "std": 44.06,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "run",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-run-charred.png",
+      "std": 37.59,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "collapsed",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-collapsed-fresh.png",
+      "std": 36.6,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "collapsed",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-collapsed-charred.png",
+      "std": 32.47,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "distant",
+      "stage": "fresh",
+      "char": 0,
+      "file": "cards-distant-fresh.png",
+      "std": 23.78,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "distant",
+      "stage": "charred",
+      "char": 0.6,
+      "file": "cards-distant-charred.png",
+      "std": 21.41,
+      "flow": null,
+      "kit": null,
+      "skeletonShow": null,
+      "skeletonDepth": null,
+      "burstFrame": 0
+    },
+    {
+      "pose": "death",
+      "stage": "lit",
+      "technique": "cards",
+      "file": "cards-death-lit.png",
+      "std": 41.12
+    },
+    {
+      "pose": "death",
+      "stage": "midburn",
+      "technique": "cards",
+      "corpseSec": 3,
+      "burns": [
+        {
+          "burn": 0.5,
+          "burnSec": 3,
+          "char": 0.9532841819946442,
+          "alight": false,
+          "dying": true,
+          "corpseSec": 3
+        },
+        {
+          "burn": 0.5,
+          "burnSec": 3,
+          "char": 0.9532841819946442,
+          "alight": false,
+          "dying": true,
+          "corpseSec": 3
+        }
+      ],
+      "file": "cards-death-midburn.png",
+      "std": 23.04
+    },
+    {
+      "pose": "death",
+      "stage": "out",
+      "technique": "cards",
+      "corpseSec": 6,
+      "burns": [
+        {
+          "burn": 0,
+          "burnSec": 0,
+          "char": 1,
+          "alight": false,
+          "dying": false,
+          "corpseSec": 6
+        },
+        {
+          "burn": 0,
+          "burnSec": 0,
+          "char": 1,
+          "alight": false,
+          "dying": false,
+          "corpseSec": 6
+        }
+      ],
+      "file": "cards-death-out.png",
+      "std": 20.03
+    }
+  ]
+}

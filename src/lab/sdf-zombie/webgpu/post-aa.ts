@@ -30,6 +30,16 @@
 //   and three emits no sampler for a nearest/nearest target; the smear pair
 //   stays NearestFilter and is not reused.
 //
+//   GLOW — bright-pass + separable blur (post-glow.ts), default OFF (the
+//   flame lab enables it while its tuning's glowGain is up). Two draws run
+//   BEFORE FXAA on the raw capture: the extract thresholds WORKING-space
+//   luminance and blurs along x into a half-size LinearFilter target, then a
+//   second draw blurs along y and is ADDED back into the capture with
+//   additive blending — glow is never added after display encoding (the
+//   colour-chain rule below). The pair is LinearFilter, not nearest, for the
+//   same hard binding reason as the VHS input pair: three emits no sampler
+//   for a nearest/nearest target and the y-blur samples with textureSample.
+//
 //   SSCS — screen-space contact shadows (post-sscs.ts), default OFF at the
 //   factory and default ON on the game page (?sscs=off). Runs BEFORE FXAA on
 //   the raw capture: each level pixel marches a short ray toward the
@@ -83,10 +93,11 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
+import { wgslFn, texture, texture3D, storage, uv, vec2, vec4, uniform } from 'three/tsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 import { setPassLabel } from './gpu-pass-timing';
+import type { Vec3 } from '../types';
 import {
   BLAST_REFRACTION, blastRefractionPhase, projectBlastRefraction,
 } from '../blast-refraction';
@@ -97,12 +108,22 @@ import {
   type VhsPreset,
   type VhsTerms,
 } from './post-vhs';
+import { POST_GLOW_EXTRACT_WGSL, POST_GLOW_BLUR_WGSL } from './post-glow';
 import {
   POST_SSCS_WGSL,
   SSCS_DEFAULTS,
   SSCS_TERM_RANGES,
   type SscsTerms,
 } from './post-sscs';
+import { POST_TONGUES_WGSL, type TongueFrame } from './post-tongues';
+import {
+  FIRE_VOLUME_MARCH_WGSL, FIRE_VOLUME_RESOLVE_WGSL, FIRE_VOLUME_COMPOSITE_WGSL,
+  type FireVolumeFrame,
+} from './fire-volume.wgsl';
+import { getCurlTexture } from './curl-volume-node';
+import {
+  FIRE_CAPSULE_STRIDE, FIRE_VOLUME_MAX_CAPSULES,
+} from './fire-volume-pack';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -561,6 +582,54 @@ export interface PostAa {
   setSscsTerm(name: keyof SscsTerms, value: number): void;
   /** Whether the SSCS stage runs. */
   readonly sscs: boolean;
+  /**
+   * THE SCREEN-SPACE TONGUE PASS (flame-tongues task 2, post-tongues.ts),
+   * default OFF. Runs FIRST of the post passes — right after the chain's
+   * capture and BEFORE the shutter capture stage and the glow extract — so
+   * tongues are both shutter-blurred and bloomed like everything else in
+   * the frame. It shapes into its own target (it samples the capture's depth,
+   * which cannot be a binding while the capture is the render target) and an
+   * additive composite lands it in the capture; off never binds the material
+   * and the all-off parity path stays exact.
+   *
+   * The per-frame feed is the whole state: stepPx (tonguePixelLength / taps,
+   * host-computed at the body's depth), camera near/far/fovTan, the body
+   * distance, the tuning record and the projected world-up in pixels.
+   */
+  setTongues(on: boolean, uniforms?: TongueFrame): void;
+  /** Points the tongue pass at the march's burn-mask attachment (sdf-layer's
+   *  `marchBurn`), exactly once at host boot — the sscsFleshTex discipline
+   *  (a second texture() node over one texture would collapse into one
+   *  binding a later .value write cannot split). Null restores the inert
+   *  fallback. */
+  setBurnMaskTexture(tex: THREE.Texture | null): void;
+  /**
+   * THE VOLUMETRIC FIRE + SMOKE PASS (burning-feedback round 2, task 4c),
+   * default OFF. Same seam as the tongues: after the chain's capture and
+   * BEFORE the shutter capture stage and the glow extract, so fire is both
+   * shutter-blurred and bloomed like everything else. Four draws: a low-res
+   * march (samples the capture's depth, writes its own target), a full-res
+   * resolve with temporal reprojection, a composite (`scene * T + emission`)
+   * into its own target, then a raw copy back into the capture. Off never
+   * binds a material, so the all-off parity path stays exact.
+   *
+   * The per-frame record is the whole state (see FireVolumeFrame); the packed
+   * capsule storage is fed separately by `setFireVolumeData` so the host can
+   * reuse one Float32Array.
+   */
+  setFireVolume(on: boolean, frame?: FireVolumeFrame): void;
+  /** Copy the packed capsules (packFireVolume's `data`) into the storage
+   *  buffer's owned array and flag it for upload. */
+  setFireVolumeData(buf: Float32Array): void;
+  /**
+   * THE GLOW STAGE (post-glow.ts), default OFF — the flame lab enables it
+   * while its tuning's glowGain is above zero. Bright-pass + separable blur
+   * off the working-space capture, added back into it BEFORE FXAA, so glow
+   * is never added after display encoding (the colour-chain rule). Two quad
+   * draws into one half-size pair; no chain stages are reordered and the
+   * all-off parity path never binds either glow material.
+   */
+  setGlow(on: boolean, gain?: number, threshold?: number): void;
   /** The live SSCS terms (the defaults, until setSscsTerm overrides one). */
   readonly sscsTerms: SscsTerms;
   /**
@@ -606,6 +675,21 @@ export interface PostAa {
    * exist yet when a blast is pushed).
    */
   pushBlastDistort(world: readonly [number, number, number], birthRadiusM: number, strength: number): void;
+  /**
+   * A burning body's heat band. Same four slots as the blast warp, but the
+   * radius does not expand and the strength comes from burn, not from age.
+   *
+   * Entries live exactly ONE resolve: the feed re-pushes every frame while a
+   * body burns (the light uniforms' discipline — per-frame state, aged by
+   * nobody), render() consumes them against that frame's camera, and the
+   * list returns to blasts-only for `stepBlastDistort` aging. While the warp
+   * is off the entries sit in the bounded ring until the next resolve, so
+   * enabling the warp mid-burn lights the band on the same frame. Bounded:
+   * when a frame's pushes exceed the four unrolled slots together with the
+   * live blasts, the STRONGEST sources survive (unlike the blast push, which
+   * drops the oldest — "oldest" carries no meaning for a per-frame feed).
+   */
+  pushBurnDistort(world: Vec3, radiusM: number, strength: number): void;
   /**
    * The camera the live bands are reprojected against. Called once with the
    * page's persistent camera; without it the pass stays inert (a blast with no
@@ -720,6 +804,18 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   // SSCS output. Colour-only like the VHS target: the pass reads scene
   // depth, it does not write any.
   const sscsTarget = new THREE.RenderTarget(1, 1, passOpts);
+  // --- GLOW pair (post-glow.ts), default OFF ----------------------------
+  // Half-content-size working targets for the two glow draws, LinearFilter
+  // ON PURPOSE and for the same hard reason as the VHS input pair above:
+  // POST_GLOW_BLUR_WGSL samples with textureSample, and three emits no
+  // `<tex>_sampler` for a nearest/nearest target (WGSLNodeBuilder
+  // .isUnfilterable) — the blur would not compile against nearest.
+  // rgba16float is filterable in WebGPU, so the sampler is valid. glowA is
+  // written once (extract+blur-x) and read once (blur-y-and-add), no
+  // ping-pong; glowB is its pair half, allocated so a non-additive variant
+  // has somewhere to land without a mid-session reallocation.
+  const glowA = new THREE.RenderTarget(1, 1, vhsPairOpts);
+  const glowB = new THREE.RenderTarget(1, 1, vhsPairOpts);
 
   // The single canvas-boundary flip. Stays a uniform as a console escape
   // hatch (setBlitFlipY) — the intermediate passes flip their own sampling
@@ -767,6 +863,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     birthRadiusM: number;
     strength: number;
     age: number;
+    /** 'burn' entries skip the blast phase (no expansion, no decay) and are
+     *  dropped after the resolve that consumed them — see pushBurnDistort. */
+    kind: 'blast' | 'burn';
   }
   const liveBlastDistorts: LiveBlastDistort[] = [];
   /** The last blit's resolved slots — see `blastDistortSlots` (task-2 seam). */
@@ -837,6 +936,211 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   ));
   const _sscsView = new THREE.Matrix4();
   const _sscsVp = new THREE.Matrix4();
+
+  // --- GLOW state (post-glow.ts). Inert while `glowOn` is false — the
+  // factory default — so the parity path never binds either glow material.
+  // The extract reads whatever the chain currently holds (swapped per frame,
+  // the blendCurTex pattern); the blur always reads glowA, which never
+  // changes, so its texture node is bound once.
+  let glowOn = false;
+  let glowGain = 0;
+  let glowThreshold = 0.75;
+  // Per-draw cfg, x = knee threshold, y/z = one GLOW-target texel as UV,
+  // w = gain (applied by the blur draw only).
+  const uGlowExtractCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uGlowBlurCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+
+  // --- TONGUES state (post-tongues.ts). Inert while `tonguesOn` is false —
+  // the factory default — so the parity path never binds the material. The
+  // burn-mask slot starts on an OWNED 1x1 fallback (rgb 0 = no burn) and is
+  // repointed ONCE at host boot by setBurnMaskTexture.
+  let tonguesOn = false;
+  const tongueBurnFallback = new THREE.DataTexture(
+    new Float32Array([0, 0, 0, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType,
+  );
+  tongueBurnFallback.needsUpdate = true;
+  const tongueBurnTex = texture(tongueBurnFallback);
+  const uTongueUp = uniform(new THREE.Vector2(0, -1));
+  // cfg0 = (stepPx, near, far, fovTan); cfg1 = (ragged, rise, gain, lean);
+  // cfg2 = (refDepthM, lengthM, time, spare) — the packing POST_TONGUES_WGSL reads.
+  const uTongueCfg0 = uniform(new THREE.Vector4(0, 0.05, 60, 1));
+  const uTongueCfg1 = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uTongueCfg2 = uniform(new THREE.Vector4(3, 0.45, 0, 0));
+  // The pass READS sceneTarget.depthTexture, so it can NOT write into
+  // sceneTarget: WebGPU forbids one subresource being both a render
+  // attachment and a binding in the same pass, and sceneTarget's depth is
+  // always an attachment (its depthTexture). Every other pass in this chain
+  // obeys the same "never sample what you write" rule by writing its own
+  // target; the tongues do too, and a second additive draw lands the result in
+  // the capture. Writing straight into sceneTarget made the whole pass a
+  // validation no-op — its taps read zero and nothing appeared.
+  const tongueTarget = new THREE.RenderTarget(1, 1, passOpts);
+  const tongueOut = wgslFn(POST_TONGUES_WGSL)({
+    burnTex: tongueBurnTex,
+    depthTex: texture(sceneTarget.depthTexture!),
+    texCoord: uv(),
+    upPx: uTongueUp,
+    cfg0: uTongueCfg0,
+    cfg1: uTongueCfg1,
+    cfg2: uTongueCfg2,
+  }) as unknown as Swizzled;
+  const tongueMat = new MeshBasicNodeMaterial();
+  tongueMat.name = 'post:tongues';
+  tongueMat.colorNode = vec4(tongueOut.xyz as never, 1.0);
+  tongueMat.depthWrite = false;
+  tongueMat.depthTest = false;
+  tongueMat.fog = false;
+  // The shaping pass WRITES its value (the quad covers every pixel); only the
+  // composite below is additive. Additive here would fold the target's clear
+  // colour — the lab background — into every frame the technique is on.
+  tongueMat.blending = THREE.NoBlending;
+  const tongueScene = quadScene(tongueMat);
+
+  // The additive composite of tongueTarget into the capture. POST_AA_COPY_WGSL
+  // is the module's textureLoad copy (no sampler needed), and its entry flip
+  // cancels the pass's own read flip, so the flame lands exactly where it was
+  // shaped. Drawn into sceneTarget with autoClear off.
+  const tongueCompositeOut = wgslFn(POST_AA_COPY_WGSL)({
+    srcTex: texture(tongueTarget.texture),
+    texCoord: uv(),
+  }) as unknown as Swizzled;
+  const tongueCompositeMat = new MeshBasicNodeMaterial();
+  tongueCompositeMat.name = 'post:tongues-composite';
+  tongueCompositeMat.colorNode = vec4(tongueCompositeOut.xyz as never, 1.0);
+  tongueCompositeMat.depthWrite = false;
+  tongueCompositeMat.depthTest = false;
+  tongueCompositeMat.fog = false;
+  tongueCompositeMat.blending = THREE.AdditiveBlending;
+  const tongueCompositeScene = quadScene(tongueCompositeMat);
+
+  // --- FIRE VOLUME state (fire-volume.wgsl.ts), default OFF -------------
+  // Same discipline as the tongues: inert while `fireOn` is false, so the
+  // all-off parity path never binds a material. The capsule storage starts
+  // zeroed; the curl volume is repointed to the shared singleton (0.7 s CPU
+  // build) only when fire is first enabled, so a page that never burns never
+  // pays for it.
+  let fireOn = false;
+  let fireResolutionScale = 0.5;
+  let fireHistValid = false;
+  let fireCurlLive = false;
+  const fireCapsFloats = new Float32Array(FIRE_VOLUME_MAX_CAPSULES * FIRE_CAPSULE_STRIDE);
+  const fireCapsAttr = new THREE.StorageBufferAttribute(fireCapsFloats, 4);
+  fireCapsAttr.setUsage(THREE.DynamicDrawUsage);
+  const fireCapsNode = storage(
+    fireCapsAttr, 'vec4', FIRE_VOLUME_MAX_CAPSULES * 3,
+  ).toReadOnly();
+  // curlFallback decodes to ~0 flow; Linear/Linear because the atlas lesson:
+  // three emits no sampler for a nearest/nearest texture and `textureSampleLevel`
+  // would silently fall back to an unfiltered binding (or fail to compile).
+  const fireCurlFallback = new THREE.Data3DTexture(
+    new Uint8Array([128, 128, 128, 255]), 1, 1, 1,
+  );
+  fireCurlFallback.format = THREE.RGBAFormat;
+  fireCurlFallback.type = THREE.UnsignedByteType;
+  fireCurlFallback.minFilter = THREE.LinearFilter;
+  fireCurlFallback.magFilter = THREE.LinearFilter;
+  fireCurlFallback.needsUpdate = true;
+  const fireCurlTex = texture3D(fireCurlFallback);
+  // Matrices + the packed per-frame record. Nothing here is per-frame ALLOCATED.
+  const uFireInvVp = uniform(new THREE.Matrix4());
+  const uFirePrevVp = uniform(new THREE.Matrix4());
+  const uFireCfg0 = uniform(new THREE.Vector4(32, 1.1, 2.2, 1.2));
+  const uFireCfg1 = uniform(new THREE.Vector4(0.35, 0.3, 0.6, 1.6));
+  const uFireCfg2 = uniform(new THREE.Vector4(0.6, 0, 0, 0));
+  const uFireCfg3 = uniform(new THREE.Vector4(0.85, 0, 0.05, 60));
+  // Round 2b's tongue-erosion + smoke-scatter block: the march reads these
+  // (the resolve keeps cfg3).
+  const uFireCfg4 = uniform(new THREE.Vector4(2.4, 0.5, 0.55, 0.6));
+  const uFireCfg5 = uniform(new THREE.Vector4(2.5, 0.12, 0.5, 0.55));
+  const uFireCfg6 = uniform(new THREE.Vector4(1.0, 0.4, 0, 0));
+  const uFireBoundsMin = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uFireBoundsMax = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const uFireNearFar = uniform(new THREE.Vector4(0.05, 60, 0, 0));
+  // fireTarget is the low-res march (Linear so the resolve can upsample it);
+  // round 2b runs the history/resolve at the SAME low resolution (the field is
+  // low-frequency, so a full-res resolve only bought pixels) and the composite
+  // bilinearly upsamples it into the capture once. The history is a ping-pong
+  // because each resolve reads the previous frame and writes the next, never
+  // the same target. There is NO separate full-res composite target: the
+  // composite blends directly into the capture.
+  const fireTarget = new THREE.RenderTarget(1, 1, vhsPairOpts);
+  const fireHistA = new THREE.RenderTarget(1, 1, vhsPairOpts);
+  const fireHistB = new THREE.RenderTarget(1, 1, vhsPairOpts);
+  let fireHistRead = fireHistA;
+  let fireHistWrite = fireHistB;
+  const fireHistReadTex = texture(fireHistRead.texture);
+  const fireResolvedTex = texture(fireHistWrite.texture);
+
+  const fireMarchOut = wgslFn(FIRE_VOLUME_MARCH_WGSL)({
+    depthTex: texture(sceneTarget.depthTexture!),
+    curlTex: fireCurlTex,
+    curlSamp: fireCurlTex,
+    caps: fireCapsNode,
+    invViewProj: uFireInvVp,
+    texCoord: uv(),
+    cfg0: uFireCfg0,
+    cfg1: uFireCfg1,
+    cfg2: uFireCfg2,
+    cfg4: uFireCfg4,
+    cfg5: uFireCfg5,
+    cfg6: uFireCfg6,
+    boundsMin: uFireBoundsMin,
+    boundsMax: uFireBoundsMax,
+    nearFar: uFireNearFar,
+  }) as unknown as Swizzled;
+  const fireMarchMat = new MeshBasicNodeMaterial();
+  fireMarchMat.name = 'post:fire-march';
+  // The march already returns vec4(emission, T); wrapping it in vec4(.., 1.0)
+  // passed five components (the console's 'exceeds maximum length' warning).
+  fireMarchMat.colorNode = fireMarchOut as never;
+  fireMarchMat.depthWrite = false;
+  fireMarchMat.depthTest = false;
+  fireMarchMat.fog = false;
+  fireMarchMat.blending = THREE.NoBlending;
+  const fireMarchScene = quadScene(fireMarchMat);
+
+  const fireResolveOut = wgslFn(FIRE_VOLUME_RESOLVE_WGSL)({
+    fireTex: texture(fireTarget.texture),
+    fireSamp: texture(fireTarget.texture),
+    histTex: fireHistReadTex,
+    histSamp: fireHistReadTex,
+    depthTex: texture(sceneTarget.depthTexture!),
+    invViewProj: uFireInvVp,
+    prevViewProj: uFirePrevVp,
+    texCoord: uv(),
+    cfg: uFireCfg3,
+  }) as unknown as Swizzled;
+  const fireResolveMat = new MeshBasicNodeMaterial();
+  fireResolveMat.name = 'post:fire-resolve';
+  fireResolveMat.colorNode = vec4(fireResolveOut as never, 1.0);
+  fireResolveMat.depthWrite = false;
+  fireResolveMat.depthTest = false;
+  fireResolveMat.fog = false;
+  fireResolveMat.blending = THREE.NoBlending;
+  const fireResolveScene = quadScene(fireResolveMat);
+
+  // COMPOSITE = the capture blend. src = emission (rgb), srcAlpha = T; with
+  // dstFactor = SrcAlpha the target becomes emission + scene * T in place, so
+  // this pass never samples the target it writes and no copy draw is needed.
+  // Alpha output = T (One/Zero on the alpha channel), as the plan specifies.
+  const fireCompositeOut = wgslFn(FIRE_VOLUME_COMPOSITE_WGSL)({
+    fireTex: fireResolvedTex,
+    fireSamp: fireResolvedTex,
+    texCoord: uv(),
+  }) as unknown as Swizzled;
+  const fireCompositeMat = new MeshBasicNodeMaterial();
+  fireCompositeMat.name = 'post:fire-composite';
+  fireCompositeMat.colorNode = vec4(fireCompositeOut as never, 1.0);
+  fireCompositeMat.depthWrite = false;
+  fireCompositeMat.depthTest = false;
+  fireCompositeMat.fog = false;
+  fireCompositeMat.blending = THREE.CustomBlending;
+  fireCompositeMat.blendSrc = THREE.OneFactor;
+  fireCompositeMat.blendDst = THREE.SrcAlphaFactor;
+  fireCompositeMat.blendEquation = THREE.AddEquation;
+  fireCompositeMat.blendSrcAlpha = THREE.OneFactor;
+  fireCompositeMat.blendDstAlpha = THREE.ZeroFactor;
+  const fireCompositeScene = quadScene(fireCompositeMat);
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
@@ -977,6 +1281,43 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   sscsMat.fog = false;
   const sscsScene = quadScene(sscsMat);
 
+  // The GLOW passes. Extract: bright-pass + blur-x off the current chain
+  // source into glowA. Blur: blur-y off glowA, ADDITIVE into the capture —
+  // AdditiveBlending is (SrcAlpha, One) non-premultiplied on this backend
+  // (explosion-vfx.ts read the factors out of the build), and alpha is 1, so
+  // rgb * cfg.w lands over the frame the capture already holds. The additive
+  // draw must run with autoClear off (render() does the blit's dance): a
+  // clear would wipe the frame from under the glow.
+  const glowExtractSrcTex = texture(sceneTarget.texture);
+  const glowExtractOut = wgslFn(POST_GLOW_EXTRACT_WGSL)({
+    srcTex: glowExtractSrcTex,
+    texCoord: uv(),
+    cfg: uGlowExtractCfg,
+  }) as unknown as Swizzled;
+  const glowExtractMat = new MeshBasicNodeMaterial();
+  glowExtractMat.name = 'post:glow-extract';
+  glowExtractMat.colorNode = vec4(glowExtractOut.xyz as never, 1.0);
+  glowExtractMat.depthWrite = false;
+  glowExtractMat.depthTest = false;
+  glowExtractMat.fog = false;
+  const glowExtractScene = quadScene(glowExtractMat);
+
+  const glowBlurTex = texture(glowA.texture);
+  const glowBlurOut = wgslFn(POST_GLOW_BLUR_WGSL)({
+    glowTex: glowBlurTex,
+    glowSamp: glowBlurTex,
+    texCoord: uv(),
+    cfg: uGlowBlurCfg,
+  }) as unknown as Swizzled;
+  const glowBlurMat = new MeshBasicNodeMaterial();
+  glowBlurMat.name = 'post:glow-blur';
+  glowBlurMat.colorNode = vec4(glowBlurOut.xyz as never, 1.0);
+  glowBlurMat.depthWrite = false;
+  glowBlurMat.depthTest = false;
+  glowBlurMat.fog = false;
+  glowBlurMat.blending = THREE.AdditiveBlending;
+  const glowBlurScene = quadScene(glowBlurMat);
+
   const blitOut = wgslFn(POST_AA_BLIT_WGSL)({
     srcTex: blitSrcTex,
     texCoord: uv(),
@@ -1072,11 +1413,30 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     vhsInB.setSize(content.width, content.height);
     vhsTarget.setSize(content.width, content.height);
     sscsTarget.setSize(content.width, content.height);
+    // Tongues shape at the capture resolution (the pass is per-pixel flame).
+    tongueTarget.setSize(content.width, content.height);
+    // Fire volume: the march runs at resolutionScale of the content size (the
+    // field is low-frequency, so 0.5 is invisible and a quarter of the pixels).
+    // Round 2b runs the resolve + history pair at the SAME low resolution and
+    // upsamples once in the blend-into-capture composite, so all three fire
+    // draws shrink with the scale.
+    fireTarget.setSize(
+      Math.max(1, Math.floor(content.width * fireResolutionScale)),
+      Math.max(1, Math.floor(content.height * fireResolutionScale)),
+    );
+    fireHistA.setSize(fireTarget.width, fireTarget.height);
+    fireHistB.setSize(fireTarget.width, fireTarget.height);
+    // The glow pair runs at HALF content size: a bloom's footprint is wide
+    // relative to one pixel, so the blur does not need full resolution, and
+    // the two draws cost a quarter of one each.
+    glowA.setSize(Math.max(1, Math.floor(content.width / 2)), Math.max(1, Math.floor(content.height / 2)));
+    glowB.setSize(Math.max(1, Math.floor(content.width / 2)), Math.max(1, Math.floor(content.height / 2)));
     // setSize reallocates the backing textures: uninitialised again, and the
     // old history is the wrong size besides.
     targetsNeedInit = true;
     historyValid = false;
     vhsInputValid = false;
+    fireHistValid = false;
     recomputeLens();
   }
   refit();
@@ -1092,7 +1452,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // A narrowing lens is an effect like any other: it needs the capture
       // redirect, because the blit has to sample a texture rather than be one.
       // VHS is a stage too, so it forces the redirected chain even alone.
-      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn || sscsOn
+      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn || sscsOn || glowOn
+        || tonguesOn || fireOn
         || (blastDistortOn && liveBlastDistorts.length > 0) || captureStage !== null;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
@@ -1111,7 +1472,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (targetsNeedInit) {
         targetsNeedInit = false;
         setPassLabel('init');
-        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget]) {
+        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, quadCam);
         }
@@ -1119,6 +1480,53 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
 
       // The whole polygon/sdf/cone/occluder/composite/goo flow, captured.
       chain();
+
+      // TONGUES (flame-tongues task 2): first of the post passes, before the
+      // shutter capture stage and the glow extract below, so tongues are both
+      // shutter-blurred and bloomed like the rest of the frame. Two draws: the
+      // shaping pass into its own target (it samples the capture's depth), then
+      // an additive composite into the capture with autoClear off — a clear
+      // there would wipe the frame from under the flame (the glow-blur dance).
+      if (tonguesOn) {
+        setPassLabel('post:tongues');
+        renderer.setRenderTarget(tongueTarget);
+        void renderer.render(tongueScene, quadCam);
+        setPassLabel('post:tongues-composite');
+        renderer.setRenderTarget(sceneTarget);
+        const prevAutoClearTongues = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(tongueCompositeScene, quadCam);
+        renderer.autoClear = prevAutoClearTongues;
+      }
+
+      // FIRE VOLUME (burning-feedback round 2, task 4c; round 2b task 4b): the
+      // SAME seam as the tongues — after the capture, before the shutter stage
+      // and the glow extract. THREE draws now: the low-res march (reads the
+      // capture depth), the low-res resolve (reads the march output + the
+      // previous history), and the composite, which BLENDS into the capture
+      // with (One, SrcAlpha). Round 2's separate full-res composite target and
+      // its copy draw are gone: the blend does `emission + scene * T` in place,
+      // so the pass still never samples the target it writes.
+      if (fireOn) {
+        setPassLabel('post:fire-march');
+        renderer.setRenderTarget(fireTarget);
+        void renderer.render(fireMarchScene, quadCam);
+        fireHistReadTex.value = fireHistRead.texture;
+        setPassLabel('post:fire-resolve');
+        renderer.setRenderTarget(fireHistWrite);
+        void renderer.render(fireResolveScene, quadCam);
+        fireResolvedTex.value = fireHistWrite.texture;
+        setPassLabel('post:fire-composite');
+        renderer.setRenderTarget(sceneTarget);
+        const prevAutoClearFire = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(fireCompositeScene, quadCam);
+        renderer.autoClear = prevAutoClearFire;
+        const fireSwap = fireHistRead;
+        fireHistRead = fireHistWrite;
+        fireHistWrite = fireSwap;
+        fireHistValid = true;
+      }
 
       // PRE-POST CAPTURE STAGE. The chain has drawn the clean frame into
       // sceneTarget; a stage may composite over it (the shutter resolve reads
@@ -1130,6 +1538,30 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (captureStage !== null) {
         const staged = captureStage(sceneTarget);
         if (staged !== null) src = staged;
+      }
+
+      // GLOW: bright-pass + separable blur off the working-space capture,
+      // added back into it — BEFORE SSCS/FXAA see the frame, so glow is
+      // never added after display encoding (the colour-chain rule) and the
+      // stages below simply read the glowing frame. The add draws INTO src
+      // (additive, autoClear off — a clear would wipe the frame under the
+      // glow), so `src` itself is unchanged and nothing downstream reorders.
+      // Both thresholds work in WORKING space: the capture is pre-encode.
+      if (glowOn && glowGain > 0) {
+        const gw = Math.max(1, glowA.width);
+        const gh = Math.max(1, glowA.height);
+        glowExtractSrcTex.value = src.texture;
+        uGlowExtractCfg.value.set(glowThreshold, 1 / gw, 1 / gh, glowGain);
+        setPassLabel('post:glow-extract');
+        renderer.setRenderTarget(glowA);
+        void renderer.render(glowExtractScene, quadCam);
+        uGlowBlurCfg.value.set(glowThreshold, 1 / gw, 1 / gh, glowGain);
+        setPassLabel('post:glow-blur');
+        renderer.setRenderTarget(src);
+        const prevAutoClearGlow = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(glowBlurScene, quadCam);
+        renderer.autoClear = prevAutoClearGlow;
       }
 
       // SSCS: contact shadows from the capture's own depth, run BEFORE FXAA
@@ -1222,7 +1654,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
           blastViewProj.multiplyMatrices(
             blastCamera.projectionMatrix, blastCamera.matrixWorldInverse);
           for (const b of liveBlastDistorts) {
-            const phase = blastRefractionPhase(b.age, BLAST_REFRACTION);
+            // A burn band has no phase: its radius never expands and its
+            // strength carries no age decay (burn-distort.ts computes both
+            // from burn and char instead). The TS-side shape the blast's
+            // phase returns is exactly (1, 1).
+            const phase = b.kind === 'burn'
+              ? { t: 1, radiusScale: 1, decay: 1 }
+              : blastRefractionPhase(b.age, BLAST_REFRACTION);
             if (!phase) {
               resolved.push({ world: b.world, age: b.age, radiusScale: 1, decay: 0, u: null, v: null, radiusUv: null, strength: 0, reason: 'spent' });
               continue;
@@ -1257,6 +1695,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
           active, BLAST_REFRACTION.maxOffsetUv, aspect,
           blastDistortOn && active > 0 ? 1 : 0,
         );
+        // Burn entries are a PER-FRAME feed — the resolve above consumed
+        // this frame's pushes, so drop them here and the list returns to
+        // blasts-only for stepBlastDistort aging. A host that never resolves
+        // (parity path) just leaves at most four of them parked in the ring.
+        for (let i = liveBlastDistorts.length - 1; i >= 0; i--) {
+          if (liveBlastDistorts[i]!.kind === 'burn') liveBlastDistorts.splice(i, 1);
+        }
       }
       setPassLabel('post:blit');
       renderer.setRenderTarget(null);
@@ -1322,14 +1767,42 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
         birthRadiusM: Math.max(0.05, Math.min(20, birthRadiusM)),
         strength: Math.max(0, Math.min(BLAST_REFRACTION.maxOffsetUv, strength)),
         age: 0,
+        kind: 'blast',
       });
       // BOUNDED: the oldest blast beyond the four unrolled slots is dropped.
       while (liveBlastDistorts.length > BLAST_DISTORT_MAX) liveBlastDistorts.shift();
+    },
+    pushBurnDistort(world: Vec3, radiusM: number, strength: number) {
+      if (world.length < 3) return;
+      const [x, y, z] = world;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+      if (!(radiusM > 0) || !(strength > 0)) return;
+      const entry: LiveBlastDistort = {
+        world: [x, y, z],
+        birthRadiusM: Math.max(0.05, Math.min(20, radiusM)),
+        strength: Math.max(0, Math.min(BLAST_REFRACTION.maxOffsetUv, strength)),
+        age: 0,
+        kind: 'burn',
+      };
+      if (liveBlastDistorts.length >= BLAST_DISTORT_MAX) {
+        // Keep the STRONGEST of the four (see pushBurnDistort's doc): a
+        // per-frame feed has no meaningful "oldest", and a weak blast must
+        // not evict a strong fire.
+        let weakest = 0;
+        for (let i = 1; i < liveBlastDistorts.length; i++) {
+          if (liveBlastDistorts[i]!.strength < liveBlastDistorts[weakest]!.strength) weakest = i;
+        }
+        if (entry.strength <= liveBlastDistorts[weakest]!.strength) return;
+        liveBlastDistorts.splice(weakest, 1);
+      }
+      liveBlastDistorts.push(entry);
     },
     stepBlastDistort(dt: number) {
       if (!(dt > 0)) return;
       for (let i = liveBlastDistorts.length - 1; i >= 0; i--) {
         const b = liveBlastDistorts[i]!;
+        // Burns are the host's per-frame feed; nobody ages them.
+        if (b.kind === 'burn') continue;
         b.age += dt;
         if (!blastRefractionPhase(b.age, BLAST_REFRACTION)) liveBlastDistorts.splice(i, 1);
       }
@@ -1390,6 +1863,107 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     },
     get sscs() { return sscsOn; },
     get sscsTerms(): SscsTerms { return { ...sscsTerms }; },
+    // --- TONGUES (post-tongues.ts), default OFF. The per-frame feed is the
+    // whole state (see the interface); non-finite fields fall back to the
+    // last good values rather than poisoning the uniforms.
+    setTongues(on: boolean, u?: TongueFrame) {
+      tonguesOn = on && u !== undefined;
+      if (!u) return;
+      if (Number.isFinite(u.upX) && Number.isFinite(u.upY) && (u.upX !== 0 || u.upY !== 0)) {
+        const l = Math.hypot(u.upX, u.upY);
+        uTongueUp.value.set(u.upX / l, u.upY / l);
+      }
+      if (Number.isFinite(u.stepPx) && u.stepPx > 0) uTongueCfg0.value.x = u.stepPx;
+      if (Number.isFinite(u.near) && u.near > 0) uTongueCfg0.value.y = u.near;
+      if (Number.isFinite(u.far) && u.far > (uTongueCfg0.value.y)) uTongueCfg0.value.z = u.far;
+      if (Number.isFinite(u.fovTan) && u.fovTan > 0) uTongueCfg0.value.w = u.fovTan;
+      if (Number.isFinite(u.refDepthM) && u.refDepthM > 0) uTongueCfg2.value.x = u.refDepthM;
+      if (Number.isFinite(u.length) && u.length > 0) uTongueCfg2.value.y = u.length;
+      if (Number.isFinite(u.time)) uTongueCfg2.value.z = u.time;
+      if (Number.isFinite(u.ragged)) uTongueCfg1.value.x = Math.min(1, Math.max(0, u.ragged));
+      if (Number.isFinite(u.rise)) uTongueCfg1.value.y = Math.min(8, Math.max(0, u.rise));
+      if (Number.isFinite(u.gain)) uTongueCfg1.value.z = Math.min(4, Math.max(0, u.gain));
+      if (Number.isFinite(u.lean)) uTongueCfg1.value.w = Math.min(1, Math.max(0, u.lean));
+    },
+    /** Repoint the burn-mask slot at the march's fourth attachment — ONCE at
+     *  host boot (the sscsFleshTex trap: one owned node, one rebind). */
+    setBurnMaskTexture(t: THREE.Texture | null) { tongueBurnTex.value = t ?? tongueBurnFallback; },
+    // --- FIRE VOLUME (fire-volume.wgsl.ts), default OFF. The per-frame record
+    // is copied into uniform nodes (no allocation); non-finite numbers fall
+    // back to the previous values rather than poisoning the march.
+    setFireVolume(on: boolean, u?: FireVolumeFrame) {
+      const wasOn = fireOn;
+      fireOn = on && u !== undefined;
+      if (!u) return;
+      if (fireOn && !fireCurlLive) {
+        // First enable: repoint the curl slot at the shared singleton (a 0.7 s
+        // CPU build), so a page that never burns never pays for it.
+        fireCurlTex.value = getCurlTexture();
+        fireCurlLive = true;
+      }
+      const t = u.tuning;
+      if (Number.isFinite(t.steps)) uFireCfg0.value.x = Math.max(0, t.steps);
+      if (Number.isFinite(t.rise)) uFireCfg0.value.y = Math.max(0, t.rise);
+      if (Number.isFinite(t.curlScale) && t.curlScale > 0) uFireCfg0.value.w = t.curlScale;
+      if (Number.isFinite(t.curlStrength)) uFireCfg1.value.x = Math.max(0, t.curlStrength);
+      if (Number.isFinite(t.lag)) uFireCfg1.value.y = Math.max(0, t.lag);
+      if (Number.isFinite(t.lagMaxM)) uFireCfg1.value.z = Math.max(0, t.lagMaxM);
+      if (Number.isFinite(t.tempGain)) uFireCfg1.value.w = Math.max(0, t.tempGain);
+      if (Number.isFinite(u.capsuleCount)) uFireCfg2.value.y = Math.max(0, u.capsuleCount);
+      if (Number.isFinite(u.time)) uFireCfg2.value.z = u.time;
+      if (Number.isFinite(u.frame)) uFireCfg2.value.w = u.frame;
+      // Round 2b's tongue-erosion block (its smoke block was removed 2026-09-19).
+      if (Number.isFinite(t.noiseScale) && t.noiseScale > 0) uFireCfg4.value.x = t.noiseScale;
+      if (Number.isFinite(t.noiseStretch) && t.noiseStretch > 0) uFireCfg4.value.y = t.noiseStretch;
+      if (Number.isFinite(t.erode)) uFireCfg4.value.z = Math.max(0, t.erode);
+      if (Number.isFinite(t.erodeRise) && t.erodeRise > 0) uFireCfg4.value.w = t.erodeRise;
+      if (Number.isFinite(t.edgeSharp) && t.edgeSharp > 0) uFireCfg5.value.x = t.edgeSharp;
+      if (Number.isFinite(t.coreR) && t.coreR > 0) uFireCfg5.value.y = t.coreR;
+      if (Number.isFinite(t.density)) uFireCfg5.value.z = Math.max(0, t.density);
+      if (Number.isFinite(t.skin)) uFireCfg5.value.w = Math.min(1, Math.max(0, t.skin));
+      if (Number.isFinite(t.headClear)) uFireCfg6.value.x = Math.min(1, Math.max(0, t.headClear));
+      if (Number.isFinite(t.headRise)) uFireCfg6.value.y = Math.max(0, t.headRise);
+      // History resets on the first frame after enabling, on a host camera
+      // jump, and whenever nothing has been written yet (a stale previous
+      // frame would smear across a scene change).
+      const reset = u.resetHistory === true || !wasOn || !fireHistValid;
+      if (Number.isFinite(t.history)) uFireCfg3.value.x = Math.min(0.97, Math.max(0, t.history));
+      uFireCfg3.value.y = reset ? 1 : 0;
+      if (Number.isFinite(u.near) && u.near > 0) uFireCfg3.value.z = u.near;
+      if (Number.isFinite(u.far) && u.far > 0) uFireCfg3.value.w = u.far;
+      uFireBoundsMin.value.set(u.boundsMin[0], u.boundsMin[1], u.boundsMin[2], 0);
+      uFireBoundsMax.value.set(u.boundsMax[0], u.boundsMax[1], u.boundsMax[2], 0);
+      uFireNearFar.value.set(uFireCfg3.value.z, uFireCfg3.value.w, 0, 0);
+      uFireInvVp.value.copy(u.invViewProj);
+      uFirePrevVp.value.copy(u.prevViewProj);
+      // resolutionScale is live; a change resizes the low-res march target AND
+      // its history pair (both run at the same scale in round 2b).
+      if (Number.isFinite(t.resolutionScale) && t.resolutionScale > 0
+        && t.resolutionScale !== fireResolutionScale) {
+        fireResolutionScale = t.resolutionScale;
+        const c = computeRenderSize(window.innerWidth, window.innerHeight);
+        fireTarget.setSize(
+          Math.max(1, Math.floor(c.width * fireResolutionScale)),
+          Math.max(1, Math.floor(c.height * fireResolutionScale)),
+        );
+        fireHistA.setSize(fireTarget.width, fireTarget.height);
+        fireHistB.setSize(fireTarget.width, fireTarget.height);
+        fireHistValid = false;
+      }
+    },
+    setFireVolumeData(buf: Float32Array) {
+      const n = Math.min(buf.length, fireCapsFloats.length);
+      fireCapsFloats.set(buf.subarray(0, n));
+      fireCapsAttr.needsUpdate = true;
+    },
+    // --- GLOW (post-glow.ts), default OFF; the flame lab feeds it from its
+    // live burn tuning every frame. Non-finite arguments fall back rather
+    // than poisoning the uniforms.
+    setGlow(on: boolean, gain = 0, threshold = 0.75) {
+      glowOn = on;
+      glowGain = Number.isFinite(gain) ? Math.max(0, gain) : 0;
+      glowThreshold = Number.isFinite(threshold) ? Math.max(0, threshold) : 0.75;
+    },
     get vhsTerms() {
       const out = {} as VhsTerms;
       for (const k of Object.keys(vhsTermUniforms) as (keyof VhsTerms)[]) {
@@ -1415,8 +1989,22 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     vhsInB.dispose();
     vhsTarget.dispose();
     sscsTarget.dispose();
+    tongueTarget.dispose();
+    fireTarget.dispose();
+    fireHistA.dispose();
+    fireHistB.dispose();
+    fireCurlFallback.dispose();
+    glowA.dispose();
+    glowB.dispose();
     sscsFleshFallback.dispose();
     sscsMat.dispose();
+    glowExtractMat.dispose();
+    glowBlurMat.dispose();
+    tongueMat.dispose();
+    tongueCompositeMat.dispose();
+    fireMarchMat.dispose();
+    fireResolveMat.dispose();
+    fireCompositeMat.dispose();
     fxaaMat.dispose();
       blendMat.dispose();
       vhsCopyMat.dispose();

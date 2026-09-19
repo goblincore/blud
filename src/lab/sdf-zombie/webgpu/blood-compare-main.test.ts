@@ -258,8 +258,10 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
     expect(src).toContain('simulateCurrentTo(eventTime)');
     expect(src).toContain('function simulateCurrentTo(seconds: number)');
     // The Current side is rebuilt from t=0 at a fixed 1/60 s, so a seek is
-    // exact and reproducible (never a drifting live frame count).
-    expect(src).toContain('advanceRaw(1 / 60)');
+    // exact and reproducible (never a drifting live frame count). The curl
+    // (blood-curl-spike) is threaded through the SAME fixed-step rebuild, so
+    // the baseline and flow sims reach the event time on identical steps.
+    expect(src).toContain('advanceScenarioState(st, 1 / 60, flowBase)');
     // Splash is posed from the same clock.
     expect(src).toContain('splashEvent.time = Math.min(splashEvent.lifetime, eventTime)');
     // Both shapes loop through one shared event clock while playing.
@@ -436,8 +438,130 @@ describe('blood comparison page — shutter mode (task 1)', () => {
   });
 });
 
-describe('blood comparison page — task 3 bench + pass labels', () => {
-  it('installs labeled pass timing and labels the candidate passes', () => {
+describe('blood comparison page — flow axis (blood-curl-spike)', () => {
+  it('ships the flow OFF so the baseline look is unchanged', () => {
+    // Every switch defaults to the shipped look; the game never sets them.
+    expect(src).toContain('let curlOn = false;');
+    expect(src).toContain('let softFadeM = 0;');
+    expect(src).toContain("let wipeAxis: WipeAxis = 'variant';");
+  });
+
+  it('builds a SECOND sim for the flow side without a second factory call', () => {
+    // The page's one-factory invariant still holds; the flow A/B needs a
+    // literal second sim at the same seed/scenario/event time.
+    expect((src.match(/createBloodSim\(/g) ?? []).length).toBe(1);
+    expect(src).toContain('const flowSim: BloodSim = { droplets: [], splats: [], clocks: {} };');
+    expect(src).toContain('function simulateFlowTo');
+    expect(src).toContain('simulateStateInto(st, seconds, curlBase(false))');
+  });
+
+  it('threads the shared curl volume into stepBlood through the API', () => {
+    expect(src).toContain('getCurlVolumeData');
+    expect(src).toContain('function curlBase');
+    expect(src).toContain('setFlow');
+    expect(src).toContain('flow: {');
+  });
+
+  it('wipes baseline against flow with the SAME filter variant on both sides', () => {
+    expect(src).toContain("wipeAxis === 'flow'");
+    expect(src).toContain('renderVariant(variantById(variant), rtA, flowSim, softFadeM)');
+    expect(src).toContain('renderVariant(variantById(variant), rtB, sim, 0)');
+    expect(src).toContain("label: 'flow A/B (baseline | flow)'");
+  });
+
+  it('applies the soft fade to both translucent element families', () => {
+    expect(src).toContain('bloodView.setSoftFade');
+    expect(src).toContain('splashLayer.setSoftFade');
+    // The flow panel exposes all four knobs plus the on/off switch.
+    for (const needle of ['curl on (sim advection)', "'strength m/s²'", "'scale m/cell'", "'drift /s'", "'soft fade m'"]) {
+      expect(src, `${needle} must be present`).toContain(needle);
+    }
+  });
+});
+
+describe('blood comparison page — density axis (blood-density spike)', () => {
+  it('ships the packing OFF so the baseline look is unchanged', () => {
+    // Every knob defaults to the shipped game look: neutral emission
+    // multipliers and GAME_GOO_DEFAULTS. A page boot is the baseline frame.
+    expect(src).toContain('const density = { ...DENSITY_DEFAULTS };');
+    expect(src).toContain('coneScale: 1, countMul: 1, sizeMul: 1,');
+    expect(src).toContain('gooSizeScale: SHIPPED_GOO.sizeScale,');
+    expect(src).toContain('gooThreshold: SHIPPED_GOO.threshold,');
+    expect(src).toContain('gooBlurPx: SHIPPED_GOO.blurPx,');
+    expect(src).toContain('GAME_GOO_DEFAULTS');
+  });
+
+  it('threads the emission pack through every spawn site of the second sim', () => {
+    // The pack rides the ScenarioState, so the baseline sim never carries one.
+    expect(src).toContain('pack?: DensityPack;');
+    expect(src).toContain('st.pack');
+    expect(src).toContain('spawnWoundDroplets(');
+    expect(src).toContain('spawnImpactGout(st.sim, \'slug\', [0, 1.35, 0.55], [0, 0, -1], st.rng, stream, st.pack)');
+    // The pack must be set BEFORE the t=0 prime.
+    const m = src.match(/st\.pack = pack;[\s\S]{0,200}?primeScenarioInto\(st\)/);
+    expect(m).not.toBeNull();
+  });
+
+  it('rebuilds the second sim with the current packing (and curl only when on)', () => {
+    expect(src).toContain('function densityEmission()');
+    expect(src).toContain('simulateStateInto(flowState, seconds, curlBase(curlOn)');
+    expect(src).toContain('densityActive()');
+    expect(src).toContain('function flowUseDensity()');
+  });
+
+  it('wipes baseline against dense on the SAME filter variant', () => {
+    expect(src).toContain("wipeAxis === 'density'");
+    expect(src).toContain('renderVariant(variantById(variant), rtA, flowSim, softFadeM, densityGoo())');
+    expect(src).toContain('renderVariant(variantById(variant), rtB, sim, 0, SHIPPED_GOO)');
+    expect(src).toContain("label: 'density A/B (baseline | dense)'");
+    // The flow axis keeps its isolated-curl semantics (shipped packing).
+    expect(src).toContain('applyGooDensity(SHIPPED_GOO);');
+  });
+
+  it('applies the goo half of the pack to the layer and exposes both halves', () => {
+    expect(src).toContain('function applyGooDensity');
+    expect(src).toContain('gooLayer.setSizeScale(p.sizeScale)');
+    expect(src).toContain('gooLayer.setThreshold(p.threshold)');
+    expect(src).toContain('gooLayer.setBlurPx(p.blurPx)');
+    for (const needle of [
+      "'spread ×'", "'count ×'", "'size ×'", "'goo radius'", "'goo threshold'", "'goo blur px'",
+    ]) {
+      expect(src, `${needle} must be present`).toContain(needle);
+    }
+  });
+
+  it('records the packing in state() and exposes setDensity beside setFlow', () => {
+    expect(src).toContain('packing: {');
+    expect(src).toContain('shipped: { ...DENSITY_DEFAULTS }');
+    expect(src).toContain('setDensity:');
+    expect(src).toContain('gooRadius');
+    expect(src).toContain('gooThreshold');
+    expect(src).toContain('gooBlur');
+  });
+
+  it('carries the per-stream switch through setDensity, state() and the panel', () => {
+    // The lab control: a DENSITY-section toggle and ramp, an API field, and
+    // the recorded state, so a capture can replay the exact look.
+    expect(src).toContain('perStream?: boolean; streamRamp?: number;');
+    expect(src).toContain('perStream: density.perStream, streamRamp: density.streamRamp,');
+    expect(src).toContain("checkbox('per-stream fusion'");
+    expect(src).toContain("row('stream fuse ramp s'");
+    expect(src).toContain('gooLayer.setPerStream(p.perStream);');
+    expect(src).toContain('gooLayer.setStreamRamp(p.streamRamp);');
+    // Default is the shipped stream-blind field.
+    expect(src).toContain('perStream: false,');
+    expect(src).toContain('streamRamp: 0,');
+  });
+
+  it('adds a per-stream wipe axis that compares dense | dense per-stream', () => {
+    expect(src).toContain("wipeAxis === 'perStream'");
+    expect(src).toContain("{ ...densityGoo(), perStream: true }");
+    expect(src).toContain("{ ...densityGoo(), perStream: false }");
+    expect(src).toContain("label: 'per-stream A/B (dense | dense per-stream)'");
+  });
+});
+
+describe('blood comparison page — task 3 bench + pass labels', () => {  it('installs labeled pass timing and labels the candidate passes', () => {
     for (const needle of ['installPassTiming', 'beginPassFrame', 'setPassLabel', 'attributePassSamples']) {
       expect(src, `${needle} must be imported/used`).toContain(needle);
     }

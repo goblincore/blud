@@ -5,6 +5,7 @@ import {
 } from './blood-sim';
 import type { Vec3 } from './types';
 import type { Droplet } from './blood-sim';
+import type { CurlFlow } from './curl-sample';
 import { BLOOD_TRAIL, GIB_BURST } from '../../game/gibs/tuning';
 
 function seeded(seed = 1): () => number {
@@ -522,3 +523,155 @@ describe('emitter stream provenance (blood-connections)', () => {
     expect(b.calls()).toBe(a.calls());
   });
 });
+
+describe('curl flow in the sim (blood-curl-spike, optional)', () => {
+  // A deterministic fake packed volume, so the flow tests cost no 64^3 build
+  // and do not need three. The decode/wrap contract lives in curl-sample.test.
+  function fakeVolume(): Uint8Array {
+    const d = new Uint8Array(64 * 64 * 64 * 4);
+    let s = 0x1234abcd;
+    for (let i = 0; i < d.length; i++) { s = (s * 1664525 + 1013904223) >>> 0; d[i] = s >>> 24; }
+    return d;
+  }
+  const flow = (over: Partial<CurlFlow> = {}): CurlFlow => ({
+    data: fakeVolume(), strength: 3, scale: 6, drift: 0.5, time: 0, ...over,
+  });
+
+  function staged(): ReturnType<typeof createBloodSim> {
+    const sim = createBloodSim();
+    burst(sim, [0, 1.2, 0], seeded(11));
+    addScraps(sim, [{ pos: [0.1, 1.2, 0.1], size: 0.06 }], [0, 1.2, 0], seeded(12));
+    return sim;
+  }
+
+  it('is BYTE-IDENTICAL to today when flow is absent or strength is 0', () => {
+    const a = staged(); const b = staged(); const c = staged();
+    const fa = seeded(5), fb = seeded(5), fc = seeded(5);
+    for (let i = 0; i < 90; i++) {
+      stepBlood(a, 1 / 60, fa);
+      stepBlood(b, 1 / 60, fb, undefined);
+      stepBlood(c, 1 / 60, fc, flow({ strength: 0 }));
+    }
+    // Every droplet, every position/velocity/age, plus the stamped splats and
+    // the RNG-driven splat offsets: identical bytes.
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+    expect(JSON.stringify(c)).toBe(JSON.stringify(a));
+  });
+
+  it('a non-zero strength bends the same seeded spray (the switch reaches the sim)', () => {
+    const a = staged(); const b = staged();
+    const fa = seeded(5), fb = seeded(5);
+    for (let i = 0; i < 20; i++) {
+      stepBlood(a, 1 / 60, fa);
+      stepBlood(b, 1 / 60, fb, flow());
+    }
+    expect(a.droplets.length).toBe(b.droplets.length);
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+  });
+
+  it('stays deterministic with flow on (no Math.random)', () => {
+    const a = staged(); const b = staged();
+    const fa = seeded(5), fb = seeded(5);
+    for (let i = 0; i < 40; i++) {
+      stepBlood(a, 1 / 60, fa, flow({ time: i / 60 }));
+      stepBlood(b, 1 / 60, fb, flow({ time: i / 60 }));
+    }
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('moves every AIRBORNE kind but never the chain-owned gut', () => {
+    const sim = createBloodSim();
+    const mk = (kind: Droplet['kind']): Droplet => ({
+      pos: [0.3, 1.5, 0.2], vel: [0, 0, 0], age: 0, life: 5, size: 0.08, kind,
+    });
+    sim.droplets.push(mk('drop'), mk('mist'), mk('scrap'), mk('gut'));
+    const gutBefore = JSON.stringify(sim.droplets[3]);
+    stepBlood(sim, 1 / 60, seeded(1), flow());
+    const [drop, mist, scrap, gut] = sim.droplets;
+    // drop/mist/scrap each left the origin; the gut is chain-owned and did not.
+    for (const d of [drop!, mist!, scrap!]) expect(d.pos).not.toEqual([0.3, 1.5, 0.2]);
+    expect(JSON.stringify(gut)).toBe(gutBefore);
+  });
+});
+
+describe('emission density pack (blood-density spike, optional)', () => {
+  const anchor: Vec3 = [0, 1.35, 0.55];
+  const dir: Vec3 = [0, 0, -1];
+  /** The exact profile values the page's DENSITY defaults use: neutral. */
+  const NEUTRAL = { coneScale: 1, countMul: 1, sizeMul: 1 };
+  /** Regenerated ONLY with an intentional default-tuning change (see below). */
+  const GOLDEN_SIM_DIGEST = '93ac4a8c';
+
+  /** A full seeded scenario: one-shot gout + a sustained wound + integration. */
+  function runScenario(pack?: Parameters<typeof spawnImpactGout>[6]): ReturnType<typeof createBloodSim> {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded(9), 1, pack);
+    let acc = 0;
+    const r = seeded(21);
+    for (let i = 0; i < 90; i++) {
+      acc = spawnWoundDroplets(sim, 'slug', i / 60, [0, 1.2, 0.4], [0, 0, 1], 1 / 60, acc, r, 2, pack);
+      stepBlood(sim, 1 / 60, r);
+    }
+    return sim;
+  }
+
+  /** FNV-1a over the full serialized sim — every droplet, every field. */
+  function digest(sim: ReturnType<typeof createBloodSim>): string {
+    const s = JSON.stringify(sim);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  }
+
+  it('is BYTE-IDENTICAL to today when no pack is passed', () => {
+    const a = runScenario();
+    const b = runScenario(undefined);
+    // Every droplet position/velocity/age/size, both emission sites and the
+    // integration between them: identical bytes.
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+
+  it('a NEUTRAL pack (all 1s) is byte-identical to the shipped profiles', () => {
+    // The game never passes a pack; a page that passes the neutral pack must
+    // not move a single bit either — this is the "defaults are today" pin.
+    const a = runScenario();
+    const b = runScenario(NEUTRAL);
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+
+  it('pins the shipped seeded scenario with a golden digest', () => {
+    // Guards the DEFAULT bands themselves: if a future edit changes
+    // IMPACT_GOUT / WOUND_BLEED (or the pack's neutral arithmetic), this
+    // digest moves and the change has to be argued for, not slipped in.
+    // Regenerate deliberately, never to make a red test green.
+    expect(digest(runScenario())).toBe(GOLDEN_SIM_DIGEST);
+  });
+
+  it('a non-neutral pack actually reaches the spray (the switch is not inert)', () => {
+    const base = runScenario();
+    const dense = runScenario({ coneScale: 0.5, countMul: 2, sizeMul: 2 });
+    expect(dense.droplets.length).not.toBe(base.droplets.length);
+    expect(JSON.stringify(dense)).not.toBe(JSON.stringify(base));
+  });
+
+  it('stays deterministic with a pack on (no Math.random)', () => {
+    const pack = { coneScale: 0.6, countMul: 1.5, sizeMul: 1.4 };
+    expect(digest(runScenario(pack))).toBe(digest(runScenario(pack)));
+  });
+
+  it('countMul raises a gout\'s droplet budget linearly, cone/size stay bounded', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'slug', anchor, dir, seeded(3), 1, { countMul: 2, sizeMul: 2 });
+    expect(sim.droplets).toHaveLength(IMPACT_GOUT.slug.count * 2);
+    // Sizes remain inside the profile band times the pack multiplier.
+    const sizeMul = 2;
+    for (const d of sim.droplets) {
+      expect(d.size).toBeGreaterThanOrEqual(IMPACT_GOUT.slug.sizeMin * sizeMul);
+      expect(d.size).toBeLessThanOrEqual(IMPACT_GOUT.slug.sizeMax * sizeMul);
+    }
+  });
+});
+

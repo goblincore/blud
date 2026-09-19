@@ -22,6 +22,7 @@ import { sdBody } from '../validate';
 import * as soldierStagger from '../soldier-stagger';
 import * as motion from '../motion';
 import { soldierInjury } from '../soldier-damage';
+import { BURN_BEHAVIOUR } from '../burn-behaviour';
 
 function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult, onMeleeContact?: () => void) {
   const shots: { age: number; kicks: number; origin: readonly number[]; direction: readonly number[]; expectedOrigin: readonly number[]; expectedDirection: readonly number[] }[] = [];
@@ -582,6 +583,47 @@ describe('soldier actor combat wiring', () => {
     }
     expect(shots).toHaveLength(0);
     expect(actor.pose().pos[2]).toBeLessThan(0.46);
+  });
+});
+
+
+describe('burning soldier panic (Task 2)', () => {
+  it('is OFF by default: a burning soldier moves exactly like an unburnt twin', () => {
+    expect(BURN_BEHAVIOUR.soldierPanic).toBe(false);
+    const a = soldier();
+    const b = soldier();
+    for (const s of [a, b]) {
+      s.actor.setBrainInput({ x: 5, z: 0, room: 1 }, true);
+      for (let i = 0; i < 30; i++) s.actor.step(1 / 60);
+    }
+    a.actor.setBurning(true);
+    for (let i = 0; i < 150; i++) { a.actor.step(1 / 60); b.actor.step(1 / 60); }
+    expect(a.actor.pose().pos).toEqual(b.actor.pose().pos);
+    expect(a.shots.length).toBe(b.shots.length);
+    expect(a.actor.burnStumbles()).toBe(0);
+  });
+  it.skipIf(!BURN_BEHAVIOUR.soldierPanic)('setBurning flees the player and stops the gun; setBurning(false) releases', () => {
+    const { actor, shots } = soldier();
+    actor.setBrainInput({ x: 5, z: 0, room: 1 }, true);
+    for (let i = 0; i < 30; i++) actor.step(1 / 60);
+    const before = actor.pose().pos;
+    const d0 = Math.hypot(before[0] - 5, before[2]);
+    const shotsBefore = shots.length;
+
+    actor.setBurning(true);
+    for (let i = 0; i < 150; i++) actor.step(1 / 60);   // 2.5 s alight
+    const after = actor.pose().pos;
+    const d1 = Math.hypot(after[0] - 5, after[2]);
+    // Ran AWAY from the player at +x (the pre-burn mind walked toward him).
+    expect(d1).toBeGreaterThan(d0 + 0.3);
+    // A burning soldier must not fire, whatever the mind wanted.
+    expect(shots.length).toBe(shotsBefore);
+    expect(actor.debug().phase).toBe('standing');
+
+    // Extinguishing releases the override; the mind resumes without throwing.
+    actor.setBurning(false);
+    for (let i = 0; i < 60; i++) actor.step(1 / 60);
+    expect(actor.debug().phase).toBe('standing');
   });
 });
 

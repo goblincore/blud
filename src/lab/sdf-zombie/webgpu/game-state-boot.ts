@@ -28,6 +28,7 @@ import type { RoomDef } from './game-level';
 import type { PassTiming } from './gpu-pass-timing';
 import type { LabRendererHandle } from './lab-renderer';
 import type { LoopController, WarmOutcome } from './warm-gate';
+import type { WarmBackgroundTracker } from './warm-background';
 
 /** `game-main.ts`'s local `RES_RUNGS` keys (`?res=`); not exported there. */
 type ResRung = '960' | '800' | '640';
@@ -142,6 +143,20 @@ export interface BootState {
   warmRequested: boolean;
   /** The warm-up outcome promise, or an already-resolved 'ok'. */
   warmPromise: Promise<WarmOutcome>;
+  /** DEFER-COMPILE (2026-09-19): TRUE on the legacy route, where the crowd and
+   *  gib/chunk march programs compile AFTER `ready`; FALSE in deferred, whose
+   *  G-buffer router keeps the old behind-the-loader warm. */
+  backgroundMode: boolean;
+  /** The background-compile state machine the crowd draw path and the gib
+   *  draws read (`crowdPath()` / `gibDraw()`). Assigned in main() so it stays
+   *  the only main()-scope state (game-context-coverage). */
+  warmBackground: WarmBackgroundTracker;
+  /** `backgroundStart` / `backgroundDone` per program, ms relative to
+   *  `warmT0`. These OBJECTS are shared into `__warmDone.phases` so a driver
+   *  that read `__warmDone` at `ready` sees the values appear as jobs settle. */
+  warmBackgroundTimes: { start: Record<string, number>; done: Record<string, number> };
+  /** warmPipelines' t0; the background-set timings are relative to it. */
+  warmT0: number;
   /** Monotonic wound/trail emitter-stream id allocator. */
   nextEmitterStream: number;
   /** The `#hud` root element, or null when the page has none. */
@@ -195,6 +210,10 @@ export function makeBootState(): BootState {
     canvas: unbuilt<HTMLCanvasElement>(),
     warmRequested: false,
     warmPromise: Promise.resolve<WarmOutcome>('ok'),
+    backgroundMode: false,
+    warmBackground: unbuilt<WarmBackgroundTracker>(),
+    warmBackgroundTimes: { start: {}, done: {} },
+    warmT0: 0,
     nextEmitterStream: 1,
     hudEl: null,
     hud: { lockHint: true },

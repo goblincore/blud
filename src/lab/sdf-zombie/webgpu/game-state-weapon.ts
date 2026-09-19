@@ -25,6 +25,7 @@
 // them INSIDE main() and does not export them, and the codemod needs the fields
 // to stay structurally usable after the rewrite.
 
+import type { FlareHarness } from './game-flare';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { StickProp } from './fpv-view';
@@ -75,6 +76,8 @@ export interface WeaponState {
   viewModelAnchor: THREE.Group;
   /** The aim (yaw/pitch) pivot for the gun rig, or null before it is built. */
   aimRig: THREE.Group | null;
+  /** Slot 3 (flare test harness, game-flare.ts); null until the aim rig exists. */
+  flare: FlareHarness | null;
   /** The gun's own rig group; the codemod supplies the real group. */
   gunRig: THREE.Group;
   /** The top-lever hinge pivot, or null before it is built. */
@@ -185,6 +188,7 @@ export function makeWeaponState(): WeaponState {
     pendingReload: false,
     viewModelAnchor: unbuilt<THREE.Group>(),
     aimRig: null,
+    flare: null,
     gunRig: unbuilt<THREE.Group>(),
     hingePivot: null,
     muzzleNodes: [],

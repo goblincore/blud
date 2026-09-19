@@ -21,6 +21,7 @@
 // codemod supplies the real value at the binding's original line. Containers
 // are always freshly constructed so no two calls share one.
 
+import type { GameBurning } from './game-burning';
 import type * as THREE from 'three/webgpu';
 import type { BleedRegistry } from '../bleed-registry';
 import type { BloodSim, Droplet } from '../blood-sim';
@@ -73,6 +74,8 @@ export interface VfxState {
   beamTuning: { gain: number; shoulder: number; keyFloor: number };
   /** Post-composite character overlay (muzzle flashes); codemod supplies it. */
   characterEffects: CharacterEffects;
+  /** In-game burning (flare test harness, game-burning.ts); set at boot. */
+  burning: GameBurning;
   /** The zombie's compiled face params. */
   face: FaceParams;
   /** The zombie's flesh material (compiled palette, else preset fallback). */
@@ -172,6 +175,7 @@ export function makeVfxState(): VfxState {
     explosionLightPool: [],
     beamTuning: { gain: 4, shoulder: 0.35, keyFloor: 0 },
     characterEffects: null as unknown as CharacterEffects,
+    burning: null as unknown as GameBurning,
     face: null as unknown as FaceParams,
     flesh: null as unknown as FleshMaterial,
     faceTex: null as unknown as THREE.Texture,

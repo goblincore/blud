@@ -160,6 +160,7 @@ export default defineConfig({
         sdfHullSpike: resolve(__dirname, 'sdf-hull-spike.html'),
         sdfGame: resolve(__dirname, 'sdf-game.html'),
         sdfBloodCompare: resolve(__dirname, 'sdf-blood-compare.html'),
+        sdfFlameLab: resolve(__dirname, 'sdf-flame-lab.html'),
         sdfDeferred: resolve(__dirname, 'sdf-deferred.html'),
       },
     },

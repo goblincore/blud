@@ -1,0 +1,198 @@
+{
+  "backend": "webgpu",
+  "note": "GPU pass ms from timestamp queries; bodies replicate the burning capsules (the lab has two).",
+  "results": [
+    {
+      "scale": 0.5,
+      "bodies": 1,
+      "on": {
+        "installed": true,
+        "march": 2.644,
+        "resolve": 2.646,
+        "composite": 2.668,
+        "copy": 2.672,
+        "total": 10.63,
+        "frames": 157,
+        "samples": 2310,
+        "wall": {
+          "n": 120,
+          "median": 16.600000000558794
+        }
+      },
+      "off": {
+        "installed": true,
+        "march": 1.843,
+        "resolve": 1.921,
+        "composite": 1.934,
+        "copy": 1.945,
+        "total": 7.644,
+        "frames": 31,
+        "samples": 434,
+        "wall": {
+          "n": 120,
+          "median": 16.600000000558794
+        }
+      }
+    },
+    {
+      "scale": 0.5,
+      "bodies": 4,
+      "on": {
+        "installed": true,
+        "march": 3.256,
+        "resolve": 3.337,
+        "composite": 3.351,
+        "copy": 3.333,
+        "total": 13.276,
+        "frames": 61,
+        "samples": 854,
+        "wall": {
+          "n": 120,
+          "median": 16.700000000186265
+        }
+      },
+      "off": {
+        "installed": true,
+        "march": 2.284,
+        "resolve": 2.362,
+        "composite": 2.374,
+        "copy": 2.387,
+        "total": 9.407,
+        "frames": 30,
+        "samples": 420,
+        "wall": {
+          "n": 120,
+          "median": 16.700000000186265
+        }
+      }
+    },
+    {
+      "scale": 0.5,
+      "bodies": 8,
+      "on": {
+        "installed": true,
+        "march": 3.801,
+        "resolve": 3.981,
+        "composite": 4.057,
+        "copy": 4.027,
+        "total": 15.866,
+        "frames": 60,
+        "samples": 840,
+        "wall": {
+          "n": 120,
+          "median": 16.700000000186265
+        }
+      },
+      "off": {
+        "installed": true,
+        "march": 1.779,
+        "resolve": 1.825,
+        "composite": 1.89,
+        "copy": 1.843,
+        "total": 7.337,
+        "frames": 31,
+        "samples": 434,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        }
+      }
+    },
+    {
+      "scale": 0.25,
+      "bodies": 1,
+      "on": {
+        "installed": true,
+        "march": 2.584,
+        "resolve": 2.461,
+        "composite": 2.598,
+        "copy": 2.686,
+        "total": 10.33,
+        "frames": 60,
+        "samples": 840,
+        "wall": {
+          "n": 120,
+          "median": 16.600000000558794
+        }
+      },
+      "off": {
+        "installed": true,
+        "march": 2.856,
+        "resolve": 2.932,
+        "composite": 2.946,
+        "copy": 2.904,
+        "total": 11.638,
+        "frames": 31,
+        "samples": 434,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        }
+      }
+    },
+    {
+      "scale": 0.25,
+      "bodies": 4,
+      "on": {
+        "installed": true,
+        "march": 3.973,
+        "resolve": 4.114,
+        "composite": 4.136,
+        "copy": 4.104,
+        "total": 16.327,
+        "frames": 60,
+        "samples": 840,
+        "wall": {
+          "n": 120,
+          "median": 16.700000000186265
+        }
+      },
+      "off": {
+        "installed": true,
+        "march": 4.061,
+        "resolve": 4.302,
+        "composite": 4.382,
+        "copy": 4.45,
+        "total": 17.195,
+        "frames": 30,
+        "samples": 420,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        }
+      }
+    },
+    {
+      "scale": 0.25,
+      "bodies": 8,
+      "on": {
+        "installed": true,
+        "march": 4.011,
+        "resolve": 4.084,
+        "composite": 4.099,
+        "copy": 4.058,
+        "total": 16.252,
+        "frames": 60,
+        "samples": 840,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        }
+      },
+      "off": {
+        "installed": true,
+        "march": 4.775,
+        "resolve": 4.865,
+        "composite": 4.878,
+        "copy": 4.837,
+        "total": 19.355,
+        "frames": 31,
+        "samples": 434,
+        "wall": {
+          "n": 120,
+          "median": 16.699999999254942
+        }
+      }
+    }
+  ]
+}

@@ -35,7 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, marchNormalRead, marchAnchorRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, marchNormalRead, marchAnchorRead, marchBurnRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
@@ -766,6 +766,30 @@ export interface SdfLayer {
     camera: THREE.PerspectiveCamera,
   ): Promise<void>;
   /**
+   * `precompile` for a call made WHILE THE LIVE LOOP IS RUNNING (defer-compile
+   * task, 2026-09-19). `precompile` mutates the SHARED renderer and camera:
+   * `camera.layers.set(SDF_LAYER)` for the whole await, and the layer's private
+   * target/MRT until its `finally`. A live frame in between reads that camera
+   * mask (`sdf-layer.render` disables SDF_LAYER for the polygonal pass), so it
+   * would draw an empty level, and it could observe the layer's target/MRT.
+   *
+   * This method compiles through a CLONE of the camera and restores the
+   * renderer's target/MRT immediately after `compileAsync`'s synchronous
+   * prologue — three captures the render context (target + MRT, which are part
+   * of the pipeline cache key) before its first await, and the live camera is
+   * never touched. The pipeline is byte-for-byte the one the live draw will
+   * use: three's cache key is geometry+material+render-context, never camera.
+   *
+   * Returns false on a throw or when the bounded wait times out; the caller
+   * degrades (the object's draw is skipped) rather than stalling.
+   */
+  precompileInBackground(
+    object: THREE.Object3D,
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    opts?: { timeoutMs?: number },
+  ): Promise<boolean>;
+  /**
    * Compiles EVERY pipeline this layer draws with, in the render-target context
    * it really draws them in, and returns how many compiles ran.
    *
@@ -953,6 +977,9 @@ export interface SdfLayer {
   readonly marchNormalTexture: THREE.Texture | null;
   /** Run 4: the march's third attachment (rest-space noise anchor.xyz, w = detail gate), normals boots only. */
   readonly marchAnchorTexture: THREE.Texture | null;
+  /** Flame tongues (flame-tongues task 2): the march's fourth attachment, the per-pixel burn
+   *  mask (rgb = burn, char, fire); null unless created with `marchBurn`. */
+  readonly marchBurnTexture: THREE.Texture | null;
   /** Run 4: the output-res skin-detail noise (xyz, w = gate), rgba32f; null unless normals are on. */
   readonly detailTarget: THREE.RenderTarget | null;
   /** Run 4: the same-body anchor jump limit (metres) for the detail pass's gradient extrapolation. */
@@ -1045,11 +1072,19 @@ export interface SdfLayerOptions {
   marchNormals?: boolean;
   /** Run 5: allocate the output-res refine targets and run the per-body refine pass; implies `marchNormals`. */
   refine?: boolean;
+  /** Flame tongues (flame-tongues task 2): allocate a FOURTH march attachment carrying the
+   *  per-pixel burn mask (rgb = burn, char, fire) and expose it as `marchBurnTexture` for the
+   *  post-aa tongue pass. Dev-only like `marchNormals`; off leaves the target and its frame
+   *  byte-identical to the shipped boot. Independent of `marchNormals` (the lab runs it alone). */
+  marchBurn?: boolean;
 }
 
 export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayerOptions = {}): SdfLayer {
   const refineOn = options.refine === true;
   const marchNormals = options.marchNormals === true || refineOn;
+  // Flame tongues (flame-tongues task 2): the fourth attachment is OPT-IN and
+  // independent of the normals pair — the flame lab runs the burn mask alone.
+  const marchBurnOn = options.marchBurn === true;
   let scale = DEFAULT_SDF_SCALE;
   let fullW = 1;
   let fullH = 1;
@@ -1200,7 +1235,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     type: THREE.FloatType,
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
-    count: marchNormals ? 3 : 1,
+    // Flame tongues (flame-tongues task 2): the burn mask is the LAST
+    // attachment — index 3 beside the normals pair, index 1 when it runs
+    // alone. It can NOT keep a fixed index 3 with normals off: three's
+    // MRTNode builds its output members BY ATTACHMENT INDEX and an unnamed
+    // hole at 1/2 crashes the pipeline build (measured, 'getNodeType' of
+    // undefined). Consumers read the mask through marchBurnTexture, never a
+    // raw index. Bonus of the alone shape: 2 rgba32f attachments = 32
+    // bytes/sample, inside even the default WebGPU attachment budget.
+    count: marchNormals ? (marchBurnOn ? 4 : 3) : (marchBurnOn ? 2 : 1),
   });
   // RUNTIME NORMALS (2026-09-12): with two attachments every material drawn into `target` must
   // emit both, so the MRT is set on the RENDERER around the march renders (three's MRTNode maps
@@ -1215,10 +1258,21 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     // Run 4: rest-space noise anchor + detail gate, for the output-res detail pass below.
     target.textures[2]!.name = 'marchAnchor';
     const n = marchNormalRead({ dep: output as never }) as unknown as { xyz: unknown; w: unknown };
+    if (marchBurnOn) target.textures[3]!.name = 'marchBurn';
     marchMrt = mrt({
       output,
       marchNormal: vec4(mul(mat3(cameraViewMatrix as never), n.xyz as never) as never, n.w as never),
       marchAnchor: marchAnchorRead({ dep: output as never }),
+      ...(marchBurnOn ? { marchBurn: marchBurnRead({ dep: output as never }) } : {}),
+    });
+  } else if (marchBurnOn) {
+    // Burn mask ALONE (the flame lab's boot): the mask rides slot 1 — three's
+    // MRTNode cannot leave attachment holes (see the count comment above).
+    target.textures[0]!.name = 'output';
+    target.textures[1]!.name = 'marchBurn';
+    marchMrt = mrt({
+      output,
+      marchBurn: marchBurnRead({ dep: output as never }),
     });
   }
   // RUN 4 DETAIL PASS (plan 2026-09-12-neural-upscale-run4-relief): the skin-detail noise evaluated
@@ -1757,6 +1811,42 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       } finally {
         renderer.setRenderTarget(previousTarget);
         camera.layers.mask = previousMask;
+      }
+    },
+    async precompileInBackground(object, scene, camera, opts) {
+      const timeoutMs = opts?.timeoutMs ?? PRECOMPILE_COLD_PASS_TIMEOUT_MS;
+      const previousTarget = renderer.getRenderTarget();
+      // A CLONE, deliberately: the live loop is drawing between awaits, and the
+      // real camera's layer mask must not be SDF_LAYER for the whole compile.
+      const bgCamera = camera.clone();
+      bgCamera.layers.set(SDF_LAYER);
+      bgCamera.updateMatrixWorld();
+      bgCamera.matrixWorldInverse.copy(bgCamera.matrixWorld).invert();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        renderer.setRenderTarget(target);
+        if (marchMrt) renderer.setMRT(marchMrt as never);
+        // Restore the renderer's globals IMMEDIATELY after the synchronous
+        // prologue: compileAsync has already snapshot the render context
+        // (target + MRT) that the pipeline descriptor is built against.
+        const compile = renderer.compileAsync(object, bgCamera, scene);
+        if (marchMrt) renderer.setMRT(null);
+        renderer.setRenderTarget(previousTarget);
+        const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), timeoutMs); });
+        const outcome = await Promise.race([compile.then(() => 'ok' as const), timeout]);
+        if (timer !== undefined) clearTimeout(timer);
+        if (outcome === 'timeout') {
+          console.warn(`[sdf-layer] background precompile did not settle in ${timeoutMs} ms — degrading`);
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('[sdf-layer] background precompile failed', err);
+        return false;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        if (marchMrt) renderer.setMRT(null);
+        renderer.setRenderTarget(previousTarget);
       }
     },
     async precompilePasses(scene, camera, opts) {
@@ -2457,6 +2547,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     },
     get marchNormalTexture() { return marchNormals ? target.textures[1]! : null; },
     get marchAnchorTexture() { return marchNormals ? target.textures[2]! : null; },
+    // Last attachment: slot 3 beside the normals pair, slot 1 when alone —
+    // the same slot rule the naming above follows.
+    get marchBurnTexture() { return marchBurnOn ? target.textures[target.textures.length - 1]! : null; },
     get detailTarget() { return detailScene ? detailTarget : null; },
     setDetailJumpMax(m) { (uDetailJumpMax.value as number) = Math.max(0.001, m); },
     get upscaleInfo() { return upscaleInfoOf(upscale); },

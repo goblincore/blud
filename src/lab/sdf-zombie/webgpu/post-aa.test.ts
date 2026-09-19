@@ -19,6 +19,7 @@ import {
   createPostAa,
 } from './post-aa';
 import { POST_VHS_WGSL, VHS_PRESETS } from './post-vhs';
+import { POST_GLOW_EXTRACT_WGSL, POST_GLOW_BLUR_WGSL } from './post-glow';
 import { getRenderCap, setRenderCap } from './lab-renderer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
@@ -175,9 +176,26 @@ describe('post-aa module wiring', () => {
 
   it('every target gets the explicit first clear after (re)allocation', () => {
     expect(src).toContain(
-      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget])',
+      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB])',
     );
     expect(src).toContain('targetsNeedInit = true;');
+  });
+
+  it('round 2b: the fire composite blends into the capture, no copy draw', () => {
+    // out = scene * T + emission via dstFactor = srcAlpha (srcAlpha is T).
+    expect(src).toContain('fireCompositeMat.blending = THREE.CustomBlending;');
+    expect(src).toContain('fireCompositeMat.blendSrc = THREE.OneFactor;');
+    expect(src).toContain('fireCompositeMat.blendDst = THREE.SrcAlphaFactor;');
+    expect(src).toContain('fireCompositeMat.blendSrcAlpha = THREE.OneFactor;');
+    expect(src).toContain('fireCompositeMat.blendDstAlpha = THREE.ZeroFactor;');
+    // The separate full-res composite target and its copy draw are gone.
+    expect(src).not.toContain('fireOut');
+    expect(src).not.toContain('fireCopyMat');
+  });
+
+  it('round 2b: the fire resolve + history run at the march resolution', () => {
+    expect(src).toContain('fireHistA.setSize(fireTarget.width, fireTarget.height);');
+    expect(src).toContain('fireHistB.setSize(fireTarget.width, fireTarget.height);');
   });
 
   it('a sink added AFTER the redirect is handed the current target', () => {
@@ -228,6 +246,10 @@ describe('post-aa module wiring', () => {
       // resolves keys against the parsed header, so a missing `samp` would be
       // silently unbound (and generateInput would substitute float(0)).
       ['POST_VHS_WGSL', POST_VHS_WGSL],
+      // The glow pair: the blur declares a sampler the extract does not, so
+      // each call site must match ITS header — the same silent-unbind trap.
+      ['POST_GLOW_EXTRACT_WGSL', POST_GLOW_EXTRACT_WGSL],
+      ['POST_GLOW_BLUR_WGSL', POST_GLOW_BLUR_WGSL],
     ];
     for (const [constName, wgsl] of callSites) {
       expect(callSiteKeys(constName)).toEqual(headerParams(wgsl));
@@ -294,6 +316,65 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(calls.render).toBe(0);
     // …and the sink was never redirected away from the canvas.
     expect(sink.target).toBe('unset');
+  });
+
+  it('setFireVolume(false) is a no-op on the all-off parity path', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setFireVolume(false);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(chainCalls).toBe(1);
+    expect(calls.setRenderTarget).toBe(0);
+    expect(calls.render).toBe(0);
+  });
+
+  it('setFireVolume(true) runs the three fire passes into the capture', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    const frame = {
+      tuning: {
+        resolutionScale: 0.5, steps: 32, tempGain: 1.6, sootGain: 0.6,
+        rise: 1.1, sootRise: 2.2, curlStrength: 0.35, curlScale: 1.2,
+        lag: 0.3, lagMaxM: 0.6, history: 0.85, cardsPerBody: 5, smokeTailSec: 2,
+        noiseScale: 2.4, noiseStretch: 0.5, erode: 0.55, erodeRise: 0.6,
+        edgeSharp: 2.5, coreR: 0.12, smokeAlbedo: 0.5, smokeAmbient: 0.55,
+        smokeFireLit: 1.0, smokeSpread: 0.4, maxBodies: 4, density: 1, skin: 1, headRise: 1, headClear: 1,
+      },
+      time: 1, frame: 3,
+      invViewProj: new THREE.Matrix4(),
+      prevViewProj: new THREE.Matrix4(),
+      near: 0.05, far: 60, capsuleCount: 2,
+      boundsMin: [-1, 0, -1] as [number, number, number],
+      boundsMax: [1, 3, 1] as [number, number, number],
+    };
+    post.setFireVolume(true, frame);
+    // The first render settles the target init loop; then the fire passes are
+    // the ONLY draws for a frame with every other effect off.
+    post.render(() => {});
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+    calls.passes.length = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    expect(chainCalls).toBe(1);
+    // Three fire draws (march, resolve, composite-into-capture), then the
+    // chain's own final blit. Round 2's separate composite target + copy draw
+    // are gone: the composite BLENDS into the capture.
+    expect(calls.render).toBe(4);
+    expect(calls.passes.slice(0, 3)).toEqual([
+      'post:fire-march', 'post:fire-resolve', 'post:fire-composite',
+    ]);
   });
 
   it('exposes the real capture target with sampleable depth (prewarm seam)', () => {

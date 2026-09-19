@@ -40,6 +40,49 @@ describe('sortFrontToBack', () => {
   });
 });
 
+describe('marchBurn attachment (flame-tongues task 2)', () => {
+  /** The stub renderer the precompile tests use — createSdfLayer only needs
+   *  the target getters at construction time. */
+  function stubRenderer(): THREE.WebGPURenderer {
+    let currentTarget: THREE.RenderTarget | null = null;
+    return {
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      compileAsync: vi.fn(async () => { /* nothing to compile here */ }),
+    } as unknown as THREE.WebGPURenderer;
+  }
+
+  it('is opt-in: the shipped boot keeps its exact attachment counts', () => {
+    const base = createSdfLayer(stubRenderer());
+    expect(base.marchTarget.textures.length).toBe(1);
+    expect(base.marchBurnTexture).toBeNull();
+    base.dispose();
+
+    // marchNormals ALONE must stay exactly as today: 3 attachments, no burn.
+    const normals = createSdfLayer(stubRenderer(), { marchNormals: true });
+    expect(normals.marchTarget.textures.length).toBe(3);
+    expect(normals.marchBurnTexture).toBeNull();
+    normals.dispose();
+  });
+
+  it('when on, the burn mask is the LAST attachment, named and exposed', () => {
+    // Alone: the mask rides slot 1 (three's MRTNode builds output members by
+    // attachment index — an unnamed hole at 1/2 crashes the pipeline build).
+    const burn = createSdfLayer(stubRenderer(), { marchBurn: true });
+    expect(burn.marchTarget.textures.length).toBe(2);
+    expect(burn.marchTarget.textures[1]!.name).toBe('marchBurn');
+    expect(burn.marchBurnTexture).toBe(burn.marchTarget.textures[1]);
+    burn.dispose();
+
+    // And it composes with the normals pair, as the FOURTH attachment.
+    const both = createSdfLayer(stubRenderer(), { marchNormals: true, marchBurn: true });
+    expect(both.marchTarget.textures.length).toBe(4);
+    expect(both.marchTarget.textures[3]!.name).toBe('marchBurn');
+    expect(both.marchBurnTexture).toBe(both.marchTarget.textures[3]);
+    both.dispose();
+  });
+});
+
 describe('SDF-layer material precompile', () => {
   it('compiles in the real float-target context and restores renderer/camera state', async () => {
     const previousTarget = new THREE.RenderTarget(2, 2);
@@ -78,6 +121,100 @@ describe('SDF-layer material precompile', () => {
 
     layer.dispose();
     previousTarget.dispose();
+  });
+});
+
+describe('SDF-layer background precompile (off the loader path)', () => {
+  it('compiles through a camera clone and restores renderer state before yielding', async () => {
+    // THE LIVE-LOOP SAFETY CONTRACT (defer-compile task, 2026-09-19). The
+    // boot `precompile` sets `camera.layers = SDF_LAYER` for its whole await;
+    // that is fine behind a suspended loop but NOT while the game is drawing,
+    // because `sdf-layer.render` reads the live mask and would disable SDF_LAYER
+    // for its polygonal pass. This pins the clone + the immediate restore.
+    const previousTarget = new THREE.RenderTarget(2, 2);
+    let currentTarget: THREE.RenderTarget | null = previousTarget;
+    let resolveCompile!: () => void;
+    let cameraDuringCompile: THREE.Camera | null = null;
+    let targetDuringCompile: THREE.RenderTarget | null = null;
+    const compileAsync = vi.fn((_obj: unknown, cam: THREE.Camera) => {
+      cameraDuringCompile = cam;
+      targetDuringCompile = currentTarget;
+      return new Promise<void>((r) => { resolveCompile = r; });
+    });
+    const renderer = {
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      compileAsync,
+    } as unknown as THREE.WebGPURenderer;
+    const layer = createSdfLayer(renderer);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    camera.layers.set(3);
+    const liveMask = camera.layers.mask;
+    const object = new THREE.Object3D();
+
+    const p = layer.precompileInBackground(object, scene, camera);
+
+    // The live camera is NEVER touched, even while the compile is in flight.
+    expect(camera.layers.mask).toBe(liveMask);
+    // ...and the renderer's target is back before the awaited compile resolves.
+    expect(currentTarget).toBe(previousTarget);
+    // The compile ran through a clone on SDF_LAYER, in the float target.
+    expect(cameraDuringCompile).not.toBe(camera);
+    expect((cameraDuringCompile as unknown as THREE.Camera).layers.mask).toBe(1 << SDF_LAYER);
+    expect(targetDuringCompile).not.toBe(previousTarget);
+    expect((targetDuringCompile as unknown as THREE.RenderTarget).texture.type).toBe(THREE.FloatType);
+
+    resolveCompile();
+    await expect(p).resolves.toBe(true);
+    expect(camera.layers.mask).toBe(liveMask);
+    expect(currentTarget).toBe(previousTarget);
+
+    layer.dispose();
+    previousTarget.dispose();
+  });
+
+  it('returns false on an unsettled compile instead of stalling the caller', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      let currentTarget: THREE.RenderTarget | null = null;
+      const renderer = {
+        getRenderTarget: () => currentTarget,
+        setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+        // Never settles — the failure mode the boot bound exists for.
+        compileAsync: vi.fn(() => new Promise<void>(() => {})),
+      } as unknown as THREE.WebGPURenderer;
+      const layer = createSdfLayer(renderer);
+      const p = layer.precompileInBackground(
+        new THREE.Object3D(), new THREE.Scene(), new THREE.PerspectiveCamera(), { timeoutMs: 5000 },
+      );
+      await vi.advanceTimersByTimeAsync(5001);
+      await expect(p).resolves.toBe(false);
+      layer.dispose();
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns false on a throwing compile', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      let currentTarget: THREE.RenderTarget | null = null;
+      const renderer = {
+        getRenderTarget: () => currentTarget,
+        setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+        compileAsync: vi.fn(async () => { throw new Error('pipeline build failed'); }),
+      } as unknown as THREE.WebGPURenderer;
+      const layer = createSdfLayer(renderer);
+      await expect(layer.precompileInBackground(
+        new THREE.Object3D(), new THREE.Scene(), new THREE.PerspectiveCamera(),
+      )).resolves.toBe(false);
+      layer.dispose();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

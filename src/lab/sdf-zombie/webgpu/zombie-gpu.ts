@@ -33,7 +33,7 @@ import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
-  HELPERS, MARCH_BODY, REFINE_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT, MARCH_ANCHOR_READ, DETAIL_FIELD, HASH13, NOISE3, FBM,
+  HELPERS, MARCH_BODY, REFINE_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT, MARCH_ANCHOR_READ, MARCH_BURN_OUT, DETAIL_FIELD, HASH13, NOISE3, FBM,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
@@ -209,6 +209,10 @@ export interface ZombieGpuView {
 export const marchNormalRead = wgslFn(MARCH_NORMAL_OUT);
 /** Run 4: the anchor/gate read (MARCH_ANCHOR_READ), sharing marchNormalRead's private declaration. */
 export const marchAnchorRead = wgslFn(MARCH_ANCHOR_READ, [marchNormalRead] as never);
+/** Flame tongues (flame-tongues task 2): the burn-mask read (MARCH_BURN_OUT). Its private is
+ *  declared in the FOLD_GROUP helper chunk every march chain carries; the include keeps the same
+ *  lineage (and eval order after the march output) as the anchor read. */
+export const marchBurnRead = wgslFn(MARCH_BURN_OUT, [marchAnchorRead] as never);
 /** Run 4: the output-res detail field (DETAIL_FIELD) on the march's own hash/noise/fbm chain. */
 export const detailFieldFn = (() => {
   const chain = [HASH13, NOISE3, FBM].reduce<ReturnType<typeof wgslFn>[]>((acc, src) => [...acc, wgslFn(src, acc.slice(-1))], []);
@@ -626,6 +630,29 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  world space, w its intensity (0 = none, bit-identical). Stamped per
      *  frame by the game from the player's and the soldiers' flashes. */
     bodyFlash: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** BURNING BODY (flame lab): x = burn 0..1, y = seconds alight, z = char
+     *  0..1, w spare. Per VIEW, so a single body burns through this; crowd
+     *  instances burn through REC_BURN. */
+    burnCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** Rest-space frequency of the fire noise. */
+    burnNoiseScale: uniform(7),
+    /** Rest-space units per second the fire noise scrolls upward. */
+    burnRiseSpeed: uniform(1.8),
+    /** How much of a charred surface stays dark instead of burning, 0..1. */
+    burnCharPatch: uniform(0.55),
+    /** Emissive multiplier on the surface fire. */
+    burnFireGain: uniform(2.8),
+    /** Fraction of the surface carrying flame at once, 0..1 — slides the fire
+     *  noise threshold, so one field decides flame vs soot. */
+    burnFireCoverage: uniform(0.9),
+    /** How far the flesh thins to show bone at full char, 0..1 — the skeleton
+     *  show-through strength. Scaled by char in the shader, so a freshly lit
+     *  body stays opaque. */
+    burnSkeleton: uniform(0.5),
+    /** Metres the bone probe reads through before its falloff hits zero
+     *  (flame-polish task 4). The old shader constant was 0.08; exposed so the
+     *  panel and capture can trade limb clutter for rib coverage. */
+    burnSkeletonDepth: uniform(0.08),
   };
 }
 
@@ -1363,6 +1390,17 @@ export function createMarchMaterial(
     instCfg: crowd?.instCfg ?? fallbackInstCfg(),
     instCentre: (crowd?.instCentre ?? fallbackInstCentre()) as never,
     instHalf: (crowd?.instHalf ?? fallbackInstHalf()) as never,
+    // BURNING BODY (flame lab) — POSITIONALLY LAST after instHalf, bound in
+    // the same commit as the WGSL inputs (the meltCfg rule). All-zero burnCfg
+    // keeps every view that does not ignite bit-identical.
+    burnCfg: u.burnCfg,
+    burnNoiseScale: u.burnNoiseScale,
+    burnRiseSpeed: u.burnRiseSpeed,
+    burnCharPatch: u.burnCharPatch,
+    burnFireGain: u.burnFireGain,
+    burnFireCoverage: u.burnFireCoverage,
+    burnSkeleton: u.burnSkeleton,
+    burnSkeletonDepth: u.burnSkeletonDepth,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 
@@ -1537,6 +1575,9 @@ export function writeViewRecord(
     // per-VIEW uniform, and the crowd shares one material, so the only way a
     // doomed body can wear the gore the chunks wear is through its own record.
     gore: u.lodCfg.value.w,
+    // The per-instance half of the burn ramp, for the same reason as `gore`:
+    // burnCfg is per VIEW and the crowd shares one material.
+    burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z,
   }, band);
 }
 

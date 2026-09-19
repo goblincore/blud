@@ -130,9 +130,16 @@ The Works (+ Dollhouse secret), Floorfiller with **the Headliner**, Hell with
 The flat finale (fight in the decorated room, shelf-order soundtrack),
 epilogues, knock-dependent ending selection, the nag screen.
 
+### GR — Native port: Rust + wgpu *(XL)*
+The release build is a native Rust app on `wgpu` (decision 4.6). Order: renderer
+first (the WGSL carries over), simulation second, tooling (debug UI, scriptable
+capture channel, shader/tuning hot-reload) alongside. The TypeScript build stays
+the reference until the native one matches it frame for frame. Starts with the
+one-zombie spike (4.6), which can run any time before this milestone.
+
 ### G10 — Polish and ship *(L)*
 Balance, performance on target hardware, settings (including bezel off),
-accessibility, store page, soundtrack release.
+accessibility, store page, soundtrack release. Ships the native build (GR).
 
 ---
 
@@ -168,6 +175,33 @@ any of those.
 The scope is sized for a solo developer only if levels are cheap to make (4.1),
 levels are remixed across phases rather than multiplied, and the finale and
 secret reuse the flat.
+
+### 4.6 Platform: web for development, Rust + wgpu for release *(decided 2026-09-18)*
+Development stays on the web stack (TypeScript + three.js WebGPU): hot reload,
+lab pages, headless capture and the agent workflow all depend on it. The
+**release is a port to Rust on `wgpu`** — the same API family and the same
+WGSL, so the raymarch, probe gather and post shaders carry over largely as-is.
+What the port buys: ahead-of-time/cached pipelines (no cold multi-minute
+compile), no browser GPU watchdog, real GPU profilers and in-pass timestamps,
+native-speed and multithreaded simulation, deterministic replays, one binary
+for Mac/Windows/Linux/Steam Deck. What it costs: rewriting all the TypeScript,
+rebuilding the capture/console tooling, and slower iteration without hot
+reload. Godot was considered and rejected: the renderer is custom SDF raymarch
+work that its pipeline would not use. Tauri was rejected (Safari's engine on
+macOS); Electron stays a fallback wrapper if release comes before the port.
+
+**Spike (do early):** a small Rust + `wgpu` app that loads `march.wgsl` and draws
+one static zombie through the same raymarch; measure pipeline compile time and
+frame cost against the browser.
+
+**Rules for the web build so the port stays cheap:**
+- WGSL stays the source of truth for rendering; prefer hand-written WGSL
+  modules over TSL-only node graphs for anything load-bearing.
+- Game logic in pure, renderer-free modules (the `burn-state` / `burn-behaviour`
+  pattern), so each is a mechanical translation with its tests.
+- Keep state explicit (the `GameContext` slices) and simulation deterministic.
+- Tooling seams (`__sdfGame`, capture scripts) talk in plain data, so a native
+  command channel can answer the same questions.
 
 ---
 
