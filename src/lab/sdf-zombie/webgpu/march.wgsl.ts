@@ -5,7 +5,6 @@ import { PROBE_DYNAMIC_WGSL } from './probe-dynamic.wgsl';
 import { SEG_VOLUME_WGSL } from './skeleton-spike/volume.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
-import { HEAD_EXTERIOR_GORE_KEEP } from '../gib-look-tuning';
 import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
   REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
   REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, REC_BURN, MAX_CROWD_INSTANCES } from './crowd-records';
@@ -20,6 +19,10 @@ export * from './march/math.wgsl';
 import { HASH13, NOISE3, FBM, NOISE_LOCAL, Q_ROT, Q_MUL, Q_FROM_TO } from './march/math.wgsl';
 export * from './march/primitives.wgsl';
 import { SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, STRAND_HASH4, STRAND_LIPSCHITZ, CONE_STRAND, SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED, SD_SHELL } from './march/primitives.wgsl';
+export * from './march/melt';
+import { HEAD_EXTERIOR_GORE_KEEP, FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, MELT_SKIN_PATCH_FREQ, MELT_SKIN_PATCH_SOFT, MELT_SKIN_KEEP, MELT_SKIN_CONTRAST } from './march/melt';
+export * from './march/shade-helpers.wgsl';
+import { TEXEL, SOFT_SHOULDER, FLICKER, LEVEL_SHADOW } from './march/shade-helpers.wgsl';
 
 /**
  * QUAD EMPTY-TILE GATE (crowd firefight task 2, 2026-09-14). True when this
@@ -1233,46 +1236,6 @@ export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture
 // touches it, so x * 0.0015 is the exact pre-run-5 stencil.
 var<private> gNormalEps: f32 = 0.0015;`;
 
-// Nearest-neighbour fetch by uv.
-//
-// textureLoad rather than textureSample, deliberately: the face sheet is
-// authored as chunky NearestFilter art on both paths, so a sampler would buy
-// nothing but a second binding to declare — and wgslFn's `sampler` parameter
-// has no TSL node to feed it that the data-texture path already proves out.
-// Clamp-to-edge is done here by hand, which is what the GLSL sampler's default
-// wrap mode was doing implicitly.
-export const TEXEL = /* wgsl */ `fn texel(tex: texture_2d<f32>, uv: vec2<f32>) -> vec4<f32> {
-  let dims = vec2<f32>(textureDimensions(tex, 0));
-  let c = clamp(vec2<i32>(floor(uv * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
-  return textureLoad(tex, c, 0);
-}`;
-
-// Irregular flicker. Three incommensurate sines rather than one, because a
-// single sine reads as a machine pulsing and the eye picks the period out
-// immediately; overlapping periods never quite repeat.
-export const SOFT_SHOULDER = /* wgsl */ `fn softShoulder(x: f32, knee: f32) -> f32 {
-  // Below the knee, identity — the whole midtone range is untouched, so a
-  // body out of the beam shades exactly as it always did. Above it, compress
-  // [knee, inf) into [knee, 1) with an exponential that is C1 at the join and
-  // strictly monotonic, which is the property that matters here: monotonic
-  // means two surfaces that differed in brightness still differ afterwards.
-  // That is what keeps a wound crater darker than the skin around it when the
-  // flashlight is pointed straight at the body, instead of both clipping to
-  // white and the damage vanishing at exactly the range you aim from.
-  if (x <= knee) { return x; }
-  let head = max(1.0 - knee, 1e-4);
-  return knee + head * (1.0 - exp(-(x - knee) / head));
-}`;
-
-export const FLICKER = /* wgsl */ `fn flicker(t: f32, amt: f32) -> f32 {
-  let a = sin(t * 11.3) * 0.5 + 0.5;
-  let b = sin(t * 23.7 + 1.3) * 0.5 + 0.5;
-  let c = sin(t * 3.1 + 0.7) * 0.5 + 0.5;
-  let f = a * 0.35 + b * 0.25 + c * 0.40;
-  // Biased upward so it mostly burns and only occasionally dips, rather than
-  // spending half its time dark.
-  return mix(1.0, 0.45 + f * 0.75, amt);
-}`;
 
 // CONE MARCH — the coarse pre-pass.
 //
@@ -1542,62 +1505,6 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
 // lodCfg.x because "no ambient occlusion" has no amplitude to turn down;
 // the gore mask took the spare lodCfg.w for the same reason — "no gore"
 // has no colour amplitude to fade to.
-// ——— Face melt (zombie melt task 8) ————————————————————————————————————
-// meltCfg.x drives all three. Interpolated into MARCH_BODY below, so a WGSL
-// reader sees numbers and a tuner sees these names. SAG slides the SAMPLED
-// sheet V upward, which drags the features DOWN the skull: shader-sheet v
-// increases up the face (the upload flip in lab-main keeps the face upright
-// with a positive faceProj.y), so a surface point must sample HIGHER v to
-// show what used to be above it. STRETCH narrows the sampled V window about
-// the projection centre, so each feature covers MORE surface as it goes —
-// the elongation is what reads as dripping rather than a sticker sliding.
-// FADE_LO is where the facing fade's lower bound moves at full melt: a
-// flattened head's surface turns away from the forward axis far sooner, and
-// the standing-zombie 0.28 cutoff fades the face out before it has finished
-// dripping.
-export const FACE_MELT_SAG = 0.25;
-export const FACE_MELT_STRETCH = 0.6;
-export const FACE_MELT_FADE_LO = 0.05;
-/** Fraction of a piece's gore a HEAD's non-face exterior keeps (0..1).
- *  A detached head was torn at the NECK; its exterior skin is intact, so at
- *  0.6 of the normal chunk gore it reads as a bloodied head rather than the
- *  generic mottled meat blob the owner reported (2026-09-16 follow-ups task 2).
- *  Setting it to 1 restores the pre-task-2 behaviour exactly. Shared with the
- *  CPU bake (gib-look-tuning.ts) so the two cannot drift. */
-export { HEAD_EXTERIOR_GORE_KEEP };
-
-/**
- * MELT SKIN PATCHES (owner review, 2026-09-03: "some of the pink would still
- * be there like the skin, so some parts are still pink mixed with the red").
- *
- * The first version lerped ALL flesh albedo toward the deep red on one global
- * progress, so every pixel crossed over together and the body took a uniform
- * stain. Skin does not do that — it SLOUGHS, in patches, exposing the meat
- * under it while other patches are still intact.
- *
- * So the crossover threshold is per-point, read off the same rest-space noise
- * anchor the mottle uses: each patch turns at its own progress. FREQ sets the
- * patch size (the mottle beside it runs at 6.0), SOFT the softness of each
- * patch's edge, and KEEP > 1 scales the threshold ABOVE full progress so the
- * highest patches never cross at all — that is what leaves pink skin on the
- * finished puddle instead of converging to one red at t = 1.
- */
-export const MELT_SKIN_PATCH_FREQ = 5.0;
-export const MELT_SKIN_PATCH_SOFT = 0.16;
-export const MELT_SKIN_KEEP = 1.30;
-/**
- * Spread of the patch field before it becomes a threshold.
- *
- * NEEDED because fbm does NOT fill 0..1 evenly — it clusters hard around its
- * midpoint, so `fbm * 0.5 + 0.5` puts almost every point near 0.5 and every
- * patch crosses at nearly the same progress. The first version of this had no
- * contrast term and the body still went uniformly red, which looked exactly
- * like the bug it was meant to fix. Multiplying the deviation from the
- * midpoint before the bias is what actually separates early patches from late
- * ones (measured against captures at t = 0.35, where the uncontrasted version
- * had no pink left at all).
- */
-export const MELT_SKIN_CONTRAST = 2.8;
 
 // MARCH_BODY is assembled from NAMED SECTIONS (hybrid deferred M1 task 2) so
 // the deferred surface entry — MARCH_SURFACE in deferred-sdf.ts — can share
@@ -3821,31 +3728,6 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   return clamp(res, 0.0, 1.0);
 }`;
 
-// Level-only shadow map lookup (perf round 2 task 7). cfg = (enabled,
-// normalBias m, depthBias, spare). The map comes from a twin spotlight that
-// renders layer 0 only, so a body never sees its own hull in it. The
-// projection is three's `shadow.matrix` (bias * proj * view), whose output
-// is [0,1] uv with depth in .z — the same contract three's own ShadowNode
-// samples. 4-tap PCF on the texel grid; the owner's PSX look wants soft
-// edges, not hard ones.
-export const LEVEL_SHADOW = /* wgsl */ `fn levelShadow(p: vec3<f32>, n: vec3<f32>, shadowTex: texture_depth_2d, shadowMat: mat4x4<f32>, cfg: vec4<f32>) -> f32 {
-  if (cfg.x < 0.5) { return 1.0; }
-  let sp = shadowMat * vec4<f32>(p + n * cfg.y, 1.0);
-  let uv = sp.xy / sp.w;
-  let z = sp.z / sp.w - cfg.z;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || z > 1.0) { return 1.0; }
-  let dims = vec2<f32>(textureDimensions(shadowTex, 0));
-  let base = uv * dims - vec2<f32>(0.5, 0.5);
-  var lit = 0.0;
-  for (var dy = 0; dy < 2; dy = dy + 1) {
-    for (var dx = 0; dx < 2; dx = dx + 1) {
-      let c = clamp(vec2<i32>(floor(base)) + vec2<i32>(dx, dy), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
-      let d = textureLoad(shadowTex, c, 0);
-      lit = lit + select(0.0, 1.0, z <= d);
-    }
-  }
-  return lit * 0.25;
-}`;
 
 // Quarter-res depth prepass fetch (close-up task 3). NEAREST texel of the
 // 4x4 block this SDF pixel falls in — never interpolated, same rule as
