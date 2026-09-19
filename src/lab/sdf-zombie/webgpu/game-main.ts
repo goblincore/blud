@@ -265,6 +265,7 @@ import { spawnAssetGibPiece, spawnSpriteGibPiece } from './game-gibs-leaves2';
 import { gateRefineTwin, woundStreamId } from './game-world-leaves2';
 import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, updateDemoHud } from './game-demo-leaves';
 import { applyMouseDelta } from './game-player-leaves';
+import { setLoader } from './game-boot-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -396,13 +397,7 @@ async function main() {
   ctx.boot.loaderEl = document.getElementById('loader');
   ctx.boot.loaderDisabled = new URLSearchParams(location.search).get('loader') === '0';
   if (ctx.boot.loaderDisabled && ctx.boot.loaderEl) ctx.boot.loaderEl.style.display = 'none';
-  function setLoader(text: string, ready = false): void {
-    if (ctx.boot.loaderDisabled) return;
-    const status = document.getElementById('loader-status');
-    if (status) status.textContent = text;
-    if (ready) ctx.boot.loaderEl?.classList.add('loader-ready');
-  }
-  setLoader('webgpu ready');
+  setLoader(ctx, 'webgpu ready');
   ctx.boot.loaderEl?.addEventListener('click', () => {
     const canvas = document.querySelector('#app canvas');
     if (canvas) canvas.requestPointerLock();
@@ -3323,7 +3318,7 @@ async function main() {
   }
 
   spawnAll(ctx.boot.errors);
-  setLoader('level + actors');
+  setLoader(ctx, 'level + actors');
   if (ctx.boot.errors.length > 0) {
     console.error('[sdf-game] body errors:', ctx.boot.errors.join(' | '));
   }
@@ -3978,7 +3973,7 @@ async function main() {
   // still boots the game, and the loader must not hang on it.
   let resolveGunReady: () => void = () => {};
   ctx.weapon.gunReadyPromise = new Promise<void>((r) => { resolveGunReady = r; });
-  setLoader('weapon + effects');
+  setLoader(ctx, 'weapon + effects');
   try {
     const gltf = await new GLTFLoader().loadAsync(GUN_GLB);
     // PBR metal is black without something to reflect — this page has no
@@ -4617,16 +4612,16 @@ async function main() {
     timeoutMs: 15000,
     isDeviceLost: () => Boolean(ctx.boot.handle.gpuDiagnostics.lost),
     handlers: {
-      setLoader: (text, ready) => setLoader(text, ready),
+      setLoader: (text, ready) => setLoader(ctx, text, ready),
       revealReady: () => {
-        setLoader('READY — CLICK TO START', true);
+        setLoader(ctx, 'READY — CLICK TO START', true);
         window.setTimeout(() => ctx.boot.loaderEl?.classList.add('loader-hidden'), 1200);
       },
       // A failed / lost warm must not be presented as a successful compile.
       // The game is still playable, so the overlay is dismissed after a beat —
       // with the honest message, and with the failure in the console.
       revealFailure: (text) => {
-        setLoader(text, true);
+        setLoader(ctx, text, true);
         window.setTimeout(() => ctx.boot.loaderEl?.classList.add('loader-hidden'), 2500);
       },
     },
