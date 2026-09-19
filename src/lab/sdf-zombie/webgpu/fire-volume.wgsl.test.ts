@@ -42,29 +42,39 @@ describe('fire volume march WGSL', () => {
     expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('alphaHash');
     expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('alphaTest');
   });
-  it('erodes the shape into tongues (round 2b)', () => {
-    // A noise fbm sampled in flame space, MULTIPLICATIVELY subtracted from the
-    // capsule shape with a height-growing amount, then contrast-stretched.
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('fireFbm(fq)');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let erodeAmt = erode * smoothstep(0.0, rise * erodeRise, hErode);');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let density = saturate(shape * saturate(1.0 - erosion * erodeAmt) * edgeSharp);');
-    // The fbm is normalised so the erosion can actually reach the core value.
+  it('sweeps every limb upward into a tapering flame sheet (hands-on redesign)', () => {
+    // The limb point under the sample, the height above it clamped to the
+    // sheet length, and the sample pulled back DOWN by it before the capsule
+    // distance: flame clings to vertical limbs and streams up off the rest.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let under = a + ab * k;');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let sH = clamp(sRaw, 0.0, rise);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let q2 = qw - lag - vec3<f32>(0.0, sH, 0.0);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('radius * (1.0 - 0.55 * u)');
+  });
+  it('erodes the sheet into crisp tongues with a full-contrast noise', () => {
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('erosion = smoothstep(0.3, 0.7, fireFbm(fq));');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let density = saturate((shape - erosion * erodeAmt) * edgeSharp);');
+    // Rotated octaves: stretched value noise otherwise stripes along its lattice.
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('q = (m * q) * 2.03;');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('return v * 1.142857;');
-    // Temperature for the ramp is the eroded density, cooled with height.
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let temp = density * cool;');
+  });
+  it('emits and absorbs with ONE coefficient, so thick flame cannot blow out to white', () => {
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let alphaF = 1.0 - exp(-density * FIRE_FLAME_SIGMA * dtFine);');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('emission = emission + T * fireRamp(temp) * alphaF * cfg1.w;');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('T = T * (1.0 - alphaF) * exp(-soot * cfg2.x * dtFine);');
   });
   it('scrolls the flame noise down so features rise with the flame', () => {
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('fq.y = fq.y - cfg2.z * rise * freq * stretch;');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('fq.y = fq.y - cfg2.z * FIRE_FLAME_SPEED * freq * stretch;');
   });
   it('scatters lit smoke instead of only darkening (round 2b)', () => {
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('let inscatter = soot * smokeGain * smokeAlbedo');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('smokeAmbient * ambientCol');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('smokeFireLit * glow * fireLitCol');
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('emission = emission + T * inscatter * stepM;');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('emission = emission + T * inscatter * dtFine;');
     // sootGain 0 must be a true smoke-off switch (the look metric's twin).
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('let smokeGain = clamp(cfg2.x, 0.0, 1.0);');
     // The column widens with height, and smoke is advected harder than flame.
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('dS = fireSdCapsule(p + cv * 1.7 - lag, a, b) - radius;');
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('dS = fireSdCapsule(p + cv * 3.0 - lag, a, b) - radius;');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('spread * max(h - 0.4 * rise, 0.0)');
   });
 });

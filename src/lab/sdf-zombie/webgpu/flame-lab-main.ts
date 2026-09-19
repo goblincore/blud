@@ -1316,6 +1316,18 @@ async function bootstrap(): Promise<void> {
   // burn/char pair for deterministic screenshots; `burns()`/`tuning()` echo
   // the live state back.
   (window as unknown as { __flameLab: unknown }).__flameLab = {
+    /** Exact, repeatable framing for look captures (no mouse drags): orbit
+     *  yaw/pitch (radians) and distance (metres) about the lab's target.
+     *  Stops the auto-spin. Returns what was applied. */
+    /** Hide/show every debug panel (the H key), for clean look captures. */
+    panels(hidden = true) { setDebugPanelHidden(hidden); return hidden; },
+    setView(yaw: number, pitch: number, dist: number) {
+      autoSpin = false;
+      camYaw = yaw;
+      camPitch = Math.max(-0.5, Math.min(1.3, pitch));
+      camDist = Math.max(0.8, Math.min(8, dist));
+      return { yaw: camYaw, pitch: camPitch, dist: camDist };
+    },
     ignite(on = true) {
       burnPaused = false;
       for (const s of burns) (on ? igniteBurn : extinguishBurn)(s);

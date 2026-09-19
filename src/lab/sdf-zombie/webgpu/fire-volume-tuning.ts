@@ -10,21 +10,27 @@
 // scattering block (smokeAlbedo .. smokeSpread). Round 2's fields keep their
 // names; `curlStrength`'s default and range grew because the round-2 0.35 was
 // too weak to advect a tongue.
+//
+// Hands-on redesign (2026-09-18): the field became swept flame SHEETS (see
+// fire-volume.wgsl.ts). `rise` is now the sheet length, `coreR` the flame shell
+// thickness, `curlStrength` a few-cm wobble (round 2b's 1.3 m threw the field
+// off the body), and `tempGain` the brightness of a single-coefficient
+// emission-absorption medium (so it cannot sum past the ramp into white).
 
 export interface FireVolumeTuning {
   /** Low-res march target scale of the content size, 0.25..1. */
   resolutionScale: number;
   /** March samples per ray; 0 = the pass early-outs (off, no pipeline change). */
   steps: number;
-  /** Emission gain on the temperature field. */
+  /** Flame brightness: a thick flame converges to ramp colour x this. */
   tempGain: number;
   /** Extinction gain on the soot field. */
   sootGain: number;
-  /** Metres of flame above a source capsule. */
+  /** Length (m) of the flame sheet each limb sweeps upward; it tapers to a point. */
   rise: number;
   /** Metres of soot above the flame core. */
   sootRise: number;
-  /** Curl warp amplitude in world metres. */
+  /** Curl wobble amplitude in world metres (a few cm; it displaces the whole field). */
   curlStrength: number;
   /** Curl domain scale: world metres per volume repeat. */
   curlScale: number;
@@ -44,11 +50,11 @@ export interface FireVolumeTuning {
   noiseStretch: number;
   /** How much the noise erodes the shape (0 = round 2's solid shell). */
   erode: number;
-  /** Fraction of `rise` over which erosion grows from solid to fully torn. */
+  /** Fraction of the sheet length over which erosion grows from base to full. */
   erodeRise: number;
   /** Contrast on (shape - erosion): higher = crisper lick edges. */
   edgeSharp: number;
-  /** Capsule core radius (m) of the flame's distance falloff. */
+  /** Thickness (m) of the flame shell around each limb; thins as the sheet climbs. */
   coreR: number;
   /** Smoke scattering gain (0 = round 2's darkening-only soot). */
   smokeAlbedo: number;
@@ -61,27 +67,27 @@ export interface FireVolumeTuning {
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
-  resolutionScale: 0.5,
-  steps: 32,
+  resolutionScale: 0.4,
+  steps: 48,
   tempGain: 2.0,
   sootGain: 0.6,
-  rise: 1.5,
+  rise: 0.55,
   sootRise: 2.0,
-  curlStrength: 1.3,
-  curlScale: 1.2,
+  curlStrength: 0.07,
+  curlScale: 1.5,
   lag: 0.3,
   lagMaxM: 0.6,
-  history: 0.85,
+  history: 0.7,
   cardsPerBody: 5,
   smokeTailSec: 2,
-  noiseScale: 3.0,
-  noiseStretch: 0.3,
-  erode: 1.5,
-  erodeRise: 0.3,
-  edgeSharp: 1.4,
-  coreR: 0.32,
-  smokeAlbedo: 0.35,
-  smokeAmbient: 0.5,
+  noiseScale: 11,
+  noiseStretch: 0.33,
+  erode: 1.4,
+  erodeRise: 0.6,
+  edgeSharp: 4,
+  coreR: 0.16,
+  smokeAlbedo: 0.5,
+  smokeAmbient: 0.45,
   smokeFireLit: 1.0,
   smokeSpread: 0.3,
 });
@@ -92,18 +98,18 @@ export const FIRE_VOLUME_BOUNDS: Readonly<Record<keyof FireVolumeTuning, readonl
   Object.freeze({
     resolutionScale: [0.25, 1],
     steps: [0, 64],
-    tempGain: [0, 4],
+    tempGain: [0, 6],
     sootGain: [0, 2],
     rise: [0, 3],
     sootRise: [0, 5],
-    curlStrength: [0, 3],
+    curlStrength: [0, 0.4],
     curlScale: [0.2, 6],
     lag: [0, 1],
     lagMaxM: [0, 1.5],
     history: [0, 0.97],
     cardsPerBody: [0, 16],
     smokeTailSec: [0, 6],
-    noiseScale: [0.5, 6],
+    noiseScale: [0.5, 16],
     noiseStretch: [0.15, 1.5],
     erode: [0, 3],
     erodeRise: [0.05, 2],
