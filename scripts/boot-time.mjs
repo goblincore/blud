@@ -29,7 +29,12 @@ const QUERY = process.argv[4] ?? 'seed=20260918';
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LAB_TMP = resolve('.lab-tmp');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const fail = (msg) => { console.error(`FAIL: ${msg}`); shutdown(1); };
+const fail = (msg) => {
+  console.error(`FAIL: ${msg}`);
+  for (const c of children) { try { process.kill(-c.pid, 'SIGKILL'); } catch { /* gone */ } }
+  try { rmSync(profile, { recursive: true, force: true }); } catch { /* best effort */ }
+  process.exit(1);
+};
 
 mkdirSync(LAB_TMP, { recursive: true });
 // Fresh profile EVERY run: the compile cache lives here, so a reused profile
