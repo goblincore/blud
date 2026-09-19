@@ -5,24 +5,24 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { WOUND_STEP_MUL } from '../layout';
 import { FACE_LAYER_WGSL } from './face.wgsl';
-import { MELT_BLOCK } from './blocks/post/melt.wgsl';
-import { BURN_BLOCK } from './blocks/post/burn.wgsl';
-import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
-import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
-import { GORE_BLOCK } from './blocks/post/gore.wgsl';
-import { MOTTLE_BLOCK } from './blocks/post/mottle.wgsl';
-import { ORGAN_BLOCK } from './blocks/post/organ.wgsl';
-import { TISSUE_BLOCK } from './blocks/post/tissue.wgsl';
-import { WOUND_MASKS_BLOCK } from './blocks/post/wound-masks.wgsl';
-import { SHADING_NORMAL_BLOCK } from './blocks/post/shading-normal.wgsl';
-import { PRIM_MATERIAL_BLOCK } from './blocks/post/prim-material.wgsl';
-import { DEBUG_COUNTERS_BLOCK } from './blocks/loop/debug-counters.wgsl';
-import { START_BOUNDS_BLOCK } from './blocks/setup/start-bounds.wgsl';
-import { STEP_CONFIG_BLOCK } from './blocks/setup/step-config.wgsl';
-import { RAY_WINDOW_BLOCK } from './blocks/setup/ray-window.wgsl';
-import { HULL_BOUNDS_BLOCK } from './blocks/setup/hull-bounds.wgsl';
-import { WOUND_LIST_BLOCK } from './blocks/setup/wound-list.wgsl';
 import { TILE_PRELOAD_BLOCK } from './blocks/setup/tile-preload.wgsl';
+import { WOUND_LIST_BLOCK } from './blocks/setup/wound-list.wgsl';
+import { HULL_BOUNDS_BLOCK } from './blocks/setup/hull-bounds.wgsl';
+import { RAY_WINDOW_BLOCK } from './blocks/setup/ray-window.wgsl';
+import { STEP_CONFIG_BLOCK } from './blocks/setup/step-config.wgsl';
+import { START_BOUNDS_BLOCK } from './blocks/setup/start-bounds.wgsl';
+import { DEBUG_COUNTERS_BLOCK } from './blocks/loop/debug-counters.wgsl';
+import { PRIM_MATERIAL_BLOCK } from './blocks/post/prim-material.wgsl';
+import { SHADING_NORMAL_BLOCK } from './blocks/post/shading-normal.wgsl';
+import { WOUND_MASKS_BLOCK } from './blocks/post/wound-masks.wgsl';
+import { TISSUE_BLOCK } from './blocks/post/tissue.wgsl';
+import { ORGAN_BLOCK } from './blocks/post/organ.wgsl';
+import { MOTTLE_BLOCK } from './blocks/post/mottle.wgsl';
+import { GORE_BLOCK } from './blocks/post/gore.wgsl';
+import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
+import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
+import { BURN_BLOCK } from './blocks/post/burn.wgsl';
+import { MELT_BLOCK } from './blocks/post/melt.wgsl';
 
 /**
  * SECTION 2 of 4 — the trace: ray setup and pre-pass gates, the march loop,

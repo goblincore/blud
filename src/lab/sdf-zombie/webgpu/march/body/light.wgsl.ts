@@ -3,11 +3,11 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): march lighting tail.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { DISPLAY_DEBUG_BLOCK } from './blocks/light/display-debug.wgsl';
-import { COMPOSE_BLOCK } from './blocks/light/compose.wgsl';
-import { AMBIENT_BLOCK } from './blocks/light/ambient.wgsl';
-import { OCCLUSION_BLOCK } from './blocks/light/occlusion.wgsl';
 import { FLASHLIGHT_BLOCK } from './blocks/light/flashlight.wgsl';
+import { OCCLUSION_BLOCK } from './blocks/light/occlusion.wgsl';
+import { AMBIENT_BLOCK } from './blocks/light/ambient.wgsl';
+import { COMPOSE_BLOCK } from './blocks/light/compose.wgsl';
+import { DISPLAY_DEBUG_BLOCK } from './blocks/light/display-debug.wgsl';
 
 export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
   // Run 5b: the normal attachment's alpha carries a per-body KEY (gInstCentre is the record's per-body centre, read from the

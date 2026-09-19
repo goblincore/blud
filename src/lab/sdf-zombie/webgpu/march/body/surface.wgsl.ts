@@ -3,8 +3,8 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): surface prep and output readers.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { GLOW_BLOCK } from './blocks/surface/glow.wgsl';
 import { WET_BLOCK } from './blocks/surface/wet.wgsl';
+import { GLOW_BLOCK } from './blocks/surface/glow.wgsl';
 
 /**
  * SECTION 3 of 4 — SURFACE PREP: the light-independent material terms the
