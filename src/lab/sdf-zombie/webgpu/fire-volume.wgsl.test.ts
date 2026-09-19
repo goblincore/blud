@@ -52,9 +52,10 @@ describe('fire volume march WGSL', () => {
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('let riseFull = max(rise * abs(rec2.w), 1e-3);');
     // Head clearing: every limb's flame thins within ~15 cm of a head capsule.
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('shape = shape * mix(headClear, 1.0, smoothstep(0.0, 0.15, dHead));');
-    // Over the head column every sheet is SHORTENED to end at headTop + headRise*rise
-    // (a taper, not a flat cut).
-    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let riseHead = clamp(headCeil - under.y, 0.05, riseFull);');
+    // Over the head column every sheet is SCALED shorter (headRise, wobbled by the
+    // curl), never ended at one shared height (that read as a clipped flat top).
+    expect(FIRE_VOLUME_MARCH_WGSL).toContain('let riseC = max(riseFull * headShrink, 1e-3);');
+    expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('headCeil');
     expect(FIRE_VOLUME_MARCH_WGSL).not.toContain('let over = qw.y');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('let q2 = qw - lag - vec3<f32>(0.0, sH, 0.0);');
     expect(FIRE_VOLUME_MARCH_WGSL).toContain('radius * (1.0 - 0.55 * u)');
