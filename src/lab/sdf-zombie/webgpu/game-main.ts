@@ -257,6 +257,7 @@ import { createFlareHarness } from './game-flare';
 import { createMiscSeams } from './game-seams-misc';
 import { applyBoneCullMode, applyBoneMesh, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
+import { applyChunkKindLook, ensureGibAssets, gibAssetArchetypeOf, gibAssetArmed, newBlastProfile, primsLongAxis, reacquireHeldProp, retireActor, scheduleGib, stepPendingGibImpulses } from './game-gibs-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -5754,25 +5755,6 @@ async function main() {
   });
   ctx.gibs.assetRuntime = createGibAssetRuntime();
 
-  /** The archetype whose committed set an actor uses. */
-  function gibAssetArchetypeOf(a: ZombieActor): string {
-    return a.kind === 'soldier' ? 'soldier' : 'zombie';
-  }
-
-  /** Kick off (or join) the load for the archetypes the assets path can use. */
-  function ensureGibAssets(): Promise<unknown> {
-    return Promise.all([
-      ctx.gibs.assetRuntime.ensure('zombie'),
-      ctx.gibs.assetRuntime.ensure('soldier'),
-    ]);
-  }
-
-  /** True once at least one archetype's committed set is loaded and usable. */
-  function gibAssetArmed(): boolean {
-    return ctx.gibs.assetRuntime.archetypeState('zombie') === 'ready'
-      || ctx.gibs.assetRuntime.archetypeState('soldier') === 'ready';
-  }
-
   /**
    * Spawn one offline-asset mesh piece. Returns false (with a counted reason)
    * when the archetype/part is not available or the runtime piece is damaged;
@@ -5789,7 +5771,7 @@ async function main() {
     impulseVel: Vec3 | null,
     impulseDelay: number,
   ): boolean {
-    const lib = ctx.gibs.assetRuntime.library(gibAssetArchetypeOf(a));
+    const lib = ctx.gibs.assetRuntime.library(gibAssetArchetypeOf(ctx, a));
     if (!lib) { ctx.gibs.assetRuntime.countFallback('no-library'); return false; }
     const piece = lib.byPart.get(g.part);
     if (!piece) { ctx.gibs.assetRuntime.countFallback('no-asset'); return false; }
@@ -5821,7 +5803,7 @@ async function main() {
     const state = makeChunk(
       g.limb as never, g.origin, [0, 0, 0],
       boneOnly ? boneChunkRadius(g.bones) : chunkExtent(g.prims, g.origin),
-      primsLongAxis(extentSource, g.origin),
+      primsLongAxis(ctx, extentSource, g.origin),
       rngStreams.misc, kind,
       (g.spinQuat || g.spinAngVel) ? { quat: g.spinQuat, angVel: g.spinAngVel } : undefined,
       support.length > 0 ? support : undefined,
@@ -6119,27 +6101,6 @@ async function main() {
       spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++);
     }
   }
-  /**
-   * The two per-view uniforms a chunk's KIND decides, written on EVERY spawn.
-   *
-   * MEAT AND BONE DO NOT SHADE ALIKE. march.wgsl.ts's pale-bone branch only
-   * runs while `meltCfg.x > 0` (it was written for the melt, where the skeleton
-   * emerges from thinning flesh), and the chunk view's own torn-meat gore mask
-   * and face projection are decided in `reset` from whether the FLESH list is
-   * empty. A released ribcage left at meltCfg.x = 0 marches, folds and shades
-   * as a meat-coloured cage — the shape would finally be there and still not
-   * read as bone, which is half of what the owner asked for.
-   *
-   * BOTH ARE WRITTEN FOR EVERY KIND, not just for bone. Chunk views are
-   * RECYCLED at the maxChunks cap, so a view that was a ribcage last blast
-   * keeps meltCfg.x = 1 into its next life as an arm — and a flesh piece
-   * rendered through the melt ramp is a pale, matte, wrong-coloured limb. The
-   * lab's spawnChunk has carried the same "every spawn, not just bone ones"
-   * comment since the melt shipped; this is that rule, not a new one.
-   */
-  function applyChunkKindLook(view: ChunkGpuView, kind: 'limb' | 'gob' | 'bone'): void {
-    view.uniforms.meltCfg.value.x = kind === 'bone' ? 1 : 0;
-  }
   /** Set by the measurement seam below: pieces exist, fly and bake exactly as
    *  they would, and are simply not drawn. */
   ctx.bake.hidden = false;
@@ -6148,17 +6109,6 @@ async function main() {
   // Now that the array exists, the frame draw can read it directly.
   chunkObjects = () => (ctx.bake.reference ? [...ctx.bake.liveChunks, ...ctx.bake.chunks] : ctx.bake.liveChunks).map(c => c.view.object);
   ctx.bake.nextId = 1;
-  function primsLongAxis(prims: Primitive[], origin: Vec3): Vec3 {
-    let best: Vec3 = [0, 1, 0];
-    let bestLen = 0;
-    for (const p of prims) {
-      if (p.op === 'sub') continue;
-      const d: Vec3 = [p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]];
-      const l = Math.hypot(d[0], d[1], d[2]);
-      if (l > bestLen) { bestLen = l; best = d; }
-    }
-    return bestLen < 1e-6 ? [0, 1, 0] : [best[0] / bestLen, best[1] / bestLen, best[2] / bestLen];
-  }
   /**
    * Spawn one detached piece. `kind` is the piece's MATERIAL AND PHYSICS, not a
    * label: 'bone' picks the CHUNK_TUNING thud (a ribcage that bounces like meat
@@ -6198,7 +6148,7 @@ async function main() {
     const state = makeChunk(
       piece.limb as never, piece.origin, initialVelocity ?? vel,
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
-      primsLongAxis(extentSource, piece.origin),
+      primsLongAxis(ctx, extentSource, piece.origin),
       rng, kind,
       (piece.spinQuat || piece.spinAngVel)
         ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
@@ -6235,7 +6185,7 @@ async function main() {
       // marches an empty field — an invisible skeleton, which is the exact
       // failure this whole piece set exists to end.
       recycled.setPackBones(boneOnly ? !ctx.gibs.boneMesh : !ctx.render.boneMesh);
-      applyChunkKindLook(recycled, kind);
+      applyChunkKindLook(ctx, recycled, kind);
       // May be arriving from a baked retirement; and a bone piece spawned while
       // the differential hides the skeleton must stay hidden.
       // With `gibBoneMesh` the tubes draw this piece and its packed rows are
@@ -6254,7 +6204,7 @@ async function main() {
         ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
       );
       view.setPackBones(boneOnly ? !ctx.gibs.boneMesh : !ctx.render.boneMesh);
-      applyChunkKindLook(view, kind);
+      applyChunkKindLook(ctx, view, kind);
       view.object.visible = !ctx.bake.hidden
         && (kind !== 'bone' || (ctx.render.bonesVisible && !(boneOnly && ctx.gibs.boneMesh)));
       view.object.layers.set(SDF_LAYER);
@@ -6303,7 +6253,7 @@ async function main() {
     const state = makeChunk(
       piece.limb as never, piece.origin, [0, 0, 0],
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
-      primsLongAxis(extentSource, piece.origin),
+      primsLongAxis(ctx, extentSource, piece.origin),
       rng, kind,
       (piece.spinQuat || piece.spinAngVel)
         ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
@@ -6458,30 +6408,6 @@ async function main() {
    * spawned chunks cannot disagree.
    */
   ctx.gibs.pendingGibs = [];
-  /**
-   * Apply every impulse whose delay has run out. A piece whose chunk was
-   * recycled out of the pool in the meantime is simply gone — the queue is
-   * keyed by chunk id, and ids are never reused.
-   *
-   * THE DELAY COUNTS DRAINS, NOT FRAMES, and that is deliberate. This drain
-   * runs LATER IN THE SAME TICK as the detonation that spawned the pieces
-   * (stepDynamite is before the chunk step in `tick`), so a frame-indexed
-   * queue either releases the first wave before the first frame is drawn — the
-   * explosion's opening frame shows pieces already moving, which is the
-   * substitution the staging exists to prevent — or needs an off-by-one
-   * "+2" that silently breaks the day someone reorders the tick. Counting
-   * drains, a delay of 0 still means "not in the tick the blast happened in",
-   * because the drain that could have fired it has already run and decremented.
-   */
-  function stepPendingGibImpulses(): void {
-    for (let i = ctx.gibs.pendingGibImpulses.length - 1; i >= 0; i--) {
-      const p = ctx.gibs.pendingGibImpulses[i]!;
-      if (p.delay > 0) { p.delay--; continue; }
-      const c = ctx.bake.liveChunks.find(q => q.id === p.id);
-      if (c) c.state.vel = [p.vel[0], p.vel[1], p.vel[2]];
-      ctx.gibs.pendingGibImpulses.splice(i, 1);
-    }
-  }
   /** Radians of view pitch per unit of the resolver's cameraKick magnitude. The
    *  magnitude is ~4 at the epicentre, so this is ~3.4° of punch point-blank
    *  and proportionally less with distance. */
@@ -6605,48 +6531,6 @@ async function main() {
     return p;
   }
 
-  /** Give the hand a bundle again once the throw has RECOVERED.
-   *
-   *  `cook.phase` must be 'idle', not merely "not cooking": fpv.ts spends
-   *  throwRecoverSec (0.4 s) in 'cooldown' after every release, and that beat is
-   *  the throw animation — handing the player the next bundle the instant the
-   *  last one leaves would put a bundle back in a hand that is still visibly
-   *  mid-throw. An overcook returns straight to 'idle', so the replacement is
-   *  immediate there, which is right: nothing was thrown. */
-  function reacquireHeldProp(): void {
-    if (ctx.weapon.heldProp || !ctx.bake.bundleReady) return;
-    if (ctx.vfx.cook.phase !== 'idle') return;
-    const p = ctx.bake.spareBundles.pop() ?? (() => {
-      const oldest = ctx.bake.liveBundles.find(b => b.prop);
-      if (!oldest || !oldest.prop) return null;
-      const q = oldest.prop;
-      oldest.prop = null;
-      return q;
-    })();
-    if (!p) return;
-    p.object.removeFromParent();
-    ctx.bake.bundleRig.add(p.object);
-    // RESET THE LOCAL TRANSFORM, and this is the whole bug (owner report
-    // 2026-09-10: "after like the first 2 throws i dont see the dynamite").
-    //
-    // `pose({ mode: 'flight' })` writes the bundle's WORLD position and its
-    // tumble quaternion onto the object. Reparenting that object into the rig
-    // does not undo any of it, so a re-acquired bundle stayed exactly where it
-    // detonated — measured, `local [28.235, 0.097, -12.354]` in a rig that sits
-    // 0.42 m in front of the eye. Drawn metres off-screen: the player was
-    // holding a bundle they could not see, and the first two throws looked fine
-    // only because the first re-acquire happened to draw a prop that had never
-    // flown.
-    //
-    // The rig carries the hold pose (BUNDLE_HOLD), so the prop's own local
-    // transform must be the identity. One owner for the hold transform.
-    p.object.position.set(0, 0, 0);
-    p.object.quaternion.identity();
-    p.object.scale.setScalar(1);
-    p.object.visible = true;
-    ctx.weapon.heldProp = p;
-  }
-
   /** True when a body is within the bundle's contact radius anywhere along the
    *  sub-step's segment. Called at the FLIGHT's own 120 Hz, so a 28 m/s bundle
    *  (0.23 m per sub-step) cannot tunnel through a 0.45 m target. */
@@ -6703,20 +6587,12 @@ async function main() {
 
   // -----------------------------------------------------------------------
   mark('detonation-start');
-  // THE DETONATION — one blast, everything it does.
-  // -----------------------------------------------------------------------
-  /** Per-phase timings of the LAST detonation, ms. The blast is one frame of
-   *  work with four very different costs in it, and "the explosion pauses the
-   *  game" is not actionable until the split is known. */
-  function newBlastProfile() {
-    return { resolve: 0, gib: 0, wound: 0, blood: 0, chunksSpawned: 0, bodies: 0, total: 0 };
-  }
-  ctx.dynamite.blastProfile = newBlastProfile();
+  ctx.dynamite.blastProfile = newBlastProfile(ctx);
 
   function detonateAt(at: Vec3, inHand = false): void {
     const t0 = performance.now();
     ctx.dynamite.gibTierLog = [];
-    const prof = newBlastProfile();
+    const prof = newBlastProfile(ctx);
     ctx.dynamite.blastProfile = prof;
     EXPLOSION_PROFILE.traceMs = 0; EXPLOSION_PROFILE.woundMs = 0;
     EXPLOSION_PROFILE.cutMs = 0; EXPLOSION_PROFILE.bodiesTraced = 0;
@@ -6794,7 +6670,7 @@ async function main() {
           // the same greedy allowance the immediate path uses, and its views
           // are RESERVED out of `gibBudget()` until release, so the preview is
           // the shape that will spawn and a later blast cannot spend its slots.
-          const chosen = scheduleGib(a, at, pb.falloff, gibAllowance(remaining, condemnedLeft));
+          const chosen = scheduleGib(ctx, a, at, pb.falloff, gibAllowance(remaining, condemnedLeft));
           if (chosen) {
             remaining = gibDebit(remaining, chosen.reserve);
             condemnedLeft = Math.max(0, condemnedLeft - 1);
@@ -6879,47 +6755,6 @@ async function main() {
       x: at[0], y: at[1], z: at[2], radiusM: fx.radiusM,
       bodies: fx.perBody.length, gibbed, pieces, ms: ctx.dynamite.lastBlastMs,
     });
-  }
-
-  /**
-   * SCHEDULE A GIB — the pre-tear window's entry point (dev-note §3c).
-   *
-   * With `?gibtear=0` this IS the old path: the body becomes pieces in the frame
-   * the bundle goes off. With a window, the body is BENT by the shockwave for
-   * `gibTearSec` first and the pieces are spawned when the window closes, which
-   * is the owner's own description of what the transition should do — "the SDF
-   * flesh ... distort the flesh from the shockwave and jiggle and then rip
-   * away".
-   *
-   * A body already in the window is NOT scheduled twice: a second bundle landing
-   * on a doomed body inside 0.1 s finds it mid-tear and leaves it alone, which
-   * is also what keeps the piece census honest (one body, one gib).
-   */
-  function scheduleGib(
-    a: ZombieActor, at: Vec3, falloff: number, allowance: number,
-  ): ReturnType<typeof gibTierPlan> | null {
-    if (ctx.gibs.tearSec <= 0) return null; // caller gibs immediately
-    if (a.tearing() || ctx.gibs.pendingGibs.some(q => q.actor === a)) return null;
-    a.setTearTuning({ sec: ctx.gibs.tearSec, ...ctx.vfx.tearShape });
-    // THE PLAN IS PREPARED ONCE, from the clean posed body, and reused for the
-    // whole visualization AND the release. `gibParts` would re-derive it at
-    // release from a body the rupture has already moved; the plan's own region
-    // offsets are what the chunks are spawned with instead (spawnScheduledGibs).
-    //
-    // THE TIER IS CHOSEN HERE, not at release (task 3). `gibTierPlan` runs the
-    // same ladder `gibActor` would, against the allowance this body is handed,
-    // and the wiring locks `gibActor` to the result — so a tight pool previews
-    // the cheap shape it will actually spawn instead of the full partition.
-    // `?gib=pieces` is the one shape with no source indices yet; it keeps the
-    // old preview-then-spawn route (see RESULTS.md Task 3 limits).
-    const mode = ctx.gibs.mode === 'clusters' ? 'clusters' : 'parts';
-    const planned = gibTierPlan(a.posed(), allowance, { bones: ctx.gibs.bones, mode, at });
-    a.beginTear(at, falloff, planned.plan);
-    ctx.gibs.pendingGibs.push({
-      actor: a, at: [at[0], at[1], at[2]], falloff, plan: planned.plan,
-      tier: planned.tier, reserve: planned.reserve,
-    });
-    return planned;
   }
 
   /**
@@ -7070,7 +6905,7 @@ async function main() {
     // the committed offline sets. Resolved ONCE per body, like carve, so the
     // budget/tier decision and the spawn loop agree. Until the archetype's load
     // resolves this is false and the body falls back to marched pieces.
-    const assetMode = ctx.gibs.renderMode === 'assets' && ctx.gibs.assetRuntime.library(gibAssetArchetypeOf(a)) !== null;
+    const assetMode = ctx.gibs.renderMode === 'assets' && ctx.gibs.assetRuntime.library(gibAssetArchetypeOf(ctx, a)) !== null;
     if (ctx.gibs.renderMode === 'sprite' && ctx.gibs.atlas === null && !ctx.gibs.spriteAtlasWarned) {
       ctx.gibs.spriteAtlasWarned = true;
       console.warn('[gib-sprites] ?gibrender=sprite but no atlas is loaded — '
@@ -7255,7 +7090,7 @@ async function main() {
     if (ctx.vfx.bleedEnabled) {
       spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++);
     }
-    retireActor(a);
+    retireActor(ctx, a);
     ctx.telemetry.telemetry.event('dynamite-gib', {
       actor: a.id, mode: ctx.gibs.mode, tier, pieces: spawned, dropped, bones: boneSpawned,
       gibBones: ctx.gibs.bones, gibStaggerFrames: ctx.gibs.staggerFrames, gibVelScale: ctx.gibs.velScale, gibLaunchMode: ctx.gibs.launchMode, budget, liveBefore,
@@ -7270,26 +7105,6 @@ async function main() {
     ctx.dynamite.lastGibParts = spawning.map(g => g.part);
     ctx.dynamite.lastGibHeld = spawning.length - spawned;
     return spawned;
-  }
-
-  /** Take a gibbed actor out of the world: hidden from every pass, out of the
-   *  router, out of the roster. The view is retained — see gibActor. */
-  function retireActor(a: ZombieActor): void {
-    // A burning body leaving the world: burn-down mark + card release.
-    ctx.vfx.burning.retire(a);
-    // Equipment is a scene sibling of the flesh proxies, not their child.
-    // This actor stops ticking here, so its attachments must retire too.
-    a.character?.retireEquipment();
-    const pi = ctx.gibs.pendingGibs.findIndex(q => q.actor === a);
-    if (pi >= 0) ctx.gibs.pendingGibs.splice(pi, 1);
-    a.view.object.visible = false;
-    a.view.coneObject.visible = false;
-    ctx.boot.deferredApi?.router.unregister(a.view.object);
-    ctx.boot.deferredApi?.router.unregister(a.view.coneObject);
-    a.view.object.removeFromParent();
-    a.view.coneObject.removeFromParent();
-    const i = ctx.world.actors.indexOf(a);
-    if (i >= 0) ctx.world.actors.splice(i, 1);
   }
 
   // -----------------------------------------------------------------------
@@ -7474,7 +7289,7 @@ async function main() {
     if (sig?.kind === 'throw') throwBundle(sig.speedMps);
     else if (sig?.kind === 'overcook') overcookInHand();
     ctx.dynamite.charge = chargeFraction(ctx.dynamite.now - ctx.vfx.cook.cookStart) * (ctx.vfx.cook.phase === 'cooking' ? 1 : 0);
-    reacquireHeldProp();
+    reacquireHeldProp(ctx);
 
     // ——— The flights. Stepped at the flight module's own 120 Hz so the body
     //     contact test is as fine as the bounces are; a bundle that hits a body
@@ -7929,9 +7744,9 @@ async function main() {
   // it resolves still gets marched pieces (counted), never no gore.
   if (ctx.gibs.renderMode === 'assets') {
     mark('gib-assets-boot-scheduled');
-    void ensureGibAssets().then(() => {
+    void ensureGibAssets(ctx).then(() => {
       mark('gib-assets-boot-ready');
-      console.log(`[gib-assets] blast render mode: assets, armed=${gibAssetArmed()}`);
+      console.log(`[gib-assets] blast render mode: assets, armed=${gibAssetArmed(ctx)}`);
     });
   }
 
@@ -9185,7 +9000,7 @@ async function main() {
       // The staged release's due impulses, BEFORE the chunk step, so a piece
       // that goes this frame integrates at its launch velocity for the whole
       // frame rather than a frame late.
-      stepPendingGibImpulses();
+      stepPendingGibImpulses(ctx);
       finishChunkBake();
       for (let ci = ctx.bake.liveChunks.length - 1; ci >= 0; ci--) {
         const c = ctx.bake.liveChunks[ci]!;
@@ -11262,8 +11077,8 @@ function performBenchAction(a: BenchAction): void {
       if (ctx.gibs.renderMode === 'sprite') await ensureGibAtlas('sheet');
       // The asset path is a fetch+decode; await it so a caller can tell "mode
       // on" from "mode on and armed" (the same contract as the sprite atlas).
-      if (ctx.gibs.renderMode === 'assets') await ensureGibAssets();
-      return { mode: ctx.gibs.renderMode, frames: ctx.gibs.atlas?.frames.length ?? 0, ready: ctx.gibs.renderMode === 'assets' ? gibAssetArmed() : ctx.gibs.atlas !== null };
+      if (ctx.gibs.renderMode === 'assets') await ensureGibAssets(ctx);
+      return { mode: ctx.gibs.renderMode, frames: ctx.gibs.atlas?.frames.length ?? 0, ready: ctx.gibs.renderMode === 'assets' ? gibAssetArmed(ctx) : ctx.gibs.atlas !== null };
     },
     gibRenderMode: () => ({
       mode: ctx.gibs.renderMode,
@@ -11271,12 +11086,12 @@ function performBenchAction(a: BenchAction): void {
       // LIBRARY, the assets path a loaded archetype SET — and conflating them
       // would report one mode armed because another's asset loaded.
       ready: ctx.gibs.renderMode === 'assets'
-        ? gibAssetArmed()
+        ? gibAssetArmed(ctx)
         : ctx.gibs.renderMode === 'carve' ? (ctx.bake.carvedLibrary !== null) : ctx.gibs.atlas !== null,
       frames: ctx.gibs.atlas?.frames.length ?? 0, atlas: ctx.gibs.atlasSource,
       liveCap: ctx.gibs.spriteLiveCap, restCap: ctx.gibs.spriteRestCap, sizeScale: ctx.gibs.spriteSizeScale,
       assets: {
-        armed: gibAssetArmed(),
+        armed: gibAssetArmed(ctx),
         zombie: ctx.gibs.assetRuntime.archetypeState('zombie'),
         soldier: ctx.gibs.assetRuntime.archetypeState('soldier'),
       },
@@ -11302,7 +11117,7 @@ function performBenchAction(a: BenchAction): void {
     },
     /** PRELOAD THE COMMITTED SETS without switching mode — the paired rig's
      *  "arm both arms first" step. Returns the armed state. */
-    preloadGibAssets: async () => { await ensureGibAssets(); return gibAssetArmed(); },
+    preloadGibAssets: async () => { await ensureGibAssets(ctx); return gibAssetArmed(ctx); },
     /** RELAY THE GORE-PART BENCH in front of the player: meat chunks and classic
      *  bones, rendered through the real gib mesh path. Returns how many parts. */
     goreShowcase: () => spawnGoreShowcase(),
@@ -11362,7 +11177,7 @@ function performBenchAction(a: BenchAction): void {
       carvedBuildMs: ctx.bake.carvedBuildMs,
       carveCells: ctx.gibs.carveCells,
       /** Task 2: the offline-asset arm's own state + census. */
-      assetArmed: gibAssetArmed(),
+      assetArmed: gibAssetArmed(ctx),
       assets: {
         zombie: ctx.gibs.assetRuntime.archetypeState('zombie'),
         soldier: ctx.gibs.assetRuntime.archetypeState('soldier'),
