@@ -240,3 +240,47 @@ layoutSource` from Task 1 and is untouched.
 `march/march-golden.test.ts`, the gate that is supposed to read the barrel).
 Each new module imports its dependencies directly, so there is no cycle.
 
+
+# Task 3 — feature blocks + test split (2026-09-19)
+
+## Inventory (before any extraction)
+
+Line numbers are `march/body/*.wgsl.ts` at base `e3077f7c`. Each block is a
+contiguous run cut verbatim into `march/body/blocks/<section>/<name>.wgsl.ts`
+and spliced back as `${NAME}` on its own line (block text carries no trailing
+newline; the parent line keeps it), so every joined string is byte-identical.
+Glue left in the parent: string openers, `let p = …`, the post-hit preamble
+(hit reload, debug 11, flat-albedo seam, counter snapshot), the key/spec/fresnel
+lines and the emission compose line.
+
+| Section | Lines | Block | Contents |
+|---|---|---|---|
+| trace SETUP | 39–143 | `setup/tile-preload` | tile-list preload, quad-mode entry |
+| | 144–165 | `setup/wound-list` | per-ray wound list |
+| | 166–279 | `setup/hull-bounds` | occluder pre-pass, outer-hull entry/exit |
+| | 280–325 | `setup/ray-window` | tMax, proxy-box entry, early discards, steps |
+| | 326–442 | `setup/step-config` | hit epsilon + AA, noise anchor, relaxed omega, wound step mul |
+| | 443–561 | `setup/start-bounds` | cone/depth-prepass/temporal start bounds |
+| trace LOOP | 763–807 | `loop/debug-counters` | debug modes 4/5/8 (return before discard) |
+| trace POST | 848–882 | `post/prim-material` | painted/gloss/metal/glow read |
+| | 883–946 | `post/shading-normal` | rest anchor, analytic gradient, calcNormal fallback, debug 12 |
+| | 947–963 | `post/wound-masks` | wound/char masks, micro-detail |
+| | 964–994 | `post/tissue` | tissue ramp, viscera |
+| | 996–1036 | `post/organ` | hitMat identity read, organ tint |
+| | 1038–1076 | `post/mottle` | colour mottle |
+| | 1080–1106 | `post/gore` | gore mask |
+| | 1108–1144 | `post/soldier-meat` | soldier wound stain + meat detail |
+| | 1146–1172 | `post/paint-char` | painted-prim overwrite, char mix |
+| | 1174–1326 | `post/burn` | burning body, soot, skeleton show-through |
+| | 1328–1370 | `post/melt` | melt / bare-bone paling |
+| SURFACE_PREP | 16–47 | `surface/wet` | wetness, melt wetness, specPow |
+| | 49–72 | `surface/glow` | face + per-prim glow |
+| LIGHT | 23–74 | `light/flashlight` | analytic flashlight |
+| | 92–137 | `light/occlusion` | scatter, AO, wound shadow, level shadow |
+| | 139–173 | `light/ambient` | bounce, probe grid, bounce spot, dynamic probes |
+| | 174–268 | `light/compose` | metal tint, muzzle flash, fleshLit, face flat, shoulder |
+| | 281–319 | `light/display-debug` | legacy display decode, heatmaps |
+
+`FACE_LAYER_WGSL` (`body/face.wgsl.ts`) was already its own block. Block
+modules are NOT re-exported from the barrel: the golden test hashes the barrel's
+export names, and blocks are internal to the body strings.
