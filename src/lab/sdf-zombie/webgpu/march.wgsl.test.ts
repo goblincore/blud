@@ -39,6 +39,10 @@ import { MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 // every exported WGSL string, and the Done-when "docstring no longer lies"
 // check needs the file's actual text.
 import moduleSource from './march.wgsl?raw';
+// Phase-1 split (2026-09-18): the row-table docstrings now live in
+// ./march/layout.ts, so the raw-source pin below reads both modules. The
+// Task-3 test split relocates this assertion next to layout.ts.
+import layoutSource from './march/layout?raw';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (see the comment below).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
@@ -2451,8 +2455,9 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     // mutation run). Scoped to ROW_PRIM_CLIP's OWN doc block: other rows'
     // "yzw spare" notes are true statements about other lanes and contain
     // the same substring.
-    const clipConst = moduleSource.indexOf('export const ROW_PRIM_CLIP');
-    const clipDoc = moduleSource.slice(moduleSource.lastIndexOf('/**', clipConst), clipConst);
+    const clipSource = moduleSource + layoutSource;
+    const clipConst = clipSource.indexOf('export const ROW_PRIM_CLIP');
+    const clipDoc = clipSource.slice(clipSource.lastIndexOf('/**', clipConst), clipConst);
     expect(clipDoc).not.toContain('spare');
     expect(clipDoc).toContain('glow');
   });
