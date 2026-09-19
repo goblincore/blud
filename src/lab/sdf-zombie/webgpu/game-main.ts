@@ -255,6 +255,7 @@ import { createFxSeams } from './game-seams-fx';
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createMiscSeams } from './game-seams-misc';
+import { applyBoneCullMode, applyBoneMesh, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -1043,21 +1044,6 @@ async function main() {
   camera.fov = FISHEYE_DEFAULTS.renderFovDeg;
   camera.updateProjectionMatrix();
   ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
-  /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
-   *  A shared function rather than three copies of the same object literal
-   *  — and the setters' own return value, not just the getter, because an
-   *  object-literal method can't write `return this.fisheye` and a shared
-   *  local is the way around that. Reads renderFovDeg/k off the LENS, not
-   *  the camera: the lens is what the blit actually applied, so this is
-   *  what tells a console user their setRenderFov(500) landed on 179. */
-  function fisheyeReport() {
-    return {
-      renderFovDeg: ctx.render.postAa.lens.renderFovDeg,
-      centerFovDeg: ctx.player.centerFovDeg,
-      visibleFovDeg: visibleFovDeg(ctx.render.postAa.lens),
-      k: ctx.render.postAa.lens.k,
-    };
-  }
   // Runtime march normals (a second march attachment + renderer MRT) are allocated ONLY when the
   // boot asks for a model that reads them: `?upscaleinputs=rgbn|rgbdn`, a trained model whose name
   // contains 'rgbn'/'rgbdn', or an explicit `?upscalenormals=1`. Every other boot — including
@@ -1276,42 +1262,6 @@ async function main() {
    *  list AND id (the sprite and chunk id sequences are independent). */
   ctx.gibs.blurPrevKeys = new Set<string>();
 
-  /**
-   * This frame's gib-blur candidates. Built from the SAME lists the renderers
-   * draw: sprite/asset/carve pieces (all `spritePieces.live`) and the marched
-   * fallback chunks (`liveChunks`). Each carries its real drawn mesh, its
-   * current `Chunk` and the layer it belongs on when NOT blurred, which is what
-   * lets the layer put it back exactly. `ageSeconds` is 0 on a piece's first
-   * presented frame (spawn OR recycled id), so the exposure clamps to that
-   * frame and no streak is drawn into an emitter that did not exist.
-   */
-  function gibBlurSubjects(): GibBlurSubject[] {
-    const out: GibBlurSubject[] = [];
-    const nextKeys = new Set<string>();
-    for (const p of ctx.vfx.spritePieces.live) {
-      if (!p.mesh.visible) continue;
-      const key = `sprite:${p.id}`;
-      nextKeys.add(key);
-      out.push({
-        id: p.id, state: p.state, mesh: p.mesh,
-        baseLayer: 0,
-        ageSeconds: ctx.gibs.blurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
-      });
-    }
-    for (const c of ctx.bake.liveChunks) {
-      if (!c.view.object.visible) continue;
-      const key = `chunk:${c.id}`;
-      nextKeys.add(key);
-      out.push({
-        id: c.id, state: c.state, mesh: c.view.object as unknown as THREE.Mesh,
-        baseLayer: SDF_LAYER,
-        ageSeconds: ctx.gibs.blurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
-      });
-    }
-    ctx.gibs.blurPrevKeys = nextKeys;
-    return out;
-  }
-
   /** Create the splash layer on first enable only, sharing the flesh/goo
    *  light uniform NODES so it is lit by the same rig. Returns silently if
    *  there is no actor view yet (the same pre-condition the goo layer has). */
@@ -1393,14 +1343,14 @@ async function main() {
   function tickAdaptive(nowMs: number): void {
     if (!ctx.render.adaptiveEnabled) return;
     const failingProbe = ctx.render.adaptiveState.probing && ctx.render.adaptiveFrames.length >= PROBE_ABORT_FRAMES
-      && (median(ctx.render.adaptiveFrames) > ctx.render.adaptiveBudgetMs * 1.1
+      && (median(ctx, ctx.render.adaptiveFrames) > ctx.render.adaptiveBudgetMs * 1.1
         || ctx.render.adaptiveFrames.filter((f) => f > ctx.render.adaptiveBudgetMs * 1.8).length >= 2);
     if (ctx.render.adaptiveFrames.length < ADAPTIVE_WINDOW && !failingProbe) return;
     const recent = ctx.render.adaptiveFrames.slice(-ADAPTIVE_WINDOW);
     const sorted = [...recent].sort((a, b) => a - b);
     const next = stepAdaptive(ctx.render.adaptiveState, {
       nowMs,
-      medianFrameMs: median(recent),
+      medianFrameMs: median(ctx, recent),
       p95FrameMs: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
       budgetMs: ctx.render.adaptiveBudgetMs,
     });
@@ -1410,13 +1360,6 @@ async function main() {
       ctx.render.adaptiveFrames.length = 0;
     }
     ctx.render.adaptiveState = next;
-  }
-  function median(xs: number[]): number {
-    if (xs.length === 0) return 0;
-    const s = [...xs].sort((a, b) => a - b);
-    const m = s.length >> 1;
-    const hi = s[m]!;
-    return s.length % 2 ? hi : (s[m - 1]! + hi) / 2;
   }
   // The frame's draw. With the goo layer on, the chain nests exactly as
   // lab-main's does: goo DENSITY (+ blur) first, the whole sdf/cone/occluder/
@@ -1490,30 +1433,6 @@ async function main() {
   ctx.crowd.volumeBound = new Set<CrowdType>();
   ctx.crowd.segMetaWarned = false;
   ctx.crowd.refineWarned = false;
-
-  /** Copy every uniform VALUE from a stamped per-body view into a type's own
-   *  nodes. The crowd material reads per-TYPE fields from these nodes and
-   *  every per-INSTANCE field from the record, so an exact copy of the view's
-   *  block is both correct and immune to a per-type stamp the wiring forgot to
-   *  list. Textures are shared by reference (they are per-type anyway);
-   *  vectors/colours/matrices copy through .copy(). */
-  function copyUniformValues(dst: MarchUniforms, src: MarchUniforms): void {
-    const d = dst as unknown as Record<string, { value: unknown }>;
-    const s = src as unknown as Record<string, { value: unknown }>;
-    for (const k of Object.keys(s)) {
-      const dn = d[k], sn = s[k];
-      if (!dn || !sn) continue;
-      const sv = sn.value;
-      const dv = dn.value;
-      if (sv !== null && typeof sv === 'object' && !(sv instanceof THREE.Texture)
-          && dv !== null && typeof dv === 'object'
-          && typeof (dv as { copy?: unknown }).copy === 'function') {
-        (dv as { copy: (o: unknown) => void }).copy(sv);
-      } else {
-        dn.value = sv;
-      }
-    }
-  }
   /** TASK-6 DIAGNOSTIC LIGHT CLOCK state — see setLightClockFrozen in the
    *  __sdfGame seam. Freezes the practical flicker phase at the freeze
    *  instant; default OFF, gate-only. DECLARED HERE (before setDrawFn)
@@ -2100,7 +2019,7 @@ async function main() {
       for (const t of ctx.crowd.types.values()) {
         const src = ctx.crowd.sourceView.get(t);
         const copyTiming = ctx.telemetry.telemetry.begin();
-        if (src) copyUniformValues(t.uniforms, src.uniforms);
+        if (src) copyUniformValues(ctx, t.uniforms, src.uniforms);
         ctx.telemetry.telemetry.end('crowd-uniform-copy', copyTiming);
         // CROWD REQUIRES ITS TILE LIST (task 8). The per-body tile playtest
         // (`gameTiles`) gates only the per-body path; the crowd type owns its
@@ -2544,20 +2463,8 @@ async function main() {
   // Three-way cull state (bone-segment spheres): boneCull stays the boolean
   // view (off vs any cull) the old seam reports.
   ctx.render.boneCullMode = GAME_BONE_CULL_MODE;
-  function applyBoneCullMode(mode: 'off' | 'cluster' | 'segment'): void {
-    ctx.render.boneCullMode = mode;
-    ctx.render.boneCull = mode !== 'off';
-    for (const a of ctx.world.actors) a.view.setBoneCullMode(mode);
-    for (const c of ctx.bake.liveChunks) c.view.setBoneCullMode(mode);
-  }
   function applyBoneCull(on: boolean): void {
-    applyBoneCullMode(on ? 'cluster' : 'off');
-  }
-  function applyBoneMesh(on: boolean): void {
-    ctx.render.boneMesh = on;
-    ctx.render.boneInstancer.object.visible = on || ctx.gibs.boneMesh;
-    for (const a of ctx.world.actors) a.view.setPackBones(!on);
-    for (const c of ctx.bake.liveChunks) c.view.setPackBones(!on);
+    applyBoneCullMode(ctx, on ? 'cluster' : 'off');
   }
 
   /** Perf round 2, task 5: front-to-back per-body passes, gated and bounded
@@ -2677,28 +2584,6 @@ async function main() {
   // A label bottom-left names the mode. Switching reallocates targets; a hitch is expected.
   ctx.render.upscaleAb = { mode: 'model', config: null, model: null, modelName: null, fieldStyle: ctx.render.sdfLayer.fieldStyle };
   ctx.render.upscaleAbLabel = null;
-  function updateUpscaleAbLabel() {
-    const c = ctx.render.upscaleAb.config;
-    if (!c) {
-      if (ctx.render.upscaleAbLabel) ctx.render.upscaleAbLabel.hidden = true;
-      return;
-    }
-    if (!ctx.render.upscaleAbLabel) {
-      ctx.render.upscaleAbLabel = document.createElement('div');
-      ctx.render.upscaleAbLabel.id = 'upscale-ab';
-      ctx.render.upscaleAbLabel.setAttribute('style',
-        'position:fixed; left:8px; bottom:8px; z-index:40; pointer-events:none;'
-        + ' font:12px/1.3 monospace; color:#ffd98a; background:rgba(0,0,0,0.6); padding:3px 6px; border-radius:3px;');
-      document.body.appendChild(ctx.render.upscaleAbLabel);
-    }
-    const m = ctx.render.upscaleAb.model;
-    const what = ctx.render.upscaleAb.mode === 'native' ? 'native (march 1.0, no upscale)'
-      : ctx.render.upscaleAb.mode === 'nearest' ? 'nearest 2x (zero model)'
-      : m ? `model ${ctx.render.upscaleAb.modelName ?? m.id} (${m.id} ${m.inputs}${m.step !== undefined ? `, step ${m.step}` : ''})`
-      : `random ${c.model} ${c.inputs} (untrained weights)`;
-    ctx.render.upscaleAbLabel.textContent = `upscale [U]: ${what} · ${c.layout}`;
-    ctx.render.upscaleAbLabel.hidden = false;
-  }
   /** `booted` = false during main()'s boot, which sets the scale the way the ?accum block does. */
   function applyUpscaleAbMode(mode: 'native' | 'nearest' | 'model', booted = true): UpscaleInfo {
     const c = ctx.render.upscaleAb.config;
@@ -2721,7 +2606,7 @@ async function main() {
         : ctx.render.sdfLayer.setUpscale(c, ctx.render.upscaleAb.model ?? undefined);
     }
     ctx.render.upscaleAb.mode = mode;
-    updateUpscaleAbLabel();
+    updateUpscaleAbLabel(ctx);
     // A stage built AFTER boot carries brand-new per-pass pipelines the boot
     // warm-up never saw; without this they compile on the first frame the new
     // stage runs, which is the same multi-second stall in miniature. Loop
@@ -2796,7 +2681,7 @@ async function main() {
       ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
       ctx.render.sdfLayer.setUpscale(cfg);
       ctx.render.upscaleAb.config = cfg;
-      updateUpscaleAbLabel();
+      updateUpscaleAbLabel(ctx);
     }
     // `?upscalesharpen=0..1`: contrast-adaptive sharpen over the stage output (UPSCALE_SHARPEN_WGSL).
     // Live: __sdfGame.setUpscaleSharpen(x).
@@ -9545,7 +9430,7 @@ async function main() {
     // so the capture's clean background has no selected gib in it. When the
     // switch is off the list is empty and every mesh is put back where it was.
     if (ctx.gibs.shutter) {
-      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? gibBlurSubjects() : []);
+      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? gibBlurSubjects(ctx) : []);
       if (!ctx.gibs.shutter.enabled) ctx.gibs.blurPrevKeys = new Set();
     }
     ctx.telemetry.telemetry.end('goo-sync', gooTiming);
@@ -9765,7 +9650,7 @@ async function main() {
     captureVersion: 2, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: ctx.boot.gameTiles.diagnostics(),
     page: location.pathname, query: location.search, userAgent: navigator.userAgent, backend: ctx.boot.handle.backend,
     visibility: document.visibilityState, frameCap: ctx.boot.handle.frameCap,
-    fisheye: fisheyeReport(), renderWidth: ctx.render.sdfLayer.marchTarget.width, renderHeight: ctx.render.sdfLayer.marchTarget.height,
+    fisheye: fisheyeReport(ctx), renderWidth: ctx.render.sdfLayer.marchTarget.width, renderHeight: ctx.render.sdfLayer.marchTarget.height,
     woundStep: ctx.world.actors[0]?.view.uniforms.perfCfg.value.z,
     hullExitBound: ctx.world.actors[0]?.view.uniforms.perfCfg.value.x,
     halfRate: ctx.render.sdfLayer.halfRate, halfRateMode: ctx.render.sdfLayer.halfRateMode,
@@ -10737,7 +10622,7 @@ function performBenchAction(a: BenchAction): void {
         ctx.player.centerFovDeg = clampFovDeg(deg);
         ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
       }
-      return fisheyeReport();
+      return fisheyeReport(ctx);
     },
     setRenderFov: (deg: number) => {
       if (Number.isFinite(deg)) {
@@ -10746,13 +10631,13 @@ function performBenchAction(a: BenchAction): void {
         ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
         sizeSdfLayer();
       }
-      return fisheyeReport();
+      return fisheyeReport(ctx);
     },
     /** renderFovDeg is what is drawn, visibleFovDeg what reaches the
      *  screen (the warp crops the mid-edges), centerFovDeg what the
      *  middle reads as. Tune against `visible`, not `render`. */
     get fisheye() {
-      return fisheyeReport();
+      return fisheyeReport(ctx);
     },
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. Optional `limb` aims at
@@ -10835,7 +10720,7 @@ function performBenchAction(a: BenchAction): void {
     /** Bone tubes (2026-09-02-bone-tubes, task 5): OFF ships as the field's
      *  bones; ON draws every posed bone as an instanced polygonal tube and
      *  flips every view's packBones off so the field drops its bone rows. */
-    setBoneMesh: (on: boolean) => applyBoneMesh(on),
+    setBoneMesh: (on: boolean) => applyBoneMesh(ctx, on),
     /** skeleton=mesh diagnostics: null unless the dev selector resolved;
      *  otherwise the renderer's coverage stats — proof the intended path
      *  ran (segments/verts > 0) and extraction health flags. */
@@ -10975,7 +10860,7 @@ function performBenchAction(a: BenchAction): void {
         ctx.render.upscaleAb.config = null;
         ctx.render.upscaleAb.model = null;
         ctx.render.upscaleAb.modelName = null;
-        updateUpscaleAbLabel();
+        updateUpscaleAbLabel(ctx);
         return ctx.render.sdfLayer.setUpscale(null);
       }
       if (raw.trained !== undefined) return enableTrainedUpscale(raw.trained, raw.layout);
@@ -10986,7 +10871,7 @@ function performBenchAction(a: BenchAction): void {
       ctx.render.upscaleAb.model = null;
       ctx.render.upscaleAb.modelName = null;
       ctx.render.upscaleAb.mode = 'model';
-      updateUpscaleAbLabel();
+      updateUpscaleAbLabel(ctx);
       return info;
     },
     /** P3: the trained models in the dev store (GET /__lab/upscale-models). */
@@ -11186,7 +11071,7 @@ function performBenchAction(a: BenchAction): void {
     /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
      *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
      *  setBoneCull(on) is the boolean shorthand for off/cluster. */
-    setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(mode); },
+    setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(ctx, mode); },
     /** Footprint-AA strength (perf round 2 task 6, aaCfg.y). 0 = the old
      *  march bit-for-bit; also refreshes the one-pixel footprint (aaCfg.x) so
      *  a frozen-scene A/B at a pinned scale reads the intended pair. */
