@@ -196,3 +196,14 @@ Not edited (parallel session owns it). Two facts for whoever updates it:
 - The board should record the march-hash gate's cross-boot flakiness (evidence
   above); the pinned canonical is still the correct target but a single red run
   is not a regression signal.
+
+## Correction (reviewer, 2026-09-19) — the gate is not flaky; the runs overlapped
+
+The non-canonical base values above (`ce7045ac…`, `9871c2c2…`, `b6422b41…`) are
+exactly the values a parallel session's march-split pixel gate read during the
+same window: two headless Chromes (ports 93xx) capturing on one GPU at once. Run
+alone, this branch's HEAD gave the canonical line 3/3
+(`8f2b74e7…` / repeat identical / wounded `1381a866…`), as did base and the march
+branch on every isolated run. So the pin is a valid single-run signal **when
+nothing else is capturing**; the fix is "never run two pixel gates at once",
+not a multi-run set comparison. The `frameIndex`-parity theory is unproven.
