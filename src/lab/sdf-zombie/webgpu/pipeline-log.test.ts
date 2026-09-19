@@ -5,6 +5,7 @@ import {
   vertexBuffersSignature,
   targetsSignature,
   depthStencilSignature,
+  wgslFingerprint,
   type ShaderModuleHashes,
   type PipelineLayoutHashes,
 } from './pipeline-log';
@@ -185,5 +186,49 @@ describe('hashText', () => {
     expect(hashText('abc')).not.toBe(hashText('abd'));
     expect(hashText('abc')).toMatch(/:3$/);
     expect(hashText('')).toMatch(/:0$/);
+  });
+});
+
+// COMPILE CENSUS (2026-09-19). The fingerprint is what lets the census say
+// WHICH march variant a huge compile was (include list / bindings), not just
+// how big it was. These pin the three facts the Node-side analysis reads.
+describe('wgslFingerprint', () => {
+  const SRC = `
+struct MarchOut { @location(0) color: vec4f, @location(1) depth: f32 };
+@group(0) @binding(0) var<uniform> marchCfg: vec4f;
+@group(0) @binding(1) var<uniform> noiseCfg: vec4f;
+fn hash13(p: vec3f) -> f32 { return 0.0; }
+fn noise3(p: vec3f) -> f32 { return hash13(p); }
+fn marchBody(ray: vec3f) -> MarchOut { return MarchOut(vec4f(1.0), 0.0); }
+`;
+
+  it('reports bytes, sorted/deduped fn names and counts', () => {
+    const f = wgslFingerprint(SRC);
+    expect(f.bytes).toBe(SRC.length);
+    expect(f.fns).toEqual(['hash13', 'marchBody', 'noise3']);
+    expect(f.fnCount).toBe(3);
+    expect(f.structs).toEqual(['MarchOut']);
+    expect(f.structCount).toBe(1);
+    expect(f.bindings).toBe(2);
+    expect(f.locations).toBe(2);
+  });
+
+  it('caps the name lists without lying about the counts', () => {
+    const f = wgslFingerprint(SRC, 1);
+    expect(f.fns).toHaveLength(1);
+    expect(f.fnCount).toBe(3);
+    expect(f.structs).toHaveLength(1);
+    expect(f.structCount).toBe(1);
+  });
+
+  it('is a stable identity for a variant: identical source, identical fingerprint', () => {
+    expect(wgslFingerprint(SRC)).toEqual(wgslFingerprint(SRC));
+  });
+
+  it('separates two marchers whose include list differs', () => {
+    const a = wgslFingerprint(SRC);
+    const b = wgslFingerprint(SRC.replace('fn marchBody', 'fn sdfSurfaceMarch'));
+    expect(b.fns).not.toContain('marchBody');
+    expect(b.fns).toContain('sdfSurfaceMarch');
   });
 });

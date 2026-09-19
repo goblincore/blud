@@ -88,6 +88,93 @@ export function hashText(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// WGSL fingerprint (pure; exported for tests).
+//
+// COMPILE CENSUS (2026-09-19). Two march variants can share every descriptor
+// field the signature covers (same targets, blend, depth state, vertex
+// buffers) and still be different, very large Metal compiles. The byte length
+// alone says "big"; it does not say WHAT the variant is. The fingerprint pulls
+// three cheap, structural facts out of the generated WGSL at shader-module
+// creation — before the GPU ever sees it — so the census can say "this module
+// carries marchBody + the whole trace include list, 243 KB" instead of only
+// "243 KB":
+//
+//   * `fns`      the `fn <name>` declarations, i.e. effectively the wgslFn
+//                INCLUDE LIST a variant was built with. Which march entry
+//                (marchBody / refineBody / sdfSurfaceMarch / coneMarch /
+//                depthPrepassMarch) is how the Node-side analysis classifies a
+//                variant as march-family, and diffing two fns sets is the
+//                include-list diff.
+//   * `structs`  the `struct <Name>` declarations (G-buffer / surface structs).
+//   * `bindings` / `locations`  counts of `@binding(` / `@location(` — the
+//                uniform/binding surface and the varyings, which is what the
+//                TSL node graph changes between two otherwise-identical
+//                marchers.
+//
+// BOUNDED: names are sorted, deduped and capped at `maxNames` each; the counts
+// stay exact. Pure string work — no three, no device — so it is directly
+// portable to the Rust + wgpu port's census.
+// ---------------------------------------------------------------------------
+
+/** Structural fingerprint of one WGSL shader module source. */
+export interface WgslFingerprint {
+  /** code.length — UTF-16 units, same as the WGSL byte count for ASCII WGSL. */
+  bytes: number;
+  /** Sorted, deduped `fn` names (capped at the caller's maxNames). */
+  fns: string[];
+  /** Exact `fn` declaration count, even when `fns` is capped. */
+  fnCount: number;
+  /** Sorted, deduped `struct` names (capped). */
+  structs: string[];
+  /** Exact `struct` declaration count. */
+  structCount: number;
+  /** `@binding(` occurrences. */
+  bindings: number;
+  /** `@location(` occurrences. */
+  locations: number;
+}
+
+const FN_DECL = /\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+const STRUCT_DECL = /\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)\b/g;
+const BINDING_DECL = /@binding\s*\(/g;
+const LOCATION_DECL = /@location\s*\(/g;
+
+function collectNames(re: RegExp, code: string): { names: string[]; count: number } {
+  const set = new Set<string>();
+  let count = 0;
+  re.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    count++;
+    if (m[1]) set.add(m[1]);
+  }
+  return { names: [...set].sort(), count };
+}
+
+function countMatches(re: RegExp, code: string): number {
+  re.lastIndex = 0;
+  let n = 0;
+  while (re.exec(code) !== null) n++;
+  return n;
+}
+
+/** Structural fingerprint of one WGSL module source. `maxNames` bounds each
+ *  name list (the counts stay exact). Pure and deterministic. */
+export function wgslFingerprint(code: string, maxNames = 240): WgslFingerprint {
+  const fn = collectNames(FN_DECL, code);
+  const st = collectNames(STRUCT_DECL, code);
+  return {
+    bytes: code.length,
+    fns: fn.names.slice(0, maxNames),
+    fnCount: fn.count,
+    structs: st.names.slice(0, maxNames),
+    structCount: st.count,
+    bindings: countMatches(BINDING_DECL, code),
+    locations: countMatches(LOCATION_DECL, code),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Full-fidelity descriptor signature (pure; exported for tests).
 // ---------------------------------------------------------------------------
 
@@ -235,6 +322,10 @@ export interface PipelineCreationRecord {
   frame: number;
   /** performance.now() at creation START — what noteFrameEnd partitions on. */
   t: number;
+  /** performance.now() when the creation settled (ready). `ms === endT - t`
+   *  modulo the two clock reads. With this, overlapping async compiles can be
+   *  turned into real wall coverage instead of a naive ms sum. */
+  endT: number;
   /** True when created through the Async entry (compileAsync path). */
   async: boolean;
   /** For async creations: the renderer.compileAsync() session that was open
@@ -257,6 +348,11 @@ export interface PipelineCreationRecord {
   /** Content hashes of the two shader modules, when enabled. */
   vertexShaderHash: string;
   fragmentShaderHash: string;
+  /** WGSL byte length of each module (compile-census, 2026-09-19). 0 when the
+   *  module was created before the log was enabled. */
+  vertexShaderBytes: number;
+  fragmentShaderBytes: number;
+  computeShaderBytes: number;
 }
 
 export interface CacheEvictionRecord {
@@ -287,6 +383,8 @@ export interface ShaderModuleStat {
   count: number;
   /** Label of the ProgrammableStage when the module was created. */
   label: string;
+  /** Structural WGSL fingerprint (bytes, include list, bindings). */
+  fingerprint: WgslFingerprint;
 }
 
 export interface PipelineLogSummary {
@@ -343,6 +441,36 @@ export interface PipelineLogSummary {
   };
 }
 
+/**
+ * The `__sdfGame.pipelineCensus()` payload (compile census, 2026-09-19).
+ *
+ * Deliberately SEPARATE from `pipelineLog()`: that one is a long-frame hitch
+ * detector and only keeps the slowest 16 creations plus aggregates, which is
+ * the wrong shape for "where did 80 s of boot compile go". This carries EVERY
+ * creation with its start/end timestamps, module byte lengths and three key,
+ * plus the shader-module fingerprint census. Plain data, JSON-serialisable;
+ * only populated while `?pipelinelog=1` is on.
+ */
+export interface PipelineCensus {
+  installed: boolean;
+  enabled: boolean;
+  /** Creations recorded (bounded — see MAX_CENSUS). */
+  count: number;
+  /** Naive sum of every creation's ms. Async creations overlap, so this is an
+   *  upper bound on wall time; use `entries[].t/endT` for real coverage. */
+  totalMs: number;
+  /** Every creation, in completion order. */
+  entries: PipelineCreationRecord[];
+  /** Distinct shader modules created, with their WGSL fingerprints. */
+  modules: ShaderModuleStat[];
+  /** Shader modules created BEFORE the log was enabled (fingerprint absent). */
+  modulesCreatedWhileDisabled: number;
+  /** Distinct module sources retained for WGSL diffing (bounded by bytes). */
+  sourcesRetained: number;
+  /** Sources dropped because the byte cap was reached. */
+  sourcesDropped: number;
+}
+
 /** Shorten labels but keep the material/stage name readable. */
 function cleanLabel(label: unknown): string {
   const s = typeof label === 'string' && label.length > 0 ? label : '<unlabeled>';
@@ -380,11 +508,26 @@ let compileSession = 0;
 const shaderModuleHashes: ShaderModuleHashes = new WeakMap();
 const bindGroupLayoutHashes: LayoutHashes = new WeakMap();
 const pipelineLayoutHashes: PipelineLayoutHashes = new WeakMap();
+// Shader-module WGSL byte length, keyed on the returned module (compile census).
+const shaderModuleByteMap: WeakMap<object, number> = new WeakMap();
+// Shader-module source, keyed on its content hash (compile census). Bounded by
+// total bytes — the march fragment modules alone are ~7.5 MB across ~31 near-
+// identical variants, and the census needs to be able to DIFF them to say what
+// makes a variant a variant. Only filled while enabled.
+const shaderModuleSourceByHash = new Map<string, string>();
+let shaderModuleSourceBytes = 0;
+let shaderModuleSourcesDropped = 0;
+const MAX_SOURCE_BYTES = 48 * 1024 * 1024;
 // Shader-module census (bounded).
 const shaderModuleCensus = new Map<string, ShaderModuleStat>();
 let shaderModulesCreated = 0;
 let shaderModuleBytes = 0;
+let shaderModulesDisabled = 0;
 const MAX_SHADER_CENSUS = 3000;
+
+// Per-creation census for the compile-time probe (bounded; enabled only).
+const censusEntries: PipelineCreationRecord[] = [];
+const MAX_CENSUS = 4000;
 
 // three's render-cache-key census: the authoritative rebuild detector.
 const rebuildCensus = new Map<string, {
@@ -465,9 +608,10 @@ export function installPipelineLog(renderer: THREE.WebGPURenderer): boolean {
   if (typeof origCreateShaderModule === 'function') {
     device.createShaderModule = function (this: unknown, ...args: unknown[]) {
       const result = (origCreateShaderModule as (...a: unknown[]) => unknown).apply(this, args);
+      const desc = args[0] as { label?: string; code?: string } | undefined;
+      const code = typeof desc?.code === 'string' ? desc.code : '';
+      if (result && typeof result === 'object') shaderModuleByteMap.set(result as object, code.length);
       if (enabled) {
-        const desc = args[0] as { label?: string; code?: string } | undefined;
-        const code = typeof desc?.code === 'string' ? desc.code : '';
         const hash = hashText(code);
         if (result && typeof result === 'object') shaderModuleHashes.set(result as object, hash);
         shaderModulesCreated++;
@@ -475,7 +619,19 @@ export function installPipelineLog(renderer: THREE.WebGPURenderer): boolean {
         const label = cleanLabel(desc?.label);
         const entry = shaderModuleCensus.get(hash);
         if (entry) entry.count++;
-        else if (shaderModuleCensus.size < MAX_SHADER_CENSUS) shaderModuleCensus.set(hash, { hash, count: 1, label });
+        else if (shaderModuleCensus.size < MAX_SHADER_CENSUS) {
+          shaderModuleCensus.set(hash, { hash, count: 1, label, fingerprint: wgslFingerprint(code) });
+        }
+        if (!shaderModuleSourceByHash.has(hash)) {
+          if (shaderModuleSourceBytes + code.length <= MAX_SOURCE_BYTES) {
+            shaderModuleSourceByHash.set(hash, code);
+            shaderModuleSourceBytes += code.length;
+          } else {
+            shaderModuleSourcesDropped++;
+          }
+        }
+      } else {
+        shaderModulesDisabled++;
       }
       return result;
     };
@@ -523,16 +679,24 @@ export function installPipelineLog(renderer: THREE.WebGPURenderer): boolean {
         ? hashOf(shaderModuleHashes, (desc as { vertex?: { module?: unknown } } | undefined)?.vertex?.module) : '';
       const fHash = enabled && kind === 'render'
         ? hashOf(shaderModuleHashes, (desc as { fragment?: { module?: unknown } } | undefined)?.fragment?.module) : '';
+      const byteOf = (mod: unknown): number =>
+        enabled && mod !== null && typeof mod === 'object'
+          ? (shaderModuleByteMap.get(mod as object) ?? 0) : 0;
       const record: PipelineCreationRecord = {
-        kind, name: cleanLabel(desc?.label), ms: 0, frame, t: t0, async: isAsync,
+        kind, name: cleanLabel(desc?.label), ms: 0, frame, t: t0, endT: t0, async: isAsync,
         via: isAsync ? (activeCompile ?? '<none>') : '', sig,
         threeKey: ctx?.threeKey ?? '',
         material: ctx?.material ?? '', objectType: ctx?.objectType ?? '',
         objectName: ctx?.objectName ?? '', geometryKey: ctx?.geometryKey ?? '',
         vertexShaderHash: vHash, fragmentShaderHash: fHash,
+        vertexShaderBytes: byteOf((desc as { vertex?: { module?: unknown } } | undefined)?.vertex?.module),
+        fragmentShaderBytes: byteOf((desc as { fragment?: { module?: unknown } } | undefined)?.fragment?.module),
+        computeShaderBytes: byteOf((desc as { compute?: { module?: unknown } } | undefined)?.compute?.module),
       };
       const finish = () => {
-        record.ms = performance.now() - t0;
+        const t1 = performance.now();
+        record.ms = t1 - t0;
+        record.endT = t1;
         totalPipelines++;
         totalCompileMs += record.ms;
         // Authoritative census: three's own cache key.
@@ -567,6 +731,10 @@ export function installPipelineLog(renderer: THREE.WebGPURenderer): boolean {
           if (slowest.length > SLOWEST_KEEP) slowest.pop();
         }
         if (enabled) inFlight.push(record);
+        if (enabled) {
+          censusEntries.push(record);
+          if (censusEntries.length > MAX_CENSUS) censusEntries.shift();
+        }
       };
       if (isAsync && result instanceof Promise) result.then(finish, finish);
       else finish();
@@ -780,10 +948,54 @@ export function resetPipelineLogForTest(): void {
   shaderModuleCensus.clear();
   shaderModulesCreated = 0;
   shaderModuleBytes = 0;
+  shaderModulesDisabled = 0;
+  shaderModuleSourceByHash.clear();
+  shaderModuleSourceBytes = 0;
+  shaderModuleSourcesDropped = 0;
+  censusEntries.length = 0;
   rebuildCensus.clear();
   descriptorCensus.clear();
   evictionEvents.length = 0;
   evictionTotal = 0;
   evictionByObject.clear();
   currentRender = null;
+}
+
+/**
+ * The `__sdfGame.pipelineCensus()` payload (compile census, 2026-09-19).
+ * Every pipeline creation recorded while the log is enabled, with the fields
+ * the compile-time analysis needs: label, sync/async, start/end (so overlapping
+ * async compiles become wall coverage rather than a meaningless ms sum), WGSL
+ * byte lengths, three's render-cache key, and the descriptor signature. Plus
+ * the shader-module fingerprint census (include list, bindings, bytes).
+ *
+ * Plain data, JSON-serialisable, no device objects. Off unless enabled.
+ */
+export function getPipelineCensus(): PipelineCensus {
+  let total = 0;
+  for (const e of censusEntries) total += e.ms;
+  return {
+    installed,
+    enabled,
+    count: censusEntries.length,
+    totalMs: Math.round(total * 100) / 100,
+    entries: censusEntries.map((e) => ({ ...e })),
+    modules: [...shaderModuleCensus.values()].map((m) => ({
+      ...m,
+      fingerprint: { ...m.fingerprint, fns: [...m.fingerprint.fns], structs: [...m.fingerprint.structs] },
+    })),
+    modulesCreatedWhileDisabled: shaderModulesDisabled,
+    sourcesRetained: shaderModuleSourceByHash.size,
+    sourcesDropped: shaderModuleSourcesDropped,
+  };
+}
+
+/**
+ * The WGSL source for one module hash, or undefined (never enabled / dropped /
+ * unknown). The compile census uses this to diff two large march variants
+ * offline instead of pushing megabytes through the summary payload. Plain
+ * string, no device object.
+ */
+export function getPipelineShaderSource(hash: string): string | undefined {
+  return shaderModuleSourceByHash.get(hash);
 }

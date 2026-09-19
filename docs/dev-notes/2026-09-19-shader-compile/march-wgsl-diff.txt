@@ -1,0 +1,28 @@
+# WGSL diff: two of the 23 body-shape march fragment modules
+#
+# Captured by `node scripts/compile-census.mjs 1 --sources 3` (the two
+# largest distinct march fragment hashes, both the 243 KB body shape).
+# The ONLY differences are generated `NodeBuffer_<id>` identifiers: the
+# crowd instance-record storage node (`inst`, argument 87 of marchBody)
+# and its struct type. Everything else - the ~2100-line body and its ~100
+# positional arguments - is byte-identical. This is why the TSL shader
+# string cache misses for every body, while the driver dedupes the compiled
+# program: only the FIRST body pipeline pays the cold compile (see
+# cold-probe-constant.json).
+#
+# A = 4d7513a003c3c46d:243087
+# B = 2ca69d92f207fea7:243087
+
+--- line 49 ---
+A: struct NodeBuffer_1844Struct {
+B: struct NodeBuffer_2330Struct {
+
+--- line 53 ---
+A: var<storage, read> NodeBuffer_1844 : NodeBuffer_1844Struct;
+B: var<storage, read> NodeBuffer_2330 : NodeBuffer_2330Struct;
+
+--- line 4581 ---
+A: 	nodeVar1 = marchBody( v_positionWorld, render.cameraPosition, nodeUniform4, nodeUniform5, nodeUniform6, object.nodeUniform7, object.nodeUniform8, object.nodeUniform9, object.nodeUniform10, nodeUniform11, nodeUniform12, object.nodeUniform13, object.nodeUniform14, object.nodeUniform15, object.nodeUniform16, object.nodeUniform17, object.nodeUniform18, object.nodeUniform19, object.nodeUniform20, obje ...[2231 more chars]
+B: 	nodeVar1 = marchBody( v_positionWorld, render.cameraPosition, nodeUniform4, nodeUniform5, nodeUniform6, object.nodeUniform7, object.nodeUniform8, object.nodeUniform9, object.nodeUniform10, nodeUniform11, nodeUniform12, object.nodeUniform13, object.nodeUniform14, object.nodeUniform15, object.nodeUniform16, object.nodeUniform17, object.nodeUniform18, object.nodeUniform19, object.nodeUniform20, obje ...[2231 more chars]
+
+differing lines: 3 of 4599
