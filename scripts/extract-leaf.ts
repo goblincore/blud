@@ -317,7 +317,12 @@ export function extractLeaves(
       );
     }
   }
-  const inferred = importsFor(fragments, importTable(sf), accounted);
+  // Never import from THIS module: an earlier wave's functions are imported back
+  // into game-main from here, and inferring those would make the module import
+  // itself (TS2440).
+  const table = importTable(sf);
+  for (const [name, e] of table) if (e.mod === `./${moduleName}`) accounted.add(name);
+  const inferred = importsFor(fragments, table, accounted);
   const types = usedLocalTypes(fragments, localTypes(source, sf));
   const needsWrapper = fragments.some(f => f.includes('withCtx('));
 

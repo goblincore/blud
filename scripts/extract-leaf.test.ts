@@ -266,3 +266,27 @@ describe('extract-leaf: --consts on a multi-declarator statement', () => {
     expect(r.main).not.toMatch(/_bfA\s*=/);
   });
 });
+
+describe('extract-leaf: a module never imports itself', () => {
+  it('drops an inferred import whose specifier IS this module', () => {
+    // An earlier wave moved viewToRig into game-weapon-leaves, so game-main
+    // imports it back from there. A later function that calls it must not
+    // re-import it into that same module.
+    const src = [
+      "import * as THREE from 'three';",
+      "import { viewToRig } from './game-weapon-leaves';",
+      "import { makeGameContext } from './game-context';",
+      '',
+      'export function main(): void {',
+      '  const ctx = makeGameContext();',
+      '  function viewDirToRig(v: number): number {',
+      '    return viewToRig(ctx, v) + ctx.weapon.bore;',
+      '  }',
+      '  viewDirToRig(1);',
+      '}',
+      '',
+    ].join('\n');
+    const r = extractLeaves(src, ['viewDirToRig'], [], 'game-weapon-leaves');
+    expect(r.module).not.toContain("from './game-weapon-leaves'");
+  });
+});
