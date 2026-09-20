@@ -183,11 +183,32 @@ export async function stageCloseUp(evaluate, opts = {}, fail = failHard) {
     // "one body filling the screen" wants the closest framing that still
     // renders, not the first rung past a threshold. Coverage = flesh pixels
     // / SDF-target pixels, from the occupancy counter (debug mode 4).
+    //
+    // SETTLED OCCUPANCY READ (march-hash bistability fix, 2026-09-20). Each
+    // occupancy() dispatches its frame and reads the march target back; under
+    // CPU load three's asynchronous render submission can DEFER that frame
+    // past the readback, which then returns whatever was last landed — at
+    // boot, an all-zero target. A zero (or stale) read yields cov 0, so the
+    // search's cov > best.cov keeps the FIRST rung and the whole gate stages
+    // a different pose than the canonical one — the bistability. The settled
+    // read waits for the real condition: two consecutive reads AGREE and are
+    // live (rasterised > 0), 250 ms apart so a just-submitted frame can land
+    // between them. Measured under a full vitest-run load: rung reads that
+    // came back all-zero went live within ~1.5 s and then matched the idle
+    // census byte-for-byte; the census values themselves were never the
+    // varying part — only their liveness was.
     let best = null;
     for (const d of ${JSON.stringify(ladder)}) {
       tryPose(d, 0);
       __sdfGame.step(2);
-      const occ = await __sdfGame.occupancy();
+      let occ = await __sdfGame.occupancy();
+      let prevSig = null;
+      for (let t = 0; t < 30 && !(occ.rasterised > 0 && occ.hits + ':' + occ.rasterised === prevSig); t++) {
+        prevSig = occ.hits + ':' + occ.rasterised;
+        await new Promise((r) => setTimeout(r, 250));
+        occ = await __sdfGame.occupancy();
+      }
+      if (!(occ.rasterised > 0)) return { error: 'occupancy never went live at d=' + d + ' (renderer backlog?)' };
       const cov = occ.hits / (occ.targetW * occ.targetH);
       if (!best || cov > best.cov) best = { d, cov, occ };
     }

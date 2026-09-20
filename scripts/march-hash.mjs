@@ -61,8 +61,31 @@
 //
 // Env: LAB_VITE_PORT / LAB_CDP_PORT (default 5323 / 9323). Run inside
 // lab-servers (see scripts/lab-servers.sh).
+//
+// SETTLING, DELIBERATELY (2026-09-20). This gate was bistable ACROSS BOOTS on
+// unchanged code (8f2b74e7... / ce7045ac... / 9871c2c2... / b6422b41...),
+// always within-boot deterministic, canonical on an idle machine and bogus
+// under CPU load. The MARCH_HASH_DUMP instrument named the input: NOT a
+// uniform, NOT temporal state — the COVERAGE-SEARCH STAGED A DIFFERENT LADDER
+// RUNG. Every occupancy() read (sdf-closeup-stage.mjs) dispatches a frame and
+// reads the march target back; under load three's asynchronous render
+// submission can defer that frame past the readback, which then returns the
+// last LANDED content — at boot, an all-zero target. cov reads 0, the first
+// rung (d=1.6) wins by default, and the gate hashes a different pose. Fix, in
+// the spirit of the fields-off pin: WAIT FOR THE REAL CONDITION instead of
+// racing it. The ladder census (sdf-closeup-stage.mjs) now reads until two
+// consecutive occupancy reads agree and are live; this script additionally
+// settles the march target (hash stable across a 250 ms gap, nonZero > 0)
+// before the first capture and, requiring the hash to DIFFER from room1,
+// before the wounded capture, and capture() retries an all-zero readback
+// (2 internal steps per attempt, so the read-parity contract below is
+// preserved). This is the regime the march work is consumed in: a gate must
+// hash the frame it actually staged, never whichever frame happened to land
+// first. No pin was moved and no comparison loosened — the canonical below is
+// the same value the idle machine always produced.
 import { createHash } from 'node:crypto';
-import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from './lib/sdf-closeup-stage.mjs';
+import { writeFileSync } from 'node:fs';
+import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp, sleep } from './lib/sdf-closeup-stage.mjs';
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
@@ -175,6 +198,27 @@ await stageCloseUp(evaluate, { room: ROOM }, fail);
 await evaluate('(() => { __sdfGame.setSdfScale(0.5); __sdfGame.step(6); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');
 
+// SETTLE before the first capture (see header): the hash must be live
+// (nonZero > 0) and STABLE across a 250 ms gap — a deferred render landing
+// between the two reads breaks stability, so agreement means the backlog has
+// drained and the target holds the staged frame. hashMarchTarget() consumes
+// no frames, so this cannot disturb the read-parity contract below.
+const settleMarchTarget = async (opts = {}) => {
+  const { distinctFrom = null, tries = 40 } = opts;
+  let prev = null;
+  for (let i = 0; i < tries; i++) {
+    const cur = await evaluate('__sdfGameDebug.hashMarchTarget()');
+    const live = cur.nonZero > 0;
+    const stable = prev !== null && prev.hash === cur.hash;
+    const distinct = distinctFrom === null || cur.hash !== distinctFrom;
+    if (live && stable && distinct) return cur;
+    prev = cur;
+    await sleep(250);
+  }
+  return null;
+};
+if (!(await settleMarchTarget())) fail('march target never settled after staging (live + stable reads) — renderer backlog?');
+
 // readMarchTarget() (game-main.ts) calls handle.step(0) itself before
 // reading — an extra internal frame per call, on top of whatever this
 // script's own step()s already advanced. That internal step flips a
@@ -187,29 +231,75 @@ await evaluate('__sdfGame.resolveGpu()');
 // successive logical captures land on the same phase; verified stable
 // across an intervening external step(2) too.
 const capture = async (maskInfo = null) => {
-  await evaluate('__sdfGameDebug.readMarchTarget()');
-  const r = await evaluate('__sdfGameDebug.readMarchTarget()');
-  const bytes = Buffer.from(r.rgba32f, 'base64');
-  const full = createHash('sha1').update(bytes).digest('hex');
-  if (!maskInfo) return { hash: full, maskedHash: null, maskedFraction: null };
-  // Hash only the texels whose TILE is single-slot (mask 0). The mask grid is
-  // at the SDF-pass size (sdfLayer.targetSize); the readback IS that target.
-  const { tilesX, tilesY, tilePx, mask } = maskInfo;
-  const h = createHash('sha1');
-  let kept = 0, total = 0;
-  for (let y = 0; y < r.h; y++) {
-    const ty = Math.min(tilesY - 1, Math.floor(y / tilePx));
-    for (let x = 0; x < r.w; x++) {
-      total++;
-      const tx = Math.min(tilesX - 1, Math.floor(x / tilePx));
-      if (mask[ty * tilesX + tx]) continue;
-      kept++;
-      const o = (y * r.w + x) * 16;
-      h.update(bytes.subarray(o, o + 16));
+  // Each attempt consumes exactly 2 internal readMarchTarget() steps (the
+  // parity contract in the comment below); a retry re-runs the whole pair, so
+  // parity is preserved whatever the retry count. An all-zero readback is the
+  // deferred-render signature (nothing had landed yet) — wait and re-read.
+  for (let attempt = 0; ; attempt++) {
+    await evaluate('__sdfGameDebug.readMarchTarget()');
+    const r = await evaluate('__sdfGameDebug.readMarchTarget()');
+    const bytes = Buffer.from(r.rgba32f, 'base64');
+    let allZero = true;
+    for (const b of bytes) { if (b !== 0) { allZero = false; break; } }
+    if (allZero) {
+      if (attempt >= 20) fail('readMarchTarget returned an all-zero frame 20x — renderer never caught up');
+      await sleep(250);
+      continue;
     }
+    const full = createHash('sha1').update(bytes).digest('hex');
+    if (!maskInfo) return { hash: full, maskedHash: null, maskedFraction: null };
+    // Hash only the texels whose TILE is single-slot (mask 0). The mask grid is
+    // at the SDF-pass size (sdfLayer.targetSize); the readback IS that target.
+    const { tilesX, tilesY, tilePx, mask } = maskInfo;
+    const h = createHash('sha1');
+    let kept = 0, total = 0;
+    for (let y = 0; y < r.h; y++) {
+      const ty = Math.min(tilesY - 1, Math.floor(y / tilePx));
+      for (let x = 0; x < r.w; x++) {
+        total++;
+        const tx = Math.min(tilesX - 1, Math.floor(x / tilePx));
+        if (mask[ty * tilesX + tx]) continue;
+        kept++;
+        const o = (y * r.w + x) * 16;
+        h.update(bytes.subarray(o, o + 16));
+      }
+    }
+    return { hash: full, maskedHash: h.digest('hex'), maskedFraction: kept / total };
   }
-  return { hash: full, maskedHash: h.digest('hex'), maskedFraction: kept / total };
 };
+
+// MARCH_HASH_DUMP=<path> — write a JSON snapshot of the scene state at hash
+// time (march material uniforms per piece, camera/projection, staged actor
+// poses, probe-gather census, warm phase, march-target rSum) BEFORE the first
+// capture. This is the instrument that named the bistability input (task 0 of
+// the march phase-2 plan): run two boots that disagree, diff the files.
+// Big Float32Arrays (dataTexture/records/probeDyn) are folded in-page to
+// `fnv#len` strings; everything else crosses as compact numbers.
+if (process.env.MARCH_HASH_DUMP) {
+  const dump = await evaluate(`(async () => {
+    const fnv = (arr) => { const f = Float32Array.from(arr); let h = 0x811c9dc5; for (let i = 0; i < f.length; i++) h = Math.imul(h ^ (f[i] | 0), 0x01000193); return (h >>> 0).toString(16) + '#' + f.length; };
+    const r6 = (a) => Array.from(a, (v) => +Number(v).toFixed(6));
+    const st = __sdfGameDebug.normalCaptureState();
+    const dyn = Array.from(await __sdfGame.probeDynReadback());
+    return {
+      frames: __sdfGame.frames,
+      camera: r6(st.camera), projection: r6(st.projection),
+      zombies: __sdfGame.zombies().map((z) => ({ id: z.id, room: z.room, pos: r6(z.pos) })),
+      pieces: st.pieces.map((p) => ({
+        key: p.key, data: fnv(p.data), records: fnv(p.records),
+        uniforms: Object.fromEntries(Object.entries(p.uniforms).map(([k, v]) => [k, Array.isArray(v) ? r6(v) : v])),
+      })),
+      probeDynamic: __sdfGame.probeDynamic,
+      probeDynHash: fnv(dyn), probeDynNonZero: dyn.reduce((n, v) => n + (v !== 0 ? 1 : 0), 0),
+      levelProbes: __sdfGame.levelProbes,
+      sdfScale: __sdfGame.sdfScale,
+      warmDone: __sdfGame.warmDone(),
+      chunkCount: __sdfGame.chunkCount, bodiesOnScreen: __sdfGame.bodiesOnScreen,
+      marchTarget: await __sdfGameDebug.hashMarchTarget(),
+    };
+  })()`);
+  writeFileSync(process.env.MARCH_HASH_DUMP, JSON.stringify(dump, null, 1));
+}
 
 let maskInfo = null;
 if (USE_MASK) {
@@ -284,6 +374,10 @@ if (ROOM === 1) {
   const stamp = await stampWounds();
   if (!stamp.stamped) fail(`no wounds stamped: ${JSON.stringify(stamp)}`);
   await evaluate('__sdfGame.resolveGpu()');
+  // Same settle as the first capture, plus the wound must already be visible:
+  // a stale pre-wound frame would read as room1 and make the visibility check
+  // below fail spuriously, so settle on stable AND distinct-from-room1.
+  if (!(await settleMarchTarget({ distinctFrom: room1 }))) fail('march target never settled post-wound (stable + distinct from room1)');
   capW = await capture(maskInfo);
 
   if (capW.hash === room1) {
