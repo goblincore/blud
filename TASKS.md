@@ -51,9 +51,24 @@
   cut-and-paste, not agents: the members averaged 8 lines and 325/378 needed only `ctx`, so a verbatim move by
   script beats six parallel hand-copies whose failure mode (an altered literal that still type-checks) the pixel
   gate cannot localise. **game-main.ts 12,569 → 11,170.**
-- [ ] **`scripts/march-hash.mjs` is BISTABLE across boots (2026-09-20)** — `e3077f7c` gives the canonical
-  line one day and `ce7045ac…` the next, alone. It is a liveness check, not a regression gate, until fixed;
-  it is Task 0 of march phase 2. [Evidence](docs/dev-notes/2026-09-20-march-hash-flakiness/NOTES.md)
+- [x] **march phase 2 Task 0 DONE (2026-09-20): the pixel gate was racing the renderer.** `occupancy()`
+  dispatches a frame and reads it straight back; under load three defers the frame, the read returns the
+  last-landed (at boot, all-zero) target, coverage reads 0 and the ladder search staged a DIFFERENT camera
+  rung — so the gate hashed a different pose. Fixed in the staging (settled census + settled/live target
+  before each capture, loud failure if it never settles); no pin moved. Verified here 3/3 canonical at
+  loadavg 8.5–19.2, plus the agent's 10/10 and 5/5.
+  [Evidence](docs/dev-notes/2026-09-20-march-hash-flakiness/NOTES.md) · `MARCH_HASH_DUMP=<path>` dumps
+  state at hash time.
+- [ ] **Sweep the same race across the other capture scripts** — the dispatch-then-read-back pattern is at
+  **18 call sites** in ~12 scripts (`march-parity`, `refine-smoke`, `sdf-depth-prepass-census`,
+  `sdf-chunk-bake-gate`, the normal-gradient checks…). Any of them can read a stale or zero frame under
+  load and report a wrong number as a result. Wants the settled-read helper from `sdf-closeup-stage.mjs`
+  applied across them.
+- [x] **`game-seams-leftover.ts` is gone (2026-09-20):** its 96 members moved verbatim into the modules that
+  already own their concern (`world` +15, `render` +12, `fx` +10, `render-diag` +6, `gibs-bake` +5, `boot` +3,
+  `render-quality` +4, `weapon-aim` +2, `debug-probe`/`demo-step`/`lighting-probes` +1 each). Verified by
+  booting both trees and diffing `Object.keys(__sdfGame).sort()`: **422 members, identical**.
+  [Notes](docs/dev-notes/2026-09-20-seams-leftover-split/NOTES.md)
 - [x] **Leaves wave 2 + tool rebuild (2026-09-20):** `extract-leaf` now inserts ctx at AST positions (generics),
   wraps value refs in `withCtx`, refuses non-leaves by name, rewrites co-moved calls, respects shadowing,
   carries main()-scope types transitively, moves const arrows, handles multi-declarator consts, appends to one
