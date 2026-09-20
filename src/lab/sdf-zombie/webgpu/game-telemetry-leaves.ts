@@ -5,10 +5,11 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import type { GameContext } from './game-context';
+
+import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { describeRecordedWound } from './game-demo-leaves';
-
+import { bodiesOnScreen } from './game-world-leaves';
 
 export function captureTelemetryScene(ctx: GameContext, name: string) {
   if (!ctx.telemetry.telemetry.active) return;
@@ -37,4 +38,17 @@ export function captureTelemetryScene(ctx: GameContext, name: string) {
     purpose: 'Frozen actor geometry for diagnosis; not deterministic whole-game replay. No pixel/ray eligibility counters.',
   });
   ctx.telemetry.telemetry.event('snapshot-cost', { name, cpuMs: performance.now() - started });
+}
+
+/** The bench census, as one function so the replay driver and the bench
+ *  script cannot disagree about what a census IS. */
+export function sceneCensus(ctx: GameContext): { bodies: number; wounds: number; chunks: number; droplets: number; splats: number; gooQuads: number } {
+  return {
+    bodies: bodiesOnScreen(ctx),
+    wounds: ctx.world.actors.reduce((n, a) => n + a.wounds().length, 0),
+    chunks: ctx.bake.liveChunks.length,
+    droplets: ctx.vfx.bloodSim.droplets.length,
+    splats: ctx.vfx.bloodSim.splats.length,
+    gooQuads: ctx.goo.layer?.liveCount ?? 0,
+  };
 }

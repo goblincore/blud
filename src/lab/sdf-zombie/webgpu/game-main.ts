@@ -287,6 +287,14 @@ import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bund
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-leaves';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-vfx-leaves';
 import { CULL_DWELL_MS, updateVisibleActors } from './game-render-leaves';
+import { chunkCollidersAt } from './game-world-leaves';
+import { applySdfScale } from './game-render-leaves';
+import { aimDir } from './game-weapon-leaves';
+import { finishChunkBake, spawnGoreShowcase } from './game-bake-leaves';
+import { ensureCarvedLibrary } from './game-gibs-leaves';
+import { updateHud } from './game-panels-leaves';
+import { sceneCensus } from './game-telemetry-leaves';
+import { demoRecordStart } from './game-demo-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -472,27 +480,6 @@ async function main() {
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
   ctx.world.colliders = levelColliders();
-
-  /**
-   * WHAT A DETACHED PIECE COLLIDES WITH. The owner, playing: *"it seems the gibs
-   * dont bounce off the walls/have collission"* — correct, and the reason was
-   * that `stepChunk` only ever knew about a floor plane at y = radius, so a
-   * piece thrown at a wall flew straight through it and out of the level.
-   *
-   * The boxes are `levelColliders()` — the SAME walls the player and the wander
-   * clamp collide with, and they are split around every doorway and tunnel
-   * mouth, so a gib sails out of an open door and bounces off the wall beside
-   * it. That is why this is the level's collider list and not a box drawn around
-   * each room: a room box would have sealed the doors.
-   *
-   * The ceiling is NOT one of those boxes (they end at WALL_H), so it comes in
-   * separately through the page's existing per-enclosure `ceilingAt` — the same
-   * lookup the bundle's flight already uses, which is why a piece cannot sail
-   * out through the arena's 6 m roof while the 3 m rooms keep theirs.
-   */
-  function chunkCollidersAt(pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
-    return { boxes: ctx.world.colliders, ceilingY: ceilingAt(ctx, pos[0], pos[2]) };
-  }
   // ---- ACTOR VISIBILITY CULL STATE ---------------------------------------
   //
   // EVERY binding updateVisibleActors closes over lives here, above the draw
@@ -1258,18 +1245,6 @@ async function main() {
   ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
   sizeSdfLayer(ctx);
   window.addEventListener('resize', withCtx(ctx, sizeSdfLayer));
-  function applySdfScale(v: number) {
-    ctx.render.sdfScale = Math.min(1, Math.max(0.2, v));
-    ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
-    ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
-    sizeSdfLayer(ctx);
-    // The AA footprint (aaCfg.x) is ONE PIXEL at the current SDF pass height;
-    // a rung change moved that height, so refresh every live view (perf round
-    // 2 task 6). Only called post-boot (tickAdaptive / the setSdfScale seam),
-    // so `actors` below is always initialised here.
-    const k = ctx.render.sdfLayer.pixelConeK;
-    for (const a of ctx.world.actors) a.view.uniforms.aaCfg.value.x = k;
-  }
 
   // -----------------------------------------------------------------------
   mark('adaptive-start');
@@ -1316,7 +1291,7 @@ async function main() {
       budgetMs: ctx.render.adaptiveBudgetMs,
     });
     if (next.rung !== ctx.render.adaptiveState.rung) {
-      applySdfScale(scaleForRung(next.rung));
+      applySdfScale(ctx, scaleForRung(next.rung));
       // Frames rendered at the OLD scale must not feed the next decision.
       ctx.render.adaptiveFrames.length = 0;
     }
@@ -2547,7 +2522,7 @@ async function main() {
     const c = ctx.render.upscaleAb.config;
     if (!c) throw new Error('upscale A/B: no upscale config is active');
     const scaleTo = (v: number) => {
-      if (booted) { applySdfScale(v); return; }
+      if (booted) { applySdfScale(ctx, v); return; }
       ctx.render.sdfScale = v;
       ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
       ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
@@ -3560,7 +3535,7 @@ async function main() {
         ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, wantSlot);
         if (ctx.weapon.slotState !== before) ctx.telemetry.telemetry.event('weapon-switch', { to: wantSlot });
       }
-      updateHud();
+      updateHud(ctx);
     }
     if (pressed('BracketLeft')) pushProbeWeight(ctx, ctx.probes.weight - 0.05);
     if (pressed('BracketRight')) pushProbeWeight(ctx, ctx.probes.weight + 0.05);
@@ -3568,7 +3543,7 @@ async function main() {
       if (ctx.probes.weight > 0) { ctx.player.parked = ctx.probes.weight; pushProbeWeight(ctx, 0); }
       else pushProbeWeight(ctx, ctx.player.parked);
     }
-    if (pressed('KeyE')) { ctx.weapon.slugMode = !ctx.weapon.slugMode; updateHud(); }
+    if (pressed('KeyE')) { ctx.weapon.slugMode = !ctx.weapon.slugMode; updateHud(ctx); }
     // Neural upscale A/B (dev-only, P3): native -> nearest -> model while an
     // upscale config is active. One toggle per rising edge, as before
     // (the old handler's `!e.repeat` guard is the same thing here).
@@ -3582,7 +3557,7 @@ async function main() {
     if (pressed('KeyG')) {
       ctx.player.freeAimOn = !ctx.player.freeAimOn;
       ctx.weapon.aim = { x: 0, y: 0 };
-      updateHud();
+      updateHud(ctx);
     }
     if (pressed('KeyH')) {
       ctx.panels.hidden = !ctx.panels.hidden;
@@ -3599,7 +3574,7 @@ async function main() {
     }
     if (pressed('KeyT')) {
       ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
-      updateHud();
+      updateHud(ctx);
     }
   }
 
@@ -3679,7 +3654,7 @@ async function main() {
   ctx.weapon.viewModelAnchor.add(ctx.weapon.aimRig);
   // WEAPON SLOT 3 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
-    burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir,
+    burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
   });
   // WEAPON SLOT 1's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
@@ -4498,34 +4473,6 @@ async function main() {
     // still-safe state: the shared background times live on __warmDone.phases.
     if (gate.phase === 'ready') startBackgroundCompiles();
   });
-  function aimDir(): Vec3 {
-    const cp = Math.cos(ctx.player.player.pitch);
-    const fwd: Vec3 = [
-      Math.sin(ctx.player.player.yaw) * cp, Math.sin(ctx.player.player.pitch), -Math.cos(ctx.player.player.yaw) * cp,
-    ];
-    if (!ctx.player.freeAimOn) return fwd;
-    // FIRE THROUGH THE RETICLE. With free aim the reticle is the aim point, so
-    // a shot down the camera's forward axis would land wherever the player
-    // happens to be FACING rather than where they are AIMING -- the one thing
-    // this scheme exists to separate. Offset the ray by the reticle's angular
-    // position inside the frustum.
-    const { tanV, tanH } = aimFrustum(ctx);
-    const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
-    // up = right x fwd, for a right-handed basis
-    const up: Vec3 = [
-      right[1] * fwd[2] - right[2] * fwd[1],
-      right[2] * fwd[0] - right[0] * fwd[2],
-      right[0] * fwd[1] - right[1] * fwd[0],
-    ];
-    const cx = ctx.weapon.aim.x * tanH, cy = ctx.weapon.aim.y * tanV;
-    const d: Vec3 = [
-      fwd[0] + right[0] * cx + up[0] * cy,
-      fwd[1] + right[1] * cx + up[1] * cy,
-      fwd[2] + right[2] * cx + up[2] * cy,
-    ];
-    const l = Math.hypot(d[0], d[1], d[2]) || 1;
-    return [d[0] / l, d[1] / l, d[2] / l];
-  }
   /** AIM CONVERGENCE (2026-08-26 defect-2 fix candidate): the muzzle sits
    *  ~20 cm right and ~12 cm low of the EYE, and pellets used to fly PARALLEL
    *  to the camera ray — so at ANY range impacts landed that whole offset off
@@ -4535,7 +4482,7 @@ async function main() {
   const AIM_CONVERGE_M = 8;
   function convergedDir(origin: Vec3): Vec3 {
     const eye = eyeOf(ctx.player.player);
-    const a = aimDir();
+    const a = aimDir(ctx);
     const target: Vec3 = [
       eye[0] + a[0] * AIM_CONVERGE_M,
       eye[1] + a[1] * AIM_CONVERGE_M,
@@ -4707,7 +4654,7 @@ async function main() {
       ctx.weapon.shells = magazineAfterFire(ctx.weapon.shells, barrels);
       if (ctx.weapon.shells <= 0) startReload(ctx);
     }
-    updateHud();
+    updateHud(ctx);
     ctx.weapon.flashAge = 0;
     ctx.weapon.fireAge = 0;
     ctx.weapon.fireBarrels = barrels;
@@ -5165,87 +5112,6 @@ async function main() {
    *  broader DOMAIN than the bump (stainScale 2.5) so they read as patches rather
    *  than speckle. */
   ctx.vfx.gorePartStain = new THREE.Vector4(1, 1, 0.85, 2.5);
-  function spawnGoreShowcase(): number {
-    const look = ((): ChunkLook | null => {
-      // The palette comes from a live actor's own view uniforms, so the parts
-      // are painted with the same flesh the bodies in this level use.
-      const a = ctx.world.actors[0];
-      if (!a) return null;
-      const u = a.view.uniforms;
-      const col = (v: { r: number; g: number; b: number }): Vec3 => [v.r, v.g, v.b];
-      return {
-        baseColor: col(u.baseColor.value), deepColor: col(u.deepColor.value),
-        fatColor: col(u.fatColor.value), mottleColor: col(u.mottleColor.value),
-        organColor: col(u.organColor.value), visceraColor: col(u.visceraColor.value),
-        woundDepthAmp: u.surfCfg3.value.x, fatDepth: u.surfCfg3.value.y,
-        muscleDepth: u.surfCfg3.value.z, visceraAmp: u.surfCfg3.value.w,
-        visceraDepth: u.visceraDepth.value, mottleAmp: u.surfCfg2.value.z,
-        mottleScale: u.surfCfg2.value.w, organAmp: u.organAmp.value, goreStrength: 1,
-      };
-    })();
-    if (!look) return 0;
-    if (!ctx.vfx.goreShowcase) {
-      ctx.vfx.goreShowcase = new THREE.Group();
-      ctx.vfx.goreShowcase.name = 'gore-showcase';
-      scene.add(ctx.vfx.goreShowcase);
-      ctx.boot.deferredApi?.router.register(ctx.vfx.goreShowcase, 'mesh', 'level-only');
-    }
-    for (const child of [...ctx.vfx.goreShowcase.children]) {
-      ctx.vfx.goreShowcase.remove(child);
-      const m = child as THREE.Mesh;
-      m.geometry?.dispose();
-    }
-    // ITS OWN material instance WITH the procedural detail layer on: bump, blood
-    // decals and organ gloss are opt-in per instance (`goreCfg.x`), so the baked
-    // chunks keep exactly the shading they had while the parts get the per-pixel
-    // detail the owner asked for ("no bumps or normal maps no stains no blood
-    // decals"). Assigning it to `bakedChunkMat` instead would silently restyle
-    // every settled piece at the same time, which is a decision to take on its
-    // own evidence.
-    if (!ctx.vfx.gorePartMat) {
-      ctx.vfx.gorePartMat = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true }));
-      ctx.vfx.gorePartMat.uniforms.goreCfg.value.set(
-        ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
-      );
-      ctx.vfx.gorePartMat.uniforms.goreCfg2.value.set(
-        ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
-      );
-    }
-    const mat = ctx.vfx.gorePartMat;
-    // A grid 2.4 m ahead, 0.42 m apart, at chest height, so a full set fills the
-    // view without needing to walk around it.
-    const fwd: Vec3 = [Math.sin(ctx.player.player.yaw), 0, -Math.cos(ctx.player.player.yaw)];
-    const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
-    const rows: { geo: ReturnType<typeof meatPartGeometry>; bone: boolean }[] = [];
-    let seed = 1;
-    for (const v of MEAT_VARIANTS) {
-      for (const size of [0.075, 0.115]) {
-        rows.push({ geo: meatPartGeometry(v, size, seed++, look), bone: false });
-      }
-    }
-    for (const v of BONE_VARIANTS) {
-      rows.push({ geo: bonePartGeometry(v, 0.075, seed++, look), bone: true });
-      rows.push({ geo: bonePartGeometry(v, 0.115, seed++, look), bone: true });
-    }
-    const perRow = 6;
-    rows.forEach((row, i) => {
-      const col = i % perRow, line = Math.floor(i / perRow);
-      const along = 1.6 + line * 0.55;
-      const across = (col - (perRow - 1) / 2) * 0.34;
-      const mesh = new THREE.Mesh(row.geo.geometry, mat.material);
-      mesh.position.set(
-        ctx.player.player.pos[0] + fwd[0] * along + right[0] * across,
-        0.42 + (row.bone ? 0.05 : 0),
-        ctx.player.player.pos[2] + fwd[2] * along + right[2] * across,
-      );
-      // A deterministic tumble per slot, so every face of every part is visible
-      // from one spot instead of all of them axis-aligned.
-      mesh.rotation.set((i * 0.7) % Math.PI, (i * 1.31) % (Math.PI * 2), (i * 0.43) % Math.PI);
-      mesh.frustumCulled = true;
-      ctx.vfx.goreShowcase!.add(mesh);
-    });
-    return rows.length;
-  }
   ctx.vfx.goreShowcaseOn = ctx.boot.search.get('goreparts') === '1';
 
   // ——— THE SPRITE BENCH ————————————————————————————————————————————————
@@ -5301,56 +5167,6 @@ async function main() {
   ctx.bake.carvedBuildMs = 0;
   ctx.bake.carvedWarned = false;
 
-  function ensureCarvedLibrary(): boolean {
-    if (ctx.bake.carvedLibrary && ctx.bake.carvedMaterial) return true;
-    if (ctx.bake.carvedLibrary) return true;
-    const a = ctx.world.actors[0];
-    if (!a) return false;
-    try {
-      const look: ChunkLook = (() => {
-        const u = a.view.uniforms;
-        const col = (v: { r: number; g: number; b: number }): Vec3 => [v.r, v.g, v.b];
-        return {
-          baseColor: col(u.baseColor.value), deepColor: col(u.deepColor.value),
-          fatColor: col(u.fatColor.value), mottleColor: col(u.mottleColor.value),
-          organColor: col(u.organColor.value), visceraColor: col(u.visceraColor.value),
-          woundDepthAmp: u.surfCfg3.value.x, fatDepth: u.surfCfg3.value.y,
-          muscleDepth: u.surfCfg3.value.z, visceraAmp: u.surfCfg3.value.w,
-          visceraDepth: u.visceraDepth.value, mottleAmp: u.surfCfg2.value.z,
-          mottleScale: u.surfCfg2.value.w, organAmp: u.organAmp.value, goreStrength: 1,
-        };
-      })();
-      const t0 = performance.now();
-      const body = buildBody(compileBlob(parseBlob(zombieBlobSrc)), DEFAULT_BUILD_OPTS, {});
-      ctx.bake.carvedLibrary = carveBodyIntoPieces({
-        archetype: 'zombie', body, look,
-        cells: ctx.gibs.carveCells, cellSize: ctx.gibs.carveCellSize,
-      });
-      ctx.bake.carvedBuildMs = performance.now() - t0;
-      if (!ctx.bake.carvedMaterial) {
-        ctx.bake.carvedMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
-        ctx.bake.carvedMaterial.uniforms.goreCfg.value.set(
-          ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
-        );
-        ctx.bake.carvedMaterial.uniforms.goreCfg2.value.set(
-          ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
-        );
-      }
-      console.log(`[gib-carve] zombie library: ${ctx.bake.carvedLibrary.pieces.length} pieces, `
-        + `${ctx.bake.carvedLibrary.totalVerts} verts, ${ctx.bake.carvedLibrary.bonePrims} bone prims in the field, `
-        + `${ctx.bake.carvedBuildMs.toFixed(0)} ms (cells ${ctx.gibs.carveCells})`);
-      return true;
-    } catch (err) {
-      ctx.bake.carvedLibrary = null;
-      if (!ctx.bake.carvedWarned) {
-        ctx.bake.carvedWarned = true;
-        console.warn(`[gib-carve] library build failed: ${String(err)} — `
-          + 'falling back to marched pieces for this session');
-      }
-      return false;
-    }
-  }
-
   /**
    * Spawn one carved mesh piece. The geometry is SHARED from the library and the
    * material is the library's own instance, so a spawn allocates nothing but the
@@ -5361,7 +5177,7 @@ async function main() {
     piece: CarvedPiece, origin: Vec3, kind: 'limb' | 'gob' | 'bone',
     impulseVel: Vec3 | null, impulseDelay: number,
   ): boolean {
-    if (!ensureCarvedLibrary() || !ctx.bake.carvedMaterial) return false;
+    if (!ensureCarvedLibrary(ctx) || !ctx.bake.carvedMaterial) return false;
     const rng = rngStreams.misc;
     const state = makeChunk(
       piece.limb as never, origin, [0, 0, 0], piece.radius,
@@ -5493,107 +5309,6 @@ async function main() {
     cancelChunkBake();
     window.removeEventListener('pagehide', cancelChunkBake);
   });
-
-  /** Consume at most one completed mesh in a frame. All extraction, welding,
-   * colour and normal work ran in the worker; only wrap buffers and swap here.
-   * Recycled IDs are never reused, so an old reply cannot hide a new piece. */
-  function finishChunkBake(): void {
-    // FRAME PIN (determinism stage 1, 2026-09-14). The worker reply used to be
-    // applied on whichever frame it happened to arrive, so a fast worker swapped
-    // on the submit frame and a slow one a frame or two later — the swap is a
-    // sim-state change (`liveChunks` -> `bakedChunks`) and the census and any
-    // downstream pellet-vs-chunk interaction read it. Hold the result until the
-    // first frame AFTER the one the job was submitted on, so a replay swaps at
-    // the same frame regardless of worker speed. Do NOT call takeCompleted()
-    // before this check: consuming here would drop the result and the piece
-    // would never bake.
-    if (ctx.bake.jobs.pendingId !== null && ctx.demo.simFrame < ctx.bake.submitFrame + 1) return;
-    const done = ctx.bake.jobs.takeCompleted();
-    if (!done) return;
-    ctx.telemetry.telemetry.event('chunk-bake-complete', { chunk: done.id });
-    const data = ctx.bake.input;
-    ctx.bake.input = null;
-    const index = ctx.bake.liveChunks.findIndex(c => c.id === done.id);
-    if (!ctx.bake.enabled || index < 0 || !data) return;
-    const entry = ctx.bake.liveChunks[index]!;
-    if (!chunkSettled(entry.state)) return;
-    const t0 = performance.now();
-    const swapTiming = ctx.telemetry.telemetry.begin();
-    const baked = unpackChunkBake(done.result);
-    if (!ctx.bake.mat) {
-      // REGISTERED, like the corpse path's identical construction a few thousand
-      // lines up. It was not, and this is the site that WINS in normal play: the
-      // corpse bake only runs if a soldier corpse settles first, so in a plain
-      // dynamite gib THIS line created the shared baked-chunk material and left
-      // it out of `litChunkMaterials`.
-      //
-      // The registry is not cosmetic. Everything the per-frame block pushes went
-      // past this material: the FLASHLIGHT (so a settled piece kept the static
-      // defaults — `spotCfg.x = 0`, beam OFF, against a fixed 2.4 directional
-      // key, i.e. lit by a lamp that is not there at ~2.5x, which is what blows
-      // flesh albedo pale) and, since this session, `fleshDetail`. The registry
-      // exists BECAUSE of exactly this class of miss — its own docstring says
-      // "the per-frame beam update touched ONLY bakedChunkMat" — and then the
-      // settled-chunk path was left out of the fix.
-      //
-      // Caught by `__sdfGame.chunkDetailApplied()` reading `[]` while the census
-      // reported 12 baked pieces on screen.
-      ctx.bake.mat = registerLitChunkMaterial(ctx, createBakedChunkMaterial(
-        // DEFERRED MODE: baked chunks are static flesh — level-only receivers
-        // with a surface G-buffer producer material.
-        // `bakedAo`: the settled bake writes a `bakeAo` attribute now, and
-        // without reading it every piece shades at ao = 1.0 and can never be in
-        // shadow — half of "way too light and dont follow the lighting".
-        ctx.boot.deferredMode
-          ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
-          : { bakedAo: true, fleshResponse: true },
-      ));
-      ctx.bake.seed?.(ctx.bake.mat);
-    }
-    ctx.bake.liveChunks.splice(index, 1);
-    // Face detail stays per-fragment at the source atlas resolution. A head
-    // owns its projection snapshot/material; other chunks share the plain one.
-    const faceMaterial = entry.view.uniforms.faceCfg.value.x > 0.5
-      ? registerLitChunkMaterial(ctx, createBakedChunkMaterial({
-        bakedAo: true, fleshResponse: true, face: entry.view.uniforms,
-        ...(ctx.boot.deferredMode ? { output: 'surface' as const, shadowReceiver: 'level-only' as const } : {}),
-      })) : undefined;
-    if (faceMaterial) ctx.bake.seed?.(faceMaterial);
-    const mesh = new THREE.Mesh(baked.geometry, (faceMaterial ?? ctx.bake.mat).material);
-    mesh.frustumCulled = true; // it is a static bounded mesh — let three cull it
-    scene.add(mesh);
-    // DEFERRED MODE: the bake swaps the piece between producer routes —
-    // marched proxy (SDF producer) -> static mesh (level-only G-buffer
-    // producer). The proxy is only HIDDEN (its registration stays valid for
-    // the recycle ring).
-    ctx.boot.deferredApi?.router.register(mesh, 'mesh', 'level-only');
-    entry.view.object.visible = ctx.bake.reference;
-    mesh.visible = !ctx.bake.reference; // normally the proxy leaves the SDF passes
-    ctx.bake.chunks.push({
-      id: entry.id, mesh, view: entry.view, state: entry.state, faceMaterial,
-      centre: baked.centre, radius: baked.radius, bakeMs: baked.bakeMs,
-      template: entry.template,
-    });
-    ctx.bake.totalBakes++;
-    ctx.bake.lastBakeMs = baked.bakeMs;
-    ctx.bake.lastBakeInfo = {
-      id: entry.id, verts: baked.verts, tris: baked.tris,
-      bakeMs: baked.bakeMs, overflow: baked.overflow ? 1 : 0,
-      droppedQuads: baked.droppedQuads,
-      extent: data.extent, flesh: data.flesh.length, bones: data.bones.length,
-      torn: data.torn.length, gore: data.gore,
-      radius: baked.radius,
-    };
-    ctx.bake.lastSwapMs = performance.now() - t0;
-    // The frame this swap landed on — a recorded number, so a replay can assert
-    // the same landing frame (chunkStats().bakeSwapFrame).
-    ctx.bake.lastSwapFrame = ctx.demo.simFrame;
-    ctx.telemetry.telemetry.end('chunk-bake-swap', swapTiming);
-    ctx.telemetry.telemetry.event('chunk-bake-swap', { chunk: entry.id, workerMs: baked.bakeMs, swapCpuMs: ctx.bake.lastSwapMs, vertices: baked.verts, triangles: baked.tris });
-    if (baked.overflow || baked.droppedQuads > 0) {
-      console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
-    }
-  }
   /** A slug/pellet INTO a baked piece: the piece GIBS. Fresh small chunks
    *  spawn at the impact (its own origin body's template, so the meat
    *  matches), a blood gout sprays, and the mesh is deleted. No reverse
@@ -5896,7 +5611,7 @@ async function main() {
     // two rules the lab's throw uses, so a bundle thrown here lands where the
     // lab's does. Deriving yaw/pitch from the aim vector keeps the lob maths
     // in that one function instead of a second copy here.
-    const d = aimDir();
+    const d = aimDir(ctx);
     const yaw = Math.atan2(d[0], -d[2]);
     const pitch = Math.asin(Math.max(-1, Math.min(1, d[1])));
     const dir = throwDirection(yaw, pitch);
@@ -6231,7 +5946,7 @@ async function main() {
     // CARVE IS THE THIRD RENDERER: real meshes from the archetype library. It
     // resolves ONCE per body (mode on AND a library that built), so a body can
     // never take the carve budget while spawning something else.
-    const carveMode = ctx.gibs.renderMode === 'carve' && ensureCarvedLibrary() && ctx.bake.carvedLibrary !== null;
+    const carveMode = ctx.gibs.renderMode === 'carve' && ensureCarvedLibrary(ctx) && ctx.bake.carvedLibrary !== null;
     // ASSETS ARE THE FOURTH RENDERER (task 2): real reusable meshes loaded from
     // the committed offline sets. Resolved ONCE per body, like carve, so the
     // budget/tier decision and the spawn loop agree. Until the archetype's load
@@ -6966,7 +6681,7 @@ async function main() {
   // rather than at the top of boot, and it is idempotent: the seam re-lays it
   // wherever the player is standing.
   if (ctx.vfx.goreShowcaseOn) {
-    const n = spawnGoreShowcase();
+    const n = spawnGoreShowcase(ctx);
     console.log(`[gore-parts] showcase: ${n} parts in front of the spawn`);
   }
   // `?gibparts=sprite` (or `?gibsprites=1`) lays the SPRITE bench instead — the
@@ -6991,7 +6706,7 @@ async function main() {
     // ?gibrender=) this branch does not run: measured 2026-09-16, the default
     // mode is 'march' and the historical carve build cost is NOT boot cost.
     mark('carve-boot-scheduled');
-    setTimeout(() => { mark('carve-build-start'); ensureCarvedLibrary(); mark('carve-build-end'); }, 0);
+    setTimeout(() => { mark('carve-build-start'); ensureCarvedLibrary(ctx); mark('carve-build-end'); }, 0);
   }
   if (ctx.gibs.renderMode === 'sprite') {
     void ensureGibAtlas('sheet').then((n) => {
@@ -7148,41 +6863,6 @@ async function main() {
   ctx.boot.frameEma = 0;
   mark('boot-time');
   ctx.boot.time = performance.now();
-
-  function updateHud() {
-    if (!ctx.boot.hudEl) return;
-    const where = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
-    const slot = ctx.weapon.slotState.phase !== 'up'
-      ? `switching ${ctx.weapon.slotState.target}`
-      : ctx.weapon.slotState.live === 'dynamite'
-        ? `2 DYNAMITE ${ctx.vfx.cook.phase === 'cooking'
-          ? `${(ctx.dynamite.charge * 100).toFixed(0)}% LIT`
-          : `${ctx.bake.liveBundles.length} out`}`
-        : ctx.weapon.slotState.live === 'flare'
-          ? '3 FLARE'
-          : '1 GRAPESHOT';
-    ctx.boot.hudEl.textContent =
-      `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen(ctx)}/${ctx.world.actors.length}` +
-      ` · ${where} · probe ${ctx.probes.weight.toFixed(2)}` +
-      ` · [${slot}]` +
-      (ctx.vfx.burning.registry.size > 0 ? ` · burning ${ctx.vfx.burning.activeCount()}` : '') +
-      (ctx.weapon.slotState.live === 'shotgun'
-        ? ctx.weapon.infiniteAmmo ? ' · shells ∞' : ` · shells ${ctx.weapon.shells}/${MAGAZINE_CAPACITY}`
-        : '') +
-      (ctx.weapon.slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
-      (ctx.render.sdfLayer.halfRate
-        ? ` · HALF30 ${ctx.render.sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
-        : '') +
-      (ctx.player.freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
-      // The wound-zone step multiplier, so a setWoundStep() flip is visible
-      // (owner: "hard to tell"). 0 = the shipped constant.
-      ` · wstep ${(() => { const z = ctx.world.actors[0]?.view.uniforms.perfCfg.value.z ?? 0; return z > 0 ? z.toFixed(2) : `${WOUND_STEP_MUL} (ship)`; })()}` +
-      (ctx.render.adaptiveEnabled ? ` · ADAPTIVE r${ctx.render.adaptiveState.rung}` : '') +
-      (ctx.render.sdfLayer.temporalStart.on ? ' · TSTART' : '') +
-      (ctx.weapon.reloadSpeed !== 1 ? ` · RELOAD x${ctx.weapon.reloadSpeed} (T)` : '') +
-      (ctx.boot.hud.lockHint ? ' · click to lock' : '') +
-      (ctx.demo.wanderFrozen ? ' · FROZEN' : '');
-  }
 
   // -----------------------------------------------------------------------
   mark('frameloop-start');
@@ -7767,7 +7447,7 @@ async function main() {
         if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(FORE_HAND_REST); aimArms(); }
         for (const m of ctx.weapon.ejectedShells) m.visible = false;
         for (const m of ctx.weapon.loadShells) m.visible = false;
-        updateHud();
+        updateHud(ctx);
       }
     }
     {
@@ -7977,7 +7657,7 @@ async function main() {
       // that goes this frame integrates at its launch velocity for the whole
       // frame rather than a frame late.
       stepPendingGibImpulses(ctx);
-      finishChunkBake();
+      finishChunkBake(ctx);
       for (let ci = ctx.bake.liveChunks.length - 1; ci >= 0; ci--) {
         const c = ctx.bake.liveChunks[ci]!;
         // Keep the exact settled snapshot visible while its worker runs.
@@ -7986,7 +7666,7 @@ async function main() {
           c.view.update(c.state); // repair view resets (e.g. bone-mode changes) without moving the snapshot
           continue;
         }
-        c.state = stepChunk(c.state, cdt, chunkCollidersAt(c.state.pos));
+        c.state = stepChunk(c.state, cdt, chunkCollidersAt(ctx, c.state.pos));
         c.view.update(c.state);
         if (ctx.bake.enabled && ctx.bake.jobs.pendingId === null && !ctx.bake.jobs.error && chunkSettled(c.state)) {
           const t0 = performance.now();
@@ -8010,7 +7690,7 @@ async function main() {
         stepSpritePieces(ctx.vfx.spritePieces, {
           dt: cdt,
           cameraQuat: camera.quaternion,
-          collidersAt: chunkCollidersAt,
+          collidersAt: withCtx(ctx, chunkCollidersAt),
           liveCap: ctx.gibs.spriteLiveCap,
           restCap: ctx.gibs.spriteRestCap,
         });
@@ -8154,9 +7834,9 @@ async function main() {
       }
     }
     tick(Math.min(dt, 1 / 20));
-    if (ctx.demo.frameCount++ % 10 === 0) updateHud();
+    if (ctx.demo.frameCount++ % 10 === 0) updateHud(ctx);
   });
-  updateHud();
+  updateHud(ctx);
 
   // -----------------------------------------------------------------------
   mark('api-start');
@@ -8438,26 +8118,6 @@ function performBenchAction(a: BenchAction): void {
 
   // -------------------------------------------------------------------------
   mark('demo-start');
-  // DEMO RECORDER / PLAYER (deterministic demo recordings stage 3, 2026-09-14).
-  //
-  // The recording is an INPUT log: one DemoFrame per fixed-step tick. Live play
-  // builds each frame from the listeners (`readInputFrame`) and feeds it through
-  // `applyInputFrame`; a replay builds it from the file and feeds the SAME
-  // function. The recorder sits at that seam, so what it captures is exactly
-  // what the sim consumed — not a re-read that could see a later event.
-  // -------------------------------------------------------------------------
-  /** The bench census, as one function so the replay driver and the bench
-   *  script cannot disagree about what a census IS. */
-  function sceneCensus(): { bodies: number; wounds: number; chunks: number; droplets: number; splats: number; gooQuads: number } {
-    return {
-      bodies: bodiesOnScreen(ctx),
-      wounds: ctx.world.actors.reduce((n, a) => n + a.wounds().length, 0),
-      chunks: ctx.bake.liveChunks.length,
-      droplets: ctx.vfx.bloodSim.droplets.length,
-      splats: ctx.vfx.bloodSim.splats.length,
-      gooQuads: ctx.goo.layer?.liveCount ?? 0,
-    };
-  }
 
   /** Apply the DEMO-BOOT flags a replay cares about — the ones that change the
    *  SCENE, not the dev levers the caller pins. Only crowd and sdf scale today;
@@ -8471,36 +8131,12 @@ function performBenchAction(a: BenchAction): void {
     }
     if (q.has('scale')) {
       const v = Number(q.get('scale'));
-      if (Number.isFinite(v) && v > 0) applySdfScale(v);
+      if (Number.isFinite(v) && v > 0) applySdfScale(ctx, v);
     }
   }
 
   /** The F7 HUD line, created lazily and parked above the telemetry controls. */
   ctx.demo.hudEl = null;
-
-  /** F7 / `__sdfGame.demoRecord('start')`. The header is snapshotted at START,
-   *  not stop: the seed and query must be the ones the run BEGAN under, or a
-   *  replay boots into a different world than the recording captured. */
-  function demoRecordStart(): boolean {
-    if (ctx.demo.recorder) return false;
-    ctx.demo.replayActive = false;
-    ctx.demo.recorder = createDemoRecorder({
-      seed: ctx.demo.seed,
-      query: location.search.replace(/^\?/, ''),
-      room: playerRoomId(ctx),
-      dt: 1 / 60,
-      meta: {
-        startPose: { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch },
-        // Free-aim moves a RETICLE; mouselook turns the camera. Which one is
-        // live decides whether a replay pins `look` or integrates dx/dy, so it
-        // is part of the recording's state, not the view's.
-        freeAim: ctx.player.freeAimOn,
-        label: 'live',
-      },
-    });
-    updateDemoHud(ctx);
-    return true;
-  }
 
   /** THE REPLAY DRIVER. Owns the sim: stops the loop, resets the sim clock and
    *  reseeds the streams, applies the scene flags and the start pose, then
@@ -8597,7 +8233,7 @@ function performBenchAction(a: BenchAction): void {
     }
     return {
       frames,
-      census: sceneCensus(),
+      census: sceneCensus(ctx),
       hashes,
       parity,
       every,
@@ -8706,7 +8342,7 @@ function performBenchAction(a: BenchAction): void {
     if (e.code !== 'F7' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
     if (ctx.demo.recorder) void demoRecordStop(ctx, true);
-    else demoRecordStart();
+    else demoRecordStart(ctx);
   });
 
   // -------------------------------------------------------------------------
@@ -8730,7 +8366,7 @@ function performBenchAction(a: BenchAction): void {
     /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
      *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
      *  POST /__lab/save-demo. F7 does the same toggle. */
-    demoRecord: (action: 'start' | 'stop') => (action === 'start' ? demoRecordStart() : demoRecordStop(ctx, true)),
+    demoRecord: (action: 'start' | 'stop') => (action === 'start' ? demoRecordStart(ctx) : demoRecordStop(ctx, true)),
     /** What the recorder/player is doing right now. `frame` is frames recorded
      *  (live) or frames replayed (replay) — never a wall-clock measure. */
     demoInfo: () => ({
@@ -8777,7 +8413,7 @@ function performBenchAction(a: BenchAction): void {
       ctx.boot.handle.setLoopRunning(false);
       for (let i = 0; i < n; i++) {
         ctx.boot.handle.step(dt);
-        if (ctx.demo.frameCount++ % 10 === 0) updateHud();
+        if (ctx.demo.frameCount++ % 10 === 0) updateHud(ctx);
       }
     },
     setProbeWeight: withCtx(ctx, pushProbeWeight),
@@ -8793,14 +8429,14 @@ function performBenchAction(a: BenchAction): void {
     // the headless driver can shoot; aim with setPose(yaw, pitch).
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(barrels),
-    setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(); return ctx.player.freeAimOn; },
+    setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(ctx); return ctx.player.freeAimOn; },
     setInfiniteAmmo: (on: boolean) => {
       ctx.weapon.infiniteAmmo = on;
       // Turning it OFF with 0 shells in the gun must not leave the player
       // holding a weapon that can only click: refill so the first dry state is
       // one the player creates by firing.
       if (!on) ctx.weapon.shells = MAGAZINE_CAPACITY;
-      updateHud();
+      updateHud(ctx);
       return ctx.weapon.infiniteAmmo;
     },
     /** The muzzle locators in world space right now (chunk-bake gate: lets a
@@ -8817,8 +8453,8 @@ function performBenchAction(a: BenchAction): void {
       const d = convergedDir(o);
       return { origin: o, dir: d };
     },
-    setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(); },
-    setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(); },
+    setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(ctx); },
+    setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(ctx); },
     fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(1); } finally { ctx.weapon.slugMode = keep; } },
     /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
      *  computed by exactly the code fire() uses (muzzleWorld + converged
@@ -8918,7 +8554,7 @@ function performBenchAction(a: BenchAction): void {
       }
       if (raw.trained !== undefined) return enableTrainedUpscale(raw.trained, raw.layout);
       const cfg = parseUpscaleConfig(raw);
-      applySdfScale(UPSCALE_SCALE);
+      applySdfScale(ctx, UPSCALE_SCALE);
       const info = ctx.render.sdfLayer.setUpscale(cfg);
       ctx.render.upscaleAb.config = cfg;
       ctx.render.upscaleAb.model = null;
@@ -8930,7 +8566,7 @@ function performBenchAction(a: BenchAction): void {
     /** P3 capture: replace every actor with the default cast (fresh, unwounded bodies). */
     resetCast: () => { rebuildCast(); return ctx.world.actors.length; },
     /** P3 capture: a full magazine, so scripted wound shots never click empty. */
-    refillShells: () => { ctx.weapon.shells = MAGAZINE_CAPACITY; updateHud(); return ctx.weapon.shells; },
+    refillShells: () => { ctx.weapon.shells = MAGAZINE_CAPACITY; updateHud(ctx); return ctx.weapon.shells; },
     get shell() {
       return {
         enabled: ctx.render.sdfLayer.shellEnabled,
@@ -8955,7 +8591,7 @@ function performBenchAction(a: BenchAction): void {
     setWoundStep(v: number) {
       const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
       for (const a of ctx.world.actors) a.view.uniforms.perfCfg.value.z = n;
-      updateHud();
+      updateHud(ctx);
     },
     setChunkBake(on: boolean) {
       ctx.bake.enabled = on;
@@ -8963,7 +8599,7 @@ function performBenchAction(a: BenchAction): void {
       if (on && ctx.bake.mat) ctx.bake.seed?.(ctx.bake.mat);
     },
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
-    setSdfScale: (v: number) => applySdfScale(v),
+    setSdfScale: (v: number) => applySdfScale(ctx, v),
     /** The active render cap + how it was chosen (?res=). */
     get resolution() {
       const cap = RES_RUNGS[ctx.boot.resKey];
@@ -9011,7 +8647,7 @@ function performBenchAction(a: BenchAction): void {
         return { ok: false, reason: `unknown-slot:${String(slot)}` };
       }
       ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, slot);
-      updateHud();
+      updateHud(ctx);
       return { ok: true, live: ctx.weapon.slotState.live, target: ctx.weapon.slotState.target, phase: ctx.weapon.slotState.phase };
     },
     /** AUTOMATION: the in-hand overcook, without waiting out the fuse. */
@@ -9042,7 +8678,7 @@ function performBenchAction(a: BenchAction): void {
     setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' | 'assets' = 'march') => {
       ctx.gibs.renderMode = mode === 'sprite' ? 'sprite'
         : mode === 'carve' ? 'carve' : mode === 'assets' ? 'assets' : 'march';
-      if (ctx.gibs.renderMode === 'carve') ensureCarvedLibrary();
+      if (ctx.gibs.renderMode === 'carve') ensureCarvedLibrary(ctx);
       if (ctx.gibs.renderMode === 'sprite') await ensureGibAtlas('sheet');
       // The asset path is a fetch+decode; await it so a caller can tell "mode
       // on" from "mode on and armed" (the same contract as the sprite atlas).
@@ -9058,7 +8694,7 @@ function performBenchAction(a: BenchAction): void {
     },
     /** RELAY THE GORE-PART BENCH in front of the player: meat chunks and classic
      *  bones, rendered through the real gib mesh path. Returns how many parts. */
-    goreShowcase: () => spawnGoreShowcase(),
+    goreShowcase: () => spawnGoreShowcase(ctx),
     /** LAY THE SPRITE GIB BENCH in front of the player (loads the dev-only atlas
      *  on first use). Returns the number of billboards. */
     gibSpriteBench: async (which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource) => {

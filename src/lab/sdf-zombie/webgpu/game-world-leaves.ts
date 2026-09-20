@@ -12,6 +12,7 @@ import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { SLUG, traceProjectile } from './game-weapon';
 import { ROOMS, TUNNELS } from './game-level';
+import { type ChunkBox } from '../gib-chunks';
 
 /** The room's level cfg: weight, and the gain that puts the probe level at
  *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
@@ -108,4 +109,25 @@ export function ceilingAt(ctx: GameContext, x: number, z: number): number {
     if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return r.height;
   }
   return BUNDLE_CEIL_M;
+}
+
+/**
+ * WHAT A DETACHED PIECE COLLIDES WITH. The owner, playing: *"it seems the gibs
+ * dont bounce off the walls/have collission"* — correct, and the reason was
+ * that `stepChunk` only ever knew about a floor plane at y = radius, so a
+ * piece thrown at a wall flew straight through it and out of the level.
+ *
+ * The boxes are `levelColliders()` — the SAME walls the player and the wander
+ * clamp collide with, and they are split around every doorway and tunnel
+ * mouth, so a gib sails out of an open door and bounces off the wall beside
+ * it. That is why this is the level's collider list and not a box drawn around
+ * each room: a room box would have sealed the doors.
+ *
+ * The ceiling is NOT one of those boxes (they end at WALL_H), so it comes in
+ * separately through the page's existing per-enclosure `ceilingAt` — the same
+ * lookup the bundle's flight already uses, which is why a piece cannot sail
+ * out through the arena's 6 m roof while the 3 m rooms keep theirs.
+ */
+export function chunkCollidersAt(ctx: GameContext, pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
+  return { boxes: ctx.world.colliders, ceilingY: ceilingAt(ctx, pos[0], pos[2]) };
 }

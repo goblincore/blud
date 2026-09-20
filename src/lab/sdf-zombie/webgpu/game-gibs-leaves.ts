@@ -5,12 +5,20 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import type { GameContext } from './game-context';
-import { gibTierPlan } from '../gib-parts'
-import { type Primitive, type Vec3 } from '../types'
-import { type ZombieActor } from './game-actor'
-import { type ChunkGpuView } from './zombie-gpu'
 
+import { type GameContext } from './game-context';
+import { gibTierPlan } from '../gib-parts';
+import { type Primitive, type Vec3 } from '../types';
+import { type ZombieActor } from './game-actor';
+import { type ChunkGpuView } from './zombie-gpu';
+import { compileBlob } from '../blob-compile';
+import { parseBlob } from '../blob-parse';
+import { DEFAULT_BUILD_OPTS, buildBody } from '../build-body';
+import zombieBlobSrc from '../characters/zombie.blob?raw';
+import { type ChunkLook } from '../chunk-bake-field';
+import { createBakedChunkMaterial } from './baked-chunks';
+import { registerLitChunkMaterial } from './game-bake-leaves';
+import { carveBodyIntoPieces } from './gib-carve';
 
 /** The archetype whose committed set an actor uses. */
 export function gibAssetArchetypeOf(ctx: GameContext, a: ZombieActor): string {
@@ -200,4 +208,54 @@ export function retireActor(ctx: GameContext, a: ZombieActor): void {
   a.view.coneObject.removeFromParent();
   const i = ctx.world.actors.indexOf(a);
   if (i >= 0) ctx.world.actors.splice(i, 1);
+}
+
+export function ensureCarvedLibrary(ctx: GameContext): boolean {
+  if (ctx.bake.carvedLibrary && ctx.bake.carvedMaterial) return true;
+  if (ctx.bake.carvedLibrary) return true;
+  const a = ctx.world.actors[0];
+  if (!a) return false;
+  try {
+    const look: ChunkLook = (() => {
+      const u = a.view.uniforms;
+      const col = (v: { r: number; g: number; b: number }): Vec3 => [v.r, v.g, v.b];
+      return {
+        baseColor: col(u.baseColor.value), deepColor: col(u.deepColor.value),
+        fatColor: col(u.fatColor.value), mottleColor: col(u.mottleColor.value),
+        organColor: col(u.organColor.value), visceraColor: col(u.visceraColor.value),
+        woundDepthAmp: u.surfCfg3.value.x, fatDepth: u.surfCfg3.value.y,
+        muscleDepth: u.surfCfg3.value.z, visceraAmp: u.surfCfg3.value.w,
+        visceraDepth: u.visceraDepth.value, mottleAmp: u.surfCfg2.value.z,
+        mottleScale: u.surfCfg2.value.w, organAmp: u.organAmp.value, goreStrength: 1,
+      };
+    })();
+    const t0 = performance.now();
+    const body = buildBody(compileBlob(parseBlob(zombieBlobSrc)), DEFAULT_BUILD_OPTS, {});
+    ctx.bake.carvedLibrary = carveBodyIntoPieces({
+      archetype: 'zombie', body, look,
+      cells: ctx.gibs.carveCells, cellSize: ctx.gibs.carveCellSize,
+    });
+    ctx.bake.carvedBuildMs = performance.now() - t0;
+    if (!ctx.bake.carvedMaterial) {
+      ctx.bake.carvedMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
+      ctx.bake.carvedMaterial.uniforms.goreCfg.value.set(
+        ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
+      );
+      ctx.bake.carvedMaterial.uniforms.goreCfg2.value.set(
+        ctx.vfx.gorePartStain.x, ctx.vfx.gorePartStain.y, ctx.vfx.gorePartStain.z, ctx.vfx.gorePartStain.w,
+      );
+    }
+    console.log(`[gib-carve] zombie library: ${ctx.bake.carvedLibrary.pieces.length} pieces, `
+      + `${ctx.bake.carvedLibrary.totalVerts} verts, ${ctx.bake.carvedLibrary.bonePrims} bone prims in the field, `
+      + `${ctx.bake.carvedBuildMs.toFixed(0)} ms (cells ${ctx.gibs.carveCells})`);
+    return true;
+  } catch (err) {
+    ctx.bake.carvedLibrary = null;
+    if (!ctx.bake.carvedWarned) {
+      ctx.bake.carvedWarned = true;
+      console.warn(`[gib-carve] library build failed: ${String(err)} — `
+        + 'falling back to marched pieces for this session');
+    }
+    return false;
+  }
 }

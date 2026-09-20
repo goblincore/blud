@@ -251,3 +251,32 @@ export function stepWeaponSlots(ctx: GameContext, dt: number): void {
   // Slot 3: the same one-transform holster travel.
   ctx.weapon.flare?.updateRig();
 }
+
+export function aimDir(ctx: GameContext): Vec3 {
+  const cp = Math.cos(ctx.player.player.pitch);
+  const fwd: Vec3 = [
+    Math.sin(ctx.player.player.yaw) * cp, Math.sin(ctx.player.player.pitch), -Math.cos(ctx.player.player.yaw) * cp,
+  ];
+  if (!ctx.player.freeAimOn) return fwd;
+  // FIRE THROUGH THE RETICLE. With free aim the reticle is the aim point, so
+  // a shot down the camera's forward axis would land wherever the player
+  // happens to be FACING rather than where they are AIMING -- the one thing
+  // this scheme exists to separate. Offset the ray by the reticle's angular
+  // position inside the frustum.
+  const { tanV, tanH } = aimFrustum(ctx);
+  const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
+  // up = right x fwd, for a right-handed basis
+  const up: Vec3 = [
+    right[1] * fwd[2] - right[2] * fwd[1],
+    right[2] * fwd[0] - right[0] * fwd[2],
+    right[0] * fwd[1] - right[1] * fwd[0],
+  ];
+  const cx = ctx.weapon.aim.x * tanH, cy = ctx.weapon.aim.y * tanV;
+  const d: Vec3 = [
+    fwd[0] + right[0] * cx + up[0] * cy,
+    fwd[1] + right[1] * cx + up[1] * cy,
+    fwd[2] + right[2] * cx + up[2] * cy,
+  ];
+  const l = Math.hypot(d[0], d[1], d[2]) || 1;
+  return [d[0] / l, d[1] / l, d[2] / l];
+}

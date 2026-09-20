@@ -280,3 +280,16 @@ export function updateVisibleActors(ctx: GameContext): void {
   ctx.render.visibleActors = out;
   ctx.world.cullCounts.visible = out.length;
 }
+
+export function applySdfScale(ctx: GameContext, v: number) {
+  ctx.render.sdfScale = Math.min(1, Math.max(0.2, v));
+  ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
+  ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
+  sizeSdfLayer(ctx);
+  // The AA footprint (aaCfg.x) is ONE PIXEL at the current SDF pass height;
+  // a rung change moved that height, so refresh every live view (perf round
+  // 2 task 6). Only called post-boot (tickAdaptive / the setSdfScale seam),
+  // so `actors` below is always initialised here.
+  const k = ctx.render.sdfLayer.pixelConeK;
+  for (const a of ctx.world.actors) a.view.uniforms.aaCfg.value.x = k;
+}

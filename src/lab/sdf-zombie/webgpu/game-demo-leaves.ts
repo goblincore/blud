@@ -8,10 +8,11 @@
 
 import { type GameContext } from './game-context';
 import { woundWorldPos, type Wound } from '../damage';
-import { type DemoFile, type DemoFrame } from './demo-recorder';
+import { type DemoFile, type DemoFrame, createDemoRecorder } from './demo-recorder';
 import { type ZombieActor } from './game-actor';
 import { ROOMS } from './game-level';
 import { type Scenario, type ScenarioStep } from './game-bench-scenario';
+import { playerRoomId } from './game-player-leaves';
 
 /** Snapshot the listeners' accumulated input as the frame the next tick will
  *  consume. Zeroes the accumulators: a delta belongs to exactly one frame. */
@@ -109,4 +110,28 @@ export function demoScenarioOf(ctx: GameContext, file: DemoFile): Scenario {
       { name: 't2', from: b, to: frames },
     ],
   };
+}
+
+/** F7 / `__sdfGame.demoRecord('start')`. The header is snapshotted at START,
+ *  not stop: the seed and query must be the ones the run BEGAN under, or a
+ *  replay boots into a different world than the recording captured. */
+export function demoRecordStart(ctx: GameContext): boolean {
+  if (ctx.demo.recorder) return false;
+  ctx.demo.replayActive = false;
+  ctx.demo.recorder = createDemoRecorder({
+    seed: ctx.demo.seed,
+    query: location.search.replace(/^\?/, ''),
+    room: playerRoomId(ctx),
+    dt: 1 / 60,
+    meta: {
+      startPose: { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch },
+      // Free-aim moves a RETICLE; mouselook turns the camera. Which one is
+      // live decides whether a replay pins `look` or integrates dx/dy, so it
+      // is part of the recording's state, not the view's.
+      freeAim: ctx.player.freeAimOn,
+      label: 'live',
+    },
+  });
+  updateDemoHud(ctx);
+  return true;
 }
