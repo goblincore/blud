@@ -63,6 +63,31 @@ headless-Chrome capture scripts (`scripts/*.mjs`).
 
 ---
 
+## Task 0: FIX THE PIXEL GATE FIRST — it is bistable across boots
+
+Evidence and what is already ruled out:
+`docs/dev-notes/2026-09-20-march-hash-flakiness/NOTES.md`. `e3077f7c` gives the
+canonical line on one day and `ce7045ac…` on the next, alone, so the gate
+currently proves liveness and nothing else. Every later task in this plan is
+gated on it, so it comes first.
+
+**Files:** `scripts/march-hash.mjs`, `scripts/lib/sdf-closeup-stage.mjs`,
+`docs/dev-notes/2026-09-20-march-hash-flakiness/NOTES.md`
+
+- [ ] **Step 1: Catch it in the act.** Dump the scene's march uniforms (and the
+      staged camera/actor transforms) at hash time, two boots, and diff them.
+      room2 is stable while room1 is not — so diff room1 against room2's dump as
+      well. Name the varying input before changing anything.
+- [ ] **Step 2: Normalise it in the STAGING, not by loosening the pin** — the
+      same discipline the script's own fields-off pin followed: force the input
+      to a fixed value for the capture, and say in the header why that regime is
+      the one the march work is consumed in.
+- [ ] **Step 3: Prove it.** Ten boots of one commit, all identical; then
+      `e3077f7c` and HEAD, five boots each, and re-pin the canonical values with
+      both numbers recorded. A gate that cannot survive ten boots of one commit
+      is not fixed.
+- [ ] **Step 4:** Update the flakiness note with the cause and the fix.
+
 ## Task 1: Baselines, and a cold-compile measurement that can be trusted
 
 **Files:** `docs/dev-notes/2026-09-20-march-phase-2/NOTES.md` (new)

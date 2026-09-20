@@ -51,6 +51,15 @@
   cut-and-paste, not agents: the members averaged 8 lines and 325/378 needed only `ctx`, so a verbatim move by
   script beats six parallel hand-copies whose failure mode (an altered literal that still type-checks) the pixel
   gate cannot localise. **game-main.ts 12,569 → 11,170.**
+- [ ] **`scripts/march-hash.mjs` is BISTABLE across boots (2026-09-20)** — `e3077f7c` gives the canonical
+  line one day and `ce7045ac…` the next, alone. It is a liveness check, not a regression gate, until fixed;
+  it is Task 0 of march phase 2. [Evidence](docs/dev-notes/2026-09-20-march-hash-flakiness/NOTES.md)
+- [x] **Leaves wave 2 + tool rebuild (2026-09-20):** `extract-leaf` now inserts ctx at AST positions (generics),
+  wraps value refs in `withCtx`, refuses non-leaves by name, rewrites co-moved calls, respects shadowing,
+  carries main()-scope types transitively, moves const arrows, handles multi-declarator consts, appends to one
+  module per slice, infers its own imports (shared `scripts/lib/game-main-deps.ts`), and plans waves with
+  `--leaves`; `extract-seam-group` picks the literal by shape and has `--all`. 54 tests, previously none.
+  **game-main.ts 9,721 → 7,815**; 45 → 14 `__sdfGame` members; 31 members into five themed seam modules.
 - [x] **Leaves wave 1 (2026-09-19, merged):** 46 leaf functions → `game-*-leaves*.ts`, 96 ctx-only members →
   `game-seams-leftover.ts`. **game-main.ts 11,598 → 9,721.** 45 members remain. Next wave, tool fixes first
   (`extract-leaf` generics/shorthand/typed wrapper/real leaf check; `extract-seam-group` `readMembers`), then
