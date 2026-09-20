@@ -39,16 +39,20 @@ headless-Chrome capture scripts (`scripts/*.mjs`).
   snapshot deliberately, in the same commit as the change that moved the text,
   and say in the message what moved. It must never be updated to silence a
   surprise.
-- **The pixel gate is the real gate:** `node scripts/march-hash.mjs` inside
-  `scripts/lab-servers.sh`, room1 `8f2b74e71ff18dd04a99c05fe19392b96dd80c9d`
-  (repeat identical, wounded `1381a866703b827745486a1062240a46bee5c73f`) and
-  room2 (`MARCH_HASH_ROOM=2 MARCH_HASH_TILES=0`)
-  `35b6d5619f7f85a52e852056a09f6c0fbfacf2c5`. A diff means behaviour changed —
-  diagnose, never loosen.
-- **NEVER run two pixel gates at once.** A concurrent headless capture (another
-  agent, another worktree) makes the gate read wrong AND non-deterministic
-  hashes; that cost a bisect on 2026-09-19. Check for other
-  `chrome --remote-debugging-port=93xx` processes first.
+- **The pixel gate is the intended gate, and it is BROKEN until task 0 lands.**
+  `node scripts/march-hash.mjs` inside `scripts/lab-servers.sh`: room1 is
+  currently bistable across boots (`8f2b74e7…` / `ce7045ac…` / others) on
+  unchanged code, so before task 0 a red run proves nothing and a green one
+  proves only liveness — see
+  `docs/dev-notes/2026-09-20-march-hash-flakiness/NOTES.md`. room2
+  (`MARCH_HASH_ROOM=2 MARCH_HASH_TILES=0` =
+  `35b6d5619f7f85a52e852056a09f6c0fbfacf2c5`) HAS been stable across every run
+  of both days — use it as the interim signal, and after task 0 use both. Never
+  loosen a pin to make a diff go away.
+- **Do not run two pixel gates at once** — two headless captures on one GPU skew
+  every timing number. (It does NOT explain the bistability: that reproduces
+  with nothing else running, and the 2026-09-19 note claiming otherwise is
+  superseded.)
 - **Targeted tests** (`npm test -- march …`) plus `npx tsc --noEmit`, except
   where a task says to run the full suite. Known pre-existing failures: 15 on
   main (`game-actor-torso-slug` ×2, `march-step-soundness`, `surface-nets-cpu`,
