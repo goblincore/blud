@@ -31,7 +31,7 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import * as ts from 'typescript';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
 
@@ -124,7 +124,7 @@ function applyEdits(text: string, edits: readonly Edit[], offset = 0): string {
 export function extractLeaves(
   source: string, fnNames: readonly string[], constNames: readonly string[], moduleName: string,
   extraImports: readonly string[] = [],
-  opts: { force?: boolean; rebind?: Record<string, string> } = {},
+  opts: { force?: boolean; rebind?: Record<string, string>; existing?: string } = {},
 ): Extraction {
   const sf = ts.createSourceFile('game-main.ts', source, ts.ScriptTarget.ES2022, true);
   const main = findMain(sf);
@@ -297,7 +297,62 @@ export function extractLeaves(
     ...bodies.map(b => b + '\n'),
   ].join('\n');
 
-  return { module, main: out, linesMoved, callSites, bareRefs };
+  return {
+    module: opts.existing ? mergeModule(opts.existing, module) : module,
+    main: out, linesMoved, callSites, bareRefs,
+  };
+}
+
+/** Append a freshly generated module onto an existing one: one header, one set
+ *  of imports (named imports from the same specifier merged), bodies in order.
+ *  Wave 1 spawned game-render-leaves2 / game-world-leaves3 only because the
+ *  writer could not do this. */
+export function mergeModule(existing: string, generated: string): string {
+  const split = (src: string): { imports: string[]; body: string } => {
+    const lines = src.split('\n');
+    const imports: string[] = [];
+    const keep: string[] = [];
+    for (const l of lines) {
+      if (/^import .*;$/.test(l)) imports.push(l); else keep.push(l);
+    }
+    return { imports, body: keep.join('\n') };
+  };
+  const a = split(existing);
+  const b = split(generated);
+
+  // Merge named imports per specifier; keep everything else verbatim, in order.
+  const named = new Map<string, { typeOnly: boolean; names: string[] }>();
+  const other: string[] = [];
+  for (const line of [...a.imports, ...b.imports]) {
+    const m = /^import (type )?\{ (.*) \} from '(.*)';$/.exec(line);
+    if (!m) { if (!other.includes(line)) other.push(line); continue; }
+    const key = `${m[1] ? 'type ' : ''}${m[3]}`;
+    const e = named.get(key) ?? { typeOnly: !!m[1], names: [] };
+    for (const n of m[2].split(',').map(x => x.trim()).filter(Boolean)) if (!e.names.includes(n)) e.names.push(n);
+    named.set(key, e);
+  }
+  const importLines = [
+    ...[...named].map(([key, e]) =>
+      `import ${e.typeOnly ? 'type ' : ''}{ ${e.names.join(', ')} } from '${key.replace(/^type /, '')}';`),
+    ...other,
+  ];
+
+  // The generated body carries its own header comment; drop it on append.
+  const bodyB = b.body.replace(/^(\/\/[^\n]*\n)+/, '');
+  const head = a.body.replace(/\s+$/, '');
+  const tail = bodyB.replace(/^\s+/, '');
+  // Skip a body that is already present (re-running a wave must be idempotent).
+  const fnName = /export (?:async )?function (\w+)/.exec(tail)?.[1];
+  if (fnName && new RegExp(`export (?:async )?function ${fnName}\\b`).test(head)) return existing;
+
+  const headLines = head.split('\n');
+  const firstImport = importLines.length;
+  void firstImport;
+  // Rebuild: header comment of the EXISTING module, then merged imports, then bodies.
+  const headerEnd = headLines.findIndex(l => l.trim() && !l.startsWith('//'));
+  const header = headLines.slice(0, headerEnd < 0 ? headLines.length : headerEnd);
+  const rest = headLines.slice(headerEnd < 0 ? headLines.length : headerEnd).join('\n').replace(/^\s+/, '');
+  return [...header, '', ...importLines, '', rest, '', tail, ''].join('\n');
 }
 
 if (process.argv[1]?.endsWith('extract-leaf.ts')) {
@@ -336,9 +391,12 @@ if (process.argv[1]?.endsWith('extract-leaf.ts')) {
     const [k, ...v] = kv.split('=');
     return [k, v.join('=')] as const;
   })) : undefined;
+  // Append when the module already exists — one file per slice, not leaves2/3.
+  const modPath = `src/lab/sdf-zombie/webgpu/${moduleName}.ts`;
+  const existing = existsSync(modPath) ? readFileSync(modPath, 'utf8') : undefined;
   const r = extractLeaves(src, fnNames, constNames, moduleName, extraImports,
-                          { force: process.argv.includes('--force'), rebind });
-  console.log(`module     : src/lab/sdf-zombie/webgpu/${moduleName}.ts`);
+                          { force: process.argv.includes('--force'), rebind, existing });
+  console.log(`module     : ${modPath}${existing ? ' (append)' : ' (new)'}`);
   console.log(`functions  : ${fnNames.join(', ')}`);
   console.log(`consts     : ${constNames.join(', ') || '(none)'}`);
   console.log(`lines moved: ${r.linesMoved}`);
@@ -346,7 +404,7 @@ if (process.argv[1]?.endsWith('extract-leaf.ts')) {
   console.log(`bare refs  : ${r.bareRefs}`);
   console.log(`game-main  : ${src.split('\n').length} -> ${r.main.split('\n').length}`);
   if (process.argv.includes('--write')) {
-    writeFileSync(`src/lab/sdf-zombie/webgpu/${moduleName}.ts`, r.module);
+    writeFileSync(modPath, r.module);
     writeFileSync(GAME_MAIN, r.main);
     console.log('\nwrote both files');
   } else {

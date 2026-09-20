@@ -146,3 +146,35 @@ describe('extract-leaf: --rebind', () => {
     expect(r.module).toContain('ctx.demo.scene = scene;');
   });
 });
+
+describe('extract-leaf: appending to an existing module', () => {
+  // Wave 1 produced game-render-leaves2.ts / game-world-leaves3.ts purely
+  // because the writer could only create. A second call for the same slice must
+  // land in the same file, merging imports rather than duplicating them.
+  const first = fixture(`  function a(x: number): number { return x + ctx.render.frame; }\n  a(1);`);
+
+  it('keeps the existing bodies and adds the new one', () => {
+    const r1 = extractLeaves(first, ['a'], [], 'game-render-leaves');
+    const second = fixture(`  function b(y: number): number { return y - ctx.render.frame; }\n  b(2);`);
+    const r2 = extractLeaves(second, ['b'], [], 'game-render-leaves', [], { existing: r1.module });
+    expect(r2.module).toContain('export function a(ctx: GameContext, x: number): number');
+    expect(r2.module).toContain('export function b(ctx: GameContext, y: number): number');
+    // One header, one GameContext import.
+    expect((r2.module.match(/^\/\/ src\/lab/gm) ?? []).length).toBe(1);
+    expect((r2.module.match(/import type \{ GameContext \}/g) ?? []).length).toBe(1);
+  });
+
+  it('merges named imports from the same module instead of repeating the line', () => {
+    const r1 = extractLeaves(first, ['a'], [], 'game-render-leaves', ["import { X } from './x';"]);
+    const second = fixture(`  function b(y: number): number { return y - ctx.render.frame; }\n  b(2);`);
+    const r2 = extractLeaves(second, ['b'], [], 'game-render-leaves', ["import { Y } from './x';"], { existing: r1.module });
+    expect((r2.module.match(/from '\.\/x';/g) ?? []).length).toBe(1);
+    expect(r2.module).toContain("import { X, Y } from './x';");
+  });
+
+  it('does not duplicate a body that is already there', () => {
+    const r1 = extractLeaves(first, ['a'], [], 'game-render-leaves');
+    const again = extractLeaves(first, ['a'], [], 'game-render-leaves', [], { existing: r1.module });
+    expect((again.module.match(/export function a\(/g) ?? []).length).toBe(1);
+  });
+});
