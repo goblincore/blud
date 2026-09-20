@@ -138,6 +138,21 @@ export function extractLeaves(
   const moved = new Set([...fnNames, ...constNames, ...Object.keys(rebind)]);
   const scope = mainScopeNames(main);
 
+  // Types declared INSIDE main() (TracerView, BakedChunk, ChunkTemplate…) are
+  // neither importable nor module-scope, so a function using one could never be
+  // a leaf. A type is inert: it travels with the move, exported so main() can
+  // keep annotating with it, and is cut from main() (which imports it back).
+  const mainTypes = new Map<string, { text: string; start: number; end: number }>();
+  for (const st of main.body!.statements) {
+    if (ts.isTypeAliasDeclaration(st) || ts.isInterfaceDeclaration(st)) {
+      mainTypes.set(st.name.text, {
+        text: source.slice(st.getStart(sf), st.getEnd())
+          .split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n'),
+        start: st.getFullStart(), end: st.getEnd(),
+      });
+    }
+  }
+
   const cuts: Array<{ start: number; end: number }> = [];
   const decls: Array<{ node: ts.FunctionDeclaration; name: string }> = [];
   const consts: string[] = [];
@@ -187,6 +202,13 @@ export function extractLeaves(
   if (decls.length !== fnNames.length) {
     throw new Error(`expected ${fnNames.length} functions, matched ${decls.length}`);
   }
+
+  // Which main()-scope types the moved bodies reference — they come along.
+  const carriedMainTypes = [...mainTypes].filter(([name]) =>
+    decls.some(d => new RegExp(`(^|[^A-Za-z0-9_.$])${name}([^A-Za-z0-9_$]|$)`).test(d.node.getText(sf))));
+  for (const [name] of carriedMainTypes) moved.add(name);
+  // Cut them here, BEFORE main() is rebuilt below.
+  for (const [, t] of carriedMainTypes) cuts.push({ start: t.start, end: t.end });
 
   // THE LEAF CHECK. Report every offender of every function in one message: the
   // point is to plan the next wave, not to bisect one name per run.
@@ -285,7 +307,7 @@ export function extractLeaves(
 
   // game-main.ts must import back everything that just left it, plus withCtx if
   // anything is now wrapped.
-  const back = [...fnNames, ...constNames].sort();
+  const back = [...fnNames, ...constNames, ...carriedMainTypes.map(([n]) => n)].sort();
   const needsWithCtx = bareRefs > 0 && !/^import \{ withCtx \} from '\.\/game-context';$/m.test(source);
   const importBack = `import { ${back.join(', ')} } from './${moduleName}';\n`
     + (needsWithCtx ? `import { withCtx } from './game-context';\n` : '');
@@ -306,7 +328,8 @@ export function extractLeaves(
   // module-scope VALUE cannot be copied (that forks it) or imported (that makes
   // a cycle), so the tool refuses and names it — wave 1 shipped --imports by
   // hand and a forgotten one only showed up as a tsc error later.
-  const fragments = [...bodies, ...consts];
+  const typeBlocks = carriedMainTypes.map(([, t]) => `export ${t.text}`);
+  const fragments = [...bodies, ...consts, ...typeBlocks];
   const accounted = new Set([...moved, 'ctx']);
   if (!opts.force) {
     const missing = missingLocalValues(fragments, sf, accounted);
@@ -341,6 +364,7 @@ export function extractLeaves(
     ...extraImports,
     ``,
     ...types.map(t => t + '\n'),
+    ...typeBlocks.map(t => t + '\n'),
     ...consts, consts.length ? '' : '',
     ...bodies.map(b => b + '\n'),
   ].join('\n');

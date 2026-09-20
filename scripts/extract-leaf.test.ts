@@ -290,3 +290,24 @@ describe('extract-leaf: a module never imports itself', () => {
     expect(r.module).not.toContain("from './game-weapon-leaves'");
   });
 });
+
+describe('extract-leaf: types declared inside main()', () => {
+  // TracerView / BakedChunk / ChunkTemplate are declared INSIDE main(), so they
+  // are neither importable nor module-scope. A type is inert, so it travels with
+  // the move — and stays behind as well when main() still uses it.
+  const src = (body: string): string =>
+    `import * as THREE from 'three';\nimport { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n  interface TracerView { mesh: THREE.Mesh; life: number }\n${body}\n}\n`;
+
+  it('carries the type into the module and accepts the function as a leaf', () => {
+    const r = extractLeaves(src(`  function newTracerView(): TracerView {\n    return { mesh: ctx.weapon.quad, life: 0 };\n  }\n  newTracerView();`), ['newTracerView'], [], 'game-weapon-leaves');
+    expect(r.module).toContain('interface TracerView { mesh: THREE.Mesh; life: number }');
+    expect(r.module).toContain('export function newTracerView(ctx: GameContext): TracerView {');
+  });
+
+  it('exports the carried type, so main() can keep annotating with it', () => {
+    const r = extractLeaves(src(`  function newTracerView(): TracerView {\n    return { mesh: ctx.weapon.quad, life: 0 };\n  }\n  const v: TracerView = newTracerView();\n  void v;`), ['newTracerView'], [], 'game-weapon-leaves');
+    expect(r.module).toContain('export interface TracerView');
+    expect(r.main).toContain("import { TracerView, newTracerView } from './game-weapon-leaves';");
+    expect(r.main).not.toContain('interface TracerView {');
+  });
+});
