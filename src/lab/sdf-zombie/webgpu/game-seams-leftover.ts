@@ -507,79 +507,6 @@ export function createLeftoverSeams(ctx: GameContext) {
       spillVerdict(ctx, a, w);
       return hit;
     },
-    /** Chunk census: live (flying/being marched) vs baked (settled meshes). A
-     *  gib reads here as live rising, then baked following as the bake queue
-     *  drains — which is the cost the ?maxchunks knob exists to bound. */
-    /**
-     * MEASUREMENT SEAM: hide every detached piece (marched proxy AND baked
-     * mesh) without spawning or destroying anything.
-     *
-     * WHY IT EXISTS. The piece cost is the one number that would justify a
-     * per-archetype mesh pre-bake, and `sdf:march` cannot price it as things
-     * stand: the SAME state in ONE boot measured 2.61, 3.82 and 18.79 ms across
-     * four-sample groups, a 7x spread that swamps any delta read from two
-     * different states. Alternating pieces-hidden/pieces-shown at a FIXED piece
-     * count is an A/B the machine can actually answer.
-     */
-    /**
-     * SHOW/HIDE THE SKELETON. A differential seam for one claim the bone census
-     * cannot make: the census reports that a bone piece is FLAGGED to render as
-     * bone (pale, with rows packed), and "the skeleton is on screen" is a
-     * different statement about pixels. Hiding the bone pieces and diffing the
-     * frame is how that gets measured rather than argued — the same trick the
-     * explosion rig uses on whole layers. Applies to pieces already live and to
-     * any spawned while it is off.
-     */
-    setBonePiecesVisible: (on: boolean) => {
-      ctx.render.bonesVisible = !!on;
-      for (const c of ctx.bake.liveChunks) if (c.kind === 'bone') c.view.object.visible = ctx.render.bonesVisible;
-      return ctx.render.bonesVisible;
-    },
-    setChunksVisible: (on: boolean) => {
-      ctx.bake.hidden = !on;
-      for (const c of ctx.bake.liveChunks) {
-        c.view.object.visible = !ctx.bake.hidden && (c.kind !== 'bone' || ctx.render.bonesVisible);
-      }
-      for (const b of ctx.bake.chunks) b.mesh.visible = !ctx.bake.hidden;
-      // SPRITE PIECES COUNT AS PIECES HERE. This seam is the "pieces shown vs
-      // hidden" arm every cost rig and differential uses, and a rig that had to
-      // know which render mode was on would be a rig that silently measured
-      // nothing the day the mode changed. The sprite mode's OWN control is
-      // `setSpritePiecesVisible` below; this one moves both.
-      setSpritePiecesVisible(ctx.vfx.spritePieces, on);
-      return !ctx.bake.hidden;
-    },
-    gibRenderMode: () => ({
-      mode: ctx.gibs.renderMode,
-      // `ready` is per mode: the sprite path needs its ATLAS, the carve path its
-      // LIBRARY, the assets path a loaded archetype SET — and conflating them
-      // would report one mode armed because another's asset loaded.
-      ready: ctx.gibs.renderMode === 'assets'
-        ? gibAssetArmed(ctx)
-        : ctx.gibs.renderMode === 'carve' ? (ctx.bake.carvedLibrary !== null) : ctx.gibs.atlas !== null,
-      frames: ctx.gibs.atlas?.frames.length ?? 0, atlas: ctx.gibs.atlasSource,
-      liveCap: ctx.gibs.spriteLiveCap, restCap: ctx.gibs.spriteRestCap, sizeScale: ctx.gibs.spriteSizeScale,
-      assets: {
-        armed: gibAssetArmed(ctx),
-        zombie: ctx.gibs.assetRuntime.archetypeState('zombie'),
-        soldier: ctx.gibs.assetRuntime.archetypeState('soldier'),
-      },
-      carve: ctx.bake.carvedLibrary ? {
-        pieces: ctx.bake.carvedLibrary.pieces.length,
-        verts: ctx.bake.carvedLibrary.totalVerts,
-        tris: ctx.bake.carvedLibrary.totalTris,
-        bonePrims: ctx.bake.carvedLibrary.bonePrims,
-        fleshPrims: ctx.bake.carvedLibrary.fleshPrims,
-        cells: ctx.bake.carvedLibrary.cells,
-        cellSize: ctx.bake.carvedLibrary.cellSize,
-        buildMs: ctx.bake.carvedBuildMs,
-        skipped: ctx.bake.carvedLibrary.skipped.length,
-        piecesWithBones: ctx.bake.carvedLibrary.pieces.filter(x => x.bonesNear > 0).length,
-      } : null,
-    }),
-    /** PRELOAD THE COMMITTED SETS without switching mode — the paired rig's
-     *  "arm both arms first" step. Returns the armed state. */
-    preloadGibAssets: async () => { await ensureGibAssets(ctx); return gibAssetArmed(ctx); },
     /** THE ENCLOSURE A POINT IS IN, in metres: the same box the probe gather and
      *  the bundle's ceiling resolve against. A rig that wants to assert "this
      *  piece stayed in the room" needs the room's rectangle, and hard-coding it
@@ -607,20 +534,6 @@ export function createLeftoverSeams(ctx: GameContext) {
      *  `{ gib, crowd }` each pending|compiling|ready|failed. A driver reads it
      *  to know whether a gib/crowd draw will use the fast path or degrade. */
     warmBackground: () => ctx.boot.warmBackground.snapshot(),
-    /** Which gib renderer boot selected and whether the carve library built. */
-    gibRenderer: () => ({
-      mode: ctx.gibs.renderMode,
-      carvedLibraryBuilt: ctx.bake.carvedLibrary !== null,
-      carvedBuildMs: ctx.bake.carvedBuildMs,
-      carveCells: ctx.gibs.carveCells,
-      /** Task 2: the offline-asset arm's own state + census. */
-      assetArmed: gibAssetArmed(ctx),
-      assets: {
-        zombie: ctx.gibs.assetRuntime.archetypeState('zombie'),
-        soldier: ctx.gibs.assetRuntime.archetypeState('soldier'),
-      },
-      assetStats: ctx.gibs.assetRuntime.countersSnapshot(),
-    }),
     rooms: ROOMS.map(r => ({
       id: r.id, name: r.name, zombies: r.zombies,
       bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },
