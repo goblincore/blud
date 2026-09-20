@@ -316,6 +316,11 @@ import { cancelChunkBake } from './game-bake-leaves';
 import { accentRoomsFor, applyHemi, levelSceneLights } from './game-lighting-leaves';
 import { refreshLevelLights } from './game-lighting-leaves';
 import { GIB_TIER_FLOOR, gibAllowance, gibBudget, gibDebit, gibReserved } from './game-gibs-leaves';
+import { createWeaponAimSeams } from './game-seams-weapon-aim';
+import { createRenderQualitySeams } from './game-seams-render-quality';
+import { createDemoStepSeams } from './game-seams-demo-step';
+import { createLightingProbeSeams } from './game-seams-lighting-probes';
+import { createGibsBakeSeams } from './game-seams-gibs-bake';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -7661,6 +7666,11 @@ async function main() {
   // boot-frame gate's note at setDrawFn.
   ctx.boot.drawReady = true;
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
+    ...createGibsBakeSeams(ctx),
+    ...createLightingProbeSeams(ctx),
+    ...createDemoStepSeams(ctx),
+    ...createRenderQualitySeams(ctx),
+    ...createWeaponAimSeams(ctx),
     ...createLeftoverSeams(ctx),
     ...createMiscSeams(ctx),
     ...createFxSeams(ctx),
@@ -7673,20 +7683,6 @@ async function main() {
     ...createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
     ...createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf: withCtx(ctx, shellAmpOf), camera }),
     ...createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
-    /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
-     *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
-     *  POST /__lab/save-demo. F7 does the same toggle. */
-    demoRecord: (action: 'start' | 'stop') => (action === 'start' ? demoRecordStart(ctx) : demoRecordStop(ctx, true)),
-    /** What the recorder/player is doing right now. `frame` is frames recorded
-     *  (live) or frames replayed (replay) — never a wall-clock measure. */
-    demoInfo: () => ({
-      recording: !!ctx.demo.recorder,
-      replaying: ctx.demo.replayActive,
-      frame: ctx.demo.replayActive ? ctx.demo.replayFrame : (ctx.demo.recorder?.frames ?? 0),
-      seed: ctx.demo.seed,
-      room: playerRoomId(ctx),
-      demoHold: ctx.demo.hold,
-    }),
     /** Replay a `.dem` (`file` object, or a path/URL to fetch) headlessly and
      *  return `{ frames, census, ... }`. `hash: true` also digests the frame
      *  every `every` steps — the surface scripts/sdf-demo-hash.mjs drives for
@@ -7718,85 +7714,13 @@ async function main() {
       ctx.crowd.on = on;
       rebuildCast();
     },
-    /** Hand-step N frames at dt seconds each; stops the rAF loop first. */
-    step(n: number, dt = 1 / 60) {
-      ctx.boot.handle.setLoopRunning(false);
-      for (let i = 0; i < n; i++) {
-        ctx.boot.handle.step(dt);
-        if (ctx.demo.frameCount++ % 10 === 0) updateHud(ctx);
-      }
-    },
-    setProbeWeight: withCtx(ctx, pushProbeWeight),
     /** Smallest centre-to-centre distance between any two zombies (m).
      *  Two 0.35 m bodies touch at 0.70; below that they are interpenetrating. */
     crowdMinDist: () => minPairDistance(ctx.world.actors.map(a => {
       const p = a.pose().pos;
       return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
     })),
-    bodiesOnScreen: withCtx(ctx, bodiesOnScreen),
-    // ---------------------------------------------------------------
-    // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
-    // the headless driver can shoot; aim with setPose(yaw, pitch).
-    // ---------------------------------------------------------------
-    fire: (barrels: 1 | 2 = 1) => fire(ctx, barrels),
-    setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(ctx); return ctx.player.freeAimOn; },
-    setInfiniteAmmo: (on: boolean) => {
-      ctx.weapon.infiniteAmmo = on;
-      // Turning it OFF with 0 shells in the gun must not leave the player
-      // holding a weapon that can only click: refill so the first dry state is
-      // one the player creates by firing.
-      if (!on) ctx.weapon.shells = MAGAZINE_CAPACITY;
-      updateHud(ctx);
-      return ctx.weapon.infiniteAmmo;
-    },
-    /** The muzzle locators in world space right now (chunk-bake gate: lets a
-     *  driver SOLVE for the player stance that puts the slug's spawn point
-     *  where it wants — the muzzle offset is ~0.6 m of view-space rig, which
-     *  no hand-derived stance reproduces). Read-only. */
-    muzzleWorld: () => muzzleWorld(ctx),
-    /** The EXACT ray a slug fired right now would take (chunk-bake gate):
-     *  origin = muzzleWorld(), dir = convergedDir(muzzleWorld()) — the same
-     *  two calls fire() makes. A driver can measure a ray-to-target miss
-     *  BEFORE spending the shot. Read-only. */
-    slugRay: () => {
-      const o = muzzleWorld(ctx);
-      const d = convergedDir(ctx, o);
-      return { origin: o, dir: d };
-    },
-    setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(ctx); },
-    setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(ctx); },
-    fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; } },
-    /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
-     *  computed by exactly the code fire() uses (muzzleWorld + converged
-     *  dir) against each actor's CURRENT posed field. No state mutated.
-     *  Diff against debugWounds() after firing to assert the crater landed
-     *  where the ray struck. */
-    predictSlugHit: () => predictSlugHitNow(ctx),
-    /** LEVEL surfaces reading the probes (P3/P4 step 3): weight 0 = the
-     *  pre-probe level (hemisphere at full, nodes add nothing); gain -1 =
-     *  each room's hemisphere-matched level. The hemisphere fades with the
-     *  weight so the flip does not brighten the room. */
-    setLevelProbes: (weight: number, gain = -1) => {
-      ctx.lighting.levelProbeWeight = Math.max(0, Math.min(1, weight)); ctx.lighting.levelProbeGain = gain;
-      applyHemi(ctx); restampLevelProbes(ctx);
-      return { weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain };
-    },
     clearDepthProbes: () => clearDepthProbes(),
-    setRenderFov: (deg: number) => {
-      if (Number.isFinite(deg)) {
-        camera.fov = clampFovDeg(deg);
-        camera.updateProjectionMatrix();
-        ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
-        sizeSdfLayer(ctx);
-      }
-      return fisheyeReport(ctx);
-    },
-    /** Aim at the nearest body's surface. Exposed so a driver can stage a
-     *  shot the same way the bench scenario does. Optional `limb` aims at
-     *  that cluster's centre instead of the torso (same confirm gate). */
-    aimSurface: (limb?: string, actorId?: number) => aimAtNearestSurface(ctx, limb, actorId),
-    /** aimSurface('head') — the bone-tubes reel's head-shot staging. */
-    aimHead: () => aimAtNearestSurface(ctx, 'head'),
 
     /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
      *  the panel's WOUND_KEYS — the table the COPY button emits from — so a
@@ -7813,103 +7737,8 @@ async function main() {
       applyWoundTuning(o);
       return woundTuningNow(ctx);
     },
-
-    /**
-     * SUPPLEMENTARY IMPACT SPLASH (2026-09-13). A procedural crown fired ON
-     * TOP of the existing slug gout — it replaces nothing and mutates no
-     * shared constant, so the Current slug stays exactly as tuned. OFF unless
-     * this is called or ?impactsplash=1 is present; enabling it creates the
-     * layer on first use (sharing the flesh light rig) and adds it to the
-     * scene. Disabling keeps the layer but hides it, so toggling costs no
-     * rebuild.
-     */
-    setImpactSplash(o: { enabled?: boolean; weapon?: ImpactSplashWeapon; preset?: keyof typeof impactSplashPresets; profile?: Partial<ImpactSplashProfile> } = {}) {
-      const weapon = o.weapon ?? 'slug';
-      if ((o.profile || o.preset) && Object.hasOwn(impactSplashProfiles, weapon)) {
-        const base = o.preset && Object.hasOwn(impactSplashPresets, o.preset) ? impactSplashPresets[o.preset] : impactSplashProfiles[weapon];
-        impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...base, ...o.profile });
-      }
-      if (o.enabled !== undefined) ctx.panels.impactSplashEnabled = o.enabled;
-      if (ctx.panels.impactSplashEnabled) ensureImpactSplashLayer(ctx);
-      ctx.panels.impactSplashLayer?.setVisible(ctx.panels.impactSplashEnabled);
-      return {
-        enabled: ctx.panels.impactSplashEnabled,
-        available: ctx.panels.impactSplashLayer !== null,
-        profiles: structuredClone(impactSplashProfiles),
-        events: ctx.panels.impactSplashLayer?.eventCount ?? 0,
-      };
-    },
-
-    /** The outer-hull shell march (shell-hull-outer.ts). Ships ON —
-     *  owner-passed 2026-08-31 after the stale-hull mask fix; -40%/-54%
-     *  frame time at real-render parity. This is the kill switch. */
-    setShell(on: boolean) {
-      ctx.render.sdfLayer.setShellEnabled(on);
-      if (on) ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
-    },
-    /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
-     *  through applySdfScale (the game's own state). `null` turns the stage off and
-     *  leaves the scale alone — callers restore it. `{ model }` = random weights (cost/parity
-     *  only) and returns the info. `{ trained: '<name>' }` loads a trained export from the dev
-     *  model store and returns a PROMISE of the info (P3); it rejects if the model is missing or invalid. */
-    setUpscale: (
-      raw: { model?: string; layout?: string; inputs?: string; seed?: number; trained?: string } | null,
-    ): UpscaleInfo | Promise<UpscaleInfo> => {
-      if (raw === null) {
-        ctx.render.upscaleAb.config = null;
-        ctx.render.upscaleAb.model = null;
-        ctx.render.upscaleAb.modelName = null;
-        updateUpscaleAbLabel(ctx);
-        return ctx.render.sdfLayer.setUpscale(null);
-      }
-      if (raw.trained !== undefined) return enableTrainedUpscale(ctx, raw.trained, raw.layout);
-      const cfg = parseUpscaleConfig(raw);
-      applySdfScale(ctx, UPSCALE_SCALE);
-      const info = ctx.render.sdfLayer.setUpscale(cfg);
-      ctx.render.upscaleAb.config = cfg;
-      ctx.render.upscaleAb.model = null;
-      ctx.render.upscaleAb.modelName = null;
-      ctx.render.upscaleAb.mode = 'model';
-      updateUpscaleAbLabel(ctx);
-      return info;
-    },
     /** P3 capture: replace every actor with the default cast (fresh, unwounded bodies). */
     resetCast: () => { rebuildCast(); return ctx.world.actors.length; },
-    /** P3 capture: a full magazine, so scripted wound shots never click empty. */
-    refillShells: () => { ctx.weapon.shells = MAGAZINE_CAPACITY; updateHud(ctx); return ctx.weapon.shells; },
-    get shell() {
-      return {
-        enabled: ctx.render.sdfLayer.shellEnabled,
-        instances: ctx.world.outerHull.instanceCount,
-        // An overflowed hull leaves flesh uncovered, which under a bounded
-        // march is a HOLE, not a slightly worse bound. Never ignore this.
-        overflowed: ctx.world.outerHull.overflowed,
-        shellAmp: shellAmpOf(ctx),
-      };
-    },
-    /**
-     * Near-wound step multiplier (perfCfg.z), for looking at the 2026-09-04
-     * retune on screen. 0 restores the shipped WOUND_STEP_MUL; **0.6 is the
-     * old value** — set it, shoot a torso half a dozen times, and compare the
-     * crater at 1.5-2.5 m, which is where 4.3% / 2.2% of that body's pixels
-     * shaded from inside the meat. See WOUND_STEP_MUL in march.wgsl.ts for
-     * what the counts mean and what each value costs in steps.
-     *
-     * Takes effect on the next frame and survives a body rebuild (perfCfg is
-     * a settings uniform, and chunk views copy it from the template).
-     */
-    setWoundStep(v: number) {
-      const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
-      for (const a of ctx.world.actors) a.view.uniforms.perfCfg.value.z = n;
-      updateHud(ctx);
-    },
-    setChunkBake(on: boolean) {
-      ctx.bake.enabled = on;
-      if (!on) cancelChunkBake(ctx);
-      if (on && ctx.bake.mat) ctx.bake.seed?.(ctx.bake.mat);
-    },
-    /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
-    setSdfScale: (v: number) => applySdfScale(ctx, v),
     /** The active render cap + how it was chosen (?res=). */
     get resolution() {
       const cap = RES_RUNGS[ctx.boot.resKey];
@@ -7941,75 +7770,14 @@ async function main() {
         lastBlastMs: ctx.dynamite.lastBlastMs,
       };
     },
-    /** AUTOMATION: select a slot without synthesising a key event. */
-    selectSlot: (slot: WeaponSlot) => {
-      if (ctx.vfx.cook.phase === 'cooking') return { ok: false, reason: 'cooking' };
-      // VALIDATED, because a bad argument here does not fail — it POISONS.
-      // `WeaponSlot` is the string union 'shotgun' | 'dynamite' and the slot
-      // machine only ever compares against those, so a caller passing the
-      // NUMBER 2 (the obvious mistake for a driving script: the key is 2, the
-      // HUD says 2) gets a state whose `live`/`target` are 2 — the switch runs,
-      // reports `phase: 'up'`, makes NOTHING live, and every later press is
-      // dropped by `liveDyn` with no error anywhere. That cost a soak rig an
-      // hour of "the throws never detonate". A refusal is cheap; a silently
-      // inert weapon slot is not.
-      if (!WEAPON_SLOTS.includes(slot)) {
-        return { ok: false, reason: `unknown-slot:${String(slot)}` };
-      }
-      ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, slot);
-      updateHud(ctx);
-      return { ok: true, live: ctx.weapon.slotState.live, target: ctx.weapon.slotState.target, phase: ctx.weapon.slotState.phase };
-    },
     /** AUTOMATION: the in-hand overcook, without waiting out the fuse. */
     overcook: () => { overcookInHand(); return { ok: true }; },
-    /** Force a burst at a point, for a capture that must not wait for a throw. */
-    spawnExplosionFx: (x: number, y: number, z: number, heightM = 2, kind: 'air' | 'ground' = 'ground') => {
-      const visual = { kind, at: [x, y, z] as Vec3, heightM };
-      const scaled = scaleBurstVisual(ctx, visual);
-      igniteExplosionLight(ctx, visual.at);
-      if (ctx.vfx.explosionVfx) ctx.vfx.explosionVfx.spawn(scaled);
-      else if (ctx.vfx.burstLayer) ctx.vfx.burstLayer.spawn(scaled);
-      else spawnBurstStandIn(ctx, scaled.at, scaled.heightM, scaled.kind);
-      return { mode: ctx.vfx.explosionVfx ? 'procedural' : ctx.vfx.burstLayer ? 'atlas' : 'standin' };
-    },
-    /** THE RENDER MODE BESIDE THE PIECE MODE — live, no reload.
-     *
-     *  This exists as a SETTER, not only as a boot param, for the reason every
-     *  A/B on this project does: single-run comparisons on this machine are
-     *  worthless (the same claim has read +7.6 ms and -1.4 ms), so a paired
-     *  measurement has to alternate the two arms INSIDE ONE BOOT, against the
-     *  same room, the same bodies and the same camera. Switching does not
-     *  disturb pieces already in flight — they keep the renderer they were born
-     *  with, which is what makes the switch itself cheap and safe.
-     *
-     *  Turning it ON loads the sheet if it is not loaded yet and reports what
-     *  happened, so a caller can tell "the mode is on" from "the mode is on and
-     *  armed". */
-    setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' | 'assets' = 'march') => {
-      ctx.gibs.renderMode = mode === 'sprite' ? 'sprite'
-        : mode === 'carve' ? 'carve' : mode === 'assets' ? 'assets' : 'march';
-      if (ctx.gibs.renderMode === 'carve') ensureCarvedLibrary(ctx);
-      if (ctx.gibs.renderMode === 'sprite') await ensureGibAtlas(ctx, 'sheet');
-      // The asset path is a fetch+decode; await it so a caller can tell "mode
-      // on" from "mode on and armed" (the same contract as the sprite atlas).
-      if (ctx.gibs.renderMode === 'assets') await ensureGibAssets(ctx);
-      return { mode: ctx.gibs.renderMode, frames: ctx.gibs.atlas?.frames.length ?? 0, ready: ctx.gibs.renderMode === 'assets' ? gibAssetArmed(ctx) : ctx.gibs.atlas !== null };
-    },
     resetGibAssets: () => {
       const dropped = clearSpritePieces(ctx.vfx.spritePieces);
       ctx.gibs.assetRuntime.dispose();
       resetGibAssetCache();
       ctx.gibs.assetRuntime = createGibAssetRuntime();
       return dropped;
-    },
-    /** RELAY THE GORE-PART BENCH in front of the player: meat chunks and classic
-     *  bones, rendered through the real gib mesh path. Returns how many parts. */
-    goreShowcase: () => spawnGoreShowcase(ctx),
-    /** LAY THE SPRITE GIB BENCH in front of the player (loads the dev-only atlas
-     *  on first use). Returns the number of billboards. */
-    gibSpriteBench: async (which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource) => {
-      await ensureGibAtlas(ctx, which);
-      return laySpriteBench(ctx);
     },
     spawnDebugCharacter: (name: string, start?: Vec3) => {
       const room = ROOMS.find(r => r.id === playerRoomId(ctx)) ?? ROOMS[0]!;
