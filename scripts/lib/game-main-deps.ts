@@ -15,6 +15,8 @@ export interface ImportEntry {
   mod: string;
   typeOnly: boolean;
   star?: boolean;
+  /** `import X from '…'` rather than `import { X } from '…'`. */
+  isDefault?: boolean;
   /** Original export name when the import is aliased: `{ X as Y }`. */
   propertyName?: string;
 }
@@ -29,7 +31,7 @@ export function importTable(sf: ts.SourceFile): Map<string, ImportEntry> {
     const mod = (st.moduleSpecifier as ts.StringLiteral).text;
     const clause = st.importClause;
     const blanket = clause.isTypeOnly;
-    if (clause.name) t.set(clause.name.text, { mod, typeOnly: blanket });
+    if (clause.name) t.set(clause.name.text, { mod, typeOnly: blanket, isDefault: true });
     const b = clause.namedBindings;
     if (b && ts.isNamedImports(b)) {
       for (const el of b.elements) {
@@ -71,19 +73,22 @@ export function importsFor(
   for (const f of fragments) {
     for (const n of referencedNames(f)) if (table.has(n) && !skip.has(n)) used.add(n);
   }
-  const byMod = new Map<string, { value: string[]; type: string[] }>();
+  const byMod = new Map<string, { def?: string; value: string[]; type: string[] }>();
   const out: string[] = [];
   for (const name of [...used].sort()) {
     const e = table.get(name)!;
     if (e.star) { out.push(`import * as ${name} from '${e.mod}';`); continue; }
     const g = byMod.get(e.mod) ?? { value: [], type: [] };
+    if (e.isDefault) { g.def = name; byMod.set(e.mod, g); continue; }
     const spec = e.propertyName ? `${e.propertyName} as ${name}` : name;
     (e.typeOnly ? g.type : g.value).push(spec);
     byMod.set(e.mod, g);
   }
   for (const [mod, g] of [...byMod].sort()) {
-    const parts = [...g.value, ...g.type.map(t => `type ${t}`)];
-    out.push(`import { ${parts.join(', ')} } from '${mod}';`);
+    const named = [...g.value, ...g.type.map(t => `type ${t}`)];
+    // A default import is its own clause: `import def, { named } from '…'`.
+    const parts = [...(g.def ? [g.def] : []), ...(named.length ? [`{ ${named.join(', ')} }`] : [])];
+    out.push(`import ${parts.join(', ')} from '${mod}';`);
   }
   return out;
 }

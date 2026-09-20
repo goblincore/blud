@@ -8,6 +8,7 @@ const SRC = [
   "import { SLUG, GRAPESHOT as SHOT } from '../weapon';",
   "import type { Vec3 } from '../types';",
   "import { type RefineTail, buildMarch } from './zombie-gpu';",
+  "import zombieBlobSrc from '../characters/zombie.blob?raw';",
   '',
   'type ResRung = "800" | "600";',
   'interface Rig { a: number }',
@@ -46,6 +47,20 @@ describe('importTable / importsFor', () => {
   it('skips names the caller provides another way', () => {
     const t = importTable(sf());
     expect(importsFor(['SLUG;'], t, new Set(['SLUG']))).toEqual([]);
+  });
+});
+
+describe('default imports', () => {
+  it('re-emits a DEFAULT import as a default, not as a named one', () => {
+    const t = importTable(sf());
+    expect(importsFor(['const s = zombieBlobSrc.length;'], t))
+      .toEqual(["import zombieBlobSrc from '../characters/zombie.blob?raw';"]);
+  });
+
+  it('keeps a default and a named import of one specifier on separate parts', () => {
+    const src2 = "import def, { named } from './m';\n";
+    const sf2 = ts.createSourceFile('m.ts', src2, ts.ScriptTarget.ES2022, true);
+    expect(importsFor(['def; named;'], importTable(sf2))).toEqual(["import def, { named } from './m';"]);
   });
 });
 
