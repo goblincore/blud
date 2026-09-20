@@ -32,6 +32,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import * as ts from 'typescript';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { importTable, importsFor, localTypes, usedLocalTypes, missingLocalValues } from './lib/game-main-deps';
 
 const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
 
@@ -282,6 +283,26 @@ export function extractLeaves(
     { start: insertAt, end: insertAt, text: importBack },
   ]);
 
+  // What the moved code needs where it lands: game-main's own import lines for
+  // the names it uses, plus a copy of any module-scope TYPE it references. A
+  // module-scope VALUE cannot be copied (that forks it) or imported (that makes
+  // a cycle), so the tool refuses and names it — wave 1 shipped --imports by
+  // hand and a forgotten one only showed up as a tsc error later.
+  const fragments = [...bodies, ...consts];
+  const accounted = new Set([...moved, 'ctx']);
+  if (!opts.force) {
+    const missing = missingLocalValues(fragments, sf, accounted);
+    if (missing.length) {
+      throw new Error(
+        `references module-scope values of game-main.ts that cannot travel: ${missing.join(', ')}\n`
+        + 'Move each to its own module first (or --force if you are adding it by hand).',
+      );
+    }
+  }
+  const inferred = importsFor(fragments, importTable(sf), accounted);
+  const types = usedLocalTypes(fragments, localTypes(source, sf));
+  const needsWrapper = fragments.some(f => f.includes('withCtx('));
+
   const module = [
     `// src/lab/sdf-zombie/webgpu/${moduleName}.ts`,
     `//`,
@@ -290,9 +311,13 @@ export function extractLeaves(
     `//`,
     `// Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md`,
     ``,
-    `import type { GameContext } from './game-context';`,
+    needsWrapper
+      ? `import { withCtx, type GameContext } from './game-context';`
+      : `import type { GameContext } from './game-context';`,
+    ...inferred,
     ...extraImports,
     ``,
+    ...types.map(t => t + '\n'),
     ...consts, consts.length ? '' : '',
     ...bodies.map(b => b + '\n'),
   ].join('\n');

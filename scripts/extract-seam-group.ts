@@ -25,6 +25,8 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import * as ts from 'typescript';
 import { readFileSync, writeFileSync } from 'node:fs';
+// Import/type inference is shared with extract-leaf.ts — one implementation.
+import { importTable, importsFor, localTypes, usedLocalTypes } from './lib/game-main-deps';
 
 const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
 
@@ -36,92 +38,6 @@ interface Member {
   fullStart: number;
   end: number;
   lines: number;
-}
-
-/** name -> { module, typeOnly } for every top-level import in game-main.ts.
- *  The moved members reference these freely; without re-emitting them the new
- *  module cannot compile. They are NOT "free names" in the closure sense, which
- *  is why the free-name scan does not see them. */
-function importTable(sf: ts.SourceFile): Map<string, ImportEntry> {
-  const t = new Map<string, ImportEntry>();
-  for (const st of sf.statements) {
-    if (!ts.isImportDeclaration(st) || !st.importClause) continue;
-    const mod = (st.moduleSpecifier as ts.StringLiteral).text;
-    const clause = st.importClause;
-    const blanket = clause.isTypeOnly;
-    if (clause.name) t.set(clause.name.text, { mod, typeOnly: blanket });
-    const b = clause.namedBindings;
-    if (b && ts.isNamedImports(b)) {
-      for (const el of b.elements) {
-        t.set(el.name.text, { mod, typeOnly: blanket || el.isTypeOnly,
-                              propertyName: el.propertyName?.text });
-      }
-    } else if (b && ts.isNamespaceImport(b)) {
-      t.set(b.name.text, { mod, typeOnly: blanket, star: true });
-    }
-  }
-  return t;
-}
-
-/** Import statements covering every imported name the picked members use. */
-interface ImportEntry { mod: string; typeOnly: boolean; star?: boolean;
-  /** Original export name when the import is aliased: `{ X as Y }`. */
-  propertyName?: string }
-
-function neededImports(source: string, picked: Member[], table: Map<string, ImportEntry>): string[] {
-  const used = new Set<string>();
-  for (const m of picked) {
-    const frag = ts.createSourceFile('frag.ts', `const o = {${m.text}};`, ts.ScriptTarget.ES2022, true);
-    const walk = (n: ts.Node): void => {
-      if (ts.isIdentifier(n)) {
-        const p = n.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node };
-        const isName = p.name === n || p.propertyName === n;
-        const isMem = ts.isPropertyAccessExpression(p) && p.name === n;
-        if (!isName && !isMem && table.has(n.text)) used.add(n.text);
-      }
-      n.forEachChild(walk);
-    };
-    walk(frag);
-  }
-  const byMod = new Map<string, { value: string[]; type: string[] }>();
-  const out: string[] = [];
-  for (const name of [...used].sort()) {
-    const e = table.get(name)!;
-    if (e.star) { out.push(`import * as ${name} from '${e.mod}';`); continue; }
-    const g = byMod.get(e.mod) ?? { value: [], type: [] };
-    // Re-emit `{ X as Y }` rather than `{ Y }`, which would not resolve.
-    const spec = e.propertyName ? `${e.propertyName} as ${name}` : name;
-    (e.typeOnly ? g.type : g.value).push(spec);
-    byMod.set(e.mod, g);
-  }
-  for (const [mod, g] of [...byMod].sort()) {
-    const parts = [...g.value, ...g.type.map(t => `type ${t}`)];
-    out.push(`import { ${parts.join(', ')} } from '${mod}';`);
-  }
-  return out;
-}
-
-/** Module-scope `type X = ...` / `interface X {}` declared in game-main.ts and
- *  not exported. A moved member referencing one cannot compile without it, and
- *  it is not an import so the import table never sees it. Copy the declaration. */
-function localTypes(source: string, sf: ts.SourceFile): Map<string, string> {
-  const t = new Map<string, string>();
-  for (const st of sf.statements) {
-    if (ts.isTypeAliasDeclaration(st) || ts.isInterfaceDeclaration(st)) {
-      t.set(st.name.text, source.slice(st.getStart(sf), st.getEnd()));
-    }
-  }
-  return t;
-}
-
-function usedLocalTypes(picked: Member[], types: Map<string, string>): string[] {
-  const used = new Set<string>();
-  for (const m of picked) {
-    for (const [name] of types) {
-      if (new RegExp(`(^|[^A-Za-z0-9_.])${name}([^A-Za-z0-9_]|$)`).test(m.text)) used.add(name);
-    }
-  }
-  return [...used].sort().map(n => types.get(n)!);
 }
 
 function mainOf(sf: ts.SourceFile): ts.FunctionDeclaration {
@@ -229,8 +145,9 @@ export function extractGroup(
   // Each slice ends at the member node, which EXCLUDES its trailing comma, so
   // the object literal needs one put back between members.
   const body = picked.map(m => m.text).join(',\n');
-  const autoImports = neededImports(source, picked, importTable(sf));
-  const carriedTypes = usedLocalTypes(picked, localTypes(source, sf));
+  const frags = picked.map(m => `const o = {${m.text}};`);
+  const autoImports = importsFor(frags, importTable(sf));
+  const carriedTypes = usedLocalTypes(frags, localTypes(source, sf));
   // main() does `const { scene, camera } = ctx.boot.handle`. Members that use
   // those names are not closing over a main()-scope DECLARATION, so the
   // free-name scan does not flag them. Re-create the destructure here rather

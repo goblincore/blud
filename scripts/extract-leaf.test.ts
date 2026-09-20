@@ -178,3 +178,33 @@ describe('extract-leaf: appending to an existing module', () => {
     expect((again.module.match(/export function a\(/g) ?? []).length).toBe(1);
   });
 });
+
+describe('extract-leaf: what the moved code needs to compile', () => {
+  const withImports = (body: string): string =>
+    `import * as THREE from 'three';\nimport { SLUG } from '../weapon';\nimport type { Vec3 } from '../types';\nimport { makeGameContext } from './game-context';\n\ntype Rung = '800' | '600';\nconst RES_RUNGS = { 800: 1 };\n\nexport function main(): void {\n  const ctx = makeGameContext();\n${body}\n}\n`;
+
+  it('infers game-main imports for the names the body uses', () => {
+    const r = extractLeaves(withImports(`  function f(v: Vec3): number {\n    return new THREE.Vector3(...v).x + SLUG.radius + ctx.render.frame;\n  }\n  f([0, 0, 0]);`), ['f'], [], 'game-x-leaves');
+    expect(r.module).toContain("import * as THREE from 'three';");
+    expect(r.module).toContain("import { SLUG } from '../weapon';");
+    expect(r.module).toContain("import { type Vec3 } from '../types';");
+  });
+
+  it('copies a module-scope type the body references', () => {
+    const r = extractLeaves(withImports(`  function f(r: Rung): string {\n    return r + String(ctx.render.frame);\n  }\n  f('800');`), ['f'], [], 'game-x-leaves');
+    expect(r.module).toContain("type Rung = '800' | '600';");
+  });
+
+  it('REFUSES when the body needs a module-scope VALUE, naming it', () => {
+    const src = withImports(`  function f(): number {\n    return RES_RUNGS[800] + ctx.render.frame;\n  }\n  f();`);
+    expect(() => extractLeaves(src, ['f'], [], 'game-x-leaves')).toThrow(/RES_RUNGS/);
+    expect(() => extractLeaves(src, ['f'], [], 'game-x-leaves', [], { force: true })).not.toThrow();
+  });
+
+  it('imports withCtx into the MODULE when a moved body passes a moved fn as a value', () => {
+    const src = withImports(`  function inner(): number { return ctx.render.frame; }\n  function outer(): unknown { return { inner }; }\n  outer();`);
+    const r = extractLeaves(src, ['inner', 'outer'], [], 'game-x-leaves');
+    expect(r.module).toContain("import { withCtx, type GameContext } from './game-context';");
+    expect(r.module).toContain('{ inner: withCtx(ctx, inner) }');
+  });
+});
