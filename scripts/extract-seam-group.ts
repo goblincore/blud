@@ -26,7 +26,7 @@
 import * as ts from 'typescript';
 import { readFileSync, writeFileSync } from 'node:fs';
 // Import/type inference is shared with extract-leaf.ts — one implementation.
-import { importTable, importsFor, localTypes, usedLocalTypes } from './lib/game-main-deps';
+import { importTable, importsFor, localTypes, usedLocalTypes, localValues, referencedNames } from './lib/game-main-deps';
 
 const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
 
@@ -71,6 +71,7 @@ export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; 
   }
   const obj = (cands[0].expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression;
 
+  const moduleValues = localValues(sf);
   const members: Member[] = [];
   for (const m of obj.properties) {
     if (ts.isSpreadAssignment(m) || !m.name || !ts.isIdentifier(m.name)) continue;
@@ -81,11 +82,20 @@ export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; 
       n.forEachChild(col);
     };
     col(m);
+    // Module-scope values of game-main cannot travel either: copying forks them,
+    // importing them makes a cycle. Report them as free so the member is skipped.
+    for (const n of referencedNames(`const o = {${m.getText(sf)}};`)) {
+      if (moduleValues.has(n) && !local.has(n)) free.add(n);
+    }
     const sc = (n: ts.Node): void => {
       if (ts.isPropertyAccessExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'ctx') slices.add(n.name.text);
       if (ts.isIdentifier(n)) {
         const p = n.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node };
-        const isName = p.name === n || p.propertyName === n;
+        // A SHORTHAND property's name IS a reference to the binding of that name:
+        // `{ demoSynthesize }` carries main()'s function, and lifting it emits a
+        // shorthand with nothing in scope (TS18004).
+        const isShorthand = ts.isShorthandPropertyAssignment(p) && p.name === n;
+        const isName = !isShorthand && (p.name === n || p.propertyName === n);
         const isMem = ts.isPropertyAccessExpression(p) && p.name === n;
         if (!isName && !isMem && scope.has(n.text) && !local.has(n.text) && n.text !== 'ctx') free.add(n.text);
       }

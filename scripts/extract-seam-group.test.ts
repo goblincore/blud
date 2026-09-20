@@ -19,6 +19,8 @@ function fixture({ decoy = false }: { decoy?: boolean } = {}): string {
     "import * as THREE from 'three';",
     "import { makeGameContext } from './game-context';",
     '',
+    'const LOCAL_TUNING = { a: 1 };',
+    '',
     'export function main(): void {',
     '  const ctx = makeGameContext();',
     '  function ceilingAt(x: number): number { return x; }',
@@ -28,6 +30,8 @@ function fixture({ decoy = false }: { decoy?: boolean } = {}): string {
     '    bumpVersion: () => { version += 1; },',
     '    plain: () => 3,',
     '    needsCeiling: (x: number) => ceilingAt(x),',
+    '    ceilingAt,',
+    '    usesModuleConst: () => LOCAL_TUNING.a,',
     '  };',
     '  let version = 0;',
     '  void version;',
@@ -39,7 +43,7 @@ function fixture({ decoy = false }: { decoy?: boolean } = {}): string {
 describe('extract-seam-group: which statement is the literal', () => {
   it('finds the __sdfGame object literal', () => {
     const { members } = readMembers(fixture());
-    expect(members.map(m => m.name)).toEqual(['setFrame', 'bumpVersion', 'plain', 'needsCeiling']);
+    expect(members.map(m => m.name)).toEqual(['setFrame', 'bumpVersion', 'plain', 'needsCeiling', 'ceilingAt', 'usesModuleConst']);
   });
 
   it('still finds it when a LONGER statement merely mentions __sdfGame', () => {
@@ -47,7 +51,25 @@ describe('extract-seam-group: which statement is the literal', () => {
     // The decoy really is the longer statement — otherwise this test proves nothing.
     expect(src.indexOf('setDrawFn')).toBeGreaterThan(-1);
     const { members } = readMembers(src);
-    expect(members.map(m => m.name)).toEqual(['setFrame', 'bumpVersion', 'plain', 'needsCeiling']);
+    expect(members.map(m => m.name)).toEqual(['setFrame', 'bumpVersion', 'plain', 'needsCeiling', 'ceilingAt', 'usesModuleConst']);
+  });
+});
+
+describe('extract-seam-group: shapes that must NOT be lifted', () => {
+  it('treats a SHORTHAND member as a reference to the main() function it names', () => {
+    // `{ demoSynthesize }` looks like a plain property, but its value IS the
+    // main()-scope function of that name — lifting it emits a shorthand with
+    // nothing in scope (TS18004).
+    const r = extractGroup(fixture(), 'game-seams-x', 'createXSeams', m => m.name === 'ceilingAt', []);
+    expect(r.picked).toEqual([]);
+    expect(r.skipped[0]?.free).toContain('ceilingAt');
+  });
+
+  it('skips a member that reads a MODULE-scope value of game-main', () => {
+    // It cannot be copied (that forks it) or imported (that is a cycle).
+    const r = extractGroup(fixture(), 'game-seams-x', 'createXSeams', m => m.name === 'usesModuleConst', []);
+    expect(r.picked).toEqual([]);
+    expect(r.skipped[0]?.free).toContain('LOCAL_TUNING');
   });
 });
 
