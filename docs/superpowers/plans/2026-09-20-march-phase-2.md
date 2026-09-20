@@ -53,6 +53,20 @@ headless-Chrome capture scripts (`scripts/*.mjs`).
   every timing number. (It does NOT explain the bistability: that reproduces
   with nothing else running, and the 2026-09-19 note claiming otherwise is
   superseded.)
+- **THE FIRST GATE RUN AFTER A MARCH TEXT CHANGE NEEDS A LONGER SETTLE.** That
+  boot pays the machine-global cold compile (tens of seconds, minutes at the
+  closest ladder rung where the refine/hull programs join); the staging's
+  default 7.5 s settle expires, the page is killed, the cache never warms, and
+  every retry fails identically with `occupancy never went live at d=…`. The
+  shader is FINE. Run that first gate with `MARCH_HASH_SETTLE_TRIES=2400` (a
+  10-minute ceiling); later runs need nothing. A warm-up boot is NOT enough on
+  its own — the gate applies its own ship defaults and `setSdfScale(0.5)`, so it
+  compiles programs a plain boot never touches.
+- **Both entries carry the trailing `MARCH_IN_STRUCT` declaration**, which is
+  safe only because `marchBody` and `refineBody` build SEPARATE materials (the
+  refine twin is its own material). If a future change ever puts both entries in
+  one shader module, that struct — and anything else declared this way — is
+  declared twice and the module will not compile. Check before assuming.
 - **Targeted tests** (`npm test -- march …`) plus `npx tsc --noEmit`, except
   where a task says to run the full suite. Known pre-existing failures: 15 on
   main (`game-actor-torso-slug` ×2, `march-step-soundness`, `surface-nets-cpu`,
