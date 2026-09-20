@@ -22,6 +22,14 @@ export function createLightingProbeSeams(ctx: GameContext) {
       ctx.lighting.levelProbeWeight = Math.max(0, Math.min(1, weight)); ctx.lighting.levelProbeGain = gain;
       applyHemi(ctx); restampLevelProbes(ctx);
       return { weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain };
-    }
+    },
+    get levelProbes() {
+      return {
+        weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain, hemi: ctx.lighting.hemi.intensity, hemiBase: ctx.lighting.hemiBase,
+        wired: ctx.lighting.levelProbeNodes.size, materials: ctx.world.levelNodeMaterials.length,
+        lights: [...ctx.world.levelLightLists].map(([id, l]) => [id, l.getLights().length]),
+        rooms: [...ctx.lighting.levelProbeNodes].map(([id, n]) => [id, n.slots.probeCfg.value.x, n.slots.probeCfg.value.y, n.slots.probeDynCfg.value.x, n.slots.probeDynCfg.value.y]),
+      };
+    },
   };
 }

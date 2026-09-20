@@ -46,8 +46,9 @@ describe('gib shutter — integration tripwires', () => {
   // 2026-09-17 decomposition; every pinned string below is byte-identical.
   const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
   // setGibBlur and its exposure/streak setters moved to game-seams-leftover.ts
-  // in leaves wave 1 (2026-09-19).
-  const leftoverSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-leftover.ts', 'utf8');
+  // in leaves wave 1 (2026-09-19), then on to game-seams-fx.ts in the
+  // 2026-09-20 leftover split.
+  const fxSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
   const panelSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-panel.ts', 'utf8');
   const resolveSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-blur.ts', 'utf8');
 
@@ -118,9 +119,9 @@ describe('gib shutter — integration tripwires', () => {
     expect(panelSrc).toContain('gib?.setExposureMs(applied)');
     expect(panelSrc).toContain('gib?.setMaxStreakPx(applied)');
     expect(gameSrc).toContain('readGibShutterSettings(location.search)');
-    expect(leftoverSrc).toContain('setGibBlur');
-    expect(leftoverSrc).toContain('ctx.gibs.shutter?.setExposureMs(applied)');
-    expect(leftoverSrc).toContain('ctx.gibs.shutter?.setMaxStreakPx(applied)');
+    expect(fxSrc).toContain('setGibBlur');
+    expect(fxSrc).toContain('ctx.gibs.shutter?.setExposureMs(applied)');
+    expect(fxSrc).toContain('ctx.gibs.shutter?.setMaxStreakPx(applied)');
     expect(gameSrc).toContain('shutterPanelHost(ctx.panels.shutterGame, ctx.gibs.shutter)');
   });
 

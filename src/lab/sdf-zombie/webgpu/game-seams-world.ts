@@ -7,11 +7,14 @@
 
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
-import { type SwingVariant } from '../attack';
+import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { woundCarveNormal, woundWorldPos } from '../damage';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
-import { ROOMS } from './game-level';
+import { ROOMS, TUNNELS, FURNITURE, enclosureKeyAt, enclosureOf } from './game-level';
+import { RING_TUNING } from '../melee-ring';
+import { MOTION_TUNING } from '../motion';
+import { characterNames } from '../character-registry';
 import { HULL_SHRINK, buildHullInstances } from './occluder-hull';
 
 export function createWorldSeams(ctx: GameContext) {
@@ -351,6 +354,110 @@ export function createWorldSeams(ctx: GameContext) {
         pos: [p.pos[0], p.pos[1], p.pos[2]] as Vec3, yaw: p.yaw,
         phase: d.phase, meter: d.meter,
       };
-    })
+    }),
+    brains: () => ctx.world.actors.map(a => {
+      const b = a.mind().debug();
+      const p = a.pose().pos;
+      return {
+        id: a.id, room: a.room, kind: a.kind, phase:a.debug().phase, state: b.state, alert: b.alert,
+        swingT: b.swingT, side: b.side, variant: b.variant,
+        hasToken: a.debug().hasToken,
+        aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
+        meleeContacts: a.debug().meleeContacts,
+        speed: a.debug().speed, target: a.debug().target,
+        dist: Math.hypot(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
+        bearing: Math.atan2(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
+      };
+    }),
+    /** Ring tuning, so a capture driver asserts against the real numbers
+     *  rather than duplicating them. */
+    ringTuning: () => ({ ...RING_TUNING }),
+    /** attack.ts's beat boundaries, so a capture driver derives its phases
+     *  from the real numbers instead of duplicating them. */
+    attackTuning: () => ({ ...ATTACK_TUNING }),
+
+    /** Project a world point through the LIVE game camera to NDC + a
+     *  behind-camera flag (M2 task 5 boot driver: proves a capture subject
+     *  is actually IN FRAME — the old wounded capture faced +Z with the
+     *  actor 1.2 m to the west and nothing caught it). |ndc| <= 1 is on
+     *  screen; z > 1 means behind/clipped. */
+    screenPosOf(x: number, y: number, z: number) {
+      const v = new THREE.Vector3(x, y, z).project(camera);
+      return { x: v.x, y: v.y, z: v.z };
+    },
+    /** The live camera's world position (task-6 normal-direction evidence:
+     *  an OUTWARD camera-facing surface normal points toward the eye, so it
+     *  satisfies n·(eye−surface) > 0 — the camera-surface oracle). */
+    cameraWorld: () => [camera.position.x, camera.position.y, camera.position.z] as Vec3,
+    /** The exact inverse of screenPosOf: the world point `dist` metres along
+     *  the live camera ray through an NDC point (depth-probe evidence seam —
+     *  lets a gate place a forward sprite on a pixel it has already verified
+     *  is empty-far in the raw G-buffer). */
+    screenRayToWorld(ndcX: number, ndcY: number, dist: number) {
+      const v = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(camera);
+      v.sub(camera.position).normalize();
+      const w = camera.position.clone().addScaledVector(v, dist);
+      return [w.x, w.y, w.z] as Vec3;
+    },
+
+    /** Footprint-AA strength (perf round 2 task 6, aaCfg.y). 0 = the old
+     *  march bit-for-bit; also refreshes the one-pixel footprint (aaCfg.x) so
+     *  a frozen-scene A/B at a pinned scale reads the intended pair. */
+    setAa(strength: number) {
+      const k = ctx.render.sdfLayer.pixelConeK;
+      for (const a of ctx.world.actors) {
+        a.view.uniforms.aaCfg.value.x = k;
+        a.view.uniforms.aaCfg.value.y = strength;
+      }
+    },
+    /** Level shadows on bodies (perf round 2 task 7, levelShadowCfg.x).
+     *  0 = the pre-task-7 march bit-for-bit (the helper returns 1.0 before
+     *  sampling). The per-frame pose block ANDs this with the beam and map
+     *  existence, so a false here also survives ?spotshadow=0 boots. */
+    setLevelShadow(on: boolean) {
+      ctx.lighting.levelShadowEnabled = !!on;
+      for (const a of ctx.world.actors) a.view.uniforms.levelShadowCfg.value.x = on ? 1 : 0;
+    },
+
+    /** A/B seam for the shoulder socket clamp (motion.ts
+     *  MOTION_TUNING.shoulderSocket). 0.05 is the shipped cap; 0 disables the
+     *  clamp entirely. Live — the next stepMotion reads it — and pairable
+     *  with refreshHull() / ?frozen=1 for single-variable captures. */
+    setShoulderSocket: (cap: number) => {
+      (MOTION_TUNING as { shoulderSocket: number }).shoulderSocket = cap;
+    },
+
+    /** CAPTURE SEAM (M2 task 5): spawn one extra REGISTRY character in the
+     *  player's current room through THE SAME spawnEnemy path as boot (so
+     *  deferred gpu opts, router registrations and kit/prop wiring all flow
+     *  identically), and return its actor id. Task-6's "all registered
+     *  characters rendered once" gate drives this; ordinary play never
+     *  calls it. Face/kit/prop evidence needs a live goblin/clown, which the
+     *  room roster (zombies + the one soldier) does not carry. */
+    /** THE REGISTRY, live (task-6 gate): the roster the gate must cover is
+     *  character-registry.ts's own keys, read through the page so a driver
+     *  cannot silently drift from the registry the game actually spawns
+     *  (the zombie-only blind spot this gate exists to kill was exactly
+     *  such a drift). Read-only, JSON-serialisable, order = registry order. */
+    characterNames: (): string[] => [...characterNames()],
+
+    /** THE ENCLOSURE A POINT IS IN, in metres: the same box the probe gather and
+     *  the bundle's ceiling resolve against. A rig that wants to assert "this
+     *  piece stayed in the room" needs the room's rectangle, and hard-coding it
+     *  in the rig would let the level move out from under the assertion. */
+    enclosureBoxAt: (x: number, z: number) => {
+      const key = enclosureKeyAt(x, z);
+      const enc = enclosureOf(key);
+      return enc ? { key, min: enc.box.min, max: enc.box.max } : null;
+    },
+
+    rooms: ROOMS.map(r => ({
+      id: r.id, name: r.name, zombies: r.zombies,
+      bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },
+    })),
+    tunnels: TUNNELS.map(t => t.name),
+    furniture: FURNITURE,
+    /** Accent lights per room — capture/measurement seam (pair-shot framing). */
+    accents: ROOMS.flatMap(r => r.accents.map(a => ({ room: r.id, ...a })))
   };
 }

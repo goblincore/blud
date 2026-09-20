@@ -197,7 +197,10 @@ describe('shutter game — integration tripwires', () => {
   const layerSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-game-layer.ts', 'utf8');
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
   const miscSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-misc.ts', 'utf8');
-  const leftoverSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-leftover.ts', 'utf8');
+  // setBloodBlurExposure / setBloodBlurMaxStreak moved to game-seams-leftover.ts
+  // in leaves wave 1 (2026-09-19), then on to game-seams-fx.ts in the
+  // 2026-09-20 leftover split.
+  const fxSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
   const postSrc = readFileSync('src/lab/sdf-zombie/webgpu/post-aa.ts', 'utf8');
   const gooSrc = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
 
@@ -242,9 +245,9 @@ describe('shutter game — integration tripwires', () => {
     expect(gameSrc).toContain('ctx.render.postAa.setCaptureStage');
     expect(gameSrc).toContain('readShutterGameSettings(location.search)');
     // setBloodBlurExposure and setBloodBlurMaxStreak moved into
-    // game-seams-leftover.ts in leaves wave 1 (2026-09-19).
-    expect(leftoverSrc).toContain('setBloodBlurExposure');
-    expect(leftoverSrc).toContain('setBloodBlurMaxStreak');
+    // game-seams-fx.ts in the 2026-09-20 leftover split.
+    expect(fxSrc).toContain('setBloodBlurExposure');
+    expect(fxSrc).toContain('setBloodBlurMaxStreak');
     // setBloodBlurSeedScale and setBloodBlurDepthBias moved into
     // game-seams-misc.ts in the 2026-09-17 decomposition. All four setters are
     // byte-identical — only the holding file differs.

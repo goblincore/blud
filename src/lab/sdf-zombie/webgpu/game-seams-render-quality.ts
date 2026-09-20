@@ -6,12 +6,14 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import type { GameContext } from './game-context';
+import * as THREE from 'three/webgpu';
 import { clampFovDeg } from './fisheye';
 import { applySdfScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-leaves';
 import { ensureImpactSplashLayer } from './game-vfx-leaves';
 import { shellAmpOf } from './game-world-leaves';
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { UPSCALE_SCALE, parseUpscaleConfig } from './upscale/upscale-model';
+import { runUpscaleSelfCheck } from './upscale/upscale-selfcheck';
 import { type UpscaleInfo } from './upscale/upscale-stage';
 
 export function createRenderQualitySeams(ctx: GameContext) {
@@ -95,6 +97,53 @@ export function createRenderQualitySeams(ctx: GameContext) {
       };
     },
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
-    setSdfScale: (v: number) => applySdfScale(ctx, v)
+    setSdfScale: (v: number) => applySdfScale(ctx, v),
+    // ---------------------------------------------------------------
+    // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at
+    // screen CENTRE; setRenderFov(deg) sets what the camera actually
+    // draws. The bend is the ratio between them, so raising the render
+    // FOV at a fixed centre FOV bends harder AND shows more world —
+    // at the cost of more of it being marched. setFisheye(camera.fov)
+    // (or anything wider) turns the lens off exactly.
+    //
+    // Both setters clamp with clampFovDeg — the same clamp makeLens applies
+    // internally — so camera.fov and the lens can never disagree about the
+    // render FOV (a stray setRenderFov(500) would otherwise squeeze the
+    // frame with a lens clamped to 179 while the frustum drew at 500). Both
+    // reject non-finite input as a no-op rather than feeding a NaN into
+    // camera.updateProjectionMatrix() (a dead frame) or into makeLens (whose
+    // clamp does not catch NaN either — see fisheye.ts). Both return the
+    // report that .fisheye also returns, so the console shows what actually
+    // landed, not what was typed.
+    // ---------------------------------------------------------------
+    setFisheye: (deg: number) => {
+      if (Number.isFinite(deg)) {
+        ctx.player.centerFovDeg = clampFovDeg(deg);
+        ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
+      }
+      return fisheyeReport(ctx);
+    },
+    /** renderFovDeg is what is drawn, visibleFovDeg what reaches the
+     *  screen (the warp crops the mid-edges), centerFovDeg what the
+     *  middle reads as. Tune against `visible`, not `render`. */
+    get fisheye() {
+      return fisheyeReport(ctx);
+    },
+
+    /** P3: the trained models in the dev store (GET /__lab/upscale-models). */
+    upscaleModels: async () => {
+      const r = await fetch('/__lab/upscale-models', { cache: 'no-store' });
+      if (!r.ok) throw new Error(`upscaleModels: HTTP ${r.status}`);
+      return r.json();
+    },
+    /** G1-parity (spec 2026-09-11): GPU output vs the CPU twin, in-page. Requires
+     *  freeze(true) + setRenderLock(true) first. Returns statistics only. */
+    upscaleSelfCheck: (opts?: { compareLayouts?: boolean }) => runUpscaleSelfCheck({
+      renderer: ctx.boot.handle.renderer,
+      layer: ctx.render.sdfLayer,
+      camera: camera as THREE.PerspectiveCamera,
+      renderFrames: (n: number) => { ctx.boot.handle.setLoopRunning(false); for (let k = 0; k < n; k++) ctx.boot.handle.step(1 / 60); },
+      resolveGpu: () => ctx.boot.handle.resolveGpu(),
+    }, opts ?? {}),
   };
 }

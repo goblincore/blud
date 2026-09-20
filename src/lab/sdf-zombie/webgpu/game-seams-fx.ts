@@ -7,7 +7,12 @@
 
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
+import { IMPACT_GOUT, type ImpactGoutProfile } from '../blood-sim';
+import { type Vec3 } from '../types';
+import { sdBody } from '../validate';
 import { chunkSettled } from '../gib-chunks';
+import { woundFromPellet, woundFromSlug, traceProjectile } from './game-weapon';
+import { spillVerdict, woundTuningNow } from './game-vfx-leaves';
 import { clearSpritePieces, setSpritePiecesVisible, spritePieceStates } from './gib-sprite-pieces';
 import { type GooReconstruction } from './goo-layer';
 
@@ -452,6 +457,127 @@ export function createFxSeams(ctx: GameContext) {
       // flips `?gibrender=sprite`. `rest` distinguishes a parked quad from one
       // still flying; the other fields are the marched row's own shape.
       ...spritePieceStates(ctx.vfx.spritePieces).map(p => ({ ...p, render: 'sprite' as const })),
-    ]
+    ],
+    /** Task-8 evidence seam: live gut-rope state per body, read-only. A body
+     *  with no rope entry reports {none: true}. droplets is the rope's current
+     *  'gut'-kind population in the blood sim (the goo pass's input). */
+    guts: () => ctx.world.actors.map(a => {
+      const e = ctx.vfx.gutRopes.get(a.id);
+      const nodes = e?.chain.nodes ?? [];
+      return {
+        id: a.id,
+        room: a.room,
+        phase: a.debug().phase,
+        none: !e,
+        attached: e?.chain.attached ?? false,
+        settled: e?.chain.settled ?? false,
+        nodes: nodes.length,
+        head: nodes[0] ? [...nodes[0]!.pos] as Vec3 : null,
+        tail: nodes.length ? [...nodes[nodes.length - 1]!.pos] as Vec3 : null,
+        droplets: e?.droplets.length ?? 0,
+        woundCavity: e ? e.wound.cavity === true : null,
+      };
+    }),
+
+    /**
+     * Screen-space metaball blood (X1.bleed-look round 2). ON suppresses the
+     * bead + ribbon sprites: the goo surface carries the fluid body, and
+     * those are the hard-edged shapes it exists to replace (they would also
+     * draw the same particles twice). Mist and floor splats stay.
+     */
+    setGoo(on: boolean) {
+      if (!ctx.goo.layer) return false;
+      ctx.goo.enabled = on;
+      // Beads and ribbons go: they are the hard-edged shapes the goo
+      // replaces, and they would draw the same particles twice.
+      ctx.vfx.bloodView.setBeadsVisible(!on);
+      // MIST STAYS. Hiding it (first cut) was a bug with teeth: the goo only
+      // draws where droplets OVERLAP, so a sparse hit — an ordinary pellet
+      // at range — crosses no threshold and draws NOTHING, and with mist off
+      // too the result was a wound with no blood at all. Reproduced headless:
+      // pellet at threshold 1.5 spawned 10 droplets and rendered zero pixels.
+      // The reference frames want both anyway — connected masses PLUS fine
+      // satellite specks — so mist is the sparse-case floor and the grain.
+      ctx.vfx.bloodView.setMistVisible(true);
+      ctx.panels.gooPanel?.setVisible(on);
+      return true;
+    },
+    /** Exposure in ms — longer = longer trails. Clamped [0, 200]. Shared by
+     *  the blood AND gib layers (the panel control is one control). */
+    setBloodBlurExposure: (ms: number) => {
+      const applied = ctx.panels.shutterGame?.setExposureMs(ms) ?? 0;
+      ctx.gibs.shutter?.setExposureMs(applied);
+      ctx.panels.shutterPanel?.refresh();
+      return applied;
+    },
+    /** Max drawn trail in CONTENT pixels. Clamped [1, 400]. Shared. */
+    setBloodBlurMaxStreak: (px: number) => {
+      const applied = ctx.panels.shutterGame?.setMaxStreakPx(px) ?? 0;
+      ctx.gibs.shutter?.setMaxStreakPx(applied);
+      ctx.panels.shutterPanel?.refresh();
+      return applied;
+    },
+    /** FLYING-GIB SHUTTER BLUR — separate switch, shared exposure. */
+    setGibBlur: (on: boolean) => {
+      const next = ctx.gibs.shutter?.setEnabled(on) ?? false;
+      ctx.panels.shutterPanel?.refresh();
+      return next;
+    },
+
+    /** Sweep gout density/shape without a rebuild. Mutates the shared table,
+     *  so it affects every later impact of that kind. */
+    setGoutTuning(kind: 'pellet' | 'slug' | 'stump', o: Partial<ImpactGoutProfile>) {
+      Object.assign(IMPACT_GOUT[kind], o);
+      return { ...IMPACT_GOUT[kind] };
+    },
+    get gout() {
+      return { pellet: { ...IMPACT_GOUT.pellet }, slug: { ...IMPACT_GOUT.slug }, stump: { ...IMPACT_GOUT.stump } };
+    },
+
+    get woundTuning() {
+      return woundTuningNow(ctx);
+    },
+
+    /** Dev twin of the lab's stampWoundAt (2026-08-27): ONE wound by ray
+     *  through the same worldHitToWound path the pellet uses, pushed via
+     *  stampBlast — no damage, no shove, no sever. A full grapeshot volley
+     *  kills and death-gibs (the weapon works), so a pocked STANDING torso
+     *  only exists through this seam. */
+    stampWoundAt: (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
+      kind: 'pellet' | 'slug' = 'pellet', bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      if (!a) return null;
+      const posed = a.posed();
+      const hit = traceProjectile(
+        [ox, oy, oz],
+        [ox + dx * 8, oy + dy * 8, oz + dz * 8],
+        q => sdBody(q, posed),
+      );
+      if (!hit) return null;
+      // 'slug' carries the BLAST profile at 0.16 (see SLUG) — the blast-class
+      // crater look without resolveExplosion's 16-wound kill-gib.
+      const field = (q: Vec3) => sdBody(q, posed);
+      const yaw = a.pose().yaw;
+      const w = kind === 'slug'
+        ? woundFromSlug(posed.prims, hit, field, yaw)
+        : woundFromPellet(posed.prims, hit, yaw, field);
+      a.stampBlast([w]);
+      // Capture twins must spill too — task 8 judges the rope from exactly
+      // this seam. Rolls bleedRng deterministically: same command sequence,
+      // same rope-or-not.
+      spillVerdict(ctx, a, w);
+      return hit;
+    },
+
+    /** Wound union-reach cull (close-up wound-cull task, 2026-09-05) —
+     *  applyWounds' one-sphere test before the wound loop. SHIPS ON; a value
+     *  no-op by construction, so ON vs OFF is a pixel-parity gate, and the
+     *  bench's cullOff leg prices what the loop cost. Bodies only: chunk
+     *  torn-end wounds ride writeWounds directly and keep the 1e9 no-cull
+     *  identity (a chunk's proxy box is already tight). */
+    setWoundCull(on: boolean) {
+      ctx.vfx.woundCullRequested = on;
+      for (const a of ctx.world.actors) a.view.setWoundCull(on);
+    },
   };
 }
