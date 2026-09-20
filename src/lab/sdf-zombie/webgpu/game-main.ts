@@ -268,7 +268,6 @@ import { applyMouseDelta } from './game-player-leaves';
 import { setLoader } from './game-boot-leaves';
 import { registerBleed, stepGutRopes } from './game-world-leaves3';
 import { demoRecordStop } from './game-demo-leaves2';
-import { createLeftoverSeams } from './game-seams-leftover';
 import { createFireSeams } from './game-seams-fire';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
@@ -7679,7 +7678,6 @@ async function main() {
     ...createSkeletonSeams(ctx),
     ...createDynamiteSeams(ctx),
     ...createMarchDebugSeams(ctx),
-    ...createLeftoverSeams(ctx),
     ...createMiscSeams(ctx),
     ...createFxSeams(ctx),
     ...createWeaponPlayerSeams(ctx),

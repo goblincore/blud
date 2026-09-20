@@ -594,5 +594,20 @@ export function createDebugProbeSeams(ctx: GameContext, d: DebugProbeDeps) {
       }
       return ctx.render.depthProbes.map((s) => s.name);
     },
+    /** Bounded SUBTREE INSPECTOR (task-6 kit/prop evidence seam): finds the
+     *  first scene descendant whose name contains `namePart` (the deferred
+     *  rig groups are named `deferred-rig-<character>-…`), walks its
+     *  descendants breadth-first up to `maxNodes`, and reports each node's
+     *  world position, material names and ROUTER route/receiver. This is the
+     *  "actual named kit descendants / material routing" evidence the task-5
+     *  review demands — a mesh-count increment is not kit proof. */
+    setRegisteredObjectsVisible: (uuids: string[], visible: boolean) => {
+      let count = 0;
+      const selected = new Set(uuids);
+      scene.traverse(o => {
+        if (selected.has(o.uuid)) { o.visible = visible; count++; }
+      });
+      return count;
+    },
   };
 }
