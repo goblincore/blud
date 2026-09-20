@@ -333,3 +333,40 @@ describe('extract-leaf: shadowing and transitive types', () => {
     expect(r.module).toContain('interface ChunkTemplate');
   });
 });
+
+describe('extract-leaf: const arrow functions', () => {
+  // Most of what is left in main() is `const f = (...) => ...` capturing ctx:
+  // cancelChunkBake, gibBudget, shellAmpOf, applyHemi, levelSceneLights…
+  const src = (body: string): string =>
+    `import * as THREE from 'three';\nimport { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n${body}\n}\n`;
+
+  it('converts a block-bodied arrow into an exported function with ctx', () => {
+    const r = extractLeaves(src(`  const cancelChunkBake = () => {\n    ctx.bake.pending = 0;\n  };\n  cancelChunkBake();`), ['cancelChunkBake'], [], 'game-bake-leaves');
+    expect(r.module).toContain('export function cancelChunkBake(ctx: GameContext) {');
+    expect(r.module).toContain('ctx.bake.pending = 0;');
+    expect(r.main).toContain('cancelChunkBake(ctx);');
+    expect(r.main).not.toContain('const cancelChunkBake');
+  });
+
+  it('gives an expression-bodied arrow a return, keeping its return type', () => {
+    const r = extractLeaves(src(`  const shellAmpOf = (): number => ctx.world.floor ?? 0;\n  shellAmpOf();`), ['shellAmpOf'], [], 'game-world-leaves');
+    expect(r.module).toMatch(/export function shellAmpOf\(ctx: GameContext\): number \{\n\s*return ctx\.world\.floor \?\? 0;\n\}/);
+  });
+
+  it('keeps parameters and their types, after ctx', () => {
+    const r = extractLeaves(src(`  const gibAllowance = (remaining: number, left: number): number => remaining + left + ctx.gibs.budget;\n  gibAllowance(1, 2);`), ['gibAllowance'], [], 'game-gibs-leaves');
+    expect(r.module).toContain('export function gibAllowance(ctx: GameContext, remaining: number, left: number): number {');
+    expect(r.main).toContain('gibAllowance(ctx, 1, 2);');
+  });
+
+  it('keeps async', () => {
+    const r = extractLeaves(src(`  const loadIt = async (n: string): Promise<void> => {\n    ctx.bake.pending = n.length;\n  };\n  void loadIt('a');`), ['loadIt'], [], 'game-bake-leaves');
+    expect(r.module).toContain('export async function loadIt(ctx: GameContext, n: string): Promise<void> {');
+  });
+
+  it('moves an arrow that is only ever passed as a value, wrapped', () => {
+    const r = extractLeaves(src(`  const applyHemi = () => { ctx.lighting.hemiBase = 1; };\n  const deps = { applyHemi };\n  void deps;`), ['applyHemi'], [], 'game-lighting-leaves');
+    expect(r.module).toContain('export function applyHemi(ctx: GameContext) {');
+    expect(r.main).toContain('{ applyHemi: withCtx(ctx, applyHemi) }');
+  });
+});

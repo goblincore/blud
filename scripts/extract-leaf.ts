@@ -155,6 +155,7 @@ export function extractLeaves(
 
   const cuts: Array<{ start: number; end: number }> = [];
   const decls: Array<{ node: ts.FunctionDeclaration; name: string }> = [];
+  const arrows: Array<{ stmt: ts.VariableStatement; decl: ts.VariableDeclaration; fn: ts.ArrowFunction; name: string }> = [];
   const consts: string[] = [];
   /** Statement rewrites in main() that are NOT cuts (a partly-moved `const` list). */
   const rewrites: Edit[] = [];
@@ -169,6 +170,19 @@ export function extractLeaves(
       linesMoved += lineSpan(st);
       cuts.push({ start: st.getFullStart(), end: st.getEnd() });
       continue;
+    }
+    // `const f = (…) => …`, which is most of what is left in main(). Hoisting
+    // differs (a module function is hoisted, a const arrow is not), which is
+    // safe in the direction we move it: out of a closure into module scope.
+    if (ts.isVariableStatement(st) && st.declarationList.declarations.length === 1) {
+      const d = st.declarationList.declarations[0];
+      if (ts.isIdentifier(d.name) && want.has(d.name.text) && d.initializer
+        && ts.isArrowFunction(d.initializer)) {
+        arrows.push({ stmt: st, decl: d, fn: d.initializer, name: d.name.text });
+        linesMoved += lineSpan(st);
+        cuts.push({ start: st.getFullStart(), end: st.getEnd() });
+        continue;
+      }
     }
     if (ts.isVariableStatement(st)) {
       // ONE statement can declare several names (`const _bfA = …, _bfB = …;`).
@@ -199,8 +213,8 @@ export function extractLeaves(
     }
   }
 
-  if (decls.length !== fnNames.length) {
-    throw new Error(`expected ${fnNames.length} functions, matched ${decls.length}`);
+  if (decls.length + arrows.length !== fnNames.length) {
+    throw new Error(`expected ${fnNames.length} functions, matched ${decls.length + arrows.length}`);
   }
 
   // Which main()-scope types the moved bodies reference — they come along.
@@ -209,7 +223,7 @@ export function extractLeaves(
   const carriedNames = new Set<string>();
   // Transitive: a carried type can reference another main()-scope type
   // (BakedChunk -> ChunkTemplate), and that one must come too.
-  let frontier = [...decls.map(d => d.node.getText(sf))];
+  let frontier = [...decls.map(d => d.node.getText(sf)), ...arrows.map(a => a.stmt.getText(sf))];
   while (frontier.length) {
     const next: string[] = [];
     for (const [name, t] of mainTypes) {
@@ -226,8 +240,10 @@ export function extractLeaves(
   // THE LEAF CHECK. Report every offender of every function in one message: the
   // point is to plan the next wave, not to bisect one name per run.
   if (!opts.force) {
-    const offenders = decls
-      .map(d => ({ name: d.name, free: freeNames(d.node, sf, scope, moved) }))
+    const offenders = [
+      ...decls.map(d => ({ name: d.name, node: d.node as ts.Node })),
+      ...arrows.map(a => ({ name: a.name, node: a.fn as ts.Node })),
+    ].map(d => ({ name: d.name, free: freeNames(d.node, sf, scope, moved) }))
       .filter(o => o.free.length);
     if (offenders.length) {
       throw new Error(
@@ -346,6 +362,25 @@ export function extractLeaves(
     return raw.split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n');
   });
 
+  // Arrow -> function declaration. The parameter list, return type, async and
+  // the body come across verbatim; an expression body gains a `return`.
+  const arrowBodies = arrows.map(({ stmt, fn, name }) => {
+    const c = cuts.find(x => x.start === stmt.getFullStart())!;
+    const local = [...inside(c), ...rebindEdits(fn)];
+    const deindent = (t: string): string => t.split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n');
+    const piece = (node: ts.Node): string => deindent(applyEdits(source.slice(node.getStart(sf), node.getEnd()),
+      local.filter(e => e.start >= node.getStart(sf) && e.end <= node.getEnd()), node.getStart(sf)));
+    const params = fn.parameters.map(p => piece(p));
+    const ret = fn.type ? `: ${piece(fn.type)}` : '';
+    const asy = fn.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword) ? 'async ' : '';
+    const doc = deindent(source.slice(stmt.getFullStart(), stmt.getStart(sf)).replace(/^\n+/, ''));
+    const sig = `${doc}export ${asy}function ${name}(${['ctx: GameContext', ...params].join(', ')})${ret} `;
+    const body = ts.isBlock(fn.body)
+      ? piece(fn.body)
+      : `{\n  return ${piece(fn.body)};\n}`;
+    return sig + body;
+  });
+
   // game-main.ts must import back everything that just left it, plus withCtx if
   // anything is now wrapped.
   const back = [...fnNames, ...constNames, ...carriedMainTypes.map(([n]) => n)].sort();
@@ -370,7 +405,7 @@ export function extractLeaves(
   // a cycle), so the tool refuses and names it — wave 1 shipped --imports by
   // hand and a forgotten one only showed up as a tsc error later.
   const typeBlocks = carriedMainTypes.map(([, t]) => `export ${t.text}`);
-  const fragments = [...bodies, ...consts, ...typeBlocks];
+  const fragments = [...bodies, ...arrowBodies, ...consts, ...typeBlocks];
   const accounted = new Set([...moved, 'ctx']);
   if (!opts.force) {
     const missing = missingLocalValues(fragments, sf, accounted);
@@ -408,6 +443,7 @@ export function extractLeaves(
     ...typeBlocks.map(t => t + '\n'),
     ...consts, consts.length ? '' : '',
     ...bodies.map(b => b + '\n'),
+    ...arrowBodies.map(b => b + '\n'),
   ].join('\n');
 
   return {
