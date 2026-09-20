@@ -114,3 +114,35 @@ describe('extract-leaf: the leaf check', () => {
     expect(msg).toContain('b');
   });
 });
+
+describe('extract-leaf: --rebind', () => {
+  // scene and camera are `const { scene, camera } = ctx.boot.handle` in main(),
+  // so they are reachable from ctx — they just are not spelled that way. Without
+  // this, half of game-main's functions are permanently "blocked" on them.
+  const src = fixture(`  const { scene, camera } = ctx.boot.handle;\n  function sizeSdfLayer(w: number): void {\n    scene.add(ctx.render.layer);\n    camera.updateProjectionMatrix();\n    void w;\n  }\n  sizeSdfLayer(2);`);
+  const rebind = { scene: 'ctx.boot.handle.scene', camera: 'ctx.boot.handle.camera' };
+
+  it('rewrites a rebound free name inside the moved body', () => {
+    const r = extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves', [], { rebind });
+    expect(r.module).toContain('ctx.boot.handle.scene.add(ctx.render.layer);');
+    expect(r.module).toContain('ctx.boot.handle.camera.updateProjectionMatrix();');
+    expect(r.module).not.toMatch(/(^|[^.\w])scene\./m);
+  });
+
+  it('accepts the function as a leaf once its free names are rebound', () => {
+    expect(() => extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves')).toThrow(/scene/);
+    expect(() => extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves', [], { rebind })).not.toThrow();
+  });
+
+  it('leaves the call site in game-main alone', () => {
+    const r = extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves', [], { rebind });
+    expect(r.main).toContain('const { scene, camera } = ');
+  });
+
+  it('does not touch a same-named property or local', () => {
+    const s2 = fixture(`  const { scene, camera } = ctx.boot.handle;\n  void camera;\n  function f(): void {\n    const scene = ctx.render.frame;\n    ctx.demo.scene = scene;\n    void scene;\n  }\n  f();`);
+    const r = extractLeaves(s2, ['f'], [], 'game-render-leaves', [], { rebind });
+    expect(r.module).toContain('const scene = ctx.render.frame;');
+    expect(r.module).toContain('ctx.demo.scene = scene;');
+  });
+});

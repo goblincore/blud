@@ -5,6 +5,14 @@
 // capture, and rewriting every call site.
 //
 //   npx tsx scripts/extract-leaf.ts <module-basename> <fn>[,<fn>...] [--consts A,B] [--write]
+//   npx tsx scripts/extract-leaf.ts --leaves      # plan a wave: leaves, and what blocks the rest
+//   ... --rebind scene=ctx.boot.handle.scene,camera=ctx.boot.handle.camera
+//
+// --rebind rewrites a free name inside the MOVED body to a ctx path, for names
+// main() only destructured out of ctx (`const { scene, camera } = ctx.boot.handle`).
+// Such a name does not block the move; without this most of game-main's
+// functions are permanently "blocked" on scene/camera. main()'s own uses of the
+// name are untouched. --leaves takes the same flag, to plan against it.
 //
 // A leaf is a function with no free main()-scope functions or vars (see
 // `npx tsx scripts/slice-extract.ts --functions`). Anything else needs its
@@ -115,13 +123,18 @@ function applyEdits(text: string, edits: readonly Edit[], offset = 0): string {
 
 export function extractLeaves(
   source: string, fnNames: readonly string[], constNames: readonly string[], moduleName: string,
-  extraImports: readonly string[] = [], opts: { force?: boolean } = {},
+  extraImports: readonly string[] = [],
+  opts: { force?: boolean; rebind?: Record<string, string> } = {},
 ): Extraction {
   const sf = ts.createSourceFile('game-main.ts', source, ts.ScriptTarget.ES2022, true);
   const main = findMain(sf);
   const want = new Set(fnNames);
   const wantConst = new Set(constNames);
-  const moved = new Set([...fnNames, ...constNames]);
+  const rebind = opts.rebind ?? {};
+  // A REBOUND name is reachable from ctx, just spelled differently in main()
+  // (`const { scene, camera } = ctx.boot.handle`). It is not a closure escape,
+  // so it does not block the move — the body is rewritten to the ctx path.
+  const moved = new Set([...fnNames, ...constNames, ...Object.keys(rebind)]);
   const scope = mainScopeNames(main);
 
   const cuts: Array<{ start: number; end: number }> = [];
@@ -218,12 +231,30 @@ export function extractLeaves(
   // de-indent and insert `export` + the ctx parameter at AST positions (a text
   // pattern misses `function f<T>(`, which is how registerLitChunkMaterial was
   // silently left without ctx).
+  // Rebind edits are body-local: main()'s own `scene` references stay as they are.
+  const rebindEdits = (node: ts.Node): Edit[] => {
+    const out: Edit[] = [];
+    const local = localNames(node);
+    const walk = (n: ts.Node): void => {
+      if (ts.isIdentifier(n) && rebind[n.text] && !local.has(n.text)) {
+        const p = n.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node };
+        const isDeclName = p.name === n || p.propertyName === n;
+        const isMember = ts.isPropertyAccessExpression(p) && p.name === n;
+        if (!isDeclName && !isMember) out.push({ start: n.getStart(sf), end: n.getEnd(), text: rebind[n.text] });
+      }
+      n.forEachChild(walk);
+    };
+    walk(node);
+    return out;
+  };
+
   const inside = (c: { start: number; end: number }) => edits.filter(e => e.start >= c.start && e.end <= c.end);
   const bodies = decls.map(({ node }, i) => {
     const c = cuts.find(x => x.start === node.getFullStart())!;
     const declStart = (node.modifiers?.[0] ?? node).getStart(sf);
     const local: Edit[] = [
       ...inside(c),
+      ...rebindEdits(node),
       { start: declStart, end: declStart, text: 'export ' },
       // parameters.pos is just after `(`, so this lands after any <T> list.
       { start: node.parameters.pos, end: node.parameters.pos,
@@ -270,6 +301,29 @@ export function extractLeaves(
 }
 
 if (process.argv[1]?.endsWith('extract-leaf.ts')) {
+  // --leaves: which main()-scope functions pass the leaf check, and what blocks
+  // the rest. This is the wave planner — it answers the question the old
+  // workflow answered by running the tool and reading tsc's fallout.
+  if (process.argv[2] === '--leaves') {
+    const src = readFileSync(GAME_MAIN, 'utf8');
+    const sf = ts.createSourceFile('game-main.ts', src, ts.ScriptTarget.ES2022, true);
+    const main = findMain(sf);
+    const scope = mainScopeNames(main);
+    const li = process.argv.indexOf('--rebind');
+    const reboundNames = li > 0 ? process.argv[li + 1].split(',').map(kv => kv.split('=')[0]) : [];
+    const leaves: string[] = [];
+    const blocked: Array<[string, string[]]> = [];
+    for (const st of main.body!.statements) {
+      if (!ts.isFunctionDeclaration(st) || !st.name) continue;
+      const free = freeNames(st, sf, scope, new Set([st.name.text, ...reboundNames]));
+      if (free.length) blocked.push([st.name.text, free]); else leaves.push(st.name.text);
+    }
+    console.log(`leaves (${leaves.length}):`);
+    for (const n of leaves) console.log(`   ${n}`);
+    console.log(`\nblocked (${blocked.length}):`);
+    for (const [n, free] of blocked) console.log(`   ${n.padEnd(28)} ${free.join(', ')}`);
+    process.exit(0);
+  }
   const [moduleName, fnCsv] = process.argv.slice(2);
   const ci = process.argv.indexOf('--consts');
   const constNames = ci > 0 ? process.argv[ci + 1].split(',') : [];
@@ -277,8 +331,13 @@ if (process.argv[1]?.endsWith('extract-leaf.ts')) {
   const src = readFileSync(GAME_MAIN, 'utf8');
   const ii = process.argv.indexOf('--imports');
   const extraImports = ii > 0 ? process.argv[ii + 1].split(';') : [];
+  const ri = process.argv.indexOf('--rebind');
+  const rebind = ri > 0 ? Object.fromEntries(process.argv[ri + 1].split(',').map(kv => {
+    const [k, ...v] = kv.split('=');
+    return [k, v.join('=')] as const;
+  })) : undefined;
   const r = extractLeaves(src, fnNames, constNames, moduleName, extraImports,
-                          { force: process.argv.includes('--force') });
+                          { force: process.argv.includes('--force'), rebind });
   console.log(`module     : src/lab/sdf-zombie/webgpu/${moduleName}.ts`);
   console.log(`functions  : ${fnNames.join(', ')}`);
   console.log(`consts     : ${constNames.join(', ') || '(none)'}`);
