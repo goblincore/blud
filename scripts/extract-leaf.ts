@@ -141,6 +141,8 @@ export function extractLeaves(
   const cuts: Array<{ start: number; end: number }> = [];
   const decls: Array<{ node: ts.FunctionDeclaration; name: string }> = [];
   const consts: string[] = [];
+  /** Statement rewrites in main() that are NOT cuts (a partly-moved `const` list). */
+  const rewrites: Edit[] = [];
   let linesMoved = 0;
 
   const lineSpan = (st: ts.Node): number =>
@@ -154,14 +156,29 @@ export function extractLeaves(
       continue;
     }
     if (ts.isVariableStatement(st)) {
-      for (const d of st.declarationList.declarations) {
-        if (!ts.isIdentifier(d.name) || !wantConst.has(d.name.text)) continue;
-        const raw = source.slice(st.getFullStart(), st.getEnd()).replace(/^\n+/, '');
-        const text = raw.split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n');
-        // `export` must precede the declaration, after any doc comment.
-        const nl = text.lastIndexOf('\n');
-        consts.push(nl >= 0 ? `${text.slice(0, nl + 1)}export ${text.slice(nl + 1)}` : `export ${text}`);
-        linesMoved += lineSpan(st);
+      // ONE statement can declare several names (`const _bfA = …, _bfB = …;`).
+      // Handle it as a statement, not once per name: cutting per name deleted
+      // overlapping ranges and left game-main.ts syntactically broken.
+      const decls = st.declarationList.declarations;
+      const taken = decls.filter(d => ts.isIdentifier(d.name) && wantConst.has(d.name.text));
+      if (!taken.length) continue;
+      const kw = st.declarationList.flags & ts.NodeFlags.Const ? 'const'
+        : st.declarationList.flags & ts.NodeFlags.Let ? 'let' : 'var';
+      const kept = decls.filter(d => !taken.includes(d));
+      // Doc comment travels only when the whole statement does.
+      const lead = kept.length ? '' : source.slice(st.getFullStart(), st.getStart(sf))
+        .replace(/^\n+/, '').split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n');
+      for (const d of taken) {
+        const text = source.slice(d.getStart(sf), d.getEnd())
+          .split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n');
+        consts.push(`${lead}export ${kw} ${text};`);
+      }
+      linesMoved += lineSpan(st);
+      if (kept.length) {
+        // Rewrite the statement with the survivors; main() still needs them.
+        const rest = kept.map(d => source.slice(d.getStart(sf), d.getEnd())).join(', ');
+        rewrites.push({ start: st.getStart(sf), end: st.getEnd(), text: `${kw} ${rest};` });
+      } else {
         cuts.push({ start: st.getFullStart(), end: st.getEnd() });
       }
     }
@@ -279,6 +296,7 @@ export function extractLeaves(
   const outside = edits.filter(e => !cuts.some(c => e.start >= c.start && e.end <= c.end));
   const out = applyEdits(source, [
     ...outside,
+    ...rewrites,
     ...cuts.map(c => ({ ...c, text: '' })),
     { start: insertAt, end: insertAt, text: importBack },
   ]);

@@ -236,3 +236,33 @@ describe('extract-leaf: mergeModule import shapes', () => {
     expect(m).toMatch(/import \{ buildMarch, type Tail \} from '\.\/gpu';/);
   });
 });
+
+describe('extract-leaf: --consts on a multi-declarator statement', () => {
+  // `const _bfA = new THREE.Vector3(), _bfB = new THREE.Vector3();` is one
+  // statement with two declarators. Cutting it once per requested name deleted
+  // overlapping ranges and left game-main.ts syntactically broken.
+  const src = (body: string): string =>
+    `import * as THREE from 'three';\nimport { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n  const _bfA = new THREE.Vector3(), _bfB = new THREE.Vector3();\n${body}\n}\n`;
+
+  it('moves BOTH declarators without corrupting the statement', () => {
+    const r = extractLeaves(src(`  function boreFrameInRig(): number {\n    return _bfA.x + _bfB.y + ctx.weapon.bore;\n  }\n  boreFrameInRig();`),
+      ['boreFrameInRig'], ['_bfA', '_bfB'], 'game-weapon-leaves');
+    expect(r.module).toContain('export const _bfA = new THREE.Vector3()');
+    expect(r.module).toContain('export const _bfB = new THREE.Vector3()');
+    // The declaration is gone from main() (it comes back as an import), and the
+    // statement is not half-deleted.
+    expect(r.main).not.toMatch(/const _bfA = /);
+    expect(r.main).toContain("import { _bfA, _bfB, boreFrameInRig } from './game-weapon-leaves';");
+    expect(r.main).not.toMatch(/const\s*,/);
+    expect(r.main).not.toMatch(/,\s*;/);
+  });
+
+  it('keeps the declarators that were NOT requested in game-main', () => {
+    const r = extractLeaves(src(`  function f(): number { return _bfA.x + ctx.weapon.bore; }\n  f();\n  void _bfB;`),
+      ['f'], ['_bfA'], 'game-weapon-leaves');
+    expect(r.module).toContain('export const _bfA = new THREE.Vector3()');
+    expect(r.module).not.toContain('_bfB');
+    expect(r.main).toContain('const _bfB = new THREE.Vector3();');
+    expect(r.main).not.toMatch(/_bfA\s*=/);
+  });
+});
