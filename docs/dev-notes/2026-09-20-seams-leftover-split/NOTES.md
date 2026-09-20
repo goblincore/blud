@@ -291,6 +291,124 @@ render 66, world 42, debug-probe 5, bench 2, render-diag 4, shell-diag 3,
 spawn-goo 8, game-main 14. Sorted list saved to
 `/tmp/sdf-members-before.txt` (also reproduced below in the results section).
 
-## Steps 5–7 — gates and results
+## Step 4 result — seam set unchanged
 
-(fill in as the work lands)
+`npx tsx scripts/sdf-game-members.mjs dump` before and after; the sorted
+`Object.keys(__sdfGame)` list is **byte-identical** (md5 `0f7f1d2b25e3679b6fa45b5efee9a0fc`,
+422 members, no duplicates before or after — the final count equals the sum of
+per-file origin counts in both runs):
+
+- before: `/tmp/sdf-members-before.txt` (also `/tmp/sdf-members-before2.txt`,
+  re-generated after the dependency merge — identical), keys in
+  `/tmp/keys-before.txt`
+- after: `/tmp/sdf-members-after.txt`, keys in `/tmp/keys-after.txt`
+- `diff /tmp/keys-before.txt /tmp/keys-after.txt` → empty
+
+By-origin counts, before → after (members that moved): gibs-bake 6 → 11 (+5),
+lighting-probes 2 → 3 (+1), demo-step 4 → 5 (+1), render-quality 6 → 10 (+4),
+weapon-aim 13 → 15 (+2), leftover 96 → **file gone** (16 to fire, 6 to
+skeleton, 3 to dynamite, 11 to march-debug, 5 to gibs-bake, 2 to weapon-aim,
+1 to demo-step, 1 to lighting-probes, 4 to render-quality, 12 to render,
+15 to world, 10 to fx, 3 to boot, 6 to render-diag, 1 to debug-probe),
+misc 29 → 29, fx 58 → 68, weapon-player 34 → 34, boot 30 → 33, render 66 → 78,
+world 42 → 57, debug-probe 5 → 6, bench 2 → 2, render-diag 4 → 10,
+shell-diag 3 → 3, spawn-goo 8 → 8, game-main 14 → 14.
+
+## Line counts
+
+| file | before | after |
+| --- | --- | --- |
+| game-seams-leftover.ts | 937 | **deleted** |
+| game-seams-fire.ts (new) | — | 77 |
+| game-seams-skeleton.ts (new) | — | 98 |
+| game-seams-dynamite.ts (new) | — | 49 |
+| game-seams-march-debug.ts (new) | — | 157 |
+| game-seams-gibs-bake.ts | 85 | 174 |
+| game-seams-weapon-aim.ts | 83 | 104 |
+| game-seams-demo-step.ts | 42 | 64 |
+| game-seams-lighting-probes.ts | 27 | 35 |
+| game-seams-render-quality.ts | 100 | 149 |
+| game-seams-render.ts | 195 | 279 |
+| game-seams-world.ts | 356 | 463 |
+| game-seams-fx.ts | 457 | 583 |
+| game-seams-boot.ts | 193 | 228 |
+| game-seams-render-diag.ts | 444 | 518 |
+| game-seams-debug-probe.ts | 598 | 613 |
+
+The 15 moved groups carry their doc comments and internal blank lines with
+them (extraction is by AST line span, not retyping); the per-file growth is a
+few lines over the moved body count in each destination for that reason.
+
+## Step 5 result — full suite
+
+`npx vitest run`: **15 failed | 5947 passed | 1 skipped** — the failure SET is
+main's base set, name for name:
+
+- `game-actor-torso-slug` ×2 (warm=30 / warm=120)
+- `march-step-soundness`
+- `surface-nets-cpu`
+- `blob-measure`
+- the blob/skeleton set: `zombie-blob` ×2, `soldier-blob`, `gnasher-blob`,
+  `blob-compile` ×2, `skeleton-spike/contract`, `skeleton-spike/mesh`,
+  `skeleton-spike/mesh-skull`, `gib-rupture`
+
+The three raw-text pin suites were repointed in the same commits as the moves
+they follow: `shading-normal.wgsl.test.ts` (pins now read game-main +
+game-seams-march-debug), `gib-shutter-layer.test.ts` and
+`shutter-game-layer.test.ts` (pins now read game-seams-fx). Both shutter
+suites were re-run green right after the repoint; the full run above is the
+final word.
+
+`npx tsc --noEmit` clean at every commit (16 move/notes commits + this one).
+
+## Step 6 result — pixel gate (ran ONCE, at the end)
+
+Own ports (5362/9362), `scripts/lab-servers.sh` lifecycle, nothing else of
+mine running, HEAD of this branch (post-split), gate scripts at the dependency
+fix (`ea1ccd83` line):
+
+- room1 shipped defaults: **`8f2b74e7…`** = canonical, repeat identical,
+  room1-wounded **`1381a866…`** = canonical. First boot, no retries.
+- room2 (`MARCH_HASH_ROOM=2 MARCH_HASH_TILES=0`):
+  **`35b6d5619f7f85a52e852056a09f6c0fbfacf2c5`** = the documented stable
+  value, repeat identical. First boot, no retries. room1's known flakiness did
+  not appear (the dependency task's settle fix held).
+
+## Verbatim discipline
+
+Bodies moved by line-span extraction from the census spans (comment blocks
+attached to each member ride along; adjacent members stay adjacent, distant
+members separated by one blank line exactly as in leftover). A post-move check
+in the mover compared every extracted stripped line against the destination
+file (all groups reported `verbatim check ok`); the raw-text pin suites pin
+eight exact body strings across the moved members and pass. Member names,
+order within each destination, and the `__sdfGame` key set are unchanged.
+
+## For TASKS.md (owner to carry over — not edited there, another session owns it)
+
+- The "game-main.ts decomposition" block can move the leftover-split item to
+  done: `game-seams-leftover.ts` (wave 1's 96-member ctx-only bucket) is gone
+  at the head of `dispatch/2026-09-20-seams-leftover-split`. Its members live
+  in four new concern-named modules (`game-seams-{fire,skeleton,dynamite,
+  march-debug}.ts`) and as extensions of eleven existing homes — biggest
+  adds: world +15, render +12, fx +10, render-diag +6, gibs-bake +5,
+  render-quality +4; boot +3, weapon-aim +2; demo-step, lighting-probes,
+  debug-probe +1 each (setter/readback joins for families already living
+  there). `__sdfGame` key set byte-identical (422, md5
+  `0f7f1d2b25e3679b6fa45b5efee9a0fc`); tsc clean at every commit; full suite
+  = the base 15-failure set; pixel gate room1 `8f2b74e7…` / wounded
+  `1381a866…` and room2 `35b6d561…`, both first-boot canonical through the
+  settled staging.
+- `scripts/sdf-game-members.mjs` (committed here) is the member-set tool the
+  next decomposition wave should reuse: `dump` simulates the `__sdfGame`
+  literal (spread order + overwrite) for the before/after diff; `census <file>`
+  prints per-member line spans and ctx slices.
+- The three raw-text pin suites now point at the members' new homes
+  (shading-normal → march-debug; gib-shutter/shutter-game → fx). Any future
+  member move must repoint pins in the same commit — that is a test fix, not a
+  behaviour change.
+- Remaining bucket-style seam files worth the same treatment some day:
+  `game-seams-misc.ts` (29: demo/freeze + panels + telemetry), `game-seams-fx.ts`
+  (68: probes/goo/chunks/gore), `game-seams-render.ts` (78),
+  `game-seams-world.ts` (57) — all now concern-homogeneous enough to split
+  mechanically with the census tool when a wave takes them on.
