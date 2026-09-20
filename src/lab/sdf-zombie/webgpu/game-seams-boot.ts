@@ -188,6 +188,41 @@ export function createBootSeams(ctx: GameContext) {
     bootMarks: () => ctx.boot.marks.slice(),
     gpuDiagnostics: () => ctx.boot.handle.gpuDiagnostics,
     loopRunning: () => ctx.boot.handle.loopRunning,
-    uptime: () => (performance.now() - ctx.boot.time) / 1000
+    uptime: () => (performance.now() - ctx.boot.time) / 1000,
+    /**
+     * THE SURFACE 'bodies' COMPOSITES INTO, read back (2026-09-10).
+     *
+     * WHY THIS EXISTS. The march target and the composited output are DIFFERENT
+     * textures, and the frame hash only ever read the former — which is why the
+     * h/3 and h/4 investigation could prove the flesh is marched (3.9% of the
+     * march target is surface at every divisor) and still not see that it never
+     * reaches the frame. Chasing that without this seam means guessing, and three
+     * guesses were already wrong.
+     *
+     * Returns the same padded float readback shape as `__sdfGameDebug`
+     * .readMarchTarget() — base64 rgba32f plus the real width and height — because
+     * a multi-megabyte float readback must not cross CDP as a returnByValue
+     * object. WIDTH AND HEIGHT ARE THE LOGICAL ONES; the caller must de-pad with
+     * `stride = Math.ceil(w * 16 / 256) * 64` floats, exactly as the hash does.
+     *
+     * Null when there is no redirect (nothing is rendering into an offscreen
+     * target, so "the output" is the canvas — use presentedShot for that).
+     */
+    readOutputTarget: async (): Promise<{ w: number; h: number; rgba32f: string } | null> => {
+      const rt = ctx.render.sdfLayer.outputTarget;
+      if (!rt) return null;
+      const w = rt.width, h = rt.height;
+      const raw = new Float32Array(await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h));
+      const bytes = new Uint8Array(raw.buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      return { w, h, rgba32f: btoa(binary) };
+    },
+
+    warmDone: () => (window as unknown as Record<string, unknown>).__warmDone ?? null,
+    /** DEFER-COMPILE (2026-09-19): the background-compile state machine —
+     *  `{ gib, crowd }` each pending|compiling|ready|failed. A driver reads it
+     *  to know whether a gib/crowd draw will use the fast path or degrade. */
+    warmBackground: () => ctx.boot.warmBackground.snapshot(),
   };
 }
