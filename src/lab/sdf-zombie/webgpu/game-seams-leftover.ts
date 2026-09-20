@@ -175,14 +175,6 @@ export function createLeftoverSeams(ctx: GameContext) {
       });
       return { meshes, visible, instanced, top: [...byName].sort((a, b) => b[1] - a[1]).slice(0, 24) };
     },
-    get levelProbes() {
-      return {
-        weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain, hemi: ctx.lighting.hemi.intensity, hemiBase: ctx.lighting.hemiBase,
-        wired: ctx.lighting.levelProbeNodes.size, materials: ctx.world.levelNodeMaterials.length,
-        lights: [...ctx.world.levelLightLists].map(([id, l]) => [id, l.getLights().length]),
-        rooms: [...ctx.lighting.levelProbeNodes].map(([id, n]) => [id, n.slots.probeCfg.value.x, n.slots.probeCfg.value.y, n.slots.probeDynCfg.value.x, n.slots.probeDynCfg.value.y]),
-      };
-    },
     // VHS is the fourth chain stage, default OFF. While on it replaces the
     // smear pass; `effectiveSmear` says which temporal filter is really
     // running (0 while VHS owns it). Both return the resulting state so a
