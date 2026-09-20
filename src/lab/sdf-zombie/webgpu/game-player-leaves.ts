@@ -5,10 +5,11 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import type { GameContext } from './game-context';
-import { moveAim } from './free-aim'
-import { PLAYER } from './game-player'
 
+import { type GameContext } from './game-context';
+import { moveAim } from './free-aim';
+import { PLAYER } from './game-player';
+import { ROOMS, enclosureKeyAt } from './game-level';
 
 /** The mouse delta's effect, extracted so the live handler and the replay
  *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
@@ -23,4 +24,12 @@ export function applyMouseDelta(ctx: GameContext, dx: number, dy: number): void 
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch - dy * 0.0022));
   }
+}
+
+export const ROOM_ID_BY_NAME = new Map(ROOMS.map(r => [r.name, r.id] as const));
+
+/** The player's room id, or -1 in a tunnel / the void. Zombies only notice
+ *  a player who shares their room. */
+export function playerRoomId(ctx: GameContext): number {
+  return ROOM_ID_BY_NAME.get(enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2])) ?? -1;
 }

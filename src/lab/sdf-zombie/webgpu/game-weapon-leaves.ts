@@ -11,6 +11,10 @@ import * as THREE from 'three/webgpu';
 import { rngStreams } from './rng';
 import { type TracerBasis } from './tracer-sprite';
 import { type Frustum } from './free-aim';
+import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
+import { type Vec3 } from '../types';
+import { eyeOf } from './game-player';
+import { slotLowerAmount, stepWeaponSlot } from './game-weapon-slots';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -114,4 +118,136 @@ export function stepBursts(ctx: GameContext, dt: number): void {
 export function aimFrustum(ctx: GameContext): Frustum {
   const tanV = Math.tan((ctx.boot.handle.camera.fov * Math.PI) / 360);
   return { tanV, tanH: tanV * ctx.boot.handle.camera.aspect };
+}
+
+export const _bd = new THREE.Vector3();
+export const _o = new THREE.Vector3();
+/** The bore's basis in RIG space this frame: `out` runs from the muzzles to
+ *  the breeches (the way a case leaves a chamber), `side` from the left
+ *  chamber to the right. Read off the same live locators as breechInRig, so
+ *  it follows the barrels through their swing. Everything that leaves or
+ *  enters a chamber is expressed in this basis: a case thrown in rig +Y from
+ *  a bore tilted 66 degrees off it goes through the chamber wall. */
+export const _bfA = new THREE.Vector3();
+/** The bore's basis in RIG space this frame: `out` runs from the muzzles to
+ *  the breeches (the way a case leaves a chamber), `side` from the left
+ *  chamber to the right. Read off the same live locators as breechInRig, so
+ *  it follows the barrels through their swing. Everything that leaves or
+ *  enters a chamber is expressed in this basis: a case thrown in rig +Y from
+ *  a bore tilted 66 degrees off it goes through the chamber wall. */
+export const _bfB = new THREE.Vector3();
+/** Scratch, so the per-shot path allocates nothing. */
+export const _muzA = new THREE.Vector3();
+/** Scratch, so the per-shot path allocates nothing. */
+export const _muzB = new THREE.Vector3();
+
+/** A view-space DIRECTION in rig space (two points, subtracted). */
+export function viewDirToRig(ctx: GameContext, view: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  viewToRig(ctx, _o.set(0, 0, 0), out);
+  const tip = viewToRig(ctx, view, _bd);
+  return out.sub(tip).negate().normalize();
+}
+
+export function boreFrameInRig(ctx: GameContext, out: THREE.Vector3, side: THREE.Vector3): boolean {
+  const mL = ctx.weapon.muzzleNodes[0], mR = ctx.weapon.muzzleNodes[1];
+  const bL = ctx.weapon.breechNodes[0], bR = ctx.weapon.breechNodes[1];
+  if (!mL || !mR || !bL || !bR) return false;
+  const rig = ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor;
+  rig.worldToLocal(bL.getWorldPosition(_bfA));
+  rig.worldToLocal(bR.getWorldPosition(_bfB));
+  out.copy(_bfA).add(_bfB).multiplyScalar(0.5);
+  side.copy(_bfB).sub(_bfA).normalize();
+  rig.worldToLocal(mL.getWorldPosition(_bfA));
+  rig.worldToLocal(mR.getWorldPosition(_bfB));
+  _bfA.add(_bfB).multiplyScalar(0.5);
+  out.sub(_bfA).normalize();
+  return true;
+}
+
+/**
+ * World-space muzzle. Reads the GLB's OWN Muzzle_L/R locators when the gun is
+ * loaded, so it follows the weapon's real heading -- including the free-aim
+ * swing -- instead of being a second description of where the gun is that can
+ * drift from the first. It did drift: the previous inline version put the
+ * spawn point at forward -0.500 from the eye while the visible muzzle sits at
+ * forward +0.600, so every projectile was born 1.1 m BEHIND the barrel and
+ * flew through the player's head.
+ *
+ * The fallback keeps the headless contract: predictSlugHitNow() and the CDP
+ * gates fire with no GLB loaded, which is why an eye-relative formula exists
+ * at all. It now goes through muzzle-pos.ts's tested helper rather than
+ * re-deriving the basis by hand with the sign wrong.
+ */
+export function muzzleWorld(ctx: GameContext): Vec3 {
+  const eye = eyeOf(ctx.player.player);
+  if (ctx.weapon.gunReady && ctx.weapon.muzzleNodes.length === 2) {
+    ctx.weapon.muzzleNodes[0]!.getWorldPosition(_muzA);
+    ctx.weapon.muzzleNodes[1]!.getWorldPosition(_muzB);
+    _muzA.add(_muzB).multiplyScalar(0.5);
+    return [_muzA.x, _muzA.y, _muzA.z];
+  }
+  const cp = Math.cos(ctx.player.player.pitch);
+  const fwd = { x: Math.sin(ctx.player.player.yaw) * cp, y: Math.sin(ctx.player.player.pitch), z: -Math.cos(ctx.player.player.yaw) * cp };
+  const right = { x: Math.cos(ctx.player.player.yaw), y: 0, z: Math.sin(ctx.player.player.yaw) };
+  const up = {
+    x: right.y * fwd.z - right.z * fwd.y,
+    y: right.z * fwd.x - right.x * fwd.z,
+    z: right.x * fwd.y - right.y * fwd.x,
+  };
+  const m = muzzleWorldPosition(
+    { x: eye[0], y: eye[1], z: eye[2] }, { right, up, forward: fwd },
+    0.2, -0.12, 0.5,
+  );
+  return [m.x, m.y, m.z];
+}
+
+/** Hold pose, rig space: low and off to one side, canted so the fuse end
+ *  reads against the dark. Which side is the off-hand side follows the
+ *  existing view-model convention (the shorty is yawed 180°, so its chambers
+ *  land screen-left and the rig's +x is what the player sees on the left). */
+export const BUNDLE_HOLD = {
+  pos: new THREE.Vector3(0.235, -0.245, -0.42),
+  rot: new THREE.Euler(
+    THREE.MathUtils.degToRad(-28), THREE.MathUtils.degToRad(18), THREE.MathUtils.degToRad(28),
+  ),
+};
+// The burst stand-in (stage 3 replaces this with webgpu/explosion-vfx.ts).
+// Additive cards in the effects overlay — the SAME routing the tracers use
+// (character-effects.ts's header explains why: that scene is drawn after the
+// SDF composite with the completed depth buffer, so the composite cannot
+// erase the burst and bodies can still occlude it).
+// -----------------------------------------------------------------------
+export const BURST_SLOTS = 6;
+
+export function spawnBurstStandIn(ctx: GameContext, at: Vec3, heightM: number, kind: 'air' | 'ground'): void {
+  const s = ctx.weapon.burstSlots[ctx.weapon.burstCursor++ % BURST_SLOTS]!;
+  s.age = 0;
+  s.life = kind === 'ground' ? 0.62 : 0.5;
+  s.h = heightM;
+  // Ground bursts sit ON the floor and bloom up; air bursts centre.
+  const y = kind === 'ground' ? at[1] + heightM * 0.35 : at[1];
+  for (const m of [s.core, s.halo, s.smoke]) { m.position.set(at[0], y, at[2]); m.visible = true; }
+}
+
+export function stepWeaponSlots(ctx: GameContext, dt: number): void {
+  ctx.weapon.slotState = stepWeaponSlot(ctx.weapon.slotState, dt);
+
+  const gunLower = slotLowerAmount(ctx.weapon.slotState, 'shotgun');
+  // Drop out of frame AND dip the muzzles: that reads as putting a gun away,
+  // where a fade reads as a bug.
+  ctx.weapon.gunRig.position.set(0, -0.42 * gunLower, 0.06 * gunLower);
+  ctx.weapon.gunRig.rotation.set(THREE.MathUtils.degToRad(38) * gunLower, 0, 0);
+  ctx.weapon.gunRig.visible = gunLower < 0.999;
+
+  const bundleLower = slotLowerAmount(ctx.weapon.slotState, 'dynamite');
+  ctx.bake.bundleRig.position.set(
+    BUNDLE_HOLD.pos.x,
+    BUNDLE_HOLD.pos.y - 0.34 * bundleLower,
+    BUNDLE_HOLD.pos.z,
+  );
+  // Only the LIVE weapon's model is drawn: during the drop the bundle is
+  // still holstered, and it appears the instant the frame changes hands.
+  ctx.bake.bundleRig.visible = ctx.weapon.slotState.live === 'dynamite' && ctx.weapon.heldProp !== null;
+  // Slot 3: the same one-transform holster travel.
+  ctx.weapon.flare?.updateRig();
 }

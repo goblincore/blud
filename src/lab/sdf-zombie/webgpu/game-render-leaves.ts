@@ -14,6 +14,10 @@ import { SDF_LAYER } from './sdf-layer';
 import { type MarchUniforms } from './zombie-gpu';
 import { type Vec3 } from '../types';
 import { billboardGib, makeGibSprite } from './gib-sprites';
+import { clearSight } from './encounter-director';
+import { type ZombieActor } from './game-actor';
+import { gateRefineTwin } from './game-world-leaves2';
+import { simTimeMs } from './sim-clock';
 
 /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
  *  A shared function rather than three copies of the same object literal
@@ -196,4 +200,83 @@ export function laySpriteBench(ctx: GameContext): number {
     }
   }
   return ctx.vfx.spriteBenchSprites.length;
+}
+
+export const CULL_DWELL_MS = 250;
+
+export function updateVisibleActors(ctx: GameContext): void {
+  const now = simTimeMs();
+  ctx.world.cullCounts.total = ctx.world.actors.length;
+  if (!ctx.render.actorCullEnabled) {
+    ctx.render.visibleActors = ctx.world.actors;
+    ctx.world.cullCounts.visible = ctx.world.actors.length;
+    // Cull off: the frustum/dwell work is skipped, but the refine gate is
+    // NOT — the spec's first rule (a dead body never refines) has to hold in
+    // both modes, so a body that collapses with the cull off still loses its
+    // twin. Same band + hysteresis, every actor, no visibility work.
+    ctx.world.sightA[0] = ctx.boot.handle.camera.position.x; ctx.world.sightA[1] = ctx.boot.handle.camera.position.y; ctx.world.sightA[2] = ctx.boot.handle.camera.position.z;
+    ctx.render.refinedBodies = 0;
+    for (const a of ctx.world.actors) {
+      const torso = a.posed().clusters.find(c => c.limb === 'torso');
+      if (gateRefineTwin(ctx, a, torso ? torso.center as Vec3 : null, true)) ctx.render.refinedBodies++;
+    }
+    ctx.world.coverage.screenFrac = 0; ctx.world.coverage.nearestM = 0; ctx.world.coverage.biggestFrac = 0;
+    return;
+  }
+  ctx.world.projScreen.multiplyMatrices(ctx.boot.handle.camera.projectionMatrix, ctx.boot.handle.camera.matrixWorldInverse);
+  ctx.world.frustum.setFromProjectionMatrix(ctx.world.projScreen);
+  ctx.world.sightA[0] = ctx.boot.handle.camera.position.x; ctx.world.sightA[1] = ctx.boot.handle.camera.position.y; ctx.world.sightA[2] = ctx.boot.handle.camera.position.z;
+  const out: ZombieActor[] = [];
+  const tw = ctx.render.sdfLayer.marchTarget.width, th = ctx.render.sdfLayer.marchTarget.height;
+  const px = Math.max(1, tw * th);
+  const halfHpx = th / 2;
+  const tanHalfFov = Math.tan((ctx.boot.handle.camera.fov * Math.PI / 180) / 2);
+  let area = 0, nearest = 0, biggest = 0;
+  ctx.render.refinedBodies = 0;
+  for (const a of ctx.world.actors) {
+    const torso = a.posed().clusters.find(c => c.limb === 'torso');
+    // No torso cluster (mid-gib, exotic body): never cull what we cannot
+    // measure — fall back to drawing it. No distance to band-test either, so
+    // the refine twin stays off for it.
+    if (!torso) {
+      out.push(a); ctx.world.lastSeenMs.set(a.id, now);
+      gateRefineTwin(ctx, a, null, true);
+      continue;
+    }
+    const c = torso.center;
+    ctx.world.bodySphere.center.set(c[0], c[1], c[2]);
+    let seen = ctx.world.frustum.intersectsSphere(ctx.world.bodySphere);
+    if (seen) {
+      // Two probes: torso centre, then a head-height point. A body edging
+      // out of cover reveals its head before its chest.
+      const head: Vec3 = [c[0], c[1] + 0.6, c[2]];
+      seen = clearSight(ctx.world.sightA, c as Vec3, ctx.world.colliders) || clearSight(ctx.world.sightA, head, ctx.world.colliders);
+    }
+    if (seen) ctx.world.lastSeenMs.set(a.id, now);
+    const since = now - (ctx.world.lastSeenMs.get(a.id) ?? -Infinity);
+    const kept = seen || since < CULL_DWELL_MS;
+    if (kept) out.push(a);
+
+    // Run 5b: the per-body refine gate (see gateRefineTwin).
+    if (gateRefineTwin(ctx, a, c as Vec3, kept)) ctx.render.refinedBodies++;
+
+    // Coverage estimate — only for bodies actually seen this frame, so a
+    // body coasting on its dwell grace does not inflate the area.
+    if (seen) {
+      const dx = c[0] - ctx.world.sightA[0], dy = c[1] - ctx.world.sightA[1], dz = c[2] - ctx.world.sightA[2];
+      const dist = Math.hypot(dx, dy, dz);
+      if (nearest === 0 || dist < nearest) nearest = dist;
+      const r = ctx.world.bodySphere.radius;
+      // Camera inside the bound: treat as full screen rather than dividing
+      // by a distance that is about to go through zero.
+      const frac = dist <= r ? 1 : Math.min(1, Math.PI * ((r / dist) * halfHpx / tanHalfFov) ** 2 / px);
+      area += frac;
+      if (frac > biggest) biggest = frac;
+    }
+  }
+  ctx.world.coverage.screenFrac = Math.min(1, area);
+  ctx.world.coverage.nearestM = nearest;
+  ctx.world.coverage.biggestFrac = biggest;
+  ctx.render.visibleActors = out;
+  ctx.world.cullCounts.visible = out.length;
 }

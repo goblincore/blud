@@ -280,6 +280,13 @@ import { bodiesOnScreen, traceSlugHitFrom } from './game-world-leaves';
 import { captureTelemetryScene } from './game-telemetry-leaves';
 import { demoScenarioOf } from './game-demo-leaves';
 import { awaitBakes, registerLitChunkMaterial } from './game-bake-leaves';
+import { ROOM_ID_BY_NAME, playerRoomId } from './game-player-leaves';
+import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDirToRig } from './game-weapon-leaves';
+import { BUNDLE_CEIL_M, ceilingAt } from './game-world-leaves';
+import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-leaves';
+import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-leaves';
+import { TRAIL_STREAM_BASE, trailStreamId } from './game-vfx-leaves';
+import { CULL_DWELL_MS, updateVisibleActors } from './game-render-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -484,7 +491,7 @@ async function main() {
    * out through the arena's 6 m roof while the 3 m rooms keep theirs.
    */
   function chunkCollidersAt(pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
-    return { boxes: ctx.world.colliders, ceilingY: ceilingAt(pos[0], pos[2]) };
+    return { boxes: ctx.world.colliders, ceilingY: ceilingAt(ctx, pos[0], pos[2]) };
   }
   // ---- ACTOR VISIBILITY CULL STATE ---------------------------------------
   //
@@ -496,7 +503,6 @@ async function main() {
   // so the cull threw on every frame while the picture still looked fine.
   // If you add a binding this function reads, add it HERE.
   ctx.world.actors = [];
-  const CULL_DWELL_MS = 250;
   // Declared HERE, above the draw callback that closes over it, not beside
   // updateVisibleActors further down. `function updateVisibleActors` is a
   // hoisted declaration, but const/let are not: with the state declared later,
@@ -671,36 +677,6 @@ async function main() {
   // is watching.
   ctx.world.accentGroup = new THREE.Group();
   ctx.world.accentGroup.name = 'accent-lights';
-  // ——— EXPLOSION LIGHT POOL (2026-09-10) ————————————————————————————————
-  // Owner: "the explosion should cast dynamic light such that the whole room
-  // lights up." Two separate lighting paths have to be fed, because the level
-  // and the bodies are lit by different machinery:
-  //
-  //   THE LEVEL (walls, floor, kit) is lit by THREE lights — the accents above.
-  //   These pool lights live in the SAME GROUP for that reason: they ride the
-  //   same mesh-side registration (`router.register(accentGroup, 'mesh')`) and
-  //   the same per-room light lists, so a detonation lights the room the way a
-  //   brazier does rather than through a second, special-cased path.
-  //
-  //   THE BODIES (SDF-marched flesh) are NOT lit by THREE lights at all — the
-  //   march has its own uniforms. They see light through the probe GATHER's
-  //   dynamic light list, which is where the explosion is also pushed (see
-  //   gatherLights). THAT path is single-room by construction: it lights the
-  //   player's enclosure, so a blast in the next room lights nothing. That is
-  //   the documented architecture, not a property of this effect.
-  //
-  // Allocated ONCE at intensity 0 and only ever modulated. CORRECTED
-  // 2026-09-16 (action-stall fix): `visible` is NEVER toggled. three r185
-  // folds the set of VISIBLE lights into `LightsNode.customCacheKey`, which is
-  // part of the NodeBuilderState chosen for every material lit by the scene
-  // lights. Toggling visibility therefore re-keys that state: the old shader
-  // variant's ProgrammableStage/pipeline is released and a DIFFERENT variant is
-  // compiled mid-frame. Measured on the old code: every detonation produced two
-  // 180–230 ms frames with 17–18 createRenderPipeline calls (ignite and
-  // expiry). Intensity 0 contributes no light — the cost of keeping the pool
-  // visible is three idle point-light iterations, against ~400 ms of pipeline
-  // churn per blast.
-  const EXPLOSION_LIGHTS = 3;
   ctx.vfx.explosionLightPool = [];
   for (let i = 0; i < EXPLOSION_LIGHTS; i++) {
     const pl = new THREE.PointLight(0xffb060, 0, 0, 2);
@@ -1745,7 +1721,7 @@ async function main() {
         // same list the mesh-side pool reads, so the walls and the bodies cannot
         // disagree about where the blast was or how bright it is.
         for (const e of ctx.vfx.explosionLights) {
-          const k = explosionLightEnv(e.age);
+          const k = explosionLightEnv(ctx, e.age);
           if (k <= 0.001) continue;
           if (gatherLights.length >= 8) break;
           // Needs to be near the gather's room to reach it at all: the layer is
@@ -1974,7 +1950,7 @@ async function main() {
     // frame's bodies and chunks. With the gate off the lists are not walked.
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
-    updateVisibleActors();
+    updateVisibleActors(ctx);
     // CROWD STAGE A: one sync per type per frame, after every attached view
     // has written its record AND after updateVisibleActors(), so the visible
     // set passed to sync() is THIS frame's. The per-frame globals (beam,
@@ -3472,12 +3448,6 @@ async function main() {
    *  there is room for one more bump before the melee radius has to move too;
    *  the gate is what tells us. */
   const ENGAGED_RADIUS = 0.80;
-  const ROOM_ID_BY_NAME = new Map(ROOMS.map(r => [r.name, r.id] as const));
-  /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
-   *  a player who shares their room. */
-  function playerRoomId(): number {
-    return ROOM_ID_BY_NAME.get(enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2])) ?? -1;
-  }
   /** Set when the weapon fires; consumed by the next tick to turn heads in
    *  the player's room. Sticky rather than instantaneous because a shot lands
    *  in an event handler, not in the frame callback. */
@@ -3801,24 +3771,18 @@ async function main() {
   const SHOULDER_R_VIEW = new THREE.Vector3(0.26, -0.30, 0.06);
   const BEND_L_VIEW = new THREE.Vector3(-1, -0.4, 0);
   const BEND_R_VIEW = new THREE.Vector3(1, -0.4, 0);
-  const _sh = new THREE.Vector3(), _bd = new THREE.Vector3(), _o = new THREE.Vector3();
-  /** A view-space DIRECTION in rig space (two points, subtracted). */
-  function viewDirToRig(view: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-    viewToRig(ctx, _o.set(0, 0, 0), out);
-    const tip = viewToRig(ctx, view, _bd);
-    return out.sub(tip).negate().normalize();
-  }
+  const _sh = new THREE.Vector3();
   /** Aim both arms at their shoulders. Called every frame after the rig pose
    *  is set, and again wherever a hand is moved. */
   const _bendR = new THREE.Vector3(), _bendL = new THREE.Vector3();
   function aimArms(): void {
     ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
     if (ctx.weapon.gripHandGroup) {
-      viewDirToRig(BEND_R_VIEW, _bendR);
+      viewDirToRig(ctx, BEND_R_VIEW, _bendR);
       aimArm(ctx.weapon.gripHandGroup, viewToRig(ctx, SHOULDER_R_VIEW, _sh), _bendR);
     }
     if (ctx.weapon.foreHandGroup) {
-      viewDirToRig(BEND_L_VIEW, _bendL);
+      viewDirToRig(ctx, BEND_L_VIEW, _bendL);
       aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL);
     }
   }
@@ -3845,28 +3809,6 @@ async function main() {
    *  real muzzle -- so it burned halfway down the barrel instead of at the
    *  bores, which is a good part of why it read wrong. */
   const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
-  /** The bore's basis in RIG space this frame: `out` runs from the muzzles to
-   *  the breeches (the way a case leaves a chamber), `side` from the left
-   *  chamber to the right. Read off the same live locators as breechInRig, so
-   *  it follows the barrels through their swing. Everything that leaves or
-   *  enters a chamber is expressed in this basis: a case thrown in rig +Y from
-   *  a bore tilted 66 degrees off it goes through the chamber wall. */
-  const _bfA = new THREE.Vector3(), _bfB = new THREE.Vector3();
-  function boreFrameInRig(out: THREE.Vector3, side: THREE.Vector3): boolean {
-    const mL = ctx.weapon.muzzleNodes[0], mR = ctx.weapon.muzzleNodes[1];
-    const bL = ctx.weapon.breechNodes[0], bR = ctx.weapon.breechNodes[1];
-    if (!mL || !mR || !bL || !bR) return false;
-    const rig = ctx.weapon.aimRig ?? ctx.weapon.viewModelAnchor;
-    rig.worldToLocal(bL.getWorldPosition(_bfA));
-    rig.worldToLocal(bR.getWorldPosition(_bfB));
-    out.copy(_bfA).add(_bfB).multiplyScalar(0.5);
-    side.copy(_bfB).sub(_bfA).normalize();
-    rig.worldToLocal(mL.getWorldPosition(_bfA));
-    rig.worldToLocal(mR.getWorldPosition(_bfB));
-    _bfA.add(_bfB).multiplyScalar(0.5);
-    out.sub(_bfA).normalize();
-    return true;
-  }
   /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
   ctx.weapon.fireAge = Infinity;
   ctx.weapon.fireBarrels = 1;
@@ -4556,45 +4498,6 @@ async function main() {
     // still-safe state: the shared background times live on __warmDone.phases.
     if (gate.phase === 'ready') startBackgroundCompiles();
   });
-
-  /** Scratch, so the per-shot path allocates nothing. */
-  const _muzA = new THREE.Vector3(), _muzB = new THREE.Vector3();
-  /**
-   * World-space muzzle. Reads the GLB's OWN Muzzle_L/R locators when the gun is
-   * loaded, so it follows the weapon's real heading -- including the free-aim
-   * swing -- instead of being a second description of where the gun is that can
-   * drift from the first. It did drift: the previous inline version put the
-   * spawn point at forward -0.500 from the eye while the visible muzzle sits at
-   * forward +0.600, so every projectile was born 1.1 m BEHIND the barrel and
-   * flew through the player's head.
-   *
-   * The fallback keeps the headless contract: predictSlugHitNow() and the CDP
-   * gates fire with no GLB loaded, which is why an eye-relative formula exists
-   * at all. It now goes through muzzle-pos.ts's tested helper rather than
-   * re-deriving the basis by hand with the sign wrong.
-   */
-  function muzzleWorld(): Vec3 {
-    const eye = eyeOf(ctx.player.player);
-    if (ctx.weapon.gunReady && ctx.weapon.muzzleNodes.length === 2) {
-      ctx.weapon.muzzleNodes[0]!.getWorldPosition(_muzA);
-      ctx.weapon.muzzleNodes[1]!.getWorldPosition(_muzB);
-      _muzA.add(_muzB).multiplyScalar(0.5);
-      return [_muzA.x, _muzA.y, _muzA.z];
-    }
-    const cp = Math.cos(ctx.player.player.pitch);
-    const fwd = { x: Math.sin(ctx.player.player.yaw) * cp, y: Math.sin(ctx.player.player.pitch), z: -Math.cos(ctx.player.player.yaw) * cp };
-    const right = { x: Math.cos(ctx.player.player.yaw), y: 0, z: Math.sin(ctx.player.player.yaw) };
-    const up = {
-      x: right.y * fwd.z - right.z * fwd.y,
-      y: right.z * fwd.x - right.x * fwd.z,
-      z: right.x * fwd.y - right.y * fwd.x,
-    };
-    const m = muzzleWorldPosition(
-      { x: eye[0], y: eye[1], z: eye[2] }, { right, up, forward: fwd },
-      0.2, -0.12, 0.5,
-    );
-    return [m.x, m.y, m.z];
-  }
   function aimDir(): Vec3 {
     const cp = Math.cos(ctx.player.player.pitch);
     const fwd: Vec3 = [
@@ -4840,10 +4743,10 @@ async function main() {
     }
     if (ctx.weapon.slugMode) {
       // One lump down one known ray instead of a pellet volley.
-      ctx.weapon.pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
+      ctx.weapon.pellets.push(spawnSlug(muzzleWorld(ctx), convergedDir(muzzleWorld(ctx))));
       return true;
     }
-    const muz = muzzleWorld();
+    const muz = muzzleWorld(ctx);
     const dir = convergedDir(muz);
     // spawnPellets spreads around `dir`; convergence just re-centres the cone.
     // One `misc` draw per volley is the pellet seed (mulberry32 inside).
@@ -5842,56 +5745,10 @@ async function main() {
 
   // -----------------------------------------------------------------------
   mark('dynamite-start');
-  // WEAPON SLOT 2 — DYNAMITE (2026-09-10).
-  //
-  // The purpose is TUNING: a bundle you can throw at zombies and soldiers so
-  // the blast radius, the gib decision and the cost of a full-body gib can be
-  // judged in play rather than argued about. So the wiring is deliberately thin
-  // and every number that matters is a seam (see DYN_PARAMS above).
-  //
-  // The pure modules do all the work: fpv.ts owns the COOK state machine and
-  // the charge→speed band, dynamite-flight.ts owns the ballistic arc — flown
-  // here against the REAL level (game-level.ts's levelColliders() plus the room
-  // ceiling), not the lab's arena rect — explosion-aoe.ts owns the AOE, and
-  // sever.ts owns the gib. This block only routes between them and the THREE
-  // scene, exactly as the lab's wiring does, with the one difference that here
-  // the bodies are ACTORS with GPU views, brains and collapse clocks.
-  // -----------------------------------------------------------------------
-
-  /** The bundle's contact radius in the body test, m: a zombie is ~0.45 m
-   *  across at the chest. The bundle's OWN 0.08 m radius lives in the flight
-   *  module, so this is the body half-width only. */
-  const BUNDLE_BODY_RADIUS_M = 0.45;
   /** How many bundles may be in the air at once — and therefore how many prop
    *  instances exist (1 held + the rest in flight). Small on purpose: this is a
    *  tuning tool, not a grenade-spam simulator. */
   const MAX_BUNDLES = 4;
-  /** Tallest ceiling in the level — the FALLBACK for a bundle outside every
-   *  enclosure. levelColliders() carries no ceiling box for the rooms, so
-   *  without a ceiling plane a full-charge lob leaves through the roof. Tunnel
-   *  lintels ARE boxes (2.2 → 3.0 m), so ceiling + boxes together reproduce the
-   *  level including its low mouths. */
-  const BUNDLE_CEIL_M = Math.max(...ROOMS.map(r => r.height));
-
-  /** The ceiling over a point, PER ENCLOSURE.
-   *
-   *  A single global plane stopped being correct the moment the arena added a
-   *  6 m room to a level whose cells are 3 m: resolving to the TALLEST ceiling
-   *  everywhere let a bundle sail out through the small rooms' roofs, and
-   *  resolving to the smallest would have clipped the arena at half its height.
-   *  Rooms and tunnels each carry their own height, so the plane is a lookup.
-   *  `BUNDLE_CEIL_M` remains the answer for a point inside neither (over a wall
-   *  or through a door frame mid-flight), which is the generous case and the one
-   *  the collider boxes are there to catch. */
-  function ceilingAt(x: number, z: number): number {
-    for (const t of TUNNELS) {
-      if (x >= t.minX && x <= t.maxX && z >= t.minZ && z <= t.maxZ) return t.height;
-    }
-    for (const r of ROOMS) {
-      if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return r.height;
-    }
-    return BUNDLE_CEIL_M;
-  }
 
   ctx.weapon.slotState = makeWeaponSlotState('shotgun');
   ctx.vfx.cook = { phase: 'idle', phaseAt: 0, cookStart: 0 };
@@ -5911,16 +5768,6 @@ async function main() {
   ctx.bake.bundleProps = [];
   ctx.bake.bundleRig = new THREE.Group();
   ctx.bake.bundleRig.name = 'bundle-rig';
-  /** Hold pose, rig space: low and off to one side, canted so the fuse end
-   *  reads against the dark. Which side is the off-hand side follows the
-   *  existing view-model convention (the shorty is yawed 180°, so its chambers
-   *  land screen-left and the rig's +x is what the player sees on the left). */
-  const BUNDLE_HOLD = {
-    pos: new THREE.Vector3(0.235, -0.245, -0.42),
-    rot: new THREE.Euler(
-      THREE.MathUtils.degToRad(-28), THREE.MathUtils.degToRad(18), THREE.MathUtils.degToRad(28),
-    ),
-  };
   ctx.bake.bundleReady = false;
   {
     const errs: string[] = [];
@@ -5985,33 +5832,6 @@ async function main() {
    *  magnitude is ~4 at the epicentre, so this is ~3.4° of punch point-blank
    *  and proportionally less with distance. */
   const BLAST_KICK_RAD_PER_UNIT = 0.015;
-
-  /** THE EXPLOSION'S OWN LIGHT. A blast is the brightest thing in this game and
-   *  it has to READ as one: near-instant spike, then a fast fall — the same
-   *  shape the muzzle flash uses, scaled up and outlasted by the fireball. */
-  const EXPLOSION_LIGHT = {
-    /** Seconds of light, longer than the muzzle flash's 0.14 s by a lot: a
-     *  detonation is not an instantaneous event and the room has to have time to
-     *  visibly return to dark. */
-    lifeSec: 0.5,
-    /** Mesh-side peak, in the accents' units (a brazier is 9-13).
-     *
-     *  320 is measured, not chosen: at 26 the light was DETECTABLY on and
-     *  visually nothing — the arena's whole-frame mean rose +0.96 with it
-     *  against +0.10 without (the particles alone), i.e. about one level out of
-     *  255 spread over the room. A brazier sustains 9-13 and the eye adapts to
-     *  it; a half-second flash has to DOMINATE the room it is in to read as one,
-     *  so it starts an order of magnitude above the braziers rather than beside
-     *  them. `?fxlight=` scales this and the gather peak together. */
-    meshPeak: 320,
-    /** Gather-side peak. The muzzle flash pushes 35 x probeFlashBoost, and an
-     *  explosion is bigger and further away, so a comparable number lands it in
-     *  the same range as a firefight's flashes. */
-    gatherPeak: 220,
-    /** Attached this far above the detonation, so a ground burst lights the room
-     *  rather than a disc of floor. */
-    liftM: 0.5,
-  } as const;
   // `?fxlight=K` scales BOTH peaks together — the owner tunes "how much does the
   // room light up" as one number, and scaling only one side would let the walls
   // and the bodies disagree about the blast's brightness.
@@ -6025,23 +5845,6 @@ async function main() {
   setProbeCapEnabled(DYN_PARAMS.get('woundcap') !== '0');
   /** Live explosions lighting something, newest last. Bounded by the pool. */
   ctx.vfx.explosionLights = [];
-  /** Light a blast. Called by BOTH the real detonation and the capture seam —
-   *  a seam that drew the particles but not the light made the light look like
-   *  it did nothing at all in the differential capture (measured: 15.0% of frame
-   *  changed with the light "on" against 15.1% with ?fxlight=0). */
-  function igniteExplosionLight(at: Vec3): void {
-    ctx.vfx.explosionLights.push({ pos: [at[0], at[1] + EXPLOSION_LIGHT.liftM, at[2]], age: 0 });
-    while (ctx.vfx.explosionLights.length > EXPLOSION_LIGHTS) ctx.vfx.explosionLights.shift();
-  }
-
-  /** Spike-then-fall, 1 at ignition and 0 at lifeSec. */
-  function explosionLightEnv(age: number): number {
-    if (age < 0 || age >= EXPLOSION_LIGHT.lifeSec) return 0;
-    const u = age / EXPLOSION_LIGHT.lifeSec;
-    // A hard attack (the first frame is the brightest) then an exponential fall
-    // — a LINEAR fade reads as a lamp being switched off, not as a blast.
-    return Math.exp(-4.2 * u) * (1 - u * u * 0.35);
-  }
 
   // Telemetry for the tuning pass — read back through __sdfGame.dynamite().
   ctx.dynamite.thrown = 0;
@@ -6076,31 +5879,6 @@ async function main() {
   ctx.dynamite.lastGibHeld = 0;
   ctx.dynamite.bloodOrphans = 0;
 
-  /** World position of a prop, or the eye when there is none. */
-  const _propPos = new THREE.Vector3();
-  function propWorld(p: StickProp | null): Vec3 {
-    if (!p) return eyeOf(ctx.player.player);
-    p.object.getWorldPosition(_propPos);
-    return [_propPos.x, _propPos.y, _propPos.z];
-  }
-
-  /** True when a body is within the bundle's contact radius anywhere along the
-   *  sub-step's segment. Called at the FLIGHT's own 120 Hz, so a 28 m/s bundle
-   *  (0.23 m per sub-step) cannot tunnel through a 0.45 m target. */
-  function bundleHitsBody(from: Vec3, to: Vec3): ZombieActor | null {
-    const dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
-    const l2 = dx * dx + dy * dy + dz * dz || 1;
-    for (const a of ctx.world.actors) {
-      const p = a.pose();
-      const cx = p.pos[0], cy = p.pos[1] + 0.95, cz = p.pos[2];
-      const t = Math.max(0, Math.min(1,
-        ((cx - from[0]) * dx + (cy - from[1]) * dy + (cz - from[2]) * dz) / l2));
-      const qx = from[0] + dx * t - cx, qy = from[1] + dy * t - cy, qz = from[2] + dz * t - cz;
-      if (qx * qx + qy * qy + qz * qz <= BUNDLE_BODY_RADIUS_M * BUNDLE_BODY_RADIUS_M) return a;
-    }
-    return null;
-  }
-
   /** Release a bundle from the hand along the aim. */
   function throwBundle(speedMps: number): void {
     if (!ctx.bake.bundleReady) return;
@@ -6111,7 +5889,7 @@ async function main() {
     // that hands the flight the scene ORIGIN — a point inside the level's solid
     // centre block — so the bundle was born buried in geometry, pushed out
     // downward, and left sliding along the floor. Caught by the slot gate.
-    const origin = propWorld(ctx.weapon.heldProp);
+    const origin = propWorld(ctx, ctx.weapon.heldProp);
     const prop = takePropForThrow(ctx);
     // The reticle IS the aim under both schemes (aimDir handles free aim), and
     // fpv.ts's throwDirection applies the game's upward lob on top — the same
@@ -6133,7 +5911,7 @@ async function main() {
   /** The bundle that never left the hand: an overcook, or a fuse that burned
    *  out while held. Detonates AT the player. */
   function overcookInHand(): void {
-    const at = propWorld(ctx.weapon.heldProp);
+    const at = propWorld(ctx, ctx.weapon.heldProp);
     ctx.telemetry.telemetry.event('dynamite-overcook', { x: at[0], y: at[1], z: at[2] });
     detonateAt(at, true);
   }
@@ -6271,7 +6049,7 @@ async function main() {
     // particles, the wiring owns what the room sees. A blast at the far end of a
     // corridor still gets a light (it does nothing useful, but consistency beats
     // a distance gate nobody can see).
-    igniteExplosionLight(at);
+    igniteExplosionLight(ctx, at);
     const burst = scaleBurstVisual(ctx, fx.burst);
     // BLAST REFRACTION (experiment, default OFF): feed the bounded post-aa ring
     // the blast's WORLD position, the shell's birth radius and its peak screen
@@ -6298,7 +6076,7 @@ async function main() {
     // ...including the stand-in, which used to get the UNSCALED height and was
     // therefore a third size convention in a three-way branch. It is the
     // control arm of the A/B; a control at a different size compares nothing.
-    else spawnBurstStandIn(burst.at, burst.heightM, burst.kind);
+    else spawnBurstStandIn(ctx, burst.at, burst.heightM, burst.kind);
     prof.chunksSpawned = pieces;
     ctx.dynamite.lastRadiusM = fx.radiusM;
     ctx.dynamite.lastBlastMs = performance.now() - t0;
@@ -6662,13 +6440,6 @@ async function main() {
 
   // -----------------------------------------------------------------------
   mark('burst-start');
-  // The burst stand-in (stage 3 replaces this with webgpu/explosion-vfx.ts).
-  // Additive cards in the effects overlay — the SAME routing the tracers use
-  // (character-effects.ts's header explains why: that scene is drawn after the
-  // SDF composite with the completed depth buffer, so the composite cannot
-  // erase the burst and bodies can still occlude it).
-  // -----------------------------------------------------------------------
-  const BURST_SLOTS = 6;
   ctx.vfx.burstTex = new THREE.DataTexture(flashPixels(64, 11), 64, 64);
   ctx.vfx.burstTex.needsUpdate = true;
   ctx.vfx.smokeBurstTex = new THREE.DataTexture(smokePixels(64), 64, 64);
@@ -6695,15 +6466,6 @@ async function main() {
     ctx.weapon.burstSlots.push({ core, halo, smoke, age: Infinity, life: 0.55, h: 1 });
   }
   ctx.weapon.burstCursor = 0;
-  function spawnBurstStandIn(at: Vec3, heightM: number, kind: 'air' | 'ground'): void {
-    const s = ctx.weapon.burstSlots[ctx.weapon.burstCursor++ % BURST_SLOTS]!;
-    s.age = 0;
-    s.life = kind === 'ground' ? 0.62 : 0.5;
-    s.h = heightM;
-    // Ground bursts sit ON the floor and bloom up; air bursts centre.
-    const y = kind === 'ground' ? at[1] + heightM * 0.35 : at[1];
-    for (const m of [s.core, s.halo, s.smoke]) { m.position.set(at[0], y, at[2]); m.visible = true; }
-  }
 
   /**
    * One frame of the slot machine and the holster travel it drives.
@@ -6777,29 +6539,6 @@ async function main() {
     }
   }
 
-  function stepWeaponSlots(dt: number): void {
-    ctx.weapon.slotState = stepWeaponSlot(ctx.weapon.slotState, dt);
-
-    const gunLower = slotLowerAmount(ctx.weapon.slotState, 'shotgun');
-    // Drop out of frame AND dip the muzzles: that reads as putting a gun away,
-    // where a fade reads as a bug.
-    ctx.weapon.gunRig.position.set(0, -0.42 * gunLower, 0.06 * gunLower);
-    ctx.weapon.gunRig.rotation.set(THREE.MathUtils.degToRad(38) * gunLower, 0, 0);
-    ctx.weapon.gunRig.visible = gunLower < 0.999;
-
-    const bundleLower = slotLowerAmount(ctx.weapon.slotState, 'dynamite');
-    ctx.bake.bundleRig.position.set(
-      BUNDLE_HOLD.pos.x,
-      BUNDLE_HOLD.pos.y - 0.34 * bundleLower,
-      BUNDLE_HOLD.pos.z,
-    );
-    // Only the LIVE weapon's model is drawn: during the drop the bundle is
-    // still holstered, and it appears the instant the frame changes hands.
-    ctx.bake.bundleRig.visible = ctx.weapon.slotState.live === 'dynamite' && ctx.weapon.heldProp !== null;
-    // Slot 3: the same one-transform holster travel.
-    ctx.weapon.flare?.updateRig();
-  }
-
   /**
    * One frame of dynamite: the cook machine, the flights, and the hand state.
    *
@@ -6831,7 +6570,7 @@ async function main() {
       // see ceilingAt. One frame of lag across a doorway is invisible (the wall
       // boxes catch that frame), and a 5-entry lookup per bundle per frame is
       // nothing next to getting the roof wrong.
-      const world = { colliders: ctx.world.colliders, ceilM: ceilingAt(b.state.pos[0], b.state.pos[2]) };
+      const world = { colliders: ctx.world.colliders, ceilM: ceilingAt(ctx, b.state.pos[0], b.state.pos[2]) };
       let remaining = Math.min(dt, 0.25);
       let boom: Vec3 | null = null;
       while (remaining > 1e-9 && !flightDetonated(b.state)) {
@@ -6841,7 +6580,7 @@ async function main() {
         // bounds: null — the dungeon has no arena rect; `colliders` is its
         // real solid geometry and `ceilM` its ceiling.
         b.state = stepFlight(b.state, sub, null, world);
-        if (bundleHitsBody(from, b.state.pos)) { boom = b.state.pos; break; }
+        if (bundleHitsBody(ctx, from, b.state.pos)) { boom = b.state.pos; break; }
       }
       if (!boom && flightDetonated(b.state)) boom = b.state.pos;
       if (boom) {
@@ -6871,7 +6610,7 @@ async function main() {
       const pl = ctx.vfx.explosionLightPool[i]!;
       const e = ctx.vfx.explosionLights[i];
       if (!e) { pl.intensity = 0; continue; }
-      const k = explosionLightEnv(e.age);
+      const k = explosionLightEnv(ctx, e.age);
       pl.position.set(e.pos[0], e.pos[1], e.pos[2]);
       pl.intensity = EXPLOSION_LIGHT.meshPeak * k * ctx.lighting.fxLightScale;
     }
@@ -6908,10 +6647,6 @@ async function main() {
   // -----------------------------------------------------------------------
   ctx.boot.nextEmitterStream = 1;
   ctx.vfx.woundStreamIds = new WeakMap<Wound, number>();
-  const TRAIL_STREAM_BASE = 0x40000000;
-  function trailStreamId(chunkId: number): number {
-    return TRAIL_STREAM_BASE + (chunkId >>> 0);
-  }
 
   // -----------------------------------------------------------------------
   mark('goo-start');
@@ -7414,83 +7149,6 @@ async function main() {
   mark('boot-time');
   ctx.boot.time = performance.now();
 
-  function updateVisibleActors(): void {
-    const now = simTimeMs();
-    ctx.world.cullCounts.total = ctx.world.actors.length;
-    if (!ctx.render.actorCullEnabled) {
-      ctx.render.visibleActors = ctx.world.actors;
-      ctx.world.cullCounts.visible = ctx.world.actors.length;
-      // Cull off: the frustum/dwell work is skipped, but the refine gate is
-      // NOT — the spec's first rule (a dead body never refines) has to hold in
-      // both modes, so a body that collapses with the cull off still loses its
-      // twin. Same band + hysteresis, every actor, no visibility work.
-      ctx.world.sightA[0] = camera.position.x; ctx.world.sightA[1] = camera.position.y; ctx.world.sightA[2] = camera.position.z;
-      ctx.render.refinedBodies = 0;
-      for (const a of ctx.world.actors) {
-        const torso = a.posed().clusters.find(c => c.limb === 'torso');
-        if (gateRefineTwin(ctx, a, torso ? torso.center as Vec3 : null, true)) ctx.render.refinedBodies++;
-      }
-      ctx.world.coverage.screenFrac = 0; ctx.world.coverage.nearestM = 0; ctx.world.coverage.biggestFrac = 0;
-      return;
-    }
-    ctx.world.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    ctx.world.frustum.setFromProjectionMatrix(ctx.world.projScreen);
-    ctx.world.sightA[0] = camera.position.x; ctx.world.sightA[1] = camera.position.y; ctx.world.sightA[2] = camera.position.z;
-    const out: ZombieActor[] = [];
-    const tw = ctx.render.sdfLayer.marchTarget.width, th = ctx.render.sdfLayer.marchTarget.height;
-    const px = Math.max(1, tw * th);
-    const halfHpx = th / 2;
-    const tanHalfFov = Math.tan((camera.fov * Math.PI / 180) / 2);
-    let area = 0, nearest = 0, biggest = 0;
-    ctx.render.refinedBodies = 0;
-    for (const a of ctx.world.actors) {
-      const torso = a.posed().clusters.find(c => c.limb === 'torso');
-      // No torso cluster (mid-gib, exotic body): never cull what we cannot
-      // measure — fall back to drawing it. No distance to band-test either, so
-      // the refine twin stays off for it.
-      if (!torso) {
-        out.push(a); ctx.world.lastSeenMs.set(a.id, now);
-        gateRefineTwin(ctx, a, null, true);
-        continue;
-      }
-      const c = torso.center;
-      ctx.world.bodySphere.center.set(c[0], c[1], c[2]);
-      let seen = ctx.world.frustum.intersectsSphere(ctx.world.bodySphere);
-      if (seen) {
-        // Two probes: torso centre, then a head-height point. A body edging
-        // out of cover reveals its head before its chest.
-        const head: Vec3 = [c[0], c[1] + 0.6, c[2]];
-        seen = clearSight(ctx.world.sightA, c as Vec3, ctx.world.colliders) || clearSight(ctx.world.sightA, head, ctx.world.colliders);
-      }
-      if (seen) ctx.world.lastSeenMs.set(a.id, now);
-      const since = now - (ctx.world.lastSeenMs.get(a.id) ?? -Infinity);
-      const kept = seen || since < CULL_DWELL_MS;
-      if (kept) out.push(a);
-
-      // Run 5b: the per-body refine gate (see gateRefineTwin).
-      if (gateRefineTwin(ctx, a, c as Vec3, kept)) ctx.render.refinedBodies++;
-
-      // Coverage estimate — only for bodies actually seen this frame, so a
-      // body coasting on its dwell grace does not inflate the area.
-      if (seen) {
-        const dx = c[0] - ctx.world.sightA[0], dy = c[1] - ctx.world.sightA[1], dz = c[2] - ctx.world.sightA[2];
-        const dist = Math.hypot(dx, dy, dz);
-        if (nearest === 0 || dist < nearest) nearest = dist;
-        const r = ctx.world.bodySphere.radius;
-        // Camera inside the bound: treat as full screen rather than dividing
-        // by a distance that is about to go through zero.
-        const frac = dist <= r ? 1 : Math.min(1, Math.PI * ((r / dist) * halfHpx / tanHalfFov) ** 2 / px);
-        area += frac;
-        if (frac > biggest) biggest = frac;
-      }
-    }
-    ctx.world.coverage.screenFrac = Math.min(1, area);
-    ctx.world.coverage.nearestM = nearest;
-    ctx.world.coverage.biggestFrac = biggest;
-    ctx.render.visibleActors = out;
-    ctx.world.cullCounts.visible = out.length;
-  }
-
   function updateHud() {
     if (!ctx.boot.hudEl) return;
     const where = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
@@ -7904,7 +7562,7 @@ async function main() {
     // (the holster travel is a local transform on gunRig/bundleRig, so it does
     // not care where the rig is — but the burst sprites the dynamite spawns are
     // world-space and want the frame's final camera).
-    stepWeaponSlots(dt);
+    stepWeaponSlots(ctx, dt);
     stepDynamite(dt);
     if (ctx.player.reticleEl) {
       ctx.player.reticleEl.style.display = ctx.player.freeAimOn ? 'block' : 'none';
@@ -7980,7 +7638,7 @@ async function main() {
       // can disagree with where the open barrels actually are.
       const out = new THREE.Vector3(), side = new THREE.Vector3();
       const breech = new THREE.Vector3();
-      const haveBore = boreFrameInRig(out, side);
+      const haveBore = boreFrameInRig(ctx, out, side);
       const outV: Vec3 = [out.x, out.y, out.z];
       const frame = { out: outV, side: [side.x, side.y, side.z] as Vec3 };
       // Shell meshes run hull +Y / head -Y; the hull points down the bore.
@@ -8394,7 +8052,7 @@ async function main() {
           ctx.vfx.bloodSim,
           [
             ...ctx.bake.liveChunks.map(c => ({
-              id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
+              id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(ctx, c.id),
             })),
             // LIVE ONLY, not `rest`: the marched path's equivalent of a parked
             // sprite is a BAKED piece, and a baked piece is out of `liveChunks`
@@ -8407,7 +8065,7 @@ async function main() {
             // emission stream either (the same separation, one layer down).
             ...ctx.vfx.spritePieces.live.map(p => ({
               id: SPRITE_TRAIL_ID_BASE + p.id, pos: p.state.pos, vel: p.state.vel,
-              stream: trailStreamId(SPRITE_TRAIL_ID_BASE + p.id),
+              stream: trailStreamId(ctx, SPRITE_TRAIL_ID_BASE + p.id),
             })),
           ],
           cdt, rngStreams.bleed,
@@ -8508,7 +8166,7 @@ async function main() {
    *  with the same code the placement gate uses, rather than trusting a
    *  cluster centre. No state mutated. */
   function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
-      const origin = muzzleWorld();
+      const origin = muzzleWorld(ctx);
       const dir = convergedDir(origin);
       return { origin, dir, ...traceSlugHitFrom(ctx, origin, dir) };
   }
@@ -8829,7 +8487,7 @@ function performBenchAction(a: BenchAction): void {
     ctx.demo.recorder = createDemoRecorder({
       seed: ctx.demo.seed,
       query: location.search.replace(/^\?/, ''),
-      room: playerRoomId(),
+      room: playerRoomId(ctx),
       dt: 1 / 60,
       meta: {
         startPose: { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch },
@@ -9068,7 +8726,7 @@ function performBenchAction(a: BenchAction): void {
     ...createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction }),
     ...createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
     ...createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf, camera }),
-    ...createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId, spawnChunkPiece }),
+    ...createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
     /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
      *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
      *  POST /__lab/save-demo. F7 does the same toggle. */
@@ -9080,7 +8738,7 @@ function performBenchAction(a: BenchAction): void {
       replaying: ctx.demo.replayActive,
       frame: ctx.demo.replayActive ? ctx.demo.replayFrame : (ctx.demo.recorder?.frames ?? 0),
       seed: ctx.demo.seed,
-      room: playerRoomId(),
+      room: playerRoomId(ctx),
       demoHold: ctx.demo.hold,
     }),
     /** Replay a `.dem` (`file` object, or a path/URL to fetch) headlessly and
@@ -9149,13 +8807,13 @@ function performBenchAction(a: BenchAction): void {
      *  driver SOLVE for the player stance that puts the slug's spawn point
      *  where it wants — the muzzle offset is ~0.6 m of view-space rig, which
      *  no hand-derived stance reproduces). Read-only. */
-    muzzleWorld: () => muzzleWorld(),
+    muzzleWorld: () => muzzleWorld(ctx),
     /** The EXACT ray a slug fired right now would take (chunk-bake gate):
      *  origin = muzzleWorld(), dir = convergedDir(muzzleWorld()) — the same
      *  two calls fire() makes. A driver can measure a ray-to-target miss
      *  BEFORE spending the shot. Read-only. */
     slugRay: () => {
-      const o = muzzleWorld();
+      const o = muzzleWorld(ctx);
       const d = convergedDir(o);
       return { origin: o, dir: d };
     },
@@ -9362,10 +9020,10 @@ function performBenchAction(a: BenchAction): void {
     spawnExplosionFx: (x: number, y: number, z: number, heightM = 2, kind: 'air' | 'ground' = 'ground') => {
       const visual = { kind, at: [x, y, z] as Vec3, heightM };
       const scaled = scaleBurstVisual(ctx, visual);
-      igniteExplosionLight(visual.at);
+      igniteExplosionLight(ctx, visual.at);
       if (ctx.vfx.explosionVfx) ctx.vfx.explosionVfx.spawn(scaled);
       else if (ctx.vfx.burstLayer) ctx.vfx.burstLayer.spawn(scaled);
-      else spawnBurstStandIn(scaled.at, scaled.heightM, scaled.kind);
+      else spawnBurstStandIn(ctx, scaled.at, scaled.heightM, scaled.kind);
       return { mode: ctx.vfx.explosionVfx ? 'procedural' : ctx.vfx.burstLayer ? 'atlas' : 'standin' };
     },
     /** THE RENDER MODE BESIDE THE PIECE MODE — live, no reload.
@@ -9408,7 +9066,7 @@ function performBenchAction(a: BenchAction): void {
       return laySpriteBench(ctx);
     },
     spawnDebugCharacter: (name: string, start?: Vec3) => {
-      const room = ROOMS.find(r => r.id === playerRoomId()) ?? ROOMS[0]!;
+      const room = ROOMS.find(r => r.id === playerRoomId(ctx)) ?? ROOMS[0]!;
       const starts = spawnPoints(room);
       // The game's own debug seam keeps the modulo default; crowdGridPoints()
       // callers pass an explicit point (perf 7f).

@@ -126,3 +126,9 @@ export function ensureImpactSplashLayer(ctx: GameContext): void {
   });
   ctx.boot.handle.scene.add(ctx.panels.impactSplashLayer.object);
 }
+
+export const TRAIL_STREAM_BASE = 0x40000000;
+
+export function trailStreamId(ctx: GameContext, chunkId: number): number {
+  return TRAIL_STREAM_BASE + (chunkId >>> 0);
+}

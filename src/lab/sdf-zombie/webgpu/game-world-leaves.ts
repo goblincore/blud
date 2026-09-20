@@ -11,6 +11,7 @@ import { levelMatchedGain } from './probe-lighting-node';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { SLUG, traceProjectile } from './game-weapon';
+import { ROOMS, TUNNELS } from './game-level';
 
 /** The room's level cfg: weight, and the gain that puts the probe level at
  *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
@@ -80,4 +81,31 @@ export function traceSlugHitFrom(ctx: GameContext, origin: Vec3, dir: Vec3): { a
       }
     }
     return { actorId: hitActorId, hit: hitPoint };
+}
+
+/** Tallest ceiling in the level — the FALLBACK for a bundle outside every
+ *  enclosure. levelColliders() carries no ceiling box for the rooms, so
+ *  without a ceiling plane a full-charge lob leaves through the roof. Tunnel
+ *  lintels ARE boxes (2.2 → 3.0 m), so ceiling + boxes together reproduce the
+ *  level including its low mouths. */
+export const BUNDLE_CEIL_M = Math.max(...ROOMS.map(r => r.height));
+
+/** The ceiling over a point, PER ENCLOSURE.
+ *
+ *  A single global plane stopped being correct the moment the arena added a
+ *  6 m room to a level whose cells are 3 m: resolving to the TALLEST ceiling
+ *  everywhere let a bundle sail out through the small rooms' roofs, and
+ *  resolving to the smallest would have clipped the arena at half its height.
+ *  Rooms and tunnels each carry their own height, so the plane is a lookup.
+ *  `BUNDLE_CEIL_M` remains the answer for a point inside neither (over a wall
+ *  or through a door frame mid-flight), which is the generous case and the one
+ *  the collider boxes are there to catch. */
+export function ceilingAt(ctx: GameContext, x: number, z: number): number {
+  for (const t of TUNNELS) {
+    if (x >= t.minX && x <= t.maxX && z >= t.minZ && z <= t.maxZ) return t.height;
+  }
+  for (const r of ROOMS) {
+    if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return r.height;
+  }
+  return BUNDLE_CEIL_M;
 }
