@@ -8,7 +8,18 @@
 //
 // A leaf is a function with no free main()-scope functions or vars (see
 // `npx tsx scripts/slice-extract.ts --functions`). Anything else needs its
-// dependencies extracted first — this is a bottom-up process.
+// dependencies extracted first — this is a bottom-up process, and the tool now
+// REFUSES a non-leaf by name rather than leaving it to `tsc` (leaves wave 1:
+// the header claimed it refused and it did not). `--consts` moves a const along
+// with the function; `--force` overrides the refusal for a case you have
+// reasoned about.
+//
+// Rewrites, all driven off AST positions rather than text patterns:
+//   f(a)        -> f(ctx, a)          calls, including between co-moved functions
+//   { f }       -> { f: withCtx(ctx, f) }   shorthand property
+//   g(f)        -> g(withCtx(ctx, f))       any other reference passed as a value
+// `withCtx` (game-context.ts) keeps the wrapper's parameter types, which a bare
+// `(...a) => f(ctx, ...a)` loses wherever the receiver is typed `unknown`.
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import * as ts from 'typescript';
@@ -23,9 +34,11 @@ export interface Extraction {
   main: string;
   linesMoved: number;
   callSites: number;
-  /** References passed as values, wrapped to keep their ctx. */
+  /** References passed as values, wrapped in withCtx to keep their ctx. */
   bareRefs: number;
 }
+
+interface Edit { start: number; end: number; text: string }
 
 function findMain(sf: ts.SourceFile): ts.FunctionDeclaration {
   let found: ts.FunctionDeclaration | undefined;
@@ -34,38 +47,95 @@ function findMain(sf: ts.SourceFile): ts.FunctionDeclaration {
   return found;
 }
 
+/** Every name main() declares at its own top level — the closure the extracted
+ *  functions must no longer reach into. */
+function mainScopeNames(main: ts.FunctionDeclaration): Set<string> {
+  const names = new Set<string>();
+  const addBinding = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) { names.add(name.text); return; }
+    for (const el of name.elements) {
+      if (ts.isBindingElement(el)) addBinding(el.name);
+    }
+  };
+  for (const st of main.body!.statements) {
+    if (ts.isVariableStatement(st)) for (const d of st.declarationList.declarations) addBinding(d.name);
+    if ((ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st) || ts.isEnumDeclaration(st)) && st.name) names.add(st.name.text);
+    if (ts.isTypeAliasDeclaration(st) || ts.isInterfaceDeclaration(st)) names.add(st.name.text);
+  }
+  return names;
+}
+
+/** Names bound INSIDE a node: parameters, locals, nested functions, type
+ *  parameters, catch clauses. Approximate but conservative in the safe
+ *  direction — a name we wrongly think is local only ever hides a refusal we
+ *  would have raised, and `tsc` still backs the move. */
+function localNames(node: ts.Node): Set<string> {
+  const names = new Set<string>();
+  const addBinding = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) { names.add(name.text); return; }
+    for (const el of name.elements) if (ts.isBindingElement(el)) addBinding(el.name);
+  };
+  const walk = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n)) addBinding(n.name as ts.BindingName);
+    if ((ts.isFunctionDeclaration(n) || ts.isClassDeclaration(n)) && n.name) names.add(n.name.text);
+    if (ts.isTypeParameterDeclaration(n)) names.add(n.name.text);
+    if (ts.isCatchClause(n) && n.variableDeclaration) addBinding(n.variableDeclaration.name);
+    n.forEachChild(walk);
+  };
+  walk(node);
+  return names;
+}
+
+/** Free references from `node` into `scope`, ignoring anything bound locally,
+ *  the moved set itself, and `ctx`. */
+function freeNames(node: ts.Node, sf: ts.SourceFile, scope: Set<string>, moved: Set<string>): string[] {
+  const local = localNames(node);
+  const free = new Set<string>();
+  const walk = (n: ts.Node): void => {
+    if (ts.isIdentifier(n)) {
+      const p = n.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node };
+      const isDeclName = p.name === n || p.propertyName === n;
+      const isMember = ts.isPropertyAccessExpression(p) && p.name === n;
+      if (!isDeclName && !isMember && n.text !== 'ctx'
+        && scope.has(n.text) && !local.has(n.text) && !moved.has(n.text)) free.add(n.text);
+    }
+    n.forEachChild(walk);
+  };
+  walk(node);
+  return [...free].sort();
+}
+
+function applyEdits(text: string, edits: readonly Edit[], offset = 0): string {
+  let out = text;
+  for (const e of [...edits].sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, e.start - offset) + e.text + out.slice(e.end - offset);
+  }
+  return out;
+}
+
 export function extractLeaves(
   source: string, fnNames: readonly string[], constNames: readonly string[], moduleName: string,
-  extraImports: readonly string[] = [],
+  extraImports: readonly string[] = [], opts: { force?: boolean } = {},
 ): Extraction {
   const sf = ts.createSourceFile('game-main.ts', source, ts.ScriptTarget.ES2022, true);
   const main = findMain(sf);
   const want = new Set(fnNames);
   const wantConst = new Set(constNames);
+  const moved = new Set([...fnNames, ...constNames]);
+  const scope = mainScopeNames(main);
 
   const cuts: Array<{ start: number; end: number }> = [];
-  const bodies: string[] = [];
+  const decls: Array<{ node: ts.FunctionDeclaration; name: string }> = [];
   const consts: string[] = [];
   let linesMoved = 0;
 
+  const lineSpan = (st: ts.Node): number =>
+    sf.getLineAndCharacterOfPosition(st.getEnd()).line - sf.getLineAndCharacterOfPosition(st.getFullStart()).line + 1;
+
   for (const st of main.body!.statements) {
     if (ts.isFunctionDeclaration(st) && st.name && want.has(st.name.text)) {
-      const a = sf.getLineAndCharacterOfPosition(st.getFullStart()).line;
-      const b = sf.getLineAndCharacterOfPosition(st.getEnd()).line;
-      linesMoved += b - a + 1;
-      // De-indent two spaces and give it ctx explicitly. Take the FULL span so
-      // the declaration's leading doc comment moves with it rather than being
-      // deleted along with the statement.
-      const raw = source.slice(st.getFullStart(), st.getEnd()).replace(/^\n+/, '');
-      const text = raw.split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n');
-      // NOTE the `m` flag: the text starts with the declaration's doc comment,
-      // so an unanchored-to-line `^` would never reach the `function` line and
-      // ctx would silently not be added.
-      const withCtx = text.replace(
-        new RegExp(`^(\\s*)(async )?function ${st.name.text}\\(`, 'm'),
-        (_m: string, ind: string, asy?: string) => `${ind}export ${asy ?? ''}function ${st.name!.text}(ctx: GameContext, `,
-      ).replace(`(ctx: GameContext, )`, `(ctx: GameContext)`);
-      bodies.push(withCtx);
+      decls.push({ node: st, name: st.name.text });
+      linesMoved += lineSpan(st);
       cuts.push({ start: st.getFullStart(), end: st.getEnd() });
       continue;
     }
@@ -77,25 +147,38 @@ export function extractLeaves(
         // `export` must precede the declaration, after any doc comment.
         const nl = text.lastIndexOf('\n');
         consts.push(nl >= 0 ? `${text.slice(0, nl + 1)}export ${text.slice(nl + 1)}` : `export ${text}`);
-        const a = sf.getLineAndCharacterOfPosition(st.getFullStart()).line;
-        const b = sf.getLineAndCharacterOfPosition(st.getEnd()).line;
-        linesMoved += b - a + 1;
+        linesMoved += lineSpan(st);
         cuts.push({ start: st.getFullStart(), end: st.getEnd() });
       }
     }
   }
 
-  if (bodies.length !== fnNames.length) {
-    throw new Error(`expected ${fnNames.length} functions, matched ${bodies.length}`);
+  if (decls.length !== fnNames.length) {
+    throw new Error(`expected ${fnNames.length} functions, matched ${decls.length}`);
   }
 
-  // Rewrite call sites: f(a) -> f(ctx, a), f() -> f(ctx).
-  const edits: Array<{ start: number; end: number; text: string }> = [];
+  // THE LEAF CHECK. Report every offender of every function in one message: the
+  // point is to plan the next wave, not to bisect one name per run.
+  if (!opts.force) {
+    const offenders = decls
+      .map(d => ({ name: d.name, free: freeNames(d.node, sf, scope, moved) }))
+      .filter(o => o.free.length);
+    if (offenders.length) {
+      throw new Error(
+        'not a leaf — still closes over main() scope:\n'
+        + offenders.map(o => `  ${o.name} -> ${o.free.join(', ')}`).join('\n')
+        + '\nExtract those first, move a const with --consts, or --force if you have reasoned about it.',
+      );
+    }
+  }
+
+  // Reference rewrites, collected for the WHOLE of main() — including inside the
+  // functions being moved, so co-moved functions calling each other pass ctx on.
+  const edits: Edit[] = [];
   let callSites = 0;
-  const inCut = (p: number) => cuts.some(c => p >= c.start && p < c.end);
+  let bareRefs = 0;
   const visit = (n: ts.Node): void => {
-    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && want.has(n.expression.text)
-      && !inCut(n.getStart(sf))) {
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && want.has(n.expression.text)) {
       callSites++;
       const open = n.expression.getEnd();
       if (n.arguments.length) {
@@ -106,40 +189,67 @@ export function extractLeaves(
         // original closing paren is left behind as `f(ctx))`.
         edits.push({ start: open, end: n.getEnd(), text: '(ctx)' });
       }
+      n.forEachChild(visit);
+      return;
     }
-    // A BARE reference (passed as a value, not called) must be wrapped, or it
-    // silently loses its ctx and its arity no longer matches the target.
-    // `(...a) => f(ctx, ...a)` is fine unannotated: these appear in
-    // contextually-typed positions, so TS infers `a` from the target signature.
-    if (ts.isIdentifier(n) && want.has(n.text) && !inCut(n.getStart(sf))) {
+    // A reference passed as a VALUE loses its ctx and its arity unless it is
+    // bound. `{ f }` is such a reference even though the identifier is also the
+    // property name — the shape leaves wave 1 missed.
+    if (ts.isIdentifier(n) && want.has(n.text)) {
       const par = n.parent as ts.Node & { name?: ts.Node; expression?: ts.Node };
-      const isCallee = ts.isCallExpression(par) && par.expression === n;
-      const isNamePos = par.name === n;
-      const isMember = ts.isPropertyAccessExpression(par) && par.name === n;
-      if (!isCallee && !isNamePos && !isMember) {
+      if (ts.isShorthandPropertyAssignment(par) && par.name === n) {
         bareRefs++;
-        edits.push({ start: n.getStart(sf), end: n.getEnd(),
-                     text: `(...a) => ${n.text}(ctx, ...a)` });
+        edits.push({ start: n.getStart(sf), end: n.getEnd(), text: `${n.text}: withCtx(ctx, ${n.text})` });
+      } else {
+        const isCallee = ts.isCallExpression(par) && par.expression === n;
+        const isNamePos = par.name === n;
+        const isMember = ts.isPropertyAccessExpression(par) && par.name === n;
+        if (!isCallee && !isNamePos && !isMember) {
+          bareRefs++;
+          edits.push({ start: n.getStart(sf), end: n.getEnd(), text: `withCtx(ctx, ${n.text})` });
+        }
       }
     }
     n.forEachChild(visit);
   };
-  let bareRefs = 0;
   visit(main);
 
-  // game-main.ts must import back everything that just left it.
+  // Bodies: take the raw span, apply the edits that fall INSIDE it, then
+  // de-indent and insert `export` + the ctx parameter at AST positions (a text
+  // pattern misses `function f<T>(`, which is how registerLitChunkMaterial was
+  // silently left without ctx).
+  const inside = (c: { start: number; end: number }) => edits.filter(e => e.start >= c.start && e.end <= c.end);
+  const bodies = decls.map(({ node }, i) => {
+    const c = cuts.find(x => x.start === node.getFullStart())!;
+    const declStart = (node.modifiers?.[0] ?? node).getStart(sf);
+    const local: Edit[] = [
+      ...inside(c),
+      { start: declStart, end: declStart, text: 'export ' },
+      // parameters.pos is just after `(`, so this lands after any <T> list.
+      { start: node.parameters.pos, end: node.parameters.pos,
+        text: node.parameters.length ? 'ctx: GameContext, ' : 'ctx: GameContext' },
+    ];
+    void i;
+    const raw = applyEdits(source.slice(c.start, c.end), local, c.start).replace(/^\n+/, '');
+    return raw.split('\n').map(l => l.startsWith('  ') ? l.slice(2) : l).join('\n');
+  });
+
+  // game-main.ts must import back everything that just left it, plus withCtx if
+  // anything is now wrapped.
   const back = [...fnNames, ...constNames].sort();
-  const importBack = `import { ${back.join(', ')} } from './${moduleName}';\n`;
+  const needsWithCtx = bareRefs > 0 && !/^import \{ withCtx \} from '\.\/game-context';$/m.test(source);
+  const importBack = `import { ${back.join(', ')} } from './${moduleName}';\n`
+    + (needsWithCtx ? `import { withCtx } from './game-context';\n` : '');
   const lastImport = [...source.matchAll(/^import .*?;$/gms)].at(-1);
   if (!lastImport) throw new Error('no import block found in game-main.ts');
   const insertAt = lastImport.index! + lastImport[0].length + 1;
 
-  let out = source;
-  const all = [...edits, ...cuts.map(c => ({ ...c, text: '' })),
-               { start: insertAt, end: insertAt, text: importBack }];
-  for (const e of all.sort((a, b) => b.start - a.start)) {
-    out = out.slice(0, e.start) + (e as { text: string }).text + out.slice(e.end);
-  }
+  const outside = edits.filter(e => !cuts.some(c => e.start >= c.start && e.end <= c.end));
+  const out = applyEdits(source, [
+    ...outside,
+    ...cuts.map(c => ({ ...c, text: '' })),
+    { start: insertAt, end: insertAt, text: importBack },
+  ]);
 
   const module = [
     `// src/lab/sdf-zombie/webgpu/${moduleName}.ts`,
@@ -167,7 +277,8 @@ if (process.argv[1]?.endsWith('extract-leaf.ts')) {
   const src = readFileSync(GAME_MAIN, 'utf8');
   const ii = process.argv.indexOf('--imports');
   const extraImports = ii > 0 ? process.argv[ii + 1].split(';') : [];
-  const r = extractLeaves(src, fnNames, constNames, moduleName, extraImports);
+  const r = extractLeaves(src, fnNames, constNames, moduleName, extraImports,
+                          { force: process.argv.includes('--force') });
   console.log(`module     : src/lab/sdf-zombie/webgpu/${moduleName}.ts`);
   console.log(`functions  : ${fnNames.join(', ')}`);
   console.log(`consts     : ${constNames.join(', ') || '(none)'}`);

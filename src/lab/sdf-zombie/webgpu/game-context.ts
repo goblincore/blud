@@ -78,3 +78,18 @@ export function makeGameContext(): GameContext {
     boot: makeBootState(),
   };
 }
+
+/** Bind `ctx` to an extracted `(ctx, …)` function so it can be PASSED AS A
+ *  VALUE with its original signature.
+ *
+ *  The decomposition's extracted functions take the context explicitly, but
+ *  plenty of them are handed to a deps object or the `__sdfGame` literal rather
+ *  than called. `scripts/extract-leaf.ts` first emitted `(...a) => f(ctx, ...a)`
+ *  there, which is implicit-any the moment the receiving property is typed
+ *  `unknown` (the `__sdfGame` literal is) — TS7019/TS2556, leaves wave 1. This
+ *  keeps the tail's types, so the wrapper is exactly as typed as the original. */
+export function withCtx<A extends unknown[], R>(
+  ctx: GameContext, fn: (ctx: GameContext, ...args: A) => R,
+): (...args: A) => R {
+  return (...args: A) => fn(ctx, ...args);
+}
