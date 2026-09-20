@@ -311,3 +311,25 @@ describe('extract-leaf: types declared inside main()', () => {
     expect(r.main).not.toContain('interface TracerView {');
   });
 });
+
+describe('extract-leaf: shadowing and transitive types', () => {
+  it('does NOT rewrite a local that shadows the moved function name', () => {
+    // game-main has `function fire(barrels)` AND, inside a bench loop,
+    // `let fire: 0 | 1 | 2 = 0`. Rewriting the latter produced
+    // `withCtx(ctx, fire) = a.barrels`, which is not even valid JS.
+    const src = `import { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n  function fire(barrels: number): boolean {\n    return barrels > 0 && ctx.weapon.loaded;\n  }\n  fire(1);\n  {\n    let fire: 0 | 1 | 2 = 0;\n    fire = 2;\n    void fire;\n  }\n}\n`;
+    const r = extractLeaves(src, ['fire'], [], 'game-weapon-leaves');
+    expect(r.main).toContain('let fire: 0 | 1 | 2 = 0;');
+    expect(r.main).toContain('fire = 2;');
+    expect(r.main).not.toContain('withCtx(ctx, fire) =');
+    // The real call site still gets ctx.
+    expect(r.main).toContain('fire(ctx, 1);');
+  });
+
+  it('carries a type that the carried type itself references', () => {
+    const src = `import * as THREE from 'three';\nimport { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n  interface ChunkTemplate { id: number }\n  interface BakedChunk { mesh: THREE.Mesh; tpl: ChunkTemplate }\n  function freeBaked(c: BakedChunk): void {\n    ctx.bake.freed.push(c.mesh);\n  }\n  freeBaked({ mesh: ctx.bake.probe, tpl: { id: 1 } });\n}\n`;
+    const r = extractLeaves(src, ['freeBaked'], [], 'game-bake-leaves');
+    expect(r.module).toContain('interface BakedChunk');
+    expect(r.module).toContain('interface ChunkTemplate');
+  });
+});

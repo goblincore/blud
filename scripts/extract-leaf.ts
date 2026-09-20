@@ -204,8 +204,21 @@ export function extractLeaves(
   }
 
   // Which main()-scope types the moved bodies reference — they come along.
-  const carriedMainTypes = [...mainTypes].filter(([name]) =>
-    decls.some(d => new RegExp(`(^|[^A-Za-z0-9_.$])${name}([^A-Za-z0-9_$]|$)`).test(d.node.getText(sf))));
+  const mentions = (text: string, name: string): boolean =>
+    new RegExp(`(^|[^A-Za-z0-9_.$])${name}([^A-Za-z0-9_$]|$)`).test(text);
+  const carriedNames = new Set<string>();
+  // Transitive: a carried type can reference another main()-scope type
+  // (BakedChunk -> ChunkTemplate), and that one must come too.
+  let frontier = [...decls.map(d => d.node.getText(sf))];
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const [name, t] of mainTypes) {
+      if (carriedNames.has(name)) continue;
+      if (frontier.some(text => mentions(text, name))) { carriedNames.add(name); next.push(t.text); }
+    }
+    frontier = next;
+  }
+  const carriedMainTypes = [...mainTypes].filter(([name]) => carriedNames.has(name));
   for (const [name] of carriedMainTypes) moved.add(name);
   // Cut them here, BEFORE main() is rebuilt below.
   for (const [, t] of carriedMainTypes) cuts.push({ start: t.start, end: t.end });
@@ -230,8 +243,36 @@ export function extractLeaves(
   const edits: Edit[] = [];
   let callSites = 0;
   let bareRefs = 0;
+  /** Does an ancestor scope between `n` and main() declare `name` itself? Then
+   *  this identifier is a DIFFERENT binding and must not be rewritten: game-main
+   *  has `function fire(barrels)` and, in a bench loop, `let fire: 0 | 1 | 2`. */
+  const shadowed = (n: ts.Node, name: string): boolean => {
+    for (let p = n.parent; p && p !== main && p !== main.body; p = p.parent) {
+      const declares = (node: ts.Node): boolean => {
+        let hit = false;
+        node.forEachChild(c => {
+          if (hit) return;
+          if (ts.isVariableStatement(c)) {
+            for (const d of c.declarationList.declarations) {
+              if (ts.isIdentifier(d.name) && d.name.text === name) hit = true;
+            }
+          }
+          // The moved declaration itself is not a shadow of itself.
+          if ((ts.isFunctionDeclaration(c) || ts.isClassDeclaration(c)) && c.name?.text === name
+            && !want.has(name)) hit = true;
+        });
+        if (ts.isFunctionLike(node)) {
+          for (const prm of node.parameters) if (ts.isIdentifier(prm.name) && prm.name.text === name) hit = true;
+        }
+        return hit;
+      };
+      if (declares(p)) return true;
+    }
+    return false;
+  };
   const visit = (n: ts.Node): void => {
-    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && want.has(n.expression.text)) {
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && want.has(n.expression.text)
+      && !shadowed(n.expression, n.expression.text)) {
       callSites++;
       const open = n.expression.getEnd();
       if (n.arguments.length) {
@@ -248,7 +289,7 @@ export function extractLeaves(
     // A reference passed as a VALUE loses its ctx and its arity unless it is
     // bound. `{ f }` is such a reference even though the identifier is also the
     // property name — the shape leaves wave 1 missed.
-    if (ts.isIdentifier(n) && want.has(n.text)) {
+    if (ts.isIdentifier(n) && want.has(n.text) && !shadowed(n, n.text)) {
       const par = n.parent as ts.Node & { name?: ts.Node; expression?: ts.Node };
       if (ts.isShorthandPropertyAssignment(par) && par.name === n) {
         bareRefs++;
