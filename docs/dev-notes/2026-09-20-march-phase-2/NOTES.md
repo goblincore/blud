@@ -307,3 +307,28 @@ in the Step 3 table.)
   off the boot path, today's cold total is 145 s with a single 141 s body
   compile inside the boot gate; post-ready background compiles are not
   captured by the census.
+
+## Reviewer verification of task 2 (2026-09-20)
+
+Merged tasks 1+2 and re-ran the gates independently of the task's own report:
+
+- `npx tsc --noEmit` clean; `march` + `deferred-sdf` suites **290 passed / 1
+  failed**, the failure being main's known `march-step-soundness`.
+- Pixel gate, both rooms, after the cold compile settled:
+  room1 `8f2b74e7…` (repeat identical, wounded `1381a866…`),
+  room2 `35b6d561…` — identical to the task-1 baseline. `MarchIn` is
+  behaviour-neutral, as intended.
+
+**The gate trap is now fixed rather than documented.** `stageCloseUp`'s settle
+bound is tunable: `MARCH_HASH_SETTLE_TRIES` (default 30 = 7.5 s, unchanged for
+warm runs). The first gate run after a march text change wants
+`MARCH_HASH_SETTLE_TRIES=2400`. Two warm-up boots of my own did NOT unblock it —
+the gate applies its own ship defaults and `setSdfScale(0.5)` before staging, so
+it compiles programs a plain boot never touches; only raising the bound inside
+the staging works. The failure message now names the variable.
+
+**Task 2 ended on a dispatch TIMEOUT (exit 124), not a clean finish** — the
+engine auto-committed its work. The work itself was complete and gated (its own
+report shows both rooms green before the deadline); only the wrap-up was cut
+off. Worth knowing when reading its commit message, and worth a longer
+`max_runtime` for tasks 3–6, which each pay this compile.
