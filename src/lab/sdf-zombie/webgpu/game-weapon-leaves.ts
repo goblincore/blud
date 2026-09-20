@@ -15,6 +15,7 @@ import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
 import { type Vec3 } from '../types';
 import { eyeOf } from './game-player';
 import { slotLowerAmount, stepWeaponSlot } from './game-weapon-slots';
+import { aimArm } from './game-arms';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -279,4 +280,68 @@ export function aimDir(ctx: GameContext): Vec3 {
   ];
   const l = Math.hypot(d[0], d[1], d[2]) || 1;
   return [d[0] / l, d[1] / l, d[2] / l];
+}
+
+/** AIM CONVERGENCE (2026-08-26 defect-2 fix candidate): the muzzle sits
+ *  ~20 cm right and ~12 cm low of the EYE, and pellets used to fly PARALLEL
+ *  to the camera ray — so at ANY range impacts landed that whole offset off
+ *  the crosshair. Standard FPS remedy: every projectile converges on the
+ *  point where the camera ray meets AIM_CONVERGE_M. Close shots still group;
+ *  the parallel-ray offset is gone by construction. */
+export const AIM_CONVERGE_M = 8;
+
+export function convergedDir(ctx: GameContext, origin: Vec3): Vec3 {
+  const eye = eyeOf(ctx.player.player);
+  const a = aimDir(ctx);
+  const target: Vec3 = [
+    eye[0] + a[0] * AIM_CONVERGE_M,
+    eye[1] + a[1] * AIM_CONVERGE_M,
+    eye[2] + a[2] * AIM_CONVERGE_M,
+  ];
+  const d: Vec3 = [target[0] - origin[0], target[1] - origin[1], target[2] - origin[2]];
+  const l = Math.hypot(d[0], d[1], d[2]) || 1;
+  return [d[0] / l, d[1] / l, d[2] / l];
+}
+
+/** The two elbows, rig space. See aimArm. */
+/** The two SHOULDERS, rig space: behind and below the camera, either side
+ *  of the body. A two-bone arm runs from each hand to these (game-arms.ts
+ *  aimArm): forearm to an IK elbow, upper arm on to the shoulder, whose
+ *  ball ends behind the eye whatever the view pitch. The elbows bend down
+ *  and OUTWARD (the hints), the way arms holding a gun at the hip do. */
+//
+//  IN VIEW SPACE (the camera's frame, viewModelAnchor), NOT the aim rig's.
+//  Free aim pitches the rig about the grip, and a shoulder that rode the
+//  rig swung round in front of the camera on a hard look up: the upper arm
+//  crossed the near plane, was cut off, and the hand read as floating
+//  (owner's screenshot). The body does not turn with the gun; the shoulders
+//  stay put behind the eye and the arms are re-aimed at them every frame.
+//
+//  The BEND HINTS are view-space directions too: OUTWARD (away from the gun,
+//  left for the left arm) and a little down. game-arms.ts floors the bend
+//  at ARM_MIN_BEND_RAD, so under a hard look up -- hand high on the
+//  fore-end, shoulder low behind -- the forearm leaves the hand sideways
+//  past the receiver instead of straight through it (owner's screenshots).
+export const SHOULDER_L_VIEW = new THREE.Vector3(-0.22, -0.26, 0.06);
+export const SHOULDER_R_VIEW = new THREE.Vector3(0.26, -0.30, 0.06);
+export const BEND_L_VIEW = new THREE.Vector3(-1, -0.4, 0);
+export const BEND_R_VIEW = new THREE.Vector3(1, -0.4, 0);
+export const _sh = new THREE.Vector3();
+/** Aim both arms at their shoulders. Called every frame after the rig pose
+ *  is set, and again wherever a hand is moved. */
+export const _bendR = new THREE.Vector3();
+/** Aim both arms at their shoulders. Called every frame after the rig pose
+ *  is set, and again wherever a hand is moved. */
+export const _bendL = new THREE.Vector3();
+
+export function aimArms(ctx: GameContext): void {
+  ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
+  if (ctx.weapon.gripHandGroup) {
+    viewDirToRig(ctx, BEND_R_VIEW, _bendR);
+    aimArm(ctx.weapon.gripHandGroup, viewToRig(ctx, SHOULDER_R_VIEW, _sh), _bendR);
+  }
+  if (ctx.weapon.foreHandGroup) {
+    viewDirToRig(ctx, BEND_L_VIEW, _bendL);
+    aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL);
+  }
 }

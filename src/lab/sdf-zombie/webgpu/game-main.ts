@@ -295,6 +295,12 @@ import { ensureCarvedLibrary } from './game-gibs-leaves';
 import { updateHud } from './game-panels-leaves';
 import { sceneCensus } from './game-telemetry-leaves';
 import { demoRecordStart } from './game-demo-leaves';
+import { ADAPTIVE_WINDOW, PROBE_ABORT_FRAMES, tickAdaptive } from './game-render-leaves';
+import { applyUpscaleAbMode } from './game-render-leaves';
+import { enableTrainedUpscale } from './game-render-leaves';
+import { AIM_CONVERGE_M, convergedDir } from './game-weapon-leaves';
+import { BEND_L_VIEW, BEND_R_VIEW, SHOULDER_L_VIEW, SHOULDER_R_VIEW, _bendL, _bendR, _sh, aimArms } from './game-weapon-leaves';
+import { applyInputEdges } from './game-player-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -1273,30 +1279,7 @@ async function main() {
   ctx.render.adaptiveEnabled = false;
   ctx.render.adaptiveBudgetMs = 1000 / 30;
   ctx.render.adaptiveState = initialAdaptiveState(performance.now());
-  const ADAPTIVE_WINDOW = 30;
-  const PROBE_ABORT_FRAMES = 8;
   ctx.render.adaptiveFrames = [];
-  function tickAdaptive(nowMs: number): void {
-    if (!ctx.render.adaptiveEnabled) return;
-    const failingProbe = ctx.render.adaptiveState.probing && ctx.render.adaptiveFrames.length >= PROBE_ABORT_FRAMES
-      && (median(ctx, ctx.render.adaptiveFrames) > ctx.render.adaptiveBudgetMs * 1.1
-        || ctx.render.adaptiveFrames.filter((f) => f > ctx.render.adaptiveBudgetMs * 1.8).length >= 2);
-    if (ctx.render.adaptiveFrames.length < ADAPTIVE_WINDOW && !failingProbe) return;
-    const recent = ctx.render.adaptiveFrames.slice(-ADAPTIVE_WINDOW);
-    const sorted = [...recent].sort((a, b) => a - b);
-    const next = stepAdaptive(ctx.render.adaptiveState, {
-      nowMs,
-      medianFrameMs: median(ctx, recent),
-      p95FrameMs: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
-      budgetMs: ctx.render.adaptiveBudgetMs,
-    });
-    if (next.rung !== ctx.render.adaptiveState.rung) {
-      applySdfScale(ctx, scaleForRung(next.rung));
-      // Frames rendered at the OLD scale must not feed the next decision.
-      ctx.render.adaptiveFrames.length = 0;
-    }
-    ctx.render.adaptiveState = next;
-  }
   // The frame's draw. With the goo layer on, the chain nests exactly as
   // lab-main's does: goo DENSITY (+ blur) first, the whole sdf/cone/occluder/
   // composite flow in the middle, then the goo SURFACE composited on top with
@@ -2517,42 +2500,6 @@ async function main() {
   // A label bottom-left names the mode. Switching reallocates targets; a hitch is expected.
   ctx.render.upscaleAb = { mode: 'model', config: null, model: null, modelName: null, fieldStyle: ctx.render.sdfLayer.fieldStyle };
   ctx.render.upscaleAbLabel = null;
-  /** `booted` = false during main()'s boot, which sets the scale the way the ?accum block does. */
-  function applyUpscaleAbMode(mode: 'native' | 'nearest' | 'model', booted = true): UpscaleInfo {
-    const c = ctx.render.upscaleAb.config;
-    if (!c) throw new Error('upscale A/B: no upscale config is active');
-    const scaleTo = (v: number) => {
-      if (booted) { applySdfScale(ctx, v); return; }
-      ctx.render.sdfScale = v;
-      ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
-      ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
-    };
-    let info: UpscaleInfo;
-    if (mode === 'native') {
-      info = ctx.render.sdfLayer.setUpscale(null);
-      scaleTo(1);
-      ctx.render.sdfLayer.setFieldStyle(ctx.render.upscaleAb.fieldStyle);
-    } else {
-      scaleTo(UPSCALE_SCALE);
-      info = mode === 'nearest'
-        ? ctx.render.sdfLayer.setUpscale({ model: 'zero', layout: c.layout, inputs: 'rgb', seed: 1 })
-        : ctx.render.sdfLayer.setUpscale(c, ctx.render.upscaleAb.model ?? undefined);
-    }
-    ctx.render.upscaleAb.mode = mode;
-    updateUpscaleAbLabel(ctx);
-    // A stage built AFTER boot carries brand-new per-pass pipelines the boot
-    // warm-up never saw; without this they compile on the first frame the new
-    // stage runs, which is the same multi-second stall in miniature. Loop
-    // paused for the duration, exactly as warmPipelines does it.
-    if (booted && info.on) {
-      ctx.boot.handle.setLoopRunning(false);
-      void ctx.render.sdfLayer.precompilePasses(scene, camera)
-        .then((n) => console.log(`[warm] upscale stage passes compiled (${n})`))
-        .catch((err) => console.warn('[warm] upscale stage precompile failed', err))
-        .finally(() => ctx.boot.handle.setLoopRunning(true));
-    }
-    return info;
-  }
   // SHIPPED UPSCALERS (owner 2026-09-13, after run 5b — see next-steps note §15):
   //   default: t16-rgb (v3.2) — no normals, no head, the cheapest frame (19 ms vs 19.5–20.4 for s32-rgbd).
   //   high:    the run-5b refine head — medium-band per-body refinement; needs the normal attachments + the
@@ -2564,16 +2511,6 @@ async function main() {
   } as const;
   /** CAS-style post-sharpen strength shipped with them (UPSCALE_SHARPEN_WGSL, 'cas' mode). */
   const SHIPPED_UPSCALE_SHARPEN = 0.5;
-  async function enableTrainedUpscale(name: string, layout?: string, booted = true, url?: string): Promise<UpscaleInfo> {
-    const r = await fetch(url ?? `/__lab/upscale-model/${encodeURIComponent(name)}`, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`upscale model ${name}: HTTP ${r.status} (expected ${url ?? `.upscale-models/${name}/model.json`})`);
-    const model = parseUpscaleModelJson(await r.json());
-    const config = parseUpscaleConfig({ model: model.id, inputs: model.inputs, layout, seed: 1 });
-    ctx.render.upscaleAb.config = config;
-    ctx.render.upscaleAb.model = model;
-    ctx.render.upscaleAb.modelName = name;
-    return applyUpscaleAbMode('model', booted);
-  }
   {
     const upSearch = new URLSearchParams(location.search);
     const upRaw = upSearch.get('upscale');
@@ -2583,7 +2520,7 @@ async function main() {
         console.error('[upscale] ?upscale=trained needs &upscalemodel=<name> — the stage stays off');
       } else {
         try {
-          await enableTrainedUpscale(name, upSearch.get('upscalelayout') ?? undefined, false);
+          await enableTrainedUpscale(ctx, name, upSearch.get('upscalelayout') ?? undefined, false);
         } catch (err) {
           console.error(`[upscale] trained model ${name} not loaded — the stage stays off: ${String(err)}`);
         }
@@ -2595,7 +2532,7 @@ async function main() {
       // forces fields off (the fields+stage stack was tried and reverted 2026-09-12).
       const ship = SHIPPED_UPSCALE[ctx.boot.graphics];
       try {
-        await enableTrainedUpscale(ship.name, undefined, false, ship.url);
+        await enableTrainedUpscale(ctx, ship.name, undefined, false, ship.url);
         ctx.render.sdfLayer.upscaleStage?.setSharpen(SHIPPED_UPSCALE_SHARPEN);
       } catch (err) {
         console.error(`[upscale] shipped model not loaded — native march: ${String(err)}`);
@@ -3510,81 +3447,13 @@ async function main() {
   window.addEventListener('keyup', (e) => ctx.player.keys.delete(e.code));
   ctx.player.parked = DEFAULT_PROBE_WEIGHT;
 
-  /** Every keydown side effect, as RISING EDGES over a held-key snapshot. The
-   *  listeners no longer do these inline: doing them here is what lets a
-   *  replayed key set toggle slug mode exactly as a live press did. */
-  function applyInputEdges(next: Set<string>): void {
-    const pressed = (code: string): boolean => next.has(code) && !ctx.player.prevInputKeys.has(code);
-    // WEAPON SLOTS. 1 = grapeshot, 2 = dynamite. Refused while a bundle is lit:
-    // a player holding a burning bundle cannot put it away, which is the game's
-    // own rule (Blood's dynamite FSM has no exit from the armed state) and the
-    // one thing that stops slot-mashing being a free overcook cancel.
-    //
-    // A RISING-EDGE SCAN, not a keydown listener (rebase onto the input-seam
-    // refactor, 2026-09-15): the slot switch has to go through the same snapshot
-    // every other edge does, or a replayed key set would not switch weapons and
-    // the recording would diverge from the live run at the first slot press.
-    for (const code of next) {
-      if (ctx.player.prevInputKeys.has(code)) continue;
-      const wantSlot = slotForKey(code);
-      if (wantSlot === null) continue;
-      if (ctx.vfx.cook.phase === 'cooking') {
-        ctx.telemetry.telemetry.event('weapon-switch-refused', { slot: wantSlot, reason: 'cooking' });
-      } else {
-        const before = ctx.weapon.slotState;
-        ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, wantSlot);
-        if (ctx.weapon.slotState !== before) ctx.telemetry.telemetry.event('weapon-switch', { to: wantSlot });
-      }
-      updateHud(ctx);
-    }
-    if (pressed('BracketLeft')) pushProbeWeight(ctx, ctx.probes.weight - 0.05);
-    if (pressed('BracketRight')) pushProbeWeight(ctx, ctx.probes.weight + 0.05);
-    if (pressed('KeyP')) {
-      if (ctx.probes.weight > 0) { ctx.player.parked = ctx.probes.weight; pushProbeWeight(ctx, 0); }
-      else pushProbeWeight(ctx, ctx.player.parked);
-    }
-    if (pressed('KeyE')) { ctx.weapon.slugMode = !ctx.weapon.slugMode; updateHud(ctx); }
-    // Neural upscale A/B (dev-only, P3): native -> nearest -> model while an
-    // upscale config is active. One toggle per rising edge, as before
-    // (the old handler's `!e.repeat` guard is the same thing here).
-    if (pressed('KeyU') && ctx.render.upscaleAb.config) {
-      applyUpscaleAbMode(ctx.render.upscaleAb.mode === 'native' ? 'nearest' : ctx.render.upscaleAb.mode === 'nearest' ? 'model' : 'native');
-    }
-    // H hides/shows EVERY tuning panel together. They cover most of the
-    // viewport, and until now the only way to dismiss them was to know the
-    // console API -- which is no use to someone doing a look pass.
-    // G toggles free aim, so the two schemes can be A/B'd back to back.
-    if (pressed('KeyG')) {
-      ctx.player.freeAimOn = !ctx.player.freeAimOn;
-      ctx.weapon.aim = { x: 0, y: 0 };
-      updateHud(ctx);
-    }
-    if (pressed('KeyH')) {
-      ctx.panels.hidden = !ctx.panels.hidden;
-      ctx.panels.woundPanel?.setVisible(!ctx.panels.hidden);
-      ctx.panels.gooPanel?.setVisible(!ctx.panels.hidden);
-      ctx.panels.vhsPanel?.setVisible(!ctx.panels.hidden);
-      ctx.panels.dynamitePanel?.setVisible(!ctx.panels.hidden);
-      ctx.panels.shutterPanel?.setVisible(!ctx.panels.hidden);
-    }
-    // Manual reload. Dead under unlimited ammo BY CONSTRUCTION (the magazine is
-    // never partial), which is why ?ammo=finite is the way to exercise it.
-    if (pressed('KeyR') && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) {
-      startReload(ctx);
-    }
-    if (pressed('KeyT')) {
-      ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
-      updateHud(ctx);
-    }
-  }
-
   /** Apply one frame of input. THE single mutation point for player input —
    *  live play and replay both arrive here, so a replay is not a lookalike of
    *  the live path, it IS the live path. `look` is re-pinned last so float
    *  drift in the recorded deltas cannot compound down a run. */
   function applyInputFrame(f: DemoFrame): void {
     const next = new Set(f.keys);
-    applyInputEdges(next);
+    applyInputEdges(ctx, next);
     if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(ctx, f.dx, f.dy);
     // Anti-drift absolute pin. Skipped in free aim, where the pose is a
     // consequence of the reticle rather than a thing the mouse set directly.
@@ -3723,44 +3592,6 @@ async function main() {
   ctx.weapon.lastEjectOrigin = null;
   const Y_UP = new THREE.Vector3(0, 1, 0);
   const _tmpV = new THREE.Vector3();
-  /** The two elbows, rig space. See aimArm. */
-  /** The two SHOULDERS, rig space: behind and below the camera, either side
-   *  of the body. A two-bone arm runs from each hand to these (game-arms.ts
-   *  aimArm): forearm to an IK elbow, upper arm on to the shoulder, whose
-   *  ball ends behind the eye whatever the view pitch. The elbows bend down
-   *  and OUTWARD (the hints), the way arms holding a gun at the hip do. */
-  //
-  //  IN VIEW SPACE (the camera's frame, viewModelAnchor), NOT the aim rig's.
-  //  Free aim pitches the rig about the grip, and a shoulder that rode the
-  //  rig swung round in front of the camera on a hard look up: the upper arm
-  //  crossed the near plane, was cut off, and the hand read as floating
-  //  (owner's screenshot). The body does not turn with the gun; the shoulders
-  //  stay put behind the eye and the arms are re-aimed at them every frame.
-  //
-  //  The BEND HINTS are view-space directions too: OUTWARD (away from the gun,
-  //  left for the left arm) and a little down. game-arms.ts floors the bend
-  //  at ARM_MIN_BEND_RAD, so under a hard look up -- hand high on the
-  //  fore-end, shoulder low behind -- the forearm leaves the hand sideways
-  //  past the receiver instead of straight through it (owner's screenshots).
-  const SHOULDER_L_VIEW = new THREE.Vector3(-0.22, -0.26, 0.06);
-  const SHOULDER_R_VIEW = new THREE.Vector3(0.26, -0.30, 0.06);
-  const BEND_L_VIEW = new THREE.Vector3(-1, -0.4, 0);
-  const BEND_R_VIEW = new THREE.Vector3(1, -0.4, 0);
-  const _sh = new THREE.Vector3();
-  /** Aim both arms at their shoulders. Called every frame after the rig pose
-   *  is set, and again wherever a hand is moved. */
-  const _bendR = new THREE.Vector3(), _bendL = new THREE.Vector3();
-  function aimArms(): void {
-    ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
-    if (ctx.weapon.gripHandGroup) {
-      viewDirToRig(ctx, BEND_R_VIEW, _bendR);
-      aimArm(ctx.weapon.gripHandGroup, viewToRig(ctx, SHOULDER_R_VIEW, _sh), _bendR);
-    }
-    if (ctx.weapon.foreHandGroup) {
-      viewDirToRig(ctx, BEND_L_VIEW, _bendL);
-      aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL);
-    }
-  }
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
@@ -3938,7 +3769,7 @@ async function main() {
     ctx.weapon.gripHandGroup.position.copy(GRIP_HAND_REST);
     ctx.weapon.foreHandGroup.position.copy(FORE_HAND_REST);
     ctx.weapon.gunRig.add(ctx.weapon.gripHandGroup, ctx.weapon.foreHandGroup);
-    aimArms();
+    aimArms(ctx);
     // DEFERRED G-BUFFER ROUTE: the goblin arms are opaque Standard-material
     // surfaces (skin, bracer, watch screen — game-arms.ts) — same route as
     // the gun, same receiver, same castShadow reasoning.
@@ -4473,25 +4304,6 @@ async function main() {
     // still-safe state: the shared background times live on __warmDone.phases.
     if (gate.phase === 'ready') startBackgroundCompiles();
   });
-  /** AIM CONVERGENCE (2026-08-26 defect-2 fix candidate): the muzzle sits
-   *  ~20 cm right and ~12 cm low of the EYE, and pellets used to fly PARALLEL
-   *  to the camera ray — so at ANY range impacts landed that whole offset off
-   *  the crosshair. Standard FPS remedy: every projectile converges on the
-   *  point where the camera ray meets AIM_CONVERGE_M. Close shots still group;
-   *  the parallel-ray offset is gone by construction. */
-  const AIM_CONVERGE_M = 8;
-  function convergedDir(origin: Vec3): Vec3 {
-    const eye = eyeOf(ctx.player.player);
-    const a = aimDir(ctx);
-    const target: Vec3 = [
-      eye[0] + a[0] * AIM_CONVERGE_M,
-      eye[1] + a[1] * AIM_CONVERGE_M,
-      eye[2] + a[2] * AIM_CONVERGE_M,
-    ];
-    const d: Vec3 = [target[0] - origin[0], target[1] - origin[1], target[2] - origin[2]];
-    const l = Math.hypot(d[0], d[1], d[2]) || 1;
-    return [d[0] / l, d[1] / l, d[2] / l];
-  }
 
   // Pellets: simulated pure (game-weapon.ts), drawn from a mesh pool that
   // grows on demand inside the tick's sync step.
@@ -4690,11 +4502,11 @@ async function main() {
     }
     if (ctx.weapon.slugMode) {
       // One lump down one known ray instead of a pellet volley.
-      ctx.weapon.pellets.push(spawnSlug(muzzleWorld(ctx), convergedDir(muzzleWorld(ctx))));
+      ctx.weapon.pellets.push(spawnSlug(muzzleWorld(ctx), convergedDir(ctx, muzzleWorld(ctx))));
       return true;
     }
     const muz = muzzleWorld(ctx);
-    const dir = convergedDir(muz);
+    const dir = convergedDir(ctx, muz);
     // spawnPellets spreads around `dir`; convergence just re-centres the cone.
     // One `misc` draw per volley is the pellet seed (mulberry32 inside).
     ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
@@ -7236,7 +7048,7 @@ async function main() {
       );
       ctx.weapon.aimRig.rotation.set(pitch, yaw, roll);
       // The rig just moved; the shoulders did not. Re-aim the arms at them.
-      aimArms();
+      aimArms(ctx);
     }
     // Weapon slots + the dynamite, AFTER the rig has been placed for this frame
     // (the holster travel is a local transform on gunRig/bundleRig, so it does
@@ -7349,7 +7161,7 @@ async function main() {
         FORE_HAND_REST.y + sh.dy,
         FORE_HAND_REST.z + sh.dz,
       );
-      if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(handNow); aimArms(); }
+      if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(handNow); aimArms(ctx); }
 
       // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
       // The seated cases are children of Barrels, so they are already carrying
@@ -7444,7 +7256,7 @@ async function main() {
           ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
           ctx.weapon.gunGroup.position.copy(GUN_REST.pos);
         }
-        if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(FORE_HAND_REST); aimArms(); }
+        if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(FORE_HAND_REST); aimArms(ctx); }
         for (const m of ctx.weapon.ejectedShells) m.visible = false;
         for (const m of ctx.weapon.loadShells) m.visible = false;
         updateHud(ctx);
@@ -7830,7 +7642,7 @@ async function main() {
       ctx.boot.frameEma = ctx.boot.frameEma === 0 ? ms : ctx.boot.frameEma * 0.95 + ms * 0.05;
       if (ctx.render.adaptiveEnabled) {
         ctx.render.adaptiveFrames.push(ms);
-        tickAdaptive(performance.now());
+        tickAdaptive(ctx, performance.now());
       }
     }
     tick(Math.min(dt, 1 / 20));
@@ -7847,7 +7659,7 @@ async function main() {
    *  cluster centre. No state mutated. */
   function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
       const origin = muzzleWorld(ctx);
-      const dir = convergedDir(origin);
+      const dir = convergedDir(ctx, origin);
       return { origin, dir, ...traceSlugHitFrom(ctx, origin, dir) };
   }
 
@@ -8450,7 +8262,7 @@ function performBenchAction(a: BenchAction): void {
      *  BEFORE spending the shot. Read-only. */
     slugRay: () => {
       const o = muzzleWorld(ctx);
-      const d = convergedDir(o);
+      const d = convergedDir(ctx, o);
       return { origin: o, dir: d };
     },
     setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(ctx); },
@@ -8552,7 +8364,7 @@ function performBenchAction(a: BenchAction): void {
         updateUpscaleAbLabel(ctx);
         return ctx.render.sdfLayer.setUpscale(null);
       }
-      if (raw.trained !== undefined) return enableTrainedUpscale(raw.trained, raw.layout);
+      if (raw.trained !== undefined) return enableTrainedUpscale(ctx, raw.trained, raw.layout);
       const cfg = parseUpscaleConfig(raw);
       applySdfScale(ctx, UPSCALE_SCALE);
       const info = ctx.render.sdfLayer.setUpscale(cfg);

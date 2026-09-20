@@ -18,6 +18,9 @@ import { clearSight } from './encounter-director';
 import { type ZombieActor } from './game-actor';
 import { gateRefineTwin } from './game-world-leaves2';
 import { simTimeMs } from './sim-clock';
+import { scaleForRung, stepAdaptive } from '../adaptive-scale';
+import { UPSCALE_SCALE, parseUpscaleConfig, parseUpscaleModelJson } from './upscale/upscale-model';
+import { type UpscaleInfo } from './upscale/upscale-stage';
 
 /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
  *  A shared function rather than three copies of the same object literal
@@ -292,4 +295,77 @@ export function applySdfScale(ctx: GameContext, v: number) {
   // so `actors` below is always initialised here.
   const k = ctx.render.sdfLayer.pixelConeK;
   for (const a of ctx.world.actors) a.view.uniforms.aaCfg.value.x = k;
+}
+
+export const ADAPTIVE_WINDOW = 30;
+export const PROBE_ABORT_FRAMES = 8;
+
+export function tickAdaptive(ctx: GameContext, nowMs: number): void {
+  if (!ctx.render.adaptiveEnabled) return;
+  const failingProbe = ctx.render.adaptiveState.probing && ctx.render.adaptiveFrames.length >= PROBE_ABORT_FRAMES
+    && (median(ctx, ctx.render.adaptiveFrames) > ctx.render.adaptiveBudgetMs * 1.1
+      || ctx.render.adaptiveFrames.filter((f) => f > ctx.render.adaptiveBudgetMs * 1.8).length >= 2);
+  if (ctx.render.adaptiveFrames.length < ADAPTIVE_WINDOW && !failingProbe) return;
+  const recent = ctx.render.adaptiveFrames.slice(-ADAPTIVE_WINDOW);
+  const sorted = [...recent].sort((a, b) => a - b);
+  const next = stepAdaptive(ctx.render.adaptiveState, {
+    nowMs,
+    medianFrameMs: median(ctx, recent),
+    p95FrameMs: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
+    budgetMs: ctx.render.adaptiveBudgetMs,
+  });
+  if (next.rung !== ctx.render.adaptiveState.rung) {
+    applySdfScale(ctx, scaleForRung(next.rung));
+    // Frames rendered at the OLD scale must not feed the next decision.
+    ctx.render.adaptiveFrames.length = 0;
+  }
+  ctx.render.adaptiveState = next;
+}
+
+/** `booted` = false during main()'s boot, which sets the scale the way the ?accum block does. */
+export function applyUpscaleAbMode(ctx: GameContext, mode: 'native' | 'nearest' | 'model', booted = true): UpscaleInfo {
+  const c = ctx.render.upscaleAb.config;
+  if (!c) throw new Error('upscale A/B: no upscale config is active');
+  const scaleTo = (v: number) => {
+    if (booted) { applySdfScale(ctx, v); return; }
+    ctx.render.sdfScale = v;
+    ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
+    ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
+  };
+  let info: UpscaleInfo;
+  if (mode === 'native') {
+    info = ctx.render.sdfLayer.setUpscale(null);
+    scaleTo(1);
+    ctx.render.sdfLayer.setFieldStyle(ctx.render.upscaleAb.fieldStyle);
+  } else {
+    scaleTo(UPSCALE_SCALE);
+    info = mode === 'nearest'
+      ? ctx.render.sdfLayer.setUpscale({ model: 'zero', layout: c.layout, inputs: 'rgb', seed: 1 })
+      : ctx.render.sdfLayer.setUpscale(c, ctx.render.upscaleAb.model ?? undefined);
+  }
+  ctx.render.upscaleAb.mode = mode;
+  updateUpscaleAbLabel(ctx);
+  // A stage built AFTER boot carries brand-new per-pass pipelines the boot
+  // warm-up never saw; without this they compile on the first frame the new
+  // stage runs, which is the same multi-second stall in miniature. Loop
+  // paused for the duration, exactly as warmPipelines does it.
+  if (booted && info.on) {
+    ctx.boot.handle.setLoopRunning(false);
+    void ctx.render.sdfLayer.precompilePasses(ctx.boot.handle.scene, ctx.boot.handle.camera)
+      .then((n) => console.log(`[warm] upscale stage passes compiled (${n})`))
+      .catch((err) => console.warn('[warm] upscale stage precompile failed', err))
+      .finally(() => ctx.boot.handle.setLoopRunning(true));
+  }
+  return info;
+}
+
+export async function enableTrainedUpscale(ctx: GameContext, name: string, layout?: string, booted = true, url?: string): Promise<UpscaleInfo> {
+  const r = await fetch(url ?? `/__lab/upscale-model/${encodeURIComponent(name)}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`upscale model ${name}: HTTP ${r.status} (expected ${url ?? `.upscale-models/${name}/model.json`})`);
+  const model = parseUpscaleModelJson(await r.json());
+  const config = parseUpscaleConfig({ model: model.id, inputs: model.inputs, layout, seed: 1 });
+  ctx.render.upscaleAb.config = config;
+  ctx.render.upscaleAb.model = model;
+  ctx.render.upscaleAb.modelName = name;
+  return applyUpscaleAbMode(ctx, 'model', booted);
 }
