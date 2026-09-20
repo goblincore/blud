@@ -12,6 +12,7 @@ export * from './march/fields/bones.wgsl';
 export * from './march/map-body.wgsl';
 export * from './march/cone-march.wgsl';
 export * from './march/body/params.wgsl';
+export * from './march/body/io.wgsl';
 export * from './march/body/trace.wgsl';
 export * from './march/body/face.wgsl';
 export * from './march/body/surface.wgsl';
