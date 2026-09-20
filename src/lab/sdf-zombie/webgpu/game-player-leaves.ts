@@ -14,8 +14,9 @@ import { updateHud } from './game-panels-leaves';
 import { pushProbeWeight } from './game-probes-leaves';
 import { applyUpscaleAbMode } from './game-render-leaves';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
-import { startReload } from './game-weapon-leaves';
+import { startReload, fire } from './game-weapon-leaves';
 import { requestSlot, slotForKey } from './game-weapon-slots';
+import { type DemoFrame } from './demo-recorder';
 
 /** The mouse delta's effect, extracted so the live handler and the replay
  *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
@@ -106,4 +107,28 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
     updateHud(ctx);
   }
+}
+
+/** Apply one frame of input. THE single mutation point for player input —
+ *  live play and replay both arrive here, so a replay is not a lookalike of
+ *  the live path, it IS the live path. `look` is re-pinned last so float
+ *  drift in the recorded deltas cannot compound down a run. */
+export function applyInputFrame(ctx: GameContext, f: DemoFrame): void {
+  const next = new Set(f.keys);
+  applyInputEdges(ctx, next);
+  if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(ctx, f.dx, f.dy);
+  // Anti-drift absolute pin. Skipped in free aim, where the pose is a
+  // consequence of the reticle rather than a thing the mouse set directly.
+  if (!ctx.player.freeAimOn) {
+    ctx.player.player.yaw = f.look[0];
+    ctx.player.player.pitch = f.look[1];
+  }
+  if (f.fire === 1) fire(ctx, 1);
+  else if (f.fire === 2) fire(ctx, 2);
+  // Slot 3's edge, consumed on the tick like every other verb.
+  ctx.weapon.flare?.consumeEdge();
+  // The KeyR edge above already covers a live press; this covers a recorded
+  // frame whose reload was folded into the flag rather than the keys.
+  if (f.reload && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);
+  ctx.player.prevInputKeys = next;
 }

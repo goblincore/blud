@@ -314,3 +314,77 @@ export async function ensureGibAtlas(ctx: GameContext, which: 'placeholder' | 's
   }
   return ctx.gibs.atlas.frames.length;
 }
+
+/** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
+ *  shape a body falls back to when the pool cannot afford anything better.
+ *  Held back for every body still to come in a blast, so no body is left with
+ *  less than this and none of them simply disappears. */
+// 7, ONE CHUNK PER LIMB PLUS THE RIBCAGE — see the ladder's `clusters+cage`
+// rung. Not 6: a reserve of 6 lets a crowded blast spend every body's slots on
+// the shape whose bones are BURIED, and measured in the arena a point-blank
+// bundle gibs five bodies, so that is not an edge case — it is what the owner
+// sees in the room he tests in. Measured after the change, below.
+export const GIB_TIER_FLOOR = 7;
+
+/**
+ * THE POOL A BLAST ALLOCATES FROM, per render mode.
+ *
+ * The marched path's budget is the view pool's free slots PLUS whatever older
+ * gore can be recycled — see the long note at its call site. The sprite path
+ * has no view pool to divide: a quad has no proxy box and no bake, so the only
+ * thing left worth bounding is the COUNT, and the count is its own cap. Note
+ * what this means for the owner's "tubes and orbs" report: a body only ever
+ * degraded because the marched pool could not afford its full set, so in
+ * sprite mode the ladder below has nothing to react to and never fires.
+ * RESTING pieces do not count against it either — they have already left the
+ * live list (`stepSpritePieces` parks them), so a pile of old gore on the
+ * floor never eats a new blast's budget.
+ */
+export function gibBudget(ctx: GameContext) {
+  return (ctx.gibs.renderMode !== 'march'
+  ? ctx.gibs.spriteLiveCap
+  : Math.max(1, ctx.bake.liveChunks.length + Math.max(0, ctx.bake.maxChunks - ctx.bake.views.length) - gibReserved(ctx)));
+}
+
+/**
+ * SLOTS A PENDING RUPTURE IS HOLDING (body-to-gib task 3). The tier is chosen
+ * when the body is SCHEDULED, and `gibActor` is locked to that plan at
+ * release, so the views it will need must not be spent by a later blast in
+ * the meantime. Counting them out of `gibBudget()` makes a second blast (or
+ * an immediate `gibtear=0` gib) budget around them, which is what keeps the
+ * preview and the release the same shape without raising any cap. The slot is
+ * freed when the body is spliced out of `pendingGibs` at release.
+ */
+export function gibReserved(ctx: GameContext) {
+  let n = 0;
+  for (const q of ctx.gibs.pendingGibs) n += q.reserve;
+  return n;
+}
+
+/** What one body may take this blast. Identical in both modes EXCEPT that the
+ *  sprite path reserves no tier floor: the floor exists to guarantee every
+ *  body in a blast can afford the cheapest SHAPE, and sprite mode has no
+ *  shapes to choose between.
+ *
+ *  CLAMPED TO `remaining` (2026-09-16 task 2, adversarial caps). The floor is
+ *  the cheapest shape's slot count, but it is a RESERVATION, not extra
+ *  capacity: at `?maxchunks=5` the old `max(floor, remaining - reserve)`
+ *  handed a body 7 slots from a 5-slot pool, so the recycler overwrote two of
+ *  its own pieces inside the same call — the "pieces jumping into positions"
+ *  defect the budget exists to prevent. A body can now never be allowed more
+ *  than the pool actually holds. */
+export function gibAllowance(ctx: GameContext, remaining: number, condemnedLeft: number) {
+  return (ctx.gibs.renderMode !== 'march'
+  ? Math.max(1, remaining)
+  : Math.max(1, Math.min(remaining,
+    Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)))));
+}
+
+/** And what that body actually spent. The marched path debits at least a
+ *  floor's worth whatever it made, because the floor's slots are reserved for
+ *  it either way; sprite mode debits exactly what it made. */
+export function gibDebit(ctx: GameContext, remaining: number, made: number) {
+  return (ctx.gibs.renderMode !== 'march'
+  ? Math.max(0, remaining - made)
+  : Math.max(0, remaining - Math.max(made, GIB_TIER_FLOOR)));
+}

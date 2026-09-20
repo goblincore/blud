@@ -308,6 +308,14 @@ import { TracerView, hideTracer, newTracerView, placeTracer } from './game-weapo
 import { MUZZLE_VIEW, fire } from './game-weapon-leaves';
 import { BakedChunk, ChunkTemplate, freeBaked } from './game-bake-leaves';
 import { GIB_ATLAS_URL, GIB_SHEET_URL, ensureGibAtlas } from './game-gibs-leaves';
+import { applyInputFrame } from './game-player-leaves';
+import { MIN_STANDOFF, aimAtNearestSurface } from './game-weapon-leaves';
+import { performBenchAction } from './game-weapon-leaves';
+import { shellAmpOf } from './game-world-leaves';
+import { cancelChunkBake } from './game-bake-leaves';
+import { accentRoomsFor, applyHemi, levelSceneLights } from './game-lighting-leaves';
+import { refreshLevelLights } from './game-lighting-leaves';
+import { GIB_TIER_FLOOR, gibAllowance, gibBudget, gibDebit, gibReserved } from './game-gibs-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -639,7 +647,6 @@ async function main() {
   ctx.lighting.levelProbeWeight = ctx.lighting.levelProbesParam === '0' || ctx.lighting.levelProbesParam === 'off' ? 0 : 1;
   ctx.lighting.levelProbeGain = -1;
   ctx.lighting.hemiBase = ctx.lighting.hemi.intensity;
-  const applyHemi = () => { ctx.lighting.hemi.intensity = ctx.lighting.hemiBase * (1 - ctx.lighting.levelProbeWeight); };
   // Declared HERE, above applyRig (which restamps them): const/let are not
   // hoisted, and the first applyRig runs long before the gather site below
   // populates these — the cullCounts race, again.
@@ -777,7 +784,7 @@ async function main() {
 
   function applyRig(rig: AmbientRig) {
     ctx.lighting.hemiBase = rig.hemiIntensity;
-    applyHemi();
+    applyHemi(ctx);
     ctx.lighting.hemi.color.setRGB(...rig.hemiSky);
     ctx.lighting.hemi.groundColor.setRGB(...rig.hemiGround);
     restampLevelProbes(ctx);
@@ -2189,12 +2196,6 @@ async function main() {
    *  above relies on. */
   ctx.lighting.levelShadowEnabled = GAME_LEVEL_SHADOW > 0.5;
 
-  /** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
-   *  Read from the live uniform rather than a constant, so retuning the noise
-   *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
-   *  cone and occluder bounds. */
-  const shellAmpOf = () => ctx.world.actors[0]?.view.uniforms.marchCfg.value.z ?? 0;
-
   // The conservative OUTER hull (shell-hull-outer.ts). Default OFF: it is a
   // measurement instrument until the march consumes it, and rasterising it
   // for nothing is pure cost.
@@ -2786,31 +2787,6 @@ async function main() {
     }
     return best.id;
   };
-  /** The rooms whose accents a room's walls shade: itself plus every room
-   *  it shares a tunnel with (the tunnel's surfaces belong to the nearer
-   *  room, and a doorway wall sees the light across the arch). */
-  const accentRoomsFor = (roomId: number): Set<number> => {
-    const set = new Set<number>([roomId]);
-    for (const t of TUNNELS) { if (t.a === roomId) set.add(t.b); if (t.b === roomId) set.add(t.a); }
-    return set;
-  };
-  /** Every scene light except OTHER rooms' accent PointLights. An accent
-   *  has no range (distance 0 = infinite), so before this every wall pixel
-   *  in the level shaded all seven; a room's walls now shade its own and
-   *  its neighbours' — the rest of the level is skipped per pixel. The
-   *  probe grid still carries every accent's bounce inside its own room. */
-  const levelSceneLights = (roomId: number): THREE.Light[] => {
-    const allowed = accentRoomsFor(roomId);
-    const ls: THREE.Light[] = [];
-    scene.traverse(o => {
-      const l = o as THREE.Light;
-      if (!l.isLight) return;
-      const accentRoom = l.userData.accentRoom as number | undefined;
-      if (accentRoom !== undefined && !allowed.has(accentRoom)) return;
-      ls.push(l);
-    });
-    return ls;
-  };
   if (!ctx.boot.deferredMode) {
     const gatherNode = ctx.probes.gather.probeDynNode;
     for (const r of ROOMS) {
@@ -2826,7 +2802,7 @@ async function main() {
       }, r.id);
       stampLevelProbeRoom(ctx, r.id);
     }
-    for (const [roomId, node] of ctx.lighting.levelProbeNodes) ctx.world.levelLightLists.set(roomId, levelLightsNode(levelSceneLights(roomId), node));
+    for (const [roomId, node] of ctx.lighting.levelProbeNodes) ctx.world.levelLightLists.set(roomId, levelLightsNode(levelSceneLights(ctx, roomId), node));
     // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
     // it is what the builder calls per pipeline, just not in the typings.
     const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
@@ -2840,15 +2816,6 @@ async function main() {
       mesh.material = nm;
       ctx.world.levelNodeMaterials.push(nm);
     }
-  }
-  /** Re-list the scene's lights on every room (a light was added — the
-   *  muzzle flash with the gun) and force the level pipelines to rebuild. */
-  function refreshLevelLights() {
-    if (ctx.world.levelLightLists.size === 0) return;
-    for (const [roomId, node] of ctx.lighting.levelProbeNodes) {
-      ctx.world.levelLightLists.get(roomId)?.setLights([...levelSceneLights(roomId), node as unknown as THREE.Light]);
-    }
-    for (const nm of ctx.world.levelNodeMaterials) nm.needsUpdate = true;
   }
 
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
@@ -3326,7 +3293,7 @@ async function main() {
         : [],
     );
     if (ctx.render.sdfLayer.shellEnabled) {
-      ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
     }
   }
 
@@ -3439,30 +3406,6 @@ async function main() {
   });
   window.addEventListener('keyup', (e) => ctx.player.keys.delete(e.code));
   ctx.player.parked = DEFAULT_PROBE_WEIGHT;
-
-  /** Apply one frame of input. THE single mutation point for player input —
-   *  live play and replay both arrive here, so a replay is not a lookalike of
-   *  the live path, it IS the live path. `look` is re-pinned last so float
-   *  drift in the recorded deltas cannot compound down a run. */
-  function applyInputFrame(f: DemoFrame): void {
-    const next = new Set(f.keys);
-    applyInputEdges(ctx, next);
-    if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(ctx, f.dx, f.dy);
-    // Anti-drift absolute pin. Skipped in free aim, where the pose is a
-    // consequence of the reticle rather than a thing the mouse set directly.
-    if (!ctx.player.freeAimOn) {
-      ctx.player.player.yaw = f.look[0];
-      ctx.player.player.pitch = f.look[1];
-    }
-    if (f.fire === 1) fire(ctx, 1);
-    else if (f.fire === 2) fire(ctx, 2);
-    // Slot 3's edge, consumed on the tick like every other verb.
-    ctx.weapon.flare?.consumeEdge();
-    // The KeyR edge above already covers a live press; this covers a recorded
-    // frame whose reload was folded into the flag rather than the keys.
-    if (f.reload && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);
-    ctx.player.prevInputKeys = next;
-  }
 
   // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
   // locks the pointer; shots need lock so a stray desktop click cannot fire.
@@ -3864,7 +3807,7 @@ async function main() {
     ctx.weapon.flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
     ctx.weapon.gunRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
-    refreshLevelLights();
+    refreshLevelLights(ctx);
     ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');
@@ -4505,63 +4448,6 @@ async function main() {
     ?? GIB_SPRITE_TUNING.restCap;
   ctx.gibs.spriteSizeScale = parseFloatParam(DYN_PARAMS.get('gibspritesize'), { min: 0.2, max: 3 })
     ?? GIB_SPRITE_TUNING.sizeScale;
-
-  /**
-   * THE POOL A BLAST ALLOCATES FROM, per render mode.
-   *
-   * The marched path's budget is the view pool's free slots PLUS whatever older
-   * gore can be recycled — see the long note at its call site. The sprite path
-   * has no view pool to divide: a quad has no proxy box and no bake, so the only
-   * thing left worth bounding is the COUNT, and the count is its own cap. Note
-   * what this means for the owner's "tubes and orbs" report: a body only ever
-   * degraded because the marched pool could not afford its full set, so in
-   * sprite mode the ladder below has nothing to react to and never fires.
-   * RESTING pieces do not count against it either — they have already left the
-   * live list (`stepSpritePieces` parks them), so a pile of old gore on the
-   * floor never eats a new blast's budget.
-   */
-  const gibBudget = () => (ctx.gibs.renderMode !== 'march'
-    ? ctx.gibs.spriteLiveCap
-    : Math.max(1, ctx.bake.liveChunks.length + Math.max(0, ctx.bake.maxChunks - ctx.bake.views.length) - gibReserved()));
-
-  /**
-   * SLOTS A PENDING RUPTURE IS HOLDING (body-to-gib task 3). The tier is chosen
-   * when the body is SCHEDULED, and `gibActor` is locked to that plan at
-   * release, so the views it will need must not be spent by a later blast in
-   * the meantime. Counting them out of `gibBudget()` makes a second blast (or
-   * an immediate `gibtear=0` gib) budget around them, which is what keeps the
-   * preview and the release the same shape without raising any cap. The slot is
-   * freed when the body is spliced out of `pendingGibs` at release.
-   */
-  const gibReserved = () => {
-    let n = 0;
-    for (const q of ctx.gibs.pendingGibs) n += q.reserve;
-    return n;
-  };
-
-  /** What one body may take this blast. Identical in both modes EXCEPT that the
-   *  sprite path reserves no tier floor: the floor exists to guarantee every
-   *  body in a blast can afford the cheapest SHAPE, and sprite mode has no
-   *  shapes to choose between.
-   *
-   *  CLAMPED TO `remaining` (2026-09-16 task 2, adversarial caps). The floor is
-   *  the cheapest shape's slot count, but it is a RESERVATION, not extra
-   *  capacity: at `?maxchunks=5` the old `max(floor, remaining - reserve)`
-   *  handed a body 7 slots from a 5-slot pool, so the recycler overwrote two of
-   *  its own pieces inside the same call — the "pieces jumping into positions"
-   *  defect the budget exists to prevent. A body can now never be allowed more
-   *  than the pool actually holds. */
-  const gibAllowance = (remaining: number, condemnedLeft: number) => (ctx.gibs.renderMode !== 'march'
-    ? Math.max(1, remaining)
-    : Math.max(1, Math.min(remaining,
-      Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)))));
-
-  /** And what that body actually spent. The marched path debits at least a
-   *  floor's worth whatever it made, because the floor's slots are reserved for
-   *  it either way; sprite mode debits exactly what it made. */
-  const gibDebit = (remaining: number, made: number) => (ctx.gibs.renderMode !== 'march'
-    ? Math.max(0, remaining - made)
-    : Math.max(0, remaining - Math.max(made, GIB_TIER_FLOOR)));
   // WHICH BONE GROUPS A BLAST RELEASES. `all` is the eleven rigid groups
   // (skull, cage, pelvis, eight long bones); `core` is the three torso masses
   // plus the skull — the A/B for what the skeleton costs; `off` is the
@@ -4648,16 +4534,6 @@ async function main() {
   ctx.render.postAa.setBlastDistort(
     DYN_PARAMS.get('blastdistort') !== '0' && DYN_PARAMS.get('blastdistort') !== 'off');
   ctx.render.postAa.setBlastDistortStrength(ctx.vfx.blastDistortStrength);
-  /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
-   *  shape a body falls back to when the pool cannot afford anything better.
-   *  Held back for every body still to come in a blast, so no body is left with
-   *  less than this and none of them simply disappears. */
-  // 7, ONE CHUNK PER LIMB PLUS THE RIBCAGE — see the ladder's `clusters+cage`
-  // rung. Not 6: a reserve of 6 lets a crowded blast spend every body's slots on
-  // the shape whose bones are BURIED, and measured in the arena a point-blank
-  // bundle gibs five bodies, so that is not an edge case — it is what the owner
-  // sees in the room he tests in. Measured after the change, below.
-  const GIB_TIER_FLOOR = 7;
   ctx.dynamite.speedScale = parseFloatParam(DYN_PARAMS.get('dynspeed'), { min: 0.1, max: 4 }) ?? 1;
   // ——— EXPLOSION SIZE (owner feedback, 2026-09-10) ————————————————————————
   // "the explosion makes it impossible to see the gibs... its not really what im
@@ -4905,15 +4781,11 @@ async function main() {
    *  next one) and the frame a swap actually landed on (reported). */
   ctx.bake.submitFrame = -1;
   ctx.bake.lastSwapFrame = -1;
-  const cancelChunkBake = () => {
-    if (ctx.bake.jobs.pendingId !== null) ctx.telemetry.telemetry.event('chunk-bake-cancel', { chunk: ctx.bake.jobs.pendingId });
-    ctx.bake.jobs.cancel(); ctx.bake.input = null;
-  };
-  window.addEventListener('pagehide', cancelChunkBake);
+  window.addEventListener('pagehide', withCtx(ctx, cancelChunkBake));
   window.addEventListener('pagehide', () => { ctx.gibs.pendingGibImpulses.length = 0; });
   import.meta.hot?.dispose(() => {
-    cancelChunkBake();
-    window.removeEventListener('pagehide', cancelChunkBake);
+    cancelChunkBake(ctx);
+    window.removeEventListener('pagehide', withCtx(ctx, cancelChunkBake));
   });
   /** A slug/pellet INTO a baked piece: the piece GIBS. Fresh small chunks
    *  spawn at the impact (its own origin body's template, so the meat
@@ -5020,7 +4892,7 @@ async function main() {
       } else {
         const oldest = ctx.bake.liveChunks.shift();
         if (oldest) {
-          if (ctx.bake.jobs.pendingId === oldest.id) cancelChunkBake();
+          if (ctx.bake.jobs.pendingId === oldest.id) cancelChunkBake(ctx);
           recycled = oldest.view;
         }
       }
@@ -5269,7 +5141,7 @@ async function main() {
     // The budget must NOT be `maxChunks - liveChunks.length` (what it was):
     // in a full pool that is zero, the split gives every body one piece, and a
     // body with one piece is a body that vanished.
-    const blastBudget = gibBudget();
+    const blastBudget = gibBudget(ctx);
     // GREEDY, NEAREST FIRST, WITH A FLOOR HELD BACK FOR THE REST. An even split
     // spends the pool on equal shares that mostly fall below the cheapest tier,
     // so three bodies in a 24-piece pool all get 8 and all degrade to the same
@@ -5293,19 +5165,19 @@ async function main() {
           // the same greedy allowance the immediate path uses, and its views
           // are RESERVED out of `gibBudget()` until release, so the preview is
           // the shape that will spawn and a later blast cannot spend its slots.
-          const chosen = scheduleGib(ctx, a, at, pb.falloff, gibAllowance(remaining, condemnedLeft));
+          const chosen = scheduleGib(ctx, a, at, pb.falloff, gibAllowance(ctx, remaining, condemnedLeft));
           if (chosen) {
-            remaining = gibDebit(remaining, chosen.reserve);
+            remaining = gibDebit(ctx, remaining, chosen.reserve);
             condemnedLeft = Math.max(0, condemnedLeft - 1);
           }
           prof.gib += performance.now() - tg;
           gibbed++;
           continue;
         }
-        const allowance = gibAllowance(remaining, condemnedLeft);
+        const allowance = gibAllowance(ctx, remaining, condemnedLeft);
         const made = gibActor(a, at, pb.falloff, allowance);
         pieces += made;
-        remaining = gibDebit(remaining, made);
+        remaining = gibDebit(ctx, remaining, made);
         condemnedLeft = Math.max(0, condemnedLeft - 1);
         prof.gib += performance.now() - tg;
         gibbed++;
@@ -5399,13 +5271,13 @@ async function main() {
     for (const q of ctx.gibs.pendingGibs) q.actor.stepTear(dt);
     const ready = ctx.gibs.pendingGibs.filter(q => !q.actor.tearing());
     if (ready.length === 0) return 0;
-    let remaining = gibBudget();
+    let remaining = gibBudget(ctx);
     let left = ready.length;
     let spawned = 0;
     for (const q of ready) {
       const i = ctx.gibs.pendingGibs.indexOf(q);
       if (i >= 0) ctx.gibs.pendingGibs.splice(i, 1);
-      const allowance = gibAllowance(remaining, left);
+      const allowance = gibAllowance(ctx, remaining, left);
       // THE HAND-OFF: the plan's own regions at the offsets the body was last
       // DRAWN with, RETARGETED onto the SLOUGHED prims (`deformedPrims`/
       // `deformedBones`). Without the retarget the chunks would spawn their
@@ -5430,7 +5302,7 @@ async function main() {
       };
       const made = gibActor(q.actor, q.at, q.falloff, locked ? q.reserve : allowance, planned);
       q.actor.endTear();
-      remaining = gibDebit(remaining, made);
+      remaining = gibDebit(ctx, remaining, made);
       left--;
       spawned += made;
     }
@@ -6508,7 +6380,7 @@ async function main() {
     // while recording, the frame the tick CONSUMED is what gets logged (not a
     // re-read after the fact, which could see a later event).
     const inputFrame = ctx.demo.replayActive ? ctx.player.currentInputFrame : readInputFrame(ctx);
-    applyInputFrame(inputFrame);
+    applyInputFrame(ctx, inputFrame);
     if (ctx.demo.replayActive) {
       // A recorded frame is consumed by exactly ONE tick. Reset to a neutral
       // frame (keeping the last look) so a repeated step — the bench's warmup,
@@ -6702,7 +6574,7 @@ async function main() {
       if (ctx.render.sdfLayer.shellEnabled) {
         // Same posed bodies the occluder hull is built from, one line below —
         // this is what makes the hull "posed" at no extra cost.
-        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
       }
       ctx.render.occluderHull.update(
         ctx.world.actors.map(a => a.posed()),
@@ -6736,7 +6608,7 @@ async function main() {
       // run. Nothing can move once frozen, so both hulls build exactly once;
       // unfreezing clears the flag and the normal per-frame path resumes.
       if (ctx.render.sdfLayer.shellEnabled) {
-        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
       }
       ctx.render.occluderHull.update(
         ctx.world.actors.map(a => a.posed()),
@@ -7093,7 +6965,7 @@ async function main() {
             const field = chunkBakeField(data).field;
             const hp = traceProjectile(from, p.pos, q => field(q) - p.radius);
             if (!hp) continue;
-            if (ctx.bake.jobs.pendingId === c.id) cancelChunkBake();
+            if (ctx.bake.jobs.pendingId === c.id) cancelChunkBake(ctx);
             ctx.bake.liveChunks.splice(ci, 1);
             c.view.object.visible = false;
             ctx.bake.spareViews.push(c.view);
@@ -7418,65 +7290,6 @@ async function main() {
   // -----------------------------------------------------------------------
   mark('api-start');
 
-  /**
-   * Aim at a body the ballistic predictor CONFIRMS is hittable.
-   *
-   * Two things this must not do, both learned by measurement (2026-08-31):
-   *
-   *   1. Do not stamp at a cluster CENTRE. A torso centre sits INSIDE the
-   *      field: it anchors the crater pathologically, and a slug's severRadius
-   *      cuts both hip necks into an instant collapse. The centre is used only
-   *      to POINT the camera; the shot itself resolves to a surface.
-   *   2. Do not aim at whatever is nearest. Room 4 spawns its zombies around
-   *      the room centre, so a bench standing at the centre had a body 0.97 m
-   *      away — close enough that the aim pitched 26 degrees DOWN into it, the
-   *      predictor returned actorId -1, and all eight pellets expired having
-   *      hit nothing. The bench then reported "firing" segments that contained
-   *      no wounds at all.
-   *
-   * So: candidates in distance order, skipping anything inside MIN_STANDOFF,
-   * and the first one the predictor confirms wins. Returns false if none do,
-   * which leaves the aim untouched — a bench that silently re-aimed until it
-   * connected would be measuring something the scenario never described.
-   */
-  const MIN_STANDOFF = 1.5;
-  function aimAtNearestSurface(limb?: string, actorId?: number): boolean {
-    const eye = eyeOf(ctx.player.player);
-    const candidates = ctx.world.actors
-      .filter(a => actorId === undefined || a.id === actorId)
-      .map((a) => {
-        const c = a.posed().clusters.find(cc => cc.limb === (limb ?? 'torso') && (actorId === undefined || cc.alive))?.center;
-        return c ? { c: [...c] as Vec3, d: Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]) } : null;
-      })
-      .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
-      .sort((a, b) => a.d - b.d);
-
-    const yaw0 = ctx.player.player.yaw;
-    const pitch0 = ctx.player.player.pitch;
-    for (const cand of candidates) {
-      // YAW CONVENTION: the page's forward is (sin yaw, −cos yaw) — camera
-      // lookAt (below), aimDir and muzzleWorld all agree — so facing a target
-      // at offset (dx, dz) is atan2(dx, −dz). walkTo (above) already did this
-      // right; these two bench sites had the z sign flipped since cdba91f,
-      // which mirrored the aim across the player's z plane. It only ever
-      // "worked" while bodies happened to sit near that plane; with the group
-      // fully on one side the bench faced a wall, benched an empty frustum
-      // and fired every shot into it (measured 2026-09-02: census 0, 0
-      // wounds, p50 1.5 ms). NOTE the aim search is still needed even with
-      // the sign right: the predictor simulates SLUG GRAVITY, so dead-on
-      // yaw/pitch at the torso can still miss low — try candidates, keep the
-      // first the predictor confirms.
-      ctx.player.player.yaw = Math.atan2(cand.c[0] - eye[0], -(cand.c[2] - eye[2]));
-      ctx.player.player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
-      // Scoped diagnostics settle the real viewmodel after this orientation
-      // and verify the predictor there; its muzzle transform is stale here.
-      if (actorId !== undefined || predictSlugHitNow(ctx).actorId >= 0) return true;
-    }
-    ctx.player.player.yaw = yaw0;
-    ctx.player.player.pitch = pitch0;
-    return false;
-  }
-
   // Read scalar counters only; no field queries/readbacks during live play.
   ctx.telemetry.firstFrame = true;
   ctx.telemetry.visibilityGap = false;
@@ -7612,76 +7425,6 @@ async function main() {
     readProbeDyn: readProbeDynForHash,
     readInstances: readInstancesForHash,
   };
-
-/** ONE SCENARIO ACTION, applied to the live page — the seam the perf
- *  bench and the frame-hash recorder BOTH drive (deterministic demo
- *  recordings stage 2, 2026-09-10). Extracted verbatim from the bench's
- *  inline `perform`: the teleport heuristics inside were tuned against the
- *  bench census (2026-08-31 — the room centre missed every shot and an
- *  outer corner aimed at a wall), so if this drifts, a recorded demo stops
- *  replaying the scenario the bench measured. One implementation, not two.
- */
-function performBenchAction(a: BenchAction): void {
-  switch (a.kind) {
-    case 'teleport': {
-      const r = ROOMS.find(x => x.id === a.room);
-      if (r) {
-        // Stand back from where the BODIES actually are, facing
-        // them. Two heuristics were tried and both failed against
-        // the census (2026-08-31): the room centre put a zombie
-        // 0.97 m away so every shot pitched down into it and
-        // missed, and an outer corner pointed the camera at a wall
-        // with bodies 1 -> 0 on screen. The room's own actors are
-        // the only thing that reliably says where to look.
-        const mine = ctx.world.actors.filter(x => x.room === a.room);
-        const cx = (r.minX + r.maxX) / 2;
-        const cz = (r.minZ + r.maxZ) / 2;
-        let tx = cx;
-        let tz = cz;
-        if (mine.length) {
-          tx = mine.reduce((n, x) => n + x.pose().pos[0], 0) / mine.length;
-          tz = mine.reduce((n, x) => n + x.pose().pos[2], 0) / mine.length;
-        }
-        // Back off along the direction from the room centre toward
-        // the outer wall, so the whole group stays in front.
-        const away = Math.hypot(tx - cx, tz - cz);
-        let ax = away > 0.2 ? (cx - tx) / away : 0;
-        let az = away > 0.2 ? (cz - tz) / away : 1;
-        // Degenerate group (all at the centre): back off along -z.
-        if (!Number.isFinite(ax) || (ax === 0 && az === 0)) { ax = 0; az = 1; }
-        const STANDOFF = 4.0;
-        const inset = 0.6;
-        const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
-        const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
-        ctx.player.player.pos = [px, 0, pz];
-        ctx.player.player.vel = [0, 0, 0];
-        // atan2(dx, −dz): the page's forward is (sin yaw, −cos
-        // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
-        // (z-mirrored) since cdba91f.
-        ctx.player.player.yaw = Math.atan2(tx - px, -(tz - pz));
-        ctx.player.player.pitch = 0;
-        ctx.player.player.grounded = true;
-      }
-      break;
-    }
-    case 'freeze': ctx.demo.wanderFrozen = a.on; break;
-    case 'look': ctx.player.player.yaw = a.yaw; ctx.player.player.pitch = a.pitch; break;
-    case 'aimSurface': aimAtNearestSurface(); break;
-    case 'fire': fire(ctx, a.barrels); break;
-    case 'fireSlug': {
-      const keep = ctx.weapon.slugMode;
-      ctx.weapon.slugMode = true;
-      try { fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; }
-      break;
-    }
-    // RECORDED INPUT (stage 3): stage the frame; `tick` consumes it through
-    // applyInputFrame, exactly as the standalone replay driver does. Applying
-    // it here as well would double the shot. `replayActive` must be on (the
-    // bench's demo path sets it) or tick would overwrite this frame from the
-    // live listeners.
-    case 'input': ctx.player.currentInputFrame = a.frame; break;
-  }
-}
 
   // -------------------------------------------------------------------------
   mark('demo-start');
@@ -7842,7 +7585,7 @@ function performBenchAction(a: BenchAction): void {
       // computed standoff is recorded as the start pose so a replay can put the
       // player there without re-deriving it from a room id.
       const tele = scenario.steps.find(s => s.at === 0 && s.action.kind === 'teleport');
-      if (tele) performBenchAction(tele.action);
+      if (tele) performBenchAction(ctx, tele.action);
       resetSimClock();
       setRngSeed(ctx.demo.seed);
       ctx.weapon.slugMode = false;
@@ -7865,7 +7608,7 @@ function performBenchAction(a: BenchAction): void {
         let fire: 0 | 1 | 2 = 0;
         let toggleSlug = false;
         for (const a of actionsAt(scenario, f)) {
-          if (a.kind === 'aimSurface') aimAtNearestSurface();
+          if (a.kind === 'aimSurface') aimAtNearestSurface(ctx);
           else if (a.kind === 'fire') fire = a.barrels;
           else if (a.kind === 'fireSlug') { toggleSlug = true; fire = 1; }
         }
@@ -7926,9 +7669,9 @@ function performBenchAction(a: BenchAction): void {
     ...createRenderSeams(ctx),
     ...createWorldSeams(ctx),
     ...createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
-    ...createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction }),
+    ...createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     ...createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
-    ...createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf, camera }),
+    ...createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf: withCtx(ctx, shellAmpOf), camera }),
     ...createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
     /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
      *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
@@ -8035,7 +7778,7 @@ function performBenchAction(a: BenchAction): void {
      *  weight so the flip does not brighten the room. */
     setLevelProbes: (weight: number, gain = -1) => {
       ctx.lighting.levelProbeWeight = Math.max(0, Math.min(1, weight)); ctx.lighting.levelProbeGain = gain;
-      applyHemi(); restampLevelProbes(ctx);
+      applyHemi(ctx); restampLevelProbes(ctx);
       return { weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain };
     },
     clearDepthProbes: () => clearDepthProbes(),
@@ -8051,9 +7794,9 @@ function performBenchAction(a: BenchAction): void {
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. Optional `limb` aims at
      *  that cluster's centre instead of the torso (same confirm gate). */
-    aimSurface: (limb?: string, actorId?: number) => aimAtNearestSurface(limb, actorId),
+    aimSurface: (limb?: string, actorId?: number) => aimAtNearestSurface(ctx, limb, actorId),
     /** aimSurface('head') — the bone-tubes reel's head-shot staging. */
-    aimHead: () => aimAtNearestSurface('head'),
+    aimHead: () => aimAtNearestSurface(ctx, 'head'),
 
     /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
      *  the panel's WOUND_KEYS — the table the COPY button emits from — so a
@@ -8102,7 +7845,7 @@ function performBenchAction(a: BenchAction): void {
      *  frame time at real-render parity. This is the kill switch. */
     setShell(on: boolean) {
       ctx.render.sdfLayer.setShellEnabled(on);
-      if (on) ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
+      if (on) ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
     },
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
      *  through applySdfScale (the game's own state). `null` turns the stage off and
@@ -8141,7 +7884,7 @@ function performBenchAction(a: BenchAction): void {
         // An overflowed hull leaves flesh uncovered, which under a bounded
         // march is a HOLE, not a slightly worse bound. Never ignore this.
         overflowed: ctx.world.outerHull.overflowed,
-        shellAmp: shellAmpOf(),
+        shellAmp: shellAmpOf(ctx),
       };
     },
     /**
@@ -8162,7 +7905,7 @@ function performBenchAction(a: BenchAction): void {
     },
     setChunkBake(on: boolean) {
       ctx.bake.enabled = on;
-      if (!on) cancelChunkBake();
+      if (!on) cancelChunkBake(ctx);
       if (on && ctx.bake.mat) ctx.bake.seed?.(ctx.bake.mat);
     },
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */

@@ -19,6 +19,9 @@ import { aimArm } from './game-arms';
 import { type Projectile, GRAPESHOT, spawnPellets, spawnSlug } from './game-weapon';
 import { updateHud } from './game-panels-leaves';
 import { RELOAD, magazineAfterFire } from './game-viewmodel';
+import { predictSlugHitNow } from './game-world-leaves';
+import { type BenchAction } from './game-bench-scenario';
+import { ROOMS } from './game-level';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -477,4 +480,134 @@ export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
   // One `misc` draw per volley is the pellet seed (mulberry32 inside).
   ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
   return true;
+}
+
+/**
+ * Aim at a body the ballistic predictor CONFIRMS is hittable.
+ *
+ * Two things this must not do, both learned by measurement (2026-08-31):
+ *
+ *   1. Do not stamp at a cluster CENTRE. A torso centre sits INSIDE the
+ *      field: it anchors the crater pathologically, and a slug's severRadius
+ *      cuts both hip necks into an instant collapse. The centre is used only
+ *      to POINT the camera; the shot itself resolves to a surface.
+ *   2. Do not aim at whatever is nearest. Room 4 spawns its zombies around
+ *      the room centre, so a bench standing at the centre had a body 0.97 m
+ *      away — close enough that the aim pitched 26 degrees DOWN into it, the
+ *      predictor returned actorId -1, and all eight pellets expired having
+ *      hit nothing. The bench then reported "firing" segments that contained
+ *      no wounds at all.
+ *
+ * So: candidates in distance order, skipping anything inside MIN_STANDOFF,
+ * and the first one the predictor confirms wins. Returns false if none do,
+ * which leaves the aim untouched — a bench that silently re-aimed until it
+ * connected would be measuring something the scenario never described.
+ */
+export const MIN_STANDOFF = 1.5;
+
+export function aimAtNearestSurface(ctx: GameContext, limb?: string, actorId?: number): boolean {
+  const eye = eyeOf(ctx.player.player);
+  const candidates = ctx.world.actors
+    .filter(a => actorId === undefined || a.id === actorId)
+    .map((a) => {
+      const c = a.posed().clusters.find(cc => cc.limb === (limb ?? 'torso') && (actorId === undefined || cc.alive))?.center;
+      return c ? { c: [...c] as Vec3, d: Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]) } : null;
+    })
+    .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
+    .sort((a, b) => a.d - b.d);
+
+  const yaw0 = ctx.player.player.yaw;
+  const pitch0 = ctx.player.player.pitch;
+  for (const cand of candidates) {
+    // YAW CONVENTION: the page's forward is (sin yaw, −cos yaw) — camera
+    // lookAt (below), aimDir and muzzleWorld all agree — so facing a target
+    // at offset (dx, dz) is atan2(dx, −dz). walkTo (above) already did this
+    // right; these two bench sites had the z sign flipped since cdba91f,
+    // which mirrored the aim across the player's z plane. It only ever
+    // "worked" while bodies happened to sit near that plane; with the group
+    // fully on one side the bench faced a wall, benched an empty frustum
+    // and fired every shot into it (measured 2026-09-02: census 0, 0
+    // wounds, p50 1.5 ms). NOTE the aim search is still needed even with
+    // the sign right: the predictor simulates SLUG GRAVITY, so dead-on
+    // yaw/pitch at the torso can still miss low — try candidates, keep the
+    // first the predictor confirms.
+    ctx.player.player.yaw = Math.atan2(cand.c[0] - eye[0], -(cand.c[2] - eye[2]));
+    ctx.player.player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
+    // Scoped diagnostics settle the real viewmodel after this orientation
+    // and verify the predictor there; its muzzle transform is stale here.
+    if (actorId !== undefined || predictSlugHitNow(ctx).actorId >= 0) return true;
+  }
+  ctx.player.player.yaw = yaw0;
+  ctx.player.player.pitch = pitch0;
+  return false;
+}
+
+/** ONE SCENARIO ACTION, applied to the live page — the seam the perf
+ *  bench and the frame-hash recorder BOTH drive (deterministic demo
+ *  recordings stage 2, 2026-09-10). Extracted verbatim from the bench's
+ *  inline `perform`: the teleport heuristics inside were tuned against the
+ *  bench census (2026-08-31 — the room centre missed every shot and an
+ *  outer corner aimed at a wall), so if this drifts, a recorded demo stops
+ *  replaying the scenario the bench measured. One implementation, not two.
+ */
+export function performBenchAction(ctx: GameContext, a: BenchAction): void {
+switch (a.kind) {
+  case 'teleport': {
+    const r = ROOMS.find(x => x.id === a.room);
+    if (r) {
+      // Stand back from where the BODIES actually are, facing
+      // them. Two heuristics were tried and both failed against
+      // the census (2026-08-31): the room centre put a zombie
+      // 0.97 m away so every shot pitched down into it and
+      // missed, and an outer corner pointed the camera at a wall
+      // with bodies 1 -> 0 on screen. The room's own actors are
+      // the only thing that reliably says where to look.
+      const mine = ctx.world.actors.filter(x => x.room === a.room);
+      const cx = (r.minX + r.maxX) / 2;
+      const cz = (r.minZ + r.maxZ) / 2;
+      let tx = cx;
+      let tz = cz;
+      if (mine.length) {
+        tx = mine.reduce((n, x) => n + x.pose().pos[0], 0) / mine.length;
+        tz = mine.reduce((n, x) => n + x.pose().pos[2], 0) / mine.length;
+      }
+      // Back off along the direction from the room centre toward
+      // the outer wall, so the whole group stays in front.
+      const away = Math.hypot(tx - cx, tz - cz);
+      let ax = away > 0.2 ? (cx - tx) / away : 0;
+      let az = away > 0.2 ? (cz - tz) / away : 1;
+      // Degenerate group (all at the centre): back off along -z.
+      if (!Number.isFinite(ax) || (ax === 0 && az === 0)) { ax = 0; az = 1; }
+      const STANDOFF = 4.0;
+      const inset = 0.6;
+      const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
+      const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
+      ctx.player.player.pos = [px, 0, pz];
+      ctx.player.player.vel = [0, 0, 0];
+      // atan2(dx, −dz): the page's forward is (sin yaw, −cos
+      // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
+      // (z-mirrored) since cdba91f.
+      ctx.player.player.yaw = Math.atan2(tx - px, -(tz - pz));
+      ctx.player.player.pitch = 0;
+      ctx.player.player.grounded = true;
+    }
+    break;
+  }
+  case 'freeze': ctx.demo.wanderFrozen = a.on; break;
+  case 'look': ctx.player.player.yaw = a.yaw; ctx.player.player.pitch = a.pitch; break;
+  case 'aimSurface': aimAtNearestSurface(ctx); break;
+  case 'fire': fire(ctx, a.barrels); break;
+  case 'fireSlug': {
+    const keep = ctx.weapon.slugMode;
+    ctx.weapon.slugMode = true;
+    try { fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; }
+    break;
+  }
+  // RECORDED INPUT (stage 3): stage the frame; `tick` consumes it through
+  // applyInputFrame, exactly as the standalone replay driver does. Applying
+  // it here as well would double the shot. `replayActive` must be on (the
+  // bench's demo path sets it) or tick would overwrite this frame from the
+  // live listeners.
+  case 'input': ctx.player.currentInputFrame = a.frame; break;
+}
 }

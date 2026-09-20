@@ -256,3 +256,8 @@ export function freeBaked(ctx: GameContext, b: BakedChunk): ChunkGpuView {
   }
   return b.view;
 }
+
+export function cancelChunkBake(ctx: GameContext) {
+  if (ctx.bake.jobs.pendingId !== null) ctx.telemetry.telemetry.event('chunk-bake-cancel', { chunk: ctx.bake.jobs.pendingId });
+  ctx.bake.jobs.cancel(); ctx.bake.input = null;
+}

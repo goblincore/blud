@@ -142,3 +142,11 @@ export function predictSlugHitNow(ctx: GameContext): { origin: Vec3; dir: Vec3; 
     const dir = convergedDir(ctx, origin);
     return { origin, dir, ...traceSlugHitFrom(ctx, origin, dir) };
 }
+
+/** The silhouette-noise amplitude the hull must budget for (marchCfg.z).
+ *  Read from the live uniform rather than a constant, so retuning the noise
+ *  cannot silently under-size the hull — X1.21.2 was exactly that bug on the
+ *  cone and occluder bounds. */
+export function shellAmpOf(ctx: GameContext) {
+  return ctx.world.actors[0]?.view.uniforms.marchCfg.value.z ?? 0;
+}
