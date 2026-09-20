@@ -5,6 +5,12 @@
 //
 //   npx tsx scripts/extract-seam-group.ts <module> <Factory> --slices world,render [--write]
 //   npx tsx scripts/extract-seam-group.ts <module> <Factory> --members a,b,c     [--write]
+//   npx tsx scripts/extract-seam-group.ts <module> <Factory> --all               [--write]
+//
+// --slices cannot express "member that reads no ctx slice at all": its pick
+// required at least one slice, which silently skipped 88 eligible ctx-only
+// members before leaves wave 1 noticed. --all takes every free-name-clean
+// member, which is the honest way to ask for the remainder.
 //
 // WHY A SCRIPT AND NOT AN AGENT. The remaining members are small and almost all
 // need nothing but `ctx`. The work is a verbatim move, so the failure mode of a
@@ -133,9 +139,21 @@ export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; 
     if (ts.isVariableStatement(st)) for (const d of st.declarationList.declarations) if (ts.isIdentifier(d.name)) scope.add(d.name.text);
     if (ts.isFunctionDeclaration(st) && st.name) scope.add(st.name.text);
   }
-  const cands = main.body!.statements.filter(s => ts.isExpressionStatement(s) && s.getText(sf).includes('__sdfGame'));
-  const target = cands.sort((a, b) => (b.getEnd() - b.getStart(sf)) - (a.getEnd() - a.getStart(sf)))[0] as ts.ExpressionStatement;
-  const obj = (target.expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression;
+  // Select by SHAPE, not by size: the assignment whose right-hand side is an
+  // object literal and whose left-hand side names __sdfGame. The old heuristic
+  // took the longest statement mentioning __sdfGame, which became game-main's
+  // setDrawFn closure the moment the literal shrank past it (leaves wave 1) —
+  // and then crashed reading `.properties` of a non-literal.
+  const cands = main.body!.statements.filter((s): s is ts.ExpressionStatement =>
+    ts.isExpressionStatement(s)
+    && ts.isBinaryExpression(s.expression)
+    && s.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    && ts.isObjectLiteralExpression(s.expression.right)
+    && s.expression.left.getText(sf).includes('__sdfGame'));
+  if (cands.length !== 1) {
+    throw new Error(`expected exactly one __sdfGame = { … } assignment in main(), found ${cands.length}`);
+  }
+  const obj = (cands[0].expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression;
 
   const members: Member[] = [];
   for (const m of obj.properties) {
@@ -251,18 +269,20 @@ export function extractGroup(
 
 if (process.argv[1]?.endsWith('extract-seam-group.ts')) {
   const [moduleName, factory] = process.argv.slice(2, 4);
+  const all = process.argv.includes('--all');
   const si = process.argv.indexOf('--slices');
   const mi = process.argv.indexOf('--members');
   const ii = process.argv.indexOf('--imports');
   const slices = si > 0 ? new Set(process.argv[si + 1].split(',')) : null;
   const names = mi > 0 ? new Set(process.argv[mi + 1].split(',')) : null;
   const extraImports = ii > 0 ? process.argv[ii + 1].split(';') : [];
-  if (!slices && !names) throw new Error('pass --slices or --members');
+  if (!slices && !names && !all) throw new Error('pass --slices, --members or --all');
 
   const src = readFileSync(GAME_MAIN, 'utf8');
   const pick = (m: Member) =>
-    names ? names.has(m.name)
-          : m.slices.length > 0 && m.slices.every(s => slices!.has(s));
+    all ? true
+        : names ? names.has(m.name)
+                : m.slices.length > 0 && m.slices.every(s => slices!.has(s));
 
   const r = extractGroup(src, moduleName, factory, pick, extraImports);
   console.log(`module  : src/lab/sdf-zombie/webgpu/${moduleName}.ts`);
