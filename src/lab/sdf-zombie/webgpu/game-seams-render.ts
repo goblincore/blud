@@ -9,6 +9,11 @@ import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { SCALE_LADDER, initialAdaptiveState, scaleForRung } from '../adaptive-scale';
 import { type SscsTerms } from './post-sscs';
+import { type VhsPreset, type VhsTerms } from './post-vhs';
+import { woundWorldPos } from '../damage';
+import { applyBoneCullMode } from './game-render-leaves';
+import { applyBoneCull } from './game-render-leaves2';
+import { type RefineTail } from './zombie-gpu';
 
 export function createRenderSeams(ctx: GameContext) {
   const { camera } = ctx.boot.handle;
@@ -190,6 +195,85 @@ export function createRenderSeams(ctx: GameContext) {
         scale: scaleForRung(ctx.render.adaptiveState.rung),
         ladder: [...SCALE_LADDER],
       };
-    }
+    },
+    setBlastDistortStrength: (v: number) => {
+      ctx.vfx.blastDistortStrength = Math.max(0, Math.min(4, Number(v) || 0));
+      ctx.render.postAa.setBlastDistortStrength(ctx.vfx.blastDistortStrength);
+      return ctx.vfx.blastDistortStrength;
+    },
+
+    // VHS is the fourth chain stage, default OFF. While on it replaces the
+    // smear pass; `effectiveSmear` says which temporal filter is really
+    // running (0 while VHS owns it). Both return the resulting state so a
+    // console caller sees the clamp without a second read.
+    setVhs: (preset: VhsPreset | null) => {
+      ctx.render.postAa.setVhs(preset);
+      // A console preset overwrites every term; without this the panel's
+      // sliders would keep showing the OLD look while the screen shows the new.
+      ctx.panels.vhsPanel?.refresh();
+      return ctx.render.postAa.vhs;
+    },
+    setVhsTerm: (name: keyof VhsTerms, value: number) => {
+      ctx.render.postAa.setVhsTerm(name, value);
+      ctx.panels.vhsPanel?.refresh();
+      return ctx.render.postAa.vhsTerms;
+    },
+
+    /** Run 5b: the refine twins' lighting tail — 'slim' (default) drops scatter, the wound
+     *  soft shadow, the ambient bounce and the probe gather from the twin only; 'full' is
+     *  run 5's behaviour. Applies to every live actor view (chunks have no refine twin). */
+    setRefineTail: (tail: RefineTail) => {
+      ctx.render.refineTailWanted = tail;
+      for (const a of ctx.world.actors) a.view.setRefineTail(tail);
+      return ctx.world.actors[0]?.view.refineTail ?? tail;
+    },
+    refineInfo: () => ({ allocated: ctx.render.sdfLayer.refineSource !== null, on: ctx.render.sdfLayer.refine, view: ctx.render.sdfLayer.refineView, cfg: ctx.render.sdfLayer.refineCfg, tail: ctx.world.actors[0]?.view.refineTail ?? 'slim', bodies: ctx.render.refinedBodies, band: { ...ctx.render.refineBand } }),
+
+    /** Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+     *  bone loop; the bench's bone-cull-on leg flips it for A/B. Takes effect
+     *  on the next per-frame pack, so a live flip needs a frame to land. */
+    setBoneCull(on: boolean) { applyBoneCull(ctx, on); },
+    /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
+     *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
+     *  setBoneCull(on) is the boolean shorthand for off/cluster. */
+    setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(ctx, mode); },
+
+    /** SSCS seam: flip the contact-shadow stage live (it re-binds the flesh
+     *  mask, so enabling from the console in deferred mode is refused — the
+     *  march target is not the flesh mask there). */
+    setSscs: (on: boolean) => {
+      if (on && ctx.boot.deferredMode) return 'refused: sscs is legacy-path-only';
+      if (on) ctx.render.postAa.setSscsFleshTex(ctx.render.sdfLayer.marchTarget.texture);
+      ctx.render.postAa.setSscs(on);
+      return ctx.render.postAa.sscs;
+    },
+
+    /** Rebuild the hull NOW (the frame-loop update is gated on !wanderFrozen,
+     *  so frozen captures would otherwise shoot through a stale hull). No
+     *  simulation steps, so a stamped body stays exactly where it was put. */
+    refreshHull: () => {
+      ctx.render.occluderHull.update(
+        ctx.world.actors.map(a => a.posed()),
+        ctx.render.hullExclusionsEnabled
+          ? ctx.world.actors.flatMap(a => {
+            const prims = a.posed().prims;
+            const yaw = a.pose().yaw;
+            return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+          })
+          : [],
+        // Same rule as the frame loop: only rebuild the occluder half when
+        // the pre-pass is on to consume it.
+        { occluder: ctx.render.sdfLayer.occluderEnabled },
+      );
+    },
+
+    hullDebug: () => ({
+      occluder: ctx.render.sdfLayer.occluderEnabled,
+      exclusions: ctx.render.hullExclusionsEnabled,
+      instances: ctx.render.occluderHull.instanceCount,
+      woundsPerBody: ctx.world.actors.map(a => a.wounds().length),
+    }),
+    setActorCull(on: boolean) { ctx.render.actorCullEnabled = on; if (!on) ctx.world.lastSeenMs.clear(); },
+    actorCull: () => ({ enabled: ctx.render.actorCullEnabled, ...ctx.world.cullCounts }),
   };
 }
