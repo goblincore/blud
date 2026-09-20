@@ -12,9 +12,11 @@ describe('final-hit analytic normal integration', () => {
   it('binds an independent default-off uniform and propagates actor/chunk requests', async () => {
     const gpu = (await import('../../../../zombie-gpu?raw')).default;
     // __sdfGame members moved out of game-main into game-seams-leftover.ts in
-    // leaves wave 1 (2026-09-19); the pins read the pair as one source.
+    // leaves wave 1 (2026-09-19); the split of 2026-09-20 moved the
+    // normal-gradient seams on into game-seams-march-debug.ts. The pins read
+    // the pair as one source.
     const game = (await import('../../../../game-main?raw')).default
-      + (await import('../../../../game-seams-leftover?raw')).default;
+      + (await import('../../../../game-seams-march-debug?raw')).default;
     expect(gpu).toContain('normalGradientCfg: uniform(new THREE.Vector4(0, 0, 0, 0))');
     expect(gpu).toContain('normalGradientCfg: u.normalGradientCfg');
     expect(gpu).toContain('u.normalGradientCfg.value.copy(template.normalGradientCfg.value)');
