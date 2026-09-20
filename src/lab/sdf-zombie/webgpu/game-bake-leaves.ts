@@ -15,6 +15,7 @@ import { BONE_VARIANTS, MEAT_VARIANTS } from '../gore-parts';
 import { type Vec3 } from '../types';
 import { unpackChunkBake } from './chunk-bake-buffers';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
+import { type ChunkGpuView, type MarchUniforms } from './zombie-gpu';
 
 /** Register a material instance to be lit by the frame's beam. Every
  *  `createBakedChunkMaterial` that is DRAWN must go through this — an
@@ -219,4 +220,39 @@ export function finishChunkBake(ctx: GameContext): void {
   if (baked.overflow || baked.droppedQuads > 0) {
     console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
   }
+}
+
+export interface ChunkTemplate { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture }
+
+export interface BakedChunk {
+  id: number;
+  mesh: THREE.Mesh;
+  view: ChunkGpuView;
+  state: import('../gib-chunks').Chunk;
+  faceMaterial?: BakedChunkMaterial;
+  centre: Vec3;
+  radius: number;
+  bakeMs: number;
+  /** The origin body's uniform set + volume texture, so a gib of this
+   *  piece spawns meat that shades like the body it came off. */
+  template: ChunkTemplate;
+}
+
+// The bake STATE (seam, bakedChunks, material) is declared near the boot's
+// light-seed block; here live only the bake/gib/free functions.
+/** Free a baked piece's mesh and return its view to the ring. The view is
+ *  NOT disposed — the ring recycles it in place via reset(), exactly as
+ *  it always has (the leak gate counts these: bounded by `maxChunks`). */
+export function freeBaked(ctx: GameContext, b: BakedChunk): ChunkGpuView {
+  const i = ctx.bake.chunks.indexOf(b);
+  if (i >= 0) ctx.bake.chunks.splice(i, 1);
+  ctx.boot.handle.scene.remove(b.mesh);
+  ctx.boot.deferredApi?.router.unregister(b.mesh);
+  b.mesh.geometry.dispose();
+  if (b.faceMaterial) {
+    const mi = ctx.world.litChunkMaterials.indexOf(b.faceMaterial);
+    if (mi >= 0) ctx.world.litChunkMaterials.splice(mi, 1);
+    b.faceMaterial.dispose(); // borrowed actor atlas is not disposed
+  }
+  return b.view;
 }

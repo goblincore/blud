@@ -8,14 +8,17 @@
 
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
-import { rngStreams } from './rng';
-import { type TracerBasis } from './tracer-sprite';
+import { rngStreams, seedFromUnit } from './rng';
+import { type TracerBasis, TRACER, faceEyeBasis, tracerBasis, tracerHeadOn, tracerLength, tracerNearFade, tracerNearScale } from './tracer-sprite';
 import { type Frustum } from './free-aim';
 import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
 import { type Vec3 } from '../types';
 import { eyeOf } from './game-player';
-import { slotLowerAmount, stepWeaponSlot } from './game-weapon-slots';
+import { slotLowerAmount, stepWeaponSlot, slotReady } from './game-weapon-slots';
 import { aimArm } from './game-arms';
+import { type Projectile, GRAPESHOT, spawnPellets, spawnSlug } from './game-weapon';
+import { updateHud } from './game-panels-leaves';
+import { RELOAD, magazineAfterFire } from './game-viewmodel';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -344,4 +347,134 @@ export function aimArms(ctx: GameContext): void {
     viewDirToRig(ctx, BEND_L_VIEW, _bendL);
     aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL);
   }
+}
+
+export interface TracerView { streak: THREE.Mesh; ember: THREE.Mesh }
+
+export function newTracerView(ctx: GameContext): TracerView {
+  const view = { streak: newTracerQuad(ctx, ctx.vfx.tracerTex), ember: newTracerQuad(ctx, ctx.vfx.emberTex) };
+  // The EFFECTS overlay, not the main scene: the overlay draws after the
+  // SDF composite against the completed depth buffer, so a streak crossing
+  // in front of a body stays visible and one behind it is occluded. In the
+  // main pass the streak writes no depth, and the flesh composite — depth-
+  // testing only against the wall behind — painted straight over it
+  // (owner-caught: tracers clipped by the soldier's body).
+  ctx.vfx.characterEffects.scene.add(view.streak);
+  ctx.vfx.characterEffects.scene.add(view.ember);
+  return view;
+}
+
+/**
+ * Point one pooled view at one live projectile, from an eye at `eye`.
+ * The streak's HEAD sits on the projectile and the smear trails behind it,
+ * so the thing that collides and the thing that glows are the same point;
+ * the ember sits ON the projectile and takes over as the streak collapses.
+ */
+export function placeTracer(ctx: GameContext, v: TracerView, p: Projectile, eye: Vec3): void {
+  const ex = eye[0] - p.pos[0], ey = eye[1] - p.pos[1], ez = eye[2] - p.pos[2];
+  const toEye: Vec3 = [ex, ey, ez];
+  const dist = Math.hypot(ex, ey, ez);
+  const fade = tracerNearFade(dist);
+  const basis = tracerBasis(p.vel, toEye);
+  if (!basis || fade <= 0) { hideTracer(ctx, v); return; }
+
+  const len = tracerLength(Math.hypot(p.vel[0], p.vel[1], p.vel[2]));
+  // Near the eye the width and the ember shrink with distance so a pellet
+  // passing the camera stays a glow, never a screen-filling disc. See
+  // tracerNearScale — the fade alone does not cover an ARRIVING shot.
+  const near = tracerNearScale(dist);
+  const wid = p.radius * TRACER.widthScale * near;
+  v.streak.visible = true;
+  (v.streak.material as THREE.MeshBasicMaterial).opacity = fade;
+  setQuadMatrix(ctx, v.streak, basis, len, wid,
+    p.pos[0] - basis.x[0] * len * 0.5,
+    p.pos[1] - basis.x[1] * len * 0.5,
+    p.pos[2] - basis.x[2] * len * 0.5);
+
+  const headOn = tracerHeadOn(p.vel, toEye) * fade;
+  const face = headOn > 0 ? faceEyeBasis(toEye) : null;
+  if (!face) { v.ember.visible = false; return; }
+  const d = p.radius * TRACER.emberScale * near;
+  v.ember.visible = true;
+  (v.ember.material as THREE.MeshBasicMaterial).opacity = headOn;
+  setQuadMatrix(ctx, v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);
+}
+
+export function hideTracer(ctx: GameContext, v: TracerView): void {
+  v.streak.visible = false;
+  v.ember.visible = false;
+}
+
+/** The muzzle in VIEW space, read off the GLB's own Muzzle_L/Muzzle_R
+ *  locators rather than guessed. The first pass put the flash at
+ *  (0.085, -0.060, -0.560) -- 4 cm left, 4.5 cm high and 3 cm SHORT of the
+ *  real muzzle -- so it burned halfway down the barrel instead of at the
+ *  bores, which is a good part of why it read wrong. */
+export const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
+
+export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
+  // SLOT GATE. The grapeshot only speaks while it is the live weapon and the
+  // switch has settled — __sdfGame.fire()/fireSlug() go through here too, so
+  // a driver cannot fire the shotgun through a lit bundle.
+  if (ctx.weapon.slotState.live !== 'shotgun' || !slotReady(ctx.weapon.slotState)) return false;
+  if (!ctx.weapon.gunReady || ctx.weapon.cooldown > 0) return false;
+  if (ctx.weapon.reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
+  if (!ctx.weapon.infiniteAmmo && ctx.weapon.shells <= 0) { startReload(ctx); return false; } // click -> start reloading
+  // Gunfire in a room turns every head in it, cone or no cone. Placed after
+  // the guards on purpose: a dry click or a shot during a reload must not
+  // alert anything, or the flag fires on inputs that made no noise.
+  barrels = (ctx.weapon.infiniteAmmo ? barrels : Math.min(ctx.weapon.shells, barrels)) as 1 | 2;
+  ctx.telemetry.telemetry.event('shot', { kind: ctx.weapon.slugMode ? 'slug' : 'pellet', barrels });
+  ctx.weapon.shotAlert = true;
+  ctx.weapon.cooldown = GRAPESHOT.fireCooldownSec;
+  ctx.weapon.recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
+  if (!ctx.weapon.infiniteAmmo) {
+    ctx.weapon.shells = magazineAfterFire(ctx.weapon.shells, barrels);
+    if (ctx.weapon.shells <= 0) startReload(ctx);
+  }
+  updateHud(ctx);
+  ctx.weapon.flashAge = 0;
+  ctx.weapon.fireAge = 0;
+  ctx.weapon.fireBarrels = barrels;
+  if (ctx.weapon.flashGroup && ctx.weapon.flashMaterial) {
+    // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
+    // identical silhouette.
+    ctx.weapon.flashGroup.rotation.z = rngStreams.fx() * Math.PI * 2;
+    const tex = ctx.weapon.flashTextures[Math.floor(rngStreams.fx() * ctx.weapon.flashTextures.length)];
+    if (tex) { ctx.weapon.flashMaterial.map = tex; ctx.weapon.flashMaterial.needsUpdate = true; }
+  }
+  // Release a few smoke puffs at the muzzle. Both barrels make more smoke.
+  {
+    let released = 0;
+    const want = barrels === 2 ? 5 : 3;
+    for (const puff of ctx.vfx.smokePuffs) {
+      if (released >= want) break;
+      if (puff.age !== Infinity) continue;
+      puff.age = 0;
+      puff.roll = rngStreams.fx() * Math.PI * 2;
+      puff.mesh.position.set(
+        MUZZLE_VIEW.x + (rngStreams.fx() - 0.5) * 0.03,
+        MUZZLE_VIEW.y + (rngStreams.fx() - 0.5) * 0.03,
+        MUZZLE_VIEW.z - 0.02 - rngStreams.fx() * 0.05,
+      );
+      puff.vel.set(
+        (rngStreams.fx() - 0.5) * 0.25,
+        0.10 + rngStreams.fx() * 0.18,
+        -0.55 - rngStreams.fx() * 0.35,
+      );
+      puff.mesh.rotation.z = puff.roll;
+      released++;
+    }
+  }
+  if (ctx.weapon.slugMode) {
+    // One lump down one known ray instead of a pellet volley.
+    ctx.weapon.pellets.push(spawnSlug(muzzleWorld(ctx), convergedDir(ctx, muzzleWorld(ctx))));
+    return true;
+  }
+  const muz = muzzleWorld(ctx);
+  const dir = convergedDir(ctx, muz);
+  // spawnPellets spreads around `dir`; convergence just re-centres the cone.
+  // One `misc` draw per volley is the pellet seed (mulberry32 inside).
+  ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
+  return true;
 }

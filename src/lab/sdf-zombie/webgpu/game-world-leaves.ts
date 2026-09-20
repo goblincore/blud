@@ -13,6 +13,7 @@ import { sdBody } from '../validate';
 import { SLUG, traceProjectile } from './game-weapon';
 import { ROOMS, TUNNELS } from './game-level';
 import { type ChunkBox } from '../gib-chunks';
+import { convergedDir, muzzleWorld } from './game-weapon-leaves';
 
 /** The room's level cfg: weight, and the gain that puts the probe level at
  *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
@@ -130,4 +131,14 @@ export function ceilingAt(ctx: GameContext, x: number, z: number): number {
  */
 export function chunkCollidersAt(ctx: GameContext, pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
   return { boxes: ctx.world.colliders, ceilingY: ceilingAt(ctx, pos[0], pos[2]) };
+}
+
+/** Where a slug fired RIGHT NOW would hit — the shared predictor.
+ *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
+ *  with the same code the placement gate uses, rather than trusting a
+ *  cluster centre. No state mutated. */
+export function predictSlugHitNow(ctx: GameContext): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
+    const origin = muzzleWorld(ctx);
+    const dir = convergedDir(ctx, origin);
+    return { origin, dir, ...traceSlugHitFrom(ctx, origin, dir) };
 }

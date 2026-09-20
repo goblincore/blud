@@ -12,6 +12,9 @@ import * as THREE from 'three/webgpu';
 import { type Vec3 } from '../types';
 import { type ZombieActor } from './game-actor';
 import { eyeOf } from './game-player';
+import { makeFlight } from '../dynamite-flight';
+import { throwDirection } from '../fpv';
+import { aimDir } from './game-weapon-leaves';
 
 /** Take a prop for a bundle that is leaving the hand: the held one if it is
  *  there, else a spare, else the OLDEST flying bundle's (its state keeps
@@ -122,4 +125,33 @@ export function bundleHitsBody(ctx: GameContext, from: Vec3, to: Vec3): ZombieAc
     if (qx * qx + qy * qy + qz * qz <= BUNDLE_BODY_RADIUS_M * BUNDLE_BODY_RADIUS_M) return a;
   }
   return null;
+}
+
+/** Release a bundle from the hand along the aim. */
+export function throwBundle(ctx: GameContext, speedMps: number): void {
+  if (!ctx.bake.bundleReady) return;
+  // THE ORIGIN IS READ BEFORE THE REPARENT, and that order is load-bearing:
+  // the held prop's world transform IS the hold pose (it rides `bundleRig`,
+  // inside the camera), while `takePropForThrow` moves the object to the scene
+  // root and leaves its LOCAL transform behind. Reading the position after
+  // that hands the flight the scene ORIGIN — a point inside the level's solid
+  // centre block — so the bundle was born buried in geometry, pushed out
+  // downward, and left sliding along the floor. Caught by the slot gate.
+  const origin = propWorld(ctx, ctx.weapon.heldProp);
+  const prop = takePropForThrow(ctx);
+  // The reticle IS the aim under both schemes (aimDir handles free aim), and
+  // fpv.ts's throwDirection applies the game's upward lob on top — the same
+  // two rules the lab's throw uses, so a bundle thrown here lands where the
+  // lab's does. Deriving yaw/pitch from the aim vector keeps the lob maths
+  // in that one function instead of a second copy here.
+  const d = aimDir(ctx);
+  const yaw = Math.atan2(d[0], -d[2]);
+  const pitch = Math.asin(Math.max(-1, Math.min(1, d[1])));
+  const dir = throwDirection(yaw, pitch);
+  const speed = speedMps * ctx.dynamite.speedScale;
+  const state = makeFlight(origin, [dir[0] * speed, dir[1] * speed, dir[2] * speed], { impactMode: true });
+  ctx.bake.liveBundles.push({ state, prop });
+  prop?.pose({ mode: 'flight', pos: state.pos, spin: state.spin, fuseBurning: true });
+  ctx.dynamite.thrown++;
+  ctx.telemetry.telemetry.event('dynamite-throw', { speedMps: speed, x: origin[0], y: origin[1], z: origin[2] });
 }

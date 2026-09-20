@@ -18,7 +18,11 @@ import zombieBlobSrc from '../characters/zombie.blob?raw';
 import { type ChunkLook } from '../chunk-bake-field';
 import { createBakedChunkMaterial } from './baked-chunks';
 import { registerLitChunkMaterial } from './game-bake-leaves';
-import { carveBodyIntoPieces } from './gib-carve';
+import { carveBodyIntoPieces, type CarvedPiece } from './gib-carve';
+import { makeChunk } from '../gib-chunks';
+import { spawnSpritePiece } from './gib-sprite-pieces';
+import { rngStreams } from './rng';
+import { loadGibSheet, loadGibSpriteAtlas } from './gib-sprites';
 
 /** The archetype whose committed set an actor uses. */
 export function gibAssetArchetypeOf(ctx: GameContext, a: ZombieActor): string {
@@ -258,4 +262,55 @@ export function ensureCarvedLibrary(ctx: GameContext): boolean {
     }
     return false;
   }
+}
+
+/**
+ * Spawn one carved mesh piece. The geometry is SHARED from the library and the
+ * material is the library's own instance, so a spawn allocates nothing but the
+ * Mesh and its `Chunk` state — which is why "bake at spawn" costs nothing once
+ * the library exists.
+ */
+export function spawnCarvedPiece(ctx: GameContext, 
+  piece: CarvedPiece, origin: Vec3, kind: 'limb' | 'gob' | 'bone',
+  impulseVel: Vec3 | null, impulseDelay: number,
+): boolean {
+  if (!ensureCarvedLibrary(ctx) || !ctx.bake.carvedMaterial) return false;
+  const rng = rngStreams.misc;
+  const state = makeChunk(
+    piece.limb as never, origin, [0, 0, 0], piece.radius,
+    piece.longAxis as never, rng, kind,
+  );
+  spawnSpritePiece(ctx.vfx.spritePieces, {
+    state,
+    impulseDelay, impulseVel,
+    render: 'mesh', geometry: piece.geometry, material: ctx.bake.carvedMaterial.material,
+  });
+  return true;
+}
+
+export const GIB_ATLAS_URL = '/assets/gibs-placeholder/manifest.json';
+/** The GENERATED sheet: own render, own resolution, committable. */
+export const GIB_SHEET_URL = '/assets/lab/gore/manifest.json';
+
+/** Load the dev-only atlas on demand. A missing one is reported, not hidden:
+ *  the bench is meaningless without it and a silent empty group reads as a bug
+ *  in the renderer. */
+export async function ensureGibAtlas(ctx: GameContext, which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource): Promise<number> {
+  if (ctx.gibs.atlas && ctx.gibs.atlasSource === which) return ctx.gibs.atlas.frames.length;
+  ctx.gibs.atlas?.dispose();
+  ctx.gibs.atlas = null;
+  ctx.gibs.atlasSource = which;
+  const url = which === 'sheet' ? GIB_SHEET_URL : GIB_ATLAS_URL;
+  try {
+    ctx.gibs.atlas = which === 'sheet' ? await loadGibSheet(url) : await loadGibSpriteAtlas(url);
+    console.log(`[gib-sprites] ${which} atlas: ${ctx.gibs.atlas.frames.length} frames from ${url}`);
+  } catch (err) {
+    console.warn(`[gib-sprites] no ${which} atlas at ${url}`
+      + (which === 'placeholder'
+        ? ' — run scripts/link-dev-assets.sh (the Blood extracts are dev-only placeholders)'
+        : ' — generate it with: npm run blob:shot -- zombie (BLOB_MASK=1) then node scripts/gib-sheet.mjs')
+      + `: ${String(err)}`);
+    return 0;
+  }
+  return ctx.gibs.atlas.frames.length;
 }

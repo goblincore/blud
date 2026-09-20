@@ -301,6 +301,13 @@ import { enableTrainedUpscale } from './game-render-leaves';
 import { AIM_CONVERGE_M, convergedDir } from './game-weapon-leaves';
 import { BEND_L_VIEW, BEND_R_VIEW, SHOULDER_L_VIEW, SHOULDER_R_VIEW, _bendL, _bendR, _sh, aimArms } from './game-weapon-leaves';
 import { applyInputEdges } from './game-player-leaves';
+import { spawnCarvedPiece } from './game-gibs-leaves';
+import { throwBundle } from './game-dynamite-leaves';
+import { predictSlugHitNow } from './game-world-leaves';
+import { TracerView, hideTracer, newTracerView, placeTracer } from './game-weapon-leaves';
+import { MUZZLE_VIEW, fire } from './game-weapon-leaves';
+import { BakedChunk, ChunkTemplate, freeBaked } from './game-bake-leaves';
+import { GIB_ATLAS_URL, GIB_SHEET_URL, ensureGibAtlas } from './game-gibs-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -3173,20 +3180,6 @@ async function main() {
   const GAME_CHUNK_BAKE: 0 | 1 = 1;
   ctx.bake.enabled = new URLSearchParams(location.search).get('chunkbake') !== '0'
     && (GAME_CHUNK_BAKE as 0 | 1) === 1;
-  interface ChunkTemplate { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture }
-  interface BakedChunk {
-    id: number;
-    mesh: THREE.Mesh;
-    view: ChunkGpuView;
-    state: import('../gib-chunks').Chunk;
-    faceMaterial?: BakedChunkMaterial;
-    centre: Vec3;
-    radius: number;
-    bakeMs: number;
-    /** The origin body's uniform set + volume texture, so a gib of this
-     *  piece spawns meat that shades like the body it came off. */
-    template: ChunkTemplate;
-  }
   ctx.bake.chunks = [];
   ctx.bake.reference = false;
   ctx.world.soldierCorpses = null;
@@ -3461,8 +3454,8 @@ async function main() {
       ctx.player.player.yaw = f.look[0];
       ctx.player.player.pitch = f.look[1];
     }
-    if (f.fire === 1) fire(1);
-    else if (f.fire === 2) fire(2);
+    if (f.fire === 1) fire(ctx, 1);
+    else if (f.fire === 2) fire(ctx, 2);
     // Slot 3's edge, consumed on the tick like every other verb.
     ctx.weapon.flare?.consumeEdge();
     // The KeyR edge above already covers a live press; this covers a recorded
@@ -3609,12 +3602,6 @@ async function main() {
    *  left the support hand floating unattached. These cannot drift. */
   const GRIP_HAND_REST = new THREE.Vector3();
   const FORE_HAND_REST = new THREE.Vector3();
-  /** The muzzle in VIEW space, read off the GLB's own Muzzle_L/Muzzle_R
-   *  locators rather than guessed. The first pass put the flash at
-   *  (0.085, -0.060, -0.560) -- 4 cm left, 4.5 cm high and 3 cm SHORT of the
-   *  real muzzle -- so it burned halfway down the barrel instead of at the
-   *  bores, which is a good part of why it read wrong. */
-  const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
   /** Seconds since the last shot, and how many barrels it was. Drives recoil. */
   ctx.weapon.fireAge = Infinity;
   ctx.weapon.fireBarrels = 1;
@@ -4340,64 +4327,6 @@ async function main() {
   ctx.vfx.emberTex = new THREE.DataTexture(emberPixels(128), 128, 128, THREE.RGBAFormat);
   ctx.vfx.emberTex.needsUpdate = true;
   ctx.weapon.pelletGeo = new THREE.PlaneGeometry(1, 1);
-  /** The streak and the head-on ember for ONE projectile. Two quads because
-   *  they are oriented differently — the streak rolls about the trajectory,
-   *  the ember faces the eye outright — and because their weights are
-   *  complementary: see tracerHeadOn. Both carry their own material, since
-   *  each fades independently by distance and angle, the same way the smoke
-   *  puffs above each own their opacity. */
-  interface TracerView { streak: THREE.Mesh; ember: THREE.Mesh }
-  function newTracerView(): TracerView {
-    const view = { streak: newTracerQuad(ctx, ctx.vfx.tracerTex), ember: newTracerQuad(ctx, ctx.vfx.emberTex) };
-    // The EFFECTS overlay, not the main scene: the overlay draws after the
-    // SDF composite against the completed depth buffer, so a streak crossing
-    // in front of a body stays visible and one behind it is occluded. In the
-    // main pass the streak writes no depth, and the flesh composite — depth-
-    // testing only against the wall behind — painted straight over it
-    // (owner-caught: tracers clipped by the soldier's body).
-    ctx.vfx.characterEffects.scene.add(view.streak);
-    ctx.vfx.characterEffects.scene.add(view.ember);
-    return view;
-  }
-  /**
-   * Point one pooled view at one live projectile, from an eye at `eye`.
-   * The streak's HEAD sits on the projectile and the smear trails behind it,
-   * so the thing that collides and the thing that glows are the same point;
-   * the ember sits ON the projectile and takes over as the streak collapses.
-   */
-  function placeTracer(v: TracerView, p: Projectile, eye: Vec3): void {
-    const ex = eye[0] - p.pos[0], ey = eye[1] - p.pos[1], ez = eye[2] - p.pos[2];
-    const toEye: Vec3 = [ex, ey, ez];
-    const dist = Math.hypot(ex, ey, ez);
-    const fade = tracerNearFade(dist);
-    const basis = tracerBasis(p.vel, toEye);
-    if (!basis || fade <= 0) { hideTracer(v); return; }
-
-    const len = tracerLength(Math.hypot(p.vel[0], p.vel[1], p.vel[2]));
-    // Near the eye the width and the ember shrink with distance so a pellet
-    // passing the camera stays a glow, never a screen-filling disc. See
-    // tracerNearScale — the fade alone does not cover an ARRIVING shot.
-    const near = tracerNearScale(dist);
-    const wid = p.radius * TRACER.widthScale * near;
-    v.streak.visible = true;
-    (v.streak.material as THREE.MeshBasicMaterial).opacity = fade;
-    setQuadMatrix(ctx, v.streak, basis, len, wid,
-      p.pos[0] - basis.x[0] * len * 0.5,
-      p.pos[1] - basis.x[1] * len * 0.5,
-      p.pos[2] - basis.x[2] * len * 0.5);
-
-    const headOn = tracerHeadOn(p.vel, toEye) * fade;
-    const face = headOn > 0 ? faceEyeBasis(toEye) : null;
-    if (!face) { v.ember.visible = false; return; }
-    const d = p.radius * TRACER.emberScale * near;
-    v.ember.visible = true;
-    (v.ember.material as THREE.MeshBasicMaterial).opacity = headOn;
-    setQuadMatrix(ctx, v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);
-  }
-  function hideTracer(v: TracerView): void {
-    v.streak.visible = false;
-    v.ember.visible = false;
-  }
   ctx.weapon.pelletViews = [];
 
   /** NOTE (determinism stage 1, 2026-09-14): the inline LCG and its `lcgNext` /
@@ -4445,73 +4374,6 @@ async function main() {
    *  Reachable three ways: ?slug URL param at boot, KeyE in-page toggle, or
    *  __sdfGame.fireSlug(). The HUD shows which mode is live. */
   ctx.weapon.slugMode = new URLSearchParams(location.search).has('slug');
-
-  function fire(barrels: 1 | 2): boolean {
-    // SLOT GATE. The grapeshot only speaks while it is the live weapon and the
-    // switch has settled — __sdfGame.fire()/fireSlug() go through here too, so
-    // a driver cannot fire the shotgun through a lit bundle.
-    if (ctx.weapon.slotState.live !== 'shotgun' || !slotReady(ctx.weapon.slotState)) return false;
-    if (!ctx.weapon.gunReady || ctx.weapon.cooldown > 0) return false;
-    if (ctx.weapon.reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
-    if (!ctx.weapon.infiniteAmmo && ctx.weapon.shells <= 0) { startReload(ctx); return false; } // click -> start reloading
-    // Gunfire in a room turns every head in it, cone or no cone. Placed after
-    // the guards on purpose: a dry click or a shot during a reload must not
-    // alert anything, or the flag fires on inputs that made no noise.
-    barrels = (ctx.weapon.infiniteAmmo ? barrels : Math.min(ctx.weapon.shells, barrels)) as 1 | 2;
-    ctx.telemetry.telemetry.event('shot', { kind: ctx.weapon.slugMode ? 'slug' : 'pellet', barrels });
-    ctx.weapon.shotAlert = true;
-    ctx.weapon.cooldown = GRAPESHOT.fireCooldownSec;
-    ctx.weapon.recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
-    if (!ctx.weapon.infiniteAmmo) {
-      ctx.weapon.shells = magazineAfterFire(ctx.weapon.shells, barrels);
-      if (ctx.weapon.shells <= 0) startReload(ctx);
-    }
-    updateHud(ctx);
-    ctx.weapon.flashAge = 0;
-    ctx.weapon.fireAge = 0;
-    ctx.weapon.fireBarrels = barrels;
-    if (ctx.weapon.flashGroup && ctx.weapon.flashMaterial) {
-      // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
-      // identical silhouette.
-      ctx.weapon.flashGroup.rotation.z = rngStreams.fx() * Math.PI * 2;
-      const tex = ctx.weapon.flashTextures[Math.floor(rngStreams.fx() * ctx.weapon.flashTextures.length)];
-      if (tex) { ctx.weapon.flashMaterial.map = tex; ctx.weapon.flashMaterial.needsUpdate = true; }
-    }
-    // Release a few smoke puffs at the muzzle. Both barrels make more smoke.
-    {
-      let released = 0;
-      const want = barrels === 2 ? 5 : 3;
-      for (const puff of ctx.vfx.smokePuffs) {
-        if (released >= want) break;
-        if (puff.age !== Infinity) continue;
-        puff.age = 0;
-        puff.roll = rngStreams.fx() * Math.PI * 2;
-        puff.mesh.position.set(
-          MUZZLE_VIEW.x + (rngStreams.fx() - 0.5) * 0.03,
-          MUZZLE_VIEW.y + (rngStreams.fx() - 0.5) * 0.03,
-          MUZZLE_VIEW.z - 0.02 - rngStreams.fx() * 0.05,
-        );
-        puff.vel.set(
-          (rngStreams.fx() - 0.5) * 0.25,
-          0.10 + rngStreams.fx() * 0.18,
-          -0.55 - rngStreams.fx() * 0.35,
-        );
-        puff.mesh.rotation.z = puff.roll;
-        released++;
-      }
-    }
-    if (ctx.weapon.slugMode) {
-      // One lump down one known ray instead of a pellet volley.
-      ctx.weapon.pellets.push(spawnSlug(muzzleWorld(ctx), convergedDir(ctx, muzzleWorld(ctx))));
-      return true;
-    }
-    const muz = muzzleWorld(ctx);
-    const dir = convergedDir(ctx, muz);
-    // spawnPellets spreads around `dir`; convergence just re-centres the cone.
-    // One `misc` draw per volley is the pellet seed (mulberry32 inside).
-    ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
-    return true;
-  }
 
   // Chunks: detached pieces fly ballistically and render through the shared
   // SDF chunk path — the same pipeline the lab gibs with, capped and
@@ -4840,24 +4702,6 @@ async function main() {
   ctx.bake.views = [];
   ctx.bake.spareViews = [];
   ctx.bake.liveChunks = [];
-  // The bake STATE (seam, bakedChunks, material) is declared near the boot's
-  // light-seed block; here live only the bake/gib/free functions.
-  /** Free a baked piece's mesh and return its view to the ring. The view is
-   *  NOT disposed — the ring recycles it in place via reset(), exactly as
-   *  it always has (the leak gate counts these: bounded by `maxChunks`). */
-  function freeBaked(b: BakedChunk): ChunkGpuView {
-    const i = ctx.bake.chunks.indexOf(b);
-    if (i >= 0) ctx.bake.chunks.splice(i, 1);
-    scene.remove(b.mesh);
-    ctx.boot.deferredApi?.router.unregister(b.mesh);
-    b.mesh.geometry.dispose();
-    if (b.faceMaterial) {
-      const mi = ctx.world.litChunkMaterials.indexOf(b.faceMaterial);
-      if (mi >= 0) ctx.world.litChunkMaterials.splice(mi, 1);
-      b.faceMaterial.dispose(); // borrowed actor atlas is not disposed
-    }
-    return b.view;
-  }
   ctx.bake.jobs = createChunkBakeJobs(() => new Worker(
     new URL('./chunk-bake.worker.ts', import.meta.url), { type: 'module' },
   ));
@@ -4940,9 +4784,6 @@ async function main() {
   ctx.gibs.atlas = null;
   ctx.vfx.spriteBenchGroup = null;
   ctx.vfx.spriteBenchSprites = [];
-  const GIB_ATLAS_URL = '/assets/gibs-placeholder/manifest.json';
-  /** The GENERATED sheet: own render, own resolution, committable. */
-  const GIB_SHEET_URL = '/assets/lab/gore/manifest.json';
   /** Which atlas the bench is showing. `sheet` is the one that ships. */
   ctx.gibs.atlasSource = 'placeholder';
 
@@ -4978,30 +4819,6 @@ async function main() {
   ctx.bake.carvedMaterial = null;
   ctx.bake.carvedBuildMs = 0;
   ctx.bake.carvedWarned = false;
-
-  /**
-   * Spawn one carved mesh piece. The geometry is SHARED from the library and the
-   * material is the library's own instance, so a spawn allocates nothing but the
-   * Mesh and its `Chunk` state — which is why "bake at spawn" costs nothing once
-   * the library exists.
-   */
-  function spawnCarvedPiece(
-    piece: CarvedPiece, origin: Vec3, kind: 'limb' | 'gob' | 'bone',
-    impulseVel: Vec3 | null, impulseDelay: number,
-  ): boolean {
-    if (!ensureCarvedLibrary(ctx) || !ctx.bake.carvedMaterial) return false;
-    const rng = rngStreams.misc;
-    const state = makeChunk(
-      piece.limb as never, origin, [0, 0, 0], piece.radius,
-      piece.longAxis as never, rng, kind,
-    );
-    spawnSpritePiece(ctx.vfx.spritePieces, {
-      state,
-      impulseDelay, impulseVel,
-      render: 'mesh', geometry: piece.geometry, material: ctx.bake.carvedMaterial.material,
-    });
-    return true;
-  }
 
   /**
    * THE OFFLINE GIB ASSET RUNTIME (2026-09-16 offline-gib-assets task 2).
@@ -5081,29 +4898,6 @@ async function main() {
   });
   ctx.gibs.assetRuntime = createGibAssetRuntime();
 
-  /** Load the dev-only atlas on demand. A missing one is reported, not hidden:
-   *  the bench is meaningless without it and a silent empty group reads as a bug
-   *  in the renderer. */
-  async function ensureGibAtlas(which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource): Promise<number> {
-    if (ctx.gibs.atlas && ctx.gibs.atlasSource === which) return ctx.gibs.atlas.frames.length;
-    ctx.gibs.atlas?.dispose();
-    ctx.gibs.atlas = null;
-    ctx.gibs.atlasSource = which;
-    const url = which === 'sheet' ? GIB_SHEET_URL : GIB_ATLAS_URL;
-    try {
-      ctx.gibs.atlas = which === 'sheet' ? await loadGibSheet(url) : await loadGibSpriteAtlas(url);
-      console.log(`[gib-sprites] ${which} atlas: ${ctx.gibs.atlas.frames.length} frames from ${url}`);
-    } catch (err) {
-      console.warn(`[gib-sprites] no ${which} atlas at ${url}`
-        + (which === 'placeholder'
-          ? ' — run scripts/link-dev-assets.sh (the Blood extracts are dev-only placeholders)'
-          : ' — generate it with: npm run blob:shot -- zombie (BLOB_MASK=1) then node scripts/gib-sheet.mjs')
-        + `: ${String(err)}`);
-      return 0;
-    }
-    return ctx.gibs.atlas.frames.length;
-  }
-
   ctx.bake.input = null;
   ctx.bake.lastSwapMs = 0;
   ctx.bake.lastRequestMs = 0;
@@ -5128,7 +4922,7 @@ async function main() {
    *  representation to keep in sync, and closer to the feel). */
   function gibBakedPiece(b: BakedChunk, at: Vec3): void {
     ctx.telemetry.telemetry.event('baked-piece-hit', { chunk: b.id, world: [...at] });
-    ctx.bake.spareViews.push(freeBaked(b));
+    ctx.bake.spareViews.push(freeBaked(ctx, b));
     gibChunkMeat(b.template, at);
   }
   function gibChunkMeat(template: ChunkTemplate, at: Vec3): void {
@@ -5222,7 +5016,7 @@ async function main() {
     if (!recycled && ctx.bake.views.length >= ctx.bake.maxChunks) {
       const oldestBaked = ctx.bake.chunks.shift();
       if (oldestBaked) {
-        recycled = freeBaked(oldestBaked);
+        recycled = freeBaked(ctx, oldestBaked);
       } else {
         const oldest = ctx.bake.liveChunks.shift();
         if (oldest) {
@@ -5405,35 +5199,6 @@ async function main() {
   ctx.dynamite.lastGibParts = [];
   ctx.dynamite.lastGibHeld = 0;
   ctx.dynamite.bloodOrphans = 0;
-
-  /** Release a bundle from the hand along the aim. */
-  function throwBundle(speedMps: number): void {
-    if (!ctx.bake.bundleReady) return;
-    // THE ORIGIN IS READ BEFORE THE REPARENT, and that order is load-bearing:
-    // the held prop's world transform IS the hold pose (it rides `bundleRig`,
-    // inside the camera), while `takePropForThrow` moves the object to the scene
-    // root and leaves its LOCAL transform behind. Reading the position after
-    // that hands the flight the scene ORIGIN — a point inside the level's solid
-    // centre block — so the bundle was born buried in geometry, pushed out
-    // downward, and left sliding along the floor. Caught by the slot gate.
-    const origin = propWorld(ctx, ctx.weapon.heldProp);
-    const prop = takePropForThrow(ctx);
-    // The reticle IS the aim under both schemes (aimDir handles free aim), and
-    // fpv.ts's throwDirection applies the game's upward lob on top — the same
-    // two rules the lab's throw uses, so a bundle thrown here lands where the
-    // lab's does. Deriving yaw/pitch from the aim vector keeps the lob maths
-    // in that one function instead of a second copy here.
-    const d = aimDir(ctx);
-    const yaw = Math.atan2(d[0], -d[2]);
-    const pitch = Math.asin(Math.max(-1, Math.min(1, d[1])));
-    const dir = throwDirection(yaw, pitch);
-    const speed = speedMps * ctx.dynamite.speedScale;
-    const state = makeFlight(origin, [dir[0] * speed, dir[1] * speed, dir[2] * speed], { impactMode: true });
-    ctx.bake.liveBundles.push({ state, prop });
-    prop?.pose({ mode: 'flight', pos: state.pos, spin: state.spin, fuseBurning: true });
-    ctx.dynamite.thrown++;
-    ctx.telemetry.telemetry.event('dynamite-throw', { speedMps: speed, x: origin[0], y: origin[1], z: origin[2] });
-  }
 
   /** The bundle that never left the hand: an overcook, or a fuse that burned
    *  out while held. Detonates AT the player. */
@@ -5890,7 +5655,7 @@ async function main() {
         const o: Vec3 = [wx, wy, wz];
         const vel = launchFor(`carve#${i}`, o);
         const delay = 1 + Math.min(ctx.gibs.staggerFrames - 1, Math.floor(i / perFrameCarve));
-        if (spawnCarvedPiece(p, o, 'limb', vel, delay)) spawned++;
+        if (spawnCarvedPiece(ctx, p, o, 'limb', vel, delay)) spawned++;
       }
     }
     for (let i = 0; i < spawning.length && !carveMode; i++) {
@@ -6083,7 +5848,7 @@ async function main() {
     ctx.dynamite.press = false;
     ctx.dynamite.release = false;
     const sig: CookSignal | null = signal;
-    if (sig?.kind === 'throw') throwBundle(sig.speedMps);
+    if (sig?.kind === 'throw') throwBundle(ctx, sig.speedMps);
     else if (sig?.kind === 'overcook') overcookInHand();
     ctx.dynamite.charge = chargeFraction(ctx.dynamite.now - ctx.vfx.cook.cookStart) * (ctx.vfx.cook.phase === 'cooking' ? 1 : 0);
     reacquireHeldProp(ctx);
@@ -6500,7 +6265,7 @@ async function main() {
   // reference look, for judging the approach.
   ctx.gibs.partsMode = ctx.boot.search.get('gibparts');
   if (ctx.gibs.partsMode === 'sprite' || ctx.gibs.partsMode === 'sheet' || ctx.boot.search.get('gibsprites') === '1') {
-    void ensureGibAtlas(ctx.gibs.partsMode === 'sheet' ? 'sheet' : 'placeholder').then(() => {
+    void ensureGibAtlas(ctx, ctx.gibs.partsMode === 'sheet' ? 'sheet' : 'placeholder').then(() => {
       const n = laySpriteBench(ctx);
       console.log(`[gib-sprites] bench: ${n} billboards in front of the spawn`);
     });
@@ -6521,7 +6286,7 @@ async function main() {
     setTimeout(() => { mark('carve-build-start'); ensureCarvedLibrary(ctx); mark('carve-build-end'); }, 0);
   }
   if (ctx.gibs.renderMode === 'sprite') {
-    void ensureGibAtlas('sheet').then((n) => {
+    void ensureGibAtlas(ctx, 'sheet').then((n) => {
       console.log(`[gib-sprites] blast render mode: sprite, ${n} frames, `
         + `live cap ${ctx.gibs.spriteLiveCap}, rest cap ${ctx.gibs.spriteRestCap}, size x${ctx.gibs.spriteSizeScale}`);
     });
@@ -7426,27 +7191,27 @@ async function main() {
       // pass; the streaks need it whether or not anything was hit.
       const tracerEye = eyeOf(ctx.player.player);
       while (ctx.weapon.soldierPelletViews.length < ctx.weapon.soldierPellets.length) {
-        ctx.weapon.soldierPelletViews.push(newTracerView());
+        ctx.weapon.soldierPelletViews.push(newTracerView(ctx));
       }
       for (let k = 0; k < ctx.weapon.soldierPelletViews.length; k++) {
         const v = ctx.weapon.soldierPelletViews[k]!;
         const p = ctx.weapon.soldierPellets[k];
-        if (p) placeTracer(v, p, tracerEye);
-        else hideTracer(v);
+        if (p) placeTracer(ctx, v, p, tracerEye);
+        else hideTracer(ctx, v);
       }
       // Sync the mesh pool to the sim list — growing it on demand (the
       // pool is ONLY grown here; fire() must not touch meshes because it
       // runs from an evaluate() with no frame in between).
       while (ctx.weapon.pelletViews.length < ctx.weapon.pellets.length) {
-        ctx.weapon.pelletViews.push(newTracerView());
+        ctx.weapon.pelletViews.push(newTracerView(ctx));
       }
       for (let k = 0; k < ctx.weapon.pelletViews.length; k++) {
         const v = ctx.weapon.pelletViews[k]!;
         const p = ctx.weapon.pellets[k];
         // A slug is drawn at its own (larger) calibre — placeTracer reads the
         // projectile's radius, so no branch is needed here.
-        if (p) placeTracer(v, p, tracerEye);
-        else hideTracer(v);
+        if (p) placeTracer(ctx, v, p, tracerEye);
+        else hideTracer(ctx, v);
       }
       // Chunks: ballistic step + world-space field repack, lab contract.
       // With the bake seam on, a chunk that has come to rest is retired
@@ -7653,16 +7418,6 @@ async function main() {
   // -----------------------------------------------------------------------
   mark('api-start');
 
-  /** Where a slug fired RIGHT NOW would hit — the shared predictor.
-   *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
-   *  with the same code the placement gate uses, rather than trusting a
-   *  cluster centre. No state mutated. */
-  function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
-      const origin = muzzleWorld(ctx);
-      const dir = convergedDir(ctx, origin);
-      return { origin, dir, ...traceSlugHitFrom(ctx, origin, dir) };
-  }
-
   /**
    * Aim at a body the ballistic predictor CONFIRMS is hittable.
    *
@@ -7715,7 +7470,7 @@ async function main() {
       ctx.player.player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
       // Scoped diagnostics settle the real viewmodel after this orientation
       // and verify the predictor there; its muzzle transform is stale here.
-      if (actorId !== undefined || predictSlugHitNow().actorId >= 0) return true;
+      if (actorId !== undefined || predictSlugHitNow(ctx).actorId >= 0) return true;
     }
     ctx.player.player.yaw = yaw0;
     ctx.player.player.pitch = pitch0;
@@ -7912,11 +7667,11 @@ function performBenchAction(a: BenchAction): void {
     case 'freeze': ctx.demo.wanderFrozen = a.on; break;
     case 'look': ctx.player.player.yaw = a.yaw; ctx.player.player.pitch = a.pitch; break;
     case 'aimSurface': aimAtNearestSurface(); break;
-    case 'fire': fire(a.barrels); break;
+    case 'fire': fire(ctx, a.barrels); break;
     case 'fireSlug': {
       const keep = ctx.weapon.slugMode;
       ctx.weapon.slugMode = true;
-      try { fire(1); } finally { ctx.weapon.slugMode = keep; }
+      try { fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; }
       break;
     }
     // RECORDED INPUT (stage 3): stage the frame; `tick` consumes it through
@@ -8240,7 +7995,7 @@ function performBenchAction(a: BenchAction): void {
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
     // the headless driver can shoot; aim with setPose(yaw, pitch).
     // ---------------------------------------------------------------
-    fire: (barrels: 1 | 2 = 1) => fire(barrels),
+    fire: (barrels: 1 | 2 = 1) => fire(ctx, barrels),
     setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(ctx); return ctx.player.freeAimOn; },
     setInfiniteAmmo: (on: boolean) => {
       ctx.weapon.infiniteAmmo = on;
@@ -8267,13 +8022,13 @@ function performBenchAction(a: BenchAction): void {
     },
     setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(ctx); },
     setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(ctx); },
-    fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(1); } finally { ctx.weapon.slugMode = keep; } },
+    fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; } },
     /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
      *  computed by exactly the code fire() uses (muzzleWorld + converged
      *  dir) against each actor's CURRENT posed field. No state mutated.
      *  Diff against debugWounds() after firing to assert the crater landed
      *  where the ray struck. */
-    predictSlugHit: () => predictSlugHitNow(),
+    predictSlugHit: () => predictSlugHitNow(ctx),
     /** LEVEL surfaces reading the probes (P3/P4 step 3): weight 0 = the
      *  pre-probe level (hemisphere at full, nodes add nothing); gain -1 =
      *  each room's hemisphere-matched level. The hemisphere fades with the
@@ -8491,7 +8246,7 @@ function performBenchAction(a: BenchAction): void {
       ctx.gibs.renderMode = mode === 'sprite' ? 'sprite'
         : mode === 'carve' ? 'carve' : mode === 'assets' ? 'assets' : 'march';
       if (ctx.gibs.renderMode === 'carve') ensureCarvedLibrary(ctx);
-      if (ctx.gibs.renderMode === 'sprite') await ensureGibAtlas('sheet');
+      if (ctx.gibs.renderMode === 'sprite') await ensureGibAtlas(ctx, 'sheet');
       // The asset path is a fetch+decode; await it so a caller can tell "mode
       // on" from "mode on and armed" (the same contract as the sprite atlas).
       if (ctx.gibs.renderMode === 'assets') await ensureGibAssets(ctx);
@@ -8510,7 +8265,7 @@ function performBenchAction(a: BenchAction): void {
     /** LAY THE SPRITE GIB BENCH in front of the player (loads the dev-only atlas
      *  on first use). Returns the number of billboards. */
     gibSpriteBench: async (which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource) => {
-      await ensureGibAtlas(which);
+      await ensureGibAtlas(ctx, which);
       return laySpriteBench(ctx);
     },
     spawnDebugCharacter: (name: string, start?: Vec3) => {
