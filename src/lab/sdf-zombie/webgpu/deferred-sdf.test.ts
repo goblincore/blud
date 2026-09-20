@@ -22,6 +22,7 @@ import {
 } from './deferred-sdf';
 import {
   MARCH_BODY, MARCH_BODY_PARAMS, MARCH_BODY_TRACE, MARCH_BODY_SURFACE_PREP, MARCH_BODY_LIGHT,
+  MARCH_IN_PACK, MARCH_IN_STRUCT,
 } from './march.wgsl';
 import { SURFACE_CLASS_FLESH, SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
 
@@ -236,8 +237,10 @@ describe('surface output assembly', () => {
 
 describe('legacy expansion preserved', () => {
   it('reassembles MARCH_BODY from the sections in order', () => {
+    // Phase-2 task 2: the MarchIn pack (first body statement) and the struct's
+    // trailing declaration joined the assembly; sections unchanged.
     expect(MARCH_BODY).toBe(
-      `fn marchBody${MARCH_BODY_PARAMS}${MARCH_BODY_TRACE}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}`,
+      `fn marchBody${MARCH_BODY_PARAMS}${MARCH_IN_PACK}${MARCH_BODY_TRACE}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}${MARCH_IN_STRUCT}`,
     );
   });
 

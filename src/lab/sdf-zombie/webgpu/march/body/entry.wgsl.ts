@@ -3,6 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): marchBody entry and the refine pass.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
+import { MARCH_IN_PACK, MARCH_IN_STRUCT } from './io.wgsl';
 import { MARCH_BODY_LIGHT } from './light.wgsl';
 import { MARCH_BODY_PARAMS } from './params.wgsl';
 import { MARCH_BODY_SURFACE_PREP } from './surface.wgsl';
@@ -13,8 +14,14 @@ import { MARCH_BODY_TRACE, MARCH_TRACE_POST, MARCH_TRACE_SETUP } from './trace.w
  * above; the text is the pre-split shader with the wet/glow hoist described
  * at MARCH_BODY_PARAMS, which is arithmetic-neutral. Every existing variant
  * (body, hands, chunks, hull-refine) keeps binding against exactly this.
+ *
+ * Phase-2 task 2 adds MARCH_IN_PACK — the FIRST body statement, packing the
+ * value parameters into MarchIn (generated, so still in parameter order) —
+ * and MARCH_IN_STRUCT, the struct's trailing declaration at the very end of
+ * the string. The body itself still reads the positional names; the struct
+ * is deliberately unused until task 3 hands `m` to the trace.
  */
-export const MARCH_BODY = `fn marchBody${MARCH_BODY_PARAMS}${MARCH_BODY_TRACE}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}`;
+export const MARCH_BODY = `fn marchBody${MARCH_BODY_PARAMS}${MARCH_IN_PACK}${MARCH_BODY_TRACE}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}${MARCH_IN_STRUCT}`;
 
 /**
  * RUN 5 (spec docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md §4).
@@ -103,4 +110,4 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
 export const REFINE_PARAMS = MARCH_BODY_PARAMS.slice(0, MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, '') +
   `,\n  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>,\n  normalTex: texture_2d<f32>\n) -> vec4<f32> {\n`;
 
-export const REFINE_BODY = `fn refineBody${REFINE_PARAMS}${MARCH_TRACE_SETUP}${REFINE_LOOP}${MARCH_TRACE_POST}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}`;
+export const REFINE_BODY = `fn refineBody${REFINE_PARAMS}${MARCH_IN_PACK}${MARCH_TRACE_SETUP}${REFINE_LOOP}${MARCH_TRACE_POST}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}${MARCH_IN_STRUCT}`;

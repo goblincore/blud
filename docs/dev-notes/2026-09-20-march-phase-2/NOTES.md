@@ -13,10 +13,86 @@ headless capture running**; every capture sequential, one GPU.
 | task | pixel room1 | pixel room2 | warm drawOnce (ms) | cold total (s) | MARCH_BODY | REFINE_BODY |
 | --- | --- | --- | --- | --- | --- | --- |
 | baseline (task 1) | `8f2b74e7…` / wounded `1381a866…`, repeat= | `35b6d561…` | 1251 / 1226 / 1244 (3 runs) | **145.0** (1×141 s body; see protocol note) | 123 831 | 113 194 |
+| task 2 (MarchIn) | `8f2b74e7…` / wounded `1381a866…`, repeat= | `35b6d561…` | 1368 (1 clean run; 4045 on a hot-GPU run — see below) | not re-measured (no boot-path change; see note) | 128 425 | 117 788 |
 
 Pixel hashes are sha1 of the exact float readback (`scripts/march-hash.mjs`,
 full 40-hex values in "Step 1" below). `MARCH_BODY`/`REFINE_BODY` are
 string-`length` in chars of the joined entry points (raw numbers in "Step 4").
+
+---
+
+## Task 2 — `MarchIn` (2026-09-20, worktree `2026-09-20-march-p2-task2`)
+
+**What landed.** New `webgpu/march/body/io.wgsl.ts`: `struct MarchIn` (86
+fields = every VALUE parameter of `MARCH_BODY_PARAMS`, in list order) plus
+`MARCH_IN_PACK`, the generated first statement of BOTH entries
+(`var m: MarchIn = MarchIn(worldPos, camPos, …);`). 13 of the 99 parameters
+stay positional FOREVER: 9 textures + 4 storage pointers — the WGSL spec
+forbids pointer/texture/sampler anywhere inside a struct (gpuweb WGSL,
+"Structure Types"). `MARCH_IN_PACK` is GENERATED from `MARCH_BODY_PARAMS`
+(comment-stripped `name: type` parse, handle heads filtered), so it cannot
+drift out of parameter order; `io.wgsl.test.ts` pins struct ⇄ pack ⇄ params
+(names AND types AND order) and the exclusion list. The body text still reads
+the positional names — the struct is unused until task 3, by design. Entry
+assembly gains `${MARCH_IN_PACK}` after the signature and `${MARCH_IN_STRUCT}`
+at the end of both `MARCH_BODY` and `REFINE_BODY`; `MARCH_IN_STRUCT` follows
+the trailing-declaration pattern (`SDF_SURFACE_STATE`/`MARCH_NORMAL_OUT`) with
+a tiny `marchIoAnchor` fn so the chunk is `^fn`-parseable standalone.
+
+**Gates.**
+- Pixel: BOTH rooms bit-identical to baseline (row above; full values below).
+  First gated on an accidentally-truncated 2-field variant (bisect artifact,
+  since overwritten) — final 86-field text re-gated after warm-up, identical.
+- `npx tsc --noEmit` clean; `npm test -- march` = **1 failed \| 269 passed
+  (270)**, failure = `march-step-soundness` (main's known set).
+- Golden snapshot updated in this commit: new exports `MARCH_IN_PACK` +
+  `MARCH_IN_STRUCT`, new hashes for `MARCH_BODY`/`REFINE_BODY`,
+  `__export_names` moves — nothing else in the snapshot changed.
+
+**THE GATE TRAP — read before task 3 (cost half a day).** After ANY march
+shader text change that survives into MSL, the FIRST gate run fails with
+`occupancy never went live (renderer backlog?)` on EVERY retry: the first boot
+pays the machine-global-cache cold compile (~55 s at stage range; ~196–445 s
+at the closest rung d=0.6 where the refine/hull programs join), and the gate's
+~7.5 s occupancy wait kills Chrome before the compile ever finishes, so the
+cache never warms. The shader is FINE — `getCompilationInfo()` is empty,
+pipelines create clean, three logs nothing (a dead struct/fn added at module
+scope is DCE'd pre-MSL and gates warm — that variant passes immediately and
+taught us nothing about the pack). **Procedure: run ONE warm-up boot staged at
+d=0.6, long-poll `__sdfGame.occupancy()` until live (allow ~8 min), THEN run
+the gate** — it will be bit-identical iff the change is behavior-neutral.
+
+**Warm census.** 4 runs (`census` stdout; JSONs in /tmp, table below):
+run1 drawOnce 4045 / warm 4739 (GPU hot straight off the gate+warm-up
+sequence — discard), runs 2–3 warm 1895 / 5169, run4 CLEAN: **drawOnce 1368,
+asyncFirst 339, entries 196, bootWall 3227, warmMs 1891** — within task 1's
+band (drawOnce 1226–1251, asyncFirst 326–358, entries 196–197); the +~120 ms
+on drawOnce is run noise, no regression signal. Task 2 cannot move boot: the
+pack is dead code by task design.
+
+**Cold total:** not re-measured — the boot path is unchanged (same pipelines,
+same order; only entry-source text differs), so the task-1 145 s number stands
+structurally. The one-off cost of THIS text change (one machine-global cache
+invalidation, ~4–7 min across programs) was paid during the warm-up boot
+above and does not recur.
+
+Sizes (chars): `MARCH_BODY` 123 831 → **128 425** (+4 594 = pack 1 524 +
+struct 3 070 + anchor fn ~90, counted with comments); `REFINE_BODY`
+113 194 → **117 788** (+4 594, same chunks). `MARCH_BODY_PARAMS` unchanged
+6 925 (signature untouched — three drives it positionally).
+
+Pixel gate full lines (final text, after warm-up):
+
+```
+{"room1":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-repeat":"8f2b74e71ff18dd04a99c05fe19392b96dd80c9d","room1-wounded":"1381a866703b827745486a1062240a46bee5c73f"}
+{"room2":"35b6d5619f7f85a52e852056a09f6c0fbfacf2c5","room2-repeat":"35b6d5619f7f85a52e852056a09f6c0fbfacf2c5"}
+```
+
+For TASKS.md: task 2 DONE — `MarchIn` lands with the generated pack in both
+entries, both rooms bit-identical, golden updated in-commit. **Tasks 3–6:
+budget one warm-up boot (~8 min) before the first pixel-gate run of each
+task** — the gate cannot see through a cold compile, and no shader-text change
+that alters the MSL can avoid it.
 
 ---
 
