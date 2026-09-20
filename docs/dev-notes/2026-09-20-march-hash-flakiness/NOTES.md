@@ -61,3 +61,24 @@ gate: a green run proves the pipeline renders, a red one proves nothing. Phase 2
 of the march refactor is gated on this hash, so fixing it is TASK 0 of that plan
 (`docs/superpowers/plans/2026-09-20-march-phase-2.md`). Until then, behaviour
 claims for march work need another instrument (room2, or a per-uniform dump).
+
+## Later the same day: 10/10 canonical on an idle machine
+
+After the investigation above, ten consecutive runs on HEAD were canonical:
+five with `MARCH_HASH_TILES=0` and five without, interleaved, in one session,
+with nothing else running. Also ruled out in that session:
+
+- **`?seed=`** — the page picks a random demo seed when the query is absent
+  (`Date.now() & 0x7fffffff`, game-main ~437), which looked like the obvious
+  culprit. It is not: `seed=1`, `seed=2`, `seed=7` and a no-op `nonce=` all give
+  the SAME canonical hash, so the seeded streams do not reach the staged frame.
+- **`MARCH_HASH_TILES=0` vs unset** — identical staging (the script only calls
+  `setTiles` when `TILES === '1'`); the variable changes the pin CHECK, not the
+  scene.
+
+So the earlier non-canonical runs were not caused by the commit, the seed, or
+the tiles flag. What they DID share is timing: they were taken immediately after
+a full `vitest` run, while the machine was still busy. That reinstates *load*
+as the correlate — not "another capture stole the GPU" as first claimed, but
+"under load the capture reads a frame the staging has not actually settled".
+That is the hypothesis the fix task tests; it is a hypothesis, not a conclusion.
