@@ -171,26 +171,6 @@ export function createLeftoverSeams(ctx: GameContext) {
         woundCavity: e ? e.wound.cavity === true : null,
       };
     }),
-    /** Live free-aim / bob knobs. Every one of these is a feel number that has
-     *  to be played rather than reasoned about:
-     *    __sdfGame.setAimTuning({ deadzoneX: 0.5, turnRateX: 1.4 })
-     *    __sdfGame.setAimTuning({ amountX: 0.03, amountY: 0.02 })   // bob
-     */
-    setAimTuning(t: Partial<Record<string, number>>) {
-      for (const [k, v] of Object.entries(t)) {
-        if (v === undefined) continue;
-        if (k in FREE_AIM) (FREE_AIM as unknown as Record<string, number>)[k] = v;
-        else if (k in BOB) (BOB as unknown as Record<string, number>)[k] = v;
-      }
-      return { ...FREE_AIM, bob: { ...BOB } };
-    },
-    /** The reload's total length, seconds. Exposed so hand-stepping gates can
-     *  DERIVE their wait budget instead of hardcoding a tick count: the shorty
-     *  gate carried `57 ticks` against a 0.95 s reload, was still carrying it
-     *  when the reload became 1.05 s, and failed a correct build the moment it
-     *  became 1.30 s. A gate that has to be edited every time a constant moves
-     *  will eventually be edited wrongly, or not at all. */
-    get reloadTotalSec() { return RELOAD.totalSec; },
     setBlastDistortStrength: (v: number) => {
       ctx.vfx.blastDistortStrength = Math.max(0, Math.min(4, Number(v) || 0));
       ctx.render.postAa.setBlastDistortStrength(ctx.vfx.blastDistortStrength);

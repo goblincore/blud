@@ -7,9 +7,10 @@
 
 import type { GameContext } from './game-context';
 import { updateHud } from './game-panels-leaves';
-import { MAGAZINE_CAPACITY } from './game-viewmodel';
+import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
 import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-weapon-leaves';
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
+import { BOB, FREE_AIM } from './free-aim';
 import { predictSlugHitNow } from './game-world-leaves';
 
 export function createWeaponAimSeams(ctx: GameContext) {
@@ -78,6 +79,26 @@ export function createWeaponAimSeams(ctx: GameContext) {
       ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, slot);
       updateHud(ctx);
       return { ok: true, live: ctx.weapon.slotState.live, target: ctx.weapon.slotState.target, phase: ctx.weapon.slotState.phase };
-    }
+    },
+    /** Live free-aim / bob knobs. Every one of these is a feel number that has
+     *  to be played rather than reasoned about:
+     *    __sdfGame.setAimTuning({ deadzoneX: 0.5, turnRateX: 1.4 })
+     *    __sdfGame.setAimTuning({ amountX: 0.03, amountY: 0.02 })   // bob
+     */
+    setAimTuning(t: Partial<Record<string, number>>) {
+      for (const [k, v] of Object.entries(t)) {
+        if (v === undefined) continue;
+        if (k in FREE_AIM) (FREE_AIM as unknown as Record<string, number>)[k] = v;
+        else if (k in BOB) (BOB as unknown as Record<string, number>)[k] = v;
+      }
+      return { ...FREE_AIM, bob: { ...BOB } };
+    },
+    /** The reload's total length, seconds. Exposed so hand-stepping gates can
+     *  DERIVE their wait budget instead of hardcoding a tick count: the shorty
+     *  gate carried `57 ticks` against a 0.95 s reload, was still carrying it
+     *  when the reload became 1.05 s, and failed a correct build the moment it
+     *  became 1.30 s. A gate that has to be edited every time a constant moves
+     *  will eventually be edited wrongly, or not at all. */
+    get reloadTotalSec() { return RELOAD.totalSec; },
   };
 }
