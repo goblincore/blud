@@ -109,28 +109,6 @@ export function createLeftoverSeams(ctx: GameContext) {
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
       return { w, h, rgba32f: btoa(binary) };
     },
-    /** Pin the render-side subsampling clocks the frame hash needs constant
-     *  (actor animation phase, gather frameSeed). See the demoHold declaration.
-     *  OFF by default and inert in normal play. */
-    setDemoHold: (on: boolean) => {
-      ctx.demo.hold = on;
-      ctx.demo.seedBase = ctx.probes.frame;
-      // VHS's time hashes come off `performance.now()` 60/24/chromaBurst times a
-      // second, so pin them with the hold. Its temporal blend is NOT pinned by
-      // this and cannot be — see post-aa setTimeFrozen: that is exactly why the
-      // frame hash measures the march target and not the presented image.
-      ctx.render.postAa.setTimeFrozen(on);
-      // NOTE, and it is a lesson worth keeping: an earlier cut RESET
-      // `probeFrame` here to re-anchor the gather's per-dispatch seed phase. It
-      // was removed because (a) the seed is now PINNED for a recording (see the
-      // frameSeed site), so the phase no longer exists to anchor, and (b) the
-      // reset silently corrupted `seedIdle` — a diagnostic computed as
-      // `probeFrame - demoSeedBase` across a reset boundary, which made it
-      // NEGATIVE (-34, -37, -1 in the stored runs). A diagnostic that can read
-      // as nonsense is worse than no diagnostic: it was briefly used as
-      // evidence. Do not reset a running counter to fix a phase problem.
-      return ctx.demo.hold;
-    },
     brains: () => ctx.world.actors.map(a => {
       const b = a.mind().debug();
       const p = a.pose().pos;
