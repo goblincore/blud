@@ -5,11 +5,12 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import type { GameContext } from './game-context';
-import * as THREE from 'three/webgpu'
-import { rngStreams } from './rng'
-import { type TracerBasis } from './tracer-sprite'
 
+import { type GameContext } from './game-context';
+import * as THREE from 'three/webgpu';
+import { rngStreams } from './rng';
+import { type TracerBasis } from './tracer-sprite';
+import { type Frustum } from './free-aim';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -98,4 +99,19 @@ export function stepBursts(ctx: GameContext, dt: number): void {
     s.smoke.scale.setScalar(s.h * 2.6 * grow);
     s.smoke.position.y += dt * s.h * 0.55;
   }
+}
+
+/** The live frustum half-angle tangents. ONE definition: the barrel angle
+ *  (weaponAngles, in the frame loop) and the shot ray (aimDir, right below)
+ *  must not be able to disagree about where the reticle is -- that
+ *  disagreement is exactly the class of bug this whole pass exists to fix,
+ *  and duplicating this formula is how it would come back the first time
+ *  someone tweens camera.fov for ADS or recoil.
+ *
+ *  Named aimFrustum, not frustum -- that name is already the module-scope
+ *  THREE.Frustum used for on-screen-body culling, a different concept
+ *  entirely (a view volume for culling vs. these bare half-angle tangents). */
+export function aimFrustum(ctx: GameContext): Frustum {
+  const tanV = Math.tan((ctx.boot.handle.camera.fov * Math.PI) / 360);
+  return { tanV, tanH: tanV * ctx.boot.handle.camera.aspect };
 }

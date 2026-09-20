@@ -329,55 +329,69 @@ export function extractLeaves(
 }
 
 /** Append a freshly generated module onto an existing one: one header, one set
- *  of imports (named imports from the same specifier merged), bodies in order.
- *  Wave 1 spawned game-render-leaves2 / game-world-leaves3 only because the
- *  writer could not do this. */
+ *  of imports (merged per specifier), bodies in order. Wave 1 spawned
+ *  game-render-leaves2 / game-world-leaves3 only because the writer could not do
+ *  this. Imports are read with the PARSER, not a line pattern: the wave-1
+ *  modules have imports with no trailing semicolon and multi-line named lists,
+ *  which a pattern silently left in the body and then duplicated. */
 export function mergeModule(existing: string, generated: string): string {
-  const split = (src: string): { imports: string[]; body: string } => {
-    const lines = src.split('\n');
-    const imports: string[] = [];
-    const keep: string[] = [];
-    for (const l of lines) {
-      if (/^import .*;$/.test(l)) imports.push(l); else keep.push(l);
+  interface Spec { star?: string; def?: string; named: Array<{ name: string; typeOnly: boolean }> }
+  const specs = new Map<string, Spec>();
+  const order: string[] = [];
+  const parse = (src: string): { header: string[]; body: string } => {
+    const sf = ts.createSourceFile('m.ts', src, ts.ScriptTarget.ES2022, true);
+    const cuts: Array<{ start: number; end: number }> = [];
+    for (const st of sf.statements) {
+      if (!ts.isImportDeclaration(st)) continue;
+      // getStart, NOT getFullStart: the leading trivia of the first import is
+      // the module's header comment, and cutting it loses the header.
+      cuts.push({ start: st.getStart(sf), end: st.getEnd() });
+      const mod = (st.moduleSpecifier as ts.StringLiteral).text;
+      if (!specs.has(mod)) { specs.set(mod, { named: [] }); order.push(mod); }
+      const e = specs.get(mod)!;
+      const clause = st.importClause;
+      if (!clause) continue;
+      const blanket = clause.isTypeOnly;
+      if (clause.name) e.def = clause.name.text;
+      const b = clause.namedBindings;
+      if (b && ts.isNamespaceImport(b)) e.star = b.name.text;
+      if (b && ts.isNamedImports(b)) {
+        for (const el of b.elements) {
+          const name = el.propertyName ? `${el.propertyName.text} as ${el.name.text}` : el.name.text;
+          const typeOnly = blanket || el.isTypeOnly;
+          if (!e.named.some(n => n.name === name)) e.named.push({ name, typeOnly });
+        }
+      }
     }
-    return { imports, body: keep.join('\n') };
+    let body = src;
+    for (const c of [...cuts].sort((a, b2) => b2.start - a.start)) body = body.slice(0, c.start) + body.slice(c.end);
+    const lines = body.split('\n').filter((l, i, arr) => !(l.trim() === '' && arr[i - 1]?.trim() === ''));
+    const end2 = lines.findIndex(l => l.trim() && !l.startsWith('//'));
+    return {
+      header: lines.slice(0, end2 < 0 ? lines.length : end2),
+      body: lines.slice(end2 < 0 ? lines.length : end2).join('\n').replace(/^\s+/, '').replace(/\s+$/, ''),
+    };
   };
-  const a = split(existing);
-  const b = split(generated);
+  const a = parse(existing);
+  const b = parse(generated);
 
-  // Merge named imports per specifier; keep everything else verbatim, in order.
-  const named = new Map<string, { typeOnly: boolean; names: string[] }>();
-  const other: string[] = [];
-  for (const line of [...a.imports, ...b.imports]) {
-    const m = /^import (type )?\{ (.*) \} from '(.*)';$/.exec(line);
-    if (!m) { if (!other.includes(line)) other.push(line); continue; }
-    const key = `${m[1] ? 'type ' : ''}${m[3]}`;
-    const e = named.get(key) ?? { typeOnly: !!m[1], names: [] };
-    for (const n of m[2].split(',').map(x => x.trim()).filter(Boolean)) if (!e.names.includes(n)) e.names.push(n);
-    named.set(key, e);
-  }
-  const importLines = [
-    ...[...named].map(([key, e]) =>
-      `import ${e.typeOnly ? 'type ' : ''}{ ${e.names.join(', ')} } from '${key.replace(/^type /, '')}';`),
-    ...other,
-  ];
+  // Skip a body already present: re-running a wave must be idempotent.
+  const fnName = /export (?:async )?function (\w+)/.exec(b.body)?.[1];
+  if (fnName && new RegExp(`export (?:async )?function ${fnName}\\b`).test(a.body)) return existing;
 
-  // The generated body carries its own header comment; drop it on append.
-  const bodyB = b.body.replace(/^(\/\/[^\n]*\n)+/, '');
-  const head = a.body.replace(/\s+$/, '');
-  const tail = bodyB.replace(/^\s+/, '');
-  // Skip a body that is already present (re-running a wave must be idempotent).
-  const fnName = /export (?:async )?function (\w+)/.exec(tail)?.[1];
-  if (fnName && new RegExp(`export (?:async )?function ${fnName}\\b`).test(head)) return existing;
+  const importLines = order.map(mod => {
+    const e = specs.get(mod)!;
+    if (e.star) return `import * as ${e.star} from '${mod}';`;
+    const parts = [
+      ...(e.def ? [e.def] : []),
+      ...(e.named.length
+        ? [`{ ${e.named.map(n => (n.typeOnly ? `type ${n.name}` : n.name)).join(', ')} }`]
+        : []),
+    ];
+    return `import ${parts.join(', ')} from '${mod}';`;
+  });
 
-  const headLines = head.split('\n');
-  const firstImport = importLines.length;
-  void firstImport;
-  // Rebuild: header comment of the EXISTING module, then merged imports, then bodies.
-  const headerEnd = headLines.findIndex(l => l.trim() && !l.startsWith('//'));
-  const header = headLines.slice(0, headerEnd < 0 ? headLines.length : headerEnd);
-  const rest = headLines.slice(headerEnd < 0 ? headLines.length : headerEnd).join('\n').replace(/^\s+/, '');
-  return [...header, '', ...importLines, '', rest, '', tail, ''].join('\n');
+  return [...a.header, '', ...importLines, '', a.body, '', b.body, ''].join('\n');
 }
 
 if (process.argv[1]?.endsWith('extract-leaf.ts')) {

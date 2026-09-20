@@ -269,6 +269,17 @@ import { setLoader } from './game-boot-leaves';
 import { registerBleed, stepGutRopes } from './game-world-leaves3';
 import { demoRecordStop } from './game-demo-leaves2';
 import { createLeftoverSeams } from './game-seams-leftover';
+import { ensureImpactSplashLayer } from './game-vfx-leaves';
+import { laySpriteBench, sizeSdfLayer } from './game-render-leaves';
+import { withCtx } from './game-context';
+import { crowdTypeFor } from './game-crowd-leaves';
+import { pushProbeWeight } from './game-probes-leaves';
+import { aimFrustum } from './game-weapon-leaves';
+import { takePropForThrow } from './game-dynamite-leaves';
+import { bodiesOnScreen, traceSlugHitFrom } from './game-world-leaves';
+import { captureTelemetryScene } from './game-telemetry-leaves';
+import { demoScenarioOf } from './game-demo-leaves';
+import { awaitBakes, registerLitChunkMaterial } from './game-bake-leaves';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -1268,47 +1279,14 @@ async function main() {
    *  gets no pre-birth streak on its first drawn frame. Keyed by the owning
    *  list AND id (the sprite and chunk id sequences are independent). */
   ctx.gibs.blurPrevKeys = new Set<string>();
-
-  /** Create the splash layer on first enable only, sharing the flesh/goo
-   *  light uniform NODES so it is lit by the same rig. Returns silently if
-   *  there is no actor view yet (the same pre-condition the goo layer has). */
-  function ensureImpactSplashLayer(): void {
-    if (ctx.panels.impactSplashLayer) return;
-    const v = ctx.world.actors[0]?.view;
-    if (!v) return;
-    ctx.panels.impactSplashLayer = createImpactSplashLayer({
-      rig: {
-        lightDir: v.uniforms.lightDir,
-        keyColor: v.uniforms.keyColor,
-        lightCfg: v.uniforms.lightCfg,
-      },
-    });
-    scene.add(ctx.panels.impactSplashLayer.object);
-  }
-
-  function sizeSdfLayer() {
-    const s = ctx.render.postAa.contentSize;
-    ctx.render.sdfLayer.setSize(s.width, s.height);
-    // The deferred layer tracks the same capped buffer (post-aa hands it the
-    // same capture target as a sink).
-    ctx.boot.deferredApi?.setSize(s.width, s.height);
-    ctx.render.sdfLayer.setConeGeometry(camera.fov, ctx.render.sdfLayer.targetSize.height);
-    // Density follows the SDF layer at GOO_TUNING.densityScale. Called from
-    // here rather than a separate resize listener (lab-main's shape) because
-    // ADAPTIVE RESOLUTION moves the SDF target at runtime through
-    // applySdfScale -> sizeSdfLayer: a listener would never fire and the goo
-    // would keep splatting into a stale-sized field.
-    const t = ctx.render.sdfLayer.targetSize;
-    ctx.goo.layer?.setSize(t.width, t.height);
-  }
   ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
-  sizeSdfLayer();
-  window.addEventListener('resize', sizeSdfLayer);
+  sizeSdfLayer(ctx);
+  window.addEventListener('resize', withCtx(ctx, sizeSdfLayer));
   function applySdfScale(v: number) {
     ctx.render.sdfScale = Math.min(1, Math.max(0.2, v));
     ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
     ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
-    sizeSdfLayer();
+    sizeSdfLayer(ctx);
     // The AA footprint (aaCfg.x) is ONE PIXEL at the current SDF pass height;
     // a rung change moved that height, so refresh every live view (perf round
     // 2 task 6). Only called post-boot (tickAdaptive / the setSdfScale seam),
@@ -2978,51 +2956,6 @@ async function main() {
     for (const nm of ctx.world.levelNodeMaterials) nm.needsUpdate = true;
   }
 
-  /** Lazily create the ONE CrowdType a character registry name draws through
-   *  (Task 5's createCrowdType). The material binds the same start/early-out
-   *  sources as a per-body view (temporal start, prev, shell, depthPre,
-   *  probeDyn) so a lone instance stays bit-identical; the per-TYPE uniform
-   *  block is seeded by copyUniformValues from the first attached view.
-   *  `?crowd=0` never calls this. */
-  function crowdTypeFor(name: string, roomId: number): CrowdType {
-    // Keyed by character AND spawn room. The per-TYPE uniform block is seeded
-    // from the first attached view, and that block carries the ROOM's
-    // lighting environment (boxMin/boxMax, the six wall colours, the room
-    // probe texture, probeMin/probeCfg) which spawnEnemy stamps per actor for
-    // its spawn room and never changes afterwards. One type spanning rooms
-    // lit every instance with the first room's walls and probes — the pale,
-    // blotchy zombie (2026-09-14). A type per (character, room) keeps the
-    // block honest; rooms are frustum-culled, so few types draw per frame.
-    const key = `${name}@${roomId}`;
-    const existing = ctx.crowd.types.get(key);
-    if (existing) return existing;
-    const t = createCrowdType(
-      ctx.boot.handle.renderer, key, defaultUniforms(blankFaceTexture()),
-      ctx.render.sdfLayer.maxWidth, ctx.render.sdfLayer.maxHeight,
-      {
-        occluder: ctx.render.sdfLayer.occluder,
-        shell: {
-          entry: ctx.render.sdfLayer.shellEntry.texture,
-          exit: ctx.render.sdfLayer.shellExit.texture,
-          uniforms: ctx.render.sdfLayer.shellEntry.uniforms,
-        },
-        prev: ctx.render.sdfLayer.prev,
-        depthPre: ctx.render.sdfLayer.depthPre,
-        lastFrame: ctx.render.sdfLayer.lastFrame,
-        probeDyn: ctx.probes.gather ? { node: ctx.probes.gather.probeDynNode } : undefined,
-      },
-      { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry },
-    );
-    t.mesh.layers.set(SDF_LAYER);
-    t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);
-    scene.add(t.mesh);
-    scene.add(t.depthPreMesh);
-    ctx.boot.deferredApi?.router.register(t.mesh, 'sdf');
-    ctx.boot.deferredApi?.router.register(t.depthPreMesh, 'exclude');
-    ctx.crowd.types.set(key, t);
-    return t;
-  }
-
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
     const enc = enclosureOf(room.name)!;
     const roomFurniture = FURNITURE
@@ -3061,7 +2994,7 @@ async function main() {
     // below only marks the slot and stores the view.
     let crowdAttach: { type: CrowdType; slot: number } | null = null;
     if (ctx.crowd.on) {
-      const t = crowdTypeFor(name, room.id);
+      const t = crowdTypeFor(ctx, name, room.id);
       const slot = t.reserveSlot();
       if (slot < 0) console.warn('[crowd] type full', name);
       else crowdAttach = { type: t, slot };
@@ -3398,15 +3331,6 @@ async function main() {
    * copy of the same block.
    */
   ctx.world.litChunkMaterials = [];
-
-  /** Register a material instance to be lit by the frame's beam. Every
-   *  `createBakedChunkMaterial` that is DRAWN must go through this — an
-   *  unregistered instance is not merely dimmer, it is lit by a lamp that does
-   *  not exist (see the block above). */
-  function registerLitChunkMaterial<T extends BakedChunkMaterial>(m: T): T {
-    ctx.world.litChunkMaterials.push(m);
-    return m;
-  }
   ctx.bake.seed = null;
   ctx.bake.totalBakes = 0;
   ctx.bake.lastBakeMs = 0;
@@ -3523,11 +3447,6 @@ async function main() {
     if (ctx.render.sdfLayer.shellEnabled) {
       ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf() });
     }
-  }
-
-  function pushProbeWeight(v: number) {
-    ctx.probes.weight = Math.min(1, Math.max(0, v));
-    for (const a of ctx.world.actors) a.view.uniforms.bounceCfg.value.x = ctx.probes.weight;
   }
 
   /** Ground radius the crowd separates zombies at — the same 0.35 m the
@@ -3673,11 +3592,11 @@ async function main() {
       }
       updateHud();
     }
-    if (pressed('BracketLeft')) pushProbeWeight(ctx.probes.weight - 0.05);
-    if (pressed('BracketRight')) pushProbeWeight(ctx.probes.weight + 0.05);
+    if (pressed('BracketLeft')) pushProbeWeight(ctx, ctx.probes.weight - 0.05);
+    if (pressed('BracketRight')) pushProbeWeight(ctx, ctx.probes.weight + 0.05);
     if (pressed('KeyP')) {
-      if (ctx.probes.weight > 0) { ctx.player.parked = ctx.probes.weight; pushProbeWeight(0); }
-      else pushProbeWeight(ctx.player.parked);
+      if (ctx.probes.weight > 0) { ctx.player.parked = ctx.probes.weight; pushProbeWeight(ctx, 0); }
+      else pushProbeWeight(ctx, ctx.player.parked);
     }
     if (pressed('KeyE')) { ctx.weapon.slugMode = !ctx.weapon.slugMode; updateHud(); }
     // Neural upscale A/B (dev-only, P3): native -> nearest -> model while an
@@ -3790,7 +3709,7 @@ async function main() {
   ctx.weapon.viewModelAnchor.add(ctx.weapon.aimRig);
   // WEAPON SLOT 3 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
-    burning: ctx.vfx.burning, traceSlugHitFrom, eye: () => eyeOf(ctx.player.player), aimDir,
+    burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir,
   });
   // WEAPON SLOT 1's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
@@ -4676,20 +4595,6 @@ async function main() {
     );
     return [m.x, m.y, m.z];
   }
-  /** The live frustum half-angle tangents. ONE definition: the barrel angle
-   *  (weaponAngles, in the frame loop) and the shot ray (aimDir, right below)
-   *  must not be able to disagree about where the reticle is -- that
-   *  disagreement is exactly the class of bug this whole pass exists to fix,
-   *  and duplicating this formula is how it would come back the first time
-   *  someone tweens camera.fov for ADS or recoil.
-   *
-   *  Named aimFrustum, not frustum -- that name is already the module-scope
-   *  THREE.Frustum used for on-screen-body culling, a different concept
-   *  entirely (a view volume for culling vs. these bare half-angle tangents). */
-  function aimFrustum(): Frustum {
-    const tanV = Math.tan((camera.fov * Math.PI) / 360);
-    return { tanV, tanH: tanV * camera.aspect };
-  }
   function aimDir(): Vec3 {
     const cp = Math.cos(ctx.player.player.pitch);
     const fwd: Vec3 = [
@@ -4701,7 +4606,7 @@ async function main() {
     // happens to be FACING rather than where they are AIMING -- the one thing
     // this scheme exists to separate. Offset the ray by the reticle's angular
     // position inside the frustum.
-    const { tanV, tanH } = aimFrustum();
+    const { tanV, tanH } = aimFrustum(ctx);
     const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
     // up = right x fwd, for a right-handed basis
     const up: Vec3 = [
@@ -5305,7 +5210,7 @@ async function main() {
     if (!ctx.bake.mat) {
       // Whichever finishes first (corpse or detached chunk) must seed the
       // same mode-aware shared material.
-      ctx.bake.mat = registerLitChunkMaterial(createBakedChunkMaterial(
+      ctx.bake.mat = registerLitChunkMaterial(ctx, createBakedChunkMaterial(
         ctx.boot.deferredMode
           ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
           : { bakedAo: true, fleshResponse: true },
@@ -5395,7 +5300,7 @@ async function main() {
     // every settled piece at the same time, which is a decision to take on its
     // own evidence.
     if (!ctx.vfx.gorePartMat) {
-      ctx.vfx.gorePartMat = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true }));
+      ctx.vfx.gorePartMat = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true }));
       ctx.vfx.gorePartMat.uniforms.goreCfg.value.set(
         ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
       );
@@ -5520,7 +5425,7 @@ async function main() {
       });
       ctx.bake.carvedBuildMs = performance.now() - t0;
       if (!ctx.bake.carvedMaterial) {
-        ctx.bake.carvedMaterial = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
+        ctx.bake.carvedMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
         ctx.bake.carvedMaterial.uniforms.goreCfg.value.set(
           ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
         );
@@ -5591,7 +5496,7 @@ async function main() {
   ctx.gibs.assetHeadFactory = {
     create: (source: unknown): { material: THREE.Material; setFrame: (f: { centre: Vec3; quat: Quat; axes: Vec3 }) => void; dispose: () => void } => {
       const u = source as import('./zombie-gpu').MarchUniforms;
-      const built = registerLitChunkMaterial(createBakedChunkMaterial({
+      const built = registerLitChunkMaterial(ctx, createBakedChunkMaterial({
         goreDetail: true, bakedAo: true, fleshResponse: true, face: u,
       }));
       built.uniforms.goreCfg.value.set(
@@ -5624,7 +5529,7 @@ async function main() {
         // Same procedural detail layer the carve uses, plus the baked flesh
         // response (this set carries `bakeResponse`/`bakeFresnel`/`bakeAnchor`,
         // so the per-pixel detail rides the asset's own rest-frame anchor).
-        ctx.gibs.assetMaterial = registerLitChunkMaterial(createBakedChunkMaterial({
+        ctx.gibs.assetMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({
           goreDetail: true, bakedAo: true, fleshResponse: true,
         }));
         ctx.gibs.assetMaterial.uniforms.goreCfg.value.set(
@@ -5644,52 +5549,6 @@ async function main() {
     headMaterialFactory: ctx.gibs.assetHeadFactory,
   });
   ctx.gibs.assetRuntime = createGibAssetRuntime();
-
-  /** Lay the sprite bench out in front of the player, sized like real gibs. */
-  function laySpriteBench(): number {
-    if (!ctx.gibs.atlas) return 0;
-    if (!ctx.vfx.spriteBenchGroup) {
-      ctx.vfx.spriteBenchGroup = new THREE.Group();
-      ctx.vfx.spriteBenchGroup.name = 'gib-sprite-bench';
-      scene.add(ctx.vfx.spriteBenchGroup);
-      ctx.boot.deferredApi?.router.register(ctx.vfx.spriteBenchGroup, 'mesh', 'level-only');
-    }
-    for (const child of [...ctx.vfx.spriteBenchGroup.children]) {
-      ctx.vfx.spriteBenchGroup.remove(child);
-      const m = child as THREE.Mesh;
-      m.geometry?.dispose();
-      (m.material as THREE.Material)?.dispose();
-    }
-    ctx.vfx.spriteBenchSprites.length = 0;
-    const fwd: Vec3 = [Math.sin(ctx.player.player.yaw), 0, -Math.cos(ctx.player.player.yaw)];
-    const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
-    // EVERY frame once, then the whole set again a size down: a gib has to read
-    // at the size it will actually be thrown at, not just at bench scale.
-    const sizes = [0.34, 0.2];
-    let i = 0;
-    for (const size of sizes) {
-      for (const frame of ctx.gibs.atlas.frames) {
-        const mesh = makeGibSprite(frame, size);
-        const col = i % 9, line = Math.floor(i / 9);
-        const along = 1.7 + line * 0.5;
-        const across = (col - 4) * 0.38;
-        mesh.position.set(
-          ctx.player.player.pos[0] + fwd[0] * along + right[0] * across,
-          0.45 + (line % 2) * 0.1,
-          ctx.player.player.pos[2] + fwd[2] * along + right[2] * across,
-        );
-        // Face the camera AT SPAWN as well as per frame: `tick` early-returns
-        // under the render lock, so a capture would otherwise photograph the
-        // bench edge-on — a plane facing +Z photographed from a player looking
-        // east is a line.
-        billboardGib(mesh, camera);
-        ctx.vfx.spriteBenchGroup.add(mesh);
-        ctx.vfx.spriteBenchSprites.push(mesh);
-        i++;
-      }
-    }
-    return ctx.vfx.spriteBenchSprites.length;
-  }
 
   /** Load the dev-only atlas on demand. A missing one is reported, not hidden:
    *  the bench is meaningless without it and a silent empty group reads as a bug
@@ -5776,7 +5635,7 @@ async function main() {
       //
       // Caught by `__sdfGame.chunkDetailApplied()` reading `[]` while the census
       // reported 12 baked pieces on screen.
-      ctx.bake.mat = registerLitChunkMaterial(createBakedChunkMaterial(
+      ctx.bake.mat = registerLitChunkMaterial(ctx, createBakedChunkMaterial(
         // DEFERRED MODE: baked chunks are static flesh — level-only receivers
         // with a surface G-buffer producer material.
         // `bakedAo`: the settled bake writes a `bakeAo` attribute now, and
@@ -5792,7 +5651,7 @@ async function main() {
     // Face detail stays per-fragment at the source atlas resolution. A head
     // owns its projection snapshot/material; other chunks share the plain one.
     const faceMaterial = entry.view.uniforms.faceCfg.value.x > 0.5
-      ? registerLitChunkMaterial(createBakedChunkMaterial({
+      ? registerLitChunkMaterial(ctx, createBakedChunkMaterial({
         bakedAo: true, fleshResponse: true, face: entry.view.uniforms,
         ...(ctx.boot.deferredMode ? { output: 'surface' as const, shadowReceiver: 'level-only' as const } : {}),
       })) : undefined;
@@ -6225,26 +6084,6 @@ async function main() {
     return [_propPos.x, _propPos.y, _propPos.z];
   }
 
-  /** Take a prop for a bundle that is leaving the hand: the held one if it is
-   *  there, else a spare, else the OLDEST flying bundle's (its state keeps
-   *  flying — only the drawing of it is recycled, so the sim never desyncs). */
-  function takePropForThrow(): StickProp | null {
-    if (ctx.weapon.heldProp) {
-      const p = ctx.weapon.heldProp;
-      ctx.weapon.heldProp = null;
-      ctx.bake.bundleRig.remove(p.object);
-      scene.add(p.object);
-      return p;
-    }
-    const spare = ctx.bake.spareBundles.pop();
-    if (spare) return spare;
-    const oldest = ctx.bake.liveBundles.find(b => b.prop);
-    if (!oldest || !oldest.prop) return null;
-    const p = oldest.prop;
-    oldest.prop = null;
-    return p;
-  }
-
   /** True when a body is within the bundle's contact radius anywhere along the
    *  sub-step's segment. Called at the FLIGHT's own 120 Hz, so a 28 m/s bundle
    *  (0.23 m per sub-step) cannot tunnel through a 0.45 m target. */
@@ -6273,7 +6112,7 @@ async function main() {
     // centre block — so the bundle was born buried in geometry, pushed out
     // downward, and left sliding along the floor. Caught by the slot gate.
     const origin = propWorld(ctx.weapon.heldProp);
-    const prop = takePropForThrow();
+    const prop = takePropForThrow(ctx);
     // The reticle IS the aim under both schemes (aimDir handles free aim), and
     // fpv.ts's throwDirection applies the game's upward lob on top — the same
     // two rules the lab's throw uses, so a bundle thrown here lands where the
@@ -7262,7 +7101,7 @@ async function main() {
     // so it can only ever add the new crown, never move a shipped value. It
     // is independent of the goo candidates above.
     ctx.panels.impactSplashEnabled = gooCandidateBoot.get('impactsplash') === '1';
-    if (ctx.panels.impactSplashEnabled) ensureImpactSplashLayer();
+    if (ctx.panels.impactSplashEnabled) ensureImpactSplashLayer(ctx);
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
@@ -7400,7 +7239,7 @@ async function main() {
   ctx.gibs.partsMode = ctx.boot.search.get('gibparts');
   if (ctx.gibs.partsMode === 'sprite' || ctx.gibs.partsMode === 'sheet' || ctx.boot.search.get('gibsprites') === '1') {
     void ensureGibAtlas(ctx.gibs.partsMode === 'sheet' ? 'sheet' : 'placeholder').then(() => {
-      const n = laySpriteBench();
+      const n = laySpriteBench(ctx);
       console.log(`[gib-sprites] bench: ${n} billboards in front of the spawn`);
     });
   }
@@ -7652,8 +7491,6 @@ async function main() {
     ctx.world.cullCounts.visible = out.length;
   }
 
-  function bodiesOnScreen(): number { return ctx.world.cullCounts.visible; }
-
   function updateHud() {
     if (!ctx.boot.hudEl) return;
     const where = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
@@ -7667,7 +7504,7 @@ async function main() {
           ? '3 FLARE'
           : '1 GRAPESHOT';
     ctx.boot.hudEl.textContent =
-      `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${ctx.world.actors.length}` +
+      `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen(ctx)}/${ctx.world.actors.length}` +
       ` · ${where} · probe ${ctx.probes.weight.toFixed(2)}` +
       ` · [${slot}]` +
       (ctx.vfx.burning.registry.size > 0 ? ` · burning ${ctx.vfx.burning.activeCount()}` : '') +
@@ -8017,7 +7854,7 @@ async function main() {
         Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
     }
     {
-      const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, aimFrustum()) : { yawDeg: 0, pitchDeg: 0 };
+      const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, aimFrustum(ctx)) : { yawDeg: 0, pitchDeg: 0 };
       ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, dt);
       ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, dt);
       // ...and the weapon CARRIES across the frame as well as turning. Rotation
@@ -8665,56 +8502,6 @@ async function main() {
 
   // -----------------------------------------------------------------------
   mark('api-start');
-  // __sdfGame — the deterministic driver surface. The grapeshot dispatch
-  // builds on this: zombies are addressable by id, the player pose is
-  // settable, frames are steppable, wanderers freezable.
-  // -----------------------------------------------------------------------
-  /** Where a slug fired RIGHT NOW would hit — the shared predictor.
-   *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
-   *  with the same code the placement gate uses, rather than trusting a
-   *  cluster centre. No state mutated. */
-  /** The ballistic slug march itself, parameterised by the firing ray. The
-   *  grapeshot's wrapper below calls it from the muzzle; slot 3's flare calls
-   *  it from the EYE, because its own gun is holstered when it fires. No state
-   *  mutated. */
-  function traceSlugHitFrom(origin: Vec3, dir: Vec3): { actorId: number; hit: Vec3 | null } {
-      let bestD = Infinity;
-      let hitActorId = -1;
-      let hitPoint: Vec3 | null = null;
-      // Simulate the slug's ACTUAL flight (gravity, like stepProjectiles) —
-      // a straight muzzle ray ignores the drop and reads ~4 cm high at 3 m,
-      // which the placement gate duly failed (2026-08-27).
-      const pos: [number, number, number] = [origin[0], origin[1], origin[2]];
-      const d0: [number, number, number] = [dir[0], dir[1], dir[2]];
-      const vel: [number, number, number] = [d0[0] * SLUG.speed, d0[1] * SLUG.speed, d0[2] * SLUG.speed];
-      const dt = 1 / 120;
-      for (const a of ctx.world.actors) {
-        const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
-        if (!c) continue;
-        if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
-        const posedA = a.posed();
-        // Per-actor arc: reset the integrator, march segment-wise for 2 s.
-        pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
-        vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
-        for (let i = 0; i < 240; i++) {
-          const next: Vec3 = [
-            pos[0] + vel[0] * dt,
-            pos[1] + vel[1] * dt,
-            pos[2] + vel[2] * dt,
-          ];
-          const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
-          const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
-          if (hp) {
-            const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
-            if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
-            break;
-          }
-          pos[0] = next[0]; pos[1] = next[1]; pos[2] = next[2];
-          vel[0] = vNext[0]; vel[1] = vNext[1]; vel[2] = vNext[2];
-        }
-      }
-      return { actorId: hitActorId, hit: hitPoint };
-  }
 
   /** Where a slug fired RIGHT NOW would hit — the shared predictor.
    *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
@@ -8723,7 +8510,7 @@ async function main() {
   function predictSlugHitNow(): { origin: Vec3; dir: Vec3; actorId: number; hit: Vec3 | null } {
       const origin = muzzleWorld();
       const dir = convergedDir(origin);
-      return { origin, dir, ...traceSlugHitFrom(origin, dir) };
+      return { origin, dir, ...traceSlugHitFrom(ctx, origin, dir) };
   }
 
   /**
@@ -8784,34 +8571,6 @@ async function main() {
     ctx.player.player.pitch = pitch0;
     return false;
   }
-  function captureTelemetryScene(name: string) {
-    if (!ctx.telemetry.telemetry.active) return;
-    const started = performance.now();
-    ctx.telemetry.telemetry.snapshot(name, {
-      camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), projection: camera.projectionMatrix.toArray(), fov: camera.fov },
-      player: { position: ctx.player.player.pos, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch },
-      settings: { tiles: ctx.boot.gameTiles.diagnostics(), sdfScale: ctx.render.sdfScale, adaptive: ctx.render.adaptiveEnabled, frameCap: ctx.boot.handle.frameCap,
-        width: ctx.render.sdfLayer.targetSize.width, height: ctx.render.sdfLayer.targetSize.height, woundTuning: ctx.vfx.woundTuning, normalGradientMode: ctx.telemetry.normalGradientMode },
-      actors: ctx.world.actors.map(a => {
-        const body = a.posed();
-        // Already-posed CPU data: no ray queries, GPU fence or texture readback.
-        return { id: a.id, model: 'zombie', room: a.room, pose: a.pose(),
-          prims: body.prims, clusters: body.clusters, bonePrims: body.bonePrims,
-          wounds: a.wounds().map(w => describeRecordedWound(ctx, a, w)),
-          uniforms: Object.fromEntries(Object.entries(a.view.uniforms).flatMap<[string, number | boolean | number[]]>(([key, u]) => {
-            const v = (u as { value: unknown }).value;
-            if (typeof v === 'number' || typeof v === 'boolean') return [[key, v]];
-            if (v instanceof THREE.Vector2 || v instanceof THREE.Vector3 || v instanceof THREE.Vector4 || v instanceof THREE.Matrix4) return [[key, (v as { toArray(): number[] }).toArray()]];
-            return [];
-          })),
-        };
-      }),
-      chunks: ctx.bake.liveChunks.map(c => ({ id: c.id, state: c.state, pendingBake: ctx.bake.jobs.pendingId === c.id })),
-      bakedChunks: ctx.bake.chunks.map(c => ({ id: c.id, centre: c.centre, radius: c.radius })),
-      purpose: 'Frozen actor geometry for diagnosis; not deterministic whole-game replay. No pixel/ray eligibility counters.',
-    });
-    ctx.telemetry.telemetry.event('snapshot-cost', { name, cpuMs: performance.now() - started });
-  }
 
   // Read scalar counters only; no field queries/readbacks during live play.
   ctx.telemetry.firstFrame = true;
@@ -8821,7 +8580,7 @@ async function main() {
     ctx.telemetry.telemetry.frame(frame, {
       hidden: document.hidden, visibilityGap: ctx.telemetry.visibilityGap, firstFrame: ctx.telemetry.firstFrame,
       pointerLocked: document.pointerLockElement === ctx.boot.canvas,
-      actors: ctx.world.actors.length, bodiesOnScreen: bodiesOnScreen(),
+      actors: ctx.world.actors.length, bodiesOnScreen: bodiesOnScreen(ctx),
       liveChunks: ctx.bake.liveChunks.length, bakedChunks: ctx.bake.chunks.length,
       projectiles: ctx.weapon.pellets.length, droplets: ctx.vfx.bloodSim.droplets.length, splats: ctx.vfx.bloodSim.splats.length,
       player: [...ctx.player.player.pos], yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch,
@@ -8872,8 +8631,8 @@ async function main() {
   }), undefined, active => {
     ctx.telemetry.firstFrame = true; ctx.telemetry.visibilityGap = false;
     ctx.boot.handle.setFrameObserver(active ? telemetryFrame : null);
-    if (active) captureTelemetryScene('recording-start');
-  }, () => captureTelemetryScene('visual-issue')) : null;
+    if (active) captureTelemetryScene(ctx, 'recording-start');
+  }, () => captureTelemetryScene(ctx, 'visual-issue')) : null;
   import.meta.hot?.dispose(() => ctx.telemetry.controls?.dispose());
 
   // CONTROLLED FORWARD DEPTH PROBES (evidence seam backing __sdfGame
@@ -9033,7 +8792,7 @@ function performBenchAction(a: BenchAction): void {
    *  script cannot disagree about what a census IS. */
   function sceneCensus(): { bodies: number; wounds: number; chunks: number; droplets: number; splats: number; gooQuads: number } {
     return {
-      bodies: bodiesOnScreen(),
+      bodies: bodiesOnScreen(ctx),
       wounds: ctx.world.actors.reduce((n, a) => n + a.wounds().length, 0),
       chunks: ctx.bake.liveChunks.length,
       droplets: ctx.vfx.bloodSim.droplets.length,
@@ -9056,30 +8815,6 @@ function performBenchAction(a: BenchAction): void {
       const v = Number(q.get('scale'));
       if (Number.isFinite(v) && v > 0) applySdfScale(v);
     }
-  }
-
-  /** Turn a recording into a bench Scenario: one `input` action per frame, and
-   *  equal thirds as segments (t0/t1/t2) because a live recording does not
-   *  carry the scripted walk/fire/gib boundaries. Feeding it through runBench
-   *  keeps the per-pass timers and the per-segment census identical to every
-   *  other bench row. */
-  function demoScenarioOf(file: DemoFile): Scenario {
-    const frames = file.frames.length;
-    const steps: ScenarioStep[] = [];
-    for (let f = 0; f < frames; f++) {
-      steps.push({ at: f, action: { kind: 'input', frame: file.frames[f]! } });
-    }
-    const a = Math.floor(frames / 3);
-    const b = Math.floor((2 * frames) / 3);
-    return {
-      frames,
-      steps,
-      segments: [
-        { name: 't0', from: 0, to: a },
-        { name: 't1', from: a, to: b },
-        { name: 't2', from: b, to: frames },
-      ],
-    };
   }
 
   /** The F7 HUD line, created lazily and parked above the telemetry controls. */
@@ -9107,19 +8842,6 @@ function performBenchAction(a: BenchAction): void {
     });
     updateDemoHud(ctx);
     return true;
-  }
-
-  /** WAIT FOR OUTSTANDING BAKE WORKERS (determinism, 2026-09-14). The gib
-   *  swap is pinned to the frame after its submit and the corpse swap to the
-   *  frame the reply arrives — both only if the reply HAS arrived. Two replays
-   *  of the owner's 56 s recording diverged at one sample because one worker
-   *  answered before a resolveGpu yield and the other after it. Every
-   *  hand-stepped driver (replay, bench, scenario hash) awaits this before a
-   *  step, so the reply is always in hand on the pinned frame. Live play never
-   *  calls it. */
-  async function awaitBakes(): Promise<void> {
-    await ctx.bake.jobs.settled();
-    if (ctx.world.soldierCorpses) await ctx.world.soldierCorpses.settled();
   }
 
   /** THE REPLAY DRIVER. Owns the sim: stops the loop, resets the sim clock and
@@ -9185,13 +8907,13 @@ function performBenchAction(a: BenchAction): void {
       // queued (worker replies, uploads, the first GPU fence) landed on the
       // same yield that took the first hash. Drain it here, before any sim
       // frame, so frame 0 starts from a page that has nothing in flight.
-      await awaitBakes();
+      await awaitBakes(ctx);
       await ctx.boot.handle.resolveGpu();
       for (let f = 0; ; f++) {
         const frame = iter.next();
         if (!frame) break;
         ctx.player.currentInputFrame = frame;
-        await awaitBakes();
+        await awaitBakes(ctx);
         ctx.boot.handle.step(file.dt);
         frames++;
         // `hashFrom` skips the RENDER warm-up frames: the scripted recorder
@@ -9295,7 +9017,7 @@ function performBenchAction(a: BenchAction): void {
         // it here too would fire every shot twice.
         ctx.player.currentInputFrame = frame;
         rec.push(frame);
-        await awaitBakes();
+        await awaitBakes(ctx);
         ctx.boot.handle.step(1 / 60);
         if (toggleSlug) {
           const off: DemoFrame = {
@@ -9304,7 +9026,7 @@ function performBenchAction(a: BenchAction): void {
           };
           ctx.player.currentInputFrame = off;
           rec.push(off);
-          await awaitBakes();
+          await awaitBakes(ctx);
           ctx.boot.handle.step(1 / 60);
         }
       }
@@ -9343,9 +9065,9 @@ function performBenchAction(a: BenchAction): void {
     ...createRenderSeams(ctx),
     ...createWorldSeams(ctx),
     ...createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
-    ...createBenchSeams(ctx, { awaitBakes, bodiesOnScreen, demoScenarioOf, performBenchAction }),
-    ...createRenderDiagSeams(ctx, { bodiesOnScreen, camera }),
-    ...createShellDiagSeams(ctx, { bodiesOnScreen, shellAmpOf, camera }),
+    ...createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction }),
+    ...createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
+    ...createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf, camera }),
     ...createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId, spawnChunkPiece }),
     /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
      *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
@@ -9400,14 +9122,14 @@ function performBenchAction(a: BenchAction): void {
         if (ctx.demo.frameCount++ % 10 === 0) updateHud();
       }
     },
-    setProbeWeight: pushProbeWeight,
+    setProbeWeight: withCtx(ctx, pushProbeWeight),
     /** Smallest centre-to-centre distance between any two zombies (m).
      *  Two 0.35 m bodies touch at 0.70; below that they are interpenetrating. */
     crowdMinDist: () => minPairDistance(ctx.world.actors.map(a => {
       const p = a.pose().pos;
       return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
     })),
-    bodiesOnScreen,
+    bodiesOnScreen: withCtx(ctx, bodiesOnScreen),
     // ---------------------------------------------------------------
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
     // the headless driver can shoot; aim with setPose(yaw, pitch).
@@ -9461,7 +9183,7 @@ function performBenchAction(a: BenchAction): void {
         camera.fov = clampFovDeg(deg);
         camera.updateProjectionMatrix();
         ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
-        sizeSdfLayer();
+        sizeSdfLayer(ctx);
       }
       return fisheyeReport(ctx);
     },
@@ -9504,7 +9226,7 @@ function performBenchAction(a: BenchAction): void {
         impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...base, ...o.profile });
       }
       if (o.enabled !== undefined) ctx.panels.impactSplashEnabled = o.enabled;
-      if (ctx.panels.impactSplashEnabled) ensureImpactSplashLayer();
+      if (ctx.panels.impactSplashEnabled) ensureImpactSplashLayer(ctx);
       ctx.panels.impactSplashLayer?.setVisible(ctx.panels.impactSplashEnabled);
       return {
         enabled: ctx.panels.impactSplashEnabled,
@@ -9683,7 +9405,7 @@ function performBenchAction(a: BenchAction): void {
      *  on first use). Returns the number of billboards. */
     gibSpriteBench: async (which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource) => {
       await ensureGibAtlas(which);
-      return laySpriteBench();
+      return laySpriteBench(ctx);
     },
     spawnDebugCharacter: (name: string, start?: Vec3) => {
       const room = ROOMS.find(r => r.id === playerRoomId()) ?? ROOMS[0]!;

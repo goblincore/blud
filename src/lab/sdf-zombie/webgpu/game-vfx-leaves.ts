@@ -5,20 +5,21 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import type { GameContext } from './game-context';
-import * as THREE from 'three/webgpu'
-import { woundEmitAnchorAndNormal } from '../bleed-registry'
-import { characterEntry } from '../character-registry'
-import { type Wound } from '../damage'
-import { detachGutChain, makeGutChain } from '../entrails'
-import { shouldSpill } from '../entrails-spawn'
-import { type BurstVisual } from '../explosion-aoe'
-import { compileCharacterSheet } from './character-view'
-import { type ZombieActor } from './game-actor'
-import { rngStreams } from './rng'
-import { type WoundTuningValues } from './wound-panel'
-import { type ZombieGpuView } from './zombie-gpu'
 
+import { type GameContext } from './game-context';
+import * as THREE from 'three/webgpu';
+import { woundEmitAnchorAndNormal } from '../bleed-registry';
+import { characterEntry } from '../character-registry';
+import { type Wound } from '../damage';
+import { detachGutChain, makeGutChain } from '../entrails';
+import { shouldSpill } from '../entrails-spawn';
+import { type BurstVisual } from '../explosion-aoe';
+import { compileCharacterSheet } from './character-view';
+import { type ZombieActor } from './game-actor';
+import { rngStreams } from './rng';
+import { type WoundTuningValues } from './wound-panel';
+import { type ZombieGpuView } from './zombie-gpu';
+import { createImpactSplashLayer } from './impact-splash';
 
 export function faceFor(ctx: GameContext, name: string) {
   const hit = ctx.vfx.faceCache.get(name);
@@ -107,4 +108,21 @@ export function spillVerdict(ctx: GameContext, a: ZombieActor, wound: Wound): vo
     }),
     wound, droplets: [],
   });
+}
+
+/** Create the splash layer on first enable only, sharing the flesh/goo
+ *  light uniform NODES so it is lit by the same rig. Returns silently if
+ *  there is no actor view yet (the same pre-condition the goo layer has). */
+export function ensureImpactSplashLayer(ctx: GameContext): void {
+  if (ctx.panels.impactSplashLayer) return;
+  const v = ctx.world.actors[0]?.view;
+  if (!v) return;
+  ctx.panels.impactSplashLayer = createImpactSplashLayer({
+    rig: {
+      lightDir: v.uniforms.lightDir,
+      keyColor: v.uniforms.keyColor,
+      lightCfg: v.uniforms.lightCfg,
+    },
+  });
+  ctx.boot.handle.scene.add(ctx.panels.impactSplashLayer.object);
 }

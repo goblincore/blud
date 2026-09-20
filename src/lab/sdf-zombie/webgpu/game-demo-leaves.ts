@@ -5,12 +5,13 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import type { GameContext } from './game-context';
-import { woundWorldPos, type Wound } from '../damage'
-import { type DemoFile, type DemoFrame } from './demo-recorder'
-import { type ZombieActor } from './game-actor'
-import { ROOMS } from './game-level'
 
+import { type GameContext } from './game-context';
+import { woundWorldPos, type Wound } from '../damage';
+import { type DemoFile, type DemoFrame } from './demo-recorder';
+import { type ZombieActor } from './game-actor';
+import { ROOMS } from './game-level';
+import { type Scenario, type ScenarioStep } from './game-bench-scenario';
 
 /** Snapshot the listeners' accumulated input as the frame the next tick will
  *  consume. Zeroes the accumulators: a delta belongs to exactly one frame. */
@@ -84,4 +85,28 @@ export function updateDemoHud(ctx: GameContext): void {
   }
   ctx.demo.hudEl.hidden = false;
   ctx.demo.hudEl.textContent = `REC \u25cf  frames: ${ctx.demo.recorder.frames}`;
+}
+
+/** Turn a recording into a bench Scenario: one `input` action per frame, and
+ *  equal thirds as segments (t0/t1/t2) because a live recording does not
+ *  carry the scripted walk/fire/gib boundaries. Feeding it through runBench
+ *  keeps the per-pass timers and the per-segment census identical to every
+ *  other bench row. */
+export function demoScenarioOf(ctx: GameContext, file: DemoFile): Scenario {
+  const frames = file.frames.length;
+  const steps: ScenarioStep[] = [];
+  for (let f = 0; f < frames; f++) {
+    steps.push({ at: f, action: { kind: 'input', frame: file.frames[f]! } });
+  }
+  const a = Math.floor(frames / 3);
+  const b = Math.floor((2 * frames) / 3);
+  return {
+    frames,
+    steps,
+    segments: [
+      { name: 't0', from: 0, to: a },
+      { name: 't1', from: a, to: b },
+      { name: 't2', from: b, to: frames },
+    ],
+  };
 }

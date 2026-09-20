@@ -7,7 +7,7 @@
 // Fixtures are minimal game-main shapes, not the real file: each test pins ONE
 // rewrite rule.
 import { describe, it, expect } from 'vitest';
-import { extractLeaves } from './extract-leaf';
+import { extractLeaves, mergeModule } from './extract-leaf';
 
 /** A game-main.ts in miniature: one import line, one main() with a closure. */
 function fixture(body: string): string {
@@ -161,7 +161,9 @@ describe('extract-leaf: appending to an existing module', () => {
     expect(r2.module).toContain('export function b(ctx: GameContext, y: number): number');
     // One header, one GameContext import.
     expect((r2.module.match(/^\/\/ src\/lab/gm) ?? []).length).toBe(1);
-    expect((r2.module.match(/import type \{ GameContext \}/g) ?? []).length).toBe(1);
+    // The merge normalises `import type { X }` to the inline `{ type X }` form;
+    // either spelling is fine, one line of it is the point.
+    expect((r2.module.match(/GameContext \} from '\.\/game-context';/g) ?? []).length).toBe(1);
   });
 
   it('merges named imports from the same module instead of repeating the line', () => {
@@ -206,5 +208,31 @@ describe('extract-leaf: what the moved code needs to compile', () => {
     const r = extractLeaves(src, ['inner', 'outer'], [], 'game-x-leaves');
     expect(r.module).toContain("import { withCtx, type GameContext } from './game-context';");
     expect(r.module).toContain('{ inner: withCtx(ctx, inner) }');
+  });
+});
+
+describe('extract-leaf: mergeModule import shapes', () => {
+  it('dedupes a namespace import', () => {
+    const a = ["// header", "", "import * as THREE from 'three';", "", "export function a(): void {}", ""].join('\n');
+    const b = ["// header", "", "import * as THREE from 'three';", "", "export function b(): void {}", ""].join('\n');
+    const m = mergeModule(a, b);
+    expect((m.match(/import \* as THREE/g) ?? []).length).toBe(1);
+  });
+
+  it('treats `import type { X }` and `import { type X }` as one specifier', () => {
+    const a = ["// header", "", "import type { DemoFile } from './demo';", "", "export function a(): void {}", ""].join('\n');
+    const b = ["// header", "", "import { type DemoFile, type Step } from './demo';", "", "export function b(): void {}", ""].join('\n');
+    const m = mergeModule(a, b);
+    expect((m.match(/from '\.\/demo';/g) ?? []).length).toBe(1);
+    expect((m.match(/DemoFile/g) ?? []).length).toBe(1);
+    expect(m).toContain('Step');
+  });
+
+  it('keeps a value and a type import of the same specifier on one line', () => {
+    const a = ["// header", "", "import { buildMarch } from './gpu';", "", "export function a(): void {}", ""].join('\n');
+    const b = ["// header", "", "import { type Tail } from './gpu';", "", "export function b(): void {}", ""].join('\n');
+    const m = mergeModule(a, b);
+    expect((m.match(/from '\.\/gpu';/g) ?? []).length).toBe(1);
+    expect(m).toMatch(/import \{ buildMarch, type Tail \} from '\.\/gpu';/);
   });
 });

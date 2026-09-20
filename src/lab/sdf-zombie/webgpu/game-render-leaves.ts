@@ -5,13 +5,15 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
-import type { GameContext } from './game-context';
-import * as THREE from 'three/webgpu'
-import { visibleFovDeg } from './fisheye'
-import { type GibBlurSubject } from './gib-shutter-layer'
-import { SDF_LAYER } from './sdf-layer'
-import { type MarchUniforms } from './zombie-gpu'
 
+import { type GameContext } from './game-context';
+import * as THREE from 'three/webgpu';
+import { visibleFovDeg } from './fisheye';
+import { type GibBlurSubject } from './gib-shutter-layer';
+import { SDF_LAYER } from './sdf-layer';
+import { type MarchUniforms } from './zombie-gpu';
+import { type Vec3 } from '../types';
+import { billboardGib, makeGibSprite } from './gib-sprites';
 
 /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
  *  A shared function rather than three copies of the same object literal
@@ -132,4 +134,66 @@ export function updateUpscaleAbLabel(ctx: GameContext) {
     : `random ${c.model} ${c.inputs} (untrained weights)`;
   ctx.render.upscaleAbLabel.textContent = `upscale [U]: ${what} · ${c.layout}`;
   ctx.render.upscaleAbLabel.hidden = false;
+}
+
+export function sizeSdfLayer(ctx: GameContext) {
+  const s = ctx.render.postAa.contentSize;
+  ctx.render.sdfLayer.setSize(s.width, s.height);
+  // The deferred layer tracks the same capped buffer (post-aa hands it the
+  // same capture target as a sink).
+  ctx.boot.deferredApi?.setSize(s.width, s.height);
+  ctx.render.sdfLayer.setConeGeometry(ctx.boot.handle.camera.fov, ctx.render.sdfLayer.targetSize.height);
+  // Density follows the SDF layer at GOO_TUNING.densityScale. Called from
+  // here rather than a separate resize listener (lab-main's shape) because
+  // ADAPTIVE RESOLUTION moves the SDF target at runtime through
+  // applySdfScale -> sizeSdfLayer: a listener would never fire and the goo
+  // would keep splatting into a stale-sized field.
+  const t = ctx.render.sdfLayer.targetSize;
+  ctx.goo.layer?.setSize(t.width, t.height);
+}
+
+/** Lay the sprite bench out in front of the player, sized like real gibs. */
+export function laySpriteBench(ctx: GameContext): number {
+  if (!ctx.gibs.atlas) return 0;
+  if (!ctx.vfx.spriteBenchGroup) {
+    ctx.vfx.spriteBenchGroup = new THREE.Group();
+    ctx.vfx.spriteBenchGroup.name = 'gib-sprite-bench';
+    ctx.boot.handle.scene.add(ctx.vfx.spriteBenchGroup);
+    ctx.boot.deferredApi?.router.register(ctx.vfx.spriteBenchGroup, 'mesh', 'level-only');
+  }
+  for (const child of [...ctx.vfx.spriteBenchGroup.children]) {
+    ctx.vfx.spriteBenchGroup.remove(child);
+    const m = child as THREE.Mesh;
+    m.geometry?.dispose();
+    (m.material as THREE.Material)?.dispose();
+  }
+  ctx.vfx.spriteBenchSprites.length = 0;
+  const fwd: Vec3 = [Math.sin(ctx.player.player.yaw), 0, -Math.cos(ctx.player.player.yaw)];
+  const right: Vec3 = [Math.cos(ctx.player.player.yaw), 0, Math.sin(ctx.player.player.yaw)];
+  // EVERY frame once, then the whole set again a size down: a gib has to read
+  // at the size it will actually be thrown at, not just at bench scale.
+  const sizes = [0.34, 0.2];
+  let i = 0;
+  for (const size of sizes) {
+    for (const frame of ctx.gibs.atlas.frames) {
+      const mesh = makeGibSprite(frame, size);
+      const col = i % 9, line = Math.floor(i / 9);
+      const along = 1.7 + line * 0.5;
+      const across = (col - 4) * 0.38;
+      mesh.position.set(
+        ctx.player.player.pos[0] + fwd[0] * along + right[0] * across,
+        0.45 + (line % 2) * 0.1,
+        ctx.player.player.pos[2] + fwd[2] * along + right[2] * across,
+      );
+      // Face the camera AT SPAWN as well as per frame: `tick` early-returns
+      // under the render lock, so a capture would otherwise photograph the
+      // bench edge-on — a plane facing +Z photographed from a player looking
+      // east is a line.
+      billboardGib(mesh, ctx.boot.handle.camera);
+      ctx.vfx.spriteBenchGroup.add(mesh);
+      ctx.vfx.spriteBenchSprites.push(mesh);
+      i++;
+    }
+  }
+  return ctx.vfx.spriteBenchSprites.length;
 }
