@@ -271,6 +271,7 @@ import { demoRecordStop } from './game-demo-leaves2';
 import { createLeftoverSeams } from './game-seams-leftover';
 import { createFireSeams } from './game-seams-fire';
 import { createSkeletonSeams } from './game-seams-skeleton';
+import { createDynamiteSeams } from './game-seams-dynamite';
 import { ensureImpactSplashLayer } from './game-vfx-leaves';
 import { laySpriteBench, sizeSdfLayer } from './game-render-leaves';
 import { withCtx } from './game-context';
@@ -7675,6 +7676,7 @@ async function main() {
     ...createWeaponAimSeams(ctx),
     ...createFireSeams(ctx),
     ...createSkeletonSeams(ctx),
+    ...createDynamiteSeams(ctx),
     ...createLeftoverSeams(ctx),
     ...createMiscSeams(ctx),
     ...createFxSeams(ctx),
