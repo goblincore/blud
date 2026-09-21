@@ -54,12 +54,18 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
       if (ngValid) { n = normalize(candidate); } else { ngReason = 2; }
     }
   }
+  // ONE calcNormal call site for the fallback and the debug-12 compare
+  // (cold-compile 2026-09-21): each call site inlines four more field taps.
+  let debugNormal12 = debugCfg.x > 11.5 && debugCfg.x < 12.5;
+  var nFD = n;
+  if (!ngValid || debugNormal12) {
+    nFD = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+  }
   if (!ngValid) {
-    n = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+    n = nFD;
   }
   // DEBUG MODE 12 (crowd diagnostics 2026-09-14): slot, analytic reason, dot(analytic n, finite-difference n).
-  if (debugCfg.x > 11.5 && debugCfg.x < 12.5) {
-    let nFD = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+  if (debugNormal12) {
     return vec4<f32>(f32(gHitSlot), f32(ngReason), dot(n, nFD), t);
   }
   // Raw diagnostic RGB bypasses later detail/shading; outputNode still writes

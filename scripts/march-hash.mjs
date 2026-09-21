@@ -253,6 +253,7 @@ if (!(await settleMarchTarget())) fail('march target never settled after staging
 // an even number of internal frames each time) locks the parity so
 // successive logical captures land on the same phase; verified stable
 // across an intervening external step(2) too.
+let rawWritten = false;
 const capture = async (maskInfo = null) => {
   // Each attempt consumes exactly 2 internal readMarchTarget() steps (the
   // parity contract in the comment below); a retry re-runs the whole pair, so
@@ -270,6 +271,14 @@ const capture = async (maskInfo = null) => {
       continue;
     }
     const full = createHash('sha1').update(bytes).digest('hex');
+    // MARCH_HASH_RAW=<path>: also write the FIRST capture's raw float bytes
+    // (with a {w,h} JSON sidecar) so two commits can be diffed by magnitude
+    // with scripts/march-raw-diff.mjs when the exact hash moves.
+    if (process.env.MARCH_HASH_RAW && !rawWritten) {
+      rawWritten = true;
+      writeFileSync(process.env.MARCH_HASH_RAW, bytes);
+      writeFileSync(`${process.env.MARCH_HASH_RAW}.json`, JSON.stringify({ w: r.w, h: r.h }));
+    }
     if (!maskInfo) return { hash: full, maskedHash: null, maskedFraction: null };
     // Hash only the texels whose TILE is single-slot (mask 0). The mask grid is
     // at the SDF-pass size (sdfLayer.targetSize); the readback IS that target.
