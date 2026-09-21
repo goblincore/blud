@@ -156,7 +156,7 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     // edge coincides with its colour gradient, so it reads as wounded flesh,
     // not a ring. The far-side sheets those gates chased were the tracer
     // overshoot bug, fixed for real at the retract guard.
-    expect(WOUND_MASK).toContain('1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz))');
+    expect(WOUND_MASK).toContain('1.0 - smoothstep(0.0, w.w * 1.6, rM)'); // rM = length(p - w.xyz) unless ragged
     // Entrails (2026-09-02) retargeted the return pin from
     // vec2<f32>(m, m): the mask now carries cavity-ness in .z, accumulated
     // over the SAME per-wound footprint — the contribution expression above

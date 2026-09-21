@@ -116,13 +116,35 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     }
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
+    // RAGGED CRATER (option 3, 2026-09-21): the fraction of the type texel is
+    // how far the edge may grow, by direction, in place of the three lobe rows
+    // a soldier wound used to upload. rN = r / s with s = 1 + A * n(dir) in
+    // [1, 1 + A]: the zero set is r = depth * s, and the rim follows it. The
+    // direction is taken in the BODY frame (gInstYaw) so the lobes turn with
+    // the body, seeded by the radius so neighbours differ. The carve term is
+    // scaled by 0.75 because an angularly varying radius steepens the field
+    // (slope ~ sqrt(1 + (A * 1.8 * 1.5)^2) = 1.3 at A = 0.3); the zero set is
+    // unchanged by the scale. Every reach bound stays valid: s <= 1.45 < 2.
+    // A = 0 (every round wound) takes rN = r, carveK = 1 — bit-identical.
+    let ragged = select(0.0, fract(wMeta.x), wMeta.x > -0.5 && !isBurn);
+    var rN = r;
+    var carveK = 1.0;
+    if (ragged > 0.0) {
+      let v = (p - w.xyz) / max(r, 1e-6);
+      let cy = cos(gInstYaw);
+      let sy = sin(gInstYaw);
+      let q = vec3<f32>(cy * v.x - sy * v.z, v.y, sy * v.x + cy * v.z);
+      let n = noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5;
+      rN = r / (1.0 + ragged * n);
+      carveK = 0.75;
+    }
     let dBefore = d;
-    d = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
+    d = smax(d, min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
     // Which owners' carves actually RAISED the field here — see the owner
     // re-fold's raiser gate in MAP_BODY. Bit 0 collects unowned wounds.
     if (d > dBefore) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
-    if (r < depth * 2.0) { near = 1.0; }
-    let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
+    if (rN < depth * 2.0) { near = 1.0; }
+    let x = (rN - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
     // Own-amp bound for the re-fold pre-scan (MAP_BODY): the most this
     // row's bump can LOWER a field, filed under its owner (0 = unowned).
@@ -178,7 +200,18 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
         (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
-    let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz));
+    // Ragged craters (see applyWounds): the footprint follows the same edge.
+    let tId = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + gBand), 0).x;
+    let ragged = select(0.0, fract(tId), tId > -0.5 && tId < 1.5);
+    var rM = length(p - w.xyz);
+    if (ragged > 0.0) {
+      let v = (p - w.xyz) / max(rM, 1e-6);
+      let cy = cos(gInstYaw);
+      let sy = sin(gInstYaw);
+      let q = vec3<f32>(cy * v.x - sy * v.z, v.y, sy * v.x + cy * v.z);
+      rM = rM / (1.0 + ragged * (noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5));
+    }
+    let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, rM);
     m = max(m, contribution);
     // Cavity-ness (entrails, 2026-09-02): the SAME radial footprint,
     // accumulated only over wounds whose flags row says the hit opened a

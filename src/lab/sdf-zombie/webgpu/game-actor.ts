@@ -470,6 +470,8 @@ export interface ZombieActor {
    * upload the pellet path uses.
    */
   stampBlast(wounds: readonly Wound[]): void;
+  /** Re-run the wound upload now (a render-side wound look changed). */
+  refreshWoundUpload(): void;
   /**
    * A RESOLVED EXPLOSION's full effect on this body — the dynamite path.
    * Stamps the blast wounds (geometry + carves), credits the collapse meter
@@ -1691,6 +1693,7 @@ export function createZombieActor(opts: {
     hit,
     hitSlug,
     stampBlast,
+    refreshWoundUpload: () => refreshWounds(),
     blast,
   };
 }

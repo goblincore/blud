@@ -15,6 +15,7 @@ import { ROOMS, TUNNELS, FURNITURE, enclosureKeyAt, enclosureOf } from './game-l
 import { RING_TUNING } from '../melee-ring';
 import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
+import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
 
 /** counts2.z carries the re-fold mode in 0..3 plus 4 for the wound exact fixes. */
 const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => (a.view.uniforms.counts2.value.z > 3.5 ? 4 : 0);
@@ -286,6 +287,13 @@ export function createWorldSeams(ctx: GameContext) {
       }
     },
     get woundExact() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 3.5; },
+    /** Option 3 (2026-09-21): soldier wounds upload ONE noise-ragged crater instead of the
+     *  wound + three lobe rows. A look change; off = ship. Re-uploads every body now. */
+    setRaggedCraters(on: boolean) {
+      setRaggedCraters(on);
+      for (const a of ctx.world.actors) a.refreshWoundUpload();
+    },
+    get raggedCraters() { return raggedCratersOn(); },
     /** Diagnostic: every wounded actor's per-wound threat masks (bit c+1 = cluster c). */
     woundThreats() {
       return ctx.world.actors.map(a => ({ id: a.id, margin: a.view.woundThreatMargin, masks: a.view.woundThreats?.() ?? [] })).filter(m => m.masks.length > 0);
