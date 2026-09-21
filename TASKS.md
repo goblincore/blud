@@ -25,8 +25,13 @@
   `shader-build` (r186 `onNodeBuilderCreated`) / `flare-shot` events. **Finding: `cpu:sdf:polys` is 5.0 of a 7.6 ms draw — the
   CPU lever is the polygonal pass (static merge / BatchedMesh / render bundles), not the SDF chain; occluder hull 1.7 ms/frame.**
   Fixed on the way: weapon-switch pipeline rebuilds (muzzle light under hideable `gunRig`, 115-445 ms) and the flare hit-test
-  stall (61-86 ms -> 0.2 ms, bit-identical). Open: per-frame GPU span + `gpu:idle` in the recording (GPU-bound?); warm the
-  `flame-cards` pool at boot (first ignite builds it synchronously, 20 ms); `sdBody` allocates per sample (`prims.slice`).
+  stall (61-86 ms -> 0.2 ms, bit-identical). **v4 (`f3900e74`, fix `335b178a`): frames carry `gpu {busyMs, idleMs, passes}`.**
+  Owner session: GPU busy p50 21.0 / p95 28.2 / p99 34.0 ms of 33.3; CPU 12.7 / 15.3 -> **the GPU (the march, 12.3 ms mean, 28-38 ms
+  with 8 bodies at 1.6 m) is the tighter side**; CPU work buys headroom, not frame time. `cpu:sdf:polys` is 815 meshes walked 3x
+  (main + 2 shadow maps): 426 un-instanced skeleton segment meshes for ALL 23 actors, 147 level meshes.
+  **Next: visual work for `visibleActors` only** (skeleton mesh visibility + pose writes, hulls, wound exclusions, kit/setTime) —
+  est. 4-6 ms CPU, march-hash gated; then instancing / level merge if needed. Open: warm `plate`, `flame-cards`, explosion
+  materials at boot; per-sever `gib-asset-*` material rebuild (share it); first dynamite gib 33-56 ms; `sdBody` `prims.slice`.
 - [x] **Cold-cache flesh bug (2026-09-20, fixed).** Not the warm gate and not three r186: the body program was ready, but the
   defer-compile per-body FALLBACK never drew. Crowd-attached proxies spawn hidden and only sdf-layer's depth-gate-ON branch
   re-shows the `setBodies` list; the game ships the gate OFF, so members stayed hidden (skull + bones) until the background
