@@ -134,4 +134,31 @@ describe('diagonalHalfAngleRad', () => {
     expect(half).toBeGreaterThan(49);
     expect(half).toBeLessThan(50);
   });
+
+  describe('occlusion (inSight)', () => {
+    const viewer = { eye: [0, 1.6, 0] as [number, number, number], yaw: 0, pitch: 0, fovYDeg: 72, aspect: 4 / 3 };
+    const ahead = { id: 1, center: [0, 1.2, -10] as [number, number, number] };
+    const near = { id: 2, center: [0, 1.2, -2] as [number, number, number] };
+
+    it('drops a body dead ahead that is behind a wall, and a near one too', () => {
+      const kept = selectVisualActors(viewer, [ahead, near], new Set(), VISUAL_CULL_DEFAULTS, () => false);
+      expect([...kept]).toEqual([]);
+    });
+
+    it('keeps an occluded body that was on screen last frame (alsoKeep wins)', () => {
+      const kept = selectVisualActors(viewer, [ahead], new Set([1]), VISUAL_CULL_DEFAULTS, () => false);
+      expect([...kept]).toEqual([1]);
+    });
+
+    it('never asks about bodies the cone already rejected', () => {
+      const asked: number[] = [];
+      const behind = { id: 3, center: [0, 1.2, 10] as [number, number, number] };
+      selectVisualActors(viewer, [ahead, behind], new Set(), VISUAL_CULL_DEFAULTS, (id) => { asked.push(id); return true; });
+      expect(asked).toEqual([1]);
+    });
+
+    it('omitting inSight is the cone-only behaviour', () => {
+      expect([...selectVisualActors(viewer, [ahead], new Set())]).toEqual([1]);
+    });
+  });
 });

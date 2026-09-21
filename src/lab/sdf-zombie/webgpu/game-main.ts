@@ -298,6 +298,7 @@ import { finishChunkBake, spawnGoreShowcase } from './game-bake-leaves';
 import { ensureCarvedLibrary } from './game-gibs-leaves';
 import { updateHud } from './game-panels-leaves';
 import { selectVisualActors } from './visual-actor-set';
+import { bodyInSight } from './actor-sight';
 import { sceneCensus } from './game-telemetry-leaves';
 import { demoRecordStart } from './game-demo-leaves';
 import { ADAPTIVE_WINDOW, PROBE_ABORT_FRAMES, tickAdaptive } from './game-render-leaves';
@@ -6532,14 +6533,20 @@ async function main() {
         for (const a of ctx.render.visibleActors) alsoKeep.add(a.id);
         const bodies: { id: number; center: Vec3 }[] = [];
         const unmeasurable: ZombieActor[] = [];
+        const byId = new Map<number, ZombieActor>();
+        const eye = eyeOf(ctx.player.player);
         for (const a of ctx.world.actors) {
+          byId.set(a.id, a);
           const torso = a.posed().clusters.find(c => c.limb === 'torso');
           if (!torso) { unmeasurable.push(a); continue; }
           bodies.push({ id: a.id, center: torso.center });
         }
         const keptIds = selectVisualActors(
-          { eye: eyeOf(ctx.player.player), yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch, fovYDeg: cam.fov, aspect: cam.aspect },
-          bodies, alsoKeep,
+          { eye, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch, fovYDeg: cam.fov, aspect: cam.aspect },
+          bodies, alsoKeep, undefined,
+          // Walls count: the same per-cluster sight test the march cull uses,
+          // from this tick's eye. Only bodies the cone kept are ever asked.
+          (id) => { const a = byId.get(id); return !a || bodyInSight(eye, a.posed().clusters, ctx.world.colliders); },
         );
         const visual = new Set<ZombieActor>();
         for (const a of unmeasurable) visual.add(a);

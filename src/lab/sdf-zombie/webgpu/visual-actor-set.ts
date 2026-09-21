@@ -72,6 +72,16 @@ export function selectVisualActors(
   bodies: readonly VisualBody[],
   alsoKeep: ReadonlySet<number>,
   opts: VisualCullOptions = VISUAL_CULL_DEFAULTS,
+  /** OCCLUSION (2026-09-21). The cone alone ignores walls, and it is nearly a
+   *  hemisphere (diagonal FOV + margin): looking down the level from the spawn
+   *  room it kept 23 of 23 actors. A body that passes the cone must ALSO be in
+   *  sight — the caller passes the march cull's own test (actor-sight.ts), so
+   *  the two culls cannot disagree about a wall. Sight depends on where the eye
+   *  and the body ARE, not on where the player looks, so it is not stale the
+   *  way the view direction is; the cone margin still covers the flick.
+   *  `alsoKeep` bypasses it (those were on screen last frame). Omitted = no
+   *  occlusion test, the pre-2026-09-21 behaviour. */
+  inSight?: (id: number) => boolean,
 ): Set<number> {
   const kept = new Set<number>();
   const halfAngle = diagonalHalfAngleRad(viewer.fovYDeg, viewer.aspect) + opts.marginDeg * DEG2RAD;
@@ -93,7 +103,7 @@ export function selectVisualActors(
     }
     const dist = Math.sqrt(distSq);
     if (dist <= opts.alwaysWithinM) {
-      kept.add(body.id);
+      if (!inSight || inSight(body.id)) kept.add(body.id);
       continue;
     }
     const cos = (fx * vx + fy * vy + fz * vz) / dist;
@@ -102,7 +112,7 @@ export function selectVisualActors(
     // so subtract it: a big close body is kept even when its centre sits
     // outside the cone, as long as the disc touches the cone.
     const reach = Math.asin(Math.min(1, opts.bodyRadiusM / dist));
-    if (angle - reach <= halfAngle) kept.add(body.id);
+    if (angle - reach <= halfAngle && (!inSight || inSight(body.id))) kept.add(body.id);
   }
   return kept;
 }

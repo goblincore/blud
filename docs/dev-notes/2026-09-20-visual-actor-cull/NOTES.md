@@ -32,3 +32,45 @@ on screen, `tick:occluder-hull` 1.5–1.7 ms at zero bodies,
   (`marginDeg: 0, bodyRadiusM: 0.001, alwaysWithinM: 0`) because the DEFAULTS
   keep almost everything within 90° — by design, and exactly the bias the plan
   asks for.
+
+## Task 2 + review (2026-09-21) — wiring by the dispatch agent, occlusion added in review
+
+Wiring (dispatch agent, `zai/glm-5.3-flash:high`, kept as written): the set is
+computed once per tick into `ctx.render.visualActors`; view time / head shape,
+both live hull updates and the wound exclusion spheres, the skeleton mesh
+renderer (`update(entries, owners, shown)`) and its crater list read it;
+`?visualcull=0` / `__sdfGame.setVisualCull(false)` restore the old behaviour;
+`visualActors` is in the recording state. Two calls of the agent's worth keeping:
+the FROZEN one-shot hull build is deliberately NOT filtered (captures teleport
+the camera after it; filtering it discards staged bodies' fragments), and the
+kit `pose()` loop was left alone. It also moved telemetry-v4's `gpuCollecting` /
+`gpuAttributor` off `main()` bindings onto `ctx.telemetry`
+(`game-context-coverage`).
+
+What the plan got wrong: **the cone ignores walls, and it is nearly a hemisphere**
+(diagonal FOV 50.4 deg + 35 deg margin). From the spawn room, looking down the
+level, it kept 23 of 23 — the agent measured exactly that and was diagnosing it
+when the task was cancelled. Fix in review: `selectVisualActors` takes an
+`inSight` predicate, fed the march cull's own per-cluster test
+(`actor-sight.ts`). Sight depends on positions, not view direction, so it is not
+stale; the margin still covers the flick; `alsoKeep` bypasses it.
+
+Measured, one page, seam-toggled off/on/off/on (headless, room 1):
+
+| | visual set | visible meshes | bodies on screen |
+| --- | --- | --- | --- |
+| off | 23 / 23 | 816 | 3 |
+| on | 5 / 23 | 487 | 5 |
+| off | 23 / 23 | 820 | 5 |
+| on | 6 / 23 | 507 | 6 |
+
+Frame after a 180-degree `setPose` flick: flesh, skeleton and wall shadow all
+present. Pixel gate: room1 `8f2b74e7…` (+repeat, wounded `1381a866…`), room2
+`35b6d561…` — canonical. Frame-time saving: NOT measured here; needs an owner
+recording against the `2026-09-21T03-12-07` baseline.
+
+Found on the way: `march-hash` could hash the per-body FALLBACK (returns
+`2c5dac0d…` = PERBODY_HASH) when the crowd program was still compiling — fixed
+in the gate. And on a cold profile under load the GIB background job hit its
+180 s per-pass timeout and settled `failed`, which means `gibDraw()` stays
+`skip` for that whole session (no gib chunks). Open.
