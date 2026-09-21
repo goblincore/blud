@@ -164,6 +164,13 @@ export async function stageCloseUp(evaluate, opts = {}, fail = failHard) {
   const eyeH = opts.eyeH ?? 1.62;
   const aimY = opts.aimY ?? 1.0;
   const ladder = opts.ladder ?? CLOSEUP_LADDER;
+  // SETTLE BOUND. 30 x 250 ms = 7.5 s is right for a warm boot, and far too
+  // short for the FIRST boot after a march text change: that boot pays the
+  // machine-global cold compile (tens of seconds, minutes at the closest rung
+  // where the refine/hull programs join), the wait expires, the page is killed,
+  // and the cache never warms — so every retry fails the same way. Raise it for
+  // that first run: MARCH_HASH_SETTLE_TRIES=2400 is a 10-minute ceiling.
+  const settleTries = Number(opts.settleTries ?? process.env.MARCH_HASH_SETTLE_TRIES ?? 30);
   const staged = await evaluate(`(async () => {
     __sdfGame.teleport(${room});
     const z = __sdfGame.zombies().find(q => q.room === ${room});
@@ -203,12 +210,12 @@ export async function stageCloseUp(evaluate, opts = {}, fail = failHard) {
       __sdfGame.step(2);
       let occ = await __sdfGame.occupancy();
       let prevSig = null;
-      for (let t = 0; t < 30 && !(occ.rasterised > 0 && occ.hits + ':' + occ.rasterised === prevSig); t++) {
+      for (let t = 0; t < ${settleTries} && !(occ.rasterised > 0 && occ.hits + ':' + occ.rasterised === prevSig); t++) {
         prevSig = occ.hits + ':' + occ.rasterised;
         await new Promise((r) => setTimeout(r, 250));
         occ = await __sdfGame.occupancy();
       }
-      if (!(occ.rasterised > 0)) return { error: 'occupancy never went live at d=' + d + ' (renderer backlog?)' };
+      if (!(occ.rasterised > 0)) return { error: 'occupancy never went live at d=' + d + ' after ${settleTries} tries (cold compile? set MARCH_HASH_SETTLE_TRIES=2400 for the first boot after a march text change)' };
       const cov = occ.hits / (occ.targetW * occ.targetH);
       if (!best || cov > best.cov) best = { d, cov, occ };
     }

@@ -13,10 +13,10 @@ import { MARCH_BODY } from '../../march.wgsl';
 // text verbatim. These pin the ASSEMBLY — the surface entry itself is pinned
 // in deferred-sdf.test.ts.
 describe('MARCH_BODY section split (hybrid deferred M1 task 2)', () => {
-  it('is exactly fn marchBody + params + trace + surface-prep + light', async () => {
+  it('is exactly fn marchBody + params + pack + trace + surface-prep + light + MarchIn struct', async () => {
     const m = await import('../../march.wgsl');
     expect(m.MARCH_BODY).toBe(
-      `fn marchBody${m.MARCH_BODY_PARAMS}${m.MARCH_BODY_TRACE}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`,
+      `fn marchBody${m.MARCH_BODY_PARAMS}${m.MARCH_IN_PACK}${m.MARCH_BODY_TRACE}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}${m.MARCH_IN_STRUCT}`,
     );
     // The entry point still satisfies the wgslFn ^-anchor.
     expect(MARCH_BODY.startsWith('fn marchBody(')).toBe(true);
@@ -71,9 +71,9 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
     expect(m.CALC_NORMAL).not.toContain('* 0.0015;');
   });
 
-  it('REFINE_BODY is params + setup + REFINE_LOOP + post + prep + light, with four refine params appended', async () => {
+  it('REFINE_BODY is params + pack + setup + REFINE_LOOP + post + prep + light + MarchIn struct, with four refine params appended', async () => {
     const m = await import('../../march.wgsl');
-    expect(m.REFINE_BODY).toBe(`fn refineBody${m.REFINE_PARAMS}${m.MARCH_TRACE_SETUP}${m.REFINE_LOOP}${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`);
+    expect(m.REFINE_BODY).toBe(`fn refineBody${m.REFINE_PARAMS}${m.MARCH_IN_PACK}${m.MARCH_TRACE_SETUP}${m.REFINE_LOOP}${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}${m.MARCH_IN_STRUCT}`);
     expect(m.REFINE_PARAMS.endsWith('  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>,\n  normalTex: texture_2d<f32>\n) -> vec4<f32> {\n')).toBe(true);
     expect(m.REFINE_PARAMS.startsWith(m.MARCH_BODY_PARAMS.slice(0, m.MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, ''))).toBe(true);
   });
