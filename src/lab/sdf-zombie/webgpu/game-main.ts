@@ -256,7 +256,7 @@ import { createFxSeams } from './game-seams-fx';
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createMiscSeams } from './game-seams-misc';
-import { applyBoneCullMode, applyBoneMesh, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
+import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
 import { applyChunkKindLook, ensureGibAssets, gibAssetArchetypeOf, gibAssetArmed, newBlastProfile, primsLongAxis, reacquireHeldProp, retireActor, scheduleGib, stepPendingGibImpulses } from './game-gibs-leaves';
 import { breechInRig, locatorInView, newTracerQuad, setQuadMatrix, startReload, stepBursts, viewToRig } from './game-weapon-leaves';
@@ -1067,6 +1067,15 @@ async function main() {
   camera.fov = FISHEYE_DEFAULTS.renderFovDeg;
   camera.updateProjectionMatrix();
   ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
+  // THE VIEW MODEL'S OWN FOV. Narrowing the world FOV to 46 magnifies
+  // everything drawn through it, the first-person weapons included, and at
+  // 46 the shorty is mostly off the bottom of the frame. Rather than retune
+  // every weapon's offsets against a number the owner is still tuning by
+  // eye, the weapons keep the FOV they were framed at and the rig pays the
+  // difference — see viewmodelFovScale(). The rig itself is created with the
+  // view model, below; this only records the FOV. Set equal to
+  // `centerFovDeg` to put the weapons back under the world FOV.
+  ctx.player.viewmodelFovDeg = VIEWMODEL_REFERENCE_FOV_DEG;
   // Runtime march normals (a second march attachment + renderer MRT) are allocated ONLY when the
   // boot asks for a model that reads them: `?upscaleinputs=rgbn|rgbdn`, a trained model whose name
   // contains 'rgbn'/'rgbdn', or an explicit `?upscalenormals=1`. Every other boot — including
@@ -3488,6 +3497,14 @@ async function main() {
 
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
+  // The FOV-compensation rig sits between the camera and everything the
+  // player holds, and carries NOTHING but viewmodelFovScale()'s scale — so
+  // the anchor's ride height below is scaled with the rest of the rig rather
+  // than surviving as an unscaled camera-space offset. Every weapon slot
+  // (shotgun, dynamite, flare) is a descendant, so this is one transform for
+  // all of them and for whatever slot 4 turns out to be.
+  ctx.weapon.fovRig = new THREE.Group();
+  ctx.weapon.fovRig.name = 'view-model-fov-rig';
   ctx.weapon.viewModelAnchor = new THREE.Group();
   ctx.weapon.viewModelAnchor.name = 'view-model-anchor';
   // Ride height of the whole view-model (gun + orb hands move together).
@@ -3519,7 +3536,9 @@ async function main() {
   ctx.weapon.gunRig = new THREE.Group();
   ctx.weapon.gunRig.name = 'gun-rig';
   ctx.weapon.aimRig.add(ctx.weapon.gunRig);
-  camera.add(ctx.weapon.viewModelAnchor);
+  ctx.weapon.fovRig.add(ctx.weapon.viewModelAnchor);
+  camera.add(ctx.weapon.fovRig);
+  applyViewmodelFovScale(ctx);
   scene.add(camera);
 
   // -----------------------------------------------------------------------
@@ -7983,6 +8002,20 @@ async function main() {
      *  paused. Warm steps are cache hits after boot, so this is cheap. */
     rewarm: () => warmPipelines(),
   };
+  // A SPREAD FLATTENS A GETTER. `...createRenderQualitySeams(ctx)` above calls
+  // that factory's `get fisheye()` ONCE, at boot, and copies the RESULT — so
+  // `__sdfGame.fisheye` was a boot-time SNAPSHOT, not the live report its own
+  // doc promises ("the console shows what actually landed, not what was
+  // typed"). It reported 72/60 for the rest of the session however many times
+  // you called setFisheye, and the FOV capture script logged three identical
+  // legs before this was spotted. The setters were never affected — they are
+  // plain functions and return fisheyeReport(ctx) fresh — so this is a
+  // reporting bug, not a tuning one. Re-declared here, after the literal,
+  // because that is where the flattening happens; if another seam factory
+  // ever grows a getter, it needs the same treatment.
+  Object.defineProperty((window as unknown as { __sdfGame: object }).__sdfGame, 'fisheye', {
+    get: () => fisheyeReport(ctx), enumerable: true, configurable: true,
+  });
   if (import.meta.env.DEV && new URLSearchParams(location.search).has('normal-playtest')) {
     const { installNormalPlaytest } = await import('./normal-gradient-playtest');
     const api = (window as unknown as { __sdfGame: Parameters<typeof installNormalPlaytest>[0] }).__sdfGame;

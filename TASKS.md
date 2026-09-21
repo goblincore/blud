@@ -4,6 +4,30 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Narrow FOV + the weapon's own FOV — 2026-09-21
+
+- [x] **Owner: narrow the frame to 58 render / 46 centre** (was 72/60), for claustrophobia and to show the wound system.
+  `FISHEYE_DEFAULTS` shipped; visible FOV 63.0 -> 49.0 deg at 16:9, bend almost unchanged. Starting values, tune by eye.
+  [Notes + captures](docs/dev-notes/2026-09-21-narrow-fov/NOTES.md).
+- [x] **The weapons are no longer framed by the world FOV** — chose (b) *own FOV*, not (a) per-weapon retuning.
+  A `view-model-fov-rig` under the camera carries `(r, r, 1)`, `r = tan(centre/2)/tan(60/2)`, which is EXACTLY the old
+  projection for camera-parented geometry (proved in `game-viewmodel.test.ts`). One transform, all three slots, no
+  per-weapon work, survives future FOV tuning; `z` pinned at 1 so depth/occlusion are untouched. Cost: non-uniform scale
+  tilts the view model's normals, and a ~3.8% residual because the lens itself changed. Seam: `__sdfGame.setViewmodelFov`.
+- [x] Tools: `scripts/sdf-game-fov-capture.sh` (9 shots, 3 FOV legs x 3 weapon slots, FOV read back and gated),
+  `scripts/sdf-game-fov-gpu-ab.sh` (one page, uncapped, alternating legs).
+- [x] **Fixed on the way: `__sdfGame.fisheye` was a boot-time SNAPSHOT.** A spread flattens a getter, so
+  `...createRenderQualitySeams(ctx)` copied `get fisheye()`'s value once and the console reported 72/60 forever.
+  Setters were unaffected. Re-declared with `Object.defineProperty`. **Any other seam getter has the same bug — unaudited.**
+- [~] **Cost: the coverage half is measured, the GPU-ms half is NOT.** Median `coverageFrac` 0.155 -> 0.27 (**1.75x**,
+  matching the 1.72-1.81x arithmetic) over six alternating legs. But the GPU busy A/B came back **vsync-bound**
+  (frame p50 16.6 ms, ~3.7 ms idle on BOTH arms) so its "1.01x" means nothing — the elastic-clock trap arriving through
+  the presenter, not the frame cap. Raising the DPR does not help: the march target is **capped** and does not follow it,
+  so the FOV adds no marched pixels, only march depth on pixels that now hit flesh. **Next: vsync off needs a Chrome flag
+  in the shared `scripts/lab-servers.sh` — not taken unilaterally.**
+- [ ] Owner to judge the captures and tune 58/46 by eye; `setViewmodelFov` if the weapon wants to sit differently.
+- [ ] F-aim.1 (free aim misplaces under the lens) is UNCHANGED and still deferred — it reproduces at every FOV.
+
 ## Burning enemies — flame look + flame lab — 2026-09-17
 
 - [x] Foundation: `sdf-flame-lab.html` + per-body burn + surface fire/char + glow, heat warp, shutter, fire light.

@@ -29,6 +29,11 @@ export interface PlayerState {
   /** Center FOV handed to the fisheye lens, degrees; the lens and camera.fov
    *  must never disagree (see the CO-INVARIANT comment in game-main.ts). */
   centerFovDeg: number;
+  /** The centre FOV the FIRST-PERSON WEAPONS are framed against, degrees —
+   *  independent of `centerFovDeg` on purpose, so tuning the world FOV never
+   *  moves the gun. Defaults to VIEWMODEL_REFERENCE_FOV_DEG (the FOV the
+   *  poses were authored at); `__sdfGame.setViewmodelFov` is the knob. */
+  viewmodelFovDeg: number;
   /** Capsule position/velocity and view angles — game-player's motion state. */
   player: PlayerMotionState;
   /** Codes of the keys currently held (live input, cleared on keyup). */
@@ -74,6 +79,7 @@ export interface PlayerState {
 export function makePlayerState(): PlayerState {
   return {
     centerFovDeg: 0,
+    viewmodelFovDeg: 0,
     player: { pos: [0, 0, 0], vel: [0, 0, 0], yaw: 0, pitch: 0, grounded: false },
     keys: new Set<string>(),
     pendingDx: 0,
@@ -99,6 +105,7 @@ export function makePlayerState(): PlayerState {
 /** Old `game-main.ts` binding name → path on the `player` slice. */
 export const PLAYER_BINDINGS = {
   centerFovDeg: 'player.centerFovDeg',
+  viewmodelFovDeg: 'player.viewmodelFovDeg',
   player: 'player.player',
   keys: 'player.keys',
   pendingDx: 'player.pendingDx',

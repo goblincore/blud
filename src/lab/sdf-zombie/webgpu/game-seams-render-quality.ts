@@ -8,7 +8,7 @@
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { clampFovDeg } from './fisheye';
-import { applySdfScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-leaves';
+import { applySdfScale, applyViewmodelFovScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-leaves';
 import { ensureImpactSplashLayer } from './game-vfx-leaves';
 import { shellAmpOf } from './game-world-leaves';
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
@@ -120,6 +120,28 @@ export function createRenderQualitySeams(ctx: GameContext) {
       if (Number.isFinite(deg)) {
         ctx.player.centerFovDeg = clampFovDeg(deg);
         ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
+        // The world FOV moved, so the view model's compensation has to move
+        // with it or the weapons drift off-frame again. Same clamp, same
+        // breath — the pairing this whole block's CO-INVARIANT note is about.
+        applyViewmodelFovScale(ctx);
+      }
+      return fisheyeReport(ctx);
+    },
+    /**
+     * The centre FOV the FIRST-PERSON WEAPONS are framed at, independent of
+     * the world's. Defaults to VIEWMODEL_REFERENCE_FOV_DEG — the FOV every
+     * weapon pose was authored against — so the weapons are unmoved by world
+     * FOV tuning. Pass `__sdfGame.fisheye.centerFovDeg` to put them back
+     * under the world FOV (bigger and closer as it narrows); pass a WIDER
+     * number than the reference to shrink the weapon further into the corner.
+     *
+     * Rejects non-finite input as a no-op and shares makeLens's clamp, for
+     * the same reasons setFisheye does.
+     */
+    setViewmodelFov: (deg: number) => {
+      if (Number.isFinite(deg)) {
+        ctx.player.viewmodelFovDeg = clampFovDeg(deg);
+        applyViewmodelFovScale(ctx);
       }
       return fisheyeReport(ctx);
     },

@@ -108,8 +108,21 @@ describe('fisheye reporting', () => {
   });
 
   it('ships the owner-approved defaults', () => {
-    expect(FISHEYE_DEFAULTS.renderFovDeg).toBe(72);
-    expect(FISHEYE_DEFAULTS.centerFovDeg).toBe(60);
+    // Narrowed from 72/60 on 2026-09-21 (owner) for a claustrophobic frame.
+    expect(FISHEYE_DEFAULTS.renderFovDeg).toBe(58);
+    expect(FISHEYE_DEFAULTS.centerFovDeg).toBe(46);
+  });
+
+  it('the shipped lens bends about as hard as 72/60 did, on a far narrower frame', () => {
+    // The two things the narrowing actually changed, pinned as numbers so a
+    // future tweak to either FOV shows up here rather than only in a
+    // screenshot. The bend (k) barely moves — the RATIO between the two FOVs
+    // is nearly what it was — while the visible frame loses 14 degrees.
+    expect(DEF.k).toBeGreaterThan(0);
+    expect(DEF.k).toBeCloseTo(0.0735, 4);
+    expect(makeLens(72, 60, ASPECT).k).toBeCloseTo(0.0621, 4);
+    expect(visibleFovDeg(DEF)).toBeCloseTo(49.0, 1);
+    expect(visibleFovDeg(makeLens(72, 60, ASPECT))).toBeCloseTo(63.0, 1);
   });
 
   it('makeLens lands on exactly what clampFovDeg would, for any raw input', () => {

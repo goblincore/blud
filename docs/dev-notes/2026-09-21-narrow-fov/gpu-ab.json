@@ -1,0 +1,99 @@
+{
+  "legs": [
+    {
+      "round": 0,
+      "arm": "old",
+      "render": 72,
+      "centre": 60,
+      "gpu": {
+        "frames": 357,
+        "busyP50Ms": 13.3,
+        "busyP95Ms": 14.21,
+        "idleP50Ms": 3.38
+      },
+      "p50Ms": 16.599999994039536,
+      "visibleFrames": 360,
+      "coverageMedian": 0.1742
+    },
+    {
+      "round": 0,
+      "arm": "new",
+      "render": 58,
+      "centre": 46,
+      "gpu": {
+        "frames": 357,
+        "busyP50Ms": 13.08,
+        "busyP95Ms": 14.16,
+        "idleP50Ms": 3.69
+      },
+      "p50Ms": 16.599999994039536,
+      "visibleFrames": 360,
+      "coverageMedian": 0.2812
+    },
+    {
+      "round": 1,
+      "arm": "old",
+      "render": 72,
+      "centre": 60,
+      "gpu": {
+        "frames": 355,
+        "busyP50Ms": 11.7,
+        "busyP95Ms": 14.14,
+        "idleP50Ms": 4.86
+      },
+      "p50Ms": 16.599999994039536,
+      "visibleFrames": 360,
+      "coverageMedian": 0.1542
+    },
+    {
+      "round": 1,
+      "arm": "new",
+      "render": 58,
+      "centre": 46,
+      "gpu": {
+        "frames": 356,
+        "busyP50Ms": 13.11,
+        "busyP95Ms": 14.06,
+        "idleP50Ms": 3.73
+      },
+      "p50Ms": 16.80000001192093,
+      "visibleFrames": 360,
+      "coverageMedian": 0.2619
+    },
+    {
+      "round": 2,
+      "arm": "old",
+      "render": 72,
+      "centre": 60,
+      "gpu": {
+        "frames": 357,
+        "busyP50Ms": 13,
+        "busyP95Ms": 14.08,
+        "idleP50Ms": 3.7
+      },
+      "p50Ms": 16.5,
+      "visibleFrames": 360,
+      "coverageMedian": 0.1597
+    },
+    {
+      "round": 2,
+      "arm": "new",
+      "render": 58,
+      "centre": 46,
+      "gpu": {
+        "frames": 357,
+        "busyP50Ms": 12.93,
+        "busyP95Ms": 14.1,
+        "idleP50Ms": 3.95
+      },
+      "p50Ms": 16.5,
+      "visibleFrames": 360,
+      "coverageMedian": 0.2727
+    }
+  ],
+  "oldBusy": 13,
+  "newBusy": 13.08,
+  "ratio": 1.0061538461538462,
+  "idleOld": 3.7,
+  "idleNew": 3.73
+}
