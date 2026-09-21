@@ -36,10 +36,10 @@ describe('per-frame GPU summaries for the gameplay recorder', () => {
     expect(out.get(5)).toEqual({ busyMs: 9, idleMs: 0, exact: false, passes: { 'sdf:march': 9 } });
   });
 
-  it('drops sub-0.05 ms passes and rounds to 0.01 ms to keep recordings small', () => {
+  it('drops sub-0.05 ms passes and keeps 0.01 ms resolution (a clock reference needs it)', () => {
     const a = createGpuFrameAttributor();
-    const out = a.add([pass(1, 'tiny', 0, 0.02), pass(1, 'sdf:march', 0, 5.12345)]);
-    expect(out.get(1)!.passes).toEqual({ 'sdf:march': 5.1 });
+    const out = a.add([pass(1, 'tiny', 0, 0.04), pass(1, 'post:fxaa', 0.04, 0.34), pass(1, 'sdf:march', 0, 5.12345)]);
+    expect(out.get(1)!.passes).toEqual({ 'sdf:march': 4.78, 'post:fxaa': 0.3 });
     expect(out.get(1)!.busyMs).toBe(5.12);
   });
 });

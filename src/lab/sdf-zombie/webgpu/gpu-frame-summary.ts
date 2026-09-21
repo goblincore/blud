@@ -26,7 +26,9 @@ export interface GpuFrameSummary {
   /** False when a sample lacked raw boundaries and wall durations were used —
    *  those overlap, so busyMs over-reads and idleMs is unknown (0). */
   exact: boolean;
-  /** label -> exclusive ms, passes under 0.05 ms dropped, 0.1 ms resolution. */
+  /** label -> exclusive ms, passes under 0.05 ms dropped, 0.01 ms resolution.
+   *  (0.1 ms was too coarse to use a small constant-work pass as a GPU CLOCK
+   *  reference: a 0.3 vs 0.4 ms fxaa is a 33% quantisation step.) */
   passes: Record<string, number>;
 }
 
@@ -52,7 +54,7 @@ export function createGpuFrameAttributor(): {
         for (const [label, ms] of ranked) {
           if (label === GPU_IDLE_LABEL) { idle += ms; continue; }
           busy += ms;
-          if (ms >= 0.05) passes[label] = tidy(ms, 0.1);
+          if (ms >= 0.05) passes[label] = tidy(ms, 0.01);
         }
         out.set(frame, { busyMs: tidy(busy, 0.01), idleMs: tidy(idle, 0.01), exact, passes });
       }
