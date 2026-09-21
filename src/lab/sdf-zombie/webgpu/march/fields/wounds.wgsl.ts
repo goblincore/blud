@@ -162,7 +162,7 @@ var<private> gWoundOwners: u32 = 0u;
 var<private> gWoundRaisers: u32 = 0u;
 // Union of the threat masks of every wound whose carve raised the field at p.
 var<private> gWoundThreat: u32 = 0u;
-// Exact-fix switch (counts2.z >= 4): the d-aware wound reach and the re-fold
+// Exact-fix switch (counts2.z >= 8): the d-aware wound reach and the re-fold
 // pre-scan. Set per slot by mapBody; 0 in every other caller = ship.
 var<private> gWoundExact: f32 = 0.0;
 // Per-owner sum of rim-bump amplitudes over the rows the BASE applyWounds

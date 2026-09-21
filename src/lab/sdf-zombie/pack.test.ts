@@ -1130,3 +1130,17 @@ describe('bone segment spheres (boneCullMode: segment)', () => {
     expect(p.boneCount).toBe(ref.boneCount);
   });
 });
+
+describe('group cluster id (per-limb accumulators, 2026-09-21)', () => {
+  it('packs cluster + 1 over 32 into the flags fraction, leaving the bitfield decode intact', () => {
+    const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const packed = packBody(body);
+    for (let g = 0; g < packed.groupCount; g++) {
+      const w = packed.groupRange[g * 4 + 3]!;
+      const start = packed.groupRange[g * 4]!;
+      const cluster = body.clusters.findIndex(c => start >= c.start && start < c.start + c.count);
+      expect(Math.round(((w % 1) + 1e-6) * 32) - 1).toBe(cluster);
+      expect(Math.trunc(w + 0.5)).toBe(Math.floor(w));
+    }
+  });
+});

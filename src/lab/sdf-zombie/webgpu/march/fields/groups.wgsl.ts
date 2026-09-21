@@ -46,7 +46,12 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
   // the cluster walk (see pack.ts: sd under-reports Euclid by up to this
   // factor; a factor-free test tore black cracks inside wound cavities).
   // Tiles cut the LIST; spheres still cut PER-STEP work.
-  if (length(p - bounds.xyz) - bounds.w > (d + counts.w * 4.0) * grp.z) { return d; }
+  // gLimbSlack (per-limb accumulators, 0 unless on and inside the wound
+  // bound) keeps groups a LIMB still needs inside a foreign crater, where
+  // the limb is less inside than the union. Folding such a group into d is a
+  // value no-op: its prims sit beyond d + 4k, where smin is exactly min.
+  if (length(p - bounds.xyz) - bounds.w > (d + gLimbSlack + counts.w * 4.0) * grp.z) { return d; }
+  let limbC = select(-1, i32(fract(grp.w) * 32.0 + 0.5) - 1, gLimbOn > 0.5);
   let start = i32(grp.x);
   let count = i32(grp.y);
   let flags = i32(grp.w + 0.5);
@@ -115,6 +120,12 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     // case (0,1,2,3,4,6) keeps its current answer — verified by
     // enumeration, see pack.test.ts / the task 5 report.
     if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
+    // PER-LIMB ACCUMULATOR: the same prim, the same blend, into its own
+    // cluster's fold — what the owner re-fold used to rebuild from scratch.
+    if (limbC >= 0 && limbC < 8) {
+      if (sd < gLimbBest[limbC]) { gLimbBest[limbC] = sd; gLimbBestIdx[limbC] = f32(idx); gLimbBestDistort[limbC] = grp.z; }
+      if ((i32(prof) & 7) == 1) { gLimb[limbC] = sminChamfer(gLimb[limbC], sd, k); } else { gLimb[limbC] = smin(gLimb[limbC], sd, k); }
+    }
   }
   return d;
 }
@@ -138,6 +149,15 @@ var<private> gFoldBestIdx: f32 = -1.0;
 // straight after its mapBody call. 1.0 default: groups without distortion
 // and the volume branch (which never folds) are exact no-ops.
 var<private> gFoldBestDistort: f32 = 1.0;
+// PER-LIMB ACCUMULATORS (counts2.z mode 4, option 4 of the 2026-09-21 wound
+// cost work): each cluster's own fold, built during the base fold, so the
+// owner re-fold needs no prim loops. mapBody resets them per slot.
+var<private> gLimbOn: f32 = 0.0;
+var<private> gLimbSlack: f32 = 0.0;
+var<private> gLimb: array<f32, 8>;
+var<private> gLimbBest: array<f32, 8>;
+var<private> gLimbBestIdx: array<f32, 8>;
+var<private> gLimbBestDistort: array<f32, 8>;
 // WIND DRIFT, metres, world space. A private global rather than another
 // parameter on foldGroup because foldGroup is reached from mapBody, which has
 // TEN call sites — threading a uniform through all of them to serve one

@@ -17,9 +17,9 @@ import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
 import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
 
-/** counts2.z carries the re-fold mode in 0..3 plus 4 for the wound exact fixes. */
-const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => (a.view.uniforms.counts2.value.z > 3.5 ? 4 : 0);
-const refoldMode = (z: number) => (z > 3.5 ? z - 4 : z);
+/** counts2.z carries the re-fold mode in 0..4 plus 8 for the wound exact fixes. */
+const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => (a.view.uniforms.counts2.value.z > 7.5 ? 8 : 0);
+const refoldMode = (z: number) => (z > 7.5 ? z - 8 : z);
 import { HULL_SHRINK, buildHullInstances } from './occluder-hull';
 
 export function createWorldSeams(ctx: GameContext) {
@@ -276,17 +276,24 @@ export function createWorldSeams(ctx: GameContext) {
     setOwnerRefoldMask(on: boolean) {
       for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 3 : 0) + exactBit(a);
     },
-    get ownerRefoldMask() { return refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 2.5; },
-    /** Wound EXACT FIXES (counts2.z + 4, 2026-09-21): d-aware per-row wound reach and the
+    get ownerRefoldMask() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 2.5 && z < 3.5; },
+    /** Owner re-fold PER-LIMB ACCUMULATORS (counts2.z == 4, option 4, 2026-09-21): each
+     *  cluster's fold is built during the base fold and gets its own wounds once — no
+     *  re-fold prim loops. Includes the raiser gate. A look change at joints; off = ship. */
+    setOwnerRefoldLimbs(on: boolean) {
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 4 : 0) + exactBit(a);
+    },
+    get ownerRefoldLimbs() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 3.5; },
+    /** Wound EXACT FIXES (counts2.z + 8, 2026-09-21): d-aware per-row wound reach and the
      *  owner re-fold pre-scan (group spheres vs dmg + own bump amplitude). Value-preserving by
      *  argument; composes with the re-fold mode. off = ship. */
     setWoundExact(on: boolean) {
       for (const a of ctx.world.actors) {
         const z = a.view.uniforms.counts2.value.z;
-        a.view.uniforms.counts2.value.z = (z > 3.5 ? z - 4 : z) + (on ? 4 : 0);
+        a.view.uniforms.counts2.value.z = (z > 7.5 ? z - 8 : z) + (on ? 8 : 0);
       }
     },
-    get woundExact() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 3.5; },
+    get woundExact() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 7.5; },
     /** Option 3 (2026-09-21): soldier wounds upload ONE noise-ragged crater instead of the
      *  wound + three lobe rows. A look change; off = ship. Re-uploads every body now. */
     setRaggedCraters(on: boolean) {

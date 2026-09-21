@@ -533,7 +533,10 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
         p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
         || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
         || p.metal !== undefined || p.strand !== undefined);
-      groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
+      // The fraction of w is the owning cluster + 1 over 32 (option 4 of the wound-cost
+      // work, 2026-09-21: foldGroup's per-limb accumulators). Every reader decodes the
+      // bitfield as i32(w + 0.5), which a fraction up to 0.25 cannot move.
+      groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0) + (ci + 1) / 32], o);
       groupCount++;
     }
     clusterGroups.set([first, groupCount - first, cDistort, 0], ci * CLUSTER_STRIDE);

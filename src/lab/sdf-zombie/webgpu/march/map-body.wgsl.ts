@@ -68,11 +68,22 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     gWoundRaisers = 0u;
     gWoundThreat = 0u;
     gWoundAmp = array<f32, 9>();
-    // counts2.z = re-fold mode (0 ship, 1 off, 2 raiser gate, 3 threat mask)
-    // + 4 when the exact fixes are on (d-aware reach, re-fold pre-scan).
-    let exactFix = counts2.z > 3.5;
-    let refoldMode = select(counts2.z, counts2.z - 4.0, exactFix);
+    // counts2.z = re-fold mode (0 ship, 1 off, 2 raiser gate, 3 threat mask,
+    // 4 per-limb accumulators) + 8 when the exact fixes are on (d-aware
+    // reach, re-fold pre-scan).
+    let exactFix = counts2.z > 7.5;
+    let refoldMode = select(counts2.z, counts2.z - 8.0, exactFix);
     gWoundExact = select(0.0, 1.0, exactFix);
+    let limbMode = refoldMode > 3.5;
+    gLimbOn = select(0.0, 1.0, limbMode);
+    // The cull slack a limb needs inside a foreign crater: how far a wound can
+    // raise the union above the limb's own surface (the deepest carve, 0.16 m
+    // blast, plus its smax overshoot) — 0.2 m, and only inside the wound bound.
+    gLimbSlack = select(0.0, 0.2, limbMode && length(p - woundBound.xyz) <= woundBound.w);
+    gLimb = array<f32, 8>(1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9);
+    gLimbBest = array<f32, 8>(1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9);
+    gLimbBestIdx = array<f32, 8>(-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0);
+    gLimbBestDistort = array<f32, 8>(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -120,7 +131,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // (owner, 2026-08-23). The factor makes a plate-bearing cluster
     // (schoolgirl sole: 22x) nearly uncullable, but its GROUPS still cull
     // soundly below, so the cost is a few texel reads, not a full fold.
-    if (length(p - cbounds.xyz) - cbounds.w > (d + counts.w * 4.0) * gspan.z) { continue; }
+    if (length(p - cbounds.xyz) - cbounds.w > (d + gLimbSlack + counts.w * 4.0) * gspan.z) { continue; }
     let gFirst = i32(gspan.x);
     let gCount = i32(gspan.y);
   for (var gi = 0; gi < 64; gi = gi + 1) {
@@ -176,13 +187,27 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // unwritten mask is zero and would switch the re-fold off entirely.
   let raisersAtBase = gWoundRaisers & ~1u;
   let threatAtBase = gWoundThreat;
-  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (refoldMode > 1.5 && refoldMode < 2.5 && raisersAtBase != 0u) || (refoldMode > 2.5 && threatAtBase != 0u))) {
+  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || ((refoldMode > 1.5 && refoldMode < 2.5 || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
       if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
       if (refoldMode > 1.5 && (raisersAtBase & ~(1u << u32(c + 1))) == 0u) { continue; }
-      if (refoldMode > 2.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
+      if (refoldMode > 2.5 && refoldMode < 3.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
+      // MODE 4: the limb's fold is already built (gLimb[c]); apply its own
+      // wounds once. A cluster the base fold never reached is 1e9 and loses.
+      if (limbMode) {
+        if (gLimb[c] > 1e8) { continue; }
+        gWoundCluster = f32(c + 1);
+        let limbDamageAcc = applyWounds(applyCarves(gLimb[c], p, data, counts, band), p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
+        if (limbDamageAcc < dmg) {
+          dmg = limbDamageAcc;
+          gFoldBest = gLimbBest[c];
+          gFoldBestIdx = gLimbBestIdx[c];
+          gFoldBestDistort = gLimbBestDistort[c];
+        }
+        continue;
+      }
       let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
       if (cr.z < 0.5) { continue; }
       let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
