@@ -20,6 +20,13 @@
 - [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](docs/dev-notes/2026-09-18-march-split/NOTES.md)).
+- [ ] **Cold-cache flesh bug (2026-09-20, open).** On a COLD shader cache with warm-up ON (default URL), the warm gate reveals the
+  game before the body/flesh pipelines are usable: actors draw as bare skull + thin bone limbs + uniform, distant actors vanish
+  entirely, while skeleton meshes and hands/weapon draw fine. `?warm=0` renders flesh correctly even cold. NOT a three version
+  issue — r185 and r186 produce the identical picture. Repro needs a FRESH browser profile (Incognito, or `scripts/lab-servers.sh`,
+  which starts a clean profile each run); a warmed profile will not show it, so it is easy to mistake for fixed.
+  Caveat for any A/B here: `scripts/gallery-look.mjs` does not wait for `__warmGate` nor dismiss the loader, so with warm ON it can
+  silently capture the "READY — CLICK TO START" overlay instead of the room (two such shots came back byte-identical and proved nothing).
 - [ ] Then: the real flare gun (projectile, stick, burning AI, damage) — owner's separate session. Burn-down on death is wired but unreachable (game has no health yet).
 - [~] Spin-offs from the [wildfire teardown](docs/dev-notes/2026-09-18-wildfire-fire-teardown.md): shared `curl-volume-node.ts` + `soft-fade.ts`.
   **Explosion curl: seam fixed and verified** (edge-map gate `npm run explosion:seam`, all scenes clean, billow kept; ship values

@@ -1112,7 +1112,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   }) as unknown as Swizzled;
   const fireResolveMat = new MeshBasicNodeMaterial();
   fireResolveMat.name = 'post:fire-resolve';
-  fireResolveMat.colorNode = vec4(fireResolveOut as never, 1.0);
+  fireResolveMat.colorNode = fireResolveOut as never;
   fireResolveMat.depthWrite = false;
   fireResolveMat.depthTest = false;
   fireResolveMat.fog = false;
@@ -1130,7 +1130,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   }) as unknown as Swizzled;
   const fireCompositeMat = new MeshBasicNodeMaterial();
   fireCompositeMat.name = 'post:fire-composite';
-  fireCompositeMat.colorNode = vec4(fireCompositeOut as never, 1.0);
+  fireCompositeMat.colorNode = fireCompositeOut as never;
   fireCompositeMat.depthWrite = false;
   fireCompositeMat.depthTest = false;
   fireCompositeMat.fog = false;

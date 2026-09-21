@@ -193,6 +193,20 @@ describe('post-aa module wiring', () => {
     expect(src).not.toContain('fireCopyMat');
   });
 
+  // THE FIRE WGSL ENTRY POINTS ALL RETURN vec4<f32> (emission.rgb, T), so a
+  // `vec4(out, 1.0)` wrapper hands JoinNode FIVE components. JoinNode logs
+  // "Length of parameters exceeds maximum length of function 'vec4()' type"
+  // and then BREAKS, silently dropping the trailing 1.0 — which is why the
+  // picture looked right while the console carried two errors on every warm
+  // boot. The march twin was fixed when it was first seen; the resolve and
+  // composite twins were missed. Pass the node through unwrapped.
+  it('the fire materials never re-wrap a vec4 wgslFn result', () => {
+    for (const mat of ['fireMarchMat', 'fireResolveMat', 'fireCompositeMat']) {
+      expect(src).toContain(`${mat}.colorNode = ${mat.replace(/Mat$/, 'Out')} as never;`);
+      expect(src).not.toContain(`${mat}.colorNode = vec4(`);
+    }
+  });
+
   it('round 2b: the fire resolve + history run at the march resolution', () => {
     expect(src).toContain('fireHistA.setSize(fireTarget.width, fireTarget.height);');
     expect(src).toContain('fireHistB.setSize(fireTarget.width, fireTarget.height);');
