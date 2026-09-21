@@ -4,9 +4,12 @@
 > wait for the body march went from **180 s to ~17 s** (8× less than the
 > 12-copy baseline; 5 `mapBody` copies remain). Step 2 (`calcNormal` through
 > one site) moved the canonical hashes by fast-math noise, and the owner
-> approved the re-pin: default `94c23457…`, crowd quad `85873b8d…`, per-body
-> `66e50ade…` (each reproduced on two independent runs; evidence in
-> `scripts/march-hash.mjs`). `march-parity` PASS after both steps.
+> approved the re-pin. On merging with main the pins moved once more, because
+> main's `1ba2db30` (FOV 58/46) had already moved them and main was never
+> re-pinned (bisected: it alone gives `57444064…`). Merged canonicals, each
+> reproduced twice: default `409be6c9…`, crowd quad `ed8c062f…`, per-body
+> `d8ba49e1…` (evidence in `scripts/march-hash.mjs`). `march-parity` PASS after
+> each step and after the merge.
 
 Branch `claude/march-compile-cold` off main `f6aaa115`. Evidence base:
 [2026-09-19 census](../2026-09-19-shader-compile/NOTES.md) (cold = one ~48–200 s

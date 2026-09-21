@@ -89,10 +89,20 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp, sleep } 
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-21):
-//   shipped default (crowd, boxes, tiles on)        = 94c23457bb817da7c0a3182ff7542d8978083698
-//   crowd quad (?crowddispatch=quad, tiles on)      = 85873b8dbd78a0882da8d4956f5f0f0bbc864e9b
-//   per-body (?crowd=0, tiles off)                  = 66e50adead87cf23aa934ae2906cc02159c89a7f
+// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-21, after
+// merging the cold-compile branch with main):
+//   shipped default (crowd, boxes, tiles on)        = 409be6c9ebb385ef7ae815b65cc6a611f3aa6ef8
+//   crowd quad (?crowddispatch=quad, tiles on)      = ed8c062f37f205c5b90421fd264caab5cec29051
+//   per-body (?crowd=0, tiles off)                  = d8ba49e1e9041af94d9e6054866e6157f362c3db
+//
+// TWO MOVERS, both intended, each bisected:
+//   1ba2db30 "fov: narrow the frame to 58/46" (main) moved the 2026-09-18 pins
+//     on its own: 57444064… / 0feba642… / 718eb274… (every later main commit
+//     up to 572fec14 held 57444064…; main was never re-pinned for it).
+//   8277ec5d calcNormal one call site (cold-compile branch) moved them on its
+//     own: 94c23457… / 85873b8d… / 66e50ade… (details below).
+// The merge carries both. Each merged value was reproduced on two independent
+// runs (ports 5398/9398 and 5399/9399).
 //
 // 2026-09-21 RE-PIN (owner-approved). The commit that moved all three is the
 // calcNormal one-call-site change (cold Metal compile ~28 s -> ~17 s; see
@@ -144,7 +154,7 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
-const PERBODY_HASH = '66e50adead87cf23aa934ae2906cc02159c89a7f';
+const PERBODY_HASH = 'd8ba49e1e9041af94d9e6054866e6157f362c3db';
 // MARCH_HASH_PERBODY — the per-body opt-out gate (task 8). Boots `?crowd=0`
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
@@ -153,8 +163,8 @@ const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
 // by DEFAULT_HASH whenever neither override is set and no extra query is given.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
-const CROWD_HASH = '85873b8dbd78a0882da8d4956f5f0f0bbc864e9b';
-const DEFAULT_HASH = '94c23457bb817da7c0a3182ff7542d8978083698';
+const CROWD_HASH = 'ed8c062f37f205c5b90421fd264caab5cec29051';
+const DEFAULT_HASH = '409be6c9ebb385ef7ae815b65cc6a611f3aa6ef8';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
