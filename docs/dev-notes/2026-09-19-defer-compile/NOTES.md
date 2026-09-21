@@ -219,3 +219,13 @@ Raw payloads: `baseline-1.json`, `baseline-2.json`, `baseline-warm.json`,
   is back at `0.1031`. Never committed.
 
 
+
+## Correction 2026-09-20 — the crowd fallback never drew with the depth gate OFF
+
+Section (b) assumed `setBodies` re-shows the hidden crowd-attached proxies. It
+does so only in sdf-layer's front-to-back per-body branch (depth gate ON); the
+game ships `GAME_DEPTH_GATE = 0`, where the single-pass march renders by each
+object's own `.visible`. Measured on a cold profile: 0 body draws in the march
+context during `{gib: compiling, crowd: pending}`, 235 in 3 s after the fix
+(the draw fn now shows/hides attached proxies itself). This was the "cold-cache
+flesh bug"; cold, the background set took > 4 min (gib alone 264 s).

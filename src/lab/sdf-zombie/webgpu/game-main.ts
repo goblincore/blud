@@ -1995,6 +1995,22 @@ async function main() {
       if (!crowdMarch) {
         for (const t of ctx.crowd.types.values()) { t.mesh.visible = false; t.depthPreMesh.visible = false; }
       }
+      // THE FALLBACK HAS TO SHOW THE PROXIES ITSELF (cold-cache flesh bug,
+      // 2026-09-20). Attached views are spawned hidden, and only sdf-layer's
+      // front-to-back per-body branch (depth gate ON) re-shows the `setBodies`
+      // list; the game ships the gate OFF, where the single-pass march renders
+      // the scene by each object's OWN visibility — so every member stayed
+      // hidden and drew as bare skull + bones until the crowd program landed
+      // (minutes, cold). Membership mirrors the crowd's own `vis` set above, and
+      // the proxies are hidden again the frame the crowd path takes over.
+      const shown = crowdMarch ? null : new Set(ctx.render.visibleActors);
+      for (const a of ctx.world.actors) {
+        if (!a.crowd) continue;
+        const on = shown !== null && shown.has(a)
+          && ctx.world.soldierCorpses?.bakedState(a.id) !== 'headless';
+        a.view.object.visible = on;
+        if (a.view.depthPreObject) a.view.depthPreObject.visible = on;
+      }
     }
     // Crowd stage a: one instanced mesh per type replaces its N hidden
     // per-body proxies; unattached (or crowd-off) actors keep their proxies.
@@ -3024,8 +3040,9 @@ async function main() {
       if (!ctx.crowd.sourceView.has(t)) ctx.crowd.sourceView.set(t, view);
       // attach/detach is the crowd's visibility gate, so the per-body proxy
       // and its depth-pre twin stay in the scene but hidden. They ARE drawn
-      // while the crowd program is not ready: `setBodies` re-shows them for the
-      // march pass, which is the degrade that keeps members visible.
+      // while the crowd program is not ready: the draw fn re-shows them each
+      // frame (`setBodies` only does so with the depth gate ON — the cold-cache
+      // flesh bug), which is the degrade that keeps members visible.
       view.object.visible = false;
       if (view.depthPreObject) view.depthPreObject.visible = false;
       // The per-body fallback marches out of the SHARED record buffer, so tell
