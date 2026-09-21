@@ -324,6 +324,7 @@ import { refreshLevelLights } from './game-lighting-leaves';
 import { GIB_TIER_FLOOR, gibAllowance, gibBudget, gibDebit, gibReserved } from './game-gibs-leaves';
 import { createWeaponAimSeams } from './game-seams-weapon-aim';
 import { createRenderQualitySeams } from './game-seams-render-quality';
+import { mergeSeams } from './seam-merge';
 import { createDemoStepSeams } from './game-seams-demo-step';
 import { createLightingProbeSeams } from './game-seams-lighting-probes';
 import { createGibsBakeSeams } from './game-seams-gibs-bake';
@@ -7868,27 +7869,32 @@ async function main() {
   // Everything the draw callback reads now exists — let frames draw. See the
   // boot-frame gate's note at setDrawFn.
   ctx.boot.drawReady = true;
-  (window as unknown as { __sdfGame: unknown }).__sdfGame = {
-    ...createGibsBakeSeams(ctx),
-    ...createLightingProbeSeams(ctx),
-    ...createDemoStepSeams(ctx),
-    ...createRenderQualitySeams(ctx),
-    ...createWeaponAimSeams(ctx),
-    ...createFireSeams(ctx),
-    ...createSkeletonSeams(ctx),
-    ...createDynamiteSeams(ctx),
-    ...createMarchDebugSeams(ctx),
-    ...createMiscSeams(ctx),
-    ...createFxSeams(ctx),
-    ...createWeaponPlayerSeams(ctx),
-    ...createBootSeams(ctx),
-    ...createRenderSeams(ctx),
-    ...createWorldSeams(ctx),
-    ...createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
-    ...createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
-    ...createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
-    ...createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf: withCtx(ctx, shellAmpOf), camera }),
-    ...createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
+  (window as unknown as { __sdfGame: unknown }).__sdfGame = mergeSeams(
+    // mergeSeams, NOT an object spread of the factories: a spread reads every getter
+    // once and copies the value, which froze 95 seam getters at their boot
+    // values after the decomposition. See seam-merge.ts. Factories first,
+    // then the inline members — later parts win, as later spreads did.
+    createGibsBakeSeams(ctx),
+    createLightingProbeSeams(ctx),
+    createDemoStepSeams(ctx),
+    createRenderQualitySeams(ctx),
+    createWeaponAimSeams(ctx),
+    createFireSeams(ctx),
+    createSkeletonSeams(ctx),
+    createDynamiteSeams(ctx),
+    createMarchDebugSeams(ctx),
+    createMiscSeams(ctx),
+    createFxSeams(ctx),
+    createWeaponPlayerSeams(ctx),
+    createBootSeams(ctx),
+    createRenderSeams(ctx),
+    createWorldSeams(ctx),
+    createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
+    createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
+    createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
+    createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf: withCtx(ctx, shellAmpOf), camera }),
+    createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
+    {
     /** Replay a `.dem` (`file` object, or a path/URL to fetch) headlessly and
      *  return `{ frames, census, ... }`. `hash: true` also digests the frame
      *  every `every` steps — the surface scripts/sdf-demo-hash.mjs drives for
@@ -8001,21 +8007,8 @@ async function main() {
      *  loop-restore contract: pause the loop, call rewarm(), assert it is still
      *  paused. Warm steps are cache hits after boot, so this is cheap. */
     rewarm: () => warmPipelines(),
-  };
-  // A SPREAD FLATTENS A GETTER. `...createRenderQualitySeams(ctx)` above calls
-  // that factory's `get fisheye()` ONCE, at boot, and copies the RESULT — so
-  // `__sdfGame.fisheye` was a boot-time SNAPSHOT, not the live report its own
-  // doc promises ("the console shows what actually landed, not what was
-  // typed"). It reported 72/60 for the rest of the session however many times
-  // you called setFisheye, and the FOV capture script logged three identical
-  // legs before this was spotted. The setters were never affected — they are
-  // plain functions and return fisheyeReport(ctx) fresh — so this is a
-  // reporting bug, not a tuning one. Re-declared here, after the literal,
-  // because that is where the flattening happens; if another seam factory
-  // ever grows a getter, it needs the same treatment.
-  Object.defineProperty((window as unknown as { __sdfGame: object }).__sdfGame, 'fisheye', {
-    get: () => fisheyeReport(ctx), enumerable: true, configurable: true,
-  });
+  },
+  );
   if (import.meta.env.DEV && new URLSearchParams(location.search).has('normal-playtest')) {
     const { installNormalPlaytest } = await import('./normal-gradient-playtest');
     const api = (window as unknown as { __sdfGame: Parameters<typeof installNormalPlaytest>[0] }).__sdfGame;

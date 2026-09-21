@@ -4,6 +4,23 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Seam getters were frozen at boot — fixed 2026-09-21
+
+- [x] **Every top-level getter in every `game-seams-*.ts` factory (95) read its BOOT value forever.** The decomposition
+  moved members byte-for-byte, but `{ ...createXSeams(ctx) }` reads each accessor once and copies the value; the
+  migration gate proved seams PRESENT, never LIVE. 50 of them are read by ~70 scripts: `gunReady`, `shells`,
+  `flashVisible`, `hingeOpenRad`, `bleed`, `bloodBlur`, `frames`, `renderMode`, `sdfScale`, `woundTuning`... Some gates
+  failed loudly; others passed VACUOUSLY (the shorty gate's reload wait was satisfied by boot values before any reload).
+  Fix: `seam-merge.ts` `mergeSeams()` copies descriptors, `__sdfGame = mergeSeams(...factories, { inline })`; same
+  override order. **Verified live:** shorty gate now reads `shells 2 -> 0 -> 2, maxOpen 0.785 rad`.
+- [x] Guards so it cannot come back: `extract-seam-group.ts` + `integrate-seams.ts` share `scripts/lib/seam-literal.ts`,
+  which emits factories as mergeSeams ARGUMENTS and REFUSES the `{ ...spread }` literal; `scripts/seam-merge-guard.test.ts` fails on any
+  hand-added `...createXSeams(` in game-main.
+- [ ] **Re-read old gate results with suspicion.** Anything a gate concluded from one of these 50 getters between the seam
+  extraction (~2026-09-17) and this fix was reading boot values. Not re-run wholesale.
+- [ ] Shorty gate (pre-existing): `fpv-rest` / `flash-on` / `flash-off` are captured over the pipeline-compile loader
+  (15 KB frames) — it waits for `__sdfGame`, not `loader-ready`. The FOV capture script shows the fix.
+
 ## Narrow FOV + the weapon's own FOV — 2026-09-21
 
 - [x] **Owner: narrow the frame to 58 render / 46 centre** (was 72/60), for claustrophobia and to show the wound system.
@@ -16,9 +33,7 @@
   tilts the view model's normals, and a ~3.8% residual because the lens itself changed. Seam: `__sdfGame.setViewmodelFov`.
 - [x] Tools: `scripts/sdf-game-fov-capture.sh` (9 shots, 3 FOV legs x 3 weapon slots, FOV read back and gated),
   `scripts/sdf-game-fov-gpu-ab.sh` (one page, uncapped, alternating legs).
-- [x] **Fixed on the way: `__sdfGame.fisheye` was a boot-time SNAPSHOT.** A spread flattens a getter, so
-  `...createRenderQualitySeams(ctx)` copied `get fisheye()`'s value once and the console reported 72/60 forever.
-  Setters were unaffected. Re-declared with `Object.defineProperty`. **Any other seam getter has the same bug — unaudited.**
+- [x] **Fixed on the way: `__sdfGame.fisheye` was a boot-time SNAPSHOT** — and so were 94 others (next row).
 - [~] **Cost: the coverage half is measured, the GPU-ms half is NOT.** Median `coverageFrac` 0.155 -> 0.27 (**1.75x**,
   matching the 1.72-1.81x arithmetic) over six alternating legs. But the GPU busy A/B came back **vsync-bound**
   (frame p50 16.6 ms, ~3.7 ms idle on BOTH arms) so its "1.01x" means nothing — the elastic-clock trap arriving through
