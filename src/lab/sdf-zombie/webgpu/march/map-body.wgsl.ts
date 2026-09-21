@@ -253,12 +253,19 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
 export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec3<f32> {
+  // ONE mapBody call site, not four (cold-compile 2026-09-21): the Metal
+  // compiler inlines every call site of the field, and four literal taps were
+  // four copies of it. The loop only gathers the four distances; the taps and
+  // the final weighted sum are the original expression verbatim, so the
+  // result is bit-identical (a loop-carried accumulator was not — march-hash).
   let e = vec2<f32>(1.0, -1.0) * gNormalEps;
-  return normalize(
-    e.xyy * mapBody(p + e.xyy, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x +
-    e.yyx * mapBody(p + e.yyx, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x +
-    e.yxy * mapBody(p + e.yxy, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x +
-    e.xxx * mapBody(p + e.xxx, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x);
+  var m = vec4<f32>(0.0);
+  for (var i = 0; i < 4; i = i + 1) {
+    let tap = select(select(select(e.xxx, e.yxy, i == 2), e.yyx, i == 1), e.xyy, i == 0);
+    let d = mapBody(p + tap, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x;
+    m = select(m, vec4<f32>(d), vec4<bool>(i == 0, i == 1, i == 2, i == 3));
+  }
+  return normalize(e.xyy * m.x + e.yyx * m.y + e.yxy * m.z + e.xxx * m.w);
 }
 
 // Run 5: the refine entry (REFINE_LOOP) sets this to its output-pixel footprint; the march never

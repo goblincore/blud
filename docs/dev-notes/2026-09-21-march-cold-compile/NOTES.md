@@ -1,5 +1,13 @@
 # March cold compile: it is the `mapBody` call-site count — NOTES
 
+> **Status (2026-09-21, final):** both steps landed on main. The loader's cold
+> wait for the body march went from **180 s to ~17 s** (8× less than the
+> 12-copy baseline; 5 `mapBody` copies remain). Step 2 (`calcNormal` through
+> one site) moved the canonical hashes by fast-math noise, and the owner
+> approved the re-pin: default `94c23457…`, crowd quad `85873b8d…`, per-body
+> `66e50ade…` (each reproduced on two independent runs; evidence in
+> `scripts/march-hash.mjs`). `march-parity` PASS after both steps.
+
 Branch `claude/march-compile-cold` off main `f6aaa115`. Evidence base:
 [2026-09-19 census](../2026-09-19-shader-compile/NOTES.md) (cold = one ~48–200 s
 Metal compile per distinct march program) and
@@ -81,7 +89,7 @@ Gates:
   that fail identically on main (soldier mesh, hull soup, torso slug, …).
   `tsc --noEmit` clean.
 
-## Not landed: `calcNormal` taps through one site (the other ~11 s)
+## Step 2, landed after owner approval: `calcNormal` taps through one site (the other ~11 s)
 
 Looping the four tetrahedron taps (A/B) is the biggest single cut (180 → 71 s
 alone), but it is **not bit-exact**, including a version where the loop only
@@ -96,10 +104,11 @@ new `MARCH_HASH_RAW=<path>` dump + `scripts/march-raw-diff.mjs`:
 | 2 | 0 | 0 | 1 035 / 29 452 | 5.54e-6 |
 
 That is ~650× below one 8-bit display step. It is invisible, but it moves the
-canonical sha1, so it needs the owner to decide to re-record
+canonical sha1. **The owner approved the re-record and it landed.** Kept for reference:
 `8f2b74e7…` (and the wounded hash). The ready-to-apply version is
-[`calcnormal-one-site.patch`](calcnormal-one-site.patch) (select-gather loop;
-`git apply` it, re-run `march-hash`, re-record the canonical hash and the golden snapshot).
+[`calcnormal-one-site.patch`](calcnormal-one-site.patch) (the select-gather loop as it was applied).
+The applying commit also re-recorded `march-golden` and updated the `volume.wgsl`
+test pins (4 taps → 1 site).
 
 ## Not tried / next
 
