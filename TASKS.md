@@ -35,7 +35,11 @@
   GPU unchanged at full clock — well short of my 4-6 ms estimate.** **METHOD WARNING: GPU ms under the 30 fps cap is elastic (the
   GPU downclocks; same work read 11.7 vs 18.9 ms). GPU A/Bs must run in ONE page with `setFrameCap(0)`; never compare GPU ms
   across sessions** ([notes](docs/dev-notes/2026-09-20-telemetry-v3/NOTES.md)). Also fixed: the peek bug (`584690a0`, per-cluster line of sight) and march-hash hashing the
-  per-body fallback (`5d7f6a18`). Next: the one-body march floor experiment (~8 ms of `sdf:march` is independent of body count).
+  per-body fallback (`5d7f6a18`). **March floor experiment DONE** ([notes](docs/dev-notes/2026-09-21-march-floor/NOTES.md)): normalised to
+  a constant clock, one body is 15.7 ms full-screen -> 4.7 ms at 3% of screen (raw ms hid this); floor ~5-7 ms = `sdf:shell-hull`
+  ~3.7 ms FIXED + a per-TARGET-pixel share of the march; steps / spot shadow / temporal start do nothing; the shell costs
+  +1..+4 ms with one body, saves ~0.6 ms with 4-5, and is not pixel-neutral. **Owner ruled out lowering march resolution
+  (too noticeable).** No cheap 4-5 ms found in the march; open, unsized: MRT diet (3x rgba32float), cheaper hull targets.
   Open: cold GIB background compile can hit its 180 s timeout and settle `failed` -> no gib chunks that session; warm `plate`,
   `flame-cards`, explosion materials at boot; per-sever `gib-asset-*` material rebuild; first dynamite gib 33-56 ms; `sdBody` `prims.slice`.
   Dead end: a magnification-aware fisheye filter does not recover 60/60 sharpness (the loss is sample density; a 3x upscaler is the lever).

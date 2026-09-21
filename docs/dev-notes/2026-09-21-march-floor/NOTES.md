@@ -68,9 +68,15 @@ frozen frame, 24.7% of pixels differ slightly and 2371 differ by more than
   work. The floor is not what hurts there.
 - An adaptive shell (on only at >= 3 visible bodies) would give ~3 ms back in
   1-2 body frames — which already have headroom. Low value on its own.
-- Candidates that attack the hot frames: march-resolution scaling driven by
-  coverage (`setAdaptive` exists), the 48 B/px MRT diet (the per-target share),
-  and making the shell's cost scale (scissor / lower-res hull targets).
+- **RULED OUT BY THE OWNER (2026-09-21): stepping the march resolution
+  (`setSdfScale` / coverage-driven adaptive scale). It is too noticeable on the
+  flesh — do not propose it again.** Same family, already dead: reduced-scale
+  flesh, half-rate C2.
+- Still open for the hot frames: the 48 B/px MRT diet (the per-target share of
+  the march) and making the shell's cost scale (lower-res hull targets). Neither
+  is sized; both need the controlled method above and a deliberate re-pin.
+- The honest position: no cheap 4-5 ms was found in the march today. The march's
+  close-up cost is real per-pixel work at a resolution the owner will not lower.
 
 Instrument fixes that came out of this: recorder pass precision 0.1 -> 0.01 ms
 (`gpu-frame-summary.ts`); the 12 MB recorder cap is ~2900 frames at 60 fps.
