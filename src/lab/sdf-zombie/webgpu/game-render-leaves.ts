@@ -14,7 +14,7 @@ import { SDF_LAYER } from './sdf-layer';
 import { type MarchUniforms } from './zombie-gpu';
 import { type Vec3 } from '../types';
 import { billboardGib, makeGibSprite } from './gib-sprites';
-import { clearSight } from './encounter-director';
+import { bodyInSight } from './actor-sight';
 import { type ZombieActor } from './game-actor';
 import { gateRefineTwin } from './game-world-leaves2';
 import { simTimeMs } from './sim-clock';
@@ -250,10 +250,12 @@ export function updateVisibleActors(ctx: GameContext): void {
     ctx.world.bodySphere.center.set(c[0], c[1], c[2]);
     let seen = ctx.world.frustum.intersectsSphere(ctx.world.bodySphere);
     if (seen) {
-      // Two probes: torso centre, then a head-height point. A body edging
-      // out of cover reveals its head before its chest.
-      const head: Vec3 = [c[0], c[1] + 0.6, c[2]];
-      seen = clearSight(ctx.world.sightA, c as Vec3, ctx.world.colliders) || clearSight(ctx.world.sightA, head, ctx.world.colliders);
+      // ANY live limb cluster in sight keeps the body (actor-sight.ts). The
+      // old two probes — torso centre and a point 0.6 m above it — were both
+      // behind the wall while a body leaning out of cover already showed an
+      // arm and its head: flesh culled, skeleton meshes not, so the owner saw
+      // a bare skull and arm bones in the doorway (2026-09-20).
+      seen = bodyInSight(ctx.world.sightA, a.posed().clusters, ctx.world.colliders);
     }
     if (seen) ctx.world.lastSeenMs.set(a.id, now);
     const since = now - (ctx.world.lastSeenMs.get(a.id) ?? -Infinity);
