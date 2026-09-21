@@ -202,22 +202,56 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
       if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
       if (refoldMode > 1.5 && (raisersAtBase & ~(1u << u32(c + 1))) == 0u) { continue; }
       if (refoldMode > 2.5 && refoldMode < 3.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
-${LIMBS ? `      // MODE 4: the limb's fold is already built (gLimb[c]); apply its own
-      // wounds once. A cluster the base fold never reached is 1e9 and loses.
+${LIMBS ? `      let savedBest = gFoldBest;
+      let savedIdx = gFoldBestIdx;
+      let savedDistort = gFoldBestDistort;
+      // MODE 4 takes the limb from its slot (built during the base fold); the
+      // other modes re-fold it. ONE shared carve/wound/win tail below either
+      // way: a second inlined applyCarves + applyWounds copy cost ~16 s of
+      // cold Metal compile (2026-09-21 census).
+      var limb = 1e9;
       if (limbMode) {
         let slot = limbLoad(c);
         if (slot.x > 1e8) { continue; }
-        gWoundCluster = f32(c + 1);
-        let limbDamageAcc = applyWounds(applyCarves(slot.x, p, data, counts, band), p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
-        if (limbDamageAcc < dmg) {
-          dmg = limbDamageAcc;
-          gFoldBest = slot.y;
-          gFoldBestIdx = slot.z;
-          gFoldBestDistort = slot.w;
+        limb = slot.x;
+        gFoldBest = slot.y;
+        gFoldBestIdx = slot.z;
+        gFoldBestDistort = slot.w;
+      } else {
+        let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
+        if (cr.z < 0.5) { continue; }
+        let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
+        let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + band), 0);
+        if (length(p - cb.xyz) - cb.w > (dmg + counts.w * 4.0) * gs.z) { continue; }
+        // PRE-SCAN (exact fixes): the limb can only win if its fold dips below
+        // dmg + the bump its own (and unowned) rows can subtract. foldGroup's
+        // cull asserts a group whose sphere fails (T + 4k) * z cannot pull a
+        // fold under T; if every group fails at T = dmg + ownAmp, the limb's
+        // fold >= T, carves and wound smax only raise it, its bumps lower it
+        // by <= ownAmp, so limbDamage >= dmg and the re-fold must lose.
+        if (exactFix) {
+          let T = dmg + gWoundAmp[0] + gWoundAmp[c + 1];
+          var anyGroup = false;
+          for (var gi = 0; gi < 64; gi = gi + 1) {
+            if (gi >= i32(gs.y)) { break; }
+            let gb = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_BOUNDS} + band), 0);
+            let gr = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_RANGE} + band), 0);
+            if (length(p - gb.xyz) - gb.w <= (T + counts.w * 4.0) * gr.z) { anyGroup = true; break; }
+          }
+          if (!anyGroup) { continue; }
         }
-        continue;
+        gFoldBest = 1e9;
+        gFoldBestIdx = -1.0;
+        gFoldBestDistort = 1.0;
+        for (var gi = 0; gi < 64; gi = gi + 1) {
+          if (gi >= i32(gs.y)) { break; }
+          let group = i32(gs.x) + gi;
+          let range = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_RANGE} + band), 0);
+          let bounds = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_BOUNDS} + band), 0);
+          limb = foldGroup(limb, p, data, counts, band, bounds, range);
+        }
       }
-` : ''}      let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
+` : `      let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
       if (cr.z < 0.5) { continue; }
       let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
       let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + band), 0);
@@ -253,7 +287,7 @@ ${LIMBS ? `      // MODE 4: the limb's fold is already built (gLimb[c]); apply i
         let bounds = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_BOUNDS} + band), 0);
         limb = foldGroup(limb, p, data, counts, band, bounds, range);
       }
-      gWoundCluster = f32(c + 1);
+`}      gWoundCluster = f32(c + 1);
       let limbCarved = applyCarves(limb, p, data, counts, band);
       let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
       if (limbDamage < dmg) {
