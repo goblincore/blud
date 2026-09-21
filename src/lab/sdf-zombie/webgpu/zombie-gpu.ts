@@ -40,6 +40,7 @@ import {
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
   QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
+import { woundThreatMasks } from './wound-threat';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
@@ -98,6 +99,9 @@ export interface ZombieGpuView {
    *  no-cull identity) for the bench A/B; the computed radius is kept, so
    *  true restores it without a re-upload. */
   setWoundCull(on: boolean): void;
+  /** Diagnostic: the per-wound threat masks last written (wound-threat.ts). */
+  woundThreats(): number[];
+  readonly woundThreatMargin: number;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
   /** The rigid head rotation (rig-bind headQuatOf); identity resets it. */
@@ -1948,6 +1952,10 @@ export function writeWounds(
   cavities?: readonly boolean[],
   /** Owning cluster and its primitive span. Omitted = legacy world-space wound. */
   owners?: readonly ({ cluster: number; start: number; count: number } | null)[],
+  /** Per-wound threat masks (wound-threat.ts) — ride the FRACTION of flags.x as
+   *  mask / 1024, below the 0.5 the cavity readers test. Omitted = 0, the state every
+   *  view that does not run the threat-mask re-fold gate keeps. */
+  threats?: readonly number[],
 ): number {
   const stride = layout.stride ?? MAX_PRIMS;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -1974,7 +1982,7 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
-    texels[flagBase + i * 4] = cavities?.[i] ? 1 : 0;
+    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
     texels[flagBase + i * 4 + 2] = owner?.start ?? 0;
@@ -2207,6 +2215,62 @@ export function createZombieGpuView(
   let woundCullOn = true;
   let woundBoundR = 1e9;
 
+  // THREAT MASKS (wound-threat.ts): which clusters each wound's carve bowl can reach,
+  // from the group spheres of the LAST upload and the wounds of the LAST setWounds.
+  // Recomputed on both, since either side moving changes the answer.
+  //
+  // margin = 4*kw + E + D, all MAGNITUDES (how far a value can move), not supports:
+  //   4*kw  the wound smax's support — beyond R + 4*kw a wound changes no field value;
+  //   E     smax overshoot, at most kw per raising wound. One stamped wound uploads as a
+  //         cluster of rows (a blast is 4), so up to 3 are allowed to coincide at a point —
+  //         a judgement, not a proof: 16 coinciding would be 16*kw;
+  //   D     how far the limb's own smin union bulges past its prims, 2 * maxBlendK.
+  // The limb's OWN rim bumps (they lower its re-fold value) are added per wound below,
+  // because only wounds the threatened cluster owns count and that differs per cluster;
+  // the ceiling over every owner keeps this one number.
+  let lastWoundThreatIn: {
+    worldPositions: Vec3[]; radii: number[]; splayScales?: number[];
+    caps?: readonly ({ n: Vec3; depth: number } | null)[];
+    owners?: readonly ({ cluster: number; start: number; count: number } | null)[];
+  } | null = null;
+  let lastThreatMasks: number[] = [];
+  let lastThreatMargin = 0;
+  function threatMasks(): number[] {
+    const w = lastWoundThreatIn;
+    const p = uploadScratch;
+    if (!w || !p) { lastThreatMasks = []; return lastThreatMasks; }
+    const n = Math.min(w.worldPositions.length, MAX_WOUNDS);
+    const kw = u.woundCfg.value.y;
+    // Largest single rim-bump amplitude a FOREIGN cluster could carry: a cluster with no
+    // wounds of its own has none, so take the largest per-owner sum over the other owners.
+    const ampByOwner = new Map<number, number>();
+    for (let i = 0; i < n; i++) {
+      const o = w.owners?.[i]?.cluster ?? -1;
+      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1));
+    }
+    const unowned = ampByOwner.get(-1) ?? 0;
+    const margin0 = 4 * kw + kw * Math.min(n, 3) + 2 * p.maxBlendK + unowned;
+    lastThreatMargin = margin0;
+    const clusterGroups: [number, number][] = [];
+    for (let c = 0; c < p.clusterCount; c++) clusterGroups.push([p.clusterGroups[c * 4]!, p.clusterGroups[c * 4 + 1]!]);
+    const wounds = w.worldPositions.slice(0, n).map((pos, i) => ({ pos, radius: w.radii[i]!, owner: w.owners?.[i]?.cluster ?? -1, cap: w.caps?.[i] ?? null }));
+    // A cluster that owns wounds gets its own bump ceiling on top; test it separately.
+    const base = woundThreatMasks(wounds, lastGroups, clusterGroups, margin0);
+    for (const [owner, amp] of ampByOwner) {
+      if (owner < 0 || amp <= 0) continue;
+      const wide = woundThreatMasks(wounds, lastGroups, clusterGroups, margin0 + amp);
+      for (let i = 0; i < n; i++) base[i] = base[i]! | (wide[i]! & (1 << (owner + 1)));
+    }
+    lastThreatMasks = base;
+    return lastThreatMasks;
+  }
+  function refreshThreatTexels() {
+    if (!lastWoundThreatIn) return;
+    const masks = threatMasks();
+    const base = (sink.woundLayout?.flagsRow ?? ROW_WOUND_FLAGS) * (sink.woundLayout?.stride ?? MAX_PRIMS) * 4;
+    for (let i = 0; i < masks.length; i++) texels[base + i * 4] = Math.floor(texels[base + i * 4]!) + (masks[i]! & 511) / 1024;
+  }
+
   function upload(next: BuildResult, rest?: BuildResult) {
     lastUploadNext = next;
     lastUploadRest = rest;
@@ -2256,6 +2320,7 @@ export function createZombieGpuView(
     writeRow(ROW_GROUP_BOUNDS, p.groupBounds, MAX_PRIMS);
     writeRow(ROW_GROUP_RANGE, p.groupRange, MAX_PRIMS);
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
+    refreshThreatTexels();
     sink.markDirty();
     ownAtlas?.flush();
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
@@ -2520,6 +2585,8 @@ export function createZombieGpuView(
     tiles: viewTiles,
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
+    woundThreats() { return [...lastThreatMasks]; },
+    get woundThreatMargin() { return lastThreatMargin; },
     setPackBones(on) { packBones = on; },
     setBoneCull(on) {
       // The boolean seam is the cluster mode — kept for the bench's
@@ -2567,7 +2634,8 @@ export function createZombieGpuView(
       syncRecord();
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners) {
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners);
+      lastWoundThreatIn = { worldPositions, radii, splayScales, caps, owners };
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks());
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a

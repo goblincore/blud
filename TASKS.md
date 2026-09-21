@@ -39,6 +39,19 @@
   Open: cold GIB background compile can hit its 180 s timeout and settle `failed` -> no gib chunks that session; warm `plate`,
   `flame-cards`, explosion materials at boot; per-sever `gib-asset-*` material rebuild; first dynamite gib 33-56 ms; `sdBody` `prims.slice`.
   Dead end: a magnification-aware fisheye filter does not recover 60/60 sharpness (the loss is sample density; a 3x upscaler is the lever).
+- [ ] **NEXT SESSION START HERE: [HANDOFF](docs/dev-notes/2026-09-21-multiscale-march/HANDOFF.md)** — commit this worktree, merge the melee harness branch, time the gates on a quiet machine, then owner-preferred wound options 3 (fewer rows) and 4 (delete the re-fold).
+- [ ] **Multi-scale march + learned reconstruction — RESEARCH (2026-09-21), nothing built.** [Notes](docs/dev-notes/2026-09-21-multiscale-march/NOTES.md).
+  Close-up `sdf:march` at scale 1.0 / **0.5 ship** / 0.25: clean 31.4 / **7.6** / 2.7 ms, 5 wounds 44.4 / **13.8** / 7.7, room 4 32.6 / **10.1** / 2.9
+  (one page, uncapped, alternating). Ceiling of a 4x reconstruction = 5-7 ms/frame; depth rebuilds within 5 mm on 95 % of body pixels from
+  1/16 of the samples. Ray-start priors stay dead (hit rays take ~4.2 steps) — the saving is in NOT running pixels. **Two free findings:
+  wounds cost ~4.5 ms that does not shrink with resolution (unexplained), and 32-49 % of walk steps are rays that miss** (the parked
+  prepass ignored coarse misses; culling on them may flip its verdict). Next: those two, then an OFFLINE 4x train (rgb / rgbdn / rgbdn+sparse truth).
+  **Wound cost ROOT-CAUSED (same day):** [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md) — the owner re-fold in `mapBody` is ~95 % of it
+  (5.9 of 6.2 ms at ship scale; `setOwnerRefold(false)` = a clean body's cost). It fires over the whole torso and almost always loses. A value-preserving
+  **raiser gate** is in behind `counts2.z == 2` / `__sdfGame.setOwnerRefoldGate(true)`, **ships OFF**: 14.95 -> 13.41 ms, diff inside the frame's own noise.
+  **CPU threat mask also built, OFF** (`counts2.z == 3` / `setOwnerRefoldMask(true)`, `wound-threat.ts`, mask rides the fraction of `ROW_WOUND_FLAGS.x`): names only real
+  neighbours in the staged hip-wound scene so it cannot beat the gate there; **untimed — machine was under Docker load; re-run quiet.** 5 stamps = 16 wound rows.
+  Before flipping: march-hash/parity with the gate on + owner look at a raised arm over a torso crater. ~5 ms remains (3 options in the note). Per-ray wound list is a LOSS (13.8 -> 21.3), keep OFF.
 - [x] **Cold-cache flesh bug (2026-09-20, fixed).** Not the warm gate and not three r186: the body program was ready, but the
   defer-compile per-body FALLBACK never drew. Crowd-attached proxies spawn hidden and only sdf-layer's depth-gate-ON branch
   re-shows the `setBodies` list; the game ships the gate OFF, so members stayed hidden (skull + bones) until the background

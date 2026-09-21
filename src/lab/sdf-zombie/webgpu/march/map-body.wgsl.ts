@@ -65,6 +65,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     gFoldBestDistort = 1.0;
     gWoundCluster = 0.0;
     gWoundOwners = 0u;
+    gWoundRaisers = 0u;
+    gWoundThreat = 0u;
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -147,11 +149,34 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // can erase the jaw again) that prices the mechanism. 0, the shipped
   // value, is bit-identical to the pre-gate shader; only the bench's
   // owner-refold-off leg sets it (__sdfGame.setOwnerRefold).
-  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && counts2.z < 0.5) {
+  //
+  // counts2.z == 2 is the RAISER GATE (2026-09-21, wound-cost investigation;
+  // docs/dev-notes/2026-09-21-multiscale-march). A limb's re-fold can only win
+  // the limbDamage < dmg test below if a wound it does NOT own raised the field
+  // at p. Proof sketch — every wound step is monotone in its input, the limb's
+  // own fold is >= the whole-body fold, and a foreign wound that did not raise
+  // the field can only have lowered it through its rim bump, so without a
+  // foreign raiser the whole-body result is already <= the limb's. The shipped
+  // trigger fires across the whole near zone and the whole rim footprint, where
+  // the re-fold then loses on every sample; this one fires inside foreign
+  // craters only. raisersAtBase is read HERE, before the re-fold's own
+  // applyWounds calls add to it. 0 stays bit-identical to the ungated shader.
+  //
+  // counts2.z == 3 is the THREAT MASK: the raiser gate, narrowed per cluster by
+  // the CPU. A raising wound names the clusters whose prim groups actually reach
+  // its carve bowl (the flags.x fraction, see applyWounds); a cluster no raising
+  // wound names cannot have flesh inside any foreign crater at p, so its
+  // re-fold cannot win. Only views that upload the masks may run at 3 — an
+  // unwritten mask is zero and would switch the re-fold off entirely.
+  let raisersAtBase = gWoundRaisers & ~1u;
+  let threatAtBase = gWoundThreat;
+  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (counts2.z < 0.5 || (counts2.z > 1.5 && counts2.z < 2.5 && raisersAtBase != 0u) || (counts2.z > 2.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
       if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
+      if (counts2.z > 1.5 && (raisersAtBase & ~(1u << u32(c + 1))) == 0u) { continue; }
+      if (counts2.z > 2.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
       let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
       if (cr.z < 0.5) { continue; }
       let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);

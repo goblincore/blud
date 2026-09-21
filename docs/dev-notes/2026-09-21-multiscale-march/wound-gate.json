@@ -1,0 +1,390 @@
+{
+ "staged": {
+  "d": 0.7,
+  "cov": 0.2738833333333333,
+  "body": 1
+ },
+ "ship": {
+  "woundList": false,
+  "ownerRefold": true,
+  "woundEarlyOut": true,
+  "woundStep": 1,
+  "relax": 1
+ },
+ "wounds": {
+  "stamped": 5,
+  "wounds": 5,
+  "bleed": {
+   "enabled": true,
+   "emitters": 0,
+   "droplets": 0,
+   "splats": 0
+  },
+  "chunks": 0,
+  "bodies": {}
+ },
+ "rows": [
+  {
+   "rep": 0,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 49.875,
+   "march": 46.71395399999892,
+   "census": {
+    "rays": 176613,
+    "steps": 868572,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 17.690000000596047,
+   "march": 14.96248000000196,
+   "census": {
+    "rays": 44166,
+    "steps": 202990,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "ship@0.25",
+   "seam": "ship",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 9.780000001192093,
+   "march": 8.22183199999563,
+   "census": {
+    "rays": 11035,
+    "steps": 43351,
+    "stepsPerRay": 3.93,
+    "maxSteps": 27
+   }
+  },
+  {
+   "rep": 0,
+   "name": "gate@1",
+   "seam": "gate",
+   "scale": 1,
+   "valid": true,
+   "frame": 42.415000000596045,
+   "march": 38.99986400000489,
+   "census": {
+    "rays": 176613,
+    "steps": 868572,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "gate@0.5",
+   "seam": "gate",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 15.890000000596046,
+   "march": 13.367795999998634,
+   "census": {
+    "rays": 44166,
+    "steps": 202990,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "gate@0.25",
+   "seam": "gate",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 8.215000000596046,
+   "march": 6.463067999997293,
+   "census": {
+    "rays": 11035,
+    "steps": 43351,
+    "stepsPerRay": 3.93,
+    "maxSteps": 27
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 34.68500000089407,
+   "march": 32.10684300000139,
+   "census": {
+    "rays": 176613,
+    "steps": 856275,
+    "stepsPerRay": 4.85,
+    "maxSteps": 55
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 11.030000001192093,
+   "march": 8.719492000003811,
+   "census": {
+    "rays": 44166,
+    "steps": 200178,
+    "stepsPerRay": 4.53,
+    "maxSteps": 39
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@0.25",
+   "seam": "refoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 6.215000000596047,
+   "march": 4.594305000005988,
+   "census": {
+    "rays": 11035,
+    "steps": 42840,
+    "stepsPerRay": 3.88,
+    "maxSteps": 28
+   }
+  },
+  {
+   "rep": 1,
+   "name": "ship@0.25",
+   "seam": "ship",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 10.010000002384185,
+   "march": 8.276456999999937,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "gate@1",
+   "seam": "gate",
+   "scale": 1,
+   "valid": true,
+   "frame": 42.86499999910593,
+   "march": 39.52006399999664,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "gate@0.5",
+   "seam": "gate",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 16.465000000596046,
+   "march": 13.44991999999911,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "gate@0.25",
+   "seam": "gate",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 8.245000000298024,
+   "march": 6.426317999997991,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 35.459999999403955,
+   "march": 32.26817399999709,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 10.815000000596047,
+   "march": 8.312040000004345,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@0.25",
+   "seam": "refoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 6.190000000596046,
+   "march": 4.627470999999787,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 50.07000000029802,
+   "march": 47.98693499999354,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 17.225,
+   "march": 14.936813000007533,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "gate@0.5",
+   "seam": "gate",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 15.990000000596046,
+   "march": 13.412544999999227,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "gate@0.25",
+   "seam": "gate",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 8.179999999701977,
+   "march": 6.544233000007807,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 34.99500000029802,
+   "march": 31.935055000009015,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 10.695000000298023,
+   "march": 8.36095600000408,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "refoldOff@0.25",
+   "seam": "refoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 6.125,
+   "march": 4.695385999992141,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 49.85,
+   "march": 47.19907200000307,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 16.959999999403955,
+   "march": 14.950188000002527,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "ship@0.25",
+   "seam": "ship",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 9.875000001490116,
+   "march": 8.054917999994359,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "gate@1",
+   "seam": "gate",
+   "scale": 1,
+   "valid": true,
+   "frame": 42.86499999910593,
+   "march": 39.48902300000191,
+   "census": null
+  }
+ ],
+ "summary": {
+  "ship@1": 47.2,
+  "ship@0.5": 14.95,
+  "ship@0.25": 8.22,
+  "gate@1": 39.49,
+  "gate@0.5": 13.41,
+  "gate@0.25": 6.46,
+  "refoldOff@1": 32.11,
+  "refoldOff@0.5": 8.36,
+  "refoldOff@0.25": 4.63
+ },
+ "parity": {
+  "1": {
+   "gateVsShip": {
+    "differingPixels": 139392,
+    "maxAbs": 0.003971755504608154,
+    "hitPixels": 139393
+   },
+   "shipVsShip": {
+    "differingPixels": 139393,
+    "maxAbs": 0.008589029312133789,
+    "hitPixels": 139393
+   },
+   "refoldOffVsShip": {
+    "differingPixels": 139393,
+    "maxAbs": 0.8428540742024779,
+    "hitPixels": 139393
+   }
+  },
+  "0.5": {
+   "gateVsShip": {
+    "differingPixels": 35017,
+    "maxAbs": 0.0031759142875671387,
+    "hitPixels": 35017
+   },
+   "shipVsShip": {
+    "differingPixels": 35017,
+    "maxAbs": 0.006089687347412109,
+    "hitPixels": 35017
+   },
+   "refoldOffVsShip": {
+    "differingPixels": 35017,
+    "maxAbs": 0.8524627778679132,
+    "hitPixels": 35017
+   }
+  }
+ }
+}

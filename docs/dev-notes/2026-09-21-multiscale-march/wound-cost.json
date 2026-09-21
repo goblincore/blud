@@ -1,0 +1,478 @@
+{
+ "staged": {
+  "d": 0.7,
+  "cov": 0.2738833333333333,
+  "body": 1
+ },
+ "rows": [
+  {
+   "wounds": 0,
+   "leg": "face@0.5",
+   "valid": true,
+   "frame": 12.339999999105931,
+   "passes": {
+    "sdf:march": 7.94,
+    "sdf:polys": 1,
+    "post:fxaa": 0.27,
+    "sdf:upscale:L2a": 0.2,
+    "sdf:upscale:L3a": 0.18,
+    "post:blit": 0.17,
+    "sdf:upscale:L4a": 0.17,
+    "post:vhs": 0.11,
+    "sdf:composite": 0.09,
+    "goo:surface": 0.09,
+    "sdf:upscale:occupiedTiles": 0.08,
+    "sdf:shell-hull": 0.08,
+    "sdf:upscale:L1a": 0.08,
+    "compute:tile-bin": 0.07,
+    "sdf:upscale:sharpen": 0.06,
+    "post:vhs-input": 0.06,
+    "compute:probe-gather": 0.06,
+    "sdf:last-blit": 0.05
+   }
+  },
+  {
+   "wounds": 0,
+   "leg": "away@0.5",
+   "valid": true,
+   "frame": 7.934999999403954,
+   "passes": {
+    "sdf:march": 4.6,
+    "sdf:polys": 0.94,
+    "post:fxaa": 0.24,
+    "post:blit": 0.15,
+    "post:vhs": 0.1,
+    "goo:surface": 0.09,
+    "compute:tile-bin": 0.08,
+    "sdf:upscale:L2a": 0.08,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:composite": 0.06,
+    "post:vhs-input": 0.05
+   }
+  },
+  {
+   "wounds": 0,
+   "leg": "face@0.25",
+   "valid": true,
+   "frame": 5.570000000298023,
+   "passes": {
+    "sdf:march": 2.54,
+    "sdf:polys": 0.98,
+    "post:fxaa": 0.24,
+    "post:blit": 0.15,
+    "post:vhs": 0.1,
+    "goo:surface": 0.08,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:composite": 0.07
+   }
+  },
+  {
+   "wounds": 0,
+   "leg": "away@0.25",
+   "valid": true,
+   "frame": 4.225,
+   "passes": {
+    "sdf:march": 1.49,
+    "sdf:shell-hull": 0.96,
+    "gpu:idle": 0.71,
+    "post:fxaa": 0.21,
+    "post:blit": 0.12,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "face@0.5",
+   "valid": true,
+   "frame": 18.795000000298025,
+   "passes": {
+    "sdf:march": 15.6,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "sdf:upscale:L4a": 0.16,
+    "sdf:upscale:L3a": 0.16,
+    "sdf:upscale:L2a": 0.16,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:composite": 0.08,
+    "sdf:last-blit": 0.07,
+    "gpu:idle": 0.07,
+    "sdf:upscale:occupiedTiles": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "away@0.5",
+   "valid": true,
+   "frame": 6.615000000596046,
+   "passes": {
+    "sdf:march": 4.3,
+    "gpu:idle": 2.18,
+    "sdf:polys": 0.91,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "compute:tile-bin": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L4a": 0.06,
+    "sdf:upscale:L2a": 0.06,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "face@0.25",
+   "valid": true,
+   "frame": 10.775,
+   "passes": {
+    "sdf:march": 8.43,
+    "gpu:idle": 1.68,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "away@0.25",
+   "valid": true,
+   "frame": 4.020000000298023,
+   "passes": {
+    "sdf:march": 1.5,
+    "sdf:shell-hull": 0.95,
+    "gpu:idle": 0.5,
+    "post:fxaa": 0.21,
+    "post:blit": 0.13,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setWoundList(false)]",
+   "valid": true,
+   "frame": 10.634999999403954,
+   "passes": {
+    "sdf:march": 8.28,
+    "gpu:idle": 1.93,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.1,
+    "goo:surface": 0.08,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setWoundList(true)]",
+   "valid": true,
+   "frame": 15.65,
+   "passes": {
+    "sdf:march": 13.4,
+    "gpu:idle": 2.75,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setWoundEarlyOut(false)]",
+   "valid": true,
+   "frame": 15.770000000298023,
+   "passes": {
+    "sdf:march": 13.48,
+    "gpu:idle": 2.7,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setWoundEarlyOut(true)]",
+   "valid": true,
+   "frame": 15.869999998807907,
+   "passes": {
+    "sdf:march": 13.41,
+    "gpu:idle": 2.05,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setWoundCull(false)]",
+   "valid": true,
+   "frame": 15.795000000298023,
+   "passes": {
+    "sdf:march": 13.46,
+    "gpu:idle": 1.51,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setWoundCull(true)]",
+   "valid": true,
+   "frame": 15.86499999910593,
+   "passes": {
+    "sdf:march": 13.43,
+    "gpu:idle": 1.51,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setOwnerRefold(false)]",
+   "valid": true,
+   "frame": 6.620000000298023,
+   "passes": {
+    "sdf:march": 4.31,
+    "gpu:idle": 2.11,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setOwnerRefold(true)]",
+   "valid": true,
+   "frame": 15.694999998807907,
+   "passes": {
+    "sdf:march": 13.42,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:last-blit": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setShell(false)]",
+   "valid": true,
+   "frame": 17.359999999403954,
+   "passes": {
+    "sdf:march": 14.59,
+    "gpu:idle": 5.9,
+    "sdf:polys": 1,
+    "post:fxaa": 0.21,
+    "post:blit": 0.13,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.05
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setShell(true)]",
+   "valid": true,
+   "frame": 15.745000000298024,
+   "passes": {
+    "sdf:march": 13.48,
+    "gpu:idle": 1.43,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setCrowdDispatch(\"boxes\")]",
+   "valid": true,
+   "frame": 15.85,
+   "passes": {
+    "sdf:march": 13.38,
+    "gpu:idle": 2.07,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setCrowdDispatch(\"quad\")]",
+   "valid": true,
+   "frame": 15.269999998807908,
+   "passes": {
+    "sdf:march": 12.64,
+    "gpu:idle": 3.09,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setTileRayCull(false)]",
+   "valid": true,
+   "frame": 14.93999999910593,
+   "passes": {
+    "sdf:march": 12.62,
+    "gpu:idle": 1.53,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.06
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setTileRayCull(true)]",
+   "valid": true,
+   "frame": 14.945000000298023,
+   "passes": {
+    "sdf:march": 12.53,
+    "gpu:idle": 1.45,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.05
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setHullExitBound(false)]",
+   "valid": true,
+   "frame": 15.86000000089407,
+   "passes": {
+    "sdf:march": 13.54,
+    "gpu:idle": 1.93,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.05
+   }
+  },
+  {
+   "wounds": 5,
+   "leg": "T[__sdfGame.setHullExitBound(true)]",
+   "valid": true,
+   "frame": 15.140000000596046,
+   "passes": {
+    "sdf:march": 12.63,
+    "sdf:polys": 1,
+    "post:fxaa": 0.24,
+    "post:blit": 0.14,
+    "post:vhs": 0.09,
+    "goo:surface": 0.08,
+    "sdf:upscale:L4a": 0.07,
+    "sdf:upscale:L3a": 0.07,
+    "sdf:upscale:L2a": 0.07,
+    "sdf:composite": 0.06,
+    "sdf:last-blit": 0.05
+   }
+  }
+ ]
+}

@@ -67,7 +67,14 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // keeps its reference bit-identical.)
     let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;
     if (perfCfg.y > 0.5 && r > reach) { continue; }
-    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0).y;
+    let wFlags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0);
+    let owner = wFlags.y;
+    // THREAT MASK (2026-09-21): the fraction of flags.x is a CPU-computed bitfield
+    // over 1024 — bit c+1 set when cluster c is NOT this wound's owner and
+    // some prim group of it reaches this wound's carve bowl (zombie-gpu.ts
+    // woundThreatMasks). The cavity readers test x > 0.5 and the fraction
+    // stays below 0.5, so they are untouched. Zero when no view wrote it.
+    let threat = u32(fract(wFlags.x) * 1024.0 + 0.5);
     if (gWoundCluster > 0.0 && owner > 0.0 && owner != gWoundCluster) { continue; }
     if (owner > 0.0) { gWoundOwners = gWoundOwners | (1u << u32(owner)); }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + band), 0);
@@ -96,13 +103,19 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // Bounded torso preview: a fixed sphere recipe, with its owner's depth
     // cap. Negative type is upload-only; stock gameplay types remain 0..2.
     if (wMeta.x < -0.5) {
+      let dPre = d;
       d = max(d, min(w.w - r, capEff - dot(p - w.xyz, wCap.xyz)));
+      if (d > dPre) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
       if (r < w.w * 2.0) { near = 1.0; }
       continue;
     }
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
+    let dBefore = d;
     d = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
+    // Which owners' carves actually RAISED the field here — see the owner
+    // re-fold's raiser gate in MAP_BODY. Bit 0 collects unowned wounds.
+    if (d > dBefore) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
     if (r < depth * 2.0) { near = 1.0; }
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
@@ -115,6 +128,10 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
 // a positive cluster id restricts the independent limb field below.
 var<private> gWoundCluster: f32 = 0.0;
 var<private> gWoundOwners: u32 = 0u;
+// Owners whose carve raised the field at p since mapBody's reset.
+var<private> gWoundRaisers: u32 = 0u;
+// Union of the threat masks of every wound whose carve raised the field at p.
+var<private> gWoundThreat: u32 = 0u;
 // Set only for final surface shading; -1 retains unscoped chunk/volume masks.
 var<private> gWoundShadePrim: f32 = -1.0;`
 

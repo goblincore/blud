@@ -261,6 +261,22 @@ export function createWorldSeams(ctx: GameContext) {
     setOwnerRefold(on: boolean) {
       for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
     },
+    /** Owner re-fold RAISER GATE (counts2.z == 2, 2026-09-21): re-fold a limb only where a wound
+     *  it does not own actually raised the field. Value-identical by construction; off = ship. */
+    setOwnerRefoldGate(on: boolean) {
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 2 : 0;
+    },
+    /** Owner re-fold THREAT MASK (counts2.z == 3, 2026-09-21): the raiser gate, narrowed per
+     *  cluster by the CPU masks the body view uploads (wound-threat.ts). off = ship. */
+    setOwnerRefoldMask(on: boolean) {
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 3 : 0;
+    },
+    get ownerRefoldMask() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 2.5; },
+    /** Diagnostic: every wounded actor's per-wound threat masks (bit c+1 = cluster c). */
+    woundThreats() {
+      return ctx.world.actors.map(a => ({ id: a.id, margin: a.view.woundThreatMargin, masks: a.view.woundThreats?.() ?? [] })).filter(m => m.masks.length > 0);
+    },
+        get ownerRefoldGate() { const z = ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0; return z > 1.5 && z < 2.5; },
     get ownerRefold() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
     /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
      *  wound set once per pixel and fold only those. OFF is bit-identical. */
