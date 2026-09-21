@@ -122,3 +122,37 @@ with 0 bodies on screen.
   `flame-cards` (7 ms), explosion materials (13 builds, ~12 ms).
 - First dynamite gib: `chunks-and-guts` 33–56 ms once, 10–18 ms after.
 - `ShadowMaterial` rebuilt 59x in a session (~0.4 ms each).
+
+## Clean GPU baseline (recording 03-12-07, `4a3b1cdd`, collector fix in)
+
+2262/2262 frames exact; busy+idle = 100.0% of wall. **Use this as the "before".**
+
+| | p50 | p95 | p99 | max |
+| --- | --- | --- | --- | --- |
+| GPU busy | 19.5 | 27.5 | 30.1 | 42.9 |
+| CPU tick+draw | 12.4 | 15.5 | 18.7 | 61.9 |
+
+Busy > 25 ms: 14.5% of frames; > 30: 1.1%; > 33.3: 0.4%.
+
+GPU by situation (mean ms):
+
+| | zero bodies | typical fight (3–6 bodies < 3 m) | hottest (> 28 ms) |
+| --- | --- | --- | --- |
+| busy p50 | 9.7 | 21.5 | 29.5 |
+| `sdf:march` | 0 | **12.3** (p95 19.1) | **18.7** (p95 28.2) |
+| `sdf:polys` (main + 2 shadow maps) | **4.7** | 2.5 | 3.2 |
+| fire (all) | 0.2 | 2.6 (p95 6.3) | 2.4 |
+| gib/shutter blur | 0.8 | 1.0 (p95 4.9) | 2.9 (**p95 19.6**) |
+| upscaler (all) | 0.9 | 0.8 | 1.0 |
+| post chain | 1.5 | 0.7 | 0.8 |
+| `sdf:shell-hull` | 0.9 (p95 4.4) | 0.4 | 0.4 |
+
+Reading it:
+- **~10 ms GPU floor with nothing on screen**, half of it `sdf:polys` — the
+  scene drawn 3x incl. two shadow maps full of other rooms' skeleton meshes. So
+  the visible-actors change is a GPU lever too, not only CPU.
+- In a fight the march is 57% of the GPU frame. Hot frames are NOT crowds:
+  median 4 bodies at 2.5 m, coverage 0.38. Proximity drives it (march ~11.7 ms
+  under 3 m, 3.5 ms beyond 6 m).
+- Gib/shutter blur is cheap on average and spiky: p95 19.6 ms in hot frames.
+- Fire is a steady 2–3 ms while anything burns, p95 6.3.
