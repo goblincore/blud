@@ -26,6 +26,7 @@
 import * as ts from 'typescript';
 import { readFileSync, writeFileSync } from 'node:fs';
 // Import/type inference is shared with extract-leaf.ts — one implementation.
+import { findSeamLiteral } from './lib/seam-literal';
 import { importTable, importsFor, localTypes, usedLocalTypes, localValues, referencedNames } from './lib/game-main-deps';
 
 const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
@@ -47,7 +48,7 @@ function mainOf(sf: ts.SourceFile): ts.FunctionDeclaration {
   return m;
 }
 
-export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; sf: ts.SourceFile; members: Member[] } {
+export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; insertAt: number; sf: ts.SourceFile; members: Member[] } {
   const sf = ts.createSourceFile('game-main.ts', source, ts.ScriptTarget.ES2022, true);
   const main = mainOf(sf);
   const scope = new Set<string>();
@@ -55,21 +56,9 @@ export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; 
     if (ts.isVariableStatement(st)) for (const d of st.declarationList.declarations) if (ts.isIdentifier(d.name)) scope.add(d.name.text);
     if (ts.isFunctionDeclaration(st) && st.name) scope.add(st.name.text);
   }
-  // Select by SHAPE, not by size: the assignment whose right-hand side is an
-  // object literal and whose left-hand side names __sdfGame. The old heuristic
-  // took the longest statement mentioning __sdfGame, which became game-main's
-  // setDrawFn closure the moment the literal shrank past it (leaves wave 1) —
-  // and then crashed reading `.properties` of a non-literal.
-  const cands = main.body!.statements.filter((s): s is ts.ExpressionStatement =>
-    ts.isExpressionStatement(s)
-    && ts.isBinaryExpression(s.expression)
-    && s.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
-    && ts.isObjectLiteralExpression(s.expression.right)
-    && s.expression.left.getText(sf).includes('__sdfGame'));
-  if (cands.length !== 1) {
-    throw new Error(`expected exactly one __sdfGame = { … } assignment in main(), found ${cands.length}`);
-  }
-  const obj = (cands[0].expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression;
+  // Select by SHAPE, not by size — and refuse the object-literal shape that
+  // froze the seam getters. scripts/lib/seam-literal.ts is the one finder.
+  const { obj, insertAt } = findSeamLiteral(main, sf);
 
   const moduleValues = localValues(sf);
   const members: Member[] = [];
@@ -110,7 +99,7 @@ export function readMembers(source: string): { obj: ts.ObjectLiteralExpression; 
       fullStart: m.getFullStart(), end: m.getEnd(), lines: b - a + 1,
     });
   }
-  return { obj, sf, members };
+  return { obj, insertAt, sf, members };
 }
 
 export interface GroupResult {
@@ -124,7 +113,7 @@ export function extractGroup(
   source: string, moduleName: string, factory: string,
   pick: (m: Member) => boolean, extraImports: readonly string[],
 ): GroupResult {
-  const { obj, sf, members } = readMembers(source);
+  const { insertAt, sf, members } = readMembers(source);
   const wanted = members.filter(pick);
   const picked = wanted.filter(m => m.free.length === 0);
   const skipped = wanted.filter(m => m.free.length > 0);
@@ -139,7 +128,8 @@ export function extractGroup(
     }
     edits.push({ start: m.fullStart, end, text: '' });
   }
-  edits.push({ start: obj.getStart(sf) + 1, end: obj.getStart(sf) + 1, text: `\n    ...${factory}(ctx),` });
+  // A mergeSeams ARGUMENT, never a `...spread` — see scripts/lib/seam-literal.ts.
+  edits.push({ start: insertAt, end: insertAt, text: `${factory}(ctx),\n    ` });
   const lastImport = [...source.matchAll(/^import .*?;$/gms)].at(-1);
   if (!lastImport) throw new Error('no import block');
   const at = lastImport.index! + lastImport[0].length + 1;

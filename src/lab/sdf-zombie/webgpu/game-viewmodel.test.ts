@@ -5,7 +5,9 @@ import {
   extractStage, extractorOffset, fireRecoil, flashEnvelope, hingeOpenFraction,
   insertStage, loadCarry, loadHold, magazineAfterFire, reloadPhaseAt, reloadPose,
   stagedShellCenter, supportHandPose, topLeverAngle,
+  VIEWMODEL_REFERENCE_FOV_DEG, viewmodelFovScale,
 } from './game-viewmodel';
+import { FISHEYE_DEFAULTS } from './fisheye';
 
 /** A bore frame for the eject tests: the breech faces the camera (+Z) and the
  *  chambers sit side by side along +X. Simpler than the real open gun's, and
@@ -428,5 +430,82 @@ describe('extractorOffset', () => {
   });
   it('retracts as the fresh cases seat, not after', () => {
     expect(extractorOffset(RELOAD.loadSeatSec)).toBeCloseTo(0, 4);
+  });
+});
+
+
+describe('viewmodelFovScale', () => {
+  const ndcX = (x: number, z: number, fovDeg: number, aspect: number) =>
+    (x / -z) / (Math.tan((fovDeg * Math.PI) / 360) * aspect);
+  const ndcY = (y: number, z: number, fovDeg: number) =>
+    (y / -z) / Math.tan((fovDeg * Math.PI) / 360);
+
+  it('is EXACTLY 1 at the reference FOV, not a rounding of 1', () => {
+    // The reference lens has to be an untouched identity: the poses were
+    // authored through it, so any scale at all there is a silent retune.
+    expect(viewmodelFovScale(VIEWMODEL_REFERENCE_FOV_DEG)).toBe(1);
+    expect(viewmodelFovScale(37, 37)).toBe(1);
+  });
+
+  it('shrinks the weapon as the world FOV narrows, and grows it as it widens', () => {
+    expect(viewmodelFovScale(46)).toBeLessThan(1);
+    expect(viewmodelFovScale(46)).toBeCloseTo(0.7352, 4);
+    expect(viewmodelFovScale(90)).toBeGreaterThan(1);
+  });
+
+  it('is monotonic in the world FOV', () => {
+    let prev = -Infinity;
+    for (let deg = 20; deg <= 140; deg += 5) {
+      const s = viewmodelFovScale(deg);
+      expect(s).toBeGreaterThan(prev);
+      prev = s;
+    }
+  });
+
+  /**
+   * THE PROPERTY THE WHOLE APPROACH RESTS ON, and the reason no weapon was
+   * retuned by hand: a camera-parented point scaled by (r, r, 1) and drawn
+   * through the NEW FOV lands on exactly the NDC it had under the OLD one.
+   * If this ever stops holding, the weapons are no longer framed as the
+   * owner approved them and the per-weapon offsets have to move after all.
+   */
+  it('reproduces the reference framing exactly, for every point and aspect', () => {
+    const world = FISHEYE_DEFAULTS.centerFovDeg;
+    const r = viewmodelFovScale(world);
+    const points: readonly (readonly [number, number, number])[] = [
+      [0.10, -0.12, -0.33],   // the shorty's rest, roughly
+      [0.235, -0.295, -0.42], // the dynamite bundle's hold
+      [0, 0, -1],             // dead centre, far
+      [-0.4, 0.3, -0.08],     // extreme, very near the eye
+    ];
+    for (const aspect of [16 / 9, 4 / 3, 1, 21 / 9]) {
+      for (const [x, y, z] of points) {
+        expect(ndcX(x * r, z, world, aspect))
+          .toBeCloseTo(ndcX(x, z, VIEWMODEL_REFERENCE_FOV_DEG, aspect), 12);
+        expect(ndcY(y * r, z, world))
+          .toBeCloseTo(ndcY(y, z, VIEWMODEL_REFERENCE_FOV_DEG), 12);
+      }
+    }
+  });
+
+  it('leaves depth alone, so occlusion against the world is untouched', () => {
+    // Not an assertion about this function (it returns one number) but about
+    // its CONTRACT: the caller applies it to x and y only. Pinned here
+    // because the tempting "just scale the rig" is the bug it prevents —
+    // a uniform scale about the eye is an exact no-op in perspective, so a
+    // caller who reaches for .setScalar() gets no framing change at all and
+    // a changed depth.
+    const r = viewmodelFovScale(46);
+    const z = -0.42;
+    expect(ndcX(0.2 * r, z, 46, 16 / 9)).not.toBeCloseTo(ndcX(0.2 * r, z * r, 46, 16 / 9), 6);
+  });
+
+  it('refuses to hide the weapon on nonsense input', () => {
+    // A NaN or zero scale is a weapon that vanishes or collapses to a point,
+    // which is worse than an unscaled one — so every degenerate input is 1.
+    for (const bad of [NaN, Infinity, -Infinity, 0, -30]) {
+      expect(viewmodelFovScale(bad)).toBe(1);
+      expect(viewmodelFovScale(46, bad)).toBe(1);
+    }
   });
 });

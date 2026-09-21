@@ -17,6 +17,7 @@
 // Exits non-zero when the placement gate fails. Servers via lab-servers.sh.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const VITE = Number(process.argv[2] ?? 5317);
 const CDP = Number(process.argv[3] ?? 9317);
@@ -84,6 +85,9 @@ for (let i = 0; i < 240; i++) {
   if (api) break;
 }
 if (api !== 'webgpu') fail(`page never booted on webgpu (got ${api})`);
+// Loader: `__sdfGame` is up before the pipelines; without this the first
+// evidence shot (g1) was the "READY — CLICK TO START" overlay.
+await waitForLoader(evaluate, { fail });
 for (let i = 0; i < 40; i++) {
   if (await evaluate('window.__sdfGame.gunReady')) break;
   await sleep(250);

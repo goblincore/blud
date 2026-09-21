@@ -27,6 +27,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const VITE = Number(process.argv[2] ?? 5484);
 const CDP = Number(process.argv[3] ?? 9484);
@@ -136,17 +137,11 @@ async function bootGame(query = '') {
   if (!ok) throw new Error(`__sdfGame never booted (${query || 'no query'})`);
   // Wait for the warm/loader gate to finish: deferred mode compiles more
   // pipelines, and a capture taken during "compiling pipelines" is not a frame.
-  for (let i = 0; i < 180; i++) {
-    const ready = await evaluate(`(() => {
-      const l = document.getElementById('loader');
-      const warm = window.__warmGate;
-      return (l && l.classList.contains('loader-hidden'))
-        || (warm && warm.phase === 'ready')
-        || (l && getComputedStyle(l).display === 'none');
-    })()`).catch(() => false);
-    if (ready) break;
-    await sleep(500);
-  }
+  // scripts/lib/wait-loader.mjs: waits up to 10 min, THROWS on timeout and
+  // dismisses the overlay. The loop this replaces gave up silently after
+  // 90 s and never dismissed, so a cold mode (task3's deferred-off) was
+  // captured as "READY — CLICK TO START" frames and diffed against itself.
+  await waitForLoader(evaluate, { settleMs: 0 });
   await sleep(1500);
   await evaluate(`(() => {
     const g = window.__sdfGame;

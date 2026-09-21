@@ -492,3 +492,69 @@ export function supportHandPose(t: number, hold?: HandHold): SupportHandPose {
   }
   return { dx: a.dx, dy: a.dy, dz: a.dz, carrying: false };
 }
+
+// ——— FOV-independent framing ————————————————————————————————————————————
+
+/**
+ * The screen-centre FOV, vertical degrees, that every view-model pose in this
+ * file and every rest offset in game-main.ts was framed against by eye.
+ *
+ * It is a HISTORICAL constant, not a tuning knob: it records the lens the
+ * owner was looking through when they approved the gun's ride height, the
+ * hands' rest positions, the reload's "keep the mouths in the lower third"
+ * and the bundle's hold pose. Change it and you silently invalidate all of
+ * them. Change `FISHEYE_DEFAULTS.centerFovDeg` instead — that is the world
+ * FOV, and viewmodelFovScale() below keeps the two independent.
+ */
+export const VIEWMODEL_REFERENCE_FOV_DEG = 60;
+
+/**
+ * The scale that frames the view model at `referenceDeg` while the world
+ * renders at `centerFovDeg` — the usual FPS "the weapon has its own FOV",
+ * expressed as one transform instead of a second render pass.
+ *
+ * WHY A SCALE AND NOT A SECOND PASS. The view model is not drawn separately:
+ * the gun, both arms and the shells are registered into the deferred
+ * G-buffer mesh pass (`router.register(..., 'mesh', 'level-only')`) so the
+ * shared light stage shades them and walls occlude a thrown case. Giving
+ * them their own projection would mean their own pass, their own G-buffer
+ * and their own depth reconcile against the SDF composite. There is no need:
+ * the whole rig is parented to the camera, and for camera-space geometry a
+ * FOV change is EXACTLY a scale.
+ *
+ * WHY (r, r, 1) IS EXACT, not an approximation. A camera-space point
+ * (x, y, z) projects to ndc.x = (x / -z) / tan(fov/2). Scale x and y by
+ * r = tan(new/2) / tan(old/2) and leave z alone, and the new projection
+ * gives (r*x / -z) / tan(new/2) = (x / -z) / tan(old/2) — the OLD ndc, for
+ * every point, at every aspect. So the view model's silhouette, its internal
+ * parallax and its occlusion order are all bit-for-bit the framing the owner
+ * approved, whatever the world FOV becomes.
+ *
+ * THE ONE COST is lighting: (r, r, 1) is non-uniform, so it stretches the rig
+ * in z relative to x/y by 1/r and three's inverse-transpose normal matrix
+ * duly tilts the normals with it. Highlights on the barrels slide a little.
+ * A uniform scale would not do this — but a uniform scale about the eye is
+ * an exact no-op in a perspective projection, so it is also not an option.
+ *
+ * MEASURED AGAINST THE CENTRE FOV, not the render FOV. The lens magnifies
+ * the middle of the frame by tan(render/2)/tan(centre/2), so near screen
+ * centre — where the gun sits — the effective FOV IS the centre FOV. Pinning
+ * to the centre FOV therefore also makes the framing independent of the
+ * render FOV, which is the sharpness/cost knob and the one most likely to
+ * move again. (The two ratios differ by under 4% at the shipped numbers:
+ * 0.735 against the centre FOV, 0.763 against the render FOV.)
+ *
+ * Returns 1 exactly when the two FOVs agree, so the reference lens is an
+ * untouched identity rather than a rounding of one. Non-finite or
+ * non-positive input returns 1 — a view model at scale 0 or NaN is a missing
+ * weapon, which is a worse failure than an unscaled one.
+ */
+export function viewmodelFovScale(
+  centerFovDeg: number, referenceDeg: number = VIEWMODEL_REFERENCE_FOV_DEG,
+): number {
+  if (!Number.isFinite(centerFovDeg) || !Number.isFinite(referenceDeg)) return 1;
+  if (centerFovDeg <= 0 || referenceDeg <= 0) return 1;
+  if (centerFovDeg === referenceDeg) return 1;
+  return Math.tan((centerFovDeg * Math.PI) / 360)
+    / Math.tan((referenceDeg * Math.PI) / 360);
+}

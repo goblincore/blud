@@ -9,6 +9,7 @@
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { visibleFovDeg } from './fisheye';
+import { VIEWMODEL_REFERENCE_FOV_DEG, viewmodelFovScale } from './game-viewmodel';
 import { type GibBlurSubject } from './gib-shutter-layer';
 import { SDF_LAYER } from './sdf-layer';
 import { type MarchUniforms } from './zombie-gpu';
@@ -35,8 +36,43 @@ export function fisheyeReport(ctx: GameContext) {
     centerFovDeg: ctx.player.centerFovDeg,
     visibleFovDeg: visibleFovDeg(ctx.render.postAa.lens),
     k: ctx.render.postAa.lens.k,
+    // The view model's own FOV and the scale it currently costs, reported
+    // alongside the world's so a console user tuning `setFisheye` can see at
+    // a glance that the weapon did NOT move with it — which is the whole
+    // point of the split and otherwise invisible until you look at the gun.
+    viewmodelFovDeg: ctx.player.viewmodelFovDeg,
+    viewmodelScale: viewmodelFovScale(ctx.player.centerFovDeg, ctx.player.viewmodelFovDeg),
   };
 }
+
+/**
+ * Push the current centre FOV onto the view model's compensation rig, so the
+ * weapons stay framed at `player.viewmodelFovDeg` while the world renders at
+ * `player.centerFovDeg`.
+ *
+ * CALL THIS WHENEVER EITHER FOV MOVES. `setFisheye` and `setViewmodelFov`
+ * both do; `setRenderFov` deliberately does NOT need to, because the scale is
+ * measured against the CENTRE FOV (see viewmodelFovScale's doc) and the
+ * render FOV is the sharpness/cost knob, not the framing one.
+ *
+ * `z` stays at 1: scaling depth would change where the view model sits
+ * relative to the world it is composited against, and the whole point of the
+ * (r, r, 1) form is that it leaves every depth — and therefore every
+ * occlusion — exactly as authored. See viewmodelFovScale.
+ *
+ * Tolerates the rig not existing yet (boot order, headless gates): the caller
+ * is the boot path itself and the seams, and a missing rig there means the
+ * view model has not been built, not that the scale was lost.
+ */
+export function applyViewmodelFovScale(ctx: GameContext): number {
+  const s = viewmodelFovScale(ctx.player.centerFovDeg, ctx.player.viewmodelFovDeg);
+  ctx.weapon.fovRig?.scale.set(s, s, 1);
+  return s;
+}
+
+/** Re-exported so game-main's boot and the seams share ONE default rather
+ *  than each spelling 60 out. */
+export { VIEWMODEL_REFERENCE_FOV_DEG };
 
 /**
  * This frame's gib-blur candidates. Built from the SAME lists the renderers

@@ -19,6 +19,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { loadavg } from 'node:os';
 import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const argv = process.argv.slice(2);
 const positional = argv.filter((a) => !a.startsWith('--'));
@@ -135,15 +136,11 @@ async function bootGame(query = '') {
   let ok = false;
   for (let i = 0; i < 240 && !ok; i++) { await sleep(500); ok = await evaluate('typeof window.__sdfGame === "object"').catch(() => false); }
   if (!ok) throw new Error(`__sdfGame never booted (${query || 'no query'})`);
-  for (let i = 0; i < 200; i++) {
-    const ready = await evaluate(`(() => {
-      const l = document.getElementById('loader'); const warm = window.__warmGate;
-      return (l && l.classList.contains('loader-hidden')) || (warm && warm.phase === 'ready')
-        || (l && getComputedStyle(l).display === 'none');
-    })()`).catch(() => false);
-    if (ready) break;
-    await sleep(500);
-  }
+  // scripts/lib/wait-loader.mjs: waits up to 10 min, THROWS on timeout and
+  // dismisses the overlay. The loop this replaces gave up silently after
+  // 100 s and never dismissed, so a cold mode (task3's deferred-off) was
+  // captured as "READY — CLICK TO START" frames and diffed against itself.
+  await waitForLoader(evaluate, { settleMs: 0 });
   await sleep(1800);
   await evaluate(`(() => {
     const g = window.__sdfGame;

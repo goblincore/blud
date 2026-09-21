@@ -256,7 +256,7 @@ import { createFxSeams } from './game-seams-fx';
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createMiscSeams } from './game-seams-misc';
-import { applyBoneCullMode, applyBoneMesh, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
+import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
 import { applyChunkKindLook, ensureGibAssets, gibAssetArchetypeOf, gibAssetArmed, newBlastProfile, primsLongAxis, reacquireHeldProp, retireActor, scheduleGib, stepPendingGibImpulses } from './game-gibs-leaves';
 import { breechInRig, locatorInView, newTracerQuad, setQuadMatrix, startReload, stepBursts, viewToRig } from './game-weapon-leaves';
@@ -324,6 +324,7 @@ import { refreshLevelLights } from './game-lighting-leaves';
 import { GIB_TIER_FLOOR, gibAllowance, gibBudget, gibDebit, gibReserved } from './game-gibs-leaves';
 import { createWeaponAimSeams } from './game-seams-weapon-aim';
 import { createRenderQualitySeams } from './game-seams-render-quality';
+import { mergeSeams } from './seam-merge';
 import { createDemoStepSeams } from './game-seams-demo-step';
 import { createLightingProbeSeams } from './game-seams-lighting-probes';
 import { createGibsBakeSeams } from './game-seams-gibs-bake';
@@ -1067,6 +1068,15 @@ async function main() {
   camera.fov = FISHEYE_DEFAULTS.renderFovDeg;
   camera.updateProjectionMatrix();
   ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg);
+  // THE VIEW MODEL'S OWN FOV. Narrowing the world FOV to 46 magnifies
+  // everything drawn through it, the first-person weapons included, and at
+  // 46 the shorty is mostly off the bottom of the frame. Rather than retune
+  // every weapon's offsets against a number the owner is still tuning by
+  // eye, the weapons keep the FOV they were framed at and the rig pays the
+  // difference — see viewmodelFovScale(). The rig itself is created with the
+  // view model, below; this only records the FOV. Set equal to
+  // `centerFovDeg` to put the weapons back under the world FOV.
+  ctx.player.viewmodelFovDeg = VIEWMODEL_REFERENCE_FOV_DEG;
   // Runtime march normals (a second march attachment + renderer MRT) are allocated ONLY when the
   // boot asks for a model that reads them: `?upscaleinputs=rgbn|rgbdn`, a trained model whose name
   // contains 'rgbn'/'rgbdn', or an explicit `?upscalenormals=1`. Every other boot — including
@@ -3488,6 +3498,14 @@ async function main() {
 
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
+  // The FOV-compensation rig sits between the camera and everything the
+  // player holds, and carries NOTHING but viewmodelFovScale()'s scale — so
+  // the anchor's ride height below is scaled with the rest of the rig rather
+  // than surviving as an unscaled camera-space offset. Every weapon slot
+  // (shotgun, dynamite, flare) is a descendant, so this is one transform for
+  // all of them and for whatever slot 4 turns out to be.
+  ctx.weapon.fovRig = new THREE.Group();
+  ctx.weapon.fovRig.name = 'view-model-fov-rig';
   ctx.weapon.viewModelAnchor = new THREE.Group();
   ctx.weapon.viewModelAnchor.name = 'view-model-anchor';
   // Ride height of the whole view-model (gun + orb hands move together).
@@ -3519,7 +3537,9 @@ async function main() {
   ctx.weapon.gunRig = new THREE.Group();
   ctx.weapon.gunRig.name = 'gun-rig';
   ctx.weapon.aimRig.add(ctx.weapon.gunRig);
-  camera.add(ctx.weapon.viewModelAnchor);
+  ctx.weapon.fovRig.add(ctx.weapon.viewModelAnchor);
+  camera.add(ctx.weapon.fovRig);
+  applyViewmodelFovScale(ctx);
   scene.add(camera);
 
   // -----------------------------------------------------------------------
@@ -7849,27 +7869,32 @@ async function main() {
   // Everything the draw callback reads now exists — let frames draw. See the
   // boot-frame gate's note at setDrawFn.
   ctx.boot.drawReady = true;
-  (window as unknown as { __sdfGame: unknown }).__sdfGame = {
-    ...createGibsBakeSeams(ctx),
-    ...createLightingProbeSeams(ctx),
-    ...createDemoStepSeams(ctx),
-    ...createRenderQualitySeams(ctx),
-    ...createWeaponAimSeams(ctx),
-    ...createFireSeams(ctx),
-    ...createSkeletonSeams(ctx),
-    ...createDynamiteSeams(ctx),
-    ...createMarchDebugSeams(ctx),
-    ...createMiscSeams(ctx),
-    ...createFxSeams(ctx),
-    ...createWeaponPlayerSeams(ctx),
-    ...createBootSeams(ctx),
-    ...createRenderSeams(ctx),
-    ...createWorldSeams(ctx),
-    ...createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
-    ...createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
-    ...createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
-    ...createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf: withCtx(ctx, shellAmpOf), camera }),
-    ...createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
+  (window as unknown as { __sdfGame: unknown }).__sdfGame = mergeSeams(
+    // mergeSeams, NOT an object spread of the factories: a spread reads every getter
+    // once and copies the value, which froze 95 seam getters at their boot
+    // values after the decomposition. See seam-merge.ts. Factories first,
+    // then the inline members — later parts win, as later spreads did.
+    createGibsBakeSeams(ctx),
+    createLightingProbeSeams(ctx),
+    createDemoStepSeams(ctx),
+    createRenderQualitySeams(ctx),
+    createWeaponAimSeams(ctx),
+    createFireSeams(ctx),
+    createSkeletonSeams(ctx),
+    createDynamiteSeams(ctx),
+    createMarchDebugSeams(ctx),
+    createMiscSeams(ctx),
+    createFxSeams(ctx),
+    createWeaponPlayerSeams(ctx),
+    createBootSeams(ctx),
+    createRenderSeams(ctx),
+    createWorldSeams(ctx),
+    createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
+    createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
+    createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
+    createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf: withCtx(ctx, shellAmpOf), camera }),
+    createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
+    {
     /** Replay a `.dem` (`file` object, or a path/URL to fetch) headlessly and
      *  return `{ frames, census, ... }`. `hash: true` also digests the frame
      *  every `every` steps — the surface scripts/sdf-demo-hash.mjs drives for
@@ -7975,6 +8000,15 @@ async function main() {
       const errs: string[] = [];
       const actor = spawnEnemy(name, room, chosen, errs);
       ctx.world.actors.push(actor);
+      // A LATE BODY NEEDS A HULL (late-spawn fix, 2026-09-21). The shell is on
+      // by default and the march DISCARDS every pixel no outer-hull instance
+      // covers (shellOut <= 0, hull-bounds.wgsl.ts). While the cast is frozen
+      // (?frozen=1, freeze(true) — every capture rig and harness) the hulls
+      // build ONCE per frozen stretch; a body added after that build had no
+      // instance, so it rasterised and marched nothing, forever. Invalidate
+      // the one-shot build so the next tick rebuilds it with this body in it.
+      // Unfrozen play rebuilds every tick and never needed this.
+      ctx.render.frozenHullBuilt = false;
       if (errs.length > 0) console.error(`[sdf-game] spawnDebugCharacter(${name}):`, errs.join(' | ')) ;
       return { id: actor.id, room: room.id, errors: errs };
     },
@@ -7982,7 +8016,8 @@ async function main() {
      *  loop-restore contract: pause the loop, call rewarm(), assert it is still
      *  paused. Warm steps are cache hits after boot, so this is cheap. */
     rewarm: () => warmPipelines(),
-  };
+  },
+  );
   if (import.meta.env.DEV && new URLSearchParams(location.search).has('normal-playtest')) {
     const { installNormalPlaytest } = await import('./normal-gradient-playtest');
     const api = (window as unknown as { __sdfGame: Parameters<typeof installNormalPlaytest>[0] }).__sdfGame;
