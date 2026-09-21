@@ -137,6 +137,9 @@ export function createFlareHarness(ctx: GameContext, deps: FlareHarnessDeps): Fl
     // FROM THE EYE, not the grapeshot muzzle: the shotgun is holstered while
     // slot 3 is live, so its muzzle has dropped out of frame.
     const hit = deps.traceSlugHitFrom(deps.eye(), deps.aimDir());
+    // The shotgun logs 'shot'; without this a flare shot left no trace in a
+    // recording, and its cost read as a causeless tick stall.
+    ctx.telemetry.telemetry.event('flare-shot', { actorId: hit.actorId });
     if (hit.actorId >= 0) {
       const a = ctx.world.actors.find(x => x.id === hit.actorId);
       if (a) deps.burning.igniteActor(a);

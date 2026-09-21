@@ -54,16 +54,24 @@ const UID_PREFIX = 'p|';
 let currentLabel = UNLABELLED_PASS;
 let frameNo = 0;
 
+/** CPU-side observer of label changes (the gameplay recorder's per-pass
+ *  submission laps). Null — one compare per label — unless a recording runs. */
+let labelObserver: ((label: string) => void) | null = null;
+export function setPassLabelObserver(fn: ((label: string) => void) | null): void {
+  labelObserver = fn;
+}
+
 /** Name the passes that follow until the next call. */
 export function setPassLabel(label: string): void {
   currentLabel = label;
+  if (labelObserver !== null) labelObserver(label);
 }
 
 /** Run fn with the label set, restoring the previous label afterwards. */
 export function withPassLabel<T>(label: string, fn: () => T): T {
   const prev = currentLabel;
-  currentLabel = label;
-  try { return fn(); } finally { currentLabel = prev; }
+  setPassLabel(label);
+  try { return fn(); } finally { setPassLabel(prev); }
 }
 
 /** Advance the module's own frame counter. The bench calls this once per

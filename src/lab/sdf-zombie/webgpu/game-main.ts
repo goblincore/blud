@@ -127,7 +127,7 @@ import {
   length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
 } from 'three/tsl';
 import { runBench, type BenchDeps, type BenchMode } from './game-bench';
-import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timing';
+import { installPassTiming, beginPassFrame, setPassLabel, setPassLabelObserver } from './gpu-pass-timing';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { getPipelineCensus, getPipelineLog, getPipelineShaderSource, setPipelineLogEnabled } from './pipeline-log';
 import { coordinateWarmGate, createLoopController, type WarmOutcome } from './warm-gate';
@@ -1414,6 +1414,9 @@ async function main() {
   ctx.render.meshSyncMarked = false;
   ctx.boot.handle.setDrawFn(() => {
     if (!ctx.boot.drawReady) return;
+    // REGION LAPS (2026-09-20): tick and draw are partitioned so a recording
+    // has no unlabelled CPU. Explicit spans below nest inside these.
+    ctx.telemetry.telemetry.lap('region', 'draw:probe-gather-lights');
     // GPU PROBE GATHER dispatch (P3/P4). OUTSIDE the post-aa pass on purpose:
     // renderer.compute() inside a render callback broke the renderer's pass
     // state and stalled the loop after five frames (owner-observed HUD at
@@ -1510,6 +1513,7 @@ async function main() {
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }
+    ctx.telemetry.telemetry.lap('region', 'draw:uniforms-cull-crowd');
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
     // revision-keyed atlas; stale same-name grids are never re-enabled.
@@ -2045,6 +2049,7 @@ async function main() {
       ctx.telemetry.telemetry.end('crowd-sdf-inner', inner);
     }
     ctx.telemetry.telemetry.end('crowd-sdf-render', sdfRenderTiming);
+    ctx.telemetry.telemetry.lap('region', 'draw:effects-tail');
     // BURNING BODIES' FLAME CARDS: pose the pool before the effects scene
     // draws. An uncreated pool (nothing has ever ignited) skips this.
     ctx.vfx.burning.updateCards(camera);
@@ -6398,6 +6403,7 @@ async function main() {
     // replay. See the declaration next to lastSeenMs for the why.
     advanceSimClock(dt);
     ctx.demo.simFrame++;
+    ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
     // an on/off pair at the same frame is a real comparison (post-aa.ts).
@@ -6502,6 +6508,7 @@ async function main() {
       ctx.weapon.shotAlert = false;
       for (const a of ctx.world.actors) a.setEncounterOrder(orders.get(a.id)!);
       ctx.telemetry.telemetry.end('encounter', encounterTiming);
+      ctx.telemetry.telemetry.lap('region', 'tick:ai-separation');
 
       // --- melee ring: who may swing this frame ---------------------------
       // Claimants are the alert bodies that are actually in the encounter; an
@@ -6557,6 +6564,7 @@ async function main() {
       // figure incomparable to every new one, which is worse than the counter
       // being slightly narrow than it ought to be.
       ctx.telemetry.telemetry.end('body-step', bodyTiming);
+      ctx.telemetry.telemetry.lap('region', 'tick:burn-kit-viewtime');
       // BURNING BODIES: step AFTER the bodies, so the draw reads this frame's
       // uniforms. An empty registry is one size check.
       ctx.vfx.burning.step(dt);
@@ -6595,6 +6603,7 @@ async function main() {
         const skull = headShape(a.drawnBody());
         if (skull) a.view.setHeadShape(skull.centre, skull.axes);
       }
+      ctx.telemetry.telemetry.lap('region', 'tick:occluder-hull');
       // Wound exclusion, same contract as the lab's woundSpheres: hull
       // endpoint spheres must not sit inside carve zones, or they render as
       // pale discs inside craters. The carve sphere is centred ON the anchor
@@ -6660,6 +6669,7 @@ async function main() {
     // GRAPESHOT SIM — pellets fly, land as wounds through actor.hit();
     // detached pieces fly ballistically through the shared chunk path.
     // ---------------------------------------------------------------
+    ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
     ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
     ctx.weapon.flare?.tickCooldown(dt);
     ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
@@ -7077,6 +7087,7 @@ async function main() {
       ctx.world.soldierCorpses?.update(ctx.world.actors,0); // restore damaged snapshots before this draw
       ctx.telemetry.telemetry.end('wound-flush', flushTiming);
       ctx.telemetry.telemetry.end('projectiles-and-hits', projectileTiming);
+      ctx.telemetry.telemetry.lap('region', 'tick:post-hits');
       // SOLDIER PELLETS SIT OUTSIDE 'projectiles-and-hits' ON PURPOSE — see
       // the same argument at 'body-step'. This is work that did not exist when
       // that counter was calibrated on main, and quietly folding it in would
@@ -7237,6 +7248,7 @@ async function main() {
         ctx.vfx.bloodView.sync(ctx.vfx.bloodSim, camera);
       }
       ctx.telemetry.telemetry.end('blood-simulation-and-sync', bloodTiming);
+      ctx.telemetry.telemetry.lap('region', 'tick:post-blood');
       // The optional impact crown advances even with bleed off, so an event
       // already in flight finishes instead of freezing mid-burst.
       ctx.panels.impactSplashLayer?.step(cdt);
@@ -7300,6 +7312,7 @@ async function main() {
       if (!ctx.gibs.shutter.enabled) ctx.gibs.blurPrevKeys = new Set();
     }
     ctx.telemetry.telemetry.end('goo-sync', gooTiming);
+    ctx.telemetry.telemetry.lap('region', 'tick:tail');
   }
 
   ctx.boot.handle.setRenderCallback((dt) => {
@@ -7358,7 +7371,7 @@ async function main() {
   ctx.telemetry.controls = import.meta.env.DEV ? createTelemetryControls(ctx.telemetry.telemetry, async () => ({
     build: await fetch('/__lab/telemetry-build', { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(r => { if (!r.ok) throw new Error('Build identity unavailable'); return r.json(); }),
     buildAtServerStart: import.meta.env.VITE_TELEMETRY_BUILD ?? { commit: 'unknown', dirty: true },
-    captureVersion: 2, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: ctx.boot.gameTiles.diagnostics(),
+    captureVersion: 3, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: ctx.boot.gameTiles.diagnostics(),
     page: location.pathname, query: location.search, userAgent: navigator.userAgent, backend: ctx.boot.handle.backend,
     visibility: document.visibilityState, frameCap: ctx.boot.handle.frameCap,
     fisheye: fisheyeReport(ctx), renderWidth: ctx.render.sdfLayer.marchTarget.width, renderHeight: ctx.render.sdfLayer.marchTarget.height,
@@ -7375,12 +7388,39 @@ async function main() {
     intervalMeaning: 'natural drawn-frame start intervals, including frame cap/vsync and scheduling; not pure GPU time',
     cpuMeaning: 'tickCpuMs and drawCpuMs are synchronous CPU time, including submission, not GPU execution',
     phaseMeaning: 'inclusive spans accumulated since previous draw; nested hit/flush/bake spans must not be added to parents',
+    selfPhaseMeaning: 'selfPhases are EXCLUSIVE ms (a span minus the spans inside it) and may be summed/ranked; tick:*/draw:* are region laps partitioning the frame, cpu:<pass> is CPU submission time per GPU pass label; unattributedCpuMs is tick+draw CPU no span covered',
+    autoEvents: 'long-frame (tick+draw CPU >= 20 ms, names the top self spans), shader-build (three r186 onNodeBuilderCreated; mode sync stalls a frame), flare-shot',
     spikeAttribution: 'a frame interval describes the gap BEFORE that row; inspect previous-row CPU spans and events in that gap',
     limits: { maxFrames: 18000, maxEvents: 4000, durationMs: 180000, maxSnapshots: 16, maxBytes: 12 * 1024 * 1024 },
     snapshots: 'At recording start and F9 only; snapshot-cost events identify instrumentation work.',
   }), undefined, active => {
     ctx.telemetry.firstFrame = true; ctx.telemetry.visibilityGap = false;
     ctx.boot.handle.setFrameObserver(active ? telemetryFrame : null);
+    // PER-PASS CPU SUBMISSION. Every GPU pass is already announced through
+    // setPassLabel; while recording, each label change is a 'pass' lap, so the
+    // capture says how long the CPU spent submitting sdf:polys, sdf:march,
+    // the post chain... — nested under whichever span was open.
+    setPassLabelObserver(active ? (label) => ctx.telemetry.telemetry.lap('pass', `cpu:${label}`) : null);
+    // SHADER BUILDS AS EVENTS (three r186 `debug.onNodeBuilderCreated`). A
+    // mid-game node build is never free and rarely expected: the weapon-switch
+    // stall (2026-09-20) was 16-19 of these per switch and the recording could
+    // not see one. Wrapping build() times it; the event names what rebuilt.
+    const debug = ctx.boot.handle.renderer.debug as unknown as {
+      onNodeBuilderCreated: ((builder: { build(): unknown; buildAsync(): Promise<unknown> }, target: unknown) => void) | null;
+    };
+    debug.onNodeBuilderCreated = !active ? null : (builder, target) => {
+      const t = target as { material?: { name?: string; type?: string }; object?: { name?: string; type?: string }; name?: string } | null;
+      const note = (mode: 'sync' | 'async', t0: number) => ctx.telemetry.telemetry.event('shader-build', {
+        mode, ms: Math.round((performance.now() - t0) * 10) / 10,
+        material: t?.material?.name || t?.material?.type || (t?.name ?? 'compute'),
+        object: t?.object?.name || t?.object?.type || null,
+      });
+      const build = builder.build.bind(builder);
+      const buildAsync = builder.buildAsync.bind(builder);
+      // 'sync' is the one that stalls a frame; 'async' (compileAsync) yields.
+      builder.build = () => { const t0 = performance.now(); try { return build(); } finally { note('sync', t0); } };
+      builder.buildAsync = () => { const t0 = performance.now(); return buildAsync().finally(() => note('async', t0)); };
+    };
     if (active) captureTelemetryScene(ctx, 'recording-start');
   }, () => captureTelemetryScene(ctx, 'visual-issue')) : null;
   import.meta.hot?.dispose(() => ctx.telemetry.controls?.dispose());
