@@ -331,7 +331,7 @@ async function stampWithRetry() {
   let plan = PLAN;
   for (let attempt = 1; ; attempt++) {
     const rec = await stampMeleeWounds(ev, plan, { ids: staging.ids, playerPose: staging.pose }, fail);
-    const problems = assertMeleeWounds(rec);
+    const problems = assertMeleeWounds(rec, { minLandedFrac: Number(process.env.MELEE_MIN_LANDED ?? 0.6) });
     if (rec.chunks === 0) {
       for (const p of problems) console.warn(`  WARNING: ${p}`);
       return { rec, plan, problems };

@@ -75,7 +75,10 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     let exactFix = counts2.z > 7.5;
     let refoldMode = select(counts2.z, counts2.z - 8.0, exactFix);
     gWoundExact = select(0.0, 1.0, exactFix);
-${LIMBS ? `    let limbMode = refoldMode > 3.5;
+${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwounded body's
+    // wound bound is the 1e9 no-cull identity, which would put EVERY sample
+    // "inside" it and pay the cull slack everywhere (+2.4 ms march, clean melee).
+    let limbMode = refoldMode > 3.5 && gInstWoundCount > 0.5 && woundBound.w < 1e8;
     gLimbOn = select(0.0, 1.0, limbMode);
     // The cull slack a limb needs inside a foreign crater: how far a wound can
     // raise the union above the limb's own surface (the deepest carve, 0.16 m
