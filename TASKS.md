@@ -20,6 +20,13 @@
 - [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](docs/dev-notes/2026-09-18-march-split/NOTES.md)).
+- [~] **Telemetry v3 + CPU frame attribution (2026-09-20).** [Notes](docs/dev-notes/2026-09-20-telemetry-v3/NOTES.md). Recordings now
+  carry `selfPhases`, `unattributedCpuMs` (was ~half the frame, now 0), region + per-pass CPU laps, and auto `long-frame` /
+  `shader-build` (r186 `onNodeBuilderCreated`) / `flare-shot` events. **Finding: `cpu:sdf:polys` is 5.0 of a 7.6 ms draw — the
+  CPU lever is the polygonal pass (static merge / BatchedMesh / render bundles), not the SDF chain; occluder hull 1.7 ms/frame.**
+  Fixed on the way: weapon-switch pipeline rebuilds (muzzle light under hideable `gunRig`, 115-445 ms) and the flare hit-test
+  stall (61-86 ms -> 0.2 ms, bit-identical). Open: per-frame GPU span + `gpu:idle` in the recording (GPU-bound?); warm the
+  `flame-cards` pool at boot (first ignite builds it synchronously, 20 ms); `sdBody` allocates per sample (`prims.slice`).
 - [x] **Cold-cache flesh bug (2026-09-20, fixed).** Not the warm gate and not three r186: the body program was ready, but the
   defer-compile per-body FALLBACK never drew. Crowd-attached proxies spawn hidden and only sdf-layer's depth-gate-ON branch
   re-shows the `setBodies` list; the game ships the gate OFF, so members stayed hidden (skull + bones) until the background
