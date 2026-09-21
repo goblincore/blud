@@ -33,7 +33,7 @@ const DEFAULTS = {
   vite: 5396,
   cdp: 9396,
   out: 'docs/dev-notes/2026-09-19-shader-compile/census.json',
-  query: 'pipelinelog=1&seed=20260919',
+  query: process.env.CENSUS_QUERY ?? 'pipelinelog=1&seed=20260919', // CENSUS_QUERY: e.g. append &limbs for a variant
   bootTimeoutMs: 240000, // plan: wait for ready OR a 240 s timeout, record which
 };
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
