@@ -16,6 +16,7 @@ import { RING_TUNING } from '../melee-ring';
 import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
 import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
+import { LIMB_ACCUMULATORS } from './march/limbs-flag';
 
 /** counts2.z carries the re-fold mode in 0..4 plus 8 for the wound exact fixes. */
 const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => (a.view.uniforms.counts2.value.z > 7.5 ? 8 : 0);
@@ -281,7 +282,14 @@ export function createWorldSeams(ctx: GameContext) {
      *  cluster's fold is built during the base fold and gets its own wounds once — no
      *  re-fold prim loops. Includes the raiser gate. A look change at joints; off = ship. */
     setOwnerRefoldLimbs(on: boolean) {
+      // The accumulators are compiled in only under ?limbs; mode 4 without them
+      // would skip the re-fold entirely (a wrong frame), so refuse instead.
+      if (on && !LIMB_ACCUMULATORS) {
+        console.warn('[sdf-game] setOwnerRefoldLimbs needs the page opened with ?limbs');
+        return false;
+      }
       for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 4 : 0) + exactBit(a);
+      return true;
     },
     get ownerRefoldLimbs() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 3.5; },
     /** Wound EXACT FIXES (counts2.z + 8, 2026-09-21): d-aware per-row wound reach and the
