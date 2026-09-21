@@ -3830,7 +3830,14 @@ async function main() {
     // A little AHEAD of the bores, so it throws light down the room instead of
     // mostly onto the gun's own barrels.
     ctx.weapon.flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
-    ctx.weapon.gunRig.add(ctx.weapon.flashLight);
+    // ON THE AIM RIG, NOT THE GUN RIG (weapon-switch stall, 2026-09-20).
+    // stepWeaponSlots hides gunRig at the holster point, and a hidden parent
+    // drops this light from the VISIBLE set — which re-keys the LightsNode and
+    // rebuilds every lit material's pipeline (the explosion-pool trap again).
+    // A gameplay recording showed a 115-445 ms frame exactly 166 ms after every
+    // switch to/from the shotgun. gunRig rests at the identity whenever the gun
+    // can fire, so the aim rig gives the same world position at every flash.
+    ctx.weapon.aimRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights(ctx);
     ctx.weapon.gunReady = true;
