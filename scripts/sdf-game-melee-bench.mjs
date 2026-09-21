@@ -92,7 +92,8 @@ const FRAMES = Number(process.env.MELEE_FRAMES ?? 60);
 const WARMUP = Number(process.env.MELEE_WARMUP ?? 60);
 const SETTLE_TRIES = Number(process.env.MELEE_SETTLE_TRIES ?? 30);
 const W = 1280, H = 800;
-const URL_ = `http://localhost:${VITE}/sdf-game.html?frozen=1&seed=1`;
+// MELEE_QS appends page flags, e.g. "&limbs" to compile mode 4 in for a gate/limbs A/B.
+const URL_ = `http://localhost:${VITE}/sdf-game.html?frozen=1&seed=1${process.env.MELEE_QS ?? ""}`;
 
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 const WATCHDOG_MIN = Number(process.env.MELEE_WATCHDOG_MIN ?? 25);
