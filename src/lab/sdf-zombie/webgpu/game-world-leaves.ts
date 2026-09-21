@@ -46,6 +46,27 @@ export function bodiesOnScreen(ctx: GameContext): number { return ctx.world.cull
  *  grapeshot's wrapper below calls it from the muzzle; slot 3's flare calls
  *  it from the EYE, because its own gun is holstered when it fires. No state
  *  mutated. */
+/** Slack over a cluster sphere before a slug segment is allowed to skip the
+ *  body: covers the hit shell (GRAPESHOT.hitEps) and the smooth-union bulge
+ *  between neighbouring prims, which a per-cluster sphere does not bound. */
+export const SLUG_BROADPHASE_MARGIN = 0.15;
+
+/** True when segment [a, b] passes within `margin` of any sphere. */
+export function segmentNearAnySphere(
+  a: Vec3, b: Vec3, spheres: readonly { center: Vec3; radius: number }[], margin: number,
+): boolean {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+  const len2 = dx * dx + dy * dy + dz * dz;
+  for (const s of spheres) {
+    const cx = s.center[0] - a[0], cy = s.center[1] - a[1], cz = s.center[2] - a[2];
+    const t = len2 > 0 ? Math.min(1, Math.max(0, (cx * dx + cy * dy + cz * dz) / len2)) : 0;
+    const ex = cx - dx * t, ey = cy - dy * t, ez = cz - dz * t;
+    const r = s.radius + margin;
+    if (ex * ex + ey * ey + ez * ez <= r * r) return true;
+  }
+  return false;
+}
+
 export function traceSlugHitFrom(ctx: GameContext, origin: Vec3, dir: Vec3): { actorId: number; hit: Vec3 | null } {
     let bestD = Infinity;
     let hitActorId = -1;
@@ -62,7 +83,13 @@ export function traceSlugHitFrom(ctx: GameContext, origin: Vec3, dir: Vec3): { a
       if (!c) continue;
       if (Math.hypot(c[0] - origin[0], c[1] - origin[1], c[2] - origin[2]) > 20) continue;
       const posedA = a.posed();
-      // Per-actor arc: reset the integrator, march segment-wise for 2 s.
+      // BROAD PHASE (flare tick stall, 2026-09-20). Every segment used to run
+      // a full sdBody trace against every actor within 20 m, hit or miss:
+      // 61-71 ms per flare shot with 23 actors (a gameplay recording showed it
+      // as 50-90 ms of unattributed tick). A segment that stays clear of every
+      // live cluster sphere cannot be inside the flesh, so it is skipped; the
+      // narrow phase is unchanged, so every hit point is the one it was.
+      const spheres = posedA.clusters.filter(cc => cc.alive);
       pos[0] = origin[0]; pos[1] = origin[1]; pos[2] = origin[2];
       vel[0] = d0[0] * SLUG.speed; vel[1] = d0[1] * SLUG.speed; vel[2] = d0[2] * SLUG.speed;
       for (let i = 0; i < 240; i++) {
@@ -72,7 +99,9 @@ export function traceSlugHitFrom(ctx: GameContext, origin: Vec3, dir: Vec3): { a
           pos[2] + vel[2] * dt,
         ];
         const vNext: Vec3 = [vel[0], vel[1] + SLUG.gravity * dt, vel[2]];
-        const hp = traceProjectile(pos, next, q => sdBody(q, posedA));
+        const hp = segmentNearAnySphere(pos, next, spheres, SLUG_BROADPHASE_MARGIN)
+          ? traceProjectile(pos, next, q => sdBody(q, posedA))
+          : null;
         if (hp) {
           const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
           if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
