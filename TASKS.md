@@ -66,6 +66,14 @@
   loadavg 8.5–19.2, plus the agent's 10/10 and 5/5.
   [Evidence](docs/dev-notes/2026-09-20-march-hash-flakiness/NOTES.md) · `MARCH_HASH_DUMP=<path>` dumps
   state at hash time.
+- [ ] **three.js r186 (merged): measure it properly, and try two of its levers.** Verified pixel-identical
+  (both rooms canonical) and tsc-clean, so pins/baselines carry over. Boot timing could NOT be attributed —
+  today's r186 numbers are worse than yesterday's r185 ones, but a control tree without our own change was
+  slower still, so it is session drift; a real answer needs r185 and r186 installed side by side and measured
+  interleaved. Then: `compileComputeAsync()` for the probe-gather compute (off the boot path), and check
+  whether TSL's "CodeNode includes as references" shrinks the 243 KB per-program march text — the same lever
+  phase 2 task 4 pulls. `DirectRenderPipeline` is NOT usable (it forbids materials that sample the
+  framebuffer; our post chain does). [Notes](docs/dev-notes/2026-09-20-threejs-r186/NOTES.md)
 - [ ] **Sweep the same race across the other capture scripts** — the dispatch-then-read-back pattern is at
   **18 call sites** in ~12 scripts (`march-parity`, `refine-smoke`, `sdf-depth-prepass-census`,
   `sdf-chunk-bake-gate`, the normal-gradient checks…). Any of them can read a stale or zero frame under
