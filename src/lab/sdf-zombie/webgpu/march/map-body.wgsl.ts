@@ -67,6 +67,12 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     gWoundOwners = 0u;
     gWoundRaisers = 0u;
     gWoundThreat = 0u;
+    gWoundAmp = array<f32, 9>();
+    // counts2.z = re-fold mode (0 ship, 1 off, 2 raiser gate, 3 threat mask)
+    // + 4 when the exact fixes are on (d-aware reach, re-fold pre-scan).
+    let exactFix = counts2.z > 3.5;
+    let refoldMode = select(counts2.z, counts2.z - 4.0, exactFix);
+    gWoundExact = select(0.0, 1.0, exactFix);
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -170,18 +176,35 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // unwritten mask is zero and would switch the re-fold off entirely.
   let raisersAtBase = gWoundRaisers & ~1u;
   let threatAtBase = gWoundThreat;
-  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (counts2.z < 0.5 || (counts2.z > 1.5 && counts2.z < 2.5 && raisersAtBase != 0u) || (counts2.z > 2.5 && threatAtBase != 0u))) {
+  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (refoldMode > 1.5 && refoldMode < 2.5 && raisersAtBase != 0u) || (refoldMode > 2.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
       if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
-      if (counts2.z > 1.5 && (raisersAtBase & ~(1u << u32(c + 1))) == 0u) { continue; }
-      if (counts2.z > 2.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
+      if (refoldMode > 1.5 && (raisersAtBase & ~(1u << u32(c + 1))) == 0u) { continue; }
+      if (refoldMode > 2.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
       let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
       if (cr.z < 0.5) { continue; }
       let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
       let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + band), 0);
       if (length(p - cb.xyz) - cb.w > (dmg + counts.w * 4.0) * gs.z) { continue; }
+      // PRE-SCAN (exact fixes): the limb can only win if its fold dips below
+      // dmg + the bump its own (and unowned) rows can subtract. foldGroup's
+      // cull asserts a group whose sphere fails (T + 4k) * z cannot pull a
+      // fold under T; if every group fails at T = dmg + ownAmp, the limb's
+      // fold >= T, carves and wound smax only raise it, its bumps lower it
+      // by <= ownAmp, so limbDamage >= dmg and the re-fold must lose.
+      if (exactFix) {
+        let T = dmg + gWoundAmp[0] + gWoundAmp[c + 1];
+        var anyGroup = false;
+        for (var gi = 0; gi < 64; gi = gi + 1) {
+          if (gi >= i32(gs.y)) { break; }
+          let gb = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_BOUNDS} + band), 0);
+          let gr = textureLoad(data, vec2<i32>(i32(gs.x) + gi, ${ROW_GROUP_RANGE} + band), 0);
+          if (length(p - gb.xyz) - gb.w <= (T + counts.w * 4.0) * gr.z) { anyGroup = true; break; }
+        }
+        if (!anyGroup) { continue; }
+      }
       let savedBest = gFoldBest;
       let savedIdx = gFoldBestIdx;
       let savedDistort = gFoldBestDistort;

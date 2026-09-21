@@ -15,6 +15,10 @@ import { ROOMS, TUNNELS, FURNITURE, enclosureKeyAt, enclosureOf } from './game-l
 import { RING_TUNING } from '../melee-ring';
 import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
+
+/** counts2.z carries the re-fold mode in 0..3 plus 4 for the wound exact fixes. */
+const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => (a.view.uniforms.counts2.value.z > 3.5 ? 4 : 0);
+const refoldMode = (z: number) => (z > 3.5 ? z - 4 : z);
 import { HULL_SHRINK, buildHullInstances } from './occluder-hull';
 
 export function createWorldSeams(ctx: GameContext) {
@@ -259,25 +263,35 @@ export function createWorldSeams(ctx: GameContext) {
      *  wound (march.wgsl.ts, counts2.z). OFF renders a wrong frame on
      *  purpose; it exists to price the mechanism in the passes bench. */
     setOwnerRefold(on: boolean) {
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 0 : 1; // a full reset: clears the exact-fix bit too (bench restore)
     },
     /** Owner re-fold RAISER GATE (counts2.z == 2, 2026-09-21): re-fold a limb only where a wound
      *  it does not own actually raised the field. Value-identical by construction; off = ship. */
     setOwnerRefoldGate(on: boolean) {
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 2 : 0;
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 2 : 0) + exactBit(a);
     },
     /** Owner re-fold THREAT MASK (counts2.z == 3, 2026-09-21): the raiser gate, narrowed per
      *  cluster by the CPU masks the body view uploads (wound-threat.ts). off = ship. */
     setOwnerRefoldMask(on: boolean) {
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 3 : 0;
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 3 : 0) + exactBit(a);
     },
-    get ownerRefoldMask() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 2.5; },
+    get ownerRefoldMask() { return refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 2.5; },
+    /** Wound EXACT FIXES (counts2.z + 4, 2026-09-21): d-aware per-row wound reach and the
+     *  owner re-fold pre-scan (group spheres vs dmg + own bump amplitude). Value-preserving by
+     *  argument; composes with the re-fold mode. off = ship. */
+    setWoundExact(on: boolean) {
+      for (const a of ctx.world.actors) {
+        const z = a.view.uniforms.counts2.value.z;
+        a.view.uniforms.counts2.value.z = (z > 3.5 ? z - 4 : z) + (on ? 4 : 0);
+      }
+    },
+    get woundExact() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) > 3.5; },
     /** Diagnostic: every wounded actor's per-wound threat masks (bit c+1 = cluster c). */
     woundThreats() {
       return ctx.world.actors.map(a => ({ id: a.id, margin: a.view.woundThreatMargin, masks: a.view.woundThreats?.() ?? [] })).filter(m => m.masks.length > 0);
     },
-        get ownerRefoldGate() { const z = ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0; return z > 1.5 && z < 2.5; },
-    get ownerRefold() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    get ownerRefoldGate() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 1.5 && z < 2.5; },
+    get ownerRefold() { return refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
     /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
      *  wound set once per pixel and fold only those. OFF is bit-identical. */
     setWoundList(on: boolean) {

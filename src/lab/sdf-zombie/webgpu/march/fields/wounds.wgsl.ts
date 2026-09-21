@@ -65,7 +65,12 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // for every wound the sample is nowhere near — which, per march step,
     // is all of them but one. (perfCfg.y seam, game page ON; lab default 0
     // keeps its reference bit-identical.)
-    let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;
+    // EXACT REACH (gWoundExact, 2026-09-21): the fillet is live only while
+    // r < depth - d + 4k, so the constant 0.25 (a bound on -d inside any limb)
+    // can be the running -d itself. Surface and outside samples (d >= 0) then
+    // drop every row whose crater and rim are out of range. Off = ship.
+    let slack = select(0.25, max(0.0, -d), gWoundExact > 0.5);
+    let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + slack;
     if (perfCfg.y > 0.5 && r > reach) { continue; }
     let wFlags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0);
     let owner = wFlags.y;
@@ -119,6 +124,9 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     if (r < depth * 2.0) { near = 1.0; }
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
+    // Own-amp bound for the re-fold pre-scan (MAP_BODY): the most this
+    // row's bump can LOWER a field, filed under its owner (0 = unowned).
+    if (gWoundCluster == 0.0) { gWoundAmp[u32(owner)] = gWoundAmp[u32(owner)] + amp; }
     let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
     d = d - exp(-x * x) * amp * rimLocal;
   }
@@ -132,6 +140,12 @@ var<private> gWoundOwners: u32 = 0u;
 var<private> gWoundRaisers: u32 = 0u;
 // Union of the threat masks of every wound whose carve raised the field at p.
 var<private> gWoundThreat: u32 = 0u;
+// Exact-fix switch (counts2.z >= 4): the d-aware wound reach and the re-fold
+// pre-scan. Set per slot by mapBody; 0 in every other caller = ship.
+var<private> gWoundExact: f32 = 0.0;
+// Per-owner sum of rim-bump amplitudes over the rows the BASE applyWounds
+// reached at p (index = owner cluster + 1, 0 = unowned).
+var<private> gWoundAmp: array<f32, 9>;
 // Set only for final surface shading; -1 retains unscoped chunk/volume masks.
 var<private> gWoundShadePrim: f32 = -1.0;`
 
