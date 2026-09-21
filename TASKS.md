@@ -16,8 +16,23 @@
 - [x] Guards so it cannot come back: `extract-seam-group.ts` + `integrate-seams.ts` share `scripts/lib/seam-literal.ts`,
   which emits factories as mergeSeams ARGUMENTS and REFUSES the `{ ...spread }` literal; `scripts/seam-merge-guard.test.ts` fails on any
   hand-added `...createXSeams(` in game-main.
-- [ ] **Re-read old gate results with suspicion.** Anything a gate concluded from one of these 50 getters between the seam
-  extraction (~2026-09-17) and this fix was reading boot values. Not re-run wholesale.
+- [x] **Re-ran the gates that read those getters (2026-09-21)** — bleed parity, slug, dynamite, shutter check/task3/task4,
+  tracer-light, shorty, FOV. The frozen getters were the SMALLEST problem found:
+  * **Loader captures (5 gates):** they waited for `__sdfGame`, not for the game — bleed parity's "zero diff" was two
+    pictures of the loader; task3/task4/shutter-check gave up SILENTLY after 90-100 s and shot "READY — CLICK TO START".
+    All now use `scripts/lib/wait-loader.mjs` (10 min, throws, dismisses the overlay).
+  * **Dynamite gate was stale twice over:** it read the slot before the tick that applies a key (input refactor
+    2026-09-15), and its bone/pool checks counted MARCHED chunks while the shipped gib renderer became ASSETS on 09-16
+    (459b3b8b). Now tier-aware; it also waits for the gib background compile. PASSES: 14 asset pieces, `bone.cage`, 0 dropped.
+  * **Bleed parity floor was 84% of the frame** on real frames (VHS grain + light clock animate while frozen), so it
+    passed any toggle. Now freezes both: the gating toggle diffs to **0 px**. Residual: control cycle A still reads
+    11.8% (B reads 23 px) — something settles after the freeze and loosens the floor. Open, small.
+  * **Real bug, opt-in deferred renderer:** every deferred surface shader failed to compile (`unresolved value
+    'gMarchAnchor'`) since cd8d8d8a. Fixed (the chain now seeds from the shared declaring node, `march-private-reads.ts`;
+    guard `scripts/march-private-seed-guard.test.ts`). With the shader valid, deferred mode now STALLS on first frames
+    (cold compile, not warmed) — **owner: deferred is PAUSED, not pursued.** shutter-check/task3's deferred legs fail
+    on that; treat as paused, not a regression.
+  * Passing on real frames: slug (placement), shorty, FOV, tracer-light, task4, shutter-check (non-deferred legs).
 - [x] Shorty gate: `fpv-rest` / `flash-on` / `flash-off` were captured over the pipeline-compile loader (15 KB frames).
   Now waits for `loader-ready` and dismisses the overlay; the three shots are real frames (425-474 KB, flash visible).
 

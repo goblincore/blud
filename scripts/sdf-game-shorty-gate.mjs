@@ -11,6 +11,7 @@
 // Usage: LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 node scripts/sdf-game-shorty-gate.mjs
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const VITE = Number(process.argv[2] ?? 5281);
 const CDP = Number(process.argv[3] ?? 9281);
@@ -152,14 +153,7 @@ await evaluate('typeof __sdfGame.vhsPanel === "function" ? (__sdfGame.vhsPanel(f
 // assertion and showed the owner nothing. game-boot-leaves adds
 // `loader-ready` when the game is playable; `loader-hidden` is what the
 // overlay's own click handler adds, so this is the player's path.
-let loaderReady = false;
-for (let i = 0; i < 600; i++) {
-  loaderReady = await evaluate(`!!document.getElementById('loader')?.classList.contains('loader-ready')`);
-  if (loaderReady) break;
-  await sleep(1000);
-}
-if (!loaderReady) fail('loader never reached loader-ready — pipelines still compiling after 10 min');
-await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
+await waitForLoader(evaluate, { fail, settleMs: 0 });
 await sleep(2000);
 await shot('fpv-rest');
 console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);

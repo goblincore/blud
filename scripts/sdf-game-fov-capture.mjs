@@ -24,6 +24,7 @@
 // (or scripts/sdf-game-fov-capture.sh, which owns its own servers.)
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const VITE = Number(process.argv[2] ?? 5285);
 const CDP = Number(process.argv[3] ?? 9285);
@@ -132,15 +133,7 @@ for (const p of ['woundPanel', 'gooPanel', 'vhsPanel']) {
 // `loader-ready` when the game is actually playable; `loader-hidden` is what
 // the overlay's own click handler adds, so dismissing it this way is the
 // player's path, not a private one.
-let ready = false;
-for (let i = 0; i < 600; i++) {
-  ready = await evaluate(`!!document.getElementById('loader')?.classList.contains('loader-ready')`);
-  if (ready) break;
-  await sleep(1000);
-}
-if (!ready) fail('loader never reached loader-ready — pipelines still compiling after 10 min');
-await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
-await sleep(1500);
+await waitForLoader(evaluate, { fail });
 
 // ————————————————————————————————————————————————————————————————————————
 // 1. THE SHIPPED DEFAULTS

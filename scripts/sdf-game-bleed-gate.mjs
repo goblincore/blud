@@ -24,6 +24,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const MODE = process.argv[2] ?? '';
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5320);
@@ -210,6 +211,10 @@ if (MODE === 'parity' || MODE === 'reel') {
       const api = await evaluate('typeof window.__sdfGame === "object" ? window.__sdfGame.backend : null');
       if (api) {
         if (api !== 'webgpu') fail(`backend is ${api}, not webgpu`);
+        // `__sdfGame` is up long before the pipelines are: without this every
+        // parity capture was a 15 KB loader frame and "zero diff" compared two
+        // pictures of the loader. scripts/lib/wait-loader.mjs.
+        await waitForLoader(evaluate, { fail });
         return;
       }
     }
@@ -260,6 +265,19 @@ if (MODE === 'parity' || MODE === 'reel') {
     // OFF captures show the pre-feature page; the rng stream does not advance
     // while OFF, making OFF a perfect pause of the subsystem.
     await evaluate('window.__sdfGame.freeze(true)');
+    // FREEZE EVERYTHING THAT ANIMATES WITHOUT THE SIM (2026-09-21). The floor
+    // below was designed at ~50-120 edge px; re-run on real frames it measured
+    // 403,854 px (84% of the frame, max channel 137), so "the toggle adds
+    // nothing above the floor" was true of ANY toggle. The shipped VHS post
+    // (grain, tracking noise) and the light clock animate every frame whether
+    // or not the sim is frozen. Neither is the subject of this gate.
+    await evaluate(`(() => {
+      const g = window.__sdfGame;
+      if (typeof g.setVhs === 'function') g.setVhs(null);
+      if (typeof g.setLightClockFrozen === 'function') g.setLightClockFrozen(true);
+      if (typeof g.setDemoHold === 'function') g.setDemoHold(true);
+      return true;
+    })()`);
     await evaluate('window.__sdfGame.setLoopRunning(false)');
 
     // THE SAME-STATE NOISE FLOOR, measured, not assumed. Two captures of the
