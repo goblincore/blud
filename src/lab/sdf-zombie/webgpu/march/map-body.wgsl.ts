@@ -80,10 +80,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // raise the union above the limb's own surface (the deepest carve, 0.16 m
     // blast, plus its smax overshoot) — 0.2 m, and only inside the wound bound.
     gLimbSlack = select(0.0, 0.2, limbMode && length(p - woundBound.xyz) <= woundBound.w);
-    gLimb = array<f32, 8>(1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9);
-    gLimbBest = array<f32, 8>(1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9, 1e9);
-    gLimbBestIdx = array<f32, 8>(-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0);
-    gLimbBestDistort = array<f32, 8>(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+    if (limbMode) {
+      let empty = vec4<f32>(1e9, 1e9, -1.0, 1.0);
+      gLimb0 = empty; gLimb1 = empty; gLimb2 = empty; gLimb3 = empty;
+      gLimb4 = empty; gLimb5 = empty; gLimb6 = empty; gLimb7 = empty;
+      gLimbCur = empty;
+      gLimbCurC = -1;
+    }
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -105,6 +108,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // cannot drift. No per-step bound texel reads before the prim work and
     // no per-step slot scan — one table lookup plus the run's own fold.
     for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
+      if (limbMode) { limbSwitch(i32(fract(gTileGrp[e].w) * 32.0 + 0.5) - 1); }
       d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);
     }
   } else {
@@ -134,6 +138,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     if (length(p - cbounds.xyz) - cbounds.w > (d + gLimbSlack + counts.w * 4.0) * gspan.z) { continue; }
     let gFirst = i32(gspan.x);
     let gCount = i32(gspan.y);
+    if (limbMode) { limbSwitch(c); }
   for (var gi = 0; gi < 64; gi = gi + 1) {
     if (gi >= gCount) { break; }
     let g = gFirst + gi;
@@ -151,6 +156,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   }
   }
   }
+  if (limbMode) { limbSwitch(-1); }
   let carved = applyCarves(d, p, data, counts, band);
   let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band);
   var dmg = dmgRes.x;
@@ -197,14 +203,15 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       // MODE 4: the limb's fold is already built (gLimb[c]); apply its own
       // wounds once. A cluster the base fold never reached is 1e9 and loses.
       if (limbMode) {
-        if (gLimb[c] > 1e8) { continue; }
+        let slot = limbLoad(c);
+        if (slot.x > 1e8) { continue; }
         gWoundCluster = f32(c + 1);
-        let limbDamageAcc = applyWounds(applyCarves(gLimb[c], p, data, counts, band), p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
+        let limbDamageAcc = applyWounds(applyCarves(slot.x, p, data, counts, band), p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
         if (limbDamageAcc < dmg) {
           dmg = limbDamageAcc;
-          gFoldBest = gLimbBest[c];
-          gFoldBestIdx = gLimbBestIdx[c];
-          gFoldBestDistort = gLimbBestDistort[c];
+          gFoldBest = slot.y;
+          gFoldBestIdx = slot.z;
+          gFoldBestDistort = slot.w;
         }
         continue;
       }
