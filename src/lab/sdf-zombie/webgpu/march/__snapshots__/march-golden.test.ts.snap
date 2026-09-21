@@ -22,12 +22,12 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "FBM": "5b9cd2b948d6e51356cf3a6fa740a22bf7648448",
   "FLICKER": "3ffe3931f4efbd3c22efddc6545cb4a61661a156",
   "FOLD_BONE_RANGE": "831c5a9403a59c748131cafb371a8a8667dde509",
-  "FOLD_GROUP": "5947d6b98664eab74a656785b9084d3d065a340e",
+  "FOLD_GROUP": "07f84cb59a809c13f2a97b2871d15baed0eb01eb",
   "HASH13": "9e6ffa9260bab033b7fbb4f6724267345107bfed",
   "HEAD_EXTERIOR_GORE_KEEP": "num:0.3",
   "INSTANCE_STATE": "f7ae45ce0aa13d000992e350d7ffdf397056ce75",
   "LEVEL_SHADOW": "694f49c6272d874d9226e431f1736158bb4bf6f7",
-  "MAP_BODY": "0bd6f5150cf7985c1352b589f5367d267ba7b5cb",
+  "MAP_BODY": "eb5301b04901c604213d483a759afd518660b6dc",
   "MARCH_ANCHOR_READ": "57d3265e1519f7cf5f0bd4c96faba22d320548ad",
   "MARCH_BODY": "cee125c45270badc9e921eb562cecee6e41ee139",
   "MARCH_BODY_LIGHT": "c5595b81b16c51e2f722c4255defd10d7b9c5fb3",
@@ -99,7 +99,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "WOUND_SHADOW": "39f268bf7b90455f9317b0afe938d4c07d1cd7d9",
   "WOUND_STEP_MUL": "num:0.6",
   "__HELPERS_count": "46",
-  "__HELPERS_joined": "a37205d1195bed6602b6e4235cbe114a37104923",
+  "__HELPERS_joined": "762366292c474b0eeed70b9d06a2bbda0d82185e",
   "__export_names": "2422868821e8c64f2804746e071f19903ada5972",
 }
 `;

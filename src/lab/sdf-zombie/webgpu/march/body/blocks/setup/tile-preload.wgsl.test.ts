@@ -59,7 +59,7 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
   it('keeps the per-step sphere cull WITH the distortion factor inside foldGroup', () => {
     const foldGroup = HELPERS.find(h => /^fn foldGroup\(/.test(h))!;
     expect(foldGroup).toContain(
-      'if (length(p - bounds.xyz) - bounds.w > (d + gLimbSlack + counts.w * 4.0) * grp.z) { return d; }'); // gLimbSlack is 0 outside limb mode
+      'if (length(p - bounds.xyz) - bounds.w > (d + counts.w * 4.0) * grp.z) { return d; }'); // ?limbs adds gLimbSlack (limbs-flag.ts)
   });
 
   it('band-offsets every prim-row load so one shared texture serves all bodies', () => {

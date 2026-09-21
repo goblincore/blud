@@ -3,6 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): the signed-distance body field and its normal.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
+import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
 
@@ -74,7 +75,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     let exactFix = counts2.z > 7.5;
     let refoldMode = select(counts2.z, counts2.z - 8.0, exactFix);
     gWoundExact = select(0.0, 1.0, exactFix);
-    let limbMode = refoldMode > 3.5;
+${LIMBS ? `    let limbMode = refoldMode > 3.5;
     gLimbOn = select(0.0, 1.0, limbMode);
     // The cull slack a limb needs inside a foreign crater: how far a wound can
     // raise the union above the limb's own surface (the deepest carve, 0.16 m
@@ -87,7 +88,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       gLimbCur = empty;
       gLimbCurC = -1;
     }
-  // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
+` : `    let limbMode = false;
+`}  // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
   // but the branch, not the counts, is what keeps it dead). bestIdx stays -1
@@ -108,8 +110,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // cannot drift. No per-step bound texel reads before the prim work and
     // no per-step slot scan — one table lookup plus the run's own fold.
     for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
-      if (limbMode) { limbSwitch(i32(fract(gTileGrp[e].w) * 32.0 + 0.5) - 1); }
-      d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);
+${LIMBS ? `      if (limbMode) { limbSwitch(i32(fract(gTileGrp[e].w) * 32.0 + 0.5) - 1); }
+` : ''}      d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);
     }
   } else {
   // TWO-LEVEL CULL. The outer loop is the cluster (limb) sphere it has
@@ -135,11 +137,11 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // (owner, 2026-08-23). The factor makes a plate-bearing cluster
     // (schoolgirl sole: 22x) nearly uncullable, but its GROUPS still cull
     // soundly below, so the cost is a few texel reads, not a full fold.
-    if (length(p - cbounds.xyz) - cbounds.w > (d + gLimbSlack + counts.w * 4.0) * gspan.z) { continue; }
+    if (length(p - cbounds.xyz) - cbounds.w > (d + ${LIMBS ? 'gLimbSlack + ' : ''}counts.w * 4.0) * gspan.z) { continue; }
     let gFirst = i32(gspan.x);
     let gCount = i32(gspan.y);
-    if (limbMode) { limbSwitch(c); }
-  for (var gi = 0; gi < 64; gi = gi + 1) {
+${LIMBS ? `    if (limbMode) { limbSwitch(c); }
+` : ''}  for (var gi = 0; gi < 64; gi = gi + 1) {
     if (gi >= gCount) { break; }
     let g = gFirst + gi;
     let range = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE} + band), 0);
@@ -156,8 +158,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   }
   }
   }
-  if (limbMode) { limbSwitch(-1); }
-  let carved = applyCarves(d, p, data, counts, band);
+${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
+` : ''}  let carved = applyCarves(d, p, data, counts, band);
   let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band);
   var dmg = dmgRes.x;
   let nearWound = dmgRes.y;
@@ -200,7 +202,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
       if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
       if (refoldMode > 1.5 && (raisersAtBase & ~(1u << u32(c + 1))) == 0u) { continue; }
       if (refoldMode > 2.5 && refoldMode < 3.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
-      // MODE 4: the limb's fold is already built (gLimb[c]); apply its own
+${LIMBS ? `      // MODE 4: the limb's fold is already built (gLimb[c]); apply its own
       // wounds once. A cluster the base fold never reached is 1e9 and loses.
       if (limbMode) {
         let slot = limbLoad(c);
@@ -215,7 +217,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
         }
         continue;
       }
-      let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
+` : ''}      let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE} + band), 0);
       if (cr.z < 0.5) { continue; }
       let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
       let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + band), 0);
