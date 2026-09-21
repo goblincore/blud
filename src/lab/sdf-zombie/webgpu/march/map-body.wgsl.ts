@@ -187,7 +187,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // unwritten mask is zero and would switch the re-fold off entirely.
   let raisersAtBase = gWoundRaisers & ~1u;
   let threatAtBase = gWoundThreat;
-  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || ((refoldMode > 1.5 && refoldMode < 2.5 || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
+  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
