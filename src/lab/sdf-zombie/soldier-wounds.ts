@@ -7,8 +7,8 @@ export const RAGGED_AMOUNT = 0.3;
 
 /** Option 3 of the wound-cost work (2026-09-21): ONE noise-ragged crater per wound instead
  *  of the wound plus three lobe rows, cutting the rows every march sample walks ~4x. A look
- *  change; OFF (the lobes) until the owner approves it. */
-let raggedCraters = false;
+ *  change the owner approved by eye (2026-09-21); ON. */
+let raggedCraters = true;
 export const setRaggedCraters = (on: boolean) => { raggedCraters = on; };
 export const raggedCratersOn = () => raggedCraters;
 

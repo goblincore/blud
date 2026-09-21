@@ -7,14 +7,14 @@ const wound = (type: Wound['type'], x = 0): Wound => ({
 } as Wound);
 
 describe('soldier ragged craters (option 3)', () => {
-  afterEach(() => setRaggedCraters(false));
+  afterEach(() => setRaggedCraters(true));
 
-  it('ships the lobes: one wound uploads as four rows', () => {
+  it('ships ragged; the lobe path (off) uploads one wound as four rows', () => {
+    setRaggedCraters(false);
     expect(soldierVisualWounds([wound('pellet')])).toHaveLength(4);
   });
 
-  it('ragged: one row per wound, carrying the ragged amount; burns stay round', () => {
-    setRaggedCraters(true);
+  it('ragged (ship): one row per wound, carrying the ragged amount; burns stay round', () => {
     const rows = soldierVisualWounds([wound('pellet'), wound('blast', 0.2), wound('burn', 0.4)]);
     expect(rows).toHaveLength(3);
     expect(rows[0]!.ragged).toBe(RAGGED_AMOUNT);
