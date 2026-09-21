@@ -98,7 +98,7 @@ import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './g
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
-import { parseFloatParam, parseIntParam } from './boot-params';
+import { boolParam, parseFloatParam, parseIntParam } from './boot-params';
 import {
   parseUpscaleConfig, parseUpscaleModelJson, UPSCALE_SCALE, type UpscaleConfig, type UpscaleModel,
 } from './upscale/upscale-model';
@@ -297,6 +297,7 @@ import { aimDir } from './game-weapon-leaves';
 import { finishChunkBake, spawnGoreShowcase } from './game-bake-leaves';
 import { ensureCarvedLibrary } from './game-gibs-leaves';
 import { updateHud } from './game-panels-leaves';
+import { selectVisualActors } from './visual-actor-set';
 import { sceneCensus } from './game-telemetry-leaves';
 import { demoRecordStart } from './game-demo-leaves';
 import { ADAPTIVE_WINDOW, PROBE_ABORT_FRAMES, tickAdaptive } from './game-render-leaves';
@@ -580,6 +581,12 @@ async function main() {
   /** Bodies whose refine twin was drawn this frame (reset each cull pass). */
   ctx.render.refinedBodies = 0;
   ctx.render.visibleActors = [];
+  // The visual-actor set starts EMPTY and the cull ships ON; both are
+  // (re)computed or re-parsed below/next tick. Reset here for the same
+  // reason visibleActors is — a demo replay must not inherit the previous
+  // run's sets.
+  ctx.render.visualActors = new Set();
+  ctx.render.visualCullEnabled = true;
   ctx.world.cullCounts = { visible: 0, total: 0 };
   ctx.world.coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
   ctx.world.sightA = [0, 0, 0];
@@ -912,6 +919,11 @@ async function main() {
   // unsafe: 0 is a real mode, so ABSENT must be detected before coercion.
   ctx.probes.raysBoot = parseIntParam(ctx.boot.search.get('dynrays'), { min: 0, max: 64 });
   ctx.probes.lightsBoot = parseIntParam(ctx.boot.search.get('dynlights'), { min: 0, max: 1024 });
+  // VISUAL-ACTOR CULL boot switch (?visualcull, visual-actor-cull plan task
+  // 2). ABSENT means the shipped ON; `?visualcull=0` is the off switch that
+  // restores the pre-cull behaviour exactly. boolParam, because absence is
+  // not 0 — the Number(null)===0 trap again.
+  ctx.render.visualCullEnabled = boolParam(ctx.boot.search.get('visualcull'), true);
   // THE AFTERGLOW RATES, as verification seams (R1, 2026-09-10). `blend` is the
   // weight of the NEW estimate against last frame's record and `fall` the rate at
   // which a record decays when the estimate drops, so the shipped pair (0.6 rise,
@@ -1500,7 +1512,11 @@ async function main() {
       const firstMeshSync = !ctx.render.meshSyncMarked;
       if (firstMeshSync) { ctx.render.meshSyncMarked = true; mark('mesh-sync-start'); }
       const craters: { pos: Vec3; radius: number }[] = [];
-      for (const a of ctx.world.actors) {
+      // Visual-actor cull: crater EXPOSURE feeds the segment meshes' wound
+      // gradient, which only matters for meshes that are drawn — build the
+      // list from the visual set only (the bone INSTANCER's own crater list
+      // above keeps walking every actor; tube mode is not part of this cull).
+      for (const a of ctx.render.visualActors) {
         const prims = a.posed().prims;
         for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
       }
@@ -1510,7 +1526,7 @@ async function main() {
         if (!e) { e = buildSkeletonSources(a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); }
         else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); ctx.render.skeletonSources.set(a, e); }
         return e.sources;
-      }), ctx.world.actors);
+      }), ctx.world.actors, ctx.render.visualActors);
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }
@@ -6490,6 +6506,50 @@ async function main() {
     // Damage transitions use their own clock; frozen pose captures must
     // still show a newly selected preset. Refresh exclusions as it grows.
     for (const a of ctx.world.actors) if (a.advanceWoundPreview(dt)) ctx.render.frozenHullBuilt = false;
+    // ——— VISUAL-ACTOR SET (visual-actor-cull plan task 2) ————————
+    // Which actors need PER-ACTOR VISUAL upkeep this tick: the padded view
+    // cone from the player's eye/yaw/pitch and the camera's fov/aspect,
+    // unioned with LAST FRAME's visibleActors (the march cull's verdict —
+    // one frame stale here by construction, which the cone margin exists to
+    // cover) and with everything within alwaysWithinM. Computed ONCE per
+    // tick, BEFORE the wanderFrozen branch, so the ?frozen=1 boot path
+    // (march-hash, closeup captures) also has a fresh set: its hull block
+    // AND the draw-side skeleton `shown` set run every tick regardless of
+    // the freeze, and a frozen capture that moves the camera must see the
+    // set follow it. A begin()/end() span named 'tick:visual-set' rather
+    // than a region lap: a lap opened here would stay open until the next
+    // 'region' lap inside the branch and smear the encounter + body-step
+    // cost into the phase. Bodies are each actor's torso cluster centre; an
+    // actor with NO torso cluster (mid-gib, exotic body) is ALWAYS kept —
+    // never cull what we cannot measure (same rule as updateVisibleActors).
+    // When the cull is off the set is every actor: the pre-cull behaviour,
+    // exactly.
+    {
+      const visualSetTiming = ctx.telemetry.telemetry.begin();
+      if (ctx.render.visualCullEnabled) {
+        const cam = ctx.boot.handle.camera;
+        const alsoKeep = new Set<number>();
+        for (const a of ctx.render.visibleActors) alsoKeep.add(a.id);
+        const bodies: { id: number; center: Vec3 }[] = [];
+        const unmeasurable: ZombieActor[] = [];
+        for (const a of ctx.world.actors) {
+          const torso = a.posed().clusters.find(c => c.limb === 'torso');
+          if (!torso) { unmeasurable.push(a); continue; }
+          bodies.push({ id: a.id, center: torso.center });
+        }
+        const keptIds = selectVisualActors(
+          { eye: eyeOf(ctx.player.player), yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch, fovYDeg: cam.fov, aspect: cam.aspect },
+          bodies, alsoKeep,
+        );
+        const visual = new Set<ZombieActor>();
+        for (const a of unmeasurable) visual.add(a);
+        for (const a of ctx.world.actors) if (keptIds.has(a.id)) visual.add(a);
+        ctx.render.visualActors = visual;
+      } else {
+        ctx.render.visualActors = new Set(ctx.world.actors);
+      }
+      ctx.telemetry.telemetry.end('tick:visual-set', visualSetTiming);
+    }
     if (!ctx.demo.wanderFrozen) {
       ctx.render.frozenHullBuilt = false;
       // --- brain input + crowd separation, BEFORE the actors step ----------
@@ -6596,6 +6656,11 @@ async function main() {
       // frame hash could never match. Pixel-only: nothing here feeds the sim.
       const now = ctx.demo.hold ? simTimeMs() / 1000 : performance.now() / 1000;
       for (const a of ctx.world.actors) {
+        // Visual-actor cull: view time and head shape are PER-ACTOR VISUAL
+        // state — skipped for bodies that cannot be on screen. Both writes
+        // are absolute-time uniform stores (no dt integration), so an actor
+        // leaving and re-entering the set just picks the current time up.
+        if (!ctx.render.visualActors.has(a)) continue;
         a.view.setTime(now);
         // Face projection tracks the posed skull through the gait jiggle — and
         // the RUPTURE's displaced head while a doomed body is coming apart, so
@@ -6605,6 +6670,11 @@ async function main() {
         if (skull) a.view.setHeadShape(skull.centre, skull.axes);
       }
       ctx.telemetry.telemetry.lap('region', 'tick:occluder-hull');
+      // The visual set's actors, in actor order, as ONE array reused by both
+      // hull updates and the wound-exclusion flatMap (visual-actor-cull task
+      // 2). With the cull off the set is every actor, so this is the old
+      // `ctx.world.actors` list exactly (order included).
+      const hullActors = ctx.world.actors.filter(a => ctx.render.visualActors.has(a));
       // Wound exclusion, same contract as the lab's woundSpheres: hull
       // endpoint spheres must not sit inside carve zones, or they render as
       // pale discs inside craters. The carve sphere is centred ON the anchor
@@ -6614,14 +6684,16 @@ async function main() {
       // craters were tangent (the pale-wound defect) and never reached the
       // hull; real craters exposed it within one capture.
       if (ctx.render.sdfLayer.shellEnabled) {
-        // Same posed bodies the occluder hull is built from, one line below —
-        // this is what makes the hull "posed" at no extra cost.
-        ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
+        // Same VISUAL bodies the occluder hull is built from, one line below
+        // — this is what makes the hull "posed" at no extra cost. (Visual-
+        // actor cull: an off-screen body's hull instances cannot be seen;
+        // its exclusion spheres only ever touched its own hull.)
+        ctx.world.outerHull.update(hullActors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
       }
       ctx.render.occluderHull.update(
-        ctx.world.actors.map(a => a.posed()),
+        hullActors.map(a => a.posed()),
         ctx.render.hullExclusionsEnabled
-          ? ctx.world.actors.flatMap(a => {
+          ? hullActors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
             return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
@@ -6649,6 +6721,15 @@ async function main() {
       // freeze() SEAM never hit this because it freezes after frames have
       // run. Nothing can move once frozen, so both hulls build exactly once;
       // unfreezing clears the flag and the normal per-frame path resumes.
+      // (Visual-actor cull: this block does NOT filter by the visual set —
+      // deliberately, a diagnosed exception to the plan's “both hull
+      // blocks”. The frozen build runs ONCE, at the spawn view, and the hull
+      // then persists for the whole frozen session while the capture
+      // teleports the camera wherever it stages (march-hash's stageCloseUp).
+      // A build filtered by the spawn-view set drops staged bodies' shell
+      // instances — shell on, shellOut 0 discards their fragments — so the
+      // “cull” would corrupt the one-shot build instead of saving anything:
+      // there is no per-frame cost here to save. Safety bias: keep all.)
       if (ctx.render.sdfLayer.shellEnabled) {
         ctx.world.outerHull.update(ctx.world.actors.map(a => a.posed()), { shellAmp: shellAmpOf(ctx) });
       }
@@ -7344,20 +7425,21 @@ async function main() {
   // Read scalar counters only; no field queries/readbacks during live play.
   ctx.telemetry.firstFrame = true;
   ctx.telemetry.visibilityGap = false;
+  ctx.telemetry.gpuAttributor = createGpuFrameAttributor();
   document.addEventListener('visibilitychange', () => { ctx.telemetry.visibilityGap = true; });
   // GPU COLLECTOR. One collect() in flight at a time; a frame that ends while
   // one is pending simply rides the next resolve (the pool holds 2048 queries,
   // ~30 frames). The async resolve + 16 KB map never blocks tick or draw, and
   // its continuation runs outside both, so it is not in tickCpuMs/drawCpuMs.
-  let gpuCollecting = false;
-  let gpuAttributor = createGpuFrameAttributor();
+  // State lives on ctx.telemetry (gpuCollecting / gpuAttributor) — main() may
+  // carry only ctx as a state binding (game-context-coverage).
   const collectGpuFrames = () => {
-    if (gpuCollecting || !ctx.boot.passTiming.installed) return;
-    gpuCollecting = true;
+    if (ctx.telemetry.gpuCollecting || !ctx.boot.passTiming.installed) return;
+    ctx.telemetry.gpuCollecting = true;
     ctx.boot.passTiming.collect()
-      .then((samples) => { for (const [frame, gpu] of gpuAttributor.add(samples)) ctx.telemetry.telemetry.attachGpu(frame, gpu); })
+      .then((samples) => { for (const [frame, gpu] of ctx.telemetry.gpuAttributor.add(samples)) ctx.telemetry.telemetry.attachGpu(frame, gpu); })
       .catch(() => {})
-      .finally(() => { gpuCollecting = false; });
+      .finally(() => { ctx.telemetry.gpuCollecting = false; });
   };
   const telemetryFrame = (frame: FrameTiming) => {
     ctx.telemetry.telemetry.frame(frame, {
@@ -7381,6 +7463,9 @@ async function main() {
       nearestBodyM: +ctx.world.coverage.nearestM.toFixed(2),
       biggestBodyFrac: +ctx.world.coverage.biggestFrac.toFixed(4),
       actorCull: ctx.render.actorCullEnabled, visibleBodies: ctx.world.cullCounts.visible,
+      // Visual-actor cull (task 2): how many actors get per-actor visual
+      // upkeep this frame — the seam the hull/viewtime/skeleton savings scale with.
+      visualActors: ctx.render.visualActors.size,
       halfRate: ctx.render.sdfLayer.halfRate, halfRateMode: ctx.render.sdfLayer.halfRateMode,
       depthPrepass: ctx.render.sdfLayer.depthPreEnabled,
       fieldMode: ctx.render.sdfLayer.fieldMode, fieldStyle: ctx.render.sdfLayer.fieldStyle, fieldComb: ctx.render.sdfLayer.fieldComb,
@@ -7423,7 +7508,7 @@ async function main() {
     // the post chain... — nested under whichever span was open.
     // The recorder owns the timestamp drain while it runs (see setTimestampDrain).
     ctx.boot.handle.setTimestampDrain(!active);
-    if (active) gpuAttributor = createGpuFrameAttributor();
+    if (active) ctx.telemetry.gpuAttributor = createGpuFrameAttributor();
     if (!active) ctx.telemetry.gpuFrame = undefined;
     setPassLabelObserver(active ? (label) => ctx.telemetry.telemetry.lap('pass', `cpu:${label}`) : null);
     // SHADER BUILDS AS EVENTS (three r186 `debug.onNodeBuilderCreated`). A

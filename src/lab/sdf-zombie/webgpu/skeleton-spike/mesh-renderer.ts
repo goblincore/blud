@@ -64,12 +64,29 @@ import {
 
 const MAX_WOUNDS_TEX = 64;
 
+/** The per-segment draw decision of the visual-actor cull (pure, exported
+ *  for vitest — see mesh-renderer.test.ts). A segment is drawn when its
+ *  contract sever rule says it is live AND — when the caller passes `shown`
+ *  (the visual-actor set) — its owner is in that set. With no `shown`, the
+ *  owner test is skipped, which is the pre-cull behaviour exactly.
+ *  Ownership only: slot indexing is untouched (entries stay one per actor,
+ *  in actor order); a hidden segment keeps its mesh and just skips the
+ *  pose writes, the same path a severed (non-live) segment takes. */
+export function segmentDrawn(live: boolean, owner: unknown, shown?: ReadonlySet<unknown>): boolean {
+  if (shown && !shown.has(owner)) return false;
+  return live;
+}
+
 export interface SegmentMeshRenderer {
   object: THREE.Group;
   uniforms: BoneInstancerUniforms;
   /** Re-pose every actor's segments for this frame. `entries[i]` is actor
-   *  i's CURRENT contract sources (rebuild the entry on sever re-derive). */
-  update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[]): void;
+   *  i's CURRENT contract sources (rebuild the entry on sever re-derive).
+   *  `shown` (visual-actor-cull task 2) is the set of owners to draw: an
+   *  owner outside it has its meshes set invisible and receives NO pose
+   *  writes (meshes stay allocated, so re-showing is one update away).
+   *  Omitted = draw every entry, the pre-cull behaviour. */
+  update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>): void;
   impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
   stepDebris(dt: number): void;
   eyeState(owner: object): { missing: number[]; debris: number };
@@ -261,7 +278,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
         if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
       }
     },
-    update(entries, owners) {
+    update(entries, owners, shown) {
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
       stats.verts = stats.tris = 0;
@@ -303,7 +320,13 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
           if (baked.overflow) stats.overflow++;
           if (baked.clamped) stats.clamped++;
           if (baked.droppedQuads) stats.droppedQuads += baked.droppedQuads;
-          const live = s.isLive();
+          // Visual-actor cull: `segmentDrawn` folds the owner test into the
+          // same live check, so a culled owner takes EXACTLY the non-live
+          // path — mesh.visible = false, stats.hidden++, return BEFORE the
+          // pose writes. Eyes are children of the segment mesh and hide
+          // with it; the mesh stays in its slot, so re-showing the owner
+          // restores visibility and the current pose in one update.
+          const live = segmentDrawn(s.isLive(), owner, shown);
           mesh.visible = live;
           if (!live) { stats.hidden++; return; }
           stats.verts += baked.verts;

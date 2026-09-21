@@ -19,6 +19,7 @@
 
 import type { GameTelemetry } from './game-telemetry';
 import type { createTelemetryControls } from './game-telemetry-controls';
+import type { createGpuFrameAttributor } from './gpu-frame-summary';
 
 /** Type of the DEV recording overlay `createTelemetryControls()` returns. */
 type TelemetryControls = ReturnType<typeof createTelemetryControls>;
@@ -56,6 +57,14 @@ export interface TelemetryState {
   gpuFrame: number | undefined;
   /** Set by `visibilitychange` so a recording can flag a hidden-tab gap. */
   visibilityGap: boolean;
+  /** GPU COLLECTOR in-flight flag: one passTiming.collect() at a time; a
+   *  frame that ends while one is pending rides the next resolve. (Moved off
+   *  main() scope — game-context-coverage — by the visual-actor-cull task 2
+   *  gate; the telemetry-v4 commit left them as main() bindings.) */
+  gpuCollecting: boolean;
+  /** Per-frame GPU attributor the collector feeds; re-created when a
+   *  recording starts so every recording attributes its own frames. */
+  gpuAttributor: ReturnType<typeof createGpuFrameAttributor>;
   /** DEV-only recording overlay, or null outside a DEV build. */
   controls: TelemetryControls | null;
 }
@@ -70,6 +79,8 @@ export function makeTelemetryState(): TelemetryState {
     firstFrame: true,
     gpuFrame: undefined,
     visibilityGap: false,
+    gpuCollecting: false,
+    gpuAttributor: unbuilt<ReturnType<typeof createGpuFrameAttributor>>(),
     controls: null,
   };
 }

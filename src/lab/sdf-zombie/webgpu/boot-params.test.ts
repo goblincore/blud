@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFloatParam, parseIntParam, hasParam } from './boot-params';
+import { boolParam, parseFloatParam, parseIntParam, hasParam } from './boot-params';
 
 // Regression gate for the 2026-09-10 visual regression: the probe-gather
 // diagnostic seams booted every UNPARAMETERISED page with zero rays and an
@@ -115,5 +115,32 @@ describe('parseFloatParam — the same contract, for fractional seams', () => {
   it('clamps to the range and rejects below the floor', () => {
     expect(parseFloatParam('2', { min: 0, max: 1 })).toBe(1);
     expect(parseFloatParam('-0.5', { min: 0, max: 1 })).toBeNull();
+  });
+});
+
+describe('boolParam — switch seams like ?visualcull', () => {
+  // The visual-actor cull's boot switch: ABSENT means the shipped default
+  // (ON), `?visualcull=0` means OFF. Same Number(null)===0 trap, so the raw
+  // string is read before any coercion.
+  it('returns the default for absent/empty/unparseable — absence is not 0', () => {
+    expect(boolParam(null, true)).toBe(true);
+    expect(boolParam('', true)).toBe(true);
+    expect(boolParam('  ', true)).toBe(true);
+    expect(boolParam('abc', true)).toBe(true);
+    expect(boolParam('NaN', true)).toBe(true);
+    // And the same for a false default.
+    expect(boolParam(null, false)).toBe(false);
+  });
+
+  it('an explicit 0 is a real OFF, distinct from absence', () => {
+    expect(boolParam('0', true)).toBe(false);
+    expect(boolParam('0.0', true)).toBe(false);
+    expect(boolParam('0', false)).toBe(false);
+  });
+
+  it('any other finite number is ON', () => {
+    expect(boolParam('1', true)).toBe(true);
+    expect(boolParam('2', true)).toBe(true);
+    expect(boolParam('-1', true)).toBe(true);
   });
 });

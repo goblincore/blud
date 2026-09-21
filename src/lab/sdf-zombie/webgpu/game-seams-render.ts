@@ -275,5 +275,13 @@ export function createRenderSeams(ctx: GameContext) {
     }),
     setActorCull(on: boolean) { ctx.render.actorCullEnabled = on; if (!on) ctx.world.lastSeenMs.clear(); },
     actorCull: () => ({ enabled: ctx.render.actorCullEnabled, ...ctx.world.cullCounts }),
+    /** Visual-actor cull A/B seam (visual-actor-cull plan task 2, ships ON).
+     *  setVisualCull(false) restores the pre-cull behaviour EXACTLY: the
+     *  tick's visual set becomes every actor, so hulls, wound exclusions,
+     *  view time and skeleton visibility all see the full cast again. Pair
+     *  with visualCull() — and use it INSTEAD of an across-page-load A/B,
+     *  which the wander makes untrustworthy. Takes effect next tick. */
+    setVisualCull(on: boolean) { ctx.render.visualCullEnabled = on; },
+    visualCull: () => ({ enabled: ctx.render.visualCullEnabled, visual: ctx.render.visualActors.size, total: ctx.world.actors.length }),
   };
 }

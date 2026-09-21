@@ -157,13 +157,36 @@ const ROOM = Number(process.env.MARCH_HASH_ROOM ?? 1);
 // tile holds one instance of a type, the per-slot loop is a single field eval.
 const USE_MASK = process.env.MARCH_HASH_MASK === '1';
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
-setTimeout(() => { console.error('FAIL: watchdog 6 min'); process.exit(3); }, 6 * 60_000).unref();
+setTimeout(() => { console.error('FAIL: watchdog 14 min'); process.exit(3); }, 14 * 60_000).unref();
 
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
 await bootCloseupPage({
   send, evaluate, fail,
   url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0${EXTRA_QUERY}`,
 });
+// WAIT FOR THE BACKGROUND COMPILES (2026-09-21). The gib and crowd programs
+// compile AFTER the loader (defer-compile, 2026-09-19); until the crowd job is
+// `ready` the game draws every member through the per-body FALLBACK. That
+// fallback drew nothing until the cold-cache flesh fix (49751086), so the
+// occupancy wait below used to cover this by accident; now it draws at once,
+// and a gate that hashes early hashes the PER-BODY path — it returns exactly
+// PERBODY_HASH (2c5dac0d…) and reads as "the canonical moved". Seen twice on
+// 2026-09-21, both times with a second Chrome loading the machine. Neither
+// ?crowd=0 (no crowd job is ever started) nor a `failed` crowd job may wait forever.
+if (!PERBODY) {
+  const BG_WAIT_S = Number(process.env.MARCH_HASH_BG_WAIT_S ?? 600);
+  let bg = null;
+  for (let i = 0; i < BG_WAIT_S * 2; i++) {
+    bg = await evaluate('JSON.stringify(__sdfGame.warmBackground())').then(JSON.parse);
+    // Only the CROWD job decides which path is hashed. The gib job runs first
+    // and may time out cold (`failed`) — the crowd job still starts after it.
+    if (bg.crowd === 'ready' || bg.crowd === 'failed') break;
+    await sleep(500);
+  }
+  if (bg?.crowd !== 'ready') {
+    fail(`background compiles not ready after ${BG_WAIT_S} s (${JSON.stringify(bg)}) — hashing now would hash the per-body fallback, not the crowd path. Cold shader cache or a loaded machine: rerun, or raise MARCH_HASH_BG_WAIT_S.`);
+  }
+}
 // Belt-and-braces: the loop should already be stopped by the time any
 // step()-driven capture happens (step() calls setLoopRunning(false)
 // itself), but stopping it explicitly here costs nothing and removes one

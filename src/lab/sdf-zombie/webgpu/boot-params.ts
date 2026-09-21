@@ -62,6 +62,22 @@ export function hasParam(raw: string | null): boolean {
 }
 
 /**
+ * An on/off switch parameter (`?visualcull=0`). Same discipline as
+ * `parseIntParam`, at boolean result: ABSENT, empty or unparseable returns
+ * `def` — the shipped default is what an ABSENT parameter yields, and an
+ * explicit `0` is a real value that must NOT be confused with absence
+ * (`Number(null) === 0` is the trap the whole file exists to kill). Any
+ * other number is on iff it is not 0, so `?x=1` and `?x=` (present, empty →
+ * default) stay distinguishable.
+ */
+export function boolParam(raw: string | null, def: boolean): boolean {
+  if (raw === null || raw.trim() === '') return def;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return def;
+  return n !== 0;
+}
+
+/**
  * Parse a FRACTIONAL boot parameter. Same contract as `parseIntParam` — absent
  * or unparseable is `null`, meaning "the caller's shipped default" — because the
  * `Number(null) === 0` trap does not care whether the value has a fractional

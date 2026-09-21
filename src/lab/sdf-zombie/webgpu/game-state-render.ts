@@ -95,6 +95,15 @@ export interface RenderState {
   refinedBodies: number;
   /** Actors that survived the last cull pass. */
   visibleActors: ZombieActor[];
+  /** Actors that need PER-ACTOR VISUAL upkeep this tick (visual-actor-cull
+   *  plan): skeleton segment meshes, both hulls, wound exclusions, view
+   *  time / head shape. Recomputed once per tick in `tick` — EMPTY only
+   *  before the first tick, never as a "cull everything" signal. Simulation
+   *  is never gated on this. */
+  visualActors: Set<ZombieActor>;
+  /** Master switch for the visual-actor cull (`?visualcull=0` or
+   *  `setVisualCull(false)` restores the pre-cull behaviour exactly). */
+  visualCullEnabled: boolean;
   /** Post-AA composer for the presented frame. */
   postAa: PostAa;
   /** True when the run-5b refine head is on (`?refine` / `?graphics=high`). */
@@ -173,6 +182,8 @@ export function makeRenderState(): RenderState {
     refineTailWanted: 'slim',
     refinedBodies: 0,
     visibleActors: [],
+    visualActors: new Set<ZombieActor>(),
+    visualCullEnabled: true,
     postAa: unbuilt<PostAa>(),
     refineWanted: false,
     sdfLayer: unbuilt<SdfLayer>(),

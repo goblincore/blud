@@ -18,6 +18,7 @@ describe('makeRenderState', () => {
     const a = makeRenderState();
     const b = makeRenderState();
     expect(a.visibleActors).not.toBe(b.visibleActors);
+    expect(a.visualActors).not.toBe(b.visualActors);
     expect(a.adaptiveFrames).not.toBe(b.adaptiveFrames);
     expect(a.depthProbes).not.toBe(b.depthProbes);
     expect(a.refineBand).not.toBe(b.refineBand);
@@ -44,6 +45,12 @@ describe('makeRenderState', () => {
     expect(s.frozenHullBuilt).toBe(false);
     expect(s.boneRatioOverride).toBeNull();
     expect(s.visibleActors).toEqual([]);
+    // visual-actor-cull task 2: the visual set starts EMPTY (the first tick
+    // fills it — empty is never a "cull everything" signal) and the cull
+    // ships ON. `?visualcull=0` / setVisualCull(false) is the off switch.
+    expect(s.visualActors).toBeInstanceOf(Set);
+    expect(s.visualActors.size).toBe(0);
+    expect(s.visualCullEnabled).toBe(true);
     expect(s.depthProbes).toEqual([]);
     expect(s.refineBand).toEqual({ near: 1.5, far: 3.5, hysteresis: 0.25 });
   });
