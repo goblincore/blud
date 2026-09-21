@@ -8000,6 +8000,15 @@ async function main() {
       const errs: string[] = [];
       const actor = spawnEnemy(name, room, chosen, errs);
       ctx.world.actors.push(actor);
+      // A LATE BODY NEEDS A HULL (late-spawn fix, 2026-09-21). The shell is on
+      // by default and the march DISCARDS every pixel no outer-hull instance
+      // covers (shellOut <= 0, hull-bounds.wgsl.ts). While the cast is frozen
+      // (?frozen=1, freeze(true) — every capture rig and harness) the hulls
+      // build ONCE per frozen stretch; a body added after that build had no
+      // instance, so it rasterised and marched nothing, forever. Invalidate
+      // the one-shot build so the next tick rebuilds it with this body in it.
+      // Unfrozen play rebuilds every tick and never needed this.
+      ctx.render.frozenHullBuilt = false;
       if (errs.length > 0) console.error(`[sdf-game] spawnDebugCharacter(${name}):`, errs.join(' | ')) ;
       return { id: actor.id, room: room.id, errors: errs };
     },

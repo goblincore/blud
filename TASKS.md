@@ -4,6 +4,17 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Late spawns drew no flesh while frozen — fixed 2026-09-21
+
+- [x] **`spawnDebugCharacter` / `spawnCrowd` bodies added after boot marched nothing** on a frozen cast (`?frozen=1`,
+  `freeze(true)` — every harness), for every cast (zombie too). Not the defer-compile work: the frozen path builds the
+  outer shell hull ONCE (`frozenHullBuilt`), the shell ships ON, and the march discards every pixel no hull instance
+  covers. Fix: `spawnDebugCharacter` clears `frozenHullBuilt`. Unfrozen play rebuilt the hull per tick and was fine.
+- [x] Gate: [`scripts/sdf-late-spawn-gate.sh`](scripts/sdf-late-spawn-gate.sh) — occupancy hits per late spawn.
+  zombie +12040, goblin +4103, bonewalker +4143 (min 300); fix reverted, goblin reads **−50** (FAIL).
+- [ ] Only `goblin` of the WAM cast is registered (`character-registry.ts`); imp/knight/lizardman/ogre/orc/skeleton/
+  troll have no .blob yet, so `spawnDebugCharacter('orc')` throws `unknown character`. Port via authoring-sdf-characters.
+
 ## Seam getters were frozen at boot — fixed 2026-09-21
 
 - [x] **Every top-level getter in every `game-seams-*.ts` factory (95) read its BOOT value forever.** The decomposition
