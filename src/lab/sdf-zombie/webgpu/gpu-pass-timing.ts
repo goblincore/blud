@@ -331,13 +331,25 @@ export function installPassTiming(renderer: THREE.WebGPURenderer): PassTiming {
     },
     async collect() {
       const out: PassSample[] = [];
-      for (const kind of ['render', 'compute'] as const) {
+      // BOTH RESOLVES START IN ONE SYNCHRONOUS STEP. Each resolve snapshots
+      // its pool up to "now"; awaiting one before starting the other let a
+      // frame render in between, so that frame's compute passes landed in this
+      // batch and its render passes in the next — a split the per-frame
+      // consumers (the gameplay recorder) cannot put back together. three's
+      // resolve runs synchronously up to its mapAsync, so starting both here
+      // cuts both pools at the same frame boundary.
+      const kinds = ['render', 'compute'] as const;
+      const settled = await Promise.all(kinds.map((kind) => {
         const pool = backend.timestampQueryPool?.[kind];
-        if (!pool || !pool.trackTimestamp) continue;
+        if (!pool || !pool.trackTimestamp) return Promise.resolve(false);
         // A pool with nothing pending returns its last value immediately, so
         // calling after the bench's own fence (which is this same resolve for
         // 'render') costs nothing extra.
-        try { await renderer.resolveTimestampsAsync(kind); } catch { continue; }
+        return renderer.resolveTimestampsAsync(kind).then(() => true, () => false);
+      }));
+      for (const [i, kind] of kinds.entries()) {
+        const pool = backend.timestampQueryPool?.[kind];
+        if (!pool || !settled[i]) continue;
         const snap = snapshots[kind];
         const raw = snap && snap.size > 0 ? await readRaw(pool) : null;
         for (const [uid, ms] of pool.timestamps) {

@@ -91,6 +91,28 @@ describe('installPassTiming', () => {
     expect(await t.collect()).toEqual([]);
   });
 
+  it('starts BOTH pool resolves before awaiting either, so no frame can land between them', async () => {
+    // A frame rendered between the render resolve and the compute resolve had
+    // its compute passes in one batch and its render passes in the next; the
+    // recorder attached the first and ignored the second (25% of frames in a
+    // live recording read as a fraction of a millisecond of GPU work).
+    const { renderer, pools } = fakeRenderer();
+    const order: string[] = [];
+    let releaseRender!: () => void;
+    renderer.resolveTimestampsAsync = async (kind = 'render') => {
+      order.push(`start:${kind}`);
+      if (kind === 'render') await new Promise<void>((r) => { releaseRender = r; });
+      order.push(`done:${kind}`);
+    };
+    const t = installPassTiming(renderer as never);
+    pools.render.timestamps.set(makePassUid('sdf:march', 1, 'r:0:1:f0'), 4);
+    const pending = t.collect();
+    await Promise.resolve();
+    expect(order.slice(0, 2)).toEqual(['start:render', 'start:compute']);
+    releaseRender();
+    expect((await pending).map(x => x.label)).toEqual(['sdf:march']);
+  });
+
   it('drops a sample whose raw end precedes its start (an empty pass) instead of poisoning the batch', async () => {
     const { renderer, pools, backend } = fakeRenderer();
     // Wire a resolve buffer path: the fake device copies from the pool's
