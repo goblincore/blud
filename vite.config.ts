@@ -143,6 +143,7 @@ export default defineConfig({
       'scripts/lib/layer-tolerance.test.mjs',
       'scripts/lib/demo-presented.test.mjs',
       'scripts/lib/png-write.test.mjs',
+      'scripts/sdf-melee-stage.test.mjs',
     ],
     exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**'],
   },
