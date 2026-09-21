@@ -11,6 +11,7 @@
 // Usage: LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 node scripts/sdf-game-shorty-gate.mjs
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const VITE = Number(process.argv[2] ?? 5281);
 const CDP = Number(process.argv[3] ?? 9281);
@@ -144,6 +145,15 @@ console.log('arms: both present, skin emissive 0, watch present');
 await evaluate('typeof __sdfGame.woundPanel === "function" ? (__sdfGame.woundPanel(false), 1) : 0');
 await evaluate('typeof __sdfGame.gooPanel === "function" ? (__sdfGame.gooPanel(false), 1) : 0');
 await evaluate('typeof __sdfGame.vhsPanel === "function" ? (__sdfGame.vhsPanel(false), 1) : 0');
+// WAIT FOR THE LOADER, THEN DISMISS IT. `__sdfGame` exists long before the
+// march pipelines finish compiling (cold: minutes — docs/dev-notes/
+// 2026-09-19-shader-compile), and the overlay covers the whole frame until
+// then. This gate used to sleep 2 s and shoot, so `fpv-rest`, `flash-on` and
+// `flash-off` were 15 KB frames of "compiling pipelines" that passed every
+// assertion and showed the owner nothing. game-boot-leaves adds
+// `loader-ready` when the game is playable; `loader-hidden` is what the
+// overlay's own click handler adds, so this is the player's path.
+await waitForLoader(evaluate, { fail, settleMs: 0 });
 await sleep(2000);
 await shot('fpv-rest');
 console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);

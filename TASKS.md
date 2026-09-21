@@ -4,6 +4,71 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Late spawns drew no flesh while frozen — fixed 2026-09-21
+
+- [x] **`spawnDebugCharacter` / `spawnCrowd` bodies added after boot marched nothing** on a frozen cast (`?frozen=1`,
+  `freeze(true)` — every harness), for every cast (zombie too). Not the defer-compile work: the frozen path builds the
+  outer shell hull ONCE (`frozenHullBuilt`), the shell ships ON, and the march discards every pixel no hull instance
+  covers. Fix: `spawnDebugCharacter` clears `frozenHullBuilt`. Unfrozen play rebuilt the hull per tick and was fine.
+- [x] Gate: [`scripts/sdf-late-spawn-gate.sh`](scripts/sdf-late-spawn-gate.sh) — occupancy hits per late spawn.
+  zombie +12040, goblin +4103, bonewalker +4143 (min 300); fix reverted, goblin reads **−50** (FAIL).
+- [ ] Only `goblin` of the WAM cast is registered (`character-registry.ts`); imp/knight/lizardman/ogre/orc/skeleton/
+  troll have no .blob yet, so `spawnDebugCharacter('orc')` throws `unknown character`. Port via authoring-sdf-characters.
+
+## Seam getters were frozen at boot — fixed 2026-09-21
+
+- [x] **Every top-level getter in every `game-seams-*.ts` factory (95) read its BOOT value forever.** The decomposition
+  moved members byte-for-byte, but `{ ...createXSeams(ctx) }` reads each accessor once and copies the value; the
+  migration gate proved seams PRESENT, never LIVE. 50 of them are read by ~70 scripts: `gunReady`, `shells`,
+  `flashVisible`, `hingeOpenRad`, `bleed`, `bloodBlur`, `frames`, `renderMode`, `sdfScale`, `woundTuning`... Some gates
+  failed loudly; others passed VACUOUSLY (the shorty gate's reload wait was satisfied by boot values before any reload).
+  Fix: `seam-merge.ts` `mergeSeams()` copies descriptors, `__sdfGame = mergeSeams(...factories, { inline })`; same
+  override order. **Verified live:** shorty gate now reads `shells 2 -> 0 -> 2, maxOpen 0.785 rad`.
+- [x] Guards so it cannot come back: `extract-seam-group.ts` + `integrate-seams.ts` share `scripts/lib/seam-literal.ts`,
+  which emits factories as mergeSeams ARGUMENTS and REFUSES the `{ ...spread }` literal; `scripts/seam-merge-guard.test.ts` fails on any
+  hand-added `...createXSeams(` in game-main.
+- [x] **Re-ran the gates that read those getters (2026-09-21)** — bleed parity, slug, dynamite, shutter check/task3/task4,
+  tracer-light, shorty, FOV. The frozen getters were the SMALLEST problem found:
+  * **Loader captures (5 gates):** they waited for `__sdfGame`, not for the game — bleed parity's "zero diff" was two
+    pictures of the loader; task3/task4/shutter-check gave up SILENTLY after 90-100 s and shot "READY — CLICK TO START".
+    All now use `scripts/lib/wait-loader.mjs` (10 min, throws, dismisses the overlay).
+  * **Dynamite gate was stale twice over:** it read the slot before the tick that applies a key (input refactor
+    2026-09-15), and its bone/pool checks counted MARCHED chunks while the shipped gib renderer became ASSETS on 09-16
+    (459b3b8b). Now tier-aware; it also waits for the gib background compile. PASSES: 14 asset pieces, `bone.cage`, 0 dropped.
+  * **Bleed parity floor was 84% of the frame** on real frames (VHS grain + light clock animate while frozen), so it
+    passed any toggle. Now freezes both: the gating toggle diffs to **0 px**. Residual: control cycle A still reads
+    11.8% (B reads 23 px) — something settles after the freeze and loosens the floor. Open, small.
+  * **Real bug, opt-in deferred renderer:** every deferred surface shader failed to compile (`unresolved value
+    'gMarchAnchor'`) since cd8d8d8a. Fixed (the chain now seeds from the shared declaring node, `march-private-reads.ts`;
+    guard `scripts/march-private-seed-guard.test.ts`). With the shader valid, deferred mode now STALLS on first frames
+    (cold compile, not warmed) — **owner: deferred is PAUSED, not pursued.** shutter-check/task3's deferred legs fail
+    on that; treat as paused, not a regression.
+  * Passing on real frames: slug (placement), shorty, FOV, tracer-light, task4, shutter-check (non-deferred legs).
+- [x] Shorty gate: `fpv-rest` / `flash-on` / `flash-off` were captured over the pipeline-compile loader (15 KB frames).
+  Now waits for `loader-ready` and dismisses the overlay; the three shots are real frames (425-474 KB, flash visible).
+
+## Narrow FOV + the weapon's own FOV — 2026-09-21
+
+- [x] **Owner: narrow the frame to 58 render / 46 centre** (was 72/60), for claustrophobia and to show the wound system.
+  `FISHEYE_DEFAULTS` shipped; visible FOV 63.0 -> 49.0 deg at 16:9, bend almost unchanged. Starting values, tune by eye.
+  [Notes + captures](docs/dev-notes/2026-09-21-narrow-fov/NOTES.md).
+- [x] **The weapons are no longer framed by the world FOV** — chose (b) *own FOV*, not (a) per-weapon retuning.
+  A `view-model-fov-rig` under the camera carries `(r, r, 1)`, `r = tan(centre/2)/tan(60/2)`, which is EXACTLY the old
+  projection for camera-parented geometry (proved in `game-viewmodel.test.ts`). One transform, all three slots, no
+  per-weapon work, survives future FOV tuning; `z` pinned at 1 so depth/occlusion are untouched. Cost: non-uniform scale
+  tilts the view model's normals, and a ~3.8% residual because the lens itself changed. Seam: `__sdfGame.setViewmodelFov`.
+- [x] Tools: `scripts/sdf-game-fov-capture.sh` (9 shots, 3 FOV legs x 3 weapon slots, FOV read back and gated),
+  `scripts/sdf-game-fov-gpu-ab.sh` (one page, uncapped, alternating legs).
+- [x] **Fixed on the way: `__sdfGame.fisheye` was a boot-time SNAPSHOT** — and so were 94 others (next row).
+- [~] **Cost: the coverage half is measured, the GPU-ms half is NOT.** Median `coverageFrac` 0.155 -> 0.27 (**1.75x**,
+  matching the 1.72-1.81x arithmetic) over six alternating legs. But the GPU busy A/B came back **vsync-bound**
+  (frame p50 16.6 ms, ~3.7 ms idle on BOTH arms) so its "1.01x" means nothing — the elastic-clock trap arriving through
+  the presenter, not the frame cap. Raising the DPR does not help: the march target is **capped** and does not follow it,
+  so the FOV adds no marched pixels, only march depth on pixels that now hit flesh. **Next: vsync off needs a Chrome flag
+  in the shared `scripts/lab-servers.sh` — not taken unilaterally.**
+- [ ] Owner to judge the captures and tune 58/46 by eye; `setViewmodelFov` if the weapon wants to sit differently.
+- [ ] F-aim.1 (free aim misplaces under the lens) is UNCHANGED and still deferred — it reproduces at every FOV.
+
 ## Burning enemies — flame look + flame lab — 2026-09-17
 
 - [x] Foundation: `sdf-flame-lab.html` + per-body burn + surface fire/char + glow, heat warp, shutter, fire light.

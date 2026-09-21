@@ -25,14 +25,17 @@ function fixture({ decoy = false }: { decoy?: boolean } = {}): string {
     '  const ctx = makeGameContext();',
     '  function ceilingAt(x: number): number { return x; }',
     decoyStmt,
-    '  (window as unknown as { __sdfGame: unknown }).__sdfGame = {',
+    '  (window as unknown as { __sdfGame: unknown }).__sdfGame = mergeSeams(',
+    '    createExistingSeams(ctx),',
+    '    {',
     '    setFrame: (n: number) => { ctx.render.frame = n; },',
     '    bumpVersion: () => { version += 1; },',
     '    plain: () => 3,',
     '    needsCeiling: (x: number) => ceilingAt(x),',
     '    ceilingAt,',
     '    usesModuleConst: () => LOCAL_TUNING.a,',
-    '  };',
+    '  },',
+    '  );',
     '  let version = 0;',
     '  void version;',
     '}',
@@ -80,7 +83,10 @@ describe('extract-seam-group: eligibility', () => {
     const r = extractGroup(fixture(), 'game-seams-x', 'createXSeams', m => ['setFrame', 'plain'].includes(m.name), []);
     expect(r.picked.map(m => m.name)).toEqual(['setFrame', 'plain']);
     expect(r.module).toContain('export function createXSeams(');
-    expect(r.main).toContain('...createXSeams(ctx)');
+    // An ARGUMENT to mergeSeams, after the existing factory and before the
+    // inline members — never a spread, which freezes the factory's getters.
+    expect(r.main).not.toContain('...createXSeams');
+    expect(r.main).toMatch(/createExistingSeams\(ctx\),\s*createXSeams\(ctx\),\s*\{/);
     expect(r.main).not.toContain('setFrame: (n: number)');
   });
 
@@ -96,5 +102,17 @@ describe('extract-seam-group: eligibility', () => {
     const r = extractGroup(fixture(), 'game-seams-x', 'createXSeams', m => m.name === 'bumpVersion', []);
     expect(r.skipped.map(m => m.name)).toEqual(['bumpVersion']);
     expect(r.skipped[0].free).toContain('version');
+  });
+});
+
+describe('extract-seam-group: the frozen-getter guard', () => {
+  it('REFUSES the old `__sdfGame = { ...spread }` literal instead of writing into it', () => {
+    // That shape is what froze 95 seam getters at their boot values; this tool
+    // used to emit `...createX(ctx)` into it. It must stop, not re-offend.
+    const legacy = fixture()
+      .replace('= mergeSeams(\n    createExistingSeams(ctx),\n    {', '= {\n    ...createExistingSeams(ctx),')
+      .replace('  },\n  );', '  };');
+    expect(legacy).toContain('__sdfGame = {');
+    expect(() => readMembers(legacy)).toThrow(/object LITERAL.*mergeSeams/s);
   });
 });

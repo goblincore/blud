@@ -1,17 +1,18 @@
 // scripts/integrate-seams.ts
 //
 // Replaces the members of game-main.ts's `window.__sdfGame` object literal that
-// now live in game-seams-*.ts with spreads of their factory calls.
+// now live in game-seams-*.ts as mergeSeams arguments (never spreads — scripts/lib/seam-literal.ts).
 //
 //   npx tsx scripts/integrate-seams.ts [--write]
 //
 // The literal is 4,577 lines — 31% of game-main.ts — and the members below were
 // extracted verbatim by the 2026-09-17 dispatch batch. Removing them here and
-// spreading the factories back in is the only edit game-main.ts needs.
+// passing the factories to mergeSeams is the only edit game-main.ts needs.
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import * as ts from 'typescript';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { findSeamLiteral } from './lib/seam-literal';
 
 const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
 
@@ -59,11 +60,9 @@ export function integrate(source: string, seams: readonly SeamModule[]): Integra
   sf.forEachChild(n => { if (ts.isFunctionDeclaration(n) && n.name?.text === 'main') main = n; });
   if (!main?.body) throw new Error('main() not found');
 
-  const cands = main.body.statements.filter(
-    s => ts.isExpressionStatement(s) && s.getText(sf).includes('__sdfGame'));
-  const target = cands.sort(
-    (a, b) => (b.getEnd() - b.getStart(sf)) - (a.getEnd() - a.getStart(sf)))[0] as ts.ExpressionStatement;
-  const obj = (target.expression as ts.BinaryExpression).right as ts.ObjectLiteralExpression;
+  // The shared finder: the same one extract-seam-group uses, and it refuses
+  // the `{ ...spread }` literal that froze every seam getter at boot.
+  const { obj, insertAt } = findSeamLiteral(main, sf);
 
   const owned = new Map<string, SeamModule>();
   for (const s of seams) for (const m of s.members) owned.set(m, s);
@@ -91,9 +90,10 @@ export function integrate(source: string, seams: readonly SeamModule[]): Integra
   const missing = [...owned.keys()].filter(k => !found.has(k));
   if (missing.length) return { main: source, removed: found.size, linesRemoved, missing };
 
-  // Spread the factories in at the top of the literal.
-  const spreads = seams.map(s => `\n    ...${s.factory}(ctx, ${s.deps}),`).join('');
-  edits.push({ start: obj.getStart(sf) + 1, end: obj.getStart(sf) + 1, text: spreads });
+  // The factories go in as mergeSeams ARGUMENTS, after the existing ones and
+  // before the inline members — never as `...spreads` (scripts/lib/seam-literal.ts).
+  const args = seams.map(s => `${s.factory}(ctx, ${s.deps}),\n    `).join('');
+  edits.push({ start: insertAt, end: insertAt, text: args });
 
   // Import the factories.
   const lastImport = [...source.matchAll(/^import .*?;$/gms)].at(-1);

@@ -72,6 +72,14 @@ export interface WeaponState {
   pendingFire: 0 | 1 | 2;
   /** True while a reload has been requested but not yet started. */
   pendingReload: boolean;
+  /**
+   * The view model's FOV-compensation rig: the camera's own child, carrying
+   * nothing but the non-uniform scale from viewmodelFovScale() so the
+   * weapons stay framed as authored whatever the world FOV is. Everything
+   * else — viewModelAnchor and down — hangs off THIS, not off the camera, so
+   * the anchor's own ride height is scaled with the rest of the rig.
+   */
+  fovRig: THREE.Group;
   /** Root the whole view model hangs from; the codemod supplies the real group. */
   viewModelAnchor: THREE.Group;
   /** The aim (yaw/pitch) pivot for the gun rig, or null before it is built. */
@@ -186,6 +194,7 @@ export function makeWeaponState(): WeaponState {
     shotAlert: false,
     pendingFire: 0,
     pendingReload: false,
+    fovRig: unbuilt<THREE.Group>(),
     viewModelAnchor: unbuilt<THREE.Group>(),
     aimRig: null,
     flare: null,
@@ -248,6 +257,7 @@ export const WEAPON_BINDINGS = {
   shotAlert: 'weapon.shotAlert',
   pendingFire: 'weapon.pendingFire',
   pendingReload: 'weapon.pendingReload',
+  fovRig: 'weapon.fovRig',
   viewModelAnchor: 'weapon.viewModelAnchor',
   aimRig: 'weapon.aimRig',
   gunRig: 'weapon.gunRig',

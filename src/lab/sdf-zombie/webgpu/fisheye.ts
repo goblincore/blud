@@ -67,10 +67,30 @@ export interface Lens {
   renderFovDeg: number;
 }
 
-/** The owner-approved look: render 72 vertical, read 60 at screen centre. */
+/**
+ * The owner-approved look: render 58 vertical, read 46 at screen centre.
+ *
+ * NARROWED 2026-09-21 (owner) from 72/60, for a claustrophobic frame and to
+ * put the SDF wound system on screen at a size where it reads. Both numbers
+ * are starting values the owner tunes by eye through `__sdfGame.setRenderFov`
+ * / `setFisheye`; nothing here treats them as load-bearing constants.
+ *
+ * TWO CONSEQUENCES, both handled elsewhere rather than by softening this:
+ *
+ *  * COST. A body at a fixed distance covers ~1.72x the pixels it did at
+ *    72 vertical (1.81x measured against the VISIBLE FOV, 63.0 -> 49.0 deg at
+ *    16:9), and close-up `sdf:march` is per-pixel — so close-up GPU cost rises
+ *    by about that factor. See docs/dev-notes/2026-09-21-narrow-fov/NOTES.md.
+ *  * THE VIEW MODEL. The first-person weapons were framed by eye at a 60 deg
+ *    centre FOV and are mostly off-frame at 46. They are NOT retuned per
+ *    weapon: the whole view model hangs off a rig that carries a
+ *    FOV-compensating transform, so its framing is pinned to
+ *    VIEWMODEL_REFERENCE_FOV_DEG whatever these two numbers become. See
+ *    viewmodelFovScale() in game-viewmodel.ts.
+ */
 export const FISHEYE_DEFAULTS = {
-  renderFovDeg: 72,
-  centerFovDeg: 60,
+  renderFovDeg: 58,
+  centerFovDeg: 46,
 } as const;
 
 /** Half the screen diagonal, in half-height units. */

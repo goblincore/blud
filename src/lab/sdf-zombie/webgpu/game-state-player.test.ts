@@ -56,6 +56,6 @@ describe('PLAYER_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(PLAYER_BINDINGS)).toHaveLength(20);
+    expect(Object.keys(PLAYER_BINDINGS)).toHaveLength(21);
   });
 });

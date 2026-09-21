@@ -60,6 +60,7 @@ import {
 import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-gradient.wgsl';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { SURFACE_CLASS_FLESH } from './deferred-surface';
+import { marchNormalRead } from './march-private-reads';
 
 /**
  * The surface-capture private globals. Declared at the tail of a function
@@ -206,8 +207,13 @@ function buildSdfSurfaceChain() {
     TEMPORAL_START_WGSL,
     SDF_SURFACE_STATE,
   ];
+  // Seeded with marchNormalRead — the SAME node the forward chain seeds with —
+  // because the shared march body writes its privates (gMarchAnchor, from the
+  // wound-masks block) and this node is their one declaration. Seeding with
+  // [] compiled every deferred surface shader against an undeclared
+  // gMarchAnchor. See march-private-reads.ts.
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [marchNormalRead],
   );
   const tail = nodes.slice(-1);
   return {

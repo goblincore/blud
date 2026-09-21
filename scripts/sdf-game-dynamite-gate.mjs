@@ -22,6 +22,7 @@
 // Exits non-zero on a failed assertion. Servers via scripts/lab-servers.sh.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { waitForLoader } from './lib/wait-loader.mjs';
 
 const VITE = Number(process.argv[2] ?? 5391);
 const CDP = Number(process.argv[3] ?? 9391);
@@ -103,7 +104,8 @@ console.log(`opening ${url}`);
 await send('Page.navigate', { url });
 
 // ——— BOOT ————————————————————————————————————————————————————————————————
-// The page shows a loader and warms its pipelines before `__sdfGame` appears.
+// `__sdfGame` appears BEFORE the pipelines finish warming (the loader is still
+// up then), so wait for `__sdfGame`, then for the loader. scripts/lib/wait-loader.mjs.
 let booted = false;
 for (let i = 0; i < 240; i++) {
   await sleep(500);
@@ -111,6 +113,25 @@ for (let i = 0; i < 240; i++) {
   if (ok) { booted = true; break; }
 }
 if (!booted) fail(`__sdfGame never appeared (pageErrors: ${pageErrors.slice(0, 3).join(' | ') || 'none'})`);
+await waitForLoader(evaluate, { fail });
+// WAIT FOR THE GIB PROGRAM. The gib/chunk march variant compiles in the
+// BACKGROUND after the loader (docs/dev-notes/2026-09-19-defer-compile), and
+// until it settles the game SKIPS drawing gib pieces by design. On a cold
+// profile that took 264 s measured, so a blast thrown straight after boot
+// gibbed a body into ZERO pieces and this gate failed "the skeleton is not
+// being released as its own pieces" — blaming the gib code for a compile that
+// had not finished. Wait for it; if it FAILS, say that instead (the known
+// 180 s timeout, TASKS.md).
+{
+  let gib = 'pending';
+  for (let i = 0; i < 420 && gib !== 'ready' && gib !== 'failed'; i++) {
+    gib = await evaluate('window.__sdfGame.warmBackground().gib').catch(() => 'pending');
+    if (gib !== 'ready' && gib !== 'failed') await sleep(1000);
+  }
+  console.log(`gib background compile: ${gib}`);
+  if (gib === 'failed') fail('the gib program failed its background compile (known 180 s timeout) — no gib pieces can draw this session; not a gib-release bug');
+  if (gib !== 'ready') fail(`the gib program never settled in 420 s (state ${gib})`);
+}
 let gunReady = false;
 for (let i = 0; i < 60; i++) {
   gunReady = await evaluate('window.__sdfGame.gunReady === true').catch(() => false);
@@ -128,8 +149,17 @@ if (!before.ready) fail('slot machine is not settled at boot');
 // ——— 1. THE SLOT SWITCH ————————————————————————————————————————————————
 // Driven through the REAL key handler (a synthetic keydown), not the seam, so a
 // broken key map fails here.
-await evaluate(`(() => {
+// The keydown only RECORDS the key; the switch happens on the next TICK, in
+// applyInputEdges' rising-edge scan (the input-seam refactor, 2026-09-15 —
+// so a replayed key set switches weapons exactly as a live press did). This
+// gate predates that and read the slot state straight after dispatch, before
+// any tick, so it failed "Digit2 did not target the dynamite slot" against a
+// game that switches fine. Two animation frames guarantee a tick has run;
+// the keyup releases the key so the held-key snapshot is clean afterwards.
+await evaluate(`(async () => {
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit2', bubbles: true }));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Digit2', bubbles: true }));
   return true;
 })()`);
 const midSwitch = await evaluate('window.__sdfGame.dynamite()');
@@ -270,8 +300,25 @@ if (!recovered.inHand) fail('the hand never got its next bundle after the throw 
     bonePieces: c.bonePieces, boneRows: c.boneRows, organs: c.organPieces,
     buriedBonePieces: c.buriedBonePieces, bonesShadingAsMeat: c.bonesShadingAsMeat,
     organsShadingAsBone: c.organsShadingAsBone, lastTier: d.lastGibTier,
+    lastSpawned: d.lastGibSpawned, lastHeld: d.lastGibHeld, parts: d.lastGibParts,
   }));
-  if (!(c.bonePieces >= 1) && !knobbed) {
+  // TIER-AWARE (2026-09-21). This check was written on 09-15 against MARCHED
+  // gib pieces; on 09-16 the shipped gib renderer became the offline ASSET
+  // tier (459b3b8b), whose pieces are asset meshes, not `bake.liveChunks` —
+  // so `chunkCensus().bonePieces` reads 0 by construction and this gate had
+  // failed "the skeleton is not being released" ever since, against a blast
+  // that released `bone.cage` as its own piece. On the asset tier the
+  // evidence is the named part list the seam already carries; on every
+  // marched tier the original chunk-census check stands unchanged.
+  if (d.lastGibTier === 'assets') {
+    const boneParts = (d.lastGibParts ?? []).filter((p) => p.startsWith('bone.'));
+    if (!(d.lastGibSpawned >= 1)) fail(`asset tier released no pieces (lastGibSpawned=${d.lastGibSpawned})`);
+    if (boneParts.length < 1 && !knobbed) {
+      fail(`asset tier released no bone.* part (parts: ${JSON.stringify(d.lastGibParts)}) — `
+        + 'the skeleton is not being released as its own piece');
+    }
+    console.log(`asset tier: ${d.lastGibSpawned} pieces, bone parts ${JSON.stringify(boneParts)}`);
+  } else if (!(c.bonePieces >= 1) && !knobbed) {
     fail(`no bone piece is in the pile (bonePieces=${c.bonePieces}, tier=${d.lastGibTier}) — `
       + 'the skeleton is not being released as its own pieces');
   }
@@ -391,7 +438,13 @@ if (!gibProbe.skipped) {
   // The LIVE-VIEW count is capped, so it is allowed to saturate: what the cap
   // costs is reported, not failed. `?maxchunks=N` is the knob.
   const recycled = Math.max(0, gibProbe.gibPieces - gibProbe.gibPiecesBefore - (gibProbe.liveChunksAfter - gibProbe.liveChunksBefore));
-  if (gibProbe.lastGibTier === 'sprite') {
+  if (gibProbe.lastGibTier === 'assets') {
+    // Asset pieces are asset meshes, not marched chunk views — the recycled
+    // arithmetic above is as meaningless here as in sprite mode (it counted
+    // every asset piece as "recycled", 14 of 14).
+    console.log(`asset tier: ${gibProbe.gibPieces - gibProbe.gibPiecesBefore} pieces, `
+      + `${gibProbe.lastGibDropped} dropped; the ?maxchunks= view pool is not in this path`);
+  } else if (gibProbe.lastGibTier === 'sprite') {
     // The marched view pool does not exist in this mode, so the recycled
     // arithmetic above is meaningless — report the pool that DOES bound it.
     console.log(`sprite pieces ${gibProbe.spriteLive} live + ${gibProbe.spriteRest} parked `
@@ -412,7 +465,17 @@ if (!gibProbe.skipped) {
   // at: the last body of a multi-body blast gets the full split piece set. Knob
   // runs are exempt (`?maxchunks=24` is a legitimate cost control), which is
   // what `knobbed` is for; the numbers are printed either way.
-  if (!knobbed && gibProbe.lastGibTier !== 'parts') {
+  // FULL-SPLIT TIERS PASS. `parts` is the marched full split; `assets` (the
+  // shipped default since 459b3b8b, 2026-09-16), `sprite` and `carve` are full
+  // splits BY CONSTRUCTION — game-main's tier code: "no cheaper shape to
+  // degrade to". Only the degraded whole-limb shapes are the owner's bug. This
+  // used to be `!== 'parts'` and so failed every shipped blast after 09-16.
+  // A full split that DROPPED pieces is still a failure.
+  const FULL_SPLIT = new Set(['parts', 'assets', 'sprite', 'carve']);
+  if (!knobbed && FULL_SPLIT.has(gibProbe.lastGibTier) && gibProbe.lastGibDropped > 0) {
+    fail(`tier=${gibProbe.lastGibTier} dropped ${gibProbe.lastGibDropped} pieces of the last body's split set`);
+  }
+  if (!knobbed && !FULL_SPLIT.has(gibProbe.lastGibTier)) {
     fail(`the shipped pool (${gibProbe.cap} views) could not afford the split piece set for the last `
       + `body of a ${gibProbe.gibbed}-body blast: tier=${gibProbe.lastGibTier}, `
       + `${gibProbe.lastGibDropped} pieces dropped and ${recycled} recycled on the blast frame. `
