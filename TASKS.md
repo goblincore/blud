@@ -18,8 +18,8 @@
   hand-added `...createXSeams(` in game-main.
 - [ ] **Re-read old gate results with suspicion.** Anything a gate concluded from one of these 50 getters between the seam
   extraction (~2026-09-17) and this fix was reading boot values. Not re-run wholesale.
-- [ ] Shorty gate (pre-existing): `fpv-rest` / `flash-on` / `flash-off` are captured over the pipeline-compile loader
-  (15 KB frames) — it waits for `__sdfGame`, not `loader-ready`. The FOV capture script shows the fix.
+- [x] Shorty gate: `fpv-rest` / `flash-on` / `flash-off` were captured over the pipeline-compile loader (15 KB frames).
+  Now waits for `loader-ready` and dismisses the overlay; the three shots are real frames (425-474 KB, flash visible).
 
 ## Narrow FOV + the weapon's own FOV — 2026-09-21
 

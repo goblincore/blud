@@ -144,6 +144,22 @@ console.log('arms: both present, skin emissive 0, watch present');
 await evaluate('typeof __sdfGame.woundPanel === "function" ? (__sdfGame.woundPanel(false), 1) : 0');
 await evaluate('typeof __sdfGame.gooPanel === "function" ? (__sdfGame.gooPanel(false), 1) : 0');
 await evaluate('typeof __sdfGame.vhsPanel === "function" ? (__sdfGame.vhsPanel(false), 1) : 0');
+// WAIT FOR THE LOADER, THEN DISMISS IT. `__sdfGame` exists long before the
+// march pipelines finish compiling (cold: minutes — docs/dev-notes/
+// 2026-09-19-shader-compile), and the overlay covers the whole frame until
+// then. This gate used to sleep 2 s and shoot, so `fpv-rest`, `flash-on` and
+// `flash-off` were 15 KB frames of "compiling pipelines" that passed every
+// assertion and showed the owner nothing. game-boot-leaves adds
+// `loader-ready` when the game is playable; `loader-hidden` is what the
+// overlay's own click handler adds, so this is the player's path.
+let loaderReady = false;
+for (let i = 0; i < 600; i++) {
+  loaderReady = await evaluate(`!!document.getElementById('loader')?.classList.contains('loader-ready')`);
+  if (loaderReady) break;
+  await sleep(1000);
+}
+if (!loaderReady) fail('loader never reached loader-ready — pipelines still compiling after 10 min');
+await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
 await sleep(2000);
 await shot('fpv-rest');
 console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);
