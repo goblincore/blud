@@ -55,6 +55,10 @@ export interface LabRendererHandle {
   setDrawFn(fn: () => void): void;
   /** Observe natural frames only; CPU submission timing is NOT GPU duration. */
   setFrameObserver(observer: ((frame: FrameTiming) => void) | null): void;
+  /** Hand the per-frame timestamp drain to someone else (the gameplay
+   *  recorder's GPU collector). Two drains race: each resolve overwrites the raw
+   *  resolve buffer the other is about to read. `true` restores the loop's own. */
+  setTimestampDrain(on: boolean): void;
   /** 'webgpu' or 'webgl' — WebGPURenderer silently falls back, so ASK. */
   readonly backend: string;
 
@@ -403,6 +407,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // exceeded'). Both pools are drained here, each with its own in-flight
   // guard (resolveQueriesAsync already coalesces concurrent calls per pool).
   let resolvingCompute = false;
+  let loopDrains = true;
 
   const loop = () => {
     const now = performance.now();
@@ -441,13 +446,13 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     // full, so the resolves have to keep up with the frames even though
     // nothing reads the per-frame value any more (the per-frame number was
     // unreliable with multiple passes per frame — see resolveGpu's note).
-    if (!resolving) {
+    if (loopDrains && !resolving) {
       resolving = true;
       renderer.resolveTimestampsAsync()
         .catch(() => {})
         .finally(() => { resolving = false; });
     }
-    if (!resolvingCompute) {
+    if (loopDrains && !resolvingCompute) {
       resolvingCompute = true;
       renderer.resolveTimestampsAsync(THREE.TimestampQuery.COMPUTE)
         .catch(() => {})
@@ -483,6 +488,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     setRenderCallback(fn) { cb = fn; },
     setDrawFn(fn) { drawFn = fn; },
     setFrameObserver(observer) { frameObserver = observer; },
+    setTimestampDrain(on) { loopDrains = on; },
     backend: backendName,
     step(dtSec) { cb(dtSec); drawFn(); },
     drawOnce() { drawFn(); },

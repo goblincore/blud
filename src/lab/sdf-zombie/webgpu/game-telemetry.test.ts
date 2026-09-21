@@ -199,3 +199,33 @@ describe('laps: scope-proof sequential spans', () => {
     expect(log.stop().frames[0]!.selfPhases).toEqual({});
   });
 });
+
+describe('late GPU results', () => {
+  it('attaches a GPU summary to the frame it belongs to, and summarises busy time', () => {
+    let now = 0;
+    const log = new GameTelemetry(() => now);
+    log.start({});
+    for (let i = 1; i <= 3; i++) {
+      now += 33;
+      log.frame({ startMs: now, endMs: now + 5, intervalMs: 33, tickCpuMs: 3, drawCpuMs: 2 }, {}, 100 + i);
+    }
+    log.attachGpu(102, { busyMs: 21, idleMs: 12, exact: true, passes: { 'sdf:march': 9 } });
+    log.attachGpu(101, { busyMs: 19, idleMs: 14, exact: true, passes: {} });
+    log.attachGpu(999, { busyMs: 1, idleMs: 0, exact: true, passes: {} }); // unknown frame: ignored
+    const data = log.stop();
+    expect(data.frames.map(f => f.gpu?.busyMs)).toEqual([19, 21, undefined]);
+    expect(data.frames[1]!.gpu).toEqual({ busyMs: 21, idleMs: 12, exact: true, passes: { 'sdf:march': 9 } });
+    expect(data.summary.gpu).toEqual({ frames: 2, busyP50Ms: 19, busyP95Ms: 21, idleP50Ms: 12 });
+  });
+
+  it('reports no GPU block when nothing was attached, and ignores results after stop', () => {
+    let now = 0;
+    const log = new GameTelemetry(() => now);
+    log.start({});
+    log.frame({ startMs: 0, endMs: 5, intervalMs: 33, tickCpuMs: 3, drawCpuMs: 2 }, {}, 7);
+    const data = log.stop();
+    log.attachGpu(7, { busyMs: 5, idleMs: 0, exact: true, passes: {} });
+    expect(data.summary.gpu).toBeNull();
+    expect(data.frames[0]!.gpu).toBeUndefined();
+  });
+});

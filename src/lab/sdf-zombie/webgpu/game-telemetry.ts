@@ -1,3 +1,5 @@
+import type { GpuFrameSummary } from './gpu-frame-summary';
+
 /** Opt-in, bounded live-play recorder. No GPU waits, reads or console writes. */
 export interface FrameTiming {
   startMs: number; endMs: number; intervalMs: number; tickCpuMs: number; drawCpuMs: number;
@@ -12,6 +14,10 @@ export interface CaptureFrame {
   /** tick + draw CPU that NO span covered. A large value is an instrumentation
    *  gap, which is what hid the flare hit test (2026-09-20). */
   unattributedCpuMs: number;
+  /** GPU timeline for this frame (gpu-frame-summary.ts). Attached a few frames
+   *  LATE, when the async timestamp resolve lands; absent on the last frames of
+   *  a recording and wherever timestamps are unavailable. */
+  gpu?: GpuFrameSummary;
 }
 type SpanToken = { start: number; generation: number; childMs: number; lap?: { channel: string; name: string } };
 export interface GameplayCapture {
@@ -20,7 +26,7 @@ export interface GameplayCapture {
   droppedEvents: number; invalidFrames: number; droppedSnapshots: number;
   frames: CaptureFrame[]; events: { t: number; name: string; detail?: Detail }[];
   snapshots: { t: number; name: string; detail: Detail }[];
-  summary: { frames: number; visibleFrames: number; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null; maxMs: number | null; spikes40ms: number; longCpuFrames: number; lateFrames: number; maxConsecutiveLateFrames: number; lateThresholdMs: number };
+  summary: { frames: number; visibleFrames: number; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null; maxMs: number | null; spikes40ms: number; longCpuFrames: number; gpu: { frames: number; busyP50Ms: number; busyP95Ms: number; idleP50Ms: number } | null; lateFrames: number; maxConsecutiveLateFrames: number; lateThresholdMs: number };
 }
 
 export class GameTelemetry {
@@ -38,6 +44,7 @@ export class GameTelemetry {
   private open: SpanToken[] = [];
   private longCpuFrames = 0;
   private laps = new Map<string, SpanToken>();
+  private byGpuFrame = new Map<number, CaptureFrame>();
   private longFrameCpuMs = 20;
   private droppedEvents = 0;
   private invalidFrames = 0;
@@ -55,7 +62,7 @@ export class GameTelemetry {
     this.metadata = structuredClone(metadata);
     this.started = this.now(); this.ended = this.started;
     this.startedAt = new Date().toISOString();
-    this.frames = []; this.events = []; this.resetSpans(); this.open = []; this.laps.clear();
+    this.frames = []; this.events = []; this.resetSpans(); this.open = []; this.laps.clear(); this.byGpuFrame.clear();
     this.longCpuFrames = 0;
     this.longFrameCpuMs = Number(metadata.longFrameCpuMs) > 0 ? Number(metadata.longFrameCpuMs) : 20;
     this.snapshots = []; this.droppedSnapshots = 0;
@@ -146,7 +153,16 @@ export class GameTelemetry {
     this.bytes += bytes;
     return true;
   }
-  frame(timing: FrameTiming, state: Detail) {
+  /** A GPU summary for a frame recorded earlier under `gpuFrame`. Reserved at
+   *  a flat estimate so a long recording cannot blow the byte budget. */
+  attachGpu(gpuFrame: number, gpu: GpuFrameSummary) {
+    const entry = this.byGpuFrame.get(gpuFrame);
+    if (!entry || !this.active) return;
+    this.byGpuFrame.delete(gpuFrame);
+    if (!this.reserve(gpu)) return;
+    entry.gpu = gpu;
+  }
+  frame(timing: FrameTiming, state: Detail, gpuFrame?: number) {
     if (!this.active) return;
     if (!Object.values(timing).every(Number.isFinite) || timing.intervalMs < 0) {
       this.invalidFrames++; this.resetSpans(); return;
@@ -154,7 +170,7 @@ export class GameTelemetry {
     for (const channel of [...this.laps.keys()].reverse()) this.lap(channel, null);
     const cpuMs = timing.tickCpuMs + timing.drawCpuMs;
     const unattributedCpuMs = Math.max(0, cpuMs - this.coveredMs);
-    const entry = { t: timing.startMs - this.started, intervalMs: timing.intervalMs,
+    const entry: CaptureFrame = { t: timing.startMs - this.started, intervalMs: timing.intervalMs,
       tickCpuMs: timing.tickCpuMs, drawCpuMs: timing.drawCpuMs, phases: this.phases, state,
       selfPhases: this.selfPhases, unattributedCpuMs };
     // THE STALL LABELS ITSELF. Any frame whose CPU half blows the budget
@@ -167,6 +183,7 @@ export class GameTelemetry {
     }
     if (!this.active || !this.reserve(entry)) return;
     this.frames.push(entry);
+    if (gpuFrame !== undefined) this.byGpuFrame.set(gpuFrame, entry);
     this.resetSpans();
     // No span crosses a frame; one abandoned by an early return must not
     // become every later span's parent.
@@ -180,6 +197,13 @@ export class GameTelemetry {
     const visible = this.frames.filter(f => !f.state.hidden && !f.state.visibilityGap && !f.state.firstFrame);
     const sorted = visible.map(f => f.intervalMs).sort((a, b) => a - b);
     const pct = (q: number) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1)]! : null;
+    const withGpu = this.frames.filter(f => f.gpu);
+    const q = (values: number[], p: number) => { const a = [...values].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.ceil(p * a.length) - 1)]!; };
+    const gpu = withGpu.length === 0 ? null : {
+      frames: withGpu.length,
+      busyP50Ms: q(withGpu.map(f => f.gpu!.busyMs), .5), busyP95Ms: q(withGpu.map(f => f.gpu!.busyMs), .95),
+      idleP50Ms: q(withGpu.map(f => f.gpu!.idleMs), .5),
+    };
     const target = Number(this.metadata.targetFrameMs) || 1000 / 30;
     const tolerance = Number(this.metadata.lateToleranceMs) || 2;
     const lateThresholdMs = target + tolerance;
@@ -194,6 +218,6 @@ export class GameTelemetry {
       frames: this.frames, events: this.events, snapshots: this.snapshots,
       summary: { frames: this.frames.length, visibleFrames: visible.length,
         p50Ms: pct(.5), p95Ms: pct(.95), p99Ms: pct(.99), maxMs: pct(1),
-        spikes40ms: sorted.filter(x => x >= 40).length, longCpuFrames: this.longCpuFrames, lateFrames, maxConsecutiveLateFrames, lateThresholdMs } };
+        spikes40ms: sorted.filter(x => x >= 40).length, longCpuFrames: this.longCpuFrames, gpu, lateFrames, maxConsecutiveLateFrames, lateThresholdMs } };
   }
 }

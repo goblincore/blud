@@ -128,6 +128,7 @@ import {
 } from 'three/tsl';
 import { runBench, type BenchDeps, type BenchMode } from './game-bench';
 import { installPassTiming, beginPassFrame, setPassLabel, setPassLabelObserver } from './gpu-pass-timing';
+import { createGpuFrameAttributor } from './gpu-frame-summary';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { getPipelineCensus, getPipelineLog, getPipelineShaderSource, setPipelineLogEnabled } from './pipeline-log';
 import { coordinateWarmGate, createLoopController, type WarmOutcome } from './warm-gate';
@@ -7327,6 +7328,11 @@ async function main() {
         tickAdaptive(ctx, performance.now());
       }
     }
+    // GPU FRAME ID (telemetry v4). The pass-frame counter only ever advanced
+    // in the bench; while recording it advances every live frame, BEFORE the
+    // tick (whose compute passes belong to this frame), so each timestamp pair
+    // carries the frame it was recorded in.
+    if (ctx.telemetry.telemetry.active) ctx.telemetry.gpuFrame = beginPassFrame();
     tick(Math.min(dt, 1 / 20));
     if (ctx.demo.frameCount++ % 10 === 0) updateHud(ctx);
   });
@@ -7339,6 +7345,20 @@ async function main() {
   ctx.telemetry.firstFrame = true;
   ctx.telemetry.visibilityGap = false;
   document.addEventListener('visibilitychange', () => { ctx.telemetry.visibilityGap = true; });
+  // GPU COLLECTOR. One collect() in flight at a time; a frame that ends while
+  // one is pending simply rides the next resolve (the pool holds 2048 queries,
+  // ~30 frames). The async resolve + 16 KB map never blocks tick or draw, and
+  // its continuation runs outside both, so it is not in tickCpuMs/drawCpuMs.
+  let gpuCollecting = false;
+  let gpuAttributor = createGpuFrameAttributor();
+  const collectGpuFrames = () => {
+    if (gpuCollecting || !ctx.boot.passTiming.installed) return;
+    gpuCollecting = true;
+    ctx.boot.passTiming.collect()
+      .then((samples) => { for (const [frame, gpu] of gpuAttributor.add(samples)) ctx.telemetry.telemetry.attachGpu(frame, gpu); })
+      .catch(() => {})
+      .finally(() => { gpuCollecting = false; });
+  };
   const telemetryFrame = (frame: FrameTiming) => {
     ctx.telemetry.telemetry.frame(frame, {
       hidden: document.hidden, visibilityGap: ctx.telemetry.visibilityGap, firstFrame: ctx.telemetry.firstFrame,
@@ -7364,14 +7384,15 @@ async function main() {
       halfRate: ctx.render.sdfLayer.halfRate, halfRateMode: ctx.render.sdfLayer.halfRateMode,
       depthPrepass: ctx.render.sdfLayer.depthPreEnabled,
       fieldMode: ctx.render.sdfLayer.fieldMode, fieldStyle: ctx.render.sdfLayer.fieldStyle, fieldComb: ctx.render.sdfLayer.fieldComb,
-    });
+    }, ctx.telemetry.gpuFrame);
+    collectGpuFrames();
     ctx.telemetry.firstFrame = false; ctx.telemetry.visibilityGap = false;
     ctx.telemetry.controls?.afterFrame();
   };
   ctx.telemetry.controls = import.meta.env.DEV ? createTelemetryControls(ctx.telemetry.telemetry, async () => ({
     build: await fetch('/__lab/telemetry-build', { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(r => { if (!r.ok) throw new Error('Build identity unavailable'); return r.json(); }),
     buildAtServerStart: import.meta.env.VITE_TELEMETRY_BUILD ?? { commit: 'unknown', dirty: true },
-    captureVersion: 3, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: ctx.boot.gameTiles.diagnostics(),
+    captureVersion: 4, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: ctx.boot.gameTiles.diagnostics(),
     page: location.pathname, query: location.search, userAgent: navigator.userAgent, backend: ctx.boot.handle.backend,
     visibility: document.visibilityState, frameCap: ctx.boot.handle.frameCap,
     fisheye: fisheyeReport(ctx), renderWidth: ctx.render.sdfLayer.marchTarget.width, renderHeight: ctx.render.sdfLayer.marchTarget.height,
@@ -7384,7 +7405,7 @@ async function main() {
       + 'estimate of screen area covered by VISIBLE bodies, not a GPU pixel '
       + 'count; overlapping bodies double-count and occlusion is ignored, so '
       + 'it OVERESTIMATES when bodies stack. Read as a trend, not an absolute.',
-    gpuTiming: 'unavailable: existing multipass timestamps are not attributable to individual frames',
+    gpuTiming: 'frames[].gpu = { busyMs, idleMs, exact, passes } from GPU timestamp queries, attributed exclusively by completion order (gpu-frame-summary.ts). busyMs is GPU work charged to the frame; idleMs is the GPU waiting for work. GPU-bound = idleMs ~ 0 with busyMs ~ intervalMs; CPU/cap-bound = large idleMs. Attached a few frames late, so the last frames of a recording have none. exact:false = wall durations (overlapping), busy over-reads.',
     intervalMeaning: 'natural drawn-frame start intervals, including frame cap/vsync and scheduling; not pure GPU time',
     cpuMeaning: 'tickCpuMs and drawCpuMs are synchronous CPU time, including submission, not GPU execution',
     phaseMeaning: 'inclusive spans accumulated since previous draw; nested hit/flush/bake spans must not be added to parents',
@@ -7400,6 +7421,10 @@ async function main() {
     // setPassLabel; while recording, each label change is a 'pass' lap, so the
     // capture says how long the CPU spent submitting sdf:polys, sdf:march,
     // the post chain... — nested under whichever span was open.
+    // The recorder owns the timestamp drain while it runs (see setTimestampDrain).
+    ctx.boot.handle.setTimestampDrain(!active);
+    if (active) gpuAttributor = createGpuFrameAttributor();
+    if (!active) ctx.telemetry.gpuFrame = undefined;
     setPassLabelObserver(active ? (label) => ctx.telemetry.telemetry.lap('pass', `cpu:${label}`) : null);
     // SHADER BUILDS AS EVENTS (three r186 `debug.onNodeBuilderCreated`). A
     // mid-game node build is never free and rarely expected: the weapon-switch

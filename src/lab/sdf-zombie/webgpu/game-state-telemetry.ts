@@ -51,6 +51,9 @@ export interface TelemetryState {
   normalGradientDebug: 0 | 1 | 2;
   /** The first telemetry frame after start/mark is discarded as a warm-up. */
   firstFrame: boolean;
+  /** gpu-pass-timing frame id of the frame in flight while recording (the key
+   *  late GPU summaries are attached by); undefined when not recording. */
+  gpuFrame: number | undefined;
   /** Set by `visibilitychange` so a recording can flag a hidden-tab gap. */
   visibilityGap: boolean;
   /** DEV-only recording overlay, or null outside a DEV build. */
@@ -65,6 +68,7 @@ export function makeTelemetryState(): TelemetryState {
     normalGradientMode: 1,
     normalGradientDebug: 0,
     firstFrame: true,
+    gpuFrame: undefined,
     visibilityGap: false,
     controls: null,
   };

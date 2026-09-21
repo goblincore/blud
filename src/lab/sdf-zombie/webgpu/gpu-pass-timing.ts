@@ -156,9 +156,13 @@ export const GPU_IDLE_LABEL = 'gpu:idle';
  * timeline advance charged to that frame's passes; sums over a batch to
  * last end minus first start).
  */
-export function attributePassSamples(samples: readonly PassSample[]): {
+export function attributePassSamples(samples: readonly PassSample[], startCursor?: number): {
   exclusive: Map<number, Map<string, number>>;
   span: Map<number, number>;
+  /** Where the timeline stood after the last pass. Hand it back as
+   *  `startCursor` for the next batch and the gap BETWEEN batches is still
+   *  charged (as idle) instead of vanishing at every collect(). */
+  cursor: number | undefined;
 } {
   const exclusive = new Map<number, Map<string, number>>();
   const span = new Map<number, number>();
@@ -178,17 +182,17 @@ export function attributePassSamples(samples: readonly PassSample[]): {
     // time the timeline advanced while it was the one completing. The
     // batch's first pass is charged from its own start.
     const sorted = [...raw].sort((a, b) => a.end - b.end);
-    let cursor = Math.min(...sorted.map((s) => s.start));
+    let cursor = startCursor ?? Math.min(...sorted.map((s) => s.start));
     for (const s of sorted) {
       const idle = Math.max(0, s.start - cursor);
       if (idle > 0) charge(s.frame, GPU_IDLE_LABEL, idle);
       charge(s.frame, s.label, Math.max(0, s.end - Math.max(cursor, s.start)));
       cursor = Math.max(cursor, s.end);
     }
-  } else {
-    for (const s of samples) charge(s.frame, s.label, s.ms);
+    return { exclusive, span, cursor };
   }
-  return { exclusive, span };
+  for (const s of samples) charge(s.frame, s.label, s.ms);
+  return { exclusive, span, cursor: startCursor };
 }
 
 /** Shape of the three internals this module reaches into. Kept minimal and
