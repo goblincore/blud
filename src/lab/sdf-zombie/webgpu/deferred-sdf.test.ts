@@ -138,9 +138,11 @@ describe('the surface entry IS the production march, not a copy', () => {
     // retrace. The FOURTH and FIFTH (2026-09-10 follow-up) are the recovery
     // probes' two textual sites in that same pre-loop gate — first probe
     // plus rewind loop — runtime-bounded at three evals, still gated on the
-    // live bound, still not a retrace. (Count is textual: two sites, one
-    // loop body.)
-    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(4);
+    // live bound, still not a retrace. Since the cold-compile fix
+    // (2026-09-21) the first probe and the rewinds share ONE textual site
+    // (each call site is an inlined field copy in the Metal compile), so the
+    // count is three.
+    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(3);
   });
 
   it('exits before every light-dependent term and the display conversion', () => {
@@ -266,8 +268,8 @@ describe('legacy expansion preserved', () => {
 
   it('keeps the lighting tail’s field probes and display conversion exactly where they were', () => {
     for (const marker of [
-      'mapBody(p + L * 0.06', // backlit scatter probe
-      'mapBody(p + n * 0.06', // AO probe
+      // scatter and AO share one mapBody site (cold-compile 2026-09-21)
+      'mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)',
       'woundShadow(p, L,', 'levelShadow(p, n,', 'ambientAt(p, n,',
       'c <= vec3<f32>(0.04045)', // legacy display compensation
     ]) {

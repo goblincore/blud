@@ -102,7 +102,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // 0.15 fixed when in-zone) instead of dropping the bound.
     expect(MARCH_BODY).toContain('temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y');
     expect(MARCH_BODY).toContain('var s = temp.x - woundCfg2.z;');
-    expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) { break; }');
+    expect(MARCH_BODY).toContain('if (probe == 3 || (dres0.x > 0.0 && dres0.z < 0.5)) { break; }');
     expect(MARCH_BODY).toContain('let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);');
     expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) {');
     // HULL-RELATIVE CAP: the accepted start tightens at most 6 cm past the

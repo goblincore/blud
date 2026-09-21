@@ -115,7 +115,7 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeTex: texture_3d<f32>');
     expect(calcNormal).toContain('volumeMin: vec3<f32>');
-    expect((calcNormal.match(/mapBody\(/g) ?? []).length).toBe(4);
+    expect((calcNormal.match(/mapBody\(/g) ?? []).length).toBe(1); // one looped tap site since 2026-09-21 (cold compile)
   });
 
   it('MARCH_BODY and CONE_MARCH declare the volume params', () => {
@@ -226,9 +226,9 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     expect(HELPERS.indexOf(NOISE_LOCAL)).toBeLessThan(HELPERS.indexOf(SD_SHELL));
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeClip: vec4<f32>');
-    // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg
+    // Every calcNormal mapBody tap (one looped call site since 2026-09-21) carries it — and the perfCfg
     // and woundBound pass-throughs behind it (perf round 2 task 3, close-up
     // wound-cull task).
-    expect((calcNormal.match(/volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg\)/g) ?? []).length).toBe(4);
+    expect((calcNormal.match(/volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg\)/g) ?? []).length).toBe(1);
   });
 });

@@ -164,6 +164,7 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
     expect(rest).toContain('levelShadow(p, n,');
     expect(rest).toContain('ambientAt(p, n,');
     expect(rest).toContain('calcNormal(p,');
-    expect((rest.match(/mapBody\(p \+/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    // Scatter + AO probes share one call site since 2026-09-21 (cold compile).
+    expect(rest).toContain('mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)');
   });
 });

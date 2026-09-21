@@ -286,9 +286,9 @@
   frame 187 ms. This is also the old "first-use gib-material compile hitch" item above.
 - [ ] Residual 100-190 ms hitches remain on the first slug hit / a later pellet hit (one small pipeline created each) — not
   yet attributed.
-- [ ] The cold march compile itself is still ~75 s (now a wait behind the loader, not a crash). Worth attributing: which march
-  variant / which Metal-compiler pathology (loop nest? inlining of `mapBody`?) and whether it can be cut. The flare-gun branch
-  needs this fix merged — its dev server is where the owner hit the loss.
+- [x] **Cold march compile attributed + cut (2026-09-21):** cost scales with `mapBody` CALL SITES (Metal inlines each). Merged 3
+  groups bit-exact (180 s -> ~28 s), then calcNormal taps via one site (-> ~17 s; owner-approved march-hash re-pin, max RGB diff 6e-6).
+  [Notes](docs/dev-notes/2026-09-21-march-cold-compile/NOTES.md). Rule: never add a `mapBody(` call site.
 
 ## Dynamite gib appearance — owner accepted 2026-09-16
 

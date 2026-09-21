@@ -70,7 +70,7 @@ export const START_BOUNDS_BLOCK = /* wgsl */ `  // Start where the cone pre-pass
     // the shipping default, so this is the identity there.
     var s = temp.x - woundCfg2.z;
     if (s > 0.0) {
-      var dres0 = mapBody(camPos + rd * s, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+      var dres0 = vec4<f32>(0.0);
       // ACCEPTANCE: outside the field AND outside a wound's near zone
       // (dres0.z). Near a crater applyWounds' smax fillet OVERSTATES the
       // distance — the field is not a bound there — and a start beside the
@@ -90,12 +90,15 @@ export const START_BOUNDS_BLOCK = /* wgsl */ `  // Start where the cone pre-pass
       // the box entry always probes positive-and-out-of-zone (every prim of
       // this body lies inside the box; zones only exist around its own
       // wounds), so the loop self-terminates there.
-      for (var probe = 0; probe < 3; probe = probe + 1) {
-        if (dres0.x > 0.0 && dres0.z < 0.5) { break; }
+      // One mapBody call site (cold-compile 2026-09-21): the first probe and
+      // the three recovery probes share it — every call site is an inlined
+      // copy of the field in the Metal compile. Same probes, same order.
+      for (var probe = 0; probe < 4; probe = probe + 1) {
+        dres0 = mapBody(camPos + rd * s, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+        if (probe == 3 || (dres0.x > 0.0 && dres0.z < 0.5)) { break; }
         let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);
         if (back <= 0.0) { break; }
         s = back;
-        dres0 = mapBody(camPos + rd * s, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
       }
       if (dres0.x > 0.0 && dres0.z < 0.5) {
         // HULL-RELATIVE CAP (the holes fix, 2026-09-10 night). The accepted

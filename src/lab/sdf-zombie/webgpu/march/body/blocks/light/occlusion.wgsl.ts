@@ -8,20 +8,27 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // A whole extra mapBody, so it is skipped outright at zero translucency
   // rather than multiplied away afterwards.
   var scatter = vec3<f32>(0.0, 0.0, 0.0);
-  if (surfCfg.w > 0.0) {
-    let thin = clamp(mapBody(p + L * 0.06, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x * -8.0, 0.0, 1.0);
-    scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
-  }
-
   // Cheap AO from the field, so creases and the insides of joints stay dark.
   // Without it a limb dissolves into the torso visually even when the geometry
   // is correctly separated — so this is a LOD lever, not a free win: it is the
   // one guarded by an explicit flag rather than by its own amplitude, because
   // there is no "AO strength" to turn down.
   var ao = 1.0;
-  if (lodCfg.x > 0.5) {
-    ao = clamp(mapBody(p + n * 0.06, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x / 0.06, 0.35, 1.0);
+  // Scatter (k = 0) and AO (k = 1) share ONE mapBody call site
+  // (cold-compile 2026-09-21): each call site is an inlined copy of the
+  // field in the Metal compile. Same probe points, same gates, same math.
+  for (var k = 0; k < 2; k = k + 1) {
+    if (select(lodCfg.x > 0.5, surfCfg.w > 0.0, k == 0)) {
+      let probeD = mapBody(select(p + n * 0.06, p + L * 0.06, k == 0), data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x;
+      if (k == 0) {
+        let thin = clamp(probeD * -8.0, 0.0, 1.0);
+        scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
+      } else {
+        ao = clamp(probeD / 0.06, 0.35, 1.0);
+      }
+    }
   }
+
   // NO wound-keyed AO darkening, NO analytic key gate, NO spec occlusion —
   // deliberately (owner bisect A/B, 2026-08-24). All three were 2026-08-23/24
   // attempts to mask wound-adjacent brightness, and each carried its own
