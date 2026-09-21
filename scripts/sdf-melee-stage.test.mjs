@@ -12,7 +12,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   median,
-  meleeLayout,
   woundPlan,
   pelletsOnly,
   summariseBlocks,
@@ -23,61 +22,6 @@ import {
   MELEE_REGIONS,
   LOAD_SUSPECT_LIMIT,
 } from './lib/sdf-melee-stage.mjs';
-
-describe('meleeLayout', () => {
-  it('returns n deterministic positions, body 0 on the nearest row', () => {
-    const a = meleeLayout(6);
-    const b = meleeLayout(6);
-    expect(a).toEqual(b);
-    expect(a).toHaveLength(6);
-    expect(a[0].row).toBe(0);
-    expect(a[0].dist).toBe(1.4);
-    // Body 0 is row 0, straight ahead: yaw-0 forward is -z.
-    expect(a[0].x).toBeCloseTo(0, 12);
-    expect(a[0].z).toBeCloseTo(-1.4, 12);
-  });
-
-  it('keeps every row-r body exactly nearest + r*rowGap out (arc, not line)', () => {
-    const pts = meleeLayout(6, { nearest: 1.5, spacing: 1.0 });
-    const dRow = (p) => Math.hypot(p.x, p.z);
-    for (const p of pts) {
-      const want = p.row === 0 ? 1.5 : 1.5 + Math.max(0.6, 1.0 * 0.75);
-      expect(dRow(p)).toBeCloseTo(want, 9);
-    }
-    // ...and all of them in FRONT of the player (z < 0).
-    for (const p of pts) expect(p.z).toBeLessThan(0);
-  });
-
-  it('staggered rows: odd rows offset half a slot so bodies overlap on screen', () => {
-    const pts = meleeLayout(4, { nearest: 1.4, spacing: 0.9 });
-    const row0 = pts.filter((p) => p.row === 0);
-    const row1 = pts.filter((p) => p.row === 1);
-    const theta0 = row0.map((p) => p.theta).sort((a, b) => a - b);
-    const theta1 = row1.map((p) => p.theta).sort((a, b) => a - b);
-    const mid0 = (theta0[0] + theta0[theta0.length - 1]) / 2;
-    const mid1 = (theta1[0] + theta1[theta1.length - 1]) / 2;
-    expect(mid1).not.toBeCloseTo(mid0, 6); // the rows are NOT aligned
-  });
-
-  it('never plans two bodies closer than half the spacing (no interpenetration)', () => {
-    for (const [n, opts] of [[6, {}], [8, { spacing: 0.7 }], [4, { nearest: 1.2, spacing: 0.8 }], [3, {}]]) {
-      const pts = meleeLayout(n, opts);
-      for (let i = 0; i < pts.length; i++) {
-        for (let j = i + 1; j < pts.length; j++) {
-          const d = Math.hypot(pts[i].x - pts[j].x, pts[i].z - pts[j].z);
-          expect(d).toBeGreaterThan((opts.spacing ?? 0.9) * 0.5);
-        }
-      }
-    }
-  });
-
-  it('handles n=1 and n=0', () => {
-    expect(meleeLayout(0)).toEqual([]);
-    const one = meleeLayout(1);
-    expect(one).toHaveLength(1);
-    expect(one[0].dist).toBe(1.4);
-  });
-});
 
 describe('woundPlan', () => {
   it('spreads each body over distinct regions and the crowd over both flanks', () => {
@@ -224,8 +168,8 @@ describe('renderMarkdown', () => {
       { phase: 'wounded', leg: 'ship', p50: 26, labels: { 'sdf:march': { p50: 16 } }, load1: 2 },
     ]);
     const md = renderMarkdown(summary, {
-      n: 6, nearest: 1.4, spacing: 0.9, coverage: 0.66, rasterisedFrac: 0.9,
-      bodiesOnScreen: 7, room: 6, ladder: [{ nearest: 1.4, spacing: 0.9, coverage: 0.66 }],
+      n: 6, gathered: 6, frames: 1140, nearest: 1.4, distances: [1.4, 1.9], coverage: 0.66, rasterised: 0.9,
+      bodiesOnScreen: 7, room: 6, search: [{ dyaw: 0, pitch: -0.12, coverage: 0.66 }],
     });
     expect(md).toContain('## Staged scene');
     expect(md).toContain('66.0%');

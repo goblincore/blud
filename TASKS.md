@@ -20,6 +20,9 @@
 - [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](docs/dev-notes/2026-09-18-march-split/NOTES.md)).
+- [x] **Melee close-up perf harness (2026-09-21):** `scripts/sdf-game-melee-bench.sh` — [notes](docs/dev-notes/2026-09-21-melee-harness/NOTES.md). The arena's cast WALKS to the
+  player, freeze, then clean -> wounded -> wounded+fire with alternating seam legs (`MELEE_LEGS` injects more). Quiet run: frame 17.0 / 22.8 / **36.7 ms**, march 13.2 / 19.3 / 27.7 —
+  reproduces the owner's GPU-bound episode. Miss rays are 46-50 % of walk steps there. Found: bodies spawned after boot never march (debug-spawn bug?); `applyShipDefaults` is not ship.
 - [~] **Telemetry v3 + CPU frame attribution (2026-09-20).** [Notes](docs/dev-notes/2026-09-20-telemetry-v3/NOTES.md). Recordings now
   carry `selfPhases`, `unattributedCpuMs` (was ~half the frame, now 0), region + per-pass CPU laps, and auto `long-frame` /
   `shader-build` (r186 `onNodeBuilderCreated`) / `flare-shot` events. **Finding: `cpu:sdf:polys` is 5.0 of a 7.6 ms draw — the

@@ -68,7 +68,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import {
-  connectGame, bootCloseupPage, applyShipDefaults, sleep, interleaveOrder, failHard,
+  connectGame, bootCloseupPage, sleep, interleaveOrder, failHard,
 } from './lib/sdf-closeup-stage.mjs';
 import {
   stageMelee, stampMeleeWounds, woundPlan, pelletsOnly,
@@ -80,8 +80,8 @@ const VITE = Number(process.argv[2] ?? 5421);
 const CDP = Number(process.argv[3] ?? 9421);
 const OUT = process.env.BENCH_OUT ?? '/tmp/sdf-melee';
 const N_BODIES = Number(process.env.MELEE_BODIES ?? 6);
-const NEAREST = Number(process.env.MELEE_NEAREST ?? 1.4);
-const SPACING = Number(process.env.MELEE_SPACING ?? 0.65);
+const GATHER_RADIUS = Number(process.env.MELEE_GATHER_RADIUS ?? 3.0);
+const GATHER_FRAMES = Number(process.env.MELEE_GATHER_FRAMES ?? 2400);
 const ROOM = Number(process.env.MELEE_ROOM ?? 6);
 const CHARACTER = process.env.MELEE_CHARACTER ?? 'zombie';
 if (CHARACTER !== 'zombie') {
@@ -119,18 +119,17 @@ const envNum = (name) => {
   if (!/^-?[0-9./()*PIE\s]+$/i.test(raw)) fail(`${name}="${raw}" is not a number`);
   return Function(`"use strict"; return (${raw});`)();
 };
-const PLAYER_X = envNum('MELEE_PLAYER_X') ?? 27.5;
-const PLAYER_Z = envNum('MELEE_PLAYER_Z') ?? -7.4;
-const PLAYER_YAW = envNum('MELEE_PLAYER_YAW') ?? 0;
 
 // The wound plan is built node-side ONCE (it is pure), then bound to the
 // staged bodies' actor ids after staging.
-const PLAN = woundPlan(N_BODIES, 4);
+const FIRE_FRAMES = Number(process.env.MELEE_FIRE_FRAMES ?? 45);
+const PER_BODY = Number(process.env.MELEE_WOUNDS_PER_BODY ?? 6);
+const PLAN = woundPlan(N_BODIES, PER_BODY);
 
 mkdirSync(OUT, { recursive: true });
 
 console.log(`melee-bench ${URL_}`);
-console.log(`  bodies ${N_BODIES}  nearest ${NEAREST}  spacing ${SPACING}  room ${ROOM}  character ${CHARACTER}`);
+console.log(`  bodies ${N_BODIES}  gather radius ${GATHER_RADIUS} m  max ${GATHER_FRAMES} sim frames  room ${ROOM}`);
 console.log(`  reps ${REPS} x ${FRAMES} frames  legs ship/flat/refoldOff${Object.keys(extraLegs).length ? '+' + Object.keys(extraLegs).join('+') : ''}`);
 console.log(`  out ${OUT}`);
 
@@ -187,15 +186,12 @@ const RESTORE_JS = (snap) => `(() => {
 // Staging (and re-staging after a severed-stamp reload).
 // ---------------------------------------------------------------------------
 
-/** Ladder: the env rung FIRST (wins ties), then the default camera
- *  distances. Bodies are placed ONCE; the ladder only moves the camera. */
-const ladder = process.env.MELEE_LADDER
-  ? process.env.MELEE_LADDER.split(',').map(Number).filter((v) => v > 0)
-  : [1.0, 0.9, 1.15, 1.3, 1.5];
-
 async function bootAndStage({ firstBoot = false } = {}) {
   await bootCloseupPage({ send, evaluate: ev, url: URL_, fail });
-  await applyShipDefaults(ev);
+  // NOT applyShipDefaults: that pin predates the upscaler (it sets the march scale to 1.0
+  // and turns the hull exit bound OFF) and is not what the game ships. The boot state IS
+  // the ship state; the only departure is an empty blood sim for the first two phases.
+  await ev('__sdfGame.setWoundTuning({ spillChance: 0 }); 1');
   let up = null;
   for (let i = 0; i < (firstBoot ? 120 : 24); i++) {
     up = await ev('window.__sdfGame.upscaleInfo()');
@@ -207,24 +203,21 @@ async function bootAndStage({ firstBoot = false } = {}) {
   const snap = await ev(SNAPSHOT_JS);
   await ev(RESTORE_JS(snap));
   const stg = await stageMelee(ev, {
-    room: ROOM, n: N_BODIES, nearest: NEAREST, spacing: SPACING,
-    ladder, settleTries: SETTLE_TRIES,
-    playerX: PLAYER_X, playerZ: PLAYER_Z, playerYaw: PLAYER_YAW,
+    room: ROOM, n: N_BODIES, gatherRadius: GATHER_RADIUS, maxFrames: GATHER_FRAMES,
+    settleTries: SETTLE_TRIES,
   }, fail);
   return { snap, up, stg };
 }
 
 let { snap: bootSnap, up, stg: staging } = await bootAndStage({ firstBoot: true });
 console.log(`  upscaler on: model ${up.model} ${JSON.stringify(up.inSize)}->${JSON.stringify(up.outSize)}`);
-console.log(`  staged: n ${staging.n} nearest-row ${staging.nearest} spacing ${staging.spacing} camera ${staging.dist}`
-  + ` coverage ${(staging.coverage * 100).toFixed(1)}%`
+console.log(`  staged: ${staging.gathered}/${staging.n} bodies within ${GATHER_RADIUS} m after ${staging.frames} sim frames,`
+  + ` nearest ${staging.nearest} m, distances ${staging.distances.join(' ')}`);
+console.log(`  framing: coverage ${(staging.coverage * 100).toFixed(1)}%`
   + ` rasterised ${(staging.rasterised * 100).toFixed(1)}%`
-  + ` bodiesOnScreen ${staging.bodiesOnScreen} enclosure ${staging.enclosure}`);
-console.log(`  placement: ${staging.placement.map((p) => `${p.id}@${p.pos.join(',')} err ${p.err}`).join('  ')}`);
-console.log(`  ladder: ${staging.ladder.map((r) => `${r.nearest}/${r.spacing}->${(r.coverage * 100).toFixed(1)}%`).join('  ')}`);
-if (staging.coverage < 0.6) {
-  console.warn(`  WARNING: staged coverage ${(staging.coverage * 100).toFixed(1)}% is below the 60% target`
-    + ` — raise MELEE_BODIES or lower MELEE_NEAREST/MELEE_SPACING`);
+  + ` bodiesOnScreen ${staging.bodiesOnScreen} yaw ${staging.pose.yaw.toFixed(2)} pitch ${staging.pose.pitch.toFixed(2)}`);
+if (staging.gathered < staging.n) {
+  console.warn(`  WARNING: only ${staging.gathered} of ${staging.n} bodies reached ${GATHER_RADIUS} m — raise MELEE_GATHER_FRAMES`);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +233,7 @@ const WOUNDED_LEG_JS = {
   refoldOff: '__sdfGame.setOwnerRefold(false);',
 };
 const legNames = (phase) => [
-  ...(phase === 'clean' ? BASE_LEG_JS : WOUNDED_LEG_JS),
+  ...Object.keys(phase === 'clean' ? BASE_LEG_JS : WOUNDED_LEG_JS),
   ...Object.keys(extraLegs),
 ];
 const legJs = (phase, leg) =>
@@ -279,7 +272,7 @@ const SETTLED_OCC_JS = (tries) => `(async () => {
 async function screenshot(name) {
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   const file = `${OUT}/${name}.png`;
-  writeFileSync(file, Buffer.from(shot.data, 'base64'));
+  writeFileSync(file, Buffer.from(shot.result.data, 'base64'));
   return file;
 }
 
@@ -318,6 +311,14 @@ async function capturePhase(phase, withWounds) {
     : null;
   const crowd = await ev('__sdfGame.crowdInfo()');
   if (!occ || !(occ.rasterised > 0)) fail(`${phase}: occupancy never went live for the census`);
+  // A census with rasterised pixels and ZERO hits is not a scene with no flesh, it is a
+  // readback that did not see the debug counters (seen in the fire phase 2026-09-21: every
+  // rasterised pixel read steps 1 / hit 0 while the screenshot is full of burning bodies).
+  // Say so instead of printing a confident 0 %.
+  if (census && census.rasterised > 0 && census.hits === 0) {
+    console.warn(`  WARNING: ${phase} census read 0 hits over ${census.rasterised} rasterised pixels — debug mode 4 did not reach this phase's march path; census marked unreliable`);
+    census = { ...census, unreliable: true };
+  }
   return { screenshot: shotFile, census, occupancy: occ, bodies, crowd };
 }
 
@@ -363,8 +364,24 @@ for (const phase of ['clean', 'wounded', 'wounded+fire']) {
   }
   if (phase === 'wounded+fire') {
     console.log('\n=== igniting the crowd ===');
-    await ev('__sdfGame.igniteAll()');
-    await ev('__sdfGame.step(60)'); // let the fire establish
+    // FIRE NEEDS THE SIM RUNNING (measured 2026-09-21): igniteAll() on a frozen cast marks
+    // 23 bodies burning but no `post:fire-march` pass ever appears; after a thaw it does
+    // (2 ms at one body) and it survives the re-freeze. So thaw briefly, holding the player
+    // where they stand, then re-freeze and put the camera back on the staged framing. The
+    // thaw is short on purpose: burning zombies panic and run.
+    await ev(`(() => {
+      const p = ${JSON.stringify(staging.pose)};
+      __sdfGame.igniteAll();
+      __sdfGame.freeze(false);
+      for (let i = 0; i < ${FIRE_FRAMES}; i += 5) {
+        __sdfGame.step(5);
+        __sdfGame.placePlayer({ x: p.pos[0], z: p.pos[2], yaw: p.yaw, pitch: p.pitch });
+      }
+      __sdfGame.freeze(true);
+      __sdfGame.setPose(p.pos[0], p.pos[2], p.yaw, p.pitch, 0);
+      __sdfGame.step(3);
+      return 1;
+    })()`);
     console.log(`  burning: ${JSON.stringify(await ev('__sdfGame.burning().length'))} bodies tracked`);
   }
 
@@ -418,9 +435,7 @@ const maxLoad = Math.max(...rows.map((r) => r.load1));
 const md = [];
 md.push(`# Melee close-up bench — ${new Date().toISOString()}`);
 md.push('');
-md.push(`Scenario: ${N_BODIES} boot-cast ${CHARACTER}s nudged into a staggered arc, best ladder rung ${staging.nearest} m`
-  + ` / spacing ${staging.spacing}, room ${ROOM} (${ROOM === 6 ? 'arena' : `room${ROOM}`}), frozen, uncap'd`
-  + ` (setFrameCap(0)); ${REPS} alternating blocks of ${FRAMES} frames per leg, one page for all three phases.`);
+md.push(`Scenario: the room's own cast WALKED to the player (${staging.gathered}/${staging.n} within ${GATHER_RADIUS} m after ${staging.frames} sim frames, nearest ${staging.nearest} m), room ${ROOM}, then frozen; one page, frame cap off.`);
 md.push('');
 md.push('Staged coverage is a settled mode-4 occupancy read (two agreeing live frames). The wound plan stamps chest/head/arm/thigh per body; a slug never stamps off the chest (SLUG.severRadius 0.13 severs a limb in one hit).');
 md.push('');
@@ -458,7 +473,7 @@ const doc = {
   meta: {
     when: new Date().toISOString(), url: URL_, W, H,
     env: {
-      MELEE_BODIES: N_BODIES, MELEE_NEAREST: NEAREST, MELEE_SPACING: SPACING,
+      MELEE_BODIES: N_BODIES, MELEE_GATHER_RADIUS: GATHER_RADIUS, MELEE_GATHER_FRAMES: GATHER_FRAMES,
       MELEE_ROOM: ROOM, MELEE_CHARACTER: CHARACTER, MELEE_REPS: REPS,
       MELEE_FRAMES: FRAMES, MELEE_WARMUP: WARMUP, MELEE_LEGS: process.env.MELEE_LEGS ?? '',
       MELEE_SETTLE_TRIES: SETTLE_TRIES,

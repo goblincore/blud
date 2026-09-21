@@ -12,9 +12,6 @@
 //
 // WHAT IS HERE:
 //   pure (unit-tested in scripts/sdf-melee-stage.test.mjs):
-//     meleeLayout(n, {nearest, spacing, rows})  — staggered arc in front of
-//       the camera, body 0's row exactly `nearest` m out, so bodies OVERLAP
-//       on screen instead of lining up.
 //     woundPlan(bodyCount, perBody)             — per body, aim targets on
 //       DIFFERENT owner limbs (chest / head / one arm / one thigh), kinds
 //       alternating slug/pellet with one safety: a slug stamps ONLY a chest,
@@ -24,8 +21,8 @@
 //     censusFromTarget(float32, w, h)           — the mode-4 census.
 //     assertMeleeWounds(record, {minLandedFrac})— the three loud checks.
 //   browser-driving (take an `evaluate` from connectGame):
-//     stageMelee(evaluate, opts)                — spawn an arc, ladder-search
-//       it for the highest settled coverage.
+//     stageMelee(evaluate, opts)                — let the room's cast WALK to the
+//       player, freeze, then search yaw x pitch for the highest settled coverage.
 //     stampMeleeWounds(evaluate, plan)          — aim, predict, stamp ONLY
 //       when the predicted body is the intended one, restore the pose.
 //
@@ -54,55 +51,6 @@ export const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
   return s.length === 0 ? NaN : s[s.length >> 1];
 };
-
-// ---------------------------------------------------------------------------
-// meleeLayout — pure
-// ---------------------------------------------------------------------------
-
-/**
- * Ground offsets (relative to the player, whose yaw-0 forward is -z — the
- * `setPose`/`teleport` convention) for `n` bodies in a staggered arc.
- *
- * `rows` arcs at distances nearest + r*rowGap (rowGap = max(0.6, 0.75*spacing)
- * — enough that the far row's chests clear the near row's heads at ~1.4 m),
- * bodies assigned round-robin (body i -> row i%rows), slots filled CENTRE-OUT
- * per row and odd rows offset half a slot over so the rows STAGGER: each far
- * body peeks through a gap of the near row instead of hiding behind it.
- * Slot angle = slot / d_r, so each row is an ARC centred on the player —
- * every body of a row stands exactly d_r metres away and the row wraps
- * gently around the camera the way a melee crowd does, rather than reading
- * as a firing squad.
- *
- * Deterministic: same (n, opts) -> same array. Body 0 is always row 0.
- * Returns [{ x, z, dist, theta, row }] ordered by body index; x/z are
- * offsets to ADD to the player's ground position.
- */
-export function meleeLayout(n, opts = {}) {
-  const nearest = opts.nearest ?? 1.4;
-  const spacing = opts.spacing ?? 0.9;
-  if (!(n > 0)) return [];
-  const rows = Math.max(1, Math.min(opts.rows ?? 2, n));
-  const rowGap = Math.max(0.6, spacing * 0.75);
-  // Centre-out slot order [0, 1, -1, 2, -2, ...]: body 0 stands straight
-  // ahead at exactly `nearest` (the coverage anchor), then the row fills
-  // symmetrically outward. Deterministic.
-  const centreOut = (k) => (((k + 1) >> 1) * ((k % 2 === 0) ? 1 : -1));
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const row = i % rows;
-    const d = nearest + row * rowGap;
-    const slot = centreOut(Math.floor(i / rows)) - (row % 2 === 1 ? 0.5 : 0);
-    const theta = slot * (spacing / d);
-    out.push({
-      x: Math.sin(theta) * d,
-      z: -Math.cos(theta) * d,
-      dist: d,
-      theta,
-      row,
-    });
-  }
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // woundPlan — pure
@@ -151,7 +99,12 @@ export function woundPlan(bodyCount, perBody = 4) {
       const def = MELEE_REGIONS[(b + j) % MELEE_REGIONS.length];
       const alternate = g % 2 === 0 ? 'slug' : 'pellet';
       const kind = alternate === 'slug' && def.region !== 'chest' ? 'pellet' : alternate;
-      targets.push({ region: def.region, height: def.height, lateral: def.lateral * side, kind });
+      // Past the fourth target the regions repeat; shift the repeat a few centimetres so
+      // it opens its own crater beside the first instead of re-stamping the same point.
+      const lap = Math.floor(j / MELEE_REGIONS.length);
+      const dh = lap === 0 ? 0 : (lap % 2 === 1 ? -0.09 : 0.09);
+      const dl = lap === 0 ? 0 : 0.07 * lap;
+      targets.push({ region: def.region, height: def.height + dh, lateral: (def.lateral + dl) * side, kind });
       g++;
     }
     out.push({ body: b, targets });
@@ -223,13 +176,13 @@ export function renderMarkdown(summary, staging) {
   const fmt = (v, d = 2) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(d) : '—');
   L.push('## Staged scene');
   L.push('');
-  L.push('| bodies | nearest | spacing | coverage | rasterised | bodies on screen | room |');
-  L.push('| --- | --- | --- | --- | --- | --- | --- |');
-  L.push(`| ${staging.n} | ${fmt(staging.nearest)} m | ${fmt(staging.spacing)} m | ${(staging.coverage * 100).toFixed(1)}% | ${(staging.rasterisedFrac ?? 0).toFixed(3)} | ${staging.bodiesOnScreen} | ${staging.room} |`);
+  L.push('| bodies gathered | sim frames | nearest | distances (m) | coverage | rasterised | bodies on screen | room |');
+  L.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+  L.push(`| ${staging.gathered ?? '—'}/${staging.n} | ${staging.frames ?? '—'} | ${fmt(staging.nearest)} m | ${(staging.distances ?? []).join(' ')} | ${(staging.coverage * 100).toFixed(1)}% | ${((staging.rasterised ?? 0) * 100).toFixed(1)}% | ${staging.bodiesOnScreen} | ${staging.room} |`);
   L.push('');
-  if (staging.ladder?.length) {
-    const key = (r) => (r.dist !== undefined ? `${r.dist} m` : `${r.nearest}/${r.spacing}`);
-    L.push(`Ladder tried (camera dist -> coverage): ${staging.ladder.map((r) => `${key(r)} -> ${(r.coverage * 100).toFixed(1)}%`).join(', ')}`);
+  if (staging.search?.length) {
+    const top = [...staging.search].sort((p, q) => q.coverage - p.coverage).slice(0, 3);
+    L.push(`Camera search (yaw offset / pitch -> coverage), best three of ${staging.search.length}: ${top.map((r) => `${r.dyaw}/${r.pitch} -> ${(r.coverage * 100).toFixed(1)}%`).join(', ')}`);
     L.push('');
   }
   const phases = [...new Set(summary.groups.map((g) => g.phase))];
@@ -336,201 +289,122 @@ export function assertMeleeWounds(record, opts = {}) {
 // stageMelee — browser-driving
 // ---------------------------------------------------------------------------
 
-/** Camera framing ladder: distances (m) from the camera to the NEAREST ROW,
- *  tried first-to-last, keeping the rung with the highest settled coverage.
- *  The BODIES never move during the search — placement happens once (see
- *  stageMelee) and only the player pose steps back and forth, exactly like
- *  the close-up stage's tryPose ladder. Re-aiming bodies between rungs was
- *  tried and failed: canTravel refuses hops into the packed arc, so rungs
- *  silently read bit-identical stale coverage. */
-export const MELEE_LADDER = [1.0, 0.9, 1.15, 1.3, 1.5];
-
-/** Aim height (m) for the staged pose: chest height, so the crush fills the
- *  frame with the bodies' expensive middle rather than the floor. */
-const AIM_Y = 1.1;
+/** Camera search after the gather: yaw offsets (radians, around the direction of the
+ *  bodies' centroid) x pitches. The best settled flesh coverage wins. */
+export const MELEE_YAWS = [0, -0.2, 0.2, -0.4, 0.4, -0.6, 0.6];
+export const MELEE_PITCHES = [-0.12, -0.22, -0.04];
 
 /**
- * Stage the melee scene: the room's BOOT bodies moved ONCE into a tight
- * staggered arc (a crush — bodies overlap on screen), then the camera
- * ladder-searched for the highest settled flesh coverage of the march target.
+ * Stage the melee scene by LETTING THE GAME BUILD IT: stand the player with their back
+ * near a wall of the room, thaw the cast, and step the sim until `n` bodies have walked
+ * to within `gatherRadius` of the player (or `maxFrames` pass). Then freeze, and search
+ * a small yaw x pitch fan for the framing with the highest settled flesh coverage.
  *
- * WHY BOOT BODIES, NOT SPAWNED ONES (measured 2026-09-21, probes in
- * docs/dev-notes/2026-09-21-melee-harness/NOTES.md): a body added after boot
- * through spawnDebugCharacter renders its skeleton meshes but NEVER marches
- * flesh — and worse, ONE spawn dropped the WHOLE scene's flesh hits to zero
- * (base h 16486 -> 0 with the proxy raster unchanged), recovering on no seam
- * poke (depth-gate re-show, visible force, dispatch re-stamp). The shipped
- * game spawns every actor at boot, so it never hits this; the harness must
- * not either. Boot bodies march fine in every room.
+ * WHY NOT PLACE THE BODIES (both tried 2026-09-21, both dead ends):
+ *   * spawnDebugCharacter / spawnCrowd after boot: the new crowd type attaches
+ *     (`zombie@1:4` in crowdInfo) but its bodies never march flesh — occupancy hits
+ *     stayed bit-identical for 170 s. The shipped game spawns every actor at boot.
+ *   * zombieNudge on boot bodies: moves the SIM position, but a frozen cast pins the
+ *     view upload (flesh kept drawing 6.6 m away), and after a thaw the bodies drew as
+ *     floating torsos at the wrong range — hull/shell bounds and view state do not
+ *     follow a teleport. nudge is also canTravel-gated, so long hops silently refuse.
+ * Bodies that WALK in go through every normal tick, so everything the renderer keeps
+ * per body is valid — and the frame is the real thing: attack poses, reaching arms,
+ * bodies overlapping. With `?seed=1` and a fixed step count the gather is repeatable.
  *
- * HOW THE BODIES MOVE. zombieNudge(id, dx, dz) is the sanctioned placement
- * seam, but it REFUSES a hop when the room's navigation canTravel() says no
- * or the hop lands in furniture — so a long teleport-by-nudge silently
- * fails. stageMelee walks each body to its slot in SHORT hops (<= 0.6 m,
- * re-reading the true position each hop, jittering the heading when a hop is
- * refused) and VERIFIES the landing: bodies that never arrive are reported
- * in placement (err), never silently trusted.
+ * opts: room (6 = the arena: 16x16 m, boots 8 zombies), n (6), gatherRadius (3.0),
+ * maxFrames (2400 = 40 s of sim; the far wall is a 12 m walk for the arena cast), wallInset (0.9 m — how far from the wall the player
+ * stands), settleTries.
  *
- * THE ATLAS RACE. Each crowd type's colour atlas flushes lazily on its first
- * need; reads before the flush show proxy boxes with ZERO flesh hits for
- * that type (the same 0-hits signature as the spawn poison). warmTypes
- * therefore polls crowdInfo() until every attached type has flushed before
- * the first measurement.
- *
- * opts: room (default 6 — the arena: the only 16x16 m room, the horde room,
- * and the room whose north spawn band gives 6+ boot bodies within short nudge
- * range of one arc), n (6; the room must BOOT that many bodies), rows
- * (default 3 for n >= 5 else 2 — a crush, not a firing squad), spacing
- * (default 0.65 — bodies overlap on screen; the brief IS several bodies
- * close together), nearest (default 1.4 — the nearest row's distance from
- * the player anchor), playerX/playerZ/playerYaw (the arc anchor; default:
- * the teleport(room) centre, yaw kept), ladder (camera distances),
- * settleTries (env MELEE_SETTLE_TRIES; a FIRST cold boot wants 2400), fail.
- *
- * Returns the staging record: { n, room, enclosure, dist (kept camera
- * distance), coverage, rasterised, bodiesOnScreen, pose, ids, placement,
- * ladder }.
+ * Returns { n, room, gathered, frames, nearest, distances, coverage, rasterised,
+ *           bodiesOnScreen, pose, ids (nearest first), search }.
  */
 export async function stageMelee(evaluate, opts = {}, fail = failHard) {
   const room = opts.room ?? 6;
   const n = opts.n ?? 6;
-  const rows = opts.rows ?? (n >= 5 ? 3 : 2);
-  const spacing = opts.spacing ?? 0.65;
-  const nearest = opts.nearest ?? 1.4;
+  const gatherRadius = opts.gatherRadius ?? 3.0;
+  const maxFrames = opts.maxFrames ?? 2400;
+  const wallInset = opts.wallInset ?? 0.9;
   const settleTries = Number(opts.settleTries ?? process.env.MELEE_SETTLE_TRIES ?? 30);
-  const ladder = opts.ladder ?? MELEE_LADDER;
-  // Node-side layout: the pure meleeLayout is the single source of the arc,
-  // and the page receives finished ground offsets (no JS duplicate to drift).
-  const points = meleeLayout(n, { nearest, spacing, rows });
-  const playerX = opts.playerX ?? null;
-  const playerZ = opts.playerZ ?? null;
-  const playerYaw = opts.playerYaw ?? null;
   const staged = await evaluate(`(async () => {
     const n = ${n};
-    const points = ${JSON.stringify(points)};
-    const ladder = ${JSON.stringify(ladder)};
-    const AIM_Y = ${AIM_Y};
-    const roomOk = __sdfGame.teleport(${room});
-    if (!roomOk) return { error: 'teleport(${room}) refused — no such room' };
-    __sdfGame.freeze(true);
-    const p0 = __sdfGame.pose();
-    const px = ${JSON.stringify(playerX)} ?? p0.pos[0];
-    const pz = ${JSON.stringify(playerZ)} ?? p0.pos[2];
-    const pyaw = ${JSON.stringify(playerYaw)} ?? p0.yaw;
-    const aimPose = (dist) => {
-      // The camera stands ` + '`' + `dist` + '`' + ` m BEHIND the nearest row: pull the anchor
-      // back along +forward (forward is -z at yaw 0, so behind is +z).
-      const bx = px - Math.sin(pyaw) * dist;
-      const bz = pz + Math.cos(pyaw) * dist;
-      const pitch = Math.atan2(AIM_Y - 1.62, dist);
-      __sdfGame.setPose(bx, bz, pyaw, pitch, 0);
-      return { pos: [bx, bz], yaw: pyaw, pitch };
-    };
-    aimPose(1.5); // park the camera back from the start: bodies hop in while the player stands clear
-    const enclosure = __sdfGame.placePlayer({ x: px, z: pz, yaw: pyaw, pitch: 0 });
-    // Boot cast of this room.
+    if (!__sdfGame.teleport(${room})) return { error: 'teleport(${room}) refused — no such room' };
+    const r = __sdfGame.rooms.find((x) => x.id === ${room});
+    if (!r) return { error: 'room ${room} not in __sdfGame.rooms' };
     const boot = __sdfGame.zombies().filter((q) => q.room === ${room});
-    if (boot.length < n) {
-      return { error: 'room ' + ${room} + ' boots only ' + boot.length + ' bodies, want ' + n
-        + ' — spawned bodies do not march flesh (2026-09-21 probe); lower MELEE_BODIES or pick a room with a bigger boot cast' };
+    if (boot.length < n) return { error: 'room ${room} boots only ' + boot.length + ' bodies, want ' + n + ' (spawned bodies do not march; lower MELEE_BODIES)' };
+    // Back to the wall FARTHEST from the cast's centroid, so everybody arrives from the front.
+    const b = r.bounds;
+    const cx0 = boot.reduce((a, q) => a + q.pos[0], 0) / boot.length;
+    const cz0 = boot.reduce((a, q) => a + q.pos[2], 0) / boot.length;
+    const midX = (b.minX + b.maxX) / 2, midZ = (b.minZ + b.maxZ) / 2;
+    const walls = [
+      { x: midX, z: b.maxZ - ${wallInset} }, { x: midX, z: b.minZ + ${wallInset} },
+      { x: b.maxX - ${wallInset}, z: midZ }, { x: b.minX + ${wallInset}, z: midZ },
+    ];
+    walls.sort((p, q) => Math.hypot(q.x - cx0, q.z - cz0) - Math.hypot(p.x - cx0, p.z - cz0));
+    const px = walls[0].x, pz = walls[0].z;
+    // The page's forward is (sin yaw, -cos yaw).
+    const yawTo = (tx, tz) => Math.atan2(tx - px, -(tz - pz));
+    __sdfGame.placePlayer({ x: px, z: pz, yaw: yawTo(cx0, cz0), pitch: 0 });
+    const dists = () => __sdfGame.zombies().filter((q) => q.room === ${room})
+      .map((q) => ({ id: q.id, d: Math.hypot(q.pos[0] - px, q.pos[2] - pz), pos: q.pos }))
+      .sort((p, q) => p.d - q.d);
+    __sdfGame.freeze(false);
+    let frames = 0;
+    while (frames < ${maxFrames}) {
+      __sdfGame.step(30);
+      frames += 30;
+      // Hold the player on the spot: a shove from a body must not move the measured scene.
+      __sdfGame.placePlayer({ x: px, z: pz, yaw: yawTo(cx0, cz0), pitch: 0 });
+      const d = dists();
+      if (d.length >= n && d[n - 1].d <= ${gatherRadius}) break;
     }
-    // WARM THE TYPES: every attached crowd type's atlas must have flushed at
-    // least once, or that type's bodies rasterise proxies with zero hits.
-    for (let i = 0; i < 90; i++) {
-      const ci = __sdfGame.crowdInfo();
-      const pending = ci.types.filter((t) => t.attached > 0 && t.atlasFlushes === 0);
-      if (pending.length === 0) break;
-      __sdfGame.step(6);
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    // Gentle verified hop toward (tx, tz); returns the landed residual. A
-    // refused hop retries with a rotated heading (canTravel/furniture reject
-    // straight lines through blocked cells; a sidestep often passes).
-    const hopTo = (id, tx, tz) => {
-      const MAX_HOP = 0.6;
-      let cur = __sdfGame.zombies().find((q) => q.id === id);
-      for (let hop = 0; hop < 60; hop++) {
-        const dx = tx - cur.pos[0], dz = tz - cur.pos[2];
-        const dist = Math.hypot(dx, dz);
-        if (dist < 0.12) break;
-        const step = Math.min(MAX_HOP, dist);
-        const ux = dx / dist, uz = dz / dist;
-        const before = [cur.pos[0], cur.pos[2]];
-        __sdfGame.zombieNudge(id, ux * step, uz * step);
-        __sdfGame.step(1);
-        cur = __sdfGame.zombies().find((q) => q.id === id);
-        if (Math.hypot(cur.pos[0] - before[0], cur.pos[2] - before[1]) < step * 0.25) {
-          for (const ang of [0.7, -0.7, 1.4, -1.4]) {
-            const jx = Math.cos(ang) * ux - Math.sin(ang) * uz;
-            const jz = Math.sin(ang) * ux + Math.cos(ang) * uz;
-            __sdfGame.zombieNudge(id, jx * step, jz * step);
-            __sdfGame.step(1);
-            cur = __sdfGame.zombies().find((q) => q.id === id);
-            if (Math.hypot(cur.pos[0] - before[0], cur.pos[2] - before[1]) >= step * 0.25) break;
-          }
-        }
-      }
-      return Math.hypot(tx - cur.pos[0], tz - cur.pos[2]);
-    };
-    // Pair slots to boot bodies greedily by world distance, then hop each
-    // body to its slot ONCE. Slots landing > 0.45 m off are reported.
-    const slots = points
-      .map((pt, i) => ({ i, wx: px + pt.x, wz: pz + pt.z }))
-      .sort((a, b) => (Math.hypot(a.wx - px, a.wz - pz) - Math.hypot(b.wx - px, b.wz - pz)));
-    const pool = boot.map((q) => ({ id: q.id, pos: q.pos }));
-    const pair = [];
-    for (const s of slots) {
-      let bi = -1, bd = Infinity;
-      for (let k = 0; k < pool.length; k++) {
-        const d = Math.hypot(pool[k].pos[0] - s.wx, pool[k].pos[2] - s.wz);
-        if (d < bd) { bd = d; bi = k; }
-      }
-      pair.push({ slot: s.i, id: pool[bi].id });
-      pool.splice(bi, 1);
-    }
-    const placement = [];
-    for (const p of pair) {
-      const pt = points[p.slot];
-      const err = await hopTo(p.id, px + pt.x, pz + pt.z);
-      placement.push({ id: p.id, err: +err.toFixed(3) });
-    }
-    const ids = pair.map((p) => p.id);
+    __sdfGame.freeze(true);
+    __sdfGame.step(2);
+    const near = dists().slice(0, n);
+    const gathered = near.filter((q) => q.d <= ${gatherRadius}).length;
+    const gx = near.reduce((a, q) => a + q.pos[0], 0) / near.length;
+    const gz = near.reduce((a, q) => a + q.pos[2], 0) / near.length;
+    const baseYaw = yawTo(gx, gz);
     const SETTLE_TRIES = ${settleTries};
     const settledOcc = async () => {
       let occ = await __sdfGame.occupancy();
       let prevSig = null;
       for (let t = 0; t < SETTLE_TRIES && !(occ.rasterised > 0 && occ.hits + ':' + occ.rasterised === prevSig); t++) {
         prevSig = occ.hits + ':' + occ.rasterised;
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((res) => setTimeout(res, 250));
         occ = await __sdfGame.occupancy();
       }
       return occ;
     };
     let best = null;
-    const ladderOut = [];
-    for (const dist of ladder) {
-      aimPose(dist);
-      __sdfGame.step(4);
-      const occ = await settledOcc();
-      if (!(occ.rasterised > 0)) return { error: 'occupancy never went live on the ladder (cold compile? MELEE_SETTLE_TRIES=2400)' };
-      const cov = occ.hits / (occ.targetW * occ.targetH);
-      ladderOut.push({ dist, coverage: cov, bodiesOnScreen: occ.bodiesOnScreen });
-      if (!best || cov > best.cov) best = { dist, cov, occ };
+    const search = [];
+    for (const dyaw of ${JSON.stringify(MELEE_YAWS)}) {
+      for (const pitch of ${JSON.stringify(MELEE_PITCHES)}) {
+        __sdfGame.setPose(px, pz, baseYaw + dyaw, pitch, 0);
+        __sdfGame.step(3);
+        const occ = await settledOcc();
+        if (!(occ.rasterised > 0)) return { error: 'occupancy never went live in the camera search (cold compile? MELEE_SETTLE_TRIES=2400)' };
+        const cov = occ.hits / (occ.targetW * occ.targetH);
+        search.push({ dyaw, pitch, coverage: +cov.toFixed(4), bodiesOnScreen: occ.bodiesOnScreen });
+        if (!best || cov > best.cov) best = { dyaw, pitch, cov, occ };
+      }
     }
-    aimPose(best.dist);
-    __sdfGame.step(2);
+    __sdfGame.setPose(px, pz, baseYaw + best.dyaw, best.pitch, 0);
+    __sdfGame.step(3);
     return {
-      n, room: ${room}, enclosure,
-      dist: best.dist, nearest, spacing,
+      n, room: ${room}, gathered, frames,
+      nearest: +near[0].d.toFixed(2),
+      distances: near.map((q) => +q.d.toFixed(2)),
       coverage: best.cov,
       rasterised: best.occ.rasterised / (best.occ.targetW * best.occ.targetH),
       bodiesOnScreen: best.occ.bodiesOnScreen,
       pose: __sdfGame.pose(),
-      ids,
-      placement,
-      ladder: ladderOut,
+      ids: near.map((q) => q.id),
+      search,
     };
-  })()`);
+  })()`, 600_000);
   if (staged.error) fail(staged.error);
   return staged;
 }
