@@ -156,3 +156,53 @@ Reading it:
   under 3 m, 3.5 ms beyond 6 m).
 - Gib/shutter blur is cheap on average and spiky: p95 19.6 ms in hot frames.
 - Fire is a steady 2–3 ms while anything burns, p95 6.3.
+
+## GPU ms under a frame cap is NOT a measure of work (2026-09-21) — read this before trusting any GPU number above
+
+Controlled A/B of the visual-actor cull (one page, frozen scene, crowd program
+ready, cull toggled every 4 s, recorder on):
+
+| 30 fps cap, block medians | busy | march | shell | post+upscale |
+| --- | --- | --- | --- | --- |
+| off | 11.7 | 6.7 | 1.8 | 1.8 |
+| on | 18.9 | 10.2 | 4.2 | 3.1 |
+| off | 12.1 | 6.8 | 2.3 | 1.7 |
+| on | 18.9 | 10.3 | 4.2 | 3.0 |
+| off | 15.3 | 8.9 | 2.3 | 2.9 |
+| on | 18.8 | 10.2 | 4.2 | 3.0 |
+| off | 18.7 | 10.2 | 4.2 | 3.0 |
+| on | 18.9 | 10.2 | 4.2 | 3.1 |
+
+EVERY pass scales by the same ~1.55x, including the post chain the cull cannot
+touch, and the "off" blocks drift up until they equal "on". Identical work,
+two durations: **the GPU changes clock under the cap** (Apple GPU power
+governor — light load, lower clock, longer passes). Uncapped
+(`__sdfGame.setFrameCap(0)`) the same A/B is flat: busy 13.2 off vs 13.4 on,
+every block within 0.5 ms.
+
+Consequences:
+- `gpu.busyMs` in a capped recording is ELASTIC: the GPU stretches work into the
+  time it has. "GPU busy 19–21 ms of 33" does NOT mean 60% utilised at full
+  clock; the same frames may be ~12–13 ms of real work. Real headroom is larger
+  than the baseline tables suggest. GPU-bound episodes (busy > interval, idle ~
+  0) are still real — the clock is at max there.
+- **Never compare GPU ms across sessions, or across capped blocks.** For a GPU
+  A/B: one page, `setFrameCap(0)`, alternate the seam, compare block medians.
+  Pass SHARES within one frame are still meaningful; absolute ms are not.
+- This is very likely the "whole-frame results vary between runs" that stalled
+  the 09-17 perf pass, and why my headless runs read 12.8 vs 23.6 ms for one scene.
+- CPU spans are unaffected (they were the same in both modes).
+
+### Visual-actor cull: the measured saving (honest version)
+
+- CPU, owner recording vs baseline: tick 6.1 -> 4.7 ms p50 (`tick:occluder-hull`
+  1.6 -> 0.5, `tick:burn-kit-viewtime` 1.6 -> 0.6). Controlled A/B: draw CPU
+  -0.7 to -1.0 ms (`cpu:sdf:polys` 4.1 -> 3.3, `skeleton-mesh` 0.7 -> 0.4).
+  **Total ~1.5–2 ms CPU — not the 4–6 ms I estimated.** Hiding 320 meshes saves
+  little because three already frustum-culled most of them cheaply; the
+  remaining ~500 meshes x 3 passes are the cost.
+- GPU: no measurable change at full clock (13.2 vs 13.4 ms). March and
+  shell-hull trade ~0.9 ms between them (exclusive attribution of adjacent
+  passes); their sum is identical.
+- Owner sessions were not comparable anyway: the "after" session was heavier
+  (mean bodies 3.8 -> 4.6, coverage 0.36 -> 0.43, frames under 2 m 20% -> 34%).

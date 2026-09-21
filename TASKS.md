@@ -31,8 +31,10 @@
   (main + 2 shadow maps): 426 un-instanced skeleton segment meshes for ALL 23 actors, 147 level meshes.
   **Visual-actor cull: DONE (`caed76d7`, 2026-09-21)** — [notes](docs/dev-notes/2026-09-20-visual-actor-cull/NOTES.md). Skeleton meshes, live hulls,
   wound exclusions and view-time follow a padded view cone + the march cull's sight test; sim untouched; `?visualcull=0` A/B.
-  Visual set 23 -> 5-6, visible meshes ~818 -> ~497, gate canonical. **Frame-time saving not yet measured — owner recording
-  vs the `03-12-07` baseline.** Also fixed: the peek bug (`584690a0`, per-cluster line of sight) and march-hash hashing the
+  Visual set 23 -> 5-6, visible meshes ~818 -> ~497, gate canonical. **Measured: ~1.5-2 ms CPU (tick 6.1 -> 4.7; draw -0.7..-1.0),
+  GPU unchanged at full clock — well short of my 4-6 ms estimate.** **METHOD WARNING: GPU ms under the 30 fps cap is elastic (the
+  GPU downclocks; same work read 11.7 vs 18.9 ms). GPU A/Bs must run in ONE page with `setFrameCap(0)`; never compare GPU ms
+  across sessions** ([notes](docs/dev-notes/2026-09-20-telemetry-v3/NOTES.md)). Also fixed: the peek bug (`584690a0`, per-cluster line of sight) and march-hash hashing the
   per-body fallback (`5d7f6a18`). Next: the one-body march floor experiment (~8 ms of `sdf:march` is independent of body count).
   Open: cold GIB background compile can hit its 180 s timeout and settle `failed` -> no gib chunks that session; warm `plate`,
   `flame-cards`, explosion materials at boot; per-sever `gib-asset-*` material rebuild; first dynamite gib 33-56 ms; `sdBody` `prims.slice`.
