@@ -20,6 +20,9 @@
 - [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](docs/dev-notes/2026-09-18-march-split/NOTES.md)).
+- [x] **Melee close-up perf harness (2026-09-21):** `scripts/sdf-game-melee-bench.sh` — [notes](docs/dev-notes/2026-09-21-melee-harness/NOTES.md). The arena's cast WALKS to the
+  player, freeze, then clean -> wounded -> wounded+fire with alternating seam legs (`MELEE_LEGS` injects more). Quiet run: frame 17.0 / 22.8 / **36.7 ms**, march 13.2 / 19.3 / 27.7 —
+  reproduces the owner's GPU-bound episode. Miss rays are 46-50 % of walk steps there. Found: bodies spawned after boot never march (debug-spawn bug?); `applyShipDefaults` is not ship.
 - [~] **Telemetry v3 + CPU frame attribution (2026-09-20).** [Notes](docs/dev-notes/2026-09-20-telemetry-v3/NOTES.md). Recordings now
   carry `selfPhases`, `unattributedCpuMs` (was ~half the frame, now 0), region + per-pass CPU laps, and auto `long-frame` /
   `shader-build` (r186 `onNodeBuilderCreated`) / `flare-shot` events. **Finding: `cpu:sdf:polys` is 5.0 of a 7.6 ms draw — the
@@ -35,7 +38,11 @@
   GPU unchanged at full clock — well short of my 4-6 ms estimate.** **METHOD WARNING: GPU ms under the 30 fps cap is elastic (the
   GPU downclocks; same work read 11.7 vs 18.9 ms). GPU A/Bs must run in ONE page with `setFrameCap(0)`; never compare GPU ms
   across sessions** ([notes](docs/dev-notes/2026-09-20-telemetry-v3/NOTES.md)). Also fixed: the peek bug (`584690a0`, per-cluster line of sight) and march-hash hashing the
-  per-body fallback (`5d7f6a18`). Next: the one-body march floor experiment (~8 ms of `sdf:march` is independent of body count).
+  per-body fallback (`5d7f6a18`). **March floor experiment DONE** ([notes](docs/dev-notes/2026-09-21-march-floor/NOTES.md)): normalised to
+  a constant clock, one body is 15.7 ms full-screen -> 4.7 ms at 3% of screen (raw ms hid this); floor ~5-7 ms = `sdf:shell-hull`
+  ~3.7 ms FIXED + a per-TARGET-pixel share of the march; steps / spot shadow / temporal start do nothing; the shell costs
+  +1..+4 ms with one body, saves ~0.6 ms with 4-5, and is not pixel-neutral. **Owner ruled out lowering march resolution
+  (too noticeable).** No cheap 4-5 ms found in the march; open, unsized: MRT diet (3x rgba32float), cheaper hull targets.
   Open: cold GIB background compile can hit its 180 s timeout and settle `failed` -> no gib chunks that session; warm `plate`,
   `flame-cards`, explosion materials at boot; per-sever `gib-asset-*` material rebuild; first dynamite gib 33-56 ms; `sdBody` `prims.slice`.
   Dead end: a magnification-aware fisheye filter does not recover 60/60 sharpness (the loss is sample density; a 3x upscaler is the lever).
