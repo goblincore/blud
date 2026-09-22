@@ -69,8 +69,11 @@ export interface FireVolumeTuning {
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
-  resolutionScale: 0.4,
-  steps: 48,
+  // 0.4 / 48 -> 0.3 / 24 (2026-09-22 flame-march cost study): post:fire-march -58 %
+  // (8.3 -> 3.4 ms in the panic-fire melee, loaded run). Owner: "looks worse but
+  // acceptable", to be dressed by post (shutter blur, heat distortion).
+  resolutionScale: 0.3,
+  steps: 24,
   tempGain: 2.0,
   rise: 0.45,
   curlStrength: 0.07,

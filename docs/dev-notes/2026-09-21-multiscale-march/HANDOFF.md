@@ -32,8 +32,9 @@ then the harness notes on the dispatch branch.
 - `counts2.z` modes now: 0 ship · 1 re-fold off (wrong frame, attribution only) · 2 raiser gate
   (`setOwnerRefoldGate`) · 3 CPU threat mask (`setOwnerRefoldMask`, includes 2). Both gates ship
   OFF. Gate: 14.95 -> 13.41 ms quiet, image inside the frame's own flicker. Mask: untimed.
-- OWNER DECISION: lowering march resolution is not acceptable in any form ("too noticeable").
-  Do not propose it. A reconstruction idea must not be a plain lower-res march.
+- ~~OWNER DECISION: lowering march resolution is not acceptable in any form.~~ **CORRECTED 2026-09-22 by the
+  owner:** that was a misunderstanding (it was about the adaptive-resolution feature). A lower march resolution is
+  fine if the reconstruction matches today's look — that is the open question, judged by eye.
 
 ## Next steps, in order
 
