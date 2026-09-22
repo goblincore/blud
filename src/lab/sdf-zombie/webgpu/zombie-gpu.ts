@@ -41,6 +41,10 @@ import {
   QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
 import { woundThreatMasks } from './wound-threat';
+
+/** The shipped owner re-fold mode (counts2.z): 2 = the raiser gate (map-body.wgsl.ts).
+ *  0 = the full re-fold it replaced; see game-seams-world.ts for the others. */
+export const SHIP_REFOLD_MODE = 2;
 import { marchNormalRead, marchAnchorRead } from './march-private-reads';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
@@ -311,7 +315,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  range, gated on nearWound. A NEW vec4 rather than a spare channel:
      *  counts was already full and woundCfg2.w is the volume hitEps
      *  override — NOT spare (see the woundShadowCfg note below). */
-    counts2: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    // counts2.z = owner re-fold mode; SHIP_REFOLD_MODE (2, the raiser gate) since
+    // 2026-09-21 — melee bench: -2.7 ms wounded, -3.6 ms wounded+fire; march-hash equal.
+    counts2: uniform(new THREE.Vector4(0, 0, SHIP_REFOLD_MODE, 0)),
     /** x melt progress 0..1 (zombie melt task 6), yzw spare. Drives the
      *  flesh-only wet-red albedo/gloss ramp in MARCH_BODY — the body goes red
      *  while still standing, before it visibly sags. 0 everywhere except a

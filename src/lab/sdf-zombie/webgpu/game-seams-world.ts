@@ -17,6 +17,7 @@ import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
 import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
 import { LIMB_ACCUMULATORS } from './march/limbs-flag';
+import { SHIP_REFOLD_MODE } from './zombie-gpu';
 
 /** counts2.z carries the re-fold mode in 0..4 plus 8 for the wound exact fixes. */
 const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => (a.view.uniforms.counts2.value.z > 7.5 ? 8 : 0);
@@ -265,17 +266,17 @@ export function createWorldSeams(ctx: GameContext) {
      *  wound (march.wgsl.ts, counts2.z). OFF renders a wrong frame on
      *  purpose; it exists to price the mechanism in the passes bench. */
     setOwnerRefold(on: boolean) {
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? 0 : 1; // a full reset: clears the exact-fix bit too (bench restore)
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? SHIP_REFOLD_MODE : 1; // on = SHIP (the gate) and a full reset: clears the exact-fix bit too (bench restore)
     },
     /** Owner re-fold RAISER GATE (counts2.z == 2, 2026-09-21): re-fold a limb only where a wound
      *  it does not own actually raised the field. Value-identical by construction; off = ship. */
     setOwnerRefoldGate(on: boolean) {
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 2 : 0) + exactBit(a);
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 2 : SHIP_REFOLD_MODE) + exactBit(a);
     },
     /** Owner re-fold THREAT MASK (counts2.z == 3, 2026-09-21): the raiser gate, narrowed per
      *  cluster by the CPU masks the body view uploads (wound-threat.ts). off = ship. */
     setOwnerRefoldMask(on: boolean) {
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 3 : 0) + exactBit(a);
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 3 : SHIP_REFOLD_MODE) + exactBit(a);
     },
     get ownerRefoldMask() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 2.5 && z < 3.5; },
     /** Owner re-fold PER-LIMB ACCUMULATORS (counts2.z == 4, option 4, 2026-09-21): each
@@ -288,7 +289,7 @@ export function createWorldSeams(ctx: GameContext) {
         console.warn('[sdf-game] setOwnerRefoldLimbs needs the page opened with ?limbs');
         return false;
       }
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 4 : 0) + exactBit(a);
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 4 : SHIP_REFOLD_MODE) + exactBit(a);
       return true;
     },
     get ownerRefoldLimbs() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 3.5; },
@@ -314,7 +315,12 @@ export function createWorldSeams(ctx: GameContext) {
       return ctx.world.actors.map(a => ({ id: a.id, margin: a.view.woundThreatMargin, masks: a.view.woundThreats?.() ?? [] })).filter(m => m.masks.length > 0);
     },
     get ownerRefoldGate() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 1.5 && z < 2.5; },
-    get ownerRefold() { return refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    get ownerRefold() { return refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) !== 1; },
+    /** The FULL re-fold (mode 0), the pre-2026-09-21 ship path, for A/B against the gate. */
+    setOwnerRefoldFull(on: boolean) {
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = (on ? 0 : SHIP_REFOLD_MODE) + exactBit(a);
+    },
+    get ownerRefoldFull() { return refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
     /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
      *  wound set once per pixel and fold only those. OFF is bit-identical. */
     setWoundList(on: boolean) {
