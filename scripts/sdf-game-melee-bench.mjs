@@ -397,6 +397,16 @@ for (const phase of PHASES) {
     console.log(`  burning: ${JSON.stringify(await ev('__sdfGame.burning().length'))} bodies tracked`);
   }
 
+  if (phase === 'noburn') {
+    // Fire study: zero every body's burn ramp in place (frozen: the burn system does not
+    // tick), keeping the fire phase's positions. Read back after two frames to prove it stuck.
+    const back = await ev(`(async () => {
+      for (const i of [0, 1, 2]) __sdfGame.setUniformAll('burnCfg', i, 0);
+      __sdfGame.step(2);
+      return __sdfGame.actorDump ? 'ok' : 'no-dump';
+    })()`);
+    console.log(`  burn ramps zeroed in place (${back})`);
+  }
   if (phase === 'out') {
     // Fire study: put every fire out WITHOUT moving anyone (still frozen), so the
     // fire phase's framing is kept and only the burning goes away.
