@@ -1741,6 +1741,7 @@ export function createCrowdMaterial(
     perfCfg: u.perfCfg,
     inst: crowd.inst as never,
     instCfg: crowd.instCfg,
+    aaCfg: u.aaCfg,
   }) as unknown as { div: (d: unknown) => unknown };
   const depthPreMaterial = new MeshBasicNodeMaterial();
   if (quad) {
@@ -2512,6 +2513,7 @@ export function createZombieGpuView(
       perfCfg: u.perfCfg,
       inst: records.node as never,
       instCfg,
+      aaCfg: u.aaCfg,
     }) as unknown as { div: (d: unknown) => unknown };
     depthPreMaterial = new MeshBasicNodeMaterial();
     depthPreMaterial.side = THREE.BackSide;

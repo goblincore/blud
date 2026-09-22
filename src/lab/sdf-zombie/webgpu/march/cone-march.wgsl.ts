@@ -110,7 +110,12 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // early hands that band back to the full march, which walks it
     // conservative and hits the bumps properly. Zero when the shell is off,
     // so the undisplaced behaviour is bit-identical.
-    if (d < r + 0.0012 + woundCfg2.z) { return t; }
+    // With the miss cull on, "no touch" must also mean "no block ray ACCEPTS a hit":
+    // the full march accepts d < max(hitEpsBase, t * aaK / distort) (distort >= 1),
+    // so a ray grazing a silhouette within that epsilon counts as a hit without
+    // crossing the surface. Widen the touch by the same worst case. Off: unchanged.
+    let acceptEps = select(0.0012, max(max(0.0012, woundCfg2.w), t * aaCfg.x * aaCfg.y), depthPreCfg.z > 0.5);
+    if (d < r + acceptEps + woundCfg2.z) { return t; }
     t = t + max(d - r, 0.0005) * marchCfg.y;
     if (t > tMax) { return tMax; }
   }
@@ -169,7 +174,8 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
   depthPreCfg: vec4<f32>,
   perfCfg: vec4<f32>,
   inst: ptr<storage, array<vec4<f32>>, read>,
-  instCfg: vec4<f32>
+  instCfg: vec4<f32>,
+  aaCfg: vec4<f32>
 ) -> f32 {
   // QUAD DISPATCH (stage a-2). A quad-mode crowd draws ONE screen quad and
   // hands this entry the reconstructed pixel ray as worldPos, so the coarse
