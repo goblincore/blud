@@ -8,6 +8,7 @@
 // LAZY BY DESIGN: the registry allocates no BurnState until the first ignite,
 // and the flame cards are not even created until then, so a session that never
 // selects slot 3 and never calls igniteAll() pays for none of it.
+import { burnBehaviourEnabled } from '../burn-behaviour';
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
@@ -372,7 +373,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
       // 0.02 floor is pushFlashes' own "actually on fire" threshold.
       burnCur.clear();
       burning.forEachActive((a, s) => { if (s.burn > 0.02) burnCur.add(a); });
-      for (const a of burnCur) if (!burnPrev.has(a)) a.setBurning(true);
+      for (const a of burnCur) if (!burnPrev.has(a) && burnBehaviourEnabled()) a.setBurning(true);
       for (const a of burnPrev) if (!burnCur.has(a)) a.setBurning(false);
       const swap = burnPrev; burnPrev = burnCur; burnCur = swap;
       let any = false;

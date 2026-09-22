@@ -44,6 +44,13 @@ export const BURN_BEHAVIOUR = Object.freeze({
   flailGain: 1.8,
 });
 
+/** STUDY SWITCH (2026-09-22, fire-cost study): false = bodies burn VISUALLY but keep
+ *  behaving as unburnt (no speed-up, jitter, stumble or flail), so the fire's render
+ *  cost can be compared against the same motion without fire. Ship: true. */
+let burnBehaviourOn = true;
+export const setBurnBehaviourEnabled = (on: boolean) => { burnBehaviourOn = on; };
+export const burnBehaviourEnabled = () => burnBehaviourOn;
+
 export interface BurnPanicState { rng: number; nextRepick: number; swing: number; nextStumble: number; t: number; phase: number }
 
 function next(s: BurnPanicState): number {          // mulberry32

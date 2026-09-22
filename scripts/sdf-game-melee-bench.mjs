@@ -373,8 +373,10 @@ for (const phase of PHASES) {
     await ev('__sdfGame.step(120)');
     woundRec = rec;
   }
-  if (phase === 'wounded+fire' || phase === 'fire' || phase === 'thaw') {
+  if (phase === 'wounded+fire' || phase === 'fire' || phase === 'thaw' || phase === 'firecalm') {
     const ignite = phase !== 'thaw';
+    // 'firecalm': burn visually, behave unburnt (setBurnBehaviour(false)) — same motion as 'thaw'.
+    if (phase === 'firecalm') await ev('__sdfGame.setBurnBehaviour(false)');
     console.log(ignite ? '\n=== igniting the crowd ===' : '\n=== thawing (no fire) ===');
     // FIRE NEEDS THE SIM RUNNING (measured 2026-09-21): igniteAll() on a frozen cast marks
     // 23 bodies burning but no `post:fire-march` pass ever appears; after a thaw it does
@@ -413,6 +415,11 @@ for (const phase of PHASES) {
     await ev('(() => { __sdfGame.extinguishAll(); __sdfGame.step(3); return 1; })()');
     console.log(`  burning after extinguish: ${JSON.stringify(await ev('__sdfGame.burning().length'))}`);
   }
+  // Render-state fingerprint per phase (fire study): what the controller and layer are doing.
+  console.log(`  state: ${JSON.stringify(await ev(`(() => { const g = __sdfGame; return {
+    sdfScale: g.sdfScale, adaptive: g.adaptive, halfRate: g.halfRate, marchSteps: g.marchSteps,
+    upscale: g.upscaleInfo ? g.upscaleInfo() : null, frozen: g.frozen, bodies: g.bodiesOnScreen ? g.bodiesOnScreen() : null,
+    chunks: g.chunkStats ? g.chunkStats() : null }; })()`))}`);
   console.log(`\n=== ${phase} ===`);
   const names = legNames(phase);
   for (let rep = 0; rep < REPS; rep++) {
