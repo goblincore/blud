@@ -66,6 +66,10 @@ export interface FireVolumeTuning {
   /** Flame strength left right around the head (0..1), from EVERY limb's
    *  sheet: the shoulder flame otherwise climbs over the face. */
   headClear: number;
+  /** FLAME STREAK (2026-09-22): the composite smears the flame buffer vertically over
+   *  this many OUTPUT pixels (symmetric, 7 taps) — a long-exposure rising-flame look that
+   *  also hides the cheaper march's grain. 0 = one sample (the pre-streak composite). */
+  streakPx: number;
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
@@ -93,6 +97,7 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   skin: 0.3,
   headRise: 1,
   headClear: 1,
+  streakPx: 0,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider
@@ -120,6 +125,7 @@ export const FIRE_VOLUME_BOUNDS: Readonly<Record<keyof FireVolumeTuning, readonl
     skin: [0, 1],
     headRise: [0, 1.5],
     headClear: [0, 1],
+    streakPx: [0, 64],
   });
 
 const FIRE_VOLUME_FIELDS = Object.keys(FIRE_VOLUME_TUNING) as (keyof FireVolumeTuning)[];

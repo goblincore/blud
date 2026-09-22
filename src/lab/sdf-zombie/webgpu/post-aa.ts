@@ -1056,6 +1056,8 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const uFireBoundsMin = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uFireBoundsMax = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uFireNearFar = uniform(new THREE.Vector4(0.05, 60, 0, 0));
+  // x = flame streak half-length in UV (tuning streakPx / output height / 2).
+  const uFireStreak = uniform(new THREE.Vector4(0, 0, 0, 0));
   // fireTarget is the low-res march (Linear so the resolve can upsample it);
   // round 2b runs the history/resolve at the SAME low resolution (the field is
   // low-frequency, so a full-res resolve only bought pixels) and the composite
@@ -1127,6 +1129,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     fireTex: fireResolvedTex,
     fireSamp: fireResolvedTex,
     texCoord: uv(),
+    streak: uFireStreak,
   }) as unknown as Swizzled;
   const fireCompositeMat = new MeshBasicNodeMaterial();
   fireCompositeMat.name = 'post:fire-composite';
@@ -1934,6 +1937,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       uFireBoundsMin.value.set(u.boundsMin[0], u.boundsMin[1], u.boundsMin[2], 0);
       uFireBoundsMax.value.set(u.boundsMax[0], u.boundsMax[1], u.boundsMax[2], 0);
       uFireNearFar.value.set(uFireCfg3.value.z, uFireCfg3.value.w, 0, 0);
+      {
+        const outH = Math.max(1, fireTarget.height / Math.max(fireResolutionScale, 1e-3));
+        const sp = Number.isFinite(t.streakPx) ? Math.max(0, t.streakPx) : 0;
+        uFireStreak.value.set(sp / outH / 2, 0, 0, 0);
+      }
       uFireInvVp.value.copy(u.invViewProj);
       uFirePrevVp.value.copy(u.prevViewProj);
       // resolutionScale is live; a change resizes the low-res march target AND
