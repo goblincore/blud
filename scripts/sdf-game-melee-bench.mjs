@@ -354,7 +354,10 @@ async function stampWithRetry() {
 const rows = [];
 const phasesOut = {};
 let woundRec = null;
-for (const phase of ['clean', 'wounded', 'wounded+fire']) {
+// MELEE_PHASES (2026-09-22, fire study): e.g. 'clean,thaw,fire' — 'thaw' is the fire phase's
+// 45-frame thaw + restore WITHOUT igniting (movement alone), 'fire' ignites with no wounds.
+const PHASES = (process.env.MELEE_PHASES ?? 'clean,wounded,wounded+fire').split(',').map(x => x.trim());
+for (const phase of PHASES) {
   if (phase === 'wounded') {
     console.log('\n=== stamping the crowd ===');
     const { rec, plan, problems } = await stampWithRetry();
@@ -370,8 +373,9 @@ for (const phase of ['clean', 'wounded', 'wounded+fire']) {
     await ev('__sdfGame.step(120)');
     woundRec = rec;
   }
-  if (phase === 'wounded+fire') {
-    console.log('\n=== igniting the crowd ===');
+  if (phase === 'wounded+fire' || phase === 'fire' || phase === 'thaw') {
+    const ignite = phase !== 'thaw';
+    console.log(ignite ? '\n=== igniting the crowd ===' : '\n=== thawing (no fire) ===');
     // FIRE NEEDS THE SIM RUNNING (measured 2026-09-21): igniteAll() on a frozen cast marks
     // 23 bodies burning but no `post:fire-march` pass ever appears; after a thaw it does
     // (2 ms at one body) and it survives the re-freeze. So thaw briefly, holding the player
@@ -379,7 +383,7 @@ for (const phase of ['clean', 'wounded', 'wounded+fire']) {
     // thaw is short on purpose: burning zombies panic and run.
     await ev(`(() => {
       const p = ${JSON.stringify(staging.pose)};
-      __sdfGame.igniteAll();
+      if (${ignite}) __sdfGame.igniteAll();
       __sdfGame.freeze(false);
       for (let i = 0; i < ${FIRE_FRAMES}; i += 5) {
         __sdfGame.step(5);
