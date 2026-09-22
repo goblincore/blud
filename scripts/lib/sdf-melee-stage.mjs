@@ -576,3 +576,78 @@ export function missAnatomy(f32, w, h) {
     emptyBlocks,
   };
 }
+
+// ---------------------------------------------------------------------------
+// costCensus — pure (cost-weighted census, 2026-09-22)
+// ---------------------------------------------------------------------------
+
+/** WHERE THE WORK IS, not where the steps are. The step census over-ranked miss
+ *  rays: a step far from any body culls every cluster before evaluating a prim,
+ *  so it is nearly free (the miss cull removed 36-41 % of steps for ~0.5 ms).
+ *  This counts the inner-loop work instead, from two dense readbacks of the same
+ *  frame:
+ *    walk  = march debug mode 13 (before the discard; misses report)
+ *    total = mode 14 (after the whole post-hit chain; hits only)
+ *  Both: r = prim evaluations, g = wound rows walked, b = steps + 1000*hit +
+ *  2000*(hit near a wound). post = total - walk, on hits.
+ *
+ *  Pixel classes: miss; wound (hit near a wound); silhouette (other hit with a
+ *  non-hit 8-neighbour); interior (the rest). Per class: pixels, and the SHARE of
+ *  all prim work / all wound-row work that class accounts for, split walk/post,
+ *  plus per-pixel means. "Work" is reported both ways because a prim and a wound
+ *  row are not the same price; neither is timed here. */
+export function costCensus(walk, total, w, h) {
+  const n = w * h;
+  const cls = new Int8Array(n).fill(-1);            // -1 not rasterised, 0 miss, 1 interior, 2 silhouette, 3 wound
+  const hit = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const b = walk[i * 4 + 2];
+    // A real fragment took >= 1 step, so b >= 1; a never-rasterised texel holds the
+    // scene CLEAR colour (b ~ 0.01, not 0 — measured 2026-09-22).
+    if (!(b >= 0.5)) continue;
+    const code = Math.floor(b / 1000);
+    hit[i] = code >= 1 ? 1 : 0;
+    cls[i] = code >= 3 ? 3 : code >= 1 ? 1 : 0;
+  }
+  for (let i = 0; i < n; i++) {
+    if (cls[i] !== 1) continue;
+    const x = i % w, y = (i / w) | 0;
+    let edge = false;
+    for (let dy = -1; dy <= 1 && !edge; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h || !hit[ny * w + nx]) { edge = true; break; }
+    }
+    if (edge) cls[i] = 2;
+  }
+  const names = ['miss', 'interior', 'silhouette', 'wound'];
+  const acc = names.map(() => ({ px: 0, steps: 0, walkPrims: 0, walkRows: 0, postPrims: 0, postRows: 0 }));
+  for (let i = 0; i < n; i++) {
+    const c = cls[i];
+    if (c < 0) continue;
+    const o = i * 4, a = acc[c];
+    a.px++;
+    a.steps += walk[o + 2] % 1000;
+    a.walkPrims += walk[o];
+    a.walkRows += walk[o + 1];
+    if (hit[i] && total[o + 2] >= 0.5) {
+      a.postPrims += Math.max(0, total[o] - walk[o]);
+      a.postRows += Math.max(0, total[o + 1] - walk[o + 1]);
+    }
+  }
+  const sum = (k) => acc.reduce((s, a) => s + a[k], 0);
+  const P = sum('walkPrims') + sum('postPrims'), R = sum('walkRows') + sum('postRows');
+  const classes = Object.fromEntries(names.map((nm, c) => {
+    const a = acc[c];
+    return [nm, {
+      px: a.px,
+      primShare: { walk: P ? a.walkPrims / P : 0, post: P ? a.postPrims / P : 0 },
+      rowShare: { walk: R ? a.walkRows / R : 0, post: R ? a.postRows / R : 0 },
+      perPixel: {
+        steps: a.px ? a.steps / a.px : 0,
+        walkPrims: a.px ? a.walkPrims / a.px : 0, walkRows: a.px ? a.walkRows / a.px : 0,
+        postPrims: a.px ? a.postPrims / a.px : 0, postRows: a.px ? a.postRows / a.px : 0,
+      },
+    }];
+  }));
+  return { totals: { prims: P, rows: R, walkPrims: sum('walkPrims'), postPrims: sum('postPrims'), walkRows: sum('walkRows'), postRows: sum('postRows') }, classes };
+}

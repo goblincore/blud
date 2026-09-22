@@ -41,6 +41,17 @@ export const DEBUG_COUNTERS_BLOCK = /* wgsl */ `  // OCCUPANCY MODE (debugCfg.x 
   // This is what the bone-fold cull must move; the timing bench could not
   // resolve the fold at all (+0.0% under a 4% spread), so the counter is the
   // measurement and the bench is only a sanity check.
+  // COST CENSUS, WALK (debugCfg.x == 13, 2026-09-22). Raw counters for the
+  // ray WALK only, returned before the discard so misses report:
+  //   r = prim evaluations (foldGroup, incl. owner re-folds)
+  //   g = wound rows walked past applyWounds' reach test
+  //   b = steps + 1000 * hit + 2000 * (hit near a wound)
+  //   a = clip depth (see mode 4 — not a distance)
+  // Mode 14 returns the same counters after the whole post-hit chain; the
+  // difference is the shading cost. Only ever read back.
+  if (debugCfg.x > 12.5 && debugCfg.x < 13.5) {
+    return vec4<f32>(gDebugPrims, gDebugWoundRows, gDebugSteps + select(0.0, 1000.0, hit) + select(0.0, 2000.0, hit && hitNearWound), t);
+  }
   if (debugCfg.x > 4.5 && debugCfg.x < 5.5) {
     return vec4<f32>(gDebugBones, select(0.0, 1.0, hit), 1.0, t);
   }

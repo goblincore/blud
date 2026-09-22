@@ -170,7 +170,7 @@ struct MarchIn {
   wallPosY: vec3<f32>,
   wallNegZ: vec3<f32>,
   wallPosZ: vec3<f32>,
-  aaCfg: vec2<f32>,
+  aaCfg: vec4<f32>,
   debugCfg: vec2<f32>,
   // (tileHdr, tileEnt stay positional — storage pointers)
   tileCfg: vec4<f32>,

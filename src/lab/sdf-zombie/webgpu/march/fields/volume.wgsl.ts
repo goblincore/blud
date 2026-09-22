@@ -99,6 +99,8 @@ fn sampleHandVolume(pWorld: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: 
 var<private> gDebugMode: f32 = 0.0;
 var<private> gDebugPrims: f32 = 0.0;
 var<private> gDebugSteps: f32 = 0.0;
+// Wound rows walked past applyWounds' reach test (cost census, debug modes 13/14).
+var<private> gDebugWoundRows: f32 = 0.0;
 /** Bone-capsule evaluations this ray (gore r3 refinement 3). The bone fold
  *  has no spatial cull, so this is the number the cull has to move — and a
  *  counter is honest where a 0.0% timing delta under a 4% spread is not. */

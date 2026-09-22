@@ -59,7 +59,12 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   let debugNormal12 = debugCfg.x > 11.5 && debugCfg.x < 12.5;
   var nFD = n;
   if (!ngValid || debugNormal12) {
+    // NORMAL HINT (counts2.z + 32): the four taps re-fold only the limb that won
+    // at the hit (or none). They sit within a hair of the hit, so the decision
+    // only differs where a tap straddles a limb's exit from a foreign crater.
+    gNormalHint = select(-1.0, hitRefold, gInstCounts2.z > 31.5);
     nFD = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+    gNormalHint = -1.0;
   }
   if (!ngValid) {
     n = nFD;

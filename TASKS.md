@@ -122,7 +122,10 @@
 - [x] **Miss-ray culling — built, proven safe (0 hits lost), a LOSS (2026-09-22).** `setMissCull`, OFF. -36/-41 % walk steps saved only ~0.5 ms
   of march; the prepass costs 7-8 ms. **Miss steps are nearly free — rank levers by cost near surfaces, not step counts.** Found + fixed a latent
   prepass bug: the block cone was half as wide as its proof (be3ec43c). [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md).
-- [ ] **NEXT (close-up march):** cost near surfaces — per-step cost in wound zones and grazing silhouettes (a cost-weighted census, not a step count),
+- [x] **Cost-weighted census (2026-09-22)** — [notes](docs/dev-notes/2026-09-22-cost-census/NOTES.md). Debug modes 13/14 + `costCensus`. Wounded melee: wound-zone hits = 68 % of
+  prim work (post-hit 35 % > walk 32 %); grazing misses 1-4 px from a body ~200 prims/px (12-21 %); far misses ~9 prims/px (nearly free).
+- [ ] **NEXT (close-up march):** cheaper post-hit probes (AO/scatter) in wound zones, then the wound-zone walk, then grazing misses. Superseded plan below:
+  cost near surfaces — per-step cost in wound zones and grazing silhouettes (a cost-weighted census, not a step count),
   the mode-4 census bug in the panic state, and (maybe) a per-wound cull slack for mode 4.
 - [ ] **Multi-scale march + learned reconstruction — RESEARCH (2026-09-21), nothing built.** [Notes](docs/dev-notes/2026-09-21-multiscale-march/NOTES.md).
   Close-up `sdf:march` at scale 1.0 / **0.5 ship** / 0.25: clean 31.4 / **7.6** / 2.7 ms, 5 wounds 44.4 / **13.8** / 7.7, room 4 32.6 / **10.1** / 2.9
