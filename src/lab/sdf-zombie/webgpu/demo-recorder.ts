@@ -48,6 +48,10 @@ export interface DemoFrame {
   reload: boolean;
   /** Absolute [yaw, pitch] AFTER dx/dy. Re-pinned each replay frame. */
   look: [number, number];
+  /** The sim step this frame ticked with. Live play ticks at the real
+   *  (variable) frame time, so a replay must re-step with the SAME dt or the
+   *  sim drifts. Absent in old recordings — the file's fixed dt applies. */
+  dt?: number;
 }
 
 /** What the recorder was started with — everything a replay needs to rebuild
@@ -103,6 +107,7 @@ function copyFrame(f: DemoFrame): DemoFrame {
     fire: f.fire,
     reload: f.reload,
     look: [f.look[0], f.look[1]],
+    ...(f.dt !== undefined ? { dt: f.dt } : {}),
   };
 }
 

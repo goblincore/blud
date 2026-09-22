@@ -6474,7 +6474,7 @@ async function main() {
     } else {
       // The frame the tick CONSUMED, not a re-read after the fact: a live
       // event that lands mid-tick must belong to the next frame, not this one.
-      if (ctx.demo.recorder) { ctx.demo.recorder.push(inputFrame); updateDemoHud(ctx); }
+      if (ctx.demo.recorder) { ctx.demo.recorder.push({ ...inputFrame, dt }); updateDemoHud(ctx); }
     }
     const held = inputFrame.keys;
     let input: MoveInput = ctx.player.holdPlayerPose
@@ -7719,6 +7719,7 @@ async function main() {
     const hashFrom = Math.max(0, Math.floor(opts.hashFrom ?? 0));
     const started = performance.now();
     let frames = 0;
+    let simMs = 0;
     ctx.demo.replayFrame = 0;
     try {
       // The replay starts from the SAME origin the synth/recorder did: sim
@@ -7743,13 +7744,16 @@ async function main() {
         const frame = iter.next();
         if (!frame) break;
         if (opts.speed && opts.speed > 0) {
-          const due = started + (f * file.dt * 1000) / opts.speed;
+          const due = started + (simMs / opts.speed);
           const wait = due - performance.now();
           await new Promise(r => (wait > 1 ? setTimeout(r, wait) : requestAnimationFrame(() => r(null))));
         }
         ctx.player.currentInputFrame = frame;
         await awaitBakes(ctx);
-        ctx.boot.handle.step(file.dt);
+        // Per-frame dt when the recording has it (live play is variable-rate).
+        const stepDt = frame.dt ?? file.dt;
+        simMs += stepDt * 1000;
+        ctx.boot.handle.step(stepDt);
         frames++;
         // `hashFrom` skips the RENDER warm-up frames: the scripted recorder
         // settles `warmup` frames before its first hash, and a replay gets the
