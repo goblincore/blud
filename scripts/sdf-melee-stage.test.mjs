@@ -20,8 +20,7 @@ import {
   clipDepthToMetres,
   assertMeleeWounds,
   MELEE_REGIONS,
-  LOAD_SUSPECT_LIMIT,
-} from './lib/sdf-melee-stage.mjs';
+  LOAD_SUSPECT_LIMIT, missAnatomy } from './lib/sdf-melee-stage.mjs';
 
 describe('woundPlan', () => {
   it('spreads each body over distinct regions and the crowd over both flanks', () => {
@@ -232,5 +231,35 @@ describe('median', () => {
     expect(median([3, 1, 2])).toBe(2);
     expect(median([4, 1, 2, 3])).toBe(3);
     expect(median([])).toBeNaN();
+  });
+});
+
+// px: [steps, hit, rasterised]
+function buf(w, h, fn) {
+  const f = new Float32Array(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const [s, hit, r] = fn(x, y); const o = (y * w + x) * 4;
+    f[o] = s; f[o + 1] = hit; f[o + 2] = r;
+  }
+  return f;
+}
+
+describe('missAnatomy', () => {
+  it('puts a miss next to a hit in bucket 1 and a far miss in >16, and finds empty blocks', () => {
+    const w = 32, h = 8;
+    const f = buf(w, h, (x) => x === 0 ? [4, 1, 1] : [1, 0, 1]);
+    const a = missAnatomy(f, w, h);
+    const total = 8 * 4 + 31 * 8;
+    expect(a.missStepShare).toBeCloseTo(248 / total, 6);
+    expect(a.byDistance['1']).toBeCloseTo(8 / total, 6);
+    expect(a.byDistance['>16']).toBeCloseTo((31 - 16) * 8 / total, 6);
+    // 4x4 blocks: columns 0-3 hold hits; the other 7 block-columns x 2 rows are empty.
+    expect(a.emptyBlocks[4]).toBeCloseTo((28 * 8) / total, 6);
+  });
+
+  it('ignores pixels that were never rasterised', () => {
+    const f = buf(4, 4, () => [9, 0, 0]);
+    const a = missAnatomy(f, 4, 4);
+    expect(a.missStepShare).toBe(0);
   });
 });

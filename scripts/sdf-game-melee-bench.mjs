@@ -73,8 +73,7 @@ import {
 import {
   stageMelee, stampMeleeWounds, woundPlan, pelletsOnly,
   summariseBlocks, renderMarkdown, censusFromTarget, assertMeleeWounds,
-  LOAD_SUSPECT_LIMIT,
-} from './lib/sdf-melee-stage.mjs';
+  LOAD_SUSPECT_LIMIT, missAnatomy } from './lib/sdf-melee-stage.mjs';
 
 const VITE = Number(process.argv[2] ?? 5421);
 const CDP = Number(process.argv[3] ?? 9421);
@@ -291,7 +290,15 @@ async function capturePhase(phase, withWounds) {
     occ = await ev(SETTLED_OCC_JS(SETTLE_TRIES));
     const buf = await ev('__sdfGameDebug.readMarchTarget()');
     const bytes = Buffer.from(buf.rgba32f, 'base64');
-    census = censusFromTarget(new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 2), buf.w, buf.h);
+    const f32 = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 2);
+    census = censusFromTarget(f32, buf.w, buf.h);
+    // Miss-ray anatomy (2026-09-22): where the miss steps sit, and the raw buffer.
+    census.miss = missAnatomy(f32, buf.w, buf.h);
+    writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-mode4-${buf.w}x${buf.h}.f32`, bytes);
+    const md = census.miss;
+    console.log(`  miss anatomy [${phase}]: miss ${(md.missStepShare * 100).toFixed(1)}% of steps; by px to nearest hit `
+      + Object.entries(md.byDistance).map(([k, v]) => `${k}:${(v * 100).toFixed(1)}%`).join(' ')
+      + `; in hit-free 4x4 blocks ${(md.emptyBlocks[4] * 100).toFixed(1)}%, 8x8 ${(md.emptyBlocks[8] * 100).toFixed(1)}%`);
   } finally {
     await ev('__sdfGame.setMarchDebugMode(0)');
   }

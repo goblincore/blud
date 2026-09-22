@@ -509,3 +509,70 @@ export async function stampMeleeWounds(evaluate, plan, opts = {}, fail = failHar
   })()`);
   return r;
 }
+
+// ---------------------------------------------------------------------------
+// missAnatomy — pure (miss-ray culling study, 2026-09-22)
+// ---------------------------------------------------------------------------
+
+/** WHERE the miss-ray steps are, over the same dense mode-4 buffer as
+ *  censusFromTarget. Two views of the same question — "could a cull skip them":
+ *
+ *  - byDistance: miss steps bucketed by chessboard distance (march-target
+ *    pixels) to the nearest HIT pixel. Distance 1-2 is the silhouette band
+ *    (grazing rays, inherent); large distances are empty hull/proxy area.
+ *  - emptyBlocks: for block sizes 4 and 8, the share of miss steps that sit in
+ *    a block with NO hit pixel — the ceiling a perfect coarse-miss cull at that
+ *    block size could remove (it would still pay the coarse pass).
+ *
+ *  Returns shares of TOTAL steps (hit + miss) so they read against the frame. */
+export function missAnatomy(f32, w, h) {
+  const n = w * h;
+  const INF = 1 << 20;
+  const dist = new Int32Array(n).fill(INF);
+  const queue = new Int32Array(n);
+  let qh = 0, qt = 0, totalSteps = 0, missSteps = 0;
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    if (!(f32[o + 2] >= 0.5)) continue;
+    totalSteps += f32[o];
+    if (f32[o + 1] > 0.5) { dist[i] = 0; queue[qt++] = i; } else missSteps += f32[o];
+  }
+  while (qh < qt) {
+    const i = queue[qh++], x = i % w, y = (i / w) | 0, d = dist[i] + 1;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      if (dist[j] > d) { dist[j] = d; queue[qt++] = j; }
+    }
+  }
+  const edges = [1, 2, 4, 8, 16, INF];
+  const labels = ['1', '2', '3-4', '5-8', '9-16', '>16'];
+  const buckets = new Float64Array(edges.length);
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    if (!(f32[o + 2] >= 0.5) || f32[o + 1] > 0.5) continue;
+    const d = dist[i];
+    let b = 0; while (d > edges[b]) b++;
+    buckets[b] += f32[o];
+  }
+  const emptyBlocks = {};
+  for (const B of [4, 8]) {
+    let s = 0;
+    for (let by = 0; by < h; by += B) for (let bx = 0; bx < w; bx += B) {
+      let anyHit = false, st = 0;
+      for (let y = by; y < Math.min(by + B, h); y++) for (let x = bx; x < Math.min(bx + B, w); x++) {
+        const o = (y * w + x) * 4;
+        if (!(f32[o + 2] >= 0.5)) continue;
+        if (f32[o + 1] > 0.5) anyHit = true; else st += f32[o];
+      }
+      if (!anyHit) s += st;
+    }
+    emptyBlocks[B] = totalSteps ? s / totalSteps : 0;
+  }
+  return {
+    missStepShare: totalSteps ? missSteps / totalSteps : 0,
+    byDistance: Object.fromEntries(labels.map((l, b) => [l, totalSteps ? buckets[b] / totalSteps : 0])),
+    emptyBlocks,
+  };
+}
