@@ -55,3 +55,9 @@ fire phase yet.
   120 k march-target px differ by > 0.02, on one crater edge; **owner A/B in play: no visible difference.**
 - **Owner rule:** per-pixel accuracy is usually not required — an FPS, not a simulation. A shortcut passes
   if it is invisible in play (A/B by eye); bit-identity is not the bar.
+- **DISTANCE-BASED HIT ACCEPT — SHIPS** (`GAME_AA_NEAR = 6`, `GAME_AA_FADE_M = 3`; `setAaDistance(near, fadeM)`,
+  0 = off). Uniform strength 4 (`setAa(4)`) saved 11-22 % of prims but the owner saw fatter/brighter edges
+  on FAR bodies and nothing up close — the fattening is ~constant in pixels, so it only reads on small
+  outlines. Near 6, fading to 1 over 1.5-3 m: wounded-melee prim work -14.8 %, clean -28.6 %; `sdf:march`
+  wounded ~16.7 -> ~14.4 ms (load up to 6, indicative). Owner A/B: invisible. Also judged 12 "okay":
+  -19.3 % / -36.9 % prims — a one-number follow-up (rays stop up to ~17 mm short at 1 m there).
