@@ -161,6 +161,9 @@ const RESTORE_JS = (snap) => `(() => {
   window.__meleeShipRestore = () => {
     const g = __sdfGame;
     g.setFlatAlbedo(snap.flatAlbedo);
+    // Ship has the depth prepass and the miss cull OFF (GAME_DEPTH_PREPASS = 0).
+    if (g.setMissCull) g.setMissCull(false);
+    if (g.setDepthPrepass) g.setDepthPrepass(false);
     g.setOwnerRefold(snap.ownerRefold);
     g.setHullExitBound(snap.hullExitBound);
     g.setWoundEarlyOut(snap.woundEarlyOut);
