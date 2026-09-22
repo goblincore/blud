@@ -4,6 +4,19 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Ogre (chainsaw brute) — first pass 2026-09-22
+
+- [x] **New character `ogre`**: SDF body (`ogre.blob`, prose-authored, Quake-ogre lineage), WAM kit (belt, kilt,
+  breeches, boots, bracers), Blender-scripted chainsaw PROP held two-handed via a new `saw` carry, `STOMP` gait +
+  `OGRE_PROFILE`. 25 tests. [Notes + frames](docs/dev-notes/2026-09-22-ogre/NOTES.md). Awaiting owner look.
+- [x] Calf through the breeches mid-stride and the kilt's back-hem V — fixed (deeper calf backs, belt/kilt refit).
+- [x] Bent face prims lost their bow under a turned head (`applyRig` did not rotate `bend`) — fixed; lips painted.
+- [x] Owner pass 2026-09-22: red glowing eyes, long pointed nose, thick parted lips, low hunch KEPT, long ape
+  arms, chainsaw now DRAGGED one-handed behind him (new one-handed `drag` carry: `oneHanded`, `rightPole`).
+- [ ] Polish: thigh-root lobes read as buttocks above the belt from behind; gut blend; hunch hides the mouth
+  from above; saw nose floats a few cm off the floor.
+  Not started by design: attacks (saw swing / grenades), brain, sounds, a game-page spawn.
+
 ## Late spawns drew no flesh while frozen — fixed 2026-09-21
 
 - [x] **`spawnDebugCharacter` / `spawnCrowd` bodies added after boot marched nothing** on a frozen cast (`?frozen=1`,
@@ -12,8 +25,8 @@
   covers. Fix: `spawnDebugCharacter` clears `frozenHullBuilt`. Unfrozen play rebuilt the hull per tick and was fine.
 - [x] Gate: [`scripts/sdf-late-spawn-gate.sh`](scripts/sdf-late-spawn-gate.sh) — occupancy hits per late spawn.
   zombie +12040, goblin +4103, bonewalker +4143 (min 300); fix reverted, goblin reads **−50** (FAIL).
-- [ ] Only `goblin` of the WAM cast is registered (`character-registry.ts`); imp/knight/lizardman/ogre/orc/skeleton/
-  troll have no .blob yet, so `spawnDebugCharacter('orc')` throws `unknown character`. Port via authoring-sdf-characters.
+- [ ] Only `goblin` of the WAM cast is registered (`character-registry.ts`); imp/knight/lizardman/orc/skeleton/
+  troll have no .blob yet (`ogre` now exists — authored from prose 2026-09-22, not ported from WAM), so `spawnDebugCharacter('orc')` throws `unknown character`. Port via authoring-sdf-characters.
 
 ## Seam getters were frozen at boot — fixed 2026-09-21
 

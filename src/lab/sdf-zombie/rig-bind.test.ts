@@ -603,3 +603,43 @@ describe('applyRig — rigid head membership is SHAPE-BLIND (2026-09-06)', () =>
     expect([...bound.head!.prims.keys()].sort((a, b) => a - b)).toEqual(spheres);
   });
 });
+
+describe('applyRig — a BENT prim on the rigid head keeps its curve (2026-09-22)', () => {
+  // THE OGRE'S LIPS. The rigid-head branch moved a skull-owned prim's
+  // endpoints and stamped orient = q, but left `bend` in REST space. The
+  // field (sdPrimitive / sdPrimO) conjugates the control point by orient
+  // along with the endpoints, so it expects the bend displacement POSED —
+  // exactly what posePrimitive already does. Left at rest, a turned head's
+  // curve bowed back into the skull: only the two end caps stayed proud of
+  // the face, which with color= read as four dark balls at the mouth corners
+  // (a bow of 3.6 cm on a 1.6 cm radius). A shallow bow (the brow shelf) hid
+  // the same error inside the flesh.
+  //
+  // Invariant: the rigid head is a RIGID motion, so each skull-owned prim's
+  // field must be identical at corresponding points. The motion is recovered
+  // from the prim itself: x -> a' + q (x - a).
+  const body = buildBody(compileBlob(parseBlob(goblinSrc)));
+  const bound = bindRig(body);
+  const moved = { ...bound, rig: { ...bound.rig, points: bound.rig.points.map((p, i) =>
+    i === bound.head!.tip ? { ...p, pos: add(p.pos, [0.3, 0.02, -0.1]) as Vec3 } : p) } };
+
+  it('the posed field of every skull-owned bent prim is the rest field, rigidly moved', () => {
+    const out = applyRig(body, moved);
+    const bent = [...bound.head!.prims.keys()].filter(i => body.prims[i]!.bend !== undefined);
+    expect(bent.length, 'goblin.blob authors a bent face prim').toBeGreaterThan(0);
+    for (const i of bent) {
+      const rest = body.prims[i]!, posed = out.prims[i]!;
+      const q = posed.orient!;
+      expect(Math.abs(1 - q[3]), 'the head really turned').toBeGreaterThan(0.005);
+      const toPosed = (x: Vec3): Vec3 => add(posed.a, qRotate(q, sub(x, rest.a)));
+      // The curve's apex (Bezier t = 1/2) and points a radius off it along
+      // the bow — the ones a rest-space bend moves the most.
+      const c = add(vscale(add(rest.a, rest.b), 0.5), rest.bend!);
+      const apex = add(vscale(add(rest.a, rest.b), 0.25), vscale(c, 0.5));
+      const bow = normalize(rest.bend!);
+      for (const x of [apex, add(apex, vscale(bow, rest.radius)), add(apex, vscale(bow, -rest.radius))]) {
+        expect(sdPrimitive(toPosed(x), posed), `prim ${i}`).toBeCloseTo(sdPrimitive(x, rest), 9);
+      }
+    }
+  });
+});

@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip' | 'aim';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -37,6 +37,18 @@ export interface CarrySpec {
   gunPitch: number;
   /** Body-local pole for the left elbow's IK (outward and down). */
   leftPole: Vec3;
+  /** ONE-HANDED: the left hand is NOT solved onto the prop's fore locator; it
+   *  stays free and swings about its shoulder by `leftSwing` radians (peak),
+   *  counter to the left leg — the ogre dragging his saw behind him. Absent =
+   *  the two-handed contract every other carry keeps. */
+  oneHanded?: { leftSwing: number };
+  /** Body-local pole the RIGHT elbow is swivelled toward (alignElbow), with
+   *  +x as the carry arm's OUTWARD side. Absent = the gun holds' default,
+   *  (out, down, a little forward), which clears a vest. A hanging arm wants
+   *  its elbow pointing BACK: the default on a near-straight hang swivels the
+   *  forearm past the upper arm, the rig's elbow limit clamps it, and the fist
+   *  leaves the handle (measured 20-25 cm on the ogre's drag). */
+  rightPole?: Vec3;
 }
 
 /** Low/chest/hip are cross-body holds. Aim raises the forearm from a low
@@ -56,6 +68,36 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // of locking straight across the face. Both elbows stay outside the vest;
   // the support elbow points down. Reach is 0.454 m on the 0.50 m left arm.
   aim:   { right: { pitch: 0.15, yaw: 0.38, fold: 2.51 }, gunPitch: -1.2275, leftPole: [0.8, -0.8, 0.45] },
+  // The ogre's TWO-HANDED chainsaw hold (ogre.blob + ogre-chainsaw.glb, solved
+  // at prop scale 1.45). Superseded as his walk by `drag` below; kept for a
+  // future two-handed attack raise.
+  // Not a variant of `low`: these angles are relative to the AUTHORED hang,
+  // and the ogre hangs his forearms 30 degrees forward already, so `low`'s
+  // 1.85 fold lifted the saw to his face. Grid-solved against the ogre rig
+  // (shoulders at y 1.82 on a hunch, 0.83 m arms) for: grip at belly height
+  // in front of the gut (hand ~(-0.28, 1.38, 0.53)), the bar level and angled
+  // ~34 degrees across the body — how a chainsaw is actually carried — and
+  // the front hoop at 0.76 m from the left shoulder, inside its 0.83 m reach
+  // with slack for the gait sway. The upper arm swings BACK (pitch -0.75) so
+  // the elbow sits out past the gut instead of through it.
+  saw:   { right: { pitch: -0.75, yaw: 0.65, fold: 1.55 }, gunPitch: 0.20, leftPole: [0.6, -0.4, 0.1] },
+  // DRAG — the ogre's walking hold since 2026-09-22 (owner: "it doesnt make
+  // sense to hold the chainsaw like a gun ... in quake the ogre drags it
+  // around on the ground behind him"). ONE-HANDED: the right fist holds the
+  // saw's rear handle with the arm hanging, and the bar trails BEHIND and
+  // down so its nose rides just over the floor. Grid-solved against the ogre
+  // rig at prop scale 1.6 for: fist beside the hip, a fist's width (>= 12 cm)
+  // CLEAR of the thigh-root flesh (wrist ~(-0.50, 0.96, 0.07); the grip sits
+  // 7.5 cm further on, in the fist — the profile's gripReach) — the rig's
+  // body collision shoved a fist placed at x -0.40 a full 20 cm forward off
+  // the handle; the bar trailing back and down, outboard of the leg, its
+  // nose ~0.08 m up at the centreline (re-solved for the 1.00 m gorilla arms) (the chain edge a few cm
+  // off the floor — the stride's bob scrapes it). The elbow keeps a BEND
+  // (fold 0.65, wrist at 88% of the 1.00 m arm): a first solve hung the arm
+  // dead straight at full reach, and any drift in the verlet shoulder then
+  // showed as a 7 cm gap between fist and handle. ogre-blob.test.ts pins the
+  // trail and the grip. The left arm is free and swings.
+  drag:  { right: { pitch: -1.05, yaw: 0.20, fold: 0.65 }, gunPitch: -0.85, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.35 }, rightPole: [0.2, 0, -1] },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from
