@@ -94,7 +94,13 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
     // of the surface the same fbm is added to the REAL stepped distance just
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
+    gWalkStep = 1.0;
     let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+    gWalkStep = 0.0;
+    // WALK SKIP bookkeeping: a call that ran the re-fold refreshes the gap (0 if any
+    // limb won); a call that skipped it keeps the decremented budget; a call where the
+    // gate never opened leaves no promise (0).
+    if (gWalkAttempted > 0.5) { gWalkGap = gWalkGapNew; } else if (!(gWalkGap > 0.0)) { gWalkGap = 0.0; }
     let distort = max(gFoldBestDistort, 1.0);
     // DISTANCE-BASED ACCEPT (aaCfg.z/w, 2026-09-22): a stronger footprint accept up
     // close, fading to aaCfg.y over [w/2, w] metres (the owner saw the fattened edge
@@ -229,6 +235,7 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
     }
     prevRadius = radius;
     t = t + stepLen;
+    gWalkGap = gWalkGap - 4.0 * abs(stepLen);
     if (t > tMax) {
       // GRAZE ACCEPT (temporal start, 2026-09-10 night). The temporal start
       // re-phases the walk; at silhouette/graze pixels the acceptance window

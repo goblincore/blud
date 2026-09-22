@@ -19,7 +19,7 @@ import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
 import { LIMB_ACCUMULATORS } from './march/limbs-flag';
 import { SHIP_COUNTS2_Z, SHIP_REFOLD_MODE } from './zombie-gpu';
 
-/** counts2.z = re-fold mode (0..4) + 8 (wound exact fixes) + 16 (cheap AO/scatter probes) + 32 (normal hint) + 64 (analytic owned normals).
+/** counts2.z = re-fold mode (0..4) + 8 (wound exact fixes) + 16 (cheap AO/scatter probes) + 32 (normal hint) + 64 (analytic owned normals) + 128 (walk skip).
  *  `exactBit` keeps every flag above the mode, so a mode setter never drops a flag. */
 const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => {
   const z = a.view.uniforms.counts2.value.z;
@@ -333,10 +333,19 @@ export function createWorldSeams(ctx: GameContext) {
     setAnalyticOwned(on: boolean) {
       for (const a of ctx.world.actors) {
         const z = a.view.uniforms.counts2.value.z;
-        a.view.uniforms.counts2.value.z = z - (z >= 64 ? 64 : 0) + (on ? 64 : 0);
+        a.view.uniforms.counts2.value.z = z - (z % 128 >= 64 ? 64 : 0) + (on ? 64 : 0);
       }
     },
-    get analyticOwned() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) >= 64; },
+    get analyticOwned() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) % 128 >= 64; },
+    /** WALK SKIP (counts2.z + 128, 2026-09-22): after a losing walk re-fold, skip the
+     *  re-fold for the next steps while the losing gap cannot have closed. off = ship. */
+    setWalkSkip(on: boolean) {
+      for (const a of ctx.world.actors) {
+        const z = a.view.uniforms.counts2.value.z;
+        a.view.uniforms.counts2.value.z = z - (z >= 128 ? 128 : 0) + (on ? 128 : 0);
+      }
+    },
+    get walkSkip() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) >= 128; },
     /** Option 3 (2026-09-21): soldier wounds upload ONE noise-ragged crater instead of the
      *  wound + three lobe rows. A look change; off = ship. Re-uploads every body now. */
     setRaggedCraters(on: boolean) {
