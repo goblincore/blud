@@ -231,3 +231,22 @@ Melee bench, `MELEE_PHASES=clean,<phase>`, each phase against the clean baseline
   `thaw`, `firecalm`, `fire`, `noburn`, `out` (`out` is a no-op: `extinguishAll` needs the sim ticking).
 - Still broken: the mode-4 census reads 0 hits / 1 step in the panic state (and after it), so
   steps cannot be counted there; the render state (scale, adaptive, steps) is identical.
+
+## 2026-09-22 — miss-ray culling: built, PROVEN SAFE, and a LOSS. Miss steps are cheap.
+
+`__sdfGame.setMissCull(true)` (ships OFF): the quarter-res depth prepass certifies 4x4 blocks empty
+(cone vs every folded instance's cluster spheres, then a cone walk to the far sphere bound; a miss is
+written at the far depth so any touch/unknown covering the block wins; prepass proxies dilated ~1.5
+blocks) and the march discards those pixels.
+
+- **Correct:** melee parity (same page, same frozen frame) — 0 hits lost / 0 gained, clean and wounded;
+  walk steps -36 % / -41 %. Getting there found a LATENT BUG in the existing prepass: the block cone
+  was `coneKFor(2√2)`, a √2-px radius — `coneKFor(px)` is px/2 pixels — so the proof's 2√2-px cone
+  was half as wide (edge-column hits lost under the cull; the start bound's backoff had hidden it).
+  Fixed to `coneKFor(2 * DEPTH_PREPASS_BLOCK_PX)` (be3ec43c).
+- **A loss (quiet machine, load <= 3.6, one page, alternating):** `sdf:march` 11.9 -> 11.3 clean,
+  16.6 -> 16.1 wounded, but `sdf:depth-pre` costs 7.2 / 7.8 ms: frame 14.8 -> 21.2 and 19.8 -> 27.1 ms.
+- **THE LESSON: miss steps are nearly free.** Removing 36-41 % of all steps saved ~0.5 ms, because a
+  step far from any body culls every cluster before a single prim is evaluated. The step census
+  (`missStepShare`, `missAnatomy`) counts steps, not cost — do not rank levers by it. Cost lives in
+  steps NEAR surfaces (hit tails, grazing silhouettes, wound zones), which is where the raiser gate paid.
