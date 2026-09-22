@@ -70,6 +70,10 @@ export interface FireVolumeTuning {
    *  this many OUTPUT pixels (symmetric, 7 taps) — a long-exposure rising-flame look that
    *  also hides the cheaper march's grain. 0 = one sample (the pre-streak composite). */
   streakPx: number;
+  /** HEAT SHIMMER (2026-09-22): the final blit warps the frame by animated noise where
+   *  there is flame and in a band above it; this is the amplitude in OUTPUT pixels.
+   *  0 = off. */
+  heatPx: number;
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
@@ -98,6 +102,7 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   headRise: 1,
   headClear: 1,
   streakPx: 0,
+  heatPx: 0,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider
@@ -126,6 +131,7 @@ export const FIRE_VOLUME_BOUNDS: Readonly<Record<keyof FireVolumeTuning, readonl
     headRise: [0, 1.5],
     headClear: [0, 1],
     streakPx: [0, 64],
+    heatPx: [0, 12],
   });
 
 const FIRE_VOLUME_FIELDS = Object.keys(FIRE_VOLUME_TUNING) as (keyof FireVolumeTuning)[];

@@ -115,6 +115,7 @@ const VOLUME_LABELS: Record<keyof FireVolumeTuning, { label: string; step: numbe
   headRise: { label: 'head flame', step: 0.05 },
   headClear: { label: 'head clear', step: 0.05 },
   streakPx: { label: 'streak px', step: 1 },
+  heatPx: { label: 'heat shimmer px', step: 0.25 },
 };
 
 export const VOLUME_KEYS: readonly VolumeKey[] = Object.freeze(
