@@ -67,3 +67,16 @@ fire phase yet.
 `before` = both new defaults off (main's ship frame). `sdf:march`: clean 11.9 -> 11.3 ms (-5 %), wounded
 17.5 -> 14.9 ms (-15 %), wounded+fire 24.2 -> 21.2 ms (-12 %). Frame p50: 14.8 -> 14.2, 20.4 -> 17.6,
 33.3 -> 30.5 ms.
+
+## Round 2 (after PR #14 merged) — census on the new defaults
+
+Total prim work: clean 1.93 M -> 0.84 M, wounded 2.97 M -> 1.63 M (separate runs; stamps differ slightly).
+Steps per interior hit 4.7 -> 2.7. Shares of the new total, wounded: wound-zone hits walk 34 % / shading
+35 %; misses 17 %; interior 13 %. Re-fold still 24 % (walk 14 %, shading 7 %). Clean: interior walk 38 % /
+shading 28 %, misses 31 %.
+
+- **Analytic normals near owned wounds** (`setAnalyticOwned`, counts2.z + 64, OFF). Where no limb won the
+  re-fold at the hit, the field is the plain wounded union, so the analytic gradient path need not bail on
+  owned wounds. Wounded `sdf:march` 13.40 -> 13.15 ms (-2 %, near noise; load 6.6); a few crater-edge px shift
+  up to 0.68. **Not shipped.** CENSUS BLIND SPOT: the analytic path (`ngBody`) folds prims itself and does not
+  count them, so the census showed a bogus -44 % — use timing for any lever that moves work into ngBody.
