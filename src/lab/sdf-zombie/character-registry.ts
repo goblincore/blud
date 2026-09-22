@@ -280,6 +280,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     face: { url: '/assets/lab/faces/ogre-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
     profile: motionProfileFor('ogre'),
   },
+
 };
 
 export function characterNames(): readonly string[] {

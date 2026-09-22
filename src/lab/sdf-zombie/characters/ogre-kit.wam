@@ -83,8 +83,8 @@ skeleton
     bone clavicle parent=chest    dir=side tilt=10 len=0.122727
     # down-bone pitches NEGATED: upperArm 12->-12, foreArm 30->-30,
     # hand 20->-20, thigh 14->-14, shin -8->8.
-    bone upperArm parent=clavicle dir=down pitch=-12 tilt=20 len=0.195455
-    bone foreArm  parent=upperArm dir=down pitch=-30 tilt=2  len=0.181818
+    bone upperArm parent=clavicle dir=down pitch=-12 tilt=20 len=0.209091
+    bone foreArm  parent=upperArm dir=down pitch=-30 tilt=2  len=0.209091
     bone hand     parent=foreArm  dir=down pitch=-20         len=0.068182
     bone thigh    parent=hips     dir=down pitch=-14 tilt=7  side=0.077273 len=0.240909
     bone shin     parent=thigh    dir=down pitch=8   tilt=-6 len=0.218182

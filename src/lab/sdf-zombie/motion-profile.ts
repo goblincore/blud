@@ -73,12 +73,12 @@ export const SOLDIER_PROFILE: MotionProfile = {
   prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.2 },
 };
 
-/** The ogre: a heavy stomp with a chainsaw held two-handed. The saw is a
- *  held PROP on the soldier's carry machinery (carry.ts): the right arm is
- *  rotated into the carry, the prop's grip locator seats on the right hand,
- *  and the left hand is FABRIK'd onto its front hoop — so both fists are on
- *  the saw by construction. make-ogre-chainsaw.py builds the .glb on the
- *  shared GUN_GRIP locators. */
+/** The ogre: a heavy stomp, DRAGGING his chainsaw behind him one-handed (the
+ *  Quake ogre's walk). The saw is a held PROP on the soldier's carry
+ *  machinery (carry.ts): the right arm is rotated into the `drag` carry and
+ *  the prop's grip locator seats on the right hand; `drag` is one-handed, so
+ *  the left arm hangs free and swings. make-ogre-chainsaw.py builds the .glb
+ *  on the shared GUN_GRIP locators. */
 export const OGRE_PROFILE: MotionProfile = {
   name: 'ogre',
   // One gait: an ogre does not break into a run (runBand never reached).
@@ -90,15 +90,17 @@ export const OGRE_PROFILE: MotionProfile = {
   // Heavier than the soldier's 5.5; a touch under the zombie default feel.
   turnRate: 2.2,
   armStyle: 'carry',
-  // 'saw' in every state (carry.ts): grip at the belly, bar level and angled
-  // across the body — the Quake ogre's walking hold. There is no fire state
-  // (he does not shoot), so `fire` only matters if a future attack drives
-  // carryOverride.
-  carries: { walk: 'saw', run: 'saw', fire: 'saw' },
-  // 1.45: every prop-local length (and the grip locators) is 1/1.45 of world
-  // (make-ogre-chainsaw.py's header). 0.33 m between the fists; 1.6 put the
-  // front hoop out of the left arm's reach on this hunched rig.
-  prop: { url: '/assets/lab/ogre-chainsaw.glb', scale: 1.45 },
+  // `drag` in every state. The two-handed `saw` (belly height, bar across the
+  // body) was the first pass; owner, 2026-09-22: "it doesnt make sense to
+  // hold the chainsaw like a gun". There is no fire state (he does not shoot),
+  // so `fire` only matters if a future attack drives carryOverride — and a
+  // swing will want `saw` or its own two-handed raise.
+  carries: { walk: 'drag', run: 'drag', fire: 'drag' },
+  // 1.6: every prop-local length (and the grip locators) is 1/1.6 of world
+  // (make-ogre-chainsaw.py's header). Dragged one-handed, the front hoop no
+  // longer has to be in the left arm's reach (that capped the two-handed
+  // hold at 1.45), and the longer bar is what lets the nose reach the floor.
+  prop: { url: '/assets/lab/ogre-chainsaw.glb', scale: 1.6 },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {

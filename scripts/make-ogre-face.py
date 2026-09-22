@@ -3,7 +3,7 @@
 
 WHY A GENERATOR: same bargain as make-cyberdemon-face.py (read its header).
 There is no reference mesh for the ogre, so `blob:face-bake` cannot run; all
-facial STRUCTURE is prims in ogre.blob (bullet cranium, brow shelf, pug nose,
+facial STRUCTURE is prims in ogre.blob (bullet cranium, brow shelf, pointed nose, lips,
 underbite jaw, tusks, emissive eyes) and this decal carries only the MOUTH —
 the one feature prims cannot draw. The art is original, drawn in PIL below.
 

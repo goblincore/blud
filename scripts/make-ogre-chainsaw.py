@@ -18,14 +18,15 @@ its FORE locator, both in PROP-LOCAL coordinates shared by every prop:
 So the saw is laid out around those two points: the rear handle's grip rail
 passes through gripHand, the front hoop passes through foreHand, the engine
 sits between them and the bar runs out along +z. The profile's prop `scale`
-(motion-profile.ts, 1.45) multiplies the mesh AND the locators, so everything
-here is authored at 1/1.45 of its world size: the 0.23 m hand spacing becomes
-0.33 m, room for the ogre's r ~0.10 m fists. (1.6 was tried first; on the
-ogre's hunched rig it put the front hoop out of the left arm's reach — see the
-`saw` carry in carry.ts.)
+(motion-profile.ts, 1.6) multiplies the mesh AND the locators, so everything
+here is authored at 1/1.6 of its world size. He DRAGS it one-handed (the
+`drag` carry), so only the grip locator is load-bearing; the fore locator
+still sits on the hoop for a two-handed carry (`saw`, which needs <= 1.45 on
+this rig for the left arm to reach it).
 
-WORLD SIZE at scale 1.45: engine ~0.30 m long, bar ~0.74 m past the engine,
-~1.2 m overall. A big saw, sized for a 2.2 m brute (a logging saw on a man is
+WORLD SIZE at scale 1.6: engine ~0.35 m long, bar ~0.80 m past the engine,
+~1.33 m overall — long enough that, hanging from his fist at 1.04 m, the nose
+trails to the floor. A big saw, sized for a 2.2 m brute (a logging saw on a man is
 ~0.9 m; this is the ogre's).
 
 AXES: Blender is Z-up, glTF is Y-up; the exporter maps Blender (X, Y, Z) to
@@ -233,7 +234,7 @@ box("handguard", (0.0, 0.080, fz + 0.030), (0.120, 0.070, 0.008), DARK, bevel=0.
 
 # --------------------------------------------------------------------------
 # GUIDE BAR + CHAIN — the length that makes it a chainsaw. Bar plate from the
-# clutch cover out to z 0.64 (1.04 m world at scale 1.45 from the grip), a
+# clutch cover out to z 0.64 (1.14 m world at scale 1.6 from the grip), a
 # rounded nose; the chain is a slightly larger, darker outline behind it, and
 # a row of teeth rides both edges.
 # --------------------------------------------------------------------------
@@ -302,4 +303,4 @@ bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_yup=True,
 dims = saw.dimensions
 print(f"wrote {OUT}")
 print(f"prop-local size x{dims.x:.3f} y(up){dims.z:.3f} z(fwd){dims.y:.3f}; "
-      f"world at scale 1.45: {dims.y * 1.45:.2f} m long")
+      f"world at scale 1.6: {dims.y * 1.6:.2f} m long")

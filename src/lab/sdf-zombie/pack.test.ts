@@ -490,7 +490,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  its haze — a flat saturated red disc that read as a
   //                  sticker — and replaced them with a non-glowing wet eye in
   //                  the throat, so only the two face eyes still emit)
-  //   ogre        2  dim sick-yellow beady eyes under the brow (2026-09-22),
+  //   ogre        2  glowing red beady eyes under the brow (2026-09-22),
   //                  also pinned at exactly two in ogre-blob.test.ts
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,

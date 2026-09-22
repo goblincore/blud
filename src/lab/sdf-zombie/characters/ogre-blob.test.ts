@@ -93,15 +93,20 @@ describe('ogre.blob', () => {
     }
   });
 
-  // BEAT 1 — THE HUNCH. The rig's world-direction pitches put the base of the
-  // neck ~0.29 m and the face ~0.5 m ahead of the hips. If someone
-  // "straightens him up", this fails.
-  it('hunches: the yoke and head hang well ahead of the hips', () => {
+  // BEAT 1 — THE HUNCH. Low and ape-like on purpose (owner, 2026-09-22:
+  // "i dont mind the low gorilla hunch stance in fact i like that"): the
+  // neck base ~0.29 m and the face ~0.5 m ahead of the hips. Straighten him
+  // up and this fails. The face must still clear the yoke, so the eyes sit
+  // above the torso's crest (a sunk head was the other half of the problem).
+  it('hunches low, with the face still clear of the yoke', () => {
     const b = built();
     const hips = b.bones.get('pelvis')!.tail;
     const yoke = b.bones.get('chest')!.tail;
     expect(yoke[2] - hips[2]).toBeGreaterThan(0.25);
     expect(clusterBounds(b, 'head').mx[2]! - hips[2]).toBeGreaterThan(0.45);
+    const torsoTop = clusterBounds(b, 'torso').mx[1]!;
+    const eyes = b.prims.filter(p => (p.glow ?? 0) > 0);
+    expect(eyes[0]!.a[1]).toBeGreaterThan(torsoTop);
   });
 
   // BEAT 2 — THE YOKE, and the small head set into it.
@@ -153,14 +158,19 @@ describe('ogre.blob', () => {
   });
 
   // THE FACE — prims, not a painted face: two pointed ivory tusks and two
-  // dimly glowing eyes. The glow is deliberately LOW (an ogre is not a demon).
-  it('has two ivory tusks and two dim emissive eyes', () => {
+  // glowing RED eyes (owner, 2026-09-22 — they started a dim yellow).
+  it('has two ivory tusks and two glowing red eyes', () => {
     const b = built();
     const head = limb(b, 'head');
     const prims = b.prims.slice(head.start, head.start + head.count);
     const eyes = prims.filter(p => (p.glow ?? 0) > 0);
     expect(eyes).toHaveLength(2);
-    for (const e of eyes) expect(e.glow!).toBeLessThan(0.5);
+    for (const e of eyes) {
+      expect(e.glow!).toBeGreaterThan(0.7);
+      const [r, g, bl] = e.color!;
+      expect(r).toBeGreaterThan(g * 4); // unmistakably red, not amber
+      expect(r).toBeGreaterThan(bl * 4);
+    }
     const tusks = prims.filter(p => p.color !== undefined && (p.glow ?? 0) === 0);
     expect(tusks).toHaveLength(2);
     for (const t of tusks) {
@@ -170,6 +180,48 @@ describe('ogre.blob', () => {
       expect(r).toBeGreaterThan(bl); // ivory, not bone-white
       expect(g).toBeGreaterThan(bl);
     }
+  });
+
+  // THICK LIPS (owner, 2026-09-22). Two bent bars across the mouth, PARTED
+  // so the decal's teeth show between them, the lower one fatter and further
+  // forward (the underbite). Unpainted — see the .blob: paint does not follow
+  // a large bend in the renderer. The brow is the other wide bent bar; it
+  // sits above the eyes, so "below the eyes" picks out the lips.
+  it('has thick, parted lips with the lower one jutting', () => {
+    const b = built();
+    const head = limb(b, 'head');
+    const prims = b.prims.slice(head.start, head.start + head.count);
+    const eyeY = prims.find(p => (p.glow ?? 0) > 0)!.a[1];
+    const lips = prims
+      .filter(p => p.bend !== undefined && p.a[1] < eyeY && Math.abs(p.b[0] - p.a[0]) > 0.12)
+      .sort((p, q) => q.a[1] - p.a[1]);
+    expect(lips).toHaveLength(2);
+    const [upper, lower] = lips as [typeof lips[number], typeof lips[number]];
+    // Spans most of the mouth, and is a lip's thickness, not a line.
+    expect(Math.abs(upper.b[0] - upper.a[0])).toBeGreaterThan(0.12);
+    expect(upper.radius).toBeGreaterThanOrEqual(0.015);
+    expect(lower.radius).toBeGreaterThan(upper.radius);
+    // Parted: a gap between the upper lip's underside and the lower's top.
+    const gap = (upper.a[1] - upper.radius * upper.scale[1]!) - (lower.a[1] + lower.radius * lower.scale[1]!);
+    expect(gap).toBeGreaterThan(0.004);
+    expect(lower.a[2]).toBeGreaterThan(upper.a[2]); // underbite
+  });
+
+  // THE NOSE (owner's pick, 2026-09-22): a long POINTED spike that projects
+  // well past the face and stays above the lips — the first hooked try
+  // dropped onto the mouth and clipped it.
+  it('has a long pointed nose that clears the lips', () => {
+    const b = built();
+    const head = limb(b, 'head');
+    const prims = b.prims.slice(head.start, head.start + head.count);
+    const nose = prims.find(p => p.radiusB !== undefined && p.radiusB < 0.005 && p.radius > 0.025)!;
+    expect(nose).toBeDefined();
+    const cranium = prims.reduce((best, p) => (p.color === undefined && p.radius * p.scale[1]! > best.radius * best.scale[1]! ? p : best));
+    const craniumFront = cranium.a[2] + cranium.radius * cranium.scale[2]!;
+    expect(nose.b[2] - craniumFront).toBeGreaterThan(0.10);
+    const upperLipTop = Math.max(...prims.filter(p => p.bend !== undefined && Math.abs(p.b[0] - p.a[0]) > 0.12 && p.a[1] < nose.a[1])
+      .map(p => p.a[1] + p.radius));
+    expect(nose.b[1]).toBeGreaterThan(upperLipTop);
   });
 
   it('authors the head as prims on a nubbed face block, framed by the cranium', () => {
@@ -217,50 +269,49 @@ describe('ogre.blob', () => {
   });
 });
 
-// THE SAW CARRY, through the real motion pipeline: the right hand holds the
-// saw's grip and the left hand is FABRIK'd onto its front hoop. This is the
-// check that the `saw` carry's angles (carry.ts) are REACHABLE on this rig —
-// the soldier's `low` was not (it lifted the saw to his face), and at prop
-// scale 1.6 the hoop was out of the left arm's reach.
-describe('ogre chainsaw carry', () => {
-  it('keeps both fists on the saw at belly height while he walks', () => {
+// THE SAW DRAG, through the real motion pipeline: the right fist holds the
+// saw's rear handle and the bar trails behind him with its nose near the
+// floor (owner, 2026-09-22: "in quake the ogre drags it around on the ground
+// behind him"). One-handed: the left hand is NOT on the saw, and swings.
+describe('ogre chainsaw drag', () => {
+  it('drags the saw behind him one-handed while he walks', () => {
     const body = built();
     const m = makeActorMotion(body, { seed: 7 });
     const rng = makeRng(7);
     const J = m.motionJoints!.index;
-    let worstFore = 0, worstGrip = 0, sumGrip = 0, sumFore = 0, n = 0;
-    let gripLow = Infinity, gripHigh = -Infinity;
+    let sumGrip = 0, n = 0, tipLow = Infinity, tipHigh = -Infinity, trailMin = Infinity;
+    let leftFore = Infinity, leftZmin = Infinity, leftZmax = -Infinity;
     for (let i = 0; i < 240; i++) {
       const f = stepActorMotion(m, {
         current: body, dt: 1 / 60, wander: true, armStyle: undefined,
         headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
         rng, signals: emptyActorSignals(), profile: OGRE_PROFILE, forceSpeed: OGRE_PROFILE.cruise,
       })!;
-      expect(f.carry).toBe('saw');
+      expect(f.carry).toBe('drag');
       if (i < 60) continue; // let the verlet settle into the carry
       const pts = m.bound.rig.points;
-      const grip = gunPoint(f.gun!, GUN_GRIP.gripHand);
-      const fore = gunPoint(f.gun!, GUN_GRIP.foreHand);
+      const pelvis = pts[J.pelvis!]!.pos;
+      const fwd = [Math.sin(f.bodyYaw), 0, Math.cos(f.bodyYaw)];
+      const along = (p: readonly number[]) => (p[0]! - pelvis[0]!) * fwd[0]! + (p[2]! - pelvis[2]!) * fwd[2]!;
       const dist = (a: readonly number[], b: readonly number[]) =>
         Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
-      const g = dist(pts[J.handR!]!.pos, grip), fo = dist(pts[J.handL!]!.pos, fore);
-      worstGrip = Math.max(worstGrip, g); worstFore = Math.max(worstFore, fo);
-      sumGrip += g; sumFore += fo; n++;
-      gripLow = Math.min(gripLow, grip[1]);
-      gripHigh = Math.max(gripHigh, grip[1]);
+      const grip = gunPoint(f.gun!, GUN_GRIP.gripHand);
+      const tip = gunPoint(f.gun!, [0, -0.012, 0.66]); // the bar's nose, prop-local
+      sumGrip += dist(pts[J.handR!]!.pos, grip); n++;
+      tipLow = Math.min(tipLow, tip[1]); tipHigh = Math.max(tipHigh, tip[1]);
+      trailMin = Math.min(trailMin, -along(tip));
+      leftFore = Math.min(leftFore, dist(pts[J.handL!]!.pos, gunPoint(f.gun!, GUN_GRIP.foreHand)));
+      const lz = along(pts[J.handL!]!.pos);
+      leftZmin = Math.min(leftZmin, lz); leftZmax = Math.max(leftZmax, lz);
     }
-    // The hands are verlet points chasing the carry's targets, so they lag in
-    // transients (turns, footfalls). The SOLDIER'S own numbers through this
-    // same loop are the baseline: mean grip 7 mm, worst 46 mm / 48 mm (fore);
-    // the ogre measured mean 10 mm, worst 55 / 60 mm on 2026-09-22. The mean
-    // is the real pin — a carry the left arm cannot reach reads ~0.1 m+ on
-    // average, not in a spike.
+    // The right fist stays on the grip (verlet lag; the soldier's own mean is 7 mm).
     expect(sumGrip / n).toBeLessThan(0.02);
-    expect(sumFore / n).toBeLessThan(0.02);
-    expect(worstGrip).toBeLessThan(0.08);
-    expect(worstFore).toBeLessThan(0.08);
-    // Belly height, not the face (the soldier's `low` put it at ~1.8 m).
-    expect(gripLow).toBeGreaterThan(1.1);
-    expect(gripHigh).toBeLessThan(1.55);
+    // The nose trails BEHIND the hips and rides near the floor, never through it.
+    expect(trailMin).toBeGreaterThan(0.35);
+    expect(tipLow).toBeGreaterThan(-0.02);
+    expect(tipHigh).toBeLessThan(0.30);
+    // One-handed: the left hand is nowhere near the hoop, and it swings.
+    expect(leftFore).toBeGreaterThan(0.25);
+    expect(leftZmax - leftZmin).toBeGreaterThan(0.12);
   });
 });
