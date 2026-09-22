@@ -83,6 +83,9 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
   // twice a wound's radius keeps its cost proportional to crater screen
   // area instead of screen size.
   var hitNearWound = false;
+  // Which limb's re-fold won at the ACCEPTED sample (gRefoldWin, 0 = none), for
+  // the NORMAL HINT around calcNormal. Re-assigned every iteration like the rest.
+  var hitRefold = 0.0;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }
@@ -96,6 +99,7 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
     var d = dres.x;
     hitBest = i32(dres.y);
     hitField = dres;
+    hitRefold = gRefoldWin;
     // Shell displacement: inside a thin shell of the smooth surface, the
     // silhouette noise displaces the REAL field — bumpy outlines are back —
     // and stepping goes conservative because the noise breaks the Lipschitz

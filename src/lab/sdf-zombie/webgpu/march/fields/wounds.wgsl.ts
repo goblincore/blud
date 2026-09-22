@@ -168,6 +168,11 @@ var<private> gWoundThreat: u32 = 0u;
 var<private> gWoundExact: f32 = 0.0;
 // Set by the AO/scatter probe loop around its mapBody call (cheap probes, counts2.z + 16).
 var<private> gProbePass: f32 = 0.0;
+// NORMAL HINT (counts2.z + 32, 2026-09-22): the re-fold is decided ONCE per pixel.
+// gRefoldWin = cluster + 1 whose re-fold won on the latest mapBody call (0 = none);
+// gNormalHint >= 0 while calcNormal's taps run: re-fold only that cluster (0 = none).
+var<private> gRefoldWin: f32 = 0.0;
+var<private> gNormalHint: f32 = -1.0;
 // Per-owner sum of rim-bump amplitudes over the rows the BASE applyWounds
 // reached at p (index = owner cluster + 1, 0 = unowned).
 var<private> gWoundAmp: array<f32, 9>;

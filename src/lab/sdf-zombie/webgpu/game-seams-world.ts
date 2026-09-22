@@ -19,7 +19,7 @@ import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
 import { LIMB_ACCUMULATORS } from './march/limbs-flag';
 import { SHIP_REFOLD_MODE } from './zombie-gpu';
 
-/** counts2.z = re-fold mode (0..4) + 8 (wound exact fixes) + 16 (cheap AO/scatter probes).
+/** counts2.z = re-fold mode (0..4) + 8 (wound exact fixes) + 16 (cheap AO/scatter probes) + 32 (normal hint).
  *  `exactBit` keeps every flag above the mode, so a mode setter never drops a flag. */
 const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => {
   const z = a.view.uniforms.counts2.value.z;
@@ -303,7 +303,7 @@ export function createWorldSeams(ctx: GameContext) {
     setWoundExact(on: boolean) {
       for (const a of ctx.world.actors) {
         const z = a.view.uniforms.counts2.value.z;
-        a.view.uniforms.counts2.value.z = (z % 8) + (z >= 16 ? 16 : 0) + (on ? 8 : 0);
+        a.view.uniforms.counts2.value.z = z - (z % 16 >= 8 ? 8 : 0) + (on ? 8 : 0);
       }
     },
     get woundExact() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) % 16 >= 8; },
@@ -313,10 +313,20 @@ export function createWorldSeams(ctx: GameContext) {
     setCheapProbes(on: boolean) {
       for (const a of ctx.world.actors) {
         const z = a.view.uniforms.counts2.value.z;
-        a.view.uniforms.counts2.value.z = (z % 16) + (on ? 16 : 0);
+        a.view.uniforms.counts2.value.z = z - (z % 32 >= 16 ? 16 : 0) + (on ? 16 : 0);
       }
     },
-    get cheapProbes() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) >= 16; },
+    get cheapProbes() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) % 32 >= 16; },
+    /** NORMAL HINT (counts2.z + 32, 2026-09-22): the re-fold is decided once per pixel —
+     *  calcNormal's four taps re-fold only the limb that won at the hit (or none). A look
+     *  change at limb/crater boundaries only; off = ship. */
+    setNormalHint(on: boolean) {
+      for (const a of ctx.world.actors) {
+        const z = a.view.uniforms.counts2.value.z;
+        a.view.uniforms.counts2.value.z = (z % 32) + (on ? 32 : 0);
+      }
+    },
+    get normalHint() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) >= 32; },
     /** Option 3 (2026-09-21): soldier wounds upload ONE noise-ragged crater instead of the
      *  wound + three lobe rows. A look change; off = ship. Re-uploads every body now. */
     setRaggedCraters(on: boolean) {
