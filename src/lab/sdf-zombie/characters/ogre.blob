@@ -37,11 +37,14 @@ model ogre
   stance humanoid
 
 skeleton
-  # Hip line 1.12 (root 1.02 + len 0.10; children attach at the TAIL). That is
-  # 0.51 of crown height — SHORT legs under a long, heavy torso is the brute
-  # proportion. The pelvis len is the crotch-to-hip segment the WAM kit
+  # Hip line 1.04 (root 0.94 + len 0.10; children attach at the TAIL). That is
+  # 0.47 of crown height — SHORT legs under a long, heavy torso — and with the
+  # 1.00 m arms (+0.15 hand) the arm:leg ratio is ~1.24, a gorilla's rather
+  # than a man's (owner, 2026-09-22: "his arms to leg ratio should be longer
+  # arms, like a gorilla"). Legs were 0.53 + 0.48; spine and chest grew
+  # 0.36 -> 0.38 to hold the 2.20 crown the kit's height fractions assume. The pelvis len is the crotch-to-hip segment the WAM kit
   # needs as its `hips` bone.
-  root pelvis at 1.02 len=0.10
+  root pelvis at 0.94 len=0.10
 
   # THE HUNCH. dir angles are WORLD directions (blob-compile dirVector), not
   # relative to the parent, so these read directly: lumbar 20 degrees forward,
@@ -49,14 +52,15 @@ skeleton
   # ape-like hunch, and that is the character: owner, 2026-09-22, "i dont
   # mind the low gorilla hunch stance in fact i like that". (A 14/18 stoop
   # was tried the same day and reverted.)
-  bone spine parent=pelvis dir=up pitch=20 len=0.36
-  bone chest parent=spine  dir=up pitch=28 len=0.36
+  bone spine parent=pelvis dir=up pitch=20 len=0.38
+  bone chest parent=spine  dir=up pitch=28 len=0.38
   # The neck leaves the yoke FORWARD (32 degrees) and the skull tips back 8,
   # so the face looks at the horizon out in front of the hunch. 40/0.12 sank
   # the face BELOW the yoke's crest (shoulders humped over the eyes); 32/0.14
-  # lifts the jaw clear, and with the yoke kept FLAT (below) the face reads
-  # from the front even in the hunch.
-  bone neck  parent=chest  dir=up pitch=32 len=0.14
+  # lifted the jaw clear but the chest still hid the mouth from above; 0.20
+  # pushes the head ~5 cm further OUT in front of the chest, vulture-like,
+  # so the mouth shows without losing the hunch.
+  bone neck  parent=chest  dir=up pitch=32 len=0.20
   bone skull parent=neck   dir=up pitch=-8 len=0.24
 
   mirror
@@ -67,23 +71,24 @@ skeleton
     # that shoulder reach is a function of torso width, not a constant.
     bone clavicle parent=chest    dir=side tilt=10 len=0.27
     # Upper arms hang slightly forward and out around the gut. LONG ape arms
-    # (0.46 + 0.46 m, fists near the knees): owner, 2026-09-22, "this
-    # character should in some ways knuckle drag". It is also what lets the
-    # dragged saw's nose reach the floor from a fist with a bent elbow — at
-    # 0.83 m the arm had to lock straight and the hand lagged the grip.
-    bone upperArm parent=clavicle dir=down pitch=12 tilt=20 len=0.46
+    # (0.50 + 0.50 m; fists at the knees): owner, 2026-09-22, "this character
+    # should in some ways knuckle drag" and "arms to leg ratio should be longer
+    # arms, like a gorilla". Also what lets the dragged saw's nose reach the
+    # floor from a fist with a bent elbow — at 0.83 m the arm had to lock
+    # straight and the hand lagged the grip.
+    bone upperArm parent=clavicle dir=down pitch=12 tilt=20 len=0.50
     # Forearms reach FORWARD at rest (pitch 30): the hands hang in front of
     # the belly, the pose of something that carries a heavy tool all day. The
     # chainsaw carry rotates from here, so a forward rest also keeps the
     # carry's rotations small.
-    bone foreArm  parent=upperArm dir=down pitch=30 tilt=2  len=0.46
+    bone foreArm  parent=upperArm dir=down pitch=30 tilt=2  len=0.50
     bone hand     parent=foreArm  dir=down pitch=20         len=0.15
     # Bowed legs: thighs splay out (tilt 7) and forward (pitch 14) around the
     # gut, shins come back in (tilt -6) and back (pitch -8) so the ankles land
     # under the knees' inside edge. Wide stance side=0.17 — the pelvis is
     # 0.54 m across, and the legs carry a body that is wider than it is deep.
-    bone thigh    parent=pelvis dir=down pitch=14 tilt=7  side=0.17 len=0.53
-    bone shin     parent=thigh  dir=down pitch=-8 tilt=-6          len=0.48
+    bone thigh    parent=pelvis dir=down pitch=14 tilt=7  side=0.17 len=0.49
+    bone shin     parent=thigh  dir=down pitch=-8 tilt=-6          len=0.44
     bone foot     parent=shin   dir=fwd                            len=0.22
   end
 
@@ -91,7 +96,10 @@ body
   # ---- TORSO ---------------------------------------------------------------
   # Pelvis: broad and deep. The widest thing below the shoulders except the
   # gut — an ogre's hips are a barrel, not a waist.
-  blob torso on pelvis at=0.40 r=0.205 wide=1.32 tall=0.95 deep=0.82 blend=0.040 offset=(0,0,0.060)
+  # tall 0.80 (was 0.95): with the legs shortened to the gorilla ratio the
+  # barrel's underside hung to y 0.785 and crowded the knees (leg daylight
+  # 20 mm) and swallowed the breeches' top ring.
+  blob torso on pelvis at=0.40 r=0.205 wide=1.32 tall=0.80 deep=0.82 blend=0.040 offset=(0,0.020,0.060)
   # THE GUT. Hangs low and forward off the lumbar spine — the offset drops it
   # 5 cm and pushes it 9 cm ahead of the spine line so in profile it sags OVER
   # the belt (the kit's belt rides its underside). deep 1.12: it is round, not
@@ -99,8 +107,11 @@ body
   blob torso on spine  at=0.25 r=0.215 wide=1.18 tall=1.05 deep=1.08 blend=0.070 offset=(0,-0.050,0.060)
   # Ribcage: barrel-chested, wider than deep.
   blob torso on spine  at=0.85 r=0.215 wide=1.28 tall=1.00 deep=1.00 blend=0.045
-  # Upper chest slab — the widest torso mass, carrying the shoulders.
-  blob torso on chest  at=0.50 r=0.220 wide=1.38 tall=1.00 deep=0.92 blend=0.045
+  # Upper chest slab — the widest torso mass, carrying the shoulders. `core`:
+  # the hunchback hump below is the torso's FATTEST prim, and clusterCore
+  # would otherwise route every fuse probe through it (head-to-torso margin
+  # fell from -37 mm to -3 mm when the hump grew).
+  blob torso on chest  at=0.50 r=0.220 wide=1.38 tall=1.00 deep=0.92 blend=0.045 core
   # Pectorals: two heavy slabs, sagging slightly (the offset drops them) —
   # old muscle gone to fat, not a bodybuilder's plates.
   blob torso on chest  at=0.45 r=0.110 wide=1.25 tall=0.85 deep=0.70 blend=0.014 offset=(0.105,-0.030,0.150) both
@@ -110,9 +121,14 @@ body
   # face and was half of the gorilla read. This mass is what the neck comes
   # out of.
   blob torso on chest  at=1.00 r=0.175 wide=1.70 tall=0.62 deep=1.00 blend=0.040 offset=(0,0.000,-0.050)
-  # Upper-back mass behind the yoke — thick, but kept below the neck line
-  # (r 0.170 lifted 3 cm was a silverback's hump).
-  blob torso on chest  at=0.70 r=0.150 wide=1.30 tall=0.95 deep=0.90 blend=0.040 offset=(0,0.000,-0.080)
+  # THE HUMP — a hunchback's dorsal mass between the shoulder blades (owner,
+  # 2026-09-22: "a more pronounced hump on his back like a hunchback"). It
+  # rides HIGH and BACK (9 cm up, 16 cm behind the thoracic axis), so in
+  # profile the back rises in a curve to a crest level with the base of the
+  # neck and then drops to the neck — the neck comes forward out of the front
+  # of it, not up through it. Wide blend so it grows out of the back rather
+  # than sitting on it as a separate ball.
+  blob torso on chest  at=0.72 r=0.235 wide=1.20 tall=1.00 deep=1.00 blend=0.055 offset=(0,0.090,-0.160)
 
   # ---- HEAD ----------------------------------------------------------------
   # Bull neck: as wide as the head. deep 0.95 so it is not a pipe.

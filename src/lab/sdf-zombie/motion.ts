@@ -1008,7 +1008,13 @@ export function stepMotion(
       const pitchAxis = Math.abs(soldierStaggerGunYaw) > 1e-9
         ? qRotate(qFromAxisAngle([0,1,0], soldierStaggerGunYaw * armPresence * inward), right)
         : right;
-      gun = gunPoseFromArm(targets[iE]!, targets[iH]!, pitchAxis, carry.gunPitch, profile.prop?.scale);
+      // The grip seats in the FIST, `gripReach` past the wrist along the
+      // forearm (motion-profile.ts). Same direction, so the aim is unchanged.
+      const reachPast = profile.prop?.gripReach ?? 0;
+      const fist = reachPast > 0
+        ? add(targets[iH]!, scale(normalize(sub(targets[iH]!, targets[iE]!)), reachPast))
+        : targets[iH]!;
+      gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale);
       // Keep the authored wrist/gun orientation, then swivel the elbow out
       // of the vest. The shoulder and grip do not move, nor do arm lengths.
       const rp = carry.rightPole;

@@ -23,8 +23,12 @@ export interface MotionProfile {
   armStyle: ArmStyle;
   /** Which carry each locomotion state uses; absent = no held weapon. */
   carries?: { walk: CarryName; run: CarryName; fire: CarryName };
-  /** The held prop, if any. */
-  prop?: { url: string; scale?: number };
+  /** The held prop, if any. `gripReach` (m, default 0) seats the prop's grip
+   *  that far PAST the wrist along the forearm — the rig's hand joint is the
+   *  WRIST (forearm tail), so a character whose fist is a long hand bone (the
+   *  ogre's 0.15 m, fist centred at its midpoint) otherwise holds the handle
+   *  inside its forearm. The soldier's short hand never showed it. */
+  prop?: { url: string; scale?: number; gripReach?: number };
 }
 
 export const ZOMBIE_PROFILE: MotionProfile = {
@@ -100,7 +104,10 @@ export const OGRE_PROFILE: MotionProfile = {
   // (make-ogre-chainsaw.py's header). Dragged one-handed, the front hoop no
   // longer has to be in the left arm's reach (that capped the two-handed
   // hold at 1.45), and the longer bar is what lets the nose reach the floor.
-  prop: { url: '/assets/lab/ogre-chainsaw.glb', scale: 1.6 },
+  // gripReach 0.075: the fist prim sits at the MIDDLE of his 0.15 m hand bone
+  // (ogre.blob `blob arm on hand at=0.50`); at 0 the handle rode inside his
+  // forearm (owner, 2026-09-22: "its like in his arm").
+  prop: { url: '/assets/lab/ogre-chainsaw.glb', scale: 1.6, gripReach: 0.075 },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {

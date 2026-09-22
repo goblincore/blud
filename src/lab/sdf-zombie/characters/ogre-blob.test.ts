@@ -297,15 +297,21 @@ describe('ogre chainsaw drag', () => {
         Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
       const grip = gunPoint(f.gun!, GUN_GRIP.gripHand);
       const tip = gunPoint(f.gun!, [0, -0.012, 0.66]); // the bar's nose, prop-local
-      sumGrip += dist(pts[J.handR!]!.pos, grip); n++;
+      // Against the FIST — the middle of the hand bone, where the fist prim
+      // is — not the wrist joint: seating the grip on the wrist put the
+      // handle inside his forearm (owner, 2026-09-22).
+      const wrist = pts[J.handR!]!.pos, tipR = pts[J.handTipR!]!.pos;
+      const fist = [0, 1, 2].map(k => (wrist[k]! + tipR[k]!) / 2);
+      sumGrip += dist(fist, grip); n++;
       tipLow = Math.min(tipLow, tip[1]); tipHigh = Math.max(tipHigh, tip[1]);
       trailMin = Math.min(trailMin, -along(tip));
       leftFore = Math.min(leftFore, dist(pts[J.handL!]!.pos, gunPoint(f.gun!, GUN_GRIP.foreHand)));
       const lz = along(pts[J.handL!]!.pos);
       leftZmin = Math.min(leftZmin, lz); leftZmax = Math.max(leftZmax, lz);
     }
-    // The right fist stays on the grip (verlet lag; the soldier's own mean is 7 mm).
-    expect(sumGrip / n).toBeLessThan(0.02);
+    // The grip sits IN the fist. 3 cm, not the wrist test's 2: the fist
+    // centre is a verlet tip riding the hand bone, one joint further out.
+    expect(sumGrip / n).toBeLessThan(0.03);
     // The nose trails BEHIND the hips and rides near the floor, never through it.
     expect(trailMin).toBeGreaterThan(0.35);
     expect(tipLow).toBeGreaterThan(-0.02);

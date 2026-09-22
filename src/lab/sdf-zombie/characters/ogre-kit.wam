@@ -68,14 +68,14 @@ palette
 
 skeleton
   # .blob `root pelvis at 1.02 len=0.10` -> WAM root POINT + `hips` bone.
-  # 1.02/2.20 = 0.463636, 0.10/2.20 = 0.045455. Every .blob `parent=pelvis`
+  # 0.94/2.20 = 0.427273, 0.10/2.20 = 0.045455. Every .blob `parent=pelvis`
   # becomes `parent=hips`.
-  root pelvis at 0.463636
+  root pelvis at 0.427273
   bone hips   parent=pelvis dir=up len=0.045455
   # up-bone pitches verbatim.
-  bone spine  parent=hips   dir=up pitch=20 len=0.163636
-  bone chest  parent=spine  dir=up pitch=28 len=0.163636
-  bone neck   parent=chest  dir=up pitch=32 len=0.063636
+  bone spine  parent=hips   dir=up pitch=20 len=0.172727
+  bone chest  parent=spine  dir=up pitch=28 len=0.172727
+  bone neck   parent=chest  dir=up pitch=32 len=0.090909
   bone skull  parent=neck   dir=up pitch=-8 len=0.109091
   mirror
     # clavicle dir=side (pitch no-op, tilt toward +y in both languages) and
@@ -83,11 +83,11 @@ skeleton
     bone clavicle parent=chest    dir=side tilt=10 len=0.122727
     # down-bone pitches NEGATED: upperArm 12->-12, foreArm 30->-30,
     # hand 20->-20, thigh 14->-14, shin -8->8.
-    bone upperArm parent=clavicle dir=down pitch=-12 tilt=20 len=0.209091
-    bone foreArm  parent=upperArm dir=down pitch=-30 tilt=2  len=0.209091
+    bone upperArm parent=clavicle dir=down pitch=-12 tilt=20 len=0.227273
+    bone foreArm  parent=upperArm dir=down pitch=-30 tilt=2  len=0.227273
     bone hand     parent=foreArm  dir=down pitch=-20         len=0.068182
-    bone thigh    parent=hips     dir=down pitch=-14 tilt=7  side=0.077273 len=0.240909
-    bone shin     parent=thigh    dir=down pitch=8   tilt=-6 len=0.218182
+    bone thigh    parent=hips     dir=down pitch=-14 tilt=7  side=0.077273 len=0.222727
+    bone shin     parent=thigh    dir=down pitch=8   tilt=-6 len=0.200000
     bone foot     parent=shin     dir=fwd                    len=0.100000
   end
 
@@ -130,7 +130,7 @@ parts
     # BREECHES — rough cloth from under the kilt to mid-shin, where the boot
     # cuff takes over. They START at chain t0.22 (y ~0.90), under the kilt's
     # hem: a top ring at the hip joint itself sat 185 mm deep in the pelvis
-    # mass (an interior face nobody sees; ogre-kit.test.ts rejected it). Chain thigh..shin is 0.53 + 0.48 m; the knee sits at chain
+    # mass (an interior face nobody sees; ogre-kit.test.ts rejected it). Chain thigh..shin is 0.49 + 0.44 m; the knee sits at chain
     # t 0.525. Every ring is flesh +22-30%: +10-14% was tried first and the
     # flesh's surface noise and the calf/knee masses pushed through the facets
     # from behind in the lab (2026-09-22). The calf rings carry the flesh's

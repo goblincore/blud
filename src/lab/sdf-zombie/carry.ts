@@ -87,16 +87,17 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // saw's rear handle with the arm hanging, and the bar trails BEHIND and
   // down so its nose rides just over the floor. Grid-solved against the ogre
   // rig at prop scale 1.6 for: fist beside the hip, a fist's width (>= 12 cm)
-  // CLEAR of the thigh-root flesh (hand ~(-0.50, 1.04, 0.06)) — the rig's
+  // CLEAR of the thigh-root flesh (wrist ~(-0.50, 0.96, 0.07); the grip sits
+  // 7.5 cm further on, in the fist — the profile's gripReach) — the rig's
   // body collision shoved a fist placed at x -0.40 a full 20 cm forward off
   // the handle; the bar trailing back and down, outboard of the leg, its
-  // nose ~0.10 m up at the centreline (the chain edge a few cm
+  // nose ~0.08 m up at the centreline (re-solved for the 1.00 m gorilla arms) (the chain edge a few cm
   // off the floor — the stride's bob scrapes it). The elbow keeps a BEND
-  // (fold 0.45, grip at 92% of the 0.92 m arm): a first solve hung the arm
+  // (fold 0.65, wrist at 88% of the 1.00 m arm): a first solve hung the arm
   // dead straight at full reach, and any drift in the verlet shoulder then
   // showed as a 7 cm gap between fist and handle. ogre-blob.test.ts pins the
   // trail and the grip. The left arm is free and swings.
-  drag:  { right: { pitch: -0.95, yaw: 0.25, fold: 0.45 }, gunPitch: -0.60, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.35 }, rightPole: [0.2, 0, -1] },
+  drag:  { right: { pitch: -1.05, yaw: 0.20, fold: 0.65 }, gunPitch: -0.85, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.35 }, rightPole: [0.2, 0, -1] },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from
