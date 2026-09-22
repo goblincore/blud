@@ -354,7 +354,7 @@ async function stampWithRetry() {
 const rows = [];
 const phasesOut = {};
 let woundRec = null;
-// MELEE_PHASES (2026-09-22, fire study): e.g. 'clean,thaw,fire' — 'thaw' is the fire phase's
+// MELEE_PHASES (2026-09-22, fire study): e.g. 'clean,thaw,fire,out' — 'out' extinguishes in place; 'thaw' is the fire phase's
 // 45-frame thaw + restore WITHOUT igniting (movement alone), 'fire' ignites with no wounds.
 const PHASES = (process.env.MELEE_PHASES ?? 'clean,wounded,wounded+fire').split(',').map(x => x.trim());
 for (const phase of PHASES) {
@@ -397,6 +397,12 @@ for (const phase of PHASES) {
     console.log(`  burning: ${JSON.stringify(await ev('__sdfGame.burning().length'))} bodies tracked`);
   }
 
+  if (phase === 'out') {
+    // Fire study: put every fire out WITHOUT moving anyone (still frozen), so the
+    // fire phase's framing is kept and only the burning goes away.
+    await ev('(() => { __sdfGame.extinguishAll(); __sdfGame.step(3); return 1; })()');
+    console.log(`  burning after extinguish: ${JSON.stringify(await ev('__sdfGame.burning().length'))}`);
+  }
   console.log(`\n=== ${phase} ===`);
   const names = legNames(phase);
   for (let rep = 0; rep < REPS; rep++) {
