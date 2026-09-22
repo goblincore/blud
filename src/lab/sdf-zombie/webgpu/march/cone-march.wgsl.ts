@@ -1,3 +1,4 @@
+import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS } from './layout';
 // src/lab/sdf-zombie/webgpu/march/cone-march.wgsl.ts
 //
@@ -211,21 +212,31 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
     var tNear = 1e9;
     tFar = 0.0;
     var reach = false;
-    for (var c = 0; c < 8; c = c + 1) {
-      if (c >= i32(gInstCounts.y)) { break; }
-      let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + gBand), 0);
-      let R = cb.w + 0.05 + woundCfg2.z;
-      let v = cb.xyz - camPos;
-      let D = length(v);
-      if (D > R) {
-        let ang = acos(clamp(dot(v, rd) / D, -1.0, 1.0));
-        if (ang > coneA + asin(clamp(R / D, 0.0, 1.0))) { continue; }
-        tNear = min(tNear, (D - R) / (1.0 + k));
-      } else {
-        tNear = 0.0;
+    // EVERY instance the field folds: mapBody walks slots base + s for s < instCfg.x
+    // (a crowd box's prepass sees the whole type's union), so the spheres must too —
+    // testing only the loaded slot certified blocks empty for bodies it never looked at.
+    let nInst = i32(instCfg.x);
+    let base = i32(instCfg.z);
+    for (var s = 0; s < ${MAX_CROWD_INSTANCES}; s = s + 1) {
+      if (s >= nInst) { break; }
+      loadInstance(inst, base + s);
+      if (gInstAlive < 0.5) { continue; }
+      for (var c = 0; c < 8; c = c + 1) {
+        if (c >= i32(gInstCounts.y)) { break; }
+        let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + gBand), 0);
+        let R = cb.w + 0.05 + woundCfg2.z;
+        let v = cb.xyz - camPos;
+        let D = length(v);
+        if (D > R) {
+          let ang = acos(clamp(dot(v, rd) / D, -1.0, 1.0));
+          if (ang > coneA + asin(clamp(R / D, 0.0, 1.0))) { continue; }
+          tNear = min(tNear, (D - R) / (1.0 + k));
+        } else {
+          tNear = 0.0;
+        }
+        reach = true;
+        tFar = max(tFar, D + R);
       }
-      reach = true;
-      tFar = max(tFar, D + R);
     }
     if (!reach) { return -2.0; }
     t = max(tNear, 0.0);
