@@ -166,6 +166,8 @@ var<private> gWoundThreat: u32 = 0u;
 // Exact-fix switch (counts2.z >= 8): the d-aware wound reach and the re-fold
 // pre-scan. Set per slot by mapBody; 0 in every other caller = ship.
 var<private> gWoundExact: f32 = 0.0;
+// Set by the AO/scatter probe loop around its mapBody call (cheap probes, counts2.z + 16).
+var<private> gProbePass: f32 = 0.0;
 // Per-owner sum of rim-bump amplitudes over the rows the BASE applyWounds
 // reached at p (index = owner cluster + 1, 0 = unowned).
 var<private> gWoundAmp: array<f32, 9>;

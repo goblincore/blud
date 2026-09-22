@@ -19,7 +19,9 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // field in the Metal compile. Same probe points, same gates, same math.
   for (var k = 0; k < 2; k = k + 1) {
     if (select(lodCfg.x > 0.5, surfCfg.w > 0.0, k == 0)) {
+      gProbePass = 1.0;
       let probeD = mapBody(select(p + n * 0.06, p + L * 0.06, k == 0), data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x;
+      gProbePass = 0.0;
       if (k == 0) {
         let thin = clamp(probeD * -8.0, 0.0, 1.0);
         scatter = deepColor * thin * surfCfg.w * (1.0 - cm);

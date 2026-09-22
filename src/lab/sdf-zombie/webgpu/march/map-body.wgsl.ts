@@ -72,8 +72,12 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // counts2.z = re-fold mode (0 ship, 1 off, 2 raiser gate, 3 threat mask,
     // 4 per-limb accumulators) + 8 when the exact fixes are on (d-aware
     // reach, re-fold pre-scan).
-    let exactFix = counts2.z > 7.5;
-    let refoldMode = select(counts2.z, counts2.z - 8.0, exactFix);
+    // + 16 = CHEAP PROBES (2026-09-22): the AO/scatter probe calls (gProbePass)
+    // skip the owner re-fold below. Normals and the walk never set gProbePass.
+    let cheapProbe = counts2.z > 15.5 && gProbePass > 0.5;
+    let z8 = select(counts2.z, counts2.z - 16.0, counts2.z > 15.5);
+    let exactFix = z8 > 7.5;
+    let refoldMode = select(z8, z8 - 8.0, exactFix);
     gWoundExact = select(0.0, 1.0, exactFix);
 ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwounded body's
     // wound bound is the 1e9 no-cull identity, which would put EVERY sample
@@ -198,7 +202,7 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
   // unwritten mask is zero and would switch the re-fold off entirely.
   let raisersAtBase = gWoundRaisers & ~1u;
   let threatAtBase = gWoundThreat;
-  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
+  if (!cheapProbe && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
