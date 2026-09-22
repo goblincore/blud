@@ -4,6 +4,14 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Broodmother (spider-bodied temptress) — first pass 2026-09-22
+
+- [x] **New character `broodmother`**: SDF body (`broodmother.blob`, prose-authored, Vore lineage but fleshy):
+  slim woman out of a spider cephalothorax, 8 flesh legs, 3 orbs, prim face. 120/128 prims, 13 tests.
+  [Notes + frames](docs/dev-notes/2026-09-22-broodmother/NOTES.md). Awaiting owner look.
+- [ ] **Spider gait**: static in the lab — `gait.ts` maps no joint for spider leg bones. Alternating-tetrapod
+  leg cycle + torso sway. Not started: attacks, brain, sounds, game-page spawn.
+
 ## Ogre (chainsaw brute) — first pass 2026-09-22
 
 - [x] **New character `ogre`**: SDF body (`ogre.blob`, prose-authored, Quake-ogre lineage), WAM kit (belt, kilt,
