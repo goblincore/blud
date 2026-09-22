@@ -80,3 +80,26 @@ shading 28 %, misses 31 %.
   owned wounds. Wounded `sdf:march` 13.40 -> 13.15 ms (-2 %, near noise; load 6.6); a few crater-edge px shift
   up to 0.68. **Not shipped.** CENSUS BLIND SPOT: the analytic path (`ngBody`) folds prims itself and does not
   count them, so the census showed a bogus -44 % — use timing for any lever that moves work into ngBody.
+
+## Walk skip (parked) and the whole-frame breakdown (2026-09-22)
+
+- **Walk re-fold study** (debug mode 15, `MELEE_REFOLD_STUDY=1`): 119,866 walk re-folds attempted over 13.6 k
+  pixels, 8.6 % won; 4,754 pixels see a limb win (all hits). ~3 limbs re-folded per step.
+- **Walk skip** (`setWalkSkip`, counts2.z + 128, OFF): skip the re-fold while the last losing gap (limb - body)
+  cannot have closed (budget 4 x stepLen per step). Saved 0.2 % of prims — the losing gaps are millimetres
+  (limbs genuinely sit against the crater), so there is nothing to skip. The whole re-fold now costs ~1.5 ms
+  (wounded 13.9 vs 12.5 re-fold off).
+
+Whole frame, melee, ship, 4 reps (load <= 6.3). GPU-bound in every phase (frame ~ GPU span):
+
+| ms p50 | clean | wounded | wounded + fire |
+| --- | ---: | ---: | ---: |
+| frame | 13.7 | 17.9 | 31.0 |
+| `sdf:march` | 10.5 | 14.9 | 21.7 |
+| `post:fire-march` | — | — | 5.0 |
+| `sdf:polys` | 1.2 | 1.2 | 1.3 |
+| upscaler | 0.5 | 0.5 | 0.5 |
+| CPU `cpu:draw` (crowd SDF uniforms) | 5.3 | 4.2 | 3.3 |
+
+Next: the flame march (`post:fire-march`, 5 ms, never tuned), then bodies-at-the-lens (the panic case).
+CPU crowd uniform upload (~4-5 ms) is not the long pole today but would be with more bodies.
