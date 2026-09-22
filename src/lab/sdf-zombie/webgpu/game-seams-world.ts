@@ -19,7 +19,7 @@ import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
 import { LIMB_ACCUMULATORS } from './march/limbs-flag';
 import { SHIP_COUNTS2_Z, SHIP_REFOLD_MODE } from './zombie-gpu';
 
-/** counts2.z = re-fold mode (0..4) + 8 (wound exact fixes) + 16 (cheap AO/scatter probes) + 32 (normal hint).
+/** counts2.z = re-fold mode (0..4) + 8 (wound exact fixes) + 16 (cheap AO/scatter probes) + 32 (normal hint) + 64 (analytic owned normals).
  *  `exactBit` keeps every flag above the mode, so a mode setter never drops a flag. */
 const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } } }) => {
   const z = a.view.uniforms.counts2.value.z;
@@ -323,10 +323,20 @@ export function createWorldSeams(ctx: GameContext) {
     setNormalHint(on: boolean) {
       for (const a of ctx.world.actors) {
         const z = a.view.uniforms.counts2.value.z;
-        a.view.uniforms.counts2.value.z = (z % 32) + (on ? 32 : 0);
+        a.view.uniforms.counts2.value.z = z - (z % 64 >= 32 ? 32 : 0) + (on ? 32 : 0);
       }
     },
-    get normalHint() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) >= 32; },
+    get normalHint() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) % 64 >= 32; },
+    /** ANALYTIC OWNED NORMALS (counts2.z + 64, 2026-09-22): the analytic normal path runs
+     *  near OWNED wounds too, where no limb won the re-fold at the hit (the field there is
+     *  the plain wounded union); elsewhere the four finite-difference taps. off = ship. */
+    setAnalyticOwned(on: boolean) {
+      for (const a of ctx.world.actors) {
+        const z = a.view.uniforms.counts2.value.z;
+        a.view.uniforms.counts2.value.z = z - (z >= 64 ? 64 : 0) + (on ? 64 : 0);
+      }
+    },
+    get analyticOwned() { return (ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0) >= 64; },
     /** Option 3 (2026-09-21): soldier wounds upload ONE noise-ragged crater instead of the
      *  wound + three lobe rows. A look change; off = ship. Re-uploads every body now. */
     setRaggedCraters(on: boolean) {

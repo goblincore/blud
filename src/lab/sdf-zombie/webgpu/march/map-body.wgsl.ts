@@ -76,7 +76,9 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // + 16 = CHEAP PROBES (2026-09-22): the AO/scatter probe calls (gProbePass)
     // skip the owner re-fold below. Normals and the walk never set gProbePass.
     // + 32 = NORMAL HINT (read by the trace around calcNormal; stripped here).
-    let z32 = select(counts2.z, counts2.z - 32.0, counts2.z > 31.5);
+    // + 64 = ANALYTIC OWNED NORMALS (read by the shading normal block; stripped here).
+    let z64 = select(counts2.z, counts2.z - 64.0, counts2.z > 63.5);
+    let z32 = select(z64, z64 - 32.0, z64 > 31.5);
     let cheapProbe = z32 > 15.5 && gProbePass > 0.5;
     let z8 = select(z32, z32 - 16.0, z32 > 15.5);
     let exactFix = z8 > 7.5;

@@ -72,7 +72,9 @@ describe('final-hit helper isolation', () => {
   it('rejects analytic normals for scoped wounds before either cutter path', () => {
     const load = `textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0).y`;
     expect(NG_WOUNDS).toContain(load);
-    expect(NG_WOUNDS).toContain('if (owner > 0.0) { gNgReason = 1; return d; }');
+    // Owned wounds still bail — unless the march found no limb won the re-fold at the hit
+    // (gNgOwnedOk, counts2.z + 64), where the field is the plain wounded union.
+    expect(NG_WOUNDS).toContain('if (owner > 0.0 && gNgOwnedOk < 0.5) { gNgReason = 1; return d; }');
     expect(NG_WOUNDS.indexOf(load)).toBeGreaterThan(NG_WOUNDS.indexOf('if (r > reach) { continue; }'));
     expect(NG_WOUNDS.indexOf(load)).toBeLessThan(NG_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
     expect(NG_BODY).toMatch(/d = ngWounds\([^;]+;\s*if \(gNgReason != 0\) \{ return d; \}/);
