@@ -20,7 +20,7 @@ import {
   clipDepthToMetres,
   assertMeleeWounds,
   MELEE_REGIONS,
-  LOAD_SUSPECT_LIMIT, missAnatomy } from './lib/sdf-melee-stage.mjs';
+  LOAD_SUSPECT_LIMIT, missAnatomy, costCensus } from './lib/sdf-melee-stage.mjs';
 
 describe('woundPlan', () => {
   it('spreads each body over distinct regions and the crowd over both flanks', () => {
@@ -261,5 +261,56 @@ describe('missAnatomy', () => {
     const f = buf(4, 4, () => [9, 0, 0]);
     const a = missAnatomy(f, 4, 4);
     expect(a.missStepShare).toBe(0);
+  });
+});
+
+describe('costCensus', () => {
+  // A 3x3 hit block in a 5x5 target; its centre pixel is interior, the ring is
+  // silhouette; one hit flagged near-wound; the rest miss.
+  const w = 5, h = 5;
+  const walk = new Float32Array(w * h * 4), total = new Float32Array(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    const isHit = x >= 1 && x <= 3 && y >= 1 && y <= 3;
+    const near = x === 3 && y === 3;
+    walk[i] = isHit ? 10 : 2;                        // prims
+    walk[i + 1] = near ? 5 : 0;                      // wound rows
+    walk[i + 2] = 4 + (isHit ? 1000 : 0) + (near ? 2000 : 0);
+    if (isHit) { total[i] = walk[i] + 20; total[i + 1] = walk[i + 1] + (near ? 7 : 0); total[i + 2] = walk[i + 2]; }
+  }
+  const c = costCensus(walk, total, w, h);
+
+  it('classes the pixels', () => {
+    expect(c.classes.miss.px).toBe(16);
+    expect(c.classes.interior.px).toBe(1);
+    expect(c.classes.silhouette.px).toBe(7);
+    expect(c.classes.wound.px).toBe(1);
+  });
+
+  it('splits prim work into walk and post-hit shares that sum to 1', () => {
+    // walk: 16*2 + 9*10 = 122; post: 9*20 = 180; total 302
+    expect(c.totals.prims).toBe(302);
+    expect(c.classes.miss.primShare.walk).toBeCloseTo(32 / 302, 9);
+    expect(c.classes.silhouette.primShare.post).toBeCloseTo(140 / 302, 9);
+    const s = Object.values(c.classes).reduce((a, k) => a + k.primShare.walk + k.primShare.post, 0);
+    expect(s).toBeCloseTo(1, 9);
+  });
+
+  it('puts wound rows on the near-wound class', () => {
+    expect(c.totals.rows).toBe(12);
+    expect(c.classes.wound.rowShare.walk).toBeCloseTo(5 / 12, 9);
+    expect(c.classes.wound.rowShare.post).toBeCloseTo(7 / 12, 9);
+    expect(c.classes.wound.perPixel.steps).toBe(4);
+  });
+});
+
+describe('costCensus — cleared texels', () => {
+  it('does not count the scene clear colour (b ~ 0.01) as a rasterised miss', () => {
+    const w = 2, h = 1;
+    const walk = new Float32Array([3, 0, 1003, 0.9, 0.008, 0.008, 0.01, 1]);
+    const total = new Float32Array([5, 0, 1003, 0.9, 0.008, 0.008, 0.01, 1]);
+    const c = costCensus(walk, total, w, h);
+    expect(c.classes.miss.px).toBe(0);
+    expect(c.classes.silhouette.px).toBe(1);
   });
 });

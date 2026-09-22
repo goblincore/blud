@@ -255,7 +255,7 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
     // the full march accepts d < max(hitEpsBase, t * aaK / distort) (distort >= 1),
     // so a ray grazing a silhouette within that epsilon counts as a hit without
     // crossing the surface. Widen the touch by the same worst case. Off: unchanged.
-    let acceptEps = select(0.0012, max(max(0.0012, woundCfg2.w), t * aaCfg.x * aaCfg.y), depthPreCfg.z > 0.5);
+    let acceptEps = select(0.0012, max(max(0.0012, woundCfg2.w), t * aaCfg.x * max(aaCfg.y, aaCfg.z)), depthPreCfg.z > 0.5);
     if (d < r + acceptEps + woundCfg2.z) { return t; }
     // Near a wound the field is not a distance bound (the smax fillet
     // overstates), so the coarse walk uses the SAME step multiplier the full

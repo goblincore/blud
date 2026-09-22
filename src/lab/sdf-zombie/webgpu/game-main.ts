@@ -2236,6 +2236,12 @@ async function main() {
    *  `__sdfGame.setAa(strength)` flips it live for A/B; 0 is the old
    *  behaviour bit-for-bit (t * 0 / distort == t * 0 == 0). */
   const GAME_AA = 1.0;
+  /** DISTANCE-BASED ACCEPT (2026-09-22, cost census): accept strength GAME_AA_NEAR up
+   *  close, fading to GAME_AA over [GAME_AA_FADE_M / 2, GAME_AA_FADE_M] metres. Owner A/B:
+   *  invisible at 6 (and judged "okay" at 12 — 12 saves ~19 % of wounded-melee prim work vs
+   *  ~15 % at 6; a one-number follow-up). `__sdfGame.setAaDistance(near, fadeM)`; 0 = off. */
+  const GAME_AA_NEAR = 6.0;
+  const GAME_AA_FADE_M = 3.0;
 
   /** Perf round 2, task 7: bodies RECEIVE the level's shadows. The twin
    *  light (dungeon-lighting.ts) renders a level-only depth map (layer 0 —
@@ -3016,6 +3022,8 @@ async function main() {
     view.uniforms.perfCfg.value.w = GAME_LAST_STEP;
     view.uniforms.normalGradientCfg.value.set(ctx.telemetry.normalGradientMode, ctx.telemetry.normalGradientDebug, 0, 0);
     view.uniforms.aaCfg.value.y = GAME_AA;
+    (view.uniforms.aaCfg.value as unknown as { z: number; w: number }).z = GAME_AA_NEAR;
+    (view.uniforms.aaCfg.value as unknown as { z: number; w: number }).w = GAME_AA_FADE_M;
     view.uniforms.aaCfg.value.x = ctx.render.sdfLayer.pixelConeK;
     view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
     const face = name === 'zombie'

@@ -8,6 +8,7 @@ import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
 
 export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
+  gRefoldWin = 0.0;
   // PER-SLOT UNION FOLD (crowd stage a). One draw traces every instance of a
   // character type; each instance's FULL field is evaluated in turn and the
   // min is the union surface. PER-INSTANCE state (counts, counts2, woundBound,
@@ -72,8 +73,14 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // counts2.z = re-fold mode (0 ship, 1 off, 2 raiser gate, 3 threat mask,
     // 4 per-limb accumulators) + 8 when the exact fixes are on (d-aware
     // reach, re-fold pre-scan).
-    let exactFix = counts2.z > 7.5;
-    let refoldMode = select(counts2.z, counts2.z - 8.0, exactFix);
+    // + 16 = CHEAP PROBES (2026-09-22): the AO/scatter probe calls (gProbePass)
+    // skip the owner re-fold below. Normals and the walk never set gProbePass.
+    // + 32 = NORMAL HINT (read by the trace around calcNormal; stripped here).
+    let z32 = select(counts2.z, counts2.z - 32.0, counts2.z > 31.5);
+    let cheapProbe = z32 > 15.5 && gProbePass > 0.5;
+    let z8 = select(z32, z32 - 16.0, z32 > 15.5);
+    let exactFix = z8 > 7.5;
+    let refoldMode = select(z8, z8 - 8.0, exactFix);
     gWoundExact = select(0.0, 1.0, exactFix);
 ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwounded body's
     // wound bound is the 1e9 no-cull identity, which would put EVERY sample
@@ -198,11 +205,12 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
   // unwritten mask is zero and would switch the re-fold off entirely.
   let raisersAtBase = gWoundRaisers & ~1u;
   let threatAtBase = gWoundThreat;
-  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
+  if (!cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
       if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
+      if (gNormalHint > 0.0 && f32(c + 1) != gNormalHint) { continue; }
       if (refoldMode > 1.5 && (raisersAtBase & ~(1u << u32(c + 1))) == 0u) { continue; }
       if (refoldMode > 2.5 && refoldMode < 3.5 && (threatAtBase & (1u << u32(c + 1))) == 0u) { continue; }
 ${LIMBS ? `      let savedBest = gFoldBest;
@@ -295,6 +303,7 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
       if (limbDamage < dmg) {
         dmg = limbDamage;
+        gRefoldWin = f32(c + 1);
       } else {
         gFoldBest = savedBest;
         gFoldBestIdx = savedIdx;

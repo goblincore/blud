@@ -24,6 +24,12 @@ export const DISPLAY_DEBUG_BLOCK = /* wgsl */ `  // Legacy display look (lodCfg.
   // (56 prims x ~35 steps as the red end). After the gamma block so the
   // ramp colours emit raw; depth (t) still goes out, so the composite's
   // depth path runs identically to a shaded frame.
+  // COST CENSUS, TOTAL (debugCfg.x == 14): mode 13's counters after EVERY
+  // post-hit evaluation (normal taps, AO, scatter, wound shadow). Hits only —
+  // a miss has no post-hit cost. b carries steps + 1000 (hit) + 2000 (near wound).
+  if (debugCfg.x > 13.5 && debugCfg.x < 14.5) {
+    return vec4<f32>(gDebugPrims, gDebugWoundRows, gDebugSteps + 1000.0 + select(0.0, 2000.0, hitNearWound), t);
+  }
   if (debugCfg.x > 0.5) {
     // MODE 3 (hull-holes diagnosis, 2026-08-27): heat of occT itself — the
     // distance this pixel's march will be clamped by. 0 m = blue, 4 m = red,

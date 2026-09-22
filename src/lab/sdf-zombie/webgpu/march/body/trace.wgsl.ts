@@ -51,7 +51,7 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
   // shipping path pays exactly one uniform branch; gDebugMode hands the
   // flag to mapBody's fold without forking its signature.
-  if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }
+  if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugWoundRows = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }
 ${TILE_PRELOAD_BLOCK}
 ${WOUND_LIST_BLOCK}
 ${HULL_BOUNDS_BLOCK}
@@ -83,6 +83,9 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
   // twice a wound's radius keeps its cost proportional to crater screen
   // area instead of screen size.
   var hitNearWound = false;
+  // Which limb's re-fold won at the ACCEPTED sample (gRefoldWin, 0 = none), for
+  // the NORMAL HINT around calcNormal. Re-assigned every iteration like the rest.
+  var hitRefold = 0.0;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }
@@ -93,9 +96,14 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
     // paying fbm at every step of the empty approach.
     let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
     let distort = max(gFoldBestDistort, 1.0);
+    // DISTANCE-BASED ACCEPT (aaCfg.z/w, 2026-09-22): a stronger footprint accept up
+    // close, fading to aaCfg.y over [w/2, w] metres (the owner saw the fattened edge
+    // on FAR bodies only). z = 0 keeps the old aaK exactly.
+    let aaKt = select(aaK, aaCfg.x * mix(aaCfg.z, aaCfg.y, smoothstep(aaCfg.w * 0.5, aaCfg.w, t)), aaCfg.z > 0.0);
     var d = dres.x;
     hitBest = i32(dres.y);
     hitField = dres;
+    hitRefold = gRefoldWin;
     // Shell displacement: inside a thin shell of the smooth surface, the
     // silhouette noise displaces the REAL field — bumpy outlines are back —
     // and stepping goes conservative because the noise breaks the Lipschitz
@@ -138,7 +146,7 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
-      let hitEps = max(hitEpsBase, t * aaK / distort);
+      let hitEps = max(hitEpsBase, t * aaKt / distort);
       // LAST-STEP SECANT ACCEPT (Claybook, Aaltonen GDC 2018 slide 25; off at
       // perfCfg.w == 0, bit-identical). A sphere trace converges on a
       // geometric series: at a fixed grazing angle each step shrinks d by the
@@ -191,7 +199,7 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
         // back-step to the interval actually travelled. This is the other half
         // of the wounded-ray non-reconvergence. Fixing it needs the packed
         // distortion factor threaded to this site — see the perf spec.
-        if (d < -max(hitEpsBase, t * aaK / distort) && omega > 1.0 && !conservative) {
+        if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0 && !conservative) {
           stepLen = d;
           omega = 1.0;
         } else {

@@ -72,6 +72,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     let slack = select(0.25, max(0.0, -d), gWoundExact > 0.5);
     let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + slack;
     if (perfCfg.y > 0.5 && r > reach) { continue; }
+    if (gDebugMode > 0.5) { gDebugWoundRows = gDebugWoundRows + 1.0; }
     let wFlags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0);
     let owner = wFlags.y;
     // THREAT MASK (2026-09-21): the fraction of flags.x is a CPU-computed bitfield
@@ -165,6 +166,13 @@ var<private> gWoundThreat: u32 = 0u;
 // Exact-fix switch (counts2.z >= 8): the d-aware wound reach and the re-fold
 // pre-scan. Set per slot by mapBody; 0 in every other caller = ship.
 var<private> gWoundExact: f32 = 0.0;
+// Set by the AO/scatter probe loop around its mapBody call (cheap probes, counts2.z + 16).
+var<private> gProbePass: f32 = 0.0;
+// NORMAL HINT (counts2.z + 32, 2026-09-22): the re-fold is decided ONCE per pixel.
+// gRefoldWin = cluster + 1 whose re-fold won on the latest mapBody call (0 = none);
+// gNormalHint >= 0 while calcNormal's taps run: re-fold only that cluster (0 = none).
+var<private> gRefoldWin: f32 = 0.0;
+var<private> gNormalHint: f32 = -1.0;
 // Per-owner sum of rim-bump amplitudes over the rows the BASE applyWounds
 // reached at p (index = owner cluster + 1, 0 = unowned).
 var<private> gWoundAmp: array<f32, 9>;

@@ -23,6 +23,6 @@ describe('ported features reach the entry point', () => {
     expect(MAP_BODY).toContain('gFoldBestDistort = 1.0;');
     expect(MAP_BODY).not.toContain('nearWound, gFoldBestDistort');
     expect(MARCH_BODY).toContain('let distort = max(gFoldBestDistort, 1.0);');
-    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK / distort);');
+    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaKt / distort);');
   });
 });
