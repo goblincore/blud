@@ -602,7 +602,9 @@ export function costCensus(walk, total, w, h) {
   const hit = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const b = walk[i * 4 + 2];
-    if (!(b > 0)) continue;                          // cleared: never rasterised
+    // A real fragment took >= 1 step, so b >= 1; a never-rasterised texel holds the
+    // scene CLEAR colour (b ~ 0.01, not 0 — measured 2026-09-22).
+    if (!(b >= 0.5)) continue;
     const code = Math.floor(b / 1000);
     hit[i] = code >= 1 ? 1 : 0;
     cls[i] = code >= 3 ? 3 : code >= 1 ? 1 : 0;
@@ -627,7 +629,7 @@ export function costCensus(walk, total, w, h) {
     a.steps += walk[o + 2] % 1000;
     a.walkPrims += walk[o];
     a.walkRows += walk[o + 1];
-    if (hit[i] && total[o + 2] > 0) {
+    if (hit[i] && total[o + 2] >= 0.5) {
       a.postPrims += Math.max(0, total[o] - walk[o]);
       a.postRows += Math.max(0, total[o + 1] - walk[o + 1]);
     }

@@ -303,3 +303,14 @@ describe('costCensus', () => {
     expect(c.classes.wound.perPixel.steps).toBe(4);
   });
 });
+
+describe('costCensus — cleared texels', () => {
+  it('does not count the scene clear colour (b ~ 0.01) as a rasterised miss', () => {
+    const w = 2, h = 1;
+    const walk = new Float32Array([3, 0, 1003, 0.9, 0.008, 0.008, 0.01, 1]);
+    const total = new Float32Array([5, 0, 1003, 0.9, 0.008, 0.008, 0.01, 1]);
+    const c = costCensus(walk, total, w, h);
+    expect(c.classes.miss.px).toBe(0);
+    expect(c.classes.silhouette.px).toBe(1);
+  });
+});
