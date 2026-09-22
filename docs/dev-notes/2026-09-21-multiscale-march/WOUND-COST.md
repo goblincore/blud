@@ -211,3 +211,23 @@ Melee bench, one page, legs alternating, `?limbs` compiled in, 21/36 stamps land
 `MELEE_QS` (page flags, e.g. `&limbs`), `MELEE_MIN_LANDED` (stamp-landing floor), `CENSUS_QUERY` (census page
 flags). Headless `sdf-gib-assets-head.mjs` renders blank frames on current main — it does not wait for render
 readiness; don't trust its images.
+
+## 2026-09-22 — why fire raised the body march: it is the PANIC, not the fire
+
+Melee bench, `MELEE_PHASES=clean,<phase>`, each phase against the clean baseline of its OWN page
+(the behaviour edge cannot be undone in-page). `sdf:march` ms, ship leg:
+
+| phase | clean | after | Δ |
+| --- | ---: | ---: | ---: |
+| `thaw` — 45 frames calm, no fire | 12.3 | 12.0 | ≈ 0 |
+| `firecalm` — burning, `setBurnBehaviour(false)` (same motion as thaw) | 12.4 | 12.3 | ≈ 0 |
+| `fire` — burning + panic behaviour | 13.4 | 25.6-30.6 | +13 to +17 (load ~7) |
+
+- **Fire rendering adds nothing to `sdf:march`.** It costs ~3.5 ms of FRAME (`post:fire-march`, the flames).
+- **The march cost is the burn BEHAVIOUR**: burning zombies chase 1.25x faster with jitter, stumbles
+  and arm flail, so with the player pinned they are on top of the camera within the thaw — the
+  close-up melee case itself. Zeroing burn ramps in place (`noburn`) also changed nothing.
+- Tools: `__sdfGame.setBurnBehaviour(false)` (burn-behaviour.ts, ship true); bench phases
+  `thaw`, `firecalm`, `fire`, `noburn`, `out` (`out` is a no-op: `extinguishAll` needs the sim ticking).
+- Still broken: the mode-4 census reads 0 hits / 1 step in the panic state (and after it), so
+  steps cannot be counted there; the render state (scale, adaptive, steps) is identical.
