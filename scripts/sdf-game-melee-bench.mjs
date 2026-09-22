@@ -151,7 +151,7 @@ const SNAPSHOT_JS = `(() => {
     woundListOn: g.woundList, marchSteps: g.marchSteps,
     sdfScale: g.sdfScale, adaptive: g.adaptive, halfRate: g.halfRate,
     depthGate: g.depthGate, occluder: g.occluder, cone: g.cone,
-    shell: g.shell, relax: g.relax,
+    shell: g.shell, relax: g.relax, aa: g.aa,
     bleedEnabled: g.bleed.enabled, spillChance: g.woundTuning.spillChance,
     frameCap: g.frameCap,
   };
@@ -161,6 +161,7 @@ const RESTORE_JS = (snap) => `(() => {
   window.__meleeShipRestore = () => {
     const g = __sdfGame;
     g.setFlatAlbedo(snap.flatAlbedo);
+    if (g.setAa && typeof snap.aa === 'number') g.setAa(snap.aa);
     // Ship has the depth prepass and the miss cull OFF (GAME_DEPTH_PREPASS = 0).
     if (g.setMissCull) g.setMissCull(false);
     if (g.setDepthPrepass) g.setDepthPrepass(false);
