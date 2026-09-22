@@ -295,6 +295,32 @@ async function capturePhase(phase, withWounds) {
     // Miss-ray anatomy (2026-09-22): where the miss steps sit, and the raw buffer.
     census.miss = missAnatomy(f32, buf.w, buf.h);
     writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-mode4-${buf.w}x${buf.h}.f32`, bytes);
+    // PARITY (MELEE_PARITY_JS, 2026-09-22): same page, same frozen frame, the leg ON —
+    // every hit pixel must still be a hit with the same clip depth. A culled pixel reads
+    // as not rasterised; the only failure is a lost or moved hit.
+    if (process.env.MELEE_PARITY_JS) {
+      await ev(`(async () => { ${process.env.MELEE_PARITY_JS} })()`);
+      await ev(SETTLED_OCC_JS(SETTLE_TRIES));
+      const buf2 = await ev('__sdfGameDebug.readMarchTarget()');
+      const b2 = Buffer.from(buf2.rgba32f, 'base64');
+      const g = new Float32Array(b2.buffer, b2.byteOffset, b2.byteLength >> 2);
+      let hitsA = 0, lost = 0, gained = 0, maxDz = 0, rastA = 0, rastB = 0, stepsA = 0, stepsB = 0;
+      for (let i = 0; i < buf.w * buf.h; i++) {
+        const o = i * 4;
+        const ra = f32[o + 2] >= 0.5, rb = g[o + 2] >= 0.5;
+        const ha = ra && f32[o + 1] > 0.5, hb = rb && g[o + 1] > 0.5;
+        if (ra) { rastA++; stepsA += f32[o]; }
+        if (rb) { rastB++; stepsB += g[o]; }
+        if (ha) hitsA++;
+        if (ha && !hb) lost++;
+        if (!ha && hb) gained++;
+        if (ha && hb) maxDz = Math.max(maxDz, Math.abs(f32[o + 3] - g[o + 3]));
+      }
+      census.parity = { hitsA, lost, gained, maxDz, rastA, rastB, stepsA, stepsB };
+      console.log(`  PARITY [${phase}]: hits ${hitsA}, lost ${lost}, gained ${gained}, max clip dz ${maxDz.toExponential(2)}; `
+        + `rasterised ${rastA} -> ${rastB}; walk steps ${stepsA.toFixed(0)} -> ${stepsB.toFixed(0)} (${(100 * (1 - stepsB / Math.max(1, stepsA))).toFixed(1)}% fewer)`);
+      await ev('__meleeShipRestore()');
+    }
     const md = census.miss;
     console.log(`  miss anatomy [${phase}]: miss ${(md.missStepShare * 100).toFixed(1)}% of steps; by px to nearest hit `
       + Object.entries(md.byDistance).map(([k, v]) => `${k}:${(v * 100).toFixed(1)}%`).join(' ')
