@@ -838,6 +838,10 @@ export interface SdfLayer {
  *  for measurement. Off is bit-identical to the pre-task-3 march. */
   setDepthPreEnabled(on: boolean): void;
   readonly depthPreEnabled: boolean;
+  /** MISS CULL (2026-09-22): discard every pixel of a 4x4 block the prepass certified
+   *  empty for all bodies covering it. Needs the prepass on. Off = bit-identical. */
+  setDepthPreMissCull(on: boolean): void;
+  readonly depthPreMissCull: boolean;
   /** The inner-hull pre-pass the march clamps its tMax by. See OCCLUDER_LAYER. */
   readonly occluder: OccluderSource;
   /** Outer-hull ENTRY distance (nearest front face) — 0 where no hull covers
@@ -2463,7 +2467,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       // same SDF pass height the AA epsilon does. Called from sizeSdfLayer on
       // every resize AND every adaptive-rung move, so k can never go stale
       // while the coarse grid (resize above) moves under it.
-      depthPreUniforms.cfg.value.y = coneKFor(DEPTH_PREPASS_BLOCK_PX);
+      // coneKFor(px) is the radius of px/2 pixels (px * tan(fov/2) / H, and one pixel
+      // spans 2 * tan(fov/2) / H) — so the block cone needs coneKFor(2 * BLOCK_PX) to
+      // reach the block corners the proof names. It was coneKFor(BLOCK_PX), a cone half
+      // as wide: harmless for the start bound (its backoff hid it), fatal for the miss
+      // cull (edge-column hits lost, 2026-09-22 melee parity).
+      depthPreUniforms.cfg.value.y = coneKFor(2 * DEPTH_PREPASS_BLOCK_PX);
     },
     setConeFineTile(px) { coneFineTile = Math.max(0, Math.round(px)); resize(); },
     get coneFineTile() { return coneFineTile; },
@@ -2471,6 +2480,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     occluder: { texture: occluder.texture, uniforms: occluderUniforms },
     depthPre: { texture: depthPre.texture, uniforms: depthPreUniforms },
     setDepthPreEnabled(on) { depthPreUniforms.cfg.value.x = on ? 1 : 0; },
+    setDepthPreMissCull(on) { depthPreUniforms.cfg.value.z = on ? 1 : 0; },
+    get depthPreMissCull() { return depthPreUniforms.cfg.value.z > 0.5; },
     get depthPreEnabled() { return depthPreUniforms.cfg.value.x > 0.5; },
     shellEntry: { texture: shellEntry.texture, uniforms: shellUniforms },
     shellExit: { texture: shellExit.texture, uniforms: shellUniforms },

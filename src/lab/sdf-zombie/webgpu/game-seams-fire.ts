@@ -6,6 +6,7 @@
 // 2026-09-20-seams-leftover-split notes).
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+import { setBurnBehaviourEnabled } from '../burn-behaviour';
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
 
@@ -16,6 +17,8 @@ export function createFireSeams(ctx: GameContext) {
     fireFlare: () => ctx.weapon.flare?.fire() ?? false,
     /** Set EVERY live actor alight. Returns how many bodies are tracked. */
     igniteAll: () => ctx.vfx.burning.igniteAll(),
+    /** Fire-cost study: false = burn visually, behave unburnt (no panic/flail). Ship true. */
+    setBurnBehaviour: (on: boolean) => { setBurnBehaviourEnabled(on); },
     /** Ignite exactly one actor by id (neighbour diagnosis, behaviour trace).
      *  Returns false for an unknown id. */
     igniteActor: (id: number) => {

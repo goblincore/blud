@@ -49,7 +49,10 @@ describe('per-ray wound list', () => {
   });
 
   it('pins the reach formula text in BOTH the fold and the preload (they cannot drift)', () => {
-    expect(APPLY_WOUNDS).toContain(REACH_FORMULA);
+    // The fold's constant 0.25 became `slack` (0.25 at ship, max(0, -d) <= 0.25 under
+    // the exact-fix switch), so the preload's 0.25 is still a superset of the fold.
+    expect(APPLY_WOUNDS).toContain(REACH_FORMULA.replace('+ 0.25', '+ slack'));
+    expect(APPLY_WOUNDS).toContain('let slack = select(0.25, max(0.0, -d), gWoundExact > 0.5);');
     // MARCH_BODY carries the SAME base reach, plus RAY_CULL_SLACK for the
     // off-ray probes. If the preload missing RAY_CULL_SLACK, the post-hit
     // probes could sample a wound the preload already dropped — pin that

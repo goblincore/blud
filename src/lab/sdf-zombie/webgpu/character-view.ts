@@ -422,7 +422,7 @@ export function createWoundRing(): WoundRing {
       gpu.setWounds(
         rows.map(w => map(woundWorldPos(posed.prims, w, bodyYaw), w, false)),
         rows.map(w => w.radius),
-        rows.map(w => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type]),
+        rows.map(w => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type] + Math.min(0.45, Math.max(0, w.ragged ?? 0))),
         rows.map(w => w.ageSec),
         rows.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
         rows.map(w => WOUND_PROFILES[w.type].rimOffsetScale),

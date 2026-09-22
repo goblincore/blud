@@ -65,6 +65,9 @@ export interface Wound {
    * no field to probe (explosions on chunks).
    */
   rimScale?: number;
+  /** Render-only: a single crater with a noise-ragged edge (0..0.45, the fraction of
+   *  radius its edge can grow by). Absent = a round crater. See soldier-wounds.ts. */
+  ragged?: number;
   /**
    * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
    * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses

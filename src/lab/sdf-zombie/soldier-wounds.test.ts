@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Wound } from './damage';
-import { soldierVisualWounds } from './soldier-wounds';
+import { setRaggedCraters, soldierVisualWounds } from './soldier-wounds';
 
 const wound = (n: number): Wound => ({ primIdx:n, local:[n*.01,0,0], radius:.055, type:'pellet', ageSec:n, carveN:[0,0,1], carveDepth:.03 });
 
-describe('soldier cosmetic wounds', () => {
+describe('soldier cosmetic wounds (the lobe path, off since ragged craters ship)', () => {
+  beforeEach(() => setRaggedCraters(false));
+  afterEach(() => setRaggedCraters(true));
   it('keeps real wounds first and adds deterministic ragged lobes without mutation', () => {
     const input=[wound(1),wound(2)], before=JSON.stringify(input);
     const a=soldierVisualWounds(input), b=soldierVisualWounds(input);

@@ -87,6 +87,13 @@ export function createRenderSeams(ctx: GameContext) {
      *  consumption of it. OFF (ship default) is bit-identical to the
      *  pre-task-3 frame; the census and the bench decide the flip. */
     setDepthPrepass(on: boolean) { ctx.render.sdfLayer.setDepthPreEnabled(on); },
+    /** MISS CULL (2026-09-22): the quarter-res prepass certifies empty 4x4 blocks and the
+     *  march discards them. Turns the prepass on with it (off leaves the prepass as it was). */
+    setMissCull(on: boolean) {
+      if (on) ctx.render.sdfLayer.setDepthPreEnabled(true);
+      ctx.render.sdfLayer.setDepthPreMissCull(on);
+    },
+    get missCull() { return ctx.render.sdfLayer.depthPreMissCull; },
     /** Temporal reprojection start (plan 2026-09-10): rays start at last
      *  frame's reprojected hit minus `margin` m (0.25 ships) and `slope`.
      *  Off is bit-identical. */

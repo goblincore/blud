@@ -1,0 +1,4868 @@
+{
+  "meta": {
+    "when": "2026-09-21T08:43:03.913Z",
+    "url": "http://localhost:5412/sdf-game.html?frozen=1&seed=1",
+    "W": 1280,
+    "H": 800,
+    "env": {
+      "MELEE_BODIES": 6,
+      "MELEE_GATHER_RADIUS": 3,
+      "MELEE_GATHER_FRAMES": 2400,
+      "MELEE_ROOM": 6,
+      "MELEE_CHARACTER": "zombie",
+      "MELEE_REPS": 2,
+      "MELEE_FRAMES": 40,
+      "MELEE_WARMUP": 60,
+      "MELEE_LEGS": "",
+      "MELEE_SETTLE_TRIES": 30
+    }
+  },
+  "boot": {
+    "snapshot": {
+      "flatAlbedo": false,
+      "ownerRefold": true,
+      "hullExitBound": true,
+      "woundEarlyOut": true,
+      "woundListOn": false,
+      "marchSteps": 96,
+      "sdfScale": 0.5,
+      "adaptive": {
+        "enabled": false,
+        "budgetMs": 33.333333333333336,
+        "rung": 7,
+        "scale": 1,
+        "ladder": [
+          0.2,
+          0.27,
+          0.35,
+          0.45,
+          0.55,
+          0.7,
+          0.85,
+          1
+        ]
+      },
+      "halfRate": false,
+      "depthGate": false,
+      "occluder": false,
+      "cone": false,
+      "shell": {
+        "enabled": true,
+        "instances": 0,
+        "overflowed": false,
+        "shellAmp": 0.016
+      },
+      "relax": 1,
+      "bleedEnabled": true,
+      "spillChance": 0,
+      "frameCap": 30
+    },
+    "upscaler": {
+      "model": "t16",
+      "inSize": {
+        "width": 400,
+        "height": 300
+      },
+      "outSize": {
+        "width": 800,
+        "height": 600
+      }
+    }
+  },
+  "staging": {
+    "n": 6,
+    "room": 6,
+    "gathered": 6,
+    "frames": 1140,
+    "nearest": 1.12,
+    "distances": [
+      1.12,
+      1.24,
+      1.9,
+      2.26,
+      2.37,
+      2.88
+    ],
+    "coverage": 0.109,
+    "rasterised": 0.2096,
+    "bodiesOnScreen": 7,
+    "pose": {
+      "pos": [
+        28,
+        0,
+        2.2999999999999994
+      ],
+      "yaw": -0.21004916074899016,
+      "pitch": -0.22
+    },
+    "ids": [
+      16,
+      18,
+      14,
+      17,
+      13,
+      11
+    ],
+    "search": [
+      {
+        "dyaw": 0,
+        "pitch": -0.12,
+        "coverage": 0.1022,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": 0,
+        "pitch": -0.22,
+        "coverage": 0.1062,
+        "bodiesOnScreen": 7
+      },
+      {
+        "dyaw": 0,
+        "pitch": -0.04,
+        "coverage": 0.0992,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": -0.2,
+        "pitch": -0.12,
+        "coverage": 0.1054,
+        "bodiesOnScreen": 7
+      },
+      {
+        "dyaw": -0.2,
+        "pitch": -0.22,
+        "coverage": 0.109,
+        "bodiesOnScreen": 7
+      },
+      {
+        "dyaw": -0.2,
+        "pitch": -0.04,
+        "coverage": 0.0992,
+        "bodiesOnScreen": 7
+      },
+      {
+        "dyaw": 0.2,
+        "pitch": -0.12,
+        "coverage": 0.0957,
+        "bodiesOnScreen": 5
+      },
+      {
+        "dyaw": 0.2,
+        "pitch": -0.22,
+        "coverage": 0.0987,
+        "bodiesOnScreen": 5
+      },
+      {
+        "dyaw": 0.2,
+        "pitch": -0.04,
+        "coverage": 0.0936,
+        "bodiesOnScreen": 5
+      },
+      {
+        "dyaw": -0.4,
+        "pitch": -0.12,
+        "coverage": 0.0234,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": -0.4,
+        "pitch": -0.22,
+        "coverage": 0.0339,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": -0.4,
+        "pitch": -0.04,
+        "coverage": 0.0136,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": 0.4,
+        "pitch": -0.12,
+        "coverage": 0.0854,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": 0.4,
+        "pitch": -0.22,
+        "coverage": 0.0875,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": 0.4,
+        "pitch": -0.04,
+        "coverage": 0.084,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": -0.6,
+        "pitch": -0.12,
+        "coverage": 0,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": -0.6,
+        "pitch": -0.22,
+        "coverage": 0,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": -0.6,
+        "pitch": -0.04,
+        "coverage": 0,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": 0.6,
+        "pitch": -0.12,
+        "coverage": 0.083,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": 0.6,
+        "pitch": -0.22,
+        "coverage": 0.0857,
+        "bodiesOnScreen": 6
+      },
+      {
+        "dyaw": 0.6,
+        "pitch": -0.04,
+        "coverage": 0.0813,
+        "bodiesOnScreen": 6
+      }
+    ]
+  },
+  "phases": {
+    "clean": {
+      "screenshot": "/private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-sdf-raymarch-multiscale-22412b/3ab7b56d-b14d-470a-9d00-24cdb53c95db/scratchpad/melee/clean.png",
+      "census": {
+        "w": 400,
+        "h": 300,
+        "pixels": 120000,
+        "rasterised": 25152,
+        "hits": 13195,
+        "misses": 11957,
+        "coverage": 0.10995833333333334,
+        "rasterisedFrac": 0.2096,
+        "occupancy": 0.524610368956743,
+        "meanStepsHit": 4.687836301629405,
+        "meanStepsMiss": 5.234506983357029,
+        "missStepShare": 0.502945076138053,
+        "meanClipDepthOnHit": 0.8827883842272395
+      },
+      "occupancy": {
+        "targetW": 400,
+        "targetH": 300,
+        "screenPx": 120000,
+        "rasterised": 25152,
+        "hits": 13195,
+        "misses": 11957,
+        "occupancy": 0.524610368956743,
+        "coverage": 0.2096,
+        "meanStepsHit": 4.687836301629405,
+        "meanStepsMiss": 5.234506983357029,
+        "missStepShare": 0.502945076138053,
+        "bodiesOnScreen": 7
+      },
+      "bodies": null,
+      "crowd": {
+        "on": true,
+        "default": true,
+        "flag": null,
+        "fallbackReason": null,
+        "tilesOn": true,
+        "dispatch": "boxes",
+        "atlasFlushes": 1189,
+        "atlasRows": 193556,
+        "recordsFlushes": 2852,
+        "volumeRebinds": 0,
+        "types": [
+          {
+            "name": "soldier@1",
+            "attached": 1,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 352,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 2000
+          },
+          {
+            "name": "zombie@2",
+            "attached": 2,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 704,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 2000
+          },
+          {
+            "name": "zombie@3",
+            "attached": 3,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 0,
+            "atlasRows": 0,
+            "recordsFlushes": 0,
+            "volumeRebinds": 0,
+            "idleSkips": 2033
+          },
+          {
+            "name": "zombie@4",
+            "attached": 4,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 1056,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 2000
+          },
+          {
+            "name": "zombie@6",
+            "attached": 8,
+            "visible": 6,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 3.284038794964669,
+            "atlasFlushes": 1140,
+            "atlasRows": 191422,
+            "recordsFlushes": 2014,
+            "volumeRebinds": 0,
+            "idleSkips": 19
+          },
+          {
+            "name": "soldier@5",
+            "attached": 3,
+            "visible": 1,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 14.806717637564018,
+            "atlasFlushes": 1,
+            "atlasRows": 22,
+            "recordsFlushes": 739,
+            "volumeRebinds": 0,
+            "idleSkips": 1294
+          },
+          {
+            "name": "zombie@5",
+            "attached": 2,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 0,
+            "atlasRows": 0,
+            "recordsFlushes": 0,
+            "volumeRebinds": 0,
+            "idleSkips": 2033
+          }
+        ]
+      }
+    },
+    "wounded": {
+      "screenshot": "/private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-sdf-raymarch-multiscale-22412b/3ab7b56d-b14d-470a-9d00-24cdb53c95db/scratchpad/melee/wounded.png",
+      "census": {
+        "w": 400,
+        "h": 300,
+        "pixels": 120000,
+        "rasterised": 25152,
+        "hits": 13776,
+        "misses": 11376,
+        "coverage": 0.1148,
+        "rasterisedFrac": 0.2096,
+        "occupancy": 0.5477099236641222,
+        "meanStepsHit": 4.240998838559814,
+        "meanStepsMiss": 4.388009845288327,
+        "missStepShare": 0.4607446788872275,
+        "meanClipDepthOnHit": 0.8838206540910002
+      },
+      "occupancy": {
+        "targetW": 400,
+        "targetH": 300,
+        "screenPx": 120000,
+        "rasterised": 25152,
+        "hits": 13776,
+        "misses": 11376,
+        "occupancy": 0.5477099236641222,
+        "coverage": 0.2096,
+        "meanStepsHit": 4.240998838559814,
+        "meanStepsMiss": 4.388009845288327,
+        "missStepShare": 0.4607446788872275,
+        "bodiesOnScreen": 7
+      },
+      "bodies": [
+        {
+          "id": 16,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "torso",
+            "armR",
+            "legR"
+          ]
+        },
+        {
+          "id": 18,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "torso",
+            "legL",
+            "armL"
+          ]
+        },
+        {
+          "id": 14,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "legR",
+            "torso",
+            "armR"
+          ]
+        },
+        {
+          "id": 17,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "legL",
+            "torso",
+            "armL"
+          ]
+        },
+        {
+          "id": 13,
+          "woundRows": 3,
+          "visualRows": 3,
+          "limbs": [
+            "head",
+            "torso",
+            "armR"
+          ]
+        },
+        {
+          "id": 11,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "head",
+            "legL",
+            "torso"
+          ]
+        }
+      ],
+      "crowd": {
+        "on": true,
+        "default": true,
+        "flag": null,
+        "fallbackReason": null,
+        "tilesOn": true,
+        "dispatch": "boxes",
+        "atlasFlushes": 1212,
+        "atlasRows": 196042,
+        "recordsFlushes": 4544,
+        "volumeRebinds": 0,
+        "types": [
+          {
+            "name": "soldier@1",
+            "attached": 1,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 352,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 2867
+          },
+          {
+            "name": "zombie@2",
+            "attached": 2,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 704,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 2867
+          },
+          {
+            "name": "zombie@3",
+            "attached": 3,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 0,
+            "atlasRows": 0,
+            "recordsFlushes": 0,
+            "volumeRebinds": 0,
+            "idleSkips": 2900
+          },
+          {
+            "name": "zombie@4",
+            "attached": 4,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 1056,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 2867
+          },
+          {
+            "name": "zombie@6",
+            "attached": 8,
+            "visible": 6,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 3.284038794964669,
+            "atlasFlushes": 1163,
+            "atlasRows": 193908,
+            "recordsFlushes": 2881,
+            "volumeRebinds": 0,
+            "idleSkips": 19
+          },
+          {
+            "name": "soldier@5",
+            "attached": 3,
+            "visible": 1,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 14.806717637564018,
+            "atlasFlushes": 1,
+            "atlasRows": 22,
+            "recordsFlushes": 1564,
+            "volumeRebinds": 0,
+            "idleSkips": 1336
+          },
+          {
+            "name": "zombie@5",
+            "attached": 2,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 0,
+            "atlasRows": 0,
+            "recordsFlushes": 0,
+            "volumeRebinds": 0,
+            "idleSkips": 2900
+          }
+        ]
+      },
+      "woundRecord": {
+        "planned": 36,
+        "landed": 23,
+        "skips": [
+          {
+            "body": 0,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 0,
+            "region": "thigh",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 1,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 1,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 2,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 2,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 3,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 3,
+            "region": "thigh",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 4,
+            "region": "chest",
+            "kind": "slug",
+            "reason": "predicted body 16 (occlusion)"
+          },
+          {
+            "body": 4,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "predicted body 16 (occlusion)"
+          },
+          {
+            "body": 4,
+            "region": "thigh",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 5,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          },
+          {
+            "body": 5,
+            "region": "arm",
+            "kind": "pellet",
+            "reason": "no hit"
+          }
+        ],
+        "severed": false,
+        "chunks": 0,
+        "bleed": {
+          "enabled": true,
+          "emitters": 0,
+          "droplets": 0,
+          "splats": 0
+        },
+        "perBody": [
+          {
+            "body": 0,
+            "id": 16,
+            "planned": 6,
+            "landed": 4,
+            "limbs": [
+              "torso",
+              "armR",
+              "legR"
+            ],
+            "woundRows": 4,
+            "visualRows": 4
+          },
+          {
+            "body": 1,
+            "id": 18,
+            "planned": 6,
+            "landed": 4,
+            "limbs": [
+              "torso",
+              "legL",
+              "armL"
+            ],
+            "woundRows": 4,
+            "visualRows": 4
+          },
+          {
+            "body": 2,
+            "id": 14,
+            "planned": 6,
+            "landed": 4,
+            "limbs": [
+              "legR",
+              "torso",
+              "armR"
+            ],
+            "woundRows": 4,
+            "visualRows": 4
+          },
+          {
+            "body": 3,
+            "id": 17,
+            "planned": 6,
+            "landed": 4,
+            "limbs": [
+              "legL",
+              "torso",
+              "armL"
+            ],
+            "woundRows": 4,
+            "visualRows": 4
+          },
+          {
+            "body": 4,
+            "id": 13,
+            "planned": 6,
+            "landed": 3,
+            "limbs": [
+              "head",
+              "torso",
+              "armR"
+            ],
+            "woundRows": 3,
+            "visualRows": 3
+          },
+          {
+            "body": 5,
+            "id": 11,
+            "planned": 6,
+            "landed": 4,
+            "limbs": [
+              "head",
+              "legL",
+              "torso"
+            ],
+            "woundRows": 4,
+            "visualRows": 4
+          }
+        ]
+      }
+    },
+    "wounded+fire": {
+      "screenshot": "/private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-sdf-raymarch-multiscale-22412b/3ab7b56d-b14d-470a-9d00-24cdb53c95db/scratchpad/melee/wounded-fire.png",
+      "census": {
+        "w": 400,
+        "h": 300,
+        "pixels": 120000,
+        "rasterised": 27199,
+        "hits": 0,
+        "misses": 27199,
+        "coverage": 0,
+        "rasterisedFrac": 0.22665833333333332,
+        "occupancy": 0,
+        "meanStepsHit": 0,
+        "meanStepsMiss": 1,
+        "missStepShare": 1,
+        "meanClipDepthOnHit": 0
+      },
+      "occupancy": {
+        "targetW": 400,
+        "targetH": 300,
+        "screenPx": 120000,
+        "rasterised": 27199,
+        "hits": 0,
+        "misses": 27199,
+        "occupancy": 0,
+        "coverage": 0.22665833333333332,
+        "meanStepsHit": 0,
+        "meanStepsMiss": 1,
+        "missStepShare": 1,
+        "bodiesOnScreen": 7
+      },
+      "bodies": [
+        {
+          "id": 16,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "torso",
+            "armR",
+            "legR"
+          ]
+        },
+        {
+          "id": 18,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "torso",
+            "legL",
+            "armL"
+          ]
+        },
+        {
+          "id": 14,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "legR",
+            "torso",
+            "armR"
+          ]
+        },
+        {
+          "id": 17,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "legL",
+            "torso",
+            "armL"
+          ]
+        },
+        {
+          "id": 13,
+          "woundRows": 3,
+          "visualRows": 3,
+          "limbs": [
+            "head",
+            "torso",
+            "armR"
+          ]
+        },
+        {
+          "id": 11,
+          "woundRows": 4,
+          "visualRows": 4,
+          "limbs": [
+            "head",
+            "legL",
+            "torso"
+          ]
+        }
+      ],
+      "crowd": {
+        "on": true,
+        "default": true,
+        "flag": null,
+        "fallbackReason": null,
+        "tilesOn": true,
+        "dispatch": "boxes",
+        "atlasFlushes": 1302,
+        "atlasRows": 204952,
+        "recordsFlushes": 5916,
+        "volumeRebinds": 0,
+        "types": [
+          {
+            "name": "soldier@1",
+            "attached": 1,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 352,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 3553
+          },
+          {
+            "name": "zombie@2",
+            "attached": 2,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 704,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 3553
+          },
+          {
+            "name": "zombie@3",
+            "attached": 3,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 0,
+            "atlasRows": 0,
+            "recordsFlushes": 0,
+            "volumeRebinds": 0,
+            "idleSkips": 3586
+          },
+          {
+            "name": "zombie@4",
+            "attached": 4,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 16,
+            "atlasRows": 1056,
+            "recordsFlushes": 33,
+            "volumeRebinds": 0,
+            "idleSkips": 3553
+          },
+          {
+            "name": "zombie@6",
+            "attached": 8,
+            "visible": 6,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 2.993281579653029,
+            "atlasFlushes": 1208,
+            "atlasRows": 201828,
+            "recordsFlushes": 3567,
+            "volumeRebinds": 0,
+            "idleSkips": 19
+          },
+          {
+            "name": "soldier@5",
+            "attached": 3,
+            "visible": 1,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 15.495926562472636,
+            "atlasFlushes": 46,
+            "atlasRows": 1012,
+            "recordsFlushes": 2250,
+            "volumeRebinds": 0,
+            "idleSkips": 1336
+          },
+          {
+            "name": "zombie@5",
+            "attached": 2,
+            "visible": 0,
+            "tileFallbacks": 0,
+            "tilesOn": true,
+            "culledByBudget": 0,
+            "clampedTiles": 0,
+            "dispatch": "boxes",
+            "rect": null,
+            "rectFrac": 0,
+            "meanDistance": 0,
+            "atlasFlushes": 0,
+            "atlasRows": 0,
+            "recordsFlushes": 0,
+            "volumeRebinds": 0,
+            "idleSkips": 3586
+          }
+        ]
+      }
+    }
+  },
+  "rows": [
+    {
+      "phase": "clean",
+      "leg": "ship",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 17.020000000298023,
+      "p95": 17.020000000298023,
+      "mean": 16.604999999701974,
+      "spanP50": 15.864964999999984,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 13.214715999999953,
+          "mean": 13.44974794999997
+        },
+        "cpu:draw": {
+          "p50": 3,
+          "mean": 3.5274999968707563
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.5,
+          "mean": 2.9575000032782555
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.2999999821186066,
+          "mean": 2.6150000020861626
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.2999999821186066,
+          "mean": 2.617500001937151
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.0999999940395355,
+          "mean": 2.5075000017881393
+        },
+        "sdf:polys": {
+          "p50": 1.13919100000021,
+          "mean": 1.1194423500000312
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.8050000026822091
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5650000005960465
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5675000011920929
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.30000001192092896,
+          "mean": 0.38999999538064
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.29999998211860657,
+          "mean": 0.3299999974668026
+        },
+        "post:fxaa": {
+          "p50": 0.23216200000001663,
+          "mean": 0.24009629999997628
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.20000001788139343,
+          "mean": 13.854999998956918
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.1925000011920929
+        },
+        "post:blit": {
+          "p50": 0.1404139999999643,
+          "mean": 0.1408175999999969
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.12304100000005747,
+          "mean": 0.12335434999998256
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12270699999999124,
+          "mean": 0.13074912499999983
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.1127480000000105,
+          "mean": 0.09940169999998716
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0.09999999403953552,
+          "mean": 0.07749999985098839
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.1199999988079071
+        },
+        "compute:tile-bin": {
+          "p50": 0.08829100000002654,
+          "mean": 0.1073940999999877
+        },
+        "post:vhs": {
+          "p50": 0.08687299999996867,
+          "mean": 0.08880377500001942
+        },
+        "goo:surface": {
+          "p50": 0.08337399999982154,
+          "mean": 0.08567882499999654
+        },
+        "sdf:composite": {
+          "p50": 0.06333199999994577,
+          "mean": 0.06456464999998843
+        },
+        "sdf:last-blit": {
+          "p50": 0.05487399999992704,
+          "mean": 0.18075760000002106
+        },
+        "sdf:shell-hull": {
+          "p50": 0.038459000000102606,
+          "mean": 0.10186307499999998
+        },
+        "compute:probe-gather": {
+          "p50": 0.03712500000006003,
+          "mean": 0.0671031000000312
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.03695900000002439,
+          "mean": 0.04762020000001144
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.036166000000093845,
+          "mean": 0.03405150000002664
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03233399999999165,
+          "mean": 0.03261099999999715
+        },
+        "post:vhs-input": {
+          "p50": 0.03158300000018244,
+          "mean": 0.035882824999987406
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.03070900000011534,
+          "mean": 0.03662335000001349
+        },
+        "gpu:idle": {
+          "p50": 0.026623999999856096,
+          "mean": 1.5609459999999282
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.005083000000013271,
+          "mean": 0.018345574999983683
+        },
+        "effects": {
+          "p50": 0.0030420000000503933,
+          "mean": 0.003032275000020945
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.054999999701976776
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.030000001937150956
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.005000001192092896
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.03750000074505806
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        }
+      },
+      "load1": 2.93603515625,
+      "load1Start": 2.93603515625
+    },
+    {
+      "phase": "clean",
+      "leg": "flat",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 15.23999999910593,
+      "p95": 15.23999999910593,
+      "mean": 14.910000000149012,
+      "spanP50": 14.329906999999821,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 11.758030000000417,
+          "mean": 11.852874400000053
+        },
+        "cpu:draw": {
+          "p50": 3.2999999821186066,
+          "mean": 3.607499996572733
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.7999999821186066,
+          "mean": 2.982500001043081
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.4000000059604645,
+          "mean": 2.637500000745058
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.4000000059604645,
+          "mean": 2.6450000002980234
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.300000011920929,
+          "mean": 2.525000000745058
+        },
+        "sdf:polys": {
+          "p50": 1.1473579999997128,
+          "mean": 1.1192339749999747
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7250000037252903
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.4950000002980232
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.49750000089406965
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.4000000059604645,
+          "mean": 0.40750000029802325
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.3574999995529652
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.29999998211860657,
+          "mean": 12.147499995678663
+        },
+        "post:fxaa": {
+          "p50": 0.23174599999993006,
+          "mean": 0.2307486000000381
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.19750000089406966
+        },
+        "post:blit": {
+          "p50": 0.13812300000017785,
+          "mean": 0.1430988250000496
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12245699999994031,
+          "mean": 0.2332880750000072
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.12183099999992919,
+          "mean": 0.11593374999999924
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.12003899999990608,
+          "mean": 0.10667232499999954
+        },
+        "compute:tile-bin": {
+          "p50": 0.10049900000058187,
+          "mean": 0.0987890749999906
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0.09999999403953552,
+          "mean": 0.057500001043081284
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.1275000013411045
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0.09999999403953552,
+          "mean": 0.054999999701976776
+        },
+        "post:vhs": {
+          "p50": 0.0862080000001697,
+          "mean": 0.08669662499996775
+        },
+        "goo:surface": {
+          "p50": 0.0832909999999174,
+          "mean": 0.0837665249999759
+        },
+        "sdf:composite": {
+          "p50": 0.06012400000008711,
+          "mean": 0.060345975000007004
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.0399160000001757,
+          "mean": 0.059770949999972345
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03879000000006272,
+          "mean": 0.10545764999995981
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03683299999966039,
+          "mean": 0.056728474999965785
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.029706999999689288,
+          "mean": 0.0297472000000198
+        },
+        "post:vhs-input": {
+          "p50": 0.028957999999875028,
+          "mean": 0.03451927499997964
+        },
+        "compute:probe-gather": {
+          "p50": 0.027665000000069995,
+          "mean": 0.038120100000037384
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.026416000000153872,
+          "mean": 0.03745367499997201
+        },
+        "gpu:idle": {
+          "p50": 0.017456999999922118,
+          "mean": 1.4793860000000678
+        },
+        "sdf:last-blit": {
+          "p50": 0.017166999999972177,
+          "mean": 0.058765725000023396
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.005124999999679858,
+          "mean": 0.0203153250000355
+        },
+        "effects": {
+          "p50": 0.0029160000003685127,
+          "mean": 0.004717624999989312
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.03750000074505806
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.007500000298023224
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.03500000014901161
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        }
+      },
+      "load1": 2.93603515625,
+      "load1Start": 2.93603515625
+    },
+    {
+      "phase": "clean",
+      "leg": "flat",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 15.1,
+      "p95": 15.1,
+      "mean": 14.952499999850989,
+      "spanP50": 14.273365999998532,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 11.618615000000318,
+          "mean": 11.956458150000163
+        },
+        "cpu:draw": {
+          "p50": 3.5999999940395355,
+          "mean": 3.7549999982118605
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.9000000059604645,
+          "mean": 3.1224999979138373
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.5999999940395355,
+          "mean": 2.749999997019768
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.5999999940395355,
+          "mean": 2.757499998062849
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.5,
+          "mean": 2.6424999974668024
+        },
+        "sdf:polys": {
+          "p50": 1.1389829999998256,
+          "mean": 1.1142516999999317
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7350000016391277
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5075000010430812
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5150000005960464
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.4000000059604645,
+          "mean": 0.4225000008940697
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.3725000016391277
+        },
+        "post:fxaa": {
+          "p50": 0.23187099999995553,
+          "mean": 0.22499979999995504
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.20000001788139343,
+          "mean": 12.205000000447034
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.1925000011920929
+        },
+        "post:blit": {
+          "p50": 0.137206000000333,
+          "mean": 0.2577501750000465
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.1234150000000227,
+          "mean": 0.12065332499987562
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12329000000045198,
+          "mean": 0.11749615000014728
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.11545699999987846,
+          "mean": 0.1055284499998379
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0.09999999403953552,
+          "mean": 0.06749999895691872
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.1100000023841858
+        },
+        "compute:tile-bin": {
+          "p50": 0.09387399999923218,
+          "mean": 0.0999528250001049
+        },
+        "post:vhs": {
+          "p50": 0.0860819999998057,
+          "mean": 0.08554979999992156
+        },
+        "goo:surface": {
+          "p50": 0.08299799999986135,
+          "mean": 0.08353100000003906
+        },
+        "sdf:composite": {
+          "p50": 0.060124000000541855,
+          "mean": 0.05976567499999419
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.05020700000022771,
+          "mean": 0.06030850000006467
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03849900000022899,
+          "mean": 0.1003901249999899
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.034082999999554886,
+          "mean": 0.030439224999986435
+        },
+        "compute:probe-gather": {
+          "p50": 0.029915000000073633,
+          "mean": 0.0707466999999724
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.029624999999214197,
+          "mean": 0.030419374999974026
+        },
+        "post:vhs-input": {
+          "p50": 0.029039999999440624,
+          "mean": 0.04507950000004257
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.026332999999794993,
+          "mean": 0.030242225000029065
+        },
+        "sdf:last-blit": {
+          "p50": 0.021625000000312866,
+          "mean": 0.06381359999984397
+        },
+        "gpu:idle": {
+          "p50": 0.015500000000429281,
+          "mean": 1.0128802500003076
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004917000000205007,
+          "mean": 0.013890399999991133
+        },
+        "effects": {
+          "p50": 0.002959000000373635,
+          "mean": 0.006647825000027296
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.04249999821186066
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.01250000074505806
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.01250000074505806
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.02499999925494194
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.007500000298023224
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.04750000089406967
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        }
+      },
+      "load1": 2.78076171875,
+      "load1Start": 2.93603515625
+    },
+    {
+      "phase": "clean",
+      "leg": "ship",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 16.28500000089407,
+      "p95": 16.28500000089407,
+      "mean": 16.1125,
+      "spanP50": 15.743969000001016,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 13.130799999999908,
+          "mean": 13.213599350000027
+        },
+        "cpu:draw": {
+          "p50": 3.199999988079071,
+          "mean": 3.337500001490116
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.5999999940395355,
+          "mean": 2.8024999983608723
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.300000011920929,
+          "mean": 2.4799999997019766
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.300000011920929,
+          "mean": 2.4799999997019766
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.2999999821186066,
+          "mean": 2.3875
+        },
+        "sdf:polys": {
+          "p50": 1.143898999999692,
+          "mean": 1.1059529500000735
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7274999991059303
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5374999977648258
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5374999977648258
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.30000001192092896,
+          "mean": 0.3400000035762787
+        },
+        "post:fxaa": {
+          "p50": 0.23195599999962724,
+          "mean": 0.23060589999997774
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.20000001788139343,
+          "mean": 0.2925000011920929
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.19999998807907104,
+          "mean": 14.159999998658895
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.17250000089406967
+        },
+        "post:blit": {
+          "p50": 0.13883100000020931,
+          "mean": 0.13805007500002375
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.1224979999997231,
+          "mean": 0.12105452499990861
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12195599999995466,
+          "mean": 0.11384085000004233
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.11766499999976077,
+          "mean": 0.1146888749999789
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.11000000163912774
+        },
+        "compute:tile-bin": {
+          "p50": 0.09503999999924417,
+          "mean": 0.09267777499994737
+        },
+        "post:vhs": {
+          "p50": 0.08699799999976676,
+          "mean": 0.09015590000001339
+        },
+        "goo:surface": {
+          "p50": 0.08316500000000815,
+          "mean": 0.0833060250000699
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06933200000003126,
+          "mean": 0.07168547500000386
+        },
+        "sdf:composite": {
+          "p50": 0.06324900000072375,
+          "mean": 0.06318342499994287
+        },
+        "sdf:last-blit": {
+          "p50": 0.051332000000002154,
+          "mean": 0.06530322499995692
+        },
+        "gpu:idle": {
+          "p50": 0.05029099999956088,
+          "mean": 1.1898149999998775
+        },
+        "sdf:shell-hull": {
+          "p50": 0.038331999999172695,
+          "mean": 0.0969026999999187
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03412399999979243,
+          "mean": 0.03190990000009606
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03245900000001711,
+          "mean": 0.03306312500005788
+        },
+        "post:vhs-input": {
+          "p50": 0.031291000000237545,
+          "mean": 0.03496085000003859
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.030456999999842083,
+          "mean": 0.0373546250000345
+        },
+        "compute:probe-gather": {
+          "p50": 0.020790999999917403,
+          "mean": 0.03811595000001944
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.005124999999679858,
+          "mean": 0.012792424999975082
+        },
+        "effects": {
+          "p50": 0.0029579999991256045,
+          "mean": 0.002912349999928665
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.034999999403953555
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.047499998658895495
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.02250000089406967
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.0375
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        }
+      },
+      "load1": 2.78076171875,
+      "load1Start": 2.78076171875
+    },
+    {
+      "phase": "wounded",
+      "leg": "ship",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 22.784999999403954,
+      "p95": 22.784999999403954,
+      "mean": 22.57749999985099,
+      "spanP50": 21.934079999997266,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 19.25949799999944,
+          "mean": 19.36013900000007
+        },
+        "cpu:draw": {
+          "p50": 2.9000000059604645,
+          "mean": 3.332499999552965
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.300000011920929,
+          "mean": 2.7800000004470347
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.0999999940395355,
+          "mean": 2.450000002235174
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.0999999940395355,
+          "mean": 2.455000002682209
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2,
+          "mean": 2.352500003576279
+        },
+        "sdf:polys": {
+          "p50": 1.1766480000005686,
+          "mean": 1.1670945249999023
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7950000002980232
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5700000032782555
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5725000038743019
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.29999998211860657,
+          "mean": 0.32500000223517417
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.29999998211860657,
+          "mean": 0.37250000014901163
+        },
+        "post:fxaa": {
+          "p50": 0.23233000000072934,
+          "mean": 0.23268070000008265
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.19999998807907104,
+          "mean": 20.059999999403953
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.19249999895691872
+        },
+        "post:blit": {
+          "p50": 0.13895600000068953,
+          "mean": 0.1408219000000372
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12212400000134949,
+          "mean": 0.12366892500003815
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.1204570000008971,
+          "mean": 0.12388140000016393
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.11149899999873014,
+          "mean": 0.10202967499990337
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0.09999999403953552,
+          "mean": 0.05999999940395355
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.11499999836087227
+        },
+        "post:vhs": {
+          "p50": 0.08695699999952922,
+          "mean": 0.08689670000007936
+        },
+        "compute:tile-bin": {
+          "p50": 0.08549800000037067,
+          "mean": 0.0803602750000664
+        },
+        "goo:surface": {
+          "p50": 0.08387299999958486,
+          "mean": 0.08374985000000379
+        },
+        "sdf:last-blit": {
+          "p50": 0.07499900000038906,
+          "mean": 0.1007465000001048
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06908199999998033,
+          "mean": 0.06285417499993855
+        },
+        "sdf:composite": {
+          "p50": 0.0649569999986852,
+          "mean": 0.06443867499997395
+        },
+        "compute:probe-gather": {
+          "p50": 0.051540999998906045,
+          "mean": 0.0900757500000509
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03879199999937555,
+          "mean": 0.10243904999988444
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.035874999999577994,
+          "mean": 0.04008475000000544
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03362400000150956,
+          "mean": 0.03447447500002454
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.03133299999899464,
+          "mean": 0.031416099999842115
+        },
+        "post:vhs-input": {
+          "p50": 0.0310829999998532,
+          "mean": 0.03133592499984843
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.005041999998866231,
+          "mean": 0.05418252500003291
+        },
+        "effects": {
+          "p50": 0.0029169999997975538,
+          "mean": 0.0059019750000516066
+        },
+        "gpu:idle": {
+          "p50": 0.002334000000701053,
+          "mean": 1.8499007142852082
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.04249999970197678
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.009999999403953552
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.009999999403953552
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.032499998807907104
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.0375
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0
+        }
+      },
+      "load1": 2.6376953125,
+      "load1Start": 2.6376953125
+    },
+    {
+      "phase": "wounded",
+      "leg": "flat",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 17.36000000089407,
+      "p95": 17.36000000089407,
+      "mean": 16.875000000745057,
+      "spanP50": 16.059838000001037,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 13.499627000001055,
+          "mean": 13.943047499999967
+        },
+        "cpu:draw": {
+          "p50": 2.800000011920929,
+          "mean": 3.19750000461936
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.2999999821186066,
+          "mean": 2.6649999991059303
+        },
+        "gpu:idle": {
+          "p50": 2.1380929999977525,
+          "mean": 2.34400666666564
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2,
+          "mean": 2.2475000008940698
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2,
+          "mean": 2.332499999552965
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2,
+          "mean": 2.342499999701977
+        },
+        "sdf:polys": {
+          "p50": 1.1663989999997284,
+          "mean": 1.1267993249999564
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7174999967217446
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5249999992549419
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5249999992549419
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.30000001192092896,
+          "mean": 0.3600000038743019
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.29999998211860657,
+          "mean": 0.32000000178813937
+        },
+        "post:fxaa": {
+          "p50": 0.23174599999947532,
+          "mean": 0.23058395000011842
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.19999998807907104,
+          "mean": 14.680000000447034
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.17499999925494195
+        },
+        "post:blit": {
+          "p50": 0.13745700000072247,
+          "mean": 0.13873342500019134
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12241400000129943,
+          "mean": 0.10933270000009543
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.12091599999985192,
+          "mean": 0.12109404999987419
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.10387400000035996,
+          "mean": 0.08777687499991771
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.10750000029802323
+        },
+        "compute:tile-bin": {
+          "p50": 0.09433200000057695,
+          "mean": 0.08878709999994498
+        },
+        "post:vhs": {
+          "p50": 0.08608099999946717,
+          "mean": 0.0853746999996929
+        },
+        "goo:surface": {
+          "p50": 0.08383200000025681,
+          "mean": 0.08365612500010684
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.07229100000040489,
+          "mean": 0.09515699999992648
+        },
+        "sdf:composite": {
+          "p50": 0.05999899999915215,
+          "mean": 0.05940742500001761
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03908200000114448,
+          "mean": 0.1009382500000811
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03575000000091677,
+          "mean": 0.03291419999995924
+        },
+        "compute:probe-gather": {
+          "p50": 0.03153999999994994,
+          "mean": 0.05369899999996051
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.029875000000174623,
+          "mean": 0.029754824999918127
+        },
+        "post:vhs-input": {
+          "p50": 0.029332000000067637,
+          "mean": 0.02918497500004378
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.02641600000060862,
+          "mean": 0.027031700000134152
+        },
+        "sdf:last-blit": {
+          "p50": 0.01900000000023283,
+          "mean": 0.051106375000063056
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004915999999866472,
+          "mean": 0.019738275000190698
+        },
+        "effects": {
+          "p50": 0.0030000000006111804,
+          "mean": 0.003059274999850459
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.029999999701976775
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.0449999988079071
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.010000000894069671
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.010000000894069671
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.027499998360872267
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.010000000149011612
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.034999999403953555
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        }
+      },
+      "load1": 2.42626953125,
+      "load1Start": 2.6376953125
+    },
+    {
+      "phase": "wounded",
+      "leg": "refoldOff",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 18.38999999910593,
+      "p95": 18.38999999910593,
+      "mean": 18.122499999403956,
+      "spanP50": 17.292525999993813,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 14.582567999997991,
+          "mean": 14.878569799999969
+        },
+        "gpu:idle": {
+          "p50": 3.383365000001504,
+          "mean": 2.2473097499996584
+        },
+        "cpu:draw": {
+          "p50": 3.199999988079071,
+          "mean": 3.58999999910593
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.600000023841858,
+          "mean": 2.9600000008940697
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.300000011920929,
+          "mean": 2.6049999997019766
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.2999999821186066,
+          "mean": 2.5975000001490116
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.199999988079071,
+          "mean": 2.4974999971687795
+        },
+        "sdf:polys": {
+          "p50": 1.1714820000015607,
+          "mean": 1.1743196499999613
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7625
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5650000013411045
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5700000025331974
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.3999999761581421,
+          "mean": 0.43249999582767484
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.37249999716877935
+        },
+        "post:fxaa": {
+          "p50": 0.23241399999824353,
+          "mean": 0.2327537750000374
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.20000001788139343,
+          "mean": 15.590000003576279
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.19249999821186065
+        },
+        "post:blit": {
+          "p50": 0.1396649999987858,
+          "mean": 0.14514992499953222
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12287300000025425,
+          "mean": 0.13121679999985644
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.12103899999783607,
+          "mean": 0.11914807500015741
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.1109150000011141,
+          "mean": 0.09745277499987423
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.1049999974668026
+        },
+        "compute:tile-bin": {
+          "p50": 0.0880410000027041,
+          "mean": 0.10649942500049292
+        },
+        "post:vhs": {
+          "p50": 0.08728999999948428,
+          "mean": 0.09047772500052816
+        },
+        "goo:surface": {
+          "p50": 0.08354099999996834,
+          "mean": 0.08525067500013392
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06895799999983865,
+          "mean": 0.056538699999600796
+        },
+        "sdf:last-blit": {
+          "p50": 0.06737400000201887,
+          "mean": 0.07904362500012212
+        },
+        "sdf:composite": {
+          "p50": 0.06362399999852641,
+          "mean": 0.06425114999983635
+        },
+        "sdf:shell-hull": {
+          "p50": 0.0382080000017595,
+          "mean": 0.10547335000001112
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03570699999909266,
+          "mean": 0.04436277499953576
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03341599999839673,
+          "mean": 0.03716410000033647
+        },
+        "post:vhs-input": {
+          "p50": 0.031291999999666587,
+          "mean": 0.0350692250000975
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.030415999997785548,
+          "mean": 0.03004019999971206
+        },
+        "compute:probe-gather": {
+          "p50": 0.02820900000006077,
+          "mean": 0.05460525000034977
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.005000000001018634,
+          "mean": 0.13421155000041834
+        },
+        "effects": {
+          "p50": 0.002957999997306615,
+          "mean": 0.006134274999658374
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.04500000029802322
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.05500000044703483
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.025
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.04999999850988388
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        }
+      },
+      "load1": 2.42626953125,
+      "load1Start": 2.42626953125
+    },
+    {
+      "phase": "wounded",
+      "leg": "flat",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 17.46499999910593,
+      "p95": 17.46499999910593,
+      "mean": 17.18999999985099,
+      "spanP50": 16.441584000007424,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 13.741372999997111,
+          "mean": 14.083505999999943
+        },
+        "cpu:draw": {
+          "p50": 3,
+          "mean": 3.3574999988079073
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.5,
+          "mean": 2.7849999979138373
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.2999999821186066,
+          "mean": 2.4474999994039535
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.2999999821186066,
+          "mean": 2.454999998956919
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.100000023841858,
+          "mean": 2.3174999967217444
+        },
+        "sdf:polys": {
+          "p50": 1.1692330000005313,
+          "mean": 1.1366004249997785
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7325000017881393
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5325000017881394
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5325000017881394
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.30000001192092896,
+          "mean": 0.3974999986588955
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.29999998211860657,
+          "mean": 0.3375
+        },
+        "post:fxaa": {
+          "p50": 0.23187200000029407,
+          "mean": 0.23047859999978754
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.20000001788139343,
+          "mean": 14.672500001639127
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.16750000044703484
+        },
+        "post:blit": {
+          "p50": 0.13858100000288687,
+          "mean": 0.13980100000017046
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12299799999891547,
+          "mean": 0.10925044999985403
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.12037300000156392,
+          "mean": 0.11685542499953953
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.10945600000195554,
+          "mean": 0.09712775000016335
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.11999999955296517
+        },
+        "compute:tile-bin": {
+          "p50": 0.08791600000040489,
+          "mean": 0.08271015000000262
+        },
+        "post:vhs": {
+          "p50": 0.0864560000009078,
+          "mean": 0.08531109999994442
+        },
+        "goo:surface": {
+          "p50": 0.08374900000126217,
+          "mean": 0.08738722499965661
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06916500000079395,
+          "mean": 0.0901891000003161
+        },
+        "sdf:composite": {
+          "p50": 0.060916000002180226,
+          "mean": 0.18395140000002358
+        },
+        "sdf:last-blit": {
+          "p50": 0.05149900000105845,
+          "mean": 0.04985872499992183
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03920700000162469,
+          "mean": 0.10576595000029557
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.035373999999137595,
+          "mean": 0.03210270000008677
+        },
+        "compute:probe-gather": {
+          "p50": 0.03416700000161654,
+          "mean": 0.06801994999950693
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03029199999946286,
+          "mean": 0.034403700000257234
+        },
+        "post:vhs-input": {
+          "p50": 0.028999000001931563,
+          "mean": 0.030138250000254628
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.026749000000563683,
+          "mean": 0.054794850000143926
+        },
+        "gpu:idle": {
+          "p50": 0.0119570000024396,
+          "mean": 1.9177371999998285
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004832999999052845,
+          "mean": 0.019879949999813108
+        },
+        "effects": {
+          "p50": 0.0030829999996058177,
+          "mean": 0.020522675000302117
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.03500000014901161
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.044999999552965166
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.02750000059604645
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.007500000298023224
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.030000000447034835
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0
+        }
+      },
+      "load1": 2.42626953125,
+      "load1Start": 2.42626953125
+    },
+    {
+      "phase": "wounded",
+      "leg": "refoldOff",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 18.375,
+      "p95": 18.375,
+      "mean": 18.272500000149012,
+      "spanP50": 17.561690999995335,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 14.806314999997994,
+          "mean": 15.012718799999675
+        },
+        "cpu:draw": {
+          "p50": 3.399999976158142,
+          "mean": 3.6225000001490115
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.699999988079071,
+          "mean": 2.9900000005960465
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.4000000059604645,
+          "mean": 2.6325000025331975
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.4000000059604645,
+          "mean": 2.642500002682209
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.300000011920929,
+          "mean": 2.5225000023841857
+        },
+        "sdf:polys": {
+          "p50": 1.1683149999989837,
+          "mean": 1.142330449999554
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7775000005960464
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5724999979138374
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5774999991059303
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.37499999925494193
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.30000001192092896,
+          "mean": 0.43249999955296514
+        },
+        "post:fxaa": {
+          "p50": 0.23241199999756645,
+          "mean": 0.3562414250002803
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.20000001788139343,
+          "mean": 15.50249999910593
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.20249999836087226
+        },
+        "post:blit": {
+          "p50": 0.13908099999753176,
+          "mean": 0.1494790250002552
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.12145600000076229,
+          "mean": 0.12153462500018578
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.11816499999986263,
+          "mean": 0.11368150000007518
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.113164999998844,
+          "mean": 0.09243089999999939
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.1125
+        },
+        "compute:tile-bin": {
+          "p50": 0.0951229999991483,
+          "mean": 0.0874852249993637
+        },
+        "post:vhs": {
+          "p50": 0.08670700000220677,
+          "mean": 0.0859651999997368
+        },
+        "goo:surface": {
+          "p50": 0.08429099999921164,
+          "mean": 0.10973387500007448
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06954100000075414,
+          "mean": 0.08386127499989016
+        },
+        "sdf:last-blit": {
+          "p50": 0.06679000000076485,
+          "mean": 0.0652552000005926
+        },
+        "sdf:composite": {
+          "p50": 0.06399899999814807,
+          "mean": 0.06401984999984052
+        },
+        "gpu:idle": {
+          "p50": 0.050248999999894295,
+          "mean": 1.2739650000003166
+        },
+        "compute:probe-gather": {
+          "p50": 0.039123999998992076,
+          "mean": 0.055057399999896006
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03874999999970896,
+          "mean": 0.09943502500027535
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03670799999963492,
+          "mean": 0.04361502500005372
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03299999999944703,
+          "mean": 0.03197952500031533
+        },
+        "post:vhs-input": {
+          "p50": 0.03112400000100024,
+          "mean": 0.034778674999961366
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.030457000000751577,
+          "mean": 0.033768399999735264
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.005124999999679858,
+          "mean": 0.030045250000057422
+        },
+        "effects": {
+          "p50": 0.0030000000006111804,
+          "mean": 0.003322874999958003
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.027499999850988388
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.04750000014901161
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.032500001788139346
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.0449999988079071
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0
+        }
+      },
+      "load1": 2.31201171875,
+      "load1Start": 2.42626953125
+    },
+    {
+      "phase": "wounded",
+      "leg": "ship",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 22.295000000298025,
+      "p95": 22.295000000298025,
+      "mean": 21.85,
+      "spanP50": 20.88930700000128,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 18.086974000001646,
+          "mean": 18.56328337499999
+        },
+        "cpu:draw": {
+          "p50": 3.0999999940395355,
+          "mean": 3.449999997764826
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.4000000059604645,
+          "mean": 2.8700000025331973
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.0999999940395355,
+          "mean": 2.5049999989569187
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.0999999940395355,
+          "mean": 2.514999998360872
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 1.9000000059604645,
+          "mean": 2.405000001192093
+        },
+        "sdf:polys": {
+          "p50": 1.1671489999971527,
+          "mean": 1.145160599999781
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7674999997019768
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5375000007450581
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5425000011920929
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.30000001192092896,
+          "mean": 0.3924999974668026
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.29999998211860657,
+          "mean": 0.3349999971687794
+        },
+        "post:fxaa": {
+          "p50": 0.23258100000020931,
+          "mean": 0.23997129999979733
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.20000001788139343,
+          "mean": 19.582500000298023
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.1850000038743019
+        },
+        "post:blit": {
+          "p50": 0.13862299999891547,
+          "mean": 0.14465517499984343
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.12553900000057183,
+          "mean": 0.1357197249998535
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.11933199999839417,
+          "mean": 0.12061484999976528
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.10949900000196067,
+          "mean": 0.10027144999994561
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.10000002384185791,
+          "mean": 0.1199999988079071
+        },
+        "post:vhs": {
+          "p50": 0.08695599999919068,
+          "mean": 0.08599750000048516
+        },
+        "goo:surface": {
+          "p50": 0.0844989999968675,
+          "mean": 0.08885382499965999
+        },
+        "compute:tile-bin": {
+          "p50": 0.084208000000217,
+          "mean": 0.08554144999961863
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06979099999807659,
+          "mean": 0.07434782500004075
+        },
+        "sdf:last-blit": {
+          "p50": 0.065124000000651,
+          "mean": 0.07268755000004604
+        },
+        "sdf:composite": {
+          "p50": 0.0633319999978994,
+          "mean": 0.06279795000018566
+        },
+        "compute:probe-gather": {
+          "p50": 0.04478999999992084,
+          "mean": 0.07942580000017188
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03866500000003725,
+          "mean": 0.10219017500021436
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03712399999858462,
+          "mean": 0.04866497499997422
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03266700000312994,
+          "mean": 0.036249400000178865
+        },
+        "post:vhs-input": {
+          "p50": 0.031082000001333654,
+          "mean": 0.15630802499954372
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.03087500000037835,
+          "mean": 0.035068225000031816
+        },
+        "gpu:idle": {
+          "p50": 0.02312499999970896,
+          "mean": 1.6518440000010222
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.0059579999979177956,
+          "mean": 0.040769025000372494
+        },
+        "effects": {
+          "p50": 0.0030000000006111804,
+          "mean": 0.016148850000445237
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.03249999955296516
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.054999999701976776
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.04750000014901161
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.04249999970197678
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        }
+      },
+      "load1": 2.31201171875,
+      "load1Start": 2.31201171875
+    },
+    {
+      "phase": "wounded+fire",
+      "leg": "ship",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 36.68000000119209,
+      "p95": 36.68000000119209,
+      "mean": 36.67750000059604,
+      "spanP50": 36.70081599999685,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 27.70953499999814,
+          "mean": 27.430772100000194
+        },
+        "post:fire-march": {
+          "p50": 5.054422999997769,
+          "mean": 4.0711233750001155
+        },
+        "cpu:draw": {
+          "p50": 4.5,
+          "mean": 6.699999999254942
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 3.2999999821186066,
+          "mean": 5.529999998211861
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.7999999821186066,
+          "mean": 4.949999997019768
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.7999999821186066,
+          "mean": 4.957499996572733
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.699999988079071,
+          "mean": 4.827499999850988
+        },
+        "gpu:idle": {
+          "p50": 1.940096000002086,
+          "mean": 2.5396515555556913
+        },
+        "sdf:polys": {
+          "p50": 1.2233140000025742,
+          "mean": 1.2013973249995615
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.8199999988079071
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.699999988079071,
+          "mean": 29.852500003576278
+        },
+        "effects": {
+          "p50": 0.5037010000014561,
+          "mean": 0.3587851500002216
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.55
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5524999998509884
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.4000000059604645,
+          "mean": 0.5074999995529652
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.4450000002980232
+        },
+        "post:fxaa": {
+          "p50": 0.21387200000026496,
+          "mean": 0.21637997500010897
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.24750000163912772
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.15183099999921978,
+          "mean": 0.1636715750001713
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.14995600000111153,
+          "mean": 0.16705562499973894
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.14737199999945005,
+          "mean": 0.2785091749999083
+        },
+        "post:blit": {
+          "p50": 0.12774799999897368,
+          "mean": 0.13624069999996208
+        },
+        "compute:tile-bin": {
+          "p50": 0.11870600000111153,
+          "mean": 0.9181505500002458
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0.09999999403953552,
+          "mean": 0.06499999910593032
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.15000000074505807
+        },
+        "goo:surface": {
+          "p50": 0.0846239999991667,
+          "mean": 0.08966739999978017
+        },
+        "compute:probe-gather": {
+          "p50": 0.08408200000121724,
+          "mean": 0.08501754999979312
+        },
+        "post:vhs": {
+          "p50": 0.07599899999695481,
+          "mean": 0.08097160000024814
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06745700000101351,
+          "mean": 0.08628309999994599
+        },
+        "sdf:composite": {
+          "p50": 0.06370700000115903,
+          "mean": 0.06349702500037893
+        },
+        "sdf:last-blit": {
+          "p50": 0.06224899999870104,
+          "mean": 0.06367409999975279
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.04029100000116159,
+          "mean": 0.04357745000024806
+        },
+        "sdf:shell-hull": {
+          "p50": 0.038834000002680114,
+          "mean": 0.1006587750003746
+        },
+        "post:fire-composite": {
+          "p50": 0.03462500000023283,
+          "mean": 0.036930799999663574
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03408300000228337,
+          "mean": 0.0378253500000028
+        },
+        "post:vhs-input": {
+          "p50": 0.03287400000044727,
+          "mean": 0.040373374999944645
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.0320819999978994,
+          "mean": 0.03862559999997757
+        },
+        "post:fire-resolve": {
+          "p50": 0.028707999998005107,
+          "mean": 0.0439179250001871
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004999999997380655,
+          "mean": 0.010109074999309086
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.034999999403953555
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.01250000074505806
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.01250000074505806
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.04249999970197678
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.052500000596046446
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        }
+      },
+      "load1": 2.20654296875,
+      "load1Start": 2.20654296875
+    },
+    {
+      "phase": "wounded+fire",
+      "leg": "flat",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 31.345000000298022,
+      "p95": 31.345000000298022,
+      "mean": 31.202500000596046,
+      "spanP50": 30.41249400000379,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 22.26403500000015,
+          "mean": 22.026888949999737
+        },
+        "post:fire-march": {
+          "p50": 5.170753999998851,
+          "mean": 5.173500175000209
+        },
+        "cpu:draw": {
+          "p50": 4.199999988079071,
+          "mean": 6.162499994784594
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 3.199999988079071,
+          "mean": 5.087499997019767
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.800000011920929,
+          "mean": 4.662499996274709
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.800000011920929,
+          "mean": 4.662499996274709
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.699999988079071,
+          "mean": 4.517499996721744
+        },
+        "sdf:polys": {
+          "p50": 1.2170229999974254,
+          "mean": 1.1856215250003515
+        },
+        "cpu:tick": {
+          "p50": 0.7000000178813934,
+          "mean": 0.8475000038743019
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.5999999940395355,
+          "mean": 25.36000000014901
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5999999977648258
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.6024999983608723
+        },
+        "effects": {
+          "p50": 0.47890999999799533,
+          "mean": 0.34025839999958407
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.4000000059604645,
+          "mean": 0.45999999791383744
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.3975000001490116
+        },
+        "post:fxaa": {
+          "p50": 0.21720400000049267,
+          "mean": 0.22864537499990548
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.217500002682209
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.15112299999964307,
+          "mean": 0.15464369999990596
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.1489980000005744,
+          "mean": 0.29040067499990985
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.14616499999829102,
+          "mean": 0.1368404499999997
+        },
+        "post:blit": {
+          "p50": 0.12395599999945262,
+          "mean": 0.1292011749997073
+        },
+        "compute:probe-gather": {
+          "p50": 0.10299900000245543,
+          "mean": 0.108598400000119
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.10000002384185791,
+          "mean": 0.14250000268220903
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0.09999999403953552,
+          "mean": 0.05750000327825546
+        },
+        "compute:tile-bin": {
+          "p50": 0.08762499999647844,
+          "mean": 0.0857425249998414
+        },
+        "goo:surface": {
+          "p50": 0.08429099999921164,
+          "mean": 0.08416957500039643
+        },
+        "post:vhs": {
+          "p50": 0.07378999999855296,
+          "mean": 0.07663422500017987
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06708199999775388,
+          "mean": 0.05829392499972528
+        },
+        "sdf:composite": {
+          "p50": 0.060248999998293584,
+          "mean": 0.05998137499991572
+        },
+        "sdf:last-blit": {
+          "p50": 0.0518740000006801,
+          "mean": 0.045569150000210355
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03941599999961909,
+          "mean": 0.051146025000161896
+        },
+        "sdf:shell-hull": {
+          "p50": 0.038414999999076826,
+          "mean": 0.09519957500015153
+        },
+        "post:fire-composite": {
+          "p50": 0.0328750000007858,
+          "mean": 0.03442657499981579
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.030749999998079147,
+          "mean": 0.031272324999918055
+        },
+        "post:vhs-input": {
+          "p50": 0.030498999996780185,
+          "mean": 0.03490265000000363
+        },
+        "gpu:idle": {
+          "p50": 0.02808300000106101,
+          "mean": 3.2540666000000784
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.027375000001484295,
+          "mean": 0.03125997500010271
+        },
+        "post:fire-resolve": {
+          "p50": 0.025916999999026302,
+          "mean": 0.04225769999993645
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.0049580000013520475,
+          "mean": 0.005348850000245875
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.027500002831220626
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.0375
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.047499998658895495
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        }
+      },
+      "load1": 2.67041015625,
+      "load1Start": 2.20654296875
+    },
+    {
+      "phase": "wounded+fire",
+      "leg": "refoldOff",
+      "rep": 0,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 33.84000000059605,
+      "p95": 33.84000000059605,
+      "mean": 33.642500000447036,
+      "spanP50": 33.459657000013976,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 24.67016500000318,
+          "mean": 24.65477910000045
+        },
+        "post:fire-march": {
+          "p50": 5.116880000001402,
+          "mean": 4.4860616749994735
+        },
+        "cpu:draw": {
+          "p50": 3.9000000059604645,
+          "mean": 6.5625000014901165
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 3,
+          "mean": 5.512499999254942
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.5999999940395355,
+          "mean": 4.97749999910593
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.5999999940395355,
+          "mean": 5.092499999701976
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.5999999940395355,
+          "mean": 5.097500000149012
+        },
+        "gpu:idle": {
+          "p50": 1.8352220000015222,
+          "mean": 2.6200907142847427
+        },
+        "sdf:polys": {
+          "p50": 1.2273150000037276,
+          "mean": 1.2215635500000643
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.8299999974668026
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.5,
+          "mean": 27.290000002086163
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5725000008940697
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5725000008940697
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.4000000059604645,
+          "mean": 0.4500000014901161
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.38749999850988387
+        },
+        "post:fxaa": {
+          "p50": 0.2127459999974235,
+          "mean": 0.2135454999999638
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.2125
+        },
+        "effects": {
+          "p50": 0.16399799999635434,
+          "mean": 0.3197515249996286
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.15245600000343984,
+          "mean": 0.15789555000064864
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.15024699999776203,
+          "mean": 0.16742454999966866
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.13999799999874085,
+          "mean": 0.12939797499893757
+        },
+        "post:blit": {
+          "p50": 0.1231229999975767,
+          "mean": 0.12902610000055575
+        },
+        "compute:probe-gather": {
+          "p50": 0.11987300000328105,
+          "mean": 0.14940600000081758
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.15499999597668648
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0.09999999403953552,
+          "mean": 0.05750000178813934
+        },
+        "compute:tile-bin": {
+          "p50": 0.09141500000259839,
+          "mean": 0.6291404500010686
+        },
+        "goo:surface": {
+          "p50": 0.08499899999878835,
+          "mean": 0.09060387500012439
+        },
+        "post:vhs": {
+          "p50": 0.07454100000177277,
+          "mean": 0.07813842499963357
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06724899999971967,
+          "mean": 0.05767099999993661
+        },
+        "sdf:composite": {
+          "p50": 0.06487400000332855,
+          "mean": 0.06614892499983398
+        },
+        "sdf:last-blit": {
+          "p50": 0.056999000000359956,
+          "mean": 0.04985947499953909
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.04070800000044983,
+          "mean": 0.03323692500016477
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03841600000305334,
+          "mean": 0.07335834999958024
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03525000000081491,
+          "mean": 0.03544222499967873
+        },
+        "post:fire-composite": {
+          "p50": 0.033583999997063074,
+          "mean": 0.03612665000036941
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.033290999999735504,
+          "mean": 0.03863892500048678
+        },
+        "post:vhs-input": {
+          "p50": 0.030542000000423286,
+          "mean": 0.03410899999998947
+        },
+        "post:fire-resolve": {
+          "p50": 0.028165999996417668,
+          "mean": 0.0471575750001648
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004957999997714069,
+          "mean": 0.016767549999531183
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.027499999850988388
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.06000000014901161
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.007500000298023224
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.005000001192092896
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.03750000074505806
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        }
+      },
+      "load1": 2.69677734375,
+      "load1Start": 2.67041015625
+    },
+    {
+      "phase": "wounded+fire",
+      "leg": "flat",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 31.729999999701977,
+      "p95": 31.729999999701977,
+      "mean": 31.520000000298026,
+      "spanP50": 30.68457400000625,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 22.320159999995667,
+          "mean": 22.33044997500001
+        },
+        "post:fire-march": {
+          "p50": 5.144089000001259,
+          "mean": 4.772735550000652
+        },
+        "cpu:draw": {
+          "p50": 4.399999976158142,
+          "mean": 6.074999998509884
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 3.199999988079071,
+          "mean": 4.562500002235174
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.9000000059604645,
+          "mean": 4.087499999254942
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.9000000059604645,
+          "mean": 4.097499999403953
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.5999999940395355,
+          "mean": 3.9424999959766867
+        },
+        "gpu:idle": {
+          "p50": 1.954928999999538,
+          "mean": 3.2065592000013567
+        },
+        "sdf:polys": {
+          "p50": 1.222063999994134,
+          "mean": 1.200809699999445
+        },
+        "cpu:tick": {
+          "p50": 0.7000000178813934,
+          "mean": 0.8325000025331974
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.7000000178813934,
+          "mean": 25.489999998360872
+        },
+        "effects": {
+          "p50": 0.5179080000016256,
+          "mean": 0.5057744499999899
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5725000001490116
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.575
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.4000000059604645,
+          "mean": 0.46999999657273295
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.4000000059604645,
+          "mean": 0.5474999979138374
+        },
+        "post:fxaa": {
+          "p50": 0.21549700000468874,
+          "mean": 0.21768625000040628
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.20000001788139343,
+          "mean": 0.23749999925494195
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.1525809999948251,
+          "mean": 0.15328302499983693
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.14895700000488432,
+          "mean": 0.1511415000008128
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.14128899999923306,
+          "mean": 0.23947354999927484
+        },
+        "post:blit": {
+          "p50": 0.12654000000475207,
+          "mean": 0.13592092500002764
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0.09999999403953552,
+          "mean": 0.0625
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.09999999403953552,
+          "mean": 0.15250000208616257
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0.09999999403953552,
+          "mean": 0.06749999821186066
+        },
+        "compute:tile-bin": {
+          "p50": 0.09629000000131782,
+          "mean": 0.39367932500026653
+        },
+        "goo:surface": {
+          "p50": 0.08458100000279956,
+          "mean": 0.08512067500014382
+        },
+        "compute:probe-gather": {
+          "p50": 0.08303999999770895,
+          "mean": 0.08448819999903208
+        },
+        "post:vhs": {
+          "p50": 0.07345799999893643,
+          "mean": 0.07817692500011617
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06724899999971967,
+          "mean": 0.05345030000007682
+        },
+        "sdf:composite": {
+          "p50": 0.06049899999925401,
+          "mean": 0.08518929999991087
+        },
+        "sdf:last-blit": {
+          "p50": 0.051748999998380896,
+          "mean": 0.04880857499956619
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.03983299999526935,
+          "mean": 0.03274122500006342
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03866600000037579,
+          "mean": 0.10561595000053785
+        },
+        "post:fire-composite": {
+          "p50": 0.03279099999781465,
+          "mean": 0.03564844999982597
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.031041000002005603,
+          "mean": 0.03257124999963708
+        },
+        "post:vhs-input": {
+          "p50": 0.030249999996158294,
+          "mean": 0.03634422499999346
+        },
+        "post:fire-resolve": {
+          "p50": 0.027792000000772532,
+          "mean": 0.04470247499939432
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.027707000001100823,
+          "mean": 0.02779342500034545
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004833999999391381,
+          "mean": 0.021693450000020674
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.039999999850988385
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.007500000298023224
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.02499999925494194
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.007500000298023224
+        }
+      },
+      "load1": 2.69677734375,
+      "load1Start": 2.69677734375
+    },
+    {
+      "phase": "wounded+fire",
+      "leg": "refoldOff",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 33.82000000029802,
+      "p95": 33.82000000029802,
+      "mean": 33.68000000044704,
+      "spanP50": 33.338698999999906,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 25.222240999995847,
+          "mean": 25.17262739999951
+        },
+        "post:fire-march": {
+          "p50": 5.035506000000169,
+          "mean": 5.015351650000776
+        },
+        "cpu:draw": {
+          "p50": 3.300000011920929,
+          "mean": 6.202499998360873
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.5,
+          "mean": 4.699999998509884
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.0999999940395355,
+          "mean": 4.2449999958276745
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.0999999940395355,
+          "mean": 4.2499999955296515
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2,
+          "mean": 4.164999997615814
+        },
+        "sdf:polys": {
+          "p50": 1.218564000002516,
+          "mean": 1.1771925000002739
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.6900000020861625
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.5999999940395355,
+          "mean": 28.112499999254943
+        },
+        "effects": {
+          "p50": 0.4967000000033295,
+          "mean": 0.3591434999996636
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.4000000059604645,
+          "mean": 0.46749999523162844
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.4000000059604645,
+          "mean": 0.46749999523162844
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.30000001192092896,
+          "mean": 0.35249999836087226
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.30000001192092896,
+          "mean": 0.40499999970197675
+        },
+        "post:fxaa": {
+          "p50": 0.23612100000173086,
+          "mean": 0.23598087500013207
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.19000000432133674
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.15333100000134436,
+          "mean": 0.15689344999937022
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.15074800000002142,
+          "mean": 0.15003307500082882
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.1301229999953648,
+          "mean": 0.11856680000128109
+        },
+        "post:blit": {
+          "p50": 0.12845699999888893,
+          "mean": 0.1295655749996513
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.10000002384185791,
+          "mean": 0.1300000049173832
+        },
+        "compute:tile-bin": {
+          "p50": 0.08974899999884656,
+          "mean": 0.06780012499893928
+        },
+        "compute:probe-gather": {
+          "p50": 0.08795699999609496,
+          "mean": 0.0986818499990477
+        },
+        "goo:surface": {
+          "p50": 0.08533200000238139,
+          "mean": 0.08750072499988164
+        },
+        "post:vhs": {
+          "p50": 0.07829100000526523,
+          "mean": 0.08159054999978252
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06724899999971967,
+          "mean": 0.06528015000076266
+        },
+        "sdf:composite": {
+          "p50": 0.06599900000583148,
+          "mean": 0.0659886750003352
+        },
+        "sdf:last-blit": {
+          "p50": 0.04120899999543326,
+          "mean": 0.04680877499959024
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.040665000000444707,
+          "mean": 0.045173324999996115
+        },
+        "sdf:shell-hull": {
+          "p50": 0.03837500000372529,
+          "mean": 0.10680132500056061
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03578999999444932,
+          "mean": 0.036548450000191225
+        },
+        "post:fire-composite": {
+          "p50": 0.03537499999947613,
+          "mean": 0.03835452499952226
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.03391600000031758,
+          "mean": 0.03388902499955293
+        },
+        "post:vhs-input": {
+          "p50": 0.03166600000258768,
+          "mean": 0.03629732500012324
+        },
+        "post:fire-resolve": {
+          "p50": 0.02766700000211131,
+          "mean": 0.04199822500013397
+        },
+        "gpu:idle": {
+          "p50": 0.01737499999580905,
+          "mean": 1.1554268333347864
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004957999997714069,
+          "mean": 0.004844774999401125
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.030000001192092896
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.04750000014901161
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.007500001043081283
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.030000001192092896
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.0050000004470348355
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0,
+          "mean": 0.054999999701976776
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.010000000894069671
+        }
+      },
+      "load1": 2.560546875,
+      "load1Start": 2.69677734375
+    },
+    {
+      "phase": "wounded+fire",
+      "leg": "ship",
+      "rep": 1,
+      "valid": true,
+      "hiddenSteps": 0,
+      "p50": 36.704999999701975,
+      "p95": 36.704999999701975,
+      "mean": 36.520000000298026,
+      "spanP50": 36.67789700000867,
+      "passFrames": 40,
+      "labels": {
+        "sdf:march": {
+          "p50": 27.611120000001392,
+          "mean": 27.593559075000304
+        },
+        "cpu:draw": {
+          "p50": 3.7000000178813934,
+          "mean": 6.700000001490116
+        },
+        "post:fire-march": {
+          "p50": 3.2441600000020117,
+          "mean": 2.9753368499998034
+        },
+        "cpu:phase:draw:uniforms-cull-crowd": {
+          "p50": 2.5999999940395355,
+          "mean": 5.1599999971687796
+        },
+        "cpu:phase:crowd-goo-outer": {
+          "p50": 2.300000011920929,
+          "mean": 4.804999997466803
+        },
+        "cpu:phase:crowd-sdf-render": {
+          "p50": 2.300000011920929,
+          "mean": 4.809999997168779
+        },
+        "cpu:phase:crowd-sdf-inner": {
+          "p50": 2.100000023841858,
+          "mean": 4.682499999552965
+        },
+        "compute:tile-bin": {
+          "p50": 2.021843999995326,
+          "mean": 1.6044610250004552
+        },
+        "gpu:idle": {
+          "p50": 1.8644710000007763,
+          "mean": 2.257809933332707
+        },
+        "sdf:polys": {
+          "p50": 1.221730999997817,
+          "mean": 1.1883452750000287
+        },
+        "cpu:tick": {
+          "p50": 0.699999988079071,
+          "mean": 0.7299999982118607
+        },
+        "cpu:phase:draw:effects-tail": {
+          "p50": 0.5,
+          "mean": 30.3825000025332
+        },
+        "cpu:phase:blood-simulation-and-sync": {
+          "p50": 0.5,
+          "mean": 0.5149999968707561
+        },
+        "cpu:phase:tick:post-hits": {
+          "p50": 0.5,
+          "mean": 0.5149999968707561
+        },
+        "cpu:phase:draw:probe-gather-lights": {
+          "p50": 0.29999998211860657,
+          "mean": 0.38000000193715094
+        },
+        "post:fxaa": {
+          "p50": 0.21920500000123866,
+          "mean": 0.2173227749994112
+        },
+        "cpu:phase:skeleton-mesh": {
+          "p50": 0.20000001788139343,
+          "mean": 0.3174999997019768
+        },
+        "cpu:phase:crowd-sync": {
+          "p50": 0.19999998807907104,
+          "mean": 0.194999997317791
+        },
+        "effects": {
+          "p50": 0.16999700000451412,
+          "mean": 0.34700607499962643
+        },
+        "sdf:upscale:L4a": {
+          "p50": 0.15174799999658717,
+          "mean": 0.15592997499988998
+        },
+        "sdf:upscale:L3a": {
+          "p50": 0.15149699999892619,
+          "mean": 0.17445257499894068
+        },
+        "sdf:upscale:L2a": {
+          "p50": 0.1428730000043288,
+          "mean": 0.15676407500122877
+        },
+        "post:blit": {
+          "p50": 0.12391399999614805,
+          "mean": 0.12935630000010861
+        },
+        "cpu:phase:tick:weapon-rig-reload": {
+          "p50": 0.10000002384185791,
+          "mean": 0.14000000283122063
+        },
+        "cpu:phase:crowd-uniform-copy": {
+          "p50": 0.09999999403953552,
+          "mean": 0.06499999836087227
+        },
+        "goo:surface": {
+          "p50": 0.08533200000238139,
+          "mean": 0.08546125000048051
+        },
+        "compute:probe-gather": {
+          "p50": 0.0847490000014659,
+          "mean": 0.22734664999989035
+        },
+        "post:vhs": {
+          "p50": 0.07512400000268826,
+          "mean": 0.07913640000042506
+        },
+        "sdf:upscale:occupiedTiles": {
+          "p50": 0.06733199999871431,
+          "mean": 0.07040012500019657
+        },
+        "sdf:composite": {
+          "p50": 0.0636240000021644,
+          "mean": 0.06432712499972695
+        },
+        "sdf:last-blit": {
+          "p50": 0.06166500000108499,
+          "mean": 0.05737089999984164
+        },
+        "sdf:upscale:L1a": {
+          "p50": 0.040416000003460795,
+          "mean": 0.037877649999973076
+        },
+        "sdf:shell-hull": {
+          "p50": 0.0383739999961108,
+          "mean": 0.10491619999957039
+        },
+        "post:fire-composite": {
+          "p50": 0.036164999997708946,
+          "mean": 0.03885035000057542
+        },
+        "sdf:upscale:sharpen": {
+          "p50": 0.03412399999797344,
+          "mean": 0.03549634999963018
+        },
+        "post:vhs-input": {
+          "p50": 0.03262399999948684,
+          "mean": 0.03754317499988247
+        },
+        "sdf:upscale:shuffle": {
+          "p50": 0.03208400000585243,
+          "mean": 0.1848211500007892
+        },
+        "post:fire-resolve": {
+          "p50": 0.028831999996327795,
+          "mean": 0.08266132499938976
+        },
+        "sdf:upscale:activeTiles": {
+          "p50": 0.004915000004984904,
+          "mean": 0.0055133749998276475
+        },
+        "cpu:phase:tick:visual-set": {
+          "p50": 0,
+          "mean": 0.027499999105930328
+        },
+        "cpu:phase:tick:input-player": {
+          "p50": 0,
+          "mean": 0.03499999865889549
+        },
+        "cpu:phase:wound-flush": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:projectiles-and-hits": {
+          "p50": 0,
+          "mean": 0.007499999552965164
+        },
+        "cpu:phase:chunks-and-guts": {
+          "p50": 0,
+          "mean": 0
+        },
+        "cpu:phase:goo-sync": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:tick:post-blood": {
+          "p50": 0,
+          "mean": 0.027499999850988388
+        },
+        "cpu:phase:tick:tail": {
+          "p50": 0,
+          "mean": 0.002499999850988388
+        },
+        "cpu:phase:crowd-atlas-flush": {
+          "p50": 0,
+          "mean": 0.004999999701976776
+        },
+        "cpu:phase:crowd-set-bodies": {
+          "p50": 0,
+          "mean": 0.002500000596046448
+        }
+      },
+      "load1": 2.435546875,
+      "load1Start": 2.560546875
+    }
+  ],
+  "summary": {
+    "groups": [
+      {
+        "phase": "clean",
+        "leg": "ship",
+        "n": 2,
+        "frameP50": 17.020000000298023,
+        "labels": {
+          "sdf:march": 13.214715999999953,
+          "cpu:draw": 3.199999988079071,
+          "cpu:phase:draw:uniforms-cull-crowd": 2.5999999940395355,
+          "cpu:phase:crowd-goo-outer": 2.300000011920929,
+          "cpu:phase:crowd-sdf-render": 2.300000011920929,
+          "cpu:phase:crowd-sdf-inner": 2.2999999821186066,
+          "sdf:polys": 1.143898999999692,
+          "cpu:tick": 0.699999988079071,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "cpu:phase:draw:probe-gather-lights": 0.30000001192092896,
+          "cpu:phase:skeleton-mesh": 0.29999998211860657,
+          "post:fxaa": 0.23216200000001663,
+          "cpu:phase:draw:effects-tail": 0.20000001788139343,
+          "cpu:phase:crowd-sync": 0.19999998807907104,
+          "post:blit": 0.1404139999999643,
+          "sdf:upscale:L4a": 0.12304100000005747,
+          "sdf:upscale:L3a": 0.12270699999999124,
+          "sdf:upscale:L2a": 0.11766499999976077,
+          "cpu:phase:tick:input-player": 0.09999999403953552,
+          "cpu:phase:tick:weapon-rig-reload": 0.09999999403953552,
+          "compute:tile-bin": 0.09503999999924417,
+          "post:vhs": 0.08699799999976676,
+          "goo:surface": 0.08337399999982154,
+          "sdf:composite": 0.06333199999994577,
+          "sdf:last-blit": 0.05487399999992704,
+          "sdf:shell-hull": 0.038459000000102606,
+          "compute:probe-gather": 0.03712500000006003,
+          "sdf:upscale:occupiedTiles": 0.06933200000003126,
+          "sdf:upscale:L1a": 0.036166000000093845,
+          "sdf:upscale:sharpen": 0.03245900000001711,
+          "post:vhs-input": 0.03158300000018244,
+          "sdf:upscale:shuffle": 0.03070900000011534,
+          "gpu:idle": 0.05029099999956088,
+          "sdf:upscale:activeTiles": 0.005124999999679858,
+          "effects": 0.0030420000000503933,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-uniform-copy": 0,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "cpu:draw",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-render",
+          "cpu:phase:crowd-sdf-inner",
+          "sdf:polys",
+          "cpu:tick"
+        ],
+        "maxLoad": 2.93603515625,
+        "loadSuspect": false
+      },
+      {
+        "phase": "clean",
+        "leg": "flat",
+        "n": 2,
+        "frameP50": 15.23999999910593,
+        "labels": {
+          "sdf:march": 11.758030000000417,
+          "cpu:draw": 3.5999999940395355,
+          "cpu:phase:draw:uniforms-cull-crowd": 2.9000000059604645,
+          "cpu:phase:crowd-goo-outer": 2.5999999940395355,
+          "cpu:phase:crowd-sdf-render": 2.5999999940395355,
+          "cpu:phase:crowd-sdf-inner": 2.5,
+          "sdf:polys": 1.1473579999997128,
+          "cpu:tick": 0.699999988079071,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "cpu:phase:draw:probe-gather-lights": 0.4000000059604645,
+          "cpu:phase:skeleton-mesh": 0.30000001192092896,
+          "cpu:phase:draw:effects-tail": 0.29999998211860657,
+          "post:fxaa": 0.23187099999995553,
+          "cpu:phase:crowd-sync": 0.19999998807907104,
+          "post:blit": 0.13812300000017785,
+          "sdf:upscale:L3a": 0.12329000000045198,
+          "sdf:upscale:L4a": 0.1234150000000227,
+          "sdf:upscale:L2a": 0.12003899999990608,
+          "compute:tile-bin": 0.10049900000058187,
+          "cpu:phase:tick:input-player": 0.09999999403953552,
+          "cpu:phase:tick:weapon-rig-reload": 0.09999999403953552,
+          "cpu:phase:crowd-uniform-copy": 0.09999999403953552,
+          "post:vhs": 0.0862080000001697,
+          "goo:surface": 0.0832909999999174,
+          "sdf:composite": 0.060124000000541855,
+          "sdf:upscale:occupiedTiles": 0.05020700000022771,
+          "sdf:shell-hull": 0.03879000000006272,
+          "sdf:upscale:L1a": 0.03683299999966039,
+          "sdf:upscale:sharpen": 0.029706999999689288,
+          "post:vhs-input": 0.029039999999440624,
+          "compute:probe-gather": 0.029915000000073633,
+          "sdf:upscale:shuffle": 0.026416000000153872,
+          "gpu:idle": 0.017456999999922118,
+          "sdf:last-blit": 0.021625000000312866,
+          "sdf:upscale:activeTiles": 0.005124999999679858,
+          "effects": 0.002959000000373635,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "cpu:draw",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-render",
+          "cpu:phase:crowd-sdf-inner",
+          "sdf:polys",
+          "cpu:tick"
+        ],
+        "maxLoad": 2.93603515625,
+        "loadSuspect": false
+      },
+      {
+        "phase": "wounded",
+        "leg": "ship",
+        "n": 2,
+        "frameP50": 22.784999999403954,
+        "labels": {
+          "sdf:march": 19.25949799999944,
+          "cpu:draw": 3.0999999940395355,
+          "cpu:phase:draw:uniforms-cull-crowd": 2.4000000059604645,
+          "cpu:phase:crowd-goo-outer": 2.0999999940395355,
+          "cpu:phase:crowd-sdf-render": 2.0999999940395355,
+          "cpu:phase:crowd-sdf-inner": 2,
+          "sdf:polys": 1.1766480000005686,
+          "cpu:tick": 0.699999988079071,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "cpu:phase:skeleton-mesh": 0.29999998211860657,
+          "cpu:phase:draw:probe-gather-lights": 0.30000001192092896,
+          "post:fxaa": 0.23258100000020931,
+          "cpu:phase:draw:effects-tail": 0.20000001788139343,
+          "cpu:phase:crowd-sync": 0.19999998807907104,
+          "post:blit": 0.13895600000068953,
+          "sdf:upscale:L3a": 0.12553900000057183,
+          "sdf:upscale:L4a": 0.1204570000008971,
+          "sdf:upscale:L2a": 0.11149899999873014,
+          "cpu:phase:tick:input-player": 0.09999999403953552,
+          "cpu:phase:tick:weapon-rig-reload": 0.10000002384185791,
+          "post:vhs": 0.08695699999952922,
+          "compute:tile-bin": 0.08549800000037067,
+          "goo:surface": 0.0844989999968675,
+          "sdf:last-blit": 0.07499900000038906,
+          "sdf:upscale:occupiedTiles": 0.06979099999807659,
+          "sdf:composite": 0.0649569999986852,
+          "compute:probe-gather": 0.051540999998906045,
+          "sdf:shell-hull": 0.03879199999937555,
+          "sdf:upscale:L1a": 0.03712399999858462,
+          "sdf:upscale:sharpen": 0.03362400000150956,
+          "sdf:upscale:shuffle": 0.03133299999899464,
+          "post:vhs-input": 0.0310829999998532,
+          "sdf:upscale:activeTiles": 0.0059579999979177956,
+          "effects": 0.0030000000006111804,
+          "gpu:idle": 0.02312499999970896,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-uniform-copy": 0,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "cpu:draw",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-render",
+          "cpu:phase:crowd-sdf-inner",
+          "sdf:polys",
+          "cpu:tick"
+        ],
+        "maxLoad": 2.6376953125,
+        "loadSuspect": false
+      },
+      {
+        "phase": "wounded",
+        "leg": "flat",
+        "n": 2,
+        "frameP50": 17.46499999910593,
+        "labels": {
+          "sdf:march": 13.741372999997111,
+          "cpu:draw": 3,
+          "cpu:phase:draw:uniforms-cull-crowd": 2.5,
+          "gpu:idle": 2.1380929999977525,
+          "cpu:phase:crowd-sdf-inner": 2.100000023841858,
+          "cpu:phase:crowd-goo-outer": 2.2999999821186066,
+          "cpu:phase:crowd-sdf-render": 2.2999999821186066,
+          "sdf:polys": 1.1692330000005313,
+          "cpu:tick": 0.699999988079071,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "cpu:phase:draw:probe-gather-lights": 0.30000001192092896,
+          "cpu:phase:skeleton-mesh": 0.29999998211860657,
+          "post:fxaa": 0.23187200000029407,
+          "cpu:phase:draw:effects-tail": 0.20000001788139343,
+          "cpu:phase:crowd-sync": 0.19999998807907104,
+          "post:blit": 0.13858100000288687,
+          "sdf:upscale:L3a": 0.12299799999891547,
+          "sdf:upscale:L4a": 0.12091599999985192,
+          "sdf:upscale:L2a": 0.10945600000195554,
+          "cpu:phase:tick:weapon-rig-reload": 0.09999999403953552,
+          "compute:tile-bin": 0.09433200000057695,
+          "post:vhs": 0.0864560000009078,
+          "goo:surface": 0.08383200000025681,
+          "sdf:upscale:occupiedTiles": 0.07229100000040489,
+          "sdf:composite": 0.060916000002180226,
+          "sdf:shell-hull": 0.03920700000162469,
+          "sdf:upscale:L1a": 0.03575000000091677,
+          "compute:probe-gather": 0.03416700000161654,
+          "sdf:upscale:sharpen": 0.03029199999946286,
+          "post:vhs-input": 0.029332000000067637,
+          "sdf:upscale:shuffle": 0.026749000000563683,
+          "sdf:last-blit": 0.05149900000105845,
+          "sdf:upscale:activeTiles": 0.004915999999866472,
+          "effects": 0.0030829999996058177,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:tick:input-player": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-uniform-copy": 0,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "cpu:draw",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-render",
+          "gpu:idle",
+          "cpu:phase:crowd-sdf-inner",
+          "sdf:polys"
+        ],
+        "maxLoad": 2.42626953125,
+        "loadSuspect": false
+      },
+      {
+        "phase": "wounded",
+        "leg": "refoldOff",
+        "n": 2,
+        "frameP50": 18.38999999910593,
+        "labels": {
+          "sdf:march": 14.806314999997994,
+          "gpu:idle": 3.383365000001504,
+          "cpu:draw": 3.399999976158142,
+          "cpu:phase:draw:uniforms-cull-crowd": 2.699999988079071,
+          "cpu:phase:crowd-sdf-render": 2.4000000059604645,
+          "cpu:phase:crowd-goo-outer": 2.4000000059604645,
+          "cpu:phase:crowd-sdf-inner": 2.300000011920929,
+          "sdf:polys": 1.1714820000015607,
+          "cpu:tick": 0.699999988079071,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "cpu:phase:draw:probe-gather-lights": 0.3999999761581421,
+          "cpu:phase:skeleton-mesh": 0.30000001192092896,
+          "post:fxaa": 0.23241399999824353,
+          "cpu:phase:draw:effects-tail": 0.20000001788139343,
+          "cpu:phase:crowd-sync": 0.19999998807907104,
+          "post:blit": 0.1396649999987858,
+          "sdf:upscale:L3a": 0.12287300000025425,
+          "sdf:upscale:L4a": 0.12145600000076229,
+          "sdf:upscale:L2a": 0.113164999998844,
+          "cpu:phase:tick:weapon-rig-reload": 0.09999999403953552,
+          "compute:tile-bin": 0.0951229999991483,
+          "post:vhs": 0.08728999999948428,
+          "goo:surface": 0.08429099999921164,
+          "sdf:upscale:occupiedTiles": 0.06954100000075414,
+          "sdf:last-blit": 0.06737400000201887,
+          "sdf:composite": 0.06399899999814807,
+          "sdf:shell-hull": 0.03874999999970896,
+          "sdf:upscale:L1a": 0.03670799999963492,
+          "sdf:upscale:sharpen": 0.03341599999839673,
+          "post:vhs-input": 0.031291999999666587,
+          "sdf:upscale:shuffle": 0.030457000000751577,
+          "compute:probe-gather": 0.039123999998992076,
+          "sdf:upscale:activeTiles": 0.005124999999679858,
+          "effects": 0.0030000000006111804,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:tick:input-player": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-uniform-copy": 0,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "cpu:draw",
+          "gpu:idle",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-sdf-render",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-inner",
+          "sdf:polys"
+        ],
+        "maxLoad": 2.42626953125,
+        "loadSuspect": false
+      },
+      {
+        "phase": "wounded+fire",
+        "leg": "ship",
+        "n": 2,
+        "frameP50": 36.704999999701975,
+        "labels": {
+          "sdf:march": 27.70953499999814,
+          "post:fire-march": 5.054422999997769,
+          "cpu:draw": 4.5,
+          "cpu:phase:draw:uniforms-cull-crowd": 3.2999999821186066,
+          "cpu:phase:crowd-goo-outer": 2.7999999821186066,
+          "cpu:phase:crowd-sdf-render": 2.7999999821186066,
+          "cpu:phase:crowd-sdf-inner": 2.699999988079071,
+          "gpu:idle": 1.940096000002086,
+          "sdf:polys": 1.2233140000025742,
+          "cpu:tick": 0.699999988079071,
+          "cpu:phase:draw:effects-tail": 0.699999988079071,
+          "effects": 0.5037010000014561,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "cpu:phase:draw:probe-gather-lights": 0.4000000059604645,
+          "cpu:phase:skeleton-mesh": 0.30000001192092896,
+          "post:fxaa": 0.21920500000123866,
+          "cpu:phase:crowd-sync": 0.19999998807907104,
+          "sdf:upscale:L3a": 0.15183099999921978,
+          "sdf:upscale:L4a": 0.15174799999658717,
+          "sdf:upscale:L2a": 0.14737199999945005,
+          "post:blit": 0.12774799999897368,
+          "compute:tile-bin": 2.021843999995326,
+          "cpu:phase:tick:input-player": 0.09999999403953552,
+          "cpu:phase:tick:weapon-rig-reload": 0.10000002384185791,
+          "goo:surface": 0.08533200000238139,
+          "compute:probe-gather": 0.0847490000014659,
+          "post:vhs": 0.07599899999695481,
+          "sdf:upscale:occupiedTiles": 0.06745700000101351,
+          "sdf:composite": 0.06370700000115903,
+          "sdf:last-blit": 0.06224899999870104,
+          "sdf:upscale:L1a": 0.040416000003460795,
+          "sdf:shell-hull": 0.038834000002680114,
+          "post:fire-composite": 0.036164999997708946,
+          "sdf:upscale:sharpen": 0.03412399999797344,
+          "post:vhs-input": 0.03287400000044727,
+          "sdf:upscale:shuffle": 0.03208400000585243,
+          "post:fire-resolve": 0.028831999996327795,
+          "sdf:upscale:activeTiles": 0.004999999997380655,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-uniform-copy": 0.09999999403953552,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "post:fire-march",
+          "cpu:draw",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-render",
+          "cpu:phase:crowd-sdf-inner",
+          "compute:tile-bin"
+        ],
+        "maxLoad": 2.435546875,
+        "loadSuspect": false
+      },
+      {
+        "phase": "wounded+fire",
+        "leg": "flat",
+        "n": 2,
+        "frameP50": 31.729999999701977,
+        "labels": {
+          "sdf:march": 22.320159999995667,
+          "post:fire-march": 5.170753999998851,
+          "cpu:draw": 4.399999976158142,
+          "cpu:phase:draw:uniforms-cull-crowd": 3.199999988079071,
+          "cpu:phase:crowd-goo-outer": 2.9000000059604645,
+          "cpu:phase:crowd-sdf-render": 2.9000000059604645,
+          "cpu:phase:crowd-sdf-inner": 2.699999988079071,
+          "sdf:polys": 1.222063999994134,
+          "cpu:tick": 0.7000000178813934,
+          "cpu:phase:draw:effects-tail": 0.7000000178813934,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "effects": 0.5179080000016256,
+          "cpu:phase:draw:probe-gather-lights": 0.4000000059604645,
+          "cpu:phase:skeleton-mesh": 0.4000000059604645,
+          "post:fxaa": 0.21720400000049267,
+          "cpu:phase:crowd-sync": 0.20000001788139343,
+          "sdf:upscale:L3a": 0.15112299999964307,
+          "sdf:upscale:L4a": 0.1525809999948251,
+          "sdf:upscale:L2a": 0.14616499999829102,
+          "post:blit": 0.12654000000475207,
+          "compute:probe-gather": 0.10299900000245543,
+          "cpu:phase:tick:weapon-rig-reload": 0.10000002384185791,
+          "cpu:phase:tick:input-player": 0.09999999403953552,
+          "compute:tile-bin": 0.09629000000131782,
+          "goo:surface": 0.08458100000279956,
+          "post:vhs": 0.07378999999855296,
+          "sdf:upscale:occupiedTiles": 0.06724899999971967,
+          "sdf:composite": 0.06049899999925401,
+          "sdf:last-blit": 0.0518740000006801,
+          "sdf:upscale:L1a": 0.03983299999526935,
+          "sdf:shell-hull": 0.03866600000037579,
+          "post:fire-composite": 0.0328750000007858,
+          "sdf:upscale:sharpen": 0.031041000002005603,
+          "post:vhs-input": 0.030498999996780185,
+          "gpu:idle": 1.954928999999538,
+          "sdf:upscale:shuffle": 0.027707000001100823,
+          "post:fire-resolve": 0.027792000000772532,
+          "sdf:upscale:activeTiles": 0.0049580000013520475,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-uniform-copy": 0.09999999403953552,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "post:fire-march",
+          "cpu:draw",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-render",
+          "cpu:phase:crowd-sdf-inner",
+          "gpu:idle"
+        ],
+        "maxLoad": 2.69677734375,
+        "loadSuspect": false
+      },
+      {
+        "phase": "wounded+fire",
+        "leg": "refoldOff",
+        "n": 2,
+        "frameP50": 33.84000000059605,
+        "labels": {
+          "sdf:march": 25.222240999995847,
+          "post:fire-march": 5.116880000001402,
+          "cpu:draw": 3.9000000059604645,
+          "cpu:phase:draw:uniforms-cull-crowd": 3,
+          "cpu:phase:crowd-sdf-inner": 2.5999999940395355,
+          "cpu:phase:crowd-goo-outer": 2.5999999940395355,
+          "cpu:phase:crowd-sdf-render": 2.5999999940395355,
+          "gpu:idle": 1.8352220000015222,
+          "sdf:polys": 1.2273150000037276,
+          "cpu:tick": 0.699999988079071,
+          "cpu:phase:draw:effects-tail": 0.5999999940395355,
+          "cpu:phase:blood-simulation-and-sync": 0.5,
+          "cpu:phase:tick:post-hits": 0.5,
+          "cpu:phase:draw:probe-gather-lights": 0.4000000059604645,
+          "cpu:phase:skeleton-mesh": 0.30000001192092896,
+          "post:fxaa": 0.23612100000173086,
+          "cpu:phase:crowd-sync": 0.19999998807907104,
+          "effects": 0.4967000000033295,
+          "sdf:upscale:L3a": 0.15333100000134436,
+          "sdf:upscale:L4a": 0.15074800000002142,
+          "sdf:upscale:L2a": 0.13999799999874085,
+          "post:blit": 0.12845699999888893,
+          "compute:probe-gather": 0.11987300000328105,
+          "cpu:phase:tick:weapon-rig-reload": 0.10000002384185791,
+          "cpu:phase:crowd-uniform-copy": 0.09999999403953552,
+          "compute:tile-bin": 0.09141500000259839,
+          "goo:surface": 0.08533200000238139,
+          "post:vhs": 0.07829100000526523,
+          "sdf:upscale:occupiedTiles": 0.06724899999971967,
+          "sdf:composite": 0.06599900000583148,
+          "sdf:last-blit": 0.056999000000359956,
+          "sdf:upscale:L1a": 0.04070800000044983,
+          "sdf:shell-hull": 0.03841600000305334,
+          "sdf:upscale:sharpen": 0.03578999999444932,
+          "post:fire-composite": 0.03537499999947613,
+          "sdf:upscale:shuffle": 0.03391600000031758,
+          "post:vhs-input": 0.03166600000258768,
+          "post:fire-resolve": 0.028165999996417668,
+          "sdf:upscale:activeTiles": 0.004957999997714069,
+          "cpu:phase:tick:visual-set": 0,
+          "cpu:phase:tick:input-player": 0,
+          "cpu:phase:wound-flush": 0,
+          "cpu:phase:projectiles-and-hits": 0,
+          "cpu:phase:chunks-and-guts": 0,
+          "cpu:phase:goo-sync": 0,
+          "cpu:phase:tick:post-blood": 0,
+          "cpu:phase:tick:tail": 0,
+          "cpu:phase:crowd-atlas-flush": 0,
+          "cpu:phase:crowd-set-bodies": 0
+        },
+        "topLabels": [
+          "sdf:march",
+          "post:fire-march",
+          "cpu:draw",
+          "cpu:phase:draw:uniforms-cull-crowd",
+          "cpu:phase:crowd-sdf-inner",
+          "cpu:phase:crowd-goo-outer",
+          "cpu:phase:crowd-sdf-render",
+          "gpu:idle"
+        ],
+        "maxLoad": 2.69677734375,
+        "loadSuspect": false
+      }
+    ],
+    "loadSuspect": false
+  },
+  "loadSuspect": false,
+  "maxLoad": 2.93603515625
+}

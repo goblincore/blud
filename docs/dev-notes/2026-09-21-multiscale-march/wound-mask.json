@@ -1,0 +1,364 @@
+{
+ "staged": {
+  "d": 0.7,
+  "cov": 0.2738833333333333,
+  "body": 1
+ },
+ "ship": {
+  "woundList": false,
+  "ownerRefold": true,
+  "woundEarlyOut": true,
+  "woundStep": 1,
+  "relax": 1
+ },
+ "wounds": {
+  "stamped": 5,
+  "wounds": 5,
+  "bleed": {
+   "enabled": true,
+   "emitters": 0,
+   "droplets": 0,
+   "splats": 0
+  },
+  "chunks": 0,
+  "bodies": {}
+ },
+ "rows": [
+  {
+   "rep": 0,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 19.90000000298023,
+   "march": 16.99540799999977,
+   "census": {
+    "rays": 44166,
+    "steps": 202989,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 64.69000000059604,
+   "march": 61.46026999999958,
+   "census": {
+    "rays": 176613,
+    "steps": 868571,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "gate@0.5",
+   "seam": "gate",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 17.340000000596046,
+   "march": 14.550986000000194,
+   "census": {
+    "rays": 44166,
+    "steps": 202989,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "gate@1",
+   "seam": "gate",
+   "scale": 1,
+   "valid": true,
+   "frame": 65.08999999910593,
+   "march": 53.95888399999967,
+   "census": {
+    "rays": 176613,
+    "steps": 868571,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "mask@0.5",
+   "seam": "mask",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 19.18500000089407,
+   "march": 16.24158499999976,
+   "census": {
+    "rays": 44166,
+    "steps": 202989,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "mask@1",
+   "seam": "mask",
+   "scale": 1,
+   "valid": true,
+   "frame": 63.21000000089407,
+   "march": 57.672411999999895,
+   "census": {
+    "rays": 176613,
+    "steps": 868571,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 12.370000000298024,
+   "march": 9.409023000000161,
+   "census": {
+    "rays": 44166,
+    "steps": 200175,
+    "stepsPerRay": 4.53,
+    "maxSteps": 39
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 62.89000000059605,
+   "march": 59.998209000001225,
+   "census": {
+    "rays": 176613,
+    "steps": 856254,
+    "stepsPerRay": 4.85,
+    "maxSteps": 55
+   }
+  },
+  {
+   "rep": 1,
+   "name": "gate@0.5",
+   "seam": "gate",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 21.41499999910593,
+   "march": 17.90697700000601,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "gate@1",
+   "seam": "gate",
+   "scale": 1,
+   "valid": true,
+   "frame": 67.83500000089407,
+   "march": 64.6748049999951,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "mask@0.5",
+   "seam": "mask",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 24.629999999701976,
+   "march": 19.18495800000528,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "mask@1",
+   "seam": "mask",
+   "scale": 1,
+   "valid": true,
+   "frame": 80.75,
+   "march": 70.50579899999866,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 17.91000000089407,
+   "march": 13.404004000003624,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 73.26000000238419,
+   "march": 67.6186349999989,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 26.965000000596046,
+   "march": 22.953150000001187,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 110.78999999910593,
+   "march": 99.52952299999743,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "mask@0.5",
+   "seam": "mask",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 24.740000000596048,
+   "march": 20.18610799999442,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "mask@1",
+   "seam": "mask",
+   "scale": 1,
+   "valid": true,
+   "frame": 92.93999999910594,
+   "march": 86.7974680000043,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 21.534999999403954,
+   "march": 15.513846999994712,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 81.85999999791383,
+   "march": 72.61114199999429,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 34.27000000178814,
+   "march": 29.50688300000911,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 111.16999999880791,
+   "march": 104.52719699998852,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "gate@0.5",
+   "seam": "gate",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 26.815000000596047,
+   "march": 21.479506000003312,
+   "census": null
+  },
+  {
+   "rep": 2,
+   "name": "gate@1",
+   "seam": "gate",
+   "scale": 1,
+   "valid": true,
+   "frame": 90.675,
+   "march": 82.73136299999896,
+   "census": null
+  }
+ ],
+ "summary": {
+  "ship@0.5": 22.95,
+  "ship@1": 99.53,
+  "gate@0.5": 17.91,
+  "gate@1": 64.67,
+  "mask@0.5": 19.18,
+  "mask@1": 70.51,
+  "refoldOff@0.5": 13.4,
+  "refoldOff@1": 67.62
+ },
+ "parity": {
+  "1": {
+   "gateVsShip": {
+    "differingPixels": 139393,
+    "maxAbs": 0.004135012626647949,
+    "hitPixels": 139393
+   },
+   "maskVsShip": {
+    "differingPixels": 139393,
+    "maxAbs": 0.007510751485824585,
+    "hitPixels": 139393
+   },
+   "shipVsShip": {
+    "differingPixels": 139393,
+    "maxAbs": 0.011232733726501465,
+    "hitPixels": 139393
+   },
+   "refoldOffVsShip": {
+    "differingPixels": 139393,
+    "maxAbs": 0.842661065980792,
+    "hitPixels": 139393
+   }
+  },
+  "0.5": {
+   "gateVsShip": {
+    "differingPixels": 35017,
+    "maxAbs": 0.0037839412689208984,
+    "hitPixels": 35017
+   },
+   "maskVsShip": {
+    "differingPixels": 35017,
+    "maxAbs": 0.004565000534057617,
+    "hitPixels": 35017
+   },
+   "shipVsShip": {
+    "differingPixels": 35017,
+    "maxAbs": 0.006257802248001099,
+    "hitPixels": 35017
+   },
+   "refoldOffVsShip": {
+    "differingPixels": 35017,
+    "maxAbs": 0.8526449296623468,
+    "hitPixels": 35017
+   }
+  }
+ }
+}

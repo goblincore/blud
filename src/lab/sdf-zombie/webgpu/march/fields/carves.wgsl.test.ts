@@ -25,7 +25,7 @@ describe('ported features reach the entry point', () => {
     // hollowed whole bodies (the owner's invisible-zombie report). Do not
     // revert to that form.
     expect(applyWounds).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP} + band), 0)`);
-    expect(applyWounds).toContain('min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz))');
+    expect(applyWounds).toContain('min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz))');
     // Uncapped wounds (w <= 0) must take a capEff no real distance can
     // cross, so the slab term loses the min EXACTLY and the field is
     // bit-identical to the pre-slab sphere — that is what keeps the lab

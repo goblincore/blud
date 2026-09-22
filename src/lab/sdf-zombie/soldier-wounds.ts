@@ -1,8 +1,21 @@
 import { MAX_WOUNDS, type Wound } from './damage';
 
+/** How ragged a single crater's edge is when it stands in for the lobes (radius grows by
+ *  up to this fraction by direction, shader-side). Stored in the fraction of the wound
+ *  TYPE texel, so it must stay below 0.5. */
+export const RAGGED_AMOUNT = 0.3;
+
+/** Option 3 of the wound-cost work (2026-09-21): ONE noise-ragged crater per wound instead
+ *  of the wound plus three lobe rows, cutting the rows every march sample walks ~4x. A look
+ *  change the owner approved by eye (2026-09-21); ON. */
+let raggedCraters = true;
+export const setRaggedCraters = (on: boolean) => { raggedCraters = on; };
+export const raggedCratersOn = () => raggedCraters;
+
 /** Render-only secondary cuts. They never enter the gameplay ring or injury ledger. */
 export function soldierVisualWounds(wounds: readonly Wound[]): Wound[] {
   const real=wounds.slice(-MAX_WOUNDS).map(w=>({...w,local:[...w.local] as [number,number,number]}));
+  if(raggedCraters) return real.map(w=>w.injuryIgnored||w.type==='burn'?w:{...w,ragged:RAGGED_AMOUNT});
   const out=[...real];
   for(let i=0;i<real.length && out.length<MAX_WOUNDS;i++) {
     const w=real[i]!;

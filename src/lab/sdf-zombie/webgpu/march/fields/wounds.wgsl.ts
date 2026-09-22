@@ -65,9 +65,21 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // for every wound the sample is nowhere near — which, per march step,
     // is all of them but one. (perfCfg.y seam, game page ON; lab default 0
     // keeps its reference bit-identical.)
-    let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;
+    // EXACT REACH (gWoundExact, 2026-09-21): the fillet is live only while
+    // r < depth - d + 4k, so the constant 0.25 (a bound on -d inside any limb)
+    // can be the running -d itself. Surface and outside samples (d >= 0) then
+    // drop every row whose crater and rim are out of range. Off = ship.
+    let slack = select(0.25, max(0.0, -d), gWoundExact > 0.5);
+    let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + slack;
     if (perfCfg.y > 0.5 && r > reach) { continue; }
-    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0).y;
+    let wFlags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0);
+    let owner = wFlags.y;
+    // THREAT MASK (2026-09-21): the fraction of flags.x is a CPU-computed bitfield
+    // over 1024 — bit c+1 set when cluster c is NOT this wound's owner and
+    // some prim group of it reaches this wound's carve bowl (zombie-gpu.ts
+    // woundThreatMasks). The cavity readers test x > 0.5 and the fraction
+    // stays below 0.5, so they are untouched. Zero when no view wrote it.
+    let threat = u32(fract(wFlags.x) * 1024.0 + 0.5);
     if (gWoundCluster > 0.0 && owner > 0.0 && owner != gWoundCluster) { continue; }
     if (owner > 0.0) { gWoundOwners = gWoundOwners | (1u << u32(owner)); }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + band), 0);
@@ -96,16 +108,47 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // Bounded torso preview: a fixed sphere recipe, with its owner's depth
     // cap. Negative type is upload-only; stock gameplay types remain 0..2.
     if (wMeta.x < -0.5) {
+      let dPre = d;
       d = max(d, min(w.w - r, capEff - dot(p - w.xyz, wCap.xyz)));
+      if (d > dPre) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
       if (r < w.w * 2.0) { near = 1.0; }
       continue;
     }
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
-    d = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
-    if (r < depth * 2.0) { near = 1.0; }
-    let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
+    // RAGGED CRATER (option 3, 2026-09-21): the fraction of the type texel is
+    // how far the edge may grow, by direction, in place of the three lobe rows
+    // a soldier wound used to upload. rN = r / s with s = 1 + A * n(dir) in
+    // [1, 1 + A]: the zero set is r = depth * s, and the rim follows it. The
+    // direction is taken in the BODY frame (gInstYaw) so the lobes turn with
+    // the body, seeded by the radius so neighbours differ. The carve term is
+    // scaled by 0.75 because an angularly varying radius steepens the field
+    // (slope ~ sqrt(1 + (A * 1.8 * 1.5)^2) = 1.3 at A = 0.3); the zero set is
+    // unchanged by the scale. Every reach bound stays valid: s <= 1.45 < 2.
+    // A = 0 (every round wound) takes rN = r, carveK = 1 — bit-identical.
+    let ragged = select(0.0, fract(wMeta.x), wMeta.x > -0.5 && !isBurn);
+    var rN = r;
+    var carveK = 1.0;
+    if (ragged > 0.0) {
+      let v = (p - w.xyz) / max(r, 1e-6);
+      let cy = cos(gInstYaw);
+      let sy = sin(gInstYaw);
+      let q = vec3<f32>(cy * v.x - sy * v.z, v.y, sy * v.x + cy * v.z);
+      let n = noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5;
+      rN = r / (1.0 + ragged * n);
+      carveK = 0.75;
+    }
+    let dBefore = d;
+    d = smax(d, min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
+    // Which owners' carves actually RAISED the field here — see the owner
+    // re-fold's raiser gate in MAP_BODY. Bit 0 collects unowned wounds.
+    if (d > dBefore) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
+    if (rN < depth * 2.0) { near = 1.0; }
+    let x = (rN - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
+    // Own-amp bound for the re-fold pre-scan (MAP_BODY): the most this
+    // row's bump can LOWER a field, filed under its owner (0 = unowned).
+    if (gWoundCluster == 0.0) { gWoundAmp[u32(owner)] = gWoundAmp[u32(owner)] + amp; }
     let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);
     d = d - exp(-x * x) * amp * rimLocal;
   }
@@ -115,6 +158,16 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
 // a positive cluster id restricts the independent limb field below.
 var<private> gWoundCluster: f32 = 0.0;
 var<private> gWoundOwners: u32 = 0u;
+// Owners whose carve raised the field at p since mapBody's reset.
+var<private> gWoundRaisers: u32 = 0u;
+// Union of the threat masks of every wound whose carve raised the field at p.
+var<private> gWoundThreat: u32 = 0u;
+// Exact-fix switch (counts2.z >= 8): the d-aware wound reach and the re-fold
+// pre-scan. Set per slot by mapBody; 0 in every other caller = ship.
+var<private> gWoundExact: f32 = 0.0;
+// Per-owner sum of rim-bump amplitudes over the rows the BASE applyWounds
+// reached at p (index = owner cluster + 1, 0 = unowned).
+var<private> gWoundAmp: array<f32, 9>;
 // Set only for final surface shading; -1 retains unscoped chunk/volume masks.
 var<private> gWoundShadePrim: f32 = -1.0;`
 
@@ -147,7 +200,18 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
         (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
-    let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz));
+    // Ragged craters (see applyWounds): the footprint follows the same edge.
+    let tId = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + gBand), 0).x;
+    let ragged = select(0.0, fract(tId), tId > -0.5 && tId < 1.5);
+    var rM = length(p - w.xyz);
+    if (ragged > 0.0) {
+      let v = (p - w.xyz) / max(rM, 1e-6);
+      let cy = cos(gInstYaw);
+      let sy = sin(gInstYaw);
+      let q = vec3<f32>(cy * v.x - sy * v.z, v.y, sy * v.x + cy * v.z);
+      rM = rM / (1.0 + ragged * (noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5));
+    }
+    let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, rM);
     m = max(m, contribution);
     // Cavity-ness (entrails, 2026-09-02): the SAME radial footprint,
     // accumulated only over wounds whose flags row says the hit opened a

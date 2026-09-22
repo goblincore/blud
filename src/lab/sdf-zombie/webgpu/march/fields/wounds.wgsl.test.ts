@@ -56,7 +56,9 @@ describe('ported features reach the entry point', () => {
     // fillet (exact min beyond 4k, plus 0.25 m for how deep inside a limb
     // the running field can be) and three rim widths past the rim offset.
     expect(APPLY_WOUNDS).toContain(
-      'let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;');
+      'let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + slack;');
+    // Ship keeps the 0.25; the exact-fix switch narrows it to the running -d.
+    expect(APPLY_WOUNDS).toContain('let slack = select(0.25, max(0.0, -d), gWoundExact > 0.5);');
   });
 
   it('tests the union-reach bound BEFORE the wound loop (close-up wound-cull task)', () => {
@@ -154,7 +156,7 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     // edge coincides with its colour gradient, so it reads as wounded flesh,
     // not a ring. The far-side sheets those gates chased were the tracer
     // overshoot bug, fixed for real at the retract guard.
-    expect(WOUND_MASK).toContain('1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz))');
+    expect(WOUND_MASK).toContain('1.0 - smoothstep(0.0, w.w * 1.6, rM)'); // rM = length(p - w.xyz) unless ragged
     // Entrails (2026-09-02) retargeted the return pin from
     // vec2<f32>(m, m): the mask now carries cavity-ness in .z, accumulated
     // over the SAME per-wound footprint — the contribution expression above

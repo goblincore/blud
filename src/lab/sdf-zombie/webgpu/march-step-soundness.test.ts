@@ -233,8 +233,8 @@ describe('near-wound step multiplier', () => {
     // The three applyWounds lines the mirror above reproduces. Edit any of
     // them and update the mirror in the same commit, or this file is lying.
     expect(APPLY_WOUNDS).toContain(
-      'd = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);');
-    expect(APPLY_WOUNDS).toContain('if (r < depth * 2.0) { near = 1.0; }');
+      'd = smax(d, min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);'); // rN = r, carveK = 1 for round wounds
+    expect(APPLY_WOUNDS).toContain('if (rN < depth * 2.0) { near = 1.0; }');
     expect(APPLY_WOUNDS).toContain('d = d - exp(-x * x) * amp * rimLocal;');
     expect(APPLY_WOUNDS).toContain('let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);');
   });

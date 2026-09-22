@@ -14,7 +14,7 @@ import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
   cameraProjectionMatrixInverse, cameraWorldMatrix,
-  storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard,
+  storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard, positionLocal, select,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
@@ -40,6 +40,11 @@ import {
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
   QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
+import { woundThreatMasks } from './wound-threat';
+
+/** The shipped owner re-fold mode (counts2.z): 2 = the raiser gate (map-body.wgsl.ts).
+ *  0 = the full re-fold it replaced; see game-seams-world.ts for the others. */
+export const SHIP_REFOLD_MODE = 2;
 import { marchNormalRead, marchAnchorRead } from './march-private-reads';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
@@ -99,6 +104,9 @@ export interface ZombieGpuView {
    *  no-cull identity) for the bench A/B; the computed radius is kept, so
    *  true restores it without a re-upload. */
   setWoundCull(on: boolean): void;
+  /** Diagnostic: the per-wound threat masks last written (wound-threat.ts). */
+  woundThreats(): number[];
+  readonly woundThreatMargin: number;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
   /** The rigid head rotation (rig-bind headQuatOf); identity resets it. */
@@ -269,6 +277,26 @@ const depthPreMarch = (() => {
   return wgslFn(DEPTH_PREPASS_MARCH, nodes.slice(-1));
 })();
 
+/** MISS CULL depth (2026-09-22): the prepass distance as hardware depth, except the
+ *  MISS sentinel (-2), which goes to the far end so any touch or unknown covering the
+ *  same block wins the nearest-depth test over it. Unknown (-1) clamps to 0 and wins. */
+const depthPreDepthNode = (t: unknown) => select(
+  (t as { lessThan: (x: number) => unknown }).lessThan(-1.5) as never,
+  float(0.9999) as never,
+  (t as { div: (d: number) => unknown }).div(CONE_DEPTH_RANGE) as never,
+);
+
+/** MISS CULL coverage (2026-09-22): the prepass proxy grown by ~1.5 coarse blocks of
+ *  screen footprint at each vertex's distance, so a body whose box only clips a 4x4
+ *  block still covers that block's centre texel and votes (a touch or unknown beats a
+ *  miss). cfg.y is the block cone's radius per metre (half-diagonal); x3 ~ 1.5 blocks.
+ *  cfg.z = 0 (cull off) is the undilated box. */
+const depthPreMarginAt = (cfg: unknown, world: unknown) => {
+  const c = cfg as { y: { mul: (x: unknown) => { mul: (x: unknown) => unknown } }; z: unknown };
+  const dist = (world as { sub: (x: unknown) => { length: () => unknown } }).sub(cameraPosition).length();
+  return c.y.mul(3.0).mul(dist) as { mul: (x: unknown) => unknown };
+};
+
 /**
  * Stand-in face sheet, so the texture binding exists before the real art
  * loads. A 1x1 opaque white texel is the identity for everything the face does
@@ -307,7 +335,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  range, gated on nearWound. A NEW vec4 rather than a spare channel:
      *  counts was already full and woundCfg2.w is the volume hitEps
      *  override — NOT spare (see the woundShadowCfg note below). */
-    counts2: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    // counts2.z = owner re-fold mode; SHIP_REFOLD_MODE (2, the raiser gate) since
+    // 2026-09-21 — melee bench: -2.7 ms wounded, -3.6 ms wounded+fire; march-hash equal.
+    counts2: uniform(new THREE.Vector4(0, 0, SHIP_REFOLD_MODE, 0)),
     /** x melt progress 0..1 (zombie melt task 6), yzw spare. Drives the
      *  flesh-only wet-red albedo/gloss ramp in MARCH_BODY — the body goes red
      *  while still standing, before it visibly sags. 0 everywhere except a
@@ -1711,20 +1741,23 @@ export function createCrowdMaterial(
     perfCfg: u.perfCfg,
     inst: crowd.inst as never,
     instCfg: crowd.instCfg,
+    aaCfg: u.aaCfg,
   }) as unknown as { div: (d: unknown) => unknown };
   const depthPreMaterial = new MeshBasicNodeMaterial();
   if (quad) {
     depthPreMaterial.vertexNode = quadNodes!.clip as never;
     depthPreMaterial.side = THREE.DoubleSide;
   } else {
-    depthPreMaterial.positionNode = positionNode as never;
+    // Dilated for the miss cull (depthPreMarginAt); margin 0 while the cull is off.
+    const mCrowd = depthPreMarginAt(depthPreCfg, positionNode).mul((depthPreCfg as unknown as { z: unknown }).z);
+    depthPreMaterial.positionNode = instCentre.add(positionGeometry.mul(instHalf.add(vec3(mCrowd as never).mul(2.0) as never))) as never;
     depthPreMaterial.side = THREE.BackSide;
   }
   // FOG STAYS OFF: this material writes a distance through the main scene, and
   // scene fog would smoothstep-mix it toward fogColor (see the per-body twin).
   depthPreMaterial.fog = false;
   depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
-  depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+  depthPreMaterial.depthNode = depthPreDepthNode(depthPreT) as never;
   depthPreMaterial.depthWrite = true;
   depthPreMaterial.depthTest = true;
 
@@ -1948,6 +1981,10 @@ export function writeWounds(
   cavities?: readonly boolean[],
   /** Owning cluster and its primitive span. Omitted = legacy world-space wound. */
   owners?: readonly ({ cluster: number; start: number; count: number } | null)[],
+  /** Per-wound threat masks (wound-threat.ts) — ride the FRACTION of flags.x as
+   *  mask / 1024, below the 0.5 the cavity readers test. Omitted = 0, the state every
+   *  view that does not run the threat-mask re-fold gate keeps. */
+  threats?: readonly number[],
 ): number {
   const stride = layout.stride ?? MAX_PRIMS;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -1974,7 +2011,7 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
-    texels[flagBase + i * 4] = cavities?.[i] ? 1 : 0;
+    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
     texels[flagBase + i * 4 + 2] = owner?.start ?? 0;
@@ -2207,6 +2244,62 @@ export function createZombieGpuView(
   let woundCullOn = true;
   let woundBoundR = 1e9;
 
+  // THREAT MASKS (wound-threat.ts): which clusters each wound's carve bowl can reach,
+  // from the group spheres of the LAST upload and the wounds of the LAST setWounds.
+  // Recomputed on both, since either side moving changes the answer.
+  //
+  // margin = 4*kw + E + D, all MAGNITUDES (how far a value can move), not supports:
+  //   4*kw  the wound smax's support — beyond R + 4*kw a wound changes no field value;
+  //   E     smax overshoot, at most kw per raising wound. One stamped wound uploads as a
+  //         cluster of rows (a blast is 4), so up to 3 are allowed to coincide at a point —
+  //         a judgement, not a proof: 16 coinciding would be 16*kw;
+  //   D     how far the limb's own smin union bulges past its prims, 2 * maxBlendK.
+  // The limb's OWN rim bumps (they lower its re-fold value) are added per wound below,
+  // because only wounds the threatened cluster owns count and that differs per cluster;
+  // the ceiling over every owner keeps this one number.
+  let lastWoundThreatIn: {
+    worldPositions: Vec3[]; radii: number[]; splayScales?: number[];
+    caps?: readonly ({ n: Vec3; depth: number } | null)[];
+    owners?: readonly ({ cluster: number; start: number; count: number } | null)[];
+  } | null = null;
+  let lastThreatMasks: number[] = [];
+  let lastThreatMargin = 0;
+  function threatMasks(): number[] {
+    const w = lastWoundThreatIn;
+    const p = uploadScratch;
+    if (!w || !p) { lastThreatMasks = []; return lastThreatMasks; }
+    const n = Math.min(w.worldPositions.length, MAX_WOUNDS);
+    const kw = u.woundCfg.value.y;
+    // Largest single rim-bump amplitude a FOREIGN cluster could carry: a cluster with no
+    // wounds of its own has none, so take the largest per-owner sum over the other owners.
+    const ampByOwner = new Map<number, number>();
+    for (let i = 0; i < n; i++) {
+      const o = w.owners?.[i]?.cluster ?? -1;
+      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1));
+    }
+    const unowned = ampByOwner.get(-1) ?? 0;
+    const margin0 = 4 * kw + kw * Math.min(n, 3) + 2 * p.maxBlendK + unowned;
+    lastThreatMargin = margin0;
+    const clusterGroups: [number, number][] = [];
+    for (let c = 0; c < p.clusterCount; c++) clusterGroups.push([p.clusterGroups[c * 4]!, p.clusterGroups[c * 4 + 1]!]);
+    const wounds = w.worldPositions.slice(0, n).map((pos, i) => ({ pos, radius: w.radii[i]!, owner: w.owners?.[i]?.cluster ?? -1, cap: w.caps?.[i] ?? null }));
+    // A cluster that owns wounds gets its own bump ceiling on top; test it separately.
+    const base = woundThreatMasks(wounds, lastGroups, clusterGroups, margin0);
+    for (const [owner, amp] of ampByOwner) {
+      if (owner < 0 || amp <= 0) continue;
+      const wide = woundThreatMasks(wounds, lastGroups, clusterGroups, margin0 + amp);
+      for (let i = 0; i < n; i++) base[i] = base[i]! | (wide[i]! & (1 << (owner + 1)));
+    }
+    lastThreatMasks = base;
+    return lastThreatMasks;
+  }
+  function refreshThreatTexels() {
+    if (!lastWoundThreatIn) return;
+    const masks = threatMasks();
+    const base = (sink.woundLayout?.flagsRow ?? ROW_WOUND_FLAGS) * (sink.woundLayout?.stride ?? MAX_PRIMS) * 4;
+    for (let i = 0; i < masks.length; i++) texels[base + i * 4] = Math.floor(texels[base + i * 4]!) + (masks[i]! & 511) / 1024;
+  }
+
   function upload(next: BuildResult, rest?: BuildResult) {
     lastUploadNext = next;
     lastUploadRest = rest;
@@ -2256,6 +2349,7 @@ export function createZombieGpuView(
     writeRow(ROW_GROUP_BOUNDS, p.groupBounds, MAX_PRIMS);
     writeRow(ROW_GROUP_RANGE, p.groupRange, MAX_PRIMS);
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
+    refreshThreatTexels();
     sink.markDirty();
     ownAtlas?.flush();
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
@@ -2419,12 +2513,23 @@ export function createZombieGpuView(
       perfCfg: u.perfCfg,
       inst: records.node as never,
       instCfg,
+      aaCfg: u.aaCfg,
     }) as unknown as { div: (d: unknown) => unknown };
     depthPreMaterial = new MeshBasicNodeMaterial();
     depthPreMaterial.side = THREE.BackSide;
+    // Dilated for the miss cull (depthPreMarginAt; the proxy mesh is unscaled and
+    // unrotated, so a local outward push is a world one). Margin 0 with the cull off.
+    {
+      const cfgN = opts.depthPre.uniforms.cfg as unknown as { z: unknown };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const worldV = (modelWorldMatrix as any).mul(vec4(positionLocal, 1.0)).xyz;
+      const mBody = depthPreMarginAt(cfgN, worldV).mul(cfgN.z);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      depthPreMaterial.positionNode = (positionLocal as any).add((positionLocal as any).sign().mul(mBody));
+    }
     depthPreMaterial.fog = false;
     depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
-    depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+    depthPreMaterial.depthNode = depthPreDepthNode(depthPreT) as never;
     depthPreMaterial.depthWrite = true;
     depthPreMaterial.depthTest = true;
     depthPreMesh = new THREE.Mesh(mesh.geometry, depthPreMaterial);
@@ -2520,6 +2625,8 @@ export function createZombieGpuView(
     tiles: viewTiles,
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
+    woundThreats() { return [...lastThreatMasks]; },
+    get woundThreatMargin() { return lastThreatMargin; },
     setPackBones(on) { packBones = on; },
     setBoneCull(on) {
       // The boolean seam is the cluster mode — kept for the bench's
@@ -2567,7 +2674,8 @@ export function createZombieGpuView(
       syncRecord();
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners) {
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners);
+      lastWoundThreatIn = { worldPositions, radii, splayScales, caps, owners };
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks());
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a

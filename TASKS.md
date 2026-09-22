@@ -85,6 +85,9 @@
 - [x] **Cold-boot compile (2026-09-19):** [census](docs/dev-notes/2026-09-19-shader-compile/NOTES.md) — cold = 4 march programs x ~48 s. Gib + crowd compiles
   deferred to background ([notes](docs/dev-notes/2026-09-19-defer-compile/NOTES.md)): cold loader ~195 s -> ~48 s, warm 2.5 -> 1.75 s, no mid-game compile.
   Next (optional): merge crowd+body programs; march phase 2 (shrink marchBody). march split: tasks 1-3 done (task 3: 25 feature blocks + test split, [notes](docs/dev-notes/2026-09-18-march-split/NOTES.md)).
+- [x] **Melee close-up perf harness (2026-09-21):** `scripts/sdf-game-melee-bench.sh` — [notes](docs/dev-notes/2026-09-21-melee-harness/NOTES.md). The arena's cast WALKS to the
+  player, freeze, then clean -> wounded -> wounded+fire with alternating seam legs (`MELEE_LEGS` injects more). Quiet run: frame 17.0 / 22.8 / **36.7 ms**, march 13.2 / 19.3 / 27.7 —
+  reproduces the owner's GPU-bound episode. Miss rays are 46-50 % of walk steps there. Found: bodies spawned after boot never march (debug-spawn bug?); `applyShipDefaults` is not ship.
 - [~] **Telemetry v3 + CPU frame attribution (2026-09-20).** [Notes](docs/dev-notes/2026-09-20-telemetry-v3/NOTES.md). Recordings now
   carry `selfPhases`, `unattributedCpuMs` (was ~half the frame, now 0), region + per-pass CPU laps, and auto `long-frame` /
   `shader-build` (r186 `onNodeBuilderCreated`) / `flare-shot` events. **Finding: `cpu:sdf:polys` is 5.0 of a 7.6 ms draw — the
@@ -108,6 +111,31 @@
   Open: cold GIB background compile can hit its 180 s timeout and settle `failed` -> no gib chunks that session; warm `plate`,
   `flame-cards`, explosion materials at boot; per-sever `gib-asset-*` material rebuild; first dynamite gib 33-56 ms; `sdBody` `prims.slice`.
   Dead end: a magnification-aware fisheye filter does not recover 60/60 sharpness (the loss is sample density; a 3x upscaler is the lever).
+- [x] **Close-up wound cost — owner re-fold RAISER GATE SHIPS (2026-09-22).** `counts2.z = SHIP_REFOLD_MODE = 2` (zombie-gpu.ts). Melee bench, one page,
+  alternating (load <= 6, indicative): `sdf:march` wounded 27.9 -> **25.3**, wounded+fire 29.1 -> **25.5** ms; march-hash `room1` + `room1-wounded`
+  bit-identical to the full re-fold. `setOwnerRefold(true)` = ship; `setOwnerRefoldFull(true)` = the old full re-fold. Also landed:
+  **ragged soldier craters ON** (owner-approved look: one noise-ragged row per wound instead of wound + 3 lobes), exact fixes (`setWoundExact`, OFF: ~0 gain),
+  **mode 4 per-limb accumulators PARKED behind `?limbs`** (owner liked the look but it LOSES to the gate: 26.9 / 28.7 ms, and +9 s cold compile — the 0.2 m
+  cull slack folds too many groups near wounds). Details: [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md) "2026-09-22".
+- [x] **Fire's march cost = the burn PANIC behaviour, not the fire (2026-09-22).** `setBurnBehaviour(false)` (burn visually, behave unburnt): `sdf:march`
+  unchanged; with panic +13-17 ms (zombies charge the camera). Fire rendering costs ~3.5 ms of frame in `post:fire-march` only.
+- [x] **Miss-ray culling — built, proven safe (0 hits lost), a LOSS (2026-09-22).** `setMissCull`, OFF. -36/-41 % walk steps saved only ~0.5 ms
+  of march; the prepass costs 7-8 ms. **Miss steps are nearly free — rank levers by cost near surfaces, not step counts.** Found + fixed a latent
+  prepass bug: the block cone was half as wide as its proof (be3ec43c). [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md).
+- [ ] **NEXT (close-up march):** cost near surfaces — per-step cost in wound zones and grazing silhouettes (a cost-weighted census, not a step count),
+  the mode-4 census bug in the panic state, and (maybe) a per-wound cull slack for mode 4.
+- [ ] **Multi-scale march + learned reconstruction — RESEARCH (2026-09-21), nothing built.** [Notes](docs/dev-notes/2026-09-21-multiscale-march/NOTES.md).
+  Close-up `sdf:march` at scale 1.0 / **0.5 ship** / 0.25: clean 31.4 / **7.6** / 2.7 ms, 5 wounds 44.4 / **13.8** / 7.7, room 4 32.6 / **10.1** / 2.9
+  (one page, uncapped, alternating). Ceiling of a 4x reconstruction = 5-7 ms/frame; depth rebuilds within 5 mm on 95 % of body pixels from
+  1/16 of the samples. Ray-start priors stay dead (hit rays take ~4.2 steps) — the saving is in NOT running pixels. **Two free findings:
+  wounds cost ~4.5 ms that does not shrink with resolution (unexplained), and 32-49 % of walk steps are rays that miss** (the parked
+  prepass ignored coarse misses; culling on them may flip its verdict). Next: those two, then an OFFLINE 4x train (rgb / rgbdn / rgbdn+sparse truth).
+  **Wound cost ROOT-CAUSED (same day):** [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md) — the owner re-fold in `mapBody` is ~95 % of it
+  (5.9 of 6.2 ms at ship scale; `setOwnerRefold(false)` = a clean body's cost). It fires over the whole torso and almost always loses. A value-preserving
+  **raiser gate** is in behind `counts2.z == 2` / `__sdfGame.setOwnerRefoldGate(true)`, **ships ON since 2026-09-22**: 14.95 -> 13.41 ms, diff inside the frame's own noise.
+  **CPU threat mask also built, OFF** (`counts2.z == 3` / `setOwnerRefoldMask(true)`, `wound-threat.ts`, mask rides the fraction of `ROW_WOUND_FLAGS.x`): names only real
+  neighbours in the staged hip-wound scene so it cannot beat the gate there; **untimed — machine was under Docker load; re-run quiet.** 5 stamps = 16 wound rows.
+  Before flipping: march-hash/parity with the gate on + owner look at a raised arm over a torso crater. ~5 ms remains (3 options in the note). Per-ray wound list is a LOSS (13.8 -> 21.3), keep OFF.
 - [x] **Cold-cache flesh bug (2026-09-20, fixed).** Not the warm gate and not three r186: the body program was ready, but the
   defer-compile per-body FALLBACK never drew. Crowd-attached proxies spawn hidden and only sdf-layer's depth-gate-ON branch
   re-shows the `setBodies` list; the game ships the gate OFF, so members stayed hidden (skull + bones) until the background

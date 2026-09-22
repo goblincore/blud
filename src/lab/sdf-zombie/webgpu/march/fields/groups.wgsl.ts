@@ -5,6 +5,7 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_MELT, REC_NOISE_YAW, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
 import { TILE_MAX_ENTRIES } from '../../tile-cull';
+import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
 import { ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
 
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
@@ -46,7 +47,11 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
   // the cluster walk (see pack.ts: sd under-reports Euclid by up to this
   // factor; a factor-free test tore black cracks inside wound cavities).
   // Tiles cut the LIST; spheres still cut PER-STEP work.
-  if (length(p - bounds.xyz) - bounds.w > (d + counts.w * 4.0) * grp.z) { return d; }
+  // With ?limbs, a limb cull slack (0 unless mode 4 and inside the wound bound)
+  // keeps groups a LIMB still needs inside a foreign crater, where the limb is
+  // less inside than the union. Folding such a group into d is a value no-op:
+  // its prims sit beyond d + 4k, where smin is exactly min.
+  if (length(p - bounds.xyz) - bounds.w > (d + ${LIMBS ? 'gLimbSlack + ' : ''}counts.w * 4.0) * grp.z) { return d; }
   let start = i32(grp.x);
   let count = i32(grp.y);
   let flags = i32(grp.w + 0.5);
@@ -115,7 +120,17 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     // case (0,1,2,3,4,6) keeps its current answer — verified by
     // enumeration, see pack.test.ts / the task 5 report.
     if ((i32(prof) & 7) == 1) { d = sminChamfer(d, sd, k); } else { d = smin(d, sd, k); }
-  }
+    // PER-LIMB ACCUMULATOR: the same prim, the same blend, into its own
+    // cluster's fold — what the owner re-fold used to rebuild from scratch.
+${LIMBS ? `    // SCALAR on purpose: the caller (mapBody) swaps gLimbCur in and out of
+    // the per-cluster slots once per cluster. Runtime-indexed private arrays
+    // written here, in the inlined prim loop, stopped the march shader from
+    // compiling at all (cold boot > 180 s, the whole browser frozen).
+    if (gLimbOn > 0.5) {
+      if (sd < gLimbCur.y) { gLimbCur = vec4<f32>(gLimbCur.x, sd, f32(idx), grp.z); }
+      if ((i32(prof) & 7) == 1) { gLimbCur.x = sminChamfer(gLimbCur.x, sd, k); } else { gLimbCur.x = smin(gLimbCur.x, sd, k); }
+    }
+` : ''}  }
   return d;
 }
 // Tile-list state + fold-argmin state, declared at the TAIL of this source
@@ -138,6 +153,56 @@ var<private> gFoldBestIdx: f32 = -1.0;
 // straight after its mapBody call. 1.0 default: groups without distortion
 // and the volume branch (which never folds) are exact no-ops.
 var<private> gFoldBestDistort: f32 = 1.0;
+${LIMBS ? `// PER-LIMB ACCUMULATORS (counts2.z mode 4, option 4 of the 2026-09-21 wound
+// cost work): each cluster's own fold, built during the base fold, so the
+// owner re-fold needs no prim loops. mapBody resets them per slot.
+var<private> gLimbOn: f32 = 0.0;
+var<private> gLimbSlack: f32 = 0.0;
+// The limb being folded: (fold, best sd, best prim idx, best distortion).
+var<private> gLimbCur: vec4<f32> = vec4<f32>(1e9, 1e9, -1.0, 1.0);
+var<private> gLimbCurC: i32 = -1;
+// One slot per cluster, NAMED (no runtime indexing — see foldGroup).
+var<private> gLimb0: vec4<f32>;
+var<private> gLimb1: vec4<f32>;
+var<private> gLimb2: vec4<f32>;
+var<private> gLimb3: vec4<f32>;
+var<private> gLimb4: vec4<f32>;
+var<private> gLimb5: vec4<f32>;
+var<private> gLimb6: vec4<f32>;
+var<private> gLimb7: vec4<f32>;
+fn limbLoad(c: i32) -> vec4<f32> {
+  switch c {
+    case 0: { return gLimb0; }
+    case 1: { return gLimb1; }
+    case 2: { return gLimb2; }
+    case 3: { return gLimb3; }
+    case 4: { return gLimb4; }
+    case 5: { return gLimb5; }
+    case 6: { return gLimb6; }
+    case 7: { return gLimb7; }
+    default: { return vec4<f32>(1e9, 1e9, -1.0, 1.0); }
+  }
+}
+fn limbStore(c: i32, v: vec4<f32>) {
+  switch c {
+    case 0: { gLimb0 = v; }
+    case 1: { gLimb1 = v; }
+    case 2: { gLimb2 = v; }
+    case 3: { gLimb3 = v; }
+    case 4: { gLimb4 = v; }
+    case 5: { gLimb5 = v; }
+    case 6: { gLimb6 = v; }
+    case 7: { gLimb7 = v; }
+    default: { }
+  }
+}
+// Switch the accumulator to cluster c (store the old one, load c's slot).
+fn limbSwitch(c: i32) {
+  if (c == gLimbCurC) { return; }
+  limbStore(gLimbCurC, gLimbCur);
+  gLimbCur = limbLoad(c);
+  gLimbCurC = c;
+}` : ''}
 // WIND DRIFT, metres, world space. A private global rather than another
 // parameter on foldGroup because foldGroup is reached from mapBody, which has
 // TEN call sites — threading a uniform through all of them to serve one

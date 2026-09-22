@@ -23,7 +23,9 @@ describe('ported features reach the entry point', () => {
     // eps floor and the shell displacement amp — so a bump standing proud of
     // the smooth field can never sit nearer the camera than what the coarse
     // pass certified as empty.
-    expect(DEPTH_PREPASS_MARCH).toContain('if (d < r + 0.0012 + woundCfg2.z) { return t; }');
+    // Off (depthPreCfg.z = 0) acceptEps is the old 0.0012; the miss cull widens it.
+    expect(DEPTH_PREPASS_MARCH).toContain('if (d < r + acceptEps + woundCfg2.z) { return t; }');
+    expect(DEPTH_PREPASS_MARCH).toContain('let acceptEps = select(0.0012,');
     // A miss contributes NOTHING: -1, which the consumer reads as <= 0 → no
     // start. coneMarch's tMax convention would hand the full march a fake
     // "start at the proxy box's far side".
@@ -50,5 +52,8 @@ describe('ported features reach the entry point', () => {
     const names = HELPERS.map(declaredName);
     expect(names).toContain('depthPreFetch');
     expect(names.indexOf('depthPreFetch')).toBe(names.length - 1);
+    // Miss cull (2026-09-22): its fetch rides the chain too, and START_BOUNDS discards on it.
+    expect(names).toContain('depthPreMiss');
+    expect(DEPTH_PREPASS_MARCH).toContain('if (t > tFar) { return -2.0; }');
   });
 });

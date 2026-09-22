@@ -1,0 +1,498 @@
+{
+ "staged": {
+  "d": 0.7,
+  "cov": 0.2738833333333333,
+  "body": 1
+ },
+ "ship": {
+  "woundList": false,
+  "ownerRefold": true,
+  "woundEarlyOut": true,
+  "woundStep": 1,
+  "relax": 1
+ },
+ "wounds": {
+  "stamped": 5,
+  "wounds": 5,
+  "bleed": {
+   "enabled": true,
+   "emitters": 0,
+   "droplets": 0,
+   "splats": 0
+  },
+  "chunks": 0,
+  "bodies": {}
+ },
+ "rows": [
+  {
+   "rep": 0,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 47.77000000178814,
+   "march": 43.79799899999989,
+   "census": {
+    "rays": 176613,
+    "steps": 868507,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 16.69499999880791,
+   "march": 13.773207000000184,
+   "census": {
+    "rays": 44166,
+    "steps": 202992,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "ship@0.25",
+   "seam": "ship",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 10.035000000894069,
+   "march": 7.669340999999804,
+   "census": {
+    "rays": 11035,
+    "steps": 43348,
+    "stepsPerRay": 3.93,
+    "maxSteps": 27
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 35.28500000089407,
+   "march": 31.488228000000163,
+   "census": {
+    "rays": 176613,
+    "steps": 856214,
+    "stepsPerRay": 4.85,
+    "maxSteps": 55
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 10.8,
+   "march": 7.739589999999225,
+   "census": {
+    "rays": 44166,
+    "steps": 200185,
+    "stepsPerRay": 4.53,
+    "maxSteps": 37
+   }
+  },
+  {
+   "rep": 0,
+   "name": "refoldOff@0.25",
+   "seam": "refoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 6.165000000596047,
+   "march": 3.9162730000007286,
+   "census": {
+    "rays": 11035,
+    "steps": 42835,
+    "stepsPerRay": 3.88,
+    "maxSteps": 28
+   }
+  },
+  {
+   "rep": 0,
+   "name": "listOn@1",
+   "seam": "listOn",
+   "scale": 1,
+   "valid": true,
+   "frame": 68.35499999970197,
+   "march": 65.14642300000014,
+   "census": {
+    "rays": 176613,
+    "steps": 868507,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "listOn@0.5",
+   "seam": "listOn",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 24.720000000298022,
+   "march": 21.277257999998255,
+   "census": {
+    "rays": 44166,
+    "steps": 202992,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "listOn@0.25",
+   "seam": "listOn",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 13.964999999105931,
+   "march": 11.53019900000072,
+   "census": {
+    "rays": 11035,
+    "steps": 43348,
+    "stepsPerRay": 3.93,
+    "maxSteps": 27
+   }
+  },
+  {
+   "rep": 0,
+   "name": "listOnRefoldOff@1",
+   "seam": "listOnRefoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 42.125000001490115,
+   "march": 38.31579000000056,
+   "census": {
+    "rays": 176613,
+    "steps": 856214,
+    "stepsPerRay": 4.85,
+    "maxSteps": 55
+   }
+  },
+  {
+   "rep": 0,
+   "name": "listOnRefoldOff@0.5",
+   "seam": "listOnRefoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 13.519999998807908,
+   "march": 10.052138000002742,
+   "census": {
+    "rays": 44166,
+    "steps": 200185,
+    "stepsPerRay": 4.53,
+    "maxSteps": 37
+   }
+  },
+  {
+   "rep": 0,
+   "name": "listOnRefoldOff@0.25",
+   "seam": "listOnRefoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 7.35,
+   "march": 5.162878999999521,
+   "census": {
+    "rays": 11035,
+    "steps": 42835,
+    "stepsPerRay": 3.88,
+    "maxSteps": 28
+   }
+  },
+  {
+   "rep": 0,
+   "name": "flat@1",
+   "seam": "flat",
+   "scale": 1,
+   "valid": true,
+   "frame": 34.540000000596045,
+   "march": 30.99061100000108,
+   "census": {
+    "rays": 176613,
+    "steps": 868507,
+    "stepsPerRay": 4.92,
+    "maxSteps": 69
+   }
+  },
+  {
+   "rep": 0,
+   "name": "flat@0.5",
+   "seam": "flat",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 12.509999999403954,
+   "march": 9.63585299999977,
+   "census": {
+    "rays": 44166,
+    "steps": 202992,
+    "stepsPerRay": 4.6,
+    "maxSteps": 53
+   }
+  },
+  {
+   "rep": 0,
+   "name": "flat@0.25",
+   "seam": "flat",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 6.46000000089407,
+   "march": 4.115520999999717,
+   "census": {
+    "rays": 11035,
+    "steps": 43348,
+    "stepsPerRay": 3.93,
+    "maxSteps": 27
+   }
+  },
+  {
+   "rep": 0,
+   "name": "flatRefoldOff@1",
+   "seam": "flatRefoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 29.670000000298025,
+   "march": 25.74906500000361,
+   "census": {
+    "rays": 176613,
+    "steps": 856214,
+    "stepsPerRay": 4.85,
+    "maxSteps": 55
+   }
+  },
+  {
+   "rep": 0,
+   "name": "flatRefoldOff@0.5",
+   "seam": "flatRefoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 9.35,
+   "march": 6.591482000003452,
+   "census": {
+    "rays": 44166,
+    "steps": 200185,
+    "stepsPerRay": 4.53,
+    "maxSteps": 37
+   }
+  },
+  {
+   "rep": 0,
+   "name": "flatRefoldOff@0.25",
+   "seam": "flatRefoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 4.784999999403953,
+   "march": 2.519877999999153,
+   "census": {
+    "rays": 11035,
+    "steps": 42835,
+    "stepsPerRay": 3.88,
+    "maxSteps": 28
+   }
+  },
+  {
+   "rep": 1,
+   "name": "ship@0.25",
+   "seam": "ship",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 10.095000000298024,
+   "march": 7.654508999999962,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@1",
+   "seam": "refoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 35.50499999970198,
+   "march": 31.53906000000279,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@0.5",
+   "seam": "refoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 10.904999999701976,
+   "march": 7.854005000001052,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "refoldOff@0.25",
+   "seam": "refoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 6.150000001490116,
+   "march": 3.904649000003701,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "listOn@1",
+   "seam": "listOn",
+   "scale": 1,
+   "valid": true,
+   "frame": 70.18500000089406,
+   "march": 66.05470100000093,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "listOn@0.5",
+   "seam": "listOn",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 24.645000000298023,
+   "march": 21.276051000000734,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "listOn@0.25",
+   "seam": "listOn",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 14.029999999701976,
+   "march": 11.52778400000534,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "listOnRefoldOff@1",
+   "seam": "listOnRefoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 42.075,
+   "march": 38.101377999999386,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "listOnRefoldOff@0.5",
+   "seam": "listOnRefoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 12.76499999910593,
+   "march": 9.811891999997897,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "listOnRefoldOff@0.25",
+   "seam": "listOnRefoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 7.340000000596047,
+   "march": 5.143880000003264,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "flat@1",
+   "seam": "flat",
+   "scale": 1,
+   "valid": true,
+   "frame": 34.39000000059605,
+   "march": 30.728531000000658,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "flat@0.5",
+   "seam": "flat",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 12.545000000298023,
+   "march": 9.741310000004887,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "flat@0.25",
+   "seam": "flat",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 6.525,
+   "march": 4.160102999994706,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "flatRefoldOff@1",
+   "seam": "flatRefoldOff",
+   "scale": 1,
+   "valid": true,
+   "frame": 29.909999999403954,
+   "march": 26.068559999999707,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "flatRefoldOff@0.5",
+   "seam": "flatRefoldOff",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 9.169999998807906,
+   "march": 6.4126519999990705,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "flatRefoldOff@0.25",
+   "seam": "flatRefoldOff",
+   "scale": 0.25,
+   "valid": true,
+   "frame": 4.8,
+   "march": 2.5426270000025397,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "ship@1",
+   "seam": "ship",
+   "scale": 1,
+   "valid": true,
+   "frame": 48.57000000029802,
+   "march": 44.19878299999982,
+   "census": null
+  },
+  {
+   "rep": 1,
+   "name": "ship@0.5",
+   "seam": "ship",
+   "scale": 0.5,
+   "valid": true,
+   "frame": 16.869999998807906,
+   "march": 13.771289999996952,
+   "census": null
+  }
+ ],
+ "summary": {
+  "ship@1": 44.2,
+  "ship@0.5": 13.77,
+  "ship@0.25": 7.67,
+  "refoldOff@1": 31.54,
+  "refoldOff@0.5": 7.85,
+  "refoldOff@0.25": 3.92,
+  "listOn@1": 66.05,
+  "listOn@0.5": 21.28,
+  "listOn@0.25": 11.53,
+  "listOnRefoldOff@1": 38.32,
+  "listOnRefoldOff@0.5": 10.05,
+  "listOnRefoldOff@0.25": 5.16,
+  "flat@1": 30.99,
+  "flat@0.5": 9.74,
+  "flat@0.25": 4.16,
+  "flatRefoldOff@1": 26.07,
+  "flatRefoldOff@0.5": 6.59,
+  "flatRefoldOff@0.25": 2.54
+ }
+}
