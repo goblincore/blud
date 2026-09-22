@@ -8,7 +8,7 @@ import { FLASHLIGHT_BOUNCE_WGSL } from '../flashlight-bounce.wgsl';
 import { PROBE_DYNAMIC_WGSL } from '../probe-dynamic.wgsl';
 import { PROBE_GRID_WGSL } from '../probe-grid.wgsl';
 import { SEG_VOLUME_WGSL } from '../skeleton-spike/volume.wgsl';
-import { DEPTH_PRE_FETCH } from './cone-march.wgsl';
+import { DEPTH_PRE_FETCH, DEPTH_PRE_MISS } from './cone-march.wgsl';
 import { APPLY_BONES, FOLD_BONE_RANGE } from './fields/bones.wgsl';
 import { APPLY_CARVES, REST_POINT } from './fields/carves.wgsl';
 import { FOLD_GROUP, INSTANCE_STATE } from './fields/groups.wgsl';
@@ -48,5 +48,5 @@ export const HELPERS = [
   WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, PROBE_DYNAMIC_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
-  DEPTH_PRE_FETCH,
+  DEPTH_PRE_MISS, DEPTH_PRE_FETCH,
 ];

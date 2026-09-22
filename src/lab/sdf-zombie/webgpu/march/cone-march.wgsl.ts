@@ -1,3 +1,4 @@
+import { ROW_CLUSTER_BOUNDS } from './layout';
 // src/lab/sdf-zombie/webgpu/march/cone-march.wgsl.ts
 //
 // Phase-1 split of march.wgsl.ts (2026-09-18): cone march, depth prepass and empty-tile gate.
@@ -182,6 +183,25 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
   gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
+  // MISS CULL (depthPreCfg.z, 2026-09-22). With it on, a coarse walk that gets
+  // past tFar without touching CERTIFIES that no ray in the block can hit this
+  // body: every surface point lies in some cluster bound sphere (the fold's own
+  // cull contract), so a block ray hitting at s has s <= |c - cam| + r for that
+  // cluster, and the cone proves emptiness out to t for every block ray. The
+  // margin covers the shell displacement and the rim bumps the spheres do not.
+  // Returns -2 (the MISS sentinel) there. Leaving the proxy box (tMax) no longer
+  // ends the walk — a neighbouring block ray exits the box elsewhere.
+  let missCull = depthPreCfg.z > 0.5;
+  var tFar = tMax;
+  if (missCull) {
+    tFar = 0.0;
+    for (var c = 0; c < 8; c = c + 1) {
+      if (c >= i32(gInstCounts.y)) { break; }
+      let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + gBand), 0);
+      tFar = max(tFar, length(cb.xyz - camPos) + cb.w);
+    }
+    tFar = tFar + 0.05 + woundCfg2.z;
+  }
   var t = 0.0;
   for (var i = 0; i < 64; i = i + 1) {
     // The FULL field (noiseCfg 0, full cluster list, no tile binning) — the
@@ -203,8 +223,11 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
     let woundMul = select(${WOUND_STEP_MUL}, perfCfg.z, perfCfg.z > 0.0);
     let stepMul = select(marchCfg.y, woundMul, nearWound);
     t = t + max(d - r, 0.0005) * stepMul;
-    if (t > tMax) { return -1.0; }
+    if (missCull) {
+      if (t > tFar) { return -2.0; }
+    } else if (t > tMax) { return -1.0; }
   }
+  // Out of iterations: UNKNOWN (-1), never a certified miss.
   return -1.0;
 }`;
 
@@ -216,6 +239,22 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
 // below zero — so the consumer's max() folds to the identity on all three.
 // Grid size comes from textureDimensions, never a captured uniform (the
 // adaptive controller resizes the layer under this pass at runtime).
+// MISS CULL fetch (2026-09-22): true when this pixel's 4x4 block holds the MISS
+// sentinel (-2) — every body whose (dilated) prepass proxy covers the block
+// certified a miss, since any touch (t > 0) or unknown (-1, written at depth 0)
+// wins the depth test over a miss (written at the far end). Off when the pass or
+// the cull is disabled, and in quad dispatch (no per-body prepass boxes there).
+export const DEPTH_PRE_MISS = /* wgsl */ `fn depthPreMiss(
+  tex: texture_2d<f32>,
+  screenUV: vec2<f32>,
+  cfg: vec4<f32>
+) -> bool {
+  if (cfg.x < 0.5 || cfg.z < 0.5) { return false; }
+  let dims = vec2<f32>(textureDimensions(tex, 0));
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  return textureLoad(tex, c, 0).x < -1.5;
+}`;
+
 export const DEPTH_PRE_FETCH = /* wgsl */ `fn depthPreFetch(
   tex: texture_2d<f32>,
   screenUV: vec2<f32>,

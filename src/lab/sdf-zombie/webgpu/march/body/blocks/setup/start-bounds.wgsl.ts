@@ -29,6 +29,9 @@ export const START_BOUNDS_BLOCK = /* wgsl */ `  // Start where the cone pre-pass
   // to that far before the field's nearest surface), and shellAmp is the
   // shell displacement the coarse test also stopped short of — the same two
   // slack terms CONE_MARCH's stop carries, handed back to the ray here.
+  // MISS CULL (2026-09-22): the block certified that no body covering it can be
+  // hit here — skip the walk entirely (see DEPTH_PRE_MISS). Quad dispatch opts out.
+  if (instCfg.y <= 1.0 && depthPreMiss(depthPreTex, screenUV, depthPreCfg)) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let preT = depthPreFetch(depthPreTex, screenUV, depthPreCfg);
   let preStart = select(0.0, max(preT - (preT * depthPreCfg.y + 0.0012 + woundCfg2.z), 0.0), preT > 0.0);
   // TEMPORAL REPROJECTION START (plan 2026-09-10). Last fresh frame's hit at

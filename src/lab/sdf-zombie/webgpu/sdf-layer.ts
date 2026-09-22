@@ -838,6 +838,10 @@ export interface SdfLayer {
  *  for measurement. Off is bit-identical to the pre-task-3 march. */
   setDepthPreEnabled(on: boolean): void;
   readonly depthPreEnabled: boolean;
+  /** MISS CULL (2026-09-22): discard every pixel of a 4x4 block the prepass certified
+   *  empty for all bodies covering it. Needs the prepass on. Off = bit-identical. */
+  setDepthPreMissCull(on: boolean): void;
+  readonly depthPreMissCull: boolean;
   /** The inner-hull pre-pass the march clamps its tMax by. See OCCLUDER_LAYER. */
   readonly occluder: OccluderSource;
   /** Outer-hull ENTRY distance (nearest front face) — 0 where no hull covers
@@ -2471,6 +2475,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     occluder: { texture: occluder.texture, uniforms: occluderUniforms },
     depthPre: { texture: depthPre.texture, uniforms: depthPreUniforms },
     setDepthPreEnabled(on) { depthPreUniforms.cfg.value.x = on ? 1 : 0; },
+    setDepthPreMissCull(on) { depthPreUniforms.cfg.value.z = on ? 1 : 0; },
+    get depthPreMissCull() { return depthPreUniforms.cfg.value.z > 0.5; },
     get depthPreEnabled() { return depthPreUniforms.cfg.value.x > 0.5; },
     shellEntry: { texture: shellEntry.texture, uniforms: shellUniforms },
     shellExit: { texture: shellExit.texture, uniforms: shellUniforms },

@@ -14,7 +14,7 @@ import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
   cameraProjectionMatrixInverse, cameraWorldMatrix,
-  storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard,
+  storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard, positionLocal, select,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
@@ -276,6 +276,26 @@ const depthPreMarch = (() => {
   );
   return wgslFn(DEPTH_PREPASS_MARCH, nodes.slice(-1));
 })();
+
+/** MISS CULL depth (2026-09-22): the prepass distance as hardware depth, except the
+ *  MISS sentinel (-2), which goes to the far end so any touch or unknown covering the
+ *  same block wins the nearest-depth test over it. Unknown (-1) clamps to 0 and wins. */
+const depthPreDepthNode = (t: unknown) => select(
+  (t as { lessThan: (x: number) => unknown }).lessThan(-1.5) as never,
+  float(0.9999) as never,
+  (t as { div: (d: number) => unknown }).div(CONE_DEPTH_RANGE) as never,
+);
+
+/** MISS CULL coverage (2026-09-22): the prepass proxy grown by ~1.5 coarse blocks of
+ *  screen footprint at each vertex's distance, so a body whose box only clips a 4x4
+ *  block still covers that block's centre texel and votes (a touch or unknown beats a
+ *  miss). cfg.y is the block cone's radius per metre (half-diagonal); x3 ~ 1.5 blocks.
+ *  cfg.z = 0 (cull off) is the undilated box. */
+const depthPreMarginAt = (cfg: unknown, world: unknown) => {
+  const c = cfg as { y: { mul: (x: unknown) => { mul: (x: unknown) => unknown } }; z: unknown };
+  const dist = (world as { sub: (x: unknown) => { length: () => unknown } }).sub(cameraPosition).length();
+  return c.y.mul(3.0).mul(dist) as { mul: (x: unknown) => unknown };
+};
 
 /**
  * Stand-in face sheet, so the texture binding exists before the real art
@@ -1727,14 +1747,16 @@ export function createCrowdMaterial(
     depthPreMaterial.vertexNode = quadNodes!.clip as never;
     depthPreMaterial.side = THREE.DoubleSide;
   } else {
-    depthPreMaterial.positionNode = positionNode as never;
+    // Dilated for the miss cull (depthPreMarginAt); margin 0 while the cull is off.
+    const mCrowd = depthPreMarginAt(depthPreCfg, positionNode).mul((depthPreCfg as unknown as { z: unknown }).z);
+    depthPreMaterial.positionNode = instCentre.add(positionGeometry.mul(instHalf.add(vec3(mCrowd as never).mul(2.0) as never))) as never;
     depthPreMaterial.side = THREE.BackSide;
   }
   // FOG STAYS OFF: this material writes a distance through the main scene, and
   // scene fog would smoothstep-mix it toward fogColor (see the per-body twin).
   depthPreMaterial.fog = false;
   depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
-  depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+  depthPreMaterial.depthNode = depthPreDepthNode(depthPreT) as never;
   depthPreMaterial.depthWrite = true;
   depthPreMaterial.depthTest = true;
 
@@ -2493,9 +2515,19 @@ export function createZombieGpuView(
     }) as unknown as { div: (d: unknown) => unknown };
     depthPreMaterial = new MeshBasicNodeMaterial();
     depthPreMaterial.side = THREE.BackSide;
+    // Dilated for the miss cull (depthPreMarginAt; the proxy mesh is unscaled and
+    // unrotated, so a local outward push is a world one). Margin 0 with the cull off.
+    {
+      const cfgN = opts.depthPre.uniforms.cfg as unknown as { z: unknown };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const worldV = (modelWorldMatrix as any).mul(vec4(positionLocal, 1.0)).xyz;
+      const mBody = depthPreMarginAt(cfgN, worldV).mul(cfgN.z);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      depthPreMaterial.positionNode = (positionLocal as any).add((positionLocal as any).sign().mul(mBody));
+    }
     depthPreMaterial.fog = false;
     depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
-    depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+    depthPreMaterial.depthNode = depthPreDepthNode(depthPreT) as never;
     depthPreMaterial.depthWrite = true;
     depthPreMaterial.depthTest = true;
     depthPreMesh = new THREE.Mesh(mesh.geometry, depthPreMaterial);
