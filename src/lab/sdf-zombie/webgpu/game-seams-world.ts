@@ -17,7 +17,7 @@ import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
 import { raggedCratersOn, setRaggedCraters } from '../soldier-wounds';
 import { LIMB_ACCUMULATORS } from './march/limbs-flag';
-import { SHIP_REFOLD_MODE } from './zombie-gpu';
+import { SHIP_COUNTS2_Z, SHIP_REFOLD_MODE } from './zombie-gpu';
 
 /** counts2.z = re-fold mode (0..4) + 8 (wound exact fixes) + 16 (cheap AO/scatter probes) + 32 (normal hint).
  *  `exactBit` keeps every flag above the mode, so a mode setter never drops a flag. */
@@ -270,7 +270,7 @@ export function createWorldSeams(ctx: GameContext) {
      *  wound (march.wgsl.ts, counts2.z). OFF renders a wrong frame on
      *  purpose; it exists to price the mechanism in the passes bench. */
     setOwnerRefold(on: boolean) {
-      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? SHIP_REFOLD_MODE : 1; // on = SHIP (the gate) and a full reset: clears the exact-fix bit too (bench restore)
+      for (const a of ctx.world.actors) a.view.uniforms.counts2.value.z = on ? SHIP_COUNTS2_Z : 1; // on = SHIP (the gate) and a full reset: clears the exact-fix bit too (bench restore)
     },
     /** Owner re-fold RAISER GATE (counts2.z == 2, 2026-09-21): re-fold a limb only where a wound
      *  it does not own actually raised the field. Value-identical by construction; off = ship. */
