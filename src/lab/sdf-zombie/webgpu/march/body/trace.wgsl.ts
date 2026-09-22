@@ -51,7 +51,7 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
   // shipping path pays exactly one uniform branch; gDebugMode hands the
   // flag to mapBody's fold without forking its signature.
-  if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }
+  if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugWoundRows = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }
 ${TILE_PRELOAD_BLOCK}
 ${WOUND_LIST_BLOCK}
 ${HULL_BOUNDS_BLOCK}

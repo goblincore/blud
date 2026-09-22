@@ -72,6 +72,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     let slack = select(0.25, max(0.0, -d), gWoundExact > 0.5);
     let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + slack;
     if (perfCfg.y > 0.5 && r > reach) { continue; }
+    if (gDebugMode > 0.5) { gDebugWoundRows = gDebugWoundRows + 1.0; }
     let wFlags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0);
     let owner = wFlags.y;
     // THREAT MASK (2026-09-21): the fraction of flags.x is a CPU-computed bitfield
