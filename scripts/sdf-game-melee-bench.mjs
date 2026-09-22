@@ -361,9 +361,22 @@ async function capturePhase(phase, withWounds) {
     const censusLegs = (process.env.MELEE_CENSUS_LEGS ?? '').split(';').filter(x => x.includes('='))
       .map(x => [x.slice(0, x.indexOf('=')).trim(), x.slice(x.indexOf('=') + 1).trim()]);
     census.costLegs = {};
+    // Shaded (mode 0) ship frame for the per-leg look diff below.
+    const shipShaded = censusLegs.length ? dec(await settledRead(0)) : null;
+    if (shipShaded) writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-shaded-ship-${w13.w}x${w13.h}.f32`, shipShaded.b);
     for (const [nm, js] of censusLegs) {
       await ev('__meleeShipRestore()');
       await ev(`(async () => { ${js} })()`);
+      const LS = dec(await settledRead(0));
+      writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-shaded-${nm}-${w13.w}x${w13.h}.f32`, LS.b);
+      let dpx = 0, dmax = 0;
+      for (let i = 0; i < w13.w * w13.h; i++) {
+        let m = 0;
+        for (let ch = 0; ch < 3; ch++) m = Math.max(m, Math.abs(LS.f[i * 4 + ch] - shipShaded.f[i * 4 + ch]));
+        if (m > 1 / 255) dpx++;
+        dmax = Math.max(dmax, m);
+      }
+      console.log(`  LOOK ship vs ${nm} [${phase}]: ${dpx} march-target px differ by > 1/255, max ${dmax.toFixed(3)}`);
       const L13 = dec(await settledRead(13)), L14 = dec(await settledRead(14));
       const cl = costCensus(L13.f, L14.f, w13.w, w13.h);
       census.costLegs[nm] = cl;
