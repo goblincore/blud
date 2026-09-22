@@ -111,7 +111,14 @@
   Open: cold GIB background compile can hit its 180 s timeout and settle `failed` -> no gib chunks that session; warm `plate`,
   `flame-cards`, explosion materials at boot; per-sever `gib-asset-*` material rebuild; first dynamite gib 33-56 ms; `sdBody` `prims.slice`.
   Dead end: a magnification-aware fisheye filter does not recover 60/60 sharpness (the loss is sample density; a 3x upscaler is the lever).
-- [ ] **NEXT SESSION START HERE: [HANDOFF](docs/dev-notes/2026-09-21-multiscale-march/HANDOFF.md)** — commit this worktree, merge the melee harness branch, time the gates on a quiet machine, then owner-preferred wound options 3 (fewer rows) and 4 (delete the re-fold).
+- [x] **Close-up wound cost — owner re-fold RAISER GATE SHIPS (2026-09-22).** `counts2.z = SHIP_REFOLD_MODE = 2` (zombie-gpu.ts). Melee bench, one page,
+  alternating (load <= 6, indicative): `sdf:march` wounded 27.9 -> **25.3**, wounded+fire 29.1 -> **25.5** ms; march-hash `room1` + `room1-wounded`
+  bit-identical to the full re-fold. `setOwnerRefold(true)` = ship; `setOwnerRefoldFull(true)` = the old full re-fold. Also landed:
+  **ragged soldier craters ON** (owner-approved look: one noise-ragged row per wound instead of wound + 3 lobes), exact fixes (`setWoundExact`, OFF: ~0 gain),
+  **mode 4 per-limb accumulators PARKED behind `?limbs`** (owner liked the look but it LOSES to the gate: 26.9 / 28.7 ms, and +9 s cold compile — the 0.2 m
+  cull slack folds too many groups near wounds). Details: [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md) "2026-09-22".
+- [ ] **NEXT: [HANDOFF](docs/dev-notes/2026-09-21-multiscale-march/HANDOFF.md)** — miss-ray culling (rays that hit nothing = 47-52 % of melee walk steps), why fire raises the body march, then
+  (maybe) a per-wound cull slack for mode 4.
 - [ ] **Multi-scale march + learned reconstruction — RESEARCH (2026-09-21), nothing built.** [Notes](docs/dev-notes/2026-09-21-multiscale-march/NOTES.md).
   Close-up `sdf:march` at scale 1.0 / **0.5 ship** / 0.25: clean 31.4 / **7.6** / 2.7 ms, 5 wounds 44.4 / **13.8** / 7.7, room 4 32.6 / **10.1** / 2.9
   (one page, uncapped, alternating). Ceiling of a 4x reconstruction = 5-7 ms/frame; depth rebuilds within 5 mm on 95 % of body pixels from
@@ -120,7 +127,7 @@
   prepass ignored coarse misses; culling on them may flip its verdict). Next: those two, then an OFFLINE 4x train (rgb / rgbdn / rgbdn+sparse truth).
   **Wound cost ROOT-CAUSED (same day):** [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md) — the owner re-fold in `mapBody` is ~95 % of it
   (5.9 of 6.2 ms at ship scale; `setOwnerRefold(false)` = a clean body's cost). It fires over the whole torso and almost always loses. A value-preserving
-  **raiser gate** is in behind `counts2.z == 2` / `__sdfGame.setOwnerRefoldGate(true)`, **ships OFF**: 14.95 -> 13.41 ms, diff inside the frame's own noise.
+  **raiser gate** is in behind `counts2.z == 2` / `__sdfGame.setOwnerRefoldGate(true)`, **ships ON since 2026-09-22**: 14.95 -> 13.41 ms, diff inside the frame's own noise.
   **CPU threat mask also built, OFF** (`counts2.z == 3` / `setOwnerRefoldMask(true)`, `wound-threat.ts`, mask rides the fraction of `ROW_WOUND_FLAGS.x`): names only real
   neighbours in the staged hip-wound scene so it cannot beat the gate there; **untimed — machine was under Docker load; re-run quiet.** 5 stamps = 16 wound rows.
   Before flipping: march-hash/parity with the gate on + owner look at a raised arm over a torso crater. ~5 ms remains (3 options in the note). Per-ray wound list is a LOSS (13.8 -> 21.3), keep OFF.

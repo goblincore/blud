@@ -1,5 +1,10 @@
 # Handoff — close-up march performance (written 2026-09-21)
 
+> **UPDATE 2026-09-22:** steps 1-4 are DONE. The raiser gate ships (bit-identical, -2.6 to -3.6 ms wounded);
+> ragged soldier craters ship; mode 4 is parked behind `?limbs` (it loses to the gate). Everything is on
+> branch `claude/sdf-raymarch-multiscale-22412b` with main merged in. Results and compile lessons:
+> [WOUND-COST.md](WOUND-COST.md) "2026-09-22". **Next: step 5** (miss-ray culling, fire raising the body march).
+
 **Goal (owner):** make the close-up, multi-body, wounded, with-FX frame fit the budget. The
 owner is also narrowing FOV 72/60 -> 58/46 (separate session), which puts ~1.7-1.85x more body
 pixels on screen, so this gets worse before it gets better.

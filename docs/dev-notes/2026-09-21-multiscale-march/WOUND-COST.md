@@ -167,3 +167,47 @@ a quiet machine, then do them, with the owner approving the look by eye.
 Cheap and exact, do alongside: the pre-scan retry (above), and `applyWounds`' per-wound reach —
 replace the constant `+ 0.25` with `max(0, -dIn)` (the fillet is only active when
 `r < depth - d + 4kw`), which drops most rows for surface and outside samples.
+
+## 2026-09-22 — what shipped, what lost, and why
+
+Melee bench, one page, legs alternating, `?limbs` compiled in, 21/36 stamps landed (narrow FOV;
+`MELEE_MIN_LANDED=0.5`), load peaked 6.1 so cross-leg deltas are indicative. `sdf:march` ms:
+
+| phase | ship (full re-fold) | **raiser gate** | mode 4 limbs | re-fold off (floor) |
+| --- | ---: | ---: | ---: | ---: |
+| clean | 16.2 | 14.5 | 15.4 | — |
+| wounded | 27.9 | **25.3** | 26.9 | 21.6 |
+| wounded + fire | 29.1 | **25.5** | 28.7 | 23.7 |
+
+- **The raiser gate SHIPS** (`counts2.z = SHIP_REFOLD_MODE = 2`). march-hash `room1` and `room1-wounded`
+  are bit-identical to the full re-fold (`0ecaabcf…` both). `setOwnerRefoldFull(true)` selects the old path.
+- **The threat mask (3) adds nothing over the gate** in the melee scene (earlier run: 12.77 vs 12.69).
+- **Exact fixes** (`setWoundExact`, counts2.z + 8: d-aware reach `max(0, -d)`, own-amp pre-scan): ~0 gain; ship OFF.
+  The re-folds the gate leaves fire inside foreign craters, where neither bound bites.
+- **Option 3, ragged soldier craters: SHIPS ON (owner approved by eye).** Only SOLDIER wounds had the lobes
+  (`soldierVisualWounds`: wound + 3 lobe rows); zombies were always one row, so this saves nothing in the
+  zombie melee scene. One row per wound, radius grows by up to `RAGGED_AMOUNT` 0.3 by body-frame direction
+  (noise3 at 1.8), encoded in the fraction of the wound TYPE texel; `woundMask` follows the same edge.
+- **Option 4, per-limb accumulators: PARKED behind `?limbs`** (limbs-flag.ts). The owner liked the look, but it
+  loses to the gate: correctness needs a 0.2 m cull slack inside the wound bound, which at close range covers
+  most of each body, plus one extra blend per prim — that eats the deleted re-fold loops. Also costs cold compile.
+  To revive it: a per-wound slack (deepest carve that can reach p, not a global 0.2 m).
+
+### Compile-cost lessons (census = `scripts/compile-census.mjs`, fresh Chrome profile)
+
+- **Runtime-indexed private arrays written in foldGroup's prim loop stopped the march compiling at all**
+  (cold > 180 s, browser frozen). Named slots + a scalar accumulator fixed that.
+- **Nonce the shader text with a RUNTIME condition** (`if (gDebugMode > N.5) {...}`) for a real cold number.
+  `0.0 * N` is constant-folded before Metal and hits the system Metal cache, which survives fresh profiles.
+- With main's call-site merge (2a8d8b4b/8277ec5d): ship cold 36 s; `?limbs` 52 s -> **45 s** after routing mode 4
+  through the SAME `applyCarves`/`applyWounds` tail as the re-fold (a second inlined copy cost ~7 s). Dead ends:
+  dropping the limb argmin, the tile-path switch, vector slots (each within noise).
+- Whole-browser freezes on reload after a march shader edit = Chrome's GPU process compiling. The "bone-only
+  gibs in flight" seen the same day were the TASKS.md cold-cache flesh effect plus missing dev assets in the
+  worktree (`scripts/link-dev-assets.sh`), not a code bug.
+
+### Bench tooling added
+
+`MELEE_QS` (page flags, e.g. `&limbs`), `MELEE_MIN_LANDED` (stamp-landing floor), `CENSUS_QUERY` (census page
+flags). Headless `sdf-gib-assets-head.mjs` renders blank frames on current main — it does not wait for render
+readiness; don't trust its images.
