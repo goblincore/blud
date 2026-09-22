@@ -153,6 +153,15 @@ const LOOK: Record<string, {
   // plastic, not enough to chrome over.
   black:  { metalness: 0.25, roughness: 0.12, envIntensity: 1.60 },
 
+  // --- ogre kit (ogre-kit.wam): coarse cloth and boot hide. Both are DARK
+  // albedos, and under LOOK_DEFAULT's roughness 0.35 / env 0.9 the room
+  // reflection outweighed the albedo — the breeches and boots rendered as
+  // brushed silver in the lab (2026-09-22). Cloth is nearly matte with a weak
+  // env; boot hide keeps a dull sheen. The belt, kilt and bracers reuse the
+  // goblin's `leather` look above.
+  cloth: { metalness: 0.0, roughness: 0.92, envIntensity: 0.22 },
+  boot:  { metalness: 0.0, roughness: 0.62, envIntensity: 0.35 },
+
   // SHARED BY BOTH KITS, so it is listed once. The clown's pom-poms and mitts
   // and the mouse's shoe highlight are both plain white cloth; this table is
   // keyed by material NAME across every kit, not per character, so a name

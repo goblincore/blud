@@ -490,12 +490,15 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  its haze — a flat saturated red disc that read as a
   //                  sticker — and replaced them with a non-glowing wet eye in
   //                  the throat, so only the two face eyes still emit)
+  //   ogre        2  dim sick-yellow beady eyes under the brow (2026-09-22),
+  //                  also pinned at exactly two in ogre-blob.test.ts
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
     'cyberdemon.blob': 2,
     'gnasher.blob': 2,
     'bloatmaw.blob': 2,
+    'ogre.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

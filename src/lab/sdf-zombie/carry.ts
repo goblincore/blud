@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip' | 'aim';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -56,6 +56,17 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // of locking straight across the face. Both elbows stay outside the vest;
   // the support elbow points down. Reach is 0.454 m on the 0.50 m left arm.
   aim:   { right: { pitch: 0.15, yaw: 0.38, fold: 2.51 }, gunPitch: -1.2275, leftPole: [0.8, -0.8, 0.45] },
+  // The OGRE's chainsaw hold (ogre.blob + ogre-chainsaw.glb, prop scale 1.6).
+  // Not a variant of `low`: these angles are relative to the AUTHORED hang,
+  // and the ogre hangs his forearms 30 degrees forward already, so `low`'s
+  // 1.85 fold lifted the saw to his face. Grid-solved against the ogre rig
+  // (shoulders at y 1.82 on a hunch, 0.83 m arms) for: grip at belly height
+  // in front of the gut (hand ~(-0.28, 1.38, 0.53)), the bar level and angled
+  // ~34 degrees across the body — how a chainsaw is actually carried — and
+  // the front hoop at 0.76 m from the left shoulder, inside its 0.83 m reach
+  // with slack for the gait sway. The upper arm swings BACK (pitch -0.75) so
+  // the elbow sits out past the gut instead of through it.
+  saw:   { right: { pitch: -0.75, yaw: 0.65, fold: 1.55 }, gunPitch: 0.20, leftPole: [0.6, -0.4, 0.1] },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from

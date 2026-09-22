@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, MARCH, RUN, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, MARCH, RUN, STOMP, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 
@@ -73,9 +73,38 @@ export const SOLDIER_PROFILE: MotionProfile = {
   prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.2 },
 };
 
+/** The ogre: a heavy stomp with a chainsaw held two-handed. The saw is a
+ *  held PROP on the soldier's carry machinery (carry.ts): the right arm is
+ *  rotated into the carry, the prop's grip locator seats on the right hand,
+ *  and the left hand is FABRIK'd onto its front hoop — so both fists are on
+ *  the saw by construction. make-ogre-chainsaw.py builds the .glb on the
+ *  shared GUN_GRIP locators. */
+export const OGRE_PROFILE: MotionProfile = {
+  name: 'ogre',
+  // One gait: an ogre does not break into a run (runBand never reached).
+  gait: { walk: STOMP, run: STOMP },
+  runBand: { from: Infinity, to: Infinity },
+  // Slower than the zombie's 1.15 m/s cruise: he closes distance by being
+  // unstoppable, not fast.
+  cruise: 0.95,
+  // Heavier than the soldier's 5.5; a touch under the zombie default feel.
+  turnRate: 2.2,
+  armStyle: 'carry',
+  // 'saw' in every state (carry.ts): grip at the belly, bar level and angled
+  // across the body — the Quake ogre's walking hold. There is no fire state
+  // (he does not shoot), so `fire` only matters if a future attack drives
+  // carryOverride.
+  carries: { walk: 'saw', run: 'saw', fire: 'saw' },
+  // 1.45: every prop-local length (and the grip locators) is 1/1.45 of world
+  // (make-ogre-chainsaw.py's header). 0.33 m between the fists; 1.6 put the
+  // front hoop out of the left arm's reach on this hunched rig.
+  prop: { url: '/assets/lab/ogre-chainsaw.glb', scale: 1.45 },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   soldier: SOLDIER_PROFILE,
+  ogre: OGRE_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

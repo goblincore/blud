@@ -241,6 +241,46 @@ export const RUN: GaitProfile = {
   torsoLean: 12,
 };
 
+/** The ogre's heavy stomp: a 2.2 m brute carrying a chainsaw. PROCEDURAL
+ *  (no clip curves) — the shamble's machinery re-tuned for weight rather than
+ *  decay. Slower cadence and longer stance than the shamble (each step is a
+ *  commitment), a high knee and a clear lift-and-plant, a deep footfall bob and a wide side-to-side roll — the weight
+ *  swinging over each planted leg is what reads as HEAVY. Arms are 'carry':
+ *  the saw's carry pose owns them, so armSwing only rides the shoulders. */
+export const STOMP: GaitProfile = {
+  ...SHAMBLE,
+  name: 'stomp',
+  // 0.80, not the shamble's 1.05: a heavier body's natural cadence is slower,
+  // and at 0.8 Hz every footfall lands on its own beat of the bob.
+  strideFreq: 0.80,
+  stanceDuty: 0.64,
+  // 0.42 on 1.0 m legs. 0.30 was the first cut and in a side-on strip the
+  // feet never visibly left the hips' footprint (2026-09-22): a heavy walk
+  // reads through a CLEAR lift-and-plant, not a shuffle.
+  strideLen: 0.42,
+  // The knee comes UP and forward before the foot comes down — the stomp.
+  // Push-back drag stays small because he is not shuffling.
+  footLift: 0.17,
+  footPush: 0.05,
+  kneeBend: 0.14,
+  kneeLift: 0.09,
+  // The roll: wider hip sway than the shamble with the shoulders following
+  // most of it (0.75) rather than counter-rotating, so the whole mass lurches
+  // onto the planted leg.
+  swayAmp: 0.075,
+  shoulderSway: 0.75,
+  // Deep bob and a forward rock at each footfall: the impact.
+  bobAmp: 0.055,
+  rockAmp: 0.035,
+  headBob: 0.35,
+  armSwing: 0.04,
+  asymJitter: 0.10,
+  armStyle: 'carry',
+  // The hunch is authored in the .blob's rest pose; the lean adds only a
+  // little more commitment toward the heading.
+  torsoLean: 6,
+};
+
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
 export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {

@@ -1,0 +1,227 @@
+# Ogre kit — the POLYGON half of the character, authored in WAM.
+#
+# WHY TWO LANGUAGES: goblin-kit.wam's header. Flesh is .blob (smooth-min is
+# round by construction and that is what flesh wants); leather edges, a belt
+# buckle and a boot sole want the crease an SDF fold cannot keep. The owner's
+# rule (2026-09-08): body SDF, kit MESH. The chainsaw is NOT here — it is a
+# held prop (public/assets/lab/ogre-chainsaw.glb) so the carry IK can put both
+# hands on it; a kit group would be rigid on one hand bone.
+#
+# WHAT HE WEARS (Quake-ogre lineage: crude leather over a bare torso):
+#   a heavy BELT under the gut with an iron buckle, a hide KILT hanging off
+#   it that swings with the thighs, rough cloth BREECHES to mid-shin, big
+#   hobnailed BOOTS, and leather BRACERS on the forearms. The chest, yoke,
+#   arms and head stay bare — that flesh is the character.
+#
+# THE SKELETON BELOW MIRRORS characters/ogre.blob AND MUST TRACK IT. The two
+# conversions from goblin-kit.wam's header, neither optional:
+#
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. The
+#     ogre's height is 2.20, so every number here is the .blob metre value /
+#     2.20 — and that includes EVERY ring w/d, offset and attach size, not
+#     only the bones (the chrome-cranium-helmet bug: metre values render 2.2x
+#     too big here).
+#   * PITCH SIGN ON `down` BONES. Up bones (spine, chest, neck, skull) share
+#     pitch verbatim; every down bone (upperArm, foreArm, hand, thigh, shin)
+#     NEGATES it. tilt needs no flip. Silent either way — this is what gave the
+#     goblin kangaroo knees.
+#
+# FLESH THIS WRAPS, marched off ogre.blob with sdBody bisects per limb-isolated
+# cluster, in the ring's own frame (w = side axis, d = depth axis, fwd = the
+# section's centre offset along depth). Metres -> height fractions:
+#
+#   pelvis t0.8   w=0.573 d=0.478 fwd=+0.082  -> w=0.2606 d=0.2172 fwd=0.0372
+#   spine  t0.1   w=0.568 d=0.479 fwd=+0.072  -> w=0.2583 d=0.2179 fwd=0.0329
+#   thigh  t0.1   w=0.371          t0.5 w=0.304    t0.9 w=0.264   (round)
+#   shin   t0.0   w=0.267 d=0.272  t0.4 w=0.230 d=0.248 fwd=-0.014 (calf)
+#          t0.6   w=0.204          t1.0 w=0.171
+#   foot   (the blob: centre y 0.067 z 0.146, semi x0.106 y0.072 z0.196)
+#   foreArm t0.4  w=0.215   t0.6 w=0.196   t0.9 w=0.168
+#
+# RING MARGINS: +12-20% over the flesh. `style chunky` is 8-sided, and a facet
+# midpoint sits at cos(22.5) = 92.4% of the nominal radius — a ring sized to
+# the flesh lets the body bulge through between facets (the clown hood
+# lesson). Cloth takes the least margin (it should hug), the boot the most.
+#
+# OPEN SHELLS (cap none) everywhere a cap would face flesh — a `cap flat`
+# through a limb puts a disc with a vertex on the bone axis (the goblin kit's
+# belt/greave bug). Only the boot's heel and toe are capped: they face air.
+#
+# BUILD:  scripts/build-wam-kit.sh ogre
+#   -> public/assets/lab/ogre-kit.gltf (committed; WAM lives outside the repo).
+model ogre-kit
+  height 2.20
+  style chunky
+
+palette
+  # Oiled brown hide: the belt, the kilt and the bracers. DARK and warm (#4e3322
+  # rendered as pale tan under the lab key, reading as skin-coloured cuffs) —
+  # it has to separate from the pinkish-tan skin by VALUE, not only hue.
+  leather #3a2416
+  # Coarse dyed cloth for the breeches: darker and cooler than the leather so
+  # the kilt reads as a separate layer over them.
+  cloth   #33302a
+  # Boot hide, near-black brown.
+  boot    #231a14
+  # Buckle, rivets and boot hobnails. `iron` is in kit-overlay.ts's LOOK table.
+  iron    #5a5e63
+
+skeleton
+  # .blob `root pelvis at 1.02 len=0.10` -> WAM root POINT + `hips` bone.
+  # 1.02/2.20 = 0.463636, 0.10/2.20 = 0.045455. Every .blob `parent=pelvis`
+  # becomes `parent=hips`.
+  root pelvis at 0.463636
+  bone hips   parent=pelvis dir=up len=0.045455
+  # up-bone pitches verbatim.
+  bone spine  parent=hips   dir=up pitch=20 len=0.163636
+  bone chest  parent=spine  dir=up pitch=28 len=0.163636
+  bone neck   parent=chest  dir=up pitch=32 len=0.063636
+  bone skull  parent=neck   dir=up pitch=-8 len=0.109091
+  mirror
+    # clavicle dir=side (pitch no-op, tilt toward +y in both languages) and
+    # foot dir=fwd (angles inert): verbatim.
+    bone clavicle parent=chest    dir=side tilt=10 len=0.122727
+    # down-bone pitches NEGATED: upperArm 12->-12, foreArm 30->-30,
+    # hand 20->-20, thigh 14->-14, shin -8->8.
+    bone upperArm parent=clavicle dir=down pitch=-12 tilt=20 len=0.195455
+    bone foreArm  parent=upperArm dir=down pitch=-30 tilt=2  len=0.181818
+    bone hand     parent=foreArm  dir=down pitch=-20         len=0.068182
+    bone thigh    parent=hips     dir=down pitch=-14 tilt=7  side=0.077273 len=0.240909
+    bone shin     parent=thigh    dir=down pitch=8   tilt=-6 len=0.218182
+    bone foot     parent=shin     dir=fwd                    len=0.100000
+  end
+
+parts
+  # ==========================================================================
+  # BELT — under the gut, over the hip line. SIZED TO THE HIPS, NOT THE
+  # PELVIS BONE'S OWN CLUSTER: the thigh-root masses (r 0.18 at x 0.17) are
+  # the widest flesh at this height, half-width 0.360 m at y 1.08, depth
+  # -0.176..+0.316 (torso + legs, marched 2026-09-22). The first belt was sized
+  # to the torso cluster alone (w 0.296) and the thigh roots stood 66 mm
+  # through it — ogre-kit.test.ts caught it. Now w = 0.72 m +8% = 0.354,
+  # d = 0.492 m +10% = 0.246, centred 0.032 forward.
+  # ==========================================================================
+  loft belt bones=hips..hips material=leather
+    ring 0.55 w=0.352 d=0.244 fwd=0.032
+    ring 0.78 w=0.356 d=0.248 fwd=0.033
+    ring 1.00 w=0.352 d=0.248 fwd=0.034
+    cap start=none end=none
+  # Buckle: a crude square iron plate on the belt front. on= snaps it flush.
+  attach buckle bone=hips kind=box at=0.78 offset=(0,0,0.17) on=belt size=0.030 w=0.040 d=0.010 material=iron
+
+  # ==========================================================================
+  # KILT — a hide skirt hanging off the belt, flaring. RIGID on the hips: the
+  # WAM cloth idiom (`follow=thigh:<w>` on the hem) split the skirt down the
+  # centreline in the lab — the rig poses the thighs splayed off their bind,
+  # and the left/right halves of the hem followed them apart, opening a
+  # triangle at the crotch. Short instead (0.24 m = 0.109), so a stride's
+  # forward thigh mostly stays under the flare. Top ring sits inside the belt
+  # so the join is hidden; widths follow the belt (the thigh roots again).
+  # ==========================================================================
+  loft kilt bone=hips at=0.60 dir=down len=0.109 material=leather frame=fwd
+    ring 0.00 w=0.348 d=0.240 fwd=0.032
+    ring 0.35 w=0.360 d=0.250 fwd=0.029
+    ring 0.70 w=0.370 d=0.258 fwd=0.026
+    ring 1.00 w=0.378 d=0.264 fwd=0.024
+    cap start=none end=none
+
+  mirror
+    # ========================================================================
+    # BREECHES — rough cloth from under the kilt to mid-shin, where the boot
+    # cuff takes over. They START at chain t0.22 (y ~0.90), under the kilt's
+    # hem: a top ring at the hip joint itself sat 185 mm deep in the pelvis
+    # mass (an interior face nobody sees; ogre-kit.test.ts rejected it). Chain thigh..shin is 0.53 + 0.48 m; the knee sits at chain
+    # t 0.525. Every ring is flesh +22-30%: +10-14% was tried first and the
+    # flesh's surface noise and the calf/knee masses pushed through the facets
+    # from behind in the lab (2026-09-22). The calf rings carry the flesh's
+    # -0.014 m (-0.0064) calf offset.
+    #
+    # The BACK half (dbot) is deeper again from the knee to the hem, and the
+    # rings are 12-sided: at rest every ray from the shin axis already met
+    # >= 8 mm of cloth over the flesh (.lab-tmp coverage probe, 2026-09-22),
+    # but MID-STRIDE the skinned cloth and the rigid SDF calf part company at
+    # the hem/cuff join and a patch of calf showed from directly behind. The
+    # front and sides are unchanged, so the silhouette only thickens at the
+    # calf, where a heavy cloth fold would sit anyway.
+    # ========================================================================
+    loft breeches bones=thigh..shin material=cloth sides=12
+      ring 0.22 w=0.172 d=0.172
+      ring 0.26 w=0.176 d=0.176
+      ring 0.42 w=0.160 d=0.160
+      ring 0.525 w=0.158 d=0.162 dbot=0.182
+      ring 0.62 w=0.146 d=0.162 dbot=0.192 fwd=-0.008
+      ring 0.72 w=0.140 d=0.156 dbot=0.186 fwd=-0.009
+      ring 0.78 w=0.132 d=0.140 dbot=0.170 fwd=-0.005
+      cap start=none end=none
+
+    # ========================================================================
+    # BOOT SHAFT — a fat folded cuff over the breeches' hem (shin t0.5, flesh
+    # w 0.0980 there; the breeches hem is 0.128, so the cuff at 0.146 covers it
+    # with room), then down to the ankle hugging the shin at +20%.
+    # ========================================================================
+    loft bootshaft bones=shin..shin material=boot sides=12
+      ring 0.46 w=0.150 d=0.156 dbot=0.180 fwd=-0.005
+      ring 0.52 w=0.148 d=0.154 dbot=0.178 fwd=-0.005
+      ring 0.58 w=0.120 d=0.124 dbot=0.140
+      ring 0.80 w=0.104 d=0.106
+      ring 1.00 w=0.098 d=0.104
+      cap start=none end=none
+
+    # ========================================================================
+    # BOOT FOOT — a free ray along +z from behind the heel to past the toe.
+    # frame=up so d is the boot's HEIGHT. The flesh foot spans z -0.05..0.34,
+    # y 0..0.139, x +-0.106 about the ankle. The boot's centre is 0.057 m
+    # (0.0259) below the ankle -> y 0.080, and its tallest ring is 0.163 m
+    # (0.074) high, so the sole sits at y ~0.0 and the top clears the flesh by
+    # 2 cm. Start 0.12 m (0.0545) behind the ankle, run 0.47 m (0.2136) so the
+    # toe ends 6 cm past the flesh — a chunky brute toe, not a slipper.
+    # squarish so the sole reads FLAT; sides=12 because an 8-sided boot pokes
+    # the foot's round flesh out between facets.
+    # ========================================================================
+    loft bootfoot bone=shin at=1.0 offset=(0,-0.0259,-0.0545) dir=fwd len=0.2136 frame=up material=boot shape=squarish sides=12
+      ring 0.00 w=0.060 d=0.052
+      ring 0.08 w=0.100 d=0.072
+      ring 0.30 w=0.108 d=0.074
+      ring 0.58 w=0.112 d=0.068
+      ring 0.80 w=0.106 d=0.058
+      ring 0.94 w=0.084 d=0.046
+      ring 1.00 w=0.052 d=0.030
+      cap start=flat end=flat
+
+    # ========================================================================
+    # BRACERS — leather cuffs on the forearms, wrist half. Flesh t0.5 0.0936,
+    # t0.7 0.0848, t0.9 0.0765 -> +14%. A second, thinner iron band at the
+    # wrist end gives the edge a hard line.
+    # ========================================================================
+    loft bracer bones=foreArm..foreArm material=leather
+      ring 0.45 w=0.110 d=0.110
+      ring 0.62 w=0.104 d=0.104
+      ring 0.80 w=0.096 d=0.096
+      ring 0.92 w=0.092 d=0.092
+      cap start=none end=none
+    loft bracerband bones=foreArm..foreArm material=iron
+      ring 0.90 w=0.096 d=0.096
+      ring 0.94 w=0.097 d=0.097
+      cap start=none end=none
+  end
+
+textures
+  # Oiled hide: painted top-light, grain along the part, mottled wear, and
+  # crevice darkening where the kilt meets the belt.
+  texture leather base=#3a2416
+    gradient axis=v from=-0.10 to=0.14
+    streaks along=v amount=0.10
+    noise scale=0.12 amount=0.10
+    ao amount=0.20
+  # Coarse cloth: low-contrast noise, no streaks — weave, not grain.
+  texture cloth base=#33302a
+    noise scale=0.06 amount=0.08
+    ao amount=0.16
+  texture boot base=#231a14
+    gradient axis=v from=-0.06 to=0.10
+    noise scale=0.10 amount=0.06
+    ao amount=0.18
+  texture iron base=#5a5e63
+    gradient axis=v from=-0.12 to=0.18
+    noise scale=0.10 amount=0.06
+    ao amount=0.14
