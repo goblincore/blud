@@ -307,6 +307,7 @@ async function capturePhase(phase, withWounds) {
       const buf2 = await ev('__sdfGameDebug.readMarchTarget()');
       const b2 = Buffer.from(buf2.rgba32f, 'base64');
       const g = new Float32Array(b2.buffer, b2.byteOffset, b2.byteLength >> 2);
+      writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-mode4-parity-${buf.w}x${buf.h}.f32`, b2);
       let hitsA = 0, lost = 0, gained = 0, maxDz = 0, rastA = 0, rastB = 0, stepsA = 0, stepsB = 0;
       for (let i = 0; i < buf.w * buf.h; i++) {
         const o = i * 4;
