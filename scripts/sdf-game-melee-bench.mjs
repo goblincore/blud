@@ -73,7 +73,7 @@ import {
 import {
   stageMelee, stampMeleeWounds, woundPlan, pelletsOnly,
   summariseBlocks, renderMarkdown, censusFromTarget, assertMeleeWounds,
-  LOAD_SUSPECT_LIMIT, missAnatomy } from './lib/sdf-melee-stage.mjs';
+  LOAD_SUSPECT_LIMIT, missAnatomy, costCensus } from './lib/sdf-melee-stage.mjs';
 
 const VITE = Number(process.argv[2] ?? 5421);
 const CDP = Number(process.argv[3] ?? 9421);
@@ -329,6 +329,33 @@ async function capturePhase(phase, withWounds) {
     console.log(`  miss anatomy [${phase}]: miss ${(md.missStepShare * 100).toFixed(1)}% of steps; by px to nearest hit `
       + Object.entries(md.byDistance).map(([k, v]) => `${k}:${(v * 100).toFixed(1)}%`).join(' ')
       + `; in hit-free 4x4 blocks ${(md.emptyBlocks[4] * 100).toFixed(1)}%, 8x8 ${(md.emptyBlocks[8] * 100).toFixed(1)}%`);
+    // COST CENSUS (2026-09-22): modes 13 (walk) and 14 (walk + post-hit), each a
+    // SETTLED read — two consecutive live frames agreeing (the stale-readback rule).
+    const settledRead = async (mode) => {
+      await ev(`__sdfGame.setMarchDebugMode(${mode})`);
+      let prev = null;
+      for (let i = 0; i < 40; i++) {
+        await ev('__sdfGame.step(1)');
+        const r = await ev('__sdfGameDebug.readMarchTarget()');
+        if (prev && r.rgba32f === prev.rgba32f && r.rgba32f.length > 0) return r;
+        prev = r;
+      }
+      console.warn(`  WARNING: mode ${mode} readback never settled; using the last frame`);
+      return prev;
+    };
+    const w13 = await settledRead(13);
+    const w14 = await settledRead(14);
+    const dec = (r) => { const b = Buffer.from(r.rgba32f, 'base64'); return { b, f: new Float32Array(b.buffer, b.byteOffset, b.byteLength >> 2) }; };
+    const A = dec(w13), B = dec(w14);
+    writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-cost-walk-${w13.w}x${w13.h}.f32`, A.b);
+    writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-cost-total-${w14.w}x${w14.h}.f32`, B.b);
+    const cc = costCensus(A.f, B.f, w13.w, w13.h);
+    census.cost = cc;
+    const pct = (x) => (x * 100).toFixed(1) + '%';
+    console.log(`  COST [${phase}]: prims ${cc.totals.prims.toFixed(0)} (walk ${pct(cc.totals.walkPrims / Math.max(1, cc.totals.prims))}), wound rows ${cc.totals.rows.toFixed(0)} (walk ${pct(cc.totals.walkRows / Math.max(1, cc.totals.rows))})`);
+    for (const [k, v] of Object.entries(cc.classes)) {
+      console.log(`    ${k.padEnd(10)} px ${String(v.px).padStart(6)} | prims walk ${pct(v.primShare.walk).padStart(6)} post ${pct(v.primShare.post).padStart(6)} | rows walk ${pct(v.rowShare.walk).padStart(6)} post ${pct(v.rowShare.post).padStart(6)} | per px: steps ${v.perPixel.steps.toFixed(1)} walkPrims ${v.perPixel.walkPrims.toFixed(0)} postPrims ${v.perPixel.postPrims.toFixed(0)} walkRows ${v.perPixel.walkRows.toFixed(1)} postRows ${v.perPixel.postRows.toFixed(1)}`);
+    }
   } finally {
     await ev('__sdfGame.setMarchDebugMode(0)');
   }
