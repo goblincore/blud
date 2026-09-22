@@ -151,7 +151,7 @@ const SNAPSHOT_JS = `(() => {
     woundListOn: g.woundList, marchSteps: g.marchSteps,
     sdfScale: g.sdfScale, adaptive: g.adaptive, halfRate: g.halfRate,
     depthGate: g.depthGate, occluder: g.occluder, cone: g.cone,
-    shell: g.shell, relax: g.relax, aa: g.aa, aaDistance: g.aaDistance,
+    shell: g.shell, relax: g.relax, aa: g.aa, aaDistance: g.aaDistance, fireVolume: g.fireVolume,
     bleedEnabled: g.bleed.enabled, spillChance: g.woundTuning.spillChance,
     frameCap: g.frameCap,
   };
@@ -163,6 +163,7 @@ const RESTORE_JS = (snap) => `(() => {
     g.setFlatAlbedo(snap.flatAlbedo);
     if (g.setAa && typeof snap.aa === 'number') g.setAa(snap.aa);
     if (g.setAaDistance && snap.aaDistance) g.setAaDistance(snap.aaDistance.near, snap.aaDistance.fadeM);
+    if (g.setFireVolume && snap.fireVolume) g.setFireVolume(snap.fireVolume);
     // Ship has the depth prepass and the miss cull OFF (GAME_DEPTH_PREPASS = 0).
     if (g.setMissCull) g.setMissCull(false);
     if (g.setDepthPrepass) g.setDepthPrepass(false);

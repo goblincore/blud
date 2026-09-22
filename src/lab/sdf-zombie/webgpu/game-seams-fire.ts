@@ -50,6 +50,10 @@ export function createFireSeams(ctx: GameContext) {
     }),
     /** Put every tracked body out (char stays). */
     extinguishAll: () => { ctx.vfx.burning.extinguishAll(); },
+    /** Fire VOLUME tuning (fire-volume-tuning.ts), patched live — steps, resolutionScale,
+     *  ... (flame-march cost study 2026-09-22). Returns the resolved tuning. */
+    setFireVolume: (patch: Record<string, number>) => ctx.vfx.burning.setVolume(patch),
+    get fireVolume() { return ctx.vfx.burning.volume(); },
     /** Read-only burn telemetry, one entry per tracked actor. */
     burning: () => ctx.vfx.burning.registry.keys().map((a) => {
       const s = ctx.vfx.burning.registry.get(a)!;
