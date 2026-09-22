@@ -1,0 +1,384 @@
+# BROODMOTHER — a slim, pale woman grown out of the front of a fleshy spider
+# body, in the lineage of Quake 1's Vore (Shalrath) but MEAT where the Vore is
+# chitin. She is the roster's body-horror piece about desire: the upper half
+# is built to be looked at — hourglass, three swollen mammary orbs, full
+# glossy lips, a fine nose, glowing eyes — and the lower half is what the eye
+# arrives at after it has been caught. The design problem is that tension:
+# every beat below is ATTRACTIVE AT THE TOP AND WRONG BY THE TIME YOU LOOK
+# TWICE. Neither half is allowed to win.
+#
+# AUTHORED FROM PROSE (owner brief, 2026-09-22: "female enemy monster ... big
+# mammary orb glands but like three of them. her face is grotesque but
+# somewhat beautiful, big lips but slim nose and glowing eyes. she is slim but
+# the bottom half her body is like a spider ... like the vore from quake 1 but
+# more fleshy"). There is no mesh and no plate, so blob:measure / blob:rings
+# exit 2 and NO number below is measured — every one is a design decision with
+# its reason beside it, as ogre.blob and gnasher.blob do.
+#
+# THE BEATS that carry the silhouette:
+#   1. THE HOURGLASS ON EIGHT LEGS. A wasp waist (0.19 m across) between a
+#      narrow ribcage and flared hips, and the hips do not end in legs — they
+#      melt into a cephalothorax. From the front at distance she reads as a
+#      woman standing in a thicket of bent sticks; the spider arrives second.
+#   2. THREE ORBS. Two high, one lower in the middle, set in a triangle so
+#      that from the front the count is legible (a row of three does not fit
+#      a slim ribcage without merging into one bolster). Taut, glossy, faintly
+#      flushed paint — overstretched skin, not a soft body — each with a small
+#      glowing gland pore in the same colour as the eyes, so the eye is pulled
+#      between face and chest, which is the point.
+#   3. THE FACE. Beautiful in its parts, wrong in its sum: a fine chamfered
+#      nose and high sharp cheekbones on a narrow jaw, then lips too wide and
+#      too full for that face, slanted glowing eyes, four small spider eyes
+#      beaded across the forehead, and a long cranium swept back into a
+#      crest — since the hair pass, a platinum ponytail of hairlock strands.
+#      Every face feature is geometry (face.ts: painted faces read as a visor
+#      or a zombie); the face block is a nub.
+#   4. THE LEGS ARE FLESH. Spider geometry — femur up and out, knee high above
+#      the body, tibia down to a pointed tarsus — but skin-coloured, with swollen
+#      knuckle joints and only the last few cm of each foot hardened to a dark
+#      nail. That is the "more fleshy than the Vore" beat.
+#
+# RIG LIMIT, said plainly: the motion layer (gait.ts jointNamesForBody) knows
+# a humanoid's hip/knee/foot joints only. The spider leg bones map to no gait
+# joint, so this pass is a STATIC body in the lab — she will render, turn and
+# take wounds, but a walk needs a spider gait. That is the next piece of work,
+# not something to fake by naming the front pair thigh/shin/foot.
+model broodmother
+  # Crown of the cranium (the crest sweeps back, not up). A slim 0.97 m of
+  # woman rising from a spider body whose back rides at ~1.0 m, so she looks
+  # DOWN at the player without being a brute — height here is reach and
+  # elegance, not mass.
+  height 1.97
+  # No `stance`: the check classifies thigh/shin/foot knee folds, and she has
+  # none. Omitted means "not checked", which is the truth (SKILL.md).
+
+skeleton
+  # The root is the JUNCTION where the woman leaves the spider: 0.90 -> 1.00.
+  # Her waist starts at 1.00 — the height a standing woman's navel is at, so
+  # the spider body replaces her from the hips down rather than being tacked
+  # under her feet.
+  root pelvis at 0.90 len=0.10
+
+  # Her spine: nearly upright with a slight sway (lumbar forward 3, thoracic
+  # back 4) — posture, not a hunch; the ogre is the hunched one.
+  # Long on purpose (0.32 + 0.27): at 0.28 + 0.24 the knees rose to her
+  # mid-chest and, from 3 m, she read as a small figure hemmed in by the
+  # leg crowns. Now the whole bust clears them and she stands UP out of the
+  # spider.
+  bone spine parent=pelvis dir=up pitch=3  len=0.32
+  bone chest parent=spine  dir=up pitch=-4 len=0.27
+  # A long neck carried forward 12 degrees and the head tipped back 4 — the
+  # chin leads, which is a haughty carriage, and it clears the face off the
+  # top orbs in profile.
+  bone neck  parent=chest  dir=up pitch=12 len=0.11
+  bone skull parent=neck   dir=up pitch=-4 len=0.22
+
+  # The spider abdomen: a bone leaving the junction BACKWARD and slightly up
+  # (dir up pitch -80 = 80 degrees back from vertical), so the egg-sac mass
+  # rides behind her at hip height and its crest does not rise over her back.
+  bone abdomen parent=pelvis dir=up pitch=-80 len=0.62
+
+  mirror
+    # Slim shoulders: 0.14 m of clavicle, tilted up 6 — a narrow woman's
+    # shoulder line. The arms are LONG (0.33 + 0.30 + hand) and thin, hanging
+    # a little forward and out so they clear the front legs' femurs.
+    bone clavicle parent=chest    dir=side tilt=6 len=0.14
+    bone upperArm parent=clavicle dir=down pitch=6  tilt=20 len=0.33
+    bone foreArm  parent=upperArm dir=down pitch=24 tilt=4  len=0.30
+    bone hand     parent=foreArm  dir=down pitch=12         len=0.09
+
+    # FOUR LEGS A SIDE. Every angle below was solved (scratch legs.mjs,
+    # inverting blob-compile dirVector) from a leg laid out by YAW around the
+    # cephalothorax centre (0, 0.90, -0.08): leg1 at 30 degrees off the nose,
+    # leg2 68, leg3 108, leg4 145. That fan — front pair reaching forward past
+    # her, back pair raking behind the abdomen — is what reads as SPIDER from
+    # every yaw; four parallel legs read as a centipede.
+    #
+    # hubN is an INVISIBLE locator (no prims): the grammar attaches children
+    # at the parent's tail and `side=` only offsets x, so a bone is the only
+    # way to put a socket FORWARD or BACK of the junction. Each hub lands on
+    # a socket 0.16-0.17 m out from the cephalothorax centre at y 0.92.
+    #
+    # Each leg: femur rises 42-48 degrees out to a knee at y 1.27-1.35 (level
+    # with her lower ribs — the knees framing her is half the silhouette),
+    # tibia drops 58-64 degrees, tarsus 78-80 degrees to a point on the floor.
+    # Tarsus lengths were set so each tip lands at y ~0.
+    bone hub1    parent=pelvis dir=down pitch=27.4  tilt=45.0 len=0.127
+    bone femur1  parent=hub1   dir=up   pitch=35.4  tilt=24.2 len=0.58
+    bone tibia1  parent=femur1 dir=down pitch=27.3  tilt=17.4 len=0.88
+    bone tarsus1 parent=tibia1 dir=down pitch=10.4  tilt=6.1  len=0.61
+
+    bone hub2    parent=pelvis dir=down pitch=-5.3  tilt=63.1 len=0.178
+    bone femur2  parent=hub2   dir=up   pitch=15.6  tilt=43.8 len=0.54
+    bone tibia2  parent=femur2 dir=down pitch=10.1  tilt=26.2 len=0.80
+    bone tarsus2 parent=tibia2 dir=down pitch=3.7   tilt=9.3  len=0.60
+
+    bone hub3    parent=pelvis dir=down pitch=-36.3 tilt=63.7 len=0.224
+    bone femur3  parent=hub3   dir=up   pitch=-13.3 tilt=46.6 len=0.52
+    bone tibia3  parent=femur3 dir=down pitch=-7.8  tilt=24.9 len=0.78
+    bone tarsus3 parent=tibia3 dir=down pitch=-3.1  tilt=9.5  len=0.58
+
+    bone hub4    parent=pelvis dir=down pitch=-60.0 tilt=48.9 len=0.244
+    bone femur4  parent=hub4   dir=up   pitch=-34.7 tilt=29.0 len=0.56
+    bone tibia4  parent=femur4 dir=down pitch=-24.2 tilt=18.3 len=0.86
+    bone tarsus4 parent=tibia4 dir=down pitch=-9.8  tilt=7.0  len=0.58
+  end
+
+body
+  # ---- THE SPIDER BODY (torso cluster) --------------------------------------
+  # Cephalothorax: the fleshy hub every leg socket sits on. Centre
+  # (0, 0.90, -0.08) — the point the leg yaws were laid out around. Longer
+  # than wide (deep 1.35), and low (tall 0.75) so it reads as a body slung
+  # between the knees rather than a ball.
+  blob torso on pelvis at=0.00 r=0.200 wide=1.15 tall=0.75 deep=1.35 blend=0.050 offset=(0,0,-0.080)
+  # Her HIPS: flared wider than the ribcage (semi-width 0.16 vs 0.13) — the
+  # bottom of the hourglass — and blended wide into the cephalothorax so the
+  # woman grows out of the spider rather than sitting on it.
+  blob torso on pelvis at=1.00 r=0.120 wide=1.35 tall=0.80 deep=1.00 blend=0.060 offset=(0,0.020,0.015)
+
+  # THE ABDOMEN — an egg sac, not a chitin bulb. Big (semi 0.32 x 0.28 x
+  # 0.41), riding BEHIND her at hip height (the bone runs 80 degrees back),
+  # dropped 6 cm so its crest stays below her shoulder blades in profile.
+  blob torso on abdomen at=0.72 r=0.300 wide=1.05 tall=0.92 deep=1.35 blend=0.070 offset=(0,-0.060,0)
+  # Pedicel: the narrow waist between cephalothorax and abdomen, a spider's
+  # tell. Slightly UNDER-width so the two masses read as two.
+  bar  torso on abdomen from=0.05 to=0.40 r=0.110 wide=0.95 tall=0.85 blend=0.040 offset=(0,-0.050,0)
+  # Swellings on the sac: three pustule blobs pushing out of the upper flank
+  # and back. Painted a darker, wetter bruised rose so they read as something
+  # growing INSIDE pressing out, not as skin folds. A saturated 8a3a44 read
+  # as flat red STICKERS in the first close-up; this is her skin, congested.
+  blob torso on abdomen at=0.65 r=0.090 blend=0.045 offset=(0.170,0.130,0.020) color=8e5d6c gloss=0.60
+  blob torso on abdomen at=0.85 r=0.075 blend=0.040 offset=(-0.150,0.170,-0.010) color=8e5d6c gloss=0.60
+  blob torso on abdomen at=1.00 r=0.065 blend=0.036 offset=(0.060,0.120,-0.120) color=8e5d6c gloss=0.60
+  # Spinneret: a short tapered teat at the rear underside, pointing back and
+  # down. r2 tapers it; the tip is left blunt (r2 0.012), it is flesh.
+  blob torso on abdomen at=1.00 r=0.050 r2=0.012 blend=0.020 chamfer offset=(0,-0.170,-0.200) tip=(0,-0.050,-0.080)
+
+  # ---- HER TORSO -------------------------------------------------------------
+  # Wasp waist: semi-width 0.095 — narrower than the hips (0.16) and the
+  # ribcage (0.13). This is the hourglass; widen it and she becomes a torso.
+  bar  torso on spine from=0.00 to=0.55 r=0.078 r2=0.085 wide=1.22 deep=0.85 blend=0.030
+  # Ribcage: narrow, a little deeper at the back so the orbs sit ON it.
+  blob torso on spine at=0.90 r=0.100 wide=1.28 tall=1.10 deep=0.86 blend=0.035
+  # Upper chest — the structural mass the arms and neck fuse to. `core`
+  # because the abdomen is the torso's fattest prim and clusterCore would
+  # otherwise route every fuse probe through the egg sac.
+  blob torso on chest at=0.50 r=0.100 wide=1.30 tall=1.00 deep=0.84 blend=0.035 core
+  # Shoulder line: flat and narrow (semi 0.135). A woman's shoulders, not a
+  # yoke.
+  blob torso on chest at=0.95 r=0.070 wide=1.95 tall=0.55 deep=0.85 blend=0.030
+
+  # THE THREE ORBS. Chest bone runs y 1.32 -> 1.59; at=0.42 puts the top pair
+  # at y ~1.42. The ribcage's front is at z ~0.09, so a centre at z 0.075
+  # with r 0.085 stands each orb 7 cm proud of the chest — big, in a slim
+  # frame. The top pair sits at x +-0.095: 0.19 apart against a 0.17
+  # diameter, so they do NOT merge; the third hangs 8.5 cm lower in the
+  # middle and a touch further forward, nestled between and under them — the
+  # triangle that keeps the count legible from the front. Painted a taut
+  # flushed rose, glossy: overstretched skin. d9a3a0 was tried first and
+  # read ORANGE against the cool skin — a costume, not her body; c99aa6
+  # keeps her skin's cool cast and only flushes it. Small blend (0.016) so
+  # they root into the chest without their outlines smearing into one mass.
+  blob torso on chest at=0.42 r=0.085 blend=0.016 offset=(0.095,-0.010,0.075) both color=c99aa6 gloss=0.55
+  blob torso on chest at=0.42 r=0.082 blend=0.016 offset=(0,-0.095,0.085) color=c99aa6 gloss=0.55
+  # Gland pores — one per orb, on its forward pole, glowing in the EYES'
+  # colour. Small (r 0.009) and half-buried so they read as a lit pore in
+  # the skin, and so face and chest answer each other across the dark.
+  blob torso on chest at=0.42 r=0.009 blend=0.003 offset=(0.100,-0.014,0.158) both color=ff2ea6 glow=0.55
+  blob torso on chest at=0.42 r=0.009 blend=0.003 offset=(0,-0.100,0.165) color=ff2ea6 glow=0.55
+
+  # ---- HEAD --------------------------------------------------------------
+  # A long slim neck (r 0.040) — elegance is length. 0.036 read as a stalk.
+  bar  head on neck from=0.00 to=1.00 r=0.040 deep=1.05 blend=0.014
+  # CRANIUM. Skull runs y 1.70 -> 1.92. Narrow (semi-width 0.075) and tall:
+  # a fine head on a slim neck. The fattest head prim, so it is the frame any
+  # future sheet would project from.
+  blob head on skull at=0.50 r=0.092 wide=0.82 tall=1.12 deep=1.08 blend=0.010
+  # THE CREST: the cranium continues back and UP into a long bald sweep (tip
+  # 17 cm behind, 9 cm up) — the Giger read, and the first thing wrong about
+  # her in silhouette. r2 narrows it so it ends in a rounded ridge, not a
+  # second skull.
+  # r2 0.030 / tip 17 cm read as a pointed HAT in the first frames; a fatter
+  # end and a shorter, flatter sweep reads as the skull itself going on.
+  # PAINTED AS HAIR since the hair pass: the crest is now a sleek, pulled-
+  # back mass (a high ponytail's root), and the ponytail strands below hang
+  # off its tip. The silhouette is unchanged; only its reading moved from
+  # skull to hair.
+  blob head on skull at=0.60 r=0.080 r2=0.050 wide=0.80 blend=0.024 offset=(0,0.000,-0.030) tip=(0,0.060,-0.140) color=ddd6cc gloss=0.45
+
+  # ---- HAIR (hairlock strands, owner ask 2026-09-22) ------------------------
+  # Platinum (ddd6cc — c9b99a rendered GOLD after the sRGB lift and the warm
+  # key): the bimbo archetype's colour, laid over the grotesque — and it
+  # reads against both the pale skin and the dark room. The `strand=` prim is
+  # schoolgirl-described's road (a mass for any VOLUME, strands for every
+  # hanging EDGE) and strand-fixture.blob is its render gate.
+  #
+  # Scalp cap: a tight crown mass, pulled BACK (z -0.030) so its front edge
+  # (z ~0.065) sits behind the spider eyes (z 0.078-0.090 at y ~1.86) — the
+  # hairline rides above and behind them, and her forehead stays bare.
+  blob head on skull at=0.58 r=0.088 wide=0.88 tall=0.92 deep=1.06 blend=0.006 offset=(0,0.018,-0.030) color=ddd6cc gloss=0.45
+  # PONYTAIL: from the crest tip (0, ~1.89, -0.17) down 0.45 m to between
+  # the shoulder blades, bowed back so it clears her spine (back of the
+  # ribcage is at z ~-0.09; the tail rides -0.17..-0.25) and ends above the
+  # abdomen's crest (y ~1.33). Tapered 0.040 -> 0.016 so it thins to points.
+  blob head on skull at=0.60 r=0.040 r2=0.016 wide=0.90 blend=0.004 offset=(0,0.055,-0.165) tip=(0,-0.450,-0.060) bend=(0,0.000,-0.050) strand=10 wave=0.14 cycles=3 fat=0.78 color=ddd6cc gloss=0.45
+  # FACE-FRAMING LOCKS: temple to collarbone, in front of the ears and behind
+  # the cheekbones' front (cheek z 0.068 vs lock z 0.01-0.05), bent out over
+  # the curve of the jaw. They stop at y ~1.54, on the shoulder line, above
+  # the top orbs (their tops ~1.50) — framing the face without covering the
+  # chest.
+  blob head on skull at=0.50 r=0.022 r2=0.010 blend=0.004 offset=(0.068,0.010,0.010) tip=(0.030,-0.260,0.040) bend=(0.020,0,0.030) strand=6 wave=0.18 cycles=3 fat=0.75 both color=ddd6cc gloss=0.45
+  # Narrow jaw, set forward: a slim V-shaped lower face.
+  blob head on skull at=0.22 r=0.062 wide=1.05 tall=0.90 deep=1.00 blend=0.012 offset=(0,-0.010,0.035)
+  # Pointed chin: a short chamfered taper forward-down off the jaw.
+  blob head on skull at=0.08 r=0.026 r2=0.010 blend=0.008 chamfer offset=(0,-0.004,0.066) tip=(0,-0.018,0.022)
+  # High, sharp cheekbones, set wide and forward: the "somewhat beautiful"
+  # half. Chamfered so they keep an edge under the eyes. wide 1.10 at x 0.044:
+  # at 1.35 / 0.048 they stood out past the cranium as a ledge and the head
+  # read as a mushroom cap from the front.
+  blob head on skull at=0.47 r=0.028 wide=1.10 tall=0.70 deep=0.90 blend=0.008 chamfer offset=(0.044,-0.012,0.068) both
+  # SLIM NOSE: a fine chamfered ridge running from between the eyes down and
+  # out, tapering r 0.009 -> 0.006. Its tip clears the face by ~1.5 cm
+  # (cranium semi-depth ~0.099; tip at z 0.113) — enough to catch the light,
+  # not enough to be a feature of its own. This is the refinement the lips
+  # are measured against.
+  blob head on skull at=0.52 r=0.009 r2=0.006 blend=0.004 chamfer offset=(0,0.010,0.093) tip=(0,-0.045,0.020)
+  # LIPS — too big for this face, on purpose (6.4 cm across on a 15 cm-wide
+  # head; the first 7 cm at r 0.013/0.017 filled the whole lower face and
+  # read as a clown's mouth rather than a beautiful one gone too far). Each one BENT bar corner to corner, bowed forward over the jaw's
+  # curve (the ogre's lips are the precedent). The lower one is fuller.
+  # Corners at z 0.092 against a jaw surface of ~0.087 there, middles ~1 cm
+  # proud. Dark wet plum, glossy — the one lush thing on a pale face.
+  bar  head on skull from=0.30 to=0.30 r=0.011 tall=0.90 blend=0.004 offset=(-0.032,0.004,0.094) tip=(0.064,0,0) bend=(0,0.008,0.030) color=7a2444 gloss=0.75
+  bar  head on skull from=0.30 to=0.30 r=0.015 tall=0.85 blend=0.004 offset=(-0.029,-0.019,0.092) tip=(0.058,0,0) bend=(0,-0.008,0.032) color=7a2444 gloss=0.75
+  # EYES — slanted almonds, GLOWING hot magenta. Each is a short capsule from
+  # its inner corner out and UP (tip), half-buried in the cranium's front
+  # (surface z ~0.088 at x 0.034), so the lid line is the cranium's own
+  # surface. Magenta, not the ogre's red: seductive and unnatural at once.
+  blob head on skull at=0.55 r=0.011 blend=0.003 offset=(0.024,0,0.086) tip=(0.022,0.007,-0.006) both color=ff2ea6 glow=0.95
+  # SPIDER EYES — four small beads across the forehead above the real eyes,
+  # the inner pair higher: a spider's secondary row. Dimmer (glow 0.7) so the
+  # main eyes still lead.
+  blob head on skull at=0.72 r=0.007 blend=0.002 offset=(0.017,0.012,0.090) both color=ff2ea6 glow=0.70
+  blob head on skull at=0.70 r=0.006 blend=0.002 offset=(0.042,0.004,0.078) both color=ff2ea6 glow=0.70
+
+  # ---- ARMS ----------------------------------------------------------------
+  # Slim and long. Shoulder ball is the structural mass (core).
+  blob arm on upperArm at=0.04 r=0.046 blend=0.016 mirror core
+  bar  arm on upperArm from=0.08 to=0.96 r=0.038 r2=0.031 blend=0.012 mirror
+  bar  arm on foreArm  from=0.02 to=0.95 r=0.031 r2=0.022 blend=0.010 mirror
+  # Narrow hand.
+  blob arm on hand at=0.40 r=0.028 wide=0.80 tall=1.25 deep=1.15 blend=0.010 mirror
+  # Three LONG fingers — 13 cm, a hand and a half — curving forward to dark
+  # nails. tip sends each down and forward, splayed; r2=0 is a true point.
+  # The spider in her hands.
+  blob arm on hand at=0.85 r=0.010 r2=0.002 blend=0.004 offset=(0.012,0,0.010)  tip=(0.018,-0.110,0.060) bend=(0.004,0,0.020) mirror color=2a1420 gloss=0.60
+  blob arm on hand at=0.85 r=0.010 r2=0.002 blend=0.004 offset=(0,0,0.016)      tip=(0,-0.125,0.065)     bend=(0,0,0.022)     mirror color=2a1420 gloss=0.60
+  blob arm on hand at=0.85 r=0.010 r2=0.002 blend=0.004 offset=(-0.012,0,0.010) tip=(-0.016,-0.110,0.058) bend=(-0.004,0,0.020) mirror color=2a1420 gloss=0.60
+
+  # ---- SPIDER LEGS (leg clusters: four legs a side) -------------------------
+  # FOUR prims a leg, and that count is budgeted: the shader ceiling is 128
+  # flesh + bone prims (validate.ts), and a first pass with separate coxa and
+  # knuckle balls (7 a leg) came to 174. So each joint's swelling is built
+  # into the taper instead: the femur starts fat (the coxa) and thins, the
+  # tibia starts FATTER than the femur ends (0.040 vs 0.034) and so reads as a
+  # knuckle of meat at the knee, and the same again at the ankle. Flesh
+  # everywhere except the last 28% of each foot, a dark glossy nail — the
+  # "more fleshy than the Vore" beat. Thick on purpose: at femur r 0.050 the
+  # first frames read as a daddy-longlegs of bent sticks; at 0.066 they read
+  # as meat, and the spread still dwarfs her so the spider is the first read.
+  # The nail's r 0.013 is under half the tarsus's 0.030 on purpose: deriveBones
+  # (MASS_FRACTION 0.5) then grows no bone in it, which is what keeps the
+  # budget.
+  # ONE coxa ball, on leg2, marked `core`: the fuse probe runs from the
+  # cluster core's centre to the torso's, and from a femur's midpoint (out in
+  # the air beside the knee) it crossed daylight and reported the legs
+  # disconnected. A ball seated IN the cephalothorax at the socket gives the
+  # probe a start inside flesh. The other three legs root by their fat femur
+  # starts alone (fusedOf per leg is pinned in the test).
+  bar  leg on femur1  from=0.00 to=1.00 r=0.066 r2=0.044 blend=0.016 mirror
+  bar  leg on tibia1  from=0.00 to=1.00 r=0.052 r2=0.027 blend=0.014 mirror
+  bar  leg on tarsus1 from=0.00 to=0.72 r=0.030 r2=0.013 blend=0.010 mirror
+  bar  leg on tarsus1 from=0.72 to=1.00 r=0.013 r2=0.000 blend=0.003 chamfer mirror color=2a1420 gloss=0.60
+
+  blob leg on femur2  at=0.00 r=0.068 blend=0.018 mirror core
+  bar  leg on femur2  from=0.00 to=1.00 r=0.066 r2=0.044 blend=0.016 mirror
+  bar  leg on tibia2  from=0.00 to=1.00 r=0.052 r2=0.027 blend=0.014 mirror
+  bar  leg on tarsus2 from=0.00 to=0.72 r=0.030 r2=0.013 blend=0.010 mirror
+  bar  leg on tarsus2 from=0.72 to=1.00 r=0.013 r2=0.000 blend=0.003 chamfer mirror color=2a1420 gloss=0.60
+
+  bar  leg on femur3  from=0.00 to=1.00 r=0.066 r2=0.044 blend=0.016 mirror
+  bar  leg on tibia3  from=0.00 to=1.00 r=0.052 r2=0.027 blend=0.014 mirror
+  bar  leg on tarsus3 from=0.00 to=0.72 r=0.030 r2=0.013 blend=0.010 mirror
+  bar  leg on tarsus3 from=0.72 to=1.00 r=0.013 r2=0.000 blend=0.003 chamfer mirror color=2a1420 gloss=0.60
+
+  bar  leg on femur4  from=0.00 to=1.00 r=0.066 r2=0.044 blend=0.016 mirror
+  bar  leg on tibia4  from=0.00 to=1.00 r=0.052 r2=0.027 blend=0.014 mirror
+  bar  leg on tarsus4 from=0.00 to=0.72 r=0.030 r2=0.013 blend=0.010 mirror
+  bar  leg on tarsus4 from=0.72 to=1.00 r=0.013 r2=0.000 blend=0.003 chamfer mirror color=2a1420 gloss=0.60
+
+# Wound pass: hidden bone. Auto-derive handles the limbs; the skull is
+# authored because a headshot is the shot players take.
+bones
+  ratio 0.38
+  # Cranium bone inside the flesh cranium (semi 0.075 x 0.103 x 0.099) with
+  # ~1.5 cm of meat on every side.
+  blob head on skull at=0.50 r=0.075 wide=0.80 tall=1.12 deep=1.08
+  # Torso bones AUTHORED, for the budget as much as the anatomy: auto-derive
+  # would put a bone inside each orb and each hip mass (~9 prims). A spine
+  # through the waist, a ribcage, and a cephalothorax plate the legs hang off.
+  bar  torso on spine  from=0.00 to=1.00 r=0.030
+  blob torso on chest  at=0.45 r=0.070 wide=1.20 tall=1.10 deep=0.80
+  blob torso on pelvis at=0.00 r=0.120 wide=1.10 tall=0.60 deep=1.30 offset=(0,0,-0.080)
+  # Two more authored purely for the BUDGET (124 -> 120 of the shader's 128):
+  # an authored bone replaces derivation on its whole bone (build-body.ts),
+  # so one bar here stands in for the two derived from shoulder ball + upper
+  # arm, and from leg2's coxa + femur.
+  bar  arm on upperArm from=0.02 to=0.96 r=0.015 mirror
+  bar  leg on femur2   from=0.00 to=1.00 r=0.021 mirror
+
+# No mesh, so no bake: every face feature is a prim above and the face block
+# is a NUB (headRadius ~0) so the parameterised ellipsoid cannot fight the
+# authored cranium. Same road as ogre / bloatmaw / gnasher.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+# The generated face sheet is OFF. With no sheet block the lab multiplies the
+# shared default sheet over the head, and on this face it painted white
+# greasepaint patches around the eyes (the default's eye glow region). Every
+# feature here is a prim, so there is nothing for a sheet to add.
+sheet
+  enabled 0
+
+# Skin: pale and cool — porcelain gone slightly grey, a body that lives in the
+# dark — with a bruise-VIOLET mottle (a hue shift, not a darker base, or it
+# vanishes). Wet and translucent: she should look soft and a little
+# see-through at the rim, which is the beautiful half; the sheen on the legs
+# and sac is the other half. Linear RGB; the sRGB encode lifts it.
+palette
+  baseColor     0.520 0.420 0.420
+  deepColor     0.520 0.060 0.100
+  charColor     0.070 0.055 0.060
+  specIntensity 0.55
+  specRoughness 0.32
+  fresnelBoost  0.40
+  translucency  0.30
+  wetness       0.45
+  surfaceNoiseAmp    0.020
+  silhouetteNoiseAmp 0.006
+  mottleAmp     0.38
+  mottleScale   2.0
+  mottleColor   0.300 0.200 0.360
