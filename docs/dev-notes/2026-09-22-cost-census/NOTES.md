@@ -103,3 +103,12 @@ Whole frame, melee, ship, 4 reps (load <= 6.3). GPU-bound in every phase (frame 
 
 Next: the flame march (`post:fire-march`, 5 ms, never tuned), then bodies-at-the-lens (the panic case).
 CPU crowd uniform upload (~4-5 ms) is not the long pole today but would be with more bodies.
+
+## Flames (2026-09-22)
+
+- Sweep (fire phase, LOADED run, ratios valid): `post:fire-march` 48/0.4 (ship) 8.3 ms; 32 steps 8.1; 24 steps 6.0;
+  16 steps 4.3; 0.3 res 5.6; **24 + 0.3 = 3.4 ms (-58 %)**. Default now 24 / 0.3 (owner: worse but acceptable).
+- Compensation tried, both OFF: `streakPx` (vertical smear in the fire composite) — owner: looks bad, should be the
+  SELECTIVE SHUTTER blur (note: the shutter resolve blurs the separately shaded blood LAYER, not the scene, so fire
+  needs its own layer/seed route); `heatPx` (warp in the final blit) — owner: too high frequency, wrong shape; wants a
+  very large wavelength, subtle distortion. Next session: see HANDOFF.md.
