@@ -443,7 +443,13 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // anisotropic face ellipsoids (brow/nose/jaw) squash along the TURNED
       // skull axes, not the world's — the detached-visor fix. Same q
       // headTransform derived; reused, not recomputed.
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
+      //
+      // bend turns with it, as in posePrimitive: the field conjugates the
+      // control point by orient along with the endpoints, so a rest-space
+      // bend bowed a turned head's curve back into the skull — the ogre's
+      // painted lips showed only their two end caps (rig-bind.test.ts).
+      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q,
+        ...(p.bend ? { bend: qRotate(rigid.q, p.bend) } : {}) };
     }
     return posePrimitive(p, bound.binding[i]!);
   });
@@ -472,7 +478,8 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       : frame ? `axial:${frame.head}-${frame.tail}`
       : `limb:${p.limb}:${bound.boneBinding[i]!.a.point}-${bound.boneBinding[i]!.b.point}`);
     if (face && rigid) {
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q, boneSegment };
+      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q,
+        ...(p.bend ? { bend: qRotate(rigid.q, p.bend) } : {}), boneSegment };
     }
     if (frame) {
       // Same composition as headTransform: the known body yaw first (the
@@ -480,7 +487,8 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // and current direction would drop the azimuth), then the residual tilt.
       const h = pos[frame.head]!.pos;
       const q = rotationOf(frame);
-      return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q, boneSegment };
+      return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q,
+        ...(p.bend ? { bend: qRotate(q, p.bend) } : {}), boneSegment };
     }
     return { ...posePrimitive(p, bound.boneBinding[i]!), boneSegment };
   });

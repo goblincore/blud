@@ -38,7 +38,7 @@ Face: all structure is prims (bullet cranium, underbite jaw, brow shelf, long po
 pointed ears, two ivory tusks, two glowing red emissive eyes); the decal carries only the
 grimace. Eyes are RED at glow 0.9. The nose is a long pointed goblin-style spike run nearly
 horizontal (the first hooked try dropped onto the mouth). The lips are two bent bars, parted,
-the lower one fatter (underbite) — UNPAINTED: see "renderer bug" below. Palette: sickly tan with
+the lower one fatter (underbite), painted dark liver-red. Palette: sickly tan with
 grey-green bruise mottle.
 
 ![face v2](face-v2.png)
@@ -79,9 +79,11 @@ slide back) — judge a procedural gait from live wander, not from `BLOB_POSE=wa
   out-down elbow pole swivelled a near-straight arm into hyperextension, which the rig's elbow
   limit clamps. Fixed with a kept elbow bend, a fist >= 12 cm clear of the flesh, and
   `rightPole` pointing the elbow BACK. Now 2 mm.
-- **Renderer bug: paint does not follow a large bend.** A painted (`color=`) bar with a 3.6 cm
-  bow on a 1.6 cm radius painted only its two END caps (four dark balls at the mouth corners);
-  the CPU field and the same prim UNPAINTED both have the full curve. The lips ship unpainted.
+- **"Paint on a bent prim shows only its end caps" was a POSE bug, not paint.** `applyRig`'s
+  rigid-head pass turned a face prim's endpoints but left `bend=` in rest space, so on a turned
+  head the bow swung back into the skull and only the caps stayed proud (unpainted, flesh-on-flesh
+  hid it). Fixed in `rig-bind.ts` (a separate session; pinned in `rig-bind.test.ts` and the
+  skill's triage table). The lips are painted.
 - **`low` carry is not portable.** Carry angles are relative to the AUTHORED arm hang; the
   ogre's forearms hang 30° forward, so the soldier's `low` lifted the saw to his face. `saw` was
   grid-solved against the ogre rig for grip-at-belly, bar level and angled across the body,

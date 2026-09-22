@@ -173,13 +173,14 @@ body
   # the decal's dark lip band lands ON these, tinting them. The lower lip is
   # fatter and further out: the underbite.
   #
-  # UNPAINTED ON PURPOSE. With color= the renderer painted only the two END
-  # caps (four dark balls at the mouth corners) while the CPU field and the
-  # unpainted render both have the full curved lip: the per-prim paint pick
-  # does not follow a large bend (a 3.6 cm bow on a 1.6 cm radius here). A
-  # renderer bug, not the .blob's; flesh lips are right for an ogre anyway.
-  bar  head on skull from=0.30 to=0.30 r=0.016 tall=0.95 blend=0.004 offset=(-0.075,-0.002,0.121) tip=(0.150,0,0) bend=(0,0.016,0.072)
-  bar  head on skull from=0.30 to=0.30 r=0.020 tall=0.90 blend=0.004 offset=(-0.072,-0.048,0.136) tip=(0.144,0,0) bend=(0,0.012,0.052)
+  # PAINTED dark liver-red. They were briefly left unpainted: with color= only
+  # the two END caps showed (four dark balls at the mouth corners). That was
+  # never the paint — the rig's rigid-head pass turned the endpoints but left
+  # bend= in rest space, so a turned head's bow swung back into the skull and
+  # only the caps stayed proud of the face (flesh-on-flesh hid it). Fixed in
+  # rig-bind.ts applyRig; pinned in rig-bind.test.ts.
+  bar  head on skull from=0.30 to=0.30 r=0.016 tall=0.95 blend=0.004 offset=(-0.075,-0.002,0.121) tip=(0.150,0,0) bend=(0,0.016,0.072) color=6a302a gloss=0.35
+  bar  head on skull from=0.30 to=0.30 r=0.020 tall=0.90 blend=0.004 offset=(-0.072,-0.048,0.136) tip=(0.144,0,0) bend=(0,0.012,0.052) color=6a302a gloss=0.35
   # TUSKS — two lower canines jutting UP out of the underbite, past the upper
   # lip (z 0.149 so they rise in front of the geometric upper lip, not
   # through it). Ivory, not bone-white (the sheet multiplies albedo; pure white also

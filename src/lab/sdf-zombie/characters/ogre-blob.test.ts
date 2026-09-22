@@ -171,7 +171,9 @@ describe('ogre.blob', () => {
       expect(r).toBeGreaterThan(g * 4); // unmistakably red, not amber
       expect(r).toBeGreaterThan(bl * 4);
     }
-    const tusks = prims.filter(p => p.color !== undefined && (p.glow ?? 0) === 0);
+    // The painted lips are the other non-glowing painted prims; they span the
+    // mouth (> 12 cm across), a tusk rises nearly straight up.
+    const tusks = prims.filter(p => p.color !== undefined && (p.glow ?? 0) === 0 && Math.abs(p.b[0] - p.a[0]) < 0.12);
     expect(tusks).toHaveLength(2);
     for (const t of tusks) {
       // Pointing UP out of the underbite.
@@ -184,9 +186,9 @@ describe('ogre.blob', () => {
 
   // THICK LIPS (owner, 2026-09-22). Two bent bars across the mouth, PARTED
   // so the decal's teeth show between them, the lower one fatter and further
-  // forward (the underbite). Unpainted — see the .blob: paint does not follow
-  // a large bend in the renderer. The brow is the other wide bent bar; it
-  // sits above the eyes, so "below the eyes" picks out the lips.
+  // forward (the underbite), painted dark red (the .blob says why they were
+  // once flesh). The brow is the other wide bent bar; it sits above the eyes,
+  // so "below the eyes" picks out the lips.
   it('has thick, parted lips with the lower one jutting', () => {
     const b = built();
     const head = limb(b, 'head');
@@ -205,6 +207,12 @@ describe('ogre.blob', () => {
     const gap = (upper.a[1] - upper.radius * upper.scale[1]!) - (lower.a[1] + lower.radius * lower.scale[1]!);
     expect(gap).toBeGreaterThan(0.004);
     expect(lower.a[2]).toBeGreaterThan(upper.a[2]); // underbite
+    // Painted, and darker than flesh: the posed bow now carries its colour
+    // end to end (rig-bind.test.ts pins the bend under a turned head).
+    for (const lip of lips) {
+      expect(lip.color, 'lip is painted').toBeDefined();
+      expect(lip.color![0] + lip.color![1] + lip.color![2]).toBeLessThan(0.5);
+    }
   });
 
   // THE NOSE (owner's pick, 2026-09-22): a long POINTED spike that projects
