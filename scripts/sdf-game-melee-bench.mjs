@@ -358,6 +358,23 @@ async function capturePhase(phase, withWounds) {
     for (const [k, v] of Object.entries(cc.classes)) {
       console.log(`    ${k.padEnd(10)} px ${String(v.px).padStart(6)} | prims walk ${pct(v.primShare.walk).padStart(6)} post ${pct(v.primShare.post).padStart(6)} | rows walk ${pct(v.rowShare.walk).padStart(6)} post ${pct(v.rowShare.post).padStart(6)} | per px: steps ${v.perPixel.steps.toFixed(1)} walkPrims ${v.perPixel.walkPrims.toFixed(0)} postPrims ${v.perPixel.postPrims.toFixed(0)} walkRows ${v.perPixel.walkRows.toFixed(1)} postRows ${v.perPixel.postRows.toFixed(1)}`);
     }
+    // MELEE_REFOLD_STUDY=1 (2026-09-22): walk owner re-folds attempted / won (mode 15).
+    if (process.env.MELEE_REFOLD_STUDY === '1') {
+      const R = dec(await settledRead(15));
+      writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-refold-${w13.w}x${w13.h}.f32`, R.b);
+      let att = 0, won = 0, pxAtt = 0, pxWon = 0, pxWonHit = 0, pxWonMiss = 0, pxAttHit = 0;
+      for (let i = 0; i < w13.w * w13.h; i++) {
+        const o = i * 4;
+        if (!(R.f[o + 2] >= 0.5)) continue;
+        const a = R.f[o], wv = R.f[o + 1], hitPx = Math.floor(R.f[o + 2] / 1000) >= 1;
+        att += a; won += wv;
+        if (a > 0) { pxAtt++; if (hitPx) pxAttHit++; }
+        if (wv > 0) { pxWon++; if (hitPx) pxWonHit++; else pxWonMiss++; }
+      }
+      census.refoldStudy = { att, won, pxAtt, pxWon, pxWonHit, pxWonMiss, pxAttHit };
+      console.log(`  REFOLD [${phase}]: walk re-folds ${att} attempted, ${won} won (${(100 * won / Math.max(1, att)).toFixed(1)}%); `
+        + `pixels with any attempt ${pxAtt} (hits ${pxAttHit}), with any win ${pxWon} (hits ${pxWonHit}, misses ${pxWonMiss})`);
+    }
     // MELEE_CENSUS_LEGS='name=js;...' (2026-09-22): the same cost census with each leg
     // applied, same page and frame, and ship MINUS leg per class — where that leg's work is.
     const censusLegs = (process.env.MELEE_CENSUS_LEGS ?? '').split(';').filter(x => x.includes('='))
