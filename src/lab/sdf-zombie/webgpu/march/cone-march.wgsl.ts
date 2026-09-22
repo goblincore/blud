@@ -194,16 +194,42 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
   // ends the walk — a neighbouring block ray exits the box elsewhere.
   let missCull = depthPreCfg.z > 0.5;
   var tFar = tMax;
+  var t = 0.0;
   if (missCull) {
+    // CONE vs CLUSTER SPHERES, before any field evaluation (2026-09-22 levers).
+    // The block's rays lie in a cone of half-angle atan(k) around rd, apex at the
+    // camera. A sphere (centre c, radius R, margin-inflated) at distance D subtends
+    // asin(R / D); the cone misses it iff the angle between rd and (c - cam)
+    // exceeds atan(k) + asin(R / D). Every surface lies inside some sphere, so a
+    // cone that misses them all certifies the block empty for this body with no
+    // walk at all. Otherwise the walk starts at the nearest reachable sphere:
+    // along any block ray a point at s is at least D - s from c, and a block ray
+    // strays at most k * s from the coarse one, so nothing is reachable before
+    // (D - R) / (1 + k). The far bound stays the farthest reachable D + R.
+    let k = depthPreCfg.y;
+    let coneA = atan(k);
+    var tNear = 1e9;
     tFar = 0.0;
+    var reach = false;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(gInstCounts.y)) { break; }
       let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + gBand), 0);
-      tFar = max(tFar, length(cb.xyz - camPos) + cb.w);
+      let R = cb.w + 0.05 + woundCfg2.z;
+      let v = cb.xyz - camPos;
+      let D = length(v);
+      if (D > R) {
+        let ang = acos(clamp(dot(v, rd) / D, -1.0, 1.0));
+        if (ang > coneA + asin(clamp(R / D, 0.0, 1.0))) { continue; }
+        tNear = min(tNear, (D - R) / (1.0 + k));
+      } else {
+        tNear = 0.0;
+      }
+      reach = true;
+      tFar = max(tFar, D + R);
     }
-    tFar = tFar + 0.05 + woundCfg2.z;
+    if (!reach) { return -2.0; }
+    t = max(tNear, 0.0);
   }
-  var t = 0.0;
   for (var i = 0; i < 64; i = i + 1) {
     // The FULL field (noiseCfg 0, full cluster list, no tile binning) — the
     // same conservative choice the cone pre-pass makes. The full march may
