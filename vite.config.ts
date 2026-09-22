@@ -6,6 +6,7 @@ import { saveGameplayCapture } from './scripts/lib/game-telemetry-save';
 import { saveDemo } from './scripts/lib/game-demo-save';
 import { listModels, modelStoreRoot, readModelText } from './scripts/lib/upscale-model-store';
 import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 
 function readTelemetryBuild(cwd = process.cwd()) {
   try {
@@ -57,6 +58,16 @@ function labDevSave(): Plugin {
         // input log, saved like telemetry — the page posts the DemoFile and the
         // server owns the filename. Get one back for a replay at
         // /docs/dev-notes/demos/<name>.dem.json (Vite serves the project root).
+        if (url.pathname === '/__lab/list-demos') {
+          const dir = resolve(__dirname, 'docs/dev-notes/demos');
+          const names = existsSync(dir)
+            ? readdirSync(dir).filter(n => n.endsWith('.dem.json'))
+              .map(n => ({ n, t: statSync(resolve(dir, n)).mtimeMs })).sort((a, b) => b.t - a.t).map(x => x.n)
+            : [];
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(names));
+          return;
+        }
         if (url.pathname === '/__lab/save-demo') {
           if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
           if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`

@@ -7657,6 +7657,14 @@ async function main() {
   /** The F7 HUD line, created lazily and parked above the telemetry controls. */
   ctx.demo.hudEl = null;
 
+  /** `speed` > 0 paces the replay to wall-clock (1 = real time) so it can be
+   *  WATCHED; omitted = as fast as possible (the hash/bench path, unchanged).
+   *  `stopAt` ends the replay after that many frames and leaves the loop
+   *  stopped, so the scene holds on that frame for inspection. `resume` (only
+   *  when not stopping early) restarts the rAF loop afterwards. */
+  type DemoReplayOpts = { hold?: boolean; hash?: boolean; every?: number; hashFrom?: number; label?: string;
+    speed?: number; stopAt?: number; resume?: boolean };
+
   /** THE REPLAY DRIVER. Owns the sim: stops the loop, resets the sim clock and
    *  reseeds the streams, applies the scene flags and the start pose, then
    *  steps one fixed frame per recorded frame through applyInputFrame. The
@@ -7666,7 +7674,7 @@ async function main() {
    *  `hash: true` additionally digests the march target and gather layers every
    *  `every` frames — the surface scripts/sdf-demo-hash.mjs drives for
    *  DEMO_HASH_DEM. */
-  async function runDemoReplay(file: DemoFile, opts: { hold?: boolean; hash?: boolean; every?: number; hashFrom?: number; label?: string } = {}) {
+  async function runDemoReplay(file: DemoFile, opts: DemoReplayOpts = {}) {
     if (!file || file.version !== DEMO_VERSION) throw new Error(`demoReplay: version ${file?.version} is not ${DEMO_VERSION}`);
     if (!Array.isArray(file.frames) || file.frames.length === 0) throw new Error('demoReplay: recording has no frames');
     if (opts.hold !== false) ctx.demo.hold = true;
@@ -7723,8 +7731,14 @@ async function main() {
       await awaitBakes(ctx);
       await ctx.boot.handle.resolveGpu();
       for (let f = 0; ; f++) {
+        if (opts.stopAt !== undefined && f >= opts.stopAt) break;
         const frame = iter.next();
         if (!frame) break;
+        if (opts.speed && opts.speed > 0) {
+          const due = started + (f * file.dt * 1000) / opts.speed;
+          const wait = due - performance.now();
+          await new Promise(r => (wait > 1 ? setTimeout(r, wait) : requestAnimationFrame(() => r(null))));
+        }
         ctx.player.currentInputFrame = frame;
         await awaitBakes(ctx);
         ctx.boot.handle.step(file.dt);
@@ -7749,6 +7763,7 @@ async function main() {
       ctx.player.holdPlayerPose = hadHoldPlayer;
       ctx.player.freeAimOn = hadFreeAim;
       ctx.player.currentInputFrame = neutralInput(ctx, ctx.player.currentInputFrame);
+      if (opts.resume && opts.stopAt === undefined) ctx.boot.handle.setLoopRunning(true);
     }
     return {
       frames,
@@ -7899,7 +7914,29 @@ async function main() {
      *  return `{ frames, census, ... }`. `hash: true` also digests the frame
      *  every `every` steps — the surface scripts/sdf-demo-hash.mjs drives for
      *  DEMO_HASH_DEM. The caller owns booting a page with the matching seed. */
-    demoReplay: (fileOrPath: DemoFile | string, opts: { hold?: boolean; hash?: boolean; every?: number; hashFrom?: number; label?: string } = {}) => {
+    /** WATCHABLE REPLAY (debug). `name` = a file in docs/dev-notes/demos
+     *  (with or without .dem.json), a full path, or omitted = the newest
+     *  recording (F7 records). Real-time by default; `stopAt: n` freezes on
+     *  frame n (e.g. the frame after a headshot). `__sdfGame.setLoopRunning(true)`
+     *  resumes live play afterwards. */
+    replayDemo: async (name?: string, opts: DemoReplayOpts = {}) => {
+      let path = name;
+      if (!path) {
+        const list = await fetch('/__lab/list-demos', { cache: 'no-store' }).then(r => r.json()) as string[];
+        if (!list.length) throw new Error('replayDemo: no recordings in docs/dev-notes/demos (press F7 to record)');
+        path = list[0]!;
+      }
+      if (!path.includes('/')) path = `/docs/dev-notes/demos/${path.endsWith('.json') ? path : `${path}.dem.json`}`;
+      const file = await fetch(path, { cache: 'no-store' }).then(r => {
+        if (!r.ok) throw new Error(`replayDemo: fetch ${path} -> ${r.status}`);
+        return r.json() as Promise<DemoFile>;
+      });
+      console.info(`[sdf-game] replayDemo ${path}: ${file.frames.length} frames`);
+      return runDemoReplay(file, { speed: 1, resume: true, ...opts });
+    },
+    /** Recordings on disk, newest first. */
+    demoList: () => fetch('/__lab/list-demos', { cache: 'no-store' }).then(r => r.json() as Promise<string[]>),
+    demoReplay: (fileOrPath: DemoFile | string, opts: DemoReplayOpts = {}) => {
       if (typeof fileOrPath === 'string') {
         return fetch(fileOrPath, { cache: 'no-store' })
           .then((r) => {
