@@ -301,11 +301,13 @@ ${LIMBS ? `      let savedBest = gFoldBest;
         limb = foldGroup(limb, p, data, counts, band, bounds, range);
       }
 `}      gWoundCluster = f32(c + 1);
+      if (gDebugMode > 0.5) { gDebugRefolds = gDebugRefolds + 1.0; }
       let limbCarved = applyCarves(limb, p, data, counts, band);
       let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
       if (limbDamage < dmg) {
         dmg = limbDamage;
         gRefoldWin = f32(c + 1);
+        if (gDebugMode > 0.5) { gDebugRefoldWins = gDebugRefoldWins + 1.0; }
       } else {
         gFoldBest = savedBest;
         gFoldBestIdx = savedIdx;
