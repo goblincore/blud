@@ -61,3 +61,9 @@ fire phase yet.
   outlines. Near 6, fading to 1 over 1.5-3 m: wounded-melee prim work -14.8 %, clean -28.6 %; `sdf:march`
   wounded ~16.7 -> ~14.4 ms (load up to 6, indicative). Owner A/B: invisible. Also judged 12 "okay":
   -19.3 % / -36.9 % prims — a one-number follow-up (rays stop up to ~17 mm short at 1 m there).
+
+## Before/after (PR #14) — melee bench, one page, alternating, 4 reps, load 3.2-4.5
+
+`before` = both new defaults off (main's ship frame). `sdf:march`: clean 11.9 -> 11.3 ms (-5 %), wounded
+17.5 -> 14.9 ms (-15 %), wounded+fire 24.2 -> 21.2 ms (-12 %). Frame p50: 14.8 -> 14.2, 20.4 -> 17.6,
+33.3 -> 30.5 ms.
