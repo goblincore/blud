@@ -96,6 +96,10 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
     // paying fbm at every step of the empty approach.
     let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
     let distort = max(gFoldBestDistort, 1.0);
+    // DISTANCE-BASED ACCEPT (aaCfg.z/w, 2026-09-22): a stronger footprint accept up
+    // close, fading to aaCfg.y over [w/2, w] metres (the owner saw the fattened edge
+    // on FAR bodies only). z = 0 keeps the old aaK exactly.
+    let aaKt = select(aaK, aaCfg.x * mix(aaCfg.z, aaCfg.y, smoothstep(aaCfg.w * 0.5, aaCfg.w, t)), aaCfg.z > 0.0);
     var d = dres.x;
     hitBest = i32(dres.y);
     hitField = dres;
@@ -142,7 +146,7 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
       stepLen = stepLen - omega * stepLen;
       omega = 1.0;
     } else {
-      let hitEps = max(hitEpsBase, t * aaK / distort);
+      let hitEps = max(hitEpsBase, t * aaKt / distort);
       // LAST-STEP SECANT ACCEPT (Claybook, Aaltonen GDC 2018 slide 25; off at
       // perfCfg.w == 0, bit-identical). A sphere trace converges on a
       // geometric series: at a fixed grazing angle each step shrinks d by the
@@ -195,7 +199,7 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
         // back-step to the interval actually travelled. This is the other half
         // of the wounded-ray non-reconvergence. Fixing it needs the packed
         // distortion factor threaded to this site — see the perf spec.
-        if (d < -max(hitEpsBase, t * aaK / distort) && omega > 1.0 && !conservative) {
+        if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0 && !conservative) {
           stepLen = d;
           omega = 1.0;
         } else {

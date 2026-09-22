@@ -493,6 +493,18 @@ export function createWorldSeams(ctx: GameContext) {
         a.view.uniforms.aaCfg.value.y = strength;
       }
     },
+    /** DISTANCE-BASED ACCEPT (aaCfg.z/w, 2026-09-22): accept strength `near` up close,
+     *  fading to the setAa strength over [fadeM/2, fadeM] metres. near = 0 turns it off. */
+    setAaDistance(near: number, fadeM: number) {
+      for (const a of ctx.world.actors) {
+        const v = a.view.uniforms.aaCfg.value as unknown as { z: number; w: number };
+        v.z = near; v.w = fadeM;
+      }
+    },
+    get aaDistance() {
+      const v = ctx.world.actors[0]?.view.uniforms.aaCfg.value as unknown as { z: number; w: number } | undefined;
+      return v ? { near: v.z, fadeM: v.w } : null;
+    },
     /** Level shadows on bodies (perf round 2 task 7, levelShadowCfg.x).
      *  0 = the pre-task-7 march bit-for-bit (the helper returns 1.0 before
      *  sampling). The per-frame pose block ANDs this with the beam and map

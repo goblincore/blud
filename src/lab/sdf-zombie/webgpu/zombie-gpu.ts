@@ -587,7 +587,10 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * distortion factor, so a large epsilon can stop rays short in
      * high-distortion regions. See the hitEps block in march.wgsl.ts.
      */
-    aaCfg: uniform(new THREE.Vector2(0.02, 0)),
+    // x = one-pixel cone k, y = accept strength (far), z = NEAR strength (0 = off: y
+    // everywhere), w = fade distance: strength goes z -> y over [w/2, w] metres
+    // (distance-based accept, 2026-09-22 — owner: invisible up close, visible far).
+    aaCfg: uniform(new THREE.Vector4(0.02, 0, 0, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
     /** Perf round 2 seams (plan 2026-09-01): x hull-exit tMax bound, y wound
      *  early-out, z near-wound step multiplier override (2026-09-04; 0 = the

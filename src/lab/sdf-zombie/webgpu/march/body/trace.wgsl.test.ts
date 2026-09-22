@@ -111,7 +111,7 @@ describe('ported features reach the entry point', () => {
     // when AA is on), so the guard tests against the same expression the hit
     // does rather than a loop-invariant.
     expect(MARCH_BODY).toContain(
-      'if (d < -max(hitEpsBase, t * aaK / distort) && omega > 1.0 && !conservative) {');
+      'if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0 && !conservative) {');
   });
 });
 

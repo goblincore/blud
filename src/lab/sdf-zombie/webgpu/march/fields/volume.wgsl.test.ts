@@ -139,11 +139,11 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // Perf round 2 task 6: the footprint term divides by the dominant group's
     // distortion factor. At aaCfg.y = 0 the whole term is still exactly 0
     // (t * 0 / distort = 0), so the primitive path stays bit-identical.
-    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaK / distort);');
+    expect(MARCH_BODY).toContain('let hitEps = max(hitEpsBase, t * aaKt / distort);');
     // wound-halo r2 split the accept into the deep-crossing retract guard and
     // the literal hit test; the epsilon literal still gates both.
     expect(MARCH_BODY).toContain('hit = true;\n          break;');
-    expect(MARCH_BODY).toContain('if (d < -max(hitEpsBase, t * aaK / distort) && omega > 1.0');
+    expect(MARCH_BODY).toContain('if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0');
     expect(MARCH_BODY).not.toContain('if (d < 0.0012)');
   });
 });
