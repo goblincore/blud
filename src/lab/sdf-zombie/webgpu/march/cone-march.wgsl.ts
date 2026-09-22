@@ -110,12 +110,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
     // early hands that band back to the full march, which walks it
     // conservative and hits the bumps properly. Zero when the shell is off,
     // so the undisplaced behaviour is bit-identical.
-    // With the miss cull on, "no touch" must also mean "no block ray ACCEPTS a hit":
-    // the full march accepts d < max(hitEpsBase, t * aaK / distort) (distort >= 1),
-    // so a ray grazing a silhouette within that epsilon counts as a hit without
-    // crossing the surface. Widen the touch by the same worst case. Off: unchanged.
-    let acceptEps = select(0.0012, max(max(0.0012, woundCfg2.w), t * aaCfg.x * aaCfg.y), depthPreCfg.z > 0.5);
-    if (d < r + acceptEps + woundCfg2.z) { return t; }
+    if (d < r + 0.0012 + woundCfg2.z) { return t; }
     t = t + max(d - r, 0.0005) * marchCfg.y;
     if (t > tMax) { return tMax; }
   }
@@ -219,7 +214,12 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
     let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
     let d = dres.x;
     let r = t * depthPreCfg.y;
-    if (d < r + 0.0012 + woundCfg2.z) { return t; }
+    // With the miss cull on, "no touch" must also mean "no block ray ACCEPTS a hit":
+    // the full march accepts d < max(hitEpsBase, t * aaK / distort) (distort >= 1),
+    // so a ray grazing a silhouette within that epsilon counts as a hit without
+    // crossing the surface. Widen the touch by the same worst case. Off: unchanged.
+    let acceptEps = select(0.0012, max(max(0.0012, woundCfg2.w), t * aaCfg.x * aaCfg.y), depthPreCfg.z > 0.5);
+    if (d < r + acceptEps + woundCfg2.z) { return t; }
     // Near a wound the field is not a distance bound (the smax fillet
     // overstates), so the coarse walk uses the SAME step multiplier the full
     // march does near craters — woundMul, with the perfCfg.z override. The
