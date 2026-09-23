@@ -23,12 +23,13 @@ into space. After this, the train is where you live between stops.
   blows the firebox open and the train leaves the rails. It plays in-engine,
   with the player free to move and look. No cutscene (P1).
 - **The Stoker** is in the cab, back turned, shovelling. It never fights, never
-  turns, never reacts (vision §10.3).
+  turns, never reacts (vision §10.3). No behaviour beyond that for now
+  (decided 2026-09-23).
 - **This level's geometry becomes the hub.** Its carriages are reused, quiet, as
   the train between stops. Build them once, well.
-- **Weapon found here: the dynamite** (*Party Favours*). It's already in the
-  game; here it's found as party favours in the party carriage, and it's the
-  obvious thing to throw into the firebox.
+- **Dynamite comes from the Wake** (decided 2026-09-23). Here the party
+  carriage restocks it as a table of party favours, right before the cab where
+  it's needed. The firebox can also just be shot open.
 
 ## 2. What doesn't work (level rule 2)
 
@@ -54,7 +55,7 @@ the other way round.)
 | 2 | **Third class** | Rows of seats, sleeping guests, streamers, bottles | Crowds in a narrow space | 6–8 guests, asleep until the first shot | Seats are cover; the aisle is a kill lane both ways |
 | 3 | **The dining car** | Tables laid, candles, a buffet counter, a kitchen galley | Tables as cover, a side route | Waiters and diners; optional bloatmaw floating over the buffet (a preview of Cold Storage) | The galley is a goblin route past the fight |
 | 4 | **The sleeper** | A narrow corridor, compartment doors either side | Doors, ambushes, choosing a route | 4–6, some behind compartment doors | **Emergency brake cord** here (§5.2). Secret under a bunk |
-| 5 | **The party carriage** | The biggest carriage: a dance floor, a jukebox, lights | The level's music source; dynamite | The biggest fight: 8–10 dancing guests turn | Dynamite as party favours on a table. The CD is in the jukebox |
+| 5 | **The party carriage** | The biggest carriage: a dance floor, a jukebox, lights | The level's music source; a dynamite restock | The biggest fight: 8–10 dancing guests turn | Dynamite restock as party favours on a table. The CD is in the jukebox |
 | 6 | **First class / coat check** | Quiet. Rails of coats, a counter, a bell nobody answers | Claim tickets | 2 ticket inspectors (soldiers) | The future hub carriage. First claim ticket on the counter |
 | 7 | **The tender** | Open air on top of the coal: wind, the first stars | Exposure, footing | 2–3 climbing up the sides | The "coal" is soft lumps. Never looked at closely |
 | 8 | **The cab** | The engine. The Stoker, the firebox, gauges | The set piece | None | §5.1 |
@@ -140,8 +141,9 @@ corridor. That maps directly onto the level format (rooms plus tunnels along z).
 
 - **Under a bunk** in the sleeper: a goblin-only crawl to a stash (health, shells).
 - **The galley** in the dining car: a back route past the fight, with a claim ticket.
-- **The roof** (later; needs multi-height floors): a hatch in the guard's van onto
-  the carriage roofs, with a wind-blown route forward over the fighting.
+- **The roof** (in scope, decided 2026-09-23; needs multi-height floors): a
+  hatch in the guard's van onto the carriage roofs, with a wind-blown route
+  forward over the fighting, dropping back in through a vestibule hatch.
 
 ## 10. Sound notes (for G3)
 
@@ -169,15 +171,29 @@ corridor. That maps directly onto the level format (rooms plus tunnels along z).
   state (no enemies, departure board live). The level format needs a state or
   variant flag; revisited stops need the same thing.
 
-## 12. Open questions
+## 12. Decisions from the design review (2026-09-23)
 
-1. **Dynamite found here or earlier?** If the Wake already gives it, the
-   firebox can also just be shot open. Decide when the weapons are laid out.
-2. **Does the Stoker ever do anything?** Hold out a hand between stops? Stop
-   shovelling once (the scariest thing it could do)?
-3. **The roof route:** worth doing multi-height floors early, or cut from v1?
-4. **Which carriages become the hub?** Proposal: 3 (dining car), 5 (party
-   carriage, where the jukebox plays your collection), 6 (coat check) and 8
-   (the cab, the Stoker). The rest locked or removed.
-5. **What the windows show between stops** in the hub: always stars, or the
-   stop you're heading to?
+- **Dynamite** is found in the Wake; the party carriage restocks it.
+- **The Stoker** doesn't respond to anything, for now.
+- **The roof route is in**, so multi-height floors move up the engine list
+  (production scope §4.7).
+- **Hub carriages:** the dining car, the party carriage (its jukebox plays your
+  collection), the coat check and the cab. The other carriages are locked or
+  removed in the hub state.
+- **Hub windows:** a landscape first (a desert), switching to stars later.
+  This conflicts with the lift-off ending this level; see §13.
+
+## 13. Open questions
+
+1. **When does the train leave the ground?** The owner wants the hub windows
+   to show a desert first and stars later, but §5.1 has the lift-off at the end
+   of this level. Options:
+   - **A. Move the lift-off later.** Night Train's set piece gets the train out
+     of the night: the fire roars, the train bursts out into dawn over an endless
+     desert. The early stops are reached across the desert. The lift-off becomes
+     its own moment at the turn from the gentle to the strange phase.
+   - **B. Keep the lift-off here** and make the desert impossible: the train
+     runs through space, and the windows show a desert anyway until, one stop,
+     they don't.
+2. **What the Stoker could do later** (hold out a hand, stop shovelling once),
+   parked.

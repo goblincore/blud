@@ -176,6 +176,14 @@ The scope is sized for a solo developer only if levels are cheap to make (4.1),
 levels are remixed across phases rather than multiplied, and the finale and
 secret reuse the flat.
 
+### 4.7 Multi-height floors *(needed early; decided 2026-09-23)*
+Everything assumes one floor at y = 0: the player controller clamps to it,
+actors ground to it, and enemy navigation is a 2-D grid. Night Train's roof
+route needs more than one floor height, and the Wake's crypt wants real stairs.
+Needs: player ground from colliders (stairs, ramps), actors grounded on the
+floor under them, and navigation with floor levels joined by stairs/drops.
+Plan it before Night Train's blockout; the Wake v1 ships at one height.
+
 ### 4.6 Platform: web for development, Rust + wgpu for release *(decided 2026-09-18)*
 Development stays on the web stack (TypeScript + three.js WebGPU): hot reload,
 lab pages, headless capture and the agent workflow all depend on it. The

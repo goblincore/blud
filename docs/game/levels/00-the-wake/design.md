@@ -20,6 +20,10 @@ the shooting and the bodies in 5–8 minutes, then hand over to the pull-back.
   starts the pull-back. When the full game resumes, the level continues out
   of the funeral home's back door to the rail line behind the cemetery, where
   the train to level 1 waits (vision §10.3).
+- **Dynamite is found here (decided 2026-09-23):** a bundle in the crypt,
+  the gravediggers' own blasting charges. Needs a `dynamite` pickup item in the
+  level format and pickups module (Wake plans 1–2 list only melee, shotgun,
+  shells, health, cd; add it when wiring).
 - **The glimpse (decided 2026-09-23):** just before the coffin, a tall window
   at the back of the parlour looks out over the cemetery to the tracks. The
   train is there, stopped, windows lit, the firebox glowing at the front. No
