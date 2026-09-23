@@ -39,6 +39,7 @@ import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
 import broodmotherBlobSrc from './characters/broodmother.blob?raw';
+import cultistBlobSrc from './characters/cultist.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -291,6 +292,17 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // (gait.ts jointNamesForBody), so she has no walk yet — a spider gait
     // is the open follow-up (docs/dev-notes/2026-09-22-broodmother/).
     profile: motionProfileFor('broodmother'),
+  },
+  cultist: {
+    name: 'cultist', src: cultistBlobSrc,
+    // Flesh + SHELL CLOTH, no kit: the robe, capelet, hood and bell cuffs are
+    // shells in the .blob (the SDF-cloth viability spike — see its header and
+    // docs/dev-notes/2026-09-23-cultist/). The face is the gaunt face block
+    // with the sheet off; the eyes are glow prims.
+    face: ZOMBIE_FLAT,
+    // GLIDE on the zombie skeleton (motion-profile.ts CULTIST_PROFILE): the
+    // shamble's upper body with short low steps that stay inside the robe.
+    profile: motionProfileFor('cultist'),
   },
 
 };

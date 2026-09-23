@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, MARCH, RUN, STOMP, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, MARCH, RUN, STOMP, GLIDE, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 
@@ -110,10 +110,19 @@ export const OGRE_PROFILE: MotionProfile = {
   prop: { url: '/assets/lab/ogre-chainsaw.glb', scale: 1.6, gripReach: 0.075 },
 };
 
+/** The cultist: the zombie's reach and cruise on a GLIDE (gait.ts) — short
+ *  low steps that stay inside his floor-length robe. */
+export const CULTIST_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'cultist',
+  gait: { walk: GLIDE, run: GLIDE },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   soldier: SOLDIER_PROFILE,
   ogre: OGRE_PROFILE,
+  cultist: CULTIST_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

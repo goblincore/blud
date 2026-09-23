@@ -4,6 +4,13 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Cultist (cloaked zombie) + SDF-cloth spike — first pass 2026-09-23
+
+- [x] **New character `cultist`**: hooded robed zombie, the costume all `shell` cloth; skirt swings on a `hem`
+  Verlet pendulum, wind gusts push it; `GLIDE` gait keeps legs in the robe. 11 tests. [Notes](docs/dev-notes/2026-09-23-cultist/NOTES.md)
+- [ ] Engine adds (`rigid`, posed shell clip planes, `restScale`/`clothForce`) await owner look. Perf ~3x zombie
+  close-up; game-page wind, attacks/brain/spawn not started.
+
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 
 - [x] 11 from `3662c1ca` (half-strength blends): zombie ribs/spine/iliac pulled in via `zombie-skeleton-gen.ts`, soldier
