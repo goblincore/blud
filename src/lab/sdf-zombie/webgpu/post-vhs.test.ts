@@ -8,10 +8,10 @@ describe('VHS_PRESETS', () => {
   // changes that look with no error anywhere.
   it('matches the owner-tuned blud preset exactly — the shipped default', () => {
     expect(VHS_PRESETS.blud).toEqual({
-      intensity: 0.64, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 0.38,
+      intensity: 0.64, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 1,
       warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
-      chromaAmount: 8.2, chromaJitter: 4.5, motionThreshold: 0.54,
-      chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,
+      chromaAmount: 4.6, chromaJitter: 10, motionThreshold: 0.06,
+      chromaBurstChance: 0.61, chromaBurstStrength: 0.5, chromaBurstRate: 41,
     });
   });
   it('matches the club-mutant soft preset exactly — it is the source of truth', () => {

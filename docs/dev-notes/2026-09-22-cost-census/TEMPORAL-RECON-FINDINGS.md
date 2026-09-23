@@ -67,7 +67,7 @@ close edges in motion were the one thing that failed. Everything below is behind
 | 9 | **Edge-distance coverage v1.** In the silhouette band, a screen-space signed distance from the near-miss values (hits: -min over neighbouring misses of \|hit-miss\| - dist), interpolated at the pixel. | Edges "more consistent", but a stair-step that moves ("marching ants"). Edge-off (history coverage) is cleaner when still, but its fresnel rim goes fuzzy/blocky in motion. "A wash." |
 | 10 | **Still/moving split** (history coverage where the pixel moved < `edgeStillPx` 0.3 half-scale px; else edge) + **edge lines** (the slope of the near-miss field across neighbouring misses gives the edge direction; each miss texel is a line, blended near the pixel). | Works: ants vanish when a head stops, return when it moves; transition smooth. Zombie idle animation keeps most edges "moving". |
 | 11 | **Temporal edge.** The edge distance lives in a second checker-history attachment (`ckEdge`), reprojected with the colour, each frame's estimate blended in (`edgeTemporal` 0.35) and the history clamped to within `edgeClampPx` 0.75 px of it. | Tested together with the VHS change below. |
-| 12 | **VHS `blud` preset retuned** (owner): intensity 0.64, blurAmount 1, chromaAmount 8.2, chromaJitter 4.5, motionThreshold 0.54. Now the shipped default. | "With the cranked up VHS settings, it works fine visually now." |
+| 12 | **VHS `blud` preset retuned** (owner): intensity 0.64, blurAmount 1, chromaAmount 8.2, chromaJitter 4.5, motionThreshold 0.54; then a second pass: gradeAmount 1, chromaAmount 4.6, chromaJitter 10, motionThreshold 0.06, chromaBurstStrength 0.5, chromaBurstRate 41 (intensity 0.64 and blur 1 kept). The second set is the shipped default. | "With the cranked up VHS settings, it works fine visually now." |
 
 Why the edge estimate crawls at all: the checker cycles the ray through four sub-positions, and each frame's edge
 estimate carries a different error; snapping coverage to each frame's estimate turns that error into motion. A
@@ -95,9 +95,27 @@ Four interleaved boots per run (ship / checker / ship / checker), frame p50 and 
 - **Do not trust the `sdf:march-far` pass label**: it still reads 6-7 ms after the fix, which cannot fit in a
   7.8 ms frame. Frame and GPU span agree with each other; use those.
 
-### Where it stands
+### Where it stands (2026-09-23, merged to main via PR #20)
 
-Uncommitted-to-main, flag-only (branch `claude/checker-edge-coverage`). Open: re-run the noisy pair quiet to
-confirm; decide whether 0.25 + checker ships as the default or as a low-end quality setting (owner: M3 Air is the
-low end; discrete GPUs have headroom); the known split limitation (a near body just in front of one at ~D can get a
-false near-miss from the window end — `accumsplit=0` removes it). The trained temporal upscaler is deferred.
+**Merged flag-only. NOT the default (owner decision): more exploration first.** Ship players get only the new VHS
+`blud` preset; the 0.25 checker path stays behind `?accum=1&accumscale=0.25&accumchecker=1&accumedge=1`.
+
+Open threads for the next round, roughly in order:
+
+1. **Quiet re-run** of the noisy A/B pair (load < 4, game closed) to confirm the ~38 % frame saving.
+2. **Default vs quality setting.** The M3 Air (this machine's GPU class) is the low end; discrete GPUs have headroom.
+   A graphics option ("performance: 0.25 + checker") may fit better than a new default.
+3. **Look in the wounded / fire phases.** Only the clean phase was timed (the wounded staging aborts on main — see the
+   melee warning), and the owner judged the look on live play, not on wound-heavy close-ups. Wounds appearing are an
+   instant geometry change: history rejects and the edge rebuilds over the cycle.
+4. **Edge direction from the march.** The edge lines take their direction from the slope of neighbouring near-miss
+   distances (free, noisier). A calcNormal at the closest approach would be exact, but adds four inlined field taps
+   to the march (cold-compile cost). Worth it only if edges still crawl without the heavy VHS.
+5. **The split's false near-miss** (a near body just in front of one at ~D; rays stop at the window). A window-aware
+   near-miss (ignore samples near the window end) would remove it; `accumsplit=0` is the workaround.
+6. **The `sdf:march-far` timer** reads 6-7 ms that the frame does not contain. Find out what it brackets before
+   trusting any split-pass timing.
+7. **Trained temporal upscaler**: deferred. Its inputs (motion vectors, checker history, near-miss distances, edge
+   history) all exist now; the near-miss channel is a new, useful input it did not have in the original plan.
+8. **VHS dependence.** The look is acceptable UNDER the retuned VHS. If VHS settings change again, re-judge the
+   checker edges; a lighter VHS may need item 4.

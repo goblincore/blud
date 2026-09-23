@@ -99,14 +99,15 @@ export const VHS_PRESETS: Record<VhsPreset, VhsTerms> = {
   // motionThreshold was soft's 0.12, untouched by that sweep (raised by the owner 2026-09-23, below).
   // 2026-09-12 (owner): intensity 1 -> 0.81, blurAmount 1 -> 0.17, tuned in-game on top of the
   // neural upscaler (the stage already softens the flesh; the VHS blur on top of it was too much).
-  // 2026-09-23 (owner): intensity 0.64, blurAmount 1, chromaAmount 8.2, chromaJitter 4.5 and the motion
-  // gate raised to 0.54, tuned in-game against the lower-march-resolution experiments: heavier tape
-  // blur and chroma split hide the reconstruction's edge artefacts.
+  // 2026-09-23 (owner): intensity 0.64 and blurAmount 1, tuned in-game against the lower-march-
+  // resolution experiments (heavier tape blur hides the reconstruction's edge artefacts); a second pass
+  // the same day set gradeAmount 1, chromaAmount 4.6, chromaJitter 10, motionThreshold 0.06,
+  // chromaBurstStrength 0.5, chromaBurstRate 41.
   blud: {
-    intensity: 0.64, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 0.38,
+    intensity: 0.64, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 1,
     warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
-    chromaAmount: 8.2, chromaJitter: 4.5, motionThreshold: 0.54,
-    chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,
+    chromaAmount: 4.6, chromaJitter: 10, motionThreshold: 0.06,
+    chromaBurstChance: 0.61, chromaBurstStrength: 0.5, chromaBurstRate: 41,
   },
   soft: {
     intensity: 0.7, blurAmount: 0.45, noiseAmount: 0.04, gradeAmount: 0.55,

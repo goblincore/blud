@@ -36,6 +36,8 @@ owner's retuned VHS `blud` preset: owner "works fine visually now". Melee crush 
 `sdf:march` 9.8 -> 4.4, after an early-out that stopped the far pass paying setup on near bodies. Details, knobs and
 the noisy second pair: TEMPORAL-RECON-FINDINGS.md "Round 2". Next: confirm quiet, then decide default vs low-end
 setting. The trained temporal upscaler is deferred.
+**Merged to main (PR #20) flag-only; owner: NOT the default yet — explore further first.** Open threads: the
+"Where it stands" list in TEMPORAL-RECON-FINDINGS.md.
 
 ## UPDATE 2026-09-23: the lower-march-resolution line is DONE for now — read TEMPORAL-RECON-FINDINGS.md
 
