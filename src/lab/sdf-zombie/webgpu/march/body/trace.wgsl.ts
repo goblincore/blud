@@ -62,7 +62,7 @@ ${START_BOUNDS_BLOCK}
 
 /** Run 5 (plan 2026-09-13-neural-upscale-run5-sdf-refine): the walk alone — from `var t` to the
  *  line before `if (!hit) { discard; }`. REFINE_LOOP replaces exactly this section. */
-export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);
+export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), winFar), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;

@@ -2556,6 +2556,15 @@ async function main() {
       ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
       const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
       ctx.render.sdfLayer.setTemporalAccum(true, alpha ?? undefined);
+      // `?accumchecker=1` (ACCUM-UPSCALE-STACK-PLAN.md step 1): checker reconstruction onto the 2x-march grid.
+      if (accumSearch.get('accumchecker') === '1') {
+        // `?accumsplit=<m>` (owner idea 2026-09-23): bodies nearer than m through the quarter-scale
+        // checker, farther ones marched at half scale for real. Default 3 m.
+        const split = parseFloatParam(accumSearch.get('accumsplit'), { min: 0, max: 100 }) ?? 3;
+        ctx.render.sdfLayer.setTemporalAccumCfg({ checker: true, splitM: split });
+        // Bodies built later read the halved pixelConeK at creation; refresh any that already exist.
+        if (ctx.world.actors) applySdfScale(ctx, ctx.render.sdfScale);
+      }
     }
   }
 
@@ -2599,7 +2608,7 @@ async function main() {
           console.error(`[upscale] trained model ${name} not loaded — the stage stays off: ${String(err)}`);
         }
       }
-    } else if (upRaw === null && accumBoot) {
+    } else if (upRaw === null && accumBoot && new URLSearchParams(location.search).get('accumchecker') !== '1') {
       // `?accum=1` skips the shipped stage: the two do not stack, and loading it would switch the
       // accumulation straight back off. (Its own branch: falling through would parse model `null`.)
     } else if (upRaw === null) {

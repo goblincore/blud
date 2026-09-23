@@ -376,7 +376,11 @@ export function applyUpscaleAbMode(ctx: GameContext, mode: 'native' | 'nearest' 
     scaleTo(1);
     ctx.render.sdfLayer.setFieldStyle(ctx.render.upscaleAb.fieldStyle);
   } else {
-    scaleTo(UPSCALE_SCALE);
+    // STACK (ACCUM-UPSCALE-STACK-PLAN.md): with checker accumulation on, the stage's input is the
+    // rebuilt 2x-march grid, so the march runs at HALF the stage's input scale.
+    const acc = ctx.render.sdfLayer.temporalAccum;
+    const stacked = acc.on && ctx.render.sdfLayer.checkerAccum;
+    scaleTo(stacked ? UPSCALE_SCALE / 2 : UPSCALE_SCALE);
     info = mode === 'nearest'
       ? ctx.render.sdfLayer.setUpscale({ model: 'zero', layout: c.layout, inputs: 'rgb', seed: 1 })
       : ctx.render.sdfLayer.setUpscale(c, ctx.render.upscaleAb.model ?? undefined);

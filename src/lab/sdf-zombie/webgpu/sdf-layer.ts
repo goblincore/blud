@@ -689,8 +689,222 @@ export const TEMPORAL_ACCUM_WGSL = /* wgsl */ `fn temporalAccum(
   return vec4<f32>(mix(hist.xyz, cur.xyz, alpha), cur.w);
 }`;
 
+/**
+ * CHECKER RECONSTRUCTION (2026-09-23, docs/dev-notes/2026-09-22-cost-census/ACCUM-UPSCALE-STACK-PLAN.md
+ * step 1). Rebuilds an EXACT half-scale-of-output frame (the grid t16 consumes) from a quarter-scale
+ * march: the march is jittered through the four 2x2 sub-positions of that grid in a fixed order, so each
+ * frame shoots the real ray for one pixel in four. Nothing is averaged.
+ *
+ * Per history pixel P (histDims = 2 x march dims): the march texel c = P / 2 carries this frame's sample.
+ *   - P is the sub-pixel sampled THIS frame (phase.xy): take the sample outright (colour, depth, hit/miss).
+ *   - otherwise REPROJECT: borrow a depth (c's, or the nearest hit in c's 3x3 when c missed), unproject P's
+ *     own centre with it, add c's object motion, project with the previous camera, fetch the history.
+ *     Keep it if it is flesh at the depth this surface had (the v2 validity test), clamped to the current
+ *     3x3 colours. History that is BACKGROUND in a mixed (silhouette) neighbourhood is kept as background:
+ *     that is what rebuilds a half-scale edge instead of inheriting the blocky quarter-scale one.
+ *   - else FALL BACK to the current quarter-scale sample (bilinear colour over hit taps, c's coverage).
+ * phase.z = 1: debug colours (green = sampled now, grey = history kept, red = fallback, blue = miss kept).
+ * phase.w = 1: seed (take fallback everywhere; history is from another configuration).
+ * No comments inside the parameter list, no backticks (the wgslFn parser rules, see TEMPORAL_ACCUM_WGSL).
+ */
+export const CHECKER_ACCUM_WGSL = /* wgsl */ `fn checkerAccum(
+  curTex: texture_2d<f32>,
+  motionTex: texture_2d<f32>,
+  histTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  curInvVp: mat4x4<f32>,
+  prevVp: mat4x4<f32>,
+  nearFar: vec2<f32>,
+  phase: vec4<f32>,
+  cfg: vec4<f32>
+) -> vec4<f32> {
+  let curDims = vec2<i32>(textureDimensions(curTex, 0));
+  let histDims = vec2<i32>(textureDimensions(histTex, 0));
+  let maxC = curDims - vec2<i32>(1, 1);
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let P = clamp(vec2<i32>(floor(st * vec2<f32>(histDims))), vec2<i32>(0, 0), histDims - vec2<i32>(1, 1));
+  let c = clamp(P / 2, vec2<i32>(0, 0), maxC);
+  let sub = P - c * 2;
+  let cur = textureLoad(curTex, c, 0);
+  let dbg = phase.z > 0.5;
+
+  // Sampled this frame? v2 (owner 2026-09-23: 'shimmering ... flips back and forth' in motion): the
+  // fresh pixel no longer bypasses history. When a block's history is rejected, an exact pixel beside
+  // three soft fallback pixels — with WHICH pixel is exact rotating every frame — was a 4-frame
+  // flicker that t16 sharpened. Now every pixel of a block takes the same path: reprojected history
+  // (the fresh sample BLENDS into it, cfg.w) or, when rejected, the same soft quarter-scale fill.
+  let direct = phase.w < 0.5 && sub.x == i32(phase.x) && sub.y == i32(phase.y);
+  let freshA = select(0.5, cfg.w, cfg.w > 0.0);
+
+  // The current 3x3 coarse neighbourhood: colour range for the clamp, whether it mixes hit and miss,
+  // and the nearest hit (depth + motion donor) when c itself missed.
+  var lo = vec3<f32>(1e9);
+  var hi = vec3<f32>(-1e9);
+  var anyHit = false;
+  var anyMiss = false;
+  var donor = c;
+  var donorD = 1e9;
+  for (var dy = -1; dy <= 1; dy++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      let q = clamp(c + vec2<i32>(dx, dy), vec2<i32>(0, 0), maxC);
+      let nb = textureLoad(curTex, q, 0);
+      if (nb.w < 1.0) {
+        anyHit = true;
+        lo = min(lo, nb.xyz);
+        hi = max(hi, nb.xyz);
+        let dd = f32(dx * dx + dy * dy);
+        if (dd < donorD) { donorD = dd; donor = q; }
+      } else { anyMiss = true; }
+    }
+  }
+
+  // Fallback: this frame's quarter-scale sample, bilinear over hit taps at P's centre.
+  var fb = cur;
+  if (cur.w < 1.0) {
+    let f = (vec2<f32>(P) + vec2<f32>(0.5, 0.5)) * 0.5 - vec2<f32>(0.5, 0.5);
+    let i0 = vec2<i32>(floor(f));
+    let fr = f - vec2<f32>(i0);
+    let a00 = textureLoad(curTex, clamp(i0, vec2<i32>(0, 0), maxC), 0);
+    let a10 = textureLoad(curTex, clamp(i0 + vec2<i32>(1, 0), vec2<i32>(0, 0), maxC), 0);
+    let a01 = textureLoad(curTex, clamp(i0 + vec2<i32>(0, 1), vec2<i32>(0, 0), maxC), 0);
+    let a11 = textureLoad(curTex, clamp(i0 + vec2<i32>(1, 1), vec2<i32>(0, 0), maxC), 0);
+    let w00 = (1.0 - fr.x) * (1.0 - fr.y) * select(0.0, 1.0, a00.w < 1.0);
+    let w10 = fr.x * (1.0 - fr.y) * select(0.0, 1.0, a10.w < 1.0);
+    let w01 = (1.0 - fr.x) * fr.y * select(0.0, 1.0, a01.w < 1.0);
+    let w11 = fr.x * fr.y * select(0.0, 1.0, a11.w < 1.0);
+    let ws = w00 + w10 + w01 + w11;
+    if (ws > 1e-5) { fb = vec4<f32>((a00.xyz * w00 + a10.xyz * w10 + a01.xyz * w01 + a11.xyz * w11) / ws, cur.w); }
+  }
+  if (phase.w > 0.5 || !anyHit) {
+    if (dbg && anyHit) { return vec4<f32>(0.9, 0.1, 0.1, fb.w); }
+    return fb;
+  }
+
+  // Reproject P's own centre with the donor's depth and object motion.
+  let dsrc = textureLoad(curTex, donor, 0);
+  let stP = (vec2<f32>(P) + vec2<f32>(0.5, 0.5)) / vec2<f32>(histDims);
+  let ndc = vec2<f32>(stP.x * 2.0 - 1.0, 1.0 - stP.y * 2.0);
+  let world = curInvVp * vec4<f32>(ndc, dsrc.w, 1.0);
+  var worldPrev = world.xyz / world.w;
+  if (cfg.x > 0.5) {
+    let mv = textureLoad(motionTex, donor, 0);
+    if (mv.w > 0.5) { worldPrev = worldPrev + mv.xyz; }
+  }
+  let clipPrev = prevVp * vec4<f32>(worldPrev, 1.0);
+  var histOk = false;
+  var hist = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  if (clipPrev.w > 0.0) {
+    let ndcPrev = clipPrev.xy / clipPrev.w;
+    let stPrev = vec2<f32>((ndcPrev.x + 1.0) * 0.5, (1.0 - ndcPrev.y) * 0.5);
+    if (stPrev.x >= 0.0 && stPrev.x <= 1.0 && stPrev.y >= 0.0 && stPrev.y <= 1.0) {
+      // FILTERED HISTORY (owner 2026-09-23: stable in motion 'but still looks really low res'). A
+      // NEAREST history fetch under continuous sub-pixel motion duplicates some pixels and drops
+      // others every frame, and the error compounds — the image stair-steps even though each frame's
+      // fresh samples are exact. Catmull-Rom over the 4x4 around the reprojected point (flesh taps
+      // only, renormalised) resamples at the true sub-pixel position without the bilinear blur;
+      // its overshoot is caught by the neighbourhood clamp below. Depth/coverage stay NEAREST: a
+      // filtered depth describes no surface.
+      let hMax = histDims - vec2<i32>(1, 1);
+      let hp = stPrev * vec2<f32>(histDims) - vec2<f32>(0.5, 0.5);
+      let hb = vec2<i32>(floor(hp));
+      let ht = hp - vec2<f32>(hb);
+      let hIdx = clamp(vec2<i32>(floor(stPrev * vec2<f32>(histDims))), vec2<i32>(0, 0), hMax);
+      hist = textureLoad(histTex, hIdx, 0);
+      histOk = true;
+      if (hist.w < 1.0) {
+        var acc = vec3<f32>(0.0);
+        var wsum = 0.0;
+        for (var j = -1; j <= 2; j++) {
+          let ty = abs(f32(j) - ht.y);
+          let wy = select(select(0.0, ((-0.5 * ty + 2.5) * ty - 4.0) * ty + 2.0, ty < 2.0), (1.5 * ty - 2.5) * ty * ty + 1.0, ty < 1.0);
+          for (var i = -1; i <= 2; i++) {
+            let tx = abs(f32(i) - ht.x);
+            let wx = select(select(0.0, ((-0.5 * tx + 2.5) * tx - 4.0) * tx + 2.0, tx < 2.0), (1.5 * tx - 2.5) * tx * tx + 1.0, tx < 1.0);
+            let tap = textureLoad(histTex, clamp(hb + vec2<i32>(i, j), vec2<i32>(0, 0), hMax), 0);
+            if (tap.w < 1.0) { acc = acc + tap.xyz * (wx * wy); wsum = wsum + wx * wy; }
+          }
+        }
+        if (wsum > 0.05) { hist = vec4<f32>(max(acc / wsum, vec3<f32>(0.0)), hist.w); }
+      }
+    }
+  }
+  // COLOUR validity (the v2 depth test): is the history the surface that was here?
+  var colOk = false;
+  if (histOk && hist.w < 1.0) {
+    let lin = nearFar.x * nearFar.y;
+    let span = nearFar.y - nearFar.x;
+    let expected = lin / (nearFar.y - (clipPrev.z / clipPrev.w) * span);
+    let stored = lin / (nearFar.y - hist.w * span);
+    colOk = cfg.y <= 0.0 || abs(stored - expected) <= cfg.y + 0.02 * expected;
+  }
+
+  // COVERAGE and COLOUR are decided separately (owner 2026-09-23: close edges 'always this really low
+  // res stairstep'). Tying coverage to colour validity threw the silhouette back to quarter-scale
+  // steps exactly where colour history fails most — the background behind an edge. Coverage instead:
+  //   - the pixel shot this frame: its own ray, exact (a real ray cannot flicker the way colour does);
+  //   - other pixels in a silhouette band (the coarse 3x3 mixes hit and miss): the REPROJECTED history's
+  //     coverage, moved with the body's motion but NOT depth-gated — an edge moves continuously, so its
+  //     coverage stays valid when its colour does not; outside the band the neighbourhood decides.
+  var covered = cur.w < 1.0;
+  if (direct) { covered = cur.w < 1.0; }
+  else if (anyHit && anyMiss) { covered = select(cur.w < 1.0, hist.w < 1.0, histOk); }
+  else { covered = anyHit; }
+  if (!covered) {
+    if (dbg) { return vec4<f32>(0.1, 0.1, 0.9, 1.0); }
+    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  }
+
+  // Colour for a covered pixel: kept history (clamped; the fresh sample blends in), else the fresh
+  // sample itself (direct), else the quarter-scale fill — never a hard switch between neighbours.
+  var col = fb.xyz;
+  if (fb.w >= 1.0) { col = dsrc.xyz; }
+  var src = 0;
+  if (colOk) {
+    col = hist.xyz;
+    if (cfg.z > 0.5) { col = clamp(col, lo, hi); }
+    if (direct && cur.w < 1.0) { col = mix(col, cur.xyz, freshA); }
+    src = 1;
+  } else if (direct && cur.w < 1.0) {
+    col = cur.xyz;
+    src = 2;
+  }
+  // Depth: the pixel's own ray when it has one, else the donor's CURRENT depth (never a blend).
+  let depth = select(dsrc.w, cur.w, direct && cur.w < 1.0);
+  if (dbg) {
+    if (src == 2 || (direct && src == 1)) { return vec4<f32>(0.1, 0.9, 0.1, depth); }
+    if (src == 1) { let g = dot(col / (col + vec3<f32>(1.0)), vec3<f32>(0.3, 0.5, 0.2)); return vec4<f32>(g, g, g, depth); }
+    return vec4<f32>(0.9, 0.1, 0.1, depth);
+  }
+  return vec4<f32>(col, depth);
+}`;
+
 const composite = wgslFn(COMPOSITE_WGSL);
 const temporalAccum = wgslFn(TEMPORAL_ACCUM_WGSL);
+const checkerAccum = wgslFn(CHECKER_ACCUM_WGSL);
+/** DISTANCE SPLIT merge (owner idea 2026-09-23): the near pass (quarter-scale checker) ends its rays at
+ *  D, the far pass marches REAL half-scale rays from D on, into a target on the checker's own grid. A
+ *  pixel the near result leaves empty takes the far ray; where both hit, near wins (it is nearer than
+ *  D by construction). split.x = on, split.y = debug tint (far pixels blue). */
+export const CHECKER_MERGE_WGSL = /* wgsl */ `fn checkerMerge(
+  inner: vec4<f32>,
+  farTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  split: vec4<f32>
+) -> vec4<f32> {
+  if (split.x < 0.5 || inner.w < 1.0) { return inner; }
+  let dims = vec2<i32>(textureDimensions(farTex, 0));
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let P = clamp(vec2<i32>(floor(st * vec2<f32>(dims))), vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+  let far = textureLoad(farTex, P, 0);
+  if (far.w >= 1.0) { return inner; }
+  if (split.y > 0.5) { return vec4<f32>(0.1, 0.3, 0.9, far.w); }
+  return far;
+}`;
+const checkerMerge = wgslFn(CHECKER_MERGE_WGSL);
 
 /**
  * WHOLE-FRAME INTERLEAVE. In field mode the ENTIRE layer — polygonal scene,
@@ -1011,7 +1225,9 @@ export interface SdfLayer {
   setTemporalAccum(on: boolean, alpha?: number): boolean;
   /** Accumulation v2 knobs (MOTION-VECTORS-PLAN.md step 2): object motion (needs the boot's marchMotion),
    *  depth-validity tolerance in metres (0 = off), neighbourhood clamp. All three off = v1. */
-  setTemporalAccumCfg(cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean }): { motion: boolean; depthTolM: number; clamp: boolean; motionAvailable: boolean };
+  /** Checker reconstruction on (read-only; setTemporalAccumCfg resets the history). */
+  readonly checkerAccum: boolean;
+  setTemporalAccumCfg(cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean; checker?: boolean; checkerDebug?: boolean; freshBlend?: number; splitM?: number }): { motion: boolean; depthTolM: number; clamp: boolean; motionAvailable: boolean; checker: boolean; checkerDebug: boolean; freshBlend: number; splitM: number };
   /** NEURAL UPSCALE STAGE (spec docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md).
    *  march -> upscale -> composite. `null` turns it off. On: forces field style
    *  'off' and refuses temporal accumulation (stacking is P5); the composite reads
@@ -1243,10 +1459,25 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   const uAccumAlpha = uniform(TEMPORAL_ACCUM_DEFAULT_ALPHA);
   // v2 (MOTION-VECTORS-PLAN.md step 2): x object motion on (needs options.marchMotion), y depth-validity
   // tolerance in metres (0 = off), z neighbourhood clamp on. Defaults = v2 fully on when motion exists.
-  const uAccumCfg = uniform(new THREE.Vector4(options.marchMotion === true ? 1 : 0, 0.03, 1, 0));
+  // w: checker fresh-sample blend (0 -> 0.5 default; 1 = take the fresh sample outright).
+  const uAccumCfg = uniform(new THREE.Vector4(options.marchMotion === true ? 1 : 0, 0.03, 1, 0.5));
   const uAccumNearFar = uniform(new THREE.Vector2(0.1, 200));
   const accumMotionFallback = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
   accumMotionFallback.needsUpdate = true;
+  const ckMotionFallback = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
+  ckMotionFallback.needsUpdate = true;
+  // CHECKER RECONSTRUCTION (ACCUM-UPSCALE-STACK-PLAN.md step 1): history on the 2x-march grid (the grid
+  // t16 consumes), ping-ponged by copy like accumPrev/accumNext. phase: x, y = the sub-pixel sampled this
+  // frame, z = debug colours, w = seed.
+  const ckPrev = new THREE.RenderTarget(1, 1, { ...accumOpts });
+  const ckNext = new THREE.RenderTarget(1, 1, { ...accumOpts });
+  const uCkPhase = uniform(new THREE.Vector4(0, 0, 0, 1));
+  let checkerOn = false;
+  /** The upscale stage was built on the checker history (stacked), not on the march target. */
+  let upscaleStacked = false;
+  let checkerDebug = false;
+  /** The fixed 2x2 cycle: every sub-position once per 4 frames. */
+  const CHECKER_ORDER: ReadonlyArray<readonly [number, number]> = [[0, 0], [1, 0], [1, 1], [0, 1]];
   // The two cameras the reprojection needs: this frame's inverse (to unproject
   // the current depth) and the PREVIOUS frame's (to project into the history).
   const uAccumCurInvVp = uniform(new THREE.Matrix4());
@@ -1324,6 +1555,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     ...(marchMotionOn ? ['marchMotion'] : [])];
   marchAttachments.forEach((name, i) => { target.textures[i]!.name = name; });
   const marchMotionTexture = marchMotionOn ? target.textures[marchAttachments.indexOf('marchMotion')]! : null;
+  // DISTANCE SPLIT: the far pass's target, on the checker grid (2x the march), with the SAME attachment
+  // layout and names as `target` so the march pipelines and the renderer-level MRT serve both.
+  const farTarget = new THREE.RenderTarget(1, 1, {
+    depthBuffer: true, type: THREE.FloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    count: marchAttachments.length,
+  });
+  marchAttachments.forEach((name, i) => { farTarget.textures[i]!.name = name; });
+  const uCkSplit = uniform(new THREE.Vector4(0, 0, 0, 0));
+  /** Distance split in metres (0 = off): near pass (checker) < D <= far pass (real half-scale rays). */
+  let splitM = 0;
   if (marchAttachments.length > 1) {
     const n = marchNormals ? marchNormalRead({ dep: output as never }) as unknown as { xyz: unknown; w: unknown } : null;
     marchMrt = mrt({
@@ -1771,6 +2012,31 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   accumQuad.frustumCulled = false;
   const accumScene = new THREE.Scene();
   accumScene.add(accumQuad);
+  const ckMat = new THREE.MeshBasicNodeMaterial();
+  const ckOut = checkerAccum({
+    curTex: texture(target.texture),
+    motionTex: texture(marchMotionTexture ?? ckMotionFallback),
+    histTex: texture(ckPrev.texture),
+    texCoord: uv(),
+    flipY: uFlipY,
+    curInvVp: uAccumCurInvVp,
+    prevVp: uAccumPrevVp,
+    nearFar: uAccumNearFar,
+    phase: uCkPhase,
+    cfg: uAccumCfg,
+  }) as unknown as { xyz: unknown; w: unknown };
+  const ckMerged = checkerMerge({
+    inner: ckOut as never, farTex: texture(farTarget.texture), texCoord: uv(), flipY: uFlipY, split: uCkSplit,
+  }) as unknown as { xyz: unknown; w: unknown };
+  // colorNode AND outputNode: alpha is the clip depth the composite (and t16) read, see accumMat.
+  ckMat.colorNode = vec4(ckMerged.xyz as never, ckMerged.w as never);
+  ckMat.outputNode = vec4(ckMerged.xyz as never, ckMerged.w as never);
+  ckMat.depthTest = false;
+  ckMat.depthWrite = false;
+  const ckQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), ckMat);
+  ckQuad.frustumCulled = false;
+  const ckScene = new THREE.Scene();
+  ckScene.add(ckQuad);
 
   /** Cone footprint radius per unit distance for a tile of `px` pixels.
    *  `coneKFor(1)` is the ONE-PIXEL footprint the march's AA epsilon wants —
@@ -1811,8 +2077,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     // reconstructs. Reallocating it also invalidates its contents, so reset.
     accumPrev.setSize(fullW, fullH);
     accumNext.setSize(fullW, fullH);
+    ckPrev.setSize(Math.max(1, 2 * w), Math.max(1, 2 * h));
+    farTarget.setSize(Math.max(1, 2 * w), Math.max(1, 2 * h));
+    ckNext.setSize(Math.max(1, 2 * w), Math.max(1, 2 * h));
     // The upscale stage reads the march grid and writes the output grid.
-    upscale?.setSize(w, h, fullW, fullH);
+    upscale?.setSize(upscaleStacked ? 2 * w : w, upscaleStacked ? 2 * h : h, fullW, fullH);
     if (detailScene) detailTarget.setSize(Math.max(1, fullW), Math.max(1, fullH));
     if (refineOn) {
       refineTarget!.setSize(Math.max(1, fullW), Math.max(1, fullH));
@@ -1986,6 +2255,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         // --- the layer's own fullscreen passes -------------------------------
         await compile('prev-blit', blitScene, quadCam, prev);
         if (accumOn) await compile('accum', accumScene, quadCam, accumNext);
+        if (accumOn && checkerOn) await compile('checker', ckScene, quadCam, ckNext);
         if (detailScene) await compile('detail', detailScene, quadCam, detailTarget);
         if (refineViewScene && refineViewTarget) await compile('refine-view', refineViewScene, quadCam, refineViewTarget);
         await compile('composite', quadScene, quadCam, outputTarget);
@@ -2265,7 +2535,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       // output pixel each frame, i.e. what turns accumulation into reconstruction
       // rather than blur. Indexed by frames-since-epoch, so it is deterministic
       // AND advancing (see temporal-accum.ts — do NOT freeze it for recordings).
-      if (accumOn) {
+      const splitNow = accumOn && checkerOn && splitM > 0;
+      // Near pass window: rays end at D (the far pass below marches D onward at half scale).
+      depthPreUniforms.cfg.value.w = splitNow ? splitM : 0;
+      if (accumOn && checkerOn) {
+        // Fixed 2x2 cycle, in FULL-RES pixels: the march texel spans k = fullW / marchW of them and the
+        // 2x-grid sub-pixel centres sit k/4 either side of its centre. setViewOffset shifts each
+        // texel's sample by (+x right, +y down), the same convention the resolve's sub index uses.
+        const [sx, sy] = CHECKER_ORDER[accumFrames % 4]!;
+        const kx = fullW / target.width, ky = fullH / target.height;
+        camera.setViewOffset(fullW, fullH, (sx ? 1 : -1) * kx / 4, (sy ? 1 : -1) * ky / 4, fullW, fullH);
+      } else if (accumOn) {
         const [jx, jy] = accumJitter(accumFrames);
         camera.setViewOffset(fullW, fullH, jx, jy, fullW, fullH);
       } else if (marchJitter) {
@@ -2331,6 +2611,30 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         renderer.setRenderTarget(target);
         withMarchMrt(() => renderer.render(scene, camera));
       }
+      // DISTANCE SPLIT FAR PASS: real half-scale rays from D onward, UNJITTERED, into the checker-grid
+      // target the resolve merges. Near bodies discard at their proxy (tMax < D), so this costs only the
+      // far bodies' pixels.
+      if (splitNow) {
+        camera.clearViewOffset();
+        setPassLabel('sdf:march-far');
+        depthPreUniforms.cfg.value.w = -splitM;
+        const farMask = camera.layers.mask;
+        camera.layers.set(SDF_LAYER);
+        renderer.setRenderTarget(farTarget);
+        // Alpha 1 = the "nothing here" sentinel (clip depth), as the refine pass forces it: a cleared-0
+        // alpha would read as a hit at depth 0 everywhere the far pass drew nothing.
+        const farPrevAlpha = renderer.getClearAlpha();
+        renderer.setClearAlpha(1);
+        renderer.clear();
+        renderer.setClearAlpha(farPrevAlpha);
+        const farAuto = renderer.autoClear;
+        renderer.autoClear = false;
+        withMarchMrt(() => renderer.render(scene, camera));
+        renderer.autoClear = farAuto;
+        camera.layers.mask = farMask;
+        depthPreUniforms.cfg.value.w = 0;
+      }
+      (uCkSplit.value as THREE.Vector4).set(splitNow ? 1 : 0, checkerDebug ? 1 : 0, 0, 0);
       // TEMPORAL START copy (plan 2026-09-10): the marched layer, final for
       // this frame, and the inverse of the VP that rendered it — paired here
       // so the fetch can never unproject with the wrong camera. Marched
@@ -2357,12 +2661,23 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         (uAccumCurInvVp.value as THREE.Matrix4).copy(_curVp).invert();
         (uAccumNearFar.value as THREE.Vector2).set(camera.near, camera.far);
         (uAccumAlpha.value as number) = accumSeed ? 1 : accumAlpha(accumFrames);
-        renderer.setRenderTarget(accumNext);
         const prevAccumAuto = renderer.autoClear;
         renderer.autoClear = false;
-        void renderer.render(accumScene, quadCam);
+        if (checkerOn) {
+          const [sx, sy] = CHECKER_ORDER[accumFrames % 4]!;
+          (uCkPhase.value as THREE.Vector4).set(sx, sy, checkerDebug ? 1 : 0, accumSeed ? 1 : 0);
+          renderer.setRenderTarget(ckNext);
+          void renderer.render(ckScene, quadCam);
+          renderer.copyTextureToTexture(ckNext.texture, ckPrev.texture);
+          // Stacked: t16 reads ckNext and the composite reads t16's output (set by setUpscale).
+          if (!upscale) accumTexNode.value = ckNext.texture;
+        } else {
+          renderer.setRenderTarget(accumNext);
+          void renderer.render(accumScene, quadCam);
+          renderer.copyTextureToTexture(accumNext.texture, accumPrev.texture);
+          accumTexNode.value = accumNext.texture;
+        }
         renderer.autoClear = prevAccumAuto;
-        renderer.copyTextureToTexture(accumNext.texture, accumPrev.texture);
         // The NEXT frame reprojects against THIS frame's camera, so the pairing
         // (history, camera) can never drift — the same reasoning the temporal
         // start's invVp copy follows.
@@ -2575,8 +2890,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     },
     get heldReproject() { return heldReproject; },
     setTemporalAccum(on, alpha) {
-      if (on && upscale) {
-        console.warn('[sdf-layer] temporal accumulation refused while the upscale stage is on (stacking is P5)');
+      if (on && upscale && !upscaleStacked) {
+        console.warn('[sdf-layer] temporal accumulation refused while the upscale stage is on (only a stage built on the checker history stacks)');
         return accumOn;
       }
       if (on) marchJitter = null;
@@ -2598,24 +2913,34 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       return accumOn;
     },
     resetTemporalAccum() { resetAccum(); },
+    get checkerAccum() { return checkerOn; },
     setTemporalAccumCfg(cfg) {
       const v = uAccumCfg.value as THREE.Vector4;
       if (cfg.motion !== undefined) v.x = cfg.motion && marchMotionOn ? 1 : 0;
       if (cfg.depthTolM !== undefined) v.y = Math.max(0, cfg.depthTolM);
       if (cfg.clamp !== undefined) v.z = cfg.clamp ? 1 : 0;
+      if (cfg.checker !== undefined) checkerOn = cfg.checker;
+      if (cfg.checkerDebug !== undefined) checkerDebug = cfg.checkerDebug;
+      if (cfg.freshBlend !== undefined) v.w = Math.min(1, Math.max(0.01, cfg.freshBlend));
+      if (cfg.splitM !== undefined) splitM = Math.max(0, cfg.splitM);
       resetAccum();
-      return { motion: v.x > 0.5, depthTolM: v.y, clamp: v.z > 0.5, motionAvailable: marchMotionOn };
+      return { motion: v.x > 0.5, depthTolM: v.y, clamp: v.z > 0.5, motionAvailable: marchMotionOn, checker: checkerOn, checkerDebug, freshBlend: v.w, splitM };
     },
     setUpscale(config, model, options) {
       if (config === null) {
         upscale?.dispose();
         upscale = null;
-        accumTexNode.value = accumNext.texture;
+        upscaleStacked = false;
+        accumTexNode.value = accumOn && checkerOn ? ckNext.texture : accumNext.texture;
         (uAccumOn.value as number) = accumOn ? 1 : 0;
         return upscaleInfoOf(null);
       }
-      if (accumOn) {
-        console.warn('[sdf-layer] upscale: turning temporal accumulation OFF (the two do not stack until P5)');
+      // STACK (ACCUM-UPSCALE-STACK-PLAN.md step 2): checker reconstruction rebuilds the 2x-march grid the
+      // stage consumes, so the stage reads that history instead of the march. Any other accumulation
+      // still does not stack.
+      const stacked = accumOn && checkerOn;
+      if (accumOn && !stacked) {
+        console.warn('[sdf-layer] upscale: turning temporal accumulation OFF (only the checker path stacks)');
         this.setTemporalAccum(false);
       }
       if (fieldStyle !== 'off') this.setFieldStyle('off');
@@ -2623,12 +2948,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       if (inputsUseNormals(config.inputs) && !marchNormals) {
         throw new Error(`upscale: input set ${config.inputs} needs march normals — boot with ?upscale=... so the layer allocates the attachment`);
       }
-      const next = createUpscaleStage(config, target.texture, uFlipY, model, marchNormals ? target.textures[1] : undefined,
+      const next = createUpscaleStage(config, stacked ? ckNext.texture : target.texture, uFlipY, model, marchNormals && !stacked ? target.textures[1] : undefined,
         detailScene ? detailTarget.texture : undefined,
         refineTarget ? { n: refineTarget.textures[1]!, c: refineTarget.textures[0]! } : undefined, options);
       upscale?.dispose();
       upscale = next;
-      upscale.setSize(target.width, target.height, fullW, fullH);
+      upscaleStacked = stacked;
+      upscale.setSize(stacked ? ckNext.width : target.width, stacked ? ckNext.height : target.height, fullW, fullH);
       accumTexNode.value = upscale.output.texture;
       (uAccumOn.value as number) = 1;
       return upscaleInfoOf(upscale);
@@ -2637,7 +2963,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     get marchAnchorTexture() { return marchNormals ? target.textures[2]! : null; },
     // Last attachment: slot 3 beside the normals pair, slot 1 when alone —
     // the same slot rule the naming above follows.
-    get marchBurnTexture() { return marchBurnOn ? target.textures[target.textures.length - 1]! : null; },
+    get marchBurnTexture() { return marchBurnOn ? target.textures[marchAttachments.indexOf('marchBurn')]! : null; },
     get detailTarget() { return detailScene ? detailTarget : null; },
     setDetailJumpMax(m) { (uDetailJumpMax.value as number) = Math.max(0.001, m); },
     get upscaleInfo() { return upscaleInfoOf(upscale); },
@@ -2776,7 +3102,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     /** One-pixel footprint radius per unit distance, for the march's AA
      *  epsilon. Derived from the SDF pass height, so it follows the adaptive
      *  resolution ladder automatically. */
-    get pixelConeK() { return coneKFor(1); },
+    // Checker reconstruction rebuilds a grid of HALF-size pixels (2x the march), so the one-pixel hit
+    // tolerance is that pixel, not the march texel — else edges fatten by the march pixel (the 0.25 halo).
+    get pixelConeK() { return coneKFor(1) * (accumOn && checkerOn ? 0.5 : 1); },
     dispose() {
       upscale?.dispose();
       target.dispose();

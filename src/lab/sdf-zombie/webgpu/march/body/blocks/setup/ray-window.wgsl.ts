@@ -48,5 +48,12 @@ export const RAY_WINDOW_BLOCK = /* wgsl */ `  let tMaxBox = length(worldPos - ca
   let bodyEntry = select(boxEntry, gTileEntryT, quadMode);
   if (quadMode && bodyEntry > 1e8) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
-  let tMax = min(tMaxSel, prevT);
+  // DISTANCE SPLIT (ACCUM-UPSCALE-STACK-PLAN.md, owner idea 2026-09-23): depthPreCfg.w > 0 = the NEAR
+  // pass, rays end at w metres; w < 0 = the FAR pass, rays start at -w; 0 = off (every ship frame, so
+  // tMax is the old min and winFar folds away in the loop's max). Near bodies go through the quarter-
+  // scale checker, far ones get real half-scale rays.
+  let winNear = select(1e9, depthPreCfg.w, depthPreCfg.w > 0.0);
+  let winFar = select(0.0, -depthPreCfg.w, depthPreCfg.w < 0.0);
+  let tMax = min(min(tMaxSel, prevT), winNear);
+  if (bodyEntry > winNear || tMax < winFar) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let steps = i32(marchCfg.x);`;

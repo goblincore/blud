@@ -200,12 +200,17 @@ async function bootAndStage({ firstBoot = false } = {}) {
   // the ship state; the only departure is an empty blood sim for the first two phases.
   await ev('__sdfGame.setWoundTuning({ spillChance: 0 }); 1');
   let up = null;
-  for (let i = 0; i < (firstBoot ? 120 : 24); i++) {
+  // MELEE_NO_UPSCALE=1 (2026-09-23): a page booted WITHOUT the shipped stage on purpose (e.g. MELEE_QS
+  // '&accum=1', which skips it — accumulation and the stage do not stack yet). The 'ship' leg is then
+  // NOT the shipped frame; the run's report must say so.
+  const noUpscale = process.env.MELEE_NO_UPSCALE === '1';
+  for (let i = 0; i < (noUpscale ? 0 : firstBoot ? 120 : 24); i++) {
     up = await ev('window.__sdfGame.upscaleInfo()');
     if (up?.on) break;
     await sleep(500);
   }
-  if (!up?.on) fail(`shipped upscaler never came on: ${JSON.stringify(up)}`);
+  if (noUpscale) up = await ev('window.__sdfGame.upscaleInfo()');
+  else if (!up?.on) fail(`shipped upscaler never came on: ${JSON.stringify(up)}`);
   await ev('__sdfGame.setFrameCap(0)');
   const snap = await ev(SNAPSHOT_JS);
   await ev(RESTORE_JS(snap));

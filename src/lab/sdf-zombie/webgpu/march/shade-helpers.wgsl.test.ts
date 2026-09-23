@@ -91,7 +91,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     ]);
     // The temporal start folds in AFTER preStart, with bodyEntry as the
     // sixth lower-bound term (see the other pin above for the argument).
-    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);');
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), winFar), 0.0, tMax);');
     expect(MARCH_BODY).toContain('temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg)');
     // Own-body gate + inside check: the reprojected point must sit in THIS
     // body's box and the start must be outside the field AND outside a
