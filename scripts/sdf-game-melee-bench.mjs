@@ -65,6 +65,7 @@
 // hits of every body already marching; (2) each crowd type's colour atlas
 // flushes lazily, so reads before the flush show proxies with zero hits —
 // staging waits for every attached type to flush before measuring.
+import { hardMask, pixelCost, sparseFraction } from './lib/hybrid-estimate.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import {
@@ -407,6 +408,33 @@ async function capturePhase(phase, withWounds) {
         const dw = (a.primShare.walk * P) - (b.primShare.walk * cl.totals.prims);
         const dp = (a.primShare.post * P) - (b.primShare.post * cl.totals.prims);
         console.log(`    ${k.padEnd(10)} px ${String(a.px).padStart(6)}/${String(b.px).padStart(6)} | extra prims walk ${dw.toFixed(0).padStart(8)} (${pct(dw / Math.max(1, P))}) post ${dp.toFixed(0).padStart(8)} (${pct(dp / Math.max(1, P))})`);
+      }
+    }
+    // MELEE_HYBRID_EST=1 (2026-09-22, docs/dev-notes/2026-09-22-cost-census/HYBRID-TIMING-PLAN.md step 0):
+    // what a sparse full-res pass over the hybrid's HARD pixels would cost, on this frozen frame. The
+    // mask comes from a coarse read (colour/depth + mode-11 prim ids + head circles), exactly as the
+    // engine would build it; it is priced against the mode-13/14 census of a 1.0 march, warp-pessimistic.
+    // Hit tolerance OFF throughout (owner: it is a perf side-effect, not the look).
+    if (process.env.MELEE_HYBRID_EST === '1') {
+      const { near, far } = await ev('__sdfGame.upscaleInfo()');
+      const f32 = (r) => { const b = Buffer.from(r.rgba32f, 'base64'); return new Float32Array(b.buffer, b.byteOffset, b.byteLength >> 2); };
+      const off = '__sdfGame.setAa(0); __sdfGame.setAaDistance(0, 3);';
+      await ev('__meleeShipRestore()');
+      await ev(`(() => { ${off} __sdfGame.setSdfScale(1.0); return 1; })()`);
+      const f13 = await settledRead(13), f14 = await settledRead(14);
+      const W = f13.w, H = f13.h;
+      const cost = pixelCost(f32(f13), f32(f14), W * H);
+      const heads = (await ev(`__sdfGame.captureAnnotations(${W}, ${H})`)).map((a) => a.head).filter(Boolean);
+      census.hybrid = {};
+      for (const scale of [0.25, 0.35]) {
+        await ev('__meleeShipRestore()');
+        await ev(`(() => { ${off} __sdfGame.setSdfScale(${scale}); return 1; })()`);
+        const col = await settledRead(0), ids = await settledRead(11);
+        const mask = hardMask({ w: col.w, h: col.h, data: f32(col) }, { w: ids.w, h: ids.h, data: f32(ids) }, heads, W, H, { near, far });
+        const r = sparseFraction(cost, mask, W, H);
+        census.hybrid[scale] = { coarse: [col.w, col.h], full: [W, H], ...r };
+        console.log(`  HYBRID [${phase}] coarse ${scale} (${col.w}x${col.h}): hard ${pct(r.hardPxShare)} of rasterised px, `
+          + `${pct(r.hardTileShare)} of warps; sparse pass = ${pct(r.fraction)} of the 1.0 march (warp-priced; per-pixel ${pct(r.plainFraction)})`);
       }
     }
     await ev('__meleeShipRestore()');
