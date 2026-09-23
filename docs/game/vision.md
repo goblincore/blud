@@ -99,6 +99,9 @@ flat, except the one moment that earns it (§9, ending 1).
 5. **The goblin is always smaller than the room.** Except in the flat.
 6. **What comes out, stays.** Things from the FPS arrive in the flat and remain.
 7. **The layers leak more as the game goes on.**
+8. **Space doesn't give.** Everything else in the game is soft sooner or later. The
+   stars are the one clean, cold, beautiful thing, and the train burns flesh to
+   reach them (§10.3). Only the Party can spoil them.
 
 ## 5. The Never list
 
@@ -111,6 +114,8 @@ Adding to this list is cheap. Removing from it needs a real reason.
 - Whether the Host's heartbeat and the knock are the same thing.
 - Whether anything can go *into* the screen.
 - The goblin's face. At most: hands, a shadow, a covered mirror.
+- Who runs the Line, where it started, and how a train flies.
+- What the Stoker is, and what it is feeding the fire with (you can see; it's never said).
 
 ## 6. Structure: three layers
 
@@ -118,7 +123,7 @@ Adding to this list is cheap. Removing from it needs a real reason.
 | --- | --- | --- |
 | **The Flat** | A small basement flat. Fully explorable, decorated over time, **never leavable** | First person, walk and look |
 | **The Desktop** | A made-up 90s OS on the beige CRT: the FPS, mail, files, a music player | Leaning into the monitor |
-| **The FPS** | The shareware shooter: ~10 levels off a small hub, the Cloakroom | Full screen, bezel almost gone |
+| **The FPS** | The shareware shooter: ~10 levels, stops on a train line that runs up into space (§10.3) | Full screen, bezel almost gone |
 
 **Moving between layers is a camera move, never a menu.** Sitting down leans
 into the monitor; launching the game pushes in until the bezel is a faint edge
@@ -248,12 +253,51 @@ character: dirty nails, knuckle hair, rings stolen from guests.
 | **Scavenge** | Weapons are junk stolen from guests |
 | **Giggle** | The only voice: giggles on kills, wheezes when hurt |
 
-### 10.3 The Cloakroom (hub)
+### 10.3 The Line (hub) — decided 2026-09-23
 
-A dim cloakroom under the Party: endless rails of coats that may be skins, a
-counter, a bell nobody answers. **Each door opens onto a different world.**
-Claim tickets found in levels are redeemed at the counter; some can only be
-redeemed outside the game.
+**The train is the hub.** After the Wake, a train line runs past the back of the
+cemetery. You board in level 1, *Night Train*, fight carriage by carriage to the
+engine, and at the end the train leaves the rails and climbs into space. From
+then on, **the space between levels is the train**, and every level is a stop on
+the Line. The last stop is the terminus: the Party, which is Hell.
+
+This keeps the game abstract (the track is the only explanation for why each
+door opens onto a different world), keeps the hub linear and cheap to build (a
+chain of carriages that grows as you progress), and follows world law 1:
+height is closeness to the Party, and space is as far up as it goes.
+
+**The carriages (the hub proper).** Quiet between stops. Each finished level
+leaves something behind in the carriages, so the train fills up as the flat does.
+- **The coat-check carriage** is the old Cloakroom, moved on board: rails of
+  coats that may be skins, a counter, a bell nobody answers. Claim tickets are
+  redeemed here; some only work outside the game.
+- **A departure board** is the only text: the next stop's name, within the word
+  budget. No announcements, no conductor speaking.
+- **Windows show what can't be there:** your flat, a level you haven't reached,
+  the Party lit up far overhead, getting closer.
+
+**The Stoker (proposal).** The engine has no driver. It has a Stoker: a huge,
+soft figure in the cab, back always to you, shovelling into the firebox without
+stopping. **The fire runs on bodies.** You can see what goes in; the game never
+says. The goblin starts the game with a gravedigger's shovel; the Stoker is the
+same verb at the scale of the whole journey. It never turns round, never speaks,
+never fights. Between stops you can walk to the cab and watch it work. It is the
+one character who is always with you.
+- **Why it works:** it puts the game's thesis in one image: *the trip to the
+  stars is powered by flesh.* Aspiration fuelled by bodies, played straight.
+- **Alternatives if it doesn't land:** *the Conductor*, a thin figure who punches
+  your claim ticket at every carriage door (it becomes the ticket system); or
+  *the empty cab*, which drives itself and has a seat exactly goblin-sized.
+
+**Space.** Romantic, aspirational, and the opposite of everything else in the
+game, and that opposition is the point (world law 8).
+- **Stars are clean.** Deep blue-black, sharp points, slow nebulae, the prerender
+  look at its most beautiful. Nothing soft out there.
+- **The one wrong light:** from the lift-off on, a warm pink smear sits in one
+  window, far away. Each stop it is a little bigger. It's the Party, the tumour,
+  the terminus. By the last carriage it fills the glass.
+- **The Stoker's fire** is the only warm light in the cab, and the only thing on
+  the train that looks like the flesh outside the windows ahead.
 
 ### 10.4 Levels: a tour of classic FPS locations
 
@@ -262,15 +306,15 @@ the theme. Every level follows the same rules (§10.6).
 
 | # | Level | Type | What doesn't work | SDF showcase | Enemy spotlight | Phase |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0 | ***The Wake*** (demo) | Cemetery, funeral home | A wake with nobody left to mourn; a CD in an open coffin | First bodies, first gore | Zombies | Cold open |
-| 1 | ***The Keep*** | Gothic castle | A banquet for guests who never come | Stone that goes soft when shot | Gargoyles | Gentle |
-| 2 | ***Cold Storage*** | Research lab | Storage that keeps nothing; specimens keep themselves | Glass tanks | Soldiers, a bloatmaw in a tank | Gentle |
-| 3 | ***The Big Top*** | Circus | A show for empty seats | Rubbery, inflatable, pops | Clowns | Strange |
-| 4 | ***Night Train*** | Train | A party carriage on a line with no stations | Motion: carriages still, world moves | Passengers | Strange |
+| 0 | ***The Wake*** (demo) | Cemetery, funeral home | A wake with nobody left to mourn; a CD in an open coffin; the rail line runs past the back gate | First bodies, first gore | Zombies | Cold open |
+| 1 | ***Night Train*** | Train | A party carriage on a line with no stations; the engine at the front, the Stoker at the fire | Motion: carriages still, world moves; **the lift-off into space** | Passengers | Gentle |
+| 2 | ***The Keep*** | Gothic castle | A banquet for guests who never come | Stone that goes soft when shot | Gargoyles | Gentle |
+| 3 | ***Cold Storage*** | Research lab | Storage that keeps nothing; specimens keep themselves | Glass tanks | Soldiers, a bloatmaw in a tank | Strange |
+| 4 | ***The Big Top*** | Circus | A show for empty seats | Rubbery, inflatable, pops | Clowns | Strange |
 | 5 | ***The Ship*** | Alien sci-fi | Arranged for a crew shaped like no one | Impossible smooth geometry, low gravity | Cyclops | Strange |
 | 6 | ***The Works*** | Factory | Assembly lines making soft flesh dolls for no buyer | Half-assembled bodies | Gnashers, dolls | Sinister |
 | 7 | ***Floorfiller*** | Club | A dance floor that swells on the kick | Architecture pulsing to the beat | The crowd; **boss: the Headliner** | Sinister |
-| 8 | ***Hell*** | Hell | *Hell is upstairs*: the Party's top floor is a tumour | **The whole level is flesh** | **Boss: the Host** | Sinister |
+| 8 | ***Hell*** (the terminus) | Hell | *Hell is upstairs*: the last stop is the tumour the pink light always was | **The whole level is flesh** | **Boss: the Host** | Sinister |
 | S | ***Dollhouse*** (secret, from The Works) | — | The goblin's own flat at giant scale | Room furniture, huge | The mouse | — |
 | F | **Your flat** | — | The room you decorated | Gore in the flat, once | The Party | Finale |
 
@@ -333,7 +377,7 @@ minotaur, dragon, schoolgirl) must earn a role or be cut.
 | The Keep | The banquet bell or gong: the absent guests arrive to eat |
 | Cold Storage | Shoot the freezer controls: every tank thaws at once |
 | The Big Top | Cut the ropes: the tent comes down soft over the crowd |
-| Night Train | The emergency brake: everything in the carriages flies forward |
+| Night Train | **Feed the fire:** at the engine, blow the firebox open (or stuff it) and the boiler roars; the train leaves the rails and climbs into space. (The emergency brake is a smaller mid-level beat: everything in the carriages flies forward.) |
 | The Ship | Vent the airlock: low gravity becomes no gravity, bodies drift |
 | The Works | Start the line: the dolls come off the belt finished, and alive |
 | Floorfiller | Shoot the speaker stack: the drop hits, the room swells, the Headliner arrives |
@@ -348,7 +392,7 @@ combined, released under made-up artists.
 
 | Layer | Job |
 | --- | --- |
-| **Dungeon synth** | The Cloakroom, exploration, the lonely goblin |
+| **Dungeon synth** | The train between stops, exploration, the lonely goblin |
 | **Noise** | Dread, transitions, damage, walls breathing |
 | **Trap** | Weight and swagger: big guests, security |
 | **Hard gabber** | Combat peaks, the club, bosses |
@@ -412,3 +456,9 @@ extreme gore, loud music and poor manners."*
 6. **Lab vs. alien ship:** distinct enough?
 7. **Level count:** 9 main + secret + finale may still be one or two too many.
 8. **Flat layout:** one room, or one room plus a tiny bathroom?
+9. **The Stoker:** keep it, or the Conductor / the empty cab (§10.3)?
+10. **Boarding:** does the cold-open demo end on the CD (then the full game
+    resumes at the cemetery's back gate by the tracks), or does the demo include
+    the first glimpse of the train?
+11. **Between stops:** is the train hub free to walk at any time, or only
+    between levels? Can you ride back to an earlier stop?

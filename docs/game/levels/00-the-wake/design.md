@@ -17,7 +17,9 @@ the shooting and the bodies in 5–8 minutes, then hand over to the pull-back.
   scope §4.1, route B/D). The flat shares the pipeline.
 - **The goblin starts with a melee tool and finds the sawn-off early.**
 - **Last pickup:** a CD in an open coffin. Picking it up ends the level and
-  starts the pull-back.
+  starts the pull-back. When the full game resumes, the level continues out
+  of the funeral home's back door to the rail line behind the cemetery, where
+  the train to level 1 waits (vision §10.3; exact handover open, vision §14 Q10).
 - **Blockout v1 limits (2026-09-11):** every floor is at one height, so the
   crypt sits *at grade* (a low, dark room) rather than down stairs, and the
   goblin-only fence gap is a narrow 1.4 m passage, not a crawl space. Stairs
