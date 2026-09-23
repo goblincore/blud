@@ -257,9 +257,20 @@ character: dirty nails, knuckle hair, rings stolen from guests.
 
 **The train is the hub.** After the Wake, a train line runs past the back of the
 cemetery. You board in level 1, *Night Train*, fight carriage by carriage to the
-engine, and at the end the train leaves the rails and climbs into space. From
-then on, **the space between levels is the train**, and every level is a stop on
-the Line. The last stop is the terminus: the Party, which is Hell.
+engine, and at the end the fire roars and the train bursts out of the night into
+a desert dawn. From then on, **the space between levels is the train**, and
+every level is a stop on the Line. The last stop is the terminus: the Party,
+which is Hell.
+
+**The journey has two halves (decided 2026-09-23).**
+- **The desert.** The early stops (the gentle phase) are reached across an
+  endless desert: flat, pale, a low sun, telegraph poles, nothing else. The hub
+  windows show it.
+- **The lift-off.** At the turn from the gentle phase to the strange phase
+  (after the Keep, before Cold Storage), the track curves up and the train
+  leaves the ground: desert, then clouds, then stars. It happens **on the train
+  between stops**, as the hub's own set piece: the player feeds the Stoker's
+  fire in the cab and the train climbs. From then on the windows show space.
 
 This keeps the game abstract (the track is the only explanation for why each
 door opens onto a different world), keeps the hub linear and cheap to build (a
@@ -302,7 +313,7 @@ before the train will go back.
 game, and that opposition is the point (world law 8).
 - **Stars are clean.** Deep blue-black, sharp points, slow nebulae, the prerender
   look at its most beautiful. Nothing soft out there.
-- **The one wrong light:** from the lift-off on, a warm pink smear sits in one
+- **The one wrong light:** from the lift-off on (vision §10.3), a warm pink smear sits in one
   window, far away. Each stop it is a little bigger. It's the Party, the tumour,
   the terminus. By the last carriage it fills the glass.
 - **The Stoker's fire** is the only warm light in the cab, and the only thing on
@@ -316,7 +327,7 @@ the theme. Every level follows the same rules (§10.6).
 | # | Level | Type | What doesn't work | SDF showcase | Enemy spotlight | Phase |
 | --- | --- | --- | --- | --- | --- | --- |
 | 0 | ***The Wake*** (demo) | Cemetery, funeral home | A wake with nobody left to mourn; a CD in an open coffin; the rail line runs past the back gate | First bodies, first gore | Zombies | Cold open |
-| 1 | ***Night Train*** | Train | A party carriage on a line with no stations; the engine at the front, the Stoker at the fire | Motion: carriages still, world moves; **the lift-off into space** | Passengers | Gentle |
+| 1 | ***Night Train*** | Train | A party carriage on a line with no stations; the engine at the front, the Stoker at the fire | Motion: carriages still, world moves; **bursting out of the night into the desert** | Passengers | Gentle |
 | 2 | ***The Keep*** | Gothic castle | A banquet for guests who never come | Stone that goes soft when shot | Gargoyles | Gentle |
 | 3 | ***Cold Storage*** | Research lab | Storage that keeps nothing; specimens keep themselves | Glass tanks | Soldiers, a bloatmaw in a tank | Strange |
 | 4 | ***The Big Top*** | Circus | A show for empty seats | Rubbery, inflatable, pops | Clowns | Strange |
@@ -388,7 +399,8 @@ minotaur, dragon, schoolgirl) must earn a role or be cut.
 | The Keep | The banquet bell or gong: the absent guests arrive to eat |
 | Cold Storage | Shoot the freezer controls: every tank thaws at once |
 | The Big Top | Cut the ropes: the tent comes down soft over the crowd |
-| Night Train | **Feed the fire:** at the engine, blow the firebox open (or stuff it) and the boiler roars; the train leaves the rails and climbs into space. (The emergency brake is a smaller mid-level beat: everything in the carriages flies forward.) |
+| Night Train | **Feed the fire:** at the engine, blow the firebox open (or stuff it) and the boiler roars; the train bursts out of the night into a desert dawn. (The emergency brake is a smaller mid-level beat: everything in the carriages flies forward.) |
+| *The Line, after the Keep* | **The lift-off:** feed the fire again and the track curves up; the train leaves the ground for space. A hub set piece, between stops |
 | The Ship | Vent the airlock: low gravity becomes no gravity, bodies drift |
 | The Works | Start the line: the dolls come off the belt finished, and alive |
 | Floorfiller | Shoot the speaker stack: the drop hits, the room swells, the Headliner arrives |

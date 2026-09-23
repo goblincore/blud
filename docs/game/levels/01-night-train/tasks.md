@@ -15,8 +15,8 @@ game loop (health, pickups, triggers). See [the Wake implementation brief](../00
 - [ ] **N-D2 Encounter script.** Counts, placement and wake-up triggers per carriage.
 - [ ] **N-D3 The Stoker.** Silhouette, scale in the cab, shovel-loop timing
   (it sets the Party's beat). *Done when:* a reference sheet.
-- [ ] **N-D4 Lift-off beat sheet.** Second by second: fire, beat, track curve,
-  ground falling away, clouds, stars, the pink light.
+- [ ] **N-D4 Dawn beat sheet.** Second by second: fire, beat, the night thinning,
+  the desert dawn.
 - [ ] **N-D5 The CD.** Artist, title, cover brief, liner notes.
 - [ ] **N-D6 Hub carriages.** Which carriages stay, and what each holds between stops.
 
@@ -34,9 +34,10 @@ game loop (health, pickups, triggers). See [the Wake implementation brief](../00
   passengers bursting out of trunks. *Deps:* N-B1, Wake L-4 (triggers).
 - [ ] **N-B6 Emergency brake.** A cord trigger; loose actors and props get a
   forward impulse. *Deps:* N-B5.
-- [ ] **N-B7 Firebox and lift-off.** The firebox as a shootable/dynamite target;
-  the sky transition from landscape to stars; the pink light. *Deps:* N-D4, N-B3.
-- [ ] **N-B8 Hub state.** Load the train in a quiet variant after the lift-off
+- [ ] **N-B7 Firebox and dawn.** The firebox as a shootable/dynamite target;
+  the sky transition from night to a desert dawn, built so the later lift-off
+  (desert to stars, the pink light) reuses it. *Deps:* N-D4, N-B3.
+- [ ] **N-B8 Hub state.** Load the train in a quiet variant after the dawn
   (no enemies, departure board live). *Deps:* N-B1. Shared with revisited stops.
 - [ ] **N-B9 Playtest pass.** 8–12 minute target, difficulty, readability in the
   narrow carriages.

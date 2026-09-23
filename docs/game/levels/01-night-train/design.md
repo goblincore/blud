@@ -5,8 +5,10 @@
 
 The first level of the full game, and the level that *builds the hub*. You
 board the train at the back, fight forward carriage by carriage, reach the
-engine and the Stoker, and set off the fire that lifts the train off the rails
-into space. After this, the train is where you live between stops.
+engine and the Stoker, and set off the fire that drives the train out of the
+night into a desert dawn. After this, the train is where you live between stops.
+(The lift-off into space comes later, between the Keep and Cold Storage;
+vision §10.3.)
 
 ---
 
@@ -19,9 +21,10 @@ into space. After this, the train is where you live between stops.
 - **Carriages stay still; the world moves.** The level geometry never moves.
   Scenery scrolls past the windows, the camera sways, the sound rattles. That
   is the whole trick, and it's cheap.
-- **The set piece is the lift-off** (level rule 9): at the engine, the player
-  blows the firebox open and the train leaves the rails. It plays in-engine,
-  with the player free to move and look. No cutscene (P1).
+- **The set piece is the dawn** (level rule 9): at the engine, the player
+  blows the firebox open and the train tears out of the night into a desert
+  dawn. It plays in-engine, with the player free to move and look. No
+  cutscene (P1).
 - **The Stoker** is in the cab, back turned, shovelling. It never fights, never
   turns, never reacts (vision §10.3). No behaviour beyond that for now
   (decided 2026-09-23).
@@ -57,31 +60,33 @@ the other way round.)
 | 4 | **The sleeper** | A narrow corridor, compartment doors either side | Doors, ambushes, choosing a route | 4–6, some behind compartment doors | **Emergency brake cord** here (§5.2). Secret under a bunk |
 | 5 | **The party carriage** | The biggest carriage: a dance floor, a jukebox, lights | The level's music source; a dynamite restock | The biggest fight: 8–10 dancing guests turn | Dynamite restock as party favours on a table. The CD is in the jukebox |
 | 6 | **First class / coat check** | Quiet. Rails of coats, a counter, a bell nobody answers | Claim tickets | 2 ticket inspectors (soldiers) | The future hub carriage. First claim ticket on the counter |
-| 7 | **The tender** | Open air on top of the coal: wind, the first stars | Exposure, footing | 2–3 climbing up the sides | The "coal" is soft lumps. Never looked at closely |
+| 7 | **The tender** | Open air on top of the coal: wind, a night sky | Exposure, footing | 2–3 climbing up the sides | The "coal" is soft lumps. Never looked at closely |
 | 8 | **The cab** | The engine. The Stoker, the firebox, gauges | The set piece | None | §5.1 |
 
 **Length target:** 8–12 minutes. **Enemy total:** roughly 25–35.
 
 ## 5. Set pieces
 
-### 5.1 The lift-off (the level's set piece)
+### 5.1 The dawn (the level's set piece)
 
 - **The cab.** The Stoker shovels steadily into a firebox that's burning low.
   The train is slowing; the gauges droop; the beat from the front drags.
 - **The player triggers it:** throw dynamite into the open firebox, or shoot
-  the firebox door off its hinges. (Both work; the dynamite was placed in the
-  previous carriage for this.)
+  the firebox door off its hinges.
 - **What happens, all in-engine, the player free to move:**
   1. The fire roars white. The Stoker doesn't flinch; it shovels faster.
-  2. The beat doubles. The gauges swing past their stops.
-  3. Out of the cab windows, the track ahead curves *up*. The train follows it.
-  4. The ground falls away below: the town, the cemetery (the funeral-home
-     window you looked out of), then clouds.
-  5. The clouds thin to stars. The sound drops to wind, then to nothing but the
-     fire and the shovel.
-  6. In one window, far away, a small warm pink light (vision §10.3).
+  2. The beat doubles. The gauges swing past their stops. The train surges.
+  3. The night outside thins: the town and the cemetery fall behind, the
+     landscape flattens and empties.
+  4. The sky goes grey, then pale gold. The train is running across an endless
+     desert at dawn, a low sun, telegraph poles ticking past.
+  5. The sound drops to the wheels, the fire and the shovel.
 - **Level end:** the departure board in the coat-check carriage flickers to the
   next stop's name. Walking back through the train *is* the hub from here on.
+
+**Later, not here:** the lift-off into space is the hub's set piece between the
+Keep and Cold Storage (vision §10.3). This level's tech (window views, the
+sky transition) is what that moment reuses.
 
 ### 5.2 The emergency brake (a smaller beat)
 
@@ -151,7 +156,7 @@ corridor. That maps directly onto the level format (rooms plus tunnels along z).
 - **The Party's beat** from the front, getting louder, turning into the shovel.
 - **The jukebox:** the level's music source.
 - **Wind** in the vestibules and on the tender.
-- **The lift-off:** everything drops out except the fire and the shovel.
+- **The dawn:** everything drops out except the wheels, the fire and the shovel.
 
 ## 11. Tech notes and risks
 
@@ -161,13 +166,13 @@ corridor. That maps directly onto the level format (rooms plus tunnels along z).
 - **Sway.** A small camera roll and bob, and loose props that shift. It must
   not affect collision.
 - **Open-air tender.** A room with a sky backdrop instead of a ceiling.
-- **The lift-off sky.** A scripted transition from night landscape to stars,
-  plus the pink light. Its own small spike.
+- **The dawn sky.** A scripted transition from night to a desert dawn. The
+  later lift-off (desert to stars, plus the pink light) reuses the same system.
 - **The Stoker.** A large, mostly static SDF body with a looping shovel
   animation. Never reacts to hits.
 - **The firebox.** A light source, and ideally the first soft set piece in a
   level: the door bulges before it bursts.
-- **As a hub.** After the lift-off, the same carriages must load in a quiet
+- **As a hub.** After the dawn, the same carriages must load in a quiet
   state (no enemies, departure board live). The level format needs a state or
   variant flag; revisited stops need the same thing.
 
@@ -180,20 +185,13 @@ corridor. That maps directly onto the level format (rooms plus tunnels along z).
 - **Hub carriages:** the dining car, the party carriage (its jukebox plays your
   collection), the coat check and the cab. The other carriages are locked or
   removed in the hub state.
-- **Hub windows:** a landscape first (a desert), switching to stars later.
-  This conflicts with the lift-off ending this level; see §13.
+- **Hub windows:** a desert first, stars after the lift-off.
+- **The lift-off moves later:** this level ends in a desert dawn; the train
+  leaves the ground between the Keep and Cold Storage, as a hub set piece.
 
 ## 13. Open questions
 
-1. **When does the train leave the ground?** The owner wants the hub windows
-   to show a desert first and stars later, but §5.1 has the lift-off at the end
-   of this level. Options:
-   - **A. Move the lift-off later.** Night Train's set piece gets the train out
-     of the night: the fire roars, the train bursts out into dawn over an endless
-     desert. The early stops are reached across the desert. The lift-off becomes
-     its own moment at the turn from the gentle to the strange phase.
-   - **B. Keep the lift-off here** and make the desert impossible: the train
-     runs through space, and the windows show a desert anyway until, one stop,
-     they don't.
-2. **What the Stoker could do later** (hold out a hand, stop shovelling once),
+1. **What the Stoker could do later** (hold out a hand, stop shovelling once),
    parked.
+2. **The lift-off's trigger:** feeding the fire again, as proposed, or
+   something the player brings back from the Keep?
