@@ -14,6 +14,16 @@
 
 ---
 
+## Changes since Plan 1's revision (2026-09-23) — read before Tasks 2 and 5
+
+Plan 1 now implements Level Format v1 ([spec](../specs/2026-09-23-level-format-design.md)).
+Where this plan's wiring steps say:
+- `authored` → use `ctx.world.level.def` (null on the ring);
+- `openGates` / `openGate(id)` → `ctx.world.openGates` / the `openGate` Plan 1 Task 6 added;
+- `roomAtPoint(authored, …)` → unchanged, from `level-def.ts`;
+- new state as `let` bindings in `main()` → put it on a `ctx` slice or a feature
+  module instead (`docs/superpowers/plan-template.md`; `npm test -- game-context`).
+
 ## Facts pinned for the implementer (verified 2026-09-11)
 
 - **Actor damage entry points** (`webgpu/game-actor.ts`): `hit(hitWorld, dirWorld, shot?)` stamps a pellet-sized wound; `hitSlug(hitWorld, dirWorld, shot?)` a large crater. Batch a frame's hits with `beginHits()` … `endHits()`. After stamping, the projectile path calls `registerBleed(actor, stamped, kind)` and `segMeshRenderer?.impact(actor, sources, point, dir, kind)`; melee does the same.

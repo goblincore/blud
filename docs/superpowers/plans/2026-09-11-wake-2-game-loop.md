@@ -14,6 +14,18 @@
 
 ---
 
+## Changes since Plan 1's revision (2026-09-23) — read before Tasks 4–6
+
+Plan 1 now implements Level Format v1 ([spec](../specs/2026-09-23-level-format-design.md)).
+Where this plan's wiring steps say:
+- `authored` → use `ctx.world.level.def` (null on the ring);
+- `openGates` / `openGate(id)` → `ctx.world.openGates` / the `openGate` Plan 1 Task 6 added;
+- `roomAtPoint(authored, …)` → unchanged, from `level-def.ts`;
+- new state as `let` bindings in `main()` → put it on a `ctx` slice or a feature
+  module instead (`docs/superpowers/plan-template.md`; `npm test -- game-context`).
+`PickupItem` now includes `'dynamite'` (the Wake has one in the crypt); Task 2's
+`collectPickups` handles it like `melee` (see the `case` below).
+
 ## Facts pinned for the implementer (verified 2026-09-11)
 
 - **There is no player health today.** `game-main.ts` says so in the soldier-pellet doc block ("There is no player health in the SDF game, so these hit nothing at all").
@@ -267,6 +279,12 @@ describe('collectPickups', () => {
     expect(dup.inventory.shellsReserve).toBe(PICKUP.shells);
   });
 
+  it('adds dynamite as a weapon, once', () => {
+    const r = collectPickups([at('d', 'dynamite', 0, 0)], new Set(), [0, 0, 0], makeInventory(['melee']), makeVitals());
+    expect(r.inventory.weapons).toEqual(['melee', 'dynamite']);
+    expect(collectPickups([at('d2', 'dynamite', 0, 0)], new Set(), [0, 0, 0], r.inventory, makeVitals()).collected).toEqual([]);
+  });
+
   it('records CDs by pickup id', () => {
     const r = collectPickups([at('the-wake-cd', 'cd', 0, 0)], new Set(), [0, 0, 0], makeInventory(), makeVitals());
     expect(r.inventory.cds).toEqual(['the-wake-cd']);
@@ -363,6 +381,7 @@ export function collectPickups(
         break;
       case 'shotgun':
       case 'melee':
+      case 'dynamite':
         if (!inv.weapons.includes(p.item)) {
           inv = { ...inv, weapons: [...inv.weapons, p.item] };
         } else if (p.item === 'shotgun') {
@@ -389,7 +408,7 @@ export function reloadFromReserve(shells: number, capacity: number, inv: Invento
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/pickups.test.ts`
-Expected: PASS, 8 tests.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Typecheck and commit**
 
