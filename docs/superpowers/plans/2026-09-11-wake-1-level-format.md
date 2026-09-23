@@ -1,6 +1,6 @@
 # The Wake 1: Level Format v1 + Blender Pipeline — Implementation Plan
 
-> **For agentic workers:** implement task-by-task. Steps use checkbox (`- [ ]`) syntax. Tasks 1–5 are pure/offline and dispatchable; Tasks 6–7 edit the game and run a headless gate (session).
+> **For agentic workers:** implement task-by-task. Steps use checkbox (`- [ ]`) syntax. Tasks 1–5d are pure/offline and dispatchable (5b stops for the owner's approval; 5c ends in a live review loop); Tasks 6–7 edit the game and run a headless gate (session). Task 5 follows the [level design guide](../../game/levels/level-design-guide.md).
 
 **Status:** revised 2026-09-23 (supersedes the 2026-09-11 draft). Part 1 of 3 for level 0, The Wake.
 
@@ -88,7 +88,10 @@
 | Create `public/assets/levels/fixtures/two-floors.level.json` | Valid fixture needing `multi-floor` |
 | Create `src/lab/sdf-zombie/webgpu/active-level.ts` (+ test) | `ActiveLevel`: `ringLevel()`, `authoredLevel()`, engine capabilities |
 | Create `scripts/levels/export_level.py`, `docs/game/levels/blender-conventions.md` | Exporter + authoring rules |
-| Create `scripts/levels/build_the_wake_blockout.py`, `assets-source/levels/the-wake.blend`, `public/assets/levels/the-wake.level.json`, `src/lab/sdf-zombie/webgpu/level-json.the-wake.test.ts` | The Wake blockout |
+| Create `docs/game/levels/00-the-wake/reference-study.md` | Task 5a: Blood E1M1/E1M2 as a type (tools already on main: `scripts/levels/blood_map_plan.py`, `scripts/levels/level_plan.py`) |
+| Create `docs/game/levels/00-the-wake/layout.md` | Task 5b: the layout, owner-approved |
+| Create `scripts/levels/build_the_wake_blockout.py`, `assets-source/levels/the-wake.blend`, `public/assets/levels/the-wake.level.json`, `src/lab/sdf-zombie/webgpu/level-json.the-wake.test.ts` | Task 5c: the Wake blockout |
+| Create `assets-source/dressing/LICENSES.md` (+ props) | Task 5d: placeholder dressing in the `.blend` |
 | Modify `game-state-world.ts`, `game-main.ts`, the ten readers listed above | Wire `ctx.world.level` |
 | Create `scripts/sdf-game-wake-gate.mjs`, `scripts/sdf-game-wake-gate.sh` | Headless gate |
 
@@ -1306,6 +1309,7 @@ git commit -m "feat(level): active-level — ring and authored levels behind one
 | `windows` | thin box meshes | `window:<view>:<id>` | Straddles exactly one room wall |
 | `lights` | point lights | any | Custom property `power` (default energy ÷ 10) |
 | `markers` | empties | see below | +Y arrow is "forward" |
+| `dressing` | any meshes | any | **Ignored by the exporter.** Placeholder props for reviews; the art pass's starting kit ([level design guide](level-design-guide.md) §7) |
 
 ## Markers
 `start` (exactly one; Z rotation = facing) · `spawn:<zombie|soldier>:<id>` ·
@@ -1605,7 +1609,161 @@ git commit -m "feat(level): Blender exporter for Level Format v1 + authoring con
 
 ---
 
-### Task 5: The Wake blockout (dispatchable, needs Blender)
+### Task 5: The Wake, as a level (split 2026-09-23)
+
+Task 5 follows the [level design guide](../../game/levels/level-design-guide.md)'s
+stages, so the Wake gets level design and not just the design doc's beat sheet
+in boxes:
+
+| Task | Stage | Needs | Output |
+| --- | --- | --- | --- |
+| **5a** | Reference study | `BLOOD.RFF`; no Blender | `docs/game/levels/00-the-wake/reference-study.md` |
+| **5b** | Layout | 5a; **owner approval** | `docs/game/levels/00-the-wake/layout.md` |
+| **5c** | Blockout | 4, 5b, Blender (+ the Blender MCP for the review loop) | `.blend`, `.level.json`, level test |
+| **5d** | Placeholder dressing | 5c, Blender | `dressing` collection, `assets-source/dressing/LICENSES.md` |
+
+5a can start any time (it doesn't need Tasks 1–4). 5d doesn't block Task 6.
+
+**Don't let the layout stall the engine work.** Tasks 6–7 only need *a*
+Wake. If 5b isn't approved when Task 6 is ready, run 5c Steps 1–6 on draft 0
+as written, and rebuild from `layout.md` later. The rebuild then also updates
+the level test's counts and the Task 7 gate's room list and crypt-gate
+coordinates (`walkNorthFrom`, the −44.4 / −45.5 thresholds).
+
+The tools are already on main (tested 2026-09-23):
+`scripts/levels/blood_map_plan.py` (any Blood map, top-down SVG, into
+`.lab-tmp/map-research/`) and `scripts/levels/level_plan.py` (any
+`.level.json`, top-down SVG, into `.lab-tmp/level-plans/`). Rasterise with
+`rsvg-convert -w 1000 X.svg -o X.png`.
+
+**Enemies:** only `zombie` and `soldier` exist (guide §4). The Wake is all
+zombies, which is fine; any soldier placement is a design choice, not a stand-in.
+
+---
+
+### Task 5a: Blood reference study (dispatchable, no Blender)
+
+**Files:**
+- Create: `docs/game/levels/00-the-wake/reference-study.md`
+- Nothing else is committed. Plans and renders stay in `.lab-tmp/map-research/`.
+
+The Wake is the *type* of Blood's opening (a funeral, a cemetery, a crypt,
+out to the tracks). Study E1M1 ("Cradle to Grave") for that type, plus E1M2
+for how the episode continues. **Never copy a layout** (vision; guide §2).
+
+- [ ] **Step 1: Render E1M1 and E1M2**
+
+```bash
+python3 scripts/levels/blood_map_plan.py E1M1
+python3 scripts/levels/blood_map_plan.py E1M2
+rsvg-convert -w 1400 .lab-tmp/map-research/E1M1.svg -o .lab-tmp/map-research/E1M1.png
+rsvg-convert -w 1400 .lab-tmp/map-research/E1M2.svg -o .lab-tmp/map-research/E1M2.png
+```
+Expected for E1M1: `155 sectors, 1498 walls, 559 sprites`; enemies by type
+`{205: 9, 219: 1, 220: 17, 203: 7, 202: 12}`. Open the PNGs (Read tool).
+
+- [ ] **Step 2: Calibrate the scale.** Hover sectors in the SVG (each has a
+`<title>` with floor and height) or load the map in Python (guide §2.1). Find
+three doorways/corridors, and pick the BU-per-metre that makes a doorway about
+2.2 m tall. Rerun Step 1 with `--bu-per-m <n>`.
+
+- [ ] **Step 3: Name the enemy types.** Look up 202, 203, 205, 219 and 220 in the
+NotBlood `kDude…` enum (`blood/src/blood.h`; if the source isn't on disk,
+`git clone --depth 1 https://github.com/clipmove/NotBlood .lab-tmp/notblood`).
+Do the same for the item/weapon sprites near the start (their statnums and
+types are in the same source).
+
+- [ ] **Step 4: Write the study** with exactly these sections, in words and
+numbers (no images, no coordinates copied from Blood):
+
+```markdown
+# The Wake: reference study (Blood E1M1, E1M2)
+
+**Date:** · **Scale used:** <n> BU/m (how it was calibrated)
+
+## 1. Shape
+Overall size, how many distinct spaces, how they connect (a line, a hub,
+loops). How many ways out of the first space.
+
+## 2. The first minute
+What the player sees at the start; how far to the first enemy and the first
+weapon; what the first space teaches.
+
+## 3. Proportions
+Typical room sizes and heights, corridor widths, open vs. enclosed space
+(as metres at the calibrated scale).
+
+## 4. Fights
+Enemy count per space; which types where; do enemies wait, rise, or come to
+you; where the player is when a fight starts.
+
+## 5. Loops and secrets
+How many loops; how secrets are hinted; what they hold.
+
+## 6. Pickups
+Ammo and health relative to the fights.
+
+## 7. Lessons for the Wake
+5–10 concrete rules, each one sentence, each tied to a section above.
+Example shape: "The cemetery is a loop, not a box: two ways round the
+central mausoleum (§5)."
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add docs/game/levels/00-the-wake/reference-study.md
+git status --short   # nothing under .lab-tmp/ or any Blood-derived file staged
+git commit -m "docs(wake): reference study — Blood E1M1/E1M2 as a type"
+```
+
+---
+
+### Task 5b: The Wake layout (dispatchable draft, owner approves)
+
+**Files:**
+- Create: `docs/game/levels/00-the-wake/layout.md`
+
+The layout is the plan of record until the `.blend` exists (guide §5). It
+starts from the **draft 0** tables in Task 5c (below) and the design's beat
+sheet, and changes them to follow the study's lessons.
+
+Known weaknesses of draft 0, visible in its plan drawing: the level is four
+boxes in a straight line with no loops; the graveyard is an empty 28 × 28 m
+square with headstones scattered in it; nothing in any room shows the way
+to the next one; the crypt and parlour are single rectangles.
+
+- [ ] **Step 1: Draw draft 0.** Until Task 5c exists, the plan drawing needs a
+`.level.json`: convert draft 0's tables by hand (or with a throwaway script in
+`.lab-tmp/`) and run `python3 scripts/levels/level_plan.py <file> --out .lab-tmp/level-plans/the-wake-draft0.svg`.
+
+- [ ] **Step 2: Write `layout.md`** with the guide's §5 sections: room and
+corridor tables (game space, same columns as draft 0), encounters, sightlines,
+loops, secrets, pickups, the enemy-swap table (empty for the Wake unless a
+soldier is placed), and the reasons for each change from draft 0, citing the
+study's lessons. Constraints that don't move: format v1 only (one floor
+height, rectangles, ≥ 1.4 m wherever enemies path), the design's beats and
+set piece (the bell, the crypt gate, the parlour turn, the CD, the window),
+spawn kinds `zombie`/`soldier`, 5–8 minutes.
+
+Rooms may be split into several rectangles joined by short tunnels, or by
+rooms that touch, to get non-rectangular spaces and loops within v1.
+
+- [ ] **Step 3: Draw it** (convert the new tables the same way as Step 1, into
+`.lab-tmp/level-plans/the-wake-layout.svg`), rasterise, and **stop for the
+owner's review.** Show the PNG next to draft 0's. Revise until approved; note
+the approval date at the top of `layout.md`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add docs/game/levels/00-the-wake/layout.md
+git commit -m "docs(wake): layout — rooms, encounters, loops, secrets (approved)"
+```
+
+---
+
+### Task 5c: The Wake blockout (dispatchable, needs Blender)
 
 **Files:**
 - Create: `scripts/levels/build_the_wake_blockout.py`
@@ -1613,10 +1771,15 @@ git commit -m "feat(level): Blender exporter for Level Format v1 + authoring con
 - Create: `public/assets/levels/the-wake.level.json` (generated)
 - Create: `src/lab/sdf-zombie/webgpu/level-json.the-wake.test.ts`
 
-Layout follows [the Wake design](../../game/levels/00-the-wake/design.md) §4, in
-**game space** (the player walks toward −z). After this task the owner edits
-the `.blend` by hand; the script is only the first draft. v1 is one floor
-height (the crypt is at grade).
+Layout follows **`layout.md` (Task 5b)**, in **game space** (the player walks
+toward −z). The tables and script below are **draft 0**: the shape of the
+script and test is right, the numbers are not final. Before Step 2, change the
+script's tables to match `layout.md`; after Step 3, change the test's counts
+(rooms, tunnels, spawns, graves per wave, routes) to match it too. After this
+task the owner edits the `.blend` by hand; the script is only the first draft.
+v1 is one floor height (the crypt is at grade).
+
+**Draft 0** (from the Wake design §4):
 
 | Room | id | x | z | Height | Holds |
 | --- | --- | --- | --- | --- | --- |
@@ -1890,12 +2053,70 @@ Expected: PASS, 6 tests (several seconds: the grid is ~17,000 cells). If a
 spawn fails the standable test, move it in the **build script** table, rebuild,
 re-export (Step 2), and rerun.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Draw it and render views**
+
+```bash
+python3 scripts/levels/level_plan.py public/assets/levels/the-wake.level.json
+rsvg-convert -w 1000 .lab-tmp/level-plans/the-wake.svg -o .lab-tmp/level-plans/the-wake.png
+```
+Compare with `layout.md`'s drawing; they must match. Then render from Blender
+a top view and one eye-height view (camera at 1.62 m) per room into
+`.lab-tmp/level-plans/views/`.
+
+- [ ] **Step 6: Commit the first build**
 
 ```bash
 git add scripts/levels/build_the_wake_blockout.py assets-source/levels/the-wake.blend \
   public/assets/levels/the-wake.level.json src/lab/sdf-zombie/webgpu/level-json.the-wake.test.ts
 git commit -m "feat(level): The Wake blockout — build script, .blend, v1 JSON, routing test"
+```
+
+- [ ] **Step 7: Review loop with the owner (session, Blender MCP).** Open the
+`.blend` in the running Blender and make the owner's changes there, live
+(move rooms, widen corridors, shift spawns), following
+[blender-conventions.md](../../game/levels/blender-conventions.md). After
+each round: export (Step 2's second command), run the test (Step 4), redraw
+(Step 5), and show the plan. Once the Task 6 wiring exists, also play it at
+`/sdf-game.html?level=the-wake`. From here the `.blend` is the source of
+truth; update `layout.md`'s tables to match when the owner is happy, and
+commit the `.blend`, the JSON, `layout.md` and any test changes together.
+
+---
+
+### Task 5d: Placeholder dressing (dispatchable, needs Blender; doesn't block Task 6)
+
+**Files:**
+- Modify: `assets-source/levels/the-wake.blend` (a new `dressing` collection)
+- Create: `assets-source/dressing/LICENSES.md`
+- Create (if any downloads): `assets-source/dressing/<source>/…`
+
+The game draws v1 levels as boxes only (spec §12), so dressing is for the
+`.blend`: reviews, renders, and the art pass's starting kit. The exporter
+ignores the `dressing` collection; confirm by re-exporting and checking that
+`public/assets/levels/the-wake.level.json` is byte-identical (`git diff --exit-code`).
+
+- [ ] **Step 1: The kit list,** from the Wake design and `layout.md`: gate
+posts and gates, fence runs, headstones (3 shapes), the open grave, the
+mausoleum, the bell tower and bell, the crypt stairs, sarcophagi, pews, the
+organ, the coffin on its stand, flowers, candles, the parlour window frame.
+
+- [ ] **Step 2: Make or source each one,** in the guide's §7 order: model it
+rough and low-poly in Blender over the MCP; else a CC0 download (Poly Haven,
+Kenney, Quaternius, ambientCG), saved under `assets-source/dressing/<source>/`
+and listed in `LICENSES.md` (name, URL, licence). **Never Blood art.** Keep
+each prop's footprint inside the collision box it dresses (a headstone
+inside its solid, a pew inside its furniture box).
+
+- [ ] **Step 3: Place and review.** Parent each prop under the `dressing`
+collection, placed over its box. Re-render the Task 5c Step 5 views and show them.
+
+- [ ] **Step 4: Commit**
+
+```bash
+blender --background "$PWD/assets-source/levels/the-wake.blend" --python scripts/levels/export_level.py -- public/assets/levels/the-wake.level.json
+git diff --exit-code public/assets/levels/the-wake.level.json   # dressing must not change the level
+git add assets-source/levels/the-wake.blend assets-source/dressing
+git commit -m "art(wake): placeholder dressing kit in the .blend (exporter ignores it)"
 ```
 
 ---

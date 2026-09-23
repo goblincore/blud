@@ -41,10 +41,12 @@ The level can't be tested without these. Build them small.
 
 ## Design
 
+- [ ] **W-D0 Reference study.** Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
+  process in the [level design guide](../level-design-guide.md).
 - [ ] **W-D1 Paper map.** Final flow and dimensions at goblin scale.
-  *Deps:* F-D5 (goblin scale). *Done when:* top-down map with measurements.
+  *Deps:* W-D0, F-D5 (goblin scale). *Done when:* `layout.md` approved (Plan 1 Task 5b).
 - [ ] **W-D2 Encounter script.** Zombie counts, spawn points, triggers per beat.
-  *Deps:* W-D1.
+  *Deps:* W-D1. Part of `layout.md` (Plan 1 Task 5b). Zombies and soldiers only.
 - [ ] **W-D3 Starting weapon decision.** *Deps:* W-B4.
 - [ ] **W-D4 The first CD.** Artist, title, cover brief, liner notes.
 - [ ] **W-D5 Secrets.** Placement and rewards. *Deps:* W-D1.
@@ -73,6 +75,7 @@ The level can't be tested without these. Build them small.
 
 - [ ] **W-A1 Art kit designs.** Gates, headstones, mausoleum, fence, crypt,
   funeral-home parlour, pews, flowers, organ, coffin. Sketches/reference first.
+  Rough placeholders come first, in the `.blend` (Plan 1 Task 5d).
 - [!] **W-A2 Art kit models.** *Blocked on:* P-4 (pipeline verdict).
 - [!] **W-A3 Art pass on the blockout.** *Deps:* W-A2, W-B3.
 - [ ] **W-A4 Starting melee model** once W-D3 is decided.

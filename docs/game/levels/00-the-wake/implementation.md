@@ -18,14 +18,20 @@ that were made so agents don't re-open them.
 
 **Order:** Plan 1 tasks 1–2 first (they define the shared types). Then Plan 1
 tasks 3–5, Plan 2 tasks 1–3 and Plan 3 tasks 1, 3, 4 can all run in parallel:
-they are pure or offline. The game wiring tasks run one at a time, in this
-order: Plan 1 T6 → Plan 1 T7 → Plan 2 T4 → Plan 2 T5 → Plan 2 T6 → Plan 3 T2 → Plan 3 T5.
+they are pure or offline. Plan 1 Task 5 is four steps from the
+[level design guide](../level-design-guide.md): 5a reference study (can start
+now), 5b layout (**owner approves**), 5c blockout (then a live review loop in
+Blender), 5d placeholder dressing. If 5b isn't approved when T6 is ready, 5c
+builds draft 0 so the wiring chain doesn't wait.
+
+The game wiring tasks run one at a time, in this order: Plan 1 T6 → Plan 1 T7 → Plan 2 T4 → Plan 2 T5 → Plan 2 T6 → Plan 3 T2 → Plan 3 T5.
 
 ```
-P1-T1 ─ P1-T2 ─┬─ P1-T3, P1-T4 ─ P1-T5 ───────┐
-               ├─ P2-T1, P2-T2, P2-T3 (pure)  │
-               └─ P3-T1, P3-T3, P3-T4 (pure)  │
-                                             ▼
+P1-T5a (study) ─ P1-T5b (layout, owner approves) ─┐ (or draft 0)
+                                                  ▼
+P1-T1 ─ P1-T2 ─┬─ P1-T3, P1-T4 ──────────────── P1-T5c (blockout) ─ P1-T5d (dressing, off the chain)
+               ├─ P2-T1, P2-T2, P2-T3 (pure)      │
+               └─ P3-T1, P3-T3, P3-T4 (pure)      ▼
           P1-T6 (ctx.world.level) ─ P1-T7 (gate) ─ P2-T4 (damage, death, HUD)
             ─ P2-T5 (pickups, triggers, gates) ─ P2-T6 (gate) ─ P3-T2 (melee)
             ─ P3-T5 (bell, waves) ─ P3-T6 (owner playtest)

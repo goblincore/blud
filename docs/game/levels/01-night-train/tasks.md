@@ -10,8 +10,12 @@ game loop (health, pickups, triggers). See [the Wake implementation brief](../00
 
 ## Design
 
+- [ ] **N-D0 Reference study.** Blood's episode-1 train map (render E1M2–E1M4 with
+  `scripts/levels/blood_map_plan.py` and pick the train one), as a type, per the
+  [level design guide](../level-design-guide.md) §2.
 - [ ] **N-D1 Carriage plan.** Final dimensions per carriage at goblin scale,
-  seat layouts with ≥ 1.4 m aisles. *Done when:* a top-down plan of all nine spaces.
+  seat layouts with ≥ 1.4 m aisles. *Done when:* `layout.md` (guide §5) with a
+  top-down plan of all nine spaces, owner-approved. *Deps:* N-D0.
 - [ ] **N-D2 Encounter script.** Counts, placement and wake-up triggers per carriage.
 - [ ] **N-D3 The Stoker.** Silhouette, scale in the cab, shovel-loop timing
   (it sets the Party's beat). *Done when:* a reference sheet.
@@ -57,5 +61,5 @@ game loop (health, pickups, triggers). See [the Wake implementation brief](../00
 
 ## Suggested order
 
-N-D1 → N-D4 · N-B1 (once the Wake pipeline works) → N-B2 / N-B3 → N-B5 → N-B7 →
+N-D0 → N-D1 → N-D4 · N-B1 (once the Wake pipeline works) → N-B2 / N-B3 → N-B5 → N-B7 →
 N-A1 → N-B6 → N-B8 → N-B9.

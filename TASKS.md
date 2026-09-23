@@ -332,6 +332,7 @@
 - [ ] Production scope draft 1 (milestones G0–G10, asset inventory). Level route: Blender (B/D), proven on the Wake + flat. [Scope](docs/game/production-scope.md).
 - [ ] First content in flight: the Flat ([tasks](docs/game/flat/tasks.md)) and level 0 The Wake ([tasks](docs/game/levels/00-the-wake/tasks.md)). Start with the render-to-texture spike (F-T2) and the melee prototype (W-B4).
 - [ ] The Wake: agent-ready plans written — [brief](docs/game/levels/00-the-wake/implementation.md) → plans 2026-09-11-wake-1/2/3. Weapon slots (dynamite branch) are on main as of 2026-09-17; main has moved a lot since the plans were written, so re-check line references before wiring tasks.
+- [ ] Level design process: [level design guide](docs/game/levels/level-design-guide.md) (reference study → layout → blockout → dressing; Blood maps readable from `BLOOD.RFF`; zombie/soldier only). Tools: `scripts/levels/blood_map_plan.py`, `scripts/levels/level_plan.py`. Wake Plan 1 Task 5 split into 5a–5d to follow it (2026-09-23).
 ## Character blends and zombie heading — owner accepted 2026-09-17
 
 - [x] Half-strength round flesh blends, matching CPU/GPU/gib geometry, and heading-dependent torso/foot/attachment fix on main.
