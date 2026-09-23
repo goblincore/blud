@@ -19,7 +19,12 @@ the shooting and the bodies in 5–8 minutes, then hand over to the pull-back.
 - **Last pickup:** a CD in an open coffin. Picking it up ends the level and
   starts the pull-back. When the full game resumes, the level continues out
   of the funeral home's back door to the rail line behind the cemetery, where
-  the train to level 1 waits (vision §10.3; exact handover open, vision §14 Q10).
+  the train to level 1 waits (vision §10.3).
+- **The glimpse (decided 2026-09-23):** just before the coffin, a tall window
+  at the back of the parlour looks out over the cemetery to the tracks. The
+  train is there, stopped, windows lit, the firebox glowing at the front. No
+  prompt, no explanation. It's the reason to sit back down at the computer
+  after the pull-back.
 - **Blockout v1 limits (2026-09-11):** every floor is at one height, so the
   crypt sits *at grade* (a low, dark room) rather than down stairs, and the
   goblin-only fence gap is a narrow 1.4 m passage, not a crawl space. Stairs

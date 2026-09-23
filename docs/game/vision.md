@@ -465,7 +465,4 @@ extreme gore, loud music and poor manners."*
 6. **Lab vs. alien ship:** distinct enough?
 7. **Level count:** 9 main + secret + finale may still be one or two too many.
 8. **Flat layout:** one room, or one room plus a tiny bathroom?
-10. **Boarding:** does the cold-open demo end on the CD (then the full game
-    resumes at the cemetery's back gate by the tracks), or does the demo include
-    the first glimpse of the train?
-11. **Revisits:** do enemies restock, and does going back cost anything?
+10. **Revisits:** do enemies restock, and does going back cost anything?
