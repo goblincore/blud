@@ -493,10 +493,26 @@ export const FIRE_VOLUME_RESOLVE_WGSL = /* wgsl */ `fn fireVolumeResolve(
 export const FIRE_VOLUME_COMPOSITE_WGSL = /* wgsl */ `fn fireVolumeComposite(
   fireTex: texture_2d<f32>,
   fireSamp: sampler,
-  texCoord: vec2<f32>
+  texCoord: vec2<f32>,
+  streak: vec4<f32>
 ) -> vec4<f32> {
   let tc = vec2<f32>(texCoord.x, 1.0 - texCoord.y);
-  let fire = textureSampleLevel(fireTex, fireSamp, tc, 0.0);
-  // The blend does the scene multiply: src = emission, srcAlpha = T.
+  // FLAME STREAK (streak.x = half-length in UV, 0 = off): average emission AND
+  // transmittance over a symmetric vertical run — the blend stays
+  // emission + scene * T, just with both smeared along the rise.
+  if (streak.x <= 0.0) {
+    let fire = textureSampleLevel(fireTex, fireSamp, tc, 0.0);
+    // The blend does the scene multiply: src = emission, srcAlpha = T.
+    return vec4<f32>(fire.rgb, fire.a);
+  }
+  var acc = vec4<f32>(0.0);
+  var wsum = 0.0;
+  for (var i: i32 = -3; i <= 3; i = i + 1) {
+    let u = f32(i) / 3.0;
+    let w = 1.0 - 0.5 * abs(u);
+    acc = acc + textureSampleLevel(fireTex, fireSamp, tc + vec2<f32>(0.0, u * streak.x), 0.0) * w;
+    wsum = wsum + w;
+  }
+  let fire = acc / wsum;
   return vec4<f32>(fire.rgb, fire.a);
 }`;

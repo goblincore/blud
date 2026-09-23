@@ -9,6 +9,8 @@ import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BO
 
 export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
   gRefoldWin = 0.0;
+  gWalkGapNew = 1e9;
+  gWalkAttempted = 0.0;
   // PER-SLOT UNION FOLD (crowd stage a). One draw traces every instance of a
   // character type; each instance's FULL field is evaluated in turn and the
   // min is the union surface. PER-INSTANCE state (counts, counts2, woundBound,
@@ -76,7 +78,12 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // + 16 = CHEAP PROBES (2026-09-22): the AO/scatter probe calls (gProbePass)
     // skip the owner re-fold below. Normals and the walk never set gProbePass.
     // + 32 = NORMAL HINT (read by the trace around calcNormal; stripped here).
-    let z32 = select(counts2.z, counts2.z - 32.0, counts2.z > 31.5);
+    // + 128 = WALK SKIP (see gWalkGap). + 64 = ANALYTIC OWNED NORMALS (read by the
+    // shading normal block). Both stripped here.
+    let walkSkipOn = counts2.z > 127.5;
+    let z128 = select(counts2.z, counts2.z - 128.0, walkSkipOn);
+    let z64 = select(z128, z128 - 64.0, z128 > 63.5);
+    let z32 = select(z64, z64 - 32.0, z64 > 31.5);
     let cheapProbe = z32 > 15.5 && gProbePass > 0.5;
     let z8 = select(z32, z32 - 16.0, z32 > 15.5);
     let exactFix = z8 > 7.5;
@@ -205,7 +212,8 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
   // unwritten mask is zero and would switch the re-fold off entirely.
   let raisersAtBase = gWoundRaisers & ~1u;
   let threatAtBase = gWoundThreat;
-  if (!cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
+  let walkSkip = walkSkipOn && gWalkStep > 0.5 && gWalkGap > 0.0;
+  if (!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
@@ -266,7 +274,7 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       if (cr.z < 0.5) { continue; }
       let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS} + band), 0);
       let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS} + band), 0);
-      if (length(p - cb.xyz) - cb.w > (dmg + counts.w * 4.0) * gs.z) { continue; }
+      if (length(p - cb.xyz) - cb.w > (dmg + counts.w * 4.0) * gs.z) { gWalkGapNew = min(gWalkGapNew, (length(p - cb.xyz) - cb.w) / gs.z - counts.w * 4.0 - dmg); continue; }
       // PRE-SCAN (exact fixes): the limb can only win if its fold dips below
       // dmg + the bump its own (and unowned) rows can subtract. foldGroup's
       // cull asserts a group whose sphere fails (T + 4k) * z cannot pull a
@@ -299,11 +307,15 @@ ${LIMBS ? `      let savedBest = gFoldBest;
         limb = foldGroup(limb, p, data, counts, band, bounds, range);
       }
 `}      gWoundCluster = f32(c + 1);
+      if (gDebugMode > 0.5) { gDebugRefolds = gDebugRefolds + 1.0; }
       let limbCarved = applyCarves(limb, p, data, counts, band);
       let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band).x;
+      gWalkAttempted = 1.0;
+      gWalkGapNew = min(gWalkGapNew, max(limbDamage - dmg, 0.0));
       if (limbDamage < dmg) {
         dmg = limbDamage;
         gRefoldWin = f32(c + 1);
+        if (gDebugMode > 0.5) { gDebugRefoldWins = gDebugRefoldWins + 1.0; }
       } else {
         gFoldBest = savedBest;
         gFoldBestIdx = savedIdx;

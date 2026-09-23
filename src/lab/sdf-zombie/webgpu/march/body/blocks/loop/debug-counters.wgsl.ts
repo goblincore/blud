@@ -52,6 +52,11 @@ export const DEBUG_COUNTERS_BLOCK = /* wgsl */ `  // OCCUPANCY MODE (debugCfg.x 
   if (debugCfg.x > 12.5 && debugCfg.x < 13.5) {
     return vec4<f32>(gDebugPrims, gDebugWoundRows, gDebugSteps + select(0.0, 1000.0, hit) + select(0.0, 2000.0, hit && hitNearWound), t);
   }
+  // WALK RE-FOLD STUDY (debugCfg.x == 15): r = owner re-folds attempted during the
+  // walk, g = re-folds that WON (lowered the field), b = steps + 1000*hit + 2000*near.
+  if (debugCfg.x > 14.5 && debugCfg.x < 15.5) {
+    return vec4<f32>(gDebugRefolds, gDebugRefoldWins, gDebugSteps + select(0.0, 1000.0, hit) + select(0.0, 2000.0, hit && hitNearWound), t);
+  }
   if (debugCfg.x > 4.5 && debugCfg.x < 5.5) {
     return vec4<f32>(gDebugBones, select(0.0, 1.0, hit), 1.0, t);
   }

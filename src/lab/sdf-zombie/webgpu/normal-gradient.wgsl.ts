@@ -14,6 +14,8 @@ const NG_STATE = /* wgsl */ `fn ngReset() -> f32 {
   return 0.0;
 }
 var<private> gNgReason: i32;
+// Set by the caller: owned wounds may take the analytic path (no limb won at the hit).
+var<private> gNgOwnedOk: f32 = 0.0;
 // TERM BISECT MASK (crowd diagnostics 2026-09-14), fed from normalGradientCfg.z
 // in MARCH_TRACE_POST. 0 = production. bit 1 skip ngWounds, bit 2 skip
 // ngBones/ngInternalLower, bit 4 skip the ngExcluded certificates, bit 8 skip
@@ -298,7 +300,11 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     // union has an analytic counterpart, differentiate the actual scalar
     // field through calcNormal's fallback for any surviving scoped wound.
     let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0).y;
-    if (owner > 0.0) { gNgReason = 1; return d; }
+    // OWNED WOUNDS (2026-09-22): the owner re-fold has no analytic counterpart — but
+    // when no limb won the re-fold at this pixel's hit (gNgOwnedOk, set by the caller
+    // from the march's hitRefold), the field here IS the union with every wound
+    // applied, exactly the unowned case below. Otherwise fall back to the taps.
+    if (owner > 0.0 && gNgOwnedOk < 0.5) { gNgReason = 1; return d; }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + gBand), 0);
     let capRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP} + gBand), 0);
     let cap = vec4<f32>(capRow.xyz, select(1e5, capRow.w, capRow.w > 0.0));

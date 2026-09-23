@@ -66,11 +66,22 @@ export interface FireVolumeTuning {
   /** Flame strength left right around the head (0..1), from EVERY limb's
    *  sheet: the shoulder flame otherwise climbs over the face. */
   headClear: number;
+  /** FLAME STREAK (2026-09-22): the composite smears the flame buffer vertically over
+   *  this many OUTPUT pixels (symmetric, 7 taps) — a long-exposure rising-flame look that
+   *  also hides the cheaper march's grain. 0 = one sample (the pre-streak composite). */
+  streakPx: number;
+  /** HEAT SHIMMER (2026-09-22): the final blit warps the frame by animated noise where
+   *  there is flame and in a band above it; this is the amplitude in OUTPUT pixels.
+   *  0 = off. */
+  heatPx: number;
 }
 
 export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
-  resolutionScale: 0.4,
-  steps: 48,
+  // 0.4 / 48 -> 0.3 / 24 (2026-09-22 flame-march cost study): post:fire-march -58 %
+  // (8.3 -> 3.4 ms in the panic-fire melee, loaded run). Owner: "looks worse but
+  // acceptable", to be dressed by post (shutter blur, heat distortion).
+  resolutionScale: 0.3,
+  steps: 24,
   tempGain: 2.0,
   rise: 0.45,
   curlStrength: 0.07,
@@ -90,6 +101,8 @@ export const FIRE_VOLUME_TUNING: FireVolumeTuning = Object.freeze({
   skin: 0.3,
   headRise: 1,
   headClear: 1,
+  streakPx: 0,
+  heatPx: 0,
 });
 
 /** The clamp range for every field, as data — the panel reads its slider
@@ -117,6 +130,8 @@ export const FIRE_VOLUME_BOUNDS: Readonly<Record<keyof FireVolumeTuning, readonl
     skin: [0, 1],
     headRise: [0, 1.5],
     headClear: [0, 1],
+    streakPx: [0, 64],
+    heatPx: [0, 12],
   });
 
 const FIRE_VOLUME_FIELDS = Object.keys(FIRE_VOLUME_TUNING) as (keyof FireVolumeTuning)[];

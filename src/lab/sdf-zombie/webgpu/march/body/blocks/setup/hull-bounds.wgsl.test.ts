@@ -58,7 +58,7 @@ describe('ported features reach the entry point', () => {
     // the flesh, so the ray-box entry is a lower bound like the others — and
     // it catches the pixels whose temporal gate failed, which used to
     // restart from the shared shellIn and walk their own empty proxy space.
-    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);');
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), winFar), 0.0, tMax);');
     // The prepass inputs ride POSITIONALLY LAST (after windDrift), and the
     // disabled identity is the fetch's 0 — never a missing binding (the
     // meltCfg rule: a declared input without a binding shades as zero and

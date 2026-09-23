@@ -31,7 +31,7 @@ describe('ported features reach the entry point', () => {
     // Stage a-2 renamed the raw ray-box entry to boxEntry so the quad mode can
     // select against gTileEntryT; the box algebra itself is unchanged.
     expect(MARCH_BODY).toContain('let boxEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
-    expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT);');
+    expect(MARCH_BODY).toContain('let tMax = min(min(tMaxSel, prevT), winNear);');
     // The 5 cm graze slack from 48f00de2 was REMOVED (adversarial review: a
     // behaviour change riding a debug commit, superseded by the graze
     // accept in 426118e8). The removal is pinned so it cannot creep back.

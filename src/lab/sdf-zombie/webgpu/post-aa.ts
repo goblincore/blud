@@ -324,7 +324,10 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
   d1: vec4<f32>,
   d2: vec4<f32>,
   d3: vec4<f32>,
-  dist: vec4<f32>
+  dist: vec4<f32>,
+  heatTex: texture_2d<f32>,
+  heatSamp: sampler,
+  heat: vec4<f32>
 ) -> vec4<f32> {
   // BLAST REFRACTION (bounded, see postAaBlastWarp): applied to the OUTPUT
   // texCoord BEFORE the entry flip, so the ring is centred on the blast's
@@ -333,6 +336,24 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
   // Inert unless the host pushes a blast and the strength gate is on, so the
   // all-off parity path is untouched.
   var st = postAaBlastWarp(texCoord, d0, d1, d2, d3, dist);
+  // HEAT SHIMMER (heat.w on, heat.x = amplitude in UV, heat.y = time, heat.z = rise
+  // band in UV): animated noise warp where the flame buffer is opaque, and in a band
+  // ABOVE it (the mask samples below the pixel — hot air rises). The flame buffer is
+  // indexed in the capture orientation, (x, 1 - y) of this texCoord.
+  if (heat.w > 0.5 && heat.x > 0.0) {
+    let ft = vec2<f32>(texCoord.x, 1.0 - texCoord.y);
+    var m = 0.0;
+    for (var k: i32 = 0; k < 4; k = k + 1) {
+      let a = textureSampleLevel(heatTex, heatSamp, ft + vec2<f32>(0.0, f32(k) * heat.z / 3.0), 0.0).a;
+      m = max(m, (1.0 - a) * (1.0 - 0.2 * f32(k)));
+    }
+    m = clamp(m * 1.5, 0.0, 1.0);
+    let tt = heat.y;
+    let nz = vec2<f32>(
+      sin(ft.y * 90.0 - tt * 11.0 + sin(ft.x * 37.0 + tt * 3.0) * 2.0),
+      cos(ft.x * 70.0 + tt * 8.0 + sin(ft.y * 53.0 - tt * 5.0) * 2.0));
+    st = st + nz * (heat.x * m);
+  }
   if (cfg.x > 0.5) { st.y = 1.0 - st.y; }
   let srcDims = vec2<f32>(textureDimensions(srcTex, 0));
   let maxP = vec2<i32>(srcDims) - vec2<i32>(1, 1);
@@ -1056,6 +1077,10 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const uFireBoundsMin = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uFireBoundsMax = uniform(new THREE.Vector4(0, 0, 0, 0));
   const uFireNearFar = uniform(new THREE.Vector4(0.05, 60, 0, 0));
+  // x = flame streak half-length in UV (tuning streakPx / output height / 2).
+  const uFireStreak = uniform(new THREE.Vector4(0, 0, 0, 0));
+  // x = heat shimmer amplitude in UV, y = time (s), z = rise band UV, w = on.
+  const uFireHeat = uniform(new THREE.Vector4(0, 0, 0.08, 0));
   // fireTarget is the low-res march (Linear so the resolve can upsample it);
   // round 2b runs the history/resolve at the SAME low resolution (the field is
   // low-frequency, so a full-res resolve only bought pixels) and the composite
@@ -1127,6 +1152,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     fireTex: fireResolvedTex,
     fireSamp: fireResolvedTex,
     texCoord: uv(),
+    streak: uFireStreak,
   }) as unknown as Swizzled;
   const fireCompositeMat = new MeshBasicNodeMaterial();
   fireCompositeMat.name = 'post:fire-composite';
@@ -1329,6 +1355,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     d2: uBlastDistort[2]!,
     d3: uBlastDistort[3]!,
     dist: uBlastDistortCfg,
+    heatTex: fireResolvedTex,
+    heatSamp: fireResolvedTex,
+    heat: uFireHeat,
   }) as unknown as Swizzled;
   const blitMat = new MeshBasicNodeMaterial();
   blitMat.name = 'post:blit';
@@ -1894,6 +1923,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     setFireVolume(on: boolean, u?: FireVolumeFrame) {
       const wasOn = fireOn;
       fireOn = on && u !== undefined;
+      if (!fireOn) uFireHeat.value.w = 0;
       if (!u) return;
       if (fireOn && !fireCurlLive) {
         // First enable: repoint the curl slot at the shared singleton (a 0.7 s
@@ -1934,6 +1964,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       uFireBoundsMin.value.set(u.boundsMin[0], u.boundsMin[1], u.boundsMin[2], 0);
       uFireBoundsMax.value.set(u.boundsMax[0], u.boundsMax[1], u.boundsMax[2], 0);
       uFireNearFar.value.set(uFireCfg3.value.z, uFireCfg3.value.w, 0, 0);
+      {
+        const outH = Math.max(1, fireTarget.height / Math.max(fireResolutionScale, 1e-3));
+        const sp = Number.isFinite(t.streakPx) ? Math.max(0, t.streakPx) : 0;
+        uFireStreak.value.set(sp / outH / 2, 0, 0, 0);
+        const hp = Number.isFinite(t.heatPx) ? Math.max(0, t.heatPx) : 0;
+        uFireHeat.value.set(hp / outH, u.time, 0.08, hp > 0 ? 1 : 0);
+      }
       uFireInvVp.value.copy(u.invViewProj);
       uFirePrevVp.value.copy(u.prevViewProj);
       // resolutionScale is live; a change resizes the low-res march target AND

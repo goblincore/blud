@@ -15,6 +15,14 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
   // No reader of the attachment consumes .w except the refine twin (pinned).
   let bodyKey = dot(gInstCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;
   gMarchNormal = vec4<f32>(normalize(n), bodyKey);
+  // MOTION VECTORS step 2: the object-motion attachment for temporal accumulation. Off (one branch)
+  // unless the per-instance switch gInstMelt.y (meltCfg.y, spare until 2026-09-22) is set — the
+  // layer sets it only while accumulation is on, so the ship path never pays for prevPosed.
+  gMarchMotion = vec4<f32>(0.0);
+  if (gInstMelt.y > 0.5) {
+    let mvPrev = prevPosed(anchor, data, hitBest, gBand);
+    if (mvPrev.w > 0.5) { gMarchMotion = vec4<f32>(mvPrev.xyz - p, 1.0); }
+  }
   // NORMAL-OUTPUT MODE (debugCfg.x == 9, neural upscale normals capture,
   // 2026-09-12). The final shading normal (after the face bump) in WORLD space,
   // depth in alpha exactly as the lit output, so the same readback and crop
@@ -24,6 +32,16 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
   // TRAINING-side source and must compute the same n the lit path shades with.
   if (debugCfg.x > 8.5 && debugCfg.x < 9.5) {
     return vec4<f32>(normalize(n), t);
+  }
+  // MOTION-VECTOR VIEW (debugCfg.x == 16, 2026-09-22, MOTION-VECTORS-PLAN.md step 1): the hit
+  // point's OBJECT motion since last frame, prevPosed(anchor) - p, in world metres, as colour:
+  // 0.5 grey = still, each channel +-0.5 per 1/40 m (1.25 cm/frame = full swing: a walk at 60 fps
+  // is ~1.7 cm/frame); magenta = no valid prev rows. Depth in alpha as mode 9. (debugCfg is a vec2 —
+  // no spare lane for a gain uniform, so the gain is a literal.)
+  if (debugCfg.x > 15.5 && debugCfg.x < 16.5) {
+    let prev = prevPosed(anchor, data, hitBest, gBand);
+    if (prev.w < 0.5) { return vec4<f32>(1.0, 0.0, 1.0, t); }
+    return vec4<f32>(clamp(vec3<f32>(0.5) + (prev.xyz - p) * 40.0, vec3<f32>(0.0), vec3<f32>(1.0)), t);
   }
 ${FLASHLIGHT_BLOCK}
   let V = -rd;

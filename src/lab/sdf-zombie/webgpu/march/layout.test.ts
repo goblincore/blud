@@ -31,6 +31,9 @@ import {
   ROW_PRIM_CLIP,
   ROW_WOUND_CAP,
   ROW_WOUND_FLAGS,
+  ROW_PREV_A,
+  ROW_PREV_B,
+  ROW_PREV_QUAT,
 } from '../march.wgsl';
 import { MAX_WOUNDS } from '../../damage';
 import { MAX_PRIMS } from '../../validate';
@@ -44,7 +47,7 @@ describe('data texture layout', () => {
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
       ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
-      ROW_PRIM_WARP, ROW_PRIM_STRAND,
+      ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);

@@ -173,6 +173,13 @@ var<private> gProbePass: f32 = 0.0;
 // gNormalHint >= 0 while calcNormal's taps run: re-fold only that cluster (0 = none).
 var<private> gRefoldWin: f32 = 0.0;
 var<private> gNormalHint: f32 = -1.0;
+// WALK SKIP (counts2.z + 128, 2026-09-22): after a LOSING walk re-fold, the losing gap
+// (limb - body) bounds how soon it could flip — each value moves <= ~stepLen per step —
+// so the walk skips the re-fold while gWalkGap > 0 (decremented 4 x stepLen per step).
+var<private> gWalkStep: f32 = 0.0;
+var<private> gWalkGap: f32 = 0.0;
+var<private> gWalkGapNew: f32 = 1e9;
+var<private> gWalkAttempted: f32 = 0.0;
 // Per-owner sum of rim-bump amplitudes over the rows the BASE applyWounds
 // reached at p (index = owner cluster + 1, 0 = unowned).
 var<private> gWoundAmp: array<f32, 9>;

@@ -32,7 +32,7 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     expect(foldGroup).toContain('if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
     // The march entry: init + per-step count guarded on the uniform itself.
     expect(MARCH_BODY).toContain(
-      'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugWoundRows = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }');
+      'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugWoundRows = 0.0; gDebugRefolds = 0.0; gDebugRefoldWins = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }');
     // The cost census's wound-row counter is guarded the same way (applyWounds).
     expect(HELPERS.find(h => declaredName(h) === 'applyWounds')!).toContain('if (gDebugMode > 0.5) { gDebugWoundRows = gDebugWoundRows + 1.0; }');
     expect(MARCH_BODY).toContain(

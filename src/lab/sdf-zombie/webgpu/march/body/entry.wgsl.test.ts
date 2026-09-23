@@ -57,7 +57,7 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
   it('concatenates textually and splits at the walk', async () => {
     const m = await import('../../march.wgsl');
     expect(m.MARCH_BODY_TRACE).toBe(`${m.MARCH_TRACE_SETUP}${m.MARCH_TRACE_LOOP}${m.MARCH_TRACE_POST}`);
-    expect(m.MARCH_TRACE_LOOP.startsWith('  var t = clamp(max(max(max(max(startT')).toBe(true);
+    expect(m.MARCH_TRACE_LOOP.startsWith('  var t = clamp(max(max(max(max(max(startT')).toBe(true);
     expect(m.MARCH_TRACE_POST.startsWith('  if (!hit) { discard; }')).toBe(true);
     expect(m.MARCH_TRACE_SETUP).not.toContain('for (var i = 0; i < 512');
     expect(m.MARCH_TRACE_LOOP).toContain('for (var i = 0; i < 512');

@@ -65,6 +65,7 @@
 // hits of every body already marching; (2) each crowd type's colour atlas
 // flushes lazily, so reads before the flush show proxies with zero hits —
 // staging waits for every attached type to flush before measuring.
+import { hardMask, pixelCost, sparseFraction } from './lib/hybrid-estimate.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import {
@@ -151,7 +152,7 @@ const SNAPSHOT_JS = `(() => {
     woundListOn: g.woundList, marchSteps: g.marchSteps,
     sdfScale: g.sdfScale, adaptive: g.adaptive, halfRate: g.halfRate,
     depthGate: g.depthGate, occluder: g.occluder, cone: g.cone,
-    shell: g.shell, relax: g.relax, aa: g.aa, aaDistance: g.aaDistance,
+    shell: g.shell, relax: g.relax, aa: g.aa, aaDistance: g.aaDistance, fireVolume: g.fireVolume,
     bleedEnabled: g.bleed.enabled, spillChance: g.woundTuning.spillChance,
     frameCap: g.frameCap,
   };
@@ -163,6 +164,7 @@ const RESTORE_JS = (snap) => `(() => {
     g.setFlatAlbedo(snap.flatAlbedo);
     if (g.setAa && typeof snap.aa === 'number') g.setAa(snap.aa);
     if (g.setAaDistance && snap.aaDistance) g.setAaDistance(snap.aaDistance.near, snap.aaDistance.fadeM);
+    if (g.setFireVolume && snap.fireVolume) g.setFireVolume(snap.fireVolume);
     // Ship has the depth prepass and the miss cull OFF (GAME_DEPTH_PREPASS = 0).
     if (g.setMissCull) g.setMissCull(false);
     if (g.setDepthPrepass) g.setDepthPrepass(false);
@@ -198,12 +200,17 @@ async function bootAndStage({ firstBoot = false } = {}) {
   // the ship state; the only departure is an empty blood sim for the first two phases.
   await ev('__sdfGame.setWoundTuning({ spillChance: 0 }); 1');
   let up = null;
-  for (let i = 0; i < (firstBoot ? 120 : 24); i++) {
+  // MELEE_NO_UPSCALE=1 (2026-09-23): a page booted WITHOUT the shipped stage on purpose (e.g. MELEE_QS
+  // '&accum=1', which skips it — accumulation and the stage do not stack yet). The 'ship' leg is then
+  // NOT the shipped frame; the run's report must say so.
+  const noUpscale = process.env.MELEE_NO_UPSCALE === '1';
+  for (let i = 0; i < (noUpscale ? 0 : firstBoot ? 120 : 24); i++) {
     up = await ev('window.__sdfGame.upscaleInfo()');
     if (up?.on) break;
     await sleep(500);
   }
-  if (!up?.on) fail(`shipped upscaler never came on: ${JSON.stringify(up)}`);
+  if (noUpscale) up = await ev('window.__sdfGame.upscaleInfo()');
+  else if (!up?.on) fail(`shipped upscaler never came on: ${JSON.stringify(up)}`);
   await ev('__sdfGame.setFrameCap(0)');
   const snap = await ev(SNAPSHOT_JS);
   await ev(RESTORE_JS(snap));
@@ -358,6 +365,23 @@ async function capturePhase(phase, withWounds) {
     for (const [k, v] of Object.entries(cc.classes)) {
       console.log(`    ${k.padEnd(10)} px ${String(v.px).padStart(6)} | prims walk ${pct(v.primShare.walk).padStart(6)} post ${pct(v.primShare.post).padStart(6)} | rows walk ${pct(v.rowShare.walk).padStart(6)} post ${pct(v.rowShare.post).padStart(6)} | per px: steps ${v.perPixel.steps.toFixed(1)} walkPrims ${v.perPixel.walkPrims.toFixed(0)} postPrims ${v.perPixel.postPrims.toFixed(0)} walkRows ${v.perPixel.walkRows.toFixed(1)} postRows ${v.perPixel.postRows.toFixed(1)}`);
     }
+    // MELEE_REFOLD_STUDY=1 (2026-09-22): walk owner re-folds attempted / won (mode 15).
+    if (process.env.MELEE_REFOLD_STUDY === '1') {
+      const R = dec(await settledRead(15));
+      writeFileSync(`${OUT}/${phase.replaceAll('+', '-')}-refold-${w13.w}x${w13.h}.f32`, R.b);
+      let att = 0, won = 0, pxAtt = 0, pxWon = 0, pxWonHit = 0, pxWonMiss = 0, pxAttHit = 0;
+      for (let i = 0; i < w13.w * w13.h; i++) {
+        const o = i * 4;
+        if (!(R.f[o + 2] >= 0.5)) continue;
+        const a = R.f[o], wv = R.f[o + 1], hitPx = Math.floor(R.f[o + 2] / 1000) >= 1;
+        att += a; won += wv;
+        if (a > 0) { pxAtt++; if (hitPx) pxAttHit++; }
+        if (wv > 0) { pxWon++; if (hitPx) pxWonHit++; else pxWonMiss++; }
+      }
+      census.refoldStudy = { att, won, pxAtt, pxWon, pxWonHit, pxWonMiss, pxAttHit };
+      console.log(`  REFOLD [${phase}]: walk re-folds ${att} attempted, ${won} won (${(100 * won / Math.max(1, att)).toFixed(1)}%); `
+        + `pixels with any attempt ${pxAtt} (hits ${pxAttHit}), with any win ${pxWon} (hits ${pxWonHit}, misses ${pxWonMiss})`);
+    }
     // MELEE_CENSUS_LEGS='name=js;...' (2026-09-22): the same cost census with each leg
     // applied, same page and frame, and ship MINUS leg per class — where that leg's work is.
     const censusLegs = (process.env.MELEE_CENSUS_LEGS ?? '').split(';').filter(x => x.includes('='))
@@ -389,6 +413,33 @@ async function capturePhase(phase, withWounds) {
         const dw = (a.primShare.walk * P) - (b.primShare.walk * cl.totals.prims);
         const dp = (a.primShare.post * P) - (b.primShare.post * cl.totals.prims);
         console.log(`    ${k.padEnd(10)} px ${String(a.px).padStart(6)}/${String(b.px).padStart(6)} | extra prims walk ${dw.toFixed(0).padStart(8)} (${pct(dw / Math.max(1, P))}) post ${dp.toFixed(0).padStart(8)} (${pct(dp / Math.max(1, P))})`);
+      }
+    }
+    // MELEE_HYBRID_EST=1 (2026-09-22, docs/dev-notes/2026-09-22-cost-census/HYBRID-TIMING-PLAN.md step 0):
+    // what a sparse full-res pass over the hybrid's HARD pixels would cost, on this frozen frame. The
+    // mask comes from a coarse read (colour/depth + mode-11 prim ids + head circles), exactly as the
+    // engine would build it; it is priced against the mode-13/14 census of a 1.0 march, warp-pessimistic.
+    // Hit tolerance OFF throughout (owner: it is a perf side-effect, not the look).
+    if (process.env.MELEE_HYBRID_EST === '1') {
+      const { near, far } = await ev('__sdfGame.upscaleInfo()');
+      const f32 = (r) => { const b = Buffer.from(r.rgba32f, 'base64'); return new Float32Array(b.buffer, b.byteOffset, b.byteLength >> 2); };
+      const off = '__sdfGame.setAa(0); __sdfGame.setAaDistance(0, 3);';
+      await ev('__meleeShipRestore()');
+      await ev(`(() => { ${off} __sdfGame.setSdfScale(1.0); return 1; })()`);
+      const f13 = await settledRead(13), f14 = await settledRead(14);
+      const W = f13.w, H = f13.h;
+      const cost = pixelCost(f32(f13), f32(f14), W * H);
+      const heads = (await ev(`__sdfGame.captureAnnotations(${W}, ${H})`)).map((a) => a.head).filter(Boolean);
+      census.hybrid = {};
+      for (const scale of [0.25, 0.35]) {
+        await ev('__meleeShipRestore()');
+        await ev(`(() => { ${off} __sdfGame.setSdfScale(${scale}); return 1; })()`);
+        const col = await settledRead(0), ids = await settledRead(11);
+        const mask = hardMask({ w: col.w, h: col.h, data: f32(col) }, { w: ids.w, h: ids.h, data: f32(ids) }, heads, W, H, { near, far });
+        const r = sparseFraction(cost, mask, W, H);
+        census.hybrid[scale] = { coarse: [col.w, col.h], full: [W, H], ...r };
+        console.log(`  HYBRID [${phase}] coarse ${scale} (${col.w}x${col.h}): hard ${pct(r.hardPxShare)} of rasterised px, `
+          + `${pct(r.hardTileShare)} of warps; sparse pass = ${pct(r.fraction)} of the 1.0 march (warp-priced; per-pixel ${pct(r.plainFraction)})`);
       }
     }
     await ev('__meleeShipRestore()');

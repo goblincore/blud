@@ -1,3 +1,4 @@
+import { applySdfScale } from './game-render-leaves';
 // src/lab/sdf-zombie/webgpu/game-seams-render.ts
 //
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
@@ -117,6 +118,12 @@ export function createRenderSeams(ctx: GameContext) {
     refineBand: () => ({ ...ctx.render.refineBand }),
     setTemporalAccum: (on: boolean, alpha?: number) => ctx.render.sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => ctx.render.sdfLayer.resetTemporalAccum(),
+    setTemporalAccumCfg: (cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean; checker?: boolean; checkerDebug?: boolean; freshBlend?: number; splitM?: number }) => {
+      const r = ctx.render.sdfLayer.setTemporalAccumCfg(cfg);
+      // The checker halves the one-pixel hit tolerance (sdf-layer pixelConeK): refresh aaCfg.x.
+      applySdfScale(ctx, ctx.render.sdfScale);
+      return r;
+    },
     /** P3 A/B state: the mode U last selected, and the loaded model's store name. */
     upscaleAb: () => ({ active: ctx.render.upscaleAb.config !== null, mode: ctx.render.upscaleAb.mode, model: ctx.render.upscaleAb.modelName }),
     /** Stage state plus the camera's near/far (what rgbd depth linearization uses).
