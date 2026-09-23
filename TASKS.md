@@ -8,7 +8,8 @@
 
 Branch `claude/wake-level-pipeline-1afb01`. [Plan 1](docs/superpowers/plans/2026-09-11-wake-1-level-format.md) · [spec](docs/superpowers/specs/2026-09-23-level-format-design.md) · [Wake tasks](docs/game/levels/00-the-wake/tasks.md).
 - [x] T1 `level-def.ts` (types + spec §6 generators), 13 tests. Dispatched, verified in session.
-- [~] T2 `level-json.ts` + fixtures; then T3 `active-level.ts` ‖ T4 Blender exporter (dispatched, chained on T2).
+- [x] T2 `level-json.ts` + shared fixtures (`two-rooms` = spec §4.2 verbatim, `two-floors`), 30 tests with T1.
+- [~] T3 `active-level.ts` ‖ T4 Blender exporter + conventions (dispatched, chained on T2).
 - [~] T5a Blood E1M1/E1M2 reference study (dispatched). T5b layout **waits for owner approval** (draft 0 builds if T6 is ready first).
 
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
