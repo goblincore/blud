@@ -390,6 +390,13 @@ function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
   return best === null || bestAxes === null ? null : { centre: best, axes: bestAxes };
 }
 
+/** `?accum=1` at boot (temporal accumulation; MOTION-VECTORS-PLAN.md). A function, not a main()-level
+ *  binding: main() keeps ctx as its only state binding (game-main-deps.test). */
+function isAccumBoot(): boolean {
+  const a = new URLSearchParams(location.search).get('accum');
+  return a !== null && a !== '0';
+}
+
 async function main() {
   // Every main()-scope binding below lives on this container (see
   // game-context.ts). Declarations were rewritten IN PLACE by
@@ -1120,8 +1127,7 @@ async function main() {
   }
   // Motion vectors step 2: `?accum=1` also allocates the object-motion attachment accumulation v2
   // reprojects with (boot-time: the attachment count is fixed with the march target).
-  const accumBoot = (() => { const a = new URLSearchParams(location.search).get('accum'); return a !== null && a !== '0'; })();
-  ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: accumBoot && new URLSearchParams(location.search).get('accummotion') !== '0' });
+  ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: isAccumBoot() && new URLSearchParams(location.search).get('accummotion') !== '0' });
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -2608,7 +2614,7 @@ async function main() {
           console.error(`[upscale] trained model ${name} not loaded — the stage stays off: ${String(err)}`);
         }
       }
-    } else if (upRaw === null && accumBoot && new URLSearchParams(location.search).get('accumchecker') !== '1') {
+    } else if (upRaw === null && isAccumBoot() && new URLSearchParams(location.search).get('accumchecker') !== '1') {
       // `?accum=1` skips the shipped stage: the two do not stack, and loading it would switch the
       // accumulation straight back off. (Its own branch: falling through would parse model `null`.)
     } else if (upRaw === null) {
