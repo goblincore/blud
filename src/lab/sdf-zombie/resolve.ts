@@ -106,6 +106,7 @@ export function placePrims(
       ...(p.glow === undefined ? {} : { glow: p.glow }),
       ...(p.metal === undefined ? {} : { metal: p.metal }),
       ...(p.core ? { core: true } : {}),
+      ...(p.rigid ? { rigid: true } : {}),
       ...(p.shell === undefined ? {} : { shell: p.shell }),
       ...(p.box === undefined ? {} : { box: p.box }),
       // The strand bundle rides through placement exactly like paint and

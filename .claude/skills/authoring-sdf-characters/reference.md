@@ -177,6 +177,28 @@ still no roughness, so one plate cannot be brushed and another polished. Both
 are deliberate gaps left for evidence from a real character; raise them rather
 than routing around them.
 
+## Cloth that moves: `rigid`, the `hem` pendulum, posed clip planes (added 2026-09-23)
+
+The cultist (`characters/cultist.blob`, notes in `docs/dev-notes/2026-09-23-cultist/`) is a whole
+costume of `shell` cloth. Three rules came out of it:
+
+- **`rigid` (bare word): both ends ride the declared bone as one piece.** Without it, each end
+  binds to its NEAREST rig joint. A garment that hangs past its bone's joints, like a floor-length
+  skirt, then pins its far end to an ankle and stretches with one leg.
+- **A `hem` bone is a cloth pendulum.** Add `bone hem parent=pelvis dir=down len=...` and put the
+  skirt `on hem ... rigid`:
+  - The bone's free end springs loosely (`HEM_REST_SCALE`), bobs with the hips but never sways, so
+    the skirt trails a walk and overshoots a stop.
+  - The lab's `setWind` pushes it (`RigState.clothForce`).
+  - Keep its tail ABOVE the feet: `bindRig` pins the lowest rig point to the floor.
+- **Clip planes follow the pose.** `clip=`/`clipd=` are authored in REST space; applyRig moves them
+  with the prim. At rest they are exactly as written.
+
+Paint the flesh under a garment the garment's colour. A limb that pushes against the sheet then
+reads as cloth bulging, not skin through a tear. And measure the stride against the skirt:
+the zombie shamble put a knee 13.7 cm through the cultist's robe, which is why he has a `GLIDE`
+gait.
+
 ## Colour is the biggest lever you have
 
 Before the `palette` block existed, every `.blob` character wore one global

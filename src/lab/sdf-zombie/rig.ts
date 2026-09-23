@@ -28,6 +28,14 @@ export interface RigState {
   bodyYaw?: number;
   /** Fallen structural actors rotate the skull with the full rig, not an upright gaze cone. */
   headFollowsRig?: boolean;
+  /** Per-point multiplier on the rest pull (absent = 1 everywhere). A CLOTH
+   *  pendulum point (the cultist's `hem`) springs to its target far more
+   *  loosely than a joint, so it lags and overshoots instead of snapping. */
+  restScale?: readonly number[];
+  /** WIND on cloth: an acceleration (m/s^2, world) added to every point whose
+   *  restScale is below 1 — the cloth pendulums, never a joint. Absent = no
+   *  wind. The host modulates it (gusts); the rig just integrates it. */
+  clothForce?: Vec3;
 }
 
 /**
@@ -137,14 +145,21 @@ export function makeRig(
  */
 export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
   // Frame-rate independent rest pull, same shaping as goober-test's Rope.
-  const st = 1 - Math.pow(1 - opts.restStiffness, Math.max(dt, 1e-4) * 60);
+  const frames = Math.max(dt, 1e-4) * 60;
+  const st = 1 - Math.pow(1 - opts.restStiffness, frames);
+  const stOf = (i: number): number => {
+    const k = state.restScale?.[i];
+    return k === undefined || k === 1 ? st : 1 - Math.pow(1 - opts.restStiffness * k, frames);
+  };
 
   let points = state.points.map((p, i) => {
     if (state.posePins?.includes(i)) return { pos: state.restPose[i]!, prev: state.restPose[i]!, pinned: true };
     if (p.pinned) return { ...p, prev: p.pos };
     const vel = scale(sub(p.pos, p.prev), 1 - opts.damping);
     let next = add(add(p.pos, vel), scale(opts.gravity, dt * dt));
-    if (st > 0) next = lerp(next, state.restPose[i]!, st);
+    if (state.clothForce && (state.restScale?.[i] ?? 1) < 1) next = add(next, scale(state.clothForce, dt * dt));
+    const sti = stOf(i);
+    if (sti > 0) next = lerp(next, state.restPose[i]!, sti);
     return { pos: sanitize(next, p.pos), prev: p.pos, pinned: false };
   });
 

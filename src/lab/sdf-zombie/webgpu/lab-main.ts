@@ -2402,6 +2402,10 @@ async function main() {
   // straight into a uniform; see setWind.
   const windVel: [number, number, number] = [0, 0, 0];
   const windOffset: [number, number, number] = [0, 0, 0];
+  let windClock = 0;
+  /** Cloth push per unit wind speed, m/s^2 per m/s. At 1 m/s a hem
+   *  pendulum (HEM_REST_SCALE) settles ~6-8 cm downwind at full gust. */
+  const WIND_CLOTH_ACCEL = 8;
 
   handle.setRenderCallback((dt) => {
     // WIND. Accumulated as a world-space OFFSET in metres rather than handing
@@ -2415,6 +2419,17 @@ async function main() {
     // motion off. They leave wind at zero, which is the authored field
     // exactly — see setWind.
     if (windVel[0] !== 0 || windVel[1] !== 0 || windVel[2] !== 0) {
+      // ...and the same wind PUSHES the cloth pendulums (a `hem` bone's free
+      // end, rig.ts clothForce), gusting: two incommensurate sines keep the
+      // push between 0.35x and 1x so the skirt lifts and falls instead of
+      // leaning at a fixed angle. Only loose rig points feel it.
+      windClock += dt;
+      const gust = 0.675 + 0.325 * Math.sin(windClock * 1.9) * Math.sin(windClock * 0.71 + 1.1);
+      const push = (v: number) => v * WIND_CLOTH_ACCEL * gust;
+      if (heroMotion.bound.rig.restScale) {
+        heroMotion.bound = { ...heroMotion.bound,
+          rig: { ...heroMotion.bound.rig, clothForce: [push(windVel[0]), push(windVel[1]), push(windVel[2])] } };
+      }
       windOffset[0] += windVel[0] * dt;
       windOffset[1] += windVel[1] * dt;
       windOffset[2] += windVel[2] * dt;
@@ -4613,6 +4628,8 @@ async function main() {
     setWind(x: number, y: number, z: number) {
       windVel[0] = x; windVel[1] = y; windVel[2] = z;
       if (x === 0 && y === 0 && z === 0) {
+        if (heroMotion.bound.rig.clothForce)
+          heroMotion.bound = { ...heroMotion.bound, rig: { ...heroMotion.bound.rig, clothForce: undefined } };
         windOffset[0] = 0; windOffset[1] = 0; windOffset[2] = 0;
         for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(0, 0, 0);
       }

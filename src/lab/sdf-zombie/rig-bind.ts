@@ -133,6 +133,13 @@ const KEY_EPS = 1e-4;
  * One endpoint follows exactly one point — an SDF primitive is owned by a
  * single bone, so there are no skinning weights to solve and no blend seams.
  */
+/** Rest-pull multiplier for a `hem` pendulum point (see bindRig). Tuned by
+ *  eye on the cultist's wander, and on a CPU start/stop: at 0.15 the hem trails
+ *  ~8 cm when he sets off and overshoots ~5 cm when he stops, settling in
+ *  about a second. At 1 (a joint's stiffness) it tracks rigidly — 0 cm.
+ *  docs/dev-notes/2026-09-23-cultist/. */
+export const HEM_REST_SCALE = 0.15;
+
 export function bindRig(body: BuildResult): BoundRig {
   // Deduplicate joints: a bone's tail and its child's head are the same point.
   const positions: Vec3[] = [];
@@ -158,6 +165,15 @@ export function bindRig(body: BuildResult): BoundRig {
     positions.map((pos, i) => ({ pos, pinned: i === lowest })),
     constraints,
   );
+  // A `hem` bone's free end is a cloth pendulum (gait.ts 'hem'): it springs
+  // to its target at HEM_REST_SCALE of a joint's stiffness, so the skirt
+  // riding it lags the walk and overshoots a stop.
+  const hemBone = body.bones.get('hem');
+  if (hemBone) {
+    const scale = positions.map(() => 1);
+    scale[indexOf(hemBone.tail)] = HEM_REST_SCALE;
+    rig.restScale = scale;
+  }
   // Only intact upper-arm/forearm chains get an elbow stop. Dead distal
   // prims retain bone metadata for wound anchoring, so bone names alone
   // cannot tell us whether the joint is still attached.
@@ -305,6 +321,19 @@ export function bindRig(body: BuildResult): BoundRig {
   }
 
   const bindPrim = (p: Primitive): PrimBind => {
+    // `rigid`: both ends ride the DECLARED bone as one piece — offsets from
+    // its head joint, turned by its segment rotation (the same frame an arm
+    // endpoint uses). A zero-length bone has no rotation to give, so it falls
+    // through to the per-endpoint bind.
+    const own = p.rigid && p.bone ? body.bones.get(p.bone) : undefined;
+    if (own) {
+      const h = indexOf(own.head), t = indexOf(own.tail);
+      if (h !== t) {
+        const origin = positions[h]!;
+        return { a: { point: h, offset: sub(p.a, origin) }, b: { point: h, offset: sub(p.b, origin) },
+          armFrame: { head: h, tail: t, restDir: normalize(sub(own.tail, own.head)) } };
+      }
+    }
     const binding: PrimBind = { a: bindEnd(p.a), b: bindEnd(p.b) };
     const bone = p.bone && ARM_BONE_RE.test(p.bone) ? body.bones.get(p.bone) : undefined;
     if (bone) binding.armFrame = { head: indexOf(bone.head), tail: indexOf(bone.tail),
@@ -417,6 +446,31 @@ export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], 
  * anchored to the ROTATED rest gaze, so turning the body does not clamp the
  * head back to the authored facing.
  */
+/**
+ * A SHELL's clip plane is authored in REST model space (`clip=(0,-1,0)
+ * clipd=-0.719` is "keep above rest height 0.719"), and it used to be packed
+ * exactly as authored whatever the pose: endpoints, bend and orient turned
+ * with the bone while the plane that cuts the sheet stayed nailed to the rest
+ * frame. Harmless for a skirt's horizontal hem on a character who stands
+ * still; wrong as soon as the sheet rides anything that moves. A hood's face
+ * opening (a z-plane on the skull) stayed facing rest +z when the body
+ * turned, and a sleeve's cuff plane stayed where the wrist WAS (cloaked
+ * cultist spike, 2026-09-23).
+ *
+ * The plane moves with the prim by the same map the prim itself does,
+ * x -> a' + q (x - a): the normal turns by q and the offset is re-read
+ * through the posed start point. At rest (a' = a, q = identity) it is the
+ * authored plane exactly.
+ */
+function poseShellPlane(rest: Primitive, posedA: Vec3, q: Quat): NonNullable<Primitive['shell']> {
+  const sh = rest.shell!;
+  // An unturned prim keeps the authored normal bit-for-bit (qRotate by the
+  // identity still flips -0 to +0), so a statue's shells pack unchanged.
+  const n = q[3] === 1 ? sh.clipNormal : qRotate(q, sh.clipNormal);
+  const clipOffset = sh.clipOffset - dot(sh.clipNormal, rest.a) + dot(n, posedA);
+  return { ...sh, clipNormal: n, clipOffset };
+}
+
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
   const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig) : null;
@@ -445,11 +499,13 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     // world. Leaving either behind made the same zombie look thin-chested
     // and wide-footed when it faced sideways (the apparent room variants).
     // Isotropic capsules retain the cheap un-oriented field path.
+    const a = add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset));
     return {
       ...p,
-      a: add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset)),
+      a,
       b: add(pos[bind.b.point]!.pos, qRotate(q, bind.b.offset)),
       ...(p.bend ? { bend: qRotate(q, p.bend) } : {}),
+      ...(p.shell ? { shell: poseShellPlane(p, a, q) } : {}),
       ...(turned && orientedShape
         ? (p.orient ? { orient: qMul(q, p.orient) } : { orient: q, poseOrient: true })
         : {}),
@@ -467,8 +523,10 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // control point by orient along with the endpoints, so a rest-space
       // bend bowed a turned head's curve back into the skull — the ogre's
       // painted lips showed only their two end caps (rig-bind.test.ts).
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q,
-        ...(p.bend ? { bend: qRotate(rigid.q, p.bend) } : {}) };
+      const a = add(rigid.origin, face.a);
+      return { ...p, a, b: add(rigid.origin, face.b), orient: rigid.q,
+        ...(p.bend ? { bend: qRotate(rigid.q, p.bend) } : {}),
+        ...(p.shell ? { shell: poseShellPlane(p, a, rigid.q) } : {}) };
     }
     return posePrimitive(p, bound.binding[i]!);
   });

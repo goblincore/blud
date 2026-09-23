@@ -271,6 +271,14 @@ export interface PrimDef {
    */
   core?: boolean;
   /**
+   * BOTH endpoints ride the bone this prim is declared on (its `bone`), as
+   * one rigid piece turned by that bone's segment rotation — instead of each
+   * endpoint binding to its NEAREST rig joint. A garment that hangs past its
+   * bone's joints needs it: a robe on the pelvis with its hem at the floor
+   * would otherwise bind the hem end to an ankle and stretch with one leg.
+   */
+  rigid?: boolean;
+  /**
    * When set, this primitive is a thin clipped SHELL (cloth, not mass): the
    * closed base capsule's field is thinned to `abs(d) - thickness`, clipped
    * against `clipNormal`/`clipOffset`, with the cut edge rounded by `rim`.
@@ -412,6 +420,8 @@ export interface Primitive {
   boneSegment?: number;
   /** See PrimDef.core. */
   core?: boolean;
+  /** See PrimDef.rigid. */
+  rigid?: boolean;
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */
   shell?: ShellParams;
   /** See PrimDef.box. Carried through mirror, resolve and the rig untouched. */

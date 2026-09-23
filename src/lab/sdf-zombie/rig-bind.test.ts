@@ -13,6 +13,7 @@ import { parseBlob } from './blob-parse';
 import { makeMotionJoints } from './motion';
 import { collapseRopes } from './collapse';
 import soldierSrc from './characters/soldier.blob?raw';
+import schoolgirlSrc from './characters/schoolgirl.blob?raw';
 import zombieSrc from './characters/zombie.blob?raw';
 import { sdPrimitive } from './validate';
 import { add, dot, len, normalize, qRotate, scale as vscale, sub } from './vec';
@@ -640,6 +641,43 @@ describe('applyRig — a BENT prim on the rigid head keeps its curve (2026-09-22
       for (const x of [apex, add(apex, vscale(bow, rest.radius)), add(apex, vscale(bow, -rest.radius))]) {
         expect(sdPrimitive(toPosed(x), posed), `prim ${i}`).toBeCloseTo(sdPrimitive(x, rest), 9);
       }
+    }
+  });
+});
+
+describe('applyRig — a SHELL\'s clip plane rides the pose (2026-09-23)', () => {
+  // The clip plane is authored in rest model space. It used to be packed as
+  // authored whatever the pose, so a hood's face opening kept facing rest +z
+  // when the body turned and a cuff plane stayed where the wrist was. The
+  // plane must move by the prim's own map, x -> a' + q (x - a).
+  const body = buildBody(compileBlob(parseBlob(schoolgirlSrc)));
+  const bound = bindRig(body);
+  const shells = body.prims.map((p, i) => ({ p, i })).filter(({ p }) => p.shell).map(({ i }) => i);
+
+  it('is the authored plane exactly at rest', () => {
+    expect(shells.length, 'schoolgirl.blob authors shells').toBeGreaterThan(0);
+    const out = applyRig(body, bound);
+    for (const i of shells) {
+      expect(out.prims[i]!.shell!.clipNormal).toEqual(body.prims[i]!.shell!.clipNormal);
+      expect(out.prims[i]!.shell!.clipOffset).toBeCloseTo(body.prims[i]!.shell!.clipOffset, 12);
+    }
+  });
+
+  it('turns and translates with the prim under a yaw and a shoved rig', () => {
+    const moved = { ...bound, rig: { ...bound.rig, points: bound.rig.points.map(p =>
+      ({ ...p, pos: add(p.pos, [0.7, 0.05, -1.3]) as Vec3 })) } };
+    const out = applyRig(body, moved, 1.3);
+    for (const i of shells) {
+      const rest = body.prims[i]!, posed = out.prims[i]!;
+      const q = posed.orient!;
+      expect(q, `prim ${i} is oriented`).toBeDefined();
+      const n0 = rest.shell!.clipNormal, n1 = posed.shell!.clipNormal;
+      const want = qRotate(q, n0);
+      for (let k = 0; k < 3; k++) expect(n1[k]).toBeCloseTo(want[k]!, 9);
+      // A point ON the rest plane lands ON the posed plane.
+      const onRest = add(rest.a, vscale(n0, rest.shell!.clipOffset - dot(n0, rest.a)));
+      const mapped = add(posed.a, qRotate(q, sub(onRest, rest.a)));
+      expect(dot(n1, mapped) - posed.shell!.clipOffset, `prim ${i}`).toBeCloseTo(0, 9);
     }
   });
 });
