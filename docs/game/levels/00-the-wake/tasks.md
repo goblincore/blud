@@ -16,10 +16,11 @@ superpowers spec/plan when they start; link it on the task.
 The Wake is the first test of **route B/D**: levels built in Blender,
 exported into the game. The flat uses the same path.
 
-- [ ] **P-1 Blender conventions.** Units and scale, collision vs. render
+- [x] **P-1 Blender conventions.** Done 2026-09-23: [blender-conventions.md](../blender-conventions.md) (Plan 1 T4). Units and scale, collision vs. render
   meshes, naming for markers (player start, spawns, pickups, triggers, exit,
   lights, music sources, SDF parts). *Done when:* a short conventions doc.
-- [ ] **P-2 Exporter + importer.** Export a Blender scene (glTF plus markers) and
+- [x] **P-2 Exporter + importer.** Done 2026-09-23 (Plan 1 T1–T4, T6): Level Format v1 parser, `scripts/levels/export_level.py`,
+  `?level=<id>` loads through `ctx.world.level`; `scripts/sdf-game-wake-gate.sh` passes. Export a Blender scene (glTF plus markers) and
   load it in the game: meshes, box/mesh collision, markers turned into entities.
   *Deps:* P-1. *Done when:* a test scene with a start, a spawn and an exit
   loads and plays.
@@ -41,9 +42,9 @@ The level can't be tested without these. Build them small.
 
 ## Design
 
-- [ ] **W-D0 Reference study.** Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
+- [~] **W-D0 Reference study.** In progress 2026-09-23 (dispatched). Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
   process in the [level design guide](../level-design-guide.md).
-- [ ] **W-D1 Paper map.** Final flow and dimensions at goblin scale.
+- [~] **W-D1 Paper map.** Draft `layout.md` next; draft 0 drawn for comparison. Final flow and dimensions at goblin scale.
   *Deps:* W-D0, F-D5 (goblin scale). *Done when:* `layout.md` approved (Plan 1 Task 5b).
 - [ ] **W-D2 Encounter script.** Zombie counts, spawn points, triggers per beat.
   *Deps:* W-D1. Part of `layout.md` (Plan 1 Task 5b). Zombies and soldiers only.
@@ -54,7 +55,8 @@ The level can't be tested without these. Build them small.
 
 ## Build
 
-- [ ] **W-B1 Blockout in Blender.** Untextured, playable: gates → grave →
+- [~] **W-B1 Blockout in Blender.** Draft 0 built 2026-09-23 (plays at `?level=the-wake`, gate passes);
+  rebuild from `layout.md` once approved. Untextured, playable: gates → grave →
   graveyard → crypt → funeral home → coffin. *Deps:* P-2, W-D1.
   *Done when:* walk start to CD pickup in the game.
 - [ ] **W-B2 Encounters in.** Spawns and triggers from W-D2. *Deps:* W-B1, L-4.

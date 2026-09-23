@@ -10,8 +10,11 @@ Branch `claude/wake-level-pipeline-1afb01`. [Plan 1](docs/superpowers/plans/2026
 - [x] T1 `level-def.ts` (types + spec §6 generators), 13 tests. Dispatched, verified in session.
 - [x] T2 `level-json.ts` + shared fixtures (`two-rooms` = spec §4.2 verbatim, `two-floors`), 30 tests with T1.
 - [x] T3 `active-level.ts`: `ringLevel()` (byte-for-byte the testbed) and `authoredLevel(def)`; 64 tests with T1–T2 + game-level.
-- [~] T4 Blender exporter + conventions (dispatched).
-- [~] T5a Blood E1M1/E1M2 reference study (dispatched). T5b layout **waits for owner approval** (draft 0 builds if T6 is ready first).
+- [x] T4 Blender exporter + conventions. Fixed in session: stale `matrix_world` (markers exported at origin), yaw rounding.
+- [x] T5c **draft 0** blockout (layout not yet approved): `.blend`, `the-wake.level.json`, 6 level tests.
+- [x] T6 `ctx.world.level` wired; `?level=the-wake` plays; ring shorty gate passes; boot within noise of base.
+- [x] T7 `scripts/sdf-game-wake-gate.sh` passes (boot, layout, crypt slab, multi-floor refusal).
+- [~] T5a Blood E1M1/E1M2 reference study (dispatched). T5b layout draft then **owner approval**; then rebuild 5c from it.
 
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 
