@@ -68,7 +68,7 @@ const pelvisRig = (s: number): V => add(PELVIS_H, mul(sub(PELVIS_T, PELVIS_H), s
 // neck bone, which starts at the neck bar's from=0.05 (0,1.406,0.044).
 const TH_A: V = [0, 1.09, -0.06];
 const TH_B: V = [0, 1.40, 0.028];
-const TH_M: V = [0, 1.245, -0.080];
+const TH_M: V = [0, 1.245, -0.072];
 const TH_C = add(mid(TH_A, TH_B), bendThrough(TH_A, TH_B, TH_M));
 /** y is linear in t on this curve (the control y is the chord-mid y). */
 const spineAt = (y: number): V => bez(TH_A, TH_C, TH_B, (y - TH_A[1]) / (TH_B[1] - TH_A[1]));
@@ -85,13 +85,17 @@ const spineAt = (y: number): V => bez(TH_A, TH_C, TH_B, (y - TH_A[1]) / (TH_B[1]
 // across in a person), rib 4 is the widest, ribs 5-6 stop on the costal
 // margin short of the sternum.
 interface Rib { y: number; A: number; B: number; drop: number; r: number; frontX: number | null; floatTheta?: number }
+// 2026-09-22: ribs 4-6 narrowed (A 0.160/0.145/0.120 -> 0.150/0.133/0.110),
+// the kyphosis apex brought forward (z -0.080 -> -0.072), BACK_FLAT 0.78 ->
+// 0.72 and the iliac APEX x 0.128 -> 0.124: half-strength blends (3662c1ca)
+// thinned the waist seam and 11 of these bones broke the 4 mm margin there.
 const RIBS: Rib[] = [
   { y: 1.375, A: 0.075, B: 0.050, drop: 0.020, r: 0.0095, frontX: 0.024 },
   { y: 1.333, A: 0.125, B: 0.082, drop: 0.036, r: 0.0105, frontX: 0.024 },
   { y: 1.291, A: 0.155, B: 0.092, drop: 0.050, r: 0.0110, frontX: 0.024 },
-  { y: 1.249, A: 0.160, B: 0.090, drop: 0.058, r: 0.0110, frontX: 0.024 },
-  { y: 1.207, A: 0.145, B: 0.077, drop: 0.060, r: 0.0105, frontX: 0.050 },
-  { y: 1.165, A: 0.120, B: 0.074, drop: 0.052, r: 0.0095, frontX: 0.080 },
+  { y: 1.249, A: 0.150, B: 0.090, drop: 0.058, r: 0.0110, frontX: 0.024 },
+  { y: 1.207, A: 0.133, B: 0.077, drop: 0.060, r: 0.0105, frontX: 0.050 },
+  { y: 1.165, A: 0.110, B: 0.074, drop: 0.052, r: 0.0095, frontX: 0.080 },
 ];
 /** x of the rib head: on the flank of an r 0.018 vertebral body. */
 const HEAD_X = 0.017;
@@ -108,7 +112,7 @@ const ANGLE_BACK = 0.012;
  *  z -0.07 and 0.114 at z -0.09), so a true elliptical corner breaks the
  *  margin on the fat six-rib cage. 0.78 keeps the cage's back a flatter arc,
  *  which is also nearer the kidney section of a real thorax. */
-const BACK_FLAT = 0.78;
+const BACK_FLAT = 0.72;
 
 interface Emitted { line: string; prim: Primitive; label: string }
 const out: Emitted[] = [];
@@ -236,7 +240,7 @@ RIBS.forEach((rib, i) => {
     'Sacrum: promontory (0,1.005,-0.047) curving back to z -0.070 then forward to the coccyx. Fat wedge, 48 mm across at the top.');
   const HUB: V = [0.078, 1.045, -0.006];
   const PSIS: V = [0.040, 1.055, -0.070];
-  const APEX: V = [0.128, 1.100, -0.014];
+  const APEX: V = [0.124, 1.100, -0.014];
   const ASIS: V = [0.118, 1.070, 0.050];
   // The blade: hub -> crest apex, thick, flattened front-to-back so it reads
   // as a plate seen edge-on from the side and a wing from the front.

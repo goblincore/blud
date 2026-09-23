@@ -947,6 +947,9 @@ export function stepMotion(
       right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
+      // A hand is on the prop or it is not — snap to the wanted carry's flag.
+      ...(wanted.oneHanded ? { oneHanded: wanted.oneHanded } : {}),
+      ...(wanted.rightPole ? { rightPole: wanted.rightPole } : {}),
     };
     if (soldierStagger.state.serial !== (state.soldierStagger?.serial ?? 0)) {
       soldierStaggerCarry = state.carryPose ?? state.carryTargetPose ?? wanted;
@@ -970,6 +973,8 @@ export function stepMotion(
       right: { ...carryTargetPose.right },
       gunPitch: carryTargetPose.gunPitch,
       leftPole: [...carryTargetPose.leftPole],
+      ...(carryTargetPose.oneHanded ? { oneHanded: carryTargetPose.oneHanded } : {}),
+      ...(carryTargetPose.rightPole ? { rightPole: carryTargetPose.rightPole } : {}),
     };
     if (soldierStagger.active && soldierStaggerCarry) {
       const w = soldierStagger.armWeight;
@@ -1003,13 +1008,33 @@ export function stepMotion(
       const pitchAxis = Math.abs(soldierStaggerGunYaw) > 1e-9
         ? qRotate(qFromAxisAngle([0,1,0], soldierStaggerGunYaw * armPresence * inward), right)
         : right;
-      gun = gunPoseFromArm(targets[iE]!, targets[iH]!, pitchAxis, carry.gunPitch, profile.prop?.scale);
+      // The grip seats in the FIST, `gripReach` past the wrist along the
+      // forearm (motion-profile.ts). Same direction, so the aim is unchanged.
+      const reachPast = profile.prop?.gripReach ?? 0;
+      const fist = reachPast > 0
+        ? add(targets[iH]!, scale(normalize(sub(targets[iH]!, targets[iE]!)), reachPast))
+        : targets[iH]!;
+      gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale);
       // Keep the authored wrist/gun orientation, then swivel the elbow out
       // of the vest. The shoulder and grip do not move, nor do arm lengths.
-      targets[iE] = alignElbow(targets[iS]!, targets[iE]!, targets[iH]!, rotateYaw([-inward, -1, 0.3], bodyYaw));
+      const rp = carry.rightPole;
+      targets[iE] = alignElbow(targets[iS]!, targets[iE]!, targets[iH]!,
+        rotateYaw(rp ? [-inward * rp[0], rp[1], rp[2]] : [-inward, -1, 0.3], bodyYaw));
+    }
+    // One-handed carry (the ogre's drag): the left arm is free. It swings about
+    // its shoulder counter to the left leg — a rotation, never a displacement,
+    // so both segments keep their lengths (the reach-pose lesson above).
+    if (carry.oneHanded && !sig.missing.armL) {
+      const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
+      const inwardL = joints.base[iS]![0] < pelvisX ? 1 : -1;
+      const swing = carry.oneHanded.leftSwing * Math.sin(2 * Math.PI * gait.pose.phase) * blend;
+      const r = armPivot(targets[iS]!, restSeg('shoulderL', 'elbowL'), restSeg('elbowL', 'handL'),
+        { pitch: swing, yaw: 0, fold: Math.max(0, swing) * 0.6 }, right, inwardL, 1);
+      targets[iE] = add(r.elbow, rotateYaw(stagger.offsets.elbowL ?? Z, bodyYaw));
+      targets[iH] = add(r.hand, rotateYaw(stagger.offsets.handL ?? Z, bodyYaw));
     }
     // Left arm: FABRIK onto the fore-end, elbow poled outward.
-    if (gun && !sig.missing.armL) {
+    if (gun && !sig.missing.armL && !carry.oneHanded) {
       const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
       const grip = gunPoint(gun, GUN_GRIP.foreHand);
       let target = grip;

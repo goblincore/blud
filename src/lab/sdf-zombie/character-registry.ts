@@ -37,6 +37,8 @@ import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
+import ogreBlobSrc from './characters/ogre.blob?raw';
+import broodmotherBlobSrc from './characters/broodmother.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -267,6 +269,30 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('gnasher'),
   },
+  ogre: {
+    name: 'ogre', src: ogreBlobSrc,
+    // Belt, hide kilt, breeches, boots and bracers: characters/ogre-kit.wam,
+    // compiled by scripts/build-wam-kit.sh ogre; committed as the glTF.
+    kit: '/assets/lab/ogre-kit.gltf',
+    // The .blob's sheet block declares ogre-face.png — a GENERATED mouth-only
+    // decal at MULTIPLY (no reference mesh to bake; scripts/make-ogre-face.py
+    // draws it). mean is the declared value; the face step re-measures off
+    // the decoded pixels.
+    face: { url: '/assets/lab/faces/ogre-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
+    profile: motionProfileFor('ogre'),
+  },
+  broodmother: {
+    name: 'broodmother', src: broodmotherBlobSrc,
+    // Flesh only, no kit. The face is GEOMETRY (lips, nose, glowing eyes and
+    // spider eyes are prims) on a nubbed face block, so `face` is the flat
+    // sheet and no `image` is declared.
+    face: ZOMBIE_FLAT,
+    // The zombie default. Her eight spider legs map to no gait joint
+    // (gait.ts jointNamesForBody), so she has no walk yet — a spider gait
+    // is the open follow-up (docs/dev-notes/2026-09-22-broodmother/).
+    profile: motionProfileFor('broodmother'),
+  },
+
 };
 
 export function characterNames(): readonly string[] {

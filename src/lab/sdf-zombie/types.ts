@@ -390,6 +390,15 @@ export interface Primitive {
    * the scale-divide. Optional so fixtures compile — same pattern as `dead`.
    */
   orient?: Quat;
+  /**
+   * True when `orient` was ADDED by applyRig to keep a turned body's
+   * anisotropic shape aligned with its heading (3e9850e3), on a prim whose
+   * rest pose has no orient. It shapes the field only: wound frames
+   * (damage.ts `frame`) must ignore it, or a wound stamped in the posed orient
+   * basis is read back on the rest prim in the axis basis and lands elsewhere
+   * (a centre-chest slug resolved at the neck root and decapitated, 2026-09-22).
+   */
+  poseOrient?: boolean;
   /** See PrimDef.color. Carried through mirror, resolve and the rig untouched. */
   color?: Vec3;
   /** See PrimDef.gloss. */

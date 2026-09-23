@@ -141,7 +141,10 @@ body
   # Waist: cinched to ~0.179 half-width so there is a break between haunch and
   # chest. ROUND 3: narrowed wide 1.05->0.98 and deepened 1.30->1.50 so the
   # mid-torso is a deep ribcage waist, not a thin pinch between two lumps.
-  blob torso on spine at=0.30 r=0.170 wide=0.98 tall=1.05 deep=1.50 blend=0.018
+  # tall 1.05 -> 1.18 (2026-09-22): half-strength blends (3662c1ca) opened a
+  # +3 mm crease between waist and chest at the belly (0.07,1.00,0.14), which
+  # broke hip-to-chest fusion; the taller waist closes it with 5 mm to spare.
+  blob torso on spine at=0.30 r=0.170 wide=0.98 tall=1.18 deep=1.50 blend=0.018
   # Chest: the biggest single mass and the deepest thing on the body. ROUND 2:
   # wide was 1.10 (0.231 half-width); the arm cleared the torso by only 4.7 mm
   # and the side view read as a slab. Narrowed to 0.98 (0.206 half-width) so

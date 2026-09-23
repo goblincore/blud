@@ -148,7 +148,10 @@ describe('extractHullSoup on the zombie', () => {
       const q: Vec3 = [p[0] - g[0] * 2 * band, p[1] - g[1] * 2 * band, p[2] - g[2] * 2 * band];
       if (field(q) > 0) fails++;
     }
-    expect(fails / soup.cellVerts).toBeLessThan(0.01);
+    // 1.5%, was 1%: half-strength blends (3662c1ca, owner-accepted) leave
+    // sharper creases between clusters, where the gradient walk inward can exit
+    // the far wall (measured 2026-09-22: 1.19%).
+    expect(fails / soup.cellVerts).toBeLessThan(0.015);
   });
 
   it('flags overflow when the cell-vertex cap is tiny, and never writes past it', () => {

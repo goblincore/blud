@@ -140,8 +140,11 @@ body
   });
 
   it('produces a BodyDef the existing builder accepts without errors', async () => {
-    const { buildBody } = await import('./build-body');
-    expect(buildBody(compileBlob(doc)).errors).toEqual([]);
+    const { buildBody, DEFAULT_BUILD_OPTS } = await import('./build-body');
+    // Authored-strength blends: this sparse fixture's carve-only head cluster
+    // fuses on its blend alone, and the character default halves it (3662c1ca;
+    // docs/dev-notes/2026-09-17-half-blend-default.md exempts such fixtures).
+    expect(buildBody(compileBlob(doc), { ...DEFAULT_BUILD_OPTS, roundBlendScale: 1 }).errors).toEqual([]);
   });
 });
 

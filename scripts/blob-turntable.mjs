@@ -215,6 +215,14 @@ const poseResult = await evaluate(`(() => {
 })()`);
 console.log('pose:', poseResult);
 await sleep(4000);
+// A held WALK/RUN pose steps the treadmill from the origin, and the body's
+// torso is no longer where the pre-pose focusBody() aimed: the ogre's stomp
+// left it ~1 m off the orbit centre, so every yaw framed a different crop of
+// it. Re-aim once the posed rig has rendered (lastPosed updates per frame).
+if (POSE !== 'rest') {
+  await evaluate('window.__sdfLab.focusBody()');
+  await sleep(500);
+}
 
 const errors = await evaluate('JSON.stringify(window.__sdfLab.current.errors ?? [])');
 if (errors && errors !== '[]') {

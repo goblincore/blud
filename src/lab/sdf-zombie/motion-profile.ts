@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, MARCH, RUN, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, MARCH, RUN, STOMP, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 
@@ -23,8 +23,12 @@ export interface MotionProfile {
   armStyle: ArmStyle;
   /** Which carry each locomotion state uses; absent = no held weapon. */
   carries?: { walk: CarryName; run: CarryName; fire: CarryName };
-  /** The held prop, if any. */
-  prop?: { url: string; scale?: number };
+  /** The held prop, if any. `gripReach` (m, default 0) seats the prop's grip
+   *  that far PAST the wrist along the forearm — the rig's hand joint is the
+   *  WRIST (forearm tail), so a character whose fist is a long hand bone (the
+   *  ogre's 0.15 m, fist centred at its midpoint) otherwise holds the handle
+   *  inside its forearm. The soldier's short hand never showed it. */
+  prop?: { url: string; scale?: number; gripReach?: number };
 }
 
 export const ZOMBIE_PROFILE: MotionProfile = {
@@ -73,9 +77,43 @@ export const SOLDIER_PROFILE: MotionProfile = {
   prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.2 },
 };
 
+/** The ogre: a heavy stomp, DRAGGING his chainsaw behind him one-handed (the
+ *  Quake ogre's walk). The saw is a held PROP on the soldier's carry
+ *  machinery (carry.ts): the right arm is rotated into the `drag` carry and
+ *  the prop's grip locator seats on the right hand; `drag` is one-handed, so
+ *  the left arm hangs free and swings. make-ogre-chainsaw.py builds the .glb
+ *  on the shared GUN_GRIP locators. */
+export const OGRE_PROFILE: MotionProfile = {
+  name: 'ogre',
+  // One gait: an ogre does not break into a run (runBand never reached).
+  gait: { walk: STOMP, run: STOMP },
+  runBand: { from: Infinity, to: Infinity },
+  // Slower than the zombie's 1.15 m/s cruise: he closes distance by being
+  // unstoppable, not fast.
+  cruise: 0.95,
+  // Heavier than the soldier's 5.5; a touch under the zombie default feel.
+  turnRate: 2.2,
+  armStyle: 'carry',
+  // `drag` in every state. The two-handed `saw` (belly height, bar across the
+  // body) was the first pass; owner, 2026-09-22: "it doesnt make sense to
+  // hold the chainsaw like a gun". There is no fire state (he does not shoot),
+  // so `fire` only matters if a future attack drives carryOverride — and a
+  // swing will want `saw` or its own two-handed raise.
+  carries: { walk: 'drag', run: 'drag', fire: 'drag' },
+  // 1.6: every prop-local length (and the grip locators) is 1/1.6 of world
+  // (make-ogre-chainsaw.py's header). Dragged one-handed, the front hoop no
+  // longer has to be in the left arm's reach (that capped the two-handed
+  // hold at 1.45), and the longer bar is what lets the nose reach the floor.
+  // gripReach 0.075: the fist prim sits at the MIDDLE of his 0.15 m hand bone
+  // (ogre.blob `blob arm on hand at=0.50`); at 0 the handle rode inside his
+  // forearm (owner, 2026-09-22: "its like in his arm").
+  prop: { url: '/assets/lab/ogre-chainsaw.glb', scale: 1.6, gripReach: 0.075 },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   soldier: SOLDIER_PROFILE,
+  ogre: OGRE_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

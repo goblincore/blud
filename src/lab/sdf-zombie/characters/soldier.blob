@@ -201,7 +201,10 @@ bones
   ratio 0.38
   # A broad cranium and separate jaw fill the face while retaining a skin wall.
   blob head on skull at=0.45 r=0.080 wide=0.94 tall=1.10 deep=1.06
-  blob head on skull at=0.18 offset=(0,-0.022,0.035) r=0.056 wide=0.90 tall=0.78 deep=1.00
+  # Jaw r 0.056 -> 0.052 (2026-09-22): under half-strength blends (3662c1ca)
+  # its lower flank at (-0.029,1.680,0.062) broke the 4 mm containment margin (0.054 cleared
+  # the SDF check but not the extracted skull mesh, mesh.test.ts).
+  blob head on skull at=0.18 offset=(0,-0.022,0.035) r=0.052 wide=0.90 tall=0.78 deep=1.00
 
   # A restrained cage beneath the cuirass: three paired two-piece hoops,
   # sternum, and rear spine. `both` keeps the authored halves symmetric.

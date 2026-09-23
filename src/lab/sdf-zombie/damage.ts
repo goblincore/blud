@@ -176,7 +176,9 @@ function bodyAxis(prim: Primitive, bodyYaw: number): Vec3 {
  * identity at rest, so nothing authored before this changed.
  */
 function frame(prim: Primitive, bodyYaw: number, axis0?: Vec3) {
-  if (prim.orient) {
+  // A rig-added pose orient (Primitive.poseOrient) is not the prim's own
+  // frame — its rest copy has none — so wounds keep the axis frame there.
+  if (prim.orient && !prim.poseOrient) {
     const q = prim.orient;
     return {
       u: qRotate(q, [1, 0, 0] as Vec3),
@@ -364,7 +366,7 @@ export function worldHitToWound(
   if (primIdx < 0) primIdx = 0; // a body with no solid primitives cannot be hit
 
   const prim = prims[primIdx]!;
-  const axis0 = prim.orient ? undefined : bodyAxis(prim, bodyYaw);
+  const axis0 = prim.orient && !prim.poseOrient ? undefined : bodyAxis(prim, bodyYaw);
   const { u, v, w } = frame(prim, bodyYaw, axis0);
   const rel = sub(hit, prim.a);
   const wound: Wound = { primIdx, local: [dot(rel, u), dot(rel, v), dot(rel, w)], radius, type, ageSec: 0 };
