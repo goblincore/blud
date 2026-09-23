@@ -42,6 +42,7 @@ export const MARCH_NORMAL_OUT = /* wgsl */ `fn readMarchNormal(dep: vec4<f32>) -
 }
 var<private> gMarchNormal: vec4<f32>;
 var<private> gMarchAnchor: vec4<f32>;
+var<private> gMarchMotion: vec4<f32>;
 `;
 
 /** Run 4 (plan 2026-09-12-neural-upscale-run4-relief): the rest-space noise anchor of the hit
@@ -59,4 +60,12 @@ export const MARCH_ANCHOR_READ = /* wgsl */ `fn readMarchAnchor(dep: vec4<f32>) 
  *  the same eval order after the march output) as the anchor read above. */
 export const MARCH_BURN_OUT = /* wgsl */ `fn readMarchBurn(dep: vec4<f32>) -> vec4<f32> {
   return gBurnOut;
+}`;
+
+/** MOTION VECTORS step 2 (docs/dev-notes/2026-09-22-cost-census/MOTION-VECTORS-PLAN.md): the hit's
+ *  OBJECT motion since the previous rendered frame, prevPosed(anchor) - p in world metres (xyz), w = 1
+ *  valid / 0 none. Written only when the per-instance switch gInstMelt.y (meltCfg.y) is on; the
+ *  private is declared in MARCH_NORMAL_OUT — include that node, never redeclare the var. */
+export const MARCH_MOTION_READ = /* wgsl */ `fn readMarchMotion(dep: vec4<f32>) -> vec4<f32> {
+  return gMarchMotion;
 }`;

@@ -49,7 +49,7 @@ export const SHIP_REFOLD_MODE = 2;
  *  re-fold only the limb that won at the hit; owner A/B 2026-09-22: no visible difference,
  *  -1.0 ms wounded melee). */
 export const SHIP_COUNTS2_Z = SHIP_REFOLD_MODE + 32;
-import { marchNormalRead, marchAnchorRead } from './march-private-reads';
+import { marchNormalRead, marchAnchorRead, marchMotionRead } from './march-private-reads';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
@@ -177,6 +177,9 @@ export interface ZombieGpuView {
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
    *  melting body (and its released bone chunks) ever set this non-zero. */
   setMelt(progress: number): void;
+  /** Motion vectors step 2 (MOTION-VECTORS-PLAN.md): meltCfg.y (gInstMelt.y) on = the march writes
+   *  the object-motion MRT attachment. The layer turns it on only while temporal accumulation runs. */
+  setMotionOut(on: boolean): void;
   /**
    * RUPTURE GORE 0..1 → lodCfg.w, the SAME channel a spawned flesh chunk sets
    * to 1 (body-to-gib task 3). A standing body is 0; a doomed body ramps it
@@ -220,7 +223,7 @@ export interface ZombieGpuView {
 // marchNormalRead / marchAnchorRead live in march-private-reads.ts so the
 // DEFERRED surface chain (deferred-sdf.ts, which this module imports) can seed
 // from the same node without an import cycle. Re-exported for existing callers.
-export { marchNormalRead, marchAnchorRead };
+export { marchNormalRead, marchAnchorRead, marchMotionRead };
 /** Flame tongues (flame-tongues task 2): the burn-mask read (MARCH_BURN_OUT). Its private is
  *  declared in the FOLD_GROUP helper chunk every march chain carries; the include keeps the same
  *  lineage (and eval order after the march output) as the anchor read. */
@@ -314,6 +317,11 @@ const depthPreMarginAt = (cfg: unknown, world: unknown) => {
  *  or a debug step(0) inside one frame cannot collapse prev onto cur. */
 let motionFrame = 0;
 export function tickMotionFrame(): void { motionFrame++; }
+/** Motion vectors step 2: whether every body writes the object-motion attachment (meltCfg.y), set by
+ *  the sdf layer while temporal accumulation runs. Applied in each body's per-frame update(), so
+ *  bodies spawned later pick it up too. */
+let motionOutAll = false;
+export function setMotionOutAll(on: boolean): void { motionOutAll = on; }
 
 export function blankFaceTexture(): THREE.DataTexture {
   const tex = new THREE.DataTexture(
@@ -2692,6 +2700,7 @@ export function createZombieGpuView(
       if (depthSegMetaNode) (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
     },
     setMelt(progress) { u.meltCfg.value.x = progress; syncRecord(); },
+    setMotionOut(on) { u.meltCfg.value.y = on ? 1 : 0; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {
       const p = upload(next, rest, true);
@@ -2712,6 +2721,7 @@ export function createZombieGpuView(
         refineMesh.position.copy(mesh.position);
         refineMesh.scale.copy(mesh.scale);
       }
+      u.meltCfg.value.y = motionOutAll ? 1 : 0;
       syncRecord();
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners) {

@@ -117,6 +117,7 @@ export function createRenderSeams(ctx: GameContext) {
     refineBand: () => ({ ...ctx.render.refineBand }),
     setTemporalAccum: (on: boolean, alpha?: number) => ctx.render.sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => ctx.render.sdfLayer.resetTemporalAccum(),
+    setTemporalAccumCfg: (cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean }) => ctx.render.sdfLayer.setTemporalAccumCfg(cfg),
     /** P3 A/B state: the mode U last selected, and the loaded model's store name. */
     upscaleAb: () => ({ active: ctx.render.upscaleAb.config !== null, mode: ctx.render.upscaleAb.mode, model: ctx.render.upscaleAb.modelName }),
     /** Stage state plus the camera's near/far (what rgbd depth linearization uses).

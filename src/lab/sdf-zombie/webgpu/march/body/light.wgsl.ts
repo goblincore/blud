@@ -15,6 +15,14 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
   // No reader of the attachment consumes .w except the refine twin (pinned).
   let bodyKey = dot(gInstCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;
   gMarchNormal = vec4<f32>(normalize(n), bodyKey);
+  // MOTION VECTORS step 2: the object-motion attachment for temporal accumulation. Off (one branch)
+  // unless the per-instance switch gInstMelt.y (meltCfg.y, spare until 2026-09-22) is set — the
+  // layer sets it only while accumulation is on, so the ship path never pays for prevPosed.
+  gMarchMotion = vec4<f32>(0.0);
+  if (gInstMelt.y > 0.5) {
+    let mvPrev = prevPosed(anchor, data, hitBest, gBand);
+    if (mvPrev.w > 0.5) { gMarchMotion = vec4<f32>(mvPrev.xyz - p, 1.0); }
+  }
   // NORMAL-OUTPUT MODE (debugCfg.x == 9, neural upscale normals capture,
   // 2026-09-12). The final shading normal (after the face bump) in WORLD space,
   // depth in alpha exactly as the lit output, so the same readback and crop

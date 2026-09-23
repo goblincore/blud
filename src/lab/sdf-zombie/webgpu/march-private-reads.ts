@@ -19,7 +19,7 @@
 // private: "unresolved value 'gMarchAnchor'", no deferred stamps, found by
 // the shutter task-3 rig on 2026-09-21. A leaf module both can import ends it.
 import { wgslFn } from 'three/tsl';
-import { MARCH_ANCHOR_READ, MARCH_NORMAL_OUT } from './march.wgsl';
+import { MARCH_ANCHOR_READ, MARCH_MOTION_READ, MARCH_NORMAL_OUT } from './march.wgsl';
 
 /** The runtime-normals read fn + its private globals (MARCH_NORMAL_OUT). Seeds
  *  every march chain, forward and deferred; call as marchNormalRead({ dep })
@@ -27,3 +27,5 @@ import { MARCH_ANCHOR_READ, MARCH_NORMAL_OUT } from './march.wgsl';
 export const marchNormalRead = wgslFn(MARCH_NORMAL_OUT);
 /** Run 4: the anchor/gate read (MARCH_ANCHOR_READ), sharing marchNormalRead's private declaration. */
 export const marchAnchorRead = wgslFn(MARCH_ANCHOR_READ, [marchNormalRead] as never);
+/** Motion vectors step 2: the object-motion read (MARCH_MOTION_READ), sharing marchNormalRead's private declaration. */
+export const marchMotionRead = wgslFn(MARCH_MOTION_READ, [marchAnchorRead] as never);

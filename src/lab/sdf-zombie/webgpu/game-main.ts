@@ -1118,7 +1118,10 @@ async function main() {
       if (Number.isFinite(n) && Number.isFinite(f) && f > n && n >= 0) { ctx.render.refineBand.near = n; ctx.render.refineBand.far = f; }
     }
   }
-  ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted });
+  // Motion vectors step 2: `?accum=1` also allocates the object-motion attachment accumulation v2
+  // reprojects with (boot-time: the attachment count is fixed with the march target).
+  const accumBoot = (() => { const a = new URLSearchParams(location.search).get('accum'); return a !== null && a !== '0'; })();
+  ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: accumBoot && new URLSearchParams(location.search).get('accummotion') !== '0' });
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -2596,6 +2599,9 @@ async function main() {
           console.error(`[upscale] trained model ${name} not loaded — the stage stays off: ${String(err)}`);
         }
       }
+    } else if (upRaw === null && accumBoot) {
+      // `?accum=1` skips the shipped stage: the two do not stack, and loading it would switch the
+      // accumulation straight back off. (Its own branch: falling through would parse model `null`.)
     } else if (upRaw === null) {
       // DEFAULT (owner 2026-09-13): the shipped stage for this graphics level, with CAS sharpen.
       // `?upscale=0` is the native march (the pre-stage picture); the U key still cycles

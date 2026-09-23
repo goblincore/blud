@@ -35,7 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickMotionFrame, marchNormalRead, marchAnchorRead, marchBurnRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickMotionFrame, setMotionOutAll, marchNormalRead, marchAnchorRead, marchBurnRead, marchMotionRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
@@ -552,7 +552,10 @@ export const TEMPORAL_ACCUM_WGSL = /* wgsl */ `fn temporalAccum(
   flipY: f32,
   curInvVp: mat4x4<f32>,
   prevVp: mat4x4<f32>,
-  alpha: f32
+  alpha: f32,
+  motionTex: texture_2d<f32>,
+  nearFar: vec2<f32>,
+  cfg: vec4<f32>
 ) -> vec4<f32> {
   let curDims = vec2<f32>(textureDimensions(curTex, 0));
   let outDims = vec2<f32>(textureDimensions(histTex, 0));
@@ -628,16 +631,56 @@ export const TEMPORAL_ACCUM_WGSL = /* wgsl */ `fn temporalAccum(
   // path reprojected forward instead, unprojecting with the HELD camera and
   // projecting with the current one; that works when the source and destination
   // are the same buffer, which a ping-pong history is not.)
+  //
+  // v2 (2026-09-22, MOTION-VECTORS-PLAN.md step 2): cfg.x > 0.5 ADDS the surface's OBJECT motion
+  // (the march's marchMotion attachment: prevPosed - p, world metres, w = valid) before projecting
+  // with the previous camera. v1 moved only with the camera, so a limb that moved under a still
+  // camera fetched history from the spot it USED to occupy — the body's old pose, stacked inside
+  // the current silhouette ("its trapped within the body", PASSOFF-3). Nearest tap, like depth: a
+  // blended motion describes no surface.
   let ndc = vec2<f32>(st.x * 2.0 - 1.0, 1.0 - st.y * 2.0);
   let world = curInvVp * vec4<f32>(ndc, cur.w, 1.0);
-  let clipPrev = prevVp * (world / world.w);
+  var worldPrev = world.xyz / world.w;
+  if (cfg.x > 0.5) {
+    let mv = textureLoad(motionTex, nearIdx, 0);
+    if (mv.w > 0.5) { worldPrev = worldPrev + mv.xyz; }
+  }
+  let clipPrev = prevVp * vec4<f32>(worldPrev, 1.0);
   if (clipPrev.w <= 0.0) { return cur; }
   let ndcPrev = clipPrev.xy / clipPrev.w;
   let stPrev = vec2<f32>((ndcPrev.x + 1.0) * 0.5, (1.0 - ndcPrev.y) * 0.5);
   if (stPrev.x < 0.0 || stPrev.x > 1.0 || stPrev.y < 0.0 || stPrev.y > 1.0) { return cur; }
   let histIdx = clamp(vec2<i32>(floor(stPrev * outDims)), vec2<i32>(0, 0), vec2<i32>(outDims) - vec2<i32>(1, 1));
-  let hist = textureLoad(histTex, histIdx, 0);
+  var hist = textureLoad(histTex, histIdx, 0);
   if (hist.w >= 1.0) { return cur; }
+
+  // v2 DEPTH VALIDITY (cfg.y = tolerance, metres, > 0 = on): the history stores the clip depth of
+  // the surface it accumulated; where that is NOT where this surface was last frame, something else
+  // covered the spot (disocclusion: a limb that swung away, a body that walked past) and its colour
+  // is not this surface's past. Linear view depth, tolerance grown 2 % with distance.
+  if (cfg.y > 0.0) {
+    let lin = nearFar.x * nearFar.y;
+    let span = nearFar.y - nearFar.x;
+    let expected = lin / (nearFar.y - (clipPrev.z / clipPrev.w) * span);
+    let stored = lin / (nearFar.y - hist.w * span);
+    if (abs(stored - expected) > cfg.y + 0.02 * expected) { return cur; }
+  }
+
+  // v2 NEIGHBOURHOOD CLAMP (cfg.z > 0.5): the history colour may not leave the range of this
+  // frame's flesh colours in the 3x3 texels around the sample. Whatever the reprojection still gets
+  // wrong (fast shading changes, a motion vector off by a texel at a joint) is pulled back to what
+  // the surface looks like NOW — the standard TAA ghost guard, deferred in v1.
+  if (cfg.z > 0.5) {
+    var lo = vec3<f32>(1e9);
+    var hi = vec3<f32>(-1e9);
+    for (var dy = -1; dy <= 1; dy++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        let nb = textureLoad(curTex, clamp(nearIdx + vec2<i32>(dx, dy), vec2<i32>(0, 0), maxI), 0);
+        if (nb.w < 1.0) { lo = min(lo, nb.xyz); hi = max(hi, nb.xyz); }
+      }
+    }
+    hist = vec4<f32>(clamp(hist.xyz, lo, hi), hist.w);
+  }
 
   // DEPTH IS NOT BLENDED (the rule the weave already pins): the alpha this pass
   // republishes is the CURRENT frame's depth, because a mix of two depths
@@ -966,6 +1009,9 @@ export interface SdfLayer {
    *  Turning it ON turns the field weave OFF — they are mutually exclusive, and
    *  accumulation replaces the weave rather than joining it. */
   setTemporalAccum(on: boolean, alpha?: number): boolean;
+  /** Accumulation v2 knobs (MOTION-VECTORS-PLAN.md step 2): object motion (needs the boot's marchMotion),
+   *  depth-validity tolerance in metres (0 = off), neighbourhood clamp. All three off = v1. */
+  setTemporalAccumCfg(cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean }): { motion: boolean; depthTolM: number; clamp: boolean; motionAvailable: boolean };
   /** NEURAL UPSCALE STAGE (spec docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md).
    *  march -> upscale -> composite. `null` turns it off. On: forces field style
    *  'off' and refuses temporal accumulation (stacking is P5); the composite reads
@@ -1081,6 +1127,10 @@ export interface SdfLayerOptions {
    *  post-aa tongue pass. Dev-only like `marchNormals`; off leaves the target and its frame
    *  byte-identical to the shipped boot. Independent of `marchNormals` (the lab runs it alone). */
   marchBurn?: boolean;
+  /** Motion vectors step 2 (MOTION-VECTORS-PLAN.md): allocate the object-motion MRT attachment
+   *  ('marchMotion', the LAST attachment) that temporal accumulation v2 reprojects with. Boot-time,
+   *  because the attachment count is fixed when the march target is created. */
+  marchMotion?: boolean;
 }
 
 export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayerOptions = {}): SdfLayer {
@@ -1089,6 +1139,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   // Flame tongues (flame-tongues task 2): the fourth attachment is OPT-IN and
   // independent of the normals pair — the flame lab runs the burn mask alone.
   const marchBurnOn = options.marchBurn === true;
+  const marchMotionOn = options.marchMotion === true;
   let scale = DEFAULT_SDF_SCALE;
   let fullW = 1;
   let fullH = 1;
@@ -1190,6 +1241,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   const accumNext = new THREE.RenderTarget(1, 1, { ...accumOpts });
   const uAccumOn = uniform(0);
   const uAccumAlpha = uniform(TEMPORAL_ACCUM_DEFAULT_ALPHA);
+  // v2 (MOTION-VECTORS-PLAN.md step 2): x object motion on (needs options.marchMotion), y depth-validity
+  // tolerance in metres (0 = off), z neighbourhood clamp on. Defaults = v2 fully on when motion exists.
+  const uAccumCfg = uniform(new THREE.Vector4(options.marchMotion === true ? 1 : 0, 0.03, 1, 0));
+  const uAccumNearFar = uniform(new THREE.Vector2(0.1, 200));
+  const accumMotionFallback = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
+  accumMotionFallback.needsUpdate = true;
   // The two cameras the reprojection needs: this frame's inverse (to unproject
   // the current depth) and the PREVIOUS frame's (to project into the history).
   const uAccumCurInvVp = uniform(new THREE.Matrix4());
@@ -1247,7 +1304,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     // undefined). Consumers read the mask through marchBurnTexture, never a
     // raw index. Bonus of the alone shape: 2 rgba32f attachments = 32
     // bytes/sample, inside even the default WebGPU attachment budget.
-    count: marchNormals ? (marchBurnOn ? 4 : 3) : (marchBurnOn ? 2 : 1),
+    // Named in order (see MARCH_ATTACHMENTS below); the motion attachment rides last for the same
+    // no-holes reason as the burn mask.
+    count: 1 + (marchNormals ? 2 : 0) + (marchBurnOn ? 1 : 0) + (marchMotionOn ? 1 : 0),
   });
   // RUNTIME NORMALS (2026-09-12): with two attachments every material drawn into `target` must
   // emit both, so the MRT is set on the RENDERER around the march renders (three's MRTNode maps
@@ -1256,27 +1315,26 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   // final colour; the normal is the lit march's private global rotated into view space (unit in,
   // unit out — no normalize, which would NaN on a fragment that never wrote it).
   let marchMrt: unknown = null;
-  if (marchNormals) {
-    target.textures[0]!.name = 'output';
-    target.textures[1]!.name = 'marchNormal';
-    // Run 4: rest-space noise anchor + detail gate, for the output-res detail pass below.
-    target.textures[2]!.name = 'marchAnchor';
-    const n = marchNormalRead({ dep: output as never }) as unknown as { xyz: unknown; w: unknown };
-    if (marchBurnOn) target.textures[3]!.name = 'marchBurn';
+  // Attachments in index order: output, [marchNormal, marchAnchor], [marchBurn], [marchMotion].
+  // Three's MRTNode maps outputs BY NAME but builds members BY INDEX and cannot leave holes, so
+  // each optional attachment takes the next free index and consumers look textures up by name.
+  const marchAttachments: string[] = ['output',
+    ...(marchNormals ? ['marchNormal', 'marchAnchor'] : []),
+    ...(marchBurnOn ? ['marchBurn'] : []),
+    ...(marchMotionOn ? ['marchMotion'] : [])];
+  marchAttachments.forEach((name, i) => { target.textures[i]!.name = name; });
+  const marchMotionTexture = marchMotionOn ? target.textures[marchAttachments.indexOf('marchMotion')]! : null;
+  if (marchAttachments.length > 1) {
+    const n = marchNormals ? marchNormalRead({ dep: output as never }) as unknown as { xyz: unknown; w: unknown } : null;
     marchMrt = mrt({
       output,
-      marchNormal: vec4(mul(mat3(cameraViewMatrix as never), n.xyz as never) as never, n.w as never),
-      marchAnchor: marchAnchorRead({ dep: output as never }),
+      ...(n ? {
+        marchNormal: vec4(mul(mat3(cameraViewMatrix as never), n.xyz as never) as never, n.w as never),
+        // Run 4: rest-space noise anchor + detail gate, for the output-res detail pass below.
+        marchAnchor: marchAnchorRead({ dep: output as never }),
+      } : {}),
       ...(marchBurnOn ? { marchBurn: marchBurnRead({ dep: output as never }) } : {}),
-    });
-  } else if (marchBurnOn) {
-    // Burn mask ALONE (the flame lab's boot): the mask rides slot 1 — three's
-    // MRTNode cannot leave attachment holes (see the count comment above).
-    target.textures[0]!.name = 'output';
-    target.textures[1]!.name = 'marchBurn';
-    marchMrt = mrt({
-      output,
-      marchBurn: marchBurnRead({ dep: output as never }),
+      ...(marchMotionOn ? { marchMotion: marchMotionRead({ dep: output as never }) } : {}),
     });
   }
   // RUN 4 DETAIL PASS (plan 2026-09-12-neural-upscale-run4-relief): the skin-detail noise evaluated
@@ -1693,6 +1751,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     curInvVp: uAccumCurInvVp,
     prevVp: uAccumPrevVp,
     alpha: uAccumAlpha,
+    // v2: the motion attachment when the boot allocated it, else a 1x1 stand-in (its OWN texture
+    // object — a TextureNode's uniform hash is its value's uuid, so sharing one would alias).
+    motionTex: texture(marchMotionTexture ?? accumMotionFallback),
+    nearFar: uAccumNearFar,
+    cfg: uAccumCfg,
   }) as unknown as { xyz: unknown; w: unknown };
   // BOTH colorNode and outputNode, exactly as the temporal-start blit does: the
   // alpha channel IS the depth the composite depth-tests with, and with
@@ -2292,6 +2355,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         camera.clearViewOffset();
         setPassLabel('sdf:accum');
         (uAccumCurInvVp.value as THREE.Matrix4).copy(_curVp).invert();
+        (uAccumNearFar.value as THREE.Vector2).set(camera.near, camera.far);
         (uAccumAlpha.value as number) = accumSeed ? 1 : accumAlpha(accumFrames);
         renderer.setRenderTarget(accumNext);
         const prevAccumAuto = renderer.autoClear;
@@ -2517,6 +2581,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       }
       if (on) marchJitter = null;
       accumOn = on;
+      // v2: bodies write object motion only while accumulation runs and the attachment exists.
+      setMotionOutAll(on && marchMotionOn);
       // The composite's output-resolution branch also carries the upscale stage.
       (uAccumOn.value as number) = on || upscale !== null ? 1 : 0;
       if (alpha !== undefined) (uAccumAlpha.value as number) = Math.min(1, Math.max(0.01, alpha));
@@ -2532,6 +2598,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       return accumOn;
     },
     resetTemporalAccum() { resetAccum(); },
+    setTemporalAccumCfg(cfg) {
+      const v = uAccumCfg.value as THREE.Vector4;
+      if (cfg.motion !== undefined) v.x = cfg.motion && marchMotionOn ? 1 : 0;
+      if (cfg.depthTolM !== undefined) v.y = Math.max(0, cfg.depthTolM);
+      if (cfg.clamp !== undefined) v.z = cfg.clamp ? 1 : 0;
+      resetAccum();
+      return { motion: v.x > 0.5, depthTolM: v.y, clamp: v.z > 0.5, motionAvailable: marchMotionOn };
+    },
     setUpscale(config, model, options) {
       if (config === null) {
         upscale?.dispose();
