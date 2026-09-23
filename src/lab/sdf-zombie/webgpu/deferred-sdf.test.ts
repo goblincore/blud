@@ -168,7 +168,7 @@ describe('the surface entry IS the production march, not a copy', () => {
   it('keeps the trace’s own behaviour: shell/hull gates, miss discard, and the flat-albedo seam intact', () => {
     for (const marker of [
       'if (shellOut <= 0.0) { discard;',
-      'if (!hit) { discard; }',
+      'if (!hit) {',
       'if (debugCfg.y > 0.5) { return vec4<f32>(baseColor, t); }',
       'if (max(shellIn, bodyEntry) > prevT) { discard;',
     ]) {

@@ -322,6 +322,10 @@ export function tickMotionFrame(): void { motionFrame++; }
  *  bodies spawned later pick it up too. */
 let motionOutAll = false;
 export function setMotionOutAll(on: boolean): void { motionOutAll = on; }
+/** NEAR-MISS EDGE (checker edge experiment 2026-09-23): meltCfg.y = 2 also makes a missed ray write
+ *  its closest approach instead of discarding (MARCH_TRACE_POST). Implies the motion write (> 0.5). */
+let edgeOutAll = false;
+export function setEdgeOutAll(on: boolean): void { edgeOutAll = on; }
 
 export function blankFaceTexture(): THREE.DataTexture {
   const tex = new THREE.DataTexture(
@@ -1540,7 +1544,12 @@ export function createMarchMaterial(
   }
 
   material.colorNode = vec4(marched.xyz as never, 1.0);
-  material.depthNode = depth;
+  // NEAR-MISS EDGE: a miss that writes (w < 0, MARCH_TRACE_POST) takes a hardware depth in
+  // [1 - 1e-5, 1 - 2e-6), nearer miss (smaller x) lower, so under LessEqual every hit beats every miss
+  // and overlapping boxes keep the closest approach. Its alpha stays the 1.0 "nothing here" sentinel.
+  // For every hit (w = t >= 0) both selects return `depth` unchanged.
+  const missEdge = (marched.w as unknown as { lessThan: (v: number) => unknown }).lessThan(0);
+  material.depthNode = select(missEdge as never, float(1 - 1e-5).add(mul((marched as unknown as { x: unknown }).x as never, 5e-7) as never), depth) as never;
   material.depthWrite = true;
 
   // Depth goes out in ALPHA as well as to depthNode, via `outputNode`.
@@ -1561,7 +1570,7 @@ export function createMarchMaterial(
   //
   // Harmless when the material draws straight to the canvas: it is opaque, so
   // the framebuffer alpha is never read.
-  material.outputNode = vec4(marched.xyz as never, depth);
+  material.outputNode = vec4(marched.xyz as never, select(missEdge as never, float(1), depth) as never);
   return material;
 }
 
@@ -2721,7 +2730,7 @@ export function createZombieGpuView(
         refineMesh.position.copy(mesh.position);
         refineMesh.scale.copy(mesh.scale);
       }
-      u.meltCfg.value.y = motionOutAll ? 1 : 0;
+      u.meltCfg.value.y = edgeOutAll ? 2 : motionOutAll ? 1 : 0;
       syncRecord();
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners) {

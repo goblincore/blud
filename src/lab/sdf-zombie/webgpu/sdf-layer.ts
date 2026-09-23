@@ -35,7 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickMotionFrame, setMotionOutAll, marchNormalRead, marchAnchorRead, marchBurnRead, marchMotionRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickMotionFrame, setMotionOutAll, setEdgeOutAll, marchNormalRead, marchAnchorRead, marchBurnRead, marchMotionRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
@@ -711,13 +711,16 @@ export const CHECKER_ACCUM_WGSL = /* wgsl */ `fn checkerAccum(
   curTex: texture_2d<f32>,
   motionTex: texture_2d<f32>,
   histTex: texture_2d<f32>,
+  sdHist: texture_2d<f32>,
   texCoord: vec2<f32>,
   flipY: f32,
   curInvVp: mat4x4<f32>,
   prevVp: mat4x4<f32>,
   nearFar: vec2<f32>,
   phase: vec4<f32>,
-  cfg: vec4<f32>
+  cfg: vec4<f32>,
+  edge: vec4<f32>,
+  edgeT: vec4<f32>
 ) -> vec4<f32> {
   let curDims = vec2<i32>(textureDimensions(curTex, 0));
   let histDims = vec2<i32>(textureDimensions(histTex, 0));
@@ -777,7 +780,10 @@ export const CHECKER_ACCUM_WGSL = /* wgsl */ `fn checkerAccum(
     let ws = w00 + w10 + w01 + w11;
     if (ws > 1e-5) { fb = vec4<f32>((a00.xyz * w00 + a10.xyz * w10 + a01.xyz * w01 + a11.xyz * w11) / ws, cur.w); }
   }
+  // A near-miss texel (edge sentinel y = -7) carries a distance, not a colour: never pass it on.
+  if (fb.w >= 1.0 && fb.y < -6.5) { fb = vec4<f32>(0.0, 0.0, 0.0, 1.0); }
   if (phase.w > 0.5 || !anyHit) {
+    gCkEdgeSd = vec4<f32>(select(edge.y, -edge.y, fb.w < 1.0), 0.0, 0.0, 1.0);
     if (dbg && anyHit) { return vec4<f32>(0.9, 0.1, 0.1, fb.w); }
     return fb;
   }
@@ -795,9 +801,13 @@ export const CHECKER_ACCUM_WGSL = /* wgsl */ `fn checkerAccum(
   let clipPrev = prevVp * vec4<f32>(worldPrev, 1.0);
   var histOk = false;
   var hist = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  var motionPx = 1e9;
+  var histSd = 0.0;
+  var histSdOk = false;
   if (clipPrev.w > 0.0) {
     let ndcPrev = clipPrev.xy / clipPrev.w;
     let stPrev = vec2<f32>((ndcPrev.x + 1.0) * 0.5, (1.0 - ndcPrev.y) * 0.5);
+    motionPx = length((stPrev - stP) * vec2<f32>(histDims));
     if (stPrev.x >= 0.0 && stPrev.x <= 1.0 && stPrev.y >= 0.0 && stPrev.y <= 1.0) {
       // FILTERED HISTORY (owner 2026-09-23: stable in motion 'but still looks really low res'). A
       // NEAREST history fetch under continuous sub-pixel motion duplicates some pixels and drops
@@ -813,6 +823,13 @@ export const CHECKER_ACCUM_WGSL = /* wgsl */ `fn checkerAccum(
       let hIdx = clamp(vec2<i32>(floor(stPrev * vec2<f32>(histDims))), vec2<i32>(0, 0), hMax);
       hist = textureLoad(histTex, hIdx, 0);
       histOk = true;
+      // Edge distance history (TEMPORAL EDGE, below): a continuous field, so plain bilinear is right.
+      let s00 = textureLoad(sdHist, clamp(hb, vec2<i32>(0, 0), hMax), 0).x;
+      let s10 = textureLoad(sdHist, clamp(hb + vec2<i32>(1, 0), vec2<i32>(0, 0), hMax), 0).x;
+      let s01 = textureLoad(sdHist, clamp(hb + vec2<i32>(0, 1), vec2<i32>(0, 0), hMax), 0).x;
+      let s11 = textureLoad(sdHist, clamp(hb + vec2<i32>(1, 1), vec2<i32>(0, 0), hMax), 0).x;
+      histSd = mix(mix(s00, s10, ht.x), mix(s01, s11, ht.x), ht.y);
+      histSdOk = true;
       if (hist.w < 1.0) {
         var acc = vec3<f32>(0.0);
         var wsum = 0.0;
@@ -851,6 +868,108 @@ export const CHECKER_ACCUM_WGSL = /* wgsl */ `fn checkerAccum(
   if (direct) { covered = cur.w < 1.0; }
   else if (anyHit && anyMiss) { covered = select(cur.w < 1.0, hist.w < 1.0, histOk); }
   else { covered = anyHit; }
+
+  // EDGE-DISTANCE COVERAGE (edge.x = 1, checker edge experiment 2026-09-23). A missed ray now reports
+  // how close it passed to a surface (the near-miss write, MARCH_TRACE_POST), so the silhouette's
+  // position INSIDE a quarter-scale texel is known this frame, no history needed. Build a screen-space
+  // signed distance at the four samples around P, in quarter-scale pixels: a miss is +its near-miss
+  // distance (edge.y when it carries none); a hit is minus the distance to the nearest edge its
+  // neighbouring misses describe, min over them of |hit - miss| - missDist. Interpolate at P's centre
+  // and cover where it is negative: an edge placed at sub-texel precision, rebuilt every frame.
+  // Sample positions are the JITTERED ones: this frame's texel c was shot at half-grid pixel 2c+phase,
+  // so P sits (P - phase) / 2 texels from the grid origin and the pixel shot this frame lands exactly
+  // on its own sample. edge.z converts the stored footprint units to quarter-scale pixels.
+  var edgeSd = 0.0;
+  // Debug (phase.z): which rule decided this band pixel's coverage. 1 = edge lines, 2 = the v1 field
+  // (no line nearby), 3 = still, history kept.
+  var edgeDbg = 0;
+  var sdOut = 0.0;
+  var sdSet = false;
+  if (edge.x > 0.5 && anyHit && anyMiss && phase.w < 0.5) {
+    let fe = (vec2<f32>(P) - phase.xy) * 0.5;
+    let e0 = vec2<i32>(floor(fe));
+    let efr = fe - vec2<f32>(e0);
+    var bv: array<f32, 16>;
+    for (var j = 0; j < 4; j++) {
+      for (var i = 0; i < 4; i++) {
+        let s = textureLoad(curTex, clamp(e0 + vec2<i32>(i - 1, j - 1), vec2<i32>(0, 0), maxC), 0);
+        var v = -1.0;
+        if (s.w >= 1.0) { v = select(edge.y, min(s.x * edge.z, edge.y), s.y < -6.5); }
+        bv[j * 4 + i] = v;
+      }
+    }
+    for (var j = 1; j <= 2; j++) {
+      for (var i = 1; i <= 2; i++) {
+        var v = bv[j * 4 + i];
+        if (v < 0.0) {
+          var best = edge.y;
+          for (var dj = -1; dj <= 1; dj++) {
+            for (var di = -1; di <= 1; di++) {
+              let m = bv[(j + dj) * 4 + i + di];
+              if (m >= 0.0) { best = min(best, max(sqrt(f32(di * di + dj * dj)) - m, 0.05)); }
+            }
+          }
+          v = -best;
+        }
+        let wx = select(1.0 - efr.x, efr.x, i == 2);
+        let wy = select(1.0 - efr.y, efr.y, j == 2);
+        edgeSd = edgeSd + v * wx * wy;
+      }
+    }
+    // EDGE LINES (v2, owner 2026-09-23: v1 'marching ants'). v1 guessed a hit texel's distance from
+    // |hit - miss| - missDist, a crude bound whose error changes with the jitter phase. The miss
+    // distances form a real screen-space distance field, so their SLOPE across neighbouring misses
+    // gives the edge direction: each miss texel then describes an edge LINE, extrapolated to P as
+    // dist + dot(P - sample, unit gradient). Lines near P are blended (weight falls to 0 at 2 texels).
+    // Texels with no report (edge.y) carry no slope. Falls back to the v1 field where no line is found.
+    var lineSd = 0.0;
+    var lineW = 0.0;
+    for (var j = 0; j < 4; j++) {
+      for (var i = 0; i < 4; i++) {
+        let v = bv[j * 4 + i];
+        if (v < 0.0 || v >= edge.y) { continue; }
+        var g = vec2<f32>(0.0);
+        var gn = vec2<f32>(0.0);
+        if (i > 0) { let a = bv[j * 4 + i - 1]; if (a >= 0.0 && a < edge.y) { g.x = g.x + v - a; gn.x = gn.x + 1.0; } }
+        if (i < 3) { let a = bv[j * 4 + i + 1]; if (a >= 0.0 && a < edge.y) { g.x = g.x + a - v; gn.x = gn.x + 1.0; } }
+        if (j > 0) { let a = bv[(j - 1) * 4 + i]; if (a >= 0.0 && a < edge.y) { g.y = g.y + v - a; gn.y = gn.y + 1.0; } }
+        if (j < 3) { let a = bv[(j + 1) * 4 + i]; if (a >= 0.0 && a < edge.y) { g.y = g.y + a - v; gn.y = gn.y + 1.0; } }
+        if (gn.x < 0.5 || gn.y < 0.5) { continue; }
+        g = g / gn;
+        let gl = length(g);
+        if (gl < 0.3) { continue; }
+        let rel = fe - vec2<f32>(e0 + vec2<i32>(i - 1, j - 1));
+        let wq = max(0.0, 1.0 - length(rel) * 0.5);
+        let w2 = wq * wq;
+        lineSd = lineSd + w2 * (v + dot(rel, g / gl));
+        lineW = lineW + w2;
+      }
+    }
+    // edge.x == 2: lines off (the v1 field alone), for A/B.
+    if (edge.x > 1.5) { lineW = 0.0; }
+    if (lineW > 1e-3) { edgeSd = lineSd / lineW; }
+    // STILL vs MOVING (owner 2026-09-23: edge-off is cleaner when still, edge-on holds in motion).
+    // Where this pixel's reprojection moved less than edge.w half-grid pixels since last frame and
+    // its history is there, the converged history coverage (exact half-scale rays) keeps the edge;
+    // only moving edges are rebuilt from this frame's lines.
+    // TEMPORAL EDGE (owner 2026-09-23: lines hold still, but in motion 'the edge changes a lot'). Each
+    // frame's estimate carries an error that changes with the jitter phase; snapping to it every frame
+    // IS the crawl. The distance itself is kept on the history grid, moved with the reprojection like
+    // colour, and each frame's estimate blends in (edgeT.x; 1 = off). The history is clamped to within
+    // edgeT.y quarter-scale px of this frame's estimate, so a real edge move is followed, not ghosted.
+    // The pixel shot this frame knows its side exactly: its stored distance keeps that sign.
+    var sdT = edgeSd;
+    if (histSdOk && edgeT.x < 1.0) {
+      sdT = mix(clamp(histSd, edgeSd - edgeT.y, edgeSd + edgeT.y), edgeSd, edgeT.x);
+    }
+    if (direct) { sdT = select(max(sdT, 0.05), min(sdT, -0.05), cur.w < 1.0); }
+    sdOut = sdT;
+    sdSet = true;
+    let still = histOk && motionPx < edge.w;
+    if (!direct && !still) { covered = sdT < 0.0; edgeDbg = select(2, 1, lineW > 1e-3); }
+    else if (!direct) { edgeDbg = 3; }
+  }
+  gCkEdgeSd = vec4<f32>(select(select(edge.y, -edge.y, covered), sdOut, sdSet), 0.0, 0.0, 1.0);
   if (!covered) {
     if (dbg) { return vec4<f32>(0.1, 0.1, 0.9, 1.0); }
     return vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -872,17 +991,27 @@ export const CHECKER_ACCUM_WGSL = /* wgsl */ `fn checkerAccum(
   }
   // Depth: the pixel's own ray when it has one, else the donor's CURRENT depth (never a blend).
   let depth = select(dsrc.w, cur.w, direct && cur.w < 1.0);
+  if (dbg && edgeDbg == 1) { return vec4<f32>(1.0, 0.85, 0.1, depth); }
+  if (dbg && edgeDbg == 2) { return vec4<f32>(0.9, 0.1, 0.9, depth); }
+  if (dbg && edgeDbg == 3) { return vec4<f32>(0.1, 0.8, 0.9, depth); }
   if (dbg) {
     if (src == 2 || (direct && src == 1)) { return vec4<f32>(0.1, 0.9, 0.1, depth); }
     if (src == 1) { let g = dot(col / (col + vec3<f32>(1.0)), vec3<f32>(0.3, 0.5, 0.2)); return vec4<f32>(g, g, g, depth); }
     return vec4<f32>(0.9, 0.1, 0.1, depth);
   }
   return vec4<f32>(col, depth);
-}`;
+}
+var<private> gCkEdgeSd: vec4<f32> = vec4<f32>(4.0, 0.0, 0.0, 1.0);`;
 
 const composite = wgslFn(COMPOSITE_WGSL);
 const temporalAccum = wgslFn(TEMPORAL_ACCUM_WGSL);
 const checkerAccum = wgslFn(CHECKER_ACCUM_WGSL);
+/** TEMPORAL EDGE: the resolve's edge distance (quarter-scale px, negative = covered) for the checker
+ *  history's second attachment. Reads checkerAccum's private; dep orders it after the resolve. */
+export const CHECKER_EDGE_READ_WGSL = /* wgsl */ `fn readCkEdge(dep: vec4<f32>) -> vec4<f32> {
+  return gCkEdgeSd;
+}`;
+const readCkEdge = wgslFn(CHECKER_EDGE_READ_WGSL, [checkerAccum] as never);
 /** DISTANCE SPLIT merge (owner idea 2026-09-23): the near pass (quarter-scale checker) ends its rays at
  *  D, the far pass marches REAL half-scale rays from D on, into a target on the checker's own grid. A
  *  pixel the near result leaves empty takes the far ray; where both hit, near wins (it is nearer than
@@ -1227,7 +1356,7 @@ export interface SdfLayer {
    *  depth-validity tolerance in metres (0 = off), neighbourhood clamp. All three off = v1. */
   /** Checker reconstruction on (read-only; setTemporalAccumCfg resets the history). */
   readonly checkerAccum: boolean;
-  setTemporalAccumCfg(cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean; checker?: boolean; checkerDebug?: boolean; freshBlend?: number; splitM?: number }): { motion: boolean; depthTolM: number; clamp: boolean; motionAvailable: boolean; checker: boolean; checkerDebug: boolean; freshBlend: number; splitM: number };
+  setTemporalAccumCfg(cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean; checker?: boolean; checkerDebug?: boolean; freshBlend?: number; splitM?: number; edge?: boolean; edgeLines?: boolean; edgeStillPx?: number; edgeTemporal?: number; edgeClampPx?: number }): { motion: boolean; depthTolM: number; clamp: boolean; motionAvailable: boolean; checker: boolean; checkerDebug: boolean; freshBlend: number; splitM: number; edge: boolean; edgeLines: boolean; edgeStillPx: number; edgeTemporal: number; edgeClampPx: number };
   /** NEURAL UPSCALE STAGE (spec docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md).
    *  march -> upscale -> composite. `null` turns it off. On: forces field style
    *  'off' and refuses temporal accumulation (stacking is P5); the composite reads
@@ -1469,9 +1598,27 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   // CHECKER RECONSTRUCTION (ACCUM-UPSCALE-STACK-PLAN.md step 1): history on the 2x-march grid (the grid
   // t16 consumes), ping-ponged by copy like accumPrev/accumNext. phase: x, y = the sub-pixel sampled this
   // frame, z = debug colours, w = seed.
-  const ckPrev = new THREE.RenderTarget(1, 1, { ...accumOpts });
-  const ckNext = new THREE.RenderTarget(1, 1, { ...accumOpts });
+  // Two attachments: [0] colour + clip depth (what t16 / the composite read), [1] 'ckEdge' the edge
+  // distance history (TEMPORAL EDGE), written through ckMrt.
+  const ckPrev = new THREE.RenderTarget(1, 1, { ...accumOpts, count: 2 });
+  const ckNext = new THREE.RenderTarget(1, 1, { ...accumOpts, count: 2 });
+  for (const t of [ckPrev, ckNext]) { t.textures[0]!.name = 'output'; t.textures[1]!.name = 'ckEdge'; }
+  /** Temporal edge: x the fresh estimate's blend weight (1 = off), y the history clamp (quarter-scale px). */
+  const uCkEdgeT = uniform(new THREE.Vector4(0.35, 0.75, 0, 0));
   const uCkPhase = uniform(new THREE.Vector4(0, 0, 0, 1));
+  /** Edge-distance coverage (checker edge experiment 2026-09-23): x on, y the distance a texel with no
+   *  near-miss report stands for (quarter-scale px; the march reports only below 16 footprints = 4 px),
+   *  z footprint units -> quarter-scale px (the checker halves aaCfg.x to a quarter of a march texel),
+   *  w the per-frame motion (half-grid px) below which a pixel keeps its history coverage instead. */
+  const uCkEdge = uniform(new THREE.Vector4(0, 4, 0.25, 0.3));
+  let edgeOn = false;
+  let edgeLines = true;
+  /** The march writes near-miss distances only while the checker resolve is there to read them. */
+  const syncEdgeOut = (): void => {
+    const on = accumOn && checkerOn && edgeOn;
+    setEdgeOutAll(on);
+    (uCkEdge.value as THREE.Vector4).x = on ? (edgeLines ? 1 : 2) : 0;
+  };
   let checkerOn = false;
   /** The upscale stage was built on the checker history (stacked), not on the march target. */
   let upscaleStacked = false;
@@ -2017,6 +2164,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     curTex: texture(target.texture),
     motionTex: texture(marchMotionTexture ?? ckMotionFallback),
     histTex: texture(ckPrev.texture),
+    sdHist: texture(ckPrev.textures[1]!),
     texCoord: uv(),
     flipY: uFlipY,
     curInvVp: uAccumCurInvVp,
@@ -2024,6 +2172,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     nearFar: uAccumNearFar,
     phase: uCkPhase,
     cfg: uAccumCfg,
+    edge: uCkEdge,
+    edgeT: uCkEdgeT,
   }) as unknown as { xyz: unknown; w: unknown };
   const ckMerged = checkerMerge({
     inner: ckOut as never, farTex: texture(farTarget.texture), texCoord: uv(), flipY: uFlipY, split: uCkSplit,
@@ -2031,6 +2181,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   // colorNode AND outputNode: alpha is the clip depth the composite (and t16) read, see accumMat.
   ckMat.colorNode = vec4(ckMerged.xyz as never, ckMerged.w as never);
   ckMat.outputNode = vec4(ckMerged.xyz as never, ckMerged.w as never);
+  const ckMrt = mrt({ output, ckEdge: readCkEdge({ dep: ckMerged as never }) });
   ckMat.depthTest = false;
   ckMat.depthWrite = false;
   const ckQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), ckMat);
@@ -2255,7 +2406,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         // --- the layer's own fullscreen passes -------------------------------
         await compile('prev-blit', blitScene, quadCam, prev);
         if (accumOn) await compile('accum', accumScene, quadCam, accumNext);
-        if (accumOn && checkerOn) await compile('checker', ckScene, quadCam, ckNext);
+        if (accumOn && checkerOn) await compile('checker', ckScene, quadCam, ckNext, ckMrt);
         if (detailScene) await compile('detail', detailScene, quadCam, detailTarget);
         if (refineViewScene && refineViewTarget) await compile('refine-view', refineViewScene, quadCam, refineViewTarget);
         await compile('composite', quadScene, quadCam, outputTarget);
@@ -2667,8 +2818,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
           const [sx, sy] = CHECKER_ORDER[accumFrames % 4]!;
           (uCkPhase.value as THREE.Vector4).set(sx, sy, checkerDebug ? 1 : 0, accumSeed ? 1 : 0);
           renderer.setRenderTarget(ckNext);
-          void renderer.render(ckScene, quadCam);
-          renderer.copyTextureToTexture(ckNext.texture, ckPrev.texture);
+          renderer.setMRT(ckMrt as never);
+          try { void renderer.render(ckScene, quadCam); } finally { renderer.setMRT(null); }
+          renderer.copyTextureToTexture(ckNext.textures[0]!, ckPrev.textures[0]!);
+          renderer.copyTextureToTexture(ckNext.textures[1]!, ckPrev.textures[1]!);
           // Stacked: t16 reads ckNext and the composite reads t16's output (set by setUpscale).
           if (!upscale) accumTexNode.value = ckNext.texture;
         } else {
@@ -2898,6 +3051,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       accumOn = on;
       // v2: bodies write object motion only while accumulation runs and the attachment exists.
       setMotionOutAll(on && marchMotionOn);
+      syncEdgeOut();
       // The composite's output-resolution branch also carries the upscale stage.
       (uAccumOn.value as number) = on || upscale !== null ? 1 : 0;
       if (alpha !== undefined) (uAccumAlpha.value as number) = Math.min(1, Math.max(0.01, alpha));
@@ -2923,8 +3077,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       if (cfg.checkerDebug !== undefined) checkerDebug = cfg.checkerDebug;
       if (cfg.freshBlend !== undefined) v.w = Math.min(1, Math.max(0.01, cfg.freshBlend));
       if (cfg.splitM !== undefined) splitM = Math.max(0, cfg.splitM);
+      if (cfg.edge !== undefined) edgeOn = cfg.edge;
+      if (cfg.edgeLines !== undefined) edgeLines = cfg.edgeLines;
+      if (cfg.edgeTemporal !== undefined) (uCkEdgeT.value as THREE.Vector4).x = Math.min(1, Math.max(0.05, cfg.edgeTemporal));
+      if (cfg.edgeClampPx !== undefined) (uCkEdgeT.value as THREE.Vector4).y = Math.max(0, cfg.edgeClampPx);
+      if (cfg.edgeStillPx !== undefined) (uCkEdge.value as THREE.Vector4).w = Math.max(0, cfg.edgeStillPx);
+      syncEdgeOut();
       resetAccum();
-      return { motion: v.x > 0.5, depthTolM: v.y, clamp: v.z > 0.5, motionAvailable: marchMotionOn, checker: checkerOn, checkerDebug, freshBlend: v.w, splitM };
+      return { motion: v.x > 0.5, depthTolM: v.y, clamp: v.z > 0.5, motionAvailable: marchMotionOn, checker: checkerOn, checkerDebug, freshBlend: v.w, splitM, edge: edgeOn, edgeLines, edgeStillPx: (uCkEdge.value as THREE.Vector4).w, edgeTemporal: (uCkEdgeT.value as THREE.Vector4).x, edgeClampPx: (uCkEdgeT.value as THREE.Vector4).y };
     },
     setUpscale(config, model, options) {
       if (config === null) {

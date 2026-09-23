@@ -96,14 +96,18 @@ export const VHS_PRESETS: Record<VhsPreset, VhsTerms> = {
   // maximum jitter, a heavy 5.4 px split, and bursts firing on 61% of rows at
   // 34 Hz — so the frame is clean until it tears, which is the VHS read.
   //
-  // motionThreshold is soft's 0.12, deliberately untouched by the sweep.
+  // motionThreshold was soft's 0.12, untouched by that sweep (raised by the owner 2026-09-23, below).
   // 2026-09-12 (owner): intensity 1 -> 0.81, blurAmount 1 -> 0.17, tuned in-game on top of the
   // neural upscaler (the stage already softens the flesh; the VHS blur on top of it was too much).
+  // 2026-09-23 (owner): intensity 0.64 and blurAmount 1, tuned in-game against the lower-march-
+  // resolution experiments (heavier tape blur hides the reconstruction's edge artefacts); a second pass
+  // the same day set gradeAmount 1, chromaAmount 4.6, chromaJitter 10, motionThreshold 0.06,
+  // chromaBurstStrength 0.5, chromaBurstRate 41.
   blud: {
-    intensity: 0.81, blurAmount: 0.17, noiseAmount: 0.005, gradeAmount: 0.38,
+    intensity: 0.64, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 1,
     warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
-    chromaAmount: 5.4, chromaJitter: 10, motionThreshold: 0.12,
-    chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,
+    chromaAmount: 4.6, chromaJitter: 10, motionThreshold: 0.06,
+    chromaBurstChance: 0.61, chromaBurstStrength: 0.5, chromaBurstRate: 41,
   },
   soft: {
     intensity: 0.7, blurAmount: 0.45, noiseAmount: 0.04, gradeAmount: 0.55,

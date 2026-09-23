@@ -118,7 +118,7 @@ export function createRenderSeams(ctx: GameContext) {
     refineBand: () => ({ ...ctx.render.refineBand }),
     setTemporalAccum: (on: boolean, alpha?: number) => ctx.render.sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => ctx.render.sdfLayer.resetTemporalAccum(),
-    setTemporalAccumCfg: (cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean; checker?: boolean; checkerDebug?: boolean; freshBlend?: number; splitM?: number }) => {
+    setTemporalAccumCfg: (cfg: { motion?: boolean; depthTolM?: number; clamp?: boolean; checker?: boolean; checkerDebug?: boolean; freshBlend?: number; splitM?: number; edge?: boolean; edgeLines?: boolean; edgeStillPx?: number; edgeTemporal?: number; edgeClampPx?: number }) => {
       const r = ctx.render.sdfLayer.setTemporalAccumCfg(cfg);
       // The checker halves the one-pixel hit tolerance (sdf-layer pixelConeK): refresh aaCfg.x.
       applySdfScale(ctx, ctx.render.sdfScale);

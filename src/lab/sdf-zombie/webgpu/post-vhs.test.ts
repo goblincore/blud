@@ -8,17 +8,11 @@ describe('VHS_PRESETS', () => {
   // changes that look with no error anywhere.
   it('matches the owner-tuned blud preset exactly — the shipped default', () => {
     expect(VHS_PRESETS.blud).toEqual({
-      intensity: 0.81, blurAmount: 0.17, noiseAmount: 0.005, gradeAmount: 0.38,
+      intensity: 0.64, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 1,
       warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
-      chromaAmount: 5.4, chromaJitter: 10, motionThreshold: 0.12,
-      chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,
+      chromaAmount: 4.6, chromaJitter: 10, motionThreshold: 0.06,
+      chromaBurstChance: 0.61, chromaBurstStrength: 0.5, chromaBurstRate: 41,
     });
-  });
-  // blud was swept FROM soft and never touched motionThreshold, which is the
-  // gate the whole chroma effect hangs off. If a future edit to soft moves it,
-  // the shipped look moves with it silently unless this catches the split.
-  it('inherits soft\'s motion gate — the sweep deliberately left it alone', () => {
-    expect(VHS_PRESETS.blud.motionThreshold).toBe(VHS_PRESETS.soft.motionThreshold);
   });
   it('matches the club-mutant soft preset exactly — it is the source of truth', () => {
     expect(VHS_PRESETS.soft).toEqual({

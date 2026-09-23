@@ -137,7 +137,7 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
   });
 
   it('sits between the hit-discard and calcNormal, so off == bit-identical', () => {
-    const hit = MARCH_BODY.indexOf('if (!hit) { discard; }');
+    const hit = MARCH_BODY.indexOf('if (!hit) {');
     const seam = MARCH_BODY.indexOf('debugCfg.y > 0.5');
     const normals = MARCH_BODY.indexOf('calcNormal(p,');
     expect(hit).toBeGreaterThan(-1);

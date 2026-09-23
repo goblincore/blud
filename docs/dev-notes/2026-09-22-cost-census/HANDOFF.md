@@ -29,6 +29,16 @@ The body march is 70–83 % of the frame; nothing else on the GPU is worth more 
 
 Before merging: re-time the flame default quiet; decide whether to keep or remove the parked switches.
 
+## UPDATE 2026-09-23 (later): 0.25 march now LOOKS acceptable and is ~38 % faster — branch `claude/checker-edge-coverage`
+
+Checker + near-miss edge coverage + temporal edge (`?accum=1&accumscale=0.25&accumchecker=1&accumedge=1`), under the
+owner's retuned VHS `blud` preset: owner "works fine visually now". Melee crush frame 12.55 -> 7.80 ms (quiet pair),
+`sdf:march` 9.8 -> 4.4, after an early-out that stopped the far pass paying setup on near bodies. Details, knobs and
+the noisy second pair: TEMPORAL-RECON-FINDINGS.md "Round 2". Next: confirm quiet, then decide default vs low-end
+setting. The trained temporal upscaler is deferred.
+**Merged to main (PR #20) flag-only; owner: NOT the default yet — explore further first.** Open threads: the
+"Where it stands" list in TEMPORAL-RECON-FINDINGS.md.
+
 ## UPDATE 2026-09-23: the lower-march-resolution line is DONE for now — read TEMPORAL-RECON-FINDINGS.md
 
 The 4x experiment below ran to completion and beyond: hybrid edge re-march (measured NO-GO), object motion vectors
