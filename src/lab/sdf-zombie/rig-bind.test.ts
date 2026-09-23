@@ -482,8 +482,8 @@ describe('applyRig — rigid segment tags (bone-segment spheres)', () => {
 describe('rig-bind on .blob bone names (soldier)', () => {
   const body = buildBody(compileBlob(parseBlob(soldierSrc)));
   const bound = bindRig(body);
-  it('both elbows get a bend constraint', () => {
-    expect(bound.rig.bends?.length).toBe(2);
+  it('both elbows and both knees get a bend constraint', () => {
+    expect(bound.rig.bends?.length).toBe(4);
   });
   it('upperarm/forearm prims carry an arm frame', () => {
     const armPrims = body.prims.map((p, i) => [p, i] as const).filter(([p]) => /^(upperarm|forearm)\.[lr]$/.test(p.bone ?? ''));

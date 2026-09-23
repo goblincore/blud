@@ -185,6 +185,23 @@ export function bindRig(body: BuildResult): BoundRig {
     rig.bends.push({ root: indexOf(upper.head), mid: indexOf(upper.tail),
       end: indexOf(fore.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
   }
+  // Knee stops — the same hinge, but the shin folds BACKWARD (pole =
+  // -bodyForward). Without it the collapse's hip↔foot rope only caps the
+  // length, so a falling corpse's knees could snap through the wrong way.
+  for (const side of ['l', 'r'] as const) {
+    const thighName = `thigh.${side}`, shinName = `shin.${side}`;
+    const live = (name: string) => body.prims.some(p => p.bone === name && !p.dead &&
+      (p.op === undefined || p.op === 'add') && len(sub(p.b, p.a)) > KEY_EPS &&
+      body.clusters[p.cluster]?.alive);
+    const thigh = body.bones.get(thighName), shin = body.bones.get(shinName);
+    if (!thigh || !shin || !live(thighName) || !live(shinName)) continue;
+    const restUpper = normalize(sub(thigh.tail, thigh.head));
+    const back = vscale(bodyForward, -1);
+    const restPole = normalize(sub(back, vscale(restUpper, dot(back, restUpper))));
+    if (len(restPole) < 1e-8) continue;
+    rig.bends.push({ root: indexOf(thigh.head), mid: indexOf(thigh.tail),
+      end: indexOf(shin.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
+  }
 
   // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.
   // Mirrored bones expand to `name.l` / `name.r` (mirror.ts), so the suffix is

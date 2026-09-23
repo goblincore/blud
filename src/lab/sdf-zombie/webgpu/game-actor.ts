@@ -472,6 +472,8 @@ export interface ZombieActor {
   stampBlast(wounds: readonly Wound[]): void;
   /** Re-run the wound upload now (a render-side wound look changed). */
   refreshWoundUpload(): void;
+  /** Debug seam: sever a limb as a shot would ('full' or a chain index for severDistal). */
+  debugSever(limb: LimbId, at?: 'full' | number): boolean;
   /**
    * A RESOLVED EXPLOSION's full effect on this body — the dynamite path.
    * Stamps the blast wounds (geometry + carves), credits the collapse meter
@@ -717,7 +719,13 @@ export function createZombieActor(opts: {
   function missingLimbs(): MissingLimbs {
     if (soldierDamage) return soldierInjury(current, soldierWounds).missing;
     const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
-    return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
+    // A leg with ANY distal cut has lost its foot (severDistal kills the prim
+    // and everything outward), so it can no longer bear weight: count it as
+    // missing for the gait/collapse. Otherwise two shot-off shins left the
+    // torso standing on air (the cluster stays alive on a mid-limb cut).
+    const legGone = (l: LimbId) => gone(l)
+      || current.prims.some(p => p.limb === l && p.dead && p.op !== 'sub');
+    return { legL: legGone('legL'), legR: legGone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
 
   /** Carve upload: the SURFACE ANCHOR (the shader's sphere centre — the
@@ -1694,6 +1702,23 @@ export function createZombieActor(opts: {
     hitSlug,
     stampBlast,
     refreshWoundUpload: () => refreshWounds(),
+    /** DEBUG SEAM (decap repro): sever `limb` exactly as a shot would.
+     *  `at` = 'full' → severLimb (whole cluster); a number n → severDistal
+     *  from the n-th prim of the limb's chain (0 = root; for the head,
+     *  1 leaves the neck on the body — the headshot-stump case). */
+    debugSever: (limb: LimbId, at: 'full' | number = 'full') => {
+      const cluster = current.clusters.find(c => c.limb === limb);
+      if (!cluster?.alive) return false;
+      if (at === 'full') detach(limb, severLimb(current, limb));
+      else {
+        const order = chainOrder(current, cluster);
+        const fromPrim = order[Math.max(0, Math.min(at, order.length - 1))];
+        if (fromPrim === undefined) return false;
+        detach(limb, severDistal(current, { limb, fromPrim }));
+      }
+      refreshWounds();
+      return true;
+    },
     blast,
   };
 }

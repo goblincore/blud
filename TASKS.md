@@ -32,6 +32,28 @@
   from above; saw nose floats a few cm off the floor.
   Not started by design: attacks (saw swing / grenades), brain, sounds, a game-page spawn.
 
+## Decap / ragdoll bugs + debug hooks — 2026-09-22
+
+- [x] **Legless bodies stood in the air.** `missingLimbs()` (webgpu/game-actor.ts) only counted a leg gone when its
+  CLUSTER died; a mid-limb `severDistal` (shoot the shin off) leaves the cluster alive, so two shot-off legs never hit
+  collapse's both-legs trigger. Now any dead prim in a leg counts that leg missing (one leg ⇒ existing hop-limp).
+- [x] **Knees folded backwards on collapse.** Only elbows had a `RigBendConstraint`; the collapse ropes cap leg LENGTH
+  but not the hinge side. `rig-bind.ts` now emits thigh/shin knee stops with the pole at −bodyForward (150° maxFlex,
+  same shape as the elbow stop). `rig-bind.test.ts` bend count 2 → 4.
+- [x] **Debug hooks.** `actor.debugSever(limb, 'full' | chainIdx)` + `__sdfGame.decapitate({id, at, dist, frame})` —
+  behead on demand and frame the stump. `__sdfGame.replayDemo(name?, {speed, stopAt, resume})` + `demoList()` +
+  dev-only `/__lab/list-demos` — watch an F7 recording at real time and FREEZE on a frame. Recorder now logs per-frame
+  `dt` (live play is variable-rate; replay used to re-step everything at 1/60 and drift).
+- [ ] **NECK STUMP STILL WRONG (the reported bug).** A decapitated stump's flat face renders pale grey/cream, not
+  interior meat. Not reproduced under instrumentation yet. Measured: the stump wound sits ~7.5 cm ABOVE the cut
+  (`severLimb`'s `lerp(anchor.a, cluster.center, 0.6)`, r ≈ 0.11 on ZOMBIE), so the crater floor IS ~3.5 cm deep —
+  deeper than `muscleDepth`, i.e. the tissue ramp should already be clot-dark there. Prime suspects: (a) the flat cut
+  face is not covered by the wound mask at all and shades as plain skin, (b) spec/fresnel glare on a flat, wet,
+  up-facing plane (`fres` is only faded by `wmRim`, so an unmasked face keeps full fresnel). Next: `decapitate()`,
+  screenshot the face, then bisect with `setFlatAlbedo` / `setMarchDebugMode` / `surfCfg.z = 0`.
+- [ ] **Replay still drifts** even with per-frame dt: owner reports enemy behaviour does not reproduce from the same
+  inputs+seed. Suspect actor-side state that is not on the seeded streams (or reads wall time). Parked.
+
 ## Late spawns drew no flesh while frozen — fixed 2026-09-21
 
 - [x] **`spawnDebugCharacter` / `spawnCrowd` bodies added after boot marched nothing** on a frozen cast (`?frozen=1`,

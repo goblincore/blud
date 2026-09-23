@@ -59,6 +59,31 @@ export function createWeaponAimSeams(ctx: GameContext) {
     aimSurface: (limb?: string, actorId?: number) => aimAtNearestSurface(ctx, limb, actorId),
     /** aimSurface('head') — the bone-tubes reel's head-shot staging. */
     aimHead: () => aimAtNearestSurface(ctx, 'head'),
+    /** DECAP REPRO (debug): behead the nearest actor with a live head and
+     *  frame the stump. at = 'full' (default) removes the whole head cluster;
+     *  a number severDistal's from that head-chain prim. frame:false leaves
+     *  the camera alone (aim at a zombie first, then call it). dist = camera standoff (m). Returns the actor id or -1. */
+    decapitate: (o: { at?: 'full' | number; dist?: number; id?: number; frame?: boolean } = {}) => {
+      const p = ctx.player.player;
+      const heads = ctx.world.actors
+        .filter(a => o.id === undefined || a.id === o.id)
+        .map(a => ({ a, c: a.posed().clusters.find(c => c.limb === 'head' && c.alive)?.center }))
+        .filter((x): x is { a: typeof x.a; c: [number, number, number] } => !!x.c)
+        .sort((x, y) => Math.hypot(x.c[0] - p.pos[0], x.c[2] - p.pos[2]) - Math.hypot(y.c[0] - p.pos[0], y.c[2] - p.pos[2]));
+      const hit = heads[0];
+      if (!hit || !hit.a.debugSever('head', o.at ?? 'full')) return -1;
+      if (o.frame === false) return hit.a.id;
+      const [cx, cy, cz] = hit.c;
+      let dx = p.pos[0] - cx, dz = p.pos[2] - cz;
+      const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+      const stand = o.dist ?? 1.1;
+      p.pos = [cx + dx * stand, p.pos[1], cz + dz * stand];
+      p.vel = [0, 0, 0];
+      p.yaw = Math.atan2(-dx, dz);
+      const eyeY = p.pos[1] + 1.62;
+      p.pitch = Math.atan2(cy - 0.12 - eyeY, stand);
+      return hit.a.id;
+    },
     /** P3 capture: a full magazine, so scripted wound shots never click empty. */
     refillShells: () => { ctx.weapon.shells = MAGAZINE_CAPACITY; updateHud(ctx); return ctx.weapon.shells; },
     /** AUTOMATION: select a slot without synthesising a key event. */
