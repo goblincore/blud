@@ -327,6 +327,8 @@ the theme. Every level follows the same rules (§10.6).
 | S | ***Dollhouse*** (secret, from The Works) | — | The goblin's own flat at giant scale | Room furniture, huge | The mouse | — |
 | F | **Your flat** | — | The room you decorated | Gore in the flat, once | The Party | Finale |
 
+**Level designs:** [0 The Wake](levels/00-the-wake/design.md) · [1 Night Train](levels/01-night-train/design.md).
+
 **Hell is a tumour.** No lava, no pentagrams. A monstrous growth has swallowed
 the top of the building: corridors through tissue, sphincter doors, pieces of
 every earlier world half-digested inside it. It pulses to the Party's kick.
