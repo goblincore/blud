@@ -1,0 +1,10 @@
+{
+  "version": 1, "id": "two-floors",
+  "rooms": [
+    { "id": 1, "name": "low", "min": [0, 0], "max": [8, 8], "height": 5 },
+    { "id": 2, "name": "high", "min": [0, -8], "max": [8, -1.6], "floor": 2.5, "height": 3 }
+  ],
+  "stairs": [{ "id": "steps", "up": "-z", "min": [3, 0, 0.5], "max": [5, 2.5, 5] }],
+  "start": { "pos": [4, 0, 6], "yaw": 0 },
+  "pickups": [{ "id": "cd", "item": "cd", "pos": [4, 3.5, -4] }]
+}
