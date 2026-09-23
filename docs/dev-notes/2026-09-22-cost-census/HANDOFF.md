@@ -29,7 +29,15 @@ The body march is 70–83 % of the frame; nothing else on the GPU is worth more 
 
 Before merging: re-time the flame default quiet; decide whether to keep or remove the parked switches.
 
-## NEXT: the offline 4x reconstruction experiment (owner-requested)
+## UPDATE 2026-09-23: the lower-march-resolution line is DONE for now — read TEMPORAL-RECON-FINDINGS.md
+
+The 4x experiment below ran to completion and beyond: hybrid edge re-march (measured NO-GO), object motion vectors
+(kept, e7aa65b9), accumulation v2 (ghosting fixed, 18292bcc), checker reconstruction + t16 stack + distance split
+(parked behind flags, 648a7baf — owner: close edges in motion "not clean or good enough to ship").
+**Next experiment (owner, later): a trained network with TEMPORAL inputs** (0.25 frame + reprojected history + motion
+vectors). The section below is the original plan, kept for history.
+
+## (original) NEXT: the offline 4x reconstruction experiment (owner-requested)
 
 **Owner correction (2026-09-22):** a LOWER march resolution IS acceptable if the reconstruction matches today's
 look. The old "not acceptable in any form" note was a misunderstanding (it was about the adaptive-resolution

@@ -124,9 +124,12 @@
   prepass bug: the block cone was half as wide as its proof (be3ec43c). [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md).
 - [x] **Cost-weighted census (2026-09-22)** — [notes](docs/dev-notes/2026-09-22-cost-census/NOTES.md). Debug modes 13/14 + `costCensus`. Wounded melee: wound-zone hits = 68 % of
   prim work (post-hit 35 % > walk 32 %); grazing misses 1-4 px from a body ~200 prims/px (12-21 %); far misses ~9 prims/px (nearly free).
-- [ ] **START HERE (2026-09-22): [cost-census HANDOFF](docs/dev-notes/2026-09-22-cost-census/HANDOFF.md)** — branch `claude/march-census-r2` (unmerged:
-  flame 24/0.3 default + parked experiments), then the owner-requested OFFLINE 4x reconstruction experiment (lower march res IS acceptable if the
-  reconstruction matches today's look). Flame streak/heat compensation: owner wants shutter-type blur and a large-wavelength subtle shimmer.
+- [ ] **START HERE (2026-09-23): [cost-census HANDOFF](docs/dev-notes/2026-09-22-cost-census/HANDOFF.md) + [TEMPORAL-RECON-FINDINGS](docs/dev-notes/2026-09-22-cost-census/TEMPORAL-RECON-FINDINGS.md)**
+  — branch `claude/march-census-r2` (unmerged). Kept: flame 24/0.3 default, per-pixel object motion vectors (debug mode 16), accumulation v2
+  (`?accum=1`, ghosting fixed). Parked behind flags: checker reconstruction + t16 stack + distance split (`?accum=1&accumscale=0.25&accumchecker=1`;
+  owner: not shippable up close in motion). Measured NO-GO: hybrid edge re-march. Before merging: re-time the flame default quiet and confirm the
+  ship frame is unchanged (A/B vs 53087f8c). Later experiment (owner): trained upscaler with TEMPORAL inputs. Flame streak/heat compensation: owner
+  wants shutter-type blur and a large-wavelength subtle shimmer.
 - [ ] **NEXT (close-up march):** cheaper post-hit probes (AO/scatter) in wound zones, then the wound-zone walk, then grazing misses. Superseded plan below:
   cost near surfaces — per-step cost in wound zones and grazing silhouettes (a cost-weighted census, not a step count),
   the mode-4 census bug in the panic state, and (maybe) a per-wound cull slack for mode 4.
