@@ -3,7 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): carve/noise anchor helpers.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { ROW_CLUSTER_RANGE, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_QUAT, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_REST_A, ROW_REST_B } from '../layout';
+import { ROW_CLUSTER_RANGE, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_QUAT, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_REST_A, ROW_REST_B } from '../layout';
 
 // REST-SPACE NOISE ANCHOR (motion-polish task 6). Maps a world point into the
 // DOMINANT primitive's rest frame — translation between capsule midpoints,
@@ -48,6 +48,36 @@ export const REST_POINT = /* wgsl */ `fn restPoint(p: vec3<f32>, data: texture_2
     q = qMulQ(qFromToV(qRot(q, axisP / lenP), axisR / lenR), q);
   }
   return midR + qRot(q, p - midP);
+}`;
+
+// MOTION VECTORS (2026-09-22, docs/dev-notes/2026-09-22-cost-census/MOTION-VECTORS-PLAN.md): the
+// INVERSE of restPoint, posed with LAST frame's prim rows (ROW_PREV_A/B/QUAT). restPoint maps
+// p -> anchor = midR + qRot(q, p - midP), with q built from the posed axis and the orient quat; the
+// same q built from the PREVIOUS rows, inverted, puts the anchor back where that surface point was
+// last frame: prevMid + qRot(conj(qPrev), anchor - midR). World space in and out (p and the prim
+// rows are both world space), so prevP - p is the hit point's OBJECT motion; camera motion is the
+// resolve's job. w = 1 valid; w = 0 = no motion vector (no live prim, rest rows or prev rows unwritten
+// — gib chunks, the FPV hands view, a body's first frame after its prim count changed).
+export const PREV_POSED = /* wgsl */ `fn prevPosed(anchor: vec3<f32>, data: texture_2d<f32>, best: i32, band: i32) -> vec4<f32> {
+  if (best < 0) { return vec4<f32>(0.0); }
+  let ra = textureLoad(data, vec2<i32>(best, ${ROW_REST_A} + band), 0);
+  let pa = textureLoad(data, vec2<i32>(best, ${ROW_PREV_A} + band), 0);
+  if (ra.w <= 0.0 || pa.w < 0.5) { return vec4<f32>(0.0); }
+  let rb = textureLoad(data, vec2<i32>(best, ${ROW_REST_B} + band), 0);
+  let pb = textureLoad(data, vec2<i32>(best, ${ROW_PREV_B} + band), 0).xyz;
+  let midP = (pa.xyz + pb) * 0.5;
+  let midR = (ra.xyz + rb.xyz) * 0.5;
+  var q = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  let O = textureLoad(data, vec2<i32>(best, ${ROW_PREV_QUAT} + band), 0);
+  if (abs(1.0 - O.w) > 1e-6) { q = vec4<f32>(-O.xyz, O.w); }
+  let axisP = pb - pa.xyz;
+  let axisR = rb.xyz - ra.xyz;
+  let lenP = length(axisP);
+  let lenR = length(axisR);
+  if (lenP > 1e-6 && lenR > 1e-6) {
+    q = qMulQ(qFromToV(qRot(q, axisP / lenP), axisR / lenR), q);
+  }
+  return vec4<f32>(midP + qRot(vec4<f32>(-q.xyz, q.w), anchor - midR), 1.0);
 }`;
 
 // Carves every subtractive primitive out of the assembled field, AFTER the

@@ -37,7 +37,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
+  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
   QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
 import { woundThreatMasks } from './wound-threat';
@@ -308,6 +308,13 @@ const depthPreMarginAt = (cfg: unknown, world: unknown) => {
  * zero — so a body whose face never loads simply renders untextured rather
  * than black or pink. Exported for the hands view (which has no face at all).
  */
+/** MOTION VECTORS (2026-09-22, MOTION-VECTORS-PLAN.md): rendered-frame counter, ticked once per
+ *  sdf-layer render(). A body's packer advances prev <- cur on its first upload in a NEW frame, so
+ *  "prev" is always the pose the previous rendered frame used — a dt = 0 re-update, a setter re-pack
+ *  or a debug step(0) inside one frame cannot collapse prev onto cur. */
+let motionFrame = 0;
+export function tickMotionFrame(): void { motionFrame++; }
+
 export function blankFaceTexture(): THREE.DataTexture {
   const tex = new THREE.DataTexture(
     new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat,
@@ -2220,6 +2227,14 @@ export function createZombieGpuView(
   // usually rides is skipped). Stored here; the pose does not change on a
   // re-pack, so the frame is bit-identical to the pre-toggle frame.
   let lastUploadNext: BuildResult | undefined;
+  // MOTION VECTORS (2026-09-22, MOTION-VECTORS-PLAN.md): this body's prim rows as last UPLOADED (cur)
+  // and as of the previous per-frame update (prev). prev -> ROW_PREV_A/B/QUAT, which prevPosed inverts
+  // restPoint with. Only update() advances prev (advanceMotion = true); re-packs from setters keep it,
+  // so a frozen frame reads zero motion. A prim-count change (sever, respawn) invalidates prev for a
+  // frame: the indices no longer name the same prims.
+  const motionCur = { a: new Float32Array(MAX_PRIMS * 4), b: new Float32Array(MAX_PRIMS * 4), q: new Float32Array(MAX_PRIMS * 4), count: -1, frame: -1 };
+  const motionRow = new Float32Array(MAX_PRIMS * 4);
+  const motionPrev = { a: new Float32Array(MAX_PRIMS * 4), b: new Float32Array(MAX_PRIMS * 4), q: new Float32Array(MAX_PRIMS * 4), count: -1 };
   let lastUploadRest: BuildResult | undefined;
   // Each view owns its packing scratch. writeRow copies into the atlas before
   // the next upload, so the temporary rows need not allocate every frame.
@@ -2307,11 +2322,30 @@ export function createZombieGpuView(
     for (let i = 0; i < masks.length; i++) texels[base + i * 4] = Math.floor(texels[base + i * 4]!) + (masks[i]! & 511) / 1024;
   }
 
-  function upload(next: BuildResult, rest?: BuildResult) {
+  function upload(next: BuildResult, rest?: BuildResult, advanceMotion = false) {
     lastUploadNext = next;
     lastUploadRest = rest;
     const p = packBody(next, rest, { packBones, boneCullMode }, uploadScratch);
     uploadScratch = p;
+    if (advanceMotion && motionCur.count >= 0 && motionCur.frame !== motionFrame) {
+      motionPrev.a.set(motionCur.a); motionPrev.b.set(motionCur.b); motionPrev.q.set(motionCur.q);
+      motionPrev.count = motionCur.count;
+    }
+    motionCur.a.set(p.primA.subarray(0, MAX_PRIMS * 4));
+    motionCur.b.set(p.primB.subarray(0, MAX_PRIMS * 4));
+    motionCur.q.set(p.primQuat.subarray(0, MAX_PRIMS * 4));
+    motionCur.count = p.primCount;
+    // Only the per-frame path stamps the frame: a setter re-pack earlier in the same frame must not
+    // make the real update() that follows skip its advance.
+    if (advanceMotion) motionCur.frame = motionFrame;
+    // Valid prev = same prim count as now; else write the CURRENT rows with w = 0 (no motion vector).
+    const prevOk = motionPrev.count === p.primCount;
+    const src = prevOk ? motionPrev : motionCur;
+    motionRow.set(src.a);
+    for (let i = 0; i < MAX_PRIMS; i++) motionRow[i * 4 + 3] = prevOk ? 1 : 0;
+    writeRow(ROW_PREV_A, motionRow, MAX_PRIMS);
+    writeRow(ROW_PREV_B, src.b, MAX_PRIMS);
+    writeRow(ROW_PREV_QUAT, src.q, MAX_PRIMS);
     lastGroups = [];
     for (let g = 0; g < p.groupCount; g++) {
       const o = g * 4;
@@ -2660,7 +2694,7 @@ export function createZombieGpuView(
     setMelt(progress) { u.meltCfg.value.x = progress; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {
-      const p = upload(next, rest);
+      const p = upload(next, rest, true);
       const f = fit(next, p.maxBlendK);
       mesh.position.copy(f.centre);
       // Per-axis, since the box is an AABB: severing a leg shortens it without

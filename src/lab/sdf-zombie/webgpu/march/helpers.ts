@@ -10,7 +10,7 @@ import { PROBE_GRID_WGSL } from '../probe-grid.wgsl';
 import { SEG_VOLUME_WGSL } from '../skeleton-spike/volume.wgsl';
 import { DEPTH_PRE_FETCH, DEPTH_PRE_MISS } from './cone-march.wgsl';
 import { APPLY_BONES, FOLD_BONE_RANGE } from './fields/bones.wgsl';
-import { APPLY_CARVES, REST_POINT } from './fields/carves.wgsl';
+import { APPLY_CARVES, PREV_POSED, REST_POINT } from './fields/carves.wgsl';
 import { FOLD_GROUP, INSTANCE_STATE } from './fields/groups.wgsl';
 import { CHAR_MASK, TISSUE_RAMP } from './fields/tissue.wgsl';
 import { SAMPLE_VOLUME } from './fields/volume.wgsl';
@@ -42,7 +42,7 @@ export const HELPERS = [
   // at pipeline creation, which is the failure this list's header warns of.
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   SD_SHELL,
-  Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
+  Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT, PREV_POSED,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
   FOLD_GROUP, INSTANCE_STATE, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, PROBE_DYNAMIC_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,

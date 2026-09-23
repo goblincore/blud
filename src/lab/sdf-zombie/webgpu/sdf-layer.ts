@@ -35,7 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, marchNormalRead, marchAnchorRead, marchBurnRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickMotionFrame, marchNormalRead, marchAnchorRead, marchBurnRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
@@ -1936,6 +1936,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     },
     render(scene, camera) {
       const restore = camera.layers.mask;
+      // Motion vectors (MOTION-VECTORS-PLAN.md): one tick per rendered frame, so each body's packer
+      // advances prev <- cur on its FIRST upload after this render, however many times it re-packs.
+      tickMotionFrame();
 
       // ---- half-rate decision (C2) ---------------------------------------
       // Snapshot the camera every frame (hold frames reproject through it);

@@ -14,7 +14,7 @@ export const RAY_CULL_SLACK = '0.07';
  *  surface. It widens `t` only — a conservative lower bound, never a miss. */
 export const QUAD_ENTRY_SLACK = '0.02';
 
-export const DATA_ROWS = 22;
+export const DATA_ROWS = 25;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -100,6 +100,17 @@ export const ROW_PRIM_WARP = 20;
  *  the strand bundle's parameters as its wrinkle frequency. Same class as
  *  the meltCfg collision the noiseCfg comment records. */
 export const ROW_PRIM_STRAND = 21;
+
+/** MOTION VECTORS (2026-09-22, docs/dev-notes/2026-09-22-cost-census/MOTION-VECTORS-PLAN.md):
+ *  LAST frame's ROW_PRIM_A / ROW_PRIM_B / ROW_PRIM_QUAT, written by the per-body packer
+ *  (zombie-gpu upload(): prev advances only on the per-frame update path). `prevPosed` in
+ *  march/fields/carves.wgsl.ts inverts `restPoint` with them to find where a hit surface point was
+ *  last frame. ROW_PREV_A.w = 1 marks the rows VALID; 0 (gib chunks, which never write them, and a
+ *  body's first frame after its prim count changed) means "no motion vector". Only xyz of A/B is
+ *  used — the current rows' w (radius, blendK) is not motion. Read by nothing on the ship path. */
+export const ROW_PREV_A = 22;
+export const ROW_PREV_B = 23;
+export const ROW_PREV_QUAT = 24;
 
 /**
  * Sphere-trace step multiplier inside applyWounds' nearWound zone.
