@@ -2567,7 +2567,8 @@ async function main() {
         // `?accumsplit=<m>` (owner idea 2026-09-23): bodies nearer than m through the quarter-scale
         // checker, farther ones marched at half scale for real. Default 3 m.
         const split = parseFloatParam(accumSearch.get('accumsplit'), { min: 0, max: 100 }) ?? 3;
-        ctx.render.sdfLayer.setTemporalAccumCfg({ checker: true, splitM: split });
+        // `?accumedge=1` (checker edge experiment 2026-09-23): silhouettes from the near-miss distances.
+        ctx.render.sdfLayer.setTemporalAccumCfg({ checker: true, splitM: split, edge: accumSearch.get('accumedge') === '1' });
         // Bodies built later read the halved pixelConeK at creation; refresh any that already exist.
         if (ctx.world.actors) applySdfScale(ctx, ctx.render.sdfScale);
       }

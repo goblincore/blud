@@ -47,6 +47,12 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
   // box-entry block (much later) share one definition; for y <= 1 it is false
   // and every branch below is dead.
   let quadMode = instCfg.y > 1.5;
+  // DISTANCE SPLIT, FAR PASS EARLY-OUT (2026-09-23): the proxy draws its BACK faces, so worldPos is
+  // where the ray leaves the box; a box that ends nearer than the split (-depthPreCfg.w) holds nothing
+  // for the far pass. Discard before the tile preload / wound list / hull bounds instead of in the ray
+  // window after them: measured, the far pass cost 7.2-7.5 ms in the melee crush, most of it paying
+  // that setup at half scale on the NEAR bodies' boxes. Off (w >= 0) on every ship frame.
+  if (!quadMode && depthPreCfg.w < 0.0 && length(worldPos - camPos) < -depthPreCfg.w) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
   // shipping path pays exactly one uniform branch; gDebugMode hands the
@@ -58,6 +64,12 @@ ${HULL_BOUNDS_BLOCK}
 ${RAY_WINDOW_BLOCK}
 ${STEP_CONFIG_BLOCK}
 ${START_BOUNDS_BLOCK}
+  // NEAR-MISS EDGE (checker edge experiment, 2026-09-23): the closest the walk came to a surface, in
+  // footprint units (field distance / (t * aaCfg.x)). Tracked only while the edge switch
+  // (gInstMelt.y == 2, set by the layer with the checker) is on; a missed ray then writes it
+  // instead of discarding (MARCH_TRACE_POST). Declared here, not in the loop, because REFINE_LOOP
+  // replaces the loop section and its post must still compile.
+  var missNear = 1e9;
 `;
 
 /** Run 5 (plan 2026-09-13-neural-upscale-run5-sdf-refine): the walk alone — from `var t` to the
@@ -131,6 +143,7 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     let nearWound = dres.z > 0.5;
     hitNearWound = nearWound;
     let radius = abs(d);
+    if (gInstMelt.y > 1.5 && t > 1e-3) { missNear = min(missNear, radius * distort / (t * aaCfg.x)); }
     let overshot = !conservative && !nearWound && omega > 1.0 && (radius + prevRadius) < stepLen;
     if (overshot) {
       // Undo the part of the last step that was not covered by the spheres,
@@ -277,7 +290,15 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
 ${DEBUG_COUNTERS_BLOCK}
 `;
 
-export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
+export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
+    // NEAR-MISS EDGE: with the edge switch on, a ray that passed within 16 footprints of a surface
+    // writes that distance (x) under the -7 sentinel (y; the clear colour can never be negative)
+    // instead of discarding. w < 0 tells the material to write a miss depth just short of the far
+    // plane (nearer miss wins the depth test, any hit beats every miss) and alpha 1 (still a miss
+    // to every reader). Off, this is the old discard exactly.
+    if (gInstMelt.y > 1.5 && missNear < 16.0) { return vec4<f32>(missNear, -7.0, 0.0, -1.0); }
+    discard;
+  }
   // Reload the slot whose field won the union fold. Every post-hit row read
   // below (material, rest anchor, face, wound masks) is the HIT instance's.
   loadInstance(inst, gHitSlot);

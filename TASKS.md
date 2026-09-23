@@ -152,7 +152,11 @@
   prepass bug: the block cone was half as wide as its proof (be3ec43c). [WOUND-COST.md](docs/dev-notes/2026-09-21-multiscale-march/WOUND-COST.md).
 - [x] **Cost-weighted census (2026-09-22)** — [notes](docs/dev-notes/2026-09-22-cost-census/NOTES.md). Debug modes 13/14 + `costCensus`. Wounded melee: wound-zone hits = 68 % of
   prim work (post-hit 35 % > walk 32 %); grazing misses 1-4 px from a body ~200 prims/px (12-21 %); far misses ~9 prims/px (nearly free).
-- [ ] **START HERE (2026-09-23): [cost-census HANDOFF](docs/dev-notes/2026-09-22-cost-census/HANDOFF.md) + [TEMPORAL-RECON-FINDINGS](docs/dev-notes/2026-09-22-cost-census/TEMPORAL-RECON-FINDINGS.md)**
+- [ ] **START HERE (2026-09-23, later): 0.25 march + checker + edge coverage — ~38 % faster frame, owner-accepted look under the retuned VHS.**
+  Branch `claude/checker-edge-coverage`, flag-only (`?accum=1&accumscale=0.25&accumchecker=1&accumedge=1`) except the new VHS `blud` defaults.
+  Melee crush frame 12.55 -> 7.80 ms (quiet pair; a second pair was CPU-bound under load). Next: re-run the A/B quiet, then decide default vs
+  low-end quality setting. [TEMPORAL-RECON-FINDINGS "Round 2"](docs/dev-notes/2026-09-22-cost-census/TEMPORAL-RECON-FINDINGS.md).
+- [ ] **(earlier) START HERE (2026-09-23): [cost-census HANDOFF](docs/dev-notes/2026-09-22-cost-census/HANDOFF.md) + [TEMPORAL-RECON-FINDINGS](docs/dev-notes/2026-09-22-cost-census/TEMPORAL-RECON-FINDINGS.md)**
   — branch `claude/march-census-r2` (unmerged). Kept: flame 24/0.3 default, per-pixel object motion vectors (debug mode 16), accumulation v2
   (`?accum=1`, ghosting fixed). Parked behind flags: checker reconstruction + t16 stack + distance split (`?accum=1&accumscale=0.25&accumchecker=1`;
   owner: not shippable up close in motion). Measured NO-GO: hybrid edge re-march. Before merging: re-time the flame default quiet and confirm the

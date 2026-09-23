@@ -53,7 +53,7 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     // read must precede calcNormal.
     const capture = MARCH_BODY.indexOf('let debugPrims = gDebugPrims;');
     expect(capture).toBeGreaterThan(-1);
-    expect(capture).toBeGreaterThan(MARCH_BODY.indexOf('if (!hit) { discard; }'));
+    expect(capture).toBeGreaterThan(MARCH_BODY.indexOf('if (!hit) {'));
     expect(capture).toBeLessThan(MARCH_BODY.indexOf('calcNormal('));
   });
 
