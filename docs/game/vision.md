@@ -276,7 +276,7 @@ leaves something behind in the carriages, so the train fills up as the flat does
 - **Windows show what can't be there:** your flat, a level you haven't reached,
   the Party lit up far overhead, getting closer.
 
-**The Stoker (proposal).** The engine has no driver. It has a Stoker: a huge,
+**The Stoker (decided 2026-09-23).** The engine has no driver. It has a Stoker: a huge,
 soft figure in the cab, back always to you, shovelling into the firebox without
 stopping. **The fire runs on bodies.** You can see what goes in; the game never
 says. The goblin starts the game with a gravedigger's shovel; the Stoker is the
@@ -285,9 +285,18 @@ never fights. Between stops you can walk to the cab and watch it work. It is the
 one character who is always with you.
 - **Why it works:** it puts the game's thesis in one image: *the trip to the
   stars is powered by flesh.* Aspiration fuelled by bodies, played straight.
-- **Alternatives if it doesn't land:** *the Conductor*, a thin figure who punches
-  your claim ticket at every carriage door (it becomes the ticket system); or
-  *the empty cab*, which drives itself and has a seat exactly goblin-sized.
+
+**Riding back (decided 2026-09-23).** The Line runs both ways: from the train
+you can return to any stop you've reached. What that buys:
+- **Missed CDs and secrets** can be collected later, so the music collection is
+  completable without replaying the whole episode.
+- **Stops change while you're away.** A revisited level has moved on with the
+  frame's tone phase (lights out, a room gone soft, guests rearranged). That's
+  the "remix levels instead of adding them" rule from the scope doc, now with a
+  reason to exist.
+- **Nothing is explained.** The departure board just shows the old stop's name.
+Open: whether a revisit restocks enemies, and whether the Stoker needs feeding
+before the train will go back.
 
 **Space.** Romantic, aspirational, and the opposite of everything else in the
 game, and that opposition is the point (world law 8).
@@ -456,9 +465,7 @@ extreme gore, loud music and poor manners."*
 6. **Lab vs. alien ship:** distinct enough?
 7. **Level count:** 9 main + secret + finale may still be one or two too many.
 8. **Flat layout:** one room, or one room plus a tiny bathroom?
-9. **The Stoker:** keep it, or the Conductor / the empty cab (§10.3)?
 10. **Boarding:** does the cold-open demo end on the CD (then the full game
     resumes at the cemetery's back gate by the tracks), or does the demo include
     the first glimpse of the train?
-11. **Between stops:** is the train hub free to walk at any time, or only
-    between levels? Can you ride back to an earlier stop?
+11. **Revisits:** do enemies restock, and does going back cost anything?
