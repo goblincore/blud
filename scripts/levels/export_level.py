@@ -69,11 +69,16 @@ def with_states(obj, item):
 
 
 def yaw_of(obj):
-    return rnd(-obj.matrix_world.to_euler("XYZ").z)
+    # Radians, not metres: millimetre rounding would move a yaw by up to 0.03°.
+    return round(-obj.matrix_world.to_euler("XYZ").z, 4) + 0.0
 
 
 def main():
     scene = bpy.context.scene
+    # matrix_world is only current after a depsgraph update. A scene built by a
+    # script in the same headless session has none yet, so every marker and
+    # light would export at the origin.
+    bpy.context.view_layer.update()
     level_id = scene.get("level_id")
     if not level_id:
         raise SystemExit("scene custom property level_id is required")
