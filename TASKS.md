@@ -4,6 +4,13 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## sdf-zombie suite red (14 tests) — fixed 2026-09-22
+
+- [x] 11 from `3662c1ca` (half-strength blends): zombie ribs/spine/iliac pulled in via `zombie-skeleton-gen.ts`, soldier
+  jaw r 0.052, gnasher waist taller; crease-residual pins (rupture, surface-nets band) loosened; gib assets rebuilt.
+- [x] 2 from `3e9850e3` (heading fix): rig-added `orient` broke wound frames; a chest slug decapitated. `poseOrient` flag.
+  Removed the stale 11 mm near-wound characterisation test (owner). 6 zombie bones now hidden only by arm flesh (was 4).
+
 ## Broodmother (spider-bodied temptress) — first pass 2026-09-22
 
 - [x] **New character `broodmother`**: SDF body (`broodmother.blob`, prose-authored, Vore lineage but fleshy):

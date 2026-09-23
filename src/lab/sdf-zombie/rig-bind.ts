@@ -433,7 +433,9 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       a: add(pos[bind.a.point]!.pos, qRotate(q, bind.a.offset)),
       b: add(pos[bind.b.point]!.pos, qRotate(q, bind.b.offset)),
       ...(p.bend ? { bend: qRotate(q, p.bend) } : {}),
-      ...(turned && orientedShape ? { orient: p.orient ? qMul(q, p.orient) : q } : {}),
+      ...(turned && orientedShape
+        ? (p.orient ? { orient: qMul(q, p.orient) } : { orient: q, poseOrient: true })
+        : {}),
     };
   };
   const prims: Primitive[] = body.prims.map((p, i) => {
