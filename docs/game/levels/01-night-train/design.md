@@ -188,10 +188,9 @@ corridor. That maps directly onto the level format (rooms plus tunnels along z).
 - **Hub windows:** a desert first, stars after the lift-off.
 - **The lift-off moves later:** this level ends in a desert dawn; the train
   leaves the ground between the Keep and Cold Storage, as a hub set piece.
+  The trigger is feeding the Stoker's fire again (decided 2026-09-23).
 
 ## 13. Open questions
 
 1. **What the Stoker could do later** (hold out a hand, stop shovelling once),
    parked.
-2. **The lift-off's trigger:** feeding the fire again, as proposed, or
-   something the player brings back from the Keep?

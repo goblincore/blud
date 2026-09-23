@@ -270,7 +270,7 @@ which is Hell.
   (after the Keep, before Cold Storage), the track curves up and the train
   leaves the ground: desert, then clouds, then stars. It happens **on the train
   between stops**, as the hub's own set piece: the player feeds the Stoker's
-  fire in the cab and the train climbs. From then on the windows show space.
+  fire in the cab again (decided) and the train climbs. From then on the windows show space.
 
 This keeps the game abstract (the track is the only explanation for why each
 door opens onto a different world), keeps the hub linear and cheap to build (a
