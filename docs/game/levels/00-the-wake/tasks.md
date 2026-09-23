@@ -42,9 +42,9 @@ The level can't be tested without these. Build them small.
 
 ## Design
 
-- [~] **W-D0 Reference study.** In progress 2026-09-23 (dispatched). Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
+- [x] **W-D0 Reference study.** Done 2026-09-23: [reference-study.md](reference-study.md). Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
   process in the [level design guide](../level-design-guide.md).
-- [~] **W-D1 Paper map.** Draft `layout.md` next; draft 0 drawn for comparison. Final flow and dimensions at goblin scale.
+- [~] **W-D1 Paper map.** [layout.md](layout.md) draft 1 written 2026-09-23; awaiting owner approval. Final flow and dimensions at goblin scale.
   *Deps:* W-D0, F-D5 (goblin scale). *Done when:* `layout.md` approved (Plan 1 Task 5b).
 - [ ] **W-D2 Encounter script.** Zombie counts, spawn points, triggers per beat.
   *Deps:* W-D1. Part of `layout.md` (Plan 1 Task 5b). Zombies and soldiers only.

@@ -14,7 +14,8 @@ Branch `claude/wake-level-pipeline-1afb01`. [Plan 1](docs/superpowers/plans/2026
 - [x] T5c **draft 0** blockout (layout not yet approved): `.blend`, `the-wake.level.json`, 6 level tests.
 - [x] T6 `ctx.world.level` wired; `?level=the-wake` plays; ring shorty gate passes; boot within noise of base.
 - [x] T7 `scripts/sdf-game-wake-gate.sh` passes (boot, layout, crypt slab, multi-floor refusal).
-- [~] T5a Blood E1M1/E1M2 reference study (dispatched). T5b layout draft then **owner approval**; then rebuild 5c from it.
+- [x] T5a [reference study](docs/game/levels/00-the-wake/reference-study.md): 256 BU/m (doorways), 10 lessons.
+- [!] T5b [layout draft 1](docs/game/levels/00-the-wake/layout.md) **waits for owner approval**; then rebuild 5c from it, then 5d dressing.
 
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 
