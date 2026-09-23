@@ -22,6 +22,7 @@
 
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
+import type { ActiveLevel } from './active-level';
 import type { BakedChunkMaterial } from './baked-chunks';
 import type { EncounterNavigation } from './encounter-navigation';
 import type { ZombieActor } from './game-actor';
@@ -48,6 +49,13 @@ function unbuilt<T>(): T {
 }
 
 export interface WorldState {
+  /** The loaded level (the ring testbed, or ?level=<id>). Every reader of
+   *  rooms, corridors, furniture, start, colliders and surfaces goes through it. */
+  level: ActiveLevel;
+  /** Gates opened so far (authored levels). */
+  openGates: Set<string>;
+  /** Gate meshes by gate id, hidden when the gate opens. */
+  gateMeshes: Map<string, THREE.Object3D>;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -100,6 +108,9 @@ export interface WorldState {
 /** Every call returns a fresh object, nested arrays, objects and maps included. */
 export function makeWorldState(): WorldState {
   return {
+    level: unbuilt<ActiveLevel>(),
+    openGates: new Set<string>(),
+    gateMeshes: new Map<string, THREE.Object3D>(),
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -128,6 +139,9 @@ export function makeWorldState(): WorldState {
 
 /** Old `game-main.ts` binding name → path on the `world` slice. */
 export const WORLD_BINDINGS = {
+  level: 'world.level',
+  openGates: 'world.openGates',
+  gateMeshes: 'world.gateMeshes',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

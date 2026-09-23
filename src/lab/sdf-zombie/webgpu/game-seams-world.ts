@@ -11,7 +11,7 @@ import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { woundCarveNormal, woundWorldPos } from '../damage';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
-import { ROOMS, TUNNELS, FURNITURE, enclosureKeyAt, enclosureOf } from './game-level';
+import { openGate } from './game-level-leaves';
 import { RING_TUNING } from '../melee-ring';
 import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
@@ -168,7 +168,7 @@ export function createWorldSeams(ctx: GameContext) {
       }));
     },
     setProbes: (weight: number, gain = -1) => { ctx.world.roomProbes.setProbes(weight, gain); return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain }; },
-    get probes() { return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain, ready: ctx.world.roomProbes.ready, matched: ROOMS.map(r => [r.id, ctx.world.roomProbes.matchedGain(r.id)]) }; },
+    get probes() { return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain, ready: ctx.world.roomProbes.ready, matched: ctx.world.level.rooms.map(r => [r.id, ctx.world.roomProbes.matchedGain(r.id)]) }; },
     /** TASK-6 TRUE-EMPTY PROOF SEAM: hide/show the static level meshes
      *  (dungeon shell + accents). With them hidden and the camera aimed at
      *  the (now absent) ceiling, verified rays see NO producer at any depth:
@@ -560,18 +560,31 @@ export function createWorldSeams(ctx: GameContext) {
      *  piece stayed in the room" needs the room's rectangle, and hard-coding it
      *  in the rig would let the level move out from under the assertion. */
     enclosureBoxAt: (x: number, z: number) => {
-      const key = enclosureKeyAt(x, z);
-      const enc = enclosureOf(key);
+      const key = ctx.world.level.keyAt(x, z);
+      const enc = ctx.world.level.enclosureFor(key);
       return enc ? { key, min: enc.box.min, max: enc.box.max } : null;
     },
 
-    rooms: ROOMS.map(r => ({
+    /** The active level: id, state, rooms, gate state, capabilities. */
+    level: () => ({
+      id: ctx.world.level.id,
+      state: ctx.world.level.def?.state ?? null,
+      rooms: ctx.world.level.rooms.map(r => r.name),
+      colliders: ctx.world.colliders.length,
+      openGates: [...ctx.world.openGates],
+      requires: ctx.world.level.def?.requires ?? [],
+      windows: ctx.world.level.surfaces.windows.map(w => w.id),
+    }),
+    /** Open an authored level's gate by id (false if unknown or already open). */
+    openGate: (id: string) => openGate(ctx, id),
+
+    rooms: ctx.world.level.rooms.map(r => ({
       id: r.id, name: r.name, zombies: r.zombies,
       bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },
     })),
-    tunnels: TUNNELS.map(t => t.name),
-    furniture: FURNITURE,
+    tunnels: ctx.world.level.tunnels.map(t => t.name),
+    furniture: ctx.world.level.furniture,
     /** Accent lights per room — capture/measurement seam (pair-shot framing). */
-    accents: ROOMS.flatMap(r => r.accents.map(a => ({ room: r.id, ...a })))
+    accents: ctx.world.level.rooms.flatMap(r => r.accents.map(a => ({ room: r.id, ...a })))
   };
 }

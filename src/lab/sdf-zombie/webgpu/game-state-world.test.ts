@@ -30,6 +30,8 @@ describe('makeWorldState', () => {
     expect(a.levelLightLists).not.toBe(b.levelLightLists);
     expect(a.levelNodeMaterials).not.toBe(b.levelNodeMaterials);
     expect(a.litChunkMaterials).not.toBe(b.litChunkMaterials);
+    expect(a.openGates).not.toBe(b.openGates);
+    expect(a.gateMeshes).not.toBe(b.gateMeshes);
   });
 
   it('starts at the declared defaults', () => {
@@ -58,6 +60,6 @@ describe('WORLD_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(23);
+    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(26);
   });
 });

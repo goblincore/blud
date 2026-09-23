@@ -21,7 +21,6 @@ import { updateHud } from './game-panels-leaves';
 import { RELOAD, magazineAfterFire } from './game-viewmodel';
 import { predictSlugHitNow } from './game-world-leaves';
 import { type BenchAction } from './game-bench-scenario';
-import { ROOMS } from './game-level';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -553,7 +552,7 @@ export function aimAtNearestSurface(ctx: GameContext, limb?: string, actorId?: n
 export function performBenchAction(ctx: GameContext, a: BenchAction): void {
 switch (a.kind) {
   case 'teleport': {
-    const r = ROOMS.find(x => x.id === a.room);
+    const r = ctx.world.level.rooms.find(x => x.id === a.room);
     if (r) {
       // Stand back from where the BODIES actually are, facing
       // them. Two heuristics were tried and both failed against

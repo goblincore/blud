@@ -10,7 +10,6 @@ import { type GameContext } from './game-context';
 import { woundWorldPos, type Wound } from '../damage';
 import { type DemoFile, type DemoFrame, createDemoRecorder } from './demo-recorder';
 import { type ZombieActor } from './game-actor';
-import { ROOMS } from './game-level';
 import { type Scenario, type ScenarioStep } from './game-bench-scenario';
 import { playerRoomId } from './game-player-leaves';
 
@@ -53,7 +52,7 @@ export function placeFromDemo(ctx: GameContext, file: DemoFile): void {
     ctx.player.player.grounded = true;
     return;
   }
-  const r = ROOMS.find(x => x.id === file.room);
+  const r = ctx.world.level.rooms.find(x => x.id === file.room);
   if (r) {
     ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
     ctx.player.player.vel = [0, 0, 0];

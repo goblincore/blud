@@ -9,7 +9,7 @@
 import { type GameContext } from './game-context';
 import { moveAim } from './free-aim';
 import { PLAYER } from './game-player';
-import { ROOMS, enclosureKeyAt } from './game-level';
+import { roomIdAt } from './game-level-leaves';
 import { updateHud } from './game-panels-leaves';
 import { pushProbeWeight } from './game-probes-leaves';
 import { applyUpscaleAbMode } from './game-render-leaves';
@@ -33,12 +33,10 @@ export function applyMouseDelta(ctx: GameContext, dx: number, dy: number): void 
   }
 }
 
-export const ROOM_ID_BY_NAME = new Map(ROOMS.map(r => [r.name, r.id] as const));
-
 /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
  *  a player who shares their room. */
 export function playerRoomId(ctx: GameContext): number {
-  return ROOM_ID_BY_NAME.get(enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2])) ?? -1;
+  return roomIdAt(ctx, ctx.player.player.pos[0], ctx.player.player.pos[2]);
 }
 
 /** Every keydown side effect, as RISING EDGES over a held-key snapshot. The
