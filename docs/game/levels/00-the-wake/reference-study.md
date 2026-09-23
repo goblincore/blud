@@ -111,8 +111,7 @@ Placement logic:
 - Cultists guard *things*: the skull key (1, out in the cemetery), the dagger
   key (1, in the crematorium), doors and stairs (2 per big room, behind cover
   such as pews). They are the map's "soldiers".
-- Zombies wait in wings and vestibules ("beware of the two zombies waiting in
-  the wings") and the buried ones **rise from the graves you are walking past**
+- Zombies wait in side rooms and vestibules, usually in pairs, and the buried ones **rise from the graves you are walking past**
   — the open cemetery and the crypt are their floors.
 - Rats and the bat swarm (5–9 strong) in closets and loot rooms; they are
   startle-and-flank trash, not fights.
