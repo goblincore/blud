@@ -43,8 +43,8 @@ change together).
   centre of the oval and `yaw` its facing (the side that shows the tracks). `target` is a level
   id matching `^[a-z0-9-]+$`, with no check that the file exists. It needs the capability
   **`portals`**.
-- **Blender:** a `portal:<target>` empty in the `markers` collection, its scale giving width and
-  height (the Blender conventions doc gets a row). The void room carries a `void` custom property.
+- **Blender:** a `portal:<target>:<id>` empty in the `markers` collection, with custom properties
+  `width` and `height` (default 2.2 × 3.4 m), like the bell's `radius` (the Blender conventions doc gets a row). The void room carries a `void` custom property.
 
 `ENGINE_CAPABILITIES` gains `void` and `portals`.
 
