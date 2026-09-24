@@ -1,0 +1,47 @@
+# THIN FIXTURE — regression case for the "lines in the air" bug (bride,
+# 2026-09-24): a painted drip 10 cm long at r 2.4 mm drew dark-red lines
+# 30+ cm out into the air either side of her in lab frames, while the CPU
+# field and blob:render-check saw nothing.
+#
+# It was NOT the renderer. bindRig bound each prim endpoint to the nearest
+# rig point of the whole body, and the drip's low end sat nearer the
+# hanging hand than the hip or knee — so it rode the hand, and when the arm
+# moved the drip became a 45 cm thread from thigh to hand, which the march
+# drew faithfully. The rest body (sdBody, render-check) never moves, so it
+# never saw it. rig-bind.test.ts pins the fix on this file.
+#
+# Not a character: the zombie's skeleton (the lab rig needs a humanoid's
+# joints) in plain capsules, arms hanging STRAIGHT so each wrist sits beside
+# the outer thigh, and one drip per thigh ending 7.8 cm from that wrist —
+# nearer than the knee (17 cm) or the pelvis root (19 cm). (The pelvis bone
+# runs 0.92 -> 1.06, so the hips, and the thighs' heads, sit at y 1.06.)
+
+model thin-fixture
+  height 1.78
+
+skeleton
+  root pelvis at 0.92
+  bone spine parent=pelvis dir=up len=0.34
+  bone neck  parent=spine  dir=up len=0.16
+  bone skull parent=neck   dir=up len=0.16
+  mirror
+    bone clavicle parent=spine    dir=side            len=0.24
+    bone upperArm parent=clavicle dir=down            len=0.30
+    bone foreArm  parent=upperArm dir=down            len=0.30
+    bone thigh    parent=pelvis   dir=down side=0.10  len=0.40
+    bone shin     parent=thigh    dir=down            len=0.42
+  end
+
+body
+  bar torso on spine from=0.00 to=1.00 r=0.120 wide=1.20 deep=0.75 blend=0.020 core
+  bar head on neck from=0.00 to=1.00 r=0.050 blend=0.020
+  blob head on skull at=0.45 r=0.100 blend=0.020
+  bar arm on clavicle from=0.00 to=1.00 r=0.045 blend=0.020 mirror
+  bar arm on upperArm from=0.00 to=1.00 r=0.045 blend=0.020 mirror
+  bar arm on foreArm from=0.00 to=1.00 r=0.038 blend=0.020 mirror
+  bar leg on thigh from=0.00 to=1.00 r=0.065 blend=0.020 mirror
+  bar leg on shin from=0.00 to=1.00 r=0.050 blend=0.020 mirror
+  # THE DRIP: 10 cm down the OUTER thigh at r 2.4 mm (length/radius ~42),
+  # painted like the bride's. x 0.165, from y 0.92 (binds the hip) to y
+  # 0.82 (bound the WRIST before the fix; the knee after).
+  blob leg on thigh at=0.35 offset=(0.065,0,0) tip=(0,-0.100,0) r=0.0024 blend=0.002 mirror color=4a0e12 gloss=0.85

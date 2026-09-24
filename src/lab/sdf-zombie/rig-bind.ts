@@ -5,7 +5,7 @@ import type { Quat } from './vec';
 import { boxReach, shellReach, strandReach } from './extent';
 import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
-import { rotateYaw } from './gait';
+import { jointForBoneEnd, rotateYaw } from './gait';
 import { segmentQuat } from './rig-frames';
 import {
   add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
@@ -125,6 +125,10 @@ export const HEAD_RIGID_TUNING = {
 } as const;
 
 const KEY_EPS = 1e-4;
+
+/** Gait joints a limb SWINGS — bindable only by prims on that limb's own
+ *  bones (see bindEnd in bindRig). */
+const DISTAL_JOINT_RE = /^(elbow|hand|handTip|knee|foot|toe)[LR]$/;
 
 /**
  * Builds a rig from the body's resolved bone joints and binds every primitive
@@ -257,10 +261,67 @@ export function bindRig(body: BuildResult): BoundRig {
     return best;
   };
 
-  const bindEnd = (p: Vec3): EndpointBind => {
+  // DISTAL JOINTS belong to their own limb (fixed 2026-09-24). An endpoint
+  // used to bind to the nearest rig point of the WHOLE body, so a prim that
+  // ends near another limb's elbow, wrist, hand or knee followed THAT joint:
+  // the bride's 10 cm inner-thigh drip ended 19 cm from the hanging hand tip
+  // and nearer to it than to the hip or knee, so the drip's low end rode the
+  // hand. At rest nothing shows; the moment the arm swings, the prim is a
+  // 45 cm, 2.4 mm-thick capsule from thigh to hand, and the march draws it —
+  // dark-red lines in the air either side of her, while the rest-body CPU
+  // field (and blob:render-check) sees nothing. A 6 cm drip ended nearer
+  // the hip, which is why shortening it "fixed" it. The audit of the cast
+  // (rig-bind.test.ts) found the same bind on minotaur's thigh (-> hand),
+  // schoolgirl and schoolgirl-alt torso (-> wrist / hand), female's belly
+  // (-> knee) and cyclops' head and torso (-> elbow).
+  //
+  // The rule: a prim may bind to a DISTAL gait joint (elbow, hand, handTip,
+  // knee, foot, toe — the ones the gait swings — and anything past them)
+  // only when that joint is an end of the prim's own bone or of a bone
+  // sharing a joint with it. Roots (shoulder, clavicle, hip) stay open to
+  // everyone: torso flesh riding the shoulder sway is intended, and the
+  // shipped cast depends on it. A prim with no bone keeps the old
+  // whole-body nearest.
+  const distal = new Set<number>();
+  const boneEnds = new Map<string, [number, number]>();
+  for (const [name, bone] of body.bones) {
+    const h = indexOf(bone.head), t = indexOf(bone.tail);
+    boneEnds.set(name, [h, t]);
+    for (const [end, j] of [['head', h], ['tail', t]] as const) {
+      const n = jointForBoneEnd(name, end);
+      if (n && DISTAL_JOINT_RE.test(n)) distal.add(j);
+    }
+  }
+  // Everything BEYOND a distal joint is distal too — fingers, claws, a spur
+  // off the heel. The gait names none of them (cyclops' c_in/c_mid/c_out
+  // claws), and without this the fix above only moved cyclops' fang tips
+  // from his elbow to his claw tip.
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [h, t] of boneEnds.values())
+      if (distal.has(h) && !distal.has(t)) { distal.add(t); grew = true; }
+  }
+  const ringCache = new Map<string, Set<number>>();
+  const boneRing = (bone: string): Set<number> | null => {
+    const own = boneEnds.get(bone);
+    if (!own) return null;
+    let ring = ringCache.get(bone);
+    if (!ring) {
+      ring = new Set(own);
+      for (const [h, t] of boneEnds.values())
+        if (own.includes(h) || own.includes(t)) { ring.add(h); ring.add(t); }
+      ringCache.set(bone, ring);
+    }
+    return ring;
+  };
+  const bindEnd = (p: Vec3, bone?: string): EndpointBind => {
+    const ring = bone ? boneRing(bone) : null;
     let best = 0;
     let bestD = Infinity;
-    positions.forEach((q, i) => { const d = len(sub(p, q)); if (d < bestD) { bestD = d; best = i; } });
+    positions.forEach((q, i) => {
+      if (ring && distal.has(i) && !ring.has(i)) return;
+      const d = len(sub(p, q)); if (d < bestD) { bestD = d; best = i; }
+    });
     return { point: best, offset: sub(p, positions[best]!) };
   };
 
@@ -294,11 +355,11 @@ export function bindRig(body: BuildResult): BoundRig {
   /** Does this prim ride the ONE rigid head transform? Shared by the rigid
    *  set built below and by boneFrames further down, which must agree with it
    *  exactly — a bone prim posed BOTH rigidly and axially is posed twice. */
-  const ridesHead = (p: { limb: string; a: Vec3; b: Vec3 }): boolean =>
+  const ridesHead = (p: { limb: string; a: Vec3; b: Vec3; bone?: string }): boolean =>
     skullPts !== null
     && p.limb === 'head'
     && (len(sub(p.a, p.b)) < KEY_EPS
-      || (skullPts.has(bindEnd(p.a).point) && skullPts.has(bindEnd(p.b).point)));
+      || (skullPts.has(bindEnd(p.a, p.bone).point) && skullPts.has(bindEnd(p.b, p.bone).point)));
   let head: HeadRigid | null = null;
   if (skull) {
     const pivot = indexOf(skull.head);
@@ -334,7 +395,7 @@ export function bindRig(body: BuildResult): BoundRig {
           armFrame: { head: h, tail: t, restDir: normalize(sub(own.tail, own.head)) } };
       }
     }
-    const binding: PrimBind = { a: bindEnd(p.a), b: bindEnd(p.b) };
+    const binding: PrimBind = { a: bindEnd(p.a, p.bone), b: bindEnd(p.b, p.bone) };
     const bone = p.bone && ARM_BONE_RE.test(p.bone) ? body.bones.get(p.bone) : undefined;
     if (bone) binding.armFrame = { head: indexOf(bone.head), tail: indexOf(bone.tail),
       restDir: normalize(sub(bone.tail, bone.head)) };

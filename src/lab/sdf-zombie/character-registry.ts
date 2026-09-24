@@ -27,6 +27,7 @@ import strandFixtureBlobSrc from './characters/strand-fixture.blob?raw';
 import bonewalkerBlobSrc from './characters/bonewalker.blob?raw';
 import dragonBlobSrc from './characters/dragon.blob?raw';
 import boxFixtureBlobSrc from './characters/box-fixture.blob?raw';
+import thinFixtureBlobSrc from './characters/thin-fixture.blob?raw';
 // The blob:draft first pass and the round-1 hand-authored scaffold it is
 // judged against (dispatch/blobforge-task-10 A/B; minotaur-r1 is untracked
 // and may come and go with the comparison).
@@ -194,6 +195,11 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     name: 'box-fixture', src: boxFixtureBlobSrc,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('box-fixture'),
+  },
+  'thin-fixture': {
+    name: 'thin-fixture', src: thinFixtureBlobSrc,
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('thin-fixture'),
   },
   minotaur: {
     name: 'minotaur', src: minotaurBlobSrc,

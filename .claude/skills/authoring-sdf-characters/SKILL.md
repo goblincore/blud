@@ -218,6 +218,7 @@ before you change a number. Paths are relative to `src/lab/sdf-zombie/`.
 | a perfectly ROUND see-through hole, CPU field solid there | occluder hull sized a tapered prim from its fat end, or another hull/pre-pass bug | `webgpu/occluder-hull.ts`; run `blob:render-check` |
 | a bent capsule renders as ONE sphere at its start | `coneBend` untapered branch | `webgpu/march.wgsl.ts` |
 | a bent FACE prim shows only its end caps (painted: dots at the corners), rest-body CPU field fine | the pose, not the paint — a rigid-head pass that moves the endpoints must also `qRotate` `bend`; probe `__sdfLab.heroPosed()`, not the rest body | `rig-bind.ts` `applyRig` |
+| a thin prim draws LINES into the air when the body moves; rest-body CPU field and `render-check` see nothing | an endpoint bound to another limb's rig point (the bride's thigh drip rode her hand); `heroPosed()` shows the stretched prim | `rig-bind.ts` `bindEnd`; `rig-bind.test.ts` |
 | a `both`/mirrored part sits on the centreline | mirror did not reflect x | `mirror.ts` |
 | a limb's distal part "disconnects" after a paint or reorder | `clusterCore` picked the wrong prim; mark the structural one `core` | `validate.ts` `clusterCore` |
 | a small feature is smeared / missing | `blend=` wider than the feature | the `.blob` — shrink blend or use `chamfer` |
