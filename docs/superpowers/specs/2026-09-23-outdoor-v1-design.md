@@ -121,8 +121,11 @@ Room custom properties `ground`, `edge_style`, `edge_height`; paths are boxes in
   shader: gradient, moon disc and halo, stars, cloud band. Drawn first, depth-write off,
   fog off. Visible only through open-sky rooms, because every closed room has a ceiling.
 - **The moon light.** One `DirectionalLight`, created at boot **only if the level has
-  an open-sky room**. `castShadow` is decided at boot and never toggled (the three r185
-  crash noted at `game-main.ts` near "do NOT toggle spot.castShadow live").
+  an open-sky room**. `castShadow` is decided at boot and never toggled. The project is
+  on three **r186** (`package.json` 0.186.0); `game-main.ts`'s comments describe a crash
+  when `castShadow` is toggled live on r185, and r186's `ShadowNode.updateBefore` still
+  reads `this.shadowMap.depthTexture` without a null check after a reset, so the
+  design does not rely on toggling.
 - **Only open rooms see the moon.** Level meshes already get per-room light lists
   (`levelSceneLights`); the moon joins the lists of open-sky rooms and of tunnels that
   touch one, and nothing else, so interiors never light through their ceilings.
@@ -147,7 +150,9 @@ Room custom properties `ground`, `edge_style`, `edge_height`; paths are boxes in
 room the player is in or nearest to, clamped to that room's rectangle plus a margin.
 Level meshes cast and receive. Bodies **cast** through the same caster path the
 flashlight's shadow uses today; they receive the moon
-as light only. Outside open rooms the map is not rendered.
+as light only. Outside open rooms the map is not rendered: `shadow.autoUpdate = false`
+with `shadow.needsUpdate` set only while the player is in or next to an open room (r186's
+`ShadowNode.updateBefore` skips the pass without disposing the map).
 
 ## 8. Ground, edges and skyline materials
 
