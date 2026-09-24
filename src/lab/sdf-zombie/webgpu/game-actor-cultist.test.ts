@@ -134,5 +134,22 @@ describe('cultist: soft target', () => {
     expect(staggered).toBeGreaterThan(0);
     expect(staggered).toBeLessThan(12);
   });
+
+  it('SCANNERS: a head shot swells the head for a beat before it pops', () => {
+    const { actor, pops } = cultist();
+    for (let i = 0; i < 10; i++) actor.step(1 / 60);
+    const r0 = actor.posed().prims.filter(p => p.limb === 'head' && !p.dead).reduce((a, p) => a + p.radius, 0);
+    const skull = actor.posed().prims.find(p => p.bone === 'skull' && !p.shell && (p.glow ?? 0) === 0)!;
+    actor.hit([skull.a[0], skull.a[1], skull.a[2] + 0.4], [0, 0, -1]);
+    for (let i = 0; i < 12; i++) actor.step(1 / 60);          // 0.2 s: mid-swell
+    expect(pops.length).toBe(0);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    const r1 = actor.posed().prims.filter(p => p.limb === 'head' && !p.dead).reduce((a, p) => a + p.radius, 0);
+    expect(r1).toBeGreaterThan(r0 * 1.05);
+    for (let i = 0; i < 24; i++) actor.step(1 / 60);          // +0.4 s
+    expect(pops.length).toBe(1);
+    for (let i = 0; i < 10; i++) actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(true);
+  });
 });
 

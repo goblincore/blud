@@ -170,7 +170,7 @@ import {
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
-  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT, burst,
+  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT, burstVolume,
 } from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import {
@@ -3199,17 +3199,18 @@ async function main() {
       furniture: roomFurniture,
       navigation: ctx.world.encounterNav,
       onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
-      // HEAD POP (soft targets — the cultist, owner 2026-09-24): a killing head
-      // shot bursts the head in the blood sim's gib spray (blood-sim.ts burst,
-      // the blood lab's "burst" scenario) instead of sending it flying. Two
-      // bursts for mass, a slug gout along the shot, and the neck bleeds.
+      // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
+      // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
+      // the whole swollen head (blood-sim.ts burstVolume — the 10-bead point
+      // burst read as a thin mist), a slug gout along the shot, the neck
+      // bleeds, and the head itself flies apart (head-pop.ts).
       ...(characterEntry(name).profile.soft ? {
         onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
           const at = head.origin;
           ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });
-          const stream = ctx.boot.nextEmitterStream++;
-          burst(ctx.vfx.bloodSim, at, rngStreams.bleed, stream);
-          burst(ctx.vfx.bloodSim, at, rngStreams.bleed, stream);
+          let rad = 0.08;
+          for (const p of head.prims) for (const e of [p.a, p.b]) rad = Math.max(rad, Math.hypot(e[0] - at[0], e[1] - at[1], e[2] - at[2]));
+          burstVolume(ctx.vfx.bloodSim, at, Math.min(rad, 0.25), [dir[0] * 1.5, 0.5, dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++);
           const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
           spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
           if (stumpWound) registerBleed(ctx, actor, stumpWound, 'stump');

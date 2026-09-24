@@ -152,6 +152,47 @@ export function burst(sim: BloodSim, origin: Vec3, rng: () => number, stream?: n
   }
 }
 
+/**
+ * A VOLUMETRIC burst (cultist head explosion, owner 2026-09-24: "Scanners").
+ * `burst` is 10 small beads from one point — it read as a thin, pointy mist.
+ * This one spawns from random points THROUGHOUT a sphere (the swollen head),
+ * each flying out from the centre plus `bias` (the shot), in the drop band
+ * the goo layer draws as thick blood, with a share of heavy `scrap` blobs.
+ */
+export const VOLUME_BURST = {
+  drops: 60,
+  scraps: 14,
+  speedMin: 2.5,
+  speedMax: 7.0,
+  dropSize: [0.035, 0.075] as const,
+  scrapSize: [0.05, 0.09] as const,
+} as const;
+
+export function burstVolume(
+  sim: BloodSim, centre: Vec3, radius: number, bias: Vec3, rng: () => number, stream?: number,
+): void {
+  const V = VOLUME_BURST;
+  for (let i = 0; i < V.drops + V.scraps; i++) {
+    const scrap = i >= V.drops;
+    // Uniform direction, then a point at up to the sphere radius along it.
+    const z = rng() * 2 - 1, th = rng() * Math.PI * 2, rr = Math.sqrt(1 - z * z);
+    const dir: Vec3 = [Math.cos(th) * rr, z * 0.8 + 0.25, Math.sin(th) * rr];
+    const k = radius * rng();
+    const at: [number, number, number] = [centre[0] + dir[0] * k, centre[1] + dir[1] * k, centre[2] + dir[2] * k];
+    const speed = (V.speedMin + rng() * (V.speedMax - V.speedMin)) * (scrap ? 0.6 : 1);
+    const band = scrap ? V.scrapSize : V.dropSize;
+    push(sim, {
+      pos: at,
+      vel: [dir[0] * speed + bias[0], dir[1] * speed + bias[1], dir[2] * speed + bias[2]],
+      age: 0,
+      life: scrap ? SCRAP_TUNING.lifetimeSec : GIB_BURST.lifetimeSec,
+      size: band[0] + rng() * (band[1] - band[0]),
+      kind: scrap ? 'scrap' : 'drop',
+      ...(stream !== undefined ? { stream } : {}),
+    });
+  }
+}
+
 /** A scrap spawn from gobs.ts — kept structural so gobs.ts need not import. */
 export interface ScrapSpawn { pos: Vec3; size: number }
 

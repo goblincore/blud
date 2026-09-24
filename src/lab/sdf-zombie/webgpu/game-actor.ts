@@ -29,6 +29,7 @@ import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { applyDeathState, hasDeathState } from '../death-state';
+import { inflateHead } from '../head-pop';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal,
   type Wound, type WoundType,
@@ -647,6 +648,10 @@ export function createZombieActor(opts: {
   let burstClock = 0;
   let burstShot = false;
   let headPop = false;
+  /** SCANNERS SWELL: a head-shot kill holds `swellDur` s (dyingT counts it
+   *  down) while the head inflates (head-pop.ts inflateHead), then pops. */
+  let swellDur = 0;
+  let swellClock = 0;
   const deathRng: Rng = makeRng((opts.seed ^ 0xdea7dea7) >>> 0);
   /** Start a soft target's death: plan it once, from the killing hit. */
   function beginSoftDeath(dir: Vec3, limb: LimbId | undefined, bone: string | undefined, weapon: 'slug' | 'pellet' | 'blast') {
@@ -656,6 +661,13 @@ export function createZombieActor(opts: {
     dyingT = deathPlan.delaySec;
     burstLeft = deathPlan.burst;
     headPop = limb === 'head' && weapon !== 'blast' && !!opts.onHeadPop;
+    if (headPop) {
+      // Owner: 0.3-0.5 s ("can always tweak"); a slug pops a little sooner.
+      swellDur = weapon === 'slug' ? 0.3 + 0.1 * deathRng() : 0.35 + 0.15 * deathRng();
+      swellClock = 0;
+      dyingT = Math.max(dyingT, swellDur);
+      burstLeft = 0;
+    }
   }
   let deathStateApplied = false;
   let soldierFatal = false;
@@ -891,7 +903,6 @@ export function createZombieActor(opts: {
   }
 
   function runSeverChecks() {
-    if (headPop) { headPop = false; popHead(); }
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
     const injury = soldierDamage ? soldierInjury(current, soldierWounds) : null;
     if (injury) soldierFatal ||= injury.fatal;
@@ -1324,6 +1335,19 @@ export function createZombieActor(opts: {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
     posed = applyRig(current, bound, bodyYaw);
+    if (headPop && swellDur > 0) {
+      swellClock += dt;
+      const u = 1 - dyingT / swellDur;
+      if (u >= 1) {
+        // Pop from the FULLY swollen head, then pose what is left.
+        posed = inflateHead(posed, 1, swellClock);
+        headPop = false;
+        popHead();
+        posed = applyRig(current, bound, bodyYaw);
+      } else {
+        posed = inflateHead(posed, u, swellClock);
+      }
+    }
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
