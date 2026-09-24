@@ -34,6 +34,11 @@ export interface MotionProfile {
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
   gunner?: { weapon: 'shotgun' | 'smg' };
+  /** A SOFT target: any bullet or blast hit kills it outright (the game
+   *  forces the collapse on the first hit). The cultist is soft; the zombie
+   *  and soldier soak hits and exist to show off the gore. Burns do not count
+   *  (owner playtest 2026-09-24). */
+  soft?: boolean;
 }
 
 export const ZOMBIE_PROFILE: MotionProfile = {
@@ -132,6 +137,8 @@ export const CULTIST_PROFILE: MotionProfile = {
   // The tommy gun: the soldier's brain on SMG_TUNING (soldier-brain.ts) —
   // long bursts of single rounds instead of a one-barrel shotgun blast.
   gunner: { weapon: 'smg' },
+  // One hit and he goes down (owner playtest 2026-09-24).
+  soft: true,
 };
 
 const BY_NAME: Record<string, MotionProfile> = {

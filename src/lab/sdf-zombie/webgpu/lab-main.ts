@@ -77,7 +77,7 @@ import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../bloo
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
-import { bindRig, applyRig, impulseAt, kickHem, headQuatOf } from '../rig-bind';
+import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
@@ -1594,9 +1594,6 @@ async function main() {
     // distance); the sustained decay lives in motion.ts's recoil state.
     const push = type === 'blast' ? 0.16 : type === 'pellet' ? 0.06 : 0.04;
     heroMotion.bound = impulseAt(heroMotion.bound, hit, [d.x * push, d.y * push, d.z * push]);
-    // A skirt hit kicks the hem pendulum (impulseAt moved the nearest joint).
-    if (lastPosed.prims[wound.primIdx]?.bone === 'hem')
-      heroMotion.bound = kickHem(heroMotion.bound, [d.x * push * 2.5, 0, d.z * push * 2.5]);
     refreshWounds();
 
     if (motionProfile.name === 'soldier') pendingFire = false;
