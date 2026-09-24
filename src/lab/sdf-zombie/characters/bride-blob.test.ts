@@ -17,7 +17,13 @@ import { characterEntry } from '../character-registry';
 import { MAX_PRIMS, sdBody, nearestPrim } from '../validate';
 import { checkStance } from '../blob-checks';
 import { bindRig, applyRig, HEM_REST_SCALE } from '../rig-bind';
-import { makeMotionJoints } from '../motion';
+import { makeMotionJoints, type MotionFrame } from '../motion';
+import { motionProfileFor, BRIDE_PROFILE } from '../motion-profile';
+import { GUN_GRIP, gunPoint, type GunPose } from '../carry';
+import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
+import { makeRng } from '../wander';
+import type { SwingVariant } from '../attack';
+import type { Vec3 } from '../types';
 
 const doc = parseBlob(src);
 const body = buildBody(compileBlob(doc, compileFace(doc)));
@@ -317,6 +323,84 @@ describe('bride — cloth and hair', () => {
       const i = fromFront(s * 0.075, 0.72);
       expect(hex(i), `stocking at x ${s * 0.075}`).toBe('e8e0d0');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE SWORD CARRY (Task 8), through the real motion pipeline — the harness is
+// the ogre's `drag` pin (ogre-blob.test.ts).
+
+/** The blade's point, prop-local (Task 5's Muzzle locator, read back from
+ *  bride-sword.glb). NOT `held.muzzle()`: held-prop.ts uses carry.ts's fixed
+ *  GUN_GRIP muzzle (z 0.41) for every prop and ignores the glb's locator. */
+const SWORD_TIP: Vec3 = [0, 0.093093, 1.245462];
+
+type Pts = { pos: Vec3 }[];
+/** Drive the bride through the real motion pipeline for `frames` 60 Hz steps.
+ *  `attack(i)` optionally feeds a swing phase on frame i (Task 9). */
+function drive(opts: {
+  frames: number; speed: number;
+  attack?: (i: number) => { phase: number; side: 'R'; variant: SwingVariant } | undefined;
+  onFrame: (f: MotionFrame, pts: Pts, J: Record<string, number | undefined>, i: number) => void;
+}): void {
+  const b = buildBody(compileBlob(doc, compileFace(doc)));
+  const m = makeActorMotion(b, { seed: 7 });
+  const rng = makeRng(7);
+  const J = m.motionJoints!.index as Record<string, number | undefined>;
+  for (let i = 0; i < opts.frames; i++) {
+    const atk = opts.attack?.(i);
+    const f = stepActorMotion(m, {
+      current: b, dt: 1 / 60, wander: true, armStyle: undefined,
+      headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+      rng, signals: emptyActorSignals(), profile: BRIDE_PROFILE, forceSpeed: opts.speed,
+      ...(atk ? { attack: atk } : {}),
+    })!;
+    opts.onFrame(f, m.bound.rig.points as unknown as Pts, J, i);
+  }
+}
+/** The fist: mid hand bone, where the fist prim is (the ogre lesson). */
+const fistOf = (pts: Pts, J: Record<string, number | undefined>): Vec3 => {
+  const w = pts[J.handR!]!.pos, t = pts[J.handTipR!]!.pos;
+  return [(w[0] + t[0]) / 2, (w[1] + t[1]) / 2, (w[2] + t[2]) / 2];
+};
+const tipOf = (g: GunPose) => gunPoint(g, SWORD_TIP);
+
+describe('bride — profile and sword carry', () => {
+  it('uses BRIDE_PROFILE: stalk gait, sword carries, the sword prop, sword melee', () => {
+    const p = motionProfileFor('bride');
+    expect(p).toBe(BRIDE_PROFILE);
+    expect(characterEntry('bride').profile).toBe(BRIDE_PROFILE);
+    expect(p.gait.walk.name).toBe('stalk');
+    expect(p.carries).toEqual({ walk: 'swordGuard', run: 'swordTrail', fire: 'swordGuard' });
+    expect(p.prop?.url).toBe('/assets/lab/bride-sword.glb');
+    expect(p.melee).toEqual({ kind: 'sword' });
+    expect(p.gunner).toBeUndefined();
+  });
+
+  it('holds the guard HIGH: blade tip above the head, both hands on the grip', () => {
+    let grip = 0, fore = 0, n = 0, tipMinOverHead = Infinity;
+    drive({ frames: 180, speed: BRIDE_PROFILE.cruise * 0.5, onFrame: (f, pts, J, i) => {
+      expect(f.carry).toBe('swordGuard');
+      if (i < 60) return; // let the verlet settle into the carry
+      grip += dist(fistOf(pts, J), gunPoint(f.gun!, GUN_GRIP.gripHand));
+      fore += dist(pts[J.handL!]!.pos, gunPoint(f.gun!, GUN_GRIP.foreHand));
+      tipMinOverHead = Math.min(tipMinOverHead, tipOf(f.gun!)[1] - pts[J.head!]!.pos[1]);
+      n++;
+    } });
+    expect(grip / n).toBeLessThan(0.03);
+    expect(fore / n).toBeLessThan(0.05);
+    expect(tipMinOverHead).toBeGreaterThan(0);
+  });
+
+  it('trails the point low on the run', () => {
+    let tipHigh = -Infinity, sawTrail = false;
+    drive({ frames: 240, speed: BRIDE_PROFILE.runBand.to + 0.2, onFrame: (f, _pts, _J, i) => {
+      if (i < 90) return;
+      if (f.carry === 'swordTrail') sawTrail = true;
+      tipHigh = Math.max(tipHigh, tipOf(f.gun!)[1]);
+    } });
+    expect(sawTrail).toBe(true);
+    expect(tipHigh).toBeLessThan(0.35);
   });
 });
 

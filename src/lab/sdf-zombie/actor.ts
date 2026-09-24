@@ -203,7 +203,13 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
     // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
-    points = pinTips(points, m.bound.tips, f.bodyYaw, input.profile?.name === 'soldier' && f.collapsed ? f.restPose : undefined);
+    // A fist closed on its prop's grip (profile.prop.fistOnGrip) points along
+    // the motion target motion.ts laid on the grip line, not the rest hang.
+    const soldierDown = input.profile?.name === 'soldier' && f.collapsed;
+    const fistTip = m.motionJoints.index.handTipR;
+    const fist = !soldierDown && input.profile?.prop?.fistOnGrip && f.gun && fistTip !== undefined
+      ? new Set([fistTip]) : undefined;
+    points = pinTips(points, m.bound.tips, f.bodyYaw, soldierDown || fist ? f.restPose : undefined, fist);
     if (f.collapsed) {
       points = applyFloorContact(points, f.floorY);
     }

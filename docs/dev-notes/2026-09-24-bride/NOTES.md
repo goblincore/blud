@@ -489,3 +489,76 @@ profile. Game: `node scripts/bride-game-frames.mjs 5271 9271 <out>`.
   - The chain girdle reads as a metal band rather than as links (the links are texture only).
   - The back view is dark, which is the lab key, not the kit.
   - The haute-piece flange is barely visible from the front.
+
+## Task 8: sword carries, the STALK gait, BRIDE_PROFILE (same day)
+
+`BRIDE_PROFILE` (motion-profile.ts): `STALK` walk / `RUN` run, `swordGuard` for walk, stand
+and fire, `swordTrail` for the run, the sword at scale 1, `melee: { kind: 'sword' }`. The
+registry picks it up through `motionProfileFor('bride')`.
+
+### Solved carries (grid-solved through `makeActorMotion`, scratchpad script)
+
+| Carry | right pitch / yaw / fold | gunPitch | Pins, measured |
+| --- | --- | --- | --- |
+| `swordGuard` | 0.30 / 0.70 / 2.70 | 0.70 | fist-to-grip 0.8 cm, left hand to Fore_Hand 0.8 cm, tip 0.86 m over the head point, blade 24 cm from it, both elbows ≥ 9 cm outside the torso |
+| `swordTrail` | -0.55 / 0.10 / 0.30 (plan's start) | -0.90 | fist-to-grip 0.9 cm, tip y 0.21 (pin: < 0.35), right elbow 2.5 cm and left 0.6 cm outside the torso |
+
+- The guard's grip sits at body-local ~(-0.22, 1.47, 0.15), just over her right shoulder.
+  The top (left) hand is beside the jaw at (-0.25, 1.67, 0.05). The blade leans ~27° back of
+  vertical and ~9° out.
+- The first solve (0.80 / 0.50 / 2.20, gunPitch 0.65) passed every pin. In the front frame,
+  though, the left forearm lay across her eyes. The re-solve scored the top hand's height
+  (jaw, not eyes) and kept the left forearm 13 cm or more off the face. It lowered the grip
+  8 cm.
+- The plan's starting guard (1.9 / 0.30 / 1.60) put the hands above her head, with the left
+  hand 15 cm off Fore_Hand.
+
+### Found on the way: the hand did not turn with the forearm
+
+- `motion.ts` only TRANSLATES the hand tip with the wrist, and `actor.ts pinTips` snaps it back
+  to the yawed rest hang. So with the forearm raised, the fist hung 4 cm BELOW the wrist while
+  the grip rode above it. The fist-to-grip gap was 7 cm and no carry angle could close it.
+  Every gun carry so far keeps its forearm low enough that nobody noticed.
+- The fix is opt-in: `prop.fistOnGrip`. The carry block lays the right hand bone along the
+  forearm, the line the grip is seated on. `pinTips` takes an `only` set, so it points just
+  that tip along its motion target, and every other tip keeps its rest hang. The soldier,
+  cultist and ogre are unchanged; their tests pass untouched.
+- `gripReach` 0.04 is the middle of her 0.08 m hand bone (the fist prim is at `hand
+  at=0.45`), with the flesh cuff running on to ~13 cm past the wrist. Fist-to-grip,
+  guard / trail: 0.03 gives 0.9 / 1.7 cm, 0.04 gives 0.8 / 0.9 cm, and 0.05 gives
+  1.6 / 0.8 cm.
+- The plan's `torsoLean: 0.04` is in DEGREES in `GaitProfile` (RUN uses 12, and gait.ts
+  converts). `STALK` uses 2.3° (≈ 0.04 rad, the intent).
+
+### Frames
+
+Lab: `LAB_TMP=.lab-tmp LAB_VITE_PORT=5271 LAB_CDP_PORT=9271`, cultist sanity shot first,
+probe `lightDir (0.35,0.6,0.72)` + `setSdfScale(1)`, `BLOB_DIST=2.6 BLOB_TARGET_Y=1.15`.
+`BLOB_POSE=aim` gives the standing guard (the `fire` carry at speed 0), and `walk` / `run`
+give the treadmill poses. The frames are crops of frame 00 (yaw 0, her front), frame 01
+(3/4) and frame 02 (side).
+
+![guard front](carry-guard-front.png) ![guard 3/4](carry-guard-34.png) ![guard side](carry-guard-side.png)
+![guard hands](carry-guard-hands.png)
+![walk front](carry-walk-front.png) ![walk side](carry-walk-side.png)
+![run front](carry-run-front.png) ![run side](carry-run-side.png)
+
+### Honest read
+
+- **Guard:** it reads as the reference's high guard. The blade stands up and back over her
+  right shoulder. In the close crop, both hands are on the grip: the left under the
+  cross-guard, the right plated fist at the bottom. Her face is clear. The right elbow juts
+  out and down at about 45°, which is right for vom Tag but a little puppet-like at 3 m. The
+  blade is long: the point is at 2.64 m, about 0.8 m over her crown. It clears everything,
+  but a low game ceiling would clip it. That is the `prop.scale` knob if the owner wants it.
+- **Walk:** she holds the guard steady while stalking; the blade barely moves with the bob.
+  The STALK legs are the march clip slowed. The trailing foot kicks up behind her to about
+  knee height, which reads brisker than a stalk. Tuning that is a gait-curve job, not a carry
+  job.
+- **Run:** the blade trails low behind her right hip and outboard of the leg, and the left arm
+  swings free. From the front only the hilt shows at her hip (the blade is behind her), so it
+  reads as a dagger at 3 m.
+- **Game:** not checked in `sdf-game.html`. The bride has no mind yet, so she is not a gunner
+  or a sword mind. game-actor.ts re-seats the prop on the solved wrist ONLY for gunners and
+  the soldier, and its rig loop never calls `pinTips`: the fist follows its target through the
+  soft rest pull only. Task 10 wires the game side.

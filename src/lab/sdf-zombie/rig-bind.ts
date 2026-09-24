@@ -476,12 +476,18 @@ export function bindRig(body: BuildResult): BoundRig {
 }
 
 /** Snap every rigid tip to anchor + yawed rest offset (pos AND prev, so the
- *  verlet carries no velocity into the next step). Pure; returns new points. */
-export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0, targets?: readonly Vec3[]): RigPoint[] {
+ *  verlet carries no velocity into the next step). With `targets`, a tip
+ *  points along its target direction instead — every tip, or only the tip
+ *  points in `only` (a held fist closing on its grip, motion.ts fistOnGrip).
+ *  Pure; returns new points. */
+export function pinTips(
+  points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0, targets?: readonly Vec3[],
+  only?: ReadonlySet<number>,
+): RigPoint[] {
   if (tips.length === 0) return points as RigPoint[];
   const out = points.slice();
   for (const t of tips) {
-    const offset = targets ? vscale(normalize(sub(targets[t.point]!, targets[t.anchor]!)), len(t.rest))
+    const offset = targets && (!only || only.has(t.point)) ? vscale(normalize(sub(targets[t.point]!, targets[t.anchor]!)), len(t.rest))
       : bodyYaw === 0 ? t.rest : rotateYaw(t.rest, bodyYaw);
     const pos = add(out[t.anchor]!.pos, offset);
     out[t.point] = { ...out[t.point]!, pos, prev: pos };

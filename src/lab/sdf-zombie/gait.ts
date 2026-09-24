@@ -310,6 +310,21 @@ export const GLIDE: GaitProfile = {
  *  so a gunner needs a carry-style gait. */
 export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyle: 'carry', armSwing: 0.03 };
 
+/** The bride's STALK: the soldier's march clip slowed and lengthened for her
+ *  long legs, with a hip sway the `hem` pendulum picks up and a slight
+ *  forward lean. Carry-style arms (the sword owns them). */
+export const STALK: GaitProfile = {
+  ...MARCH,
+  name: 'stalk',
+  strideFreq: MARCH.strideFreq * 0.8,
+  strideLen: 0.42,
+  swayAmp: 0.06,
+  shoulderSway: 0.2,
+  bobAmp: 0.015,
+  torsoLean: 2.3, // degrees (gait.ts converts); ~0.04 rad
+  armSwing: 0.02,
+};
+
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
 export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {

@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 
@@ -28,12 +28,21 @@ export interface MotionProfile {
    *  WRIST (forearm tail), so a character whose fist is a long hand bone (the
    *  ogre's 0.15 m, fist centred at its midpoint) otherwise holds the handle
    *  inside its forearm. The soldier's short hand never showed it. */
-  prop?: { url: string; scale?: number; gripReach?: number };
+  prop?: { url: string; scale?: number; gripReach?: number;
+    /** The hand bone lies along the forearm while the prop is held (motion.ts
+     *  carry block) instead of keeping its rest hang: a two-handed hilt held
+     *  HIGH needs the fist round the grip, not dangling off the wrist. Absent
+     *  = the rest hang every gun carry was tuned with. */
+    fistOnGrip?: boolean };
   /** A RANGED enemy: the game gives it the soldier's shooting brain
    *  (enemy-mind.ts makeSoldierMind) with this weapon's tuning, and its
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
   gunner?: { weapon: 'shotgun' | 'smg' };
+  /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
+   *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
+   *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
+  melee?: { kind: 'sword' };
 }
 
 export const ZOMBIE_PROFILE: MotionProfile = {
@@ -134,11 +143,35 @@ export const CULTIST_PROFILE: MotionProfile = {
   gunner: { weapon: 'smg' },
 };
 
+/** The bride: a slow STALK in a high sword guard; the point trails on the
+ *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
+export const BRIDE_PROFILE: MotionProfile = {
+  name: 'bride',
+  gait: { walk: STALK, run: RUN },
+  // She breaks into a run only to close a long gap.
+  runBand: { from: 1.6, to: 3.0 },
+  cruise: 1.1,
+  turnRate: 3.5,
+  armStyle: 'carry',
+  carries: { walk: 'swordGuard', run: 'swordTrail', fire: 'swordGuard' },
+  // Scale 1 (the 1.42 m Blender sword as modelled): the guard's point clears
+  // her head by 0.86 m and the trail's rides 0.21 m off the floor, so nothing
+  // forces a shrink. fistOnGrip: held HIGH, her fist must close round the
+  // grip instead of hanging off the wrist (motion.ts). gripReach 0.04 is the
+  // fist centre — the middle of her 0.08 m hand bone, where the fist prim sits
+  // (bride.blob `blob arm on hand at=0.45`), with the flesh cuff running on
+  // ~13 cm past the wrist into the hilt. Measured fist-to-grip on the rig:
+  // 0.03 -> 0.9 / 1.7 cm (guard / trail), 0.04 -> 0.8 / 0.9, 0.05 -> 1.6 / 0.8.
+  prop: { url: '/assets/lab/bride-sword.glb', scale: 1, gripReach: 0.04, fistOnGrip: true },
+  melee: { kind: 'sword' },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   soldier: SOLDIER_PROFILE,
   ogre: OGRE_PROFILE,
   cultist: CULTIST_PROFILE,
+  bride: BRIDE_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

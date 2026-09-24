@@ -329,10 +329,10 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   // plate arms, pauldron, thigh boots, chains and crosses in the kit
   // (characters/bride-kit.wam, compiled by scripts/build-wam-kit.sh bride;
   // committed as the glTF). ARMOURED like the soldier: her plate sparks and
-  // sheds, baring the raw fused seams under it. The sword and BRIDE_PROFILE
-  // come in later tasks (until then motionProfileFor falls back to the
-  // zombie's). The face is GENERATED (scripts/make-bride-face.py) and worn at rgb
-  // multiply. mean is MEASURED off the PNG (the painter prints it): the lab
+  // sheds, baring the raw fused seams under it. BRIDE_PROFILE (Task 8):
+  // the STALK gait, the sword prop and its guard/trail carries; the sword
+  // mind that swings it comes later. The face is GENERATED
+  // (scripts/make-bride-face.py) and worn at rgb multiply. mean is MEASURED off the PNG (the painter prints it): the lab
   // re-measures off the decoded pixels, but the game uses this value as is,
   // and bakedFace's fallback of 1 would darken her whole face ~28% there.
   bride: {

@@ -923,6 +923,9 @@ export function stepMotion(
   }
   let gun: GunPose | null = null;
   let carryUsed: CarryName | null = null;
+  /** prop.fistOnGrip: the right hand tip's offset from the wrist, laid along
+   *  the grip line — re-applied after the tip follow pass below. */
+  let fistTipR: Vec3 | null = null;
   const carries = profile.carries;
   const broadSoldierOpen = soldierStagger.active && !soldierStagger.state.fullOpen && soldierStagger.variant === 1
     && soldierStagger.state.level !== 'small';
@@ -1017,6 +1020,15 @@ export function stepMotion(
         ? add(targets[iH]!, scale(normalize(sub(targets[iH]!, targets[iE]!)), reachPast))
         : targets[iH]!;
       gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale);
+      // The FIST CLOSES ON THE GRIP (prop.fistOnGrip): the hand bone lies
+      // along the forearm, the line the grip was just seated on, instead of
+      // keeping its rest hang. The tip follow pass only TRANSLATES the hand
+      // tip, so a raised forearm (the bride's high guard) otherwise leaves the
+      // fist hanging 4 cm below the wrist while the grip rides above it.
+      if (profile.prop?.fistOnGrip && idx.handTipR !== undefined) {
+        const handLen = len(sub(joints.base[idx.handTipR]!, joints.base[iH]!));
+        fistTipR = scale(normalize(sub(targets[iH]!, targets[iE]!)), handLen);
+      }
       // Keep the authored wrist/gun orientation, then swivel the elbow out
       // of the vest. The shoulder and grip do not move, nor do arm lengths.
       const rp = carry.rightPole;
@@ -1201,6 +1213,8 @@ export function stepMotion(
   };
   follow('handTipL', 'handL', before.handL);
   follow('handTipR', 'handR', before.handR);
+  if (fistTipR && idx.handTipR !== undefined && idx.handR !== undefined)
+    targets[idx.handTipR] = add(targets[idx.handR]!, fistTipR);
   follow('toeL', 'footL', before.footL);
   follow('toeR', 'footR', before.footR);
 
