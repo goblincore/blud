@@ -144,6 +144,21 @@ The cultist is now a ranged enemy with a Thompson-style SMG.
 - The aim hold's left hand sometimes reaches past the foregrip. A cultist-solved `aim` carry is the
   next polish.
 
+## Fixed 2026-09-24: faceless cultists in the game
+
+**Symptom (owner):** in the game the cultists had no faces, as if facing backwards. The hood rendered
+CLOSED, with only the nose tip poking through.
+
+**Cause:** `translate.ts` `translateBody`, which moves a body to its spawn point, shifted every
+endpoint, cluster and bone, but not shell clip planes. Every garment in the game was therefore cut by
+a plane still at the origin. The lab never translates its body, so it never showed there. The
+schoolgirl's collar and skirt had the same latent bug in any room away from the origin.
+
+**Fix:** the plane offset moves by `dot(n, offset)`. `translate.test.ts` checks that the translated
+field equals the shifted rest field exactly, and fires a ray at the eye of a cultist placed in a room.
+
+![faces in game](in-game-faces-fixed.png)
+
 ## What exists
 
 | Piece | Where |

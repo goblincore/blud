@@ -26,7 +26,16 @@ export function translateBody(body: BuildResult, offset: Vec3): BuildResult {
   const sh = (v: Vec3): Vec3 => [v[0] + offset[0], v[1] + offset[1], v[2] + offset[2]];
   return {
     ...body,
-    prims: body.prims.map(p => ({ ...p, a: sh(p.a), b: sh(p.b) })),
+    // SHELL CLIP PLANES TOO (cultist, 2026-09-24). A shell's plane is an
+    // absolute half-space, dot(p, n) < clipOffset, so moving the sheet by
+    // `offset` moves the plane's offset by dot(n, offset). Left behind, every
+    // garment in the GAME was cut by a plane still at the origin — the
+    // cultist's hood rendered CLOSED over his face (the lab never translates
+    // its body, so it never showed there), and the schoolgirl's collar was
+    // cut in the wrong place in any room but the one at the origin.
+    prims: body.prims.map(p => ({ ...p, a: sh(p.a), b: sh(p.b),
+      ...(p.shell ? { shell: { ...p.shell, clipOffset: p.shell.clipOffset
+        + p.shell.clipNormal[0] * offset[0] + p.shell.clipNormal[1] * offset[1] + p.shell.clipNormal[2] * offset[2] } } : {}) })),
     clusters: body.clusters.map(c => ({ ...c, center: sh(c.center) })),
     bones: new Map([...body.bones].map(([k, b]) => [k, { ...b, head: sh(b.head), tail: sh(b.tail) }])),
     // BONE PRIMS TOO (wound pass r2): they ride the rig like flesh, so leaving
