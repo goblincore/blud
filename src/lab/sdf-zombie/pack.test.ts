@@ -495,7 +495,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //   broodmother 9  two slanted magenta eyes + four spider eyes (head) and
   //                  three gland pores on the orbs (torso), 2026-09-22;
   //                  pinned at 6 + 3 in broodmother-blob.test.ts
-  //   cultist     2  two ember eyes deep in the hood (2026-09-23)
+  //   cultist     2  two ember eyes deep in the hood (2026-09-23); the
+  //                  cultist-cowled variant likewise
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
@@ -505,6 +506,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'ogre.blob': 2,
     'broodmother.blob': 9,
     'cultist.blob': 2,
+    'cultist-cowled.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

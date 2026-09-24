@@ -8,8 +8,12 @@
 
 - [x] **New character `cultist`**: hooded robed zombie, the costume all `shell` cloth; skirt swings on a `hem`
   Verlet pendulum, wind gusts push it; `GLIDE` gait keeps legs in the robe. 11 tests. [Notes](docs/dev-notes/2026-09-23-cultist/NOTES.md)
-- [ ] Engine adds (`rigid`, posed shell clip planes, `restScale`/`clothForce`) await owner look. Perf ~3x zombie
-  close-up; game-page wind, attacks/brain/spawn not started.
+- [x] Face passes 2-3 (scowl brow, socketed eyes, hooked nose; heavier jaw + teeth), khaki robes; variant
+  `cultist-cowled` kept (lower face hidden). Owner: good enough to merge (2026-09-23).
+- [ ] **Next: animations + attacks** — SMG (Thompson / MP44 look) on the soldier's carry machinery; hit reactions.
+- [ ] **Cloth hit reactions** — shells must not take the flesh crater. Proposal in the cultist notes / chat:
+  hole through the sheet reveals flesh (flesh wound underneath), scorched rim, hem kick, fabric shreds.
+- [ ] *Idea (owner, not this session):* flammability tiers — clothed characters catch/burn differently from bare flesh.
 
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 

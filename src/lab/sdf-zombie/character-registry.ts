@@ -40,6 +40,7 @@ import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
 import broodmotherBlobSrc from './characters/broodmother.blob?raw';
 import cultistBlobSrc from './characters/cultist.blob?raw';
+import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -302,6 +303,13 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     face: ZOMBIE_FLAT,
     // GLIDE on the zombie skeleton (motion-profile.ts CULTIST_PROFILE): the
     // shamble's upper body with short low steps that stay inside the robe.
+    profile: motionProfileFor('cultist'),
+  },
+  // The cultist's face-pass-2 head kept as a variant (owner, 2026-09-23):
+  // high cowl + back-tipped hood hide the lower face; no jaw/teeth pass.
+  'cultist-cowled': {
+    name: 'cultist-cowled', src: cultistCowledBlobSrc,
+    face: ZOMBIE_FLAT,
     profile: motionProfileFor('cultist'),
   },
 

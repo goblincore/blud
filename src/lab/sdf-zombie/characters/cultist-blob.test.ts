@@ -17,6 +17,7 @@
 // (docs/dev-notes/2026-09-23-cultist/).
 import { describe, it, expect } from 'vitest';
 import src from './cultist.blob?raw';
+import cowledSrc from './cultist-cowled.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
@@ -161,5 +162,27 @@ describe('cultist — the hem swings', () => {
       if (i === hemI) continue;
       expect(len(sub(windy.points[i]!.pos, calm.points[i]!.pos)), `point ${i}`).toBeLessThan(0.01);
     }
+  });
+});
+
+// The face-pass-2 head kept as a variant (owner, 2026-09-23): same body,
+// cloth and pendulum; only the head differs. Pinned so the two cannot drift
+// apart in the parts they are meant to share.
+describe('cultist-cowled — the variant', () => {
+  const cowled = buildBody(compileBlob(parseBlob(cowledSrc), compileFace(parseBlob(cowledSrc))));
+  it('compiles clean, is registered, and has two ember eyes', () => {
+    expect(cowled.errors).toEqual([]);
+    expect(characterEntry('cultist-cowled').name).toBe('cultist-cowled');
+    expect(cowled.prims.filter(p => (p.glow ?? 0) > 0)).toHaveLength(2);
+  });
+  it('wears the same shell costume and the same robe colour', () => {
+    const layout = (b: typeof body) => b.prims.filter(p => p.shell).map(p => `${p.limb}:${p.bone}`).sort();
+    expect(layout(cowled)).toEqual(layout(body));
+    const robe = body.prims.find(p => p.shell && p.bone === 'hem')!.color;
+    expect(cowled.prims.find(p => p.shell && p.bone === 'hem')!.color).toEqual(robe);
+  });
+  it('keeps the hem pendulum', () => {
+    expect(cowled.bones.has('hem')).toBe(true);
+    expect(bindRig(cowled).rig.restScale!.filter(k => k !== 1)).toHaveLength(1);
   });
 });

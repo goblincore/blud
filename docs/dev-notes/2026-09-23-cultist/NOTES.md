@@ -49,6 +49,18 @@ hood or cloak."*
 ![jaw and teeth](face-v3-jaw-teeth.png)
 ![body distance](face-v3-body.png)
 
+## Tan robes + two variants (same day)
+
+- **Robe colour:** khaki tan `6e5c40` on both (owner: "a more tan colour, like Blood's cultists, to
+  make him easier to see"). `a08058` read as bright orange after the sRGB lift.
+- **Two variants, both kept (owner):**
+  - `cultist`: the jaw-and-teeth head with the lowered cowl. Its shoulder balls were shrunk to 0.062,
+    because at the lighter colour they stood out of the cowl as round epaulettes.
+  - `cultist-cowled`: face pass 2, with the high cowl and the back-tipped hood hiding the lower face.
+  - Same body, cloth and pendulum; tests pin the shared parts.
+
+![cultist | cultist-cowled](tan-both-variants.png)
+
 ## What exists
 
 | Piece | Where |
@@ -140,6 +152,8 @@ Look at it: `npm run dev`, then `/sdf-lab-webgpu.html?character=cultist`. In the
   axis (`bend=` driven by the lag), would give real hem flare rather than tilt.
 - The game page has no wind (only the lab's `setWind`). `clothForce` is ready for a level-driven wind.
 - Face: still pale under a close key light, because there is no shadow ray.
+- **Cloth hit reactions (design needed):** today a shot on the robe carves the FLESH crater (red
+  interior) into an 8 mm sheet. See TASKS.md.
 - Not done: attacks (Blood cultists shoot: tommy gun / shotgun on the soldier's carry machinery),
   brain, sounds, gib tuning, spawn in `sdf-game.html`.
 - The shell cuffs use `rigid` on the forearm; hands come out of them cleanly in all frames seen.
