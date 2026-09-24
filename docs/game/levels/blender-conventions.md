@@ -1,6 +1,7 @@
 # Authoring a level in Blender
 
 **Spec:** `docs/superpowers/specs/2026-09-23-level-format-design.md` (the source of truth)
+**Outdoor keys:** [Outdoor v1 design spec](../../superpowers/specs/2026-09-23-outdoor-v1-design.md) §4.4
 **Exporter:** `scripts/levels/export_level.py`
 
 ## Space
@@ -14,7 +15,8 @@
 
 | Collection | Contains | Object name | Notes |
 | --- | --- | --- | --- |
-| `rooms` | box meshes | `room:<id>:<name>` | Box bottom = floor, top = ceiling. Custom property `sky` (a view name) makes it open-air |
+| `rooms` | box meshes | `room:<id>:<name>` | Box bottom = floor, top = ceiling. Custom property `sky` (a sky preset name) makes it open-air. Outdoor: `ground` (a ground preset, default `stone`), `edge_style` (an edge preset) + `edge_height` (metres, default 2.2; open-sky rooms only) |
+| `paths` | box meshes | `path:<ground>:<room id>` | Ground strip laid over the room's floor; the box's x/z rectangle is exported (`path:gravel:1` = gravel in room 1) |
 | `tunnels` | box meshes | `tunnel:<a>:<b>` | Both ends flush with their rooms' walls; same floor as both rooms; ≥ 1.4 m wide |
 | `stairs` | box meshes | `stair:<up>:<id>` | `<up>` is `+x`, `-x`, `+z` or `-z` in **game** axes |
 | `furniture` | box meshes | any | Sits on its room's floor |
@@ -37,7 +39,8 @@ Any object's custom property `states` = comma-separated names it exists in.
 
 ## Scene custom properties
 `level_id` (required), `level_name`, `ammo` (`finite`|`infinite`), `loadout`
-(comma-separated), `complete_on` (default `pickup.cd`), `states`.
+(comma-separated), `complete_on` (default `pickup.cd`), `states`, `skyline`
+(a skyline preset name; backdrops beyond every open-sky room's edges).
 
 Blender's duplicate suffix (`.001`) is ignored. Event names use dots, never
 colons.
