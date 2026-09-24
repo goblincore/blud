@@ -96,7 +96,7 @@ def main():
     if scene.get("states"):
         doc["states"] = csv(scene["states"])
     for key in ("rooms", "tunnels", "stairs", "furniture", "solids", "gates", "triggers", "windows",
-                "lights", "spawns", "graves", "pickups", "bells"):
+                "lights", "spawns", "graves", "pickups", "bells", "portals"):
         doc[key] = []
 
     for o in objects("rooms"):
@@ -110,6 +110,8 @@ def main():
             room["sky"] = str(o["sky"])
         if o.get("ground"):
             room["ground"] = str(o["ground"])
+        if o.get("void"):
+            room["void"] = True
         if o.get("edge_style"):
             room["edge"] = {"style": str(o["edge_style"]), "height": rnd(float(o.get("edge_height", 2.2)))}
         doc["rooms"].append(with_states(o, room))
@@ -193,6 +195,10 @@ def main():
         elif kind == "bell":
             _, bid = fields(o, "bell", 2)
             doc["bells"].append(with_states(o, {"id": bid, "pos": pos, "radius": rnd(o.get("radius", 0.8))}))
+        elif kind == "portal":
+            _, target, pid = fields(o, "portal", 3)
+            doc["portals"].append(with_states(o, {"id": pid, "pos": pos, "yaw": yaw_of(o), "target": target,
+                                                  "width": rnd(o.get("width", 2.2)), "height": rnd(o.get("height", 3.4))}))
         else:
             raise SystemExit(f"unknown marker {o.name!r}")
     if start is None:

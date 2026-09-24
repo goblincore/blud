@@ -15,7 +15,7 @@
 
 | Collection | Contains | Object name | Notes |
 | --- | --- | --- | --- |
-| `rooms` | box meshes | `room:<id>:<name>` | Box bottom = floor, top = ceiling. Custom property `sky` (a sky preset name) makes it open-air. Outdoor: `ground` (a ground preset, default `stone`), `edge_style` (an edge preset) + `edge_height` (metres, default 2.2; open-sky rooms only) |
+| `rooms` | box meshes | `room:<id>:<name>` | Box bottom = floor, top = ceiling. Custom property `sky` (a sky preset name) makes it open-air. Outdoor: `ground` (a ground preset, default `stone`), `edge_style` (an edge preset) + `edge_height` (metres, default 2.2; open-sky rooms only). `void` (bool): nothing drawn, collision kept; excludes `sky`, edges and paths |
 | `paths` | box meshes | `path:<ground>:<room id>` | Ground strip laid over the room's floor; the box's x/z rectangle is exported (`path:gravel:1` = gravel in room 1) |
 | `tunnels` | box meshes | `tunnel:<a>:<b>` | Both ends flush with their rooms' walls; same floor as both rooms; ≥ 1.4 m wide |
 | `stairs` | box meshes | `stair:<up>:<id>` | `<up>` is `+x`, `-x`, `+z` or `-z` in **game** axes |
@@ -31,7 +31,9 @@
 ## Markers
 `start` (exactly one; Z rotation = facing) · `spawn:<zombie|soldier>:<id>` ·
 `grave:<wave>:<id>` · `pickup:<melee|shotgun|dynamite|shells|health|cd>:<id>` ·
-`bell:<id>` (custom property `radius`, default 0.8).
+`bell:<id>` (custom property `radius`, default 0.8) ·
+`portal:<target level id>:<id>` (facing = the viewer side; custom properties `width`, `height`,
+default 2.2 × 3.4 m; the base centre sits on the floor).
 
 ## States
 Scene custom property `states` = comma-separated names (first is the default).
