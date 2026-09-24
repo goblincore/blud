@@ -211,7 +211,7 @@ Read `scripts/make-ogre-face.py` in full first. Your script has the same shape: 
 The header must say why a generator (no reference mesh, so `blob:face-bake` cannot run) and what it draws. Draw in this order, each as its own function:
 1. `sockets()`: two soft radial gradients, near-black at the centre and fading out over ~70 px, set slightly above centre and spaced to match the eye prims.
 2. `lids()`: thin bruised-red (`#7a1e22`) crescents along each socket's lower and upper rim, alpha ~0.6.
-3. `hollows()`: a grey-violet (`#5a4c63`) cheek contour under each cheekbone, alpha ~0.35, blurred.
+3. `hollows()`: SUNKEN CHEEKS (owner ask, 2026-09-24: done as texture, not geometry). A deep grey-violet (`#4a3c55`) hollow under each cheekbone, running from below the outer eye corner down toward the jaw corner. Alpha ~0.55 at the core, heavily blurred, with a thin lighter band (`#e8e4ee`, alpha ~0.2) along its top edge as the cheekbone highlight, so the hollow reads as depth under front light.
 4. `lips()`: a grey-lilac (`#8a7a8e`) lip shape, alpha ~0.7.
 5. `sutures()`: from each mouth corner, a fine dark line (2 px at 512) arcing back and up toward the ear (~110 px long), with ~9 short cross-stitches perpendicular to it. Colour `#2a1216`.
 6. `veins()`: 2–3 faint blue (`#3d4f73`) branching polylines at each temple, alpha ~0.25.
