@@ -16,7 +16,7 @@ import {
   litWallAlbedo, type Aabb, type BoxSpec, type FurnitureDef, type PlaneSpec,
   type RoomDef, type TunnelDef,
 } from './game-level';
-import type { EdgeStyle, GroundName, SkyName, SkylineName } from './outdoor-presets';
+import { SKY_PRESETS, type EdgeStyle, type GroundName, type SkyName, type SkylineName } from './outdoor-presets';
 
 export const LEVEL_WALL_T = 0.3;
 /** Spec §3: validation and opening-detection tolerance, metres. */
@@ -44,6 +44,25 @@ export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamit
 export interface PathDef { ground: GroundName; minX: number; maxX: number; minZ: number; maxZ: number }
 /** Outdoor v1 §4.1: an open-sky room's visible edge. */
 export interface EdgeDef { style: EdgeStyle; height: number }
+
+/** Outdoor v1 §5: which material a generated plane takes. Absent = the ring's legacy
+ *  plane (material chosen by axis, as before). */
+export type SurfaceTag = 'wall' | 'ceiling' | 'tunnel' | `ground:${GroundName}` | `path:${GroundName}` | `edge:${EdgeStyle}`;
+export interface LevelPlane extends PlaneSpec { surface?: SurfaceTag }
+/** Path strips sit this far above the floor so they never z-fight it. */
+export const PATH_LIFT = 0.005;
+/** Extra headroom over an open-sky room for thrown things (Outdoor v1 §7). */
+export const OPEN_SKY_CEILING_M = 30;
+
+/** Where thrown things stop rising in a room: its height, or far above an open one. */
+export function roomCeilingM(room: { height: number; sky?: string | null }): number {
+  return room.sky ? room.height + OPEN_SKY_CEILING_M : room.height;
+}
+
+/** Height above the floor a room's generated walls are DRAWN to (collision is always full height). */
+function displayTop(r: LevelRoom): number {
+  return r.edge ? r.edge.height : r.height;
+}
 
 export interface LevelRoom extends RoomDef {
   floor: number;
@@ -180,60 +199,67 @@ export function gateColliders(level: Pick<LevelDef, 'gates'>, open: ReadonlySet<
 }
 
 export interface LevelSurfaceSet {
-  planes: PlaneSpec[];
+  planes: LevelPlane[];
   boxes: BoxSpec[];
   gates: { id: string; box: BoxSpec }[];
   windows: { id: string; view: string; plane: PlaneSpec }[];
+  /** Outdoor v1 §5: the skyline preset and the level's x/z bounds, or null. */
+  skyline: { preset: SkylineName; min: [number, number]; max: [number, number] } | null;
 }
 
 /** Spec §6.3: display geometry. */
 export function layoutSurfaces(level: LevelDef): LevelSurfaceSet {
   const P = level.palette;
-  const planes: PlaneSpec[] = [];
+  const planes: LevelPlane[] = [];
   const boxes: BoxSpec[] = [];
-  const plane = (min: Vec3, max: Vec3, axis: 0 | 1 | 2, facing: 1 | -1, color: Vec3): PlaneSpec => {
-    const p = { min, max, axis, facing, color };
-    return p;
-  };
+  const plane = (min: Vec3, max: Vec3, axis: 0 | 1 | 2, facing: 1 | -1, color: Vec3, surface?: SurfaceTag): LevelPlane =>
+    surface ? { min, max, axis, facing, color, surface } : { min, max, axis, facing, color };
 
   for (const r of level.rooms) {
     const f = r.floor, top = r.floor + r.height;
-    planes.push(plane([r.minX, f, r.minZ], [r.maxX, f, r.maxZ], 1, 1, r.floorColor));
-    if (r.sky === null) planes.push(plane([r.minX, top, r.minZ], [r.maxX, top, r.maxZ], 1, -1, r.ceilColor));
+    const wallTop = f + displayTop(r);
+    const wallTag: SurfaceTag = r.edge ? `edge:${r.edge.style}` : 'wall';
+    planes.push(plane([r.minX, f, r.minZ], [r.maxX, f, r.maxZ], 1, 1, r.floorColor, `ground:${r.ground}`));
+    for (const p of r.paths) {
+      planes.push(plane([p.minX, f + PATH_LIFT, p.minZ], [p.maxX, f + PATH_LIFT, p.maxZ], 1, 1, r.floorColor, `path:${p.ground}`));
+    }
+    if (r.sky === null) planes.push(plane([r.minX, top, r.minZ], [r.maxX, top, r.maxZ], 1, -1, r.ceilColor, 'ceiling'));
     // West/east walls: fixed x, span z (index 2).
     for (const [side, at, facing] of [['w', r.minX, 1], ['e', r.maxX, -1]] as const) {
       let cursor = r.minZ;
       for (const m of roomMouths(level, r, side)) {
-        if (m.lo - cursor > 1e-3) planes.push(plane([at, f, cursor], [at, top, m.lo], 0, facing, r.wallColor));
-        if (r.height - m.tunnel.height > 1e-3) planes.push(plane([at, f + m.tunnel.height, m.lo], [at, top, m.hi], 0, facing, r.wallColor));
+        if (m.lo - cursor > 1e-3) planes.push(plane([at, f, cursor], [at, wallTop, m.lo], 0, facing, r.wallColor, wallTag));
+        if (wallTop - (f + m.tunnel.height) > 1e-3) planes.push(plane([at, f + m.tunnel.height, m.lo], [at, wallTop, m.hi], 0, facing, r.wallColor, wallTag));
         cursor = m.hi;
       }
-      if (r.maxZ - cursor > 1e-3) planes.push(plane([at, f, cursor], [at, top, r.maxZ], 0, facing, r.wallColor));
+      if (r.maxZ - cursor > 1e-3) planes.push(plane([at, f, cursor], [at, wallTop, r.maxZ], 0, facing, r.wallColor, wallTag));
     }
     // North/south walls: fixed z, span x (index 0).
     for (const [side, at, facing] of [['n', r.minZ, 1], ['s', r.maxZ, -1]] as const) {
       let cursor = r.minX;
       for (const m of roomMouths(level, r, side)) {
-        if (m.lo - cursor > 1e-3) planes.push(plane([cursor, f, at], [m.lo, top, at], 2, facing, r.wallColor));
-        if (r.height - m.tunnel.height > 1e-3) planes.push(plane([m.lo, f + m.tunnel.height, at], [m.hi, top, at], 2, facing, r.wallColor));
+        if (m.lo - cursor > 1e-3) planes.push(plane([cursor, f, at], [m.lo, wallTop, at], 2, facing, r.wallColor, wallTag));
+        if (wallTop - (f + m.tunnel.height) > 1e-3) planes.push(plane([m.lo, f + m.tunnel.height, at], [m.hi, wallTop, at], 2, facing, r.wallColor, wallTag));
         cursor = m.hi;
       }
-      if (r.maxX - cursor > 1e-3) planes.push(plane([cursor, f, at], [r.maxX, top, at], 2, facing, r.wallColor));
+      if (r.maxX - cursor > 1e-3) planes.push(plane([cursor, f, at], [r.maxX, wallTop, at], 2, facing, r.wallColor, wallTag));
     }
   }
 
   for (const t of level.tunnels) {
     const f = t.floor;
-    planes.push(plane([t.minX, f, t.minZ], [t.maxX, f, t.maxZ], 1, 1, t.color));
+    let shown = 0;
+    for (const r of level.rooms) if (r.id === t.a || r.id === t.b) shown = Math.max(shown, displayTop(r));
+    const wallH = Math.min(t.height, shown);
+    planes.push(plane([t.minX, f, t.minZ], [t.maxX, f, t.maxZ], 1, 1, t.color, 'tunnel'));
     if (t.axis === 'x') {
-      planes.push(plane([t.minX, f, t.minZ], [t.maxX, f + t.height, t.minZ], 2, 1, t.color));
-      planes.push(plane([t.minX, f, t.maxZ], [t.maxX, f + t.height, t.maxZ], 2, -1, t.color));
+      planes.push(plane([t.minX, f, t.minZ], [t.maxX, f + wallH, t.minZ], 2, 1, t.color, 'tunnel'));
+      planes.push(plane([t.minX, f, t.maxZ], [t.maxX, f + wallH, t.maxZ], 2, -1, t.color, 'tunnel'));
     } else {
-      planes.push(plane([t.minX, f, t.minZ], [t.minX, f + t.height, t.maxZ], 0, 1, t.color));
-      planes.push(plane([t.maxX, f, t.minZ], [t.maxX, f + t.height, t.maxZ], 0, -1, t.color));
+      planes.push(plane([t.minX, f, t.minZ], [t.minX, f + wallH, t.maxZ], 0, 1, t.color, 'tunnel'));
+      planes.push(plane([t.maxX, f, t.minZ], [t.maxX, f + wallH, t.maxZ], 0, -1, t.color, 'tunnel'));
     }
-    const top = tunnelTop(level, t);
-    if (top - t.height > 1e-3) boxes.push({ min: [t.minX, f + t.height, t.minZ], max: [t.maxX, f + top, t.maxZ], color: t.color });
+    if (shown - t.height > 1e-3) boxes.push({ min: [t.minX, f + t.height, t.minZ], max: [t.maxX, f + shown, t.maxZ], color: t.color });
   }
 
   for (const fu of level.furniture) {
@@ -257,7 +283,12 @@ export function layoutSurfaces(level: LevelDef): LevelSurfaceSet {
     return { id: w.id, view: w.view, plane: p };
   });
 
-  return { planes, boxes, gates, windows };
+  let skyline: LevelSurfaceSet['skyline'] = null;
+  if (level.skyline) {
+    const xs = level.rooms.flatMap(r => [r.minX, r.maxX]), zs = level.rooms.flatMap(r => [r.minZ, r.maxZ]);
+    skyline = { preset: level.skyline, min: [Math.min(...xs), Math.min(...zs)], max: [Math.max(...xs), Math.max(...zs)] };
+  }
+  return { planes, boxes, gates, windows, skyline };
 }
 
 /** A corridor first, then a room, else 'void'. */
@@ -294,7 +325,8 @@ export function enclosureOfIn(level: Pick<LevelDef, 'rooms' | 'tunnels'>, key: s
       box,
       walls: {
         negX: lit(0, -1, room.wallColor), posX: lit(0, 1, room.wallColor),
-        negY: lit(1, -1, room.floorColor), posY: lit(1, 1, room.ceilColor),
+        negY: lit(1, -1, room.floorColor),
+        posY: room.sky ? SKY_PRESETS[room.sky].ambient : lit(1, 1, room.ceilColor),
         negZ: lit(2, -1, room.wallColor), posZ: lit(2, 1, room.wallColor),
       },
     };
