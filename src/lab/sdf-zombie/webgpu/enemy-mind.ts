@@ -16,7 +16,8 @@ import {
   makeBrain, staggerNow, stepBrain, type Brain, type BrainPlayer, type BrainSelf,
 } from '../brain';
 import {
-  makeSoldierBrain, staggerSoldierNow, stepSoldierBrain, type SoldierBrain,
+  makeSoldierBrain, staggerSoldierNow, stepSoldierBrain, SOLDIER_TUNING,
+  type SoldierBrain, type SoldierTuning,
 } from '../soldier-brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
@@ -163,7 +164,9 @@ export function makeZombieMind(): EnemyMind {
   };
 }
 
-export function makeSoldierMind(): EnemyMind {
+/** The shooting brain. `tuning` is the weapon's (soldier-brain.ts):
+ *  SOLDIER_TUNING for the soldier's shotgun, SMG_TUNING for the cultist. */
+export function makeSoldierMind(tuning: SoldierTuning = SOLDIER_TUNING): EnemyMind {
   let brain: SoldierBrain = makeSoldierBrain();
   let aimT = 0;
   let lastAttack: MindOutput['attack'] = null;
@@ -188,7 +191,7 @@ export function makeSoldierMind(): EnemyMind {
         missing: input.missing,
         hasToken: input.hasToken,
         drift: input.drift,
-      });
+      }, tuning);
       brain = out.brain;
       aimT = out.aimT;
       lastAttack = out.attack;

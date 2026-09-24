@@ -100,6 +100,50 @@ What was wrong was the shading: paint overwrote the crater. Four changes fixed i
 Still to come with the SMG: a cloth-fibre puff in place of the blood gout for holes. Also, 16 wound
 slots per body will fill fast under SMG fire (the oldest holes vanish).
 
+## The tommy gun (2026-09-23)
+
+The cultist is now a ranged enemy with a Thompson-style SMG.
+
+- **Model:** `scripts/model-cultist-smg.py` (headless Blender, based on the soldier-shotgun script)
+  builds `public/assets/lab/cultist-smg.glb`: finned barrel, Cutts compensator, 50-round drum,
+  vertical foregrip, walnut furniture, 1,876 triangles. It is built around the shared `GUN_GRIP`
+  hand points: the rear grip takes the right hand and the foregrip top takes the left.
+  - The steel is dark and only half metallic, because the held-prop environment map turned a 0.70
+    metallic into bright silver.
+- **Carry:**
+  - `GLIDE_CARRY` gait: the carry table only engages when the *gait* has
+    `armStyle: 'carry'`; `MotionProfile.armStyle` is never read.
+  - Carries: `low` when walking, `aim` when firing. On his arm hang, `aim` measures +4° barrel pitch.
+  - `gripReach` is 0.02, because his fist is authored past the wrist.
+- **Brain:** a new `MotionProfile.gunner: { weapon }` field says "this enemy shoots"; a prop alone
+  doesn't, since the ogre's chainsaw is a prop. The game gives gunners the soldier's brain, on
+  `SMG_TUNING` for the cultist:
+  - Up to 7 rounds a burst at about 7 rounds/s, then a longer settle and cooldown.
+  - 7 m range; he prefers to stand 3.4 m off.
+- **Recoil climb:** each fire kick lifts the gun, and the first bursts walked into the ceiling. The
+  barrel still climbs on screen, but SMG rounds now keep the gun's heading (the aim error, so they can
+  miss sideways) while their vertical comes from the player's chest height.
+- **Game generalisations** (these were soldier-only):
+  - Spawning keys off `profile.gunner`.
+  - The gun re-seats onto the solved hand, honouring `gripReach`.
+  - `canHold` (no right arm, no gun).
+  - Gib set and burn kit radius key off the character name, not the brain.
+  - Every non-zombie uses its own `.blob` palette and sheet settings. Without this the cultist
+    played in the game as wet black latex wearing the zombie's painted face.
+- **Playtest:** `sdf-game.html?spawn=cultist` makes every zombie slot a cultist. Room 1's only slot is
+  the soldier, so teleport to room 2 (`__sdfGame.teleport(2)`). `__sdfGame.spawnDebugCharacter('cultist')`
+  also works now.
+
+![model](smg-model.png)
+![in game](in-game-smg.png)
+
+**Not done:**
+- Enemy rounds still hit nothing: the player has no health yet (soldier included).
+- No gunshot sound (no enemy audio exists).
+- No shell casings (soldier-only).
+- The aim hold's left hand sometimes reaches past the foregrip. A cultist-solved `aim` carry is the
+  next polish.
+
 ## What exists
 
 | Piece | Where |

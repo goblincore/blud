@@ -304,6 +304,12 @@ export const GLIDE: GaitProfile = {
   kneeLift: 0,
 };
 
+/** GLIDE with the arms on a HELD GUN (the cultist's tommy gun): the carry
+ *  table owns the arms, as STOMP does for the ogre's saw. motion.ts takes the
+ *  arm style from the GAIT (pickArmStyle), never from MotionProfile.armStyle,
+ *  so a gunner needs a carry-style gait. */
+export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyle: 'carry', armSwing: 0.03 };
+
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
 export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {

@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, MARCH, RUN, STOMP, GLIDE, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 
@@ -29,6 +29,11 @@ export interface MotionProfile {
    *  ogre's 0.15 m, fist centred at its midpoint) otherwise holds the handle
    *  inside its forearm. The soldier's short hand never showed it. */
   prop?: { url: string; scale?: number; gripReach?: number };
+  /** A RANGED enemy: the game gives it the soldier's shooting brain
+   *  (enemy-mind.ts makeSoldierMind) with this weapon's tuning, and its
+   *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
+   *  shooter — the ogre's chainsaw is a prop with carries. */
+  gunner?: { weapon: 'shotgun' | 'smg' };
 }
 
 export const ZOMBIE_PROFILE: MotionProfile = {
@@ -74,6 +79,7 @@ export const SOLDIER_PROFILE: MotionProfile = {
   armStyle: 'carry',
   carries: { walk: 'low', run: 'chest', fire: 'aim' },
   turnRate: 5.5,
+  gunner: { weapon: 'shotgun' },
   prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.2 },
 };
 
@@ -115,7 +121,17 @@ export const OGRE_PROFILE: MotionProfile = {
 export const CULTIST_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'cultist',
-  gait: { walk: GLIDE, run: GLIDE },
+  // Carry-style glide: the tommy gun owns the arms (gait.ts GLIDE_CARRY).
+  gait: { walk: GLIDE_CARRY, run: GLIDE_CARRY },
+  armStyle: 'carry',
+  carries: { walk: 'low', run: 'low', fire: 'aim' },
+  // scripts/model-cultist-smg.py -> cultist-smg.glb, on the shared GUN_GRIP
+  // locators. gripReach: his fist is authored PAST the wrist (the palm at
+  // foreArm 1.06, fingers from 1.12 — cultist.blob), so the grip seats 2 cm on.
+  prop: { url: '/assets/lab/cultist-smg.glb', scale: 1.2, gripReach: 0.02 },
+  // The tommy gun: the soldier's brain on SMG_TUNING (soldier-brain.ts) —
+  // long bursts of single rounds instead of a one-barrel shotgun blast.
+  gunner: { weapon: 'smg' },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {

@@ -28,6 +28,8 @@ import { stepRig } from '../rig';
 import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { motionProfileFor } from '../motion-profile';
 import { makeRng } from '../wander';
+import { SMG_TUNING, SOLDIER_TUNING } from '../soldier-brain';
+import { GUN_GRIP, gunPoint } from '../carry';
 import { dot, len, sub } from '../vec';
 import type { Vec3 } from '../types';
 
@@ -184,5 +186,53 @@ describe('cultist-cowled — the variant', () => {
   it('keeps the hem pendulum', () => {
     expect(cowled.bones.has('hem')).toBe(true);
     expect(bindRig(cowled).rig.restScale!.filter(k => k !== 1)).toHaveLength(1);
+  });
+});
+
+// THE TOMMY GUN (2026-09-23): a held SMG on the soldier's carry machinery and
+// the soldier's shooting brain on SMG_TUNING. The prop is a .glb
+// (scripts/model-cultist-smg.py) seated on the shared GUN_GRIP locators.
+describe('cultist — the tommy gun', () => {
+  const profile = motionProfileFor('cultist');
+  it('is a ranged SMG gunner with a carry-style gait and a shipped prop', () => {
+    expect(profile.gunner?.weapon).toBe('smg');
+    expect(profile.gait.walk.armStyle).toBe('carry');
+    expect(profile.carries?.fire).toBe('aim');
+    const shipped = Object.keys(import.meta.glob('../../../../public/assets/lab/*.glb'))
+      .map(p => p.slice(p.indexOf('/public/') + '/public'.length));
+    expect(shipped).toContain(profile.prop!.url);
+  });
+  it('SMG bursts are longer and faster than the soldier shotgun', () => {
+    expect(SMG_TUNING.burstMax).toBeGreaterThan(SOLDIER_TUNING.burstMax);
+    expect(SMG_TUNING.recoverSec).toBeLessThan(SOLDIER_TUNING.recoverSec);
+    expect(SMG_TUNING.followAimSec).toBeLessThan(SOLDIER_TUNING.followAimSec);
+  });
+  it('holds the gun in his fist while he walks and fires', () => {
+    const m = makeActorMotion(body, { seed: 5 });
+    const rng = makeRng(5);
+    const J = m.motionJoints!.index;
+    let worst = 0, n = 0;
+    for (let i = 0; i < 240; i++) {
+      const signals = emptyActorSignals();
+      if (i % 40 === 20) signals.fire = true;
+      const f = stepActorMotion(m, {
+        current: body, dt: 1 / 60, wander: true, armStyle: undefined,
+        headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+        rng, signals, profile, forceSpeed: profile.cruise,
+      })!;
+      expect(f.gun, 'a carry always poses the gun').toBeTruthy();
+      if (i < 60) continue;
+      // The authored grip target: gripReach past the WRIST along the forearm.
+      const pts = m.bound.rig.points;
+      const w = pts[J.handR!]!.pos, e = pts[J.elbowR!]!.pos;
+      const d = sub(w, e), l = len(d);
+      const fist: Vec3 = [w[0] + d[0] / l * 0.02, w[1] + d[1] / l * 0.02, w[2] + d[2] / l * 0.02];
+      worst = Math.max(worst, len(sub(fist, gunPoint(f.gun!, GUN_GRIP.gripHand))));
+      n++;
+    }
+    expect(n).toBeGreaterThan(0);
+    // Motion places the grip before Verlet; the GAME re-seats it on the solved
+    // hand (game-actor.ts), so this is the pre-seat drift, not what renders.
+    expect(worst, 'fist-to-grip drift before the game re-seat, metres').toBeLessThan(0.08);
   });
 });

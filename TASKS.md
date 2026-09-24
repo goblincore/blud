@@ -10,7 +10,9 @@
   Verlet pendulum, wind gusts push it; `GLIDE` gait keeps legs in the robe. 11 tests. [Notes](docs/dev-notes/2026-09-23-cultist/NOTES.md)
 - [x] Face passes 2-3 (scowl brow, socketed eyes, hooked nose; heavier jaw + teeth), khaki robes; variant
   `cultist-cowled` kept (lower face hidden). Owner: good enough to merge (2026-09-23).
-- [ ] **Next: animations + attacks** — SMG (Thompson / MP44 look) on the soldier's carry machinery; hit reactions.
+- [x] **Tommy gun**: cultist-smg.glb (Blender script), GLIDE_CARRY + low/aim carries, `profile.gunner` -> soldier
+  brain on SMG_TUNING (bursts), rounds aimed at chest height. Game: `?spawn=cultist`. Palette/sheet now per-character.
+- [ ] Cultist polish: own `aim` carry (left hand on the foregrip), player damage (no player health yet), SMG audio.
 - [x] **Cloth hit reactions** — paint yields inside wounds (scorched fray); heavy rounds tear + reveal, small
   calibre = dark bullet hole (flags bit 1), size-scaled fillet, hem kick. Lab: Ctrl-click = SMG hole. Fibre puff w/ SMG.
 - [ ] *Idea (owner, not this session):* flammability tiers — clothed characters catch/burn differently from bare flesh.

@@ -208,7 +208,29 @@ export const SOLDIER_TUNING = {
   meleeContactPhase: 0.5,
 } as const;
 
-export type SoldierTuning = typeof SOLDIER_TUNING;
+/** SOLDIER_TUNING's shape with its numbers WIDENED (it is `as const`), so a
+ *  second weapon (SMG_TUNING) can be a SoldierTuning with other values. */
+export type SoldierTuning = {
+  readonly [K in keyof typeof SOLDIER_TUNING]: (typeof SOLDIER_TUNING)[K] extends number ? number : (typeof SOLDIER_TUNING)[K];
+};
+
+/** The cultist's TOMMY GUN on the soldier's brain (2026-09-23). Same states,
+ *  same telegraph; the weapon differs in the burst: a follow-up is near
+ *  certain and up to six follow-ups ride one trigger pull, each after a short
+ *  re-acquire + recoil (~0.15 s a round, ~7 rounds/s), then a longer settle
+ *  and cooldown so the burst reads as a burst and the player gets a window.
+ *  A touch more range than the shotgun, and he likes to stand further off. */
+export const SMG_TUNING: SoldierTuning = {
+  ...SOLDIER_TUNING,
+  fireRange: 7.0,
+  preferredRange: 3.4,
+  burstChance: 0.92,
+  burstMax: 6,
+  followAimSec: 0.06,
+  recoverSec: 0.09,
+  settleSec: 0.35,
+  minCooldownSec: 1.1,
+};
 
 export function makeSoldierBrain(): SoldierBrain {
   return {

@@ -1193,11 +1193,21 @@ export function createZombieActor(opts: {
         const i = joints.index[kick.joint];
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
       }
-      if (soldierDamage && f.gun && !f.collapsed) {
+      if ((soldierDamage || opts.profile?.gunner) && f.gun && !f.collapsed) {
         // Motion authors the grip target before Verlet and bend constraints.
         // Seat the prop on the solved hand without changing its authored
         // wrist rotation (the elbow pole adjustment must not repitch it).
-        const hand = bound.rig.points[joints.index.handR]!.pos;
+        // Every GUNNER, not only the soldier (the cultist's tommy gun floated
+        // off his hand otherwise). The grip seats `gripReach` past the wrist
+        // along the forearm, as motion.ts placed it (motion-profile.ts).
+        const wrist = bound.rig.points[joints.index.handR]!.pos;
+        const elbow = bound.rig.points[joints.index.elbowR]!.pos;
+        const reach = opts.profile?.prop?.gripReach ?? 0;
+        const fdx = wrist[0] - elbow[0], fdy = wrist[1] - elbow[1], fdz = wrist[2] - elbow[2];
+        const fl = Math.hypot(fdx, fdy, fdz) || 1;
+        const hand: Vec3 = reach > 0
+          ? [wrist[0] + fdx / fl * reach, wrist[1] + fdy / fl * reach, wrist[2] + fdz / fl * reach]
+          : wrist;
         const grip = gunPoint(f.gun, GUN_GRIP.gripHand);
         f.gun = { ...f.gun, root: [
           f.gun.root[0] + hand[0] - grip[0],

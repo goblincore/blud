@@ -83,6 +83,7 @@ import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
+import { SMG_TUNING, SOLDIER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import type { Vec3 } from '../types';
@@ -3027,7 +3028,10 @@ async function main() {
     ctx.boot.gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!ctx.render.boneMesh);
-    view.applyMaterial(name === 'soldier' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
+    // A character's OWN palette (its .blob block) wherever it declares one —
+    // was soldier-only, so the cultist's matte tan robe played in the game as
+    // the zombie's wet black latex. The zombie keeps the panel-tunable flesh.
+    view.applyMaterial(name !== 'zombie' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
       LIGHT_PRESETS['practical-hard-key']);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
@@ -3065,7 +3069,10 @@ async function main() {
       // Keep the soldier's authored face consistent with the lab. Projection
       // alone still left the zombie's full-strength tint, relief and glow on
       // his head, washing out the jaw and turning the entire face orange.
-      if (name === 'soldier') {
+      // Every non-zombie character with a sheet block (was soldier-only):
+      // the cultist's `sheet enabled 0` must switch the zombie's generated
+      // face OFF, or his prim face wears the zombie's painted one.
+      {
         view.uniforms.faceCfg.value.set(
           sheet.enabled ? (sheet.decal > 0.5 ? 2 : sheet.blendLuma > 0.5 ? 3 : 1) : 0,
           sheet.texStrength, sheet.faceForward, sheet.texRelief,
@@ -3155,15 +3162,33 @@ async function main() {
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
       boundedWounds: ctx.vfx.boundedWoundPreview,
-      ...(name === 'soldier' ? {
-        mind: makeSoldierMind(),
+      // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
+      // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
+      // gun. Was `name === 'soldier'`.
+      ...(characterEntry(name).profile.gunner ? {
+        mind: makeSoldierMind(characterEntry(name).profile.gunner!.weapon === 'smg' ? SMG_TUNING : SOLDIER_TUNING),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
           ctx.world.encounter.shot(zombieId);
           // ONE barrel: the double-barrel volley is the player's signature,
           // and the soldier throwing the same wall of lead reads as a second
           // player rather than an enemy.
-          ctx.weapon.soldierPellets.push(...spawnPellets(muz, dir, 1, seedFromUnit(rngStreams.misc())));
+          // THE TOMMY GUN CLIMBS. Each round's fire kick lifts the carry, and a
+          // 6-7 round burst at ~7 rounds/s walked the stream into the ceiling
+          // (2026-09-23 capture). The barrel still climbs on screen; the ROUNDS
+          // keep the gun's heading (the brain's aim error, so bursts can miss
+          // sideways) but take their vertical from the player's chest. The
+          // soldier's single shotgun round is unchanged.
+          let shotDir = dir;
+          if (characterEntry(name).profile.gunner?.weapon === 'smg') {
+            const pp = ctx.player.player.pos;
+            const hx = dir[0], hz = dir[2], hl = Math.hypot(hx, hz) || 1;
+            const dist = Math.hypot(pp[0] - muz[0], pp[2] - muz[2]);
+            const rise = (pp[1] + SMG_TARGET_CHEST_Y) - muz[1];
+            const l = Math.hypot(dist, rise) || 1;
+            shotDir = [hx / hl * dist / l, rise / l, hz / hl * dist / l];
+          }
+          ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
       profile: characterEntry(name).profile,
@@ -3194,10 +3219,19 @@ async function main() {
     return actor;
   }
 
+  /** Height above the player's feet an enemy SMG round is aimed at (m). */
+  const SMG_TARGET_CHEST_Y = 1.25;
+  const spawnOverride = ((): string | null => {
+    const v = new URLSearchParams(location.search).get('spawn');
+    return v && characterNames().includes(v) ? v : null;
+  })();
+
   function spawnAll(errs: string[]): void {
     for (const room of ROOMS) {
       for (const [index,start] of spawnPoints(room).entries()) {
-        const name = index < (room.soldiers ?? 0) ? 'soldier' : 'zombie';
+        // ?spawn=<character> (playtest): every non-soldier slot spawns that
+        // registry character instead of the zombie, e.g. ?spawn=cultist.
+        const name = index < (room.soldiers ?? 0) ? 'soldier' : spawnOverride ?? 'zombie';
         ctx.world.actors.push(spawnEnemy(name, room, start, errs));
       }
     }

@@ -684,7 +684,9 @@ export function stepMotion(
     ? profile.gait.walk : blendProfiles(profile.gait.walk, profile.gait.run, rw);
 
   // --- fire hold ------------------------------------------------------------
-  const canHold = profile.name !== 'soldier' || !sig.missing.armR;
+  // A GUNNER with no right arm cannot hold the gun (was soldier-only, so the
+  // cultist would have kept firing a tommy gun from a stump).
+  const canHold = (profile.name !== 'soldier' && !profile.gunner) || !sig.missing.armR;
   const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;

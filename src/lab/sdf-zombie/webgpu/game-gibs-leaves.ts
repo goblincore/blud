@@ -26,7 +26,9 @@ import { loadGibSheet, loadGibSpriteAtlas } from './gib-sprites';
 
 /** The archetype whose committed set an actor uses. */
 export function gibAssetArchetypeOf(ctx: GameContext, a: ZombieActor): string {
-  return a.kind === 'soldier' ? 'soldier' : 'zombie';
+  // By CHARACTER, not mind: the cultist runs the soldier's shooting brain
+  // but must not throw the soldier's gib set.
+  return a.character?.entry.name === 'soldier' ? 'soldier' : 'zombie';
 }
 
 /** Kick off (or join) the load for the archetypes the assets path can use. */
