@@ -66,6 +66,9 @@ export interface CharacterEntry {
    *  every frame the hero loop re-poses it from rig-frames.ts's per-bone
    *  transforms (see the `kit?.pose(frames)` call). */
   kit?: string;
+  /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
+   *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
+  armoured?: boolean;
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -214,6 +217,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   soldier: {
     name: 'soldier', src: soldierBlobSrc,
     kit: '/assets/lab/soldier-kit.gltf',
+    armoured: true,
     // Measured from the original PNG, excluding alpha < 8, exactly like
     // the lab's applyMeanOf. The fallback 1 halved its level in the game.
     face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
@@ -320,15 +324,20 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     profile: motionProfileFor('cultist'),
   },
   // The bride — Blud's death knight: a pale, lace-dressed swordswoman.
-  // docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md. Flesh
-  // and the corpse-makeup face sheet so far (Tasks 1-2): no shells, kit or
-  // sword yet; the profile falls back to the zombie's until BRIDE_PROFILE
-  // lands. The face is GENERATED (scripts/make-bride-face.py) and worn at rgb
+  // docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md. Flesh,
+  // shell cloth and the corpse-makeup face sheet in the .blob (Tasks 1-3);
+  // plate arms, pauldron, thigh boots, chains and crosses in the kit
+  // (characters/bride-kit.wam, compiled by scripts/build-wam-kit.sh bride;
+  // committed as the glTF). ARMOURED like the soldier: her plate sparks and
+  // sheds, baring the raw fused seams under it. No sword yet; the profile
+  // falls back to the zombie's until BRIDE_PROFILE lands. The face is GENERATED (scripts/make-bride-face.py) and worn at rgb
   // multiply. mean is MEASURED off the PNG (the painter prints it): the lab
   // re-measures off the decoded pixels, but the game uses this value as is,
   // and bakedFace's fallback of 1 would darken her whole face ~28% there.
   bride: {
     name: 'bride', src: brideBlobSrc,
+    kit: '/assets/lab/bride-kit.gltf',
+    armoured: true,
     face: { ...bakedFace('bride-face.png'), mean: 0.712472 },
     profile: motionProfileFor('bride'),
   },

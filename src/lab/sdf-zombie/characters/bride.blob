@@ -101,17 +101,22 @@ skeleton
     # bone tilt swings toward +y, so negative is down.) The WAM pauldron
     # (Task 4) widens the right one.
     bone clavicle parent=spine2   side=0.020 dir=side tilt=-8 len=0.13
-    # Arms long and thin, hanging out (tilt 11, forearm 6) so there is
+    # Arms long and thin, hanging out (tilt 14, forearm 12) so there is
     # DAYLIGHT between wrist and hip flare (semi ~0.16): at tilt 8 / 4 the
     # probed flesh ran unbroken from the navel to the forearm at y 1.00.
     # Forward a touch (pitch 2).
-    bone upperarm parent=clavicle dir=down tilt=11 pitch=2 len=0.30
+    # SPLAYED FOR THE PLATE (Task 4): 11 / 6 -> 14 / 12. At 11 / 6 the
+    # forearm flesh already ran 5-14 mm INTO the ruffle skirt at y 0.94-1.04
+    # (probed at the forearm's own z), so the vambraces (kit, ~6 mm over the
+    # flesh) punched through the cloth. Now >= 13 mm of flesh-to-skirt air at
+    # rest; bride-kit.wam transcribes the same angles.
+    bone upperarm parent=clavicle dir=down tilt=14 pitch=2 len=0.30
     # THE SWORD FOREARM (hook 1): 0.26 on the off side, 0.30 on the sword
     # side. lenR= is the grammar's asymmetric-pair word (added for her): a
     # mirror block otherwise gives both sides one length, and a bone outside
     # it could neither parent to upperarm.r nor carry arm prims. The right
     # hand hangs 4 cm lower at rest; the vambrace hides where.
-    bone forearm  parent=upperarm dir=down tilt=6 pitch=10 len=0.26 lenR=0.30
+    bone forearm  parent=upperarm dir=down tilt=12 pitch=10 len=0.26 lenR=0.30
     bone hand     parent=forearm  dir=down pitch=8         len=0.08
     # LEGS: 0.49 + 0.48 from the hip joint at 1.04 lands the ankle at ~0.07.
     # Knees drawn in a whisper (tilt -1.5, shins +1.5) — a narrow, poised
