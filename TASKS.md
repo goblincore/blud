@@ -8,7 +8,7 @@
 
 [Spec](docs/superpowers/specs/2026-09-24-new-game-flow-design.md): intro → menu → **the void** (hub, unlit, one portal) → **Night Train first**; the Wake moves later (train crash).
 - [x] 1 Design + doc updates (vision §6.1/§10.3/§10.4, Night Train, Wake).
-- [ ] 2 **Next:** the void + portal spec (render-to-texture view, portal → `?level=`, menu New game starts here).
+- [~] 2 The void + portal: [spec](docs/superpowers/specs/2026-09-24-void-portal-design.md) approved (WGSL portal with ray-cast tracks, embers, glow pool; `void` rooms + `portals` in the format). **Next:** plan.
 - [ ] 3 Train carriage kit (Blender, windows with scrolling scenery, sway) · 4 Night Train first slice (carriages 1, 3, 5, 8).
 
 ## Wake level pipeline — Plan 1 in flight — 2026-09-23
