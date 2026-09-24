@@ -466,11 +466,15 @@ export function createWorldSeams(ctx: GameContext) {
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
         meleeContacts: a.debug().meleeContacts,
+        carry: a.debug().carry, fistGrip: a.debug().fistGrip, fistGripAuthored: a.debug().fistGripAuthored,
         speed: a.debug().speed, target: a.debug().target,
         dist: Math.hypot(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
         bearing: Math.atan2(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
       };
     }),
+    /** Enemy melee hits the player has taken (player-hit-feedback.ts). No
+     *  player health yet: a hit flashes, shakes and counts. */
+    playerHits: () => ctx.player.hitFeedback.hits,
     /** Ring tuning, so a capture driver asserts against the real numbers
      *  rather than duplicating them. */
     ringTuning: () => ({ ...RING_TUNING }),

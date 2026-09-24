@@ -9,6 +9,8 @@
 - [x] **Task 3, cloth + hair:** shell bodice open over the ribs with laces, two-tier ruffle skirt on a `hem`
   pendulum, rigid veil, strand hair, painted stockings. 123/128 prims. Uncut in game. [Notes](docs/dev-notes/2026-09-24-bride/NOTES.md)
 - [ ] Perf census vs cultist (fallback-B gate) deferred by the owner (2026-09-24). Next: Task 4 (kit + boots).
+- [x] **Task 11, game wiring:** `?spawn=bride` fights on the sword mind; hits flash/shake/count (no player health).
+  `node scripts/bride-melee-gate.mjs 5271 9271` passes. Crowd gate's negative control fails on the base too (pre-existing).
 
 ## Thin-prim "lines in the air" (bride) — fixed 2026-09-24
 

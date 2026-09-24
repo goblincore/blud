@@ -635,3 +635,112 @@ front view.
   the centreline), so mid-strike it looks like a small sweep.
 - **Contact timing (Task 10):** `SWORD_CONTACT.phase` is mid-strike (0.375). The cleave's tip
   is still OVERHEAD then (y 2.88 m). The blade is at the player at about 0.45–0.5.
+
+## Task 11: game wiring — mind, hit feedback, the fight in `sdf-game.html` (same day)
+
+- **Mind:** `game-main.ts` gives any `profile.melee.kind === 'sword'` body `makeSwordMind()`.
+  Every actor gets `onMeleeContact`. The zombie mind never reports contact, so it is a no-op there.
+- **Hit feedback** (`player-hit-feedback.ts`, pure, tested): a hit sets the flash to 1, starts the
+  variant's shake (cleave 6 cm, lunge 5, sweep 4) and bumps the counter. Both fade linearly to exactly 0
+  in 0.45 s of sim time. The state lives on `ctx.player.hitFeedback`; the overlay element is
+  `ctx.player.hitFlashEl`, a fixed `#8a0000` multiply div at up to 0.55 opacity. The shake offsets the
+  eye and the look target together, so the view shakes rather than swivels. The seam is
+  `__sdfGame.playerHits()`, and `brains()` now also reports `carry`, `fistGrip` and `fistGripAuthored`.
+- **No sound.** The plan asked for one reused existing sample, but the SDF game loads no audio at
+  all (no `Audio`/`AudioContext` anywhere under `src/lab/sdf-zombie/`), so there is none to reuse, and
+  new assets are out of scope.
+
+### The sword in her hand, in the game (the Task 8 review's findings)
+
+- **(a) Prop seating.** `game-actor.ts` re-seated the held prop on the solved hand only for the
+  soldier and gunners. It now also seats any profile with a `prop` AND a `melee`. **The ogre is
+  unchanged:** he has a prop but no `melee`, so his chainsaw keeps riding the motion target.
+- **(b) Fist-to-grip, measured on the game path** (`webgpu/game-actor-bride.test.ts`, CPU, the real
+  `createZombieActor`): **3.1 cm at the guard and 4.8 cm mid-swing**, over the 3 cm bar. The missing
+  `pinTips` was not the cause. Pinning the tip the lab's way (`only` = the fist) moved it < 0.2 mm.
+  - **The cause:** motion.ts seats the grip on the forearm line, then `alignElbow` swivels the
+    elbow out. The solved forearm is no longer the line the grip and the hand bone were laid on, and
+    the game re-seat used that swivelled line. The hand stood ~46° off the solved forearm.
+  - **Fix:** a `fistOnGrip` prop seats on the FIST (the middle of the solved hand bone, wrist to
+    tip), which is exactly where the lab measures it. The `only`-tip pin stays in the game step for
+    `fistOnGrip` profiles, so that tip points along its target like the lab's.
+- **(c) The arms lagged in the guard.** The first gate run caught an AUTHORED gap (solved fist to the
+  grip where motion.ts put it) of **13.6 cm** at the guard. The soft rest pull let the arms trail
+  their targets whenever she turned or set off. With the sword seated on the lagging fist, the left
+  hand came off Fore_Hand. `motion.ts` now pins both arms (`posePins`) for the whole two-handed sword
+  carry, not only mid-swing. The one-handed `swordTrail` keeps its free left arm, and a stagger or
+  recoil still releases the pins. Re-measured: 0.60 cm.
+
+### The run-to-swing snap (Task 9 review)
+
+The brain does NOT always halt and settle before swinging. A lunge can start on the very frame she
+enters the ring from `pursue`, still walking. But **she never runs in the game.** Her wander speed is
+capped at `cruise` 1.1 m/s, or 1.375 with the burning-panic ×1.25, and `runBand.from` is 1.6. So
+`runWeight` is 0 and the live carry is always `swordGuard`, the pose the track starts from. Only the
+lab's `forceSpeed` reaches `swordTrail`. There is no snap to fix in game, so the track still starts
+from `CARRIES[carries.walk]`.
+- `game-actor-bride.test.ts` pins the invariant: `runWeight(BRIDE_PROFILE, cruise × burn)` is 0. If
+  that ever fails, start the track from the carry at swing start.
+- The gate checks it live: every swing start in 20 s had carry `swordGuard`.
+
+### Gate: `scripts/bride-melee-gate.mjs`
+
+Run: `LAB_TMP=.lab-tmp LAB_VITE_PORT=5271 LAB_CDP_PORT=9271`, sourcing `lab-servers.sh`, then
+`node scripts/bride-melee-gate.mjs 5271 9271`.
+- The scene: `?spawn=bride&seed=1&vhs=off`, room 2. The player stands 4.0 m from the nearest bride
+  (5 m does not fit inside the room). One barrel is fired AWAY from her to wake the room.
+- Then 20 s of sim, sampled every 6 frames.
+
+```
+lunges: 3.08 -> 1.88 m
+fist-to-grip max: guard 0.00 cm seated / 0.60 cm authored (313 samples); swing 0.00 cm seated / 0.72 cm authored (88 samples)
+melee contacts by actor: zombie 2: 8, zombie 23: 7        (= playerHits 15; one contact per swing)
+PASS: fist-to-grip at the guard <= 3 cm (0.00 cm seated, 0.60 cm authored)
+PASS: fist-to-grip on the swing frames <= 3 cm (0.00 cm seated, 0.72 cm authored)
+PASS: a lunge from beyond 2.2 m closed >= 0.8 m within 1.2 s (3.08 m, -1.20 m)
+PASS: a cleave or sweep (cleave, lunge, sweep)
+PASS: playerHits >= 1 (15)
+PASS: every swing starts from the guard carry (swordGuard)
+PASS: frames: guard true, cleave wind-up true, cleave strike true
+PASS: no console errors / pipeline errors (0)
+```
+
+- **The fight:** she lunged from 3.08 m and the full 1.2 m advance landed, stopping at 1.88 m. From
+  there she held 1.80 m and threw cleave, cleave, sweep, cleave, cleave, sweep, cleave, about one
+  swing every 2.3-2.7 s.
+- **The cleave's hit:** it landed at swingT 0.480, just past the 0.47 contact phase.
+- **The hit flash, measured** on a wall crop (x 900-1100, y 250-500): luma 19.2 on the wind-up frame
+  and 11.0 on the strike frame (−43%); R/(G+B) went from 0.54 to 0.86.
+
+**Crowd gate (the zombie no-op evidence).** `sdf-game-crowd-gate.mjs` FAILS at its negative control
+("zombies stayed alert with the player out of the room"). It fails identically on this branch's base
+commit `aac99621`, checked in a temporary detached worktree with the same ports. Every number before
+the failure matches exactly on both runs: worst pair 0.887 m, probe 0.740 m, swing frame swingT 0.952.
+So the failure is pre-existing and not Task 11. Neither was changed.
+
+`game-context-coverage` also fails before this task: `spawnOverride` (commit 06884bb3, also on
+`main`) is a second main()-scope state binding.
+
+### Frames
+
+The camera turns 0.3 rad off her (`FRAME_YAW`), so she stands clear of the first-person shotgun.
+Off-centre she is also outside the player's light, which is why she reads in the room's dim green.
+
+![guard](game-melee-guard.png) ![cleave wind-up](game-melee-cleave-windup.png) ![cleave strike + flash](game-melee-cleave-strike.png)
+
+### Honest read
+
+- **Guard:** the sword is in both hands, blade up over her right shoulder, the high guard from the
+  lab. The skirt, chain girdle and crosses render uncut. So does the second bride behind her: veil,
+  corset, skirt and boots. In the dim green her veil is hard to separate from her hair.
+- **Wind-up:** the hands are over the crown and the blade stands straight up, which reads as the
+  overhead coming. The renderer's temporal history leaves a faint ghost blade, because the
+  frame-stepped capture moves a lot between frames.
+- **Strike:** the whole screen goes dark red. Her hands are at her chest and the blade drives
+  diagonally out at the camera, past the shotgun, so the hit reads as landing on you. At 1.8 m the
+  blade foreshortens hard; the side-view swing strips (Task 9) are clearer about its arc.
+- **Weak spots:**
+  - At 1.8 m the camera is inside her swing, so the blade's tip mostly leaves frame.
+  - She never re-faces while `recover` halts her. A player who sidesteps during her cooldown is
+    swung at along the old facing and missed (the contact cone does its job). That is correct for
+    a slow knight, but it will read as a whiff.
