@@ -562,3 +562,76 @@ give the treadmill poses. The frames are crops of frame 00 (yaw 0, her front), f
   or a sword mind. game-actor.ts re-seats the prop on the solved wrist ONLY for gunners and
   the soldier, and its rig loop never calls `pinTips`: the fist follows its target through the
   soft rest pull only. Task 10 wires the game side.
+
+## Task 9: the sword follows the swing (same day)
+
+- `actor.ts` `ActorStepInput.attack` is forwarded to `stepMotion` only when set, so existing
+  callers step bit-identically.
+- In `motion.ts`, the carry block uses `swordCarryAt(phase, variant, CARRIES[carries.walk])`
+  UNSMOOTHED while a sword swing is live (`profile.melee.kind === 'sword'` + a sword variant).
+  Downstream (armPivot, gunPoseFromArm, fistOnGrip, the left-hand FABRIK) is unchanged.
+- **Found on the way: the verlet let go of the grip.** With the track wired, the fist-to-grip
+  gap reached 21 cm mid-cleave. The prop is seated on the motion TARGETS, and the rig's soft rest
+  pull lags a 1 s swing, so `|rig hand − target hand|` was the whole gap. The fix: while a sword
+  swing is live, `frame.posePins` pins both arms (elbow, hand, hand tip, L and R) to their
+  targets, the way the soldier pins his legs. A stagger or recoil releases the pins. Only the
+  bride can reach this path.
+- `rig-bind.test.ts`: `pinTips(…, only)` moves just the listed tip (Task 8 review follow-up).
+
+### Re-solved `SWORD_KEYS` (CPU grid + coordinate descent, then a joint pass over 8 in-between phases)
+
+| Variant | windup pitch / yaw / fold, gunPitch | strike pitch / yaw / fold, gunPitch |
+| --- | --- | --- |
+| cleave | 1.60 / 1.15 / 1.20, 1.15 | 0.25 / 0.75 / 2.10, -1.15 |
+| sweep | -0.75 / -0.20 / 2.05, 0.95 | 0.40 / 1.40 / 1.10, -0.55 |
+| lunge | -1.20 / 1.15 / 1.60, 1.25 | 0.45 / 0.75 / 2.00, -1.20 |
+
+The scores were: fist on the grip, left hand on Fore_Hand, elbows ≥ 5 cm outside the torso,
+the blade clear of her head, torso and legs (`sdBody` along the blade), and the cleave, sweep
+and lunge strike tips at 1.2–1.5 m about 1.5 m out. The plan's starting cleave drove the point
+into the floor (tip y −0.23 m).
+
+Measured over a 60-frame swing (body-local: +x her left, +z forward, pelvis origin):
+
+| | max fist gap | max left-hand gap | min blade clearance | wind-up tip | strike tip |
+| --- | --- | --- | --- | --- | --- |
+| cleave | 0.0 cm | 2.2 cm | 4.6 cm | (0.15, 2.71, −0.66) | (0.25, 1.34, 1.53); drops 1.37 m |
+| sweep | 1.1 cm | 4.6 cm | 4.6 cm | (−0.81, 2.19, 0.81) | (1.51, 1.21, 0.65); x flips sign |
+| lunge | 1.2 cm | 1.8 cm | 2.7 cm | (0.21, 1.35, 1.26) | (0.19, 1.41, 1.57) |
+
+### The sweep and its shape pin
+
+The `sword-swing.test.ts` pin wants the sweep's arm YAW to change sign. A two-handed grip cannot
+cock the blade flat out to her right with the arm yawed OUT: the left hand has to reach
+Fore_Hand 23 cm past the grip, and it runs out of arm (≥ 8 cm off in every yaw < 0 solve). The
+unpinned solve cocks it flat to the right with yaw +1.6, the upper arm across the chest. Under
+the pin, the wind-up stands the blade up and out to her front-right, so the sweep is a
+descending diagonal into a flat pass. The flat part is the strike half, where the hit lands.
+
+### Frames
+
+Lab: `holdPose('aim', 90, { phase, variant })` pins the swing for the last 30 frames, and
+`blob-turntable.mjs` gets `BLOB_SWING=<variant>:<phase>` (ports 5271/9271, cultist sanity shot
+first, `BLOB_DIST=3.4 BLOB_TARGET_Y=1.35`). Each strip runs phases 0, 0.15, 0.25, 0.4, 0.5,
+0.7 and 1.0. The top row is the side view (yaw 90°: she faces left), and the bottom row is the
+front view.
+
+![cleave](swing-cleave.png)
+![sweep](swing-sweep.png)
+![lunge](swing-lunge.png)
+
+### Honest read
+
+- **Cleave:** reads as overhead. The sword goes up at 0.15–0.25, with the hands over the crown
+  and the blade leaning back. At 0.4 it comes over the top, and at 0.5–0.7 it is level at the
+  player's chest. It ends LEVEL, a chop that stops on the target rather than following through
+  to the floor. The wind-up blade leans back about 40°, not laid flat behind her head.
+- **Sweep:** from the front it reads as flat. At 0.25 the blade is up and out to her right.
+  From 0.4 to 0.7 it is level at chest height, pointing out to her left. It is a
+  diagonal-into-flat, not a pure horizontal (see the pin above).
+- **Lunge:** from the side it reads as a thrust. The point drops to level at the hip at 0.25,
+  then the arms drive out with the blade level at chest height at 0.5. From the front, at 0.4
+  the blade swings out to her LEFT on the way (the angle interpolation arcs it about 0.85 m off
+  the centreline), so mid-strike it looks like a small sweep.
+- **Contact timing (Task 10):** `SWORD_CONTACT.phase` is mid-strike (0.375). The cleave's tip
+  is still OVERHEAD then (y 2.88 m). The blade is at the player at about 0.45–0.5.

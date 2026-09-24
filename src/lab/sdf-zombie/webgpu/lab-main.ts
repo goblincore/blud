@@ -99,6 +99,7 @@ import {
 import type { ArmStyle } from '../gait';
 import { speedForBand, motionProfileFor, type MotionProfile } from '../motion-profile';
 import type { CarryName } from '../carry';
+import type { SwingVariant } from '../attack';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { add, sub } from '../vec';
 import { makeChunk, stepChunk, type Chunk, type ChunkKind } from '../gib-chunks';
@@ -4568,9 +4569,11 @@ async function main() {
      * Deterministic pose for captures: treadmill at `speed` m/s (0 = stand),
      * optionally pinned to a carry, stepped `frames` times at 1/60 with the
      * body standing still, then motion is frozen so the rig holds it.
-     * 'walk' | 'run' | 'hip' are the turntable's presets.
+     * 'walk' | 'run' | 'hip' are the turntable's presets. `swing` pins a
+     * swing at a fixed phase over the last 30 frames (sword swing strips).
      */
-    holdPose(preset: 'walk' | 'run' | 'hip' | 'aim' | 'rest', frames = 90) {
+    holdPose(preset: 'walk' | 'run' | 'hip' | 'aim' | 'rest', frames = 90,
+      swing?: { phase: number; variant: SwingVariant }) {
       setWander(false);
       setMotionEnabled(true); // resetMotion: fresh state at the origin, poseHeld off
       forceSpeed = preset === 'walk' ? cruiseFor('walk') : preset === 'run' ? cruiseFor('run') : 0;
@@ -4583,6 +4586,7 @@ async function main() {
           current, dt: 1 / 60, wander: false, armStyle, headingFollow, gazeFollow,
           bounds: WANDER_BOUNDS, rng: motionRng, signals: sig,
           profile: motionProfile, forceSpeed, carryOverride,
+          ...(swing && i >= frames - 30 ? { attack: { phase: swing.phase, side: 'R' as const, variant: swing.variant } } : {}),
         });
         lastMotionFrame = f;
         if (f) sinceFire = f.kicks.length ? 0 : sinceFire + 1 / 60;

@@ -515,6 +515,15 @@ describe('rigid tips (hand tips and toes)', () => {
     expect(len(sub(rel, rotateYaw(toe.rest, yaw)))).toBeLessThan(1e-9);
     expect(pinned[toe.point]!.prev).toEqual(pinned[toe.point]!.pos);
   });
+  it('with `only`, just the listed tip points along its target; the rest keep their rest hang', () => {
+    const [a, b] = bound.tips;
+    const targets = bound.rig.points.map(p => p.pos);
+    targets[a!.point] = add(targets[a!.anchor]!, [0, 1, 0]); // point tip a straight up
+    targets[b!.point] = add(targets[b!.anchor]!, [0, 1, 0]); // and b, which is NOT listed
+    const pinned = pinTips(bound.rig.points, bound.tips, 0, targets, new Set([a!.point]));
+    expect(len(sub(sub(pinned[a!.point]!.pos, pinned[a!.anchor]!.pos), [0, len(a!.rest), 0]))).toBeLessThan(1e-9);
+    expect(len(sub(sub(pinned[b!.point]!.pos, pinned[b!.anchor]!.pos), b!.rest))).toBeLessThan(1e-9);
+  });
   it('the zombie has no tips and pinTips is a no-op for it', () => {
     const z = bindRig(buildBody(compileBlob(parseBlob(zombieSrc))));
     expect(z.tips).toEqual([]);

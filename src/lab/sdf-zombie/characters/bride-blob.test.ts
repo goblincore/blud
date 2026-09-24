@@ -22,7 +22,7 @@ import { motionProfileFor, BRIDE_PROFILE } from '../motion-profile';
 import { GUN_GRIP, gunPoint, type GunPose } from '../carry';
 import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { makeRng } from '../wander';
-import type { SwingVariant } from '../attack';
+import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
 
 const doc = parseBlob(src);
@@ -401,6 +401,57 @@ describe('bride — profile and sword carry', () => {
     } });
     expect(sawTrail).toBe(true);
     expect(tipHigh).toBeLessThan(0.35);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE SWING (Task 9): the sword track drives the carry, so the blade follows
+// the arm and the fist stays on the grip.
+
+/** Stand 60 frames in the guard, then swing `variant` over 60 frames
+ *  (phase i/60). Records the fist-grip gap and the tip in body-local x/y. */
+function recordSwing(variant: 'cleave' | 'sweep' | 'lunge') {
+  const out: { phase: number; gap: number; tip: Vec3; tipX: number }[] = [];
+  drive({
+    frames: 121, speed: 0,
+    attack: i => (i >= 60 ? { phase: Math.min(1, (i - 60) / 60), side: 'R', variant } : undefined),
+    onFrame: (f, pts, J, i) => {
+      if (i < 60) return;
+      const tip = tipOf(f.gun!), pel = pts[J.pelvis!]!.pos;
+      const right: Vec3 = [Math.cos(f.bodyYaw), 0, -Math.sin(f.bodyYaw)];
+      out.push({
+        phase: Math.min(1, (i - 60) / 60),
+        gap: dist(fistOf(pts, J), gunPoint(f.gun!, GUN_GRIP.gripHand)),
+        tip,
+        tipX: (tip[0] - pel[0]) * right[0] + (tip[2] - pel[2]) * right[2],
+      });
+    },
+  });
+  return out;
+}
+const at = (rec: ReturnType<typeof recordSwing>, phase: number) =>
+  rec.reduce((a, b) => (Math.abs(b.phase - phase) < Math.abs(a.phase - phase) ? b : a));
+
+describe('bride — the sword swings with the arm', () => {
+  it.each(['cleave', 'sweep', 'lunge'] as const)('%s: the fist stays on the grip through the whole swing', variant => {
+    for (const s of recordSwing(variant)) expect(s.gap, `phase ${s.phase.toFixed(2)}`).toBeLessThan(0.03);
+  });
+
+  it('cleave: the tip travels > 1.2 m and drops > 0.8 m from wind-up to strike', () => {
+    const rec = recordSwing('cleave');
+    let path = 0;
+    for (let k = 1; k < rec.length; k++) path += dist(rec[k]!.tip, rec[k - 1]!.tip);
+    expect(path).toBeGreaterThan(1.2);
+    const w = at(rec, ATTACK_TUNING.windupEnd).tip[1];
+    const s = at(rec, (ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2).tip[1];
+    expect(w - s).toBeGreaterThan(0.8);
+  });
+
+  it('sweep: the tip crosses her centreline (body-local x changes sign)', () => {
+    const rec = recordSwing('sweep');
+    const w = at(rec, ATTACK_TUNING.windupEnd).tipX;
+    const s = at(rec, (ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2).tipX;
+    expect(Math.sign(w)).not.toBe(Math.sign(s));
   });
 });
 

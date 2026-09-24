@@ -31,6 +31,7 @@ import { constrainRigBends, stepRig } from './rig';
 import { relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
+import type { SwingVariant } from './attack';
 import type { MotionProfile } from './motion-profile';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
@@ -136,6 +137,9 @@ export interface ActorStepInput {
   forceSpeed?: number;
   /** Hold this carry regardless of gait/fire state — see MotionConfig. */
   carryOverride?: CarryName;
+  /** A live swing (attack.ts's phase clock) — see MotionConfig.attack. Only
+   *  forwarded when set, so callers without one step bit-identically. */
+  attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
 }
 
 /**
@@ -162,6 +166,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
         headingFollow: input.headingFollow, gazeFollow: input.gazeFollow,
         profile: input.profile, forceSpeed: input.forceSpeed,
         carryOverride: input.carryOverride,
+        ...(input.attack ? { attack: input.attack } : {}),
       },
       {
         dt: sdt,

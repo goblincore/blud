@@ -74,6 +74,7 @@ import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
+import { isSwordVariant, swordCarryAt } from './sword-swing';
 
 /** Motion knobs owned by the wiring (the modules own their own). */
 export const MOTION_TUNING = {
@@ -926,6 +927,8 @@ export function stepMotion(
   /** prop.fistOnGrip: the right hand tip's offset from the wrist, laid along
    *  the grip line — re-applied after the tip follow pass below. */
   let fistTipR: Vec3 | null = null;
+  /** A live sword swing pins both arms to their targets (frame.posePins). */
+  let swordArmPins = false;
   const carries = profile.carries;
   const broadSoldierOpen = soldierStagger.active && !soldierStagger.state.fullOpen && soldierStagger.variant === 1
     && soldierStagger.state.level !== 'small';
@@ -945,10 +948,19 @@ export function stepMotion(
       ?? (fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
     carryUsed = carryName;
     const wanted = CARRIES[carryName];
+    // A SWORD SWING owns the carry (sword-swing.ts): the track pose, UNSMOOTHED
+    // — the swing is authored motion, and the exp(-9 dt) chase below would lag
+    // a 0.9 s sweep by a third of its arc. Its phase-0 and phase-1 poses are
+    // the walk guard exactly, so entering and leaving needs no blend.
+    const swordSwing = attack && cfg.attack && profile.melee?.kind === 'sword'
+      && isSwordVariant(cfg.attack.variant)
+      ? swordCarryAt(cfg.attack.phase, cfg.attack.variant, CARRIES[carries.walk])
+      : null;
+    swordArmPins = swordSwing !== null;
     const previous = carryTargetPose ?? wanted;
     const amount = 1 - Math.exp(-9 * dt);
     const mix = (a: number, b: number) => a + (b - a) * amount;
-    carryTargetPose = {
+    carryTargetPose = swordSwing ?? {
       right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
@@ -1338,6 +1350,12 @@ export function stepMotion(
       // Hit reactions offset joints independently. Let Verlet absorb those
       // impulses rather than hard-pinning incompatible torso/leg targets.
       ...(footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null ? { posePins: (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const)
+        .map(name => idx[name]).filter(i => i !== undefined) } : {}),
+      // A SWORD SWING pins both arms to the track. The verlet's soft rest pull
+      // lags a 1 s swing by up to 20 cm, and the prop is seated on the
+      // TARGETS, so an unpinned fist visibly lets go of the grip mid-strike.
+      // A hit reaction releases the pins, as for the soldier's legs.
+      ...(swordArmPins && !stagger.staggered && recoil.joint === null ? { posePins: (['elbowR', 'handR', 'handTipR', 'elbowL', 'handL', 'handTipL'] as const)
         .map(name => idx[name]).filter(i => i !== undefined) } : {}),
       restPull: structural ? 1 : collapse.restPull,
       gravity: structural ? [0, -1.5, 0] : collapsed

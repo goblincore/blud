@@ -31,26 +31,38 @@ export function isSwordVariant(v: SwingVariant): v is SwordVariant {
 
 interface SwordKey { arm: CarryArm; gunPitch: number }
 
-/** STARTING angles. Task 9 re-solves them against the bride rig (the carry
- *  table's own lesson: angles are relative to the AUTHORED hang, never
- *  copied between bodies) — the tests pin the SHAPE (cleave strikes down,
- *  sweep crosses the body), not these numbers. */
+/** Solved against the bride rig (Task 9: a CPU grid + coordinate-descent
+ *  solve through makeActorMotion, the Task 8 carry method). Scored per key:
+ *  fist on the grip, left hand on Fore_Hand, both elbows outside the torso,
+ *  the blade clear of her head, torso and legs, and the strike tip at player
+ *  chest height ~1.5 m out; then the in-between phases were scored too.
+ *  Angles are relative to the AUTHORED hang (carry.ts's lesson), so they are
+ *  hers alone. The tests pin the SHAPE (cleave strikes down, the sweep's yaw
+ *  changes sign); bride-blob.test.ts pins the blade's travel. */
 export const SWORD_KEYS: Record<SwordVariant, { windup: SwordKey; strike: SwordKey }> = {
-  // Overhead, two-handed: blade raised behind the head, then driven down
-  // through the player to about hip height.
+  // Overhead, two-handed: hands over the crown, the blade laid back behind
+  // her head (tip ~2.9 m), then brought over the top and down until the
+  // point is at the player's chest 1.5 m out (tip drop ~1.5 m).
   cleave: {
-    windup: { arm: { pitch: 2.4, yaw: 0.35, fold: 1.2 }, gunPitch: 0.9 },
-    strike: { arm: { pitch: 0.55, yaw: 0.25, fold: 0.15 }, gunPitch: -0.55 },
+    windup: { arm: { pitch: 1.6, yaw: 1.15, fold: 1.2 }, gunPitch: 1.15 },
+    strike: { arm: { pitch: 0.25, yaw: 0.75, fold: 2.1 }, gunPitch: -1.15 },
   },
-  // Flat: cocked OUT to her right, swept ACROSS the body to her left.
+  // Raised to her front-right (hands at the right hip, blade up and out),
+  // then swept across flat at chest height to finish out on her left. The
+  // shape pin keeps the wind-up yaw negative; a two-handed grip cannot cock
+  // the blade flat out to her right with the arm yawed out (the left hand
+  // runs out of reach), so the wind-up stands the blade up instead.
   sweep: {
-    windup: { arm: { pitch: 1.1, yaw: -0.9, fold: 1.0 }, gunPitch: 0.1 },
-    strike: { arm: { pitch: 1.0, yaw: 1.1, fold: 0.4 }, gunPitch: -0.1 },
+    windup: { arm: { pitch: -0.75, yaw: -0.2, fold: 2.05 }, gunPitch: 0.95 },
+    strike: { arm: { pitch: 0.4, yaw: 1.4, fold: 1.1 }, gunPitch: -0.55 },
   },
-  // Drawn back at the hip, then the arm straightens into a thrust.
+  // Drawn back: hands at the right hip, the point low and forward; then the
+  // hands drive up to the chest and the point out level at chest height.
+  // Two hands cap the arm's reach — the root advance (lungeAdvance) is the
+  // distance, the arm is the aim.
   lunge: {
-    windup: { arm: { pitch: 0.6, yaw: 0.3, fold: 2.2 }, gunPitch: -0.2 },
-    strike: { arm: { pitch: 1.45, yaw: 0.2, fold: 0.05 }, gunPitch: -0.05 },
+    windup: { arm: { pitch: -1.2, yaw: 1.15, fold: 1.6 }, gunPitch: 1.25 },
+    strike: { arm: { pitch: 0.45, yaw: 0.75, fold: 2 }, gunPitch: -1.2 },
   },
 };
 
