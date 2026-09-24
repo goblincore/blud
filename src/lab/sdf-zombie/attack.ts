@@ -75,7 +75,7 @@ export const ATTACK_TUNING = {
   handDrop: 0.10,
 } as const;
 
-export type SwingVariant = 'hook' | 'overhead' | 'shove';
+export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 'lunge';
 
 /** Per-variant arm angles (rad). Pitch keeps the reach convention (positive =
  *  forward/raised); yaw is written for the RIGHT arm, where NEGATIVE is cocked
@@ -106,6 +106,11 @@ export const SWING_ARCS: Record<SwingVariant, {
   hook: { windupPitch: 0.35, strikePitch: 0.95, windupYaw: -0.85, strikeYaw: 0.90 },
   overhead: { windupPitch: 1.35, strikePitch: -0.75, windupYaw: -0.15, strikeYaw: 0.10 },
   shove: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
+  // The REACH-arm fallback only — a carry character's arms are driven by
+  // sword-swing.ts's tracks, not these.
+  cleave: { windupPitch: 1.35, strikePitch: -0.75, windupYaw: -0.15, strikeYaw: 0.10 },
+  sweep: { windupPitch: 0.35, strikePitch: 0.95, windupYaw: -0.85, strikeYaw: 0.90 },
+  lunge: { windupPitch: 0.4, strikePitch: 1.3, windupYaw: 0, strikeYaw: 0 },
 };
 
 export type AttackTuning = typeof ATTACK_TUNING;

@@ -124,7 +124,21 @@ export const BRAIN_TUNING = {
   blastHoldSec: 0.55,
 } as const;
 
-export type BrainTuning = typeof BRAIN_TUNING;
+/** Every numeric knob of BRAIN_TUNING, widened from its literal types, plus
+ *  the OPTIONAL sword extensions. Absent extensions = the zombie exactly
+ *  (brain.test.ts passes unchanged — that is the no-op evidence). */
+export type BrainTuning = { readonly [K in keyof typeof BRAIN_TUNING]: number } & {
+  /** Variant for a swing started inside meleeRadius. Absent = hook/overhead 50/50. */
+  readonly pickVariant?: (roll: number, dist: number) => SwingVariant;
+  /** A swing may also start at min <= dist <= max, as a 'lunge'. */
+  readonly lungeBand?: { readonly min: number; readonly max: number };
+  /** Per-variant swing duration (s). Absent entries use swingSec. */
+  readonly swingSecFor?: Partial<Record<SwingVariant, number>>;
+};
+
+function swingSecOf(tuning: BrainTuning, variant: SwingVariant): number {
+  return tuning.swingSecFor?.[variant] ?? tuning.swingSec;
+}
 
 export function makeBrain(): Brain {
   return {
@@ -213,7 +227,8 @@ export function stepBrain(
 
   // --- a committed swing runs to the end ----------------------------------
   if (state === 'attack') {
-    swingT = tuning.swingSec > 0 ? Math.min(1, swingT + dt / tuning.swingSec) : 1;
+    const swingSec = swingSecOf(tuning, swing.variant);
+    swingT = swingSec > 0 ? Math.min(1, swingT + dt / swingSec) : 1;
     if (swingT < 1) {
       return {
         brain: { state, alert, lostFor, swingT, cooldown, holdSecs, swing },
@@ -271,14 +286,19 @@ export function stepBrain(
     };
   }
 
-  if (dist <= tuning.meleeRadius && cooldown <= 0) {
+  const inReach = dist <= tuning.meleeRadius;
+  const band = tuning.lungeBand;
+  const inLunge = band !== undefined && dist >= band.min && dist <= band.max;
+  if ((inReach || inLunge) && cooldown <= 0) {
     // Roll the variant HERE, at the one frame the swing begins, and store it
     // so the rest of the swing reads a fixed value — the caller's roll keeps
     // changing every frame and must not re-decide mid-swing.
-    const started = {
-      side: swing.side,
-      variant: (input.roll < 0.5 ? 'hook' : 'overhead') as SwingVariant,
-    };
+    const variant: SwingVariant = !inReach
+      ? 'lunge'
+      : tuning.pickVariant
+        ? tuning.pickVariant(input.roll, dist)
+        : (input.roll < 0.5 ? 'hook' : 'overhead');
+    const started = { side: swing.side, variant };
     return {
       brain: { state: 'attack', alert, lostFor, swingT: 0, cooldown, holdSecs, swing: started },
       target: playerPoint, halt: true,
