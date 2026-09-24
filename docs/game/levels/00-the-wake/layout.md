@@ -1,13 +1,13 @@
-# The Wake: layout (draft 1)
+# The Wake: layout
 
-**Date:** 2026-09-23 · **Status:** draft 1, **awaiting owner approval** (not built; draft 0 is what plays today)
+**Date:** 2026-09-23 · **Status:** draft 1 **approved by the owner 2026-09-23** (no soldier); built by `scripts/levels/build_the_wake_blockout.py`
 · **Design:** [design.md](design.md) · **Study:** [reference-study.md](reference-study.md)
 · **Guide:** [level design guide](../level-design-guide.md) §5 · **Format:** Level Format v1
 
 Game space: metres, x right, **−z north** (the player heads north), y up. Every
 floor is at y = 0 (v1). Rooms joined back to back use 0.6 m "door" tunnels (the
 two 0.3 m walls). The tables are exactly what
-`scripts/levels/build_the_wake_blockout.py` will build once this is approved.
+`scripts/levels/build_the_wake_blockout.py` builds. After the live Blender review the `.blend` is the source of truth; update these tables to match it.
 
 ## 1. Rooms
 
@@ -109,8 +109,7 @@ does the job), and lesson 6 (a soldier on a key: the Wake has no keys).
 
 ## 9. Enemy swaps
 
-None. The Wake is all zombies. Open question for the owner: one `soldier` by
-the crypt slab, visible from the lych gate (study lesson 6, design open question 5)?
+None. The Wake is all zombies; the owner decided against a soldier by the crypt slab (2026-09-23).
 
 ## 10. Plan drawing
 
@@ -120,7 +119,8 @@ drawn side by side at the same scale: `.lab-tmp/level-plans/the-wake-draft0-vs-l
 
 ## 11. Risks to check when building
 
-- Open-sky rooms haven't been played yet: check the fog and lighting read at night
-  with no ceiling.
-- The graveyard (32 × 31 × 8.5 m) and parlour (20 × 23 × 6 m) are the biggest probe
-  grids so far; Task 6 measured draft 0 (28 × 28 × 8 m) at a normal boot.
+- Open-sky rooms render (dark sky, fog, no ceiling), checked in headless captures.
+- **The tower sightline doesn't work yet:** from the lych gate the bell tower and its
+  fire are lost in the fog. Fix in the live review (a brighter tower light, a
+  closer tower, or the graveyard fog).
+- Boot on this layout: warm-up about 1.3 s (drawOnce 826 / 867 ms), no slower than draft 0.

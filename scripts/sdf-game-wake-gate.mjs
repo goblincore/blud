@@ -2,7 +2,7 @@
 // No-deps CDP, same plumbing as scripts/sdf-game-shorty-gate.mjs.
 //
 //   1. BOOT: webgpu, warm gate ready, no console errors, level 'the-wake'.
-//   2. LAYOUT: five rooms, start in 'gates', the parlour window exists.
+//   2. LAYOUT: eight rooms, start in 'gates', the parlour window exists.
 //   3. GATE: the crypt slab blocks the player until opened, then lets them through.
 //   4. CAPABILITY: the two-floors fixture is refused with a clear message.
 //
@@ -72,27 +72,30 @@ if (level.id !== 'the-wake') fail(`level ${level.id}, expected the-wake`);
 pass('boot: webgpu, warm gate ready, no errors, the-wake active');
 
 // 2. LAYOUT
-if (JSON.stringify(level.rooms) !== JSON.stringify(['gates', 'graveyard', 'crypt', 'parlour', 'secret'])) {
+if (JSON.stringify(level.rooms) !== JSON.stringify(['gates', 'lane', 'graveyard', 'crypt', 'ossuary', 'vestibule', 'parlour', 'secret'])) {
   fail(`rooms ${JSON.stringify(level.rooms)}`);
 }
 if ((await evaluate('__sdfGame.room()')) !== 'gates') fail('start room is not gates');
 if (!level.windows.includes('parlour-window')) fail('parlour window missing');
-pass('layout: five rooms, start in gates, parlour window present');
+pass('layout: eight rooms, start in gates, parlour window present');
 
 // 3. GATE — stand south of the slab, walk north, check z did not cross it.
+// The crypt slab (layout.md §2): gate z -59…-58.6 inside the crypt stairs
+// (z -62…-58). Walk from the graveyard's north lane toward the crypt.
+const SLAB_SOUTH = -58.6, SLAB_NORTH = -59, WALK_TO_Z = -61.5;
 async function walkNorthFrom(x, z, ms) {
   await evaluate(`__sdfGame.setPose(${x}, ${z}, 0, 0)`);
-  await evaluate(`__sdfGame.walkTo(${x}, -47)`);
+  await evaluate(`__sdfGame.walkTo(${x}, ${WALK_TO_Z})`);
   await sleep(ms);
   await evaluate('__sdfGame.walkCancel()');
   return evaluate('__sdfGame.pose().pos[2]');
 }
 await evaluate('__sdfGame.freeze(true)');
-const blockedZ = await walkNorthFrom(0, -42.5, 2500);
-if (blockedZ < -44.4) fail(`walked through the closed crypt slab (z ${blockedZ})`);
+const blockedZ = await walkNorthFrom(0.6, -55, 2500);
+if (blockedZ < SLAB_SOUTH) fail(`walked through the closed crypt slab (z ${blockedZ})`);
 if (!(await evaluate('__sdfGame.openGate("crypt-slab")'))) fail('openGate returned false');
-const openZ = await walkNorthFrom(0, -42.5, 3500);
-if (openZ > -45.5) fail(`gate open but the player stopped at z ${openZ}`);
+const openZ = await walkNorthFrom(0.6, -55, 3500);
+if (openZ > SLAB_NORTH - 0.5) fail(`gate open but the player stopped at z ${openZ}`);
 pass(`gate: blocked at z ${blockedZ.toFixed(2)}, through to z ${openZ.toFixed(2)} once open`);
 
 // 4. CAPABILITY — a level needing multi-floor is refused by name.

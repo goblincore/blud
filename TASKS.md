@@ -11,11 +11,11 @@ Branch `claude/wake-level-pipeline-1afb01`. [Plan 1](docs/superpowers/plans/2026
 - [x] T2 `level-json.ts` + shared fixtures (`two-rooms` = spec §4.2 verbatim, `two-floors`), 30 tests with T1.
 - [x] T3 `active-level.ts`: `ringLevel()` (byte-for-byte the testbed) and `authoredLevel(def)`; 64 tests with T1–T2 + game-level.
 - [x] T4 Blender exporter + conventions. Fixed in session: stale `matrix_world` (markers exported at origin), yaw rounding.
-- [x] T5c **draft 0** blockout (layout not yet approved): `.blend`, `the-wake.level.json`, 6 level tests.
 - [x] T6 `ctx.world.level` wired; `?level=the-wake` plays; ring shorty gate passes; boot within noise of base.
 - [x] T7 `scripts/sdf-game-wake-gate.sh` passes (boot, layout, crypt slab, multi-floor refusal).
 - [x] T5a [reference study](docs/game/levels/00-the-wake/reference-study.md): 256 BU/m (doorways), 10 lessons.
-- [!] T5b [layout draft 1](docs/game/levels/00-the-wake/layout.md) **waits for owner approval**; then rebuild 5c from it, then 5d dressing.
+- [x] T5b [layout](docs/game/levels/00-the-wake/layout.md) approved (no soldier); T5c rebuilt from it: 8 rooms, level test 7/7, gate passes.
+- [ ] Next: live Blender review with the owner (tower sightline lost in fog), then 5d dressing. Dispatch skill default is now `zai/glm-5.3-flash`.
 
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 

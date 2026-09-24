@@ -44,7 +44,7 @@ The level can't be tested without these. Build them small.
 
 - [x] **W-D0 Reference study.** Done 2026-09-23: [reference-study.md](reference-study.md). Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
   process in the [level design guide](../level-design-guide.md).
-- [~] **W-D1 Paper map.** [layout.md](layout.md) draft 1 written 2026-09-23; awaiting owner approval. Final flow and dimensions at goblin scale.
+- [x] **W-D1 Paper map.** [layout.md](layout.md) draft 1 approved 2026-09-23 (no soldier). Final flow and dimensions at goblin scale.
   *Deps:* W-D0, F-D5 (goblin scale). *Done when:* `layout.md` approved (Plan 1 Task 5b).
 - [ ] **W-D2 Encounter script.** Zombie counts, spawn points, triggers per beat.
   *Deps:* W-D1. Part of `layout.md` (Plan 1 Task 5b). Zombies and soldiers only.
@@ -55,8 +55,8 @@ The level can't be tested without these. Build them small.
 
 ## Build
 
-- [~] **W-B1 Blockout in Blender.** Draft 0 built 2026-09-23 (plays at `?level=the-wake`, gate passes);
-  rebuild from `layout.md` once approved. Untextured, playable: gates → grave →
+- [~] **W-B1 Blockout in Blender.** Built from the approved layout 2026-09-23: plays at `?level=the-wake`,
+  level test and gate pass. Remaining: live Blender review with the owner (tower sightline), then dressing (5d). Untextured, playable: gates → grave →
   graveyard → crypt → funeral home → coffin. *Deps:* P-2, W-D1.
   *Done when:* walk start to CD pickup in the game.
 - [ ] **W-B2 Encounters in.** Spawns and triggers from W-D2. *Deps:* W-B1, L-4.
