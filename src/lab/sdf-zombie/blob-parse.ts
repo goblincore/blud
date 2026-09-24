@@ -339,10 +339,15 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
     if (parent === null) throw new BlobError('bone needs "parent="', l.line, l.indent + 1);
     if (!s.known.has(parent))
       throw new BlobError(`unknown parent "${parent}"`, l.line, l.indent + 1);
+    // `lenR=` lengthens (or shortens) only the `.r` copy of a MIRRORED bone.
+    // Outside a mirror block there is no right copy, so it is a mistake.
+    const lenR = strArg(l, 'lenR') === null ? undefined : numArg(l, 'lenR');
+    if (lenR !== undefined && !s.inMirror)
+      throw new BlobError('lenR= only applies to a bone inside a mirror block', l.line, l.indent + 1);
     s.doc.bones.push({
       name, parent, dir: dirArg(l),
       pitchDeg: numArg(l, 'pitch', 0), tiltDeg: numArg(l, 'tilt', 0),
-      len: numArg(l, 'len'), side: numArg(l, 'side', 0),
+      len: numArg(l, 'len'), ...(lenR === undefined ? {} : { lenR }), side: numArg(l, 'side', 0),
       at: strArg(l, 'at') === null ? null : numArg(l, 'at'),
       mirror: s.inMirror, src: l,
     } satisfies BlobBone);

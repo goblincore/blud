@@ -474,6 +474,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       parent: b.parent,
       dir: dirVector(b.dir, b.pitchDeg, b.tiltDeg),
       length: b.len,
+      ...(b.lenR === undefined ? {} : { lengthR: b.lenR }),
       side: b.side,
       mirror: b.mirror,
     } satisfies BoneDef)),

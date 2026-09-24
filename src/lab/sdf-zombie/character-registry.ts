@@ -41,6 +41,7 @@ import ogreBlobSrc from './characters/ogre.blob?raw';
 import broodmotherBlobSrc from './characters/broodmother.blob?raw';
 import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
+import brideBlobSrc from './characters/bride.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -311,6 +312,15 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     name: 'cultist-cowled', src: cultistCowledBlobSrc,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('cultist'),
+  },
+  // The bride — Blud's death knight: a pale, lace-dressed swordswoman.
+  // docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md. Flesh
+  // only so far (Task 1): no shells, kit, sword or face sheet yet; the
+  // profile falls back to the zombie's until BRIDE_PROFILE lands.
+  bride: {
+    name: 'bride', src: brideBlobSrc,
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('bride'),
   },
 
 };
