@@ -1,7 +1,7 @@
 # Hand-off: the Wake level pipeline + Outdoor v1 (2026-09-24)
 
 **Branch:** `claude/wake-level-pipeline-1afb01` (worktree `.claude/worktrees/wake-level-pipeline-1afb01`),
-about 50 commits on top of `main` 8abbfb4b. **Nothing is merged to `main` yet.**
+about 50 commits on top of `main` 8abbfb4b. **Merged to `main` 2026-09-24 (99669277).**
 Status board: [TASKS.md](../../TASKS.md) (top section) · Wake tasks: [00-the-wake/tasks.md](../game/levels/00-the-wake/tasks.md).
 
 ## Where things stand
