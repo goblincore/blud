@@ -56,7 +56,7 @@ The level can't be tested without these. Build them small.
 ## Build
 
 - [~] **W-B1 Blockout in Blender.** Built from the approved layout 2026-09-23: plays at `?level=the-wake`,
-  level test and gate pass. Remaining: live Blender review with the owner (tower sightline), then dressing (5d). Untextured, playable: gates → grave →
+  level test and gate pass. Placeholder dressing in the `.blend` (Plan 1 5d). Remaining: live Blender review with the owner. Untextured, playable: gates → grave →
   graveyard → crypt → funeral home → coffin. *Deps:* P-2, W-D1.
   *Done when:* walk start to CD pickup in the game.
 - [ ] **W-B2 Encounters in.** Spawns and triggers from W-D2. *Deps:* W-B1, L-4.
@@ -72,6 +72,11 @@ The level can't be tested without these. Build them small.
   *Done when:* three tolls, three waves, crypt opens, playtested.
 - [ ] **W-D7 Bell waves.** Wave sizes, grave positions, rewards per toll.
   *Deps:* W-D2.
+
+- [ ] **W-B7 Outdoor look (engine).** The gates, lane and graveyard are the game's first outdoor spaces;
+  the renderer only knows dungeon rooms (probe boxes, stone floors, fog as the sky). Needs a spec:
+  moonlight and sky ambient, ground/terrain materials, open-sky edges (fence, hedge, treeline, horizon),
+  per-room materials. Raised by the owner 2026-09-23. *Deps:* none; blocks the art pass (W-A3).
 
 ## Art (Blender)
 
