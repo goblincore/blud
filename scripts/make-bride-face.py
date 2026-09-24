@@ -17,7 +17,7 @@ WHAT IT DRAWS (in this order, one function each)
  1. sockets()  soft near-black smoke round each eye, spaced on the eye prims
  2. lids()     thin bruised-red crescents on the upper and lower socket rims
  3. hollows()  SUNKEN CHEEKS (owner, 2026-09-24: texture, not geometry) — a
-               blurred grey-violet hollow under each cheekbone, with a faint
+               blurred, deep grey-violet hollow under each cheekbone, with a faint
                light band along its top edge as the cheekbone highlight
  4. lips()     a grey-lilac lip shape over the lip prims
  5. sutures()  a fine dark line from each mouth corner arcing back toward the
@@ -62,8 +62,8 @@ point in the head frame normalised by the FATTEST head prim's semi-axes
   upper lid (lash line)   lid prim lower edge     hs y ~ -0.215
   lower lid               eye bottom 1.6923       hs y ~ -0.330
   socket oval             semi 0.0257 x 0.0162    hs 0.361 x 0.177
-  cheekbone               x 0.053 y 1.678         hs (0.747, -0.483)
-  soft cheek              x 0.040 y 1.660         hs (0.564, -0.680)
+  cheekbone               x 0.046 y 1.678         hs (0.648, -0.483)
+  soft cheek              x 0.032 y 1.660         hs (0.451, -0.680)
   mouth (between lips)    y 1.635, corners x 0.0195  hs y -0.955, corners x 0.275
   jaw corner              x ~0.056 y 1.625        hs (0.79, -1.07)
 
@@ -111,7 +111,7 @@ MOUTH_HALF_W = 0.275
 
 INK = (10, 8, 8)             # 0a0808 — liner, lashes, mascara
 BRUISE = (122, 30, 34)       # 7a1e22 — lid crescents
-HOLLOW = (74, 60, 85)        # 4a3c55 — sunken cheeks
+HOLLOW = (58, 44, 70)        # 3a2c46 — sunken cheeks (was 4a3c55; owner: deeper)
 HIGHLIGHT = (232, 228, 238)  # e8e4ee — cheekbone highlight
 LIP = (138, 122, 142)        # 8a7a8e — dead lips
 STITCH = (42, 18, 22)        # 2a1216 — sutures
@@ -229,10 +229,11 @@ def lids() -> Image.Image:
 
 
 def hollows() -> Image.Image:
-    """SUNKEN CHEEKS as texture. A diagonal hollow from below the outer eye
-    corner (hs 0.74, -0.58) toward the jaw corner (0.70, -1.00), between the
-    cheekbone (0.747, -0.483) and the soft cheek (0.564, -0.680) — the valley
-    the .blob deliberately left shallow — heavily blurred, core alpha ~0.55.
+    """SUNKEN CHEEKS as texture. A diagonal hollow from under the cheekbone
+    (hs 0.67, -0.58) sloping in toward the mouth corner (0.49, -0.92), between
+    the cheekbone (0.648, -0.483) and the soft cheek (0.451, -0.680) — the
+    valley the .blob deliberately left shallow — heavily blurred, core alpha
+    0.85.
     Returns (hollow, highlight) composited in that order."""
     m = Image.new("L", (W, W), 0)
     h = Image.new("L", (W, W), 0)
@@ -242,11 +243,12 @@ def hollows() -> Image.Image:
         # sloping in toward the mouth corner (the buccal hollow). The first
         # placement ran down the OUTER cheek (x 0.78 -> 0.68) where the
         # surface turns away and the facing fade ate it: invisible in the 3/4.
-        pts = [px(s * (0.70 - 0.18 * t), -0.58 - 0.34 * t) for t in [i / 12 for i in range(13)]]
+        # Shifted 0.03 in when the cheekbones were narrowed (Task 2 review).
+        pts = [px(s * (0.67 - 0.18 * t), -0.58 - 0.34 * t) for t in [i / 12 for i in range(13)]]
         stroke(dm, pts, hs_len(0.13), hs_len(0.08))
         # Cheekbone highlight: a thin arc hugging the hollow's TOP edge, from
         # under the outer eye corner out along the cheekbone.
-        hl = [px(s * (0.40 + 0.40 * t), -0.50 + 0.04 * t - 0.05 * math.sin(math.pi * t))
+        hl = [px(s * (0.38 + 0.36 * t), -0.50 + 0.04 * t - 0.05 * math.sin(math.pi * t))
               for t in [i / 12 for i in range(13)]]
         stroke(dh, hl, hs_len(0.030), hs_len(0.020))
     m = m.filter(ImageFilter.GaussianBlur(hs_len(0.07)))
@@ -255,7 +257,11 @@ def hollows() -> Image.Image:
     # at alpha 0.55 (and the highlight's at 0.20) whatever the blur radius.
     m = m.point(lambda v, k=255.0 / max(1, m.getextrema()[1]): min(255, int(v * k)))
     h = h.point(lambda v, k=255.0 / max(1, h.getextrema()[1]): min(255, int(v * k)))
-    return recolour(m, HOLLOW, 0.55), recolour(h, HIGHLIGHT, 0.20)
+    # Core alpha 0.85 (was 0.55): the owner's review asked for deeper
+    # hollows, roughly double the darkness. The highlight rides a touch
+    # higher (0.25) so the pair still reads as a concave shadow under a
+    # lit cheekbone rather than a bruise.
+    return recolour(m, HOLLOW, 0.85), recolour(h, HIGHLIGHT, 0.25)
 
 
 def lips() -> Image.Image:

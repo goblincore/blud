@@ -247,3 +247,37 @@ Close-ups: `BLOB_TARGET_Y=1.675 BLOB_DIST=0.26 BLOB_PITCH=0`.
   (dark red `6a2632`), which dominate the outer corners as red wedges and ignore the sheet.
   If the smoky eye should be blacker, the lever is that prim's colour (Task 1 found `4a1a26`
   merged the eye into a goggle), or unpainting it and letting the sheet own the socket.
+
+### Review pass: deeper cheek hollows (owner: "wow big difference, looking good" + one ask)
+
+The owner asked for deeper hollows and nothing else. The red socket ovals and the
+slit-looking eyes stay exactly as they were.
+
+- **Geometry (`bride.blob`).** The face widened sharply at the cheekbones, and that flare
+  fought the painted hollow. The cheekbone's outer reach went 0.077 → 0.0636 (x 0.053 →
+  0.046, wide 1.50 → 1.10, −17%), with height and depth unchanged so the cheekbones stay
+  high. The soft cheek went 0.064 → 0.054 (x 0.040 → 0.032, r 0.024 → 0.022, −16%). The
+  cranium is still the fattest head prim, so the head frame, and with it the projection, is
+  unchanged. The painter/blob parity pin passes.
+- **Paint (`make-bride-face.py`).**
+  - The hollow core alpha went 0.55 → 0.85, and the colour 4a3c55 → 3a2c46.
+  - The band moved 0.03 in to follow the narrower cheekbone.
+  - The cheekbone highlight went 0.20 → 0.25 and still rides the hollow's top edge.
+  - The sheet mean is now 0.7125, and the registry declares it.
+- **Numbers** (close-up, same framing and boxes: `face-sheet-hollow-boxes-before.png` /
+  `-after.png`):
+
+| crop (mean sRGB luma) | before | after |
+| --- | --- | --- |
+| hollow, viewer-left / right | 0.371 / 0.552 | 0.201 / 0.389 |
+| upper cheek, viewer-left / right | 0.541 / 0.696 | 0.458 / 0.725 |
+| **hollow − upper** | **−0.170 / −0.144** | **−0.257 / −0.336** |
+
+  The hollow-to-upper-cheek contrast is 1.5× (left) and 2.3× (right) what it was.
+- **Read.**
+  - Front: the face no longer winged at the cheekbones, and a clear violet shadow runs
+    under each cheekbone toward the sutures, under a lit cheekbone band.
+  - 3/4: it reads as a violet shadow band under the cheekbone. The silhouette itself is not
+    hollow; that is paint, as the owner asked.
+  - 3 m: the hollows now show as two darker violet patches under the eyes, which help the
+    gaunt read. At that size they could also pass for bruising.

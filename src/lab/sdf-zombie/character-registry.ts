@@ -323,7 +323,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   // and bakedFace's fallback of 1 would darken her whole face ~28% there.
   bride: {
     name: 'bride', src: brideBlobSrc,
-    face: { ...bakedFace('bride-face.png'), mean: 0.721241 },
+    face: { ...bakedFace('bride-face.png'), mean: 0.712472 },
     profile: motionProfileFor('bride'),
   },
 

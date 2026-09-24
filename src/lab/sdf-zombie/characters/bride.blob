@@ -235,11 +235,19 @@ body
   # toward the temple at (0.053, 1.678) — OUTSIDE and below the eye's outer
   # corner, not under it: the under-eye stays a flat canvas for the sheet's
   # running mascara (owner ask for Task 2)...
-  blob head on skull at=0.50 offset=(0.053,-0.0097,0.0550) r=0.016 wide=1.50 tall=0.60 deep=0.85 blend=0.010 both
+  # NARROWED for the hollows (owner, Task 2 review: "deeper cheek hollows"):
+  # the face widened sharply at the cheekbones and the flare fought the
+  # painted hollow under it. Outer reach 0.053 + 0.016*1.50 = 0.077 ->
+  # 0.046 + 0.016*1.10 = 0.0636 (-17%); height and depth unchanged, so the
+  # cheekbones stay HIGH, just less winged.
+  blob head on skull at=0.50 offset=(0.046,-0.0097,0.0550) r=0.016 wide=1.10 tall=0.60 deep=0.85 blend=0.010 both
   # ...and SOFT CHEEKS under them: fullness at (0.040, 1.660), r 0.024. At
   # r 0.020 the 3/4 view showed a gaunt valley from eye to jaw — the alien
   # read. The hollow the sheet paints later goes between the two.
-  blob head on skull at=0.42 offset=(0.040,-0.0085,0.0520) r=0.024 blend=0.014 both
+  # Pulled in with the cheekbones for the hollows (owner, Task 2 review):
+  # outer reach 0.040 + 0.024 = 0.064 -> 0.032 + 0.022 = 0.054 (-16%). Still
+  # above r 0.020, the gaunt-valley radius.
+  blob head on skull at=0.42 offset=(0.032,-0.0085,0.0520) r=0.022 blend=0.014 both
   # SOCKETS = where the heavy makeup goes: flat bruised ovals (deep 0.60)
   # sat ~0.5 mm off the face round each eye, 3.4 cm wide — a smoky
   # surround, NOT a pit (pits read as bug eyes) and not a bump (at 2.7 mm
