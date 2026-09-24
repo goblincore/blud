@@ -215,6 +215,9 @@ The header must say why a generator (no reference mesh, so `blob:face-bake` cann
 4. `lips()`: a grey-lilac (`#8a7a8e`) lip shape, alpha ~0.7.
 5. `sutures()`: from each mouth corner, a fine dark line (2 px at 512) arcing back and up toward the ear (~110 px long), with ~9 short cross-stitches perpendicular to it. Colour `#2a1216`.
 6. `veins()`: 2–3 faint blue (`#3d4f73`) branching polylines at each temple, alpha ~0.25.
+7. `liner()` (owner ask, 2026-09-24: "eyelashes … or some kind of mascara look"): a thick black (`#0a0808`) line along each upper lid edge, thickening toward the outer corner and ending in a short upswept wing. Alpha ~0.9.
+8. `lashes()`: about 14 fine tapered strokes (2 px at the root to 0 at the tip) fanning up and out from each upper lid edge, longest and most curled at the outer corner, plus about 6 short ones on each lower lid. Colour `#0a0808`. They are painted, not geometry: prim lashes would be subpixel at game distance.
+9. `runs()`: running mascara. One or two thin (2–3 px) dark streaks per eye, from the lower lid down the cheek, wavering and fading out over about 60–90 px, with slightly uneven lengths left to right. This ties the mascara to the corpse makeup.
 
 Seed with `random.Random(24)`, so it is deterministic.
 
@@ -229,7 +232,7 @@ In `bride.blob`, replace `sheet / enabled 0` with an `image bride-face.png` shee
 
 - [ ] **Step 4: Verify on frames**
 
-Shoot a face close-up and a 3 m 3/4 view. Measure: the mean luma of an eye-socket crop must be at least 0.15 darker than a cheek crop. Look at both images. The sutures must be visible in the close-up, and the makeup must still read at 3 m.
+Shoot a face close-up and a 3 m 3/4 view. Measure: the mean luma of an eye-socket crop must be at least 0.15 darker than a cheek crop. Look at both images. The sutures and the lashes/liner must be visible in the close-up, and the makeup (dark eyes, mascara runs) must still read at 3 m.
 
 - [ ] **Step 5: Test, commit**
 
