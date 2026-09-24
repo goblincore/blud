@@ -12,6 +12,16 @@
   `cultist-cowled` kept (lower face hidden). Owner: good enough to merge (2026-09-23).
 - [x] **Tommy gun**: cultist-smg.glb (Blender script), GLIDE_CARRY + low/aim carries, `profile.gunner` -> soldier
   brain on SMG_TUNING (bursts), rounds aimed at chest height. Game: `?spawn=cultist`. Palette/sheet now per-character.
+- [x] **Playtest 2026-09-24 fixes**: cultists are SOFT targets (`MotionProfile.soft`: first bullet/blast kills); robe hits
+  are painted decals (blood soak / scorched hole), never carved and never severing; the hem kick that spun the robe
+  is gone; a kill throws the body along the shot (`soft-death.ts`); the hood drops on death (`.blob` `when=alive|dead`,
+  `death-state.ts`). Soldier unchanged (still carved).
+- [ ] **Cultist perf pass** (owner: "really bad" in groups; ~3x a zombie close up): measure first (step heatmap), then
+  cut hidden flesh under the robe, merge robe shells, consider baking the hands (owner: no digit-level damage needed).
+  Owner open to a mesh/baked robe if SDF can't get near ~1.5x a zombie.
+- [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),
+  travelling warp waves driven by velocity, or a prebaked cloth sim. Robe distortion on the death throw.
+- [ ] **Hip fire**: the cultist fires from the shoulder; owner wants a random mix of hip and shoulder bursts.
 - [ ] Cultist polish: own `aim` carry (left hand on the foregrip), player damage (no player health yet), SMG audio.
 - [x] **Cloth hit reactions** — paint yields inside wounds (scorched fray); heavy rounds tear + reveal, small
   calibre = dark bullet hole (flags bit 1), size-scaled fillet, hem kick. Lab: Ctrl-click = SMG hole. Fibre puff w/ SMG.
