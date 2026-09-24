@@ -28,6 +28,27 @@ ellipsoid's surface:
 ![face v2](face-v2.png)
 ![face v2, body distance](face-v2-body.png)
 
+## Face pass 3: jaw, teeth, hood and cowl opening (same day)
+
+Owner: *"add some teeth and a heavier jaw ... most of his lower face is hidden by the bottom of the
+hood or cloak."*
+
+- **Jaw:** the face-block jaw is wider, taller, lower and further forward (jawWidth 0.86, jawHeight 0.92,
+  jawDrop 0.082, jawJut 0.050), with a flattened chin shelf.
+- **Mouth:** a dark gap bowed with the jaw.
+- **Teeth:** four snaggled pairs, two hanging down and two jutting up from the underbite, in dirty
+  ivory. Eight thin clean-ivory teeth read as one yellow clump.
+- **What was hiding the lower face:**
+  - Mostly the **cowl**. Its neck opening rose to y 1.57, and the head bows (chin posed at y ~1.49),
+    so the chin sank into it. The cowl now starts 5.5 cm lower and 2.5 cm further back, and still
+    covers the shoulders.
+  - Partly the **hood**. Its opening plane was tipped back, which kept the hood's under-chin bowl in
+    front of the jaw. It now leans forward 20° at the top: the brim still overhangs the brow, and the
+    bottom is cut back behind the jaw.
+
+![jaw and teeth](face-v3-jaw-teeth.png)
+![body distance](face-v3-body.png)
+
 ## What exists
 
 | Piece | Where |
@@ -118,8 +139,7 @@ Look at it: `npm run dev`, then `/sdf-lab-webgpu.html?character=cultist`. In the
 - One pendulum = one rigid cone tilting. A second pendulum (front/back panels), or bending the skirt
   axis (`bend=` driven by the lag), would give real hem flare rather than tilt.
 - The game page has no wind (only the lab's `setWind`). `clothForce` is ready for a level-driven wind.
-- Face: still pale under a close key light, because there is no shadow ray. The mouth barely
-  reads; teeth or a jaw would help.
+- Face: still pale under a close key light, because there is no shadow ray.
 - Not done: attacks (Blood cultists shoot: tommy gun / shotgun on the soldier's carry machinery),
   brain, sounds, gib tuning, spawn in `sdf-game.html`.
 - The shell cuffs use `rigid` on the forearm; hands come out of them cleanly in all frames seen.

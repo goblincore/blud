@@ -115,18 +115,23 @@ body
   # the plane cut nothing and it read as a closed saucer round the neck.
   # Round cone: r 0.08 at the neck, r2 0.29 at the chest; the shoulder balls
   # (x reach 0.244 at y 1.53) sit inside the flare.
-  shell torso on spine at=1.00 offset=(0,0.10,0.0) tip=(0,-0.28,0) r=0.080 r2=0.290 wide=1.00 deep=0.80 thick=0.008 clip=(0,-1,0) clipd=-1.23 rim=0.008 blend=0.010 color=4a3424 warp=0.006 warpFreq=(30,6,30) rigid
+  shell torso on spine at=1.00 offset=(0,0.045,-0.025) tip=(0,-0.25,0.02) r=0.080 r2=0.285 wide=1.00 deep=0.80 thick=0.008 clip=(0,-1,0) clipd=-1.23 rim=0.008 blend=0.010 color=4a3424 warp=0.006 warpFreq=(30,6,30) rigid
 
   # BELL CUFFS: the sleeve flares open past the wrist, dark inside, the bony
   # hand coming out of the black.
   shell arm on foreArm at=0.62 r=0.056 r2=0.085 tip=(0.008,-0.130,0.026) thick=0.006 clip=(0.03,-0.97,0.22) clipd=-0.87 rim=0.006 blend=0.008 mirror color=4a3424 rigid
 
   # HOOD: a tall ellipsoid sheet round the head, opened at the front by a
-  # plane tipped back 18 degrees (the brim overhangs the brow, so the face
-  # sits in shadow). Rides the skull rigidly (a head sphere always does).
+  # plane leaning FORWARD at the top by 20.5 degrees: the brim overhangs the
+  # brow (cut at z 0.172 at brow height, 0.202 at the crown) while the
+  # bottom is cut back to z 0.116 at y 1.55 and 0.097 at 1.50, behind the
+  # jaw. (8.6 degrees still left the hood's under-chin bowl standing in
+  # front of the jaw from the side.) Pass 1 tipped
+  # it the other way (normal (0,0.31,0.95)), which kept the hood's lower
+  # front in FRONT of the chin — most of the lower face was hidden (owner). Rides the skull rigidly (a head sphere always does).
   # tall 1.30: at 1.18 it read from behind as a round ball — a hood is
   # taller than the head it holds, and the extra height is the peak.
-  shell head on skull at=0.45 offset=(0,0.035,-0.030) r=0.150 wide=0.95 tall=1.30 deep=1.18 thick=0.008 clip=(0,0.31,0.95) clipd=0.67 rim=0.010 blend=0.006 color=4a3424 warp=0.004 warpFreq=(40,10,40)
+  shell head on skull at=0.45 offset=(0,0.035,-0.030) r=0.150 wide=0.95 tall=1.30 deep=1.18 thick=0.008 clip=(0,-0.35,0.9368) clipd=-0.4339 rim=0.010 blend=0.006 color=4a3424 warp=0.004 warpFreq=(40,10,40)
   # The hood's peak — a cone off the crown, up and back, so the hood reads
   # as a POINTED cowl (the Blood cultist silhouette), not a balaclava.
   blob head on skull at=0.90 offset=(0,0.040,-0.050) tip=(0,0.070,-0.110) r=0.075 r2=0.010 blend=0.030 color=4a3424
@@ -165,9 +170,26 @@ body
   # CHEEKBONES — gaunt: two narrow bars of bone under the sockets, ~2 cm
   # proud, so the hollow under each reads by its shadow.
   blob head on skull at=0.50 r=0.020 wide=1.50 tall=0.70 deep=0.80 blend=0.008 offset=(0.050,-0.035,0.080) both
-  # MOUTH — a thin dark grim slit across the jaw's front (jaw surface
-  # z ~0.177 at x 0), bowed forward with the jaw's curve.
-  bar  head on skull from=0.50 to=0.50 r=0.005 blend=0.003 offset=(-0.025,-0.085,0.100) tip=(0.050,0,0) bend=(0,-0.004,0.010) color=2a0a08
+  # JAW (pass 3, owner: "add some teeth and a heavier jaw"). The face
+  # block's jaw is now wider, taller, lower and further out (jawWidth 0.86,
+  # jawHeight 0.92, jawDrop 0.082, jawJut 0.050 -> centre y 1.59 z 0.12,
+  # semi 0.075 x 0.080 x 0.073, front z ~0.193). The chin squares it off:
+  # a flattened shelf at the jaw's front-bottom, the ogre's chin idiom.
+  blob head on skull at=0.50 r=0.032 wide=1.50 tall=0.75 deep=0.90 blend=0.010 offset=(0,-0.145,0.085)
+  # MOUTH — a dark gap, not a line: a tall bar across the jaw front at
+  # y 1.585, bowed forward with the jaw's curve (chord z 0.179, mid 0.192
+  # against a surface of 0.193), so it reads as the cavity the teeth sit in.
+  bar  head on skull from=0.50 to=0.50 r=0.010 tall=1.25 blend=0.003 offset=(-0.040,-0.098,0.104) tip=(0.080,0,0) bend=(0,0,0.026) color=1a0605
+  # TEETH — a snaggled row, SPACED so each reads as a tooth against the
+  # dark of the mouth (an 8-tooth first try packed into a yellow clump):
+  # two pairs hanging from above the gap, two pairs jutting up from the
+  # underbite at the gaps between them, uneven lengths and a little splay.
+  # Pointed (r2) and chamfered; roots 3-5 mm inside the flesh. Dirty ivory,
+  # low gloss — clean ivory under the key light read as bright yellow.
+  blob head on skull at=0.50 r=0.0070 r2=0.0015 blend=0.002 chamfer offset=(0.011,-0.085,0.123) tip=(0.000,-0.018,0.003) both color=8f8266 gloss=0.15
+  blob head on skull at=0.50 r=0.0060 r2=0.0012 blend=0.002 chamfer offset=(0.033,-0.087,0.113) tip=(0.002,-0.014,0.002) both color=8f8266 gloss=0.15
+  blob head on skull at=0.50 r=0.0075 r2=0.0015 blend=0.002 chamfer offset=(0.022,-0.113,0.121) tip=(-0.001,0.021,0.003) both color=8f8266 gloss=0.15
+  blob head on skull at=0.50 r=0.0060 r2=0.0012 blend=0.002 chamfer offset=(0.043,-0.110,0.106) tip=(0.002,0.015,0.002) both color=8f8266 gloss=0.15
 
 # Hidden bone for wounds — the derive ratio is right for a thin man.
 bones
@@ -180,10 +202,10 @@ face
   headWidth  0.72
   headHeight 1.14
   headDepth  0.88
-  jawWidth   0.70
-  jawHeight  0.84
-  jawDrop    0.070
-  jawJut     0.03
+  jawWidth   0.86
+  jawHeight  0.92
+  jawDrop    0.082
+  jawJut     0.050
   noseLength 0
   noseWidth  0.36
   noseDrop   0.009
