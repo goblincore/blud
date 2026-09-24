@@ -104,7 +104,9 @@ export interface ZombieGpuView {
     owners?: readonly ({ cluster: number; start: number; count: number } | null)[],
     /** Per-wound CLOTH BULLET HOLE flags (damage.ts clothifyWound 'hole'):
      *  ROW_WOUND_FLAGS.x bit 1. Omitted = none. */
-    holes?: readonly boolean[]): void;
+    holes?: readonly boolean[],
+    /** Per-wound CLOTH DECAL flags (damage.ts clothDecal): bit 2. Omitted = none. */
+    decals?: readonly boolean[]): void;
   /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
    *  Ships ON — the cull is a value no-op (outside the bound every per-wound
    *  reach test would `continue`). false parks the bound's radius at 1e9 (the
@@ -2024,6 +2026,10 @@ export function writeWounds(
    *  hole's interior dark instead of as tissue (WOUND_MASK gWoundHole).
    *  Omitted = none — every view before cloth. */
   holes?: readonly boolean[],
+  /** Per-wound CLOTH DECAL flags (soft targets, 2026-09-24; damage.ts
+   *  clothDecal): bit 2 (value 4). The carve skips the wound and the paint
+   *  block draws it. Omitted = none. */
+  decals?: readonly boolean[],
 ): number {
   const stride = layout.stride ?? MAX_PRIMS;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -2050,8 +2056,10 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
-    // Integer part is a BITFIELD: bit 0 cavity, bit 1 cloth bullet hole.
-    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + (holes?.[i] ? 2 : 0) + ((threats?.[i] ?? 0) & 511) / 1024;
+    // Integer part is a BITFIELD: bit 0 cavity, bit 1 cloth bullet hole,
+    // bit 2 cloth decal (no carve).
+    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + (holes?.[i] ? 2 : 0) + (decals?.[i] ? 4 : 0)
+      + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
     texels[flagBase + i * 4 + 2] = owner?.start ?? 0;
@@ -2742,9 +2750,9 @@ export function createZombieGpuView(
       u.meltCfg.value.y = edgeOutAll ? 2 : motionOutAll ? 1 : 0;
       syncRecord();
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes) {
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals) {
       lastWoundThreatIn = { worldPositions, radii, splayScales, caps, owners };
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes);
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a

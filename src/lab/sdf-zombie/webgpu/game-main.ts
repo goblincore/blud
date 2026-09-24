@@ -1502,7 +1502,7 @@ async function main() {
         const craters: { pos: Vec3; radius: number }[] = [];
         for (const a of ctx.world.actors) {
           const prims = a.posed().prims;
-          for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+          for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
         }
         ctx.render.boneInstancer.setWounds(craters);
       }
@@ -1539,7 +1539,8 @@ async function main() {
       // above keeps walking every actor; tube mode is not part of this cull).
       for (const a of ctx.render.visualActors) {
         const prims = a.posed().prims;
-        for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+        // Cloth decals carve nothing, so they expose no bone.
+        for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
       }
       ctx.render.segMeshRenderer.setWounds(craters);
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {

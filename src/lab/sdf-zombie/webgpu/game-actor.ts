@@ -28,7 +28,7 @@ import {
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
+  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal,
   type Wound, type WoundType,
 } from '../damage';
 import { severLimb, severDistal, type SeverResult } from '../sever';
@@ -1526,6 +1526,8 @@ export function createZombieActor(opts: {
     }
     recordSoldierInjury(wound);
     if (softTarget && wound.type !== 'burn') softKilled = true;
+    // A soft target's robe takes a painted mark, not a crater (damage.ts).
+    if (softTarget) clothDecal(field.prims, wound);
     woundRing.stamp(wound, field, bodyYaw);
     torsoWounds?.record(wound, current);
     pendingWounds.push(wound);

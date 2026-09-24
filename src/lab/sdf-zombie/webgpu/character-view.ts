@@ -443,6 +443,8 @@ export function createWoundRing(): WoundRing {
         }),
         // Cloth bullet holes shade dark inside, not as tissue (damage.ts).
         rows.map(w => w.cloth === 'hole'),
+        // Soft-target cloth decals are painted on, never carved (damage.ts).
+        rows.map(w => !!w.decal),
       );
     },
   };

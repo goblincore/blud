@@ -132,6 +132,14 @@ export interface Wound {
    * bullet hole. Effects read it (cloth puff, no blood gout on a 'hole').
    */
   cloth?: 'tear' | 'hole';
+  /**
+   * CLOTH DECAL (soft targets, 2026-09-24): set by `clothDecal`. The wound
+   * does NOT carve: a round passes through a robe, it does not blow a window
+   * in it. The shader skips it in every carve and paints it on the cloth
+   * instead (ROW_WOUND_FLAGS.x bit 2): a blood stain round a torn core, or,
+   * with cloth 'hole', a scorched bullet hole.
+   */
+  decal?: boolean;
 }
 
 /**
@@ -472,6 +480,31 @@ export const CLOTH_RAGGED = 0.40;
  *  fillet scales with the radius (wounds.wgsl.ts kW), or a hole this small
  *  melted 5 cm of an 8 mm sheet. */
 export const CLOTH_BULLET_HOLE_RADIUS = 0.014;
+
+/** A heavy round's blood stain on a soft target's robe is capped at this
+ *  radius. The mask reaches 1.6 x the radius, so the slug's 0.16 crater
+ *  radius would soak half a metre of robe; 0.07 is a ~22 cm stain. */
+export const CLOTH_STAIN_MAX_RADIUS = 0.07;
+
+/**
+ * SOFT-TARGET CLOTH TAKES MARKS, NOT CRATERS (owner playtest 2026-09-24): "it
+ * would just pass through the cloth and hit the flesh ... the rips and tears
+ * can be replaced with decals". A soft target dies to the first hit, so there
+ * is nothing to reveal: the robe just shows where it was hit. Run AFTER
+ * `clothifyWound` (which decided tear vs hole). Marks the wound as a decal,
+ * caps a stain's size and drops the gore extras that need an opening (cavity,
+ * spill). A no-op off cloth (a face shot still carves) and for burns.
+ * The soldier keeps `clothifyWound`'s carved tears: he is a gore target.
+ */
+export function clothDecal(prims: Primitive[], wound: Wound): Wound {
+  const p = prims[wound.primIdx];
+  if (!p || !isClothPrim(p) || wound.type === 'burn') return wound;
+  wound.decal = true;
+  if (wound.cloth !== 'hole') wound.radius = Math.min(wound.radius, CLOTH_STAIN_MAX_RADIUS);
+  delete wound.cavity;
+  delete wound.spillCalibre;
+  return wound;
+}
 
 /**
  * Cloth hit reactions (owner, 2026-09-23: "a pistol or SMG will just make a

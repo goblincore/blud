@@ -63,7 +63,7 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from '../material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES, clothifyWound,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES, clothifyWound, clothDecal,
   type Wound, type WoundType,
 } from '../damage';
 import { sdBody } from '../validate';
@@ -1574,10 +1574,12 @@ async function main() {
     // CLOTH (2026-09-23): a hit on a robe tears it (heavy rounds) — or, with
     // Ctrl held, is a SMALL-CALIBRE bullet hole, previewing the pistol/SMG
     // look before any such gun exists. Both are no-ops on bare flesh.
-    const wound = clothifyWound(lastPosed.prims,
+    const clothed = clothifyWound(lastPosed.prims,
       worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
         p => sdBody(p, lastPosed)),
       ev.ctrlKey ? 'small' : 'heavy');
+    // A soft target's robe is marked, not carved — the game's rule (game-actor.ts).
+    const wound = motionProfile.soft ? clothDecal(lastPosed.prims, clothed) : clothed;
     woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and localized hit recoil,
@@ -4007,9 +4009,10 @@ async function main() {
         const origin: Vec3 = [cx - dir[0] * 3, cy - dir[1] * 3, cz - dir[2] * 3];
         const hit = raycastBody(origin, dir, lastPosed);
         if (!hit) continue;
-        const wound = clothifyWound(prims, worldHitToWound(
+        const clothed = clothifyWound(prims, worldHitToWound(
           prims, hit, radius, type, heroMotion.lastBodyYaw, p => sdBody(p, lastPosed),
         ), calibre);
+        const wound = motionProfile.soft ? clothDecal(prims, clothed) : clothed;
         woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
         stamped++;
       }
