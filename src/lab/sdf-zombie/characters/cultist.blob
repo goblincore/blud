@@ -139,7 +139,12 @@ body
   shell head on skull at=0.45 offset=(0,0.035,-0.030) r=0.150 wide=0.95 tall=1.30 deep=1.18 thick=0.008 clip=(0,-0.35,0.9368) clipd=-0.4339 rim=0.010 blend=0.006 color=6e5c40 warp=0.004 warpFreq=(40,10,40)
   # The hood's peak — a cone off the crown, up and back, so the hood reads
   # as a POINTED cowl (the Blood cultist silhouette), not a balaclava.
-  blob head on skull at=0.90 offset=(0,0.040,-0.050) tip=(0,0.070,-0.110) r=0.075 r2=0.010 blend=0.030 color=6e5c40
+  # Owner (2026-09-23): "the hoodie should have a more pointy top". The v1
+  # peak (tip y 1.856) sat wholly INSIDE the hood sheet's crown (top y
+  # 1.905), so it never showed. Now rooted just under the crown (y 1.86,
+  # z 0.00) and rising 13 cm up and 9 cm back to a point, with a wide blend
+  # so the sheet flows into it instead of a horn stuck on a dome.
+  blob head on skull at=0.90 offset=(0,0.114,-0.080) tip=(0,0.130,-0.090) r=0.070 r2=0.005 blend=0.045 color=6e5c40
 
   # ============================================================
   # THE FACE (pass 2, owner 2026-09-23: "the eyes are positioned too low
