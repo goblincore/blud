@@ -159,7 +159,17 @@ def candle(name, pos, h=0.25):
 SOLIDS = [(tuple(s["min"]), tuple(s["max"])) for s in L.get("solids", [])]
 
 
-def solids_in(x0, x1, z0, z1):
+ROOMS = {r["name"]: r for r in L["rooms"]}
+
+
+def rect(name):
+    """(minX, maxX, minZ, maxZ) of a room, from the level file."""
+    r = ROOMS[name]
+    return r["min"][0], r["max"][0], r["min"][1], r["max"][1]
+
+
+def solids_in(name):
+    x0, x1, z0, z1 = rect(name)
     return [s for s in SOLIDS if x0 <= (s[0][0] + s[1][0]) / 2 <= x1 and z0 <= (s[0][2] + s[1][2]) / 2 <= z1]
 
 
@@ -168,7 +178,7 @@ def size(s):
 
 
 # --- 1. gates ----------------------------------------------------------------
-for i, s in enumerate(solids_in(-6, 6, -10, 0)):
+for i, s in enumerate(solids_in("gates")):
     (x0, y0, z0), (x1, y1, z1) = s
     if size(s)[0] > 2:  # the gatehouse
         box(f"gatehouse.walls", (x0, 0, z0), (x1, 2.2, z1), STONE)
@@ -178,27 +188,30 @@ for i, s in enumerate(solids_in(-6, 6, -10, 0)):
     else:  # a gate pillar with a ball cap and an open iron gate leaf against the wall
         box(f"gatepost.{i}", (x0, 0, z0), (x1, y1 - 0.4, z1), STONE)
         ball(f"gatepost.{i}.cap", ((x0 + x1) / 2, y1 - 0.2, (z0 + z1) / 2), 0.2, STONE)
-        side = -1 if x1 < 0 else 1
+        gx0, gx1, _, _ = rect("gates")
+        side = -1 if (x0 + x1) / 2 < (gx0 + gx1) / 2 else 1
         gx = x0 if side < 0 else x1
         for b in range(8):  # bars swung back along the wall, just inside the pillar line
             bz = z1 + 0.05 + b * 0.18
             cyl(f"gate.{i}.bar{b}", (gx - side * 0.05, 0, bz), 0.015, 2.6, IRON, segs=4)
         box(f"gate.{i}.rail", (gx - side * 0.07, 2.2, z1), (gx - side * 0.03, 2.28, z1 + 1.5), IRON, track=False)
-lantern("lamp.gates", (-4, 2.5, -6))
 
 # --- 2. the lane: hedges on the walls, two chest tombs -------------------------
-for zz in range(-26, -10, 2):
-    for sx in (-2.5, 2.5):
-        box(f"hedge.{sx}.{zz}", (sx - 0.05 if sx > 0 else sx - 0.25, 0, zz), (sx + 0.25 if sx > 0 else sx + 0.05, 2.4, zz + 2), HEDGE, track=False)
-for i, s in enumerate(solids_in(-2.5, 2.5, -26, -10.6)):
+lx0, lx1, lz0, lz1 = rect("lane")
+zz = lz0
+while zz < lz1:
+    z2 = min(lz1, zz + 2)
+    box(f"hedge.w.{zz:.1f}", (lx0 - 0.25, 0, zz), (lx0 + 0.05, 2.4, z2), HEDGE, track=False)
+    box(f"hedge.e.{zz:.1f}", (lx1 - 0.05, 0, zz), (lx1 + 0.25, 2.4, z2), HEDGE, track=False)
+    zz = z2
+for i, s in enumerate(solids_in("lane")):
     (x0, y0, z0), (x1, y1, z1) = s
     box(f"tomb.{i}.chest", (x0 + 0.05, 0, z0 + 0.05), (x1 - 0.05, y1 - 0.12, z1 - 0.05), MOSS)
     box(f"tomb.{i}.lid", (x0, y1 - 0.12, z0), (x1, y1, z1), STONE, track=False)
-lantern("lantern.lane", (0, 2.5, -18))
 
 # --- 3. graveyard -------------------------------------------------------------
 shape = 0
-for i, s in enumerate(solids_in(-16, 16, -58, -26.6)):
+for i, s in enumerate(solids_in("graveyard")):
     (x0, y0, z0), (x1, y1, z1) = s
     w, h, d = size(s)
     cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
@@ -244,8 +257,10 @@ for i, s in enumerate(solids_in(-16, 16, -58, -26.6)):
                                 (xa, top, z0), (xb, top, z0), (xa, top, z1 - 0.06), (xb, top, z1 - 0.06)], STONE_DK)
             PLACED.append((cx, top / 2, cz))
         box(f"stone.{i}.base", (x0 - 0.05, 0, z0 - 0.05), (x1 + 0.05, 0.12, z1 + 0.05), STONE_DK, track=False)
-# the open grave's pit (a dark slab on the floor) and the bell
-box("grave.pit", (-0.8, 0.0, -31.2), (0.8, 0.02, -28.8), mat("pit", (0.01, 0.008, 0.006)), track=False)
+# the open grave's pit, between its two dirt lips, and the bell
+lips = sorted((s for s in solids_in("graveyard") if size(s)[1] <= 0.4), key=lambda s: s[0][0])
+if len(lips) == 2:
+    box("grave.pit", (lips[0][1][0], 0.0, lips[0][0][2]), (lips[1][0][0], 0.02, lips[1][1][2]), mat("pit", (0.01, 0.008, 0.006)), track=False)
 bell = [b for b in L.get("bells", [])][0]
 bx, by, bz = bell["pos"]
 r = bell.get("radius", 0.8)
@@ -253,13 +268,12 @@ cyl("bell.body", (bx, by - 0.55, bz), r, 0.9, BRONZE, segs=16, r2=r * 0.55)
 ball("bell.crown", (bx, by + 0.35, bz), r * 0.5, BRONZE, segs=12)
 cyl("bell.lip", (bx, by - 0.62, bz), r * 1.05, 0.08, BRONZE, segs=16)
 box("bell.yoke", (bx - 1.4, by + 0.7, bz - 0.1), (bx + 1.4, by + 0.9, bz + 0.1), WOOD_DK, track=False)
-lantern("fire.belltower", (0, 5.6, -40.2))
 
 # --- 4, 5. crypt and ossuary ----------------------------------------------------
-for i, s in enumerate(solids_in(-3, 11, -76, -62)):
+for i, s in enumerate(solids_in("crypt") + solids_in("ossuary")):
     (x0, y0, z0), (x1, y1, z1) = s
     cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
-    if x1 <= -1.9:  # sarcophagus against the west wall
+    if s in solids_in("crypt"):  # sarcophagus against the hall wall
         box(f"sarcophagus.{i}", (x0 + 0.05, 0, z0 + 0.05), (x1 - 0.05, y1 - 0.12, z1 - 0.05), STONE_DK)
         box(f"sarcophagus.{i}.lid", (x0, y1 - 0.12, z0), (x1, y1, z1), STONE, track=False)
         box(f"sarcophagus.{i}.effigy", (cx - 0.15, y1, z0 + 0.3), (cx + 0.15, y1 + 0.1, z1 - 0.3), STONE, track=False)
@@ -270,16 +284,16 @@ for i, s in enumerate(solids_in(-3, 11, -76, -62)):
             for k in range(5):
                 for sx in (x0 + 0.05, x1 - 0.05):
                     ball(f"skull.{shelf}.{k}.{sx:.0f}", (sx, sy, z0 + 0.35 + k * 0.58), 0.09, BONE, segs=6)
-lantern("glow.crypt", (0, 1.2, -69), GLOW_G)
-for k, (cx, cz) in enumerate([(10.4, -73.4), (10.4, -64.6)]):
-    candle(f"ossuary.candle{k}", (cx, 0, cz), 0.4)
+ox0, ox1, oz0, oz1 = rect("ossuary")
+for k, cz in enumerate([oz0 + 0.6, oz1 - 0.6]):
+    candle(f"ossuary.candle{k}", (ox1 - 0.6, 0, cz), 0.4)
 
 # --- 6. vestibule ---------------------------------------------------------------
-box("vestibule.rug", (-2, 0, -85), (2, 0.01, -81), VELVET, track=False)
-lantern("lamp.vestibule", (-3, 2.2, -83))
+vx0, vx1, vz0, vz1 = rect("vestibule")
+box("vestibule.rug", (vx0 + 2, 0, vz0 + 1), (vx1 - 2, 0.01, vz1 - 1), VELVET, track=False)
 
 # --- 7. parlour -------------------------------------------------------------------
-for i, s in enumerate(solids_in(-10, 10, -110, -86.6)):
+for i, s in enumerate(solids_in("parlour")):
     (x0, y0, z0), (x1, y1, z1) = s
     w, h, d = size(s)
     cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
@@ -325,8 +339,73 @@ for w in L.get("windows", []):
     box("window.sill", (x0 - 0.2, y0 - 0.2, z1), (x1 + 0.2, y0 - 0.1, z1 + 0.25), WOOD_DK, track=False)
 
 # --- 8. secret ---------------------------------------------------------------
-lantern("red.secret", (20, 1.0, -40.5), GLOW_R)
-box("secret.crate", (21, 0, -41.2), (21.8, 0.6, -40.4), WOOD, track=False)
+sx0, sx1, sz0, sz1 = rect("secret")
+box("secret.crate", (sx1 - 1.0, 0, (sz0 + sz1) / 2 - 0.4), (sx1 - 0.2, 0.6, (sz0 + sz1) / 2 + 0.4), WOOD, track=False)
+
+# --- lanterns and lamps: one per level light, from the .blend's lights ---------
+# (candle lights are drawn as candles above; the moon is not a lantern)
+lights = bpy.data.collections.get("lights")
+for o in (lights.objects if lights else []):
+    kind = o.name.split(".")[0]
+    if kind in ("lamp", "lantern", "glow", "fire", "red"):
+        g = (o.location.x, o.location.z, -o.location.y)
+        lantern(f"lantern.{o.name}", g, GLOW_G if kind == "glow" else GLOW_R if kind == "red" else FLAME)
+
+# --- the manor: the funeral home, a gothic house rising behind the graveyard's
+# north wall. The crypt is in its foundations (the slab portal), the vestibule
+# and parlour inside it. Its mass stays ABOVE every interior ceiling and
+# outside every playable room, so it never shows from inside.
+gx0, gx1, gz0, gz1 = rect("graveyard")
+inside = [rect(n) for n in ("crypt", "ossuary", "vestibule", "parlour")]
+mx0 = min(r[0] for r in inside) - 1.0
+mx1 = max(r[1] for r in inside) + 1.0
+mz_front = gz0 - 0.35                       # just behind the graveyard's north wall
+mz_back = min(r[2] for r in inside) - 1.0
+top_in = 6.4                                # above the tallest interior (parlour, 6 m)
+STONE_M = mat("manor-stone", (0.20, 0.19, 0.21))
+SLATE = mat("slate", (0.07, 0.07, 0.09), rough=0.6)
+LIT = mat("party-window", (1.0, 0.7, 0.35), emit=(1.0, 0.62, 0.3), strength=8)
+DARKWIN = mat("dark-window", (0.02, 0.02, 0.03), rough=0.3)
+# the front, open over the crypt stairs so the portal looks through to them
+_t = [t for t in L["tunnels"] if t["a"] == ROOMS["graveyard"]["id"] and t["b"] == ROOMS["crypt"]["id"]]
+fa, fb = (_t[0]["min"][0] - 0.3, _t[0]["max"][0] + 0.3) if _t else (mx0, mx0)
+box("manor.front.w", (mx0, 0, mz_front - 0.6), (fa, 15, mz_front), STONE_M)
+box("manor.front.e", (fb, 0, mz_front - 0.6), (mx1, 15, mz_front), STONE_M, track=False)
+box("manor.front.over", (fa, 3.0, mz_front - 0.6), (fb, 15, mz_front), STONE_M, track=False)
+box("manor.body", (mx0, top_in, mz_back), (mx1, 15, mz_front - 0.6), STONE_M, track=False)
+gable("manor.roof", mx0 - 0.4, mx1 + 0.4, mz_back - 0.4, mz_front + 0.4, 15, 22, SLATE, "x")
+# a steep central gable over the portal
+cx_portal = 10.0
+tun = [t for t in L["tunnels"] if t["a"] == ROOMS["graveyard"]["id"] and t["b"] == ROOMS["crypt"]["id"]]
+if tun:
+    cx_portal = (tun[0]["min"][0] + tun[0]["max"][0]) / 2
+hull("manor.gable", [(cx_portal - 4, 15, mz_front), (cx_portal + 4, 15, mz_front), (cx_portal, 24, mz_front),
+                     (cx_portal - 4, 15, mz_front - 3), (cx_portal + 4, 15, mz_front - 3), (cx_portal, 24, mz_front - 3)], SLATE)
+# towers at the corners with needle spires
+for k, tx in enumerate((mx0 + 1.6, mx1 - 1.6)):
+    cyl(f"manor.tower{k}", (tx, 0, mz_front - 2.2), 1.8, 19, STONE_M, segs=12)
+    cyl(f"manor.tower{k}.spire", (tx, 19, mz_front - 2.2), 2.1, 7.5, SLATE, segs=12, r2=0.05)
+    for w in range(3):
+        box(f"manor.tower{k}.slit{w}", (tx - 0.2, 9 + w * 3, mz_front + 0.0), (tx + 0.2, 10.4 + w * 3, mz_front + 0.05), LIT if w == 2 else DARKWIN, track=False)
+# gothic windows along the upper floor, lit where the party is; a rose window in the gable
+n = 7
+for w in range(n):
+    wx = mx0 + 3 + w * (mx1 - mx0 - 6) / (n - 1)
+    if abs(wx - cx_portal) < 1.5:
+        continue
+    m = LIT if w % 3 != 1 else DARKWIN
+    box(f"manor.win{w}", (wx - 0.45, 10, mz_front), (wx + 0.45, 12.6, mz_front + 0.05), m, track=False)
+    hull(f"manor.win{w}.arch", [(wx - 0.45, 12.6, mz_front), (wx + 0.45, 12.6, mz_front), (wx, 13.4, mz_front),
+                                (wx - 0.45, 12.6, mz_front + 0.05), (wx + 0.45, 12.6, mz_front + 0.05), (wx, 13.4, mz_front + 0.05)], m)
+ball("manor.rose", (cx_portal, 18.5, mz_front + 0.1), 1.3, LIT, segs=16, squash=(1, 1, 0.08))
+# the crypt portal: a pointed arch around the slab, on the graveyard side of the wall
+if tun:
+    t0, t1 = tun[0]["min"][0], tun[0]["max"][0]
+    for k, (a, b) in enumerate(((t0 - 0.6, t0), (t1, t1 + 0.6))):
+        box(f"portal.jamb{k}", (a, 0, gz0), (b, 3.0, gz0 + 0.2), STONE)
+    hull("portal.arch", [(t0 - 0.6, 3.0, gz0), (t1 + 0.6, 3.0, gz0), (cx_portal, 4.6, gz0),
+                         (t0 - 0.6, 3.0, gz0 + 0.2), (t1 + 0.6, 3.0, gz0 + 0.2), (cx_portal, 4.6, gz0 + 0.2)], STONE)
+    ball("portal.skull", (cx_portal, 3.6, gz0 + 0.22), 0.22, BONE, segs=8)
 
 # ---- coverage report ---------------------------------------------------------
 missing = []

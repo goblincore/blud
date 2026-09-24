@@ -1,13 +1,14 @@
 [
   {"name": "00-top", "top": true},
-  {"name": "01-start-gates", "pos": [0, -1.5], "yaw": 0},
-  {"name": "02-lane", "pos": [0, -11.5], "yaw": 0},
-  {"name": "03-lychgate-grave-tower", "pos": [0, -27.5], "yaw": 0, "pitch": 0.08},
-  {"name": "04-graveyard-west-lane", "pos": [-12.5, -29], "yaw": 0},
-  {"name": "05-tower-north-slab", "pos": [4, -50], "yaw": -0.5},
-  {"name": "06-crypt", "pos": [0, -63], "yaw": 0},
-  {"name": "07-ossuary", "pos": [4.4, -65.5], "yaw": 2.3},
-  {"name": "08-parlour-entry", "pos": [0, -88], "yaw": 0},
-  {"name": "09-coffin-window", "pos": [0, -101], "yaw": 0, "pitch": 0.1},
-  {"name": "10-fence-gap", "pos": [12.5, -40.7], "yaw": 1.5708}
+  {"name": "01-start-gates", "pos": [-11.5, -1.5], "yaw": 0},
+  {"name": "02-lane", "pos": [-11.5, -11.5], "yaw": 0, "pitch": 0.1},
+  {"name": "03-lychgate-tower-manor", "pos": [-11.5, -27.5], "yaw": 0.67, "pitch": 0.22},
+  {"name": "04-graveyard-to-manor", "pos": [4, -30], "yaw": 0.1, "pitch": 0.3},
+  {"name": "05-graveyard-west-lane", "pos": [-12.5, -35], "yaw": 0},
+  {"name": "06-slab-portal", "pos": [8, -50], "yaw": 0.25, "pitch": 0.15},
+  {"name": "07-crypt", "pos": [10, -63], "yaw": 0},
+  {"name": "08-ossuary", "pos": [14.4, -65.5], "yaw": 2.3},
+  {"name": "09-parlour-entry", "pos": [10, -88], "yaw": 0},
+  {"name": "10-coffin-window", "pos": [10, -101], "yaw": 0, "pitch": 0.1},
+  {"name": "11-fence-gap", "pos": [12.5, -40.7], "yaw": 1.5708}
 ]

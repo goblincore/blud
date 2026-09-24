@@ -75,7 +75,7 @@ The level can't be tested without these. Build them small.
 
 - [ ] **W-B7 Outdoor look (engine).** The gates, lane and graveyard are the game's first outdoor spaces;
   the renderer only knows dungeon rooms (probe boxes, stone floors, fog as the sky). Needs a spec:
-  moonlight and sky ambient, ground/terrain materials, open-sky edges (fence, hedge, treeline, horizon),
+  moonlight and sky ambient, ground/terrain materials and elevation, open-sky edges (fence, hedge, treeline, horizon),
   per-room materials. Raised by the owner 2026-09-23. *Deps:* none; blocks the art pass (W-A3).
 
 ## Art (Blender)

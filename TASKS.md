@@ -16,11 +16,12 @@ Branch `claude/wake-level-pipeline-1afb01`. [Plan 1](docs/superpowers/plans/2026
 - [x] T5a [reference study](docs/game/levels/00-the-wake/reference-study.md): 256 BU/m (doorways), 10 lessons.
 - [x] T5b [layout](docs/game/levels/00-the-wake/layout.md) approved (no soldier); T5c rebuilt from it: 8 rooms, level test 7/7, gate passes.
 - [x] T5d placeholder dressing in the `.blend` (67/67 solids) + Blender review renders (`scripts/levels/render_level_views.py`).
-- [ ] Next: live Blender review with the owner. Dispatch skill default is now `zai/glm-5.3-flash`.
+- [x] Layout review (owner): route bends (lane SW → slab NE), funeral home is a gothic manor on the graveyard's north edge.
+- [ ] Next: outdoor rendering spec (below). Dispatch skill default is now `zai/glm-5.3-flash`.
 - [ ] **Outdoor rendering needs a spec** (owner, 2026-09-23): the engine only knows enclosed dungeon rooms. Open: moon key +
   sky ambient vs. per-room probe boxes in open-sky rooms; ground/terrain materials (grass, gravel, dirt) instead of stone
   floors; open-sky room edges as fence/hedge/treeline + horizon instead of 8.5 m walls; a sky, not fog-as-clear-colour;
-  per-room materials (every room shares one stone palette). Brainstorm → spec before the Wake's art pass.
+  per-room materials (every room shares one stone palette); terrain elevation. Brainstorm → spec before the Wake's art pass.
 
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 

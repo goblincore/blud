@@ -30,7 +30,7 @@ describe('the-wake.level.json', () => {
     for (const item of ['cd', 'shotgun', 'dynamite'] as const) {
       expect(wake.pickups.filter(p => p.item === item), item).toHaveLength(1);
     }
-    expect(roomAtPoint(wake, 10.3, -69)?.name).toBe('ossuary'); // the dynamite
+    expect(roomAtPoint(wake, 20.3, -69)?.name).toBe('ossuary'); // the dynamite
     expect(wake.windows).toEqual([expect.objectContaining({ id: 'parlour-window', view: 'train-waiting', room: 7, side: 'n' })]);
     expect(wake.spawns).toHaveLength(20);
     expect(wake.spawns.every(s => s.kind === 'zombie')).toBe(true);
@@ -45,25 +45,25 @@ describe('the-wake.level.json', () => {
     const nav = createEncounterNavigation(wake.rooms, wake.tunnels, layoutColliders(wake));
     const start: Vec3 = [wake.playerStart.x, 0, wake.playerStart.z];
     expect(nav.canStand(start)).toBe(true);
-    expect(nav.route(start, [0, 0, -104]).length).toBeGreaterThan(0);
+    expect(nav.route(start, [10, 0, -104]).length).toBeGreaterThan(0);
   });
 
   it('reaches the secret room through the fence gap', () => {
     const nav = createEncounterNavigation(wake.rooms, wake.tunnels, layoutColliders(wake));
-    expect(nav.route([0, 0, -30], [20, 0, -40]).length).toBeGreaterThan(0);
+    expect(nav.route([-11.5, 0, -27.3], [20, 0, -40]).length).toBeGreaterThan(0);
   });
 
   it('cannot reach the crypt while the crypt slab is closed', () => {
     const closed = [...layoutColliders(wake), ...gateColliders(wake, new Set())];
     const nav = createEncounterNavigation(wake.rooms, wake.tunnels, closed);
-    expect(nav.route([0, 0, -30], [0, 0, -69])).toEqual([]);
+    expect(nav.route([-11.5, 0, -27.3], [10, 0, -69])).toEqual([]);
   });
 
   it('loops: round the bell tower and through both ossuary doors', () => {
     const nav = createEncounterNavigation(wake.rooms, wake.tunnels, layoutColliders(wake));
     expect(nav.route([-8, 0, -42], [8, 0, -42]).length).toBeGreaterThan(0);
-    expect(nav.route([0, 0, -64], [8, 0, -65]).length).toBeGreaterThan(0);
-    expect(nav.route([0, 0, -74.5], [8, 0, -73]).length).toBeGreaterThan(0);
+    expect(nav.route([10, 0, -64], [18, 0, -65]).length).toBeGreaterThan(0);
+    expect(nav.route([10, 0, -74.5], [18, 0, -73]).length).toBeGreaterThan(0);
   });
 
   it('keeps every spawn and grave standable', () => {

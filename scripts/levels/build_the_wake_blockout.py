@@ -73,13 +73,13 @@ FACE_NORTH = 0.0
 # ---- ROOMS: (id, name, (minX, minZ), (maxX, maxZ), height, sky) -------------
 # Game space, -z north. Tables match layout.md §1-§3.
 ROOMS = [
-    (1, "gates",     (-6, -10),     (6, 0),        5.0, "night"),
-    (2, "lane",      (-2.5, -26),   (2.5, -10.6),  4.0, "night"),
+    (1, "gates",     (-17.5, -10),  (-5.5, 0),     5.0, "night"),
+    (2, "lane",      (-14, -26),    (-9, -10.6),   4.0, "night"),
     (3, "graveyard", (-16, -58),    (16, -26.6),   8.5, "night"),
-    (4, "crypt",     (-3, -76),     (3, -62),      2.8, None),
-    (5, "ossuary",   (3.6, -74),    (11, -64),     2.6, None),
-    (6, "vestibule", (-4, -86),     (4, -80),      3.0, None),
-    (7, "parlour",   (-10, -110),   (10, -86.6),   6.0, None),
+    (4, "crypt",     (7, -76),      (13, -62),     2.8, None),
+    (5, "ossuary",   (13.6, -74),   (21, -64),     2.6, None),
+    (6, "vestibule", (6, -86),      (14, -80),     3.0, None),
+    (7, "parlour",   (0, -110),     (20, -86.6),   6.0, None),
     (8, "secret",    (18, -44),     (22, -37),     2.5, None),
 ]
 for rid, name, (x0, z0), (x1, z1), h, sky in ROOMS:
@@ -90,13 +90,13 @@ for rid, name, (x0, z0), (x1, z1), h, sky in ROOMS:
 # ---- CORRIDORS: (a, b, (minX, minZ), (maxX, maxZ), height) ------------------
 # 0.6 m "door" tunnels join rooms whose walls sit back to back.
 TUNNELS = [
-    (1, 2, (-1.5, -10.6), (1.5, -10), 3.5),      # the iron gates
-    (2, 3, (-1.5, -26.6), (1.5, -26), 3.5),      # lych gate into the graveyard
-    (3, 4, (-1.2, -62), (1.2, -58), 2.6),        # crypt stairs (slab)
-    (4, 5, (3, -66.4), (3.6, -64.8), 2.2),       # ossuary door A
-    (4, 5, (3, -73), (3.6, -71.4), 2.2),         # ossuary door B (the crypt loop)
-    (4, 6, (-1, -80), (1, -76), 2.4),            # stairs up to the funeral home
-    (6, 7, (-1.5, -86.6), (1.5, -86), 2.8),      # parlour doors
+    (1, 2, (-13, -10.6), (-10, -10), 3.5),       # the iron gates
+    (2, 3, (-13, -26.6), (-10, -26), 3.5),       # lych gate, graveyard's SW corner
+    (3, 4, (8.8, -62), (11.2, -58), 2.6),        # crypt stairs (slab) in the manor's foundations, NE
+    (4, 5, (13, -66.4), (13.6, -64.8), 2.2),     # ossuary door A
+    (4, 5, (13, -73), (13.6, -71.4), 2.2),       # ossuary door B (the crypt loop)
+    (4, 6, (9, -80), (11, -76), 2.4),            # stairs up into the manor
+    (6, 7, (8.5, -86.6), (11.5, -86), 2.8),      # parlour doors
     (3, 8, (16, -41.4), (18, -40), 2.0),         # fence gap (1.4 m, goblin route)
 ]
 for a, b, (x0, z0), (x1, z1), h in TUNNELS:
@@ -104,12 +104,12 @@ for a, b, (x0, z0), (x1, z1), h in TUNNELS:
 
 S = []
 # gates: gatehouse, gate posts either side of the iron gates
-S += [((2.5, 0, -8), (5.5, 3, -4)), ((-2.3, 0, -9.9), (-1.5, 3.2, -9.1)), ((1.5, 0, -9.9), (2.3, 3.2, -9.1))]
+S += [((-9, 0, -8), (-6, 3, -4)), ((-13.8, 0, -9.9), (-13, 3.2, -9.1)), ((-10, 0, -9.9), (-9.2, 3.2, -9.1))]
 # lane: hedges are the walls; two low tombs as cover
-S += [((-2.5, 0, -21), (-1.3, 0.9, -19.6)), ((1.3, 0, -24.5), (2.5, 0.9, -23.1))]
+S += [((-14, 0, -21), (-12.8, 0.9, -19.6)), ((-10.2, 0, -24.5), (-9, 0.9, -23.1))]
 # graveyard: open grave lip right past the lych gate
-S += [((-1.1, 0, -31.2), (-0.8, 0.35, -28.8)), ((0.8, 0, -31.2), (1.1, 0.35, -28.8)),
-      ((-0.5, 0, -31.6), (0.5, 1.0, -31.3))]
+S += [((-12.6, 0, -31.2), (-12.3, 0.35, -28.8)), ((-10.7, 0, -31.2), (-10.4, 0.35, -28.8)),
+      ((-12, 0, -31.6), (-11, 1.0, -31.3))]
 # the bell tower: base, four pillars, roof. The loop runs all the way round it.
 S.append(((-3, 0, -45), (3, 5, -39)))
 for px, pz in [(-3, -45), (2.7, -45), (-3, -39.3), (2.7, -39.3)]:
@@ -117,83 +117,85 @@ for px, pz in [(-3, -45), (2.7, -45), (-3, -39.3), (2.7, -39.3)]:
 S.append(((-3.2, 7.6, -45.2), (3.2, 8.0, -38.8)))
 # the mausoleum (NW), a landmark and cover
 S.append(((-14, 0, -56), (-9, 4, -51)))
-# headstones in rows (0.7 x 0.2 x 0.9), aisles >= 1.4 m between rows
+# headstones in rows (0.7 x 0.2 x 0.9), aisles >= 1.4 m; the SW entry and the
+# approach to the slab (NE) stay clear
 def row(z, xs):
     for x in xs:
         S.append(((x - 0.35, 0, z - 0.1), (x + 0.35, 0.9, z + 0.1)))
-row(-34, [-13, -11, -9, -7, 7, 9, 11, 13])
-row(-37, [-13, -11, -9, 9, 11, 13])
+row(-34, [-5, -3, 3, 5, 7, 9, 11, 13])
+row(-37, [-14, -12, -9, -5, 9, 11, 13])
 row(-43, [-14, -12, -9, 9, 12, 14])
 row(-47, [-14, -12, -9, 9, 12, 14])
-row(-50, [-6, -4, 4, 6, 9, 12, 14])
-row(-54, [-6, -4, 4, 6])
+row(-50, [-6, -4, 4, 6, 13, 15])
+row(-54, [-6, -4, 3, 5])
 # fence-gap hint: two broken posts either side of the gap
 S += [((15.6, 0, -42.0), (16, 1.4, -41.4)), ((15.6, 0, -40.0), (16, 1.4, -39.4))]
-# crypt: sarcophagi against the hall walls; ossuary bone shelves
-# sarcophagi on the west wall (the east wall has the ossuary doors)
-S += [((-3, 0, -68), (-2, 0.8, -66)), ((-3, 0, -73), (-2, 0.8, -71))]
-S += [((6.5, 0, -70.5), (8, 1.8, -67.5))]   # the ossuary pillar the loop turns on
+# crypt: sarcophagi on the west wall (the east wall has the ossuary doors);
+# the ossuary pillar the loop turns on
+S += [((7, 0, -68), (8, 0.8, -66)), ((7, 0, -73), (8, 0.8, -71))]
+S += [((16.5, 0, -70.5), (18, 1.8, -67.5))]
 # parlour: pews (two blocks per row, 1.6 m side aisles, 2.4 m centre aisle),
 # the coffin on its stand, the organ
 for z in (-94, -97, -100, -103):
-    S += [((-8.4, 0, z - 0.25), (-1.2, 0.9, z + 0.25)), ((1.2, 0, z - 0.25), (8.4, 0.9, z + 0.25))]
-S += [((-1, 0, -107), (1, 0.9, -105)), ((6, 0, -110), (9.5, 3, -107.5))]
+    S += [((1.6, 0, z - 0.25), (8.8, 0.9, z + 0.25)), ((11.2, 0, z - 0.25), (18.4, 0.9, z + 0.25))]
+S += [((9, 0, -107), (11, 0.9, -105)), ((16, 0, -110), (19.5, 3, -107.5))]
 for i, (mn, mx) in enumerate(S):
     gbox("solids", f"solid.{i:03d}", mn, mx)
 
-gbox("gates", "gate:bell.toll.1:crypt-slab", (-1.2, 0, -59), (1.2, 2.6, -58.6))
-gbox("triggers", "trigger:wave.0:grave-rise", (-2, 0, -31.6), (2, 2, -28.2), wire=True)
-gbox("triggers", "trigger:alert.room.7:parlour-turn", (-10, 0, -91), (10, 3, -89), wire=True)
+gbox("gates", "gate:bell.toll.1:crypt-slab", (8.8, 0, -59), (11.2, 2.6, -58.6))
+gbox("triggers", "trigger:wave.0:grave-rise", (-13.5, 0, -31.6), (-9.5, 2, -28.2), wire=True)
+gbox("triggers", "trigger:alert.room.7:parlour-turn", (0, 0, -91), (20, 3, -89), wire=True)
 # The glimpse (design §1): behind the coffin, the train waiting.
-gbox("windows", "window:train-waiting:parlour-window", (-2.5, 1.0, -110.05), (2.5, 4.5, -109.95))
+gbox("windows", "window:train-waiting:parlour-window", (7.5, 1.0, -110.05), (12.5, 4.5, -109.95))
 
-glight("lamp.gates", (-4, 2.5, -6), (0.9, 0.55, 0.25), 10)
-glight("lantern.lane", (0, 2.5, -18), (0.9, 0.55, 0.25), 7)
+glight("lamp.gates", (-15.5, 2.5, -6), (0.9, 0.55, 0.25), 10)
+glight("lantern.lane", (-11.5, 2.5, -18), (0.9, 0.55, 0.25), 7)
 glight("fire.belltower", (0, 5.6, -42), (1.0, 0.4, 0.15), 12)
 glight("moon.graveyard", (10, 4, -30), (0.35, 0.45, 0.9), 12)
-glight("glow.crypt", (0, 1.2, -69), (0.3, 0.9, 0.35), 7)
-glight("candles.ossuary", (9, 1.2, -73), (1.0, 0.5, 0.2), 6)
-glight("lamp.vestibule", (-3, 2.2, -83), (1.0, 0.6, 0.3), 6)
-glight("candles.coffin", (0, 1.4, -108), (1.0, 0.5, 0.2), 10)
-glight("candles.organ", (7.5, 3.3, -108.5), (1.0, 0.5, 0.2), 8)
+glight("lamp.manor-door", (10, 3.2, -57), (1.0, 0.55, 0.25), 8)
+glight("glow.crypt", (10, 1.2, -69), (0.3, 0.9, 0.35), 7)
+glight("candles.ossuary", (19, 1.2, -73), (1.0, 0.5, 0.2), 6)
+glight("lamp.vestibule", (7, 2.2, -83), (1.0, 0.6, 0.3), 6)
+glight("candles.coffin", (10, 1.4, -108), (1.0, 0.5, 0.2), 10)
+glight("candles.organ", (17.5, 3.3, -108.5), (1.0, 0.5, 0.2), 8)
 glight("red.secret", (20, 1.0, -40.5), (0.9, 0.2, 0.1), 6)
 
-gempty("start", (0, 0, -1.5), FACE_NORTH)
+gempty("start", (-11.5, 0, -1.5), FACE_NORTH)
 Z = []
-Z += [("lane-1", (0, 0, -17), FACE_SOUTH), ("lane-2", (-1.5, 0, -24.5), FACE_SOUTH)]
-Z += [("yard-1", (-10, 0, -31), FACE_SOUTH), ("yard-2", (11, 0, -40), FACE_SOUTH),
-      ("yard-3", (-11, 0, -45), FACE_SOUTH), ("yard-4", (10.5, 0, -52), FACE_SOUTH),
-      ("yard-5", (0, 0, -56), FACE_SOUTH)]
-Z += [("crypt-1", (0, 0, -70), FACE_SOUTH)]
-Z += [("ossuary-1", (5, 0, -66), FACE_SOUTH), ("ossuary-2", (9.5, 0, -66), FACE_SOUTH),
-      ("ossuary-3", (5, 0, -72.5), FACE_SOUTH), ("ossuary-4", (9.5, 0, -72.5), FACE_SOUTH)]
-for i, (x, z) in enumerate([(-4.8, -95.5), (-2.4, -95.5), (2.4, -95.5), (4.8, -95.5),
-                            (-6, -98.5), (-3, -98.5), (3, -98.5), (6, -98.5)]):
+Z += [("lane-1", (-11.5, 0, -17), FACE_SOUTH), ("lane-2", (-13, 0, -24.5), FACE_SOUTH)]
+Z += [("yard-1", (-3, 0, -30.5), FACE_SOUTH), ("yard-2", (11, 0, -38.5), FACE_SOUTH),
+      ("yard-3", (-11, 0, -45), FACE_SOUTH), ("yard-4", (6, 0, -52), FACE_SOUTH),
+      ("yard-5", (13, 0, -56), FACE_SOUTH)]
+Z += [("crypt-1", (10, 0, -70), FACE_SOUTH)]
+Z += [("ossuary-1", (15, 0, -66), FACE_SOUTH), ("ossuary-2", (19.5, 0, -66), FACE_SOUTH),
+      ("ossuary-3", (15, 0, -72.5), FACE_SOUTH), ("ossuary-4", (19.5, 0, -72.5), FACE_SOUTH)]
+for i, (x, z) in enumerate([(5.2, -95.5), (7.6, -95.5), (12.4, -95.5), (14.8, -95.5),
+                            (4, -98.5), (7, -98.5), (13, -98.5), (16, -98.5)]):
     Z.append((f"mourner-{i + 1}", (x, 0, z), FACE_NORTH))
 for sid, pos, yaw in Z:
     gempty(f"spawn:zombie:{sid}", pos, yaw)
 
 # Waves come from every side of the tower, so the loop is the answer to them.
 GRAVES = {
-    0: [(-3, -33), (3, -33)],
-    1: [(-12, -40), (12, -40), (0, -49)],
-    2: [(-8, -30), (8, -30), (-13, -48.5), (13, -45)],
-    3: [(-6, -41), (6, -41), (-7.5, -57), (10, -56), (0, -36)],
+    0: [(-14.5, -33), (-8.5, -33)],
+    1: [(-12, -40), (12, -41), (0, -49)],
+    2: [(4, -30.5), (12, -30.5), (-13, -48.5), (13, -45)],
+    3: [(-6, -41), (6, -41), (-7.5, -57), (5, -57), (0, -36)],
 }
 for wave, points in GRAVES.items():
     for i, (x, z) in enumerate(points):
         gempty(f"grave:{wave}:w{wave}-{i + 1}", (x, 0, z), FACE_SOUTH)
 
 PICKUPS = [
-    ("shotgun", "sawn-off", (0, 0.3, -30)),
-    ("shells", "shells-grave", (1.6, 0.2, -28)),
+    ("shotgun", "sawn-off", (-11.5, 0.3, -30)),
+    ("shells", "shells-grave", (-9.9, 0.2, -28)),
     ("shells", "shells-yard-w", (-14.5, 0.2, -40)), ("shells", "shells-yard-e", (14.5, 0.2, -49)),
-    ("shells", "shells-crypt", (0, 0.2, -64)),
-    ("dynamite", "crypt-dynamite", (10.3, 0.2, -69)),
-    ("shells", "shells-ossuary", (4.3, 0.2, -69)),
-    ("health", "health-vestibule", (3, 0.2, -84)), ("shells", "shells-vestibule", (-3, 0.2, -84.5)),
+    ("shells", "shells-crypt", (10, 0.2, -64)),
+    ("dynamite", "crypt-dynamite", (20.3, 0.2, -69)),
+    ("shells", "shells-ossuary", (14.3, 0.2, -69)),
+    ("health", "health-vestibule", (13, 0.2, -84)), ("shells", "shells-vestibule", (7, 0.2, -84.5)),
     ("health", "health-secret", (21, 0.2, -38)), ("shells", "shells-secret", (21, 0.2, -43)),
-    ("cd", "the-wake-cd", (0, 1.0, -106)),
+    ("cd", "the-wake-cd", (10, 1.0, -106)),
 ]
 for item, pid, pos in PICKUPS:
     gempty(f"pickup:{item}:{pid}", pos)

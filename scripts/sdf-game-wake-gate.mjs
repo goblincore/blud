@@ -91,10 +91,10 @@ async function walkNorthFrom(x, z, ms) {
   return evaluate('__sdfGame.pose().pos[2]');
 }
 await evaluate('__sdfGame.freeze(true)');
-const blockedZ = await walkNorthFrom(0.6, -55, 2500);
+const blockedZ = await walkNorthFrom(10.6, -55, 2500);
 if (blockedZ < SLAB_SOUTH) fail(`walked through the closed crypt slab (z ${blockedZ})`);
 if (!(await evaluate('__sdfGame.openGate("crypt-slab")'))) fail('openGate returned false');
-const openZ = await walkNorthFrom(0.6, -55, 3500);
+const openZ = await walkNorthFrom(10.6, -55, 3500);
 if (openZ > SLAB_NORTH - 0.5) fail(`gate open but the player stopped at z ${openZ}`);
 pass(`gate: blocked at z ${blockedZ.toFixed(2)}, through to z ${openZ.toFixed(2)} once open`);
 
