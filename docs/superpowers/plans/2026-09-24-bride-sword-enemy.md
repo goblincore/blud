@@ -1118,6 +1118,8 @@ In `motion.ts`, import `isSwordVariant` and `swordCarryAt` from `./sword-swing`.
 
 Change the `carryTargetPose = { right: …mix… }` assignment to `carryTargetPose = swordSwing ?? { …existing object… };`. Everything downstream (`armPivot`, `gunPoseFromArm`, the left-hand FABRIK onto Fore_Hand) is unchanged.
 
+Task 8 added an opt-in `prop.fistOnGrip` (only the bride sets it): the carry block lays the right hand bone along the forearm onto the grip line (`motion.ts` ~l.1028 / ~l.1216), and `actor.ts` `pinTips(…, only)` redirects that one hand tip. The swing track goes through the same carry block, so the fist should follow the grip automatically. Check that it does, and don't bypass that code. Also add a one-line `rig-bind` unit test for `pinTips(…, only)`: with `only` set, only the listed tip moves (a review follow-up from Task 8).
+
 - [ ] **Step 4: Run the tests; re-solve the keys**
 
 Run: `npm test -- bride-blob sword-swing motion ogre-blob cultist-blob soldier && npx tsc --noEmit`
@@ -1401,7 +1403,9 @@ Expected: PASS.
       } : {}),
 ```
 
-Import `makeSwordMind` alongside `makeSoldierMind`. Pass `onMeleeContact` to `createZombieActor` for EVERY actor. The zombie never emits contact, so this is a no-op for it:
+Import `makeSwordMind` alongside `makeSoldierMind`.
+
+**Seat the sword in the game (from the Task 8 review).** `game-actor.ts` (~l.1196) re-seats the held prop onto the solved hand only for the soldier or a `gunner`. The bride has neither, so her sword would ride the motion target, not her hand. Widen that condition to any profile with a `prop` and `melee` (keep the ogre's current behaviour unless the change is visibly better for him too, and say which). The game rig loop also never calls `pinTips` (only the lab's `stepActorMotion` does), so in the game the fist reaches the grip only through the soft target pull. MEASURE fist-to-grip in `sdf-game.html` during the guard and mid-swing (the gate script below). If it is over 3 cm, apply the same `only`-tip redirect in the game rig step for `fistOnGrip` profiles. Pass `onMeleeContact` to `createZombieActor` for EVERY actor. The zombie never emits contact, so this is a no-op for it:
 
 ```ts
       onMeleeContact: ({ variant }) => {
@@ -1431,7 +1435,7 @@ Run: `npx tsc --noEmit && npm test -- game-context-coverage game-actor`
 Write `scripts/bride-melee-gate.mjs` modelled on `scripts/sdf-game-crowd-gate.mjs` (same boot, same `__warmGate` wait). It should:
 1. Open `/sdf-game.html?spawn=bride`, wait for `ready`, `__sdfGame.teleport(2)`, and `placePlayer` about 5 m from a bride, facing her. Unfreeze.
 2. Let 20 s of sim run with the player standing still. Sample `__sdfGame.brains()` (or the actor debug seam it exposes) every 100 ms: record states, variants, and the bride–player distance.
-3. Assert all of: at least one `lunge` started beyond 2.2 m; after it, the distance dropped by at least 0.8 m within 1.2 s; at least one `cleave` or `sweep`; `__sdfGame.playerHits() >= 1`; zero pipeline errors.
+3. Assert all of: fist-to-grip ≤ 3 cm on the guard and at a strike frame (the game path, see the seating note above); at least one `lunge` started beyond 2.2 m; after it, the distance dropped by at least 0.8 m within 1.2 s; at least one `cleave` or `sweep`; `__sdfGame.playerHits() >= 1`; zero pipeline errors.
 4. Take screenshots at a cleave's wind-up and at its strike, plus one standing guard. Look at them: the sword is in both hands, the veil and skirt are uncut, and the flash is visible on the hit frame.
 
 Run: `node scripts/bride-melee-gate.mjs`, expecting the `PASS` lines above. Then run `node scripts/sdf-game-crowd-gate.mjs` to confirm the zombie crowd is unchanged.
