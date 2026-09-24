@@ -95,6 +95,7 @@ import { parseLevelJson } from './level-json';
 import { levelCeilingM, roomSpawnPoints } from './game-level-leaves';
 import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor-leaves';
 import { mountGameMenu } from './game-menu-dom';
+import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -708,6 +709,8 @@ async function main() {
   // (null for the ring). Before the per-room light lists are built, so the moon
   // joins the open rooms' lists (levelSceneLights honours userData.onlyRooms).
   ctx.lighting.outdoor = createOutdoor(ctx);
+  // THE VOID: portals, glow pools, embers (null without a portal).
+  ctx.lighting.void = createVoid(ctx);
 
   // CEILING FILL. The sun points down; ceilings (and north-south walls in
   // shadow) have normals pointing away from it, so with only a dim ambient
@@ -3409,9 +3412,10 @@ async function main() {
   ctx.bake.lastBakeInfo = null;
   // Bone tubes (task 5): the instancer owns its own light set — seed it once
   // from body 1's view, which just took the LIGHT_PRESETS apply above, so
-  // the tube pass cannot drift from the march's key.
-  {
-    const v = ctx.world.actors[0]!.view.uniforms;
+  // the tube pass cannot drift from the march's key. A level with no bodies
+  // (the Void) has nothing to seed from and nothing to draw bones for.
+  if (ctx.world.actors[0]) {
+    const v = ctx.world.actors[0].view.uniforms;
     ctx.render.boneInstancer.uniforms.lightDir.value.copy(v.lightDir.value);
     ctx.render.boneInstancer.uniforms.keyColor.value.copy(v.keyColor.value);
     ctx.render.boneInstancer.uniforms.lightCfg.value.copy(v.lightCfg.value);
@@ -3443,9 +3447,10 @@ async function main() {
   // Baked chunks (close-up task 5): same seed from body 1's view — the
   // mesh shade fn is boneShade's formula, so it takes the same diet. The
   // per-frame FLASHLIGHT refresh happens in the render callback beside the
-  // bone instancer's; this seed is the room's key/ambient.
-  {
-    const v = ctx.world.actors[0]!.view.uniforms;
+  // bone instancer's; this seed is the room's key/ambient. No bodies (the
+  // Void): no seed, and chunks never bake.
+  if (ctx.world.actors[0]) {
+    const v = ctx.world.actors[0].view.uniforms;
     const seedBaked = (m: BakedChunkMaterial) => {
       m.uniforms.lightDir.value.copy(v.lightDir.value);
       m.uniforms.keyColor.value.copy(v.keyColor.value);
@@ -6616,6 +6621,7 @@ async function main() {
     advanceSimClock(dt);
     ctx.demo.simFrame++;
     stepOutdoor(ctx, dt);
+    stepVoid(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
@@ -8084,6 +8090,7 @@ async function main() {
     createRenderSeams(ctx),
     createWorldSeams(ctx),
     createOutdoorSeams(ctx),
+    createVoidSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),

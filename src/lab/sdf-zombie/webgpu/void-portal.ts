@@ -73,5 +73,5 @@ export function emberWrap(pos: Vec3, cam: Vec3, box: number): Vec3 {
 /** Glow pool brightness at `r` metres from its centre. */
 export function glowAt(r: number, radius: number): number {
   const t = Math.min(1, r / radius);
-  return (1 - t) * (1 - t);
+  return (1 - t) * (1 - t) * (1 - t);
 }

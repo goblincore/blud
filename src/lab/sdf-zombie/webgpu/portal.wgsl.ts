@@ -24,7 +24,8 @@ export const PORTAL_COLOR = /* wgsl */ `fn portalColor(wpos: vec3<f32>, eye: vec
   let d = length(vec2<f32>(u, v)) - 1.0 - (n1 - 0.5) * 0.10 - (n2 - 0.5) * 0.06;
   // Rim: white-hot just inside the edge, red outward, broken into wisps.
   let core = exp(-abs(d) * 26.0);
-  let glow = exp(-max(d, 0.0) * 7.0) * step(-0.02, d) * (0.6 + 0.8 * n2);
+  // The quad reaches d = 0.4 (PORTAL_PAD 1.4): the glow must be gone before it.
+  let glow = exp(-max(d, 0.0) * 7.0) * step(-0.02, d) * (0.6 + 0.8 * n2) * (1.0 - smoothstep(0.18, 0.36, d));
   var c = vec3<f32>(1.0, 0.95, 0.9) * core * 1.6 + vec3<f32>(0.9, 0.06, 0.04) * glow * 1.4;
   if (d < 0.0) {
     // Haze: slow dark-red swirl.
@@ -65,5 +66,5 @@ export const EMBER_POS = /* wgsl */ `fn emberPos(i: f32, t: f32, cam: vec3<f32>,
 /** Glow pool: additive red at uv (0..1 square), radial falloff. */
 export const GLOW_POOL = /* wgsl */ `fn glowPool(uv: vec2<f32>) -> vec3<f32> {
   let r = min(1.0, length(uv - vec2<f32>(0.5, 0.5)) * 2.0);
-  return vec3<f32>(0.55, 0.03, 0.02) * (1.0 - r) * (1.0 - r);
+  return vec3<f32>(0.40, 0.02, 0.015) * (1.0 - r) * (1.0 - r) * (1.0 - r);
 }`;
