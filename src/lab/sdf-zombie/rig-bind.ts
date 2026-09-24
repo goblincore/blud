@@ -226,9 +226,12 @@ export function bindRig(body: BuildResult): BoundRig {
   // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.
   // Mirrored bones expand to `name.l` / `name.r` (mirror.ts), so the suffix is
   // the honest marker. Falls back to every joint when a body has none.
+  // The `hem` bone is a CLOTH PENDULUM, not anatomy: it is unmirrored but
+  // never axial. Its swinging tail must not anchor a rib, and its segment
+  // must not frame one (the bride's pelvis bone sits exactly on it).
   const axialJoints: number[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name)) continue;
+    if (/\.[lr]$/.test(name) || name === 'hem') continue;
     for (const j of [indexOf(bone.head), indexOf(bone.tail)])
       if (!axialJoints.includes(j)) axialJoints.push(j);
   }
@@ -236,7 +239,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // rigid torso-bone frames below.
   const axialSegs: { head: number; tail: number }[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name)) continue;
+    if (/\.[lr]$/.test(name) || name === 'hem') continue;
     const h = indexOf(bone.head), t = indexOf(bone.tail);
     if (h !== t) axialSegs.push({ head: h, tail: t });
   }
@@ -301,6 +304,14 @@ export function bindRig(body: BuildResult): BoundRig {
     for (const [h, t] of boneEnds.values())
       if (distal.has(h) && !distal.has(t)) { distal.add(t); grew = true; }
   }
+  // The HEM PENDULUM's free end swings like a distal joint, and further: it
+  // is cloth, so only the garments on the hem bone (and bones sharing its
+  // hip joint) may ride it. The bride's stocking tops (thigh prims at
+  // y 0.78) ended nearer the hem tail (y 0.64, on the centreline) than the
+  // hip or knee, and in a walk rose off the leg as tubes to the swinging
+  // hem (2026-09-24).
+  const hemPendulum = body.bones.get('hem');
+  if (hemPendulum) distal.add(indexOf(hemPendulum.tail));
   const ringCache = new Map<string, Set<number>>();
   const boneRing = (bone: string): Set<number> | null => {
     const own = boneEnds.get(bone);
