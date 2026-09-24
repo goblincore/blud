@@ -16,7 +16,8 @@
   are painted decals (blood soak / scorched hole), never carved and never severing; the hem kick that spun the robe
   is gone; a kill throws the body along the shot (`soft-death.ts`); the hood drops on death (`.blob` `when=alive|dead`,
   `death-state.ts`). Soldier unchanged (still carved).
-- [ ] **Cultist perf pass** (owner: "really bad" in groups; ~3x a zombie close up): measure first (step heatmap), then
+- [ ] **Cultist perf pass** — IN PROGRESS, paused for a quiet machine. Landed: upper-bound cull (all characters, -31% cultist
+  / -34% zombie prim evals, pixel-identical). Findings + next steps: [PERF.md](docs/dev-notes/2026-09-23-cultist/PERF.md). Original plan:
   cut hidden flesh under the robe, merge robe shells, consider baking the hands (owner: no digit-level damage needed).
   Owner open to a mesh/baked robe if SDF can't get near ~1.5x a zombie.
 - [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),

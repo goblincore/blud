@@ -51,7 +51,9 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
   // keeps groups a LIMB still needs inside a foreign crater, where the limb is
   // less inside than the union. Folding such a group into d is a value no-op:
   // its prims sit beyond d + 4k, where smin is exactly min.
-  if (length(p - bounds.xyz) - bounds.w > (d + ${LIMBS ? 'gLimbSlack + ' : ''}counts.w * 4.0) * grp.z) { return d; }
+  // UPPER-BOUND CULL (cultist perf pass, 2026-09-24): min(d, gCullRef), see
+  // gCullRef below. 1e9 (every caller but the march's main fold) = as before.
+  if (length(p - bounds.xyz) - bounds.w > (min(d, gCullRef) + ${LIMBS ? 'gLimbSlack + ' : ''}counts.w * 4.0) * grp.z) { return d; }
   let start = i32(grp.x);
   let count = i32(grp.y);
   let flags = i32(grp.w + 0.5);
@@ -299,7 +301,20 @@ var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);
 // block, read by marchBurnRead (MARCH_BURN_OUT). rgb = burn, char, surface
 // fire; w = 1 on a written pixel and is NEVER a hit gate -- the attachment's
 // cleared alpha is 1 too (the sdf-layer MRT note), so readers gate on rgb.
-var<private> gBurnOut: vec4<f32> = vec4<f32>(0.0);`;
+var<private> gBurnOut: vec4<f32> = vec4<f32>(0.0);
+// UPPER-BOUND CULL REFERENCE (cultist perf pass, 2026-09-24). The group and
+// cluster culls compare a sphere against the RUNNING fold d — and d starts at
+// 1e9, so the FIRST cluster folded (the head: CLUSTER_ORDER) could never cull
+// anything: every march step of every ray paid the whole head. The cultist's
+// 24-prim face cost 52% of his prim evaluations that way. The march loop now
+// hands mapBody an upper bound on this sample's fold (the previous sample's
+// fold + 3x the distance moved; the fold is ~1-Lipschitz, 3x covers warps),
+// and the main fold culls against min(d, bound). The fold ORDER is untouched
+// (smin is order-dependent: reordering moved surfaces up to 78 mm). A group
+// past bound + 4k cannot reach the final fold, which is <= the bound. 1e9 =
+// off; mapBody sets it per slot and resets it before the owner re-fold,
+// whose limb-only field the whole-body bound does not bound.
+var<private> gCullRef: f32 = 1e9;`;
 
 // Per-instance state, loaded from the record buffer by slot. Everything that
 // used to be a per-body uniform parameter is a private global now, so the

@@ -28,6 +28,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   var bestIdxU = -1.0;
   var bestU = 1e9;
   var bestDistortU = 1.0;
+  var foldU = 1e9;
   var nearWoundU = 0.0;
   var carvedU = 0.0;
   // PER-STEP SLOT ITERATION. Tiles off: walk the capacity bound and take slot
@@ -118,6 +119,10 @@ ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwoun
   } else {
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
+  // UPPER-BOUND CULL (see gCullRef): only for the slot the bound was measured
+  // on, and never with per-limb accumulators (a limb's fold is not bounded by
+  // the body's).
+  gCullRef = select(1e9, gCullUB, base + s == gCullSlot && !limbMode);
   if (tiled) {
     // TILE-LIST PATH (perf task 5 step 2, range-walked in 7d). MARCH_BODY
     // preloaded this pixel's tile entries into gTile* ONCE, before any
@@ -154,7 +159,7 @@ ${LIMBS ? `      if (limbMode) { limbSwitch(i32(fract(gTileGrp[e].w) * 32.0 + 0.
     // (owner, 2026-08-23). The factor makes a plate-bearing cluster
     // (schoolgirl sole: 22x) nearly uncullable, but its GROUPS still cull
     // soundly below, so the cost is a few texel reads, not a full fold.
-    if (length(p - cbounds.xyz) - cbounds.w > (d + ${LIMBS ? 'gLimbSlack + ' : ''}counts.w * 4.0) * gspan.z) { continue; }
+    if (length(p - cbounds.xyz) - cbounds.w > (min(d, gCullRef) + ${LIMBS ? 'gLimbSlack + ' : ''}counts.w * 4.0) * gspan.z) { continue; }
     let gFirst = i32(gspan.x);
     let gCount = i32(gspan.y);
 ${LIMBS ? `    if (limbMode) { limbSwitch(c); }
@@ -176,7 +181,9 @@ ${LIMBS ? `    if (limbMode) { limbSwitch(c); }
   }
   }
 ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
-` : ''}  let carved = applyCarves(d, p, data, counts, band);
+` : ''}  gCullRef = 1e9;
+  let foldSlot = d;
+  let carved = applyCarves(d, p, data, counts, band);
   let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound, band);
   var dmg = dmgRes.x;
   let nearWound = dmgRes.y;
@@ -376,8 +383,11 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       bestIdxU = gFoldBestIdx;
       bestU = gFoldBest;
       bestDistortU = gFoldBestDistort;
+      foldU = foldSlot;
     }
   }
+  gLastFold = foldU;
+  gLastFoldSlot = bestSlot;
   gFoldBest = bestU;
   gFoldBestIdx = bestIdxU;
   gFoldBestDistort = bestDistortU;
@@ -387,7 +397,14 @@ ${LIMBS ? `      let savedBest = gFoldBest;
   let wantSlot = select(bestSlot, gPinSlot, gPinSlot >= 0);
   if (gSlot != wantSlot) { loadInstance(inst, wantSlot); }
   return vec4<f32>(dUnion, bestIdxU, nearWoundU, carvedU);
-}`;
+}
+// UPPER-BOUND CULL plumbing (see gCullRef): the march loop writes gCullUB /
+// gCullSlot before its mapBody call and clears them after; mapBody leaves the
+// winning slot's pre-carve FOLD in gLastFold / gLastFoldSlot for the next one.
+var<private> gCullUB: f32 = 1e9;
+var<private> gCullSlot: i32 = -1;
+var<private> gLastFold: f32 = 1e9;
+var<private> gLastFoldSlot: i32 = -1;`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
