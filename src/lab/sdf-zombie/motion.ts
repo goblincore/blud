@@ -927,7 +927,8 @@ export function stepMotion(
   /** prop.fistOnGrip: the right hand tip's offset from the wrist, laid along
    *  the grip line — re-applied after the tip follow pass below. */
   let fistTipR: Vec3 | null = null;
-  /** A live sword swing pins both arms to their targets (frame.posePins). */
+  /** A live sword swing, or the two-handed sword carry, pins both arms to
+   *  their targets (frame.posePins). */
   let swordArmPins = false;
   const carries = profile.carries;
   const broadSoldierOpen = soldierStagger.active && !soldierStagger.state.fullOpen && soldierStagger.variant === 1
@@ -956,7 +957,12 @@ export function stepMotion(
       && isSwordVariant(cfg.attack.variant)
       ? swordCarryAt(cfg.attack.phase, cfg.attack.variant, CARRIES[carries.walk])
       : null;
-    swordArmPins = swordSwing !== null;
+    // Pinned for the whole two-handed carry, not only the swing (Task 11): in
+    // the guard the soft rest pull let the solved arms lag their targets by
+    // up to 14 cm whenever she turned or set off (measured in the game), and
+    // with the sword seated on the solved fist the left hand then came off
+    // Fore_Hand. The one-handed run (swordTrail) keeps its free left arm.
+    swordArmPins = swordSwing !== null || (profile.melee?.kind === 'sword' && !wanted.oneHanded);
     const previous = carryTargetPose ?? wanted;
     const amount = 1 - Math.exp(-9 * dt);
     const mix = (a: number, b: number) => a + (b - a) * amount;
