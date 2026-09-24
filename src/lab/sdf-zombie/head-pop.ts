@@ -101,6 +101,10 @@ export function headPopDebris(head: { origin: Vec3; prims: Primitive[] }, dir: V
   return out;
 }
 
+/** Swell length range (s). Owner: 0.3-0.5 was "a bit too delayed"; quick
+ *  now, but a knob — a future bullet-time mode stretches it. */
+export const SWELL_SEC = [0.12, 0.2] as const;
+
 /** Swell curve: 1 at the hit, ~1 + SWELL_MAX at the pop, accelerating. */
 export const SWELL_MAX = 0.6;
 export function swellScale(u: number): number {

@@ -29,7 +29,7 @@ import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { applyDeathState, hasDeathState } from '../death-state';
-import { inflateHead } from '../head-pop';
+import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal,
   type Wound, type WoundType,
@@ -98,6 +98,11 @@ const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.
  *  blast response (stagger.ts StaggerHit.gain; default 1 = lab amplitudes).
  *  Pellets send no gain: eight arrive together and re-flinch the body. */
 const SLUG_GAIN = 1.3;
+
+/** SOFT TARGETS (MotionProfile.soft — the cultist; owner playtest 2026-09-24,
+ *  second pass). Trigger pulls to kill; the range (m) inside which a slug
+ *  severs (an arm) or pops a head. 6 m: across a small room — eyeballed. */
+export const SOFT_TUNING = { hitsToKill: 2, severRange: 6 } as const;
 
 /** Heavy-hit root knockback: initial ground-plane speed (m/s) along the
  *  shot's horizontal direction — the body's ROOT actually travels back
@@ -654,22 +659,43 @@ export function createZombieActor(opts: {
   let swellClock = 0;
   const deathRng: Rng = makeRng((opts.seed ^ 0xdea7dea7) >>> 0);
   /** Start a soft target's death: plan it once, from the killing hit. */
-  function beginSoftDeath(dir: Vec3, limb: LimbId | undefined, bone: string | undefined, weapon: 'slug' | 'pellet' | 'blast') {
+  function beginSoftDeath(dir: Vec3, limb: LimbId | undefined, bone: string | undefined, weapon: 'slug' | 'pellet' | 'blast', pop = false) {
     softKilled = true;
     deathDir = [...dir] as Vec3;
     deathPlan = planDeath({ limb, bone, weapon }, deathRng);
     dyingT = deathPlan.delaySec;
     burstLeft = deathPlan.burst;
-    headPop = limb === 'head' && weapon !== 'blast' && !!opts.onHeadPop;
+    headPop = pop && !!opts.onHeadPop;
     if (headPop) {
-      // Owner: 0.3-0.5 s ("can always tweak"); a slug pops a little sooner.
-      swellDur = weapon === 'slug' ? 0.3 + 0.1 * deathRng() : 0.35 + 0.15 * deathRng();
+      // Owner, second pass: 0.3-0.5 s was "a bit too delayed". SWELL_SEC
+      // (head-pop.ts) keeps it a knob — a bullet-time mode will stretch it.
+      swellDur = SWELL_SEC[0] + (SWELL_SEC[1] - SWELL_SEC[0]) * deathRng();
       swellClock = 0;
       dyingT = Math.max(dyingT, swellDur);
       burstLeft = 0;
     }
   }
   let deathStateApplied = false;
+  /** SOFT HIT COUNT (owner, second pass: one hit was too soft). Counted per
+   *  TRIGGER PULL — a shotgun's pellets share a shotId — so a volley is one. */
+  let softHits = 0;
+  const softShots = new Set<string>();
+  let softShotSerial = 0;
+  function newSoftShot(wound: Wound): boolean {
+    const src = wound.shot;
+    const id = src && 'shotId' in src && src.shotId !== undefined ? `shot:${src.shotId}`
+      : `batch:${hitBatching ? diagnosticBatchShot : --softShotSerial}`;
+    if (softShots.has(id)) return false;
+    softShots.add(id);
+    return true;
+  }
+  /** Distance to the player at the hit (the last seen position); Infinity when
+   *  unknown, so an unknown shooter never counts as close. */
+  function shooterDistance(): number {
+    const pl = encounterOrder?.player ?? brainPlayer;
+    if (!pl) return Infinity;
+    return Math.hypot(pl.x - state.wander.pos[0], pl.z - state.wander.pos[2]);
+  }
   let soldierFatal = false;
   let propReleaseRequested = false;
 
@@ -853,6 +879,12 @@ export function createZombieActor(opts: {
     if (r.chunk.prims.length === 0) return;
     const piece = posedDetachedChunk(current, posed, r.chunk, bodyYaw, !soldierDamage);
     current = r.body;
+    // A soft target's gun hand goes with ANY cut on the right arm (a forearm
+    // cut leaves the arm cluster alive, so missingLimbs never says so).
+    if (softTarget && limb === 'armR' && !propReleaseRequested) {
+      propReleaseRequested = true;
+      opts.character?.releaseProp([0, 0, 0], opts.seed);
+    }
     if (r.stumpWound) {
       woundRing.stamp(r.stumpWound, posed, bodyYaw);
       torsoWounds?.record(r.stumpWound, current, false);
@@ -900,6 +932,22 @@ export function createZombieActor(opts: {
     pendingSevered.push('head');
     rebind();
     opts.onHeadPop?.(piece, deathDir, r.stumpWound);
+  }
+
+  /** The first (non-lethal) hit's reaction: the profile's violent throw-back
+   *  flail (motion-profile.ts flail), the arms thrown open with the gun yawed
+   *  off, or the hunch — and the aim goes (mind.stagger). */
+  function softStagger(weapon: 'slug' | 'pellet' | 'blast'): Partial<NonNullable<MotionSignals['shot']>> {
+    const r = deathRng();
+    const react: Partial<NonNullable<MotionSignals['shot']>> = r < 0.45
+      ? { soldierLevel: weapon === 'pellet' ? 'medium' : 'heavy', fullStagger: true, torso: true }
+      : r < 0.7
+        ? { soldierLevel: weapon === 'pellet' ? 'medium' : 'heavy', staggerVariant: 1 }
+        : { soldierLevel: 'heavy', staggerVariant: 2, torso: true };
+    const dur = react.fullStagger ? (opts.profile?.flail?.durationSec ?? soldierStaggerDuration('heavy', true))
+      : soldierStaggerDuration(react.soldierLevel ?? 'medium');
+    mind.stagger(dur);
+    return react;
   }
 
   function runSeverChecks() {
@@ -1599,8 +1647,10 @@ export function createZombieActor(opts: {
     const rank = (s: NonNullable<MotionSignals['shot']>) =>
       s.fullStagger ? 3 : s.soldierLevel === 'heavy' ? 2 : s.soldierLevel === 'medium' ? 1 : 0;
     // Keep strength and impact source together until motion consumes them.
-    // Zombies retain their existing last-impact selection.
-    if (!soldierDamage || !pendingShot || rank(shot) > rank(pendingShot)
+    // Zombies retain their existing last-impact selection; a soft target with
+    // soldier reactions keeps the strongest too (its volley's first pellet
+    // carries the stagger, the rest are plain pellets).
+    if (!(soldierDamage || (softTarget && opts.profile?.staggerStyle === 'soldier')) || !pendingShot || rank(shot) > rank(pendingShot)
       || (rank(shot) === rank(pendingShot) && (shot.gain ?? 1) >= (pendingShot.gain ?? 1))) {
       pendingShot = shot;
     }
@@ -1642,9 +1692,27 @@ export function createZombieActor(opts: {
       wound.radius = Math.min(wound.radius, .09, girth * 1.1);
     }
     recordSoldierInjury(wound);
-    if (softTarget && wound.type !== 'burn' && !softKilled)
-      beginSoftDeath(dirWorld, hitPrim?.limb, hitPrim?.bone,
-        wound.shot?.weapon === 'slug' ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet');
+    // SOFT TARGET, second pass (owner 2026-09-24):
+    //   * two trigger pulls kill; the first STAGGERS (softStagger);
+    //   * a slug to the HEAD from close range pops it at once (Scanners);
+    //   * only a CLOSE slug severs (an arm through the sleeve); pellets and far
+    //     slugs leave decals and blood, never cuts;
+    //   * a hit in the face drops the hood (the death-state swap, early) and
+    //     the face carves to the skull like the other enemies'.
+    let softReact: Partial<NonNullable<MotionSignals['shot']>> | null = null;
+    if (softTarget && wound.type !== 'burn' && !softKilled) {
+      const weapon = wound.shot?.weapon === 'slug' ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet';
+      const close = shooterDistance() <= SOFT_TUNING.severRange;
+      const head = hitPrim?.limb === 'head';
+      if (!(weapon === 'slug' && close)) wound.severRadius = 0;
+      if (head && !deathStateApplied && hasDeathState(current)) { deathStateApplied = true; current = applyDeathState(current); }
+      if (weapon === 'slug' && close && head) beginSoftDeath(dirWorld, 'head', hitPrim?.bone, 'slug', true);
+      else if (newSoftShot(wound)) {
+        softHits++;
+        if (softHits >= SOFT_TUNING.hitsToKill) beginSoftDeath(dirWorld, hitPrim?.limb, hitPrim?.bone, weapon);
+        else softReact = softStagger(weapon);
+      }
+    }
     // A soft target's robe takes a painted mark, not a crater (damage.ts).
     if (softTarget) clothDecal(field.prims, wound);
     woundRing.stamp(wound, field, bodyYaw);
@@ -1652,6 +1720,7 @@ export function createZombieActor(opts: {
     pendingWounds.push(wound);
     const fullStagger = progressiveHit(wound);
     const shot: NonNullable<MotionSignals['shot']> = {
+      ...(softReact ?? {}),
       type: fullStagger ? 'blast' : wound.type,
       dirWorld: [...dirWorld] as Vec3,
       woundWorld: [...hitWorld] as Vec3,
@@ -1662,6 +1731,7 @@ export function createZombieActor(opts: {
       // SLUG_GAIN (above the lab's blast amplitudes — first-person range).
       // Pellets send no gain: eight arrive together and re-flinch at 1.
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
+      ...(softReact ?? {}),
     };
     selectPendingShot(shot);
     if (fullStagger) mind.stagger(soldierStaggerDuration('heavy', true));
@@ -1671,7 +1741,7 @@ export function createZombieActor(opts: {
       // travel; Zombies retain the existing actor-level root knock.
       mind.stagger(soldierDamage ? soldierStaggerDuration('medium') : undefined);
       const l = Math.hypot(dirWorld[0], dirWorld[2]);
-      if (!soldierDamage && l > 1e-6) {
+      if (!soldierDamage && !softTarget && l > 1e-6) {
         knockV = BLAST_KNOCK_MPS;
         knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
       }

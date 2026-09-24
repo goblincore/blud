@@ -45,10 +45,13 @@ const smooth = (x: number) => {
 
 export function stepSoldierStagger(
   previous: SoldierStaggerState | undefined,
-  hit: { dirWorld: Vec3; level: SoldierStaggerLevel; torso?: boolean; fullStagger?: boolean } | null,
+  hit: { dirWorld: Vec3; level: SoldierStaggerLevel; torso?: boolean; fullStagger?: boolean; variant?: 0 | 1 | 2 } | null,
   dt: number,
   seed: number,
   cancelled = false,
+  /** The full flail's rise and length (motion-profile.ts FlailTuning); absent
+   *  = the soldier's 0.25 s / soldierStaggerDuration. */
+  full?: { riseSec: number; durationSec: number },
 ): SoldierStaggerStep {
   let state = previous ?? makeSoldierStaggerState(seed);
   if (cancelled) state = { ...state, active: false, age: 0 };
@@ -57,6 +60,7 @@ export function stepSoldierStagger(
     const side = hit.dirWorld[0] < -.15 ? 0 : hit.dirWorld[0] > .15 ? 2 : 1;
     let variant = (((seed + state.serial + side) % 3 + 3) % 3) as 0 | 1 | 2;
     if (variant === state.previous) variant = ((variant + 1) % 3) as 0 | 1 | 2;
+    if (hit.variant !== undefined) variant = hit.variant;
     state = { active: true, age: 0, variant, previous: variant,
       serial: state.serial + 1, dirWorld: [...hit.dirWorld] as Vec3, level: hit.level,
       torso: !!hit.torso, fullOpen: !!hit.fullStagger };
@@ -68,14 +72,14 @@ export function stepSoldierStagger(
   const levelIndex = state.level === 'small' ? 0 : state.level === 'medium' ? 1 : 2;
   const distance = SOLDIER_STAGGER.travel[levelIndex];
   const driveSec = SOLDIER_STAGGER.driveSec[levelIndex];
-  const duration = soldierStaggerDuration(state.level, state.fullOpen);
+  const duration = state.fullOpen && full ? full.durationSec : soldierStaggerDuration(state.level, state.fullOpen);
   const u0 = Math.min(age0 / driveSec, 1);
   const u1 = Math.min(age / driveSec, 1);
   const delta = distance * (smooth(u1) - smooth(u0));
   const lateral = (state.variant - 1) * .18;
   const dx = state.dirWorld[0] / mag, dz = state.dirWorld[2] / mag;
   const travelDelta: Vec3 = [(dx - dz * lateral) * delta, 0, (dz + dx * lateral) * delta];
-  const rise = smooth(age / (state.fullOpen ? .25 : Math.min(.14, duration * .28)));
+  const rise = smooth(age / (state.fullOpen ? (full?.riseSec ?? .25) : Math.min(.14, duration * .28)));
   const fall = 1 - smooth((age - duration * .42) / (duration * .58));
   const armWeight = rise * fall * ([.28, .62, 1][levelIndex] ?? 1);
   const active = age < duration;
