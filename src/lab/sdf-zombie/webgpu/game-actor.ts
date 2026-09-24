@@ -378,6 +378,9 @@ export interface ZombieActor {
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
   readonly kind: 'zombie' | 'soldier';
+  /** The motion profile's character name ('zombie' when none) — which
+   *  character this is, where `kind` is only which decision vocabulary. */
+  profileName(): string;
   meleeCapable(): boolean;
   /** The LAST motion frame, or null before the first step. character-view's
    *  pose() reads `gun` (the held prop's transform) and `collapsed` (release
@@ -682,6 +685,14 @@ export function createZombieActor(opts: {
     routeCache.age+=dt;return nav.follow(state.wander.pos,routeCache.path);
   };
   let lastFrame: ReturnType<typeof stepMotion>['frame'] | null = null;
+  /** prop.fistOnGrip: the right hand tip, pinned along its motion target
+   *  each step (pinTips `only`); the one-element list, built once. */
+  const fistTips = ((): { tips: BoundRig['tips']; only: ReadonlySet<number> } | null => {
+    const i = joints.index.handTipR;
+    if (!opts.profile?.prop?.fistOnGrip || i === undefined) return null;
+    const tips = bound.tips.filter(t => t.point === i);
+    return tips.length ? { tips, only: new Set([i]) } : null;
+  })();
   /** See debug().fistGrip / fistGripAuthored. */
   let lastFistGrip: number | null = null;
   let lastFistGripAuthored: number | null = null;
@@ -891,6 +902,12 @@ export function createZombieActor(opts: {
   let damageRevision = 0;
   function step(dt: number) {
     if (bakePaused) return;
+    // A MELEE prop falls with its sword arm (the bride): motion.ts stops the
+    // carry (canHold), so drop the sword rather than leave it hanging in air.
+    if (opts.profile?.melee && opts.profile.prop && !propReleaseRequested && missingLimbs().armR) {
+      propReleaseRequested = true;
+      opts.character?.releaseProp([0, 0, 0], opts.seed);
+    }
     reactionTime += Math.max(0, dt);
     let firstSub = true;
     // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
@@ -937,7 +954,12 @@ export function createZombieActor(opts: {
           headAlive: current.clusters.find(c => c.limb === 'head')?.alive ?? false,
           freshWounds: pendingWounds,
         }
-        : { ...CALM, dt: sdt };
+        // A MELEE carry (the bride) needs her real missing limbs on EVERY
+        // sub-step, not only on damage frames: motion.ts's canHold and arm
+        // pins read sig.missing, and CALM would re-pin a severed arm's joints
+        // to guard targets the frame after the cut (Task 11 review). Other
+        // profiles keep CALM exactly (the zombie no-op contract).
+        : opts.profile?.melee ? { ...CALM, dt: sdt, missing: missingLimbs() } : { ...CALM, dt: sdt };
       firstSub = false;
       // Decide before locomotion integrates, so the target this sub-step walks
       // toward is this sub-step's target.
@@ -1210,10 +1232,8 @@ export function createZombieActor(opts: {
       // measured 3.1 cm fist-to-grip at the guard and up to 4.8 cm mid-swing.
       // Point JUST that tip along its motion target, as actor.ts does. Every
       // other tip (and every other character) keeps the unpinned verlet.
-      const fistTip = joints.index.handTipR;
-      if (opts.profile?.prop?.fistOnGrip && f.gun && !f.collapsed && fistTip !== undefined) {
-        const tip = bound.tips.filter(t => t.point === fistTip);
-        if (tip.length) points = pinTips(points, tip, f.bodyYaw, f.restPose, new Set([fistTip]));
+      if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
+        points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
       }
       if (f.collapsed) {
         points = applyFloorContact(points, f.floorY);
@@ -1234,7 +1254,7 @@ export function createZombieActor(opts: {
       // prop.fistOnGrip (the bride): the fist is the middle of the solved
       // hand bone (wrist to the pinned tip), where the fist prim sits.
       const fistTipI = joints.index.handTipR;
-      const fistPt: Vec3 | null = opts.profile?.prop?.fistOnGrip && f.gun && fistTipI !== undefined
+      const fistPt: Vec3 | null = opts.profile?.prop?.fistOnGrip && f.gun && fistTipI !== undefined && !propReleaseRequested
         ? (() => {
           const w = bound.rig.points[joints.index.handR]!.pos, t = bound.rig.points[fistTipI]!.pos;
           return [(w[0] + t[0]) / 2, (w[1] + t[1]) / 2, (w[2] + t[2]) / 2] as Vec3;
@@ -1781,6 +1801,7 @@ export function createZombieActor(opts: {
      *  `at` = 'full' → severLimb (whole cluster); a number n → severDistal
      *  from the n-th prim of the limb's chain (0 = root; for the head,
      *  1 leaves the neck on the body — the headshot-stump case). */
+    profileName: () => opts.profile?.name ?? 'zombie',
     debugSever: (limb: LimbId, at: 'full' | number = 'full') => {
       const cluster = current.clusters.find(c => c.limb === limb);
       if (!cluster?.alive) return false;

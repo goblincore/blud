@@ -13,10 +13,11 @@ import { BRIDE_PROFILE, runWeight } from '../motion-profile';
 import { BURN_BEHAVIOUR } from '../burn-behaviour';
 import { makeSwordMind } from './enemy-mind';
 import { createZombieActor } from './game-actor';
+import { makeMotionJoints } from '../motion';
 import type { SwingVariant } from '../attack';
 
 const body = buildBody(compileBlob(parseBlob(brideSrc)));
-function bride(onMeleeContact?: (e: { variant: SwingVariant }) => void) {
+function bride(onMeleeContact?: (e: { variant: SwingVariant }) => void, releaseProp?: () => void) {
   return createZombieActor({
     id: 1, room: 1, seed: 42, start: [0, 0, 0],
     bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }, furniture: [],
@@ -24,8 +25,14 @@ function bride(onMeleeContact?: (e: { variant: SwingVariant }) => void) {
     view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any,
     profile: BRIDE_PROFILE, mind: makeSwordMind(),
     ...(onMeleeContact ? { onMeleeContact } : {}),
+    ...(releaseProp ? { character: { releaseProp } as any } : {}),
   });
 }
+const J = makeMotionJoints(body, bindRigRest())!.index;
+function bindRigRest() { return createZombieActor({
+  id: 0, room: 1, seed: 1, start: [0, 0, 0], bounds: { minX: -1, maxX: 1, minZ: -1, maxZ: 1 }, furniture: [], body,
+  view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any, profile: BRIDE_PROFILE,
+}).boundRig().rig.restPose; }
 const CM3 = 0.03;
 
 describe('bride actor (game path)', () => {
@@ -77,5 +84,40 @@ describe('bride actor (game path)', () => {
   it('never runs in the game, so a swing always starts from the guard', () => {
     const fastest = BRIDE_PROFILE.cruise * Math.max(BURN_BEHAVIOUR.zombieSpeed, 1);
     expect(runWeight(BRIDE_PROFILE, fastest)).toBe(0);
+  });
+
+  // SEVERED ARMS (Task 11 review). Pins for the whole two-handed carry must
+  // never hold a missing arm's joints to guard targets; without her sword arm
+  // she drops the sword, the carry goes, and her swings stop landing.
+  it.each(['armR', 'armL'] as const)('without %s: no pin on the missing arm, and she keeps stepping', limb => {
+    let released = 0, hits = 0;
+    const a = bride(() => hits++, () => released++);
+    for (let i = 0; i < 60; i++) a.step(1 / 60);
+    expect(a.debugSever(limb)).toBe(true);
+    const gone = limb === 'armR' ? [J.elbowR, J.handR, J.handTipR] : [J.elbowL, J.handL, J.handTipL];
+    let fights = 0;
+    for (let i = 0; i < 600; i++) {
+      a.setRingInput(true, 0);
+      a.setBrainInput({ x: 0, z: 5, room: 1 }, true);
+      expect(() => a.step(1 / 60)).not.toThrow();
+      const f = a.motionFrame()!;
+      for (const g of gone) expect(f.posePins ?? []).not.toContain(g);
+      if (a.debug().state === 'attack') fights++;
+    }
+    expect(fights).toBeGreaterThan(0);
+    if (limb === 'armR') {
+      // Drops the sword: released once, no carry, no seated fist, no hits.
+      expect(released).toBe(1);
+      expect(a.motionFrame()!.gun).toBeNull();
+      expect(a.debug().carry).toBeNull();
+      expect(a.debug().fistGrip).toBeNull();
+      expect(hits).toBe(0);
+    } else {
+      // One-handed: she keeps the sword, the right arm stays pinned, and she still hits.
+      expect(released).toBe(0);
+      expect(a.debug().carry).toBe('swordGuard');
+      expect(a.motionFrame()!.posePins ?? []).toContain(J.handR);
+      expect(hits).toBeGreaterThan(0);
+    }
   });
 });

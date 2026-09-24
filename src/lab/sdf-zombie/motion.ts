@@ -686,8 +686,10 @@ export function stepMotion(
 
   // --- fire hold ------------------------------------------------------------
   // A GUNNER with no right arm cannot hold the gun (was soldier-only, so the
-  // cultist would have kept firing a tommy gun from a stump).
-  const canHold = (profile.name !== 'soldier' && !profile.gunner) || !sig.missing.armR;
+  // cultist would have kept firing a tommy gun from a stump). Nor can a MELEE
+  // prop's owner hold her sword: the bride drops it (game-actor releases the
+  // prop) and the carry, the fist seat and the arm pins all switch off.
+  const canHold = (profile.name !== 'soldier' && !profile.gunner && !profile.melee) || !sig.missing.armR;
   const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;
@@ -1364,8 +1366,13 @@ export function stepMotion(
       ...((): { posePins?: number[] } => {
         const legs = footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null
           ? (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const) : [];
+        // Never pin a MISSING arm's joints (a severed left arm under the
+        // one-armed carry; the right arm cannot reach here, canHold is off).
         const arms = swordArmPins && !stagger.staggered && recoil.joint === null
-          ? (['elbowR', 'handR', 'handTipR', 'elbowL', 'handL', 'handTipL'] as const) : [];
+          ? ([
+            ...(sig.missing.armR ? [] : ['elbowR', 'handR', 'handTipR'] as const),
+            ...(sig.missing.armL ? [] : ['elbowL', 'handL', 'handTipL'] as const),
+          ]) : [];
         const pins = [...legs, ...arms].map(name => idx[name]).filter((i): i is number => i !== undefined);
         return legs.length || arms.length ? { posePins: pins } : {};
       })(),

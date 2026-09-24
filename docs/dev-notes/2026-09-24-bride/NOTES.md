@@ -744,3 +744,24 @@ Off-centre she is also outside the player's light, which is why she reads in the
   - She never re-faces while `recover` halts her. A player who sidesteps during her cooldown is
     swung at along the old facing and missed (the contact cone does its job). That is correct for
     a slow knight, but it will read as a whiff.
+
+### Review follow-up: severed arms
+
+- **Without her sword arm she drops the sword.** A `melee` profile no longer holds the carry once
+  `armR` is missing (motion.ts `canHold`). game-actor releases the prop once, and the fist seat and
+  the fist-tip pin are skipped. She keeps pursuing and still throws her swings, but they come from
+  the bare left arm, the zombie's swipe. The sword mind reports no contact and no lunge advance when
+  `armR` is missing, so those swings never hit.
+- **Without the left arm she fights one-handed.** She keeps the sword and the carry, her right arm
+  stays pinned, and her hits still land.
+- **Pins skip a missing arm's joints.** The fix needed one more piece. The game fed motion `CALM`
+  signals, whose `missing` is all-false, on every frame without damage. So the frame after a cut
+  re-pinned the missing arm, which the new test caught. Melee profiles now get the real
+  `missingLimbs()` on every sub-step. Every other profile keeps `CALM` exactly.
+- Tests: `game-actor-bride.test.ts`, one per arm. Each severs the arm and steps 600 frames. It asserts
+  that no step throws and no posePin belongs to the missing arm, then checks the drop, or the
+  one-handed fight.
+- Minors:
+  - The fist-tip list is built once per actor.
+  - The gate filters on `brains().name === 'bride'` (the new `profileName()` seam).
+  - The gate's 1.2 s lunge window is now sim time. That change is **untested in the browser**.

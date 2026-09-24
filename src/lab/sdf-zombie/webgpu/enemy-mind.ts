@@ -251,7 +251,9 @@ export function makeSwordMind(tuning: BrainTuning = SWORD_TUNING.brain): EnemyMi
       let contact = false;
       let advance: Vec3 | null = null;
       const a = out.attack;
-      if (a && input.player && isSwordVariant(a.variant)) {
+      // Without her sword arm she has dropped the sword (game-actor): the
+      // swing that is left is the zombie's bare-armed swipe, which never hits.
+      if (a && input.player && isSwordVariant(a.variant) && !input.missing?.armR) {
         const dx = input.player.x - input.self.x, dz = input.player.z - input.self.z;
         const dist = Math.hypot(dx, dz);
         contact = swordContact({ prevPhase, phase: a.phase, variant: a.variant, self: input.self, player: input.player });

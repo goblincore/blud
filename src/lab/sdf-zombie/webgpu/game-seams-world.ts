@@ -461,7 +461,7 @@ export function createWorldSeams(ctx: GameContext) {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, kind: a.kind, phase:a.debug().phase, state: b.state, alert: b.alert,
+        id: a.id, room: a.room, kind: a.kind, name: a.profileName(), phase:a.debug().phase, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),

@@ -105,7 +105,7 @@ for (const p of ['woundPanel', 'gooPanel', 'vhsPanel']) {
 //     the room (toward its centre), facing her.
 await evaluate(`__sdfGame.teleport(${ROOM}); __sdfGame.step(2, 1 / 60);`);
 const centre = await evaluate('__sdfGame.playerPos()');
-const brides = (await evaluate('__sdfGame.brains()')).filter((b) => b.room === ROOM && b.kind !== 'soldier');
+const brides = (await evaluate('__sdfGame.brains()')).filter((b) => b.room === ROOM && b.name === 'bride');
 if (!brides.length) fail(`no bride in room ${ROOM}`);
 const actors = await evaluate('__sdfGame.zombies()');
 const posOf = (id) => actors.find((a) => a.id === id).pos;
@@ -134,7 +134,12 @@ console.log(`player at ${stand.map((v) => v.toFixed(2)).join(', ')}, ${Math.hypo
 
 // --- Run SIM_SEC of sim, sampling every 6 frames.
 const variants = new Set();
-const lunges = [];          // { id, startDist, minDist, samplesLeft }
+const lunges = [];          // { id, startDist, minDist, t0 }
+// The lunge window is SIM time: the cleave capture below steps frame by frame
+// inside one outer sample, so counting outer samples would stretch it.
+const LUNGE_WINDOW_SEC = 1.2;
+let simT = 0;
+const stepSim = async (frames) => { await evaluate(`__sdfGame.step(${frames}, 1 / 60)`); simT += frames / 60; };
 const guardFist = [], swingFist = [], guardAuth = [], swingAuth = [];
 const startCarries = new Set();
 const prev = new Map();
@@ -145,8 +150,8 @@ const faceBride = async (id) => {
 };
 const samples = Math.round(SIM_SEC * 10);
 for (let i = 0; i < samples; i++) {
-  await evaluate('__sdfGame.step(6, 1 / 60)');
-  const bs = (await evaluate('__sdfGame.brains()')).filter((b) => b.room === ROOM && b.kind !== 'soldier');
+  await stepSim(6);
+  const bs = (await evaluate('__sdfGame.brains()')).filter((b) => b.room === ROOM && b.name === 'bride');
   for (const b of bs) {
     const was = prev.get(b.id);
     const starting = b.state === 'attack' && (!was || was.state !== 'attack');
@@ -158,10 +163,10 @@ for (let i = 0; i < samples; i++) {
     }
     if (starting) {
       startCarries.add(b.carry);
-      if (b.variant === 'lunge') lunges.push({ id: b.id, startDist: b.dist, minDist: b.dist, samplesLeft: 12 });
+      if (b.variant === 'lunge') lunges.push({ id: b.id, startDist: b.dist, minDist: b.dist, t0: simT });
       console.log(`  t=${(i / 10).toFixed(1)}s bride ${b.id} ${b.variant} from ${b.dist.toFixed(2)} m (carry ${b.carry})`);
     }
-    for (const l of lunges) if (l.id === b.id && l.samplesLeft > 0) { l.minDist = Math.min(l.minDist, b.dist); l.samplesLeft--; }
+    for (const l of lunges) if (l.id === b.id && simT - l.t0 <= LUNGE_WINDOW_SEC) l.minDist = Math.min(l.minDist, b.dist);
     prev.set(b.id, b);
   }
   // The standing guard: the target recovering near the player.
@@ -170,7 +175,7 @@ for (let i = 0; i < samples; i++) {
     // A few frames after turning the camera: the renderer's temporal history
     // otherwise ghosts the previous view into the shot.
     await faceBride(t.id);
-    await evaluate('__sdfGame.step(6, 1 / 60)');
+    await stepSim(6);
     await shot('game-melee-guard');
     shotGuard = true;
   }
@@ -178,11 +183,11 @@ for (let i = 0; i < samples; i++) {
   const c = bs.find((b) => b.state === 'attack' && b.variant === 'cleave' && b.swingT > 0.05 && b.swingT < 0.2 && b.dist < 2.3);
   if (c && !shotStrike) {
     await faceBride(c.id);
-    await evaluate('__sdfGame.step(6, 1 / 60)');
+    await stepSim(6);
     if (!shotWindup) { await shot('game-melee-cleave-windup'); shotWindup = true; }
     const hits0 = await evaluate('__sdfGame.playerHits()');
     for (let k = 0; k < 40; k++) {
-      await evaluate('__sdfGame.step(1, 1 / 60)');
+      await stepSim(1);
       if (await evaluate('__sdfGame.playerHits()') > hits0) {
         const me = (await evaluate('__sdfGame.brains()')).find((b) => b.id === c.id);
         console.log(`  hit on frame ${k + 1}: bride ${c.id} ${me.variant} swingT ${me.swingT.toFixed(3)}, fist-to-grip ${(me.fistGrip * 100).toFixed(2)} cm seated / ${(me.fistGripAuthored * 100).toFixed(2)} cm authored`);
@@ -196,7 +201,7 @@ for (let i = 0; i < samples; i++) {
 }
 
 const hits = await evaluate('__sdfGame.playerHits()');
-const contacts = (await evaluate('__sdfGame.brains()')).filter((b) => b.meleeContacts > 0).map((b) => `${b.kind} ${b.id}: ${b.meleeContacts}`);
+const contacts = (await evaluate('__sdfGame.brains()')).filter((b) => b.meleeContacts > 0).map((b) => `${b.name} ${b.id}: ${b.meleeContacts}`);
 console.log(`melee contacts by actor: ${contacts.join(', ') || 'none'}`);
 const maxOf = (a) => (a.length ? Math.max(...a) : NaN);
 const cm = (v) => `${(v * 100).toFixed(2)} cm`;
