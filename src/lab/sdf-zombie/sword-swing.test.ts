@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { makeBrain, stepBrain, BRAIN_TUNING, type Brain, type BrainTuning } from './brain';
 import {
   SWORD_TUNING, SWORD_KEYS, swordCarryAt, lungeAdvance, swordContact, isSwordVariant, SWORD_CONTACT,
+  jawGapeAt, JAW_GAPE,
 } from './sword-swing';
 import { ATTACK_TUNING } from './attack';
 import type { CarrySpec } from './carry';
@@ -166,5 +167,23 @@ describe('SWORD_TUNING', () => {
 
   it('winds the cleave up slower than the sweep (the readable one hits hardest)', () => {
     expect(SWORD_TUNING.brain.swingSecFor!.cleave!).toBeGreaterThan(SWORD_TUNING.brain.swingSecFor!.sweep!);
+  });
+});
+
+describe('jawGapeAt — the wind-up gape', () => {
+  it('is shut at rest, peaks at windupEnd, holds to mid-strike and is shut by strikeEnd', () => {
+    const T = ATTACK_TUNING;
+    for (const v of ['cleave', 'sweep', 'lunge'] as const) {
+      expect(jawGapeAt(0, v)).toBe(0);
+      expect(jawGapeAt(T.windupEnd, v)).toBeCloseTo(JAW_GAPE.peak[v], 6);
+      expect(jawGapeAt((T.windupEnd + T.strikeEnd) / 2 - 1e-3, v)).toBeCloseTo(JAW_GAPE.peak[v], 6);
+      expect(jawGapeAt(T.strikeEnd, v)).toBe(0);
+      expect(jawGapeAt(1, v)).toBe(0);
+      expect(jawGapeAt(T.windupEnd / 2, v)).toBeGreaterThan(0);
+    }
+  });
+  it('the cleave opens widest', () => {
+    expect(JAW_GAPE.peak.cleave).toBeGreaterThan(JAW_GAPE.peak.lunge);
+    expect(JAW_GAPE.peak.lunge).toBeGreaterThan(JAW_GAPE.peak.sweep);
   });
 });

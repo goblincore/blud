@@ -92,6 +92,17 @@ skeleton
   # tail (y 0.64) stays well ABOVE the feet: bindRig pins the lowest rig
   # point to the floor.
   bone hem    parent=pelvis dir=down len=0.40
+  # THE JAW (Task 12, hook 2 — the mouth that opens too wide). Not a hinge
+  # bone: a CARRIER for one kinematic rig point. It hangs off the neck's top
+  # (the skull's own pivot, joint `neck`) forward to the chin (tail y 1.597,
+  # z 0.069 = the chin prim's centre) so gait.ts can name its tail `jaw`.
+  # The jaw ROTATES about the hinge gait.ts jawHinge() puts on the skull axis
+  # (skull at 0.38, 1.5 cm back: y 1.659, just below the nose tip, where a
+  # jaw joint sits in front of the ear), not about this bone's head; the rig
+  # pins the tail to that rotated target and rig-bind turns the jaw prims
+  # (lower lip, chin, mouth) with the head plus the gape. Only prims declared
+  # `on jaw` may ride it.
+  bone jaw    parent=neck   dir=up pitch=66 len=0.070
 
   mirror
     # NARROW, SLOPING SHOULDERS: socket at x ~0.15, y ~1.41 — a slight
@@ -236,13 +247,35 @@ body
   # upper rim stood out of the cranium's sides and, once the lab rendered
   # her facing the right way, read as a shelf straight across the forehead. This is what gives the face its
   # height; it narrows to a slim jaw with no seam across it.
-  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0707,0.0235) r=0.054 r2=0.030 wide=1.20 blend=0.012
+  # SPLIT AT THE MOUTH (Task 12): the one capsule is now two lying on the
+  # SAME line with the same taper — the upper part on the skull (1.676 ->
+  # 1.650, r 0.054 -> 0.0452), the lower on the JAW (1.628 -> 1.605, r
+  # 0.0377 -> 0.030). At rest their union is the old surface except a dent
+  # of <= 5 mm at y ~1.63, under the lips that cover it. The jaw part starts
+  # BELOW the lip line on purpose: started at 1.640, its round top cap swung
+  # down WITH the jaw and filled the opening with skin (the first gape frame
+  # read as a long face with a dropped lip, not an open mouth). When the jaw
+  # drops, the upper part's bottom cap recedes behind the old face plane
+  # below y ~1.62: that is the open mouth's roof.
+  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0260,0.0086) r=0.054 r2=0.0452 wide=1.20 blend=0.012
+  blob head on jaw at=1.0 offset=(0,0.03122,-0.02654) tip=(0,-0.0227,0.0075) r=0.0377 r2=0.030 wide=1.20 blend=0.012
+  # THE MOUTH'S INSIDE (Task 12): a wet dark-red bar on the SKULL behind
+  # the lips, upper-lip line to chin (y 1.633 -> 1.597, centre z ~0.058,
+  # front z <= 0.070), buried >= 6 mm under the rest face, its low cap 1 cm
+  # above the chin's underside (invisible, and
+  # never the nearest prim to the rest skin, so it paints nothing). When the
+  # jaw drops, the receding roof above is nearest to it and it fills the
+  # gap: the throat, not a skin-coloured hollow. (A single r 0.012 ball
+  # here left the lower half of the opening skin-grey in the first frame.)
+  bar  head on skull from=0.27 to=0.12 offset=(0,0.0006,0.0562) r=0.012 wide=2.2 deep=0.9 blend=0.004 color=2a0608 gloss=0.85
   # SLIM JAW: the mass behind the face that gives the jaw line its width
   # (semi 0.056), set back so it never reaches the face plane.
   blob head on skull at=0.24 offset=(0,-0.0005,-0.0050) r=0.052 wide=1.08 tall=0.85 blend=0.012
   # CHIN: delicate — pointed but SOFT, a small round mass (front z 0.085,
   # bottom y 1.581), not the first pass's chamfered spike.
-  blob head on skull at=0.12 offset=(0,0.0003,0.0650) r=0.017 wide=1.15 tall=0.95 blend=0.008
+  # Rides the JAW (Task 12): same rest point as the old `on skull at=0.12
+  # offset=(0,0.0003,0.0650)` (1.5973, 0.0683), re-expressed off the jaw tail.
+  blob head on jaw at=1.0 offset=(0,0.00055,-0.00096) r=0.017 wide=1.15 tall=0.95 blend=0.008
   # HIGH SMOOTH FOREHEAD: the cranium's own curve, nothing added. A wide
   # brow fill was tried and rendered as a ridge across the forehead (a
   # Klingon brow in the 3/4 view); the upper lid edge must stay a clean
@@ -328,7 +361,10 @@ body
   # (prim-material.wgsl hitBest), and round lips that claims a patch wider
   # than the lips, so the tint stays a step off the skin — pale, not pink.
   bar  head on skull from=0.30 to=0.30 offset=(-0.015,0.0002,0.0805) tip=(0.030,0,0) bend=(0,0.0015,0.007) r=0.0045 tall=0.85 blend=0.003 color=b4a6bc gloss=0.50
-  bar  head on skull from=0.26 to=0.26 offset=(-0.013,-0.0002,0.0795) tip=(0.026,0,0) bend=(0,-0.0015,0.007) r=0.0058 tall=0.80 blend=0.003 color=b4a6bc gloss=0.50
+  # The LOWER lip rides the JAW (Task 12): same rest endpoints as the old
+  # `on skull from=0.26 offset=(-0.013,-0.0002,0.0795)`, re-expressed off the
+  # jaw tail. The upper lip stays on the skull, so the mouth opens between them.
+  bar  head on jaw from=1.0 to=1.0 offset=(-0.013,0.03358,0.01120) tip=(0.026,0,0) bend=(0,-0.0015,0.007) r=0.0058 tall=0.80 blend=0.003 color=b4a6bc gloss=0.50
 
   # ============================================================
   # ARMS. Under plate from shoulder to fingertip (Task 4), so the flesh is

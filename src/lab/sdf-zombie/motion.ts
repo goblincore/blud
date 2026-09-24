@@ -62,7 +62,7 @@ import type { WanderBounds, WanderState } from './wander';
 import { headingDir, stepWander, wrapPi, type Rng } from './wander';
 import type { PlantState, AimState } from './ik';
 import {
-  IK_TUNING, makeAim, makePlant, poleReflect, solveChain, solveHingeLeg, solvePlantedLeg,
+  IK_TUNING, clampDir, makeAim, makePlant, poleReflect, solveChain, solveHingeLeg, solvePlantedLeg,
   stepAim, stepPlant,
 } from './ik';
 import type { StaggerKind, StaggerState } from './stagger';
@@ -74,7 +74,8 @@ import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
-import { isSwordVariant, swordCarryAt } from './sword-swing';
+import { isSwordVariant, jawGapeAt, swordCarryAt } from './sword-swing';
+import { jawRestOf, jawTargetAt, type JawRest } from './jaw';
 
 /** Motion knobs owned by the wiring (the modules own their own). */
 export const MOTION_TUNING = {
@@ -237,6 +238,8 @@ export interface MotionJoints {
   arm: { L: readonly [number, number]; R: readonly [number, number] };
   /** Chest→neck, neck→head lengths (the aim chain). */
   neck: readonly [number, number];
+  /** The jaw's rest geometry (jaw.ts), when the body has a `jaw` bone. */
+  jaw?: JawRest;
   /** Authored foot height — the floor-contact plane for plants. */
   groundY: number;
   /** The pelvis base position — rootShift is measured from it. */
@@ -274,6 +277,8 @@ export function makeMotionJoints(
       R: [d('shoulderR', 'elbowR'), d('elbowR', 'handR')],
     },
     neck: [d('chest', 'neck'), d('neck', 'head')],
+    ...(index.jaw === undefined ? {} : {
+      jaw: jawRestOf(baseRest[index.neck!]!, baseRest[index.head!]!, baseRest[index.jaw]!) }),
     groundY: Math.min(baseRest[index.footL!]![1], baseRest[index.footR!]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
@@ -453,6 +458,9 @@ export interface MotionFrame {
   restPose: Vec3[];
   /** Firm combat leg joints; absent returns the whole body to Verlet. */
   posePins?: readonly number[];
+  /** The jaw's gape (rad, jaw.ts) — the wiring copies it to rig.jawGape.
+   *  0 for a body without a jaw and whenever no sword swing is live. */
+  jawGape: number;
   /** Multiply stepRig's restStiffness by this (the collapse ramp). */
   restPull: number;
   /** Gravity for stepRig this frame (soft standing vs full falling weight). */
@@ -1277,6 +1285,27 @@ export function stepMotion(
     targets[idx.head!] = add(targets[idx.head!]!, sub(stepped.points[1]!, restHead));
   }
 
+  // --- the jaw (bride Task 12, jaw.ts) --------------------------------------
+  // The jaw point is KINEMATIC: the head target's frame, opened about the
+  // hinge by the sword swing's gape (sword-swing.ts jawGapeAt — wide on the
+  // wind-up, snapped shut by the strike's end). Written after the head aim so
+  // it rides the look; pinned below (posePins). rig-bind reads the gape back
+  // off this target to open the `on jaw` prims.
+  // The frame is the head AS rig-bind POSES IT: the current rig points'
+  // pivot->tip, clamped to the same IK_TUNING cone headTransform uses. Not
+  // the targets: the aim lays the head target out along the gaze (tilted
+  // ~40 degrees on the bride's upright skull), and the Verlet head point
+  // chases it; only the clamp says where the drawn head is.
+  let jawGape = 0;
+  if (joints.jaw && idx.jaw !== undefined && idx.neck !== undefined && idx.head !== undefined) {
+    jawGape = attack && cfg.attack && profile.melee?.kind === 'sword' && isSwordVariant(cfg.attack.variant)
+      ? jawGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
+    const at = (i: number): Vec3 => (havePoints ? points[i]!.pos : targets[i]!);
+    const dir = clampDir(normalize(sub(at(idx.head), at(idx.neck))), rotateYaw(joints.jaw.restDir, bodyYaw),
+      IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+    targets[idx.jaw] = jawTargetAt(joints.jaw, at(idx.neck), dir, bodyYaw, jawGape);
+  }
+
   // --- localized hit recoil -------------------------------------------------
   // The rig point NEAREST the hit takes a world-space shove along the shot
   // ray, attack-decaying over ~0.45 s; the verlet constraints drag the
@@ -1289,6 +1318,7 @@ export function stepMotion(
     let best: GaitJointName | null = null;
     let bestD = Infinity;
     joints.names.forEach((name, i) => {
+      if (name === 'jaw') return; // kinematic; would steal the head's recoil
       const p = havePoints ? points[i]!.pos : targets[i]!;
       const d = len(sub(p, at));
       if (d < bestD) { bestD = d; best = name; }
@@ -1355,6 +1385,7 @@ export function stepMotion(
       heading: wander.heading,
       bodyYaw,
       restPose: targets,
+      jawGape,
       // Hit reactions offset joints independently. Let Verlet absorb those
       // impulses rather than hard-pinning incompatible torso/leg targets.
       // A SWORD SWING also pins both arms to the track. The verlet's soft
@@ -1373,8 +1404,12 @@ export function stepMotion(
             ...(sig.missing.armR ? [] : ['elbowR', 'handR', 'handTipR'] as const),
             ...(sig.missing.armL ? [] : ['elbowL', 'handL', 'handTipL'] as const),
           ]) : [];
-        const pins = [...legs, ...arms].map(name => idx[name]).filter((i): i is number => i !== undefined);
-        return legs.length || arms.length ? { posePins: pins } : {};
+        // The JAW is always pinned while she stands: it is kinematic (the
+        // head frame plus the gape), and a free chin point would sag on a
+        // stiffness-0 bone (rig-bind.ts).
+        const jaw = !collapsed && idx.jaw !== undefined ? (['jaw'] as const) : [];
+        const pins = [...legs, ...arms, ...jaw].map(name => idx[name]).filter((i): i is number => i !== undefined);
+        return pins.length ? { posePins: pins } : {};
       })(),
       restPull: structural ? 1 : collapse.restPull,
       gravity: structural ? [0, -1.5, 0] : collapsed

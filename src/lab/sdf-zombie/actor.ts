@@ -220,7 +220,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: input.profile?.name === 'soldier' && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw },
+      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: input.profile?.name === 'soldier' && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
         f.collapsed ? f.floorY : undefined),
     };
     // Fire kicks: point shoves THROUGH the rig, after the bend constraints

@@ -765,3 +765,102 @@ Off-centre she is also outside the player's light, which is why she reads in the
   - The fist-tip list is built once per actor.
   - The gate filters on `brains().name === 'bride'` (the new `profileName()` seam).
   - The gate's 1.2 s lunge window is now sim time. That change is **untested in the browser**.
+
+## Task 12: the jaw gapes on the wind-up (same day) — DONE, inside the time-box
+
+### How it is wired
+
+- **`bone jaw parent=neck dir=up pitch=66 len=0.070`** (bride.blob). It is a CARRIER, not a hinge:
+  it runs from the skull's pivot (joint `neck`) to the chin (tail y 1.597, z 0.069) so that its tail
+  is a named rig point, `jaw` (gait.ts `GaitJointName`, `GAIT_JOINTS`, `JOINT_AT jaw: { head:
+  'neck', tail: 'jaw' }`). It is optional like `hem`. A body without the bone never names it.
+- **The hinge** is `jaw.ts` `JAW_HINGE`: skull at 0.30 and 2 cm back (y 1.640, z -0.020), level with
+  the upper lip. That is lower than a human jaw joint on purpose. At the anatomical height (0.38,
+  under the nose) the 0.55 rad gape swung the lower lip 3.4 cm BACK into the face, where it
+  disappeared. Level with the lips, the lip drops ~5 cm and moves back only ~1.4 cm, so the jaw
+  falls open, unhinged. Rotating about the bone's own head (the skull pivot) made an underbite.
+- **The gape** is `sword-swing.ts` `jawGapeAt(phase, variant)`. It opens on the wind-up's
+  smoothstep to a peak at `windupEnd`, holds to mid-strike (0.375), and SNAPS shut by `strikeEnd`,
+  so the bite lands with the blade. It is exactly 0 outside (0, 0.5). The peaks are
+  **cleave 0.55 rad, lunge 0.42, sweep 0.35**. The cleave is the overhead scream. The sweep is a
+  faster side cut and the lunge is a thrust, so both open less.
+- **motion.ts** computes the gape. It pins the `jaw` point to the head frame opened by the gape
+  (posePins, whenever she stands) and hands the scalar on as `MotionFrame.jawGape` →
+  `rig.jawGape` (actor.ts and game-actor.ts). The head frame comes from the head's CURRENT rig
+  points, clamped to the same IK cone as the rigid head. The targets don't work: the aim lays the
+  head target out along the gaze, tilted ~40° on her upright skull.
+- **rig-bind.ts:** `on jaw` prims join the rigid head (`ridesHead`). `headTransform` opens them
+  about the hinge by `rig.jawGape`, in the head's rest frame, before the head rotation. Their
+  `orient` is the head quat times the gape quat (`jawOrient`). The prims take the SCALAR, never
+  an angle read back off the jaw point. That point is one step stale, and at a walk the pivot moves
+  ~2.5 cm a step, which is ~0.2 rad of error.
+- **Care taken, after the hem:**
+  - The jaw bone's Verlet constraint has stiffness 0. Pivot→chin shortens ~4 cm at full gape, and a
+    rigid constraint would yank the neck toward the pinned chin.
+  - The jaw point is not axial.
+  - ONLY `on jaw` prims may bind to it. The upper lip ends 7 cm from it and 10 cm from the pivot,
+    and the jaw shares the skull's pivot, so the hem's bone-ring rule would have let every skull
+    prim reach it.
+  - `impulseAt` and motion's recoil search skip it, so it cannot steal a headshot.
+- **The face:**
+  - The lower lip and the chin moved `on jaw`, with the same rest points re-expressed off the jaw
+    tail (probed identical to 0.1 mm).
+  - The FACE MASS capsule is split into two on the same line: the skull keeps 1.676 → 1.650 and
+    the jaw gets 1.628 → 1.605. At rest there is a ≤ 5 mm dent at y ~1.63, under the lips.
+  - A split at the lip line (1.640) did NOT work: the jaw half's round top cap swung down with the
+    jaw and filled the opening with skin. The frame read as a long face with a dropped lip.
+  - A dark wet bar `2a0608` on the skull behind the lips (y 1.633 → 1.597, front z ≤ 0.070) sits
+    ≥ 6 mm under the rest skin, so it is invisible and paints nothing. When the jaw drops, it is the
+    inside of the mouth.
+  - The cranium (the sheet's projection anchor) is untouched. The sheet-projection pins pass
+    unchanged.
+
+### Numbers (CPU, `bride-blob.test.ts` drive, head frame = un-turned by `headQuatOf`)
+
+| variant | gape | jaw point drop | lip centreline gap |
+| --- | --- | --- | --- |
+| rest | 0 | — | 1.0 cm |
+| cleave (0.25) | 0.55 rad | 4.0 cm | 6.1 cm |
+| lunge (0.25) | 0.42 rad | 3.2 cm | 5.0 cm |
+| sweep (0.25) | 0.35 rad | 2.8 cm | 4.4 cm |
+
+The jaw is back to its rest point within 0.1 mm by phase 1 (the test allows 5 mm). These numbers
+come from the first split (at the lip line). The final split does not move the jaw point or the
+lips.
+
+**The test's measure changed from the plan's draft.** The draft took world y against the Verlet
+head point. Her upright skull tilts up to ~45° inside the look cone as she turns, so that number
+moved 2.2 cm between phase 0 and 1 with the jaw shut. It also ate the gape at the peak: 0.9 cm read
+for a 4 cm drop. The pin now measures in the rigid head's own frame. A second pin checks that
+exactly the three `on jaw` prims move when `jawGape` is set and every other prim stays put.
+
+**KNOWN_NULL at HEAD (64285c82, run before gait.ts was touched):** the plan's list (mouse, cyclops,
+schoolgirl-alt, dragon, gargoyle, bloatmaw, strand-fixture, box-fixture) plus **broodmother**. It
+was already null there, so it was added with a comment. Every other registered character still
+builds motion joints.
+
+### Frames
+
+Lab, ports 5271/9271, cultist sanity shot first, probe `lightDir (0.35,0.6,0.72)` +
+`setSdfScale(1)`, `BLOB_POSE=aim` (+ `BLOB_SWING=cleave:0.25` for the peak), `BLOB_TARGET_Y=1.66
+BLOB_DIST=0.30 BLOB_PITCH=-0.2`. **Yaw 315 (her left front 3/4), not the front.** At the cleave
+wind-up peak her left forearm crosses in front of her face at yaw 0 and 45, so the front view shows
+plate, not a mouth. Crops are 2× of the frame's face region.
+
+![jaw at rest](jaw-rest.png) ![jaw at the cleave wind-up peak](jaw-gape.png)
+
+### Honest read
+
+- **It opens.** The lower lip drops from under the upper lip to the chin line, and a dark band
+  (mean rgb 34/31/32 against the lips' ~111/93/111) opens between them. It reads as a slack,
+  dropped jaw, grotesque and still her face. The nose, eyes, sheet makeup and upper lip are unmoved.
+  The rest face shows no seam from the split.
+- **It is a DROP, not a split.** The opening is vertical. It does not widen out to the corners, so
+  it does not "open past where the sutures begin" in the literal sense: the painted sutures stay
+  where they are, and in this shadowed 3/4 view they are barely visible. Tearing the corners would
+  mean moving the sheet's paint with the jaw, which the projection cannot do.
+- **The inside reads dark, not red.** In this light `2a0608` is near black. That is fine for "a
+  mouth", but it is not a wet red throat.
+- **Her head is pitched well down in the `aim` pose**, so the mouth faces the floor. The low camera
+  (pitch -0.2) is what shows it. From the player's eye height, at game distance, the gape will be a
+  small dark gap under the nose. It has not been checked in `sdf-game.html`.

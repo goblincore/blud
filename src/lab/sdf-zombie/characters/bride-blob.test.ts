@@ -13,10 +13,11 @@ import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage } from '../blob-compile';
 import { buildBody } from '../build-body';
-import { characterEntry } from '../character-registry';
+import { characterEntry, characterNames } from '../character-registry';
 import { MAX_PRIMS, sdBody, nearestPrim } from '../validate';
 import { checkStance } from '../blob-checks';
-import { bindRig, applyRig, HEM_REST_SCALE } from '../rig-bind';
+import { bindRig, applyRig, headQuatOf, HEM_REST_SCALE } from '../rig-bind';
+import { qRotate, sub } from '../vec';
 import { makeMotionJoints, type MotionFrame } from '../motion';
 import { motionProfileFor, BRIDE_PROFILE } from '../motion-profile';
 import { GUN_GRIP, gunPoint, type GunPose } from '../carry';
@@ -343,6 +344,8 @@ function drive(opts: {
   frames: number; speed: number;
   attack?: (i: number) => { phase: number; side: 'R'; variant: SwingVariant } | undefined;
   onFrame: (f: MotionFrame, pts: Pts, J: Record<string, number | undefined>, i: number) => void;
+  /** The actor's CURRENT bound rig, handed over before each onFrame. */
+  onBound?: (b: ReturnType<typeof bindRig>) => void;
 }): void {
   const b = buildBody(compileBlob(doc, compileFace(doc)));
   const m = makeActorMotion(b, { seed: 7 });
@@ -356,6 +359,7 @@ function drive(opts: {
       rng, signals: emptyActorSignals(), profile: BRIDE_PROFILE, forceSpeed: opts.speed,
       ...(atk ? { attack: atk } : {}),
     })!;
+    opts.onBound?.(m.bound);
     opts.onFrame(f, m.bound.rig.points as unknown as Pts, J, i);
   }
 }
@@ -511,3 +515,59 @@ function measuredSheetMean(path: string): number {
   }
   return sum / n;
 }
+
+describe('bride — the jaw gapes on the wind-up', () => {
+  // HEAD-RELATIVE means in the rigid head's own frame: the chin point minus
+  // the skull pivot, un-turned by the posed head rotation (headQuatOf), so
+  // only the gape moves it. The plan's first draft measured world y against
+  // the Verlet head point, which reads the HEAD's motion instead: her
+  // upright skull tilts up to ~45 degrees inside the look cone as she turns,
+  // and that alone moved the number 2.2 cm between phase 0 and 1 with the
+  // jaw shut, and ate most of the gape at the peak (0.9 cm).
+  it('the chin drops >= 3 cm (head-relative) at the cleave wind-up peak and is back by phase 1', () => {
+    const chin: { phase: number; y: number }[] = [];
+    let bound: ReturnType<typeof bindRig> | null = null;
+    drive({
+      frames: 121, speed: 0,
+      attack: i => (i >= 60 ? { phase: Math.min(1, (i - 60) / 60), side: 'R', variant: 'cleave' } : undefined),
+      onBound: b => { bound = b; },
+      onFrame: (f, pts, J, i) => {
+        if (i < 59) return;
+        expect(J.jaw, 'no jaw joint').toBeDefined();
+        const q = headQuatOf(bound!, f.bodyYaw)!;
+        const inv: [number, number, number, number] = [-q[0], -q[1], -q[2], q[3]];
+        const rel = qRotate(inv, sub(pts[J.jaw!]!.pos, pts[J.neck!]!.pos));
+        chin.push({ phase: Math.max(0, Math.min(1, (i - 60) / 60)), y: rel[1] });
+      },
+    });
+    const near = (p: number) => chin.reduce((a, b) => (Math.abs(b.phase - p) < Math.abs(a.phase - p) ? b : a)).y;
+    expect(near(0) - near(ATTACK_TUNING.windupEnd)).toBeGreaterThanOrEqual(0.03);
+    expect(Math.abs(near(1) - near(0))).toBeLessThan(0.005);
+  });
+
+  it('only the `on jaw` prims open: lower lip, chin and jaw half drop; upper lip, nose and throat stay', () => {
+    const bound = bindRig(body);
+    const shut = applyRig(body, bound, 0);
+    const open = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: 0.55 } }, 0);
+    const moved = body.prims.map((_, i) => dist(shut.prims[i]!.a, open.prims[i]!.a));
+    body.prims.forEach((p, i) => {
+      if (p.bone === 'jaw') expect(moved[i], `jaw prim ${i}`).toBeGreaterThan(0.02);
+      else expect(moved[i], `${p.bone} prim ${i}`).toBe(0);
+    });
+    // Three: the lower lip, the chin, the jaw's half of the face mass.
+    expect(body.prims.filter(p => p.bone === 'jaw')).toHaveLength(3);
+  });
+
+  // A new optional joint must not break the bodies that map today. These are
+  // the ones known NOT to build motion joints before this change (memory:
+  // spawnDebugCharacter throws for them) — excluded, not fixed here.
+  // broodmother: also null at HEAD 64285c82 (run before gait.ts was touched).
+  const KNOWN_NULL = new Set(['mouse', 'cyclops', 'schoolgirl-alt', 'dragon', 'gargoyle', 'bloatmaw', 'strand-fixture', 'box-fixture',
+    'broodmother']);
+  it.each(characterNames().filter(n => !KNOWN_NULL.has(n)))('%s still builds motion joints', name => {
+    const e = characterEntry(name);
+    const d = parseBlob(e.src);
+    const b = buildBody(compileBlob(d, compileFace(d)));
+    expect(makeActorMotion(b, { seed: 1 }).motionJoints).not.toBeNull();
+  });
+});

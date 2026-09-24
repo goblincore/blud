@@ -28,6 +28,11 @@ export interface RigState {
   bodyYaw?: number;
   /** Fallen structural actors rotate the skull with the full rig, not an upright gaze cone. */
   headFollowsRig?: boolean;
+  /** THE JAW's gape (rad, jaw.ts), from MotionFrame.jawGape: rig-bind opens
+   *  the `on jaw` prims by it. Absent = shut. An explicit scalar rather than
+   *  a read of the jaw point: the pivot moves ~2.5 cm a step at a walk, and
+   *  an angle measured off a point one step stale is off by ~0.2 rad. */
+  jawGape?: number;
   /** Per-point multiplier on the rest pull (absent = 1 everywhere). A CLOTH
    *  pendulum point (the cultist's `hem`) springs to its target far more
    *  loosely than a joint, so it lags and overshoots instead of snapping. */

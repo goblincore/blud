@@ -1240,7 +1240,7 @@ export function createZombieActor(opts: {
       }
       bound = {
         ...bound,
-        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw },
+        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined),
       };
       for (const kick of f.kicks) {

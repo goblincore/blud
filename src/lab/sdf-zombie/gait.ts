@@ -51,7 +51,12 @@ export type GaitJointName =
   // No gait offset ever names it, so its target just rides the body's
   // translation and yaw while the Verlet rig swings it on its constraint —
   // which is exactly the lag a robe's skirt should have (cultist, 2026-09-23).
-  | 'hem';
+  | 'hem'
+  // THE JAW: the tail of a `jaw` bone (bride, 2026-09-24). Kinematic, never a
+  // Verlet point: motion.ts pins it to the head frame turned by the gape
+  // about the hinge (jaw.ts), and rig-bind.ts reads the gape back off it to pose the
+  // `on jaw` prims. Optional like `hem`: a body without the bone never names it.
+  | 'jaw';
 
 /** Every joint, primary first — the ORDER is the naming priority when two
  *  bone ends share a position (jointNamesForBody). */
@@ -60,7 +65,7 @@ export const GAIT_JOINTS: readonly GaitJointName[] = [
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
   'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR',
   'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
-  'hem',
+  'hem', 'jaw',
 ];
 
 /** A GAIT PROFILE — every knob of one way of walking. The zombie's numbers
@@ -690,6 +695,9 @@ export function stepGait(
     // side to side over a hem that stays put, and the Verlet constraint
     // between them tilts the skirt — the hem lagging the waist, as cloth does.
     hem: [0, bob * 0.9, 0],
+    // Rigid with the head (motion.ts re-derives the jaw target from the
+    // head frame anyway; this keeps the pre-override target sane).
+    jaw: [-sway * 0.2, -bob * T.headBob, 0],
   };
 
   let p = (phiL % TAU) / TAU;
@@ -735,6 +743,9 @@ const JOINT_AT: Record<string, { head: string; tail: string }> = {
   foot:     { head: 'foot',     tail: 'toe' },
   // Cloth pendulum off the pelvis (see GaitJointName 'hem').
   hem:      { head: 'hips',     tail: 'hem' },
+  // The jaw carrier hangs off the skull's pivot (the neck joint) to the chin
+  // (see GaitJointName 'jaw').
+  jaw:      { head: 'neck',     tail: 'jaw' },
 };
 
 /** The joint names that carry a per-side suffix (centerline joints never do). */

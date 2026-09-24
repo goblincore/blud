@@ -130,6 +130,31 @@ export function lungeAdvance(
   return Math.max(0, Math.min(step, room));
 }
 
+/** THE JAW GAPE (Task 12, hook 2): how far the bride's jaw swings open
+ *  (rad, about the hinge gait.ts jawHinge() places) on each variant. The
+ *  cleave is the big one, the overhead scream; the sweep is a side cut
+ *  thrown faster, the lunge a thrust, so they open less. At 0.55 rad the
+ *  chin drops ~3.5 cm (bride-blob.test.ts pins >= 3 cm), which splits the
+ *  mouth well past the painted sutures' start at the corners. */
+export const JAW_GAPE = {
+  peak: { cleave: 0.55, sweep: 0.35, lunge: 0.42 } as Record<SwordVariant, number>,
+  /** The jaw holds wide into the strike and SNAPS shut over its second half
+   *  (mid-strike -> strikeEnd): the bite lands with the blade (cleave hit
+   *  0.47, sweep 0.40). */
+} as const;
+
+/** Jaw gape (rad) at `phase` of a `variant` swing: 0 at rest, opening on the
+ *  wind-up's smoothstep to the peak at windupEnd, held to mid-strike, shut
+ *  by strikeEnd. Exactly 0 outside (0, strikeEnd). Pure. */
+export function jawGapeAt(phase: number, variant: SwordVariant, tuning: AttackTuning = ATTACK_TUNING): number {
+  const T = tuning, peak = JAW_GAPE.peak[variant];
+  if (!(phase > 0) || phase >= T.strikeEnd) return 0;
+  if (phase < T.windupEnd) return peak * smooth(phase / T.windupEnd);
+  const mid = (T.windupEnd + T.strikeEnd) / 2;
+  if (phase < mid) return peak;
+  return peak * (1 - smooth((phase - mid) / (T.strikeEnd - mid)));
+}
+
 /** When in the swing the blade connects, and what it can reach. */
 export const SWORD_CONTACT = {
   /** The hit instant per variant, on the strike beat (0.25 -> 0.5 on a
