@@ -1,8 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-menu.ts
 //
 // The Esc menu's decisions, as pure functions: where New game starts, which levels the
-// dev picker offers, the URL
-// that starts one, and when the menu shows. Starting a level is a page reload with
+// dev picker offers, the URL that starts one, and when the menu shows. Starting a level is a page reload with
 // ?level= (the engine cannot swap levels live yet). Pure: no DOM, no three.js; the
 // overlay itself is game-menu-dom.ts.
 
