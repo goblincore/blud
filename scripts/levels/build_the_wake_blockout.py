@@ -20,6 +20,7 @@ SC["level_name"] = "The Wake"
 SC["ammo"] = "finite"
 SC["loadout"] = "melee"
 SC["complete_on"] = "pickup.cd"
+SC["skyline"] = "treeline"  # Outdoor v1
 
 COLLS = {}
 
@@ -82,10 +83,34 @@ ROOMS = [
     (7, "parlour",   (0, -110),     (20, -86.6),   6.0, None),
     (8, "secret",    (18, -44),     (22, -37),     2.5, None),
 ]
+# Outdoor v1 (spec 2026-09-23-outdoor-v1-design.md §9): ground, and the visible
+# edge of each open room (collision still reaches the full height).
+OUTDOOR = {
+    "gates": {"ground": "gravel", "edge_style": "wall", "edge_height": 2.4},
+    "lane": {"ground": "gravel", "edge_style": "hedge", "edge_height": 2.6},
+    "graveyard": {"ground": "grass", "edge_style": "wall", "edge_height": 2.2},
+    "crypt": {"ground": "flagstone"},
+    "ossuary": {"ground": "flagstone"},
+}
 for rid, name, (x0, z0), (x1, z1), h, sky in ROOMS:
     o = gbox("rooms", f"room:{rid}:{name}", (x0, 0, z0), (x1, h, z1), wire=True)
     if sky:
         o["sky"] = sky
+    for k, v in OUTDOOR.get(name, {}).items():
+        o[k] = v
+
+# Path strips (graveyard, room 3): gravel from the lych gate past the open grave,
+# east between the headstone rows, north to the slab portal; dirt round the grave.
+# Strips never overlap (both are drawn just above the floor).
+PATHS = [
+    ("gravel", (-13, -28), (-10, -26.6)),
+    ("dirt", (-13.6, -32.2), (-9.4, -28)),
+    ("gravel", (-12.5, -34.2), (-10.5, -32.2)),
+    ("gravel", (-12.5, -36.8), (10.55, -34.2)),
+    ("gravel", (9.45, -58), (10.55, -36.8)),
+]
+for i, (ground, (x0, z0), (x1, z1)) in enumerate(PATHS):
+    gbox("paths", f"path:{ground}:3", (x0, 0, z0), (x1, 0.05, z1), wire=True)
 
 # ---- CORRIDORS: (a, b, (minX, minZ), (maxX, maxZ), height) ------------------
 # 0.6 m "door" tunnels join rooms whose walls sit back to back.

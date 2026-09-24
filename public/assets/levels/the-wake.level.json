@@ -2,6 +2,7 @@
   "version": 1,
   "id": "the-wake",
   "name": "The Wake",
+  "skyline": "treeline",
   "ammo": "finite",
   "loadout": [
     "melee"
@@ -20,7 +21,12 @@
         0.0
       ],
       "height": 5.0,
-      "sky": "night"
+      "sky": "night",
+      "ground": "gravel",
+      "edge": {
+        "style": "wall",
+        "height": 2.4
+      }
     },
     {
       "id": 2,
@@ -34,7 +40,12 @@
         -10.6
       ],
       "height": 4.0,
-      "sky": "night"
+      "sky": "night",
+      "ground": "gravel",
+      "edge": {
+        "style": "hedge",
+        "height": 2.6
+      }
     },
     {
       "id": 3,
@@ -48,7 +59,69 @@
         -26.6
       ],
       "height": 8.5,
-      "sky": "night"
+      "sky": "night",
+      "ground": "grass",
+      "edge": {
+        "style": "wall",
+        "height": 2.2
+      },
+      "paths": [
+        {
+          "ground": "dirt",
+          "min": [
+            -13.6,
+            -32.2
+          ],
+          "max": [
+            -9.4,
+            -28.0
+          ]
+        },
+        {
+          "ground": "gravel",
+          "min": [
+            -13.0,
+            -28.0
+          ],
+          "max": [
+            -10.0,
+            -26.6
+          ]
+        },
+        {
+          "ground": "gravel",
+          "min": [
+            -12.5,
+            -34.2
+          ],
+          "max": [
+            -10.5,
+            -32.2
+          ]
+        },
+        {
+          "ground": "gravel",
+          "min": [
+            -12.5,
+            -36.8
+          ],
+          "max": [
+            10.55,
+            -34.2
+          ]
+        },
+        {
+          "ground": "gravel",
+          "min": [
+            9.45,
+            -58.0
+          ],
+          "max": [
+            10.55,
+            -36.8
+          ]
+        }
+      ]
     },
     {
       "id": 4,
@@ -61,7 +134,8 @@
         13.0,
         -62.0
       ],
-      "height": 2.8
+      "height": 2.8,
+      "ground": "flagstone"
     },
     {
       "id": 5,
@@ -74,7 +148,8 @@
         21.0,
         -64.0
       ],
-      "height": 2.6
+      "height": 2.6,
+      "ground": "flagstone"
     },
     {
       "id": 6,

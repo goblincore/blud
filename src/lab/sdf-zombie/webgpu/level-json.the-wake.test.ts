@@ -59,6 +59,16 @@ describe('the-wake.level.json', () => {
     expect(nav.route([-11.5, 0, -27.3], [10, 0, -69])).toEqual([]);
   });
 
+  it('is outdoors where the design says (Outdoor v1 §9)', () => {
+    const by = new Map(wake.rooms.map(r => [r.name, r]));
+    expect(by.get('graveyard')).toMatchObject({ sky: 'night', ground: 'grass', edge: { style: 'wall', height: 2.2 } });
+    expect(by.get('lane')).toMatchObject({ sky: 'night', ground: 'gravel', edge: { style: 'hedge' } });
+    expect(by.get('gates')).toMatchObject({ sky: 'night', ground: 'gravel', edge: { style: 'wall' } });
+    expect(by.get('crypt')).toMatchObject({ sky: null, ground: 'flagstone' });
+    expect(wake.skyline).toBe('treeline');
+    expect(by.get('graveyard')!.paths.map(q => q.ground).sort()).toEqual(['dirt', 'gravel', 'gravel', 'gravel', 'gravel']);
+  });
+
   it('loops: round the bell tower and through both ossuary doors', () => {
     const nav = createEncounterNavigation(wake.rooms, wake.tunnels, layoutColliders(wake));
     expect(nav.route([-8, 0, -42], [8, 0, -42]).length).toBeGreaterThan(0);

@@ -118,7 +118,7 @@ def main():
     if paths:
         by_id = {r["id"]: r for r in doc["rooms"]}
         for o in sorted(paths.objects, key=lambda x: x.name):
-            parts = o.name.split(":")
+            parts = base_name(o).split(":")
             if len(parts) != 3 or parts[0] != "path":
                 raise SystemExit(f"paths: bad name {o.name} (want path:<ground>:<room id>)")
             gmin, gmax = world_aabb(o)

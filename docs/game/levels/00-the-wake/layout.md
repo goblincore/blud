@@ -74,6 +74,15 @@ Zombies only (see §9). 20 standing + 14 from graves = 34 if all three tolls are
 - **Terrain elevation** (outdoors isn't flat) goes to the outdoor rendering spec (W-B7)
   with multi-floor support; v1 stays flat.
 
+## 4b. Outdoor v1 (2026-09-23)
+
+Per the [Outdoor v1 spec](../../../superpowers/specs/2026-09-23-outdoor-v1-design.md) §9:
+gates `gravel` + `wall` edge 2.4 m; lane `gravel` + `hedge` 2.6 m; graveyard `grass` +
+`wall` 2.2 m with gravel paths (lych gate → past the open grave → east between the
+headstone rows → north to the slab portal) and `dirt` round the open grave; crypt and
+ossuary `flagstone`; level `skyline: treeline`, sky `night`. Collision still reaches each
+room's full height. The `night` preset is untuned (owner tuning pass pending).
+
 ## 5. Loops
 
 - **The graveyard rings the bell tower.** 5–13 m lanes on all four sides, headstone
