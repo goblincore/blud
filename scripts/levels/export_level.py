@@ -85,6 +85,8 @@ def main():
     doc = {"version": 1, "id": level_id}
     if scene.get("level_name"):
         doc["name"] = scene["level_name"]
+    if scene.get("skyline"):
+        doc["skyline"] = scene["skyline"]
     if scene.get("ammo"):
         doc["ammo"] = scene["ammo"]
     if scene.get("loadout"):
@@ -106,7 +108,24 @@ def main():
             room["floor"] = gmin[1]
         if o.get("sky"):
             room["sky"] = str(o["sky"])
+        if o.get("ground"):
+            room["ground"] = str(o["ground"])
+        if o.get("edge_style"):
+            room["edge"] = {"style": str(o["edge_style"]), "height": rnd(float(o.get("edge_height", 2.2)))}
         doc["rooms"].append(with_states(o, room))
+
+    paths = bpy.data.collections.get("paths")
+    if paths:
+        by_id = {r["id"]: r for r in doc["rooms"]}
+        for o in sorted(paths.objects, key=lambda x: x.name):
+            parts = o.name.split(":")
+            if len(parts) != 3 or parts[0] != "path":
+                raise SystemExit(f"paths: bad name {o.name} (want path:<ground>:<room id>)")
+            gmin, gmax = world_aabb(o)
+            room = by_id.get(int(parts[2]))
+            if room is None:
+                raise SystemExit(f"{o.name}: no room {parts[2]}")
+            room.setdefault("paths", []).append({"ground": parts[1], "min": [gmin[0], gmin[2]], "max": [gmax[0], gmax[2]]})
 
     for o in objects("tunnels"):
         _, a, b = fields(o, "tunnel", 3)
