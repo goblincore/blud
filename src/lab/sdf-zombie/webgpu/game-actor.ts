@@ -27,6 +27,7 @@ import {
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
+import { DEATH_THROW, deathThrowVelocities, launchPoints } from '../soft-death';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal,
   type Wound, type WoundType,
@@ -628,6 +629,9 @@ export function createZombieActor(opts: {
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
   let softKilled = false;
+  /** The killing hit's throw, applied on the first collapsed sub-step
+   *  (soft-death.ts). Null once spent. */
+  let softThrow: { dir: Vec3; kind: keyof typeof DEATH_THROW } | null = null;
   let soldierFatal = false;
   let propReleaseRequested = false;
 
@@ -1173,13 +1177,21 @@ export function createZombieActor(opts: {
       }
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
+      if (softThrow && f.collapsed) {
+        const hemI = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
+        const vel = deathThrowVelocities(bound.rig.points, softThrow.dir, DEATH_THROW[softThrow.kind], hemI);
+        bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt) } };
+        softThrow = null;
+      }
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
         {
           gravity: f.gravity,
           damping: 0.06,
           iterations: 4,
-          restStiffness: STANDING_RIG.restStiffness * f.restPull,
+          // A soft kill goes limp AT ONCE: the collapse's 0.35 s rest-pull
+          // ramp dragged the thrown body back upright and ate the throw.
+          restStiffness: STANDING_RIG.restStiffness * (softKilled && f.collapsed ? 0 : f.restPull),
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
@@ -1346,7 +1358,10 @@ export function createZombieActor(opts: {
   function blast(effect: ActorBlastEffect): void {
     damageRevision++; bakePaused = false;
     const { wounds: blastWounds, meterCredit, impulse } = effect;
-    if (softTarget && meterCredit > 0) softKilled = true;
+    if (softTarget && meterCredit > 0 && !softKilled) {
+      softKilled = true;
+      softThrow = { dir: effect.impulse ? unitOrZero(effect.impulse.vel) : [0, 0, 0], kind: 'blast' };
+    }
 
     for (const w of blastWounds) if (w.shot?.weapon === 'explosion') recordSoldierInjury(w);
     woundRing.stampBundle(blastWounds);
@@ -1525,7 +1540,10 @@ export function createZombieActor(opts: {
       wound.radius = Math.min(wound.radius, .09, girth * 1.1);
     }
     recordSoldierInjury(wound);
-    if (softTarget && wound.type !== 'burn') softKilled = true;
+    if (softTarget && wound.type !== 'burn' && !softKilled) {
+      softKilled = true;
+      softThrow = { dir: [...dirWorld] as Vec3, kind: wound.shot?.weapon === 'slug' ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet' };
+    }
     // A soft target's robe takes a painted mark, not a crater (damage.ts).
     if (softTarget) clothDecal(field.prims, wound);
     woundRing.stamp(wound, field, bodyYaw);

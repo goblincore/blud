@@ -58,4 +58,18 @@ describe('cultist: soft target', () => {
     const moved = Math.hypot(...actor.boundRig().rig.points[hemI]!.pos.map((v, k) => v - hemBefore[hemI]![k]!));
     expect(moved).toBeLessThan(0.05);
   });
+
+  it('a slug THROWS the body along the shot (it used to fold toward the shooter)', () => {
+    for (const dz of [-1, 1]) {
+      const { actor } = cultist();
+      for (let i = 0; i < 10; i++) actor.step(1 / 60);
+      const cz = () => { const ps = actor.boundRig().rig.points; return ps.reduce((a, p) => a + p.pos[2], 0) / ps.length; };
+      const z0 = cz();
+      const torso = actor.posed().prims.find(p => p.limb === 'torso' && !p.shell)!;
+      actor.hitSlug([torso.a[0], torso.a[1], torso.a[2] - dz * 0.3], [0, 0, dz]);
+      for (let i = 0; i < 60; i++) actor.step(1 / 60);
+      expect((cz() - z0) * dz).toBeGreaterThan(0.5);
+    }
+  });
 });
+
