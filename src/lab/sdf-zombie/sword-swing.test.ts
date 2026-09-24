@@ -1,6 +1,11 @@
 // src/lab/sdf-zombie/sword-swing.test.ts
 import { describe, it, expect } from 'vitest';
 import { makeBrain, stepBrain, BRAIN_TUNING, type Brain, type BrainTuning } from './brain';
+import {
+  SWORD_TUNING, SWORD_KEYS, swordCarryAt, lungeAdvance, swordContact, isSwordVariant, SWORD_CONTACT,
+} from './sword-swing';
+import { ATTACK_TUNING } from './attack';
+import type { CarrySpec } from './carry';
 
 const TEST_TUNING: BrainTuning = {
   ...BRAIN_TUNING,
@@ -44,5 +49,109 @@ describe('BrainTuning — sword extensions', () => {
       alerted: false, hasToken: true, drift: 0, roll: 0.2,
     }, TEST_TUNING);
     expect(out.attack?.phase).toBeCloseTo(0.5, 5); // 0.625 / 1.25
+  });
+});
+
+const GUARD: CarrySpec = { right: { pitch: 1.9, yaw: 0.3, fold: 1.6 }, gunPitch: 0.6, leftPole: [0.5, -0.3, 0.2] };
+
+describe('swordCarryAt — the phase-keyed carry track', () => {
+  it('starts and ends EXACTLY on the guard (no step into or out of the gait)', () => {
+    for (const v of ['cleave', 'sweep', 'lunge'] as const) {
+      expect(swordCarryAt(0, v, GUARD)).toEqual(GUARD);
+      expect(swordCarryAt(1, v, GUARD)).toEqual(GUARD);
+    }
+  });
+
+  it('hits the wind-up key at windupEnd and the strike key through the hold', () => {
+    const w = swordCarryAt(ATTACK_TUNING.windupEnd, 'cleave', GUARD);
+    expect(w.right).toEqual(SWORD_KEYS.cleave.windup.arm);
+    const s = swordCarryAt((ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2, 'cleave', GUARD);
+    expect(s.right).toEqual(SWORD_KEYS.cleave.strike.arm);
+    expect(s.gunPitch).toBe(SWORD_KEYS.cleave.strike.gunPitch);
+  });
+
+  it('is continuous: no angle jumps more than 0.35 rad between 1% phase steps', () => {
+    for (const v of ['cleave', 'sweep', 'lunge'] as const) {
+      let prev = swordCarryAt(0, v, GUARD);
+      for (let i = 1; i <= 100; i++) {
+        const cur = swordCarryAt(i / 100, v, GUARD);
+        for (const k of ['pitch', 'yaw', 'fold'] as const)
+          expect(Math.abs(cur.right[k] - prev.right[k]), `${v} ${k} @${i}`).toBeLessThan(0.35);
+        prev = cur;
+      }
+    }
+  });
+
+  it('keeps the sword two-handed (never oneHanded) and the guard pole', () => {
+    const s = swordCarryAt(0.4, 'sweep', GUARD);
+    expect(s.oneHanded).toBeUndefined();
+    expect(s.leftPole).toEqual(GUARD.leftPole);
+  });
+
+  it('cleave strikes DOWN: strike pitch below wind-up pitch', () => {
+    expect(SWORD_KEYS.cleave.strike.arm.pitch).toBeLessThan(SWORD_KEYS.cleave.windup.arm.pitch);
+  });
+
+  it('sweep crosses the body: yaw changes sign from wind-up to strike', () => {
+    expect(Math.sign(SWORD_KEYS.sweep.windup.arm.yaw)).not.toBe(Math.sign(SWORD_KEYS.sweep.strike.arm.yaw));
+  });
+});
+
+describe('lungeAdvance', () => {
+  it('sums to the full lunge distance over a swing when the player is far', () => {
+    let total = 0, prev = 0;
+    for (let i = 1; i <= 120; i++) { const p = i / 120; total += lungeAdvance(prev, p, 10); prev = p; }
+    expect(total).toBeCloseTo(SWORD_TUNING.lungeDistance, 3);
+  });
+
+  it('moves only between windupEnd and strikeEnd', () => {
+    expect(lungeAdvance(0, ATTACK_TUNING.windupEnd, 10)).toBe(0);
+    expect(lungeAdvance(ATTACK_TUNING.strikeEnd, 1, 10)).toBe(0);
+  });
+
+  it('stops short of the player', () => {
+    expect(lungeAdvance(ATTACK_TUNING.windupEnd, ATTACK_TUNING.strikeEnd, 1.2))
+      .toBeCloseTo(1.2 - SWORD_TUNING.lungeStopShort, 6);
+    expect(lungeAdvance(ATTACK_TUNING.windupEnd, ATTACK_TUNING.strikeEnd, 0.5)).toBe(0);
+  });
+});
+
+describe('swordContact', () => {
+  const self = { x: 0, z: 0, yaw: 0 };
+  const hitPhase = SWORD_CONTACT.phase;
+
+  it('fires exactly once, on the frame the phase crosses the hit instant', () => {
+    let fired = 0, prev = 0;
+    for (let i = 1; i <= 100; i++) {
+      const p = i / 100;
+      if (swordContact({ prevPhase: prev, phase: p, variant: 'cleave', self, player: { x: 0, z: 1.5 } })) fired++;
+      prev = p;
+    }
+    expect(fired).toBe(1);
+    expect(swordContact({ prevPhase: hitPhase - 0.01, phase: hitPhase, variant: 'cleave', self, player: { x: 0, z: 1.5 } })).toBe(true);
+  });
+
+  it('misses out of reach and outside the cone; sweep has the wider cone', () => {
+    const at = (variant: 'cleave' | 'sweep', x: number, z: number) =>
+      swordContact({ prevPhase: hitPhase - 0.01, phase: hitPhase, variant, self, player: { x, z } });
+    expect(at('cleave', 0, 2.6)).toBe(false);          // too far
+    expect(at('cleave', 1.2, 0.9)).toBe(false);        // ~53 deg off — outside the cleave cone
+    expect(at('sweep', 1.2, 0.9)).toBe(true);          // inside the sweep cone
+  });
+
+  it('isSwordVariant', () => {
+    expect(isSwordVariant('lunge')).toBe(true);
+    expect(isSwordVariant('hook')).toBe(false);
+  });
+});
+
+describe('SWORD_TUNING', () => {
+  it('lunges from beyond reach, inside the ring', () => {
+    expect(SWORD_TUNING.brain.lungeBand!.min).toBeGreaterThan(SWORD_TUNING.brain.meleeRadius);
+    expect(SWORD_TUNING.brain.lungeBand!.max).toBeLessThan(SWORD_TUNING.brain.engageRange);
+  });
+
+  it('winds the cleave up slower than the sweep (the readable one hits hardest)', () => {
+    expect(SWORD_TUNING.brain.swingSecFor!.cleave!).toBeGreaterThan(SWORD_TUNING.brain.swingSecFor!.sweep!);
   });
 });
