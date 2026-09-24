@@ -3846,17 +3846,36 @@ async function main() {
     } else if (heroMotion.motionJoints) {
       // Statue at wherever the body ended up, in its authored pose — not
       // frozen mid-stride, and not snapped back to the origin either.
+      const restPose = heroMotion.motionJoints.base.map(
+        v => [v[0] + heroMotion.lastRootShift[0], v[1], v[2] + heroMotion.lastRootShift[2]] as Vec3);
       heroMotion.bound = {
         ...heroMotion.bound,
         rig: {
           ...heroMotion.bound.rig,
           bodyYaw: 0,
-          restPose: heroMotion.motionJoints.base.map(
-            v => [v[0] + heroMotion.lastRootShift[0], v[1], v[2] + heroMotion.lastRootShift[2]] as Vec3),
+          restPose,
+          // SNAP the points onto the authored-facing rest pose too. Left
+          // where the wander put them (yawed to its last heading), the
+          // statue springs only relaxed them toward rest over many frames,
+          // so a capture taken right after the freeze drew bone-bound prims
+          // (legs, feet) at the old heading while offset prims and the head
+          // used yaw 0 — or the reverse — and the feet pointed backwards.
+          points: heroMotion.bound.rig.points.map((p, i) => {
+            const r = restPose[i];
+            return r ? { ...p, pos: r, prev: r } : p;
+          }),
         },
       };
       camTarget.x = heroMotion.lastRootShift[0];
       camTarget.z = heroMotion.lastRootShift[2];
+      // The statue's rest pose above is authored-facing (yaw 0), so the
+      // yaw applyRig is handed must be 0 too. Left at the wander's last
+      // heading, applyRig rotated every OFFSET-placed prim and the rigid head
+      // by it while bone-bound prims stayed at rest: in every blob:shot the
+      // face, bust and ribs faced one way and the feet the other (the bride,
+      // 2026-09-24; schoolgirl-described showed it too), and the turntable's
+      // "front" became whichever yaw the wander happened to end on.
+      heroMotion.lastBodyYaw = 0;
     }
     motionBtn.textContent = `motion: ${on ? 'on' : 'off'}`;
   }

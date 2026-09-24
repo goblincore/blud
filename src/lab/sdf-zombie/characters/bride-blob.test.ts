@@ -45,6 +45,27 @@ describe('bride — build', () => {
     expect(foreR - foreL).toBeGreaterThan(0.03);
   });
 
+  it('has her feet pointing FORWARD (+z, the way she faces): toe ahead of ankle', () => {
+    // Owner (2026-09-24): "feet point backwards". The .blob was right; the
+    // lab turntable rotated her offset prims by a stale wander yaw
+    // (lab-main.ts setMotionEnabled). Pinned here in the rest skeleton AND in
+    // the motion rig's base pose, which is what the gait and the renderer
+    // pose from — the face is at +z, so the toes must be too.
+    for (const s of ['l', 'r']) {
+      const foot = bone(`foot.${s}`);
+      expect(foot.tail[2] - foot.head[2], `foot.${s}`).toBeGreaterThan(0.08);
+    }
+    const joints = makeMotionJoints(body, bindRig(body).rig.restPose)!;
+    const at = (n: string) => joints.base[joints.index[n as keyof typeof joints.index]!]!;
+    expect(at('toeL')[2]).toBeGreaterThan(at('footL')[2]);
+    expect(at('toeR')[2]).toBeGreaterThan(at('footR')[2]);
+    // ...and the face is on the same side: nose tip ahead of the cranium.
+    const skull = body.prims.filter(p => p.bone === 'skull');
+    const cranium = skull.reduce((m, p) => (p.radius > m.radius ? p : m));
+    const noseTip = Math.max(...skull.map(p => Math.max(p.a[2], p.b[2]) + p.radius * p.scale[2]));
+    expect(noseTip).toBeGreaterThan(cranium.a[2] + cranium.radius * cranium.scale[2]);
+  });
+
   it('has no typo in its face, sheet or palette parameter names; sheet off', () => {
     expect(() => compilePalette(doc)).not.toThrow();
     // Flesh only (Task 1): the baked face sheet arrives in Task 2.

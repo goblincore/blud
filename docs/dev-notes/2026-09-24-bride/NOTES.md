@@ -10,7 +10,7 @@ Flesh only. No shells, hair, kit, sword or face sheet yet (Tasks 2-5).
 
 | What | Value | Spec |
 | --- | --- | --- |
-| Prims | 68 flesh + 27 bone = 95 | ≤ 108 (128 − 20 for Task 3's cloth) |
+| Prims | 73 flesh + 27 bone = 100 | ≤ 108 (128 − 20 for Task 3's cloth) |
 | Flesh crown | 1.814 m | ~1.85 once the hair and veil are on |
 | Hip joint / height | 1.04 / 1.814 = 0.57 | ≥ 0.54 |
 | Waist half-width | 0.086 | ≤ 0.095 |
@@ -22,17 +22,18 @@ Flesh only. No shells, hair, kit, sword or face sheet yet (Tasks 2-5).
 ## Frames
 
 Shot with `LAB_TMP=.lab-tmp LAB_VITE_PORT=5271 LAB_CDP_PORT=9271 npm run blob:shot -- bride`.
-The probe was `BLOB_PROBE="(window.__sdfLab.uniforms.lightDir.value.set(0.35,0.6,-0.72), 1)"`.
+The probe was `BLOB_PROBE="(window.__sdfLab.uniforms.lightDir.value.set(0.35,0.6,0.72), 1)"`
+(the broodmother's light). **Yaw 0 is her face** (frame 00 of 8), as the broodmother notes
+say. Earlier passes shot at yaw 180 with the light's z negated. That was a lab bug, not a
+convention; see "Second look pass" below.
 
-- **The light's z is negated** relative to the broodmother notes. In today's lab,
-  **yaw 180 is her face** (frame 04 of 8), and the broodmother's `+0.72` lights her back.
 - **Use private ports.** Another worktree's Vite was already on 5233. `lab-servers.sh`
   reuses any listener, so the first "bride" shot was that checkout's zombie.
   Sanity-shoot `cultist` on the same ports first.
 
 ![front](body-front.png) ![3/4](body-34.png) ![side](body-side.png) ![back](body-back.png)
 ![torso](torso-front.png) ![torso 3/4](torso-34.png) ![legs](legs-front.png)
-![face](face-front.png) ![face 3/4](face-34.png) ![head at 1 m](head-1m.png)
+![face](face-front.png) ![face 3/4](face-34.png) ![profile](head-profile.png) ![head at 1 m](head-1m.png) ![legs side](legs-side.png)
 
 ## Things found on the way
 
@@ -117,3 +118,48 @@ were re-shot after this pass.
     veil go on.
   - The throat cross still renders as a ~2 × 4 cm dark teardrop, bigger than its prims. It
     is paint claiming past thin prims, and possibly the same thin-prim renderer issue.
+
+## Second look pass (same day): feet, lids, profile
+
+- **"Her feet point backwards" was a LAB bug**, and it had been skewing every frame in
+  this folder.
+  - `blob:shot` freezes the rig with `setMotionEnabled(false)`. That reset `rig.bodyYaw`
+    and `restPose` to the authored facing (yaw 0), but left two things behind:
+    `heroMotion.lastBodyYaw` at the wander's last heading (2.94 rad in one probe), and the
+    rig points where the wander had put them.
+  - `applyRig(current, bound, lastBodyYaw)` then rotated every offset-placed prim and the
+    rigid head by that stale yaw. The bone-bound prims (legs, feet) stayed at the rest
+    heading.
+  - Result: the face, bust and ribs pointed one way and the feet the other, the "front"
+    fell at whatever yaw the wander ended on, and the face looked a few degrees turned.
+    `schoolgirl-described` showed the same backwards feet.
+  - Fix in `webgpu/lab-main.ts` `setMotionEnabled(false)`: zero `lastBodyYaw` and snap the
+    rig points onto the rest pose. Two back-to-back shots now give the same orientation,
+    and green marker prims on the nose and the toes agree in every view.
+  - The `.blob` was right all along (`foot dir=fwd`, toes at +z). `bride-blob.test.ts`
+    now pins that toe.z > ankle.z on both feet (rest skeleton and motion-rig base pose), and
+    that the face is on the same side.
+  - Everything judged before this fix was judged on a half-rotated render. The re-shot
+    frames are the first honest ones.
+- **Heavy upper lids**: the almond capsule raised 8.3 mm, ~0.5 mm proud and flattened, so it
+  caps the top ~third of each eye. The lids are unpainted skin with a small blend, leaving a
+  clean upper edge for Task 2's liner and lashes.
+- **Eyes set into the head**:
+  - Sclera, iris, lid and socket all moved back 8.5 mm.
+  - A small brow arc sits over each eye (probed front z 0.080 at x 0.03, y 1.72, with the
+    eye ~3 mm under it), plus a nasal root between the eyes.
+  - The cranium moved 5 mm back: its lower front rim overhung the eyes as a shelf across the
+    whole forehead.
+  - The face-mass capsule's top dome was lowered for the same reason.
+- **Bust enlarged** (r 0.044 → 0.052, blend 0.012). With the render fixed, r 0.044 read as
+  pectorals.
+- **Honest read** (from the fixed render):
+  - At 3 m: clearly a tall, slim woman, with bust, hourglass, long legs and long neck. The
+    feet point forward in every view.
+  - At 1 m: a sleepy-lidded porcelain doll, with eyes under a soft brow, a small nose and
+    full pale-lilac lips.
+  - Still alien-leaning: the bald, slightly long cranium, and a fairly strong brow line in
+    front light. The ribs read hard (a xylophone) at 1 m; that is the hook, though the
+    bodice will frame it.
+  - Now that it renders right side out, the throat mark reads as a cross with a drip rather
+    than a teardrop.

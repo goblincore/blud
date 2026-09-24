@@ -40,8 +40,9 @@
 #   2. THE VEIL HIDES A WRONG FACE — the head prims: a human cranium, a face
 #      mass that tapers to a slim jaw and a soft pointed chin, high round
 #      cheekbones over soft cheeks, a small upturned nose, full pale-lilac
-#      lips, and almond eyes (sclera + dark iris) inside flat bruised
-#      makeup ovals. Pretty in its parts. The upper lids and under-eyes are
+#      lips, and almond eyes (sclera + dark iris) set IN the head under
+#      heavy, half-hooded upper lids and soft brow arcs, inside flat bruised
+#      makeup ovals — a sleepy doll. Pretty in its parts. The upper lids and under-eyes are
 #      kept clean surfaces: the WRONG half is the baked sheet (Task 2: liner,
 #      lashes, running mascara, corpse makeup, sutures from the mouth
 #      corners) and the jaw gape (a later task). The eyes do NOT glow — she
@@ -148,11 +149,13 @@ body
   # structural mass the arms, neck and hips all fuse to.
   bar  torso on chest  from=0.00 to=0.88 r=0.072 r2=0.098 wide=1.17 deep=0.84 blend=0.024 core
   # A MODEST, CLEARLY FEMALE BUST (look pass): two soft forms high on the
-  # chest, centres (+-0.060, 1.345, 0.046), r 0.044 — ~2 cm proud of the
-  # ribcage, bottoms at y ~1.30. The first pass's r 0.036 mounds set wide
+  # chest, centres (+-0.063, 1.342, 0.052), r 0.052, blend 0.012 — ~3 cm
+  # proud of the
+  # ribcage, bottoms at y ~1.30. (r 0.044 read as pectorals once the lab
+  # turntable drew her the right way round — lab-main.ts statue fix.) The first pass's r 0.036 mounds set wide
   # read as nothing, and she read as an alien mannequin. The Task 3 bodice
   # sits over these.
-  blob torso on chest  at=0.95 offset=(0.060,-0.0065,0.0596) r=0.044 tall=0.95 deep=0.95 blend=0.018 both
+  blob torso on chest  at=0.95 offset=(0.063,-0.0100,0.0660) r=0.052 tall=0.95 deep=0.95 blend=0.012 both
   # THE RIB WINDOW (hook 3). Four ribs each side of a 3 cm sternum gap,
   # BELOW and between the bust: sternal ends at y 1.303 / 1.271 / 1.239 /
   # 1.207, each running out to x ~0.075 and dropping 3.0-3.5 cm — the
@@ -202,20 +205,22 @@ body
   # porcelain skin, the long neck. Pretty doll first, slightly wrong second.
   # World targets (y, z at the centreline): crown 1.813, brow 1.724 /
   # z 0.088, eye line 1.699, nose tip 1.662 / 0.100, mouth 1.635 / 0.093,
-  # chin 1.581 / 0.085, back of head z -0.096 (a deeper back read as a
-  # bulb in the 3/4 view). Offsets were solved from the
+  # chin 1.581 / 0.085, back of head z -0.101. The cranium sits 5 mm further
+  # back than first placed: its lower front rim overhung the eyes as one
+  # shelf across the whole forehead; now only the two brow arcs do. Offsets were solved from the
   # skull point at each at= (y 1.568 + 0.2394 at, z 0.005 - 0.01675 at).
-  # CRANIUM: a human braincase, centre (0, 1.722, -0.006), semi (0.071,
+  # CRANIUM: a human braincase, centre (0, 1.722, -0.011), semi (0.071,
   # 0.091, 0.090): rounded at the back, narrower at the forehead than the
   # cheeks, tall 0.97 (a touch long — the trace of the alien). The fattest
   # head prim: the frame the Task 2 sheet projects from.
-  blob head on skull at=0.64 offset=(0,0.0008,-0.0003) r=0.094 wide=0.755 tall=0.97 deep=0.96 blend=0.010
-  # THE FACE MASS: one tapered capsule from the cheeks (1.683, r 0.056 x
-  # 1.12 wide, front z 0.084 — flush with the cranium, never proud of it,
-  # or the ledge under it shades as a moustache: the first pass's lesson)
-  # down to the jaw front (1.605, r 0.030). This is what gives the face its
+  blob head on skull at=0.64 offset=(0,0.0008,-0.0053) r=0.094 wide=0.755 tall=0.97 deep=0.96 blend=0.010
+  # THE FACE MASS: one tapered capsule from the cheeks (1.676, r 0.054 x
+  # 1.20 wide, front z 0.081) down to the jaw front (1.605, r 0.030). Its
+  # top dome must stay UNDER the brow: rooted at 1.683 / r 0.056 the dome's
+  # upper rim stood out of the cranium's sides and, once the lab rendered
+  # her facing the right way, read as a shelf straight across the forehead. This is what gives the face its
   # height; it narrows to a slim jaw with no seam across it.
-  blob head on skull at=0.48 offset=(0,0.0001,0.0310) tip=(0,-0.078,0.022) r=0.056 r2=0.030 wide=1.18 blend=0.012
+  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0707,0.0235) r=0.054 r2=0.030 wide=1.20 blend=0.012
   # SLIM JAW: the mass behind the face that gives the jaw line its width
   # (semi 0.056), set back so it never reaches the face plane.
   blob head on skull at=0.24 offset=(0,-0.0005,-0.0050) r=0.052 wide=1.08 tall=0.85 blend=0.012
@@ -230,7 +235,7 @@ body
   # toward the temple at (0.053, 1.678) — OUTSIDE and below the eye's outer
   # corner, not under it: the under-eye stays a flat canvas for the sheet's
   # running mascara (owner ask for Task 2)...
-  blob head on skull at=0.50 offset=(0.053,-0.0097,0.0520) r=0.016 wide=1.50 tall=0.60 deep=0.85 blend=0.010 both
+  blob head on skull at=0.50 offset=(0.053,-0.0097,0.0550) r=0.016 wide=1.50 tall=0.60 deep=0.85 blend=0.010 both
   # ...and SOFT CHEEKS under them: fullness at (0.040, 1.660), r 0.024. At
   # r 0.020 the 3/4 view showed a gaunt valley from eye to jaw — the alien
   # read. The hollow the sheet paints later goes between the two.
@@ -242,7 +247,7 @@ body
   # a step lighter than the eye so the almond reads inside it (4a1a26 and
   # the eye merged into one black goggle); the Task 2 sheet paints the
   # smoke, liner and lashes over it.
-  blob head on skull at=0.55 offset=(0.034,-0.0007,0.0690) r=0.019 wide=1.35 tall=0.85 deep=0.60 blend=0.004 both color=6a2632
+  blob head on skull at=0.55 offset=(0.034,-0.0007,0.0630) r=0.019 wide=1.35 tall=0.85 deep=0.60 blend=0.004 both color=6a2632
   # EYES: almond — a short horizontal capsule, inner corner low, outer
   # corner a hair up (tip) — 3.3 cm long at r 0.0085, ~3 mm proud of the
   # socket. A touch too LARGE and too WIDE-SET (centres x +-0.034, a woman's
@@ -251,13 +256,37 @@ body
   # an all-black almond read as a grey alien's eye, the single loudest
   # alien cue in the look-pass frames. The IRIS is a dark ball set in it,
   # r 0.0068 — a touch too big for the eye, the doll's trace.
-  blob head on skull at=0.55 offset=(0.026,-0.0012,0.0812) tip=(0.016,0.002,-0.004) r=0.0085 tall=0.90 blend=0.002 both color=d0c4c8 gloss=0.70
-  blob head on skull at=0.55 offset=(0.034,-0.0002,0.0830) r=0.0068 blend=0.001 both color=160c0e gloss=0.95
+  # SET BACK 8.5 mm in all (owner, second look pass: "too bulgy in
+  # profile") — with the sockets and lids — so the sclera front sits ~0.077,
+  # just under the brow arcs and nasal root below, INSIDE the head rather
+  # than proud of it.
+  blob head on skull at=0.55 offset=(0.026,-0.0012,0.0727) tip=(0.016,0.002,-0.004) r=0.0085 tall=0.90 blend=0.002 both color=d0c4c8 gloss=0.70
+  blob head on skull at=0.55 offset=(0.034,-0.0002,0.0745) r=0.0068 blend=0.001 both color=160c0e gloss=0.95
+  # HEAVY UPPER LID — the lidded, half-hooded doll look: the almond's own
+  # capsule, raised 8.3 mm and ~0.5 mm proud of the sclera, r 0.0080
+  # flattened (tall 0.70), so it caps the top ~third of the eye (raised
+  # 6.8 mm it hooded half the eye into a slit). Unpainted
+  # skin and a small blend: its upper edge is one clean rounded surface for
+  # the Task 2 sheet's liner and lashes. The valley between it and the brow
+  # ridge below is the crease.
+  blob head on skull at=0.55 offset=(0.0255,0.0071,0.0732) tip=(0.0165,0.002,-0.004) r=0.0080 tall=0.70 blend=0.003 both
+  # SOFT BROW RIDGE over each eye (probed front z 0.086 at y 1.72, the eye
+  # ~3 mm under it at 0.083; at r 0.016 / 6 mm it rendered as a shelf
+  # right across the forehead): the cranium
+  # alone falls away to z ~0.074 there, which left the eyes proud of the
+  # face in profile. Low (tall 0.55) with a small blend — smooth-min swell
+  # between it, the nasal root and the cranium first probed 0.099 at the
+  # glabella — so it reads as a brow line, not the Klingon ridge a
+  # full-width forehead fill made.
+  blob head on skull at=0.62 offset=(0.034,0.0046,0.0720) r=0.012 wide=1.35 tall=0.50 blend=0.006 both
+  # NASAL ROOT: fills between the eyes at the bridge (probed front z 0.090
+  # at y 1.70) so the eyes sit IN sockets either side of it.
+  blob head on skull at=0.57 offset=(0,0.0005,0.0720) r=0.010 wide=0.90 blend=0.006
   # SMALL FINE NOSE, slightly upturned, LOW projection (~1.5 cm): a slim
   # round bridge from between the eyes, then a small tip ball set a hair
   # ABOVE the bridge's end so the tip turns up. The first pass's chamfered
   # cone read as a beak.
-  blob head on skull at=0.52 offset=(0,0.0015,0.0867) tip=(0,-0.030,0.009) r=0.0048 r2=0.0058 blend=0.004
+  blob head on skull at=0.52 offset=(0,0.0015,0.0847) tip=(0,-0.030,0.011) r=0.0048 r2=0.0058 blend=0.004
   blob head on skull at=0.40 offset=(0,-0.0028,0.0957) r=0.0075 wide=1.30 tall=0.85 blend=0.005
   # STIGMATA, THROAT (hook 3): a small cross over the windpipe at y ~1.50
   # (neck at=0.45 is (0, 1.492, -0.006); front surface z ~0.035) and one
@@ -353,7 +382,7 @@ bones
   ratio 0.38
   # Cranium: ~1.5-2 cm of flesh on every side of the (0.071, 0.091, 0.090)
   # braincase, same centre.
-  blob head on skull at=0.64 offset=(0,0.0008,-0.0003) r=0.076 wide=0.74 tall=0.92 deep=0.90
+  blob head on skull at=0.64 offset=(0,0.0008,-0.0053) r=0.076 wide=0.74 tall=0.92 deep=0.90
   # Spine through the waist, a ribcage, a pelvic bowl.
   bar  torso on spine1 from=0.00 to=1.00 r=0.024
   blob torso on chest  at=0.55 r=0.062 wide=1.25 tall=1.25 deep=0.85
