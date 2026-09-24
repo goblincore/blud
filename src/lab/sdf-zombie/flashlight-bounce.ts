@@ -110,6 +110,9 @@ export function computeBounceSpot(
   box: Box,
   walls: EnclosureWalls,
   occluders: readonly Box[],
+  /** Outdoor v1 §7: an open room — the top face, and walls above `above`, are sky
+   *  (no bounce patch there). */
+  open?: { above: number },
 ): BounceSpot | null {
   if (beam.intensity <= 0) return null;
   if (!insideBox(beam.pos, box)) return null;
@@ -124,7 +127,9 @@ export function computeBounceSpot(
   let bestAlbedo: Vec3 | null = null;
 
   const enc = hitEnclosure(beam.pos, dir, box);
-  if (enc !== null) {
+  const encIsSky = enc !== null && open !== undefined && enc.wall !== 'negY'
+    && (enc.wall === 'posY' || enc.point[1] > open.above);
+  if (enc !== null && !encIsSky) {
     bestT = enc.t;
     bestPoint = enc.point;
     bestNormal = enc.normal;
