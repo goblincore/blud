@@ -958,7 +958,7 @@ null
   for (const name of REGISTRY) assert.ok(ALL_REGISTERED.includes(name), `${name}: gameplay actor missing from registry`);
   const GAMEPLAY_EXCLUDED = Object.fromEntries(ALL_REGISTERED.filter(n => !REGISTRY.includes(n))
     .map(n => [n, n === 'strand-fixture' ? 'SDF hair-rendering fixture, outside gameplay scope'
-      : n === 'box-fixture' ? 'Lab rendering fixture, outside gameplay scope'
+      : n === 'box-fixture' || n === 'thin-fixture' ? 'Lab rendering fixture, outside gameplay scope'
       : 'Unused character, outside owner-selected gameplay scope']));
   results.gameplayCharacters = REGISTRY;
   results.excludedFeatures.characters = GAMEPLAY_EXCLUDED;
