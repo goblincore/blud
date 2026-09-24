@@ -17,25 +17,38 @@
 # something that only arrives as she closes, and none of them is allowed to
 # spoil the first read.
 #
+# THE LOOK PASS (owner, 2026-09-24). The first build read as "an alien
+# mannequin"; then "i kinda like it but its a bit too alien" — so the target
+# is THE MIDDLE: a pretty, doll-like young woman first, slightly otherworldly
+# second. The beautiful half is a human skull with a real face, a small fine
+# nose, full lips, soft cheeks, a modest female bust, an hourglass and
+# thighs that taper like a woman's. The otherworldly half is only a TRACE:
+# eyes a touch too large and too wide-set, a high smooth forehead on a
+# slightly long cranium, porcelain skin, the long neck and long legs.
+#
 # THE FOUR HOOKS, and the prims that carry each (this pass is FLESH ONLY;
 # later tasks lay cloth, kit, sword and face sheet over these):
 #   1. WRONG ANATOMY, THE CHEAP VERSION — the SKELETON carries it, not a prim:
 #      the hip joint at 1.04 m (57% of her 1.815 m flesh height; a woman is
-#      ~50%), stick-thin thighs (bar semi 0.055 at the root, 0.045 probed at
-#      mid-thigh), a wasp waist (probed semi 0.087) between flared hips
-#      (probed 0.169 — carried by the THIGH prims, see LEGS) and a small high
-#      chest, and a 0.14 m neck (~20% too long). bride-blob.test.ts pins
-#      every one of these. The SWORD FOREARM is 4 cm longer than the off one (`lenR=` on
+#      ~50%), slim thighs with a woman's taper (semi 0.068 at the root to
+#      0.035 at the knee, 0.052 probed mid-thigh), a wasp waist (probed semi
+#      0.087) between flared hips (probed ~0.17 — carried by the THIGH prims,
+#      see LEGS) and a modest high bust, and a 0.14 m neck (~20% too long).
+#      bride-blob.test.ts pins the proportions. The SWORD FOREARM is 4 cm longer than the off one (`lenR=` on
 #      `forearm`): the vambrace hides it at rest, and the swing arcs spend it
 #      as a whip-like reach. No second elbow — motion joints are a fixed set.
-#   2. THE VEIL HIDES A WRONG FACE — the head prims: large recessed sockets,
-#      high chamfered cheekbones, a fine nose, pale
-#      lips and a narrow jaw ending in a pointed chin. Pretty in its parts.
-#      The WRONG half is the baked sheet (Task 2: corpse makeup, sutures from
-#      the mouth corners) and the jaw gape (a later task). The eyes are dark
-#      and wet, NOT glowing — she is a corpse, not a demon.
+#   2. THE VEIL HIDES A WRONG FACE — the head prims: a human cranium, a face
+#      mass that tapers to a slim jaw and a soft pointed chin, high round
+#      cheekbones over soft cheeks, a small upturned nose, full pale-lilac
+#      lips, and almond eyes (sclera + dark iris) inside flat bruised
+#      makeup ovals. Pretty in its parts. The upper lids and under-eyes are
+#      kept clean surfaces: the WRONG half is the baked sheet (Task 2: liner,
+#      lashes, running mascara, corpse makeup, sutures from the mouth
+#      corners) and the jaw gape (a later task). The eyes do NOT glow — she
+#      is a corpse, not a demon.
 #   3. STIGMATA / RELIQUARY — the RIB WINDOW: eight thin rib ridges, four each
-#      side of a sternum gap, y 1.25-1.40 on the chest bone, which the corset
+#      side of a sternum gap, y ~1.17-1.31 BELOW and between the bust (the
+#      costal arch), on the chest bone, which the corset
 #      bodice (Task 3) is clipped open over. Plus PAINTED wounds — a small
 #      cross at the throat and one on each inner thigh, each with a weeping
 #      drip line, in a darker, wetter red than any other paint on her.
@@ -95,7 +108,7 @@ skeleton
     bone hand     parent=forearm  dir=down pitch=8         len=0.08
     # LEGS: 0.49 + 0.48 from the hip joint at 1.04 lands the ankle at ~0.07.
     # Knees drawn in a whisper (tilt -1.5, shins +1.5) — a narrow, poised
-    # stance with a daylight gap between stick-thin thighs. Knee a touch
+    # stance with a daylight gap between slim thighs. Knee a touch
     # FORWARD of the hip-ankle line (thigh pitch 2, shin -1): a first pass
     # with the shin pitched +1 folded the knee 4 mm BEHIND it, which
     # checkStance reads as digitigrade and the lab refuses to load.
@@ -134,25 +147,30 @@ body
   # bone (y 1.36). This is the surface the rib ridges lie on. `core`: the
   # structural mass the arms, neck and hips all fuse to.
   bar  torso on chest  from=0.00 to=0.88 r=0.072 r2=0.098 wide=1.17 deep=0.84 blend=0.024 core
-  # Small, HIGH chest: two low mounds at y ~1.35, set wide (x 0.068) so the
-  # sternum strip between them — the rib window — stays open.
-  blob torso on chest  at=0.95 offset=(0.068,-0.018,0.052) r=0.036 deep=0.95 blend=0.022 both
+  # A MODEST, CLEARLY FEMALE BUST (look pass): two soft forms high on the
+  # chest, centres (+-0.060, 1.345, 0.046), r 0.044 — ~2 cm proud of the
+  # ribcage, bottoms at y ~1.30. The first pass's r 0.036 mounds set wide
+  # read as nothing, and she read as an alien mannequin. The Task 3 bodice
+  # sits over these.
+  blob torso on chest  at=0.95 offset=(0.060,-0.0065,0.0596) r=0.044 tall=0.95 deep=0.95 blend=0.018 both
   # THE RIB WINDOW (hook 3). Four ribs each side of a 3 cm sternum gap,
-  # sternal ends at y 1.385 / 1.350 / 1.315 / 1.280, each running out to
-  # x ~0.08 and dropping 2.7-3.5 cm as real ribs do (steeper lower down).
-  # Task 3 clips the bodice open over exactly this strip. Every endpoint's z
-  # is the PROBED front surface of the chest there (sdBody, scratch probe)
-  # minus ~1.5 mm, so an r 0.0055 ridge stands ~4 mm proud: ribs pressing
-  # against skin, not bones laid on it. bend= is the probed surface bulge at
-  # each rib's midpoint over its chord. Unpainted: shading carries them.
+  # BELOW and between the bust: sternal ends at y 1.303 / 1.271 / 1.239 /
+  # 1.207, each running out to x ~0.075 and dropping 3.0-3.5 cm — the
+  # starved costal arch under the breasts, y ~1.17-1.31. (First pass: 1.28-
+  # 1.39, which the bust now covers.) Task 3 clips the bodice open over
+  # exactly this strip. Every endpoint's z is the PROBED front surface of
+  # the chest there (sdBody with the ribs removed, scratch probe) minus
+  # ~1.5 mm, so an r 0.0055 ridge stands ~4 mm proud: ribs pressing against
+  # skin, not bones laid on it. bend= is the probed surface bulge at each
+  # rib's midpoint over its chord. Unpainted: shading carries them.
   # The chest bone's at=0.50 is (0, 1.275, -0.0095); offsets are from there.
-  bar  torso on chest from=0.50 to=0.50 offset=(0.016,0.110,0.0725) tip=(0.066,-0.027,0.0025) bend=(0,0,0.0012) r=0.0055 blend=0.004 both
-  bar  torso on chest from=0.50 to=0.50 offset=(0.016,0.075,0.0780) tip=(0.066,-0.028,0) bend=(0,0,0.0065) r=0.0055 blend=0.004 both
-  bar  torso on chest from=0.50 to=0.50 offset=(0.016,0.040,0.0765) tip=(0.066,-0.030,-0.025) bend=(0,0,0.012) r=0.0055 blend=0.004 both
-  bar  torso on chest from=0.50 to=0.50 offset=(0.016,0.005,0.0710) tip=(0.064,-0.035,-0.036) bend=(0,0,0.0085) r=0.0055 blend=0.004 both
+  bar  torso on chest from=0.50 to=0.50 offset=(0.016,0.028,0.0755) tip=(0.059,-0.030,-0.0275) bend=(0,0,0.007) r=0.0055 blend=0.004 both
+  bar  torso on chest from=0.50 to=0.50 offset=(0.016,-0.004,0.0700) tip=(0.059,-0.032,-0.0250) bend=(0,0,0.005) r=0.0055 blend=0.004 both
+  bar  torso on chest from=0.50 to=0.50 offset=(0.016,-0.036,0.0690) tip=(0.059,-0.035,-0.0245) bend=(0,0,0.005) r=0.0055 blend=0.004 both
+  bar  torso on chest from=0.50 to=0.50 offset=(0.016,-0.068,0.0690) tip=(0.056,-0.035,-0.0240) bend=(0,0,0.0045) r=0.0055 blend=0.004 both
   # Yoke + shoulder line: thin front-to-back, semi-width 0.135 — a narrow
   # woman's shoulders sloping into the long neck.
-  blob torso on spine2 at=0.90 r=0.060 wide=2.35 tall=0.62 deep=0.85 blend=0.030
+  blob torso on spine2 at=0.90 r=0.060 wide=2.35 tall=0.62 deep=0.85 blend=0.034
 
   # ============================================================
   # HEAD + NECK (hook 2). The face block is a NUB; every feature is a prim
@@ -174,69 +192,100 @@ body
   # buildBody does NOT halve it (only round unions), so the cheekbones'
   # chamfer 0.008 bevelled 3.2 cm of air into flesh. Chamfers here are
   # 0.002-0.003; round head blends 0.010-0.014.
-  # CRANIUM: narrow and a little long, centre y ~1.708, semi (0.076, 0.108,
-  # 0.100). The fattest head prim: the frame the Task 2 sheet projects from.
-  blob head on skull at=0.58 r=0.098 wide=0.78 tall=1.10 deep=1.02 blend=0.010
-  # THE LOWER FACE is ONE tapered cone from under the cheeks (y 1.664,
-  # r 0.050, front z 0.0965 — 4.5 mm INSIDE the cranium's front there, so it
-  # never bulges past it) down to the chin (y 1.594, r 0.024): a V that
-  # narrows to the chin with no seam across it. Two earlier passes put a
-  # mass proud of the cranium (a jaw ellipsoid, then this cone rooted at eye
-  # height) and the ledge under it shaded, below the nose, as a handlebar
-  # MOUSTACHE. Mouth-height (y 1.635) front z ~0.090.
-  blob head on skull at=0.40 offset=(0,0,0.036) tip=(0,-0.070,0.022) r=0.050 r2=0.024 wide=1.25 blend=0.012
-  # Jaw angle: the mass behind the V that gives the jaw line its width,
-  # set back (front z ~0.07) so it never reaches the face plane.
-  blob head on skull at=0.22 offset=(0,-0.005,0.000) r=0.055 wide=1.05 tall=0.90 deep=1.00 blend=0.014
-  # POINTED CHIN: a short chamfered taper forward and down, bottom y ~1.585.
-  blob head on skull at=0.08 offset=(0,0.002,0.052) tip=(0,-0.012,0.014) r=0.022 r2=0.009 blend=0.003 chamfer
-  # HIGH CHEEKBONES, chamfered so they keep an edge under the sockets; the
-  # hollow below them is what the sheet's contour paint deepens later. HIGH
-  # means just under the eye and out toward the temple (y ~1.683, x 0.048):
-  # the first pass sat them beside the nose (y 1.667, x 0.040) and they
-  # puffed out as a chipmunk's cheeks.
-  blob head on skull at=0.50 offset=(0.046,-0.012,0.060) r=0.014 wide=1.25 tall=0.60 deep=0.90 blend=0.003 chamfer both
-  # LARGE SOCKETS: bruised ovals set near-flush (front ~4 mm proud of the
-  # cranium at x 0.029) — big dark eyes are the "pretty" read at range.
-  # Taller than wide-ish (tall 1.05): at 1.30 x 0.90, pinched by brow and
-  # cheek, they read as black slits — sunglasses, not eyes. Bruise red-
-  # violet (5a2530), a step lighter than the eye, so the eyeball reads
-  # inside it; the Task 2 sheet adds the smoky makeup.
-  blob head on skull at=0.55 offset=(0.029,0,0.075) r=0.020 wide=1.15 tall=1.05 blend=0.004 both color=5a2530
-  # EYES: dark and wet, NOT glowing. ~6 mm proud of the socket.
-  blob head on skull at=0.55 offset=(0.029,-0.001,0.087) r=0.012 blend=0.002 both color=120a0c gloss=0.90
-  # FINE NOSE: a chamfered ridge from just below the eye line down and out
-  # (rooted at the eye line it stood between the sockets as a lump),
-  # r 0.0065 -> 0.0045 (0.008 -> 0.006 read as a potato from the front),
-  # tip ~1.7 cm proud. The refinement the rest is measured
-  # against.
-  blob head on skull at=0.52 offset=(0,0.002,0.090) tip=(0,-0.036,0.017) r=0.0065 r2=0.0045 wide=0.85 blend=0.002 chamfer
+  # THE LOOK PASS (owner, 2026-09-24): the first head was "an alien
+  # mannequin" — a tall egg of cranium with the face squeezed into its
+  # bottom third, pits for eyes, a beak. Then: "i kinda like it but its a
+  # bit too alien" — aim for the MIDDLE. So the head below is a human skull
+  # shape with the face taking the lower ~60% of the head's height, and the
+  # otherworldly half is kept only as a TRACE: eyes a touch too large and
+  # too wide-set, a high smooth forehead on a slightly long cranium,
+  # porcelain skin, the long neck. Pretty doll first, slightly wrong second.
+  # World targets (y, z at the centreline): crown 1.813, brow 1.724 /
+  # z 0.088, eye line 1.699, nose tip 1.662 / 0.100, mouth 1.635 / 0.093,
+  # chin 1.581 / 0.085, back of head z -0.096 (a deeper back read as a
+  # bulb in the 3/4 view). Offsets were solved from the
+  # skull point at each at= (y 1.568 + 0.2394 at, z 0.005 - 0.01675 at).
+  # CRANIUM: a human braincase, centre (0, 1.722, -0.006), semi (0.071,
+  # 0.091, 0.090): rounded at the back, narrower at the forehead than the
+  # cheeks, tall 0.97 (a touch long — the trace of the alien). The fattest
+  # head prim: the frame the Task 2 sheet projects from.
+  blob head on skull at=0.64 offset=(0,0.0008,-0.0003) r=0.094 wide=0.755 tall=0.97 deep=0.96 blend=0.010
+  # THE FACE MASS: one tapered capsule from the cheeks (1.683, r 0.056 x
+  # 1.12 wide, front z 0.084 — flush with the cranium, never proud of it,
+  # or the ledge under it shades as a moustache: the first pass's lesson)
+  # down to the jaw front (1.605, r 0.030). This is what gives the face its
+  # height; it narrows to a slim jaw with no seam across it.
+  blob head on skull at=0.48 offset=(0,0.0001,0.0310) tip=(0,-0.078,0.022) r=0.056 r2=0.030 wide=1.18 blend=0.012
+  # SLIM JAW: the mass behind the face that gives the jaw line its width
+  # (semi 0.056), set back so it never reaches the face plane.
+  blob head on skull at=0.24 offset=(0,-0.0005,-0.0050) r=0.052 wide=1.08 tall=0.85 blend=0.012
+  # CHIN: delicate — pointed but SOFT, a small round mass (front z 0.085,
+  # bottom y 1.581), not the first pass's chamfered spike.
+  blob head on skull at=0.12 offset=(0,0.0003,0.0650) r=0.017 wide=1.15 tall=0.95 blend=0.008
+  # HIGH SMOOTH FOREHEAD: the cranium's own curve, nothing added. A wide
+  # brow fill was tried and rendered as a ridge across the forehead (a
+  # Klingon brow in the 3/4 view); the upper lid edge must stay a clean
+  # surface for the Task 2 sheet's liner and lashes.
+  # HIGH CHEEKBONES, round and broad (chamfer read as a mask edge), out
+  # toward the temple at (0.053, 1.678) — OUTSIDE and below the eye's outer
+  # corner, not under it: the under-eye stays a flat canvas for the sheet's
+  # running mascara (owner ask for Task 2)...
+  blob head on skull at=0.50 offset=(0.053,-0.0097,0.0520) r=0.016 wide=1.50 tall=0.60 deep=0.85 blend=0.010 both
+  # ...and SOFT CHEEKS under them: fullness at (0.040, 1.660), r 0.024. At
+  # r 0.020 the 3/4 view showed a gaunt valley from eye to jaw — the alien
+  # read. The hollow the sheet paints later goes between the two.
+  blob head on skull at=0.42 offset=(0.040,-0.0085,0.0520) r=0.024 blend=0.014 both
+  # SOCKETS = where the heavy makeup goes: flat bruised ovals (deep 0.60)
+  # sat ~0.5 mm off the face round each eye, 3.4 cm wide — a smoky
+  # surround, NOT a pit (pits read as bug eyes) and not a bump (at 2.7 mm
+  # proud their rims were ridges under the lid). Bruise red-violet 6a2632,
+  # a step lighter than the eye so the almond reads inside it (4a1a26 and
+  # the eye merged into one black goggle); the Task 2 sheet paints the
+  # smoke, liner and lashes over it.
+  blob head on skull at=0.55 offset=(0.034,-0.0007,0.0690) r=0.019 wide=1.35 tall=0.85 deep=0.60 blend=0.004 both color=6a2632
+  # EYES: almond — a short horizontal capsule, inner corner low, outer
+  # corner a hair up (tip) — 3.3 cm long at r 0.0085, ~3 mm proud of the
+  # socket. A touch too LARGE and too WIDE-SET (centres x +-0.034, a woman's
+  # are ~0.031): the otherworldly trace. Wet, not glowing.
+  # The almond is the SCLERA — a dull, faintly bloodshot off-white (d0c4c8):
+  # an all-black almond read as a grey alien's eye, the single loudest
+  # alien cue in the look-pass frames. The IRIS is a dark ball set in it,
+  # r 0.0068 — a touch too big for the eye, the doll's trace.
+  blob head on skull at=0.55 offset=(0.026,-0.0012,0.0812) tip=(0.016,0.002,-0.004) r=0.0085 tall=0.90 blend=0.002 both color=d0c4c8 gloss=0.70
+  blob head on skull at=0.55 offset=(0.034,-0.0002,0.0830) r=0.0068 blend=0.001 both color=160c0e gloss=0.95
+  # SMALL FINE NOSE, slightly upturned, LOW projection (~1.5 cm): a slim
+  # round bridge from between the eyes, then a small tip ball set a hair
+  # ABOVE the bridge's end so the tip turns up. The first pass's chamfered
+  # cone read as a beak.
+  blob head on skull at=0.52 offset=(0,0.0015,0.0867) tip=(0,-0.030,0.009) r=0.0048 r2=0.0058 blend=0.004
+  blob head on skull at=0.40 offset=(0,-0.0028,0.0957) r=0.0075 wide=1.30 tall=0.85 blend=0.005
   # STIGMATA, THROAT (hook 3): a small cross over the windpipe at y ~1.50
   # (neck at=0.45 is (0, 1.492, -0.006); front surface z ~0.035) and one
   # thin drip weeping down to the notch. The darkest, wettest paint on her:
   # 4a0e12 at gloss 0.85: a 3.2 x 2.0 cm cross of 1.8 mm bars. At 4.4 x
   # 2.8 cm / 2.4 mm the arms and drip merged into one 2.5 cm red teardrop
-  # in the 0.5 m close-up — a wound you see, not a mark you find — a mark you find, not a wound you see.
+  # in the 0.5 m close-up: a wound you see, not a mark you find.
   blob head on neck at=0.45 offset=(0,0.016,0.040) tip=(0,-0.032,0.001) r=0.0018 blend=0.001 color=4a0e12 gloss=0.85
   blob head on neck at=0.45 offset=(-0.010,0.006,0.040) tip=(0.020,0,0) bend=(0,0,0.003) r=0.0018 blend=0.001 color=4a0e12 gloss=0.85
-  blob head on neck at=0.45 offset=(0.001,-0.016,0.039) tip=(0.002,-0.040,-0.006) r=0.0016 r2=0.0008 blend=0.001 color=4a0e12 gloss=0.85
-  # PALE LIPS: two bent bars bowed over the jaw's curve, grey-lilac — the
-  # corpse makeup's mouth, before the sheet adds the sutures.
-  # 3.0 cm / 2.6 cm across, thin upper, fuller lower, each ~half PROUD of
-  # the face (front z ~0.090). Paint goes to the hit's nearest prim
-  # (prim-material.wgsl hitBest), and round the lips that claims more of
-  # the face than the lips themselves: the colour paints a ~4 cm patch. So
-  # the tint is kept a step off the skin (b8a4b0), pale, not pink.
-  bar  head on skull from=0.30 to=0.30 offset=(-0.015,0,0.079) tip=(0.030,0,0) bend=(0,0.001,0.006) r=0.0040 tall=0.90 blend=0.003 color=b8a4b0 gloss=0.45
-  bar  head on skull from=0.30 to=0.30 offset=(-0.013,-0.009,0.078) tip=(0.026,0,0) bend=(0,-0.002,0.007) r=0.0052 tall=0.85 blend=0.003 color=b8a4b0 gloss=0.45
+  blob head on neck at=0.45 offset=(0.001,-0.016,0.040) tip=(0.002,-0.030,0.005) r=0.0016 blend=0.001 color=4a0e12 gloss=0.85
+  # FULL LIPS: a real upper/lower pair, 3.0 / 2.6 cm wide, the upper bent
+  # UP at its middle for a soft cupid's bow, the lower fuller (r 0.0058),
+  # both ~1 cm proud at the middle (front z ~0.093 against a face of
+  # ~0.082). Pale LILAC b4a6bc (b8a2b8 rendered pink after the sRGB lift). Paint goes to the hit's nearest prim
+  # (prim-material.wgsl hitBest), and round lips that claims a patch wider
+  # than the lips, so the tint stays a step off the skin — pale, not pink.
+  bar  head on skull from=0.30 to=0.30 offset=(-0.015,0.0002,0.0805) tip=(0.030,0,0) bend=(0,0.0015,0.007) r=0.0045 tall=0.85 blend=0.003 color=b4a6bc gloss=0.50
+  bar  head on skull from=0.26 to=0.26 offset=(-0.013,-0.0002,0.0795) tip=(0.026,0,0) bend=(0,-0.0015,0.007) r=0.0058 tall=0.80 blend=0.003 color=b4a6bc gloss=0.50
 
   # ============================================================
   # ARMS. Under plate from shoulder to fingertip (Task 4), so the flesh is
-  # thin and plain — except at the SEAMS (hook 4).
+  # slim and plain — except at the SEAMS (hook 4). Look pass: a softer
+  # shoulder (the deltoid ball moved down the arm, blended wider — the cap
+  # read boxy) and a touch more arm (0.038 / 0.031), slim, not sticks.
   # ============================================================
-  blob arm on upperarm at=0.00 r=0.037 blend=0.024 mirror core
-  bar  arm on upperarm from=0.04 to=0.97 r=0.036 r2=0.028 blend=0.016 mirror
-  bar  arm on forearm  from=0.02 to=0.96 r=0.029 r2=0.021 blend=0.014 mirror
+  blob arm on upperarm at=0.06 r=0.036 blend=0.030 mirror core
+  bar  arm on upperarm from=0.04 to=0.97 r=0.038 r2=0.030 blend=0.016 mirror
+  bar  arm on forearm  from=0.02 to=0.96 r=0.031 r2=0.022 blend=0.014 mirror
   blob arm on hand     at=0.45 r=0.024 wide=0.75 tall=1.20 deep=1.15 blend=0.016 mirror
   # FUSED SEAMS (hook 4), raw red 8a2a2a where the plate will meet skin.
   # ELBOW CREASE: the couter covers the point of the elbow; the forearm is
@@ -258,31 +307,41 @@ body
   blob arm on hand at=0.10 tip=(0,-0.125,0.018) r=0.031 r2=0.016 blend=0.010 side=r
 
   # ============================================================
-  # LEGS. Stick-thin (hook 1): thigh semi 0.055 at the root tapering to 0.036
-  # at the knee, a small hard calf, narrow feet. The cream boots (Task 4)
-  # cover them from the thigh down.
+  # LEGS. Long and slim with a WOMAN'S taper (look pass): thigh semi 0.068
+  # at the root to 0.035 at a slim knee, a long gentle calf, narrow feet.
+  # The first pass's 0.055 stick thighs and knee balls read as a mannequin.
+  # The cream boots (Task 4) cover them from the thigh down.
   # ============================================================
   # HIP FLARE — on the THIGH, where anatomy puts the widest point of the
   # hips (the greater trochanter is femur): a mass out and a little back of
   # the hip joint, outer surface x ~0.165 at y ~1.00 (probed), flowing in one smooth
   # leg-cluster blend down the outside of the thigh. It swings with the leg,
   # which is right. The bottom of the hourglass (hook 1).
-  blob leg on thigh at=0.09 offset=(0.014,0,-0.010) r=0.060 tall=1.30 deep=1.00 blend=0.030 mirror core
-  bar  leg on thigh from=0.04 to=1.00 r=0.055 r2=0.036 deep=1.05 blend=0.020 mirror
+  blob leg on thigh at=0.09 offset=(0.012,0,-0.010) r=0.057 tall=1.30 deep=1.00 blend=0.030 mirror core
+  bar  leg on thigh from=0.04 to=1.00 r=0.068 r2=0.035 deep=1.05 blend=0.020 mirror
   # Bars run to the joint and overlap: stopped short (0.97 / 0.03) with a
   # knee ball between, the knee read as a doll's ring joint.
-  bar  leg on shin  from=0.00 to=0.97 r=0.037 r2=0.022 blend=0.020 mirror
+  bar  leg on shin  from=0.02 to=0.97 r=0.034 r2=0.021 blend=0.010 mirror
+  # (RENDERER BUG, not ours to fix here: a long THIN capsule — the drip at
+  # r 0.0024 over 10 cm, length/radius ~50, tapered or not — drew dark-red
+  # lines straight out into the air either side of the body at its height,
+  # 30+ cm long; the CPU field has nothing there and removing the drip
+  # removes them. The drip is now 6 cm at r 0.0025, ratio 24, the same
+  # range as the throat drip, which never showed it.)
   # STIGMATA, INNER THIGHS (hook 3): a cross on the inner-front of each
-  # thigh at y ~0.93 (thigh at=0.22, flesh r ~0.055 with the root's blend; the cross sits 30
+  # thigh at y ~0.87 (thigh at=0.34, flesh r ~0.060; the cross sits 50
   # degrees round from the inside toward the front, so it shows between the
-  # thighs from the front), and a drip weeping 10 cm down toward where the
+  # thighs from the front). At=0.22 it sat in the crotch's merged flesh,
+  # buried 3 cm (probed), once the look pass fattened the thigh tops. A drip
+  # weeps 6 cm down toward where the
   # stockings (Task 3) will start. Offsets are for .l (+x out); mirror
   # reflects them for .r. The horizontal arm runs along the surface tangent.
-  blob leg on thigh at=0.22 offset=(-0.048,0.016,0.029) tip=(0.001,-0.032,0) r=0.0030 blend=0.002 mirror color=4a0e12 gloss=0.85
-  blob leg on thigh at=0.22 offset=(-0.0540,0.005,0.0190) tip=(0.0114,0,0.0187) r=0.0030 blend=0.002 mirror color=4a0e12 gloss=0.85
-  blob leg on thigh at=0.22 offset=(-0.048,-0.016,0.029) tip=(0.002,-0.100,-0.002) r=0.0024 r2=0.0012 blend=0.002 mirror color=4a0e12 gloss=0.85
-  # Calf: a small high swell at the back — muscle on a starved frame.
-  blob leg on shin  at=0.26 offset=(0,0,-0.010) r=0.034 deep=1.15 blend=0.024 mirror
+  blob leg on thigh at=0.34 offset=(-0.0386,0.016,0.0460) tip=(0,-0.032,0) r=0.0030 blend=0.002 mirror color=4a0e12 gloss=0.85
+  blob leg on thigh at=0.34 offset=(-0.0463,0.005,0.0396) tip=(0.0153,0.0015,0.0129) r=0.0030 blend=0.002 mirror color=4a0e12 gloss=0.85
+  blob leg on thigh at=0.34 offset=(-0.0386,-0.016,0.0460) tip=(0.0011,-0.060,-0.0011) r=0.0025 blend=0.002 mirror color=4a0e12 gloss=0.85
+  # Calf: a long gentle swell at the back (a tapered capsule down the shin,
+  # not the first pass's ball — that was a second knob under the knee).
+  blob leg on shin  at=0.22 offset=(0,0,-0.010) tip=(0,-0.110,0.004) r=0.036 r2=0.025 deep=1.10 blend=0.016 mirror
   # Foot: one tapered bar, sole at y ~0.01, arch-high heel end.
   bar  leg on foot  from=0.00 to=0.90 offset=(0,-0.036,-0.010) r=0.030 r2=0.021 wide=1.10 tall=0.80 blend=0.018 mirror
 
@@ -292,8 +351,9 @@ body
 # shots players take. Limbs auto-derive (ratio 0.38).
 bones
   ratio 0.38
-  # Cranium: ~1.6-2 cm of flesh on every side of the (0.076,0.108,0.100) head.
-  blob head on skull at=0.58 r=0.078 wide=0.78 tall=1.08 deep=1.00
+  # Cranium: ~1.5-2 cm of flesh on every side of the (0.071, 0.091, 0.090)
+  # braincase, same centre.
+  blob head on skull at=0.64 offset=(0,0.0008,-0.0003) r=0.076 wide=0.74 tall=0.92 deep=0.90
   # Spine through the waist, a ribcage, a pelvic bowl.
   bar  torso on spine1 from=0.00 to=1.00 r=0.024
   blob torso on chest  at=0.55 r=0.062 wide=1.25 tall=1.25 deep=0.85
