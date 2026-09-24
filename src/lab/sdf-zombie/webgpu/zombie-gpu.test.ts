@@ -14,9 +14,9 @@ import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
-import { ROW_PRIM_BEND } from './march.wgsl';
+import { ROW_PRIM_A, ROW_PRIM_BEND } from './march.wgsl';
 import { REC_ANCHOR_BAND, REC_COUNTS, REC_VEC4S } from './crowd-records';
-import { MAX_PRIMS } from '../validate';
+import { BASE_PRIM_STRIDE, MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
 import * as THREE from 'three/webgpu';
@@ -294,7 +294,7 @@ describe('chunk bend transform', () => {
 
     const readBend = (row: number): number[] => {
       const data = (view.dataTexture as THREE.DataTexture).image.data as Float32Array;
-      const o = (ROW_PRIM_BEND * MAX_PRIMS + row) * 4;
+      const o = (ROW_PRIM_BEND * BASE_PRIM_STRIDE + row) * 4;
       return [data[o]!, data[o + 1]!, data[o + 2]!];
     };
 
@@ -658,5 +658,58 @@ describe('run 5b slim twin lighting tail (source pins)', () => {
     expect(MARCH_BODY_LIGHT).toContain('if (probeCfg.x > 0.0) {');
     expect(MARCH_BODY_LIGHT).toContain('if (probeDynCfg.x > 0.0 || probeDynCfg.y > 0.0)');
     expect(MARCH_BODY_LIGHT).toMatch(/bounceCfg\.x == 0/);
+  });
+});
+
+// Per-body data-texture width (2026-09-24): a body over BASE_PRIM_STRIDE
+// flesh + bone gets a wider texture; everything at or under it keeps 128.
+describe('per-body data texture width', () => {
+  /** The zombie with `extra` copies of its last flesh prim appended to its
+   *  last cluster — a stand-in for a dense character (fold order intact). */
+  const widened = (extra: number) => {
+    const last = body.prims[body.prims.length - 1]!;
+    const clusters = body.clusters.map((c, i) =>
+      i === body.clusters.length - 1 ? { ...c, count: c.count + extra } : c);
+    return { ...body, prims: [...body.prims, ...Array.from({ length: extra }, () => ({ ...last }))], clusters };
+  };
+  const total = (b: typeof body) => b.prims.length + (b.bonePrims?.length ?? 0);
+
+  it('keeps the shipped zombie on the 128-wide base texture', () => {
+    expect(total(body)).toBeLessThanOrEqual(BASE_PRIM_STRIDE);
+    const view = createZombieGpuView(body, {});
+    expect((view.dataTexture as THREE.DataTexture).image.width).toBe(BASE_PRIM_STRIDE);
+    view.dispose();
+  });
+
+  it('sizes a denser body at 192 and writes its tail prims into their own columns', () => {
+    const wide = widened(BASE_PRIM_STRIDE + 20 - total(body));
+    expect(total(wide)).toBe(BASE_PRIM_STRIDE + 20);
+    const view = createZombieGpuView(wide, {});
+    const tex = view.dataTexture as THREE.DataTexture;
+    expect(tex.image.width).toBe(192);
+    view.update(wide);
+    // The LAST flesh prim sits past column 128 — a 128-wide texture would have
+    // wrapped it into the next row. Its radius (primA.w) must be there.
+    const data = tex.image.data as Float32Array;
+    const col = wide.prims.length - 1;
+    expect(col).toBeGreaterThanOrEqual(BASE_PRIM_STRIDE - (wide.bonePrims?.length ?? 0));
+    expect(data[(ROW_PRIM_A * 192 + col) * 4 + 3]).toBeCloseTo(wide.prims[col]!.radius, 6);
+    expect(view.uniforms.counts.value.x).toBe(wide.prims.length);
+    view.dispose();
+  });
+
+  it('fails loudly when a body outgrows the texture it was created for', () => {
+    const view = createZombieGpuView(body, {});
+    const wide = widened(BASE_PRIM_STRIDE + 1 - total(body));
+    expect(() => view.update(wide)).toThrow(/128-wide data texture/);
+    view.dispose();
+  });
+});
+
+describe('per-body data texture width — stride floor', () => {
+  it('a view given stride: MAX_PRIMS takes any live-edited body up to the ceiling', () => {
+    const view = createZombieGpuView(body, { stride: MAX_PRIMS });
+    expect((view.dataTexture as THREE.DataTexture).image.width).toBe(MAX_PRIMS);
+    view.dispose();
   });
 });

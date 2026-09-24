@@ -11,7 +11,7 @@
 // smoke are deliberately not here.
 
 import type { Vec3 } from '../types';
-import { worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, worldHitToWound, type Wound } from '../damage';
 
 export const GRAPESHOT = {
   /** Pellets per barrel. The brief says ~8 and "err chunky". */
@@ -219,7 +219,8 @@ export function woundFromSlug(
   // 'blast' (the crater profile), so without this marker shouldSpill reads
   // every slug at the blast pin (1.0) and SPILL_CHANCE.slug is dead.
   w.spillCalibre = 'slug';
-  return w;
+  // Through cloth a slug TEARS: ragged hole, the wound shows through it.
+  return clothifyWound(prims, w, 'heavy');
 }
 
 /** Integrate one frame: ballistic arc + ageing. Mutates in place.
@@ -301,7 +302,8 @@ export function woundFromPellet(
   const w = worldHitToWound(prims, hit, GRAPESHOT.woundRadius, 'pellet', bodyYaw, field);
   // Severing reads its own calibre, not the crater's — see GRAPESHOT above.
   w.severRadius = GRAPESHOT.severRadius;
-  return w;
+  // Shotgun pellets are heavy rounds to a robe: a ragged tear, not a decal.
+  return clothifyWound(prims, w, 'heavy');
 }
 
 // ---------------------------------------------------------------------------

@@ -282,7 +282,8 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // A burn only opens up as it cooks; a pellet/blast subtracts immediately.
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
     let r = length(p - w.xyz);
-    d = smax(d, -(r - depth), woundCfg.y);
+    // Size-scaled fillet — MUST match APPLY_WOUNDS (march/fields/wounds.wgsl.ts).
+    d = smax(d, -(r - depth), woundCfg.y * clamp(w.w / 0.05, 0.1, 1.0));
     // Everted rim: the displaced flesh splays outward into a raised lip.
     let x = (r - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
     let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);

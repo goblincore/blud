@@ -46,7 +46,12 @@ export type GaitJointName =
   | 'shoulderL' | 'shoulderR' | 'elbowL' | 'elbowR' | 'handL' | 'handR'
   | 'hipL' | 'hipR' | 'kneeL' | 'kneeR' | 'footL' | 'footR'
   | 'spineA' | 'spineB' | 'clavicleL' | 'clavicleR'
-  | 'handTipL' | 'handTipR' | 'toeL' | 'toeR';
+  | 'handTipL' | 'handTipR' | 'toeL' | 'toeR'
+  // A CLOTH PENDULUM: the free end of a `hem` bone hanging off the pelvis.
+  // No gait offset ever names it, so its target just rides the body's
+  // translation and yaw while the Verlet rig swings it on its constraint —
+  // which is exactly the lag a robe's skirt should have (cultist, 2026-09-23).
+  | 'hem';
 
 /** Every joint, primary first — the ORDER is the naming priority when two
  *  bone ends share a position (jointNamesForBody). */
@@ -55,6 +60,7 @@ export const GAIT_JOINTS: readonly GaitJointName[] = [
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
   'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR',
   'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
+  'hem',
 ];
 
 /** A GAIT PROFILE — every knob of one way of walking. The zombie's numbers
@@ -280,6 +286,29 @@ export const STOMP: GaitProfile = {
   // little more commitment toward the heading.
   torsoLean: 6,
 };
+
+/** The cultist's GLIDE: the shamble with the legs hidden. Under a floor-length
+ *  robe the shamble's stride pushed the knees up to 14 cm outside the skirt
+ *  cone (cultist-blob.test.ts measures it) and a thigh broke the cloth in
+ *  side-on frames. Short, quick, low steps keep the legs inside the robe, and
+ *  a figure that moves without visibly walking is the creepier read anyway.
+ *  The upper body (reach arms, sway, bob) is the shamble's, untouched. */
+export const GLIDE: GaitProfile = {
+  ...SHAMBLE,
+  name: 'glide',
+  strideFreq: 1.25,
+  strideLen: 0.18,
+  footLift: 0.06,
+  footPush: 0.04,
+  kneeBend: 0.05,
+  kneeLift: 0,
+};
+
+/** GLIDE with the arms on a HELD GUN (the cultist's tommy gun): the carry
+ *  table owns the arms, as STOMP does for the ogre's saw. motion.ts takes the
+ *  arm style from the GAIT (pickArmStyle), never from MotionProfile.armStyle,
+ *  so a gunner needs a carry-style gait. */
+export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyle: 'carry', armSwing: 0.03 };
 
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
@@ -642,6 +671,10 @@ export function stepGait(
     handTipR: armB.hand,
     toeL: legA.foot,
     toeR: legB.foot,
+    // The cloth pendulum bobs with the hips but NEVER sways: the hips swing
+    // side to side over a hem that stays put, and the Verlet constraint
+    // between them tilts the skirt — the hem lagging the waist, as cloth does.
+    hem: [0, bob * 0.9, 0],
   };
 
   let p = (phiL % TAU) / TAU;
@@ -685,6 +718,8 @@ const JOINT_AT: Record<string, { head: string; tail: string }> = {
   thigh:    { head: 'hip',      tail: 'knee' },
   shin:     { head: 'knee',     tail: 'foot' },
   foot:     { head: 'foot',     tail: 'toe' },
+  // Cloth pendulum off the pelvis (see GaitJointName 'hem').
+  hem:      { head: 'hips',     tail: 'hem' },
 };
 
 /** The joint names that carry a per-side suffix (centerline joints never do). */

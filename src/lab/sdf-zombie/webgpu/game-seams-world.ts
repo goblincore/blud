@@ -448,6 +448,22 @@ export function createWorldSeams(ctx: GameContext) {
      *  target and to count what a detonation removed. Read-only scalars only:
      *  id, kind, room, ground position, yaw, collapse phase. No GPU state, so
      *  this is safe to poll between stepped frames. */
+    /** Life-state prims (`when=`, death-state.ts) of one actor: index,
+     *  when, dead — for checking the hood swap from a driver. */
+    actorLifePrims: (id: number) => {
+      const a = ctx.world.actors.find(q => q.id === id);
+      return a ? a.posed().prims.flatMap((p, i) => p.when ? [{ i, when: p.when, dead: !!p.dead }] : []) : null;
+    },
+    /** World-space centre of an actor's live prims on one limb (a driver's
+     *  camera target — e.g. a corpse's head). Null when none are alive. */
+    actorLimbCentre: (id: number, limb: string) => {
+      const a = ctx.world.actors.find(q => q.id === id);
+      const ps = a?.drawnBody().prims.filter(p => p.limb === limb && !p.dead && p.op !== 'sub') ?? [];
+      if (!a || ps.length === 0) return null;
+      const s = [0, 0, 0];
+      for (const p of ps) for (let k = 0; k < 3; k++) s[k]! += (p.a[k]! + p.b[k]!) / 2 / ps.length;
+      return s;
+    },
     actorList: () => ctx.world.actors.map(a => {
       const p = a.pose();
       const d = a.debug();

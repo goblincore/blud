@@ -83,6 +83,7 @@ import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
+import { SMG_TUNING, SOLDIER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import type { Vec3 } from '../types';
@@ -138,7 +139,7 @@ import { createWarmBackgroundTracker } from './warm-background';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
-import { sdBody, smax } from '../validate';
+import { sdBody, smax, bodyPrimStride } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
   GRAPESHOT, SLUG, expired, spawnPellets, spawnSlug,
@@ -171,7 +172,7 @@ import {
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
-  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT,
+  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT, burstVolume,
 } from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import {
@@ -270,6 +271,7 @@ import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, upd
 import { applyMouseDelta } from './game-player-leaves';
 import { setLoader } from './game-boot-leaves';
 import { registerBleed, stepGutRopes } from './game-world-leaves3';
+import { headPopDebris } from '../head-pop';
 import { demoRecordStop } from './game-demo-leaves2';
 import { createFireSeams } from './game-seams-fire';
 import { createSkeletonSeams } from './game-seams-skeleton';
@@ -1555,7 +1557,7 @@ async function main() {
         const craters: { pos: Vec3; radius: number }[] = [];
         for (const a of ctx.world.actors) {
           const prims = a.posed().prims;
-          for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+          for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
         }
         ctx.render.boneInstancer.setWounds(craters);
       }
@@ -1592,7 +1594,8 @@ async function main() {
       // above keeps walking every actor; tube mode is not part of this cull).
       for (const a of ctx.render.visualActors) {
         const prims = a.posed().prims;
-        for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+        // Cloth decals carve nothing, so they expose no bone.
+        for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
       }
       ctx.render.segMeshRenderer.setWounds(craters);
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
@@ -3010,26 +3013,36 @@ async function main() {
     // members visible while the crowd program compiles. Reserve the slot here
     // and hand the shared sink/records/slot to createZombieGpuView; attachAt()
     // below only marks the slot and stores the view.
-    let crowdAttach: { type: CrowdType; slot: number } | null = null;
-    if (ctx.crowd.on) {
-      const t = crowdTypeFor(ctx, name, room.id);
+    //
+    // Reserved from INSIDE createCharacterView's gpu callback (per-body data
+    // texture widths, 2026-09-24): the crowd type's atlas is sized to the
+    // first body's primStride, so the body must exist first. The callback runs
+    // after the build and before the view, which keeps the ordering above.
+    // A body wider than an existing type's atlas does not join it — it draws
+    // per-body, like a full type.
+    let crowdAttach = null as { type: CrowdType; slot: number } | null;
+    const crowdViewOptsFor = (built: BuildResult): GpuViewOpts => {
+      if (!ctx.crowd.on) return {};
+      const stride = bodyPrimStride(built);
+      const t = crowdTypeFor(ctx, name, room.id, stride);
+      if (t.atlas.stride < stride) {
+        console.warn(`[crowd] ${name}: body needs a ${stride}-wide atlas, type has ${t.atlas.stride}; drawing per-body`);
+        return {};
+      }
       const slot = t.reserveSlot();
-      if (slot < 0) console.warn('[crowd] type full', name);
-      else crowdAttach = { type: t, slot };
-    }
-    const crowdViewOpts: GpuViewOpts = crowdAttach
-      ? {
-          sink: crowdAttach.type.atlas.sink(crowdAttach.slot),
-          sinkTexture: crowdAttach.type.atlas.texture,
-          records: crowdAttach.type.records,
-          slot: crowdAttach.slot,
-        }
-      : {};
+      if (slot < 0) { console.warn('[crowd] type full', name); return {}; }
+      crowdAttach = { type: t, slot };
+      return {
+        sink: t.atlas.sink(slot),
+        sinkTexture: t.atlas.texture,
+        records: t.records,
+        slot,
+      };
+    };
     const viewGpuOpts: GpuViewOpts = {
       // The dynamic probe layer's storage node (P3/P4). Bound at material
       // creation like the tile binding — a storage node cannot be rebound.
       ...(ctx.probes.gather ? { probeDyn: { node: ctx.probes.gather.probeDynNode } } : {}),
-      ...crowdViewOpts,
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU
       // lazy-init submit conflict that rejects the WHOLE producer pass
@@ -3091,14 +3104,17 @@ async function main() {
       // the doc would have done (nothing today; an authored ratio from the
       // bones block, later).
       ...(ctx.render.boneRatioOverride !== null ? { boneRatio: ctx.render.boneRatioOverride } : {}),
-      gpu: viewGpuOpts,
+      gpu: (built) => ({ ...viewGpuOpts, ...crowdViewOptsFor(built) }),
     });
     const placed = character.body;
     const view = character.gpu;
     ctx.boot.gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!ctx.render.boneMesh);
-    view.applyMaterial(name === 'soldier' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
+    // A character's OWN palette (its .blob block) wherever it declares one —
+    // was soldier-only, so the cultist's matte tan robe played in the game as
+    // the zombie's wet black latex. The zombie keeps the panel-tunable flesh.
+    view.applyMaterial(name !== 'zombie' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
       LIGHT_PRESETS['practical-hard-key']);
     // Outdoor v1 §7: a body in an open room takes the moon as its key light.
     if ((room as Partial<LevelRoom>).sky) applyMoonKey(ctx, view.uniforms);
@@ -3138,7 +3154,10 @@ async function main() {
       // Keep the soldier's authored face consistent with the lab. Projection
       // alone still left the zombie's full-strength tint, relief and glow on
       // his head, washing out the jaw and turning the entire face orange.
-      if (name === 'soldier') {
+      // Every non-zombie character with a sheet block (was soldier-only):
+      // the cultist's `sheet enabled 0` must switch the zombie's generated
+      // face OFF, or his prim face wears the zombie's painted one.
+      {
         view.uniforms.faceCfg.value.set(
           sheet.enabled ? (sheet.decal > 0.5 ? 2 : sheet.blendLuma > 0.5 ? 3 : 1) : 0,
           sheet.texStrength, sheet.faceForward, sheet.texRelief,
@@ -3228,15 +3247,33 @@ async function main() {
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
       boundedWounds: ctx.vfx.boundedWoundPreview,
-      ...(name === 'soldier' ? {
-        mind: makeSoldierMind(),
+      // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
+      // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
+      // gun. Was `name === 'soldier'`.
+      ...(characterEntry(name).profile.gunner ? {
+        mind: makeSoldierMind(characterEntry(name).profile.gunner!.weapon === 'smg' ? SMG_TUNING : SOLDIER_TUNING),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
           ctx.world.encounter.shot(zombieId);
           // ONE barrel: the double-barrel volley is the player's signature,
           // and the soldier throwing the same wall of lead reads as a second
           // player rather than an enemy.
-          ctx.weapon.soldierPellets.push(...spawnPellets(muz, dir, 1, seedFromUnit(rngStreams.misc())));
+          // THE TOMMY GUN CLIMBS. Each round's fire kick lifts the carry, and a
+          // 6-7 round burst at ~7 rounds/s walked the stream into the ceiling
+          // (2026-09-23 capture). The barrel still climbs on screen; the ROUNDS
+          // keep the gun's heading (the brain's aim error, so bursts can miss
+          // sideways) but take their vertical from the player's chest. The
+          // soldier's single shotgun round is unchanged.
+          let shotDir = dir;
+          if (characterEntry(name).profile.gunner?.weapon === 'smg') {
+            const pp = ctx.player.player.pos;
+            const hx = dir[0], hz = dir[2], hl = Math.hypot(hx, hz) || 1;
+            const dist = Math.hypot(pp[0] - muz[0], pp[2] - muz[2]);
+            const rise = (pp[1] + SMG_TARGET_CHEST_Y) - muz[1];
+            const l = Math.hypot(dist, rise) || 1;
+            shotDir = [hx / hl * dist / l, rise / l, hz / hl * dist / l];
+          }
+          ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
       profile: characterEntry(name).profile,
@@ -3245,6 +3282,24 @@ async function main() {
       furniture: roomFurniture,
       navigation: ctx.world.encounterNav,
       onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
+      // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
+      // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
+      // the whole swollen head (blood-sim.ts burstVolume — the 10-bead point
+      // burst read as a thin mist), a slug gout along the shot, the neck
+      // bleeds, and the head itself flies apart (head-pop.ts).
+      ...(characterEntry(name).profile.soft ? {
+        onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
+          const at = head.origin;
+          ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });
+          let rad = 0.08;
+          for (const p of head.prims) for (const e of [p.a, p.b]) rad = Math.max(rad, Math.hypot(e[0] - at[0], e[1] - at[1], e[2] - at[2]));
+          burstVolume(ctx.vfx.bloodSim, at, Math.min(rad, 0.25), [dir[0] * 1.5, 0.5, dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+          const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
+          spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+          if (stumpWound) registerBleed(ctx, actor, stumpWound, 'stump');
+          ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc));
+        },
+      } : {}),
     });
     // Ship default + any live toggle: a late spawn must not fall back to the
     // flat bone fold while the rest of the room culls.
@@ -3267,8 +3322,20 @@ async function main() {
     return actor;
   }
 
+  /** Height above the player's feet an enemy SMG round is aimed at (m). */
+  const SMG_TARGET_CHEST_Y = 1.25;
+  const spawnOverride = ((): string | null => {
+    const v = new URLSearchParams(location.search).get('spawn');
+    return v && characterNames().includes(v) ? v : null;
+  })();
+
   function spawnAll(errs: string[]): void {
-    for (const s of ctx.world.level.spawnList()) ctx.world.actors.push(spawnEnemy(s.kind, s.room, s.pos, errs));
+    // ?spawn=<character> (playtest): every non-soldier slot spawns that
+    // registry character instead of the zombie, e.g. ?spawn=cultist.
+    for (const s of ctx.world.level.spawnList()) {
+      const name = s.kind === 'soldier' ? 'soldier' : spawnOverride ?? s.kind;
+      ctx.world.actors.push(spawnEnemy(name, s.room, s.pos, errs));
+    }
   }
 
   spawnAll(ctx.boot.errors);
@@ -6451,6 +6518,12 @@ async function main() {
     ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
     spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
     if (stumpWound) registerBleed(ctx, a, stumpWound, 'stump');
+  };
+  ctx.boot.onGoreDispatch = (a, pieces) => {
+    for (const p of pieces) {
+      spawnChunkPiece({ ...p, spinAngVel: p.angVel },
+        { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, p.vel);
+    }
   };
 
   // -----------------------------------------------------------------------

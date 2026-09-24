@@ -59,7 +59,6 @@ import {
   ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
 } from './march.wgsl';
 import { packBody } from '../pack';
-import { MAX_PRIMS } from '../validate';
 import { WOUND_PROFILES, type Wound } from '../damage';
 import { woundWorldPos } from '../damage';
 import type { Primitive, Vec3 } from '../types';
@@ -263,7 +262,7 @@ export function fitHandCluster(members: Primitive[]): { center: Vec3; radius: nu
 export function createHandsGpuView(
   template: MarchUniforms, limb: 'armL' | 'armR',
 ): HandsGpuView {
-  const { tex: dataTex, texels, writeRow } = createDataTexture();
+  const { tex: dataTex, texels, writeRow, stride } = createDataTexture();
   const u = defaultUniforms(blankFaceTexture());
 
   // The hero's look, verbatim — legacy gamma (lodCfg.y) included, so the
@@ -386,13 +385,13 @@ export function createHandsGpuView(
       }],
       bones: new Map(), bonePrims: [],
     });
-    writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
-    writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
-    writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
+    writeRow(ROW_PRIM_A, packed.primA, stride);
+    writeRow(ROW_PRIM_B, packed.primB, stride);
+    writeRow(ROW_PRIM_SCALE, packed.primScale, stride);
     writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
-    writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, MAX_PRIMS);
-    writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);
+    writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, stride);
+    writeRow(ROW_GROUP_RANGE, packed.groupRange, stride);
     writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, 1);
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);
     dataTex.needsUpdate = true;
@@ -479,6 +478,7 @@ export function createHandsGpuView(
           wounds.map(w => w.ageSec),
           wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
           wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+          { stride },
         );
         u.counts.value.set(0, 0, 0, 0);
         dataTex.needsUpdate = true;
@@ -494,6 +494,7 @@ export function createHandsGpuView(
         wounds.map(w => w.ageSec),
         wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
         wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+        { stride },
       );
       syncHandsRecord();
     },

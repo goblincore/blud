@@ -46,13 +46,13 @@ try {
     const owner={cluster:ownerId,...aimed.clusters[ownerId]};
     const packed=packBody(aimed),data=gpu.createDataTexture();
     const rows={PRIM_A:'primA',PRIM_B:'primB',PRIM_SCALE:'primScale',PRIM_QUAT:'primQuat',REST_A:'restA',REST_B:'restB',PRIM_SHAPE:'primShape',PRIM_BEND:'primBend',PRIM_COLOR:'primColor',PRIM_SHELL:'primShell',PRIM_WARP:'primWarp',PRIM_STRAND:'primStrand',PRIM_CLIP:'primClip',CLUSTER_BOUNDS:'clusterBounds',CLUSTER_RANGE:'clusterRange',GROUP_BOUNDS:'groupBounds',GROUP_RANGE:'groupRange',CLUSTER_GROUPS:'clusterGroups'};
-    for(const [row,key]of Object.entries(rows))data.writeRow(wgsl['ROW_'+row],packed[key],packed[key].length/4);
+    for(const [row,key]of Object.entries(rows))data.writeRow(wgsl['ROW_'+row],packed[key],data.stride);
     const head=aimed.prims.filter(p=>p.limb==='head'&&p.bone==='skull');
     // Dense sample grid through the head/shoulder overlap; evaluate the real mapBody.
     const samples=[];
     for(let x=-.20;x<=.22;x+=.02)for(let y=1.20;y<=1.62;y+=.02)for(let z=-.04;z<=.32;z+=.02)samples.push([x,y,z,0]);
     const adapter=await navigator.gpu.requestAdapter(),device=await adapter.requestDevice();
-    const tex=device.createTexture({size:[MAX_PRIMS,wgsl.DATA_ROWS],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+    const tex=device.createTexture({size:[data.stride,wgsl.DATA_ROWS],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
     const volume=device.createTexture({size:[1,1,1],dimension:'3d',format:'r32float',usage:GPUTextureUsage.TEXTURE_BINDING});
     const points=device.createBuffer({size:samples.length*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(points,0,new Float32Array(samples.flat()));
     const output=device.createBuffer({size:samples.length*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
@@ -73,8 +73,8 @@ try {
     const pipeline=await device.createComputePipelineAsync({layout:'auto',compute:{module,entryPoint:'main'}});
     const group=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:tex.createView()},{binding:1,resource:volume.createView()},{binding:2,resource:{buffer:points}},{binding:3,resource:{buffer:output}}]});
     const run=async scoped=>{
-      gpu.writeWounds(data.texels,[centre],[.13],[1],[0],[.45],[.85],{},undefined,undefined,scoped?[owner]:undefined);
-      device.queue.writeTexture({texture:tex},data.texels,{bytesPerRow:MAX_PRIMS*16},[MAX_PRIMS,wgsl.DATA_ROWS]);
+      gpu.writeWounds(data.texels,[centre],[.13],[1],[0],[.45],[.85],{stride:data.stride},undefined,undefined,scoped?[owner]:undefined);
+      device.queue.writeTexture({texture:tex},data.texels,{bytesPerRow:data.stride*16},[data.stride,wgsl.DATA_ROWS]);
       const encoder=device.createCommandEncoder(),pass=encoder.beginComputePass();pass.setPipeline(pipeline);pass.setBindGroup(0,group);pass.dispatchWorkgroups(Math.ceil(samples.length/64));pass.end();encoder.copyBufferToBuffer(output,0,readback,0,samples.length*16);device.queue.submit([encoder.finish()]);
       await readback.mapAsync(GPUMapMode.READ);const result=new Float32Array(readback.getMappedRange().slice(0));readback.unmap();return result;
     };

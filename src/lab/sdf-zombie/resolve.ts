@@ -106,6 +106,11 @@ export function placePrims(
       ...(p.glow === undefined ? {} : { glow: p.glow }),
       ...(p.metal === undefined ? {} : { metal: p.metal }),
       ...(p.core ? { core: true } : {}),
+      ...(p.rigid ? { rigid: true } : {}),
+      // A dead-only prim starts hidden; the actor swaps the sets on death
+      // (death-state.ts). `dead` is the same switch severing uses.
+      ...(p.when ? { when: p.when } : {}),
+      ...(p.when === 'dead' ? { dead: true } : {}),
       ...(p.shell === undefined ? {} : { shell: p.shell }),
       ...(p.box === undefined ? {} : { box: p.box }),
       // The strand bundle rides through placement exactly like paint and

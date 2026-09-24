@@ -567,7 +567,7 @@ describe('wound payload rows and loop bounds', () => {
     expect(apply).toContain('wMeta.z');       // rimSplay
     expect(apply).toContain('wMeta.w');       // rimOffset
     // woundCfg / woundCfg2 channels: blendK, rimSplay, rimOffset, rimWidth.
-    expect(apply).toContain('smax(d, -(r - depth), woundCfg.y)');
+    expect(apply).toContain('smax(d, -(r - depth), woundCfg.y * clamp(w.w / 0.05, 0.1, 1.0))');
     expect(apply).toContain('woundCfg.w * wMeta.w');
     expect(apply).toContain('woundCfg.z * wMeta.z');
     expect(apply).toContain('woundCfg2.x');

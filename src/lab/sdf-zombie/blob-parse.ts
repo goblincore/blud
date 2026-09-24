@@ -137,6 +137,14 @@ function dirArg(l: BlobLine): DirName {
   return v;
 }
 
+/** `when=alive|dead` -> the value; absent -> null; anything else is an error. */
+function parseWhenArg(l: BlobLine): 'alive' | 'dead' | null {
+  const v = strArg(l, 'when');
+  if (v === null) return null;
+  if (v === 'alive' || v === 'dead') return v;
+  throw new BlobError(`when= takes alive or dead, got "${v}"`, l.line, l.indent + 1);
+}
+
 function strArg(l: BlobLine, key: string): string | null {
   const hit = l.words.find(w => w.startsWith(`${key}=`));
   return hit ? hit.slice(key.length + 1) : null;
@@ -484,6 +492,10 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     metal: parseMetalArg(l, strArg(l, 'color') !== null),
     // `core`: the limb's structural mass, for the fuse probe. See clusterCore.
     core: l.words.includes('core'),
+    // `rigid`: both ends ride the declared bone as one piece. See BlobPart.rigid.
+    rigid: l.words.includes('rigid'),
+    // `when=alive|dead`: shown only while alive / only once dead. See BlobPart.when.
+    when: parseWhenArg(l),
     // `organ`: a bones-block line opting into viscera (organs r3). Same bare-
     // word mechanism as `hard`/`mirror`/`both`; compileBlob turns it into
     // `op: 'organ'`, which differs from bone only in material code.

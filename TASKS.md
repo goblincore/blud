@@ -23,6 +23,52 @@
   floors; open-sky room edges as fence/hedge/treeline + horizon instead of 8.5 m walls; a sky, not fog-as-clear-colour;
   per-room materials (every room shares one stone palette); terrain elevation. Brainstorm → spec before the Wake's art pass.
 
+## Prim ceiling 128 -> 256, per-body texture width — done 2026-09-24
+
+- [x] **`MAX_PRIMS` = 256** (flesh + bone). Each body's data texture is `primStride(total)` wide: 128 up to 128
+  prims, then 192/256, so the shipped cast pays nothing. Crowd types size from their first body; lab hero is 256.
+- [x] Gates: bench stills A/B/C/CZ and the game crowd path's float march target + prim-work buffers byte-identical
+  to base; melee `sdf:march` 13.9-14.7 vs 13.4-14.7 ms; cold `drawOnce` median 1218 vs 1242 ms (noise, load ~12).
+  Costs per width in `.claude/skills/authoring-sdf-characters/reference.md` ("Primitive budget").
+- [ ] Next wall for the bride: **64 prims per cluster** (`MAX_CLUSTER_PRIMS`) — hair + face both land in `head` (34 now).
+- [ ] (pre-existing, not this change) `game-context-coverage` fails on main: `spawnOverride` binding in game-main.
+
+## Thin-prim "lines in the air" (bride) — fixed 2026-09-24
+
+- [x] **Not a renderer bug: a rig bind.** `bindRig` bound each prim end to the nearest rig point of the WHOLE body,
+  so the bride's 10 cm thigh drip rode her hand and stretched to 45 cm when the arm moved. Distal joints (elbow/knee
+  and beyond) now bind only their own limb's prims. Also fixes minotaur, schoolgirl(-alt), female, cyclops binds.
+  Gate: `rig-bind.test.ts` (cast-wide) + `characters/thin-fixture.blob`. Bride's drip can go back to 10 cm.
+- [ ] **Other posed-vs-rest stretch, pre-existing, separate cause** (frozen lab pose, prim length change): gnasher
+  skull line 315 +46 cm, cyberdemon chest 195 +26 cm / spine 202 +17 cm, minotaur shin/foot 324/375/379 +11-17 cm,
+  goblin/gnasher feet +8-10 cm. Candidates: pelvis-root binds, own-chain knee/ankle drift. Not investigated.
+
+## Cultist (cloaked zombie) + SDF-cloth spike — first pass 2026-09-23
+
+- [x] **New character `cultist`**: hooded robed zombie, the costume all `shell` cloth; skirt swings on a `hem`
+  Verlet pendulum, wind gusts push it; `GLIDE` gait keeps legs in the robe. 11 tests. [Notes](docs/dev-notes/2026-09-23-cultist/NOTES.md)
+- [x] Face passes 2-3 (scowl brow, socketed eyes, hooked nose; heavier jaw + teeth), khaki robes; variant
+  `cultist-cowled` kept (lower face hidden). Owner: good enough to merge (2026-09-23).
+- [x] **Tommy gun**: cultist-smg.glb (Blender script), GLIDE_CARRY + low/aim carries, `profile.gunner` -> soldier
+  brain on SMG_TUNING (bursts), rounds aimed at chest height. Game: `?spawn=cultist`. Palette/sheet now per-character.
+- [x] **Playtest 2026-09-24 fixes**: cultists are SOFT targets (`MotionProfile.soft`: first bullet/blast kills); robe hits
+  are painted decals (blood soak / scorched hole), never carved and never severing; the hem kick that spun the robe
+  is gone; a kill throws the body along the shot (`soft-death.ts`); the hood drops on death (`.blob` `when=alive|dead`,
+  `death-state.ts`). Soldier unchanged (still carved).
+- [ ] **Cultist perf pass** — IN PROGRESS, paused for a quiet machine. Landed: upper-bound cull (all characters, -31% cultist
+  / -34% zombie prim evals, pixel-identical). Findings + next steps: [PERF.md](docs/dev-notes/2026-09-23-cultist/PERF.md). Original plan:
+  cut hidden flesh under the robe, merge robe shells, consider baking the hands (owner: no digit-level damage needed).
+  Owner open to a mesh/baked robe if SDF can't get near ~1.5x a zombie.
+- [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),
+  travelling warp waves driven by velocity, or a prebaked cloth sim. Robe distortion on the death throw.
+- [ ] **Hip fire**: the cultist fires from the shoulder; owner wants a random mix of hip and shoulder bursts.
+- [ ] (minor) **Head-explosion bench in the blood lab**: a head on a stake, sliders for the Scanners pop (swell time/size,
+  burst drops/scraps/speeds, clump count, eyeball arc) and scrub/replay back and forth. Owner idea 2026-09-24.
+- [ ] Cultist polish: own `aim` carry (left hand on the foregrip), player damage (no player health yet), SMG audio.
+- [x] **Cloth hit reactions** — paint yields inside wounds (scorched fray); heavy rounds tear + reveal, small
+  calibre = dark bullet hole (flags bit 1), size-scaled fillet, hem kick. Lab: Ctrl-click = SMG hole. Fibre puff w/ SMG.
+- [ ] *Idea (owner, not this session):* flammability tiers — clothed characters catch/burn differently from bare flesh.
+
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 
 - [x] 11 from `3662c1ca` (half-strength blends): zombie ribs/spine/iliac pulled in via `zombie-skeleton-gen.ts`, soldier

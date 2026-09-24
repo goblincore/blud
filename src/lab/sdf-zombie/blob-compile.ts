@@ -441,6 +441,8 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.glow === null ? {} : { glow: p.glow }),
       ...(p.metal ? { metal: true } : {}),
       ...(p.core ? { core: true } : {}),
+      ...(p.rigid ? { rigid: true } : {}),
+      ...(p.when ? { when: p.when } : {}),
       ...(p.kind === 'shell'
         ? {
             shell: {

@@ -63,10 +63,10 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from '../material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES, clothifyWound, clothDecal,
   type Wound, type WoundType,
 } from '../damage';
-import { sdBody } from '../validate';
+import { sdBody, MAX_PRIMS } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces, type SeverResult } from '../sever';
 import { soldierInjury } from '../soldier-damage';
 import { posedDetachedChunk } from '../detached-pose';
@@ -260,7 +260,9 @@ async function main() {
     renderer: handle.renderer,
     scene,
     effectsScene: characterEffects.scene,
-    gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding },
+    // stride: rebuildBody re-feeds this SAME view live-edited bodies, so it
+    // is sized for the ceiling — an edit past 128 prims must not outgrow it.
+    gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding, stride: MAX_PRIMS },
     errors: heroErrors,
     face,
     override,
@@ -1571,8 +1573,15 @@ async function main() {
     const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
     // The wound frame is the body's CURRENT yaw — the same transform the
     // heading rotation puts the prims through, so the crater rides the turn.
-    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
-      p => sdBody(p, lastPosed));
+    // CLOTH (2026-09-23): a hit on a robe tears it (heavy rounds) — or, with
+    // Ctrl held, is a SMALL-CALIBRE bullet hole, previewing the pistol/SMG
+    // look before any such gun exists. Both are no-ops on bare flesh.
+    const clothed = clothifyWound(lastPosed.prims,
+      worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
+        p => sdBody(p, lastPosed)),
+      ev.ctrlKey ? 'small' : 'heavy');
+    // A soft target's robe is marked, not carved — the game's rule (game-actor.ts).
+    const wound = motionProfile.soft ? clothDecal(lastPosed.prims, clothed) : clothed;
     woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and localized hit recoil,
@@ -2402,6 +2411,10 @@ async function main() {
   // straight into a uniform; see setWind.
   const windVel: [number, number, number] = [0, 0, 0];
   const windOffset: [number, number, number] = [0, 0, 0];
+  let windClock = 0;
+  /** Cloth push per unit wind speed, m/s^2 per m/s. At 1 m/s a hem
+   *  pendulum (HEM_REST_SCALE) settles ~6-8 cm downwind at full gust. */
+  const WIND_CLOTH_ACCEL = 8;
 
   handle.setRenderCallback((dt) => {
     // WIND. Accumulated as a world-space OFFSET in metres rather than handing
@@ -2415,6 +2428,17 @@ async function main() {
     // motion off. They leave wind at zero, which is the authored field
     // exactly — see setWind.
     if (windVel[0] !== 0 || windVel[1] !== 0 || windVel[2] !== 0) {
+      // ...and the same wind PUSHES the cloth pendulums (a `hem` bone's free
+      // end, rig.ts clothForce), gusting: two incommensurate sines keep the
+      // push between 0.35x and 1x so the skirt lifts and falls instead of
+      // leaning at a fixed angle. Only loose rig points feel it.
+      windClock += dt;
+      const gust = 0.675 + 0.325 * Math.sin(windClock * 1.9) * Math.sin(windClock * 0.71 + 1.1);
+      const push = (v: number) => v * WIND_CLOTH_ACCEL * gust;
+      if (heroMotion.bound.rig.restScale) {
+        heroMotion.bound = { ...heroMotion.bound,
+          rig: { ...heroMotion.bound.rig, clothForce: [push(windVel[0]), push(windVel[1]), push(windVel[2])] } };
+      }
       windOffset[0] += windVel[0] * dt;
       windOffset[1] += windVel[1] * dt;
       windOffset[2] += windVel[2] * dt;
@@ -3962,7 +3986,9 @@ async function main() {
      * outside the body, `worldHitToWound` in the body's CURRENT yaw (so the crater
      * rides the authored body through any heading rotation), then `woundRing.stamp`.
      */
-    wound(n = 4, seed = 1, type: WoundType = 'pellet') {
+    // calibre: 'heavy' (default, the shotgun/slug) or 'small' (pistol/SMG
+    // bullet holes) — only changes hits on CLOTH (damage.ts clothifyWound).
+    wound(n = 4, seed = 1, type: WoundType = 'pellet', calibre: 'heavy' | 'small' = 'heavy') {
       const prims = lastPosed.prims;
       if (!prims.length) return 0;
       // The body's own centre, from its live clusters — not a guessed point.
@@ -3985,9 +4011,10 @@ async function main() {
         const origin: Vec3 = [cx - dir[0] * 3, cy - dir[1] * 3, cz - dir[2] * 3];
         const hit = raycastBody(origin, dir, lastPosed);
         if (!hit) continue;
-        const wound = worldHitToWound(
+        const clothed = clothifyWound(prims, worldHitToWound(
           prims, hit, radius, type, heroMotion.lastBodyYaw, p => sdBody(p, lastPosed),
-        );
+        ), calibre);
+        const wound = motionProfile.soft ? clothDecal(prims, clothed) : clothed;
         woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
         stamped++;
       }
@@ -4613,6 +4640,8 @@ async function main() {
     setWind(x: number, y: number, z: number) {
       windVel[0] = x; windVel[1] = y; windVel[2] = z;
       if (x === 0 && y === 0 && z === 0) {
+        if (heroMotion.bound.rig.clothForce)
+          heroMotion.bound = { ...heroMotion.bound, rig: { ...heroMotion.bound.rig, clothForce: undefined } };
         windOffset[0] = 0; windOffset[1] = 0; windOffset[2] = 0;
         for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(0, 0, 0);
       }

@@ -30,8 +30,8 @@ const H = Number(process.env.BENCH_H ?? 1704);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
-if (DEBUG && DEBUG !== 'steps' && DEBUG !== 'prims') {
-  fail(`debug mode must be steps|prims, got "${DEBUG}"`);
+if (DEBUG && DEBUG !== 'steps' && DEBUG !== 'prims' && DEBUG !== 'shaded') {
+  fail(`debug mode must be steps|prims|shaded, got "${DEBUG}"`);
 }
 
 const tab = await (

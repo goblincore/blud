@@ -1,0 +1,238 @@
+# CULTIST-COWLED — the cultist's face pass 2 kept as a variant (owner,
+# 2026-09-23: "I kinda like both the more hidden cowl one and the tooth
+# one, so keep both"). Same body, cloth and hem pendulum as cultist.blob;
+# the difference is the head: the high cowl and the back-tipped hood
+# opening hide the lower face, so only brow, ember eyes and the hooked
+# nose come out of the dark. No jaw/teeth pass. Header below is cultist's.
+#
+# THE CULTIST — a hooded, robed zombie in the Blood/NBlood cultist lineage.
+# Owner brief (2026-09-23, prose, no reference mesh): "the schoolgirl's
+# clothes are an SDF cloth that can be animated fairly easily, like blowing
+# in the wind — could that tech make a cloaked zombie figure, basically like
+# the cultists in Blood?" So this character is TWO things: an enemy, and the
+# viability spike for SDF cloth as a whole costume rather than trim.
+#
+# The read, in order of distance:
+#   1. a tall dark cone — robe to the floor, no legs, a pointed hood;
+#   2. two glowing eyes in the black of the hood;
+#   3. bony grey hands out of wide bell sleeves.
+# Blood's cultists are brown-robed. TAN (6e5c40) since 2026-09-23 (owner:
+# "a more tan colour, like Blood's cultists, to make him easier to see").
+# History: near-black read as a black vinyl blob; dark earth brown (4a3424)
+# read as wool but vanished against dark rooms. Tan on the matte palette is
+# the Blood read and separates from the floor; the eyes still carry him.
+# a08058 was tried first: the sRGB encode lifts it to bright orange.
+#
+# HOW THE CLOTH IS BUILT (the part the spike is about):
+#   * The garment is `shell` prims — `abs(base) - thick` off a closed capsule,
+#     clipped by a plane with a rounded rim (types.ts ShellParams). A shell is
+#     a real thin sheet: the hood is hollow and the face sits INSIDE it, the
+#     skirt is a hollow cone the legs walk inside.
+#   * `rigid` (new with this character) makes a prim ride the bone it is
+#     declared on as ONE piece. Without it each end binds to its NEAREST rig
+#     joint and a floor-length skirt pins its hem to an ankle.
+#   * Clip planes now follow the pose (rig-bind.ts poseShellPlane). Before
+#     this character they stayed in rest space, so a hood's face opening
+#     would have kept facing rest +z while the body turned.
+#   * The skirt SWINGS: it rides the `hem` bone below, a Verlet pendulum
+#     (gait.ts 'hem', rig-bind.ts HEM_REST_SCALE), so it lags the walk and
+#     overshoots a stop. The lab's wind pushes that pendulum too.
+#   * The folds are `warp=`: a sine warp of the base distance, body-anchored,
+#     scrolled by the lab's wind (`__sdfLab.setWind(x,y,z)`).
+#   * Where the cloth follows a limb exactly (sleeves, the torso under the
+#     capelet), it is NOT a shell: the flesh prim itself is painted robe
+#     colour. A painted solid moves with the rig for free and costs nothing a
+#     shell does not; the shells are kept for the places a sheet reads
+#     differently from a mass — the hood's opening, the cuffs' bells, the
+#     capelet's hem and the skirt around walking legs.
+model cultist-cowled
+  height 1.84
+
+skeleton
+  root pelvis at 0.96
+
+  # The zombie's skeleton, bone for bone, so the shamble gait (gait.ts), the
+  # arm reach and the head look-at all drive it with no new profile. A little
+  # less hunched than the zombie: a cultist walks upright-ish, head bowed.
+  bone spine parent=pelvis dir=up pitch=4 len=0.36
+  bone neck  parent=spine  dir=up pitch=16 len=0.15
+  bone skull parent=neck   dir=up pitch=6 len=0.16
+
+  # THE HEM PENDULUM. Not anatomy: a bone hanging from the hips whose free
+  # end is a Verlet rig point like any joint. Gait gives it the hips' bob but
+  # never their sway (gait.ts 'hem'), so the waist swings over a hem that
+  # stays put and the skirt riding this bone TILTS — cloth lagging the body.
+  # The same spring that settles every joint (restStiffness) is its restoring
+  # force, and a start, stop, turn or shove swings it. Its tail must stay
+  # ABOVE the feet: bindRig pins the lowest rig point to the floor.
+  bone hem   parent=pelvis dir=down len=0.55
+
+  mirror
+    bone clavicle parent=spine    dir=side                 len=0.19
+    bone upperArm parent=clavicle dir=down tilt=12         len=0.30
+    bone foreArm  parent=upperArm dir=down tilt=2 pitch=12 len=0.29
+    bone thigh    parent=pelvis   dir=down side=0.09       len=0.43
+    bone shin     parent=thigh    dir=down pitch=2         len=0.44
+  end
+
+body
+  # ============================================================
+  # FLESH, mostly hidden. Gaunt: a starved man under a heavy robe. Anything
+  # the robe covers is painted robe colour so a limb that pushes through the
+  # cloth mid-stride reads as fabric bulging, not skin.
+  # ============================================================
+  bar head on neck from=0.05 to=1.0 r=0.040 blend=0.007
+
+  # Torso under the robe — painted robe. Narrower than the zombie's.
+  blob torso on spine  at=0.82 r=0.140 wide=1.30 deep=0.78 blend=0.016 color=6e5c40 core
+  blob torso on spine  at=0.45 r=0.130 wide=1.10 deep=0.78 blend=0.020 color=6e5c40
+  blob torso on pelvis at=0.40 r=0.130 wide=1.10 tall=0.9 deep=0.90 blend=0.020 color=6e5c40
+
+  # Arms — robe sleeves painted on the flesh capsules, the sleeve slightly
+  # fatter than a gaunt arm would be (cloth stands off the skin).
+  blob arm on clavicle at=0.90 r=0.074 blend=0.012 mirror color=6e5c40 core
+  bar  arm on upperArm from=0.02 to=0.95 r=0.060 blend=0.008 mirror color=6e5c40
+  bar  arm on foreArm  from=0.05 to=0.70 r=0.055 r2=0.060 blend=0.008 mirror color=6e5c40
+  # Wrist and hand: bone-thin, grey-green flesh (unpainted — the palette).
+  bar  arm on foreArm  from=0.70 to=0.98 r=0.024 blend=0.006 mirror
+  blob arm on foreArm  at=1.06 r=0.034 wide=0.75 tall=1.25 deep=1.00 blend=0.008 mirror
+  # Four long fingers hanging off the palm, slightly curled forward.
+  bar  arm on foreArm  from=1.12 to=1.12 offset=(0.020,0,0.010) tip=(0.004,-0.085,0.030) bend=(0,0,0.010) r=0.0085 r2=0.006 blend=0.004 mirror
+  bar  arm on foreArm  from=1.12 to=1.12 offset=(0.006,0,0.016) tip=(0.000,-0.095,0.034) bend=(0,0,0.012) r=0.0090 r2=0.006 blend=0.004 mirror
+  bar  arm on foreArm  from=1.12 to=1.12 offset=(-0.008,0,0.014) tip=(-0.004,-0.090,0.032) bend=(0,0,0.012) r=0.0088 r2=0.006 blend=0.004 mirror
+  bar  arm on foreArm  from=1.12 to=1.12 offset=(-0.020,0,0.008) tip=(-0.008,-0.072,0.026) bend=(0,0,0.010) r=0.0078 r2=0.005 blend=0.004 mirror
+
+  # Legs — robe-painted to the shin (a trailing thigh that breaks the skirt
+  # reads as a fold), then a bare grey ankle and a black boot.
+  bar  leg on thigh from=0.05 to=0.95 r=0.074 blend=0.016 mirror color=6e5c40 core
+  bar  leg on shin  from=0.05 to=0.80 r=0.056 blend=0.014 mirror color=6e5c40
+  bar  leg on shin  from=0.80 to=0.96 r=0.040 blend=0.010 mirror
+  blob leg on shin  at=1.00 r=0.062 wide=0.85 tall=0.55 deep=1.55 blend=0.012 mirror color=141010
+
+  # ============================================================
+  # THE CLOTH — shells.
+  # ============================================================
+
+  # ROBE SKIRT: one flared cone from the waist to the floor, riding the HEM
+  # PENDULUM rigidly, pivoting at the hips. Hollow; the legs walk inside it.
+  # (v1 rode the spine: a rigid bell with a dead-still hem that slid along
+  # like a Dalek.)
+  shell torso on hem at=0.0 offset=(0,0.040,0) r=0.150 r2=0.320 tip=(0,-0.86,0.02) wide=1.06 deep=1.00 thick=0.008 clip=(0,-1,0) clipd=-0.20 rim=0.008 blend=0.010 color=6e5c40 warp=0.010 warpFreq=(22,4,22) rigid
+
+  # CAPELET (cowl): a round cone from the neck flaring over the shoulders,
+  # cut off at the chest — the hood's fabric falling onto the shoulders. v1
+  # was a squat wide ellipsoid whose bottom sat ABOVE its own clip plane, so
+  # the plane cut nothing and it read as a closed saucer round the neck.
+  # Round cone: r 0.08 at the neck, r2 0.29 at the chest; the shoulder balls
+  # (x reach 0.244 at y 1.53) sit inside the flare.
+  shell torso on spine at=1.00 offset=(0,0.10,0.0) tip=(0,-0.28,0) r=0.080 r2=0.290 wide=1.12 deep=0.84 thick=0.008 clip=(0,-1,0) clipd=-1.23 rim=0.008 blend=0.010 color=6e5c40 warp=0.006 warpFreq=(30,6,30) rigid
+
+  # BELL CUFFS: the sleeve flares open past the wrist, dark inside, the bony
+  # hand coming out of the black.
+  shell arm on foreArm at=0.62 r=0.056 r2=0.085 tip=(0.008,-0.130,0.026) thick=0.006 clip=(0.03,-0.97,0.22) clipd=-0.87 rim=0.006 blend=0.008 mirror color=6e5c40 rigid
+
+  # HOOD: a tall ellipsoid sheet round the head, opened at the front by a
+  # plane tipped back 18 degrees (the brim overhangs the brow, so the face
+  # sits in shadow). Rides the skull rigidly (a head sphere always does).
+  # tall 1.30: at 1.18 it read from behind as a round ball — a hood is
+  # taller than the head it holds, and the extra height is the peak.
+  shell head on skull at=0.45 offset=(0,0.035,-0.030) r=0.150 wide=0.95 tall=1.30 deep=1.18 thick=0.008 clip=(0,0.31,0.95) clipd=0.67 rim=0.010 blend=0.006 color=6e5c40 warp=0.004 warpFreq=(40,10,40) when=alive
+  # The hood's peak — a cone off the crown, up and back, so the hood reads
+  # as a POINTED cowl (the Blood cultist silhouette), not a balaclava.
+  # Owner (2026-09-23): "the hoodie should have a more pointy top". The v1
+  # peak (tip y 1.856) sat wholly INSIDE the hood sheet's crown (top y
+  # 1.905), so it never showed. Now rooted just under the crown (y 1.86,
+  # z 0.00) and rising 13 cm up and 9 cm back to a point, with a wide blend
+  # so the sheet flows into it instead of a horn stuck on a dome.
+  blob head on skull at=0.90 offset=(0,0.114,-0.080) tip=(0,0.130,-0.090) r=0.070 r2=0.005 blend=0.045 color=6e5c40 when=alive
+  # HOOD DOWN (owner playtest 2026-09-24: a shot should drop the hood, not
+  # carve it, "his head would be completely exposed"). The two lines above
+  # are `when=alive`; these are `when=dead` — hidden until he dies, then the
+  # actor swaps the sets (death-state.ts). The fallen hood: a bunched roll of
+  # fabric across the back of the neck, resting on the capelet, and its
+  # peak hanging down between the shoulder blades. Eyeballed on the game
+  # capture; the spine top (at=1.0) is the neck base.
+  blob torso on spine at=0.97 offset=(0,0.030,-0.105) tip=(0,-0.090,-0.030) r=0.072 r2=0.060 wide=1.70 deep=0.80 blend=0.030 color=6e5c40 when=dead
+  blob torso on spine at=0.80 offset=(0,0.000,-0.150) tip=(0,-0.170,-0.010) r=0.042 r2=0.006 blend=0.030 color=6e5c40 when=dead
+
+  # ============================================================
+  # THE FACE (pass 2, owner 2026-09-23: "the eyes are positioned too low
+  # relative to the brow and in general it's a bit featureless ... a big
+  # pointy nose, see goblin or the ogre"). The face block now supplies only
+  # the gaunt head + jaw masses (browHeavy / noseLength 0); every feature is
+  # an authored prim, placed against the face ellipsoid's surface (centre
+  # y 1.675 z 0.074, semi 0.081 x 0.128 x 0.099 — probed with blob:inspect).
+  # Skull bone: y 1.603 -> 1.762, so at=0.50 is y 1.683.
+  # ============================================================
+  # BROW — one ridge, chamfered so its underside is a crease the eyes sit
+  # under. y 1.698, 1.5 cm above the eye line (pass 1 had the face block's
+  # brow 6 cm above the eyes: they read as sitting in the cheeks). ~2 cm
+  # proud of the forehead at the centre, 3 cm at the ends.
+  # Two arches, not one bar: a straight ridge read as a cap brim. Each runs
+  # from just off the nose root (low) up and out over the socket, so the
+  # pair makes a V — a scowl. Inner end y 1.690, outer 1.706.
+  bar  head on skull from=0.60 to=0.60 r=0.015 tall=0.75 blend=0.005 chamfer offset=(0.006,-0.008,0.093) tip=(0.044,0.016,-0.014) bend=(0,0.004,0.008) both
+  # SOCKETS — dark painted ovals set almost flush (face surface z ~0.165 at
+  # x 0.030): the eye reads as a hole in the face, the ember inside it.
+  blob head on skull at=0.50 r=0.018 wide=1.40 tall=0.85 blend=0.004 offset=(0.031,0,0.074) both color=140a08
+  # EYES — embers, r 0.012, ~5 mm proud of the socket (r 0.008 vanished at
+  # 0.6 m). (Pass 1's r 0.014
+  # read as two flat red coins; r 0.010 still sat 6 cm under the brow.)
+  blob head on skull at=0.50 r=0.012 blend=0.002 offset=(0.031,0,0.083) both color=ff5a10 glow=1.0
+  # NOSE — long, pointed and hooked, the goblin/ogre spike: a tapered
+  # chamfered cone (r 0.022 -> 0.003) rooted between the eyes INSIDE the face
+  # (z 0.164 vs surface 0.172) and reaching 11.5 cm forward, 5.5 cm down;
+  # bend bows the bridge up and out, so the tip hooks. It pokes ~10 cm past
+  # the hood's opening (rest plane z ~0.18 at the tip's height), which is
+  # the point: from the side the silhouette is hood, then nose.
+  blob head on skull at=0.45 r=0.022 r2=0.003 wide=0.85 blend=0.004 chamfer offset=(0,-0.004,0.090) tip=(0,-0.055,0.115) bend=(0,0.010,0.020)
+  # CHEEKBONES — gaunt: two narrow bars of bone under the sockets, ~2 cm
+  # proud, so the hollow under each reads by its shadow.
+  blob head on skull at=0.50 r=0.020 wide=1.50 tall=0.70 deep=0.80 blend=0.008 offset=(0.050,-0.035,0.080) both
+  # MOUTH — a thin dark grim slit across the jaw's front (jaw surface
+  # z ~0.177 at x 0), bowed forward with the jaw's curve.
+  bar  head on skull from=0.50 to=0.50 r=0.005 blend=0.003 offset=(-0.025,-0.085,0.100) tip=(0.050,0,0) bend=(0,-0.004,0.010) color=2a0a08
+
+# Hidden bone for wounds — the derive ratio is right for a thin man.
+bones
+  ratio 0.36
+
+# The zombie's gaunt head + jaw, narrowed. Brow and nose are OFF here — the
+# body block authors them (see THE FACE).
+face
+  headRadius 0.112
+  headWidth  0.72
+  headHeight 1.14
+  headDepth  0.88
+  jawWidth   0.70
+  jawHeight  0.84
+  jawDrop    0.070
+  jawJut     0.03
+  noseLength 0
+  noseWidth  0.36
+  noseDrop   0.009
+  browHeavy  0
+  browRise   0.045
+  headBlend  0.006
+
+sheet
+  enabled 0
+
+# Skin: dead grey-green, bruised toward violet. Only the face and hands show.
+# Dark on purpose — the march has AO but no shadow ray, so the hood cannot
+# shade the face; a pale face lit inside the cowl read as a mask.
+palette
+  baseColor     0.20 0.21 0.17
+  deepColor     0.40 0.06 0.06
+  # MATTE: the latex preset's wet highlight turns wool into black vinyl
+  # (first turntable). Cloth and dry dead skin both want the clay end.
+  specIntensity 0.18
+  specRoughness 0.80
+  fresnelBoost  0.15
+  translucency  0.10
+  wetness       0.15
+  surfaceNoiseAmp    0.10
+  silhouetteNoiseAmp 0.006
+  mottleAmp     0.45
+  mottleScale   1.8
+  mottleColor   0.22 0.16 0.24

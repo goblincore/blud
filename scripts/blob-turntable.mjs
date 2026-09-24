@@ -391,7 +391,9 @@ if (WOUNDS > 0) {
   // click-shoot pipeline "stays god-only", and this rig freezes the rig).
   const seed = Number(process.env.BLOB_WOUND_SEED ?? 7);
   const type = process.env.BLOB_WOUND_TYPE ?? 'pellet';
-  const stamped = await evaluate(`__sdfLab.wound(${WOUNDS}, ${seed}, '${type}')`);
+  // BLOB_WOUND_CALIBRE=small: pistol/SMG bullet holes on cloth (clothifyWound).
+  const calibre = process.env.BLOB_WOUND_CALIBRE ?? 'heavy';
+  const stamped = await evaluate(`__sdfLab.wound(${WOUNDS}, ${seed}, '${type}', '${calibre}')`);
   console.log(`  ${stamped} of ${WOUNDS} wound(s) landed; body now carries `
     + `${await evaluate('__sdfLab.woundCount()')}`);
   const woundedPx = await evaluate(`(() => {

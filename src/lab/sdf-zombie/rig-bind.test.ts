@@ -7,12 +7,13 @@ import goblinSrc from './characters/goblin.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
-import { jointNamesForBody, rotateYaw } from './gait';
+import { jointForBoneEnd, jointNamesForBody, rotateYaw } from './gait';
 import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import { makeMotionJoints } from './motion';
 import { collapseRopes } from './collapse';
 import soldierSrc from './characters/soldier.blob?raw';
+import schoolgirlSrc from './characters/schoolgirl.blob?raw';
 import zombieSrc from './characters/zombie.blob?raw';
 import { sdPrimitive } from './validate';
 import { add, dot, len, normalize, qRotate, scale as vscale, sub } from './vec';
@@ -642,4 +643,109 @@ describe('applyRig — a BENT prim on the rigid head keeps its curve (2026-09-22
       }
     }
   });
+});
+
+describe('applyRig — a SHELL\'s clip plane rides the pose (2026-09-23)', () => {
+  // The clip plane is authored in rest model space. It used to be packed as
+  // authored whatever the pose, so a hood's face opening kept facing rest +z
+  // when the body turned and a cuff plane stayed where the wrist was. The
+  // plane must move by the prim's own map, x -> a' + q (x - a).
+  const body = buildBody(compileBlob(parseBlob(schoolgirlSrc)));
+  const bound = bindRig(body);
+  const shells = body.prims.map((p, i) => ({ p, i })).filter(({ p }) => p.shell).map(({ i }) => i);
+
+  it('is the authored plane exactly at rest', () => {
+    expect(shells.length, 'schoolgirl.blob authors shells').toBeGreaterThan(0);
+    const out = applyRig(body, bound);
+    for (const i of shells) {
+      expect(out.prims[i]!.shell!.clipNormal).toEqual(body.prims[i]!.shell!.clipNormal);
+      expect(out.prims[i]!.shell!.clipOffset).toBeCloseTo(body.prims[i]!.shell!.clipOffset, 12);
+    }
+  });
+
+  it('turns and translates with the prim under a yaw and a shoved rig', () => {
+    const moved = { ...bound, rig: { ...bound.rig, points: bound.rig.points.map(p =>
+      ({ ...p, pos: add(p.pos, [0.7, 0.05, -1.3]) as Vec3 })) } };
+    const out = applyRig(body, moved, 1.3);
+    for (const i of shells) {
+      const rest = body.prims[i]!, posed = out.prims[i]!;
+      const q = posed.orient!;
+      expect(q, `prim ${i} is oriented`).toBeDefined();
+      const n0 = rest.shell!.clipNormal, n1 = posed.shell!.clipNormal;
+      const want = qRotate(q, n0);
+      for (let k = 0; k < 3; k++) expect(n1[k]).toBeCloseTo(want[k]!, 9);
+      // A point ON the rest plane lands ON the posed plane.
+      const onRest = add(rest.a, vscale(n0, rest.shell!.clipOffset - dot(n0, rest.a)));
+      const mapped = add(posed.a, qRotate(q, sub(onRest, rest.a)));
+      expect(dot(n1, mapped) - posed.shell!.clipOffset, `prim ${i}`).toBeCloseTo(0, 9);
+    }
+  });
+});
+
+// THE BRIDE'S DRIP (2026-09-24): an endpoint bound to the nearest rig point
+// of the WHOLE body, so a thin prim ending near another limb's hand rode that
+// hand and, the moment the arm moved, stretched into a thread across the air
+// (dark-red lines beside the bride; characters/thin-fixture.blob). Distal
+// joints — elbow, hand, handTip, knee, foot, toe — now bind only prims on
+// their own bone or an adjacent one (bindEnd in rig-bind.ts).
+describe('bindRig — distal joints belong to their own limb', () => {
+  const RAW = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+  const DISTAL = /^(elbow|hand|handTip|knee|foot|toe)[LR]$/;
+
+  /** Rig points (by index) that are distal gait joints of the given limb kind. */
+  function distalPoints(body: BuildResult, bound: ReturnType<typeof bindRig>, kind: 'arm' | 'leg'): Set<number> {
+    const want = kind === 'arm' ? /^(elbow|hand|handTip)/ : /^(knee|foot|toe)/;
+    const out = new Set<number>();
+    for (const [name, bone] of body.bones) {
+      for (const end of ['head', 'tail'] as const) {
+        const n = jointForBoneEnd(name, end);
+        if (!n || !DISTAL.test(n) || !want.test(n)) continue;
+        const i = bound.rig.points.findIndex(p => len(sub(p.pos as Vec3, bone[end])) < 1e-4);
+        if (i >= 0) out.add(i);
+      }
+    }
+    // ...and everything past them: claws, fingers (cyclops' c_in/c_mid/c_out).
+    const ends = [...body.bones.values()].map(b => [b.head, b.tail].map(e =>
+      bound.rig.points.findIndex(p => len(sub(p.pos as Vec3, e)) < 1e-4)));
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const [h, t] of ends) if (out.has(h!) && !out.has(t!)) { out.add(t!); grew = true; }
+    }
+    return out;
+  }
+
+  /** Swing the given rig points ~0.37 m and return how far each prim's
+   *  endpoints moved (the larger of the two) — a prim bound to a foreign
+   *  hand at BOTH ends does not stretch, it flies (minotaur's thigh). */
+  function moved(body: BuildResult, bound: ReturnType<typeof bindRig>, pts: Set<number>): number[] {
+    const moved = { ...bound, rig: { ...bound.rig, points: bound.rig.points.map((p, i) => pts.has(i)
+      ? { ...p, pos: [p.pos[0] + 0.3, p.pos[1] + 0.1, p.pos[2] + 0.2] as const } : p) } };
+    const out = applyRig(body, moved);
+    return body.prims.map((p, i) =>
+      Math.max(len(sub(out.prims[i]!.a, p.a)), len(sub(out.prims[i]!.b, p.b))));
+  }
+
+  it('thin-fixture: the 10 cm drip stays put when the wrists swing', () => {
+    const body = buildBody(compileBlob(parseBlob(RAW['./characters/thin-fixture.blob']!)), DEFAULT_BUILD_OPTS);
+    const bound = bindRig(body);
+    const drips = body.prims.map((p, i) => [p, i] as const).filter(([p]) => p.radius < 0.003);
+    expect(drips).toHaveLength(2);
+    const dz = moved(body, bound, distalPoints(body, bound, 'arm'));
+    // Before the fix each drip's low end rode its wrist (0.10 m -> ~0.4 m).
+    for (const [, i] of drips) expect(dz[i]!).toBeLessThan(1e-9);
+  });
+
+  for (const [file, src] of Object.entries(RAW)) {
+    const name = file.replace('./characters/', '').replace('.blob', '');
+    it(`${name}: swinging one limb's distal joints moves no prim of another limb`, () => {
+      const body = buildBody(compileBlob(parseBlob(src)), DEFAULT_BUILD_OPTS);
+      const bound = bindRig(body);
+      for (const kind of ['arm', 'leg'] as const) {
+        const dz = moved(body, bound, distalPoints(body, bound, kind));
+        const bad = body.prims.flatMap((p, i) => p.limb.startsWith(kind) || dz[i]! < 1e-6 ? []
+          : [`${p.limb}/${p.bone} line ${p.src} +${(dz[i]! * 1000).toFixed(0)} mm`]);
+        expect(bad, `${kind} swing moved`).toEqual([]);
+      }
+    });
+  }
 });

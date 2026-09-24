@@ -124,6 +124,22 @@ export interface Wound {
    *  `cavity`, so every present and future spill call site is right by
    *  construction. */
   spillCalibre?: 'slug';
+  /**
+   * CLOTH (cultist, 2026-09-23): set by `clothifyWound` when the struck prim
+   * is cloth (a shell, or a painted non-metal prim). 'tear' = a heavy round
+   * (shotgun pellet, slug) ripped a ragged hole and the wound shows through
+   * it; 'hole' = a small-calibre round (pistol/SMG) left only a small ragged
+   * bullet hole. Effects read it (cloth puff, no blood gout on a 'hole').
+   */
+  cloth?: 'tear' | 'hole';
+  /**
+   * CLOTH DECAL (soft targets, 2026-09-24): set by `clothDecal`. The wound
+   * does NOT carve: a round passes through a robe, it does not blow a window
+   * in it. The shader skips it in every carve and paints it on the cloth
+   * instead (ROW_WOUND_FLAGS.x bit 2): a blood stain round a torn core, or,
+   * with cloth 'hole', a scorched bullet hole.
+   */
+  decal?: boolean;
 }
 
 /**
@@ -435,6 +451,90 @@ export function woundCarveNormal(prims: Primitive[], wound: Wound, bodyYaw = 0):
   const { u, v, w } = frame(prim, bodyYaw, wound.axis0);
   const c = wound.carveN;
   return add(add(scale(u, c[0]), scale(v, c[1])), scale(w, c[2]));
+}
+
+/**
+ * Is this prim CLOTH to a bullet? A shell (the sheet garments) or any painted
+ * prim that is not metal and does not glow — the cultist's robe-coloured
+ * torso and sleeves are flesh prims painted as cloth, and a player cannot
+ * tell them from the shells. Metal plates and glowing eyes are not cloth.
+ * The shader applies the same rule when it lets a wound show through paint
+ * (paint-char.wgsl.ts): paint yields inside a wound unless it is metal.
+ */
+export function isClothPrim(p: Primitive): boolean {
+  if (p.shell) return true;
+  return p.color !== undefined && !p.metal && !((p.glow ?? 0) > 0);
+}
+
+/** How a round meets cloth. 'heavy' = shotgun pellet / slug; 'small' =
+ *  pistol / SMG (none in the game yet — the cultist's own gun is next). */
+export type ClothCalibre = 'heavy' | 'small';
+
+/** Ragged edge for a hole in cloth: torn fabric, not a punched porthole.
+ *  0.40 of the 0.45 the shader clamps to. */
+export const CLOTH_RAGGED = 0.40;
+/** A small-calibre round through cloth leaves a bullet hole this size, not a
+ *  crater: a 2.8 cm carve sphere through the sheet, a dark hole with a
+ *  scorched ring (paint-char.wgsl.ts fray band) round it. 0.008 was tried
+ *  first and was a speck at 1.3 m — invisible at combat range. The carve's
+ *  fillet scales with the radius (wounds.wgsl.ts kW), or a hole this small
+ *  melted 5 cm of an 8 mm sheet. */
+export const CLOTH_BULLET_HOLE_RADIUS = 0.014;
+
+/** A heavy round's blood stain on a soft target's robe is capped at this
+ *  radius. The mask reaches 1.6 x the radius, so the slug's 0.16 crater
+ *  radius would soak half a metre of robe; 0.07 is a ~22 cm stain. */
+export const CLOTH_STAIN_MAX_RADIUS = 0.07;
+
+/**
+ * SOFT-TARGET CLOTH TAKES MARKS, NOT CRATERS (owner playtest 2026-09-24): "it
+ * would just pass through the cloth and hit the flesh ... the rips and tears
+ * can be replaced with decals". A soft target dies to the first hit, so there
+ * is nothing to reveal: the robe just shows where it was hit. Run AFTER
+ * `clothifyWound` (which decided tear vs hole). Marks the wound as a decal,
+ * caps a stain's size and drops the gore extras that need an opening (cavity,
+ * spill). A no-op off cloth (a face shot still carves) and for burns.
+ * The soldier keeps `clothifyWound`'s carved tears: he is a gore target.
+ */
+export function clothDecal(prims: Primitive[], wound: Wound): Wound {
+  const p = prims[wound.primIdx];
+  if (!p || !isClothPrim(p) || wound.type === 'burn') return wound;
+  wound.decal = true;
+  if (wound.cloth !== 'hole') wound.radius = Math.min(wound.radius, CLOTH_STAIN_MAX_RADIUS);
+  delete wound.cavity;
+  delete wound.spillCalibre;
+  return wound;
+}
+
+/**
+ * Cloth hit reactions (owner, 2026-09-23: "a pistol or SMG will just make a
+ * small hole or bullet decal on the clothes, but a large shotgun slug would
+ * actually reveal wounds ... it's all about differing visceral effects").
+ *
+ * RENDERING NEEDS NOTHING NEW. A wound already carves the blended body —
+ * cloth and flesh together — and since paint yields to the wound inside its
+ * mask, a crater through a sheet shows the flesh wound behind it with a
+ * scorched fray round the hole. So the whole decision is this stamp-time
+ * rewrite of the wound:
+ *   heavy -> ragged edge, marked 'tear' (gore unchanged: it reveals);
+ *   small -> shrunk to a bullet hole, ragged, marked 'hole', and stripped of
+ *            the gore extras (cavity, spill) — it is a hole in a robe.
+ * Returns the wound unchanged when the struck prim is not cloth.
+ */
+export function clothifyWound(prims: Primitive[], wound: Wound, calibre: ClothCalibre): Wound {
+  const p = prims[wound.primIdx];
+  if (!p || !isClothPrim(p) || wound.type === 'burn') return wound;
+  wound.ragged = CLOTH_RAGGED;
+  if (calibre === 'heavy') { wound.cloth = 'tear'; return wound; }
+  wound.cloth = 'hole';
+  wound.radius = Math.min(wound.radius, CLOTH_BULLET_HOLE_RADIUS);
+  // No everted lip: a punched hole in cloth has no rim of meat to catch the
+  // light (with one, a small hole read as a pale ring).
+  wound.rimScale = 0;
+  if (wound.carveDepth !== undefined) wound.carveDepth = Math.min(wound.carveDepth, wound.radius);
+  delete wound.cavity;
+  delete wound.spillCalibre;
+  return wound;
 }
 
 /** Ring buffer append — oldest is evicted at capacity. */

@@ -15,9 +15,10 @@ import { blankFaceTexture, defaultUniforms } from './zombie-gpu';
  *  (Task 5's createCrowdType). The material binds the same start/early-out
  *  sources as a per-body view (temporal start, prev, shell, depthPre,
  *  probeDyn) so a lone instance stays bit-identical; the per-TYPE uniform
- *  block is seeded by copyUniformValues from the first attached view.
+ *  block is seeded by copyUniformValues from the first attached view, and
+ *  its atlas width from the first body's `stride`.
  *  `?crowd=0` never calls this. */
-export function crowdTypeFor(ctx: GameContext, name: string, roomId: number): CrowdType {
+export function crowdTypeFor(ctx: GameContext, name: string, roomId: number, stride?: number): CrowdType {
   // Keyed by character AND spawn room. The per-TYPE uniform block is seeded
   // from the first attached view, and that block carries the ROOM's
   // lighting environment (boxMin/boxMax, the six wall colours, the room
@@ -44,7 +45,9 @@ export function crowdTypeFor(ctx: GameContext, name: string, roomId: number): Cr
       lastFrame: ctx.render.sdfLayer.lastFrame,
       probeDyn: ctx.probes.gather ? { node: ctx.probes.gather.probeDynNode } : undefined,
     },
-    { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry },
+    // `stride` (validate.ts primStride of the first body) fixes the atlas
+    // width for the type's life; the caller checks later bodies fit.
+    { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry, stride },
   );
   t.mesh.layers.set(SDF_LAYER);
   t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);

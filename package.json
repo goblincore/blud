@@ -14,6 +14,7 @@
     "blob:rings": "tsx scripts/blob-rings.ts",
     "blob:depth": "tsx scripts/blob-depth.ts",
     "blob:shot": "scripts/blob-shot.sh",
+    "blob:cloth": "scripts/cloth-capture.sh",
     "blob:silview": "tsx scripts/blob-silview.ts",
     "blob:inspect": "tsx scripts/blob-inspect.ts",
     "melt:shot": "scripts/melt-shot.sh",

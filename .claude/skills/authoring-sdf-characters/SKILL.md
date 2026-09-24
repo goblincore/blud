@@ -218,6 +218,7 @@ before you change a number. Paths are relative to `src/lab/sdf-zombie/`.
 | a perfectly ROUND see-through hole, CPU field solid there | occluder hull sized a tapered prim from its fat end, or another hull/pre-pass bug | `webgpu/occluder-hull.ts`; run `blob:render-check` |
 | a bent capsule renders as ONE sphere at its start | `coneBend` untapered branch | `webgpu/march.wgsl.ts` |
 | a bent FACE prim shows only its end caps (painted: dots at the corners), rest-body CPU field fine | the pose, not the paint — a rigid-head pass that moves the endpoints must also `qRotate` `bend`; probe `__sdfLab.heroPosed()`, not the rest body | `rig-bind.ts` `applyRig` |
+| a thin prim draws LINES into the air when the body moves; rest-body CPU field and `render-check` see nothing | an endpoint bound to another limb's rig point (the bride's thigh drip rode her hand); `heroPosed()` shows the stretched prim | `rig-bind.ts` `bindEnd`; `rig-bind.test.ts` |
 | a `both`/mirrored part sits on the centreline | mirror did not reflect x | `mirror.ts` |
 | a limb's distal part "disconnects" after a paint or reorder | `clusterCore` picked the wrong prim; mark the structural one `core` | `validate.ts` `clusterCore` |
 | a small feature is smeared / missing | `blend=` wider than the feature | the `.blob` — shrink blend or use `chamfer` |
@@ -296,6 +297,12 @@ guess, and guesses are what `blob:measure` exists to replace.
   and the surface loses geometry with no error at the shader level.
   `validateBody` now catches this at authoring time; do not raise the
   constant to silence it.
+- **A body may carry at most 256 flesh + bone primitives** (`MAX_PRIMS`,
+  raised from 128 on 2026-09-24). Up to 128 costs nothing new; past 128 the
+  body's data texture widens to 192 or 256 texels, which doubles its crowd
+  atlas and upload at 256. Build for looks first, then trim — see "Primitive
+  budget" in [reference.md](reference.md). Dense detail (hair, a face) usually
+  hits the 64-per-cluster wall above before this one: it all lands in `head`.
 
 ## The dials
 

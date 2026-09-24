@@ -441,6 +441,10 @@ export function createWoundRing(): WoundRing {
           const c = posed.clusters[cluster];
           return c ? { cluster, start: c.start, count: c.count } : null;
         }),
+        // Cloth bullet holes shade dark inside, not as tissue (damage.ts).
+        rows.map(w => w.cloth === 'hole'),
+        // Soft-target cloth decals are painted on, never carved (damage.ts).
+        rows.map(w => !!w.decal),
       );
     },
   };
@@ -509,8 +513,14 @@ export interface CharacterViewOpts {
   /** Passed through to createZombieGpuView unchanged — the caller still owns
    *  the sdf layer, the flashlight and the lighting preset. Use the exact
    *  parameter type createZombieGpuView already declares; do not invent a
-   *  new one. */
-  gpu: Parameters<typeof createZombieGpuView>[1];
+   *  new one.
+   *
+   *  May be a FUNCTION of the built body, called once, after the build and
+   *  before the view exists: the game reserves its crowd slot there, because
+   *  the crowd type's atlas width is the body's primStride (validate.ts) and
+   *  the view's material binds that atlas at creation. */
+  gpu: Parameters<typeof createZombieGpuView>[1]
+    | ((body: BuildResult) => Parameters<typeof createZombieGpuView>[1]);
   /** Build errors are pushed here rather than thrown: one bad character must
    *  not take the page down, which is how the lab behaves today. */
   errors: string[];
@@ -547,7 +557,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const body = buildCharacterBody(
     entry, opts.start, opts.errors, opts.face, opts.override, out, opts.boneRatio,
   );
-  const gpu = createZombieGpuView(body, opts.gpu);
+  const gpu = createZombieGpuView(body, typeof opts.gpu === 'function' ? opts.gpu(body) : opts.gpu);
 
   // The character's polygon kit and held prop, on the DEFAULT layer with the
   // floor and the reference cube — NOT SDF_LAYER. That is what puts them in

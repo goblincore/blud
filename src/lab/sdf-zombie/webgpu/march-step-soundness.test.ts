@@ -29,7 +29,7 @@ import { MARCH_BODY, APPLY_WOUNDS, WOUND_STEP_MUL } from './march.wgsl';
 import { ZOMBIE } from '../body';
 import { buildBody } from '../build-body';
 import { sdBody, smax } from '../validate';
-import { worldHitToWound, woundWorldPos, woundCarveNormal, WOUND_PROFILES, type WoundType } from '../damage';
+import { worldHitToWound, woundWorldPos, woundCarveNormal, WOUND_PROFILES, CLOTH_BULLET_HOLE_RADIUS, type WoundType } from '../damage';
 import type { Vec3 } from '../types';
 
 /** woundCfg (y, z, w) and woundCfg2.x as zombie-gpu.ts binds them. */
@@ -59,7 +59,9 @@ function applyWounds(dIn: number, p: Vec3, ws: readonly WoundRow[]): [number, nu
     const cn = w.capN ?? ([0, 0, 0] as Vec3);
     const isBurn = w.type > 1.5;
     const depth = isBurn ? w.radius * 0.35 * Math.min(1, Math.max(0, w.age)) : w.radius;
-    d = smax(d, Math.min(-(r - depth), capEff - (dx * cn[0] + dy * cn[1] + dz * cn[2])), BLEND_K);
+    // Size-scaled fillet (cloth bullet holes): k = BLEND_K * clamp(r / 0.05, 0.1, 1).
+    const kW = BLEND_K * Math.min(1, Math.max(0.1, w.radius / 0.05));
+    d = smax(d, Math.min(-(r - depth), capEff - (dx * cn[0] + dy * cn[1] + dz * cn[2])), kW);
     if (r < depth * 2) near = 1;
     const x = (r - depth * RIM_OFFSET * w.offsetScale) / Math.max(depth * RIM_WIDTH, 1e-4);
     const amp = depth * RIM_SPLAY * w.splayScale * (isBurn ? 0.25 : 1);
@@ -106,6 +108,12 @@ describe('near-wound step multiplier', () => {
         splayScale: WOUND_PROFILES.pellet.rimSplayScale,
         offsetScale: WOUND_PROFILES.pellet.rimOffsetScale,
         capN: [0, 0, -1], capDepth: WOUND_PROFILES.pellet.radius * 0.45 }],
+      // A small-calibre bullet hole in cloth (damage.ts CLOTH_BULLET_HOLE_RADIUS):
+      // the size-scaled fillet makes its k 0.1x, so it must stay sound too.
+      ['cloth hole', { pos: [0, 0, 0], radius: CLOTH_BULLET_HOLE_RADIUS, type: 0, age: 1,
+        splayScale: WOUND_PROFILES.pellet.rimSplayScale,
+        offsetScale: WOUND_PROFILES.pellet.rimOffsetScale,
+        capN: [0, 0, -1], capDepth: CLOTH_BULLET_HOLE_RADIUS }],
     ];
     for (const [name, w] of cases) {
       const field = (p: Vec3) => applyWounds(p[2], p, [w])[0];
@@ -162,7 +170,9 @@ describe('near-wound step multiplier', () => {
     // The three applyWounds lines the mirror above reproduces. Edit any of
     // them and update the mirror in the same commit, or this file is lying.
     expect(APPLY_WOUNDS).toContain(
-      'd = smax(d, min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);'); // rN = r, carveK = 1 for round wounds
+      'let kW = woundCfg.y * clamp(w.w / 0.05, 0.1, 1.0);');
+    expect(APPLY_WOUNDS).toContain(
+      'd = smax(d, min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz)), kW);'); // rN = r, carveK = 1 for round wounds
     expect(APPLY_WOUNDS).toContain('if (rN < depth * 2.0) { near = 1.0; }');
     expect(APPLY_WOUNDS).toContain('d = d - exp(-x * x) * amp * rimLocal;');
     expect(APPLY_WOUNDS).toContain('let rimLocal = 1.0 - smoothstep(-amp * 0.3, amp * 0.7, dIn);');

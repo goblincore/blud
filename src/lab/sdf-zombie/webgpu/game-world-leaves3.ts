@@ -89,6 +89,12 @@ export function registerBleed(ctx: GameContext,
   contact?: { point: Vec3; incoming: Vec3 },
 ): void {
   if (!ctx.vfx.bleedEnabled) return;
+  // A small-calibre BULLET HOLE in cloth (damage.ts clothifyWound 'hole') is
+  // a hole in a robe, not a wound: no trickle, no gout, no spill. Returned
+  // BEFORE the bleed stream is touched, so it spends no bleedRng either.
+  // (The cloth-fibre puff that replaces the gout lands with the first
+  // small-calibre gun — nothing in the game stamps a 'hole' yet.)
+  if (wound.cloth === 'hole') return;
   ctx.vfx.bleed.register(a.id, wound, kind, ctx.vfx.bleedClock);
   // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
   // the wound's own anchor so it leaves the body where the hole is. Fired

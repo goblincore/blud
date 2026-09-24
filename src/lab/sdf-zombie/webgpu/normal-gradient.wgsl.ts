@@ -299,7 +299,10 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     // mapBody restores foreign clusters after localized carving. Until that
     // union has an analytic counterpart, differentiate the actual scalar
     // field through calcNormal's fallback for any surviving scoped wound.
-    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0).y;
+    let flagsRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
+    // CLOTH DECAL (bit 2): never carved — mirrors applyWounds' skip.
+    if ((i32(flagsRow.x) & 4) != 0) { continue; }
+    let owner = flagsRow.y;
     // OWNED WOUNDS (2026-09-22): the owner re-fold has no analytic counterpart — but
     // when no limb won the re-fold at this pixel's hit (gNgOwnedOk, set by the caller
     // from the march's hitRefold), the field here IS the union with every wound
@@ -331,7 +334,8 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let cutter = min(depth - r, cap.w - dot(v, cap.xyz));
     if (abs((depth - r) - (cap.w - dot(v, cap.xyz))) <= (1.0 + length(cap.xyz)) * R && cutter + (1.0 + gNgLip) * R >= d.x - 4.0 * cfg.y) { gNgReason = 3; }
     if (cfg.y <= 0.0 && abs(d.x - cutter) <= (gNgLip + max(1.0, length(cap.xyz))) * R) { gNgReason = 3; }
-    d = ngWound(d, base, v, depth, cap, cfg.y, rim);
+    // Size-scaled fillet — MUST match APPLY_WOUNDS (march/fields/wounds.wgsl.ts).
+    d = ngWound(d, base, v, depth, cap, cfg.y * clamp(w.w / 0.05, 0.1, 1.0), rim);
     gNgLip = max(gNgLip, max(1.0, length(cap.xyz))) + ngWoundLip(base.x, r, rim);
     if (r < 2.0 * depth) { gNgNear = 1.0; }
   }

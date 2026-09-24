@@ -54,7 +54,7 @@ import { add, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from '
 import type { RigPoint } from './rig';
 import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
-import { runWeight, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
+import { runWeight, SOLDIER_FLAIL, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
 import {
   alignElbow, armPivot, CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint, type CarryName, type CarrySpec, type GunPose,
 } from './carry';
@@ -415,7 +415,10 @@ export interface MotionSignals {
   /** `dirWorld` must be a UNIT vector: the reaction amplitudes it scales are
    *  metres (see stagger.ts's header — a velocity here tore bodies in half). */
   shot: { type: WoundType; dirWorld: Vec3; woundWorld: Vec3; torso: boolean; gain?: number;
-    soldierLevel?: SoldierStaggerLevel; fullStagger?: boolean } | null;
+    soldierLevel?: SoldierStaggerLevel; fullStagger?: boolean;
+    /** Force the soldier-stagger variant (0-2) instead of the side/seed pick —
+     *  the cultist picks flail (fullStagger) or hunch (heavy + torso + 2). */
+    staggerVariant?: 0 | 1 | 2 } | null;
   mobilityInjury?: { severity: number; side: 'L' | 'R' | 'both' };
   /** The body fired its weapon this frame (drained by the wiring). */
   fire: boolean;
@@ -561,14 +564,21 @@ export function stepMotion(
   }, dt);
   const collapsed = collapse.phase !== 'standing';
 
-  const soldierHit = profile.name === 'soldier' && sig.shot && !collapsed ? {
+  // SOLDIER-STYLE HIT REACTIONS (the arm open / flail / hunch): the soldier,
+  // and any profile that opts in (the cultist, staggerStyle 'soldier').
+  const soldierReact = profile.name === 'soldier' || profile.staggerStyle === 'soldier';
+  const soldierHit = soldierReact && sig.shot && !collapsed ? {
     dirWorld: sig.shot.dirWorld,
     level: sig.shot.soldierLevel ?? (sig.shot.type === 'pellet' ? 'small' : 'medium'),
     torso: sig.shot.torso,
     fullStagger: sig.shot.fullStagger,
+    ...(sig.shot.staggerVariant !== undefined ? { variant: sig.shot.staggerVariant } : {}),
   } as const : null;
+  const flail = profile.flail ?? SOLDIER_FLAIL;
   const soldierStagger = stepSoldierStagger(state.soldierStagger, soldierHit,
-    dt, state.gait.seed, collapsed || !!sig.fatal);
+    dt, state.gait.seed, collapsed || !!sig.fatal, profile.flail ? flail : undefined);
+  const staggerDuration = (st: typeof soldierStagger.state) =>
+    st.fullOpen && profile.flail ? flail.durationSec : soldierStaggerDuration(st.level, st.fullOpen);
   const wideSoldierReaction = soldierStagger.active && (soldierStagger.state.fullOpen
     || (soldierStagger.variant === 1 && soldierStagger.state.level !== 'small'));
   // --- stagger: the shot's reaction (dir rotated world → body-local) ------
@@ -576,7 +586,7 @@ export function stepMotion(
   // opening owns its arms/torso and suppresses that extra pose layer; an
   // already-active Soldier reaction does not restart the shared envelope.
   const stagger = stepStagger(state.stagger, {
-    hit: sig.shot && !collapsed && (profile.name !== 'soldier'
+    hit: sig.shot && !collapsed && (!soldierReact
       || (!wideSoldierReaction && !state.soldierStagger?.active))
       ? { type: sig.shot.type, dir: rotateYaw(sig.shot.dirWorld, -state.bodyYaw), gain: sig.shot.gain }
       : null,
@@ -605,7 +615,7 @@ export function stepMotion(
     : profile.cruise) * (sig.cruiseScale ?? 1);
   if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, travelCruise,
     cfg.faceHeading === undefined ? undefined : { faceHeading: cfg.faceHeading });
-  if (!collapsed && profile.name === 'soldier' && soldierStagger.active) {
+  if (!collapsed && soldierReact && soldierStagger.active) {
     wander = { ...wander, pos: [
       clamp(wander.pos[0] + soldierStagger.travelDelta[0], bounds.minX, bounds.maxX),
       wander.pos[1],
@@ -684,7 +694,9 @@ export function stepMotion(
     ? profile.gait.walk : blendProfiles(profile.gait.walk, profile.gait.run, rw);
 
   // --- fire hold ------------------------------------------------------------
-  const canHold = profile.name !== 'soldier' || !sig.missing.armR;
+  // A GUNNER with no right arm cannot hold the gun (was soldier-only, so the
+  // cultist would have kept firing a tommy gun from a stump).
+  const canHold = (profile.name !== 'soldier' && !profile.gunner) || !sig.missing.armR;
   const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;
@@ -978,7 +990,7 @@ export function stepMotion(
     };
     if (soldierStagger.active && soldierStaggerCarry) {
       const w = soldierStagger.armWeight;
-      const duration = soldierStaggerDuration(soldierStagger.state.level, soldierStagger.state.fullOpen);
+      const duration = staggerDuration(soldierStagger.state);
       const hold = 1 - smooth01((soldierStagger.state.age - duration * .65) / (duration * .35));
       const open = soldierStagger.state.level === 'small' ? .06
         : soldierStagger.state.level === 'medium' ? .11 : .16;
@@ -1040,7 +1052,7 @@ export function stepMotion(
       let target = grip;
       if (soldierStagger.active && soldierStaggerSupport) {
         const base = add(targets[iS]!, rotateYaw(soldierStaggerSupport, bodyYaw));
-        const duration = soldierStaggerDuration(soldierStagger.state.level, soldierStagger.state.fullOpen);
+        const duration = staggerDuration(soldierStagger.state);
         const recover = smooth01((soldierStagger.state.age - duration * .65) / (duration * .35));
         const lag = smooth01((soldierStagger.state.age - [.04, .08, .12][soldierStagger.variant]!) / .16);
         const broadOpen = broadSoldierOpen;
@@ -1064,6 +1076,15 @@ export function stepMotion(
     }
   }
 
+  // FLAIL ARCH (profile.flail.arch): the chest arches and the head whips BACK
+  // with the throw (the cultist's; the soldier's arch is 0 — unchanged).
+  if (!collapsed && soldierStagger.active && soldierStagger.state.fullOpen && flail.arch > 0) {
+    const back = rotateYaw([0, 0.02, -flail.arch], bodyYaw);
+    for (const [name, k] of [['chest', 0.6], ['neck', 1], ['head', 1.6], ['shoulderL', 0.7], ['shoulderR', 0.7]] as const) {
+      const i = idx[name];
+      if (i !== undefined) targets[i] = add(targets[i]!, scale(back, k * soldierStagger.armWeight));
+    }
+  }
   if (!collapsed && soldierStagger.active && soldierStagger.state.fullOpen && soldierFullArmBase) {
     const carriedGun = gun;
     let fullGunRotation: ReturnType<typeof qFromAxisAngle> | null = null;
@@ -1071,17 +1092,18 @@ export function stepMotion(
       const base = soldierFullArmBase[side];
       if (!base || sig.missing[`arm${side}`]) continue;
       const sign = side === 'L' ? 1 : -1;
-      const lag = side === 'L' ? smooth01((soldierStagger.state.age - .08) / .22) : 1;
+      const lag = side === 'L' && flail.lagL ? smooth01((soldierStagger.state.age - .08) / .22) : 1;
       const w = soldierStagger.armWeight * lag;
-      const qAbduct = qFromAxisAngle([0,0,1], -sign * .55 * w);
-      const qLift = qFromAxisAngle([1,0,0], side === 'R' ? -.35 * w : 0);
+      const lift = side === 'R' ? flail.liftR : flail.liftL;
+      const qAbduct = qFromAxisAngle([0,0,1], -sign * flail.abduct * w);
+      const qLift = qFromAxisAngle([1,0,0], lift * w);
       // Aim, low carry and an already-reacting pose start at different yaw.
       // Rotate toward one body-local side target instead of adding a fixed arc,
       // which could carry a low-held gun through and behind the shoulder.
-      const fullRaisedHand = qRotate(qFromAxisAngle([1,0,0], side === 'R' ? -.35 : 0),
-        qRotate(qFromAxisAngle([0,0,1], -sign * .55), base.hand));
+      const fullRaisedHand = qRotate(qFromAxisAngle([1,0,0], lift),
+        qRotate(qFromAxisAngle([0,0,1], -sign * flail.abduct), base.hand));
       const fromYaw = Math.atan2(fullRaisedHand[0], fullRaisedHand[2]);
-      const yawDelta = Math.atan2(Math.sin(sign * 1.30 - fromYaw), Math.cos(sign * 1.30 - fromYaw));
+      const yawDelta = Math.atan2(Math.sin(sign * flail.yawOut - fromYaw), Math.cos(sign * flail.yawOut - fromYaw));
       const qOut = qFromAxisAngle([0,1,0], yawDelta * w);
       const qLocal = qMul(qOut, qMul(qLift, qAbduct));
       const rotateFull = (v: Vec3) => qRotate(qLocal, v);
@@ -1248,7 +1270,7 @@ export function stepMotion(
   // overrides so the plants/aim can't stomp it, and composed on top
   // of the whole-body stagger. A fresh hit re-targets the recoil.
   let recoil = state.recoil;
-  if (sig.shot && !collapsed && !(profile.name === 'soldier' && state.recoil.joint !== null)) {
+  if (sig.shot && !collapsed && !(soldierReact && state.recoil.joint !== null)) {
     const at = sig.shot.woundWorld;
     let best: GaitJointName | null = null;
     let bestD = Infinity;
@@ -1294,7 +1316,7 @@ export function stepMotion(
   const nextState: MotionState = {
     ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
     wander, gait: gait.state, stagger: stagger.state,
-    ...(profile.name === 'soldier' || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
+    ...(soldierReact || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
     collapse: collapse.state,
     plantL, plantR, aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture, mobilityPosture,
     protectiveCrouchSec, protectiveCrouchPosture,
@@ -1333,7 +1355,7 @@ export function stepMotion(
       meter: collapse.state.meter,
       hop: collapse.hop,
       stance: collapsed ? { legL: false, legR: false } : gait.pose.stance,
-      staggerKind: collapsed ? null : profile.name === 'soldier' && soldierStagger.active
+      staggerKind: collapsed ? null : soldierReact && soldierStagger.active
         ? soldierStagger.state.level === 'small' ? 'flinch' : 'lurch'
         : stagger.state.kind,
       speed: collapsed ? 0 : wander.speed,
