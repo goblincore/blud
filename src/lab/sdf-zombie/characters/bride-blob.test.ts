@@ -9,6 +9,8 @@ import src from './bride.blob?raw';
 import { parseBlob } from '../blob-parse';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node (strand-wiring.test.ts)
 import { readFileSync } from 'node:fs';
+// @ts-expect-error — node:zlib, same arrangement as node:fs above
+import { inflateSync } from 'node:zlib';
 import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { characterEntry } from '../character-registry';
@@ -88,8 +90,7 @@ describe('bride — build', () => {
     // bakedFace's fallback 1 would darken her face).
     const face = characterEntry('bride').face;
     expect(face.url).toBe('/assets/lab/faces/bride-face.png');
-    expect(face.mean).toBeGreaterThan(0.6);
-    expect(face.mean).toBeLessThan(0.85);
+    expect(face.mean).toBeCloseTo(measuredSheetMean('public/assets/lab/faces/bride-face.png'), 3);
   });
 
   it('paints with the SAME projection the sheet block declares', () => {
@@ -318,3 +319,46 @@ describe('bride — cloth and hair', () => {
     }
   });
 });
+
+/** The sheet mean exactly as the lab measures it (lab-main.ts applyMeanOf):
+ *  Rec.709 luma over texels with alpha >= 8. Decodes the committed PNG
+ *  (8-bit RGBA, non-interlaced — what make-bride-face.py writes) so a re-run
+ *  of the painter that moves the mean fails here instead of leaving the
+ *  registry's declared value stale. */
+function measuredSheetMean(path: string): number {
+  const buf: Uint8Array = readFileSync(path);
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let w = 0, h = 0;
+  const idat: Uint8Array[] = [];
+  for (let o = 8; o < buf.length;) {
+    const len = dv.getUint32(o), type = String.fromCharCode(...buf.subarray(o + 4, o + 8));
+    const body = buf.subarray(o + 8, o + 8 + len);
+    if (type === 'IHDR') {
+      w = dv.getUint32(o + 8); h = dv.getUint32(o + 12);
+      if (body[8] !== 8 || body[9] !== 6 || body[12] !== 0) throw new Error('expected 8-bit RGBA, non-interlaced');
+    } else if (type === 'IDAT') idat.push(body);
+    o += 12 + len;
+  }
+  const all = new Uint8Array(idat.reduce((n, c) => n + c.length, 0));
+  idat.reduce((at, c) => (all.set(c, at), at + c.length), 0);
+  const raw: Uint8Array = inflateSync(all);
+  const stride = w * 4, px = new Uint8Array(h * stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)]!, src = y * (stride + 1) + 1, dst = y * stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= 4 ? px[dst + x - 4]! : 0, b = y > 0 ? px[dst - stride + x]! : 0;
+      const c = x >= 4 && y > 0 ? px[dst - stride + x - 4]! : 0;
+      const pred = f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1 : f === 4
+        ? ((pa, pb, pc) => (pa <= pb && pa <= pc ? a : pb <= pc ? b : c))(Math.abs(b - c), Math.abs(a - c), Math.abs(a + b - 2 * c))
+        : 0;
+      px[dst + x] = (raw[src + x]! + pred) & 255;
+    }
+  }
+  let sum = 0, n = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3]! < 8) continue;
+    sum += (0.2126 * px[i]! + 0.7152 * px[i + 1]! + 0.0722 * px[i + 2]!) / 255;
+    n++;
+  }
+  return sum / n;
+}

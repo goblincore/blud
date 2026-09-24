@@ -253,8 +253,9 @@ def hollows() -> Image.Image:
         stroke(dh, hl, hs_len(0.030), hs_len(0.020))
     m = m.filter(ImageFilter.GaussianBlur(hs_len(0.07)))
     h = h.filter(ImageFilter.GaussianBlur(hs_len(0.03)))
-    # The blur roughly halves the stroke's peak; normalise so the CORE lands
-    # at alpha 0.55 (and the highlight's at 0.20) whatever the blur radius.
+    # The blur roughly halves the stroke's peak; normalise to full scale here,
+    # so the core/highlight alphas set below land as written whatever the
+    # blur radius.
     m = m.point(lambda v, k=255.0 / max(1, m.getextrema()[1]): min(255, int(v * k)))
     h = h.point(lambda v, k=255.0 / max(1, h.getextrema()[1]): min(255, int(v * k)))
     # Core alpha 0.85 (was 0.55): the owner's review asked for deeper

@@ -98,8 +98,9 @@ describe('bride-kit.gltf fits bride.blob', () => {
 
   // THE TRANSCRIPTION. Every .blob bone's head must sit where the kit's bone
   // node does. 10 mm, not 0: WAM and .blob resolve a combined pitch+tilt on a
-  // down bone very slightly differently (the forearm/hand carry 6-8 mm), which
-  // is invisible under a 30 mm cloth margin; a missed length edit is 30-60 mm.
+  // down bone very slightly differently (the bride's worst is 1.8 mm, at the
+  // hands), which is invisible under a cloth margin; a missed length edit is
+  // 30-60 mm.
   it('carries the same skeleton as the .blob (height fractions x 1.85)', () => {
     const world = nodeWorld();
     for (const [name, bone] of body.bones) {

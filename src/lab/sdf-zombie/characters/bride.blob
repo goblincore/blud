@@ -411,9 +411,10 @@ body
   bar  leg on thigh from=0.51 to=0.55 r=0.0535 r2=0.0525 deep=1.05 blend=0.002 mirror color=c4b8a2 gloss=0.15
 
   # ============================================================
-  # THE CLOTH (Task 3) — shells, the cultist's road: cloth, not mass. Three
-  # of them (bodice, skirt, veil) and no more: the owner rates the
-  # cultist's five-shell costume as slow, and NOTES.md has the census.
+  # THE CLOTH (Task 3) — shells, the cultist's road: cloth, not mass. Four
+  # of them (bodice, two skirt tiers, veil). Kept few because shells are
+  # the costly part of the cultist's costume; no perf census this pass
+  # (owner, 2026-09-24: visuals first).
   # ============================================================
   # CORSET BODICE, ivory. One round cone from under the skirt's waistband
   # (y 1.07) to over the bust (y 1.345), squashed tall 0.60 so the top cap
