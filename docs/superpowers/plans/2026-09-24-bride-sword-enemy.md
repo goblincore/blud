@@ -871,8 +871,10 @@ import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
 
-/** The blade's point, prop-local (Task 5's Muzzle locator). */
-const SWORD_TIP: Vec3 = [0, 0.062, 1.30];
+/** The blade's point, prop-local (Task 5's Muzzle locator, read back from
+ *  bride-sword.glb). NOT `held.muzzle()`: held-prop.ts uses carry.ts's fixed
+ *  GUN_GRIP muzzle (z 0.41) for every prop and ignores the glb's locator. */
+const SWORD_TIP: Vec3 = [0, 0.093093, 1.245462];
 
 type Pts = { pos: Vec3 }[];
 /** Drive the bride through the real motion pipeline for `frames` 60 Hz steps.
