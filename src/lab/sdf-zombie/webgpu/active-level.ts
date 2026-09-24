@@ -56,7 +56,7 @@ export function ringLevel(): ActiveLevel {
     furniture: FURNITURE,
     playerStart: { ...PLAYER_START, y: 0 },
     staticColliders: levelColliders(),
-    surfaces: { planes: s.planes, boxes: s.boxes, gates: [], windows: [] },
+    surfaces: { planes: s.planes, boxes: s.boxes, gates: [], windows: [], skyline: null },
     keyAt: enclosureKeyAt,
     enclosureFor: enclosureOf,
     gateColliders: () => [],
