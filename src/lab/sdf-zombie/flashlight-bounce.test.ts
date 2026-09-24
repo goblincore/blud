@@ -143,6 +143,14 @@ describe('computeBounceSpot — finding the patch', () => {
     const spot = computeBounceSpot(beam(), BOX, WALLS, [behind])!;
     expect(spot.pos[2]).toBeCloseTo(-3, 12);
   });
+  it('an open room: a beam at the sky makes no patch; at the wall below the edge it does', () => {
+    const box: Box = { min: [0, 0, 0], max: [8, 6, 8] };
+    const up = beam({ pos: [4, 1.6, 4], axis: [0, 1, 0], range: 20 });
+    expect(computeBounceSpot(up, box, WALLS, [])).not.toBeNull();            // closed: the ceiling
+    expect(computeBounceSpot(up, box, WALLS, [], { above: 2.2 })).toBeNull(); // open: sky
+    const low = beam({ pos: [4, 1.6, 4], axis: [1, -0.05, 0], range: 20 });
+    expect(computeBounceSpot(low, box, WALLS, [], { above: 2.2 })).not.toBeNull();
+  });
 });
 
 describe('bounceSpotIrradiance — the analytic disc', () => {

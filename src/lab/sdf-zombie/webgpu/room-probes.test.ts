@@ -101,4 +101,15 @@ describe('createRoomProbes', () => {
     expect(g).toBeGreaterThan(0);
     expect(g).toBeLessThan(1);
   });
+
+  it('passes a sky to the request only for rooms that have one', () => {
+    const posted: any[] = [];
+    const worker: ProbeWorkerLike = { postMessage: m => posted.push(m), onmessage: null, terminate() {} };
+    const rp = createRoomProbes({
+      rooms: [ROOMS[0]!, ROOMS[1]!], furniture: FURNITURE, light: LIGHT, workerFactory: () => worker,
+      skyFor: r => (r.id === ROOMS[0]!.id ? { radiance: [0, 0, 1], above: 2 } : null),
+    });
+    expect(posted[0].req.options.sky).toEqual({ radiance: [0, 0, 1], above: 2 });
+    rp.dispose();
+  });
 });
