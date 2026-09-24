@@ -16,7 +16,8 @@
 //
 // Usage (servers from scripts/lab-servers.sh or already listening):
 //   node scripts/bride-game-frames.mjs <vitePort> <cdpPort> <outDir>
-// Env: CHARACTER (bride), ROOM (2), DIST (2.6), EYE_PITCH (-0.18).
+// Env: CHARACTER (bride), ROOM (2), DIST (2.6), EYE_PITCH (-0.18),
+// KIT_STEPS (2; unfrozen ticks that pose the kit, 0 to skip).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { connectGame, bootCloseupPage, sleep } from './lib/sdf-closeup-stage.mjs';
 
@@ -42,6 +43,13 @@ for (let i = 0; i < 240; i++) {
 }
 if (await evaluate('window.__warmGate ? window.__warmGate.phase : "ready"') !== 'ready') fail('warm gate never reached ready');
 await evaluate(`__sdfGame.teleport(${ROOM}); __sdfGame.step(2);`);
+// ?frozen=1 skips the whole body block, and the KIT (polygon armour) is
+// posed from the rig only inside it (game-main's character.pose call), so a
+// frozen boot shows every kit parked at its bind pose at the world origin:
+// the bride stood there in flesh only (Task 4). Unfreeze for KIT_STEPS ticks
+// to pose it once, then freeze again; the kit keeps that pose while frozen.
+const KIT_STEPS = Number(process.env.KIT_STEPS ?? 2);
+if (KIT_STEPS > 0) await evaluate(`__sdfGame.freeze(false); __sdfGame.step(${KIT_STEPS}); __sdfGame.freeze(true);`);
 const actors = JSON.parse(await evaluate('JSON.stringify(__sdfGame.actorTrace())'));
 const kinds = [...new Set(actors.map((a) => a.kind))];
 console.log(`actors: ${actors.length} (${kinds.join(', ')})`);

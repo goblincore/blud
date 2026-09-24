@@ -375,30 +375,31 @@ parts
 
   # ==========================================================================
   # IRON CROSSES. Each is two boxes in a group's own frame (the upright hangs
-  # DOWN from the origin — a box's top face sits at its origin), mounted by
-  # aiming the group's +Y. Latin proportions: the top arm is ~as long as
-  # each side arm (17-18 mm). With a 13 mm top arm the first build's crosses
-  # read as a row of T's.
+  # DOWN from its `at` point: a box's top face sits there), mounted by aiming
+  # the group's +Y. Inside a group a part is placed with `at=(x,y,z)`;
+  # `offset=` is silently ignored there, which stacked every box on the
+  # group origin and turned the first build's crosses into T's. Latin
+  # proportions: the top arm is about as long as each side arm (17-21 mm).
   # ==========================================================================
   # The necklace cross: hangs from the necklace's lowest point (P4, the top
   # of the bodice slot), in the gap between the bust, over the laces.
   group ncross bone=nk3 at=1.0 offset=(0,-0.00216,0.00162) dir=up pitch=-8
-    attach nbail kind=box offset=(0,0.00216,0) w=0.00216 h=0.00432 d=0.00216 material=iron
-    attach nup kind=box offset=(0,-0.00216,0) w=0.00541 h=0.03351 d=0.00324 material=iron
-    attach nbar kind=box offset=(0,-0.01135,0) w=0.01946 h=0.00541 d=0.00324 material=iron
+    attach nbail kind=box at=(0,0.00216,0) w=0.00216 h=0.00432 d=0.00216 material=iron
+    attach nup kind=box at=(0,-0.00216,0) w=0.00541 h=0.03351 d=0.00324 material=iron
+    attach nbar kind=box at=(0,-0.01135,0) w=0.01946 h=0.00541 d=0.00324 material=iron
   end
   # The girdle crosses: two hanging from its front, left and right of centre,
   # each turned to the skirt's surface normal there (spin) and leaned back
   # with the bell (pitch). A short link ties each to the band.
   group gcross.l bone=hem at=0.0 offset=(0.03892,0.01243,0.09946) dir=up pitch=-14 spin=-21
-    attach glink.l kind=box offset=(0,0.00649,0) w=0.00216 h=0.00757 d=0.00216 material=chain
-    attach gup.l kind=box offset=(0,0,0) w=0.00595 h=0.03135 d=0.00324 material=iron
-    attach gbar.l kind=box offset=(0,-0.00919,0) w=0.01838 h=0.00541 d=0.00324 material=iron
+    attach glink.l kind=box at=(0,0.00649,0) w=0.00216 h=0.00757 d=0.00216 material=chain
+    attach gup.l kind=box at=(0,0,0) w=0.00595 h=0.03135 d=0.00324 material=iron
+    attach gbar.l kind=box at=(0,-0.00919,0) w=0.01838 h=0.00541 d=0.00324 material=iron
   end
   group gcross.r bone=hem at=0.0 offset=(-0.03892,0.01243,0.09946) dir=up pitch=-14 spin=21
-    attach glink.r kind=box offset=(0,0.00649,0) w=0.00216 h=0.00757 d=0.00216 material=chain
-    attach gup.r kind=box offset=(0,0,0) w=0.00595 h=0.03135 d=0.00324 material=iron
-    attach gbar.r kind=box offset=(0,-0.00919,0) w=0.01838 h=0.00541 d=0.00324 material=iron
+    attach glink.r kind=box at=(0,0.00649,0) w=0.00216 h=0.00757 d=0.00216 material=chain
+    attach gup.r kind=box at=(0,0,0) w=0.00595 h=0.03135 d=0.00324 material=iron
+    attach gbar.r kind=box at=(0,-0.00919,0) w=0.01838 h=0.00541 d=0.00324 material=iron
   end
 
 textures

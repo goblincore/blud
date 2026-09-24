@@ -385,3 +385,107 @@ game's face frame is still the cranium):
 - +2: a separate front hair part (two small strand sweeps from the part) instead of the
   mass showing as a stripe.
 - +2: a veil hem layer, so the bottom ends in a free edge rather than a round cap.
+
+## Task 4: the WAM kit (plate, boots, chains, crosses) + the armoured flag (same day)
+
+Source: `src/lab/sdf-zombie/characters/bride-kit.wam` (the header holds the measured flesh
+table and every reason). Built with `scripts/build-wam-kit.sh bride` into
+`public/assets/lab/bride-kit.gltf` (committed): 1247 vertices, 1940 triangles, 4 materials.
+Pins: `characters/bride-kit.test.ts`.
+
+| Material | Pieces |
+| --- | --- |
+| `plate` (dull steel, breakable) | vambraces on both forearms; couters cupping the BACK of each elbow; a fingered gauntlet with pointed plate claws on the left hand; a back-of-hand plate on the right, whose short fingers sink into the flesh cuff; a domed pauldron with a haute-piece flange on the RIGHT (sword) shoulder only |
+| `boot` | cream suede thigh-highs (12-sided), sole on the floor, top at y 0.759 |
+| `chain` | a girdle round the skirt's waist; a choker; a long necklace down to the top of the bodice slot |
+| `iron` | three Latin crosses: one on the necklace over the laces, two hanging off the girdle |
+
+### The uneven forearm
+
+`bride.blob` says `forearm len=0.26 lenR=0.30`, and a WAM mirror block gives `.l` and `.r`
+one length. A ten-line test `.wam` confirmed that WAM accepts sided bones OUTSIDE a mirror
+block that parent to a mirrored bone (`bone forearm.r parent=upperarm.r`: `find_parent`
+resolves the literal name). So `forearm.l` / `forearm.r` are explicit bones with their own
+lengths, and `.r`'s tilt is negated by hand, since nothing reflects it. The hands go back
+into a second mirror block, whose `parent=forearm` resolves to the suffixed bones. WAM itself
+was not edited.
+
+### Numbers (CPU: `sdBody` against the compiled glTF's rest vertices)
+
+- **Skeleton parity:** every blob bone head is within 1.8 mm of the kit's (worst: hands,
+  1.6 / 1.8 mm; the pitch+tilt resolution difference the ogre test notes). The test bar is
+  10 mm.
+- **Tuck:** the deepest vertex per material is within the 45 mm `TUCK_MAX`. The deepest are
+  the right-hand plate fingers, which sink 25 mm into the flesh cuff on purpose (hook 4). The
+  pauldron's inner rim sits 21 mm into the yoke, which is forced the way the soldier's is.
+- **Boots:** sole at y 0.0011. The top is at y 0.759, 1-3 cm under the stocking's lace band
+  (0.77-0.79), so stocking, band and bare thigh show between the boot and the hem (0.855).
+- **Skirt clearance (the controller's check).** With Task 1's arm hang (upperarm tilt 11,
+  forearm 6), the forearm FLESH already ran 5-14 mm into the ruffle skirt at y 0.94-1.04,
+  probed at the forearm's own z. The plate could only punch through. **The fix was the blob:
+  the arms now splay to 14 / 12.** Flesh-to-skirt air is now ≥ 13 mm at rest, and the
+  closest plate vertex is 4.4 mm off the skirt (the rings beside the skirt also sit 3 mm
+  outward and 2 mm narrower). `bride-blob.test.ts` still passes unchanged. In the walk frames
+  the zombie profile's arms-out shamble keeps the plate well clear.
+- **Handedness settled.** `.r` is −x in both languages. In the lab's yaw-0 frame (facing
+  her) the pauldron, the longer forearm and the red wrist cuff are all on SCREEN-LEFT, which
+  is her right. The close-up at yaw 270 shows the pauldron side with the two red swellings.
+
+### Registry and sparks
+
+- `CharacterEntry.armoured?: boolean` is set on the soldier and the bride.
+- `character-view.ts` keys armour sparks and `loadKit`'s breakable flag on
+  `entry.armoured === true`, where both used to check `entry.name === 'soldier'`.
+- Shotgun casings stay soldier-only.
+- **Spec deviation (as planned):** the spec says armour hits leave no wound. The existing
+  soldier mechanism sparks, sheds a plate after two or three hits, and lets the flesh under it
+  take the wound. That bares the raw fused seams, which suits her brief better.
+
+### Things found on the way
+
+- **Inside a WAM `group`, `offset=` is silently ignored.** A part is placed with
+  `at=(x,y,z)`. Every cross box stacked on the group origin, so the crosses read as T's until
+  the boxes moved to `at=`.
+- **Frozen game captures never pose a kit.** `?frozen=1` skips the body block, and
+  `character.pose` (the kit's rig ride) only runs there. So every kit sits at its bind pose
+  at the world origin, and the bride stood in flesh only in the first game frames (the
+  soldier would too). `scripts/bride-game-frames.mjs` now unfreezes for `KIT_STEPS` (2)
+  ticks after the teleport, then freezes again.
+- **`chain` joins kit-overlay.ts's LOOK table** (iron's numbers). Unlisted, it fell to
+  LOOK_DEFAULT's near-dielectric sheen. `LOOK` is keyed by material name across every kit, so
+  her `boot` shares the ogre's dull suede-ish entry, and her breakable `plate` gets `loadKit`'s
+  own duller armour look.
+- The couters began as 45 mm domes, which read as steel BALLS from behind. They are now
+  shorter and taper to a point. The girdle went from 10 to 16 mm: at 10 mm it read as a sewn
+  seam round the skirt.
+
+### Frames
+
+Lab: `LAB_TMP=.lab-tmp LAB_VITE_PORT=5271 LAB_CDP_PORT=9271`, cultist sanity shot first,
+probe `lightDir (0.35,0.6,0.72)` + `setSdfScale(1)`. The body is `BLOB_DIST=2.1 BLOB_TARGET_Y=0.95`
+and the close-ups are `BLOB_DIST=0.75 BLOB_TARGET_Y=1.24`. The walk still uses the zombie
+profile. Game: `node scripts/bride-game-frames.mjs 5271 9271 <out>`.
+
+![front](kit-front.png) ![3/4](kit-34.png) ![side](kit-side.png) ![back](kit-back.png)
+![walk](kit-walk.png) ![walk side](kit-walk-side.png)
+![close front](kit-close-front.png) ![pauldron side](kit-close-pauldron.png) ![elbow side](kit-close-elbow.png)
+![game front](kit-game-front.png) ![game 3/4](kit-game-34.png)
+
+### Honest read
+
+- **3 m / game:** she now reads as an armoured bride. The steel forearms and the single
+  pauldron make the knight half legible, and the cream boots give the long legs a line. In
+  game she reads well at 2.6 m, and the crosses and necklace carry there. The plate rides her
+  rig correctly (no placement bug) and renders uncut.
+- **Close:** the fused-gauntlet hook works. Raw-red bulges sit in front of both elbows,
+  between the couter and the vambrace. Two red swellings push out from under the pauldron's
+  lip. A red ring shows at the sword wrist, and the flesh tendril grows on past the right hand.
+- **Weak spots:**
+  - The plate is smooth, round, tube-like steel, closer to "robot arm" than to articulated
+    armour. There are no lames, rivets or edge rolls.
+  - The couters still read a little like ball joints from behind.
+  - The boot and stocking are close in value, so the boot top reads as a seam, not a hard
+    edge.
+  - The chain girdle reads as a metal band rather than as links (the links are texture only).
+  - The back view is dark, which is the lab key, not the kit.
+  - The haute-piece flange is barely visible from the front.
