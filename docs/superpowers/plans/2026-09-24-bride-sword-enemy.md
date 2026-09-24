@@ -158,7 +158,7 @@ Expected: FAIL. Cannot resolve `./bride.blob?raw`.
 
 Targets, all from the spec:
 - `model bride`, `height 1.85`. The pelvis sits high (legs ≥ 54% of height). Thighs are stick-thin (thigh semi ≤ 0.055), the waist is a wasp waist (≤ 0.095 half-width), and the hips flare (~0.16). The chest is small and high. The neck bone is ≥ 0.13 m.
-- **Rib window.** Flesh ridges or thin bone prims for 4–5 ribs on each side of a sternum gap, visible from the front between y ≈ 1.25 and 1.40. Task 3 clips the bodice open over exactly this band.
+- **Rib window.** Flesh ridges or thin bone prims for 4–5 ribs on each side of a sternum gap, visible from the front between y ≈ 1.25 and 1.40. Task 3 clips the bodice open over exactly this band. (The look pass moved it to y 1.17–1.31, below and between the bust.)
 - **Stigmata.** Paint only: a darker, wetter `color=` on small prims at the throat and inner thighs (or a painted cross made of two thin prims). Keep them subtle.
 - **Fused seams.** Flesh bulge prims at both elbow creases and under where the pauldron will sit (the right shoulder), painted raw red (`color=` ~ `8a2a2a`). Add a flesh cuff prim on the right hand that extends past the fist along the grip axis.
 - **Face structure.** Large sockets, high cheekbones, a fine nose, pale lips, a pointed chin. No sheet yet. Two eye prims, not glowing (she is not a demon).
@@ -291,7 +291,7 @@ Expected: FAIL (no shells).
 - [ ] **Step 3: Author the cloth and hair**
 
 - `bone hem parent=pelvis dir=down len=0.40` (a short skirt: the hem stops at upper thigh, around y 0.80 on her long legs).
-- **Bodice:** one shell on `chest`, ivory `f1ece0`. A `clip` plane removes a narrow vertical strip at the front sternum between the rib-window heights (clip normal toward +z, with `clipd` chosen so the gap is ~6 cm wide). Paint the laces as 4–5 thin dark prims crossing the gap. Those are flesh-list prims coloured `3a2a22`, so they count toward the budget. Use `warp` for a faint boning ripple.
+- **Bodice:** one shell on `chest`, ivory `f1ece0`. A `clip` plane removes a narrow vertical strip at the front sternum between the rib-window heights (clip normal toward +z, with `clipd` chosen so the gap is ~6 cm wide). **The rib window is at y 1.17–1.31** (moved below and between the bust by the Task 1 look pass), and the bodice must cover the bust. Paint the laces as 4–5 thin dark prims crossing the gap. Those are flesh-list prims coloured `3a2a22`, so they count toward the budget. Use `warp` for a faint boning ripple.
 - **Skirt:** one flared shell on `hem`, `rigid`, white `f4f1ea`. Give it a strong `warp` with a high `warpFreq` so the hem scallops like ruffles. Lace is paint only. `clip=(0,-1,0)` at the hem height.
 - **Veil:** one shell on `skull` over the crown, falling to the shoulder blades. Clip it at the face so the face stays open (cultist hood technique), colour `eeeae4`.
 - **Hair:** a scalp mass plus `strand=` locks (black `141216`), centre-parted, falling to mid-back under the veil, with two front locks framing the face, as on `schoolgirl-described`.
