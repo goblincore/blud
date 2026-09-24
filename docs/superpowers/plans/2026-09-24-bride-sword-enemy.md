@@ -39,7 +39,7 @@ Art comes from the existing pipelines: `.blob`, `.wam` → `build-wam-kit.sh`, a
 - Extracted Blood assets are dev placeholders. Never commit them. The owner's reference photo is **not** committed either.
 
 **Traps this plan already knows about. Read before starting:**
-1. `blob:shot` silently renders the ZOMBIE for any character missing from `webgpu/lab-main.ts`'s `CHARACTERS` registry. Always sanity-shot a known character first.
+1. `blob:shot` can silently render the ZOMBIE: another worktree's dev server on the default port (5233) answers instead of yours. Use your own ports (Task 1 used 5271/9271) and always sanity-shot a known character (cultist) first. (`lab-main.ts` no longer has a `CHARACTERS` list — it reads `character-registry.ts`, so registration is the registry entry alone.)
 2. The kit skeleton (`.wam`) is a hand transcription of the `.blob` skeleton. Units are height fractions, not metres, and **pitch negates on every "down" bone**. Nothing checks it except the kit test in Task 4.
 3. Lab-only verification cannot catch placement bugs (`translateBody`). Garment and swing checks must also run in `sdf-game.html` (`?spawn=bride`, `__sdfGame.teleport(2)` + `placePlayer`).
 4. The zombie path must be a **no-op**. `brain.test.ts` and `scripts/sdf-game-crowd-gate.mjs` must pass UNCHANGED after Tasks 6–10.
@@ -56,7 +56,6 @@ Art comes from the existing pipelines: `.blob`, `.wam` → `build-wam-kit.sh`, a
 | `src/lab/sdf-zombie/characters/bride-kit.test.ts` | create | kit/blob skeleton parity, no clipping, boots on floor |
 | `scripts/model-bride-sword.py` | create | Blender longsword → `public/assets/lab/bride-sword.glb` |
 | `src/lab/sdf-zombie/character-registry.ts` | modify | `bride` entry; `armoured` flag |
-| `src/lab/sdf-zombie/webgpu/lab-main.ts` | modify | `CHARACTERS` line for `bride` |
 | `src/lab/sdf-zombie/webgpu/character-view.ts` | modify | sparks and breakable kit keyed on `entry.armoured` |
 | `src/lab/sdf-zombie/brain.ts` | modify | `BrainTuning` widened: `pickVariant`, `lungeBand`, `swingSecFor` |
 | `src/lab/sdf-zombie/attack.ts` | modify | `SwingVariant` gains `cleave`, `sweep` and `lunge` |
@@ -79,7 +78,7 @@ Art comes from the existing pipelines: `.blob`, `.wam` → `build-wam-kit.sh`, a
 
 **Files:**
 - Create: `src/lab/sdf-zombie/characters/bride.blob`, `src/lab/sdf-zombie/characters/bride-blob.test.ts`
-- Modify: `src/lab/sdf-zombie/character-registry.ts` (imports ~l.42, entries ~l.297), `src/lab/sdf-zombie/webgpu/lab-main.ts` (`CHARACTERS`; find the `cultist` line with `grep -n "'cultist'" src/lab/sdf-zombie/webgpu/lab-main.ts` and copy it)
+- Modify: `src/lab/sdf-zombie/character-registry.ts` (imports ~l.42, entries ~l.297)
 
 This task is FLESH ONLY: no shells, no hair, no sheet (`sheet` → `enabled 0` for now). Start from `characters/cultist.blob` for block order and syntax (`model` / `skeleton` / `body` / `bones` / `face` / `sheet` / `palette`). Take the header style from `characters/schoolgirl-described.blob` and the attractive/wrong discipline from `characters/broodmother.blob` (read their headers). Write the header as a design brief. It must name the four hooks and say which prims carry each.
 
@@ -180,7 +179,6 @@ import brideBlobSrc from './characters/bride.blob?raw';
   },
 ```
 
-Add the `CHARACTERS` line in `webgpu/lab-main.ts` in the same form as the cultist's.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -194,7 +192,7 @@ Run `npm run blob:shot -- cultist` first (sanity: it must show the cultist, not 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/lab/sdf-zombie/characters/bride.blob src/lab/sdf-zombie/characters/bride-blob.test.ts src/lab/sdf-zombie/character-registry.ts src/lab/sdf-zombie/webgpu/lab-main.ts docs/dev-notes/2026-09-24-bride/
+git add src/lab/sdf-zombie/characters/bride.blob src/lab/sdf-zombie/characters/bride-blob.test.ts src/lab/sdf-zombie/character-registry.ts docs/dev-notes/2026-09-24-bride/
 git commit -m "bride: SDF body — long-limbed, rib window, fused seams, stigmata"
 ```
 
@@ -354,7 +352,9 @@ Expected: FAIL. `bride-kit.gltf` does not resolve.
 
 - [ ] **Step 3: Author `bride-kit.wam`**
 
-Transcribe the skeleton from `bride.blob`. Units are **height fractions (metres / 1.85)**, and **pitch negates on down bones**. Pieces:
+Transcribe the skeleton from `bride.blob`. Units are **height fractions (metres / 1.85)**, and **pitch negates on down bones**.
+
+**The uneven forearm.** `bride.blob` gives the right forearm its own length with `lenR=` (added in Task 1; `forearm` is `len=0.26 lenR=0.30`). WAM has no `lenR`: in `~/Projects/2026/wam/wam/skeleton.py` (~l.193) a mirror block always gives `.l`/`.r` the same length. So in the kit, author `forearm` and `hand` OUTSIDE the mirror block, as explicit `.l` and `.r` bones with their own lengths. First check that WAM accepts sided bones outside a mirror block that parent to a mirrored bone (`upperarm.r`): write a 10-line test `.wam` and compile it. If WAM refuses, STOP and report BLOCKED. Don't edit WAM, which is an external repo; the controller will decide. Pieces:
 - `plate` (dull steel): vambraces on both forearms, couters at the elbows, fingered gauntlets on both hands, and a pauldron on the right shoulder. Leave the elbow crease and the pauldron underside OPEN. The flesh bulges from Task 1 must show through.
 - `boot`: cream suede thigh-highs to just above the knee.
 - `chain`: the belt chain at the hips and two necklace chains.
