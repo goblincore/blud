@@ -4,6 +4,12 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Bride (sword enemy) — Tasks 1-3 of [the plan](docs/superpowers/plans/2026-09-24-bride-sword-enemy.md)
+
+- [x] **Task 3, cloth + hair:** shell bodice open over the ribs with laces, two-tier ruffle skirt on a `hem`
+  pendulum, rigid veil, strand hair, painted stockings. 123/128 prims. Uncut in game. [Notes](docs/dev-notes/2026-09-24-bride/NOTES.md)
+- [ ] Perf census vs cultist (fallback-B gate) deferred by the owner (2026-09-24). Next: Task 4 (kit + boots).
+
 ## Thin-prim "lines in the air" (bride) — fixed 2026-09-24
 
 - [x] **Not a renderer bug: a rig bind.** `bindRig` bound each prim end to the nearest rig point of the WHOLE body,

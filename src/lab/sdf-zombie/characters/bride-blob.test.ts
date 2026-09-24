@@ -12,9 +12,9 @@ import { readFileSync } from 'node:fs';
 import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { characterEntry } from '../character-registry';
-import { MAX_PRIMS, sdBody } from '../validate';
+import { MAX_PRIMS, sdBody, nearestPrim } from '../validate';
 import { checkStance } from '../blob-checks';
-import { bindRig } from '../rig-bind';
+import { bindRig, applyRig, HEM_REST_SCALE } from '../rig-bind';
 import { makeMotionJoints } from '../motion';
 
 const doc = parseBlob(src);
@@ -105,12 +105,11 @@ describe('bride — build', () => {
     expect(num('PROJ_CENTRE_Y')).toBe(sheet.projCentreY);
   });
 
-  it('fits the 128 flesh+bone prim budget with room for cloth and hair', () => {
-    // Task 1 is flesh only; shells + strands (Task 3) need ~20 more.
-    expect(body.prims.length).toBeLessThanOrEqual(MAX_PRIMS - 20);
-    // MAX_PRIMS bounds flesh AND bone together (validate.ts), so the headroom
-    // has to exist in the sum too, or Task 3's cloth lands over the ceiling.
-    expect(body.prims.length + body.bonePrims.length).toBeLessThanOrEqual(MAX_PRIMS - 20);
+  it('fits the 128 flesh+bone prim budget with the cloth and hair on', () => {
+    // Task 1 left 20 prims of headroom; Task 3's shells, laces, hair and
+    // stocking tops spent most of it. MAX_PRIMS bounds flesh AND bone
+    // together (validate.ts), so the sum is what must fit.
+    expect(body.prims.length + body.bonePrims.length).toBeLessThanOrEqual(MAX_PRIMS);
   });
 });
 
@@ -136,8 +135,10 @@ describe('bride — wrong anatomy (the cheap version)', () => {
   // half-width. Blend volume is included, which is the point — the first
   // "double the blends" pass looked fine in the .blob and probed a 0.131
   // waist.
+  // FLESH only: the Task 3 bodice and skirt stand off the body on purpose.
+  const flesh = { ...body, prims: body.prims.map(p => (p.shell || p.strand ? { ...p, dead: true } : p)) };
   const halfWidth = (y: number) => {
-    for (let x = 0; x < 0.4; x += 0.001) if (sdBody([x, y, 0], body) > 0) return x;
+    for (let x = 0; x < 0.4; x += 0.001) if (sdBody([x, y, 0], flesh) > 0) return x;
     return Infinity;
   };
 
@@ -160,5 +161,160 @@ describe('bride — wrong anatomy (the cheap version)', () => {
     const r = dist(bone('forearm.r').head, bone('forearm.r').tail);
     const l = dist(bone('forearm.l').head, bone('forearm.l').tail);
     expect(r - l).toBeGreaterThan(0.03);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3: the cloth (bodice, ruffle skirt, veil), the strand hair, the laces
+// and the painted stockings. Shells are cloth, not mass (the cultist's road);
+// the hair is a mass for the volume plus strands for every hanging edge (the
+// schoolgirl-described road).
+// ---------------------------------------------------------------------------
+describe('bride — cloth and hair', () => {
+  const shells = body.prims.filter(p => p.shell);
+  const bodiceI = body.prims.findIndex(p => p.shell && p.bone === 'chest');
+  // The LOWER (longest) tier: the lowest hem.
+  const skirtI = body.prims.reduce((best, p, i) => (p.shell && p.bone === 'hem'
+    && (best < 0 || p.shell.clipOffset > body.prims[best]!.shell!.clipOffset) ? i : best), -1);
+  const veilI = body.prims.findIndex(p => p.shell && p.bone === 'skull');
+  /** The prim that owns the first surface a ray meets (the paint lookup's
+   *  arg-min at the hit, validate.ts nearestPrim), or -1 on a miss. */
+  const firstHit = (o: readonly number[], d: readonly number[], max = 1): number => {
+    let t = 0;
+    while (t < max) {
+      const p = [o[0]! + d[0]! * t, o[1]! + d[1]! * t, o[2]! + d[2]! * t] as const;
+      const f = sdBody(p, body);
+      if (f < 0.0003) return nearestPrim(p, body);
+      t += Math.max(f * 0.8, 0.0005);
+    }
+    return -1;
+  };
+  const fromFront = (x: number, y: number) => firstHit([x, y, 0.4], [0, 0, -1]);
+  const fromBack = (x: number, y: number) => firstHit([x, y, -0.4], [0, 0, 1]);
+  // .blob colours are sRGB hex compiled to LINEAR rgb (blob-parse.ts);
+  // convert back to compare against the file's hex.
+  const toSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
+  const hex = (i: number) => body.prims[i]?.color?.map(v => Math.round(toSrgb(v) * 255).toString(16).padStart(2, '0')).join('');
+
+  it('is dressed in SHELLS: bodice, two ruffle tiers on the hem, veil on the skull', () => {
+    // The plan said three; a second, shorter skirt tier was added so the
+    // skirt reads as tiered ruffles (owner: build for the look first).
+    const s = shells.map(p => `${p.limb}:${p.bone}`).sort();
+    expect(s).toEqual(['head:skull', 'torso:chest', 'torso:hem', 'torso:hem']);
+  });
+
+  it('opens the bodice down the sternum over the rib window, and covers the bust', () => {
+    expect(body.prims[bodiceI]!.shell!.clipNormal[2]).toBeGreaterThan(0.9);
+    // Straight at the sternum, through the rib window's height (y 1.17-1.31):
+    // the first thing a ray meets is NOT the bodice — flesh (ribs, skin) or
+    // a lace. The clip leaves the front open.
+    for (const y of [1.18, 1.21, 1.24, 1.27, 1.29]) expect(fromFront(0, y), `sternum y ${y}`).not.toBe(bodiceI);
+    // ...and a ray at each breast meets the bodice: she is covered. (The
+    // bust is painted the bodice's ivory too, so a mound pushing through the
+    // lid reads as the corset's cup — the cultist's rule — and never skin.)
+    for (const x of [-0.063, 0.063]) expect(fromFront(x, 1.34), `bust x ${x}`).toBe(bodiceI);
+    for (const x of [-0.063, 0.063]) for (const y of [1.30, 1.36, 1.38])
+      expect(hex(fromFront(x, y)), `bust x ${x} y ${y}`).toBe('f1ece0');
+  });
+
+  it('laces the gap: dark thin prims cross the sternum in front of the ribs', () => {
+    const laces = body.prims.filter(p => !p.shell && p.limb === 'torso' && hex(body.prims.indexOf(p)) === '3a2a22');
+    expect(laces.length).toBeGreaterThanOrEqual(4);
+    expect(laces.length).toBeLessThanOrEqual(5);
+    // Each one CROSSES the centreline.
+    for (const l of laces) expect(Math.sign(l.a[0]) * Math.sign(l.b[0])).toBe(-1);
+  });
+
+  it('has a short ruffled skirt on the hem pendulum, hemmed below the crotch', () => {
+    const skirt = body.prims[skirtI]!;
+    expect(skirt.shell!.warpAmp ?? 0).toBeGreaterThan(0);
+    // clip=(0,-1,0): keeps y > -clipd. Below the crotch (flesh ends ~0.88 at
+    // the centreline) so she is not bare from the front; above the stocking
+    // tops, so the thigh band shows.
+    const hemY = -skirt.shell!.clipOffset;
+    expect(hemY).toBeLessThan(0.87);
+    expect(hemY).toBeGreaterThan(0.80);
+    // `rigid`: both ends ride the hem bone head; the tail swings.
+    const bound = bindRig(body);
+    const hem = bone('hem');
+    const pointAt = (p: readonly number[]) => bound.rig.points.findIndex(q => dist(q.pos, p) < 1e-4);
+    body.prims.forEach((p, i) => {
+      if (!(p.shell && p.bone === 'hem')) return;
+      expect(bound.binding[i]!.a.point).toBe(pointAt(hem.head));
+      expect(bound.binding[i]!.b.point).toBe(pointAt(hem.head));
+    });
+    const tail = pointAt(hem.tail);
+    expect(bound.rig.restScale![tail]).toBe(HEM_REST_SCALE);
+    expect(bound.rig.points[tail]!.pinned).toBe(false);
+  });
+
+  it('binds NO flesh or bone prim to the swinging hem (only the skirt rides it)', () => {
+    // The stocking tops ended nearer the hem tail than the hip or knee and,
+    // in a walk, rose off the leg as tubes to it (rig-bind.ts distal set).
+    const bound = bindRig(body);
+    const tail = bound.rig.points.findIndex(q => dist(q.pos, bone('hem').tail) < 1e-4);
+    body.prims.forEach((p, i) => {
+      if (p.bone === 'hem') return;
+      const b = bound.binding[i]!;
+      expect([b.a.point, b.b.point], `prim ${i} on ${p.bone}`).not.toContain(tail);
+    });
+    bound.boneBinding.forEach((b, i) =>
+      expect([b.a.point, b.b.point], `bone prim ${i}`).not.toContain(tail));
+  });
+
+  it('veils the head but leaves the face open', () => {
+    const veil = body.prims[veilI]!;
+    // `rigid` on the skull: both ends ride the skull as one piece, so the
+    // veil does not stretch to the nearest back joint, and the opening turns
+    // with her (a 90 degree body yaw turns the clip normal from +z to +x).
+    const bound = bindRig(body);
+    const skull = bone('skull');
+    const pointAt = (p: readonly number[]) => bound.rig.points.findIndex(q => dist(q.pos, p) < 1e-4);
+    expect(bound.binding[veilI]!.a.point).toBe(pointAt(skull.head));
+    expect(bound.binding[veilI]!.b.point).toBe(pointAt(skull.head));
+    const n1 = applyRig(body, bound, Math.PI / 2).prims[veilI]!.shell!.clipNormal;
+    expect(n1[0]).toBeGreaterThan(0.9);
+    // Eyes, nose and mouth are not behind the veil...
+    for (const [x, y] of [[0.034, 1.70], [0, 1.66], [0, 1.635]] as const)
+      expect(fromFront(x, y), `face ${x},${y}`).not.toBe(veilI);
+    // ...and the crown is under it.
+    expect(firstHit([0, 2.1, 0], [0, -1, 0])).toBe(veilI);
+    expect(veil.shell!.clipNormal[2]).toBeGreaterThan(0.5);
+  });
+
+  it('has long black centre-parted strand hair covering the back of the skull', () => {
+    const strands = body.prims.filter(p => p.strand);
+    expect(strands.length).toBeGreaterThanOrEqual(3);
+    for (const s of strands) expect(hex(body.prims.indexOf(s))).toBe('141216');
+    // Nothing bald shows from behind: the back of the head is hair or veil.
+    for (const y of [1.66, 1.72, 1.78]) {
+      const i = fromBack(0, y);
+      expect(i === veilI || hex(i) === '141216', `back of head y ${y}`).toBe(true);
+    }
+    // Long: the lowest strand reaches down the back past the shoulder blades.
+    expect(Math.min(...strands.map(p => Math.min(p.a[1], p.b[1])))).toBeLessThan(1.30);
+  });
+
+  it('keeps the CRANIUM as the face frame in game AND lab (hair/veil never out-size it)', () => {
+    // game-main.ts headShape takes the fattest head prim by radius x max
+    // scale over ALL prims (lab-main skips painted ones). A hair mass or veil
+    // that won would re-centre the Task 2 sheet in game only: sutures off the
+    // mouth, liner off the lids. So every covering prim stays under it.
+    const head = body.clusters.find(c => c.limb === 'head')!;
+    const prims = body.prims.slice(head.start, head.start + head.count).filter(p => p.op !== 'sub');
+    const metric = (p: typeof prims[number]) => p.radius * Math.max(...p.scale);
+    const fattest = prims.reduce((m, p) => (metric(p) > metric(m) ? p : m));
+    expect(fattest.color).toBeUndefined();
+    expect(fattest.shell).toBeUndefined();
+    expect(fattest.strand).toBeUndefined();
+  });
+
+  it('wears ivory stockings on the thigh band below the skirt', () => {
+    // The Task 4 boots cover from above the knee down; the band between the
+    // hem and the boots is where the stockings show.
+    for (const s of [1, -1]) {
+      const i = fromFront(s * 0.075, 0.72);
+      expect(hex(i), `stocking at x ${s * 0.075}`).toBe('e8e0d0');
+    }
   });
 });

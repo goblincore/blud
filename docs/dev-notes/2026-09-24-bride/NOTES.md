@@ -281,3 +281,107 @@ slit-looking eyes stay exactly as they were.
     hollow; that is paint, as the owner asked.
   - 3 m: the hollows now show as two darker violet patches under the eyes, which help the
     gaunt read. At that size they could also pass for bruising.
+
+## Task 3: cloth shells, strand hair, laces, stockings (same day)
+
+Perf census deferred (owner, 2026-09-24).
+
+Owner direction mid-task: build for the look first and optimise later; stay under
+`MAX_PRIMS` 128 (a hard validator limit today) without raising it.
+
+### What she wears (`bride.blob`, pins in `bride-blob.test.ts`)
+
+| Part | How | Prims |
+| --- | --- | --- |
+| Corset bodice, ivory | one `shell` round cone on `chest`, `rigid`, clipped open down the sternum | 1 |
+| Laces | five dark thin bars zig-zagging across the slot, ends sunk into the sheet's probed edges | 5 |
+| Ruffle skirt, two tiers | two `shell` cones on a new `hem` pendulum bone, `rigid`, warped; the upper tier stops at y 0.945 | 2 |
+| Veil | one `shell` round cone on `skull`, `rigid`, clipped at the face | 1 |
+| Hair | scalp mass + strand bundles: face-framing locks (x2), side-back locks (x2), back curtain | 6 |
+| Stockings | knee-down prims painted e8e0d0; a thigh overlay (+1 mm) and a darker lace-top band from y ~0.80 | 4 |
+| Bust | painted the bodice's ivory (the cultist's rule), no new prim | 0 |
+
+Budget: 92 flesh + 31 bone = **123 / 128**. Four of the bone prims are auto-derived from
+the stocking overlays (a thigh-sized prim grows a femur, `bone-derive.ts`).
+
+### Numbers (CPU field)
+
+- **Sternum slot** (the bodice sheet's edge, probed): 6.7 cm wide at y 1.16, 6.0 at 1.22,
+  5.6 at 1.25, 4.8 at 1.28, 2.7 at 1.31, 1.0 at 1.34, shut at 1.36. The plane was
+  grid-searched against target half-widths (11 degrees off vertical). The cut is a few mm
+  into a gently curved front, so a few mm of `clipd` moves the width by centimetres.
+- **Skirt hem** y 0.855 (under the crotch at ~0.88); upper tier hem 0.945. Stocking top
+  ~0.80, so the inner-thigh wounds sit under the hem and their drips run out into the
+  3.5 cm of bare thigh above the stocking tops.
+- **Face frame held:** every hair/veil prim's radius × max scale stays under the
+  cranium's 0.0912. `game-main.ts` `headShape` takes the fattest head prim over ALL prims
+  (the lab skips painted ones), so a bigger hair mass would re-centre the Task 2 sheet in
+  the game only. Pinned.
+
+### Things found on the way
+
+- **A squashed shell under-reports its distance, and paint follows the field.** A shell's
+  base distance is taken in the scaled space and comes back multiplied by the smallest
+  axis. At `tall 0.35` (to flatten the bodice's top cap into a lid) two things broke:
+  - `thick 0.004` became a 19 mm slab in z;
+  - `nearestPrim` / `hitBest` saw the bodice as nearer than the ribs 2-3 cm behind it, so
+    the whole rib window was painted ivory.
+  At `tall 0.60` the slot's skin and ribs own their paint from y 1.16 up (probed). `thick`
+  and `warp` are divided the same way; the `.blob` comments give the world sizes.
+- **The hem pendulum stole the stocking tops (fixed, `rig-bind.ts`).** The stocking
+  overlay's top end (y 0.78) was nearer the hem bone's tail (y 0.64, centreline) than the
+  hip or knee. At rest nothing showed; in the walk frame each stocking rose off the leg
+  as a tube to the swinging hem. Fix: the hem tail joins the DISTAL set (only prims on
+  bones sharing its joints may bind to it), and `hem` is excluded from the axial joints
+  and segments (the pelvis bone sits exactly on the hem segment). New pin: no flesh or
+  bone prim binds to the hem tail. This built on main's `cab14582` (distal joints bind
+  only their own limb's prims), cherry-picked onto this branch because it was not here yet.
+- **Rigid veil, non-rigid hair.** The veil is `rigid` on the skull. Without that its low
+  end bound to the upper back and the face could turn inside the opening. It turns with
+  a body yaw (pinned). The hair strands are NOT rigid: their tops ride the head, their
+  ends ride the chest, which reads as hair lying on the shoulders.
+- **Width is boxed in by the hanging arms.** The hip flare is 0.171 wide and the forearm's
+  inner edge is ~0.19 at y 1.0, so the skirt can only flare front to back.
+
+### Frames
+
+Lab: private ports (`LAB_TMP=.lab-tmp LAB_VITE_PORT=5271 LAB_CDP_PORT=9271`), cultist
+sanity shot first, probe `lightDir (0.35,0.6,0.72)` + `setSdfScale(1)`. The back frames use
+`lightDir (-0.35,0.6,-0.72)`. The walk is `BLOB_POSE=walk`, on the ZOMBIE profile she still
+falls back to (hence the arms-out shamble; `BRIDE_PROFILE` is Task 8).
+
+![front](cloth-front.png) ![3/4](cloth-34.png) ![side](cloth-side.png) ![back](cloth-back.png) ![back 3/4](cloth-back-34.png)
+![walk](cloth-walk-front.png) ![walk side](cloth-walk-side.png)
+![bodice](cloth-bodice-front.png) ![bodice 3/4](cloth-bodice-34.png)
+![veil](cloth-veil-front.png) ![veil 3/4](cloth-veil-34.png) ![veil side](cloth-veil-side.png)
+
+Game (`node scripts/bride-game-frames.mjs 5271 9271 <out>`: `?spawn=bride&frozen=1&seed=1&vhs=off`,
+`teleport(2)`, `placePlayer` 2.6 m round the first bride). The veil, bodice slot and both
+skirt tiers render **uncut** at her spawn position, and the face sheet sits on the face (so the
+game's face frame is still the cranium):
+
+![game front](game-front.png) ![game 3/4](game-34.png) ![game back](game-back.png)
+
+### Honest read
+
+- **3 m:** a tall pale woman in a white strapless corset and a short ruffled skirt, long
+  black hair, a white veil down her back, ivory stockings. Bride first. The bald/alien
+  cranium read is gone: the veil and the hair cover it.
+- **1 m:** the laced slot down the bodice with ribs behind the laces reads as the
+  reliquary hook. Between the breasts the bodice is smooth; the painted bust gives it cups.
+- **Weak spots:**
+  - The skirt reads as crumpled, tiered fabric rather than lace ruffles. The warp is a
+    product of Cartesian sines, so it cannot make ruffles periodic around the waist.
+  - From the front the veil's crown reads a little like a nun's coif, with a black centre
+    stripe (the hair mass between the locks) as the part.
+  - In game resolution the laces merge into a dark slot.
+  - At rest the skirt comes within ~1 cm of the forearms.
+
+### With more prims (owner: the controller raises MAX_PRIMS separately)
+
+- +2-4: a third skirt tier, or petticoat layers, for a fuller tiered ruffle.
+- +4-6: more strand bundles (a second back layer, fuller side falls), for hair volume
+  under the veil.
+- +2: a separate front hair part (two small strand sweeps from the part) instead of the
+  mass showing as a stripe.
+- +2: a veil hem layer, so the bottom ends in a free edge rather than a round cap.
