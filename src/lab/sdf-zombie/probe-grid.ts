@@ -82,6 +82,8 @@ export interface ProbeGridOptions {
   occluders?: Box[];
   /** Linear-RGB albedo an occluder hit reflects. Default a dark crate. */
   occluderAlbedo?: Vec3;
+  /** Open-sky room: see `ProbeSky`. Absent = the closed box, bit-identical to before. */
+  sky?: ProbeSky;
 }
 
 export const DEFAULT_PROBE_OPTIONS: ProbeGridOptions = {
@@ -137,6 +139,10 @@ export interface ProbeLight {
   /** Point lights baked into the gather. Default none. */
   points?: ProbePointLight[];
 }
+
+/** Outdoor v1 §7: an open room's sky. Rays leaving through the top face, or through a
+ *  side wall above `above` (metres, absolute y), return `radiance` and do not bounce. */
+export interface ProbeSky { radiance: Vec3; above: number }
 
 export interface ShSample {
   dir: Vec3;
@@ -632,6 +638,7 @@ export function buildProbeGrid(
   const [nx, ny, nz] = dims;
   const occluders = o.occluders ?? [];
   const occluderAlbedo = o.occluderAlbedo ?? DEFAULT_OCCLUDER_ALBEDO;
+  const sky = o.sky;
 
   const min: Vec3 = [box.min[0] + o.inset, box.min[1] + o.inset, box.min[2] + o.inset];
   const max: Vec3 = [box.max[0] - o.inset, box.max[1] - o.inset, box.max[2] - o.inset];
@@ -652,6 +659,11 @@ export function buildProbeGrid(
           for (const dir of dirs) {
             const hit = nearestHit(origin, dir, box, occluders);
             if (hit === null) continue;
+            if (sky !== undefined && hit.wall !== null && hit.wall !== 'negY'
+              && (hit.wall === 'posY' || hit.point[1] > sky.above)) {
+              samples.push({ dir, radiance: [sky.radiance[0], sky.radiance[1], sky.radiance[2]] });
+              continue;
+            }
             const albedo = hit.wall === null ? occluderAlbedo : walls[hit.wall];
             let bounce: Vec3 = [0, 0, 0];
             if (prev !== null) {
