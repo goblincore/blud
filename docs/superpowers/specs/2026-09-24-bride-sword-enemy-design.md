@@ -38,9 +38,7 @@ The broodmother follows the same rule (`docs/dev-notes/2026-09-22-broodmother/NO
 | Sword | a hand-and-a-half longsword, ~1.2 m, cruciform guard | prop glb from a Blender script (`scripts/model-bride-sword.py`, following `model-cultist-smg.py`), with locators matching `GUN_GRIP` |
 | Face makeup | corpse makeup and mouth sutures | a baked face sheet (`FaceSheet` in the registry), overlay-blended (the house default) |
 
-**Fallback B:** if the perf census in step 2 shows a garment shell costs too
-much (the owner already rates the cultist's all-shell costume as slow), that
-garment moves into the WAM kit as mesh. The flesh stays SDF either way.
+**Fallback B:** if a garment shell turns out too costly, it moves into the WAM kit as mesh. The flesh stays SDF either way. **No perf bench in this pass** (owner, 2026-09-24: visuals first, optimize later). The prim count is a soft budget, and a separate effort is evaluating raising `MAX_PRIMS`.
 
 ## The look
 
@@ -145,8 +143,7 @@ Each step ends with frames the owner can look at.
    face sheet, a `character-registry.ts` entry, and a line in `webgpu/lab-main.ts`
    `CHARACTERS`. Without that line `blob:shot` silently renders the zombie.
 2. **Cloth and hair:** the bodice, skirt (with `hem` bone) and veil shells, plus
-   the strands. Run a perf census against the cultist, and send any costly
-   garment to fallback B now.
+   the strands.
 3. **Kit and sword:** `bride-kit.wam` built to glTF, and the sword Blender script
    plus its glb.
 4. **Carry and gait:** the `sword` carry (guard and run), the stalking gait, and
@@ -179,7 +176,6 @@ Each step ends with frames the owner can look at.
   Placement bugs (translateBody) never appear in the lab. In the game, confirm
   the veil and skirt render uncut, the sword follows the swing, and a hit fires
   the feedback.
-- Record the perf census numbers next to the cultist's.
 - Notes and frames go in `docs/dev-notes/2026-09-24-bride/NOTES.md`, plus a
   row in `TASKS.md`.
 

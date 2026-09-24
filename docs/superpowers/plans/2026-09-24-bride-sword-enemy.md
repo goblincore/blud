@@ -33,7 +33,8 @@ Art comes from the existing pipelines: `.blob`, `.wam` → `build-wam-kit.sh`, a
 - Work ONLY in this worktree. Never use bare `git stash`. `node_modules` is symlinked, so do not reinstall.
 - **Targeted tests only** (`npm test -- <names>`) plus `npx tsc --noEmit`. Never run the bare full suite.
 - **Headless capture only.** The in-app browser pane loses the WebGPU device. Capture scripts require `window.__warmGate.phase === 'ready'` and fail on renderer pipeline errors.
-- **Prove visual and performance claims with a number** (crop luminance, GPU ms, a distance in metres), and look at the images yourself.
+- **Prove visual claims with a number** (crop luminance, a distance in metres), and look at the images yourself.
+- **Visuals first, perf later** (owner, 2026-09-24). No perf bench in this plan. The prim count is a soft budget: build the best look that fits `MAX_PRIMS` and prefer paint over geometry for cheap detail.
 - WebGPU: alpha goes in `colorNode.w`, never `alphaHash`/`alphaTest`. Never toggle a light's `.visible`.
 - Kill anything you start outside a capture script in the same step.
 - Extracted Blood assets are dev placeholders. Never commit them. The owner's reference photo is **not** committed either.
@@ -245,7 +246,7 @@ git commit -m "bride: corpse-makeup face sheet — sockets, bruised lids, suture
 
 ---
 
-### Task 3: Cloth shells + strand hair + perf census
+### Task 3: Cloth shells + strand hair
 
 **Files:**
 - Modify: `src/lab/sdf-zombie/characters/bride.blob`, `src/lab/sdf-zombie/characters/bride-blob.test.ts`
@@ -306,11 +307,7 @@ Expected: PASS.
 
 Take lab `blob:shot` frames: front, 3/4, back, and a walking frame. Game: `npm run dev`, open `/sdf-game.html?spawn=bride` headless through a capture script, and in the page run `__sdfGame.teleport(2)` + `placePlayer` to frame her. The veil and skirt must render UNCUT in the game (the translateBody clip-plane trap). Save the frames to the notes dir.
 
-- [ ] **Step 6: Perf census vs the cultist (fallback-B gate)**
-
-Use the melee bench described in `docs/dev-notes/2026-09-22-cost-census/NOTES.md`. Run it once with `?spawn=cultist` and once with `?spawn=bride`, and record `sdf:march` GPU ms for both in NOTES.md. **If the bride is more than 15% slower than the cultist,** find the garment responsible by removing one shell at a time and re-measuring. Move it into the Task 4 kit as mesh (fallback B) and record the decision.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/characters/bride.blob src/lab/sdf-zombie/characters/bride-blob.test.ts docs/dev-notes/2026-09-24-bride/
@@ -1523,7 +1520,6 @@ git commit -m "bride: jaw gapes on the sword wind-up (optional jaw joint, hem pr
   - a "what exists" table (pieces → sources → built into);
   - how to look at her (`/sdf-lab-webgpu.html?character=bride`, `?spawn=bride`, the gate script);
   - the design, one numbered beat per horror hook;
-  - the perf census numbers against the cultist;
   - deviations (armour sheds rather than blocks; the jaw, if it was cut);
   - things found along the way;
   - the frames.
@@ -1538,5 +1534,5 @@ Expected: all PASS. Paste the summary lines into NOTES.md.
 
 ```bash
 git add docs/dev-notes/2026-09-24-bride/ TASKS.md
-git commit -m "docs(bride): notes, frames, perf census; TASKS.md row"
+git commit -m "docs(bride): notes, frames; TASKS.md row"
 ```
