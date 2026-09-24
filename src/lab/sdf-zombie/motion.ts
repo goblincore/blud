@@ -1349,14 +1349,20 @@ export function stepMotion(
       restPose: targets,
       // Hit reactions offset joints independently. Let Verlet absorb those
       // impulses rather than hard-pinning incompatible torso/leg targets.
-      ...(footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null ? { posePins: (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const)
-        .map(name => idx[name]).filter(i => i !== undefined) } : {}),
-      // A SWORD SWING pins both arms to the track. The verlet's soft rest pull
-      // lags a 1 s swing by up to 20 cm, and the prop is seated on the
-      // TARGETS, so an unpinned fist visibly lets go of the grip mid-strike.
-      // A hit reaction releases the pins, as for the soldier's legs.
-      ...(swordArmPins && !stagger.staggered && recoil.joint === null ? { posePins: (['elbowR', 'handR', 'handTipR', 'elbowL', 'handL', 'handTipL'] as const)
-        .map(name => idx[name]).filter(i => i !== undefined) } : {}),
+      // A SWORD SWING also pins both arms to the track. The verlet's soft
+      // rest pull lags a 1 s swing by up to 20 cm, and the prop is seated on
+      // the TARGETS, so an unpinned fist visibly lets go of the grip
+      // mid-strike. A hit reaction releases the pins, as for the soldier's
+      // legs. The two lists are MERGED into one posePins (a second spread of
+      // the key would silently drop the first).
+      ...((): { posePins?: number[] } => {
+        const legs = footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null
+          ? (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const) : [];
+        const arms = swordArmPins && !stagger.staggered && recoil.joint === null
+          ? (['elbowR', 'handR', 'handTipR', 'elbowL', 'handL', 'handTipL'] as const) : [];
+        const pins = [...legs, ...arms].map(name => idx[name]).filter((i): i is number => i !== undefined);
+        return legs.length || arms.length ? { posePins: pins } : {};
+      })(),
       restPull: structural ? 1 : collapse.restPull,
       gravity: structural ? [0, -1.5, 0] : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]

@@ -23,6 +23,7 @@ import { GUN_GRIP, gunPoint, type GunPose } from '../carry';
 import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { makeRng } from '../wander';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
+import { SWORD_CONTACT } from '../sword-swing';
 import type { Vec3 } from '../types';
 
 const doc = parseBlob(src);
@@ -411,7 +412,7 @@ describe('bride — profile and sword carry', () => {
 /** Stand 60 frames in the guard, then swing `variant` over 60 frames
  *  (phase i/60). Records the fist-grip gap and the tip in body-local x/y. */
 function recordSwing(variant: 'cleave' | 'sweep' | 'lunge') {
-  const out: { phase: number; gap: number; tip: Vec3; tipX: number }[] = [];
+  const out: { phase: number; gap: number; tip: Vec3; tipX: number; tipFwd: number }[] = [];
   drive({
     frames: 121, speed: 0,
     attack: i => (i >= 60 ? { phase: Math.min(1, (i - 60) / 60), side: 'R', variant } : undefined),
@@ -424,6 +425,7 @@ function recordSwing(variant: 'cleave' | 'sweep' | 'lunge') {
         gap: dist(fistOf(pts, J), gunPoint(f.gun!, GUN_GRIP.gripHand)),
         tip,
         tipX: (tip[0] - pel[0]) * right[0] + (tip[2] - pel[2]) * right[2],
+        tipFwd: (tip[0] - pel[0]) * Math.sin(f.bodyYaw) + (tip[2] - pel[2]) * Math.cos(f.bodyYaw),
       });
     },
   });
@@ -445,6 +447,18 @@ describe('bride — the sword swings with the arm', () => {
     const w = at(rec, ATTACK_TUNING.windupEnd).tip[1];
     const s = at(rec, (ATTACK_TUNING.strikeEnd + ATTACK_TUNING.holdEnd) / 2).tip[1];
     expect(w - s).toBeGreaterThan(0.8);
+  });
+
+  // The hit instant (sword-swing.ts SWORD_CONTACT.phase) is where the BLADE
+  // ARRIVES: the tip at a standing player's chest height and well out in front.
+  // Measured 2026-09-24: cleave (0.47) y 1.52 fwd 1.55; sweep (0.40) y 1.33
+  // fwd 1.39; lunge (0.47) y 1.44 fwd 1.56. The old mid-strike 0.375 had the
+  // cleave's tip overhead at y 2.74.
+  it.each(['cleave', 'sweep', 'lunge'] as const)('%s: at the hit instant the tip is at chest height, in front', variant => {
+    const s = at(recordSwing(variant), SWORD_CONTACT.phase[variant]);
+    expect(s.tip[1]).toBeGreaterThan(1.1);
+    expect(s.tip[1]).toBeLessThan(1.65);
+    expect(s.tipFwd).toBeGreaterThan(1.2);
   });
 
   it('sweep: the tip crosses her centreline (body-local x changes sign)', () => {

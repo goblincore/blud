@@ -132,8 +132,13 @@ export function lungeAdvance(
 
 /** When in the swing the blade connects, and what it can reach. */
 export const SWORD_CONTACT = {
-  /** Mid-strike. */
-  phase: (ATTACK_TUNING.windupEnd + ATTACK_TUNING.strikeEnd) / 2,
+  /** The hit instant per variant, on the strike beat (0.25 -> 0.5 on a
+   *  smoothstep). Mid-strike (0.375) was too early: the ease is only 0.5
+   *  there, so the cleave's tip was still overhead and a lunge from the top
+   *  of its band had covered half its advance and was out of reach. Each
+   *  value is where the blade actually arrives; all stay before holdEnd.
+   *  bride-blob.test.ts pins the tip height and reach at each one. */
+  phase: { cleave: 0.47, sweep: 0.40, lunge: 0.47 } as Record<SwordVariant, number>,
   reach: { cleave: 2.1, sweep: 2.0, lunge: 2.0 } as Record<SwordVariant, number>,
   /** Half-angle of the hit cone about her facing (rad). */
   cone: { cleave: 0.45, sweep: 1.2, lunge: 0.35 } as Record<SwordVariant, number>,
@@ -145,7 +150,7 @@ export function swordContact(a: {
   prevPhase: number; phase: number; variant: SwordVariant;
   self: { x: number; z: number; yaw: number }; player: { x: number; z: number };
 }): boolean {
-  const at = SWORD_CONTACT.phase;
+  const at = SWORD_CONTACT.phase[a.variant];
   if (!(a.prevPhase < at && a.phase >= at)) return false;
   const dx = a.player.x - a.self.x, dz = a.player.z - a.self.z;
   if (Math.hypot(dx, dz) > SWORD_CONTACT.reach[a.variant]) return false;

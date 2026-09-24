@@ -118,7 +118,7 @@ describe('lungeAdvance', () => {
 
 describe('swordContact', () => {
   const self = { x: 0, z: 0, yaw: 0 };
-  const hitPhase = SWORD_CONTACT.phase;
+  const hitPhase = SWORD_CONTACT.phase.cleave;
 
   it('fires exactly once, on the frame the phase crosses the hit instant', () => {
     let fired = 0, prev = 0;
@@ -133,10 +133,23 @@ describe('swordContact', () => {
 
   it('misses out of reach and outside the cone; sweep has the wider cone', () => {
     const at = (variant: 'cleave' | 'sweep', x: number, z: number) =>
-      swordContact({ prevPhase: hitPhase - 0.01, phase: hitPhase, variant, self, player: { x, z } });
+      swordContact({ prevPhase: SWORD_CONTACT.phase[variant] - 0.01, phase: SWORD_CONTACT.phase[variant], variant, self, player: { x, z } });
     expect(at('cleave', 0, 2.6)).toBe(false);          // too far
     expect(at('cleave', 1.2, 0.9)).toBe(false);        // ~53 deg off — outside the cleave cone
     expect(at('sweep', 1.2, 0.9)).toBe(true);          // inside the sweep cone
+  });
+
+  it('hits on the strike beat, before the hold, for every variant', () => {
+    for (const v of ['cleave', 'sweep', 'lunge'] as const) {
+      expect(SWORD_CONTACT.phase[v]).toBeGreaterThan(ATTACK_TUNING.windupEnd);
+      expect(SWORD_CONTACT.phase[v]).toBeLessThan(ATTACK_TUNING.holdEnd);
+    }
+  });
+
+  it('a lunge from the top of its band has advanced into reach by its hit instant', () => {
+    const band = SWORD_TUNING.brain.lungeBand!;
+    const advanced = lungeAdvance(0, SWORD_CONTACT.phase.lunge, 10);
+    expect(band.max - advanced).toBeLessThanOrEqual(SWORD_CONTACT.reach.lunge);
   });
 
   it('isSwordVariant', () => {
