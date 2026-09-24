@@ -18,7 +18,7 @@ Branch `claude/wake-level-pipeline-1afb01`. [Plan 1](docs/superpowers/plans/2026
 - [x] T5d placeholder dressing in the `.blend` (67/67 solids) + Blender review renders (`scripts/levels/render_level_views.py`).
 - [x] Layout review (owner): route bends (lane SW → slab NE), funeral home is a gothic manor on the graveyard's north edge.
 - [ ] Next: outdoor rendering spec (below). Dispatch skill default is now `zai/glm-5.3-flash`.
-- [~] **Outdoor v1** [spec](docs/superpowers/specs/2026-09-23-outdoor-v1-design.md) written, awaiting owner review (terrain = spec 2). Was: the engine only knows enclosed dungeon rooms. Open: moon key +
+- [~] **Outdoor v1** [spec](docs/superpowers/specs/2026-09-23-outdoor-v1-design.md) approved; [plan](docs/superpowers/plans/2026-09-23-outdoor-v1.md) written (8 tasks; T1–T6 dispatchable). Terrain = spec 2. Was: the engine only knows enclosed dungeon rooms. Open: moon key +
   sky ambient vs. per-room probe boxes in open-sky rooms; ground/terrain materials (grass, gravel, dirt) instead of stone
   floors; open-sky room edges as fence/hedge/treeline + horizon instead of 8.5 m walls; a sky, not fog-as-clear-colour;
   per-room materials (every room shares one stone palette); terrain elevation. Brainstorm → spec before the Wake's art pass.
