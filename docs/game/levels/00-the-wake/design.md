@@ -2,6 +2,11 @@
 
 **Date:** 2026-09-10 · **Vision:** [../../vision.md](../../vision.md) §6.1, §10 · **Tasks:** [tasks.md](tasks.md)
 
+> **Moved later (2026-09-24,** [new game flow](../../../superpowers/specs/2026-09-24-new-game-flow-design.md)**):** no longer
+> the first level or the cold open. Reached when the train crashes back to earth; gains cultists
+> and a new monster when it resumes. The pull-back moves to the end of Night Train. The text
+> below is the original first-level design.
+
 The demo level and the cold open. The first thing anyone plays. It has to sell
 the shooting and the bodies in 5–8 minutes, then hand over to the pull-back.
 

@@ -4,6 +4,13 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## New game flow restructure — design approved 2026-09-24
+
+[Spec](docs/superpowers/specs/2026-09-24-new-game-flow-design.md): intro → menu → **the void** (hub, unlit, one portal) → **Night Train first**; the Wake moves later (train crash).
+- [x] 1 Design + doc updates (vision §6.1/§10.3/§10.4, Night Train, Wake).
+- [ ] 2 **Next:** the void + portal spec (render-to-texture view, portal → `?level=`, menu New game starts here).
+- [ ] 3 Train carriage kit (Blender, windows with scrolling scenery, sway) · 4 Night Train first slice (carriages 1, 3, 5, 8).
+
 ## Wake level pipeline — Plan 1 in flight — 2026-09-23
 
 **Hand-off:** [2026-09-24 wake + outdoor](docs/dev-notes/2026-09-24-wake-outdoor-handoff.md). Merged to `main` 2026-09-24 (99669277). [Plan 1](docs/superpowers/plans/2026-09-11-wake-1-level-format.md) · [spec](docs/superpowers/specs/2026-09-23-level-format-design.md) · [Wake tasks](docs/game/levels/00-the-wake/tasks.md).
