@@ -2,11 +2,11 @@
 //
 // The Esc menu overlay. Esc already releases pointer lock (the browser does that); this
 // shows a panel whenever the pointer is free after the first lock: Resume re-locks,
-// New game lists LEVEL_CHOICES and reloads into one. Decisions live in game-menu.ts.
+// New game reloads into the Void, Levels (dev) lists LEVEL_CHOICES. Decisions live in game-menu.ts.
 //
 // The game does NOT pause behind the menu (there is no pause in the sim yet).
 
-import { LEVEL_CHOICES, levelUrl, shouldShowMenu } from './game-menu';
+import { LEVEL_CHOICES, NEW_GAME_LEVEL, levelUrl, shouldShowMenu } from './game-menu';
 
 const CSS = `
 #menu { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
@@ -55,13 +55,14 @@ export function mountGameMenu(canvas: HTMLElement, currentLevel: string): void {
     panel.replaceChildren(
       Object.assign(document.createElement('div'), { className: 'menu-title', textContent: 'PAUSED' }),
       button('Resume', resume),
-      button('New game', showLevels),
+      button('New game', () => location.assign(levelUrl(location.href, NEW_GAME_LEVEL))),
+      button('Levels (dev)', showLevels),
       note,
     );
   };
   const showLevels = (): void => {
     panel.replaceChildren(
-      Object.assign(document.createElement('div'), { className: 'menu-title', textContent: 'NEW GAME' }),
+      Object.assign(document.createElement('div'), { className: 'menu-title', textContent: 'LEVELS (DEV)' }),
       ...LEVEL_CHOICES.map(c => button(c.label, () => location.assign(levelUrl(location.href, c.id)), c.id === currentLevel)),
       Object.assign(document.createElement('div'), { className: 'menu-sub', textContent: 'starts the level fresh (reloads the page)' }),
       button('Back', showMain),

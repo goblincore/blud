@@ -1,15 +1,20 @@
 // src/lab/sdf-zombie/webgpu/game-menu.ts
 //
-// The Esc menu's decisions, as pure functions: which levels "New game" offers, the URL
+// The Esc menu's decisions, as pure functions: where New game starts, which levels the
+// dev picker offers, the URL
 // that starts one, and when the menu shows. Starting a level is a page reload with
 // ?level= (the engine cannot swap levels live yet). Pure: no DOM, no three.js; the
 // overlay itself is game-menu-dom.ts.
 
 export interface LevelChoice { id: string; label: string }
 
-/** `ring` is the testbed (no ?level param); every other id is public/assets/levels/<id>.level.json. */
+/** New game starts here (new game flow spec 2026-09-24): the hub, unlit. */
+export const NEW_GAME_LEVEL = 'the-void';
+
+/** The dev level picker. `ring` is the testbed (no ?level param); every other id is public/assets/levels/<id>.level.json. */
 export const LEVEL_CHOICES: readonly LevelChoice[] = [
   { id: 'ring', label: 'Ring (testbed)' },
+  { id: 'the-void', label: 'The Void' },
   { id: 'the-wake', label: 'The Wake (WIP)' },
 ];
 

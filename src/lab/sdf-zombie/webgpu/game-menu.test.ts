@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { LEVEL_CHOICES, levelUrl, shouldShowMenu } from './game-menu';
+import { LEVEL_CHOICES, NEW_GAME_LEVEL, levelUrl, shouldShowMenu } from './game-menu';
 
 describe('game menu', () => {
-  it('offers the ring testbed and the Wake', () => {
-    expect(LEVEL_CHOICES.map(c => c.id)).toEqual(['ring', 'the-wake']);
+  it('New game starts in the Void; the dev picker lists every level', () => {
+    expect(NEW_GAME_LEVEL).toBe('the-void');
+    expect(LEVEL_CHOICES.map(c => c.id)).toEqual(['ring', 'the-void', 'the-wake']);
   });
 
   it('the ring drops ?level and ?state; other params survive', () => {
