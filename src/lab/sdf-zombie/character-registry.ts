@@ -315,11 +315,15 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   },
   // The bride — Blud's death knight: a pale, lace-dressed swordswoman.
   // docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md. Flesh
-  // only so far (Task 1): no shells, kit, sword or face sheet yet; the
-  // profile falls back to the zombie's until BRIDE_PROFILE lands.
+  // and the corpse-makeup face sheet so far (Tasks 1-2): no shells, kit or
+  // sword yet; the profile falls back to the zombie's until BRIDE_PROFILE
+  // lands. The face is GENERATED (scripts/make-bride-face.py) and worn at rgb
+  // multiply. mean is MEASURED off the PNG (the painter prints it): the lab
+  // re-measures off the decoded pixels, but the game uses this value as is,
+  // and bakedFace's fallback of 1 would darken her whole face ~28% there.
   bride: {
     name: 'bride', src: brideBlobSrc,
-    face: ZOMBIE_FLAT,
+    face: { ...bakedFace('bride-face.png'), mean: 0.721241 },
     profile: motionProfileFor('bride'),
   },
 

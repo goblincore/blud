@@ -406,11 +406,53 @@ face
   browRise   0
   headBlend  0.006
 
-# The generated sheet is OFF until the baked corpse-makeup sheet (Task 2).
-# With no sheet block the lab multiplies the shared default sheet over the
-# head, and on a prim face it paints greasepaint round the eyes (broodmother).
+# THE CORPSE MAKEUP (Task 2): a GENERATED sheet (scripts/make-bride-face.py —
+# no reference mesh, so blob:face-bake cannot run). Smoky black sockets,
+# bruised lids, winged liner, painted lashes, running mascara, grey-lilac
+# lips, sutures from the mouth corners, temple veins and SUNKEN CHEEKS as
+# paint (owner: the hollow look without touching the geometry).
+#
+# PROJECTION, solved from the built body (buildBody + headShape): hs is
+# normalised by the cranium (the fattest head prim: centre y 1.7223, semi
+# 0.07097 x 0.09118). projScale is a FREQUENCY — lower is bigger; 0.40 makes
+# one sheet span 2.5 head units (0.177 m across, 0.228 m down), brow to chin
+# and cheek to cheek. The painter centres its drawing on hs (0, -0.5),
+# mid-face (eyes at hs.y -0.247, mouth at -0.955); uv.y = hs.y*scale +
+# centre, and the drawing's centre sits at uv 0.5, so centre = 0.5 +
+# 0.5*0.40 = 0.70. The painter's constants MUST match these four numbers.
+#
+# BLEND: decal 0 (multiply) with blendLuma 0 (rgb multiply, mode 1) — NOT the
+# house default blendLuma 1. The luma default exists because a SKIN-TONED
+# bake times skin-toned flesh compounds the hue (the "over-saturated face"
+# owner note). This sheet's base is a NEUTRAL grey, so rgb multiply adds no
+# hue there, and the makeup's hues (bruise red, violet hollow, blue veins,
+# lilac lips) are the point — luma would flatten them all to grey. The sheet
+# carries a grey base under the makeup on purpose: the shader divides by the
+# mean of every covered texel, so ink with nothing around it would be its
+# own mean and multiply by ~1 (the painter's header has the arithmetic).
+#
+# PAINTED prims IGNORE the sheet (paint-char runs after the face pass): the
+# sclera, iris, socket ovals and lips keep their color=. So the smoke is
+# painted on the skin AROUND them — lid, brow valley, under-eye below hs
+# -0.37 — which a banded diagnostic sheet located (NOTES.md, Task 2).
+#
+# Her eyes do not glow (eyeGlowCut 0.99 / eyeGlowAmp 0 — the sheet's base is
+# a bright grey, and an ungated sheet glows wherever it is bright).
 sheet
-  enabled 0
+  image       bride-face.png
+  decal       0
+  blendLuma   0
+  projScaleX  0.40
+  projScaleY  0.40
+  projCentreX 0.50
+  projCentreY 0.70
+  eyeGlowCut  0.99
+  eyeGlowAmp  0
+  # Luminance relief at ~a fifth of the 1.4 default: at 1.4, and still at
+  # 0.6, every thin ink line (the mascara runs, the sutures) embossed as a
+  # groove with a lit rim — the stitches read WHITE in the 3/4. The broad
+  # hollows and sockets keep a trace of sink at 0.3.
+  texRelief   0.3
 
 # BLUE PORCELAIN: a cold, slightly blue pale (linear 0.62 0.64 0.70) — not
 # the schoolgirl's warm skin, not the zombie's grey-green: a body kept too

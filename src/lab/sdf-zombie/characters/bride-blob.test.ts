@@ -7,7 +7,9 @@
 import { describe, it, expect } from 'vitest';
 import src from './bride.blob?raw';
 import { parseBlob } from '../blob-parse';
-import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node (strand-wiring.test.ts)
+import { readFileSync } from 'node:fs';
+import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { characterEntry } from '../character-registry';
 import { MAX_PRIMS, sdBody } from '../validate';
@@ -66,10 +68,41 @@ describe('bride — build', () => {
     expect(noseTip).toBeGreaterThan(cranium.a[2] + cranium.radius * cranium.scale[2]);
   });
 
-  it('has no typo in its face, sheet or palette parameter names; sheet off', () => {
+  it('has no typo in its face, sheet or palette parameter names', () => {
     expect(() => compilePalette(doc)).not.toThrow();
-    // Flesh only (Task 1): the baked face sheet arrives in Task 2.
-    expect(compileSheet(doc)?.enabled).toBe(0);
+    expect(() => compileSheet(doc)).not.toThrow();
+  });
+
+  it('wears the corpse-makeup sheet at rgb multiply, eyes unlit (Task 2)', () => {
+    const sheet = compileSheet(doc)!;
+    expect(sheet.enabled).toBe(1);
+    expect(compileSheetImage(doc)).toBe('bride-face.png');
+    // MULTIPLY with blendLuma 0: the sheet's base is neutral grey, and the
+    // makeup's hues (bruise, violet hollows, blue veins) are the point.
+    expect(sheet.decal).toBe(0);
+    expect(sheet.blendLuma).toBe(0);
+    // Her eyes do not glow; the sheet's bright grey base must not either.
+    expect(sheet.eyeGlowAmp).toBe(0);
+    expect(sheet.eyeGlowCut).toBeGreaterThanOrEqual(0.99);
+    // The registry declares the MEASURED mean (the game does not measure;
+    // bakedFace's fallback 1 would darken her face).
+    const face = characterEntry('bride').face;
+    expect(face.url).toBe('/assets/lab/faces/bride-face.png');
+    expect(face.mean).toBeGreaterThan(0.6);
+    expect(face.mean).toBeLessThan(0.85);
+  });
+
+  it('paints with the SAME projection the sheet block declares', () => {
+    // make-bride-face.py places every stroke through these four numbers; if
+    // the .blob moves the projection without rerunning the painter, the
+    // liner lands off the lids and the sutures off the mouth corners.
+    const py = readFileSync('scripts/make-bride-face.py', 'utf8');
+    const num = (k: string) => Number(new RegExp(`^${k} = ([0-9.]+)`, 'm').exec(py)?.[1]);
+    const sheet = compileSheet(doc)!;
+    expect(num('PROJ_SCALE_X')).toBe(sheet.projScaleX);
+    expect(num('PROJ_SCALE_Y')).toBe(sheet.projScaleY);
+    expect(num('PROJ_CENTRE_X')).toBe(sheet.projCentreX);
+    expect(num('PROJ_CENTRE_Y')).toBe(sheet.projCentreY);
   });
 
   it('fits the 128 flesh+bone prim budget with room for cloth and hair', () => {

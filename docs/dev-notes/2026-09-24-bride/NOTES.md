@@ -163,3 +163,87 @@ were re-shot after this pass.
     bodice will frame it.
   - Now that it renders right side out, the throat mark reads as a cross with a drip rather
     than a teardrop.
+
+## Task 2: the corpse-makeup face sheet (same day)
+
+Painter: `scripts/make-bride-face.py` (PIL, seeded `random.Random(24)`, byte-identical on
+rerun) → `public/assets/lab/faces/bride-face.png`. Worn by the `.blob`'s `sheet` block;
+the registry's `face` declares the measured mean. Pins in `bride-blob.test.ts`, including
+one that the painter's four projection constants equal the sheet block's.
+
+- **Projection, solved from the built body, not guessed.** `headShape()` normalises by
+  the cranium (centre y 1.7223, semi 0.07097 × 0.09118). The prim positions converted to
+  head-space: iris (±0.479, −0.247), lash line ≈ −0.21, mouth −0.955 with corners at
+  ±0.275, cheekbone (0.747, −0.483). `projScale 0.40/0.40`, centre `0.50/0.70` (hs −0.5,
+  mid-face, lands at uv 0.5).
+- **Checked with a banded diagnostic sheet** (coloured bands at known hs, vertical lines at
+  the iris and mouth-corner x; `face-sheet-diag-bands.png`). The lines hit the irises and the
+  mouth corners, the cyan/magenta bands hit the lips, and the red band hits the lash line.
+- **Painted prims ignore the sheet.** The same diagnostic showed that the sclera, iris,
+  socket ovals and lips (all `color=`) are overwritten after the face pass
+  (`paint-char.wgsl`), so the green band vanished across the eyeball. The sclera prim also
+  covers down to hs ≈ −0.37, lower than its prim radius suggests. So the smoke is painted on
+  the skin AROUND those prims: the lid, the under-eye below −0.37 and the brow valley. The
+  `lips()` layer only greys the margin round the lips.
+- **Blend: `decal 0` with `blendLuma 0` (rgb multiply), NOT the house luma default.**
+  - There is no true overlay mode in `face.wgsl.ts`. The modes are 1 rgb multiply,
+    2 replace, and 3 luma multiply, the "overlay-style" default the owner preferred.
+  - Luma mode exists because a skin-toned bake times skin-toned flesh compounds hue. This
+    sheet's base is neutral grey, so rgb multiply adds no hue to the skin. The makeup's hues
+    are the point (bruise red, violet hollows, blue veins), and luma would flatten them to
+    grey.
+  - Dark goes dark enough under multiply, but only because of the base. The shader divides
+    by the mean luma of every texel with alpha ≥ 8. Ink with nothing around it (the ogre's
+    alpha-0 layout) is its own mean and multiplies by ~1, so it is invisible.
+  - The sheet therefore lays a neutral grey (206) base over the face at alpha 1. Mean
+    0.7212: the base multiplies by 1.12 (a faint pale powder) and the ink by 0.045.
+- **The game does not measure the mean** (`game-vfx-leaves.ts faceFor` uses the registry
+  value). So the registry declares `mean: 0.721241`, as the soldier's entry does, instead of
+  `bakedFace`'s fallback 1, which would darken her face ~28% in game. The ogre, cyberdemon
+  and gargoyle decals carry mean 1 in the game and a dark-only measured mean in the lab. That
+  is worth a look separately.
+- **`texRelief 0.3`.** The luminance relief at the 1.4 default (and still at 0.6) embossed
+  every thin ink line: the stitches read WHITE in the 3/4.
+
+### Numbers (close-up, `face-sheet-luma-boxes.png`: eye boxes include sclera, iris, lid and socket prim)
+
+| crop (mean sRGB luma) | sheet on | sheet off | Δ |
+| --- | --- | --- | --- |
+| socket, viewer-left / right | 0.194 / 0.288 | 0.339 / 0.461 | −0.145 / −0.173 |
+| cheek, viewer-left / right | 0.537 / 0.739 | 0.606 / 0.787 | −0.069 / −0.048 |
+| **cheek − socket** | **0.343 / 0.451** | 0.267 / 0.326 | |
+
+The task's bar is socket ≥ 0.15 darker than cheek. It passes with the sheet on (0.34 / 0.45).
+The prims alone already passed it, so the sheet's own contribution is the Δ column:
+≈ 0.15–0.17 darker at the eyes.
+
+### Frames
+
+Shot on private ports with `LAB_TMP=.lab-tmp LAB_VITE_PORT=5271 LAB_CDP_PORT=9271`, cultist
+sanity shot first. The probe was
+`(window.__sdfLab.uniforms.lightDir.value.set(0.35,0.6,0.72), window.__sdfLab.setSdfScale(1), 1)`.
+`setSdfScale(1)` renders the SDF layer at full resolution. The default scale made the lashes
+a smear.
+Close-ups: `BLOB_TARGET_Y=1.675 BLOB_DIST=0.26 BLOB_PITCH=0`.
+
+![close](face-sheet-close.png) ![close 3/4](face-sheet-close-34.png) ![sheet off](face-sheet-off-close.png)
+![1 m 3/4](face-sheet-1m-34.png) ![3 m](face-sheet-3m.png) ![3 m head, 6x nearest](face-sheet-3m-head-6x.png)
+![diagnostic bands](face-sheet-diag-bands.png)
+
+### Honest read
+
+- **Close-up:** a pale doll with heavy black liner and lashes on the hooded lids, smoke on
+  the lid and under the eye, two mascara tear-tracks, and a stitched Glasgow smile from both
+  mouth corners. The hollows are a soft lilac shadow under the cheekbones. They are there
+  but quiet: shading carries more of the hollow than the paint does.
+- **3/4:** the suture reads, and fades out toward the ear with the facing fade. The runs
+  read. On the near eye the liner's wing is lost where the surface turns away: the outer
+  corner is the red socket prim, which the sheet cannot paint.
+- **3 m:** she reads as dark-eyed, and the eyes are the darkest thing on the head. Most of
+  that darkness is the socket prims plus the under-eye smoke. The mascara runs are at best
+  a one-pixel darker trace, even with the ~7 mm smudge under each streak. At 3 m one lab
+  pixel is ~9 mm of face, so a painted tear that thin cannot carry at that range.
+- **Concerns for the owner:** the eye makeup is capped by the Task 1 painted socket ovals
+  (dark red `6a2632`), which dominate the outer corners as red wedges and ignore the sheet.
+  If the smoky eye should be blacker, the lever is that prim's colour (Task 1 found `4a1a26`
+  merged the eye into a goggle), or unpainting it and letting the sheet own the socket.
