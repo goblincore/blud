@@ -71,5 +71,19 @@ describe('cultist: soft target', () => {
       expect((cz() - z0) * dz).toBeGreaterThan(0.5);
     }
   });
+
+  it('death drops the hood: when=alive prims go dead, the hood-down roll appears', () => {
+    const { actor } = cultist();
+    const hood = () => actor.posed().prims.filter(p => p.when === 'alive');
+    const down = () => actor.posed().prims.filter(p => p.when === 'dead');
+    expect(hood().length).toBe(2);
+    expect(down().length).toBe(2);
+    actor.step(1 / 60);
+    expect(hood().every(p => !p.dead) && down().every(p => p.dead)).toBe(true);
+    shootSkirt(actor);
+    for (let i = 0; i < 5; i++) actor.step(1 / 60);
+    expect(hood().every(p => p.dead)).toBe(true);
+    expect(down().every(p => !p.dead)).toBe(true);
+  });
 });
 

@@ -119,6 +119,10 @@ export interface BlobPart {
    *  For garments that hang off a bone past its joints (a floor-length robe
    *  on the pelvis would otherwise pin its hem to an ankle). */
   rigid: boolean;
+  /** `when=alive` / `when=dead`: this prim exists only while the character
+   *  lives, or only once it has died (a hood that falls back off the head).
+   *  Null = always. See PrimDef.when. */
+  when: 'alive' | 'dead' | null;
   /** The bare word `organ` (bones block only): soft viscera, not bone.
    *  Rides the same array and gates as bone; differs only in material. */
   organ: boolean;

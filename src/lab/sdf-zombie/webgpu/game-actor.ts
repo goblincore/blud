@@ -28,6 +28,7 @@ import {
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import { DEATH_THROW, deathThrowVelocities, launchPoints } from '../soft-death';
+import { applyDeathState, hasDeathState } from '../death-state';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal,
   type Wound, type WoundType,
@@ -632,6 +633,7 @@ export function createZombieActor(opts: {
   /** The killing hit's throw, applied on the first collapsed sub-step
    *  (soft-death.ts). Null once spent. */
   let softThrow: { dir: Vec3; kind: keyof typeof DEATH_THROW } | null = null;
+  let deathStateApplied = false;
   let soldierFatal = false;
   let propReleaseRequested = false;
 
@@ -1177,6 +1179,12 @@ export function createZombieActor(opts: {
       }
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
+      // LIFE-STATE PRIMS: the first collapsed sub-step swaps the body to its
+      // dead look (the cultist's hood drops off his head; death-state.ts).
+      if (f.collapsed && !deathStateApplied) {
+        deathStateApplied = true;
+        if (hasDeathState(current)) current = applyDeathState(current);
+      }
       if (softThrow && f.collapsed) {
         const hemI = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
         const vel = deathThrowVelocities(bound.rig.points, softThrow.dir, DEATH_THROW[softThrow.kind], hemI);

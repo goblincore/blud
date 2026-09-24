@@ -199,6 +199,15 @@ reads as cloth bulging, not skin through a tear. And measure the stride against 
 the zombie shamble put a knee 13.7 cm through the cultist's robe, which is why he has a `GLIDE`
 gait.
 
+### A different look once dead: `when=alive` / `when=dead` (added 2026-09-24)
+
+A prim tagged `when=alive` exists only while the character lives; `when=dead` starts hidden and
+appears when the body collapses (the game actor swaps the sets on the first collapsed step,
+`death-state.ts`). The cultist's hood is `when=alive` and a bunched roll behind his neck is
+`when=dead`, so a kill drops the hood and bares his head. The swap uses the same `dead` switch
+severing does, so no prim moves and wounds stay put. The lab does not apply it: check the dead
+look by temporarily swapping the tags and running `blob:shot`.
+
 ## Colour is the biggest lever you have
 
 Before the `palette` block existed, every `.blob` character wore one global

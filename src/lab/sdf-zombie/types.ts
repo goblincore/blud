@@ -279,6 +279,12 @@ export interface PrimDef {
    */
   rigid?: boolean;
   /**
+   * Life-state gate (cultist hood, 2026-09-24). 'alive': present only until
+   * the character dies; 'dead': hidden (dead) until it dies, then shown. The
+   * swap is death-state.ts `applyDeathState`. Absent = always present.
+   */
+  when?: 'alive' | 'dead';
+  /**
    * When set, this primitive is a thin clipped SHELL (cloth, not mass): the
    * closed base capsule's field is thinned to `abs(d) - thickness`, clipped
    * against `clipNormal`/`clipOffset`, with the cut edge rounded by `rim`.
@@ -422,6 +428,8 @@ export interface Primitive {
   core?: boolean;
   /** See PrimDef.rigid. */
   rigid?: boolean;
+  /** See PrimDef.when. */
+  when?: 'alive' | 'dead';
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */
   shell?: ShellParams;
   /** See PrimDef.box. Carried through mirror, resolve and the rig untouched. */
