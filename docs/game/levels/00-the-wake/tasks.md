@@ -82,7 +82,11 @@ The level can't be tested without these. Build them small.
 
 - [ ] **W-A1 Art kit designs.** Gates, headstones, mausoleum, fence, crypt,
   funeral-home parlour, pews, flowers, organ, coffin. Sketches/reference first.
-  Rough placeholders come first, in the `.blend` (Plan 1 Task 5d).
+  Rough placeholders come first, in the `.blend` (Plan 1 Task 5d; done 2026-09-23).
+  **Owner notes on the placeholders (2026-09-23):** the bell tower is unimaginative, needs a
+  real design; more irregular shapes: crumbling walls, a sense of decadent decay; the iron
+  gates should be visually impressive; add a gothic castle element. Simplified forms are
+  fine for a first pass.
 - [!] **W-A2 Art kit models.** *Blocked on:* P-4 (pipeline verdict).
 - [!] **W-A3 Art pass on the blockout.** *Deps:* W-A2, W-B3.
 - [ ] **W-A4 Starting melee model** once W-D3 is decided.
