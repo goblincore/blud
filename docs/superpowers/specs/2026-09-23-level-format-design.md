@@ -62,6 +62,7 @@ Top level. Every key listed; keys marked *opt* may be omitted.
 | `completeOn` | string *opt* | Event that completes the level; default `"pickup.cd"` |
 | `palette` | object *opt* | `wall`, `floor`, `ceil`, `tunnel`, `solid`: RGB 0–1 |
 | `states` | string[] *opt* | Named variants of the level (§7). Default `["default"]` |
+| `skyline` | skyline preset name *opt* | Backdrop beyond open-sky rooms (Outdoor v1) |
 | `rooms` | Room[] | At least one |
 | `tunnels` | Tunnel[] *opt* | Corridors joining two rooms |
 | `stairs` | Stair[] *opt* | Ramps between floor heights |
@@ -84,7 +85,7 @@ only in those states (§7).
 
 | Element | Fields |
 | --- | --- |
-| **Room** | `id` (int ≥ 1, unique), `name` (unique), `min` `[x,z]`, `max` `[x,z]`, `floor` (y, *opt*, default 0), `height` (ceiling above the floor), `sky` (string *opt*: open-air room showing this view instead of a ceiling) |
+| **Room** | `id` (int ≥ 1, unique), `name` (unique), `min` `[x,z]`, `max` `[x,z]`, `floor` (y, *opt*, default 0), `height` (ceiling above the floor), `sky` (sky preset name *opt*: open-air room showing this sky instead of a ceiling), `ground` (ground preset, default `"stone"`), `paths` (`{ground, min [x,z], max [x,z]}`[] *opt*: strips of another ground on the floor), `edge` (`{style, height}` *opt*, open-sky rooms only: the visible edge) |
 | **Tunnel** | `a`, `b` (room ids), `min` `[x,z]`, `max` `[x,z]`, `height`. Its floor is the rooms' floor (§5) |
 | **Stair** | `id`, `min` `[x,y,z]`, `max` `[x,y,z]`, `up`: `"+x"`, `"-x"`, `"+z"`, `"-z"`. A ramp rising from `min.y` to `max.y` toward `up` |
 | **Box** (furniture, solids) | `min` `[x,y,z]`, `max` `[x,y,z]` |
@@ -151,6 +152,10 @@ prefixed with the level id.
   are inside a room (not a corridor).
 - **States:** every `states` entry on an element appears in the top-level
   `states`.
+- **Outdoor (Outdoor v1 §4.2):** `sky`, `ground`, `edge.style`, `skyline` and every
+  path's `ground` name a known preset (Outdoor v1 §4.1). `edge` only on a room with
+  `sky`; `0.3 ≤ edge.height ≤ room height`. Every path lies inside its room's
+  rectangle and has positive extent.
 - **Unknown keys** anywhere are errors (typo protection).
 
 ## 6. Generation rules
@@ -193,6 +198,15 @@ walls span z, axis-2 walls span x).
 Enemy navigation is built over room and tunnel rectangles with **gates open**,
 from boxes that block walking height. Its grid is 0.4 m with 0.34 m actor
 inflation, hence the 1.4 m minimum corridor width.
+
+### 6.5 Outdoor (Outdoor v1 §5)
+
+Open-sky rooms (`sky`), grounds, paths, edges and skylines generate by the rules
+in [Outdoor v1 §5](2026-09-23-outdoor-v1-design.md): display walls of an edged
+room stop at `edge.height` while collision still reaches `f + h`; the floor
+plane takes the room's `ground` and each path is a floor quad a few millimetres
+above it; a `skyline` draws silhouette bands beyond the level's bounds. The
+TypeScript and Rust generators must agree there as here.
 
 ## 7. States
 

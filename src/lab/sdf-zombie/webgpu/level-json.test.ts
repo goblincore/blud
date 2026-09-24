@@ -79,3 +79,48 @@ describe('parseLevelJson: rejections', () => {
     expect(() => parseLevelJson(f)).toThrow(/start.*spawn z1/s);
   });
 });
+
+describe('parseLevelJson: outdoor keys (Outdoor v1 spec §4)', () => {
+  it('reads the open-sky fixture', () => {
+    const L = parseLevelJson(fixture('open-sky'));
+    expect(L.skyline).toBe('treeline');
+    const [yard, hall] = L.rooms;
+    expect(yard).toMatchObject({ sky: 'night', ground: 'grass', edge: { style: 'wall', height: 2.2 } });
+    expect(yard!.paths).toEqual([{ ground: 'gravel', minX: 5, maxX: 7, minZ: 0, maxZ: 10 }]);
+    expect(hall).toMatchObject({ sky: null, ground: 'flagstone', edge: null, paths: [] });
+    expect(L.requires).toEqual(['open-sky']);
+  });
+
+  it('defaults: ground stone, no paths, no edge, no skyline', () => {
+    const L = parseLevelJson(fixture('two-rooms'));
+    expect(L.skyline).toBeNull();
+    for (const r of L.rooms) expect(r).toMatchObject({ ground: 'stone', paths: [], edge: null });
+  });
+
+  const bad = (mutate: (j: any) => void): string => {
+    const j = fixture('open-sky');
+    mutate(j);
+    try { parseLevelJson(j); return ''; } catch (e) { return (e as Error).message; }
+  };
+
+  it('rejects unknown preset names', () => {
+    expect(bad(j => { j.rooms[0].sky = 'noon'; })).toMatch(/rooms\[0\]\.sky: unknown sky noon/);
+    expect(bad(j => { j.rooms[0].ground = 'lava'; })).toMatch(/rooms\[0\]\.ground: unknown ground lava/);
+    expect(bad(j => { j.rooms[0].paths[0].ground = 'lava'; })).toMatch(/rooms\[0\]\.paths\[0\]\.ground: unknown ground lava/);
+    expect(bad(j => { j.rooms[0].edge.style = 'moat'; })).toMatch(/rooms\[0\]\.edge\.style: unknown edge style moat/);
+    expect(bad(j => { j.skyline = 'mountains'; })).toMatch(/skyline: unknown skyline mountains/);
+  });
+
+  it('rejects an edge without sky, and an edge out of range', () => {
+    expect(bad(j => { j.rooms[1].edge = { style: 'wall', height: 2 }; })).toMatch(/rooms\[1\]\.edge: only open-sky rooms have an edge/);
+    expect(bad(j => { j.rooms[0].edge.height = 0.1; })).toMatch(/rooms\[0\]\.edge\.height: between 0\.3 and the room height/);
+    expect(bad(j => { j.rooms[0].edge.height = 7; })).toMatch(/rooms\[0\]\.edge\.height: between 0\.3 and the room height/);
+  });
+
+  it('rejects a path outside its room or with no extent, and unknown keys', () => {
+    expect(bad(j => { j.rooms[0].paths[0].max = [13, 10]; })).toMatch(/rooms\[0\]\.paths\[0\]: must lie inside its room/);
+    expect(bad(j => { j.rooms[0].paths[0].max = [5, 10]; })).toMatch(/rooms\[0\]\.paths\[0\]: empty path/);
+    expect(bad(j => { j.rooms[0].paths[0].width = 2; })).toMatch(/rooms\[0\]\.paths\[0\]: unknown key width/);
+    expect(bad(j => { j.rooms[0].edge.colour = 'red'; })).toMatch(/rooms\[0\]\.edge: unknown key colour/);
+  });
+});

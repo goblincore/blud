@@ -16,6 +16,7 @@ import {
   litWallAlbedo, type Aabb, type BoxSpec, type FurnitureDef, type PlaneSpec,
   type RoomDef, type TunnelDef,
 } from './game-level';
+import type { EdgeStyle, GroundName, SkyName, SkylineName } from './outdoor-presets';
 
 export const LEVEL_WALL_T = 0.3;
 /** Spec §3: validation and opening-detection tolerance, metres. */
@@ -39,7 +40,19 @@ export type WallSide = 'n' | 's' | 'e' | 'w';
 export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd';
 export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd'];
 
-export interface LevelRoom extends RoomDef { floor: number; sky: string | null }
+/** Outdoor v1 §4.1: a strip of another ground laid over a room's floor. */
+export interface PathDef { ground: GroundName; minX: number; maxX: number; minZ: number; maxZ: number }
+/** Outdoor v1 §4.1: an open-sky room's visible edge. */
+export interface EdgeDef { style: EdgeStyle; height: number }
+
+export interface LevelRoom extends RoomDef {
+  floor: number;
+  /** Sky preset for an open-sky room, else null (spec §4.1; Outdoor v1 §4.1). */
+  sky: SkyName | null;
+  ground: GroundName;
+  paths: PathDef[];
+  edge: EdgeDef | null;
+}
 export interface LevelTunnel extends TunnelDef { floor: number }
 export interface StairDef { id: string; up: '+x' | '-x' | '+z' | '-z'; box: Aabb }
 export interface WindowDef { id: string; view: string; room: number; side: WallSide; box: Aabb }
@@ -63,6 +76,8 @@ export interface LevelDef {
   states: string[];
   /** Derived by the parser (spec §8). */
   requires: Capability[];
+  /** Outdoor v1 §4.1: backdrop preset beyond open-sky rooms' edges, or null. */
+  skyline: SkylineName | null;
   rooms: LevelRoom[];
   tunnels: LevelTunnel[];
   stairs: StairDef[];

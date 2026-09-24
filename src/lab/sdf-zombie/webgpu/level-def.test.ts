@@ -15,12 +15,12 @@ import { stepPlayer, type PlayerState } from './game-player';
 function twoRooms(): LevelDef {
   const P = DEFAULT_PALETTE;
   const room = (id: number, name: string, minX: number, maxX: number): LevelRoom => ({
-    id, name, minX, maxX, minZ: 0, maxZ: 8, height: 3, floor: 0, sky: null,
+    id, name, minX, maxX, minZ: 0, maxZ: 8, height: 3, floor: 0, sky: null, ground: 'stone', paths: [], edge: null,
     wallColor: P.wall, floorColor: P.floor, ceilColor: P.ceil, accents: [], zombies: 0, soldiers: 0,
   });
   return {
     id: 'two', name: 'Two rooms', ammo: 'infinite', palette: P, loadout: [], completeOn: 'pickup.cd',
-    state: 'default', states: ['default'], requires: [],
+    state: 'default', states: ['default'], requires: [], skyline: null,
     rooms: [room(1, 'west', 0, 8), room(2, 'east', 9.6, 17.6)],
     tunnels: [{ name: 'tunnel-1-2', a: 1, b: 2, minX: 8, maxX: 9.6, minZ: 3.2, maxZ: 4.8,
       height: 2.2, color: P.tunnel, axis: 'x', floor: 0 }],
@@ -104,7 +104,7 @@ describe('layoutSurfaces', () => {
   it('gives each room a floor and a ceiling, and a sky room no ceiling', () => {
     const L = twoRooms();
     expect(layoutSurfaces(L).planes.filter(p => p.axis === 1 && p.facing === -1)).toHaveLength(2);
-    L.rooms[1]!.sky = 'stars';
+    L.rooms[1]!.sky = 'night';
     expect(layoutSurfaces(L).planes.filter(p => p.axis === 1 && p.facing === -1)).toHaveLength(1);
   });
 

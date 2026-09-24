@@ -1,0 +1,14 @@
+{
+  "version": 1, "id": "open-sky", "name": "Open sky",
+  "skyline": "treeline",
+  "rooms": [
+    { "id": 1, "name": "yard", "min": [0, 0], "max": [12, 10], "height": 6, "sky": "night",
+      "ground": "grass",
+      "paths": [{ "ground": "gravel", "min": [5, 0], "max": [7, 10] }],
+      "edge": { "style": "wall", "height": 2.2 } },
+    { "id": 2, "name": "hall", "min": [12.6, 3], "max": [20.6, 9], "height": 3, "ground": "flagstone" }
+  ],
+  "tunnels": [{ "a": 1, "b": 2, "min": [12, 5], "max": [12.6, 7], "height": 2.6 }],
+  "start": { "pos": [6, 0, 8], "yaw": 0 },
+  "pickups": [{ "id": "cd", "item": "cd", "pos": [16, 1, 6] }]
+}

@@ -9,10 +9,14 @@ import type { Vec3 } from '../types';
 import type { Aabb, FurnitureDef } from './game-level';
 import {
   DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type GateDef,
-  type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
-  type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
+  type EdgeDef, type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
+  type PathDef, type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
   type WallSide, type WindowDef,
 } from './level-def';
+import {
+  EDGE_STYLES, GROUND_NAMES, SKYLINE_NAMES, SKY_NAMES,
+  type EdgeStyle, type GroundName, type SkyName, type SkylineName,
+} from './outdoor-presets';
 
 type Json = Record<string, unknown>;
 
@@ -21,11 +25,13 @@ const MAX_STAIR_RISE = 3;
 
 /** Allowed keys per element (spec §4). `states` is allowed on every element. */
 const KEYS: Record<string, readonly string[]> = {
-  top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'rooms', 'tunnels',
+  top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
     'stairs', 'furniture', 'solids', 'gates', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
     'pickups', 'bells'],
   palette: ['wall', 'floor', 'ceil', 'tunnel', 'solid'],
-  room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'states'],
+  room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'states'],
+  path: ['ground', 'min', 'max'],
+  edge: ['style', 'height'],
   tunnel: ['a', 'b', 'min', 'max', 'height', 'states'],
   stair: ['id', 'up', 'min', 'max', 'states'],
   box: ['min', 'max', 'states'],
@@ -91,6 +97,17 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
   const loadout = j.loadout === undefined ? [] : (Array.isArray(j.loadout) ? j.loadout : []).map((w, i) => str(w, `loadout[${i}]`));
   const completeOn = typeof j.completeOn === 'string' && j.completeOn ? j.completeOn : 'pickup.cd';
 
+  const oneOf = <T extends string>(v: string, known: readonly T[], what: string, where: string): v is T => {
+    if ((known as readonly string[]).includes(v)) return true;
+    errors.push(`${where}: unknown ${what} ${v} (known: ${known.join(', ')})`);
+    return false;
+  };
+  let skyline: SkylineName | null = null;
+  if (j.skyline !== undefined) {
+    const s = str(j.skyline, 'skyline');
+    if (oneOf(s, SKYLINE_NAMES, 'skyline', 'skyline')) skyline = s;
+  }
+
   const pj = (j.palette ?? {}) as Json;
   keys(pj, 'palette', 'palette');
   const colour = (k: keyof LevelPalette): Vec3 =>
@@ -125,12 +142,44 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     const floor = o.floor === undefined ? 0 : num(o.floor, `${where}.floor`);
     const height = num(o.height, `${where}.height`, 3);
     if (!(maxX! > minX! && maxZ! > minZ! && height > 0)) errors.push(`${where}: empty room`);
-    const sky = o.sky === undefined ? null : str(o.sky, `${where}.sky`);
+    let sky: SkyName | null = null;
+    if (o.sky !== undefined) {
+      const s = str(o.sky, `${where}.sky`);
+      if (oneOf(s, SKY_NAMES, 'sky', `${where}.sky`)) sky = s;
+    }
+    let ground: GroundName = 'stone';
+    if (o.ground !== undefined) {
+      const g = str(o.ground, `${where}.ground`);
+      if (oneOf(g, GROUND_NAMES, 'ground', `${where}.ground`)) ground = g;
+    }
+    const paths: PathDef[] = [];
+    list(o.paths, `${where}.paths`).forEach((p, k) => {
+      const pw = `${where}.paths[${k}]`;
+      keys(p, 'path', pw);
+      const g = str(p.ground, `${pw}.ground`, 'stone');
+      const [px0, pz0] = vec(p.min, 2, `${pw}.min`);
+      const [px1, pz1] = vec(p.max, 2, `${pw}.max`);
+      if (!(px1! > px0! && pz1! > pz0!)) { errors.push(`${pw}: empty path`); return; }
+      if (px0! < minX! - LEVEL_TOL || px1! > maxX! + LEVEL_TOL || pz0! < minZ! - LEVEL_TOL || pz1! > maxZ! + LEVEL_TOL) {
+        errors.push(`${pw}: must lie inside its room`);
+      }
+      if (oneOf(g, GROUND_NAMES, 'ground', `${pw}.ground`)) paths.push({ ground: g, minX: px0!, maxX: px1!, minZ: pz0!, maxZ: pz1! });
+    });
+    let edge: EdgeDef | null = null;
+    if (o.edge !== undefined) {
+      const ej = (typeof o.edge === 'object' && o.edge !== null ? o.edge : {}) as Json;
+      keys(ej, 'edge', `${where}.edge`);
+      const style = str(ej.style, `${where}.edge.style`, 'wall');
+      const eh = num(ej.height, `${where}.edge.height`, 2);
+      if (sky === null && o.sky === undefined) errors.push(`${where}.edge: only open-sky rooms have an edge`);
+      if (eh < 0.3 || eh > height + LEVEL_TOL) errors.push(`${where}.edge.height: between 0.3 and the room height`);
+      if (oneOf(style, EDGE_STYLES, 'edge style', `${where}.edge.style`)) edge = { style: style as EdgeStyle, height: eh };
+    }
     if (!keep) return;
     if (rooms.some(r => r.id === rid)) errors.push(`${where}.id: duplicate room id ${rid}`);
     if (rooms.some(r => r.name === rname)) errors.push(`${where}.name: duplicate room name ${rname}`);
     rooms.push({
-      id: rid, name: rname, minX: minX!, maxX: maxX!, minZ: minZ!, maxZ: maxZ!, floor, height, sky,
+      id: rid, name: rname, minX: minX!, maxX: maxX!, minZ: minZ!, maxZ: maxZ!, floor, height, sky, ground, paths, edge,
       wallColor: palette.wall, floorColor: palette.floor, ceilColor: palette.ceil,
       accents: [], zombies: 0, soldiers: 0,
     });
@@ -352,7 +401,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
   if (rooms.some(r => r.sky !== null)) requires.push('open-sky');
 
   return {
-    id, name, ammo, palette, loadout, completeOn, state, states, requires,
+    id, name, ammo, palette, loadout, completeOn, state, states, requires, skyline,
     rooms, tunnels, stairs, furniture, solids, gates, triggers, windows,
     playerStart, spawns, graves, pickups, bells,
   };
