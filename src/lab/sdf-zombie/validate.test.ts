@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, sdPrimitive, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, type Body } from './validate';
+import { validateBody, sdBody, sdPrimitive, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, BASE_PRIM_STRIDE, primStride, bodyPrimStride, type Body } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -36,6 +36,50 @@ describe('shader caps', () => {
 
   it('can hold a cast, not just the one zombie', () => {
     expect(MAX_PRIMS).toBeGreaterThanOrEqual(128);
+  });
+});
+
+// Per-body data-texture width (2026-09-24). MAX_PRIMS is the ceiling; a body's
+// texture is only as wide as its own total needs, so the shipped cast (all
+// <= 128 flesh + bone) keeps the 128-wide textures and their upload cost.
+describe('per-body data texture width', () => {
+  it('raises the ceiling to 256 without widening the base texture', () => {
+    expect(MAX_PRIMS).toBe(256);
+    expect(BASE_PRIM_STRIDE).toBe(128);
+  });
+
+  it('maps a prim total to 128, 192 or 256', () => {
+    expect(primStride(0)).toBe(128);
+    expect(primStride(21)).toBe(128);
+    expect(primStride(128)).toBe(128);
+    expect(primStride(129)).toBe(192);
+    expect(primStride(192)).toBe(192);
+    expect(primStride(193)).toBe(256);
+    expect(primStride(256)).toBe(256);
+    // Over the ceiling is a validateBody error; the width still clamps.
+    expect(primStride(400)).toBe(MAX_PRIMS);
+  });
+
+  it('keeps the cluster-bounds and wound columns inside the base width', () => {
+    // ROW_CLUSTER_* use columns up to 2 * MAX_CLUSTERS + BONE_SEG_MAX (44);
+    // the wound rows use MAX_WOUNDS (16). Both must fit the narrowest texture.
+    expect(2 * MAX_CLUSTERS + 1 + 32).toBeLessThanOrEqual(BASE_PRIM_STRIDE);
+  });
+
+  it('sizes a built body from flesh AND bone', () => {
+    const flesh = Array.from({ length: 100 }, () => ({}));
+    expect(bodyPrimStride({ prims: flesh })).toBe(128);
+    expect(bodyPrimStride({ prims: flesh, bonePrims: Array.from({ length: 28 }, () => ({})) })).toBe(128);
+    expect(bodyPrimStride({ prims: flesh, bonePrims: Array.from({ length: 29 }, () => ({})) })).toBe(192);
+  });
+
+  it('accepts a 200-prim body spread over clusters that each stay under 64', () => {
+    const limbs: LimbId[] = ['head', 'torso', 'armL', 'armR'];
+    const prims = limbs.flatMap((limb, k) =>
+      Array.from({ length: 50 }, (_, i) => prim(limb, [k * 0.01, 1.2 + i * 0.001, 0], 0.22)));
+    const errs = validateBody(assignClusters(prims), { silhouetteNoiseAmp: 0.01, stepMultiplier: 0.6 }).join(' ');
+    expect(errs).not.toMatch(/primitive count/i);
+    expect(errs).not.toMatch(/per-cluster shader ceiling/i);
   });
 });
 
@@ -101,8 +145,8 @@ describe('validateBody', () => {
   });
 
   it('counts bones AGAINST the shader ceiling, naming both counts', () => {
-    // Flesh alone fits; flesh + bones does not. The texture is MAX_PRIMS wide
-    // and the bone rows ride the SAME allocation past primCount, so the bound
+    // Flesh alone fits; flesh + bones does not. The texture is sized from the
+    // total and the bone rows ride the SAME allocation past primCount, so the bound
     // is on the total — a body that validates here but overflows the texture
     // would have its bones silently unread.
     const flesh = Array.from({ length: MAX_PRIMS - 2 }, (_, i) => prim('torso', [0, 1.2 + i * 0.001, 0], 0.22));

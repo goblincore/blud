@@ -137,7 +137,7 @@ import { createWarmBackgroundTracker } from './warm-background';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
-import { sdBody, smax } from '../validate';
+import { sdBody, smax, bodyPrimStride } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
   GRAPESHOT, SLUG, expired, spawnPellets, spawnSlug,
@@ -2942,26 +2942,36 @@ async function main() {
     // members visible while the crowd program compiles. Reserve the slot here
     // and hand the shared sink/records/slot to createZombieGpuView; attachAt()
     // below only marks the slot and stores the view.
-    let crowdAttach: { type: CrowdType; slot: number } | null = null;
-    if (ctx.crowd.on) {
-      const t = crowdTypeFor(ctx, name, room.id);
+    //
+    // Reserved from INSIDE createCharacterView's gpu callback (per-body data
+    // texture widths, 2026-09-24): the crowd type's atlas is sized to the
+    // first body's primStride, so the body must exist first. The callback runs
+    // after the build and before the view, which keeps the ordering above.
+    // A body wider than an existing type's atlas does not join it — it draws
+    // per-body, like a full type.
+    let crowdAttach = null as { type: CrowdType; slot: number } | null;
+    const crowdViewOptsFor = (built: BuildResult): GpuViewOpts => {
+      if (!ctx.crowd.on) return {};
+      const stride = bodyPrimStride(built);
+      const t = crowdTypeFor(ctx, name, room.id, stride);
+      if (t.atlas.stride < stride) {
+        console.warn(`[crowd] ${name}: body needs a ${stride}-wide atlas, type has ${t.atlas.stride}; drawing per-body`);
+        return {};
+      }
       const slot = t.reserveSlot();
-      if (slot < 0) console.warn('[crowd] type full', name);
-      else crowdAttach = { type: t, slot };
-    }
-    const crowdViewOpts: GpuViewOpts = crowdAttach
-      ? {
-          sink: crowdAttach.type.atlas.sink(crowdAttach.slot),
-          sinkTexture: crowdAttach.type.atlas.texture,
-          records: crowdAttach.type.records,
-          slot: crowdAttach.slot,
-        }
-      : {};
+      if (slot < 0) { console.warn('[crowd] type full', name); return {}; }
+      crowdAttach = { type: t, slot };
+      return {
+        sink: t.atlas.sink(slot),
+        sinkTexture: t.atlas.texture,
+        records: t.records,
+        slot,
+      };
+    };
     const viewGpuOpts: GpuViewOpts = {
       // The dynamic probe layer's storage node (P3/P4). Bound at material
       // creation like the tile binding — a storage node cannot be rebound.
       ...(ctx.probes.gather ? { probeDyn: { node: ctx.probes.gather.probeDynNode } } : {}),
-      ...crowdViewOpts,
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU
       // lazy-init submit conflict that rejects the WHOLE producer pass
@@ -3023,7 +3033,7 @@ async function main() {
       // the doc would have done (nothing today; an authored ratio from the
       // bones block, later).
       ...(ctx.render.boneRatioOverride !== null ? { boneRatio: ctx.render.boneRatioOverride } : {}),
-      gpu: viewGpuOpts,
+      gpu: (built) => ({ ...viewGpuOpts, ...crowdViewOptsFor(built) }),
     });
     const placed = character.body;
     const view = character.gpu;

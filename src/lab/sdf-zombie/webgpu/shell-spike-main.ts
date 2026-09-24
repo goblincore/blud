@@ -37,7 +37,7 @@ import { SHELL_TRACE } from './shell-spike.wgsl';
 import { createDataTexture } from './zombie-gpu';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { packBody } from '../pack';
-import { MAX_PRIMS, sdBody } from '../validate';
+import { sdBody } from '../validate';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { buildHullMesh } from './shell-hull';
 import { parseBlob } from '../blob-parse';
@@ -111,21 +111,21 @@ async function main() {
   if (body.errors.length) say(body.errors.join(' | '), true);
 
   // ————— Pack the field into the data texture the WGSL marches ———————————
-  const { tex: dataTex, texels, writeRow } = createDataTexture();
+  const { tex: dataTex, texels, writeRow, stride } = createDataTexture();
   const packed = packBody(body);
-  writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
-  writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
-  writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
-  writeRow(ROW_PRIM_QUAT, packed.primQuat, MAX_PRIMS);
-  writeRow(ROW_REST_A, packed.restA, MAX_PRIMS);
-  writeRow(ROW_REST_B, packed.restB, MAX_PRIMS);
-  writeRow(ROW_PRIM_SHAPE, packed.primShape, MAX_PRIMS);
-  writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
-  writeRow(ROW_PRIM_COLOR, packed.primColor, MAX_PRIMS);
+  writeRow(ROW_PRIM_A, packed.primA, stride);
+  writeRow(ROW_PRIM_B, packed.primB, stride);
+  writeRow(ROW_PRIM_SCALE, packed.primScale, stride);
+  writeRow(ROW_PRIM_QUAT, packed.primQuat, stride);
+  writeRow(ROW_REST_A, packed.restA, stride);
+  writeRow(ROW_REST_B, packed.restB, stride);
+  writeRow(ROW_PRIM_SHAPE, packed.primShape, stride);
+  writeRow(ROW_PRIM_BEND, packed.primBend, stride);
+  writeRow(ROW_PRIM_COLOR, packed.primColor, stride);
   writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, packed.clusterCount);
   writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, packed.clusterCount);
-  writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, MAX_PRIMS);
-  writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);
+  writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, stride);
+  writeRow(ROW_GROUP_RANGE, packed.groupRange, stride);
   writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, packed.clusterCount);
   dataTex.needsUpdate = true;
 

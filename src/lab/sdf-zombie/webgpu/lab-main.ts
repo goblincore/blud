@@ -66,7 +66,7 @@ import {
   MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES, clothifyWound, clothDecal,
   type Wound, type WoundType,
 } from '../damage';
-import { sdBody } from '../validate';
+import { sdBody, MAX_PRIMS } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces, type SeverResult } from '../sever';
 import { soldierInjury } from '../soldier-damage';
 import { posedDetachedChunk } from '../detached-pose';
@@ -260,7 +260,9 @@ async function main() {
     renderer: handle.renderer,
     scene,
     effectsScene: characterEffects.scene,
-    gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding },
+    // stride: rebuildBody re-feeds this SAME view live-edited bodies, so it
+    // is sized for the ceiling — an edit past 128 prims must not outgrow it.
+    gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding, stride: MAX_PRIMS },
     errors: heroErrors,
     face,
     override,

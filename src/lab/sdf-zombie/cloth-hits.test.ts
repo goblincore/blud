@@ -27,7 +27,7 @@ import { APPLY_WOUNDS, WOUND_MASK } from './webgpu/march.wgsl';
 import { NG_WOUNDS as NORMAL_GRADIENT_WGSL } from './webgpu/normal-gradient.wgsl';
 import { PAINT_CHAR_BLOCK } from './webgpu/march/body/blocks/post/paint-char.wgsl';
 import { ROW_WOUND_FLAGS } from './webgpu/march.wgsl';
-import { MAX_PRIMS } from './validate';
+import { BASE_PRIM_STRIDE } from './validate';
 import { len, sub } from './vec';
 import type { Vec3 } from './types';
 
@@ -102,11 +102,11 @@ describe('clothifyWound', () => {
 
 describe('the bullet-hole GPU flag', () => {
   it('rides flags.x bit 1, beside the cavity bit 0, under the threat fraction', () => {
-    const texels = new Float32Array(32 * MAX_PRIMS * 4);
+    const texels = new Float32Array(32 * BASE_PRIM_STRIDE * 4);
     const p: Vec3[] = [[0, 1, 0], [0, 1.1, 0], [0, 1.2, 0]];
     writeWounds(texels, p, [0.05, 0.05, 0.05], [0, 0, 0], [0, 0, 0], undefined, undefined, {},
       undefined, [true, false, true], undefined, [5, 0, 0], [false, true, true]);
-    const x = (i: number) => texels[ROW_WOUND_FLAGS * MAX_PRIMS * 4 + i * 4]!;
+    const x = (i: number) => texels[ROW_WOUND_FLAGS * BASE_PRIM_STRIDE * 4 + i * 4]!;
     expect(Math.floor(x(0))).toBe(1);            // cavity only
     expect(Math.floor(x(1))).toBe(2);            // hole only
     expect(Math.floor(x(2))).toBe(3);            // both
@@ -169,11 +169,11 @@ describe('clothDecal', () => {
     expect(clothDecal(body.prims, stampOn(skirt, 'burn')).decal).toBeUndefined();
   });
   it('rides flags.x bit 4 beside cavity and hole', () => {
-    const texels = new Float32Array(32 * MAX_PRIMS * 4);
+    const texels = new Float32Array(32 * BASE_PRIM_STRIDE * 4);
     const p: Vec3[] = [[0, 1, 0], [0, 1.1, 0]];
     writeWounds(texels, p, [0.05, 0.05], [0, 0], [0, 0], undefined, undefined, {},
       undefined, undefined, undefined, [0, 0], [false, true], [true, true]);
-    const x = (i: number) => texels[ROW_WOUND_FLAGS * MAX_PRIMS * 4 + i * 4]!;
+    const x = (i: number) => texels[ROW_WOUND_FLAGS * BASE_PRIM_STRIDE * 4 + i * 4]!;
     expect(x(0)).toBe(4);
     expect(x(1)).toBe(6);
   });

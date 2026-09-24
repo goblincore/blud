@@ -297,6 +297,12 @@ guess, and guesses are what `blob:measure` exists to replace.
   and the surface loses geometry with no error at the shader level.
   `validateBody` now catches this at authoring time; do not raise the
   constant to silence it.
+- **A body may carry at most 256 flesh + bone primitives** (`MAX_PRIMS`,
+  raised from 128 on 2026-09-24). Up to 128 costs nothing new; past 128 the
+  body's data texture widens to 192 or 256 texels, which doubles its crowd
+  atlas and upload at 256. Build for looks first, then trim — see "Primitive
+  budget" in [reference.md](reference.md). Dense detail (hair, a face) usually
+  hits the 64-per-cluster wall above before this one: it all lands in `head`.
 
 ## The dials
 

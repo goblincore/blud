@@ -4,6 +4,16 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Prim ceiling 128 -> 256, per-body texture width — done 2026-09-24
+
+- [x] **`MAX_PRIMS` = 256** (flesh + bone). Each body's data texture is `primStride(total)` wide: 128 up to 128
+  prims, then 192/256, so the shipped cast pays nothing. Crowd types size from their first body; lab hero is 256.
+- [x] Gates: bench stills A/B/C/CZ and the game crowd path's float march target + prim-work buffers byte-identical
+  to base; melee `sdf:march` 13.9-14.7 vs 13.4-14.7 ms; cold `drawOnce` median 1218 vs 1242 ms (noise, load ~12).
+  Costs per width in `.claude/skills/authoring-sdf-characters/reference.md` ("Primitive budget").
+- [ ] Next wall for the bride: **64 prims per cluster** (`MAX_CLUSTER_PRIMS`) — hair + face both land in `head` (34 now).
+- [ ] (pre-existing, not this change) `game-context-coverage` fails on main: `spawnOverride` binding in game-main.
+
 ## Thin-prim "lines in the air" (bride) — fixed 2026-09-24
 
 - [x] **Not a renderer bug: a rig bind.** `bindRig` bound each prim end to the nearest rig point of the WHOLE body,

@@ -1,10 +1,11 @@
 // src/lab/sdf-zombie/webgpu/crowd-atlas.ts
-// The shared prim texture of a crowd type: MAX_PRIMS wide, DATA_ROWS rows per
-// band, one band per instance slot. A DataTexture cannot resize in place, so
-// the band count is fixed at creation.
+// The shared prim texture of a crowd type: `stride` prims wide (validate.ts
+// primStride — BASE_PRIM_STRIDE for every body up to 128 prims), DATA_ROWS
+// rows per band, one band per instance slot. A DataTexture cannot resize in
+// place, so the width and band count are fixed at creation.
 import * as THREE from 'three/webgpu';
 import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS } from './march.wgsl';
-import { MAX_PRIMS } from '../validate';
+import { BASE_PRIM_STRIDE } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 
 export function bandRowOffset(band: number): number { return band * DATA_ROWS; }
@@ -18,6 +19,8 @@ export type AtlasUploader = (rows: number, data: Float32Array) => void;
 /** What a view needs to pack into "its" texture, whether it owns it or not. */
 export interface PrimSink {
   readonly band: number;
+  /** Texture width in prims: the most flesh + bone rows this sink can hold. */
+  readonly stride: number;
   readonly texels: Float32Array;
   /** Row inside the band; same contract as the legacy writeRow(row, src, count, col). */
   writeRow(row: number, src: Float32Array, count: number, col?: number): void;
@@ -28,6 +31,8 @@ export interface PrimSink {
 
 export interface CrowdPrimAtlas {
   readonly bands: number;
+  /** Texture width in prims (see PrimSink.stride). */
+  readonly stride: number;
   readonly texture: THREE.DataTexture;
   readonly texels: Float32Array;
   dirty: boolean;
@@ -48,9 +53,9 @@ export interface CrowdPrimAtlas {
   flush(maxBand?: number): number;
 }
 
-export function createCrowdPrimAtlas(bands: number, upload?: AtlasUploader): CrowdPrimAtlas {
-  const texels = new Float32Array(MAX_PRIMS * DATA_ROWS * bands * 4);
-  const texture = new THREE.DataTexture(texels, MAX_PRIMS, DATA_ROWS * bands, THREE.RGBAFormat, THREE.FloatType);
+export function createCrowdPrimAtlas(bands: number, upload?: AtlasUploader, stride = BASE_PRIM_STRIDE): CrowdPrimAtlas {
+  const texels = new Float32Array(stride * DATA_ROWS * bands * 4);
+  const texture = new THREE.DataTexture(texels, stride, DATA_ROWS * bands, THREE.RGBAFormat, THREE.FloatType);
   texture.minFilter = THREE.NearestFilter; texture.magFilter = THREE.NearestFilter;
   texture.generateMipmaps = false; texture.needsUpdate = true;
   // Highest band written since the last flush (-1 = clean). Bands an actor
@@ -59,18 +64,18 @@ export function createCrowdPrimAtlas(bands: number, upload?: AtlasUploader): Cro
   // band below the high-water mark rides the same prefix.
   let hiBand = -1;
   const atlas: CrowdPrimAtlas = {
-    bands, texture, texels, dirty: false,
+    bands, stride, texture, texels, dirty: false,
     sink(band) {
       const r0 = bandRowOffset(band);
       const mark = () => { if (band > hiBand) hiBand = band; atlas.dirty = true; };
       return {
-        band, texels,
+        band, stride, texels,
         writeRow(row, src, count, col = 0) {
-          texels.set(src.subarray(0, count * 4), ((r0 + row) * MAX_PRIMS + col) * 4);
+          texels.set(src.subarray(0, count * 4), ((r0 + row) * stride + col) * 4);
           mark();
         },
         woundLayout: {
-          maxWounds: MAX_WOUNDS, stride: MAX_PRIMS,
+          maxWounds: MAX_WOUNDS, stride,
           woundRow: r0 + ROW_WOUND, metaRow: r0 + ROW_WOUND_META,
           capRow: r0 + ROW_WOUND_CAP, flagsRow: r0 + ROW_WOUND_FLAGS,
         },
@@ -85,7 +90,7 @@ export function createCrowdPrimAtlas(bands: number, upload?: AtlasUploader): Cro
       // Nothing to send: every written band sat above the drawn set.
       if (hi < 0) return 0;
       const rows = (hi + 1) * DATA_ROWS;
-      if (upload) upload(rows, texels.subarray(0, rows * MAX_PRIMS * 4));
+      if (upload) upload(rows, texels.subarray(0, rows * stride * 4));
       else texture.needsUpdate = true; // legacy/no-uploader path (tests)
       return rows;
     },
