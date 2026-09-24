@@ -33,6 +33,9 @@ export function levelSceneLights(ctx: GameContext, roomId: number): THREE.Light[
     if (!l.isLight) return;
     const accentRoom = l.userData.accentRoom as number | undefined;
     if (accentRoom !== undefined && !allowed.has(accentRoom)) return;
+    // Outdoor v1: the moon lights only the open-sky rooms' surfaces.
+    const only = l.userData.onlyRooms as ReadonlySet<number> | undefined;
+    if (only !== undefined && !only.has(roomId)) return;
     ls.push(l);
   });
   return ls;

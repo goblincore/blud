@@ -12,6 +12,7 @@ import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { SLUG, traceProjectile } from './game-weapon';
 import { levelCeilingM } from './game-level-leaves';
+import { roomCeilingM } from './level-def';
 import { type ChunkBox } from '../gib-chunks';
 import { convergedDir, muzzleWorld } from './game-weapon-leaves';
 
@@ -129,7 +130,8 @@ export function ceilingAt(ctx: GameContext, x: number, z: number): number {
     if (x >= t.minX && x <= t.maxX && z >= t.minZ && z <= t.maxZ) return t.height;
   }
   for (const r of ctx.world.level.rooms) {
-    if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return r.height;
+    // roomCeilingM: an open-sky room has no ceiling for a lob (Outdoor v1 §7).
+    if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return roomCeilingM(r);
   }
   // Tallest ceiling in the level: levelColliders() carries no ceiling box for
   // the rooms, so without a ceiling plane a full-charge lob leaves through the

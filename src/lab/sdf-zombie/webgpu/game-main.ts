@@ -92,6 +92,9 @@ import { wanderBounds, type RoomDef } from './game-level';
 import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel } from './active-level';
 import { parseLevelJson } from './level-json';
 import { levelCeilingM, roomSpawnPoints } from './game-level-leaves';
+import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor-leaves';
+import type { LevelPlane, LevelRoom } from './level-def';
+import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
@@ -642,14 +645,19 @@ async function main() {
     // failure pointing up. A small emissive term in their own colour keeps
     // them legible as the room's top surface without flattening the mood.
     const isCeiling = axis === 1 && p.facing < 0;
+    // Outdoor v1 §8: grounds, paths and edges by surface tag; null keeps the
+    // stone path below exactly (the ring's planes carry no tag).
+    const outdoorMat = outdoorSurfaceMaterial((p as LevelPlane).surface, w, h);
     const base = stoneFor(axis, p.facing) as THREE.MeshStandardMaterial;
-    const mesh = new THREE.Mesh(geo, base.clone());
-    const mm = mesh.material as THREE.MeshStandardMaterial;
-    mm.color = new THREE.Color(p.color[0], p.color[1], p.color[2]);
-    // Ceilings keep a whisper of self-light so they do not read as a void —
-    // but far less than the gallery needed, because the flashlight now
-    // reaches them.
-    if (isCeiling) mm.emissive = new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.10);
+    const mesh = new THREE.Mesh(geo, outdoorMat ?? base.clone());
+    if (!outdoorMat) {
+      const mm = mesh.material as THREE.MeshStandardMaterial;
+      mm.color = new THREE.Color(p.color[0], p.color[1], p.color[2]);
+      // Ceilings keep a whisper of self-light so they do not read as a void —
+      // but far less than the gallery needed, because the flashlight now
+      // reaches them.
+      if (isCeiling) mm.emissive = new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.10);
+    }
     const mid: Vec3 = [
       (p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2,
     ];
@@ -693,6 +701,10 @@ async function main() {
     ctx.world.levelGroup.add(mesh);
   }
   scene.add(ctx.world.levelGroup);
+  // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
+  // (null for the ring). Before the per-room light lists are built, so the moon
+  // joins the open rooms' lists (levelSceneLights honours userData.onlyRooms).
+  ctx.lighting.outdoor = createOutdoor(ctx);
 
   // CEILING FILL. The sun points down; ceilings (and north-south walls in
   // shadow) have normals pointing away from it, so with only a dim ambient
@@ -813,7 +825,7 @@ async function main() {
   ctx.lighting.flashlight = createFlashlight(DUNGEON_RIG, ctx.boot.shadowMapParam > 0 ? { shadowMapSize: ctx.boot.shadowMapParam } : {});
   // BOOT-TIME shadow ablation (?spotshadow=0), for the dungeon bench legs.
   // castShadow has to be decided BEFORE the first frame: toggling it live
-  // crashes three r185 WebGPU (ShadowNode.updateShadow dereferences the
+  // crashes three r185 WebGPU, and r186 keeps the unguarded read (ShadowNode.updateShadow dereferences the
   // disposed map's depthTexture — see the __dungeon note below), and
   // shadow.intensity=0 cannot stand in — it only zeroes the SAMPLING term;
   // the 1024² map still renders every frame, so it would measure the wrong
@@ -833,7 +845,7 @@ async function main() {
   // maps (deferred-shadows.ts) are explicit raster passes that never consult
   // renderer.shadowMap, and every opaque surface is an unlit G-buffer
   // producer — three's per-light shadow maps would be 1024² passes of pure
-  // waste per renderer.render call. Boot-time decision: three r185 WebGPU
+  // waste per renderer.render call. Boot-time decision: three r185/r186 WebGPU
   // crashes when castShadow is toggled after maps were built, so this ships
   // as a boot property like the legacy ?spotshadow=0 ablation above.
   ctx.boot.handle.renderer.shadowMap.enabled = !ctx.boot.deferredMode;
@@ -878,7 +890,7 @@ async function main() {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
     get on() { return ctx.lighting.dungeonOn; },
     /** The weapon light itself, for runtime A/Bs (shadow.intensity 0/1 is the
-     *  shadow kill switch — do NOT toggle spot.castShadow live, three r185
+     *  shadow kill switch — do NOT toggle spot.castShadow live, three r185/r186
      *  WebGPU crashes rebuilding a disposed shadow map). */
     spot: ctx.lighting.flashlight.spot,
     /** Beam knobs, also on the tuning panel. */
@@ -1694,7 +1706,11 @@ async function main() {
             pos: [sp.x, sp.y, sp.z], axis: [sAxis.x, sAxis.y, sAxis.z],
             intensity: flashGate, cosInner: flashInner, cosOuter: flashOuter,
             range: ctx.lighting.flashlight.spot.distance, keyGain: ctx.vfx.beamTuning.gain, color: [sc.r, sc.g, sc.b],
-          }, enc.box, walls, occ);
+          }, enc.box, walls, occ,
+          // Outdoor v1 §7: no bounce patch on the sky (top face, walls above the edge).
+          roomDef && (roomDef as Partial<LevelRoom>).sky
+            ? { above: ((roomDef as Partial<LevelRoom>).floor ?? 0) + ((roomDef as Partial<LevelRoom>).edge?.height ?? roomDef.height) }
+            : undefined);
         }
       }
       // GPU PROBE GATHER (P3/P4 dynamic layer). Once per frame for the
@@ -2867,6 +2883,19 @@ async function main() {
   ctx.probes.probesOff = ctx.probes.probesParam === '0' || ctx.probes.probesParam === 'off';
   ctx.world.roomProbes = createRoomProbes({
     rooms: ctx.world.level.rooms, furniture: ctx.world.level.furniture,
+    // Outdoor v1 §7: an open room bakes against its sky (through the top and
+    // above its edge) with the moon as its key. Closed rooms are unchanged.
+    skyFor: r => {
+      const lr = r as Partial<LevelRoom>;
+      return lr.sky ? { radiance: SKY_PRESETS[lr.sky].ambient, above: (lr.floor ?? 0) + (lr.edge?.height ?? r.height) } : null;
+    },
+    lightFor: r => {
+      const lr = r as Partial<LevelRoom>;
+      const P = LIGHT_PRESETS['practical-hard-key'];
+      if (!lr.sky) return { dir: P.keyDir, keyColor: P.keyColor, keyIntensity: P.keyIntensity, fillIntensity: P.fillIntensity };
+      const m = SKY_PRESETS[lr.sky].moon;
+      return { dir: m.dir, keyColor: m.color, keyIntensity: m.intensity, fillIntensity: P.fillIntensity };
+    },
     light: {
       dir: LIGHT_PRESETS['practical-hard-key'].keyDir,
       keyColor: LIGHT_PRESETS['practical-hard-key'].keyColor,
@@ -3071,6 +3100,8 @@ async function main() {
     view.setPackBones(!ctx.render.boneMesh);
     view.applyMaterial(name === 'soldier' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
       LIGHT_PRESETS['practical-hard-key']);
+    // Outdoor v1 §7: a body in an open room takes the moon as its key light.
+    if ((room as Partial<LevelRoom>).sky) applyMoonKey(ctx, view.uniforms);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
     // or a rebuild would silently reset the ramp (the silent-reset class
@@ -6508,6 +6539,7 @@ async function main() {
     // replay. See the declaration next to lastSeenMs for the why.
     advanceSimClock(dt);
     ctx.demo.simFrame++;
+    stepOutdoor(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
@@ -7975,6 +8007,7 @@ async function main() {
     createBootSeams(ctx),
     createRenderSeams(ctx),
     createWorldSeams(ctx),
+    createOutdoorSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
