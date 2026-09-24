@@ -697,6 +697,21 @@ export function headQuatOf(bound: BoundRig, bodyYaw = 0): Quat | null {
 }
 
 /** Shoves the rig point nearest a world position — used to make hits push flesh. */
+/**
+ * Shove the CLOTH PENDULUM (a `hem` bone's loose tail) directly. impulseAt
+ * moves the NEAREST rig point, and a shot into a skirt is usually nearer a
+ * knee than the hem point, so a robe hit would kick a leg while the cloth
+ * hung still. No-op for a body without a hem.
+ */
+export function kickHem(bound: BoundRig, delta: Vec3): BoundRig {
+  const i = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
+  if (i < 0) return bound;
+  return {
+    ...bound,
+    rig: { ...bound.rig, points: bound.rig.points.map((p, j) => j === i ? { ...p, pos: add(p.pos, delta) } : p) },
+  };
+}
+
 export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
   let best = 0;
   let bestD = Infinity;

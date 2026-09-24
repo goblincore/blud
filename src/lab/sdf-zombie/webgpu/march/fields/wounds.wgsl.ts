@@ -140,7 +140,16 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
       carveK = 0.75;
     }
     let dBefore = d;
-    d = smax(d, min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
+    // SIZE-SCALED FILLET (cloth bullet holes, 2026-09-23): the carve's smooth
+    // blend is one global k (woundCfg.y, 1.5 cm), and on an 8 mm cloth sheet
+    // a fillet that wide dissolves the sheet out to ~depth + k: an 8 mm
+    // bullet hole rendered 5 cm across. k now scales with the wound,
+    // clamp(r / 0.05, 0.1, 1): every stock profile (pellet 0.055, burn
+    // 0.08, blast 0.13) is >= 0.05, so they keep k exactly; only sub-5 cm
+    // wounds sharpen. MIRRORED in normal-gradient.wgsl.ts and humanoid.wgsl.ts
+    // — keep the three identical. A smaller k only shrinks every reach bound.
+    let kW = woundCfg.y * clamp(w.w / 0.05, 0.1, 1.0);
+    d = smax(d, min(-(rN - depth) * carveK, capEff - dot(p - w.xyz, wCap.xyz)), kW);
     // Which owners' carves actually RAISED the field here — see the owner
     // re-fold's raiser gate in MAP_BODY. Bit 0 collects unowned wounds.
     if (d > dBefore) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
@@ -203,9 +212,15 @@ var<private> gWoundShadePrim: f32 = -1.0;`
 // The far-side white sheets the 2026-08-23 gates were chasing turned out to
 // be the tracer overshoot bug (fixed at the retract guard above): with rays
 // no longer landing inside the body, the ungated mask is safe again.
+// gWoundHole (cloth bullet holes, 2026-09-23): the SAME footprint as m,
+// accumulated only over wounds flagged as a cloth bullet hole (flags.x bit 1),
+// left in a private so the return shape every caller destructures is
+// unchanged. The paint block reads it to shade a hole's inside DARK — a
+// punched hole, not a shallow pit of fat-yellow tissue.
 export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>) -> vec3<f32> {
   var m = 0.0;
   var cav = 0.0;
+  gWoundHole = 0.0;
   // Per-instance wound count: the slot loop's loadInstance set this before
   // the post-hit readback (POST reloads gHitSlot).
   let n = i32(gInstWoundCount);
@@ -232,10 +247,16 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     // accumulated only over wounds whose flags row says the hit opened a
     // cavity. Deliberately NOT a second footprint — a second mask edge is
     // how the 2026-08-23 halo happened.
-    if (flags.x > 0.5) { cav = max(cav, contribution); }
+    // flags.x's integer part is a bitfield (zombie-gpu.ts writeWounds):
+    // bit 0 cavity, bit 1 cloth bullet hole. Was a plain > 0.5 test when
+    // cavity was the only thing it could hold.
+    let fBits = i32(flags.x);
+    if ((fBits & 1) != 0) { cav = max(cav, contribution); }
+    if ((fBits & 2) != 0) { gWoundHole = max(gWoundHole, contribution); }
   }
   return vec3<f32>(m, m, cav);
-}`
+}
+var<private> gWoundHole: f32 = 0.0;`
 
 /**
  * Helper sources in DEPENDENCY ORDER — each one may only call those before it,

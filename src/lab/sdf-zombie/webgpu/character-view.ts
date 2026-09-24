@@ -441,6 +441,8 @@ export function createWoundRing(): WoundRing {
           const c = posed.clusters[cluster];
           return c ? { cluster, start: c.start, count: c.count } : null;
         }),
+        // Cloth bullet holes shade dark inside, not as tissue (damage.ts).
+        rows.map(w => w.cloth === 'hole'),
       );
     },
   };

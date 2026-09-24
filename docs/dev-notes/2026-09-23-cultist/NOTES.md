@@ -61,6 +61,45 @@ hood or cloak."*
 
 ![cultist | cultist-cowled](tan-both-variants.png)
 
+## Cloth hit reactions (2026-09-23)
+
+Owner: *"a pistol or SMG will just make a small hole or bullet decal on the clothes, but a large
+shotgun slug would actually reveal wounds ... it's all about differing visceral effects."*
+
+**The rendering trick:** the renderer barely needed anything new. A wound already carves the
+blended body, cloth and flesh together, so a hit through a thin robe sheet already cut a real hole.
+What was wrong was the shading: paint overwrote the crater. Four changes fixed it:
+
+1. **Paint yields inside a wound** (`paint-char.wgsl.ts`). Inside the lip you see the wound; just
+   outside it the paint is scorched to 28% (a frayed edge); beyond that the paint is untouched. Metal
+   is exempt. This applies to every painted prim, since a painted limb is "cloth" to a player.
+2. **`clothifyWound`** (`damage.ts`) is a stamp-time rewrite for hits on cloth (a shell, or a
+   painted non-metal, non-glowing prim):
+   - `heavy` (shotgun pellets, the slug): a ragged edge, marked `tear`, gore unchanged. The wound
+     shows through.
+   - `small` (pistol/SMG; none exist in the game yet): shrunk to a 1.4 cm bullet hole, no lip, no
+     cavity or spill, marked `hole`. The GPU gets a hole bit (flags.x bit 1) and shades the inside
+     near-black: a punched hole, not a pale pit. `registerBleed` skips the trickle and gout for a
+     hole.
+3. **Size-scaled carve fillet.** The global 1.5 cm blend dissolved about 5 cm of an 8 mm sheet round
+   a small wound. `k` now scales with `clamp(r/0.05, 0.1, 1)`, so every stock profile (≥ 5 cm) is
+   unchanged. It is mirrored in `normal-gradient.wgsl.ts`, `humanoid.wgsl.ts` and the soundness
+   test's CPU mirror, which now also checks a bullet-hole case.
+4. **Hem kick.** A hit on the skirt shoves the hem pendulum (`kickHem`) as well as the nearest joint,
+   so the robe jerks.
+
+**Lab controls:**
+- Click = pellet tear; Shift-click = blast/slug.
+- Ctrl-click = small-calibre bullet hole (a preview of the SMG look).
+- `__sdfLab.wound(n, seed, type, 'small')` stamps from the console, and `BLOB_WOUND_CALIBRE=small`
+  does the same for turntables.
+
+![shotgun tears + slug](hits-shotgun-slug.png)
+![small calibre bullet holes](hits-small-calibre.png)
+
+Still to come with the SMG: a cloth-fibre puff in place of the blood gout for holes. Also, 16 wound
+slots per body will fill fast under SMG fire (the oldest holes vanish).
+
 ## What exists
 
 | Piece | Where |

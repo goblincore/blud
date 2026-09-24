@@ -11,8 +11,8 @@
 - [x] Face passes 2-3 (scowl brow, socketed eyes, hooked nose; heavier jaw + teeth), khaki robes; variant
   `cultist-cowled` kept (lower face hidden). Owner: good enough to merge (2026-09-23).
 - [ ] **Next: animations + attacks** — SMG (Thompson / MP44 look) on the soldier's carry machinery; hit reactions.
-- [ ] **Cloth hit reactions** — shells must not take the flesh crater. Proposal in the cultist notes / chat:
-  hole through the sheet reveals flesh (flesh wound underneath), scorched rim, hem kick, fabric shreds.
+- [x] **Cloth hit reactions** — paint yields inside wounds (scorched fray); heavy rounds tear + reveal, small
+  calibre = dark bullet hole (flags bit 1), size-scaled fillet, hem kick. Lab: Ctrl-click = SMG hole. Fibre puff w/ SMG.
 - [ ] *Idea (owner, not this session):* flammability tiers — clothed characters catch/burn differently from bare flesh.
 
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22

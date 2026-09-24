@@ -20,7 +20,7 @@ import type { EncounterOrder } from './encounter-director';
 // not navigation.
 
 import type { BuildResult } from '../build-body';
-import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-bind';
+import { bindRig, applyRig, headQuatOf, impulseAt, kickHem, type BoundRig } from '../rig-bind';
 import {
   TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
@@ -89,6 +89,9 @@ const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
  *  the lab's numbers were tuned for a god-cam further out (see the lab's
  *  "scaled up in the motion-polish pass" note). */
 const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.04 };
+/** Hem kick per unit of the hit's IMPULSE — cloth is light, so it swings
+ *  much further than the joint shove (cultist, 2026-09-23). */
+const HEM_KICK = 2.5;
 
 /** Stagger amplitude multiplier sent with a SLUG's motion signal — the slug
  *  is a hand-cannon round and should lurch harder than the lab's tuned
@@ -1548,6 +1551,9 @@ export function createZombieActor(opts: {
       dirWorld[1] * push,
       dirWorld[2] * push,
     ]);
+    // A hit on a skirt riding the hem pendulum kicks the CLOTH: impulseAt
+    // shoved the nearest joint (usually a knee), so push the hem point too.
+    if (hitPrim?.bone === 'hem') bound = kickHem(bound, [dirWorld[0] * push * HEM_KICK, 0, dirWorld[2] * push * HEM_KICK]);
     // Sever checks BEFORE the pose re-apply so a severed limb is gone from
     // the very next rendered frame.
     if (hitBatching) { hitPending = true; } else { flushHitTail(); }

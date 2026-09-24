@@ -331,7 +331,8 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let cutter = min(depth - r, cap.w - dot(v, cap.xyz));
     if (abs((depth - r) - (cap.w - dot(v, cap.xyz))) <= (1.0 + length(cap.xyz)) * R && cutter + (1.0 + gNgLip) * R >= d.x - 4.0 * cfg.y) { gNgReason = 3; }
     if (cfg.y <= 0.0 && abs(d.x - cutter) <= (gNgLip + max(1.0, length(cap.xyz))) * R) { gNgReason = 3; }
-    d = ngWound(d, base, v, depth, cap, cfg.y, rim);
+    // Size-scaled fillet — MUST match APPLY_WOUNDS (march/fields/wounds.wgsl.ts).
+    d = ngWound(d, base, v, depth, cap, cfg.y * clamp(w.w / 0.05, 0.1, 1.0), rim);
     gNgLip = max(gNgLip, max(1.0, length(cap.xyz))) + ngWoundLip(base.x, r, rim);
     if (r < 2.0 * depth) { gNgNear = 1.0; }
   }

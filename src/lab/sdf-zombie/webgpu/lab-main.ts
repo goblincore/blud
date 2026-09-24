@@ -63,7 +63,7 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from '../material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES, clothifyWound,
   type Wound, type WoundType,
 } from '../damage';
 import { sdBody } from '../validate';
@@ -77,7 +77,7 @@ import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../bloo
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
-import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
+import { bindRig, applyRig, impulseAt, kickHem, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
@@ -1571,8 +1571,13 @@ async function main() {
     const type: WoundType = ev.shiftKey ? 'blast' : ev.altKey ? 'burn' : 'pellet';
     // The wound frame is the body's CURRENT yaw — the same transform the
     // heading rotation puts the prims through, so the crater rides the turn.
-    const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
-      p => sdBody(p, lastPosed));
+    // CLOTH (2026-09-23): a hit on a robe tears it (heavy rounds) — or, with
+    // Ctrl held, is a SMALL-CALIBRE bullet hole, previewing the pistol/SMG
+    // look before any such gun exists. Both are no-ops on bare flesh.
+    const wound = clothifyWound(lastPosed.prims,
+      worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
+        p => sdBody(p, lastPosed)),
+      ev.ctrlKey ? 'small' : 'heavy');
     woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and localized hit recoil,
@@ -1589,6 +1594,9 @@ async function main() {
     // distance); the sustained decay lives in motion.ts's recoil state.
     const push = type === 'blast' ? 0.16 : type === 'pellet' ? 0.06 : 0.04;
     heroMotion.bound = impulseAt(heroMotion.bound, hit, [d.x * push, d.y * push, d.z * push]);
+    // A skirt hit kicks the hem pendulum (impulseAt moved the nearest joint).
+    if (lastPosed.prims[wound.primIdx]?.bone === 'hem')
+      heroMotion.bound = kickHem(heroMotion.bound, [d.x * push * 2.5, 0, d.z * push * 2.5]);
     refreshWounds();
 
     if (motionProfile.name === 'soldier') pendingFire = false;
@@ -3977,7 +3985,9 @@ async function main() {
      * outside the body, `worldHitToWound` in the body's CURRENT yaw (so the crater
      * rides the authored body through any heading rotation), then `woundRing.stamp`.
      */
-    wound(n = 4, seed = 1, type: WoundType = 'pellet') {
+    // calibre: 'heavy' (default, the shotgun/slug) or 'small' (pistol/SMG
+    // bullet holes) — only changes hits on CLOTH (damage.ts clothifyWound).
+    wound(n = 4, seed = 1, type: WoundType = 'pellet', calibre: 'heavy' | 'small' = 'heavy') {
       const prims = lastPosed.prims;
       if (!prims.length) return 0;
       // The body's own centre, from its live clusters — not a guessed point.
@@ -4000,9 +4010,9 @@ async function main() {
         const origin: Vec3 = [cx - dir[0] * 3, cy - dir[1] * 3, cz - dir[2] * 3];
         const hit = raycastBody(origin, dir, lastPosed);
         if (!hit) continue;
-        const wound = worldHitToWound(
+        const wound = clothifyWound(prims, worldHitToWound(
           prims, hit, radius, type, heroMotion.lastBodyYaw, p => sdBody(p, lastPosed),
-        );
+        ), calibre);
         woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
         stamped++;
       }
