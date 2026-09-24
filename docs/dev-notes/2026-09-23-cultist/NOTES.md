@@ -11,6 +11,23 @@ additions, because the schoolgirl's cloth had only ever been trim on a figure st
 ![turntable](turntable.png)
 ![hood close-up](hood-closeup.png)
 
+## Face pass 2 (same day)
+
+Owner: *"the eyes are positioned too low relative to the brow ... a bit featureless ... a big pointy
+nose (see goblin or the ogre)"*. The face block now provides only the gaunt head and jaw masses
+(`browHeavy`/`noseLength` 0). Every feature is an authored prim, placed against the face
+ellipsoid's surface:
+
+- **Brow:** two chamfered arches making a scowl V. The single straight ridge read as a cap brim.
+- **Eyes:** raised 2.4 cm so they sit 1.5 cm under the brow instead of 6 cm, and set in dark
+  painted sockets.
+- **Nose:** long, hooked and pointed, the goblin/ogre spike, reaching 11.5 cm forward. It pokes out of
+  the hood opening, so from the side the silhouette reads hood, then nose.
+- **Cheekbones:** gaunt. **Mouth:** a thin dark slit, mostly lost in the hood's shadow.
+
+![face v2](face-v2.png)
+![face v2, body distance](face-v2-body.png)
+
 ## What exists
 
 | Piece | Where |
@@ -101,7 +118,8 @@ Look at it: `npm run dev`, then `/sdf-lab-webgpu.html?character=cultist`. In the
 - One pendulum = one rigid cone tilting. A second pendulum (front/back panels), or bending the skirt
   axis (`bend=` driven by the lag), would give real hem flare rather than tilt.
 - The game page has no wind (only the lab's `setWind`). `clothForce` is ready for a level-driven wind.
-- Face: less pale, lose the cap-brim brow; maybe a jaw/teeth read.
+- Face: still pale under a close key light, because there is no shadow ray. The mouth barely
+  reads; teeth or a jaw would help.
 - Not done: attacks (Blood cultists shoot: tommy gun / shotgun on the soldier's carry machinery),
   brain, sounds, gib tuning, spawn in `sdf-game.html`.
 - The shell cuffs use `rigid` on the forearm; hands come out of them cleanly in all frames seen.

@@ -131,18 +131,50 @@ body
   # as a POINTED cowl (the Blood cultist silhouette), not a balaclava.
   blob head on skull at=0.90 offset=(0,0.040,-0.050) tip=(0,0.070,-0.110) r=0.075 r2=0.010 blend=0.030 color=4a3424
 
-  # EYES: two ember points deep in the hood. The first pass (r 0.011, centre
-  # z 0.152) sat INSIDE the face block — its surface at x 0.032 is z ~0.165 —
-  # and showed only slivers; r 0.014 pushed out to z 0.094 read as two flat
-  # red coins at close range. r 0.010, just proud of the face.
-  blob head on skull at=0.35 offset=(0.032,0,0.090) r=0.010 blend=0.003 both color=ff5a10 glow=0.95
+  # ============================================================
+  # THE FACE (pass 2, owner 2026-09-23: "the eyes are positioned too low
+  # relative to the brow and in general it's a bit featureless ... a big
+  # pointy nose, see goblin or the ogre"). The face block now supplies only
+  # the gaunt head + jaw masses (browHeavy / noseLength 0); every feature is
+  # an authored prim, placed against the face ellipsoid's surface (centre
+  # y 1.675 z 0.074, semi 0.081 x 0.128 x 0.099 — probed with blob:inspect).
+  # Skull bone: y 1.603 -> 1.762, so at=0.50 is y 1.683.
+  # ============================================================
+  # BROW — one ridge, chamfered so its underside is a crease the eyes sit
+  # under. y 1.698, 1.5 cm above the eye line (pass 1 had the face block's
+  # brow 6 cm above the eyes: they read as sitting in the cheeks). ~2 cm
+  # proud of the forehead at the centre, 3 cm at the ends.
+  # Two arches, not one bar: a straight ridge read as a cap brim. Each runs
+  # from just off the nose root (low) up and out over the socket, so the
+  # pair makes a V — a scowl. Inner end y 1.690, outer 1.706.
+  bar  head on skull from=0.60 to=0.60 r=0.015 tall=0.75 blend=0.005 chamfer offset=(0.006,-0.008,0.093) tip=(0.044,0.016,-0.014) bend=(0,0.004,0.008) both
+  # SOCKETS — dark painted ovals set almost flush (face surface z ~0.165 at
+  # x 0.030): the eye reads as a hole in the face, the ember inside it.
+  blob head on skull at=0.50 r=0.018 wide=1.40 tall=0.85 blend=0.004 offset=(0.031,0,0.074) both color=140a08
+  # EYES — embers, r 0.012, ~5 mm proud of the socket (r 0.008 vanished at
+  # 0.6 m). (Pass 1's r 0.014
+  # read as two flat red coins; r 0.010 still sat 6 cm under the brow.)
+  blob head on skull at=0.50 r=0.012 blend=0.002 offset=(0.031,0,0.083) both color=ff5a10 glow=1.0
+  # NOSE — long, pointed and hooked, the goblin/ogre spike: a tapered
+  # chamfered cone (r 0.022 -> 0.003) rooted between the eyes INSIDE the face
+  # (z 0.164 vs surface 0.172) and reaching 11.5 cm forward, 5.5 cm down;
+  # bend bows the bridge up and out, so the tip hooks. It pokes ~10 cm past
+  # the hood's opening (rest plane z ~0.18 at the tip's height), which is
+  # the point: from the side the silhouette is hood, then nose.
+  blob head on skull at=0.45 r=0.022 r2=0.003 wide=0.85 blend=0.004 chamfer offset=(0,-0.004,0.090) tip=(0,-0.055,0.115) bend=(0,0.010,0.020)
+  # CHEEKBONES — gaunt: two narrow bars of bone under the sockets, ~2 cm
+  # proud, so the hollow under each reads by its shadow.
+  blob head on skull at=0.50 r=0.020 wide=1.50 tall=0.70 deep=0.80 blend=0.008 offset=(0.050,-0.035,0.080) both
+  # MOUTH — a thin dark grim slit across the jaw's front (jaw surface
+  # z ~0.177 at x 0), bowed forward with the jaw's curve.
+  bar  head on skull from=0.50 to=0.50 r=0.005 blend=0.003 offset=(-0.025,-0.085,0.100) tip=(0.050,0,0) bend=(0,-0.004,0.010) color=2a0a08
 
 # Hidden bone for wounds — the derive ratio is right for a thin man.
 bones
   ratio 0.36
 
-# The zombie's gaunt face, narrowed. It is mostly in shadow; what shows is
-# the cheekbones and the jaw under the eyes.
+# The zombie's gaunt head + jaw, narrowed. Brow and nose are OFF here — the
+# body block authors them (see THE FACE).
 face
   headRadius 0.112
   headWidth  0.72
@@ -152,10 +184,10 @@ face
   jawHeight  0.84
   jawDrop    0.070
   jawJut     0.03
-  noseLength 0.006
+  noseLength 0
   noseWidth  0.36
   noseDrop   0.009
-  browHeavy  0.006
+  browHeavy  0
   browRise   0.045
   headBlend  0.006
 
