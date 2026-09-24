@@ -18,6 +18,7 @@
 - [x] T5d placeholder dressing in the `.blend` (67/67 solids) + Blender review renders (`scripts/levels/render_level_views.py`).
 - [x] Layout review (owner): route bends (lane SW → slab NE), funeral home is a gothic manor on the graveyard's north edge.
 - [ ] Next: outdoor rendering spec (below). Dispatch skill default is now `zai/glm-5.3-flash`.
+- [x] **Esc menu** (`game-menu.ts` + `game-menu-dom.ts`): Resume / New game → Ring or The Wake (reloads with `?level=`). The sim does not pause behind it.
 - [~] **Outdoor v1** [spec](docs/superpowers/specs/2026-09-23-outdoor-v1-design.md) · [plan](docs/superpowers/plans/2026-09-23-outdoor-v1.md): T1–T6 dispatched + verified, T7 wired (ring unchanged, boot within noise), T8 Wake adopted (gate 5/5). **Next: owner tuning of the `night` preset** (`__sdfGame.setSky`); ground reads too dark. Terrain = spec 2; mesh key (manor in-game) next spec. Was: the engine only knows enclosed dungeon rooms. Open: moon key +
   sky ambient vs. per-room probe boxes in open-sky rooms; ground/terrain materials (grass, gravel, dirt) instead of stone
   floors; open-sky room edges as fence/hedge/treeline + horizon instead of 8.5 m walls; a sky, not fog-as-clear-colour;

@@ -94,6 +94,7 @@ import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel } fr
 import { parseLevelJson } from './level-json';
 import { levelCeilingM, roomSpawnPoints } from './game-level-leaves';
 import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor-leaves';
+import { mountGameMenu } from './game-menu-dom';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -3578,6 +3579,8 @@ async function main() {
   document.addEventListener('pointerlockchange', () => {
     ctx.boot.hud.lockHint = document.pointerLockElement !== ctx.boot.canvas;
   });
+  // Esc menu: Resume / New game (level picker), shown once the pointer is released.
+  mountGameMenu(ctx.boot.canvas, ctx.world.level.id);
 
   // -----------------------------------------------------------------------
   // THE INPUT SEAM (deterministic demo recordings stage 3, 2026-09-14).
