@@ -965,7 +965,7 @@ export function createZombieActor(opts: {
       if (doomed) {
         think = {
           ...think, target: null, halt: true,
-          attack: null, fire: false, weaponUp: false, contact: false,
+          attack: null, fire: false, weaponUp: false, contact: false, advance: null,
         };
       }
       if (encounterOrder) {
@@ -1098,6 +1098,17 @@ export function createZombieActor(opts: {
         };
       } else {
         detourSide = 0;
+      }
+      // The sword LUNGE (enemy-mind.ts makeSwordMind): the brain halts
+      // locomotion during a swing, so the surge is applied to the root here,
+      // and only where the level allows it (the same combat-move check fed
+      // into MindInput.canMoveTo above).
+      if (think.advance) {
+        const p = state.wander.pos;
+        const next: Vec3 = [p[0] + think.advance[0], p[1], p[2] + think.advance[2]];
+        if (clearCombatMove(p, next, opts.furniture)) {
+          state = { ...state, wander: { ...state.wander, pos: next } };
+        }
       }
       const beforeMove = state.wander.pos;
       const stepR = stepMotion(
