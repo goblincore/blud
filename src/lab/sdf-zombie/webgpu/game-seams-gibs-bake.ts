@@ -7,6 +7,7 @@
 
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
+import { headPopDebris } from '../head-pop';
 import { cancelChunkBake, spawnGoreShowcase } from './game-bake-leaves';
 import { igniteExplosionLight } from './game-dynamite-leaves';
 import { ensureCarvedLibrary, ensureGibAssets, ensureGibAtlas, gibAssetArmed } from './game-gibs-leaves';
@@ -76,6 +77,39 @@ export function createGibsBakeSeams(ctx: GameContext) {
     /** RELAY THE GORE-PART BENCH in front of the player: meat chunks and classic
      *  bones, rendered through the real gib mesh path. Returns how many parts. */
     goreShowcase: () => spawnGoreShowcase(ctx),
+    /** HEAD-POP SHOWCASE: the cultist head-pop debris (head-pop.ts) laid AT
+     *  REST 0.9 m in front of the player, spread in a row, from the head of
+     *  actor `id` (default: the first actor with glowing eyes) — for looking at
+     *  the eyeballs and bits without chasing them through the air. */
+    headPopShowcase: (id?: number) => {
+      const a = id !== undefined ? ctx.world.actors.find(q => q.id === id)
+        : ctx.world.actors.find(q => q.posed().prims.some(p => p.limb === 'head' && (p.glow ?? 0) > 0));
+      if (!a || !ctx.boot.onGoreDispatch) return null;
+      const head = a.posed().prims.filter(p => p.limb === 'head' && !p.dead);
+      let cx = 0, cy = 0, cz = 0;
+      for (const p of head) { cx += (p.a[0] + p.b[0]) / 2; cy += (p.a[1] + p.b[1]) / 2; cz += (p.a[2] + p.b[2]) / 2; }
+      const c: Vec3 = [cx / head.length, cy / head.length, cz / head.length];
+      const pl = ctx.player.player;
+      const fwd: Vec3 = [Math.sin(pl.yaw), 0, -Math.cos(pl.yaw)];
+      const at: Vec3 = [pl.pos[0] + fwd[0] * 0.9, 0.9, pl.pos[2] + fwd[2] * 0.9];
+      const d: Vec3 = [at[0] - c[0], at[1] - c[1], at[2] - c[2]];
+      const mv = (v: Vec3): Vec3 => [v[0] + d[0], v[1] + d[1], v[2] + d[2]];
+      const prims = head.map(p => ({ ...p, a: mv(p.a), b: mv(p.b) }));
+      const pieces = headPopDebris({ origin: at, prims }, fwd, () => 0.5);
+      const right: Vec3 = [Math.cos(pl.yaw), 0, Math.sin(pl.yaw)];
+      pieces.forEach((pc, i) => {
+        const off = (i - (pieces.length - 1) / 2) * 0.12;
+        const sh: Vec3 = [right[0] * off, 0, right[2] * off];
+        pc.origin = [pc.origin[0] + sh[0], pc.origin[1], pc.origin[2] + sh[2]];
+        pc.prims = pc.prims.map(p => ({ ...p, a: [p.a[0] + sh[0], p.a[1], p.a[2] + sh[2]], b: [p.b[0] + sh[0], p.b[1], p.b[2] + sh[2]] }));
+        pc.vel = [0, 0, 0]; pc.angVel = [0, 0, 0];
+      });
+      ctx.boot.onGoreDispatch(a, pieces);
+      return pieces.length;
+    },
+    /** Live (flying) / baked (settled) gib-piece counts — a driver's check that
+     *  a gore spawn (the cultist's head pop, head-pop.ts) actually landed. */
+    chunkCounts: () => ({ live: ctx.bake.liveChunks.length, baked: ctx.bake.chunks.length, views: ctx.bake.views.length }),
     /** LAY THE SPRITE GIB BENCH in front of the player (loads the dev-only atlas
      *  on first use). Returns the number of billboards. */
     gibSpriteBench: async (which: 'placeholder' | 'sheet' = ctx.gibs.atlasSource) => {

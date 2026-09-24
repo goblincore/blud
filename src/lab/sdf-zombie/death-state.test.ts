@@ -63,4 +63,17 @@ describe('cloth decals cut nothing', () => {
     expect(cutLimbs(b, [{ ...w, decal: true }], torsoC)).toEqual([]);
     expect(p).toBeDefined();
   });
+  it('a decal on a SLEEVE still cuts the arm (owner: arms can be shot off)', () => {
+    const b = build(cultistSrc);
+    const i = b.prims.findIndex(p => p.limb === 'armR' && p.bone === 'upperArm.r');
+    const w = { primIdx: i, local: [0, 0, 0] as [number, number, number], radius: 0.07, type: 'blast' as const, ageSec: 0, severRadius: 0.13, decal: true };
+    const torsoC = b.clusters.find(c => c.limb === 'torso')!.center;
+    expect(cutLimbs(b, [w], torsoC)).toContain('armR');
+  });
+  it('the hood-down roll does not appear once the head (and its hood) is gone', () => {
+    const b = build(cultistSrc);
+    const clusters = b.clusters.map(c => (c.limb === 'head' ? { ...c, alive: false } : c));
+    const d = applyDeathState({ ...b, clusters });
+    expect(d.prims.filter(p => p.when === 'dead').every(p => p.dead)).toBe(true);
+  });
 });

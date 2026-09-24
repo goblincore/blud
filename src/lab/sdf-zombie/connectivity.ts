@@ -50,10 +50,11 @@ function carveSpheres(prims: Primitive[], wounds: Wound[], bodyYaw = 0): CarveSp
   const out: CarveSphere[] = [];
   for (const w of wounds) {
     if (w.type === 'burn') continue;
-    // A cloth DECAL (soft targets, damage.ts clothDecal) carves nothing, so it
-    // cuts nothing: a slug into a cultist's robe used to take his head off,
-    // and the hood-drop reveal went with it (2026-09-24).
-    if (w.decal) continue;
+    // A cloth DECAL on the TORSO (soft targets, damage.ts clothDecal) cuts
+    // nothing: a slug into a cultist's robe front used to take his head off.
+    // A decal on a SLEEVE still cuts — the owner wants arms shot off
+    // (2026-09-24); the legs are hidden under the robe anyway.
+    if (w.decal && prims[w.primIdx]?.limb === 'torso') continue;
     out.push({ centre: woundWorldPos(prims, w, bodyYaw), radius: w.severRadius ?? w.radius });
   }
   return out;

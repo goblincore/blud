@@ -24,11 +24,14 @@ export function applyDeathState(body: BuildResult): BuildResult {
   if (!hasDeathState(body)) return body;
   const clusterAlive = (i: number) =>
     body.clusters.find(c => i >= c.start && i < c.start + c.count)?.alive ?? true;
+  // What the dead look REPLACES is gone (the head popped with its hood):
+  // then there is nothing to fall back, so nothing appears.
+  const replacedGone = body.prims.some((p, i) => p.when === 'alive' && !clusterAlive(i));
   return {
     ...body,
     prims: body.prims.map((p, i) => {
       if (p.when === 'alive' && !p.dead) return { ...p, dead: true };
-      if (p.when === 'dead' && p.dead && clusterAlive(i)) {
+      if (p.when === 'dead' && p.dead && clusterAlive(i) && !replacedGone) {
         const { dead: _dead, ...rest } = p;
         return rest;
       }

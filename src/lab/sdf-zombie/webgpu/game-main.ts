@@ -170,7 +170,7 @@ import {
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
-  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT,
+  createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT, burst,
 } from '../blood-sim';
 import { BleedRegistry, woundEmitAnchorAndNormal } from '../bleed-registry';
 import {
@@ -269,6 +269,7 @@ import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, upd
 import { applyMouseDelta } from './game-player-leaves';
 import { setLoader } from './game-boot-leaves';
 import { registerBleed, stepGutRopes } from './game-world-leaves3';
+import { headPopDebris } from '../head-pop';
 import { demoRecordStop } from './game-demo-leaves2';
 import { createFireSeams } from './game-seams-fire';
 import { createSkeletonSeams } from './game-seams-skeleton';
@@ -3198,6 +3199,23 @@ async function main() {
       furniture: roomFurniture,
       navigation: ctx.world.encounterNav,
       onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
+      // HEAD POP (soft targets — the cultist, owner 2026-09-24): a killing head
+      // shot bursts the head in the blood sim's gib spray (blood-sim.ts burst,
+      // the blood lab's "burst" scenario) instead of sending it flying. Two
+      // bursts for mass, a slug gout along the shot, and the neck bleeds.
+      ...(characterEntry(name).profile.soft ? {
+        onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
+          const at = head.origin;
+          ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });
+          const stream = ctx.boot.nextEmitterStream++;
+          burst(ctx.vfx.bloodSim, at, rngStreams.bleed, stream);
+          burst(ctx.vfx.bloodSim, at, rngStreams.bleed, stream);
+          const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
+          spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+          if (stumpWound) registerBleed(ctx, actor, stumpWound, 'stump');
+          ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc));
+        },
+      } : {}),
     });
     // Ship default + any live toggle: a late spawn must not fall back to the
     // flat bone fold while the rest of the room culls.
@@ -6418,6 +6436,12 @@ async function main() {
     ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
     spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
     if (stumpWound) registerBleed(ctx, a, stumpWound, 'stump');
+  };
+  ctx.boot.onGoreDispatch = (a, pieces) => {
+    for (const p of pieces) {
+      spawnChunkPiece({ ...p, spinAngVel: p.angVel },
+        { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, p.vel);
+    }
   };
 
   // -----------------------------------------------------------------------
