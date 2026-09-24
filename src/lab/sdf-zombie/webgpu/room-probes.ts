@@ -13,7 +13,7 @@
 // to the P1 path, which is also what ?probes=0 pins for the parity drivers.
 import * as THREE from 'three/webgpu';
 import { luminance, type Box, type EnclosureWalls, type Vec3 } from '../ambient';
-import { sampleProbeGrid, type ProbeGrid, type ProbeGridRequest } from '../probe-grid';
+import { sampleProbeGrid, type ProbeGrid, type ProbeGridRequest, type ProbeSky } from '../probe-grid';
 import type { ProbeWorkerReply, ProbeWorkerRequest } from '../probe-grid.worker';
 import type { FurnitureDef, RoomDef } from './game-level';
 
@@ -50,6 +50,10 @@ export interface RoomProbesOptions {
    *  luminance. The game runs P1 at ambientGain 4, so 4 keeps the LEVEL of
    *  today's look and changes only its direction and hue. */
   levelMultiple?: number;
+  /** Outdoor v1: the sky of an open room (null for a closed one). */
+  skyFor?: (room: RoomDef) => ProbeSky | null;
+  /** Outdoor v1: the key light a room bakes with (the moon outdoors). Default `light`. */
+  lightFor?: (room: RoomDef) => RoomProbeLight;
   onReady?: (roomId: number) => void;
 }
 
@@ -57,6 +61,7 @@ export interface RoomProbesOptions {
 export function roomProbeRequest(
   room: RoomDef, furniture: readonly FurnitureDef[], light: RoomProbeLight,
   opts: { dims: [number, number, number]; raysPerProbe: number; bounces: number },
+  sky?: ProbeSky,
 ): ProbeGridRequest {
   const box: Box = { min: [room.minX, 0, room.minZ], max: [room.maxX, room.height, room.maxZ] };
   const walls: EnclosureWalls = {
@@ -75,7 +80,7 @@ export function roomProbeRequest(
       keyIntensity: light.keyIntensity, fillIntensity: light.fillIntensity,
       points: room.accents.map(a => ({ pos: a.pos, color: a.color })),
     },
-    options: { dims: opts.dims, raysPerProbe: opts.raysPerProbe, bounces: opts.bounces, occluders },
+    options: { dims: opts.dims, raysPerProbe: opts.raysPerProbe, bounces: opts.bounces, occluders, ...(sky ? { sky } : {}) },
   };
 }
 
@@ -140,11 +145,14 @@ export function createRoomProbes(o: RoomProbesOptions): RoomProbes {
   const worker = o.workerFactory();
   const queue = [...o.rooms];
   let inFlight: RoomDef | null = null;
+  const lightById = new Map<number, RoomProbeLight>();
   function next() {
     if (disposed) return;
     inFlight = queue.shift() ?? null;
     if (!inFlight) { worker.terminate(); return; }
-    worker.postMessage({ id: inFlight.id, req: roomProbeRequest(inFlight, o.furniture, o.light, { dims, raysPerProbe, bounces }) });
+    const roomLight = o.lightFor?.(inFlight) ?? o.light;
+    lightById.set(inFlight.id, roomLight);
+    worker.postMessage({ id: inFlight.id, req: roomProbeRequest(inFlight, o.furniture, roomLight, { dims, raysPerProbe, bounces }, o.skyFor?.(inFlight) ?? undefined) });
   }
   worker.onmessage = ({ data }) => {
     if (disposed) return;
@@ -157,7 +165,7 @@ export function createRoomProbes(o: RoomProbesOptions): RoomProbes {
         THREE.RGBAFormat, THREE.FloatType,
       );
       tex.needsUpdate = true;
-      baked.set(data.id, { grid, tex, gain: matchedGain(grid, o.light, levelMultiple) });
+      baked.set(data.id, { grid, tex, gain: matchedGain(grid, lightById.get(data.id) ?? o.light, levelMultiple) });
       for (const u of bound.get(data.id) ?? []) stamp(u, data.id);
       o.onReady?.(data.id);
     }
