@@ -8,7 +8,7 @@
 import type { Vec3 } from '../types';
 import type { Aabb, FurnitureDef } from './game-level';
 import {
-  DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type GateDef,
+  DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type PortalDef, type GateDef,
   type EdgeDef, type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
   type PathDef, type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
   type WallSide, type WindowDef,
@@ -27,9 +27,9 @@ const MAX_STAIR_RISE = 3;
 const KEYS: Record<string, readonly string[]> = {
   top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
     'stairs', 'furniture', 'solids', 'gates', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
-    'pickups', 'bells'],
+    'pickups', 'bells', 'portals'],
   palette: ['wall', 'floor', 'ceil', 'tunnel', 'solid'],
-  room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'states'],
+  room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'void', 'states'],
   path: ['ground', 'min', 'max'],
   edge: ['style', 'height'],
   tunnel: ['a', 'b', 'min', 'max', 'height', 'states'],
@@ -44,6 +44,7 @@ const KEYS: Record<string, readonly string[]> = {
   grave: ['id', 'wave', 'pos', 'yaw', 'states'],
   pickup: ['id', 'item', 'pos', 'states'],
   bell: ['id', 'pos', 'radius', 'states'],
+  portal: ['id', 'pos', 'yaw', 'width', 'height', 'target', 'states'],
 };
 
 export interface ParseOptions {
@@ -175,11 +176,13 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
       if (eh < 0.3 || eh > height + LEVEL_TOL) errors.push(`${where}.edge.height: between 0.3 and the room height`);
       if (oneOf(style, EDGE_STYLES, 'edge style', `${where}.edge.style`)) edge = { style: style as EdgeStyle, height: eh };
     }
+    const isVoid = o.void === undefined ? false : o.void === true ? true : (errors.push(`${where}.void: expected true or false`), false);
+    if (isVoid && (o.sky !== undefined || o.edge !== undefined || o.paths !== undefined)) errors.push(`${where}: void rooms have no sky, edge or paths`);
     if (!keep) return;
     if (rooms.some(r => r.id === rid)) errors.push(`${where}.id: duplicate room id ${rid}`);
     if (rooms.some(r => r.name === rname)) errors.push(`${where}.name: duplicate room name ${rname}`);
     rooms.push({
-      id: rid, name: rname, minX: minX!, maxX: maxX!, minZ: minZ!, maxZ: maxZ!, floor, height, sky, ground, paths, edge,
+      id: rid, name: rname, minX: minX!, maxX: maxX!, minZ: minZ!, maxZ: maxZ!, floor, height, sky, ground, paths, edge, void: isVoid,
       wallColor: palette.wall, floorColor: palette.floor, ceilColor: palette.ceil,
       accents: [], zombies: 0, soldiers: 0,
     });
@@ -392,6 +395,21 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     if (keep) bells.push({ id: bid, pos, radius });
   });
 
+  const portals: PortalDef[] = [];
+  list(j.portals, 'portals').forEach((o, i) => {
+    const pid = str(o.id, `portals[${i}].id`, `portal${i}`);
+    keys(o, 'portal', `portal ${pid}`);
+    const keep = present(o, `portal ${pid}`);
+    claim(pid);
+    const pos = vec(o.pos, 3, `portal ${pid}.pos`) as unknown as Vec3;
+    const width = num(o.width, `portal ${pid}.width`, 2.2), height = num(o.height, `portal ${pid}.height`, 3.4);
+    if (!(width > 0 && height > 0)) errors.push(`portal ${pid}: width and height must be > 0`);
+    const target = str(o.target, `portal ${pid}.target`);
+    if (!/^[a-z0-9-]+$/.test(target)) errors.push(`portal ${pid}: target must match [a-z0-9-]+`);
+    if (!inRoom(pos[0], pos[2])) errors.push(`portal ${pid}: outside every room`);
+    if (keep) portals.push({ id: pid, pos, yaw: isNum(o.yaw) ? o.yaw : 0, width, height, target });
+  });
+
   if (errors.length > 0) throw new Error(`level ${id}: ${errors.join('; ')}`);
 
   // --- capabilities (spec §8), in a fixed order ---------------------------------
@@ -399,10 +417,12 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
   if (rooms.some(r => Math.abs(r.floor) > LEVEL_TOL) || stairs.length > 0) requires.push('multi-floor');
   if (windows.length > 0) requires.push('windows');
   if (rooms.some(r => r.sky !== null)) requires.push('open-sky');
+  if (rooms.some(r => r.void)) requires.push('void');
+  if (portals.length > 0) requires.push('portals');
 
   return {
     id, name, ammo, palette, loadout, completeOn, state, states, requires, skyline,
     rooms, tunnels, stairs, furniture, solids, gates, triggers, windows,
-    playerStart, spawns, graves, pickups, bells,
+    playerStart, spawns, graves, pickups, bells, portals,
   };
 }

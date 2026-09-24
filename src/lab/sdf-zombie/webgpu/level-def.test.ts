@@ -15,7 +15,7 @@ import { stepPlayer, type PlayerState } from './game-player';
 function twoRooms(): LevelDef {
   const P = DEFAULT_PALETTE;
   const room = (id: number, name: string, minX: number, maxX: number): LevelRoom => ({
-    id, name, minX, maxX, minZ: 0, maxZ: 8, height: 3, floor: 0, sky: null, ground: 'stone', paths: [], edge: null,
+    id, name, minX, maxX, minZ: 0, maxZ: 8, height: 3, floor: 0, sky: null, ground: 'stone', paths: [], edge: null, void: false,
     wallColor: P.wall, floorColor: P.floor, ceilColor: P.ceil, accents: [], zombies: 0, soldiers: 0,
   });
   return {
@@ -29,7 +29,7 @@ function twoRooms(): LevelDef {
     triggers: [],
     windows: [{ id: 'w1', view: 'night', room: 1, side: 'n', box: { min: [3, 1, -0.05], max: [5, 2, 0.05] } }],
     playerStart: { x: 4, y: 0, z: 4, yaw: Math.PI / 2, pitch: 0 },
-    spawns: [], graves: [], pickups: [], bells: [],
+    spawns: [], graves: [], pickups: [], bells: [], portals: [],
   };
 }
 

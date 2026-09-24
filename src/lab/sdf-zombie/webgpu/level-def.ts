@@ -35,13 +35,15 @@ export const DEFAULT_PALETTE: LevelPalette = {
   solid: [0.34, 0.33, 0.32],
 };
 
-export type Capability = 'multi-floor' | 'windows' | 'open-sky';
+export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals';
 export type WallSide = 'n' | 's' | 'e' | 'w';
 export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd';
 export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd'];
 
 /** Outdoor v1 §4.1: a strip of another ground laid over a room's floor. */
 export interface PathDef { ground: GroundName; minX: number; maxX: number; minZ: number; maxZ: number }
+/** Void v1 §3: a portal. `yaw` faces the viewer side; `target` is a level id. */
+export interface PortalDef { id: string; pos: Vec3; yaw: number; width: number; height: number; target: string }
 /** Outdoor v1 §4.1: an open-sky room's visible edge. */
 export interface EdgeDef { style: EdgeStyle; height: number }
 
@@ -71,6 +73,8 @@ export interface LevelRoom extends RoomDef {
   ground: GroundName;
   paths: PathDef[];
   edge: EdgeDef | null;
+  /** Void v1 §3: nothing drawn (walls, floor, ceiling); collision unchanged. */
+  void: boolean;
 }
 export interface LevelTunnel extends TunnelDef { floor: number }
 export interface StairDef { id: string; up: '+x' | '-x' | '+z' | '-z'; box: Aabb }
@@ -110,6 +114,7 @@ export interface LevelDef {
   graves: GraveDef[];
   pickups: PickupDef[];
   bells: BellDef[];
+  portals: PortalDef[];
 }
 
 export interface Mouth { lo: number; hi: number; tunnel: LevelTunnel }
@@ -216,6 +221,7 @@ export function layoutSurfaces(level: LevelDef): LevelSurfaceSet {
     surface ? { min, max, axis, facing, color, surface } : { min, max, axis, facing, color };
 
   for (const r of level.rooms) {
+    if (r.void) continue; // Void v1 §3: collision only
     const f = r.floor, top = r.floor + r.height;
     const wallTop = f + displayTop(r);
     const wallTag: SurfaceTag = r.edge ? `edge:${r.edge.style}` : 'wall';
@@ -319,6 +325,10 @@ export function enclosureOfIn(level: Pick<LevelDef, 'rooms' | 'tunnels'>, key: s
   const room = level.rooms.find(r => r.name === key);
   if (room) {
     const box: Box = { min: [room.minX, room.floor, room.minZ], max: [room.maxX, room.floor + room.height, room.maxZ] };
+    if (room.void) {
+      const k: Vec3 = [0, 0, 0];
+      return { box, walls: { negX: k, posX: k, negY: k, posY: k, negZ: k, posZ: k } };
+    }
     const lit = (axis: 0 | 1 | 2, side: -1 | 1, paint: Vec3): Vec3 =>
       litWallAlbedo(paint, wallCentre(box, axis, side), room.accents);
     return {

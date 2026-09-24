@@ -57,7 +57,7 @@ describe('authoredLevel', () => {
 
 describe('capabilities', () => {
   it('web engine v1 supports windows and open sky, not multi-floor', () => {
-    expect([...ENGINE_CAPABILITIES].sort()).toEqual(['open-sky', 'windows']);
+    expect([...ENGINE_CAPABILITIES].sort()).toEqual(['open-sky', 'portals', 'void', 'windows']);
     expect(missingCapabilities(two(), ENGINE_CAPABILITIES)).toEqual([]);
     expect(missingCapabilities(floors(), ENGINE_CAPABILITIES)).toEqual(['multi-floor']);
   });

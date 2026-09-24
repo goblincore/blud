@@ -15,11 +15,11 @@ import {
 } from './game-level';
 import {
   enclosureKeyIn, enclosureOfIn, gateColliders, layoutColliders, layoutSurfaces,
-  roomAtPoint, type Capability, type LevelDef, type LevelSurfaceSet,
+  roomAtPoint, type Capability, type LevelDef, type LevelSurfaceSet, type PortalDef,
 } from './level-def';
 
 /** Capabilities the web engine can load today (spec §8). */
-export const ENGINE_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['windows', 'open-sky']);
+export const ENGINE_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['windows', 'open-sky', 'void', 'portals']);
 
 export function missingCapabilities(def: LevelDef, supported: ReadonlySet<Capability>): Capability[] {
   return def.requires.filter(c => !supported.has(c));
@@ -42,6 +42,8 @@ export interface ActiveLevel {
   keyAt(x: number, z: number): string;
   enclosureFor(key: string): { box: Box; walls: EnclosureWalls } | null;
   gateColliders(open: ReadonlySet<string>): Aabb[];
+  /** Void v1 §3: portals; empty for the ring. */
+  portals: readonly PortalDef[];
   /** Enemies to spawn at load, in spawn order. */
   spawnList(): LevelSpawn[];
 }
@@ -60,6 +62,7 @@ export function ringLevel(): ActiveLevel {
     keyAt: enclosureKeyAt,
     enclosureFor: enclosureOf,
     gateColliders: () => [],
+    portals: [],
     spawnList: () => ROOMS.flatMap(room => spawnPoints(room).map((pos, index) => ({
       id: `ring-${room.id}-${index}`,
       kind: index < (room.soldiers ?? 0) ? 'soldier' as const : 'zombie' as const,
@@ -82,6 +85,7 @@ export function authoredLevel(def: LevelDef): ActiveLevel {
     keyAt: (x, z) => enclosureKeyIn(def, x, z),
     enclosureFor: key => enclosureOfIn(def, key),
     gateColliders: open => gateColliders(def, open),
+    portals: def.portals,
     spawnList: () => def.spawns.flatMap(s => {
       const room = roomAtPoint(def, s.pos[0], s.pos[2]);
       return room ? [{ id: s.id, kind: s.kind, room, pos: s.pos }] : [];
