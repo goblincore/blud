@@ -10,8 +10,7 @@ file (one room per carriage, thin partitions as solids, props as furniture, spaw
 for the level tests and scripts/levels/level_plan.py; `--svg` draws every carriage as its own
 strip, north to the right, for review.
 
-Draft conventions: cultists are `soldier` spawns with ids `cultist-*` (the format has no
-cultist kind yet); the locked compartment is a gate that never opens in v1.
+The locked compartment is a gate that never opens in v1.
 """
 from __future__ import annotations
 
@@ -53,7 +52,7 @@ CARRIAGES = [
                 ("buffet island", -0.6, 0.6, 11.0, 14.2, 1.0),
                 ("stoves", 1.3, 2.1, 15.7, 17.6, 1.0), ("counter", -2.1, -1.6, 16.6, 17.8, 1.0)],
          spawns=[("waiter-1", "zombie", -1.1, 3.4), ("waiter-2", "zombie", 1.1, 7.2),
-                 ("cultist-island", "soldier", 0.0, 15.0), ("cultist-lounge", "soldier", -1.4, 13.0),
+                 ("cultist-island", "cultist", 0.0, 15.0), ("cultist-lounge", "cultist", -1.4, 13.0),
                  ("cook", "zombie", 0.3, 16.8)],
          pickups=[("galley-health", "health", -1.85, 17.2), ("galley-shells", "shells", 1.7, 17.2)],
          gates=[]),
@@ -67,7 +66,7 @@ CARRIAGES = [
                 ("C4", -0.5, 2.0, 10.58, 13.44), ("C5", -0.5, 2.0, 13.54, 16.3), ("north lobby", -2.0, 2.0, 16.4, 18.0)],
          props=[*[("bunk", 1.2, 2.0, a + 0.1, b - 0.1, 0.6) for a, b in ((1.7, 4.56), (4.66, 7.52), (7.62, 10.48), (10.58, 13.44))]],
          spawns=[("c1-sleeper", "zombie", 0.6, 3.1), ("c3-sleeper", "zombie", 0.6, 9.0),
-                 ("cultist-c4", "soldier", 0.2, 12.0), ("lobby-1", "zombie", -1.0, 17.2), ("lobby-2", "zombie", 1.0, 17.2)],
+                 ("cultist-c4", "cultist", 0.2, 12.0), ("lobby-1", "zombie", -1.0, 17.2), ("lobby-2", "zombie", 1.0, 17.2)],
          pickups=[("c2-shells", "shells", 1.5, 6.0), ("new-weapon", "dynamite", 1.5, 9.0)],
          gates=[("c5-door", "never", -0.6, -0.5, 14.28, 15.68)]),
     dict(rid=5, name="party-carriage", w=4.2, L=20.0, h=3.4,
@@ -78,7 +77,7 @@ CARRIAGES = [
                 ("bar", 1.5, 2.1, 11.5, 17.5, 1.1), ("jukebox", -2.1, -1.3, 18.9, 19.5, 1.5)],
          spawns=[*[(f"dancer-{i}", "zombie", x, u) for i, (x, u) in enumerate(
                      ((-1.0, 8.5), (0.8, 8.8), (-0.6, 10.0), (1.0, 10.4), (-1.2, 11.4), (0.4, 11.8), (-0.3, 14.5), (0.9, 15.2)), 1)],
-                 ("cultist-bar-1", "soldier", 1.1, 13.0), ("cultist-bar-2", "soldier", 1.1, 16.5)],
+                 ("cultist-bar-1", "cultist", 1.1, 13.0), ("cultist-bar-2", "cultist", 1.1, 16.5)],
          pickups=[("favour-dynamite", "dynamite", -1.75, 3.0), ("bar-health", "health", 1.8, 17.8), ("jukebox-cd", "cd", -1.7, 19.2)],
          gates=[]),
     dict(rid=8, name="cab", w=3.0, L=8.0, h=2.6,
@@ -159,7 +158,7 @@ def to_svg() -> str:
         for gid, _, x0, x1, u0, u1 in c["gates"]:
             o.append(box(x0 - 0.05, x1 + 0.05, u0, u1, "#e08030") + text((u0 + u1) / 2, x1 + 0.45, "locked", "#e08030", 10, "middle"))
         for sid, kind, x, u in c["spawns"]:
-            cult = sid.startswith("cultist")
+            cult = kind == "cultist"
             col = "#e0a020" if cult else "#d03030"
             o.append(f'<circle cx="{X(u):.1f}" cy="{Y(x):.1f}" r="7" fill="{col}"/>'
                      + text(u, x + 0.1, "C" if cult else "Z", "#fff", 10, "middle", "bold"))

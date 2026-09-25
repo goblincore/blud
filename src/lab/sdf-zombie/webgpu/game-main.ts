@@ -3367,7 +3367,7 @@ async function main() {
     // ?spawn=<character> (playtest): every non-soldier slot spawns that
     // registry character instead of the zombie, e.g. ?spawn=cultist.
     for (const s of ctx.world.level.spawnList()) {
-      const name = s.kind === 'soldier' ? 'soldier' : spawnOverride ?? s.kind;
+      const name = s.kind === 'zombie' ? spawnOverride ?? 'zombie' : s.kind;
       ctx.world.actors.push(spawnEnemy(name, s.room, s.pos, errs));
     }
   }

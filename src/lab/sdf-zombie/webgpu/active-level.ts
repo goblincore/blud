@@ -15,7 +15,7 @@ import {
 } from './game-level';
 import {
   enclosureKeyIn, enclosureOfIn, gateColliders, layoutColliders, layoutSurfaces,
-  roomAtPoint, type Capability, type LevelDef, type LevelSurfaceSet, type PortalDef,
+  roomAtPoint, type Capability, type LevelDef, type LevelSurfaceSet, type PortalDef, type SpawnKind,
 } from './level-def';
 
 /** Capabilities the web engine can load today (spec §8). */
@@ -25,7 +25,7 @@ export function missingCapabilities(def: LevelDef, supported: ReadonlySet<Capabi
   return def.requires.filter(c => !supported.has(c));
 }
 
-export interface LevelSpawn { id: string; kind: 'zombie' | 'soldier'; room: RoomDef; pos: Vec3 }
+export interface LevelSpawn { id: string; kind: SpawnKind; room: RoomDef; pos: Vec3 }
 
 export interface ActiveLevel {
   /** 'ring' for the testbed, else the authored level id. */

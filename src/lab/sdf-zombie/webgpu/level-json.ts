@@ -348,8 +348,8 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     keys(o, 'spawn', `spawn ${sid}`);
     const keep = present(o, `spawn ${sid}`);
     claim(sid);
-    const kind = o.kind === 'soldier' ? 'soldier' : o.kind === 'zombie' ? 'zombie' : null;
-    if (!kind) errors.push(`spawn ${sid}: kind must be zombie or soldier`);
+    const kind = o.kind === 'soldier' || o.kind === 'zombie' || o.kind === 'cultist' ? o.kind : null;
+    if (!kind) errors.push(`spawn ${sid}: kind must be zombie, soldier or cultist`);
     const pos = vec(o.pos, 3, `spawn ${sid}.pos`) as unknown as Vec3;
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`spawn ${sid}: must be inside a room (not a corridor)`);

@@ -83,7 +83,8 @@ export interface LevelTunnel extends TunnelDef { floor: number }
 export interface StairDef { id: string; up: '+x' | '-x' | '+z' | '-z'; box: Aabb }
 export interface WindowDef { id: string; view: string; room: number; side: WallSide; box: Aabb }
 export interface PickupDef { id: string; item: PickupItem; pos: Vec3 }
-export interface SpawnDef { id: string; kind: 'zombie' | 'soldier'; pos: Vec3; yaw: number }
+export type SpawnKind = 'zombie' | 'soldier' | 'cultist';
+export interface SpawnDef { id: string; kind: SpawnKind; pos: Vec3; yaw: number }
 export interface GraveDef { id: string; wave: number; pos: Vec3; yaw: number }
 export interface BellDef { id: string; pos: Vec3; radius: number }
 export interface TriggerDef { id: string; event: string; once: boolean; box: Aabb }

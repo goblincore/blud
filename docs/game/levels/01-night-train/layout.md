@@ -52,8 +52,7 @@ sleeper −36.4…−54.4, party −55.6…−75.6, cab −76.8…−84.8).
 | Party carriage | 8 dancers (zombies) + **2 cultists at the bar** | the first shot | everything together; circling the pillars |
 | Cab | the Stoker (not an enemy) | — | the set piece (later) |
 
-**Total:** 18 zombies, 5 cultists. (Draft data marks cultists as `soldier` spawns named
-`cultist-*`; the format needs a cultist kind before the build.)
+**Total:** 18 zombies, 5 cultists (the format's `cultist` spawn kind).
 
 ## 3. Sightlines (what each doorway shows first)
 
