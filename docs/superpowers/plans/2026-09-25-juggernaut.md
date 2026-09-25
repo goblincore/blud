@@ -88,9 +88,8 @@ and `soldier-kit.test.ts`. Use the `authoring-sdf-characters` skill.
 - [ ] `strafe: false` tuning flag: engage only closes radially toward
   preferredRange and never backs off. Brain tests: no lateral goal, never
   retreats, and a burst of 15 or more rounds.
-- [ ] Single-round projectile (one pellet per shot) for `'chaingun'`. Decide
-  whether the cultist's SMG moves to it too (owner call; it currently fires
-  8-pellet rounds).
+- [ ] Single-round projectile (one pellet per shot) for `'chaingun'` ONLY. The
+  cultist's SMG keeps its 8-pellet rounds (owner, 2026-09-25).
 - [ ] Spin-up: barrel spin rate driven by brain state (aim, fire, settle) as
   plain data, applied by the view. Placeholder whine and brass casings.
 
