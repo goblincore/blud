@@ -21,7 +21,7 @@ vision §10.3.)
 > **Art direction (owner, 2026-09-24):** an old-timey interior, wood floors and wood-panelled
 > walls. Inspiration: the first train level of *Resident Evil 0* (the owner has a fan
 > recreation), as a *type*, like Blood: its mood and materials, never its layout or assets.
-> Divergences welcome. Built with the [mesh key](../../../superpowers/specs/2026-09-24-level-mesh-key-design.md).
+> Divergences welcome. Study: [reference-study-re0.md](reference-study-re0.md). Built with the [mesh key](../../../superpowers/specs/2026-09-24-level-mesh-key-design.md).
 
 ## 1. Decisions so far
 
