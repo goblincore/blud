@@ -16,10 +16,11 @@ superpowers spec/plan when they start; link it on the task.
 The Wake is the first test of **route B/D**: levels built in Blender,
 exported into the game. The flat uses the same path.
 
-- [ ] **P-1 Blender conventions.** Units and scale, collision vs. render
+- [x] **P-1 Blender conventions.** Done 2026-09-23: [blender-conventions.md](../blender-conventions.md) (Plan 1 T4). Units and scale, collision vs. render
   meshes, naming for markers (player start, spawns, pickups, triggers, exit,
   lights, music sources, SDF parts). *Done when:* a short conventions doc.
-- [ ] **P-2 Exporter + importer.** Export a Blender scene (glTF plus markers) and
+- [x] **P-2 Exporter + importer.** Done 2026-09-23 (Plan 1 T1–T4, T6): Level Format v1 parser, `scripts/levels/export_level.py`,
+  `?level=<id>` loads through `ctx.world.level`; `scripts/sdf-game-wake-gate.sh` passes. Export a Blender scene (glTF plus markers) and
   load it in the game: meshes, box/mesh collision, markers turned into entities.
   *Deps:* P-1. *Done when:* a test scene with a start, a spawn and an exit
   loads and plays.
@@ -41,9 +42,9 @@ The level can't be tested without these. Build them small.
 
 ## Design
 
-- [ ] **W-D0 Reference study.** Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
+- [x] **W-D0 Reference study.** Done 2026-09-23: [reference-study.md](reference-study.md). Blood E1M1/E1M2 as a type. Plan 1 Task 5a;
   process in the [level design guide](../level-design-guide.md).
-- [ ] **W-D1 Paper map.** Final flow and dimensions at goblin scale.
+- [x] **W-D1 Paper map.** [layout.md](layout.md) draft 1 approved 2026-09-23 (no soldier). Final flow and dimensions at goblin scale.
   *Deps:* W-D0, F-D5 (goblin scale). *Done when:* `layout.md` approved (Plan 1 Task 5b).
 - [ ] **W-D2 Encounter script.** Zombie counts, spawn points, triggers per beat.
   *Deps:* W-D1. Part of `layout.md` (Plan 1 Task 5b). Zombies and soldiers only.
@@ -54,7 +55,8 @@ The level can't be tested without these. Build them small.
 
 ## Build
 
-- [ ] **W-B1 Blockout in Blender.** Untextured, playable: gates → grave →
+- [~] **W-B1 Blockout in Blender.** Built from the approved layout 2026-09-23: plays at `?level=the-wake`,
+  level test and gate pass. Placeholder dressing in the `.blend` (Plan 1 5d). Remaining: live Blender review with the owner. Untextured, playable: gates → grave →
   graveyard → crypt → funeral home → coffin. *Deps:* P-2, W-D1.
   *Done when:* walk start to CD pickup in the game.
 - [ ] **W-B2 Encounters in.** Spawns and triggers from W-D2. *Deps:* W-B1, L-4.
@@ -71,11 +73,21 @@ The level can't be tested without these. Build them small.
 - [ ] **W-D7 Bell waves.** Wave sizes, grave positions, rewards per toll.
   *Deps:* W-D2.
 
+- [~] **W-B7 Outdoor look (engine).** Outdoor v1 landed 2026-09-23 (sky, moon + shadow, grounds, paths, low edges,
+  treeline); owner tuning pending. The gates, lane and graveyard are the game's first outdoor spaces;
+  the renderer only knows dungeon rooms (probe boxes, stone floors, fog as the sky). Needs a spec:
+  moonlight and sky ambient, ground/terrain materials and elevation, open-sky edges (fence, hedge, treeline, horizon),
+  per-room materials. Raised by the owner 2026-09-23. *Deps:* none; blocks the art pass (W-A3).
+
 ## Art (Blender)
 
 - [ ] **W-A1 Art kit designs.** Gates, headstones, mausoleum, fence, crypt,
   funeral-home parlour, pews, flowers, organ, coffin. Sketches/reference first.
-  Rough placeholders come first, in the `.blend` (Plan 1 Task 5d).
+  Rough placeholders come first, in the `.blend` (Plan 1 Task 5d; done 2026-09-23).
+  **Owner notes on the placeholders (2026-09-23):** the bell tower is unimaginative, needs a
+  real design; more irregular shapes: crumbling walls, a sense of decadent decay; the iron
+  gates should be visually impressive; add a gothic castle element. Simplified forms are
+  fine for a first pass.
 - [!] **W-A2 Art kit models.** *Blocked on:* P-4 (pipeline verdict).
 - [!] **W-A3 Art pass on the blockout.** *Deps:* W-A2, W-B3.
 - [ ] **W-A4 Starting melee model** once W-D3 is decided.

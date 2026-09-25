@@ -53,3 +53,6 @@ telemetry/
 
 # Neural upscale training pairs (spec 2026-09-11 §7) — local data, never committed
 .upscale-data/
+
+# Blender save backups
+*.blend1

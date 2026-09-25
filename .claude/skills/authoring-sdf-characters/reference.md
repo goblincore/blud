@@ -220,6 +220,15 @@ reads as cloth bulging, not skin through a tear. And measure the stride against 
 the zombie shamble put a knee 13.7 cm through the cultist's robe, which is why he has a `GLIDE`
 gait.
 
+### A different look once dead: `when=alive` / `when=dead` (added 2026-09-24)
+
+A prim tagged `when=alive` exists only while the character lives; `when=dead` starts hidden and
+appears when the body collapses (the game actor swaps the sets on the first collapsed step,
+`death-state.ts`). The cultist's hood is `when=alive` and a bunched roll behind his neck is
+`when=dead`, so a kill drops the hood and bares his head. The swap uses the same `dead` switch
+severing does, so no prim moves and wounds stay put. The lab does not apply it: check the dead
+look by temporarily swapping the tags and running `blob:shot`.
+
 ## Colour is the biggest lever you have
 
 Before the `palette` block existed, every `.blob` character wore one global
@@ -451,3 +460,39 @@ Rules:
   (`eyeGap`..`seed`) are ignored in decal mode.
 - Meshes face +z by glTF convention; `--front -z` if the bake shows the
   back of the head.
+
+## Primitive budget: 256 per body, 64 per cluster (updated 2026-09-24)
+
+Two ceilings, both enforced by `validateBody` (`validate.ts`):
+
+| Limit | Value | What happens past it |
+| --- | --- | --- |
+| `MAX_PRIMS` — flesh + bone, the whole body | 256 | validation error |
+| `MAX_CLUSTER_PRIMS` — one limb cluster | 64 | validation error (the shader would silently stop folding) |
+
+Bone prims count against `MAX_PRIMS`. `blob-inspect` prints each cluster's
+count: `npx tsx scripts/blob-inspect.ts <name>`.
+
+**What the total costs.** Each body's data texture is `primStride(total)`
+texels wide: 128 up to 128 prims, 192 up to 192, 256 up to 256. The GPU march
+does not see the width (it reads by column and stops at the live count), so
+per-pixel march cost is set by how many prims a ray folds, the same as
+always, not by this ceiling. The width costs CPU-side memory and bandwidth,
+per character type:
+
+| Width | Crowd atlas (64 slots, GPU) | CPU mirror | Upload per drawn body per frame |
+| --- | --- | --- | --- |
+| 128 | 3.1 MiB | 3.1 MiB | ~51 KB |
+| 192 | 4.7 MiB | 4.7 MiB | ~77 KB |
+| 256 | 6.25 MiB | 6.25 MiB | ~102 KB |
+
+A crowd type (one per character per room) takes its width from the first body
+spawned into it. Gib chunks and the FPV hands always stay 128 wide.
+
+**Where the real per-frame cost is:** prims folded per pixel. A 200-prim body
+whose extra prims sit in small, tight clusters (fingers, teeth, hair locks)
+costs far less than one that fattens the torso, because the group cull skips
+far-away runs. The cultist's 24-prim face was its most expensive part before
+the upper-bound cull (docs/dev-notes/2026-09-23-cultist/PERF.md). Measure with
+the bench's prims heatmap (`scripts/sdf-bench.sh <scene> 0.7 5 prims`).
+

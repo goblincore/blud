@@ -19,13 +19,15 @@ import { buildBody } from './build-body';
 import { bindRig, kickHem } from './rig-bind';
 import { sdBody } from './validate';
 import {
-  clothifyWound, isClothPrim, worldHitToWound, WOUND_PROFILES,
-  CLOTH_BULLET_HOLE_RADIUS, CLOTH_RAGGED, type Wound,
+  clothifyWound, clothDecal, isClothPrim, worldHitToWound, WOUND_PROFILES,
+  CLOTH_BULLET_HOLE_RADIUS, CLOTH_RAGGED, CLOTH_STAIN_MAX_RADIUS, type Wound,
 } from './damage';
 import { writeWounds } from './webgpu/zombie-gpu';
 import { APPLY_WOUNDS, WOUND_MASK } from './webgpu/march.wgsl';
+import { NG_WOUNDS as NORMAL_GRADIENT_WGSL } from './webgpu/normal-gradient.wgsl';
+import { PAINT_CHAR_BLOCK } from './webgpu/march/body/blocks/post/paint-char.wgsl';
 import { ROW_WOUND_FLAGS } from './webgpu/march.wgsl';
-import { MAX_PRIMS } from './validate';
+import { BASE_PRIM_STRIDE } from './validate';
 import { len, sub } from './vec';
 import type { Vec3 } from './types';
 
@@ -100,11 +102,11 @@ describe('clothifyWound', () => {
 
 describe('the bullet-hole GPU flag', () => {
   it('rides flags.x bit 1, beside the cavity bit 0, under the threat fraction', () => {
-    const texels = new Float32Array(32 * MAX_PRIMS * 4);
+    const texels = new Float32Array(32 * BASE_PRIM_STRIDE * 4);
     const p: Vec3[] = [[0, 1, 0], [0, 1.1, 0], [0, 1.2, 0]];
     writeWounds(texels, p, [0.05, 0.05, 0.05], [0, 0, 0], [0, 0, 0], undefined, undefined, {},
       undefined, [true, false, true], undefined, [5, 0, 0], [false, true, true]);
-    const x = (i: number) => texels[ROW_WOUND_FLAGS * MAX_PRIMS * 4 + i * 4]!;
+    const x = (i: number) => texels[ROW_WOUND_FLAGS * BASE_PRIM_STRIDE * 4 + i * 4]!;
     expect(Math.floor(x(0))).toBe(1);            // cavity only
     expect(Math.floor(x(1))).toBe(2);            // hole only
     expect(Math.floor(x(2))).toBe(3);            // both
@@ -140,5 +142,48 @@ describe('kickHem', () => {
     const zombie = buildBody(compileBlob(parseBlob(cultistSrc.replace(/^\s*bone hem .*$/m, '').replace(/ on hem /g, ' on spine '))));
     const bound = bindRig(zombie);
     expect(kickHem(bound, [1, 0, 0])).toBe(bound);
+  });
+});
+
+// SOFT-TARGET DECALS (owner playtest 2026-09-24): "it would just pass through
+// the cloth and hit the flesh ... the rips and tears can be replaced with
+// decals". A soft target's robe is painted, never carved.
+describe('clothDecal', () => {
+  it('a slug on the robe becomes a capped, carve-free stain with no gut spill', () => {
+    const w = clothDecal(body.prims, clothifyWound(body.prims,
+      { ...stampOn(skirt, 'blast'), radius: 0.16, cavity: true, spillCalibre: 'slug' as const }, 'heavy'));
+    expect(w.decal).toBe(true);
+    expect(w.cloth).toBe('tear');
+    expect(w.radius).toBe(CLOTH_STAIN_MAX_RADIUS);
+    expect(w.cavity).toBeUndefined();
+    expect(w.spillCalibre).toBeUndefined();
+  });
+  it('a small-calibre hole stays a hole, now as a decal', () => {
+    const w = clothDecal(body.prims, clothifyWound(body.prims, stampOn(skirt), 'small'));
+    expect(w.decal).toBe(true);
+    expect(w.cloth).toBe('hole');
+    expect(w.radius).toBe(CLOTH_BULLET_HOLE_RADIUS);
+  });
+  it('bare flesh and burns still carve (a face shot is a wound)', () => {
+    expect(clothDecal(body.prims, stampOn(hand)).decal).toBeUndefined();
+    expect(clothDecal(body.prims, stampOn(skirt, 'burn')).decal).toBeUndefined();
+  });
+  it('rides flags.x bit 4 beside cavity and hole', () => {
+    const texels = new Float32Array(32 * BASE_PRIM_STRIDE * 4);
+    const p: Vec3[] = [[0, 1, 0], [0, 1.1, 0]];
+    writeWounds(texels, p, [0.05, 0.05], [0, 0], [0, 0], undefined, undefined, {},
+      undefined, undefined, undefined, [0, 0], [false, true], [true, true]);
+    const x = (i: number) => texels[ROW_WOUND_FLAGS * BASE_PRIM_STRIDE * 4 + i * 4]!;
+    expect(x(0)).toBe(4);
+    expect(x(1)).toBe(6);
+  });
+  it('every carve skips a decal; the mask paints it outside the flesh wound mask', () => {
+    expect(APPLY_WOUNDS).toContain('if ((i32(wFlags.x) & 4) != 0) { continue; }');
+    expect(NORMAL_GRADIENT_WGSL).toContain('if ((i32(flagsRow.x) & 4) != 0) { continue; }');
+    const decal = WOUND_MASK.indexOf('if ((fBits & 4) != 0)');
+    expect(decal).toBeGreaterThan(-1);
+    expect(decal).toBeLessThan(WOUND_MASK.indexOf('m = max(m, contribution);'));
+    expect(PAINT_CHAR_BLOCK).toContain('gClothStain');
+    expect(PAINT_CHAR_BLOCK).toContain('gClothMark');
   });
 });

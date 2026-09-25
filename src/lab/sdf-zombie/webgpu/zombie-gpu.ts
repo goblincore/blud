@@ -18,7 +18,7 @@ import {
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
-import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
+import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
@@ -104,7 +104,9 @@ export interface ZombieGpuView {
     owners?: readonly ({ cluster: number; start: number; count: number } | null)[],
     /** Per-wound CLOTH BULLET HOLE flags (damage.ts clothifyWound 'hole'):
      *  ROW_WOUND_FLAGS.x bit 1. Omitted = none. */
-    holes?: readonly boolean[]): void;
+    holes?: readonly boolean[],
+    /** Per-wound CLOTH DECAL flags (damage.ts clothDecal): bit 2. Omitted = none. */
+    decals?: readonly boolean[]): void;
   /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
    *  Ships ON — the cull is a value no-op (outside the bound every per-wound
    *  reach test would `continue`). false parks the bound's radius at 1e9 (the
@@ -1953,13 +1955,14 @@ export const CONE_DEPTH_RANGE = 32;
 /** Allocates the RGBA32F data texture every march reads its field from.
  *  Exported for the FPV hands view, which marches its own small field the
  *  same way (X1.23 task 4) — one copy of the packing machinery. */
-export function createDataTexture() {
+export function createDataTexture(stride = BASE_PRIM_STRIDE) {
   // Nearest filtering and no mips: these are DATA, and any interpolation
   // between texels would silently blend one primitive's endpoint into its
-  // neighbour's.
-  const texels = new Float32Array(MAX_PRIMS * DATA_ROWS * 4);
+  // neighbour's. `stride` is the texture width in prims (validate.ts
+  // primStride); every row write below uses it, never MAX_PRIMS.
+  const texels = new Float32Array(stride * DATA_ROWS * 4);
   const tex = new THREE.DataTexture(
-    texels, MAX_PRIMS, DATA_ROWS, THREE.RGBAFormat, THREE.FloatType,
+    texels, stride, DATA_ROWS, THREE.RGBAFormat, THREE.FloatType,
   );
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
@@ -1968,10 +1971,10 @@ export function createDataTexture() {
 
   /** Writes one row of the data texture from a packed Float32Array. */
   function writeRow(row: number, src: Float32Array, count: number, col = 0) {
-    const base = row * MAX_PRIMS * 4 + col * 4;
+    const base = row * stride * 4 + col * 4;
     for (let i = 0; i < count * 4; i++) texels[base + i] = src[i]!;
   }
-  return { tex, texels, writeRow };
+  return { tex, texels, writeRow, stride };
 }
 
 /**
@@ -1995,7 +1998,8 @@ export interface WriteWoundsLayout {
   capRow?: number;
   /** Row index for the per-wound flag texels (was ROW_WOUND_FLAGS). */
   flagsRow?: number;
-  /** Data-texture column stride (was MAX_PRIMS). */
+  /** Data-texture column stride (default BASE_PRIM_STRIDE, the width of a
+   *  createDataTexture() texture — NOT MAX_PRIMS, which is only the ceiling). */
   stride?: number;
 }
 
@@ -2024,8 +2028,12 @@ export function writeWounds(
    *  hole's interior dark instead of as tissue (WOUND_MASK gWoundHole).
    *  Omitted = none — every view before cloth. */
   holes?: readonly boolean[],
+  /** Per-wound CLOTH DECAL flags (soft targets, 2026-09-24; damage.ts
+   *  clothDecal): bit 2 (value 4). The carve skips the wound and the paint
+   *  block draws it. Omitted = none. */
+  decals?: readonly boolean[],
 ): number {
-  const stride = layout.stride ?? MAX_PRIMS;
+  const stride = layout.stride ?? BASE_PRIM_STRIDE;
   const woundRow = layout.woundRow ?? ROW_WOUND;
   const metaRow = layout.metaRow ?? ROW_WOUND_META;
   const n = Math.min(worldPositions.length, layout.maxWounds ?? MAX_WOUNDS);
@@ -2050,8 +2058,10 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
-    // Integer part is a BITFIELD: bit 0 cavity, bit 1 cloth bullet hole.
-    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + (holes?.[i] ? 2 : 0) + ((threats?.[i] ?? 0) & 511) / 1024;
+    // Integer part is a BITFIELD: bit 0 cavity, bit 1 cloth bullet hole,
+    // bit 2 cloth decal (no carve).
+    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + (holes?.[i] ? 2 : 0) + (decals?.[i] ? 4 : 0)
+      + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
     texels[flagBase + i * 4 + 2] = owner?.start ?? 0;
@@ -2185,6 +2195,12 @@ export interface GpuViewOpts {
    *  DataTexture node the material binds (the shared atlas). */
   sink?: PrimSink;
   sinkTexture?: THREE.Texture;
+  /** Minimum width (prims) of the view's OWN data texture; ignored with a
+   *  `sink`. The texture is max(this, bodyPrimStride(body)) wide. A view that
+   *  is re-fed LIVE-EDITED bodies (the lab hero: face sliders, bone ratio)
+   *  passes MAX_PRIMS so an edit past 128 prims cannot outgrow it — width
+   *  never changes pixels, only upload size. */
+  stride?: number;
   /** Crowd stage a (Task 5): write records into a SHARED per-type buffer and
    *  attach at `slot` instead of owning a one-slot record. */
   records?: CrowdRecords;
@@ -2230,7 +2246,7 @@ export function createZombieGpuView(
   // owns a one-band atlas and a one-record buffer, OR borrows a shared band
   // and the type's record buffer (Task 5). Either way the kernel reads the
   // same record layout and the same banded texture.
-  const ownAtlas = opts.sink ? null : createCrowdPrimAtlas(1);
+  const ownAtlas = opts.sink ? null : createCrowdPrimAtlas(1, undefined, Math.max(opts.stride ?? 0, bodyPrimStride(body)));
   let sink: PrimSink = opts.sink ?? ownAtlas!.sink(0);
   const dataTex = opts.sink ? opts.sinkTexture! : ownAtlas!.texture;
   const ownRecords = opts.records ? null : createCrowdRecords(1);
@@ -2344,7 +2360,7 @@ export function createZombieGpuView(
   function refreshThreatTexels() {
     if (!lastWoundThreatIn) return;
     const masks = threatMasks();
-    const base = (sink.woundLayout?.flagsRow ?? ROW_WOUND_FLAGS) * (sink.woundLayout?.stride ?? MAX_PRIMS) * 4;
+    const base = sink.woundLayout.flagsRow * sink.woundLayout.stride * 4;
     for (let i = 0; i < masks.length; i++) texels[base + i * 4] = Math.floor(texels[base + i * 4]!) + (masks[i]! & 511) / 1024;
   }
 
@@ -2353,6 +2369,15 @@ export function createZombieGpuView(
     lastUploadRest = rest;
     const p = packBody(next, rest, { packBones, boneCullMode }, uploadScratch);
     uploadScratch = p;
+    // The texture is sink.stride prims wide (sized from the body at creation,
+    // or from the crowd type's first body). A body that outgrew it — a
+    // rebuild with more bones, a bigger character pushed into a narrower
+    // type — would write its tail rows into the NEXT row's columns. Fail
+    // loudly; never draw a silently truncated body.
+    const W = sink.stride;
+    if (p.primCount + p.boneCount > W) {
+      throw new Error(`[zombie-gpu] body packs ${p.primCount} flesh + ${p.boneCount} bone prims into a ${W}-wide data texture`);
+    }
     if (advanceMotion && motionCur.count >= 0 && motionCur.frame !== motionFrame) {
       motionPrev.a.set(motionCur.a); motionPrev.b.set(motionCur.b); motionPrev.q.set(motionCur.q);
       motionPrev.count = motionCur.count;
@@ -2368,10 +2393,10 @@ export function createZombieGpuView(
     const prevOk = motionPrev.count === p.primCount;
     const src = prevOk ? motionPrev : motionCur;
     motionRow.set(src.a);
-    for (let i = 0; i < MAX_PRIMS; i++) motionRow[i * 4 + 3] = prevOk ? 1 : 0;
-    writeRow(ROW_PREV_A, motionRow, MAX_PRIMS);
-    writeRow(ROW_PREV_B, src.b, MAX_PRIMS);
-    writeRow(ROW_PREV_QUAT, src.q, MAX_PRIMS);
+    for (let i = 0; i < W; i++) motionRow[i * 4 + 3] = prevOk ? 1 : 0;
+    writeRow(ROW_PREV_A, motionRow, W);
+    writeRow(ROW_PREV_B, src.b, W);
+    writeRow(ROW_PREV_QUAT, src.q, W);
     lastGroups = [];
     for (let g = 0; g < p.groupCount; g++) {
       const o = g * 4;
@@ -2386,19 +2411,19 @@ export function createZombieGpuView(
         flags: gr[o + 3]!,
       });
     }
-    writeRow(ROW_PRIM_A, p.primA, MAX_PRIMS);
-    writeRow(ROW_PRIM_B, p.primB, MAX_PRIMS);
-    writeRow(ROW_PRIM_SCALE, p.primScale, MAX_PRIMS);
-    writeRow(ROW_PRIM_QUAT, p.primQuat, MAX_PRIMS);
-    writeRow(ROW_REST_A, p.restA, MAX_PRIMS);
-    writeRow(ROW_REST_B, p.restB, MAX_PRIMS);
-    writeRow(ROW_PRIM_SHAPE, p.primShape, MAX_PRIMS);
-    writeRow(ROW_PRIM_BEND, p.primBend, MAX_PRIMS);
-    writeRow(ROW_PRIM_COLOR, p.primColor, MAX_PRIMS);
-    writeRow(ROW_PRIM_SHELL, p.primShell, MAX_PRIMS);
-    writeRow(ROW_PRIM_WARP, p.primWarp, MAX_PRIMS);
-    writeRow(ROW_PRIM_STRAND, p.primStrand, MAX_PRIMS);
-    writeRow(ROW_PRIM_CLIP, p.primClip, MAX_PRIMS);
+    writeRow(ROW_PRIM_A, p.primA, W);
+    writeRow(ROW_PRIM_B, p.primB, W);
+    writeRow(ROW_PRIM_SCALE, p.primScale, W);
+    writeRow(ROW_PRIM_QUAT, p.primQuat, W);
+    writeRow(ROW_REST_A, p.restA, W);
+    writeRow(ROW_REST_B, p.restB, W);
+    writeRow(ROW_PRIM_SHAPE, p.primShape, W);
+    writeRow(ROW_PRIM_BEND, p.primBend, W);
+    writeRow(ROW_PRIM_COLOR, p.primColor, W);
+    writeRow(ROW_PRIM_SHELL, p.primShell, W);
+    writeRow(ROW_PRIM_WARP, p.primWarp, W);
+    writeRow(ROW_PRIM_STRAND, p.primStrand, W);
+    writeRow(ROW_PRIM_CLIP, p.primClip, W);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
     // Bone-cluster spheres (packBoneClusters): stored in the free texels at
@@ -2413,8 +2438,8 @@ export function createZombieGpuView(
     writeRow(ROW_CLUSTER_RANGE, p.boneSegmentRange, BONE_SEG_MAX, 2 * MAX_CLUSTERS + 1);
     // Full width: a shorter list than last frame must zero the tail, which
     // is the shader's end-of-list sentinel.
-    writeRow(ROW_GROUP_BOUNDS, p.groupBounds, MAX_PRIMS);
-    writeRow(ROW_GROUP_RANGE, p.groupRange, MAX_PRIMS);
+    writeRow(ROW_GROUP_BOUNDS, p.groupBounds, W);
+    writeRow(ROW_GROUP_RANGE, p.groupRange, W);
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
     refreshThreatTexels();
     sink.markDirty();
@@ -2742,9 +2767,9 @@ export function createZombieGpuView(
       u.meltCfg.value.y = edgeOutAll ? 2 : motionOutAll ? 1 : 0;
       syncRecord();
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes) {
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals) {
       lastWoundThreatIn = { worldPositions, radii, splayScales, caps, owners };
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes);
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a
@@ -2940,7 +2965,9 @@ export function createChunkGpuView(
    *  this option then only governs the privately-owned-material path. */
   options?: SurfaceOutputOptions,
 ): ChunkGpuView {
-  const { tex: dataTex, texels, writeRow } = createDataTexture();
+  // Chunks stay BASE_PRIM_STRIDE wide: a chunk is one limb cluster (at most
+  // MAX_CLUSTER_PRIMS flesh) plus that limb's bones; reset() checks it.
+  const { tex: dataTex, texels, writeRow, stride } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
   const ownsVolume = !volumeTex;
   const volTex = volumeTex ?? createFallbackHandVolumeTexture();
@@ -3147,10 +3174,10 @@ export function createChunkGpuView(
     // sphere, rewritten from the chunk's position every frame.
     packed.groupBounds.set([c.pos[0], c.pos[1], c.pos[2], extent * Math.max(sx, sy, sz)], 0);
 
-    writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
-    writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
-    writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
-    writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
+    writeRow(ROW_PRIM_A, packed.primA, stride);
+    writeRow(ROW_PRIM_B, packed.primB, stride);
+    writeRow(ROW_PRIM_SCALE, packed.primScale, stride);
+    writeRow(ROW_PRIM_BEND, packed.primBend, stride);
     writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
     writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, 1);
 
@@ -3159,7 +3186,7 @@ export function createChunkGpuView(
       // they stay welded to the stumps as the piece tumbles.
       const ats = tornLocals.map(t => chunkPoint(c, t, sx, sy, sz));
       u.woundCfg.value.x = writeWounds(
-        texels, ats, tornRadii, ats.map(() => 1), ats.map(() => 0));
+        texels, ats, tornRadii, ats.map(() => 1), ats.map(() => 0), undefined, undefined, { stride });
     } else {
       u.woundCfg.value.x = 0;
     }
@@ -3214,6 +3241,9 @@ export function createChunkGpuView(
     // Girth at the tear, not the length-dominated proxy extent (X1.16).
     tornRadii = tornLocals.map(t => tornEndRadius(local, t));
 
+    if (local.length + localBones.length > stride) {
+      throw new Error(`[chunk] ${local.length} flesh + ${localBones.length} bone prims exceed the chunk's ${stride}-wide data texture`);
+    }
     packed = packBody({
       prims: local,
       clusters: [{
@@ -3225,21 +3255,21 @@ export function createChunkGpuView(
 
     // Full-width copies intentionally zero any rows left by the previous
     // occupant of this slot.
-    writeRow(ROW_PRIM_A, packed.primA, MAX_PRIMS);
-    writeRow(ROW_PRIM_B, packed.primB, MAX_PRIMS);
-    writeRow(ROW_PRIM_SCALE, packed.primScale, MAX_PRIMS);
-    writeRow(ROW_PRIM_QUAT, packed.primQuat, MAX_PRIMS);
-    writeRow(ROW_REST_A, packed.restA, MAX_PRIMS);
-    writeRow(ROW_REST_B, packed.restB, MAX_PRIMS);
-    writeRow(ROW_PRIM_SHAPE, packed.primShape, MAX_PRIMS);
-    writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
-    writeRow(ROW_PRIM_COLOR, packed.primColor, MAX_PRIMS);
-    writeRow(ROW_PRIM_SHELL, packed.primShell, MAX_PRIMS);
-    writeRow(ROW_PRIM_WARP, packed.primWarp, MAX_PRIMS);
-    writeRow(ROW_PRIM_STRAND, packed.primStrand, MAX_PRIMS);
-    writeRow(ROW_PRIM_CLIP, packed.primClip, MAX_PRIMS);
+    writeRow(ROW_PRIM_A, packed.primA, stride);
+    writeRow(ROW_PRIM_B, packed.primB, stride);
+    writeRow(ROW_PRIM_SCALE, packed.primScale, stride);
+    writeRow(ROW_PRIM_QUAT, packed.primQuat, stride);
+    writeRow(ROW_REST_A, packed.restA, stride);
+    writeRow(ROW_REST_B, packed.restB, stride);
+    writeRow(ROW_PRIM_SHAPE, packed.primShape, stride);
+    writeRow(ROW_PRIM_BEND, packed.primBend, stride);
+    writeRow(ROW_PRIM_COLOR, packed.primColor, stride);
+    writeRow(ROW_PRIM_SHELL, packed.primShell, stride);
+    writeRow(ROW_PRIM_WARP, packed.primWarp, stride);
+    writeRow(ROW_PRIM_STRAND, packed.primStrand, stride);
+    writeRow(ROW_PRIM_CLIP, packed.primClip, stride);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
-    writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);
+    writeRow(ROW_GROUP_RANGE, packed.groupRange, stride);
     writeRow(ROW_CLUSTER_GROUPS, packed.clusterGroups, 1);
 
     u.counts.value.set(packed.primCount, 1, packed.carveCount, packed.maxBlendK);

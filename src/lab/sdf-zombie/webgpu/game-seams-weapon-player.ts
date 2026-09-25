@@ -8,7 +8,6 @@
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { type Vec3 } from '../types';
-import { ROOMS, enclosureKeyAt } from './game-level';
 
 export function createWeaponPlayerSeams(ctx: GameContext) {
   const { scene, camera } = ctx.boot.handle;
@@ -23,7 +22,7 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
       ctx.player.player.yaw = p.yaw;
       ctx.player.player.pitch = p.pitch ?? 0;
       ctx.player.player.grounded = true;
-      return enclosureKeyAt(p.x, p.z);
+      return ctx.world.level.keyAt(p.x, p.z);
     },
     /** Set the player pose. y defaults to 0 (feet on the floor). */
     setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {
@@ -36,7 +35,7 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     pose: () => ({ pos: [...ctx.player.player.pos] as Vec3, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch }),
     /** Teleport to a room's centre, facing +z. */
     teleport(roomId: number) {
-      const r = ROOMS.find(r => r.id === roomId);
+      const r = ctx.world.level.rooms.find(r => r.id === roomId);
       if (!r) return false;
       ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
       ctx.player.player.vel = [0, 0, 0];
@@ -48,7 +47,7 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
      *  chosen body rather than detonate across the room. Read-only. */
     playerPos: () => [...ctx.player.player.pos] as Vec3,
     /** Enclosure key under the player's feet ('room1'..'room5', tunnel, 'void'). */
-    room: () => enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]),
+    room: () => ctx.world.level.keyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]),
     /** Walk the player toward (x, z) through the real collision path until
      *  within 0.25 m (or walkCancel). Pairs with step()/setLoopRunning. */
     walkTo: (x: number, z: number) => { ctx.player.autopilot = { x, z }; },

@@ -123,6 +123,9 @@ export interface BootState {
   doc: BlobDoc;
   /** Sever-dispatch indirection; assigned once the chunk spawner exists. */
   onSeverDispatch: SeverDispatch | null;
+  /** Gore-piece dispatch (head-pop debris, head-pop.ts); assigned with the
+   *  sever dispatch, once the chunk spawner exists. */
+  onGoreDispatch: ((actor: ZombieActor, pieces: import('../head-pop').GorePiece[]) => void) | null;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */
@@ -200,6 +203,7 @@ export function makeBootState(): BootState {
     fieldsBoot: null,
     doc: unbuilt<BlobDoc>(),
     onSeverDispatch: null,
+    onGoreDispatch: null,
     tilesPlaytest: false,
     gameTiles: unbuilt<GameTilePlaytest>(),
     tilesButton: null,
@@ -251,6 +255,7 @@ export const BOOT_BINDINGS = {
   fieldsBoot: 'boot.fieldsBoot',
   doc: 'boot.doc',
   onSeverDispatch: 'boot.onSeverDispatch',
+  onGoreDispatch: 'boot.onGoreDispatch',
   tilesPlaytest: 'boot.tilesPlaytest',
   gameTiles: 'boot.gameTiles',
   tilesButton: 'boot.tilesButton',

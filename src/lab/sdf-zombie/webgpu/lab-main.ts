@@ -63,10 +63,10 @@ import {
   type FleshMaterial, type FleshPresetName, type LightPresetName,
 } from '../material';
 import {
-  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES, clothifyWound,
+  MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, WOUND_PROFILES, clothifyWound, clothDecal,
   type Wound, type WoundType,
 } from '../damage';
-import { sdBody } from '../validate';
+import { sdBody, MAX_PRIMS } from '../validate';
 import { severLimb, severDistal, gibAll, gibAllPieces, type SeverResult } from '../sever';
 import { soldierInjury } from '../soldier-damage';
 import { posedDetachedChunk } from '../detached-pose';
@@ -77,7 +77,7 @@ import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../bloo
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
-import { bindRig, applyRig, impulseAt, kickHem, headQuatOf } from '../rig-bind';
+import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
@@ -261,7 +261,9 @@ async function main() {
     renderer: handle.renderer,
     scene,
     effectsScene: characterEffects.scene,
-    gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding },
+    // stride: rebuildBody re-feeds this SAME view live-edited bodies, so it
+    // is sized for the ceiling — an edit past 128 prims must not outgrow it.
+    gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding, stride: MAX_PRIMS },
     errors: heroErrors,
     face,
     override,
@@ -1575,10 +1577,12 @@ async function main() {
     // CLOTH (2026-09-23): a hit on a robe tears it (heavy rounds) — or, with
     // Ctrl held, is a SMALL-CALIBRE bullet hole, previewing the pistol/SMG
     // look before any such gun exists. Both are no-ops on bare flesh.
-    const wound = clothifyWound(lastPosed.prims,
+    const clothed = clothifyWound(lastPosed.prims,
       worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
         p => sdBody(p, lastPosed)),
       ev.ctrlKey ? 'small' : 'heavy');
+    // A soft target's robe is marked, not carved — the game's rule (game-actor.ts).
+    const wound = motionProfile.soft ? clothDecal(lastPosed.prims, clothed) : clothed;
     woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and localized hit recoil,
@@ -1595,9 +1599,6 @@ async function main() {
     // distance); the sustained decay lives in motion.ts's recoil state.
     const push = type === 'blast' ? 0.16 : type === 'pellet' ? 0.06 : 0.04;
     heroMotion.bound = impulseAt(heroMotion.bound, hit, [d.x * push, d.y * push, d.z * push]);
-    // A skirt hit kicks the hem pendulum (impulseAt moved the nearest joint).
-    if (lastPosed.prims[wound.primIdx]?.bone === 'hem')
-      heroMotion.bound = kickHem(heroMotion.bound, [d.x * push * 2.5, 0, d.z * push * 2.5]);
     refreshWounds();
 
     if (motionProfile.name === 'soldier') pendingFire = false;
@@ -4030,9 +4031,10 @@ async function main() {
         const origin: Vec3 = [cx - dir[0] * 3, cy - dir[1] * 3, cz - dir[2] * 3];
         const hit = raycastBody(origin, dir, lastPosed);
         if (!hit) continue;
-        const wound = clothifyWound(prims, worldHitToWound(
+        const clothed = clothifyWound(prims, worldHitToWound(
           prims, hit, radius, type, heroMotion.lastBodyYaw, p => sdBody(p, lastPosed),
         ), calibre);
+        const wound = motionProfile.soft ? clothDecal(prims, clothed) : clothed;
         woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
         stamped++;
       }

@@ -50,6 +50,18 @@ export const PAINT_CHAR_BLOCK = /* wgsl */ `  // PER-PRIMITIVE COLOUR. The fold 
     let holeness = clamp(gWoundHole / max(wm, 1e-4), 0.0, 1.0);
     let inside = mix(albedo, vec3<f32>(0.012, 0.008, 0.006), holeness);
     albedo = mix(mix(primAlbedo, primAlbedo * 0.28, fray), inside, reveal);
+    // CLOTH DECALS (soft targets, 2026-09-24; WOUND_MASK bit 2). Nothing is
+    // carved: the robe is marked where the round went through.
+    //   stain ... blood soaking out from a torn dark core (heavy rounds);
+    //   mark .... a scorched ring round a dark bullet hole (small calibre).
+    // Both masks peak at 1 on the hit and reach 0 at 1.6 x the radius, and
+    // follow the ragged edge, so the core and the soak are not circles.
+    let stain = gClothStain * clothy;
+    let mark = gClothMark * clothy;
+    albedo = mix(albedo, vec3<f32>(0.075, 0.008, 0.006), smoothstep(0.02, 0.55, stain) * 0.9);
+    albedo = mix(albedo, albedo * 0.3, smoothstep(0.15, 0.45, mark));
+    let core = max(smoothstep(0.80, 0.88, stain), smoothstep(0.55, 0.65, mark));
+    albedo = mix(albedo, vec3<f32>(0.012, 0.008, 0.006), core);
   }
   faceGlow = faceGlow * (1.0 - painted);
 

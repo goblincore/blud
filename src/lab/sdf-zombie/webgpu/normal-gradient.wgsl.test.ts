@@ -70,7 +70,8 @@ describe('normal-gradient WGSL registration', () => {
 // These guard structure; the intact phase is the actual shader/numeric gate.
 describe('final-hit helper isolation', () => {
   it('rejects analytic normals for scoped wounds before either cutter path', () => {
-    const load = `textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0).y`;
+    // The flags row is loaded whole (x carries the cloth-decal skip, y the owner).
+    const load = `textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0)`;
     expect(NG_WOUNDS).toContain(load);
     // Owned wounds still bail — unless the march found no limb won the re-fold at the hit
     // (gNgOwnedOk, counts2.z + 64), where the field is the plain wounded union.

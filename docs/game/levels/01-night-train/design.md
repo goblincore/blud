@@ -12,6 +12,12 @@ vision §10.3.)
 
 ---
 
+> **Revised 2026-09-24** ([new game flow](../../../superpowers/specs/2026-09-24-new-game-flow-design.md)): Night Train is
+> now the **first level played**. The player arrives through the void's portal straight into the
+> guard's van (beat 0, the platform, is cut). Cultists replace the soldier ticket inspectors. It
+> ends with the dawn, then the first CD's pull-back into the Flat. **First slice:** carriages 1,
+> 3, 5, 8; revised beats in the spec.
+
 ## 1. Decisions so far
 
 - **Type:** a night train, the classic FPS train level as a *type* (Blood's

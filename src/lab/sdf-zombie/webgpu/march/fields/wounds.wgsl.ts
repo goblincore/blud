@@ -75,6 +75,9 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     if (gDebugMode > 0.5) { gDebugWoundRows = gDebugWoundRows + 1.0; }
     let wFlags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + band), 0);
     let owner = wFlags.y;
+    // CLOTH DECAL (flags.x bit 2, soft targets, 2026-09-24): painted on in
+    // WOUND_MASK, never carved. MIRRORED in normal-gradient.wgsl.ts.
+    if ((i32(wFlags.x) & 4) != 0) { continue; }
     // THREAT MASK (2026-09-21): the fraction of flags.x is a CPU-computed bitfield
     // over 1024 — bit c+1 set when cluster c is NOT this wound's owner and
     // some prim group of it reaches this wound's carve bowl (zombie-gpu.ts
@@ -221,6 +224,8 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
   var m = 0.0;
   var cav = 0.0;
   gWoundHole = 0.0;
+  gClothMark = 0.0;
+  gClothStain = 0.0;
   // Per-instance wound count: the slot loop's loadInstance set this before
   // the post-hit readback (POST reloads gHitSlot).
   let n = i32(gInstWoundCount);
@@ -242,6 +247,25 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
       rM = rM / (1.0 + ragged * (noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5));
     }
     let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, rM);
+    let fBits = i32(flags.x);
+    // CLOTH DECALS (bit 2): the same footprint, but kept OUT of m — a decal
+    // is not a wound to the flesh passes (no tissue, no gloss, no halo). The
+    // paint block draws it: bit 1 set = scorched bullet hole, else a stain.
+    // The ragged edge above is a few broad lobes, so a stain came out as a
+    // bullseye (round core in a round soak). A finer noise in the body frame,
+    // relative to the wound, frays the soak's edge like blood wicking through
+    // weave.
+    if ((fBits & 4) != 0) {
+      let dv = p - w.xyz;
+      let cy = cos(gInstYaw);
+      let sy = sin(gInstYaw);
+      let lv = vec3<f32>(cy * dv.x - sy * dv.z, dv.y, sy * dv.x + cy * dv.z);
+      let fine = noise3(lv * (1.2 / max(w.w, 1e-3)) + vec3<f32>(w.w * 131.0, 7.0, w.w * 57.0));
+      let c2 = 1.0 - smoothstep(0.0, w.w * 1.6, rM * (1.0 + 0.45 * fine));
+      if ((fBits & 2) != 0) { gClothMark = max(gClothMark, c2); }
+      else { gClothStain = max(gClothStain, c2); }
+      continue;
+    }
     m = max(m, contribution);
     // Cavity-ness (entrails, 2026-09-02): the SAME radial footprint,
     // accumulated only over wounds whose flags row says the hit opened a
@@ -250,13 +274,14 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     // flags.x's integer part is a bitfield (zombie-gpu.ts writeWounds):
     // bit 0 cavity, bit 1 cloth bullet hole. Was a plain > 0.5 test when
     // cavity was the only thing it could hold.
-    let fBits = i32(flags.x);
     if ((fBits & 1) != 0) { cav = max(cav, contribution); }
     if ((fBits & 2) != 0) { gWoundHole = max(gWoundHole, contribution); }
   }
   return vec3<f32>(m, m, cav);
 }
-var<private> gWoundHole: f32 = 0.0;`
+var<private> gWoundHole: f32 = 0.0;
+var<private> gClothMark: f32 = 0.0;
+var<private> gClothStain: f32 = 0.0;`
 
 /**
  * Helper sources in DEPENDENCY ORDER — each one may only call those before it,

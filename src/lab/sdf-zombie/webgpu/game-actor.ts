@@ -20,15 +20,18 @@ import type { EncounterOrder } from './encounter-director';
 // not navigation.
 
 import type { BuildResult } from '../build-body';
-import { bindRig, applyRig, headQuatOf, impulseAt, kickHem, pinTips, type BoundRig } from '../rig-bind';
+import { bindRig, applyRig, headQuatOf, impulseAt, pinTips, type BoundRig } from '../rig-bind';
 import {
   TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
+import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
+import { applyDeathState, hasDeathState } from '../death-state';
+import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
+  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal,
   type Wound, type WoundType,
 } from '../damage';
 import { severLimb, severDistal, type SeverResult } from '../sever';
@@ -60,7 +63,7 @@ import { soldierVisualWounds } from '../soldier-wounds';
 import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
-import { add, qMul, qRotate, sub } from '../vec';
+import { add, normalize, qMul, qRotate, sub } from '../vec';
 import {
   BURN_BEHAVIOUR, createBurnPanic, stepBurnPanic, type BurnPanicState,
 } from '../burn-behaviour';
@@ -89,15 +92,17 @@ const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
  *  the lab's numbers were tuned for a god-cam further out (see the lab's
  *  "scaled up in the motion-polish pass" note). */
 const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.04 };
-/** Hem kick per unit of the hit's IMPULSE — cloth is light, so it swings
- *  much further than the joint shove (cultist, 2026-09-23). */
-const HEM_KICK = 2.5;
 
 /** Stagger amplitude multiplier sent with a SLUG's motion signal — the slug
  *  is a hand-cannon round and should lurch harder than the lab's tuned
  *  blast response (stagger.ts StaggerHit.gain; default 1 = lab amplitudes).
  *  Pellets send no gain: eight arrive together and re-flinch the body. */
 const SLUG_GAIN = 1.3;
+
+/** SOFT TARGETS (MotionProfile.soft — the cultist; owner playtest 2026-09-24,
+ *  second pass). Trigger pulls to kill; the range (m) inside which a slug
+ *  severs (an arm) or pops a head. 6 m: across a small room — eyeballed. */
+export const SOFT_TUNING = { hitsToKill: 2, severRange: 6 } as const;
 
 /** Heavy-hit root knockback: initial ground-plane speed (m/s) along the
  *  shot's horizontal direction — the body's ROOT actually travels back
@@ -555,6 +560,12 @@ export function createZombieActor(opts: {
    *  stump wound the sever stamped on the REMAINING body (null when no live
    *  anchor existed) — the bleed emitters register from it directly. */
   onSever?: (piece: DetachedPiece, stumpWound: Wound | null) => void;
+  /** HEAD POP (soft targets, owner 2026-09-24: the cultist's head shot is a
+   *  big blood burst, not the zombie's flying head). When set, a killing
+   *  head hit on a soft target removes the head outright — no flying chunk —
+   *  and calls this with the head's world centre, the shot direction and the
+   *  neck's stump wound, for the caller's burst and bleed. */
+  onHeadPop?: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => void;
 }): ZombieActor {
   const { body, view } = opts;
   let bound = bindRig(body);
@@ -639,6 +650,64 @@ export function createZombieActor(opts: {
   let lastPlayerPos: Vec3 | null = null;
   let bodyYaw = 0;
   const soldierDamage = opts.profile?.name === 'soldier';
+  /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
+   *  set on the hit, turned into a forced collapse on the next step. */
+  const softTarget = !!opts.profile?.soft;
+  let softKilled = false;
+  /** The killing hit's death (soft-death.ts planDeath): the style's throw is
+   *  applied on the first collapsed sub-step, a stagger first stays up
+   *  `dyingT` seconds (optionally spraying `burstLeft` rounds). */
+  let deathPlan: DeathPlan | null = null;
+  let deathDir: Vec3 = [0, 0, 0];
+  let deathThrown = false;
+  let dyingT = 0;
+  let burstLeft = 0;
+  let burstClock = 0;
+  let burstShot = false;
+  let headPop = false;
+  /** SCANNERS SWELL: a head-shot kill holds `swellDur` s (dyingT counts it
+   *  down) while the head inflates (head-pop.ts inflateHead), then pops. */
+  let swellDur = 0;
+  let swellClock = 0;
+  const deathRng: Rng = makeRng((opts.seed ^ 0xdea7dea7) >>> 0);
+  /** Start a soft target's death: plan it once, from the killing hit. */
+  function beginSoftDeath(dir: Vec3, limb: LimbId | undefined, bone: string | undefined, weapon: 'slug' | 'pellet' | 'blast', pop = false) {
+    softKilled = true;
+    deathDir = [...dir] as Vec3;
+    deathPlan = planDeath({ limb, bone, weapon }, deathRng);
+    dyingT = deathPlan.delaySec;
+    burstLeft = deathPlan.burst;
+    headPop = pop && !!opts.onHeadPop;
+    if (headPop) {
+      // Owner, second pass: 0.3-0.5 s was "a bit too delayed". SWELL_SEC
+      // (head-pop.ts) keeps it a knob — a bullet-time mode will stretch it.
+      swellDur = SWELL_SEC[0] + (SWELL_SEC[1] - SWELL_SEC[0]) * deathRng();
+      swellClock = 0;
+      dyingT = Math.max(dyingT, swellDur);
+      burstLeft = 0;
+    }
+  }
+  let deathStateApplied = false;
+  /** SOFT HIT COUNT (owner, second pass: one hit was too soft). Counted per
+   *  TRIGGER PULL — a shotgun's pellets share a shotId — so a volley is one. */
+  let softHits = 0;
+  const softShots = new Set<string>();
+  let softShotSerial = 0;
+  function newSoftShot(wound: Wound): boolean {
+    const src = wound.shot;
+    const id = src && 'shotId' in src && src.shotId !== undefined ? `shot:${src.shotId}`
+      : `batch:${hitBatching ? diagnosticBatchShot : --softShotSerial}`;
+    if (softShots.has(id)) return false;
+    softShots.add(id);
+    return true;
+  }
+  /** Distance to the player at the hit (the last seen position); Infinity when
+   *  unknown, so an unknown shooter never counts as close. */
+  function shooterDistance(): number {
+    const pl = encounterOrder?.player ?? brainPlayer;
+    if (!pl) return Infinity;
+    return Math.hypot(pl.x - state.wander.pos[0], pl.z - state.wander.pos[2]);
+  }
   let soldierFatal = false;
   let propReleaseRequested = false;
 
@@ -835,6 +904,12 @@ export function createZombieActor(opts: {
     if (r.chunk.prims.length === 0) return;
     const piece = posedDetachedChunk(current, posed, r.chunk, bodyYaw, !soldierDamage);
     current = r.body;
+    // A soft target's gun hand goes with ANY cut on the right arm (a forearm
+    // cut leaves the arm cluster alive, so missingLimbs never says so).
+    if (softTarget && limb === 'armR' && !propReleaseRequested) {
+      propReleaseRequested = true;
+      opts.character?.releaseProp([0, 0, 0], opts.seed);
+    }
     if (r.stumpWound) {
       woundRing.stamp(r.stumpWound, posed, bodyYaw);
       torsoWounds?.record(r.stumpWound, current, false);
@@ -868,6 +943,38 @@ export function createZombieActor(opts: {
     return soldierArmCutAllowed(current, soldierWounds, limb, at);
   }
 
+  /** HEAD POP: the head goes in a burst — no flying chunk (onHeadPop). */
+  function popHead() {
+    const head = current.clusters.find(c => c.limb === 'head');
+    if (!head?.alive) return;
+    const r = severLimb(current, 'head');
+    const piece = posedDetachedChunk(current, posed, r.chunk, bodyYaw, !soldierDamage);
+    current = r.body;
+    if (r.stumpWound) {
+      woundRing.stamp(r.stumpWound, posed, bodyYaw);
+      pendingWounds.push(r.stumpWound);
+    }
+    pendingSevered.push('head');
+    rebind();
+    opts.onHeadPop?.(piece, deathDir, r.stumpWound);
+  }
+
+  /** The first (non-lethal) hit's reaction: the profile's violent throw-back
+   *  flail (motion-profile.ts flail), the arms thrown open with the gun yawed
+   *  off, or the hunch — and the aim goes (mind.stagger). */
+  function softStagger(weapon: 'slug' | 'pellet' | 'blast'): Partial<NonNullable<MotionSignals['shot']>> {
+    const r = deathRng();
+    const react: Partial<NonNullable<MotionSignals['shot']>> = r < 0.45
+      ? { soldierLevel: weapon === 'pellet' ? 'medium' : 'heavy', fullStagger: true, torso: true }
+      : r < 0.7
+        ? { soldierLevel: weapon === 'pellet' ? 'medium' : 'heavy', staggerVariant: 1 }
+        : { soldierLevel: 'heavy', staggerVariant: 2, torso: true };
+    const dur = react.fullStagger ? (opts.profile?.flail?.durationSec ?? soldierStaggerDuration('heavy', true))
+      : soldierStaggerDuration(react.soldierLevel ?? 'medium');
+    mind.stagger(dur);
+    return react;
+  }
+
   function runSeverChecks() {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
     const injury = soldierDamage ? soldierInjury(current, soldierWounds) : null;
@@ -880,6 +987,11 @@ export function createZombieActor(opts: {
     for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
+    }
+    // A soft target that loses its gun arm drops the gun.
+    if (softTarget && !propReleaseRequested && missingLimbs().armR) {
+      propReleaseRequested = true;
+      opts.character?.releaseProp([0, 0, 0], opts.seed);
     }
     if (soldierDamage) {
       const after = soldierInjury(current, soldierWounds);
@@ -1097,6 +1209,23 @@ export function createZombieActor(opts: {
       // A burning soldier must never fire, whatever the mind or the injury
       // path computed above (the panic override is the last word).
       if (burnPanic && !doomed) signals.fire = false;
+      if (softKilled) {
+        // A STAGGER stays up for dyingT, reeling, and may clench the trigger:
+        // one round every 70 ms, sprayed high (see the onFire site).
+        burstShot = false;
+        if (dyingT > 0) {
+          dyingT -= sdt;
+          burstClock -= sdt;
+          signals.fire = false;
+          if (burstLeft > 0 && burstClock <= 0 && !missingLimbs().armR) {
+            signals.fire = true; burstShot = true; burstLeft--; burstClock = 0.07;
+          }
+        } else {
+          signals.forcedCollapse = true; signals.fire = false;
+        }
+      }
+      // A dying soft target keeps no agenda (the same override as `doomed`).
+      if (softKilled) think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
       if (think.halt && (soldierDamage || !mind.meleeCapable)) {
         state = { ...state, wander: { ...state.wander, target: null, speed: 0, idle: 0 } };
       }
@@ -1218,13 +1347,32 @@ export function createZombieActor(opts: {
       }
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
+      // LIFE-STATE PRIMS: the first collapsed sub-step swaps the body to its
+      // dead look (the cultist's hood drops off his head; death-state.ts).
+      if (f.collapsed && !deathStateApplied) {
+        deathStateApplied = true;
+        if (hasDeathState(current)) current = applyDeathState(current);
+      }
+      if (deathPlan && f.collapsed && !deathThrown) {
+        deathThrown = true;
+        const hemI = bound.rig.restScale?.findIndex(k => k !== 1) ?? -1;
+        const vel = addSpin(bound.rig.points,
+          deathThrowVelocities(bound.rig.points, deathDir, deathPlan.throw, hemI), deathPlan.spin);
+        bound = { ...bound, rig: { ...bound.rig, points: launchPoints(bound.rig.points, vel, sdt) } };
+        // The gun leaves his hand with it (the zombie path never released it).
+        const hand = joints.index.handR;
+        const hv = hand !== undefined ? vel[hand]! : [0, 0, 0] as Vec3;
+        if (!propReleaseRequested) { propReleaseRequested = true; opts.character?.releaseProp([hv[0], hv[1] + 0.8, hv[2]], opts.seed); }
+      }
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
         {
           gravity: f.gravity,
           damping: 0.06,
           iterations: 4,
-          restStiffness: STANDING_RIG.restStiffness * f.restPull,
+          // A soft kill goes limp AT ONCE: the collapse's 0.35 s rest-pull
+          // ramp dragged the thrown body back upright and ate the throw.
+          restStiffness: STANDING_RIG.restStiffness * (softKilled && f.collapsed ? 0 : f.restPull),
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
@@ -1294,7 +1442,12 @@ export function createZombieActor(opts: {
       }
       lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
       if (signals.fire && f.gun && !f.collapsed) {
-        opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction: rotateYaw(qRotate(f.gun.quat, [0, 0, 1]), think.aimError) });
+        const fwd = qRotate(f.gun.quat, [0, 0, 1]);
+        // The death burst sprays HIGH and wide: up 15-60 deg, +-25 deg yaw.
+        const direction = burstShot
+          ? rotateYaw(normalize([fwd[0], fwd[1] + Math.tan(0.26 + deathRng() * 0.79), fwd[2]]), (deathRng() - 0.5) * 0.87)
+          : rotateYaw(fwd, think.aimError);
+        opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction });
       }
     }
     // Drain the frame's one-shot signals (values are read back by the motion
@@ -1308,6 +1461,19 @@ export function createZombieActor(opts: {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
     posed = applyRig(current, bound, bodyYaw);
+    if (headPop && swellDur > 0) {
+      swellClock += dt;
+      const u = 1 - dyingT / swellDur;
+      if (u >= 1) {
+        // Pop from the FULLY swollen head, then pose what is left.
+        posed = inflateHead(posed, 1, swellClock);
+        headPop = false;
+        popHead();
+        posed = applyRig(current, bound, bodyYaw);
+      } else {
+        posed = inflateHead(posed, u, swellClock);
+      }
+    }
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
@@ -1424,6 +1590,8 @@ export function createZombieActor(opts: {
   function blast(effect: ActorBlastEffect): void {
     damageRevision++; bakePaused = false;
     const { wounds: blastWounds, meterCredit, impulse } = effect;
+    if (softTarget && meterCredit > 0 && !softKilled)
+      beginSoftDeath(effect.impulse ? unitOrZero(effect.impulse.vel) : [0, 0, 0], undefined, undefined, 'blast');
 
     for (const w of blastWounds) if (w.shot?.weapon === 'explosion') recordSoldierInjury(w);
     woundRing.stampBundle(blastWounds);
@@ -1559,8 +1727,10 @@ export function createZombieActor(opts: {
     const rank = (s: NonNullable<MotionSignals['shot']>) =>
       s.fullStagger ? 3 : s.soldierLevel === 'heavy' ? 2 : s.soldierLevel === 'medium' ? 1 : 0;
     // Keep strength and impact source together until motion consumes them.
-    // Zombies retain their existing last-impact selection.
-    if (!soldierDamage || !pendingShot || rank(shot) > rank(pendingShot)
+    // Zombies retain their existing last-impact selection; a soft target with
+    // soldier reactions keeps the strongest too (its volley's first pellet
+    // carries the stagger, the rest are plain pellets).
+    if (!(soldierDamage || (softTarget && opts.profile?.staggerStyle === 'soldier')) || !pendingShot || rank(shot) > rank(pendingShot)
       || (rank(shot) === rank(pendingShot) && (shot.gain ?? 1) >= (pendingShot.gain ?? 1))) {
       pendingShot = shot;
     }
@@ -1602,11 +1772,35 @@ export function createZombieActor(opts: {
       wound.radius = Math.min(wound.radius, .09, girth * 1.1);
     }
     recordSoldierInjury(wound);
+    // SOFT TARGET, second pass (owner 2026-09-24):
+    //   * two trigger pulls kill; the first STAGGERS (softStagger);
+    //   * a slug to the HEAD from close range pops it at once (Scanners);
+    //   * only a CLOSE slug severs (an arm through the sleeve); pellets and far
+    //     slugs leave decals and blood, never cuts;
+    //   * a hit in the face drops the hood (the death-state swap, early) and
+    //     the face carves to the skull like the other enemies'.
+    let softReact: Partial<NonNullable<MotionSignals['shot']>> | null = null;
+    if (softTarget && wound.type !== 'burn' && !softKilled) {
+      const weapon = wound.shot?.weapon === 'slug' ? 'slug' : wound.type === 'blast' ? 'blast' : 'pellet';
+      const close = shooterDistance() <= SOFT_TUNING.severRange;
+      const head = hitPrim?.limb === 'head';
+      if (!(weapon === 'slug' && close)) wound.severRadius = 0;
+      if (head && !deathStateApplied && hasDeathState(current)) { deathStateApplied = true; current = applyDeathState(current); }
+      if (weapon === 'slug' && close && head) beginSoftDeath(dirWorld, 'head', hitPrim?.bone, 'slug', true);
+      else if (newSoftShot(wound)) {
+        softHits++;
+        if (softHits >= SOFT_TUNING.hitsToKill) beginSoftDeath(dirWorld, hitPrim?.limb, hitPrim?.bone, weapon);
+        else softReact = softStagger(weapon);
+      }
+    }
+    // A soft target's robe takes a painted mark, not a crater (damage.ts).
+    if (softTarget) clothDecal(field.prims, wound);
     woundRing.stamp(wound, field, bodyYaw);
     torsoWounds?.record(wound, current);
     pendingWounds.push(wound);
     const fullStagger = progressiveHit(wound);
     const shot: NonNullable<MotionSignals['shot']> = {
+      ...(softReact ?? {}),
       type: fullStagger ? 'blast' : wound.type,
       dirWorld: [...dirWorld] as Vec3,
       woundWorld: [...hitWorld] as Vec3,
@@ -1617,6 +1811,7 @@ export function createZombieActor(opts: {
       // SLUG_GAIN (above the lab's blast amplitudes — first-person range).
       // Pellets send no gain: eight arrive together and re-flinch at 1.
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
+      ...(softReact ?? {}),
     };
     selectPendingShot(shot);
     if (fullStagger) mind.stagger(soldierStaggerDuration('heavy', true));
@@ -1626,7 +1821,7 @@ export function createZombieActor(opts: {
       // travel; Zombies retain the existing actor-level root knock.
       mind.stagger(soldierDamage ? soldierStaggerDuration('medium') : undefined);
       const l = Math.hypot(dirWorld[0], dirWorld[2]);
-      if (!soldierDamage && l > 1e-6) {
+      if (!soldierDamage && !softTarget && l > 1e-6) {
         knockV = BLAST_KNOCK_MPS;
         knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
       }
@@ -1641,9 +1836,6 @@ export function createZombieActor(opts: {
       dirWorld[1] * push,
       dirWorld[2] * push,
     ]);
-    // A hit on a skirt riding the hem pendulum kicks the CLOTH: impulseAt
-    // shoved the nearest joint (usually a knee), so push the hem point too.
-    if (hitPrim?.bone === 'hem') bound = kickHem(bound, [dirWorld[0] * push * HEM_KICK, 0, dirWorld[2] * push * HEM_KICK]);
     // Sever checks BEFORE the pose re-apply so a severed limb is gone from
     // the very next rendered frame.
     if (hitBatching) { hitPending = true; } else { flushHitTail(); }

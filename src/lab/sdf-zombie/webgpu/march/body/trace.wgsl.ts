@@ -79,6 +79,10 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
   var prevRadius = 0.0;
   var stepLen = 0.0;
   var clamped = false;
+  // UPPER-BOUND CULL (gCullRef): the previous sample's fold, its slot and t.
+  var cullFold = 1e9;
+  var cullSlot = -1;
+  var cullT = 0.0;
   // Dominant prim at the last field sample (mapBody.y) — the hit pixel's
   // noise anchor reuses it instead of re-running the fold (task 6).
   var hitBest = -1;
@@ -107,8 +111,14 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     // below, which is where the silhouette gets its bumps back without
     // paying fbm at every step of the empty approach.
     gWalkStep = 1.0;
+    gCullUB = select(1e9, cullFold + 3.0 * abs(t - cullT) + 0.002, i > 0 && cullFold < 1e8);
+    gCullSlot = cullSlot;
     let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
     gWalkStep = 0.0;
+    gCullUB = 1e9;
+    cullFold = gLastFold;
+    cullSlot = gLastFoldSlot;
+    cullT = t;
     // WALK SKIP bookkeeping: a call that ran the re-fold refreshes the gap (0 if any
     // limb won); a call that skipped it keeps the decremented budget; a call where the
     // gate never opened leaves no promise (0).

@@ -25,7 +25,6 @@ import { createComputeTileBinding, MAX_TILE_GROUPS, type ComputeTileBinding } fr
 import { TileBinner, TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
 import { crowdScreenRect } from './crowd-rect';
 import { RAY_CULL_SLACK, QUAD_ENTRY_SLACK } from './march.wgsl';
-import { MAX_PRIMS } from '../validate';
 import {
   createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
@@ -198,7 +197,13 @@ export function createCrowdType(
   maxW: number,
   maxH: number,
   sources?: CrowdMaterialSources,
-  opts?: { dispatch?: CrowdDispatch; telemetry?: Pick<GameTelemetry, 'begin' | 'end'> },
+  opts?: {
+    dispatch?: CrowdDispatch; telemetry?: Pick<GameTelemetry, 'begin' | 'end'>;
+    /** Atlas width in prims — validate.ts primStride of the type's body.
+     *  Fixed for the type's life; a wider body cannot join it. Default
+     *  BASE_PRIM_STRIDE (every body up to 128 prims). */
+    stride?: number;
+  },
 ): CrowdType {
   // ONE shared prim atlas, ONE record buffer, ONE material pair, ONE tile
   // binding — the whole point of the type. The atlas is allocated at the
@@ -214,8 +219,8 @@ export function createCrowdType(
     // uploads it once in full.
     (renderer.backend as unknown as {
       updateTexture(t: THREE.Texture, o: { image: { data: Float32Array; width: number; height: number } }): void;
-    }).updateTexture(atlas.texture, { image: { data, width: MAX_PRIMS, height: rows } });
-  });
+    }).updateTexture(atlas.texture, { image: { data, width: atlas.stride, height: rows } });
+  }, opts?.stride);
   const records = createCrowdRecords();
   // y = 1 marks a crowd material (MARCH_TRACE_SETUP selects instCentre/
   // instHalf for the proxy box); x is the loop's instance-count upper bound.

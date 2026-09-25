@@ -6,29 +6,54 @@ import { sdStrand, strandLipschitz } from './strand';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
- * Shader array ceilings. THE canonical declaration — `march.glsl.ts` imports
- * these and bakes them into the GLSL, so the CPU field and the GPU field
- * cannot drift apart. They were separately declared in both files until
- * 2026-08-15; if they disagree the shader reads past the uniform array.
+ * Primitive ceilings. THE canonical declaration.
  *
- * 128 is sized for a CAST, not for the one zombie. It was 48 — the 21-primitive
- * body plus a ~13-primitive face with headroom — which is a fine ceiling right
- * up until you try to author a second character (see `P8`, the SDF character
- * language). Raising it is close to free on the shipping WebGPU path: prims
- * ride a data texture there (`zombie-gpu.ts` allocates MAX_PRIMS x DATA_ROWS
- * RGBA-float, so 128 costs ~20 KiB against 48's ~7.7 KiB), and the WGSL folds
- * break out on the live prim count rather than looping the full width.
+ * MAX_PRIMS (256) is the most flesh + bone prims one body may carry. It is NOT
+ * a texture width any more (2026-09-24): each body's data texture is
+ * `primStride(total)` texels wide — BASE_PRIM_STRIDE (128) for every body at
+ * or under 128, then 192 or 256 — so the ceiling costs nothing for a body
+ * that does not use it.
  *
- * The only thing this cost anything was the WebGL twin, which declares three
- * `uniform vec4[MAX_PRIMS]` arrays and so grows three vec4 per added prim. That
- * used to be the reason not to raise this: the GLSL shader already sat near 300
- * vec4 against a GLES 3.0 guaranteed minimum of 224, and 128 puts it near 540.
- * It is NOT a reason any more — Blud is WebGPU-only (`X1.11`), the GLSL twin is
- * unsupported reference kept until it is deleted, and it still compiles on the
- * development machine (Apple M3 reports MAX_FRAGMENT_UNIFORM_VECTORS = 1024)
- * for as long as it survives. Do not let it constrain the shipping path.
+ * Why per-body and not one global width: the WGSL reads the texture by
+ * (column, row) and every fold breaks on the LIVE count, so the GPU never
+ * sees the width. What does scale with it is CPU-side and per texture: the
+ * crowd atlas (MAX_CROWD_INSTANCES = 64 bands per character type, ~3.1 MiB
+ * GPU + the same again as its CPU mirror at 128 wide), its per-frame prefix
+ * upload (~51 KB per drawn body at 128), and every flying gib chunk, which
+ * re-uploads its whole texture each frame it moves. A global 256 doubled all
+ * of that for a cast that averages well under 128. A crowd type is sized from
+ * the first body attached to it; a 256-wide type costs ~6.25 MiB + mirror.
+ *
+ * The real per-body wall for dense characters is usually MAX_CLUSTER_PRIMS
+ * (64 per limb cluster — hair and a face both land in `head`), not this.
+ *
+ * History: 48 -> 128 (2026-08-20), -> 256 with per-body width (2026-09-24).
+ * The WebGL GLSL twin (`march.glsl.ts`, unsupported: Blud is WebGPU-only)
+ * still bakes MAX_PRIMS into three uniform arrays; it is not a constraint.
  */
-export const MAX_PRIMS = 128;
+export const MAX_PRIMS = 256;
+/** Data-texture width for any body with at most this many flesh + bone prims
+ *  — the whole shipped cast, and the width every texture had before per-body
+ *  widths. Gib chunks and the FPV hands always use it. */
+export const BASE_PRIM_STRIDE = 128;
+/** Width granularity above BASE_PRIM_STRIDE: 129..192 -> 192, 193..256 -> 256. */
+export const PRIM_STRIDE_STEP = 64;
+
+/** Data-texture width (texels) for a body carrying `total` flesh + bone prims.
+ *  Never below BASE_PRIM_STRIDE (the cluster-bounds rows use columns up to
+ *  2 * MAX_CLUSTERS + BONE_SEG_MAX, and the wound rows MAX_WOUNDS), never
+ *  above MAX_PRIMS (validateBody rejects such a body; clamping keeps a
+ *  corrupt count from allocating an unbounded texture). */
+export function primStride(total: number): number {
+  if (total <= BASE_PRIM_STRIDE) return BASE_PRIM_STRIDE;
+  return Math.min(MAX_PRIMS, Math.ceil(total / PRIM_STRIDE_STEP) * PRIM_STRIDE_STEP);
+}
+
+/** primStride for a built body: flesh prims + bone prims, the same total
+ *  validateBody bounds (bone rows ride the same texture past the flesh). */
+export function bodyPrimStride(body: { prims: readonly unknown[]; bonePrims?: readonly unknown[] }): number {
+  return primStride(body.prims.length + (body.bonePrims?.length ?? 0));
+}
 export const MAX_CLUSTERS = 6;
 
 /**
@@ -51,7 +76,7 @@ export const BONE_SEG_MAX = 32;
  * primitives does not error: the shader silently stops folding at 64 and the
  * surface quietly loses geometry. Nothing validated this before — MAX_PRIMS
  * bounded the TOTAL, never a single cluster, and at 48 total the case was
- * unreachable. Raising MAX_PRIMS to 128 makes it reachable, so it is checked.
+ * unreachable. Raising MAX_PRIMS to 128 made it reachable, so it is checked.
  *
  * Keep this equal to the literal in march.wgsl.ts's cluster loops; the WGSL is
  * a template string, so `validate.test.ts` asserts the literal is present
@@ -664,8 +689,9 @@ export function boneBreach(body: Body, prim: Primitive): Vec3 | null {
 export function validateBody(body: Body, opts: ValidateOpts): string[] {
   const errs: string[] = [];
 
-  // MAX_PRIMS bounds FLESH AND BONES TOGETHER: the data texture is MAX_PRIMS
-  // wide and the bone rows ride the SAME allocation past primCount, so flesh
+  // MAX_PRIMS bounds FLESH AND BONES TOGETHER: the data texture is sized from
+  // that same total (bodyPrimStride, at most MAX_PRIMS wide) and the bone rows
+  // ride the SAME allocation past primCount, so flesh
   // under the ceiling with bones overflowing it would have its bone rows
   // silently unread. The message names both counts so the author knows which
   // way to move.

@@ -47,7 +47,9 @@ export * from './march/helpers';
 // PRIMITIVE DATA ARRIVES AS A FLOAT TEXTURE, not uniform arrays. That is the
 // substantive win of the migration: uniforms capped the body near 48
 // primitives against a 224-vec4 floor, whereas a texture has no such ceiling
-// (this device reports a 4 GB storage limit). Layout, MAX_PRIMS wide:
+// (this device reports a 4 GB storage limit). Layout, one column per prim —
+// the body's primStride wide (validate.ts: 128 for every body up to 128
+// prims, at most MAX_PRIMS = 256):
 //
 //   row 0  primA        xyz = endpoint A, w = radius
 //   row 1  primB        xyz = endpoint B, w = blendK
@@ -87,7 +89,7 @@ export * from './march/helpers';
 // Rows 8-9 (task 6, rest-space noise) diverge the same way, same reason.
 //
 // Wounds ride the SAME texture rather than a uniform array, which the GLSL
-// path had to use. MAX_WOUNDS (16) is comfortably under MAX_PRIMS (128), so
+// path had to use. MAX_WOUNDS (16) is comfortably under BASE_PRIM_STRIDE (128), so
 // they fit in two more rows and the whole per-body payload stays one upload.
 //
 // TRANSLATION TRAPS, all of which bite silently:

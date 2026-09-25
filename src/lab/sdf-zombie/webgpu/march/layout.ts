@@ -4,6 +4,8 @@
 // damage mirror — split out of march.wgsl.ts (phase 1, move-only). Pure TS,
 // no WGSL. Imported by the barrel and by the WGSL helper modules.
 
+import { MAX_PRIMS } from '../../validate';
+
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
  *  n * 0.06 — still see every group the ray's own march did. */
@@ -37,7 +39,7 @@ export const ROW_WOUND_CAP = 18;
  *  y age, z splayScale, w offsetScale — and rather than a new code on
  *  `type`, because the shader tests types with unbounded comparisons
  *  (`isBurn = wMeta.x > 1.5`) that a fourth code would silently break. One
- *  row costs MAX_PRIMS * 16 bytes = 2 KiB per body. */
+ *  row costs stride * 16 bytes = 2 KiB per body at the base 128 width. */
 export const ROW_WOUND_FLAGS = 19;
 
 /** CPU mirror for the damaged Soldier decal's luminance-only shadow mask. */
@@ -58,8 +60,10 @@ export const ROW_PRIM_COLOR = 12;
  *  list), z alive, w flag bitfield as ROW_CLUSTER_RANGE.w. */
 export const ROW_GROUP_BOUNDS = 13;
 export const ROW_GROUP_RANGE = 14;
-/** Group list capacity = one per prim at worst; the texture is MAX_PRIMS wide. */
-export const MAX_GROUPS = 128;
+/** Group list capacity = one per prim at worst; no texture is wider than MAX_PRIMS.
+ *  Derived, not a literal: it read 128 as a second copy of MAX_PRIMS and would
+ *  have gone stale the day the prim ceiling moved. */
+export const MAX_GROUPS = MAX_PRIMS;
 /** Per-cluster span into the group list: x = first group, y = group count. */
 export const ROW_CLUSTER_GROUPS = 15;
 /** `shell` construction (2048-08-25): x = half-thickness, y = rim radius,
@@ -84,7 +88,7 @@ export const ROW_PRIM_CLIP = 17;
  *  `hasClip < 0.5` is an early return in sdShell — even though pack.ts
  *  happens to write 1 there for every shell today. Aliasing a lane that is
  *  constant by accident rather than by contract is how the box/shell profile
- *  bit went wrong. One row costs MAX_PRIMS * 16 bytes = 2 KiB per body, the
+ *  bit went wrong. One row costs stride * 16 bytes = 2 KiB per 128-wide body, the
  *  same bargain ROW_WOUND_FLAGS took. */
 export const ROW_PRIM_WARP = 20;
 /** Strand bundle parameters (hairlock, 2026-09-05): x = strand count,

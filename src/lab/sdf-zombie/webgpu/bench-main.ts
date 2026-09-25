@@ -52,6 +52,7 @@ import { createComputeTileBinding, type ComputeTileBinding } from './tile-bin-co
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
+import cultistBlobSrc from '../characters/cultist.blob?raw';
 import type { FaceParams } from '../face';
 import type { BlobDoc } from '../blob-ast';
 import type { Vec3 } from '../types';
@@ -103,6 +104,20 @@ function sceneB(): BenchScene {
       z: (Math.floor(i / 4) - 1) * 1.5,
     })),
     camera: { dist: 6, targetY: 1.05 },
+  };
+}
+
+/**
+ * Scene C — the cultist perf pass (owner playtest 2026-09-24: three cultists
+ * close up ran at 65 ms). Three of `character` in a row 0.9 m apart, camera
+ * orbiting at 2.2 m: whole bodies, filling the frame. `?scene=C` benches the
+ * cultist; `?scene=CZ` the SAME layout with zombies, the reference cost.
+ */
+function sceneC(character: string, name: string): BenchScene {
+  return {
+    name,
+    bodies: [-0.9, 0, 0.9].map(x => ({ character, x, z: 0 })),
+    camera: { dist: 2.2, targetY: 1.2 },
   };
 }
 
@@ -261,6 +276,9 @@ async function main() {
   const seconds = Math.max(1, Number(params.get('seconds') ?? 15) || 15);
   const debugParam = (params.get('debug') ?? '').toLowerCase();
   const debugMode = debugParam === 'steps' ? 1 : debugParam === 'prims' ? 2 : 0;
+  // ?debug=shaded: the debug path's held yaw-0 frame, SHADED — a deterministic
+  // still for before/after image diffs of a shader change (perf pass, 2026-09-24).
+  const holdStill = debugMode > 0 || debugParam === 'shaded';
   // PERF TASK 5 step 3: per-tile fold lists for ONE body (the plan's
   // hero-only parity stage). ?tiles=1 bins and uploads body 0's bound
   // groups every frame; its draw then folds that list instead of walking
@@ -336,6 +354,7 @@ async function main() {
     zombie: zombieBlobSrc,
     cyclops: cyclopsBlobSrc,
     schoolgirl: schoolgirlBlobSrc,
+    cultist: cultistBlobSrc,
   };
 
   const views: ReturnType<typeof createZombieGpuView>[] = [];
@@ -485,7 +504,7 @@ async function main() {
     t0 = lastStamp = performance.now();
     // Debug mode renders the static yaw-0 heatmap frame only — no orbit,
     // no timed run, __bench never completes.
-    running = debugMode === 0;
+    running = !holdStill;
   }
 
   handle.setRenderCallback(() => {
@@ -545,7 +564,10 @@ async function main() {
     stats: () => stats.summary(),
   };
 
-  start(sceneName === 'B' ? sceneB() : sceneA());
+  start(sceneName === 'B' ? sceneB()
+    : sceneName === 'C' ? sceneC('cultist', 'C')
+    : sceneName === 'CZ' ? sceneC('zombie', 'CZ')
+    : sceneA());
 
   // Decal/PNG faces load asynchronously — a face not yet uploaded is a
   // cheaper face, so the run must not count frames before it arrives. The
@@ -557,7 +579,7 @@ async function main() {
     stats = new BenchStats({ warmup: WARMUP_FRAMES });
     hiddenFrames = 0;
     frameCount = 0;
-    running = debugMode === 0;
+    running = !holdStill;
   }
 }
 

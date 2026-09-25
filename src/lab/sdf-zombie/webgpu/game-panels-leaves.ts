@@ -6,7 +6,6 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import type { GameContext } from './game-context';
-import { enclosureKeyAt } from './game-level';
 import { MAGAZINE_CAPACITY } from './game-viewmodel';
 import { bodiesOnScreen } from './game-world-leaves';
 import { WOUND_STEP_MUL } from './march.wgsl';
@@ -14,7 +13,7 @@ import { WOUND_STEP_MUL } from './march.wgsl';
 
 export function updateHud(ctx: GameContext) {
   if (!ctx.boot.hudEl) return;
-  const where = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
+  const where = ctx.world.level.keyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
   const slot = ctx.weapon.slotState.phase !== 'up'
     ? `switching ${ctx.weapon.slotState.target}`
     : ctx.weapon.slotState.live === 'dynamite'

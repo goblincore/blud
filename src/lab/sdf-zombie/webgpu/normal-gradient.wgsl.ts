@@ -299,7 +299,10 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     // mapBody restores foreign clusters after localized carving. Until that
     // union has an analytic counterpart, differentiate the actual scalar
     // field through calcNormal's fallback for any surviving scoped wound.
-    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0).y;
+    let flagsRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
+    // CLOTH DECAL (bit 2): never carved — mirrors applyWounds' skip.
+    if ((i32(flagsRow.x) & 4) != 0) { continue; }
+    let owner = flagsRow.y;
     // OWNED WOUNDS (2026-09-22): the owner re-fold has no analytic counterpart — but
     // when no limb won the re-fold at this pixel's hit (gNgOwnedOk, set by the caller
     // from the march's hitRefold), the field here IS the union with every wound

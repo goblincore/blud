@@ -132,6 +132,11 @@ pulling back.
 
 ### 6.1 Pacing
 
+> **Revised 2026-09-24** ([new game flow](../superpowers/specs/2026-09-24-new-game-flow-design.md)): first launch is now an intro cutscene → title menu →
+> **New game** → the void (the hub, unlit: one glowing portal onto rail tracks) → *Night Train*.
+> The pull-back below moves to the end of Night Train (its first CD). The Wake is a later level.
+> The text below is kept for the pull-back itself.
+
 **First launch, the cold open.** No title screen. The game starts inside the
 FPS on *The Wake*, the demo level (5–8 minutes). Its last pickup is a CD in an
 open coffin. Picking it up starts one continuous pull-back: the bezel appears
@@ -255,6 +260,10 @@ character: dirty nails, knuckle hair, rings stolen from guests.
 
 ### 10.3 The Line (hub) — decided 2026-09-23
 
+> **Revised 2026-09-24** ([new game flow](../superpowers/specs/2026-09-24-new-game-flow-design.md)): the game now starts in the hub's unlit first state, a
+> dark void with one portal; it drops you into Night Train's first carriage (no platform, no
+> boarding from the Wake). The Wake is reached later, when the train crashes back to earth.
+
 **The train is the hub.** After the Wake, a train line runs past the back of the
 cemetery. You board in level 1, *Night Train*, fight carriage by carriage to the
 engine, and at the end the fire roars and the train bursts out of the night into
@@ -326,8 +335,9 @@ the theme. Every level follows the same rules (§10.6).
 
 | # | Level | Type | What doesn't work | SDF showcase | Enemy spotlight | Phase |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0 | ***The Wake*** (demo) | Cemetery, funeral home | A wake with nobody left to mourn; a CD in an open coffin; the rail line runs past the back gate | First bodies, first gore | Zombies | Cold open |
-| 1 | ***Night Train*** | Train | A party carriage on a line with no stations; the engine at the front, the Stoker at the fire | Motion: carriages still, world moves; **bursting out of the night into the desert** | Passengers | Gentle |
+| 0 | ***The Void*** (prologue) | The hub, unlit | Darkness and one portal onto rail tracks | A live view through the portal | None | Cold open |
+| 1 | ***Night Train*** | Train | A party carriage on a line with no stations; the engine at the front, the Stoker at the fire | Motion: carriages still, world moves; **bursting out of the night into the desert** | Passengers, cultists | Cold open → gentle |
+| ? | ***The Wake*** | Cemetery, gothic manor | A wake with nobody left to mourn; **the train crashes into it** (placement open) | First bodies, first gore | Zombies, cultists, a new monster | Open |
 | 2 | ***The Keep*** | Gothic castle | A banquet for guests who never come | Stone that goes soft when shot | Gargoyles | Gentle |
 | 3 | ***Cold Storage*** | Research lab | Storage that keeps nothing; specimens keep themselves | Glass tanks | Soldiers, a bloatmaw in a tank | Strange |
 | 4 | ***The Big Top*** | Circus | A show for empty seats | Rubbery, inflatable, pops | Clowns | Strange |
@@ -338,6 +348,7 @@ the theme. Every level follows the same rules (§10.6).
 | S | ***Dollhouse*** (secret, from The Works) | — | The goblin's own flat at giant scale | Room furniture, huge | The mouse | — |
 | F | **Your flat** | — | The room you decorated | Gore in the flat, once | The Party | Finale |
 
+**Revised 2026-09-24:** order per the [new game flow](../superpowers/specs/2026-09-24-new-game-flow-design.md) spec.
 **Level designs:** [0 The Wake](levels/00-the-wake/design.md) · [1 Night Train](levels/01-night-train/design.md).
 
 **Hell is a tumour.** No lava, no pentagrams. A monstrous growth has swallowed

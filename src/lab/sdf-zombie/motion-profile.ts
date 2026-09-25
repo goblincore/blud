@@ -43,7 +43,42 @@ export interface MotionProfile {
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
   melee?: { kind: 'sword' };
+  /** A SOFT target: any bullet or blast hit kills it outright (the game
+   *  forces the collapse on the first hit). The cultist is soft; the zombie
+   *  and soldier soak hits and exist to show off the gore. Burns do not count
+   *  (owner playtest 2026-09-24). */
+  soft?: boolean;
+  /** Hit reactions: 'soldier' = the soldier's stagger (arms thrown open,
+   *  full flail, the hunch; soldier-stagger.ts) instead of the zombie's
+   *  lurch/shudder. The soldier always has it. */
+  staggerStyle?: 'soldier';
+  /** The FULL flail's shape and timing (soldier-stagger fullOpen). Absent =
+   *  the soldier's, exactly (SOLDIER_FLAIL). Angles in radians, body-local. */
+  flail?: FlailTuning;
 }
+
+export interface FlailTuning {
+  /** Arm swing out to the side. */
+  abduct: number;
+  /** Rotation about the body's side axis per arm: + swings the hand BACK. */
+  liftL: number;
+  liftR: number;
+  /** Where the hand ends up around the body (yaw from forward): 1.3 is out to
+   *  the side, > pi/2 is behind the shoulder. */
+  yawOut: number;
+  /** The left arm follows the right after a beat (the soldier's). */
+  lagL: boolean;
+  /** Seconds to full throw, and the whole reaction. */
+  riseSec: number;
+  durationSec: number;
+  /** Chest/neck/head thrown back this far at full throw (m); head x1.6. */
+  arch: number;
+}
+
+/** The soldier's full flail — the numbers motion.ts shipped with. */
+export const SOLDIER_FLAIL: FlailTuning = {
+  abduct: 0.55, liftL: 0, liftR: -0.35, yawOut: 1.30, lagL: true, riseSec: 0.25, durationSec: 1.35, arch: 0,
+};
 
 export const ZOMBIE_PROFILE: MotionProfile = {
   name: 'zombie',
@@ -141,6 +176,16 @@ export const CULTIST_PROFILE: MotionProfile = {
   // The tommy gun: the soldier's brain on SMG_TUNING (soldier-brain.ts) —
   // long bursts of single rounds instead of a one-barrel shotgun blast.
   gunner: { weapon: 'smg' },
+  // Soft: two trigger pulls kill him, a close slug to the head pops it
+  // (owner playtest 2026-09-24, second pass — one hit was too soft).
+  soft: true,
+  // His first hit staggers him the soldier's way: arms flung out and the aim
+  // thrown off, or a hunch (owner, same pass).
+  staggerStyle: 'soldier',
+  // ...but NOT the soldier's slow opening (owner: "more dramatic — arms thrown
+  // out and back"): both arms snap out and behind him in 0.07 s, the chest
+  // arches, the head whips back, the gun is flung off target.
+  flail: { abduct: 1.45, liftL: 1.2, liftR: 1.2, yawOut: 2.6, lagL: false, riseSec: 0.07, durationSec: 0.85, arch: 0.12 },
 };
 
 /** The bride: a slow STALK in a high sword guard; the point trails on the
