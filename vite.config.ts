@@ -128,6 +128,10 @@ export default defineConfig({
   // optimized Three/TSL modules: mixed module copies collide on node IDs and
   // silently drop shader includes. Keep the optimizer cache in this checkout.
   cacheDir: resolve(__dirname, '.vite'),
+  // Agent captures keep a headless Chrome profile (and scratch output) under
+  // .lab-tmp/; watching it reloaded the owner's open game tab on every
+  // profile write (2026-09-25 playtest).
+  server: { watch: { ignored: ['**/.lab-tmp/**'] } },
   define: { 'import.meta.env.VITE_TELEMETRY_BUILD': JSON.stringify(telemetryBuild) },
   plugins: [labDevSave()],
   test: {
