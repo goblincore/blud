@@ -6,7 +6,7 @@ exports[`packBody byte pin > bonewalker.blob packs the pinned bytes 1`] = `"c4bf
 
 exports[`packBody byte pin > box-fixture.blob packs the pinned bytes 1`] = `"936e8b25726287ac"`;
 
-exports[`packBody byte pin > bride.blob packs the pinned bytes 1`] = `"b2f89b0e5eb69f7e"`;
+exports[`packBody byte pin > bride.blob packs the pinned bytes 1`] = `"caad05abaac0384a"`;
 
 exports[`packBody byte pin > broodmother.blob packs the pinned bytes 1`] = `"bc130a8d5268e68f"`;
 

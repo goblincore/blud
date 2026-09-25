@@ -761,3 +761,44 @@ describe('bindRig — distal joints belong to their own limb', () => {
     });
   }
 });
+
+// THE BRIDE'S STOCKING TUBE (2026-09-25 playtest): a LIMB prim bound to a
+// TORSO point. The stocking band (`bar leg on thigh from=0.53`) starts 19.5 cm
+// from the pelvis ROOT point and 21.6 cm from her own hip joint, so its top
+// rode the pelvis while its bottom rode the knee. Her hips are offset from the
+// pelvis (`thigh ... side=0.085`) and no rig bone joins them, so whenever the
+// leg and the pelvis part -- a stride, and above all the sword lunge's 1.2 m
+// root surge over planted feet -- the march drew an ivory tube from the pelvis
+// to the knee (0.23 m at rest, 1.1 m after a lunge). Her thigh crosses and
+// drips rode the pelvis too and slid off the swinging thigh. Fixed in the
+// .blob, not here: those lines are now `rigid` on the thigh (both ends ride
+// the thigh segment's frame). A bindEnd rule restricting limb prims to their
+// bone's joints was tried and rejected: nearest-in-ring split the 6 cm drip
+// between hip and knee (0.06 -> 0.48 m). This audit keeps the cast clean: no
+// prim on a mirrored arm/leg bone may ride a joint off its own limb.
+describe('bindRig — limb prims bind within their own limb', () => {
+  const RAW = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+  for (const [file, src] of Object.entries(RAW)) {
+    const name = file.replace('./characters/', '').replace('.blob', '');
+    it(`${name}: no arm/leg prim endpoint is bound outside its bone's joint ring`, () => {
+      const body = buildBody(compileBlob(parseBlob(src)), DEFAULT_BUILD_OPTS);
+      const bound = bindRig(body);
+      const at = (p: Vec3) => bound.rig.points.findIndex(q => len(sub(q.pos as Vec3, p)) < 1e-4);
+      const bad: string[] = [];
+      body.prims.forEach((p, i) => {
+        if (!/^(arm|leg)[LR]$/.test(p.limb) || !p.bone || !/\.[lr]$/.test(p.bone)) return;
+        const own = body.bones.get(p.bone)!;
+        const ends = [at(own.head), at(own.tail)];
+        const ring = new Set(ends);
+        for (const b of body.bones.values()) {
+          const h = at(b.head), t = at(b.tail);
+          if (ends.includes(h) || ends.includes(t)) { ring.add(h); ring.add(t); }
+        }
+        const bind = bound.binding[i]!;
+        for (const [end, e] of [['a', bind.a], ['b', bind.b]] as const)
+          if (!ring.has(e.point)) bad.push(`${p.limb}/${p.bone} line ${p.src} end ${end}`);
+      });
+      expect(bad).toEqual([]);
+    });
+  }
+});

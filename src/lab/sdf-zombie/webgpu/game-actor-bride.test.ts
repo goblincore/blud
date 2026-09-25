@@ -86,6 +86,37 @@ describe('bride actor (game path)', () => {
     expect(runWeight(BRIDE_PROFILE, fastest)).toBe(0);
   });
 
+  // THE STOCKING TUBE (playtest 2026-09-25): an ivory tube ~1 m long from
+  // her pelvis to a knee. The stocking band and the thigh stigmata bound
+  // their upper ends to the PELVIS root point (nearest joint), not the
+  // thigh; the lunge surges her root 1.2 m over planted feet, the hips part
+  // from the pelvis, and those prims stretched pelvis->knee (0.23 -> 1.1 m).
+  // Every live prim of the bride must keep its rest length through
+  // walks, swings and lunges. Players 2.5-3 m off put her in the lunge band.
+  it.each([2.5, 3.0])('no prim stretches through her fights (player %s m off, lunges)', pz => {
+    const game = buildBody(compileBlob(parseBlob(brideSrc)));
+    const a = createZombieActor({
+      id: 1, room: 1, seed: 42, start: [0, 0, 0],
+      bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }, furniture: [], body: game,
+      view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any,
+      profile: BRIDE_PROFILE, mind: makeSwordMind(),
+    });
+    const rest = game.prims.map(p => Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]));
+    let worst = 0, worstAt = '', lunges = 0;
+    for (let f = 0; f < 900; f++) {
+      a.setRingInput(true, 0);
+      a.setBrainInput({ x: 0, z: pz, room: 1 }, true);
+      a.step(1 / 60);
+      if (a.debug().state === 'attack' && a.debug().variant === 'lunge') lunges++;
+      a.posed().prims.forEach((p, i) => {
+        const l = Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]) - rest[i]!;
+        if (l > worst) { worst = l; worstAt = `prim ${i} ${game.prims[i]!.bone} line ${game.prims[i]!.src}`; }
+      });
+    }
+    expect(lunges).toBeGreaterThan(0);
+    expect(worst, worstAt).toBeLessThan(0.05);
+  });
+
   // SEVERED ARMS (Task 11 review). Pins for the whole two-handed carry must
   // never hold a missing arm's joints to guard targets; without her sword arm
   // she drops the sword, the carry goes, and her swings stop landing.
