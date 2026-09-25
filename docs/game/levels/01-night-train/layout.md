@@ -1,6 +1,6 @@
 # Night Train: layout (first slice)
 
-**Date:** 2026-09-25 · **Status:** draft 1, **for owner review** · **Design:** [design.md](design.md)
+**Date:** 2026-09-25 · **Status:** draft 1 **approved by the owner 2026-09-25** (dynamite in C3, five compartments, three van rooms) · **Design:** [design.md](design.md)
 · **Study:** [reference-study-re0.md](reference-study-re0.md) · **Guide:** [level design guide](../level-design-guide.md) §5
 · **Kit:** [carriage kit spec](../../../superpowers/specs/2026-09-25-train-carriage-kit-design.md)
 
@@ -99,10 +99,9 @@ sleeper −36.4…−54.4, party −55.6…−75.6, cab −76.8…−84.8).
   lanes round the buffet island, and every compartment. (Moving the island 0.5 m north was
   needed: the last tables and the island pinched both lanes shut.)
 
-## 8. Open questions for the owner
+## 8. Decisions (owner, 2026-09-25)
 
-1. **The new weapon** in sleeper C3: dynamite (it's in the design already), or the cultists'
-   tommy gun as a player weapon (a new weapon to build)?
-2. **The sleeper's compartments:** five is RE0-like. Fewer, bigger compartments are easier to
-   fight in.
-3. **The guard's van rooms:** three small rooms with zig-zag doors, as drawn, or two?
+1. **The new weapon** in sleeper C3 is **dynamite** for now (the tommy gun as a player weapon
+   is a later idea).
+2. **Five compartments** in the sleeper, as drawn.
+3. **Three rooms** in the guard's van, as drawn.
