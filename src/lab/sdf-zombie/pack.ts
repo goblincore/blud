@@ -623,13 +623,26 @@ function fitRange(
     pts += 2;
     if (p.bend !== undefined) { const c = ctrlOf(i, p); sx += c[0]; sy += c[1]; sz += c[2]; pts++; }
   }
-  const center: [number, number, number] = [sx / pts, sy / pts, sz / pts];
+  return radiusAbout(prims, s, e, [sx / pts, sy / pts, sz / pts], anySolid, ctrl, ctrlBase);
+}
+
+/** How far a prim's surface reaches past its axis points (the fit's reach). */
+function primReach(p: Primitive): number {
+  return Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand) * Math.max(p.scale[0], p.scale[1], p.scale[2])
+    + shellReach(p);
+}
+
+/** fitRange's radius pass about a given centre. `ctrl` / `reachOf`, when
+ *  given, hold bendCtrl / primReach per prim at index i - base. */
+function radiusAbout(
+  prims: Primitive[], s: number, e: number, center: [number, number, number], anySolid: boolean,
+  ctrl?: (Vec3 | undefined)[], base = 0, reachOf?: Float64Array,
+): { center: [number, number, number]; radius: number } {
   let radius = 0;
   for (let i = s; i < e; i++) {
     const p = prims[i]!;
     if (anySolid && p.op === 'sub') continue;
-    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand) * Math.max(p.scale[0], p.scale[1], p.scale[2])
-      + shellReach(p);
+    const reach = reachOf ? reachOf[i - base]! : primReach(p);
     if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
       // An oriented prim rotates about its MIDPOINT, so its endpoints move:
       // bound by the rotation-invariant ball around the midpoint instead of
@@ -643,7 +656,7 @@ function fitRange(
     radius = Math.max(radius, Math.hypot(p.a[0] - center[0], p.a[1] - center[1], p.a[2] - center[2]) + reach);
     radius = Math.max(radius, Math.hypot(p.b[0] - center[0], p.b[1] - center[1], p.b[2] - center[2]) + reach);
     if (p.bend !== undefined) {
-      const c = ctrlOf(i, p);
+      const c = ctrl ? ctrl[i - base]! : bendCtrl(p.a, p.b, p.bend);
       radius = Math.max(radius, Math.hypot(c[0] - center[0], c[1] - center[1], c[2] - center[2]) + reach);
     }
   }
@@ -659,19 +672,47 @@ function fitRange(
  */
 export function boundGroups(prims: Primitive[], start: number, count: number): BoundGroup[] {
   const out: BoundGroup[] = [];
+  // Per-prim constants of the fit, computed once per cluster instead of once
+  // per refit of every growing run: bendCtrl and the reach are pure in the prim.
   const ctrl: (Vec3 | undefined)[] = new Array(count);
+  const reach = new Float64Array(count);
   for (let i = 0; i < count; i++) {
     const p = prims[start + i]!;
     ctrl[i] = p.bend === undefined ? undefined : bendCtrl(p.a, p.b, p.bend);
+    reach[i] = primReach(p);
   }
+  // Running centroid sums of the open run, over ALL its prims and over its
+  // SOLID ones (fitRange's fitTo). Growing the run by one prim appends that
+  // prim's points to the same left-to-right accumulation a from-scratch fit
+  // performs, so the sums (and so the centre) are bit-identical to fitRange's.
+  const all = [0, 0, 0, 0], solid = [0, 0, 0, 0];
+  let anySolid = false;
+  const accumulate = (t: number[], p: Primitive, c: Vec3 | undefined) => {
+    t[0]! += p.a[0]; t[1]! += p.a[1]; t[2]! += p.a[2];
+    t[0]! += p.b[0]; t[1]! += p.b[1]; t[2]! += p.b[2];
+    t[3]! += 2;
+    if (c) { t[0]! += c[0]; t[1]! += c[1]; t[2]! += c[2]; t[3]!++; }
+  };
+  const add = (i: number) => {
+    const p = prims[i]!, c = ctrl[i - start];
+    accumulate(all, p, c);
+    if (p.op !== 'sub') { accumulate(solid, p, c); anySolid = true; }
+  };
+  const fitOpen = (gs: number, e: number) => {
+    const t = anySolid ? solid : all;
+    return radiusAbout(prims, gs, e, [t[0]! / t[3]!, t[1]! / t[3]!, t[2]! / t[3]!], anySolid, ctrl, start, reach);
+  };
   let gStart = start;
   let fit: { center: [number, number, number]; radius: number } | null = null;
   for (let i = start; i < start + count; i++) {
-    const next = fitRange(prims, gStart, i + 1, ctrl, start);
+    add(i);
+    const next = fitOpen(gStart, i + 1);
     if (fit !== null && next.radius > GROUP_RADIUS_MAX) {
       out.push({ start: gStart, count: i - gStart, ...fit, distort: distortRange(prims, gStart, i) });
       gStart = i;
-      fit = fitRange(prims, gStart, i + 1, ctrl, start);
+      all.fill(0); solid.fill(0); anySolid = false;
+      add(i);
+      fit = fitOpen(gStart, i + 1);
     } else {
       fit = next;
     }
