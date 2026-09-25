@@ -2,7 +2,10 @@
 """The train carriage kit (spec docs/superpowers/specs/2026-09-25-train-carriage-kit-design.md §3).
 
     blender --background --factory-startup --python scripts/levels/build_train_kit.py \
-        [-- --width 3.0 --ceilings 2.6,3.2 --out PATH --renders DIR]
+        [-- --out PATH --renders DIR] [--width 3.0 --ceilings 2.6,3.2]
+
+Without --width the shell pieces are built for every (width, ceiling) pair the approved layout
+uses (scripts/levels/night_train_layout.py); --width/--ceilings build one size (comparisons).
 
 Writes assets-source/levels/kit.blend (one collection per kit piece) and the baked textures in
 assets-source/levels/kit-textures/. Levels link the pieces (collection instances); the level
@@ -33,8 +36,20 @@ def arg(name, default):
 
 OUT = os.path.abspath(arg("--out", os.path.join(ROOT, "kit.blend")))
 BAY = 1.9
-W = float(arg("--width", "3.0")) / 2          # half the carriage's inside width
-CEILINGS = [float(c) for c in arg("--ceilings", "2.6,3.2").split(",")]
+W = 1.5  # the cab's half width (the cab shell is one size)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+if "--width" in ARGV:
+    # A one-off kit for one carriage size (width comparisons): --width W --ceilings H1,H2
+    SIZES = sorted({(float(arg("--width", "3.0")), float(c)) for c in arg("--ceilings", "2.6").split(",")})
+else:
+    # Every (width, ceiling) the approved layout uses (docs/game/levels/01-night-train/layout.md).
+    from night_train_layout import CARRIAGES
+    SIZES = sorted({(c["w"], c["h"]) for c in CARRIAGES if c["name"] != "cab"})
+
+
+def dm(v):
+    """Metres to decimetres for piece names: 4.2 -> 42."""
+    return int(round(v * 10))
 DADO = 0.95
 WALL_TOP = 2.2
 
@@ -248,9 +263,11 @@ class Piece:
 
 
 def wall_bay(kind, top=WALL_TOP):
-    """kind: 'window' | 'plain' | 'door'. West wall of one bay."""
+    """kind: 'window' | 'plain' | 'door'. One bay of side wall, its face at the wall plane
+    x = 0 with the room on the +x side (the build script puts it at x = -w/2, and turns it
+    180 degrees for the east wall), so one piece serves every carriage width."""
     p = Piece(f"bay-wall-{kind}")
-    x = -W
+    x = 0.0
     p.box("train.wood-dark", (x, 0, -BAY), (x + 0.04, DADO, 0))                  # dado
     p.box("train.wood-dark", (x, DADO, -BAY), (x + 0.06, DADO + 0.06, 0))         # cap rail
     y0 = DADO + 0.06
@@ -277,7 +294,7 @@ def wall_bay(kind, top=WALL_TOP):
 
 def pillar():
     p = Piece("bay-pillar")
-    p.box("train.wood-dark", (-W, 0, -0.06), (-W + 0.08, WALL_TOP, 0.06))
+    p.box("train.wood-dark", (0, 0, -0.06), (0.08, WALL_TOP, 0.06))  # at the wall plane, like the walls
     return p
 
 
@@ -285,9 +302,10 @@ CEIL_PROFILE = [(-1.5, 0.0), (-1.45, 0.15), (-1.35, 0.25), (-1.2, 0.32), (-1.0, 
                 (-0.6, 0.4), (0.6, 0.4), (0.6, 0.35), (1.0, 0.35), (1.2, 0.32), (1.35, 0.25), (1.45, 0.15), (1.5, 0.0)]
 
 
-def ceiling_bay(height):
+def ceiling_bay(width, height):
     """Wall panel above 2.2 m up to the cove, the curved ceiling and clerestory, brackets, lamp."""
-    p = Piece(f"bay-ceiling-{int(round(height * 10))}")
+    W = width / 2
+    p = Piece(f"bay-ceiling-{dm(width)}-{dm(height)}")
     base = height - 0.4     # the cove starts 0.4 m below the ceiling's peak
     for side in (-1, 1):
         if base > WALL_TOP + 1e-3:
@@ -310,17 +328,19 @@ def ceiling_bay(height):
     return p
 
 
-def floor_bay(runner):
-    p = Piece("bay-floor-runner" if runner else "bay-floor-planks")
+def floor_bay(width, runner):
+    W = width / 2
+    p = Piece(f"bay-floor-{'runner' if runner else 'planks'}-{dm(width)}")
     p.floor("train.wood-dark", 0, 1, -W, W, -BAY, 0)
     if runner:
         p.floor("train.runner", 0.005, 1, -0.6, 0.6, -BAY, 0)
     return p
 
 
-def end_wall(height):
+def end_wall(width, height):
     """At a carriage's SOUTH end (z = 0), facing north (-z), with a 1.4 m door opening."""
-    p = Piece("end-wall-door" if abs(height - 2.6) < 1e-3 else f"end-wall-door-{int(round(height * 10))}")
+    W = width / 2
+    p = Piece(f"end-wall-door-{dm(width)}-{dm(height)}")
     dx, dh = 0.7, 2.1
     for x0, x1 in ((-W, -dx), (dx, W)):
         p.wall_z("train.wood-dark", 0, -1, x0, x1, 0, DADO)
@@ -453,7 +473,7 @@ def favour_table():
 
 
 def cab_shell():
-    """The cab, 8 m long from its south end (z = 0) to the boiler backhead (z = -8)."""
+    """The cab, 3.0 m wide, 8 m long from its south end (z = 0) to the boiler backhead (z = -8)."""
     p = Piece("cab-shell")
     L, H = 8.0, 2.6
     p.floor("train.iron", 0, 1, -W, W, -L, 0)
@@ -492,15 +512,118 @@ def cab_shell():
 
 # ---- main ----------------------------------------------------------------------------------
 
+def partition(height):
+    """A thin room partition inside a carriage: 1 m long along -z (the instance scales it to
+    its length and turns it 90 degrees to run across), 0.1 m thick, dado and panel on both
+    faces, up to the ceiling."""
+    p = Piece(f"partition-{dm(height)}")
+    t = 0.05
+    for side in (-1, 1):
+        x = side * t
+        p.wall_x("train.wood-dark", x, side, -1.0, 0, 0, DADO)
+        p.wall_x("train.panel", x, side, -1.0, 0, DADO, height)
+        p.box("train.wood-dark", (min(x, x + side * 0.03), DADO, -1.0), (max(x, x + side * 0.03), DADO + 0.05, 0))
+    p.floor("train.wood-dark", height - 0.01, 1, -t, t, -1.0, 0)
+    return p
+
+
+def desk():
+    p = Piece("desk")
+    p.box("train.wood-dark", (-0.4, 0.74, -0.8), (0.4, 0.8, 0.8))
+    p.box("train.wood-dark", (-0.38, 0, -0.78), (0.38, 0.74, -0.3))
+    p.box("train.wood-dark", (-0.38, 0, 0.3), (0.38, 0.74, 0.78))
+    p.box("train.brass", (-0.05, 0.8, 0.45), (0.05, 1.15, 0.55))
+    p.box("train.lamp", (-0.12, 1.15, 0.38), (0.12, 1.28, 0.62))
+    return p
+
+
+def stove():
+    p = Piece("stove")
+    p.box("train.iron", (-0.3, 0, -0.4), (0.3, 1.0, 0.4))
+    p.box("train.iron", (-0.08, 1.0, -0.08), (0.08, 2.6, 0.08))  # the flue
+    p.wall_x("train.firebox", -0.305, -1, -0.2, 0.2, 0.25, 0.55)
+    return p
+
+
+def buffet_island():
+    p = Piece("buffet-island")
+    p.box("train.wood-dark", (-0.6, 0, -1.6), (0.6, 0.97, 1.6))
+    p.box("train.brass", (-0.62, 0.97, -1.62), (0.62, 1.0, 1.62))
+    p.box("train.lamp", (-0.2, 1.0, -0.2), (0.2, 1.12, 0.2))  # a lit centrepiece
+    return p
+
+
+def galley_stoves():
+    p = Piece("galley-stoves")
+    p.box("train.iron", (-0.4, 0, -0.95), (0.4, 0.95, 0.95))
+    for z in (-0.5, 0.4):
+        p.box("train.firebox", (-0.3, 0.95, z - 0.2), (0.1, 0.97, z + 0.2))
+    return p
+
+
+def galley_counter():
+    p = Piece("galley-counter")
+    p.box("train.wood-dark", (-0.25, 0, -0.6), (0.25, 0.97, 0.6))
+    p.box("train.brass", (-0.26, 0.97, -0.61), (0.26, 1.0, 0.61))
+    return p
+
+
+def bar():
+    p = Piece("bar")
+    p.box("train.wood-dark", (-0.3, 0, -3.0), (0.3, 1.05, 3.0))
+    p.box("train.brass", (-0.32, 1.05, -3.02), (0.32, 1.1, 3.02))
+    p.wall_x("train.velvet", -0.305, -1, -2.9, 2.9, 0.1, 0.95)  # the padded front
+    p.box("train.brass", (-0.42, 0.15, -3.0), (-0.38, 0.19, 3.0))  # the foot rail
+    return p
+
+
+def pillar_round():
+    p = Piece("pillar-round")
+    b = p.bm("train.wood-dark")
+    n, r = 12, 0.15
+    lo = [b.verts.new(g(r * math.cos(2 * math.pi * i / n), 0.15, r * math.sin(2 * math.pi * i / n))) for i in range(n)]
+    hi = [b.verts.new(g(r * math.cos(2 * math.pi * i / n), 3.25, r * math.sin(2 * math.pi * i / n))) for i in range(n)]
+    for i in range(n):
+        j = (i + 1) % n
+        b.faces.new([lo[i], lo[j], hi[j], hi[i]])
+    p.box("train.brass", (-0.2, 0, -0.2), (0.2, 0.15, 0.2))
+    p.box("train.brass", (-0.22, 3.25, -0.22), (0.22, 3.4, 0.22))
+    return p
+
+
+def bunk():
+    """Along the outer (east) wall of a compartment; origin at its floor centre."""
+    p = Piece("bunk")
+    p.box("train.wood-dark", (-0.4, 0, -1.3), (0.4, 0.4, 1.3))
+    p.box("train.velvet", (-0.38, 0.4, -1.28), (0.38, 0.6, 1.28))
+    p.box("train.wood-dark", (-0.4, 1.4, -1.3), (0.4, 1.46, 1.3))
+    p.box("train.velvet", (-0.38, 1.46, -1.28), (0.38, 1.6, 1.28))
+    for z in (-1.28, 1.24):
+        p.box("train.wood-dark", (-0.4, 0, z), (-0.36, 1.8, z + 0.04))
+    return p
+
+
+def trunk_big():
+    p = Piece("trunk-big")
+    p.box("train.wood-dark", (-0.55, 0, -0.45), (0.55, 0.7, 0.45))
+    for x in (-0.3, 0.3):
+        p.box("train.brass", (x - 0.03, 0, -0.46), (x + 0.03, 0.71, 0.46))
+    return p
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     mats = final_materials(bake_textures())
     pieces = [
         wall_bay("window"), wall_bay("plain"), wall_bay("door"), pillar(),
-        *[ceiling_bay(c) for c in CEILINGS], floor_bay(False), floor_bay(True),
-        *[end_wall(c) for c in CEILINGS], vestibule(), lamp_hanging(), curtain(),
-        seat_bench(), luggage_rack(), trunk(), coffin(), dining_table(), dining_chair(),
+        *[ceiling_bay(w, h) for w, h in SIZES],
+        *[end_wall(w, h) for w, h in SIZES],
+        *[floor_bay(w, r) for w in sorted({w for w, _ in SIZES}) for r in (False, True)],
+        *[partition(h) for h in sorted({h for _, h in SIZES})],
+        vestibule(), lamp_hanging(), curtain(),
+        seat_bench(), luggage_rack(), trunk(), trunk_big(), coffin(), dining_table(), dining_chair(),
         buffet_counter(), jukebox(), favour_table(), cab_shell(),
+        desk(), stove(), buffet_island(), galley_stoves(), galley_counter(), bar(), pillar_round(), bunk(),
     ]
     for pc in pieces:
         pc.finish(mats)
