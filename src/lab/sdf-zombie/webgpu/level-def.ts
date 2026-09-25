@@ -273,11 +273,17 @@ export function layoutSurfaces(level: LevelDef): LevelSurfaceSet {
     if (shown - t.height > 1e-3) boxes.push({ min: [t.minX, f + t.height, t.minZ], max: [t.maxX, f + shown, t.maxZ], color: t.color });
   }
 
+  // Mesh key §3: a level with art draws its furniture and solids AS art; the boxes
+  // are collision only (art modelled over a box z-fights it). Gates still draw: they
+  // must vanish when they open. Without art, boxes draw as before.
+  const boxesAreArt = level.art !== null;
   for (const fu of level.furniture) {
-    const f = level.rooms.find(r => r.id === fu.room)?.floor ?? 0;
+    const room = level.rooms.find(r => r.id === fu.room);
+    if (boxesAreArt || room?.shell === 'art') continue;
+    const f = room?.floor ?? 0;
     boxes.push({ min: [fu.minX, f, fu.minZ], max: [fu.maxX, f + fu.height, fu.maxZ], color: P.solid });
   }
-  for (const s of level.solids) boxes.push({ min: s.min, max: s.max, color: P.solid });
+  if (!boxesAreArt) for (const s of level.solids) boxes.push({ min: s.min, max: s.max, color: P.solid });
   for (const st of level.stairs) boxes.push({ min: st.box.min, max: st.box.max, color: P.solid });
 
   const gates = level.gates.map(g => ({ id: g.id, box: { min: g.box.min, max: g.box.max, color: P.solid } }));

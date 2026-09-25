@@ -36,7 +36,9 @@ waiting for.
   excludes `void` and `paths`. (An `edge` is allowed: `shell: "art"` skips its drawing too, and
   collision is unchanged.)
 - `ENGINE_CAPABILITIES` gains `art`. `layoutSurfaces` skips a `shell: "art"` room's planes the way
-  it skips a `void` room. `enclosureOfIn` is unchanged (bounce colours still come from the palette).
+  it skips a `void` room. **A level with `art` draws no `furniture` or `solids` boxes**: they are
+  collision only, and the art draws them (art modelled over a box z-fights it; found in the fixture's
+  seats and the Wake's pillars and tower). Gates still draw, since they vanish when opened. `enclosureOfIn` is unchanged (bounce colours still come from the palette).
 
 ## 4. Export
 
