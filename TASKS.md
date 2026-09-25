@@ -33,7 +33,8 @@
 - [x] 1 Design + doc updates (vision §6.1/§10.3/§10.4, Night Train, Wake).
 - [x] 2 **The Void + portal** ([spec](docs/superpowers/specs/2026-09-24-void-portal-design.md) · [plan](docs/superpowers/plans/2026-09-24-void-portal.md)): `?level=the-void`; Esc → New game starts there. WGSL portal (flame rim, haze, ray-cast tracks), embers, glow pool; format `void` rooms + `portals`. Gate `scripts/sdf-game-void-gate.sh` 3/3; Wake + shorty gates pass. First level with no bodies (boot seeds guarded). **Next:** owner look review; portal targets `the-wake` until Night Train exists.
 - [x] 3a **Level mesh key** ([spec](docs/superpowers/specs/2026-09-24-level-mesh-key-design.md) · [plan](docs/superpowers/plans/2026-09-24-level-mesh-key.md)): `dressing` → `<id>.art.glb` (kit linked + GPU-instanced, rest joined per room/material), `shell: "art"`; with art, solids/furniture are collision only. The Wake draws its dressing (359 meshes → 53). Gate `scripts/sdf-game-art-gate.sh` passes; budget +75 draws / +5 ms (owner-approved). Art emission capped at 1 (Blender strengths blew out).
-- [ ] 3b Train carriage kit (old-timey wood interior, RE0 train as inspiration; windows with scrolling scenery, sway) · 4 Night Train first slice (carriages 1, 3, 5, 8).
+- [~] 3b **Train carriage kit** [spec](docs/superpowers/specs/2026-09-25-train-carriage-kit-design.md) approved: scripted bays from `kit.blend` (baked wood/panel/brass), carriages 1, 3, 5, 8 walkable (no gameplay), WGSL window scenery, sway; Void portal → `night-train`. [RE0 study](docs/game/levels/01-night-train/reference-study-re0.md). **Next:** plan.
+- [ ] 4 Night Train first slice: gameplay (encounters, the Stoker, dawn later).
 
 ## Wake level pipeline — Plan 1 in flight — 2026-09-23
 
