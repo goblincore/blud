@@ -122,6 +122,11 @@ skeleton
   bone spine2 parent=chest  dir=up pitch=0  len=0.03784
   bone neck   parent=spine2 dir=up pitch=8  len=0.07568
   bone skull  parent=neck   dir=up pitch=-4 len=0.12973
+  # THE JAW (bride.blob, Task 12): a point-carrier from the skull pivot to
+  # the chin, driven by the sword wind-up. No kit piece rides it; it is
+  # transcribed so the skeleton-parity test sees every .blob bone. Up bone:
+  # pitch verbatim; 0.070 m / 1.85.
+  bone jaw    parent=neck   dir=up pitch=66 len=0.03784
   # THE HEM PENDULUM (bride.blob, Task 3): a down bone from the hip joint
   # whose tail is a loose Verlet point; the rigid ruffle skirt rides it. It
   # is transcribed because the girdle and its crosses ride it TOO — a chain

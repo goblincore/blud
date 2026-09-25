@@ -14,12 +14,9 @@
   `node scripts/bride-melee-gate.mjs 5271 9271` passed as of Task 11 (`64285c82`'s jaw-adjacent
   edits are untested in a browser since). Crowd gate's negative control fails on the base commit
   too (pre-existing, unrelated).
-- [x] **Unit-test verification (Task 13):** `tsc --noEmit` clean, 610/612 targeted tests pass. One
-  new failure: `bride-kit.test.ts` skeleton parity — the kit `.wam` has no `jaw` bone to match the
-  one Task 12 added to `bride.blob`. Not fixed here; needs a kit rebuild (Blender).
+- [x] **Unit-test verification (Task 13):** `tsc --noEmit` clean, all targeted tests pass after the
+  kit gained Task 12's `jaw` bone (skeleton parity had caught it; geometry unchanged, WAM rebuild).
 - [ ] Perf census vs cultist (fallback-B gate) deferred by the owner (2026-09-24).
-- [ ] **`bride-kit.test.ts` jaw-bone regression** (found in Task 13): add a `jaw` node to
-  `bride-kit.wam` and rebuild `bride-kit.gltf`, or otherwise reconcile skeleton parity.
 - [ ] Polish: jaw red interior + corner tear; plate detail (lames, rivets, rolled edges); the boot
   top edge (reads as a seam against the stocking); the skirt reading as crumpled cloth rather than
   lace ruffles; the veil's crown reading like a nun's coif; the STALK gait's trailing-foot kick

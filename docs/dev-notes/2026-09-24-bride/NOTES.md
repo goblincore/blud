@@ -1019,9 +1019,13 @@ AssertionError: kit has no bone jaw: expected undefined to be defined
 Task 12 (`9c1d0d8a`) added a `jaw` bone to `bride.blob`'s skeleton but did not add a matching
 node to `bride-kit.wam` / regenerate `bride-kit.gltf`. `bride-kit.test.ts`'s skeleton-parity
 check walks every `.blob` bone and now fails on the one the kit doesn't carry. This is a real
-regression, not the known `game-context-coverage`/crowd-gate pre-existing failures. **Not fixed
-in this task** (out of scope for "notes and verification"; the fix belongs with a `.wam`/kit
-rebuild, which needs Blender). Flagged for a follow-up session.
+regression, not the known `game-context-coverage`/crowd-gate pre-existing failures.
+
+**Fixed right after (controller):** `bride-kit.wam` gained `bone jaw parent=neck dir=up pitch=66
+len=0.03784` (0.070 m / 1.85, up bone so pitch verbatim) and was rebuilt with
+`scripts/build-wam-kit.sh bride` (a WAM/Python compile, not Blender). The glTF's geometry is
+unchanged (4916 vertices before and after); the only new node is `jaw`. `bride-kit` + `bride-blob`
+pass (60/60).
 
 Everything else in the run is green, including all 52 `bride-blob.test.ts` cases (carries,
 swing tracks, jaw gape), the 5 `game-actor-bride.test.ts` game-path cases (fight, both severed-arm
