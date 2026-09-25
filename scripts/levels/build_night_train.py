@@ -1,14 +1,14 @@
 # scripts/levels/build_night_train.py
-"""Night Train's first slice (carriage kit spec docs/superpowers/specs/2026-09-25-train-carriage-kit-design.md §4).
+"""Night Train's first slice, built from the approved layout.
 
-    blender --background --factory-startup --python scripts/levels/build_night_train.py \
-        [-- --width 3.0 --ceiling 2.6 --kit PATH --out PATH --only NAME]
+    blender --background --factory-startup --python scripts/levels/build_night_train.py [-- --kit PATH --out PATH]
 
-Builds assets-source/levels/night-train.blend from the CARRIAGES table: four art-shelled
-carriages (1 the guard's van, 3 the dining car, 5 the party carriage, 8 the cab) toward -z,
-1.2 m vestibules between them, every piece a collection instance linked from kit.blend, and
-a furniture box for every prop that stands on the floor. After the first run the .blend is
-the source of truth; refine it in Blender.
+The layout tables (scripts/levels/night_train_layout.py, docs/game/levels/01-night-train/layout.md)
+say where every carriage, partition, prop, spawn, pickup and gate goes; this script turns them
+into assets-source/levels/night-train.blend: art-shelled rooms, 1.2 m vestibules, every piece a
+collection instance linked from kit.blend, and a collision box (furniture or solid) for every prop
+and partition. After the first run the .blend can be refined by hand, but the tables stay the
+plan of record: change them and rebuild.
 
 Game space (x, y, z), y up, the train runs toward -z; Blender gets (x, -z, y).
 """
@@ -17,6 +17,9 @@ import os
 import sys
 
 import bpy
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from night_train_layout import CARRIAGES, VESTIBULE, placed  # noqa: E402
 
 ROOT = os.path.abspath("assets-source/levels")
 ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -28,11 +31,14 @@ def arg(name, default):
 
 KIT = os.path.abspath(arg("--kit", os.path.join(ROOT, "kit.blend")))
 OUT = os.path.abspath(arg("--out", os.path.join(ROOT, "night-train.blend")))
-ONLY = arg("--only", None)
-BAY, VESTIBULE = 1.9, 1.2
-W = float(arg("--width", "3.0")) / 2   # half the inside width
-CEIL = float(arg("--ceiling", "2.6"))
+BAY = 1.9
 PI = math.pi
+WARM = (1.0, 0.72, 0.45)
+
+
+def dm(v):
+    return int(round(v * 10))
+
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 SC = bpy.context.scene
@@ -87,16 +93,6 @@ def glight(name, pos, color, power):
     coll("lights").objects.link(obj)
 
 
-
-# id, name, length (m), ceiling (m), recipe
-CARRIAGES = [
-    (1, "guards-van", 16.0, CEIL, "van"),
-    (3, "dining-car", 18.0, CEIL, "dining"),
-    (5, "party-carriage", 20.0, 3.2, "party"),
-    (8, "cab", 8.0, 2.6, "cab"),
-]
-WARM = (1.0, 0.72, 0.45)
-
 with bpy.data.libraries.load(KIT, link=True, relative=True) as (src, dst):
     dst.collections = list(src.collections)
 PIECES = {c.name: c for c in dst.collections}
@@ -104,7 +100,8 @@ COUNT = {}
 
 
 def put(piece, x, y, z, yaw=0.0, zscale=1.0):
-    """A linked kit piece at game (x, y, z); yaw PI turns it to face the other way."""
+    """A linked kit piece at game (x, y, z). Blender yaw: PI turns it round; -PI/2 turns a
+    piece modelled along -z to run along +x. zscale stretches it along its own length."""
     COUNT[piece] = COUNT.get(piece, 0) + 1
     e = bpy.data.objects.new(f"{piece}:{COUNT[piece]}", None)
     e.instance_type = "COLLECTION"
@@ -116,95 +113,104 @@ def put(piece, x, y, z, yaw=0.0, zscale=1.0):
     return e
 
 
-def furn(name, x0, x1, z0, z1, h):
-    gbox("furniture", name, (x0, 0, z0), (x1, h, z1))
-
-
-def walls(kind_w, kind_e, zs, length):
-    """A wall segment on both sides from zs toward -z; the east side is the west piece turned."""
+def walls(kind_w, kind_e, w2, zs, length):
+    """Both side walls of one segment (from zs toward -z); the east piece is the west one turned."""
     k = length / BAY
-    put(f"bay-wall-{kind_w}", 0, 0, zs, 0.0, k)
-    put(f"bay-wall-{kind_e}", 0, 0, zs - length, PI, k)
+    put(f"bay-wall-{kind_w}", -w2, 0, zs, 0.0, k)
+    put(f"bay-wall-{kind_e}", w2, 0, zs - length, PI, k)
 
 
-def carriage(rid, name, length, ceiling, recipe, max_z):
-    min_z = max_z - length
-    room = gbox("rooms", f"room:{rid}:{name}", (-W, 0, min_z), (W, ceiling, max_z), wire=True)
+def partition(h, x0, x1, u0, u1, g):
+    """A thin partition from the layout's walls table, plus its collision solid."""
+    piece = f"partition-{dm(h)}"
+    if (x1 - x0) >= (u1 - u0):   # runs across the carriage
+        put(piece, x0, 0, g((u0 + u1) / 2), -PI / 2, x1 - x0)
+    else:                        # runs along it
+        put(piece, (x0 + x1) / 2, 0, g(u0), 0.0, u1 - u0)
+    gbox("solids", f"partition:{COUNT[piece]}", (x0, 0, g(u1)), (x1, h, g(u0)))
+
+
+def prop(label, x0, x1, u0, u1, h, g, rid, n):
+    """A layout prop: its kit piece(s) and its furniture box."""
+    xc, zc = (x0 + x1) / 2, g((u0 + u1) / 2)
+    if label == "trunks":
+        put("trunk", xc, 0, zc + 0.35)
+        put("trunk", xc, 0, zc - 0.35)
+        put("trunk", xc, 0.5, zc)
+    elif label == "big trunk":
+        put("trunk-big", xc, 0, zc)
+    elif label == "table":
+        put("dining-table", xc, 0, zc)
+        put("dining-chair", xc, 0, zc + 0.65)
+        put("dining-chair", xc, 0, zc - 0.65, PI)
+    elif label != "backhead":  # the cab shell has its own backhead
+        piece = {"coffin": "coffin", "desk": "desk", "stove": "stove", "buffet island": "buffet-island",
+                 "stoves": "galley-stoves", "counter": "galley-counter", "bunk": "bunk", "favours": "favour-table",
+                 "pillar": "pillar-round", "bar": "bar", "jukebox": "jukebox"}[label]
+        put(piece, xc, 0, zc)
+    gbox("furniture", f"{label}:{rid}:{n}", (x0, 0, g(u1)), (x1, h, g(u0)))
+
+
+def carriage(c, zs):
+    rid, name, w, L, h = c["rid"], c["name"], c["w"], c["L"], c["h"]
+    w2 = w / 2
+    g = lambda u: zs - u  # noqa: E731  (carriage frame u -> game z)
+    room = gbox("rooms", f"room:{rid}:{name}", (-w2, 0, g(L)), (w2, h, zs), wire=True)
     room["shell"] = "art"
-    for i in range(max(1, round(length / 8))):
-        glight(f"lamp:{rid}:{i}", (0, ceiling - 0.4, max_z - length * (i + 0.5) / max(1, round(length / 8))), WARM, 3)
-    if recipe == "cab":
-        put("cab-shell", 0, 0, max_z)
-        furn(f"backhead:{rid}", -W, W, min_z, min_z + 0.4, 2.4)
-        glight(f"firebox:{rid}", (0, 1.0, min_z + 1.0), (1.0, 0.42, 0.12), 4)
-        return min_z
-    bays = int(length // BAY)
-    pad = (length - bays * BAY) / 2
-    ceil_piece = f"bay-ceiling-{int(round(ceiling * 10))}"
-    floor_piece = "bay-floor-planks" if recipe == "van" else "bay-floor-runner"
-    # End pads: plain wall, ceiling and floor scaled to the pad length.
-    for zs in (max_z, min_z + pad):
-        walls("plain", "plain", zs, pad)
-        put(ceil_piece, 0, 0, zs, 0.0, pad / BAY)
-        put(floor_piece, 0, 0, zs, 0.0, pad / BAY)
-    for b in range(bays):
-        zs = max_z - pad - b * BAY
-        mid = zs - BAY / 2
-        windowed = recipe != "van" or b in (1, 4)
-        walls("window" if windowed else "plain", "window" if windowed else "plain", zs, BAY)
-        put(ceil_piece, 0, 0, zs)
-        put(floor_piece, 0, 0, zs)
-        put("bay-pillar", 0, 0, zs)
-        put("bay-pillar", 0, 0, zs, PI)
-        if windowed and recipe != "van":
-            put("curtain", -W, 1.9, zs - 0.4)
-            put("curtain", W, 1.9, zs - 1.5, PI)
-        if recipe == "van":
-            if b % 2 == 0:
-                put("luggage-rack", -W, 0, zs)
-                put("luggage-rack", W, 0, zs - BAY, PI)
-            put("trunk", -(W - 0.3), 0, mid)
-            furn(f"trunk:{rid}:{b}", -(W - 0.05), -(W - 0.55), mid - 0.45, mid + 0.45, 0.5)
-            if b in (2, 5):
-                put("coffin", W - 0.35, 0, mid)
-                furn(f"coffin:{rid}:{b}", W - 0.65, W - 0.05, mid - 1.0, mid + 1.0, 0.5)
-        elif recipe == "dining":
-            buffet = b >= bays - 2
-            sides = (1,) if buffet else (-1, 1)
-            for side in sides:
-                x = side * (W - 0.35)
-                put("dining-table", x, 0, mid)
-                put("dining-chair", x, 0, mid + 0.65)
-                put("dining-chair", x, 0, mid - 0.65, PI)
-                furn(f"table:{rid}:{b}:{side}", min(x - 0.35, x + 0.35), max(x - 0.35, x + 0.35), mid - 0.9, mid + 0.9, 0.95)
-        elif recipe == "party":
-            if b < 3:
-                put("favour-table", -(W - 0.35), 0, mid)
-                furn(f"favours:{rid}:{b}", -W, -(W - 0.71), mid - 0.81, mid + 0.81, 0.76)
-            if b % 2 == 0:
-                put("lamp-hanging", 0, ceiling, zs)
-    if recipe == "dining":
-        put("buffet-counter", -W, 0, min_z + pad + 3.0)
-        furn(f"buffet:{rid}", -W, -W + 0.62, min_z + pad, min_z + pad + 3.0, 1.03)
-    if recipe == "party":
-        put("jukebox", W - 0.4, 0, min_z + pad + 0.4)
-        furn(f"jukebox:{rid}", W - 0.8, W, min_z + pad + 0.15, min_z + pad + 0.65, 1.5)
-    end = "end-wall-door" if abs(ceiling - 2.6) < 1e-3 else f"end-wall-door-{int(round(ceiling * 10))}"
-    put(end, 0, 0, max_z)
-    put(end, 0, 0, min_z, PI)
-    return min_z
+    lamps = max(1, round(L / 8))
+    for i in range(lamps):
+        glight(f"lamp:{rid}:{i}", (0, h - 0.4, g(L * (i + 0.5) / lamps)), WARM, 3)
+    if name == "cab":
+        put("cab-shell", 0, 0, zs)
+        glight(f"firebox:{rid}", (0, 1.0, g(L - 1.0)), (1.0, 0.42, 0.12), 4)
+    else:
+        bays = int(L // BAY)
+        pad = (L - bays * BAY) / 2
+        ceil_piece, end_piece = f"bay-ceiling-{dm(w)}-{dm(h)}", f"end-wall-door-{dm(w)}-{dm(h)}"
+        floor_piece = f"bay-floor-{'planks' if name == 'guards-van' else 'runner'}-{dm(w)}"
+        for z0 in (zs, g(L - pad)):
+            walls("plain", "plain", w2, z0, pad)
+            put(ceil_piece, 0, 0, z0, 0.0, pad / BAY)
+            put(floor_piece, 0, 0, z0, 0.0, pad / BAY)
+        for b in range(bays):
+            z0 = g(pad + b * BAY)
+            windowed = name != "guards-van" or b in (1, 4)
+            kind = "window" if windowed else "plain"
+            walls(kind, kind, w2, z0, BAY)
+            put(ceil_piece, 0, 0, z0)
+            put(floor_piece, 0, 0, z0)
+            put("bay-pillar", -w2, 0, z0)
+            put("bay-pillar", w2, 0, z0, PI)
+            if windowed and name in ("dining-car", "party-carriage", "sleeper"):
+                put("curtain", -w2, 1.9, z0 - 0.4)
+                put("curtain", w2, 1.9, z0 - 1.5, PI)
+            if name == "guards-van" and b % 2 == 0:
+                put("luggage-rack", -w2, 0, z0)
+                put("luggage-rack", w2, 0, z0 - BAY, PI)
+            if name == "party-carriage" and b % 2 == 0:
+                put("lamp-hanging", 0, h, z0)
+        put(end_piece, 0, 0, zs)
+        put(end_piece, 0, 0, g(L), PI)
+    for x0, x1, u0, u1 in c["walls"]:
+        partition(h, x0, x1, u0, u1, g)
+    for n, (label, x0, x1, u0, u1, ph) in enumerate(c["props"]):
+        prop(label, x0, x1, u0, u1, ph, g, rid, n)
+    for sid, kind, x, u in c["spawns"]:
+        gempty(f"spawn:{kind}:{sid}", (x, 0, g(u)), PI)   # facing south, toward the player
+    for pid, item, x, u in c["pickups"]:
+        gempty(f"pickup:{item}:{pid}", (x, 0.3, g(u)))
+    for gid, event, x0, x1, u0, u1 in c["gates"]:
+        gbox("gates", f"gate:{event}:{gid}", (x0, 0, g(u1)), (x1, 2.2, g(u0)))
 
 
-z = 0.0
 prev = None
-for rid, name, length, ceiling, recipe in [c for c in CARRIAGES if ONLY in (None, c[1])]:
+for c, zs in placed():
     if prev is not None:
-        # The vestibule between the previous carriage (south) and this one: a 1.4 m tunnel.
-        put("vestibule", 0, 0, z + VESTIBULE)
-        gbox("tunnels", f"tunnel:{prev}:{rid}", (-0.7, 0, z), (0.7, 2.1, z + VESTIBULE), wire=True)
-    min_z = carriage(rid, name, length, ceiling, recipe, z)
-    prev = rid
-    z = min_z - VESTIBULE
+        # The vestibule between the previous carriage and this one: a 1.4 m tunnel.
+        put("vestibule", 0, 0, zs + VESTIBULE)
+        gbox("tunnels", f"tunnel:{prev}:{c['rid']}", (-0.7, 0, zs), (0.7, 2.1, zs + VESTIBULE), wire=True)
+    carriage(c, zs)
+    prev = c["rid"]
 
 gempty("start", (0, 0, -1.0), 0.0)
 bpy.ops.wm.save_as_mainfile(filepath=OUT, relative_remap=True)
