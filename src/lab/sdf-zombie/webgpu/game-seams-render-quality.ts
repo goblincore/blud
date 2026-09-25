@@ -96,7 +96,10 @@ export function createRenderQualitySeams(ctx: GameContext) {
         shellAmp: shellAmpOf(ctx),
       };
     },
-    /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
+    /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). With the upscale stage on
+     *  (the shipped default), anything but its scale (0.5) drops the stage to NATIVE with a
+     *  one-time warning — see upscale/upscale-scale-guard.ts. Setting 0.5 again does not
+     *  re-enable it; the shipped state is setSdfScale(0.5) on a fresh boot. */
     setSdfScale: (v: number) => applySdfScale(ctx, v),
     // ---------------------------------------------------------------
     // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at
