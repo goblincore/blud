@@ -98,6 +98,7 @@ import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial
 import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
+import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -719,6 +720,9 @@ async function main() {
   ctx.lighting.outdoor = createOutdoor(ctx);
   // THE VOID: portals, glow pools, embers (null without a portal).
   ctx.lighting.void = createVoid(ctx);
+  // THE TRAIN: window scenery and sway (null unless the art has them). Before the
+  // per-room light lists: the glass is unlit and skipped there.
+  ctx.world.train = createTrain(ctx);
 
   // CEILING FILL. The sun points down; ceilings (and north-south walls in
   // shadow) have normals pointing away from it, so with only a dim ambient
@@ -2980,6 +2984,7 @@ async function main() {
     const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
     for (const mesh of ctx.world.levelGroup.children) {
       if (!(mesh instanceof THREE.Mesh)) continue;
+      if (mesh.userData.skipLevelLights) continue; // unlit art (the train's window scenery)
       // Art carries its room (mesh key §5); generated surfaces go by position.
       const room = typeof mesh.userData.room === 'number' ? mesh.userData.room as number : roomIdAt(mesh.position.x, mesh.position.z);
       const list = ctx.world.levelLightLists.get(room);
@@ -6656,6 +6661,7 @@ async function main() {
     ctx.demo.simFrame++;
     stepOutdoor(ctx, dt);
     stepVoid(ctx, dt);
+    stepTrain(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
@@ -7592,6 +7598,8 @@ async function main() {
       eye[1] + Math.sin(ctx.player.player.pitch + ctx.weapon.recoilPitch),
       eye[2] - Math.cos(ctx.player.player.yaw) * cp,
     );
+    // The train's roll and bob ride on the view only (never the player or collision).
+    applyTrainCamera(ctx, camera);
     camera.updateMatrixWorld();
 
     // Optional impact crown: rebuild from the current event times after the
@@ -8131,6 +8139,7 @@ async function main() {
     createWorldSeams(ctx),
     createOutdoorSeams(ctx),
     createVoidSeams(ctx),
+    createTrainSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),

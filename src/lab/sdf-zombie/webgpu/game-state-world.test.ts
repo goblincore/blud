@@ -60,6 +60,6 @@ describe('WORLD_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(27);
+    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(28);
   });
 });

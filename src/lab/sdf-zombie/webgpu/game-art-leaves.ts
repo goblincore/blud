@@ -37,6 +37,8 @@ export function placeLevelArt(ctx: GameContext, scene: THREE.Group, file: string
     ctx.world.levelGroup.attach(m);
     if (room !== null) m.userData.room = room;
     if (!shadow) m.userData.shadow = false;
+    const sway = chain.find(u => typeof u.sway === 'string')?.sway;
+    if (sway) m.userData.sway = sway;
     m.castShadow = shadow;
     m.receiveShadow = true;
     for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
