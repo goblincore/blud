@@ -20,6 +20,10 @@ carrying its cargo toward the Party.
 2. **Dynamic light and the flashlight:** the flashlight becomes a pickup (the level starts dark;
    it hangs by a dying lamp in the baggage hold, and picking it up wakes the trunk zombie; no
    battery); failing lamps; light sweeping past the windows; furnace and firebox glow.
+   **Owner addition (2026-09-25): the view outside becomes a thunderstorm** (a `storm` window
+   preset: roiling clouds, rain on the glass, lightning bolts), and **lightning lights the
+   interior** through the windows, timed with the bolts in the glass. Open for that spec: does
+   lightning replace the passing-light sweeps, or join them?
 3. **Haze and volumetric light:** drifting smoke; raymarched light for **every** light. Occluded
    shafts where a light has a shadow map (the flashlight; a moon-style directional light through the
    windows), glow in the haze for lamps and furnaces; reduced resolution plus temporal smoothing.
