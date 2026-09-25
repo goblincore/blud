@@ -126,8 +126,8 @@ const shoot = async (name) => {
   return decodePng(png);
 };
 
-/** Cost of the train's art over its art-less (empty) shell, worst pose. PROPOSED 2026-09-25,
- *  pending the owner: measured +65..+153 draws, +6.1..+8.5 ms paired, machine under load. */
+/** Cost of the train's art over its art-less (empty) shell, worst pose. Owner-approved
+ *  2026-09-25; measured +65..+153 draws, +6.1..+8.5 ms paired, machine under load. */
 const BUDGET = { drawCalls: 175, frameMs: 10 };
 const stats = (img, fx0, fy0, fx1, fy1) => {
   const { w, h, ch, data } = img; const v = [];

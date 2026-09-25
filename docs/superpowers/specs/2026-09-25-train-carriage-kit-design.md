@@ -128,7 +128,8 @@ exported as usual (`night-train.level.json` + `night-train.art.glb`).
   - an autopilot walk from the guard's van reaches the cab;
   - entering the Void's portal loads `night-train`;
   - the cost at three poses (van, dining, party) is recorded as draw calls and fenced frame
-    time. The budget is proposed to the owner after the first measurement.
+    time. Budget (owner-approved 2026-09-25): at most +175 draw calls and +10 ms paired
+    frame time over the empty shell (measured +65..+153, +6.1..+8.5 ms under load).
 - **Regression:** ring, Void, Wake, art and shorty gates; the full suite.
 
 ## 8. Open
