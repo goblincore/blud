@@ -37,6 +37,7 @@
 - [x] 4a **Night Train layout** draft 1 approved ([layout.md](docs/game/levels/01-night-train/layout.md)): five carriages as chains of rooms (van 3 rooms, dining saloon + island + galley, **sleeper** 5 compartments, party, cab); widths 3.6/4.2/4.0/4.2/3.0.
 - [x] 4b **Carriages rebuilt from the layout** ([plan](docs/superpowers/plans/2026-09-25-night-train-rebuild.md)): `cultist` spawn kind; kit walls at the wall plane, shells sized per carriage, partitions, layout props; `build_night_train.py` reads `night_train_layout.py`. Gate: every room walked (24 waypoints, `?nospawn`). Budget raised to +200 draws / +10 ms (owner; optimise once the level feels good).
 - [ ] 4c Gameplay: encounters (wake-up triggers), the Stoker; dawn later.
+- [ ] 4d **Owner ideas (2026-09-25), for layout draft 2:** keys + locked doors to gate progress (retro FPS staple; format has gates, needs key pickups, locked-door feedback, a key HUD); the train a bit longer (bring back third class / coat check / tender, or lengthen carriages).
 
 ## Wake level pipeline — Plan 1 in flight — 2026-09-23
 
