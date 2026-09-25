@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/motion-profile.test.ts
 import { describe, it, expect } from 'vitest';
-import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight, speedForBand, isSoldierFamily } from './motion-profile';
+import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight, speedForBand, isSoldierFamily, JUGGERNAUT_PROFILE } from './motion-profile';
 import { SHAMBLE, MARCH, RUN } from './gait';
 import { WANDER_TUNING } from './wander';
 
@@ -40,8 +40,16 @@ it('lab run control reaches the run gait even when patrol cruise is a walk', () 
 
 it('soldier family is a trait, not a name: a renamed variant keeps it, the cultist gunner does not', () => {
   expect(isSoldierFamily(SOLDIER_PROFILE)).toBe(true);
-  expect(isSoldierFamily({ ...SOLDIER_PROFILE, name: 'juggernaut' })).toBe(true);
+  expect(motionProfileFor('juggernaut')).toBe(JUGGERNAUT_PROFILE);
+  expect(isSoldierFamily(JUGGERNAUT_PROFILE)).toBe(true);
   expect(isSoldierFamily(motionProfileFor('cultist'))).toBe(false);
   expect(isSoldierFamily(ZOMBIE_PROFILE)).toBe(false);
   expect(isSoldierFamily(undefined)).toBe(false);
+});
+
+it('juggernaut: a slower, heavier-turning soldier that never runs', () => {
+  expect(JUGGERNAUT_PROFILE.cruise).toBeLessThan(SOLDIER_PROFILE.cruise);
+  expect(JUGGERNAUT_PROFILE.turnRate!).toBeLessThan(SOLDIER_PROFILE.turnRate!);
+  expect(runWeight(JUGGERNAUT_PROFILE, 99)).toBe(0);
+  expect(JUGGERNAUT_PROFILE.gunner).toBeDefined();
 });

@@ -192,9 +192,34 @@ export const CULTIST_PROFILE: MotionProfile = {
   flail: { abduct: 1.45, liftL: 1.2, liftR: 1.2, yawOut: 2.6, lagL: false, riseSec: 0.07, durationSec: 0.85, arch: 0.12 },
 };
 
+/** The juggernaut: the soldier's power-armoured chaingunner variant
+ *  (docs/superpowers/specs/2026-09-25-juggernaut-design.md). A soldier-family
+ *  member (family inherited), so every soldier system applies. Only what
+ *  makes him a TANK differs: slower, heavier turn, and he never breaks into a
+ *  run. Task 2 of the plan: the body + kit. He still carries the soldier's
+ *  shotgun (scaled to his hand) until the chaingun prop, the `hip` carry and
+ *  CHAINGUN_TUNING land in Task 3. */
+export const JUGGERNAUT_PROFILE: MotionProfile = {
+  ...SOLDIER_PROFILE,
+  name: 'juggernaut',
+  // MARCH only: a tank does not sprint. runBand at Infinity keeps runWeight 0.
+  gait: { walk: MARCH, run: MARCH },
+  runBand: { from: Infinity, to: Infinity },
+  // Spec table: ~0.9 m/s against the soldier's 1.25. Under the zombie's 1.15
+  // on purpose: he closes by being unstoppable, not fast (the ogre's 0.95).
+  cruise: 0.9,
+  // Spec table: ~1.8 rad/s against the soldier's 5.5. The slow sweep IS the
+  // dodge: a strafing player outruns his aim.
+  turnRate: 1.8,
+  // Placeholder until Task 3: the soldier's shotgun x 1.15 (his hand is
+  // 1.15x the soldier's, so the grip seats the same way).
+  prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.38 },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   soldier: SOLDIER_PROFILE,
+  juggernaut: JUGGERNAUT_PROFILE,
   ogre: OGRE_PROFILE,
   cultist: CULTIST_PROFILE,
 };

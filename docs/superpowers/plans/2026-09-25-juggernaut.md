@@ -59,25 +59,22 @@ headless-Chrome capture scripts (`scripts/*.mjs`), Blender scripts for props.
 - Follow-up in Task 3: `createShotgunCasings()` fires for the whole family, so
   the chaingun wants brass casings from its own weapon, not its family.
 
-## Task 2 — Body + power armour, lab only (owner look gate)
+## Task 2 — Body + power armour, lab only (owner look gate) — authored 2026-09-25
 
-**Files:** create `characters/juggernaut.blob`, `characters/juggernaut-kit.wam`
-(-> `/assets/lab/juggernaut-kit.gltf`), a registry entry, `JUGGERNAUT_PROFILE`
-(shotgun placeholder until Task 3), blob tests modelled on `soldier-blob.test.ts`
-and `soldier-kit.test.ts`. Use the `authoring-sdf-characters` skill.
+Notes: `docs/dev-notes/2026-09-25-juggernaut/NOTES.md`.
 
-- [ ] `juggernaut.blob`: start from `soldier.blob`. Height about 2.3 m. Scale
-  shoulder, chest and arm girth about 1.3x and legs about 1.15x (thick, not
-  lanky). Drop the flat-top hair prims. Keep the skeleton topology identical,
-  so gait, carry and injury code apply unchanged.
-- [ ] `juggernaut-kit.wam`: classic power-armour silhouette (spec, "The read").
-  Re-march the flesh widths, as the soldier-kit header describes. Helmet
-  parts go on the skull bone.
-- [ ] Heavy gait: try `STOMP`, then a slowed `MARCH`; owner picks. Set cruise
-  and turnRate from the spec table.
-- [ ] Capture front, side, 3/4 and walk frames next to the soldier for scale.
-  Look at them yourself.
-  Notes: `docs/dev-notes/2026-09-25-juggernaut/NOTES.md`.
+- [x] `juggernaut.blob`: soldier.blob scaled (H 1.15, torso 1.13/1.06 extra,
+  arms 1.12, legs and hips 1.10, neck 1.15), no hair, upper arm tilt 12.
+  2.291 m tall with 1.30x the soldier's shoulder span. 10 tests.
+- [x] `juggernaut-kit.wam`: classic power armour (spec, "The read"). Skeleton
+  derived from the `.blob` to six places. Helmet, snout and lenses are on the skull.
+- [x] `JUGGERNAUT_PROFILE` (MARCH only, cruise 0.9, turn 1.8, placeholder
+  shotgun), registry entry, `lens` look.
+- [ ] **Compile the kit** (`scripts/build-wam-kit.sh juggernaut`, needs WAM,
+  which is outside the repo; the cloud session's sandbox would not run it),
+  then make `juggernaut-kit.test.ts` green (it skips until the glTF exists).
+- [ ] GPU frames next to the soldier (front, side, 3/4, walk); STOMP vs slowed
+  MARCH, owner's pick. A CPU flesh-only comparison is in the notes.
 
 ## Task 3 — Chaingun, single rounds, CHAINGUN_TUNING
 

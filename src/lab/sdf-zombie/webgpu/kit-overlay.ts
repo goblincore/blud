@@ -139,6 +139,15 @@ const LOOK: Record<string, {
   plate:   { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
   webbing: { metalness: 0.05, roughness: 0.70, envIntensity: 0.25 },
 
+  // ---- juggernaut (juggernaut-kit.wam) ----
+  // The power-armour helmet's two round eye lenses: `glass`'s sheen plus a
+  // DIM red self-glow (spec: "a dim glow behind them"). The goblin's glass
+  // rejected an emissive because a lit visor was the wrong note for HIM; a
+  // sealed helmet with lit eyes is exactly the note for a tank. The body under
+  // it has no light to show through (see the emissive docstring), so the
+  // lens carries it. Plate, iron and brass reuse the entries above.
+  lens: { metalness: 0.35, roughness: 0.05, envIntensity: 1.6, emissive: [0.9, 0.06, 0.03], emissiveIntensity: 0.9 },
+
   // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
   // entries exist mostly for the ENV MAP — without one, a rough dielectric's
   // shadow side falls to near-black under the lab's single key, and the

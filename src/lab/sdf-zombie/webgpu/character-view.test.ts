@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildCharacterBody, compileCharacterSheet, createWoundRing } from './character-view';
 import { characterEntry, characterNames } from '../character-registry';
+import { isSoldierFamily } from '../motion-profile';
 import { severLimb } from '../sever';
 import type { Wound } from '../damage';
 
@@ -84,11 +85,13 @@ describe('buildCharacterBody', () => {
 });
 
 describe('compileCharacterSheet', () => {
-  it('opts only the soldier into red-pixel emission while retaining Replace', () => {
+  // The soldier FAMILY: the juggernaut wears the soldier's baked face and
+  // sheet block verbatim (juggernaut.blob), red eyes included.
+  it('opts only the soldier family into red-pixel emission while retaining Replace', () => {
     for (const name of characterNames()) {
       const { sheet, error } = compileCharacterSheet(characterEntry(name));
       expect(error).toBeNull();
-      if (name === 'soldier') {
+      if (isSoldierFamily(characterEntry(name).profile)) {
         expect(sheet).toMatchObject({ decal: 1, eyeGlowRedOnly: 1 });
         expect(sheet!.eyeGlowAmp).toBeGreaterThan(0);
       } else if (sheet) {
