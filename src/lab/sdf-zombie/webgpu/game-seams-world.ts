@@ -593,6 +593,16 @@ export function createWorldSeams(ctx: GameContext) {
     }),
     /** Open an authored level's gate by id (false if unknown or already open). */
     openGate: (id: string) => openGate(ctx, id),
+    /** Mesh key: what the level's art placed (null without art). */
+    artInfo: () => {
+      const a = ctx.world.art;
+      return a ? { file: a.file, meshes: a.meshes, instanced: a.instanced, instances: a.instances } : null;
+    },
+    /** Show or hide the level art (the gate's same-page A/B; visibility, never castShadow). */
+    setArtVisible: (on: boolean) => {
+      for (const o of ctx.world.art?.objects ?? []) o.visible = on;
+      return ctx.world.art !== null;
+    },
 
     rooms: ctx.world.level.rooms.map(r => ({
       id: r.id, name: r.name, zombies: r.zombies,

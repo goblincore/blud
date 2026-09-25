@@ -56,6 +56,8 @@ export interface WorldState {
   openGates: Set<string>;
   /** Gate meshes by gate id, hidden when the gate opens. */
   gateMeshes: Map<string, THREE.Object3D>;
+  /** Mesh key: what the level's art file placed, or null (no art / `?art=0`). */
+  art: { file: string; meshes: number; instanced: number; instances: number; objects: THREE.Object3D[] } | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -111,6 +113,7 @@ export function makeWorldState(): WorldState {
     level: unbuilt<ActiveLevel>(),
     openGates: new Set<string>(),
     gateMeshes: new Map<string, THREE.Object3D>(),
+    art: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -142,6 +145,7 @@ export const WORLD_BINDINGS = {
   level: 'world.level',
   openGates: 'world.openGates',
   gateMeshes: 'world.gateMeshes',
+  art: 'world.art',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

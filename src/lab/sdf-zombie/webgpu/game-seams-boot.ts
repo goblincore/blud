@@ -85,6 +85,18 @@ export function createBootSeams(ctx: GameContext) {
      *  measured form. `installed` false = no timestamp tracking on this page. */
     passTimings: async () => ({ installed: ctx.boot.passTiming.installed, samples: await ctx.boot.passTiming.collect() }),
     passCounts: () => ctx.boot.passTiming.countsSinceLast(),
+    /** Median ms of `n` still frames, each drawn then fenced (CPU + GPU, no vsync or
+     *  frame cap in the number). The mesh key gate's cost probe. */
+    timeDraws: async (n = 30) => {
+      const ms: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const t0 = performance.now();
+        ctx.boot.handle.drawOnce();
+        await ctx.boot.handle.resolveGpu();
+        ms.push(performance.now() - t0);
+      }
+      return ms.sort((a, b) => a - b)[n >> 1]!;
+    },
     // ---------------------------------------------------------------
     // FRAME PACING. setFrameCap(fps) presents on a fixed cadence; 0
     // uncaps and restores the raw rAF behaviour. Default 30, matching

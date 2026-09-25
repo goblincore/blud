@@ -96,6 +96,7 @@ import { levelCeilingM, roomSpawnPoints } from './game-level-leaves';
 import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor-leaves';
 import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
+import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -528,6 +529,8 @@ async function main() {
   // --- ACTIVE LEVEL (Level Format v1 — spec 2026-09-23). ?level=<id> loads
   // public/assets/levels/<id>.level.json (&state=<name> picks a state); no
   // param is the ring testbed, bit-identical to before.
+  // Mesh key: the level's art, parsed here and placed with the level group below.
+  let artScene: THREE.Group | null = null;
   {
     const q = new URLSearchParams(location.search);
     const levelParam = q.get('level');
@@ -538,6 +541,7 @@ async function main() {
       const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
       if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
       ctx.world.level = authoredLevel(def);
+      artScene = await loadLevelArt(levelParam, def.art);
     } else {
       ctx.world.level = ringLevel();
     }
@@ -704,6 +708,9 @@ async function main() {
     mesh.name = `window:${win.id}`;
     ctx.world.levelGroup.add(mesh);
   }
+  // Mesh key §5: the art joins the group BEFORE the per-room light lists are
+  // assigned (below), so it is lit exactly like the walls.
+  if (artScene && ctx.world.level.def?.art) placeLevelArt(ctx, artScene, ctx.world.level.def.art);
   scene.add(ctx.world.levelGroup);
   // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
   // (null for the ring). Before the per-room light lists are built, so the moon
@@ -864,7 +871,8 @@ async function main() {
   // recompile); changing the radius after that does not.
   ctx.boot.handle.renderer.shadowMap.type = THREE.PCFShadowMap;
   ctx.world.levelGroup.traverse((o) => {
-    if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; }
+    // Level art may opt out of casting (mesh key §4: `shadow = false`).
+    if (o instanceof THREE.Mesh) { o.castShadow = o.userData.shadow !== false; o.receiveShadow = true; }
   });
 
   function applyRig(rig: AmbientRig) {
@@ -2971,7 +2979,9 @@ async function main() {
     const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
     for (const mesh of ctx.world.levelGroup.children) {
       if (!(mesh instanceof THREE.Mesh)) continue;
-      const list = ctx.world.levelLightLists.get(roomIdAt(mesh.position.x, mesh.position.z));
+      // Art carries its room (mesh key §5); generated surfaces go by position.
+      const room = typeof mesh.userData.room === 'number' ? mesh.userData.room as number : roomIdAt(mesh.position.x, mesh.position.z);
+      const list = ctx.world.levelLightLists.get(room);
       if (!list) continue;
       const nm = library.fromMaterial(mesh.material as THREE.Material);
       if (!nm) continue;
