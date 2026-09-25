@@ -4,7 +4,7 @@ import { LEVEL_CHOICES, NEW_GAME_LEVEL, levelUrl, shouldShowMenu } from './game-
 describe('game menu', () => {
   it('New game starts in the Void; the dev picker lists every level', () => {
     expect(NEW_GAME_LEVEL).toBe('the-void');
-    expect(LEVEL_CHOICES.map(c => c.id)).toEqual(['ring', 'the-void', 'the-wake']);
+    expect(LEVEL_CHOICES.map(c => c.id)).toEqual(['ring', 'the-void', 'night-train', 'the-wake']);
   });
 
   it('the ring drops ?level and ?state; other params survive', () => {

@@ -16,7 +16,7 @@ describe('the-void.level.json', () => {
     expect(v.rooms).toHaveLength(1);
     expect(v.rooms[0]!.void).toBe(true);
     expect(v.portals).toHaveLength(1);
-    expect(v.portals[0]!.target).toBe('the-wake');
+    expect(v.portals[0]!.target).toBe('night-train');
     expect(v.spawns).toEqual([]);
     expect(missingCapabilities(v, ENGINE_CAPABILITIES)).toEqual([]);
   });

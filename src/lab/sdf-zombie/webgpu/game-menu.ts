@@ -14,6 +14,7 @@ export const NEW_GAME_LEVEL = 'the-void';
 export const LEVEL_CHOICES: readonly LevelChoice[] = [
   { id: 'ring', label: 'Ring (testbed)' },
   { id: 'the-void', label: 'The Void' },
+  { id: 'night-train', label: 'Night Train (WIP)' },
   { id: 'the-wake', label: 'The Wake (WIP)' },
 ];
 

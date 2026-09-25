@@ -68,8 +68,9 @@ def glight(name, pos, color, power):
 o = gbox("rooms", "room:1:void", (-20, 0, -40), (20, 8, 0), wire=True)
 o["void"] = True
 gempty("start", (0, 0, -6), 0.0)  # facing -z, toward the portal
-# Faces +z (toward the player); the tracks run away behind it, to -z.
-gempty("portal:the-wake:first", (0, 0, -18), math.pi, width=2.2, height=3.4)
+# Faces +z (toward the player); the tracks run away behind it, to -z. It leads to the
+# first level, Night Train (carriage kit spec §4).
+gempty("portal:night-train:first", (0, 0, -18), math.pi, width=2.2, height=3.4)
 glight("portal-light", (0, 1.7, -17.6), (1.0, 0.12, 0.08), 6)
 
 argv = sys.argv

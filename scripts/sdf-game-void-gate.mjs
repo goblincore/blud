@@ -1,7 +1,7 @@
 // scripts/sdf-game-void-gate.mjs — headless gate for the Void (spec 2026-09-24-void-portal-design.md §9).
 // No-deps CDP, same plumbing as scripts/sdf-game-wake-gate.mjs.
 //
-//   1. BOOT: the-void active, no console errors, one portal to the-wake.
+//   1. BOOT: the-void active, no console errors, one portal to night-train.
 //   2. LOOK: from the start, the screen centre (the portal) is red; the edges are black.
 //   3. ENTER: standing in the portal reloads the page into the target level.
 //
@@ -119,8 +119,8 @@ function meanRgb(img, fx0, fy0, fx1, fy1) {
 // 1. BOOT
 if (!(await boot('level=the-void'))) { console.error(consoleEvents.slice(-8)); fail('the-void did not boot to ready'); }
 const vs = await evaluate('__sdfGame.voidState()');
-if (!vs || vs.portals.length !== 1 || vs.portals[0].target !== 'the-wake') fail(`voidState ${JSON.stringify(vs)}`);
-pass('boot: the-void active, one portal to the-wake');
+if (!vs || vs.portals.length !== 1 || vs.portals[0].target !== 'night-train') fail(`voidState ${JSON.stringify(vs)}`);
+pass('boot: the-void active, one portal to night-train');
 
 // 2. LOOK — standing at the start, facing the portal. The loader hides on first lock,
 // which headless never does; hide it by hand for the capture.
@@ -139,8 +139,8 @@ pass(`look: portal centre ${f3(c)}, edges ${f3(l)} / ${f3(r)}`);
 await evaluate('__sdfGame.setPose(0, -18, 0, 0)');
 await sleep(1500);
 const href = await evaluate('location.href').catch(() => '');
-if (!/level=the-wake/.test(href)) fail(`did not enter the portal: ${href}`);
-pass('enter: the portal loads the-wake');
+if (!/level=night-train/.test(href)) fail(`did not enter the portal: ${href}`);
+pass('enter: the portal loads night-train');
 
 console.log('PASS sdf-game-void-gate');
 process.exit(0);
