@@ -15,7 +15,7 @@
 
 | Collection | Contains | Object name | Notes |
 | --- | --- | --- | --- |
-| `rooms` | box meshes | `room:<id>:<name>` | Box bottom = floor, top = ceiling. Custom property `sky` (a sky preset name) makes it open-air. Outdoor: `ground` (a ground preset, default `stone`), `edge_style` (an edge preset) + `edge_height` (metres, default 2.2; open-sky rooms only). `void` (bool): nothing drawn, collision kept; excludes `sky`, edges and paths |
+| `rooms` | box meshes | `room:<id>:<name>` | Box bottom = floor, top = ceiling. Custom property `sky` (a sky preset name) makes it open-air. Outdoor: `ground` (a ground preset, default `stone`), `edge_style` (an edge preset) + `edge_height` (metres, default 2.2; open-sky rooms only). `void` (bool): nothing drawn, collision kept; excludes `sky`, edges and paths. `shell` (`generated` default, or `art`: generated surfaces not drawn, the art is the room's look) |
 | `paths` | box meshes | `path:<ground>:<room id>` | Ground strip laid over the room's floor; the box's x/z rectangle is exported (`path:gravel:1` = gravel in room 1) |
 | `tunnels` | box meshes | `tunnel:<a>:<b>` | Both ends flush with their rooms' walls; same floor as both rooms; ≥ 1.4 m wide |
 | `stairs` | box meshes | `stair:<up>:<id>` | `<up>` is `+x`, `-x`, `+z` or `-z` in **game** axes |
@@ -26,7 +26,7 @@
 | `windows` | thin box meshes | `window:<view>:<id>` | Straddles exactly one room wall |
 | `lights` | point lights | any | Custom property `power` (default energy ÷ 10) |
 | `markers` | empties | see below | +Y arrow is "forward" |
-| `dressing` | any meshes | any | **Ignored by the exporter.** Placeholder props for reviews; the art pass's starting kit ([level design guide](level-design-guide.md) §7) |
+| `dressing` | meshes, collection instances | any | **The level's art** ([mesh key](../../superpowers/specs/2026-09-24-level-mesh-key-design.md)): exported to `<id>.art.glb`, joined per room and material. One material per object. Custom props `room` (room id override; default: the room holding the object's centre) and `shadow` (false = casts none). Kit pieces are collection instances of collections linked from `assets-source/levels/kit.blend`; they export as GPU instances. Visual only: collision is the boxes |
 
 ## Markers
 `start` (exactly one; Z rotation = facing) · `spawn:<zombie|soldier>:<id>` ·

@@ -8,7 +8,8 @@ Runs INSIDE Blender:
 Spec: docs/superpowers/specs/2026-09-23-level-format-design.md
 Conventions: docs/game/levels/blender-conventions.md
 Validation lives in the game (level-json.ts); this script only refuses names it
-cannot read.
+cannot read. A non-empty `dressing` collection also exports as <id>.art.glb
+(the mesh key: docs/superpowers/specs/2026-09-24-level-mesh-key-design.md).
 """
 import json
 import re
@@ -73,6 +74,105 @@ def yaw_of(obj):
     return round(-obj.matrix_world.to_euler("XYZ").z, 4) + 0.0
 
 
+def room_for(obj, rooms):
+    if "room" in obj.keys():
+        return int(obj["room"])
+    gmin, gmax = world_aabb(obj)
+    cx, cz = (gmin[0] + gmax[0]) / 2, (gmin[2] + gmax[2]) / 2
+    for r in rooms:
+        if r["min"][0] <= cx <= r["max"][0] and r["min"][1] <= cz <= r["max"][1]:
+            return r["id"]
+    def d2(r):
+        rx, rz = (r["min"][0] + r["max"][0]) / 2, (r["min"][1] + r["max"][1]) / 2
+        return (rx - cx) ** 2 + (rz - cz) ** 2
+    return min(rooms, key=d2)["id"]
+
+
+def export_art(doc, json_path):
+    """Dressing -> <id>.art.glb. Mutates the loaded scene; the .blend is never saved."""
+    dressing = bpy.data.collections.get("dressing")
+    if dressing is None or not dressing.all_objects:
+        return
+    view = bpy.context.view_layer
+    # 1. Linked kit pieces: collection-instance empties become real objects that SHARE
+    #    their mesh data (linked duplicates), which the exporter writes as GPU instances.
+    for inst in [o for o in dressing.all_objects if o.instance_type == "COLLECTION" and o.instance_collection]:
+        for o in view.objects:
+            o.select_set(False)
+        inst.select_set(True)
+        view.objects.active = inst
+        room = room_for(inst, doc["rooms"])
+        bpy.ops.object.duplicates_make_real(use_base_parent=False, use_hierarchy=False)
+        for o in bpy.context.selected_objects:
+            if o.type == "MESH":
+                o["room"] = room
+                o["kit"] = base_name(inst).split(":")[0]
+        bpy.data.objects.remove(inst)
+    view.update()
+    meshes = [o for o in dressing.all_objects if o.type == "MESH"]
+    for o in meshes:
+        if "room" not in o.keys():
+            o["room"] = room_for(o, doc["rooms"])
+    for o in meshes:
+        for slot in o.material_slots:
+            img_nodes = [n for n in (slot.material.node_tree.nodes if slot.material and slot.material.use_nodes else [])
+                         if n.type == "TEX_IMAGE" and n.image]
+            for n in img_nodes:
+                if max(n.image.size) > 1024:
+                    raise SystemExit(f"texture {n.image.name} is {n.image.size[0]}x{n.image.size[1]} (max 1024)")
+    shared = {o.data.name for o in meshes if o.data.users > 1}
+    # 2. Kit instances: one parent empty per (room, piece), so each room's copies are
+    #    siblings (the exporter instances siblings that share a mesh).
+    parents = {}
+    for o in [o for o in meshes if o.data.name in shared]:
+        key = (int(o["room"]), o.get("kit", o.data.name))
+        if key not in parents:
+            p = bpy.data.objects.new(f"kit:{key[0]}:{key[1]}", None)
+            p["room"] = key[0]
+            dressing.objects.link(p)
+            parents[key] = p
+        mw = o.matrix_world.copy()
+        o.parent = parents[key]
+        o.matrix_world = mw
+    # 3. The rest: split by material, then join per (room, material, shadow).
+    groups = {}
+    for o in [o for o in meshes if o.data.name not in shared]:
+        for m in o.modifiers[:]:
+            bpy.context.view_layer.objects.active = o
+            bpy.ops.object.modifier_apply(modifier=m.name)
+        mats = [s.material for s in o.material_slots] or [None]
+        mat = mats[0]
+        if len(mats) > 1:
+            raise SystemExit(f"{o.name}: one material per dressing object (split it in Blender)")
+        shadow = bool(o.get("shadow", True))
+        key = (int(o["room"]), mat.name if mat else "none", shadow)
+        groups.setdefault(key, []).append(o)
+    for (room, mat, shadow), objs in groups.items():
+        for o in view.objects:
+            o.select_set(False)
+        for o in objs:
+            o.select_set(True)
+        view.objects.active = objs[0]
+        if len(objs) > 1:
+            bpy.ops.object.join()
+        j = view.objects.active
+        j.name = f"art:{room}:{mat}" + ("" if shadow else ":noshadow")
+        j["room"] = room
+        if not shadow:
+            j["shadow"] = False
+    for o in view.objects:
+        o.select_set(False)
+    for o in dressing.all_objects:
+        o.select_set(True)
+    art_name = f"{doc['id']}.art.glb"
+    art_path = json_path.rsplit("/", 1)[0] + "/" + art_name if "/" in json_path else art_name
+    bpy.ops.export_scene.gltf(filepath=art_path, export_format="GLB", use_selection=True, export_yup=True,
+                              export_extras=True, export_gpu_instances=True, export_cameras=False,
+                              export_lights=False, export_apply=True, export_materials="EXPORT")
+    doc["art"] = art_name
+    print(f"art: {len(groups)} joined meshes, {len(parents)} instanced pieces -> {art_path}")
+
+
 def main():
     scene = bpy.context.scene
     # matrix_world is only current after a depsgraph update. A scene built by a
@@ -112,6 +212,8 @@ def main():
             room["ground"] = str(o["ground"])
         if o.get("void"):
             room["void"] = True
+        if o.get("shell"):
+            room["shell"] = str(o["shell"])
         if o.get("edge_style"):
             room["edge"] = {"style": str(o["edge_style"]), "height": rnd(float(o.get("edge_height", 2.2)))}
         doc["rooms"].append(with_states(o, room))
@@ -209,6 +311,9 @@ def main():
         del doc[key]
 
     path = out_path()
+    # The mesh key: dressing -> <id>.art.glb beside the JSON (sets doc["art"]).
+    # It mutates the loaded scene, so it runs last and the .blend is never saved.
+    export_art(doc, path)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=2)
         f.write("\n")
