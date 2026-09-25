@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/motion-profile.test.ts
 import { describe, it, expect } from 'vitest';
-import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight, speedForBand } from './motion-profile';
+import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight, speedForBand, isSoldierFamily } from './motion-profile';
 import { SHAMBLE, MARCH, RUN } from './gait';
 import { WANDER_TUNING } from './wander';
 
@@ -36,4 +36,12 @@ it('lab run control reaches the run gait even when patrol cruise is a walk', () 
   expect(runWeight(SOLDIER_PROFILE, speedForBand(SOLDIER_PROFILE, 'run'))).toBe(1);
   expect(runWeight(SOLDIER_PROFILE, speedForBand(SOLDIER_PROFILE, 'walk'))).toBe(0);
   expect(speedForBand(ZOMBIE_PROFILE, 'run')).toBe(ZOMBIE_PROFILE.cruise);
+});
+
+it('soldier family is a trait, not a name: a renamed variant keeps it, the cultist gunner does not', () => {
+  expect(isSoldierFamily(SOLDIER_PROFILE)).toBe(true);
+  expect(isSoldierFamily({ ...SOLDIER_PROFILE, name: 'juggernaut' })).toBe(true);
+  expect(isSoldierFamily(motionProfileFor('cultist'))).toBe(false);
+  expect(isSoldierFamily(ZOMBIE_PROFILE)).toBe(false);
+  expect(isSoldierFamily(undefined)).toBe(false);
 });

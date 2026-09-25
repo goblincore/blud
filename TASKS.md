@@ -4,6 +4,15 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Juggernaut (power-armour chaingunner, first soldier variant) — started 2026-09-25
+
+- [x] **Soldier family trait**: `MotionProfile.family` + `isSoldierFamily()` replace ~37 `name === 'soldier'` checks,
+  so a renamed variant keeps injury rules, kit breakoff, casings, footwork, collapse. No behaviour change.
+- [ ] Body (~2.3 m, broader, no hair) + Fallout-style power-armour kit + helmet, lab owner look. Then chaingun
+  (hip, spin-up, 15-25 round stream, single rounds), plate armour that absorbs, game spawn.
+  [Spec](docs/superpowers/specs/2026-09-25-juggernaut-design.md) · [Plan](docs/superpowers/plans/2026-09-25-juggernaut.md)
+- [ ] *Next variant candidate:* Grenadier (gas mask, grenades flush last-known position, dodges dynamite).
+
 ## Prim ceiling 128 -> 256, per-body texture width — done 2026-09-24
 
 - [x] **`MAX_PRIMS` = 256** (flesh + bone). Each body's data texture is `primStride(total)` wide: 128 up to 128

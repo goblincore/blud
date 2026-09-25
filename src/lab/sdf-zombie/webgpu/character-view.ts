@@ -50,6 +50,7 @@ import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
   type Wound, type WoundType,
 } from '../damage';
+import { isSoldierFamily } from '../motion-profile';
 
 // ---------------------------------------------------------------------------
 // The build step
@@ -574,16 +575,16 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   let equipmentRetired = false;
   const wounds = createWoundRing();
   const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
-  const armorSparks = entry.name === 'soldier' && opts.effectsScene ? createArmorSparks() : null;
+  const armorSparks = isSoldierFamily(entry.profile) && opts.effectsScene ? createArmorSparks() : null;
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   if (armorSparks) opts.effectsScene!.add(armorSparks.object);
-  const casings = entry.name === 'soldier' ? createShotgunCasings() : null;
+  const casings = isSoldierFamily(entry.profile) ? createShotgunCasings() : null;
   const ejection = createEjectionCycle();
   const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();
   if (casings) opts.scene.add(casings.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
-    loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.name === 'soldier')
+    loadKit(kitUrl, opts.renderer, [0, 0, 0], isSoldierFamily(entry.profile))
       .then(k => {
         if (disposed || equipmentRetired) { k.dispose(); return; }
         kit = k; opts.scene.add(k.object, k.debris);

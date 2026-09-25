@@ -31,7 +31,7 @@ import { constrainRigBends, stepRig } from './rig';
 import { relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
-import type { MotionProfile } from './motion-profile';
+import { isSoldierFamily, type MotionProfile } from './motion-profile';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -203,13 +203,13 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
     // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
-    points = pinTips(points, m.bound.tips, f.bodyYaw, input.profile?.name === 'soldier' && f.collapsed ? f.restPose : undefined);
+    points = pinTips(points, m.bound.tips, f.bodyYaw, isSoldierFamily(input.profile) && f.collapsed ? f.restPose : undefined);
     if (f.collapsed) {
       points = applyFloorContact(points, f.floorY);
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: input.profile?.name === 'soldier' && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw },
+      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw },
         f.collapsed ? f.floorY : undefined),
     };
     // Fire kicks: point shoves THROUGH the rig, after the bend constraints

@@ -10,6 +10,13 @@ import { WANDER_TUNING } from './wander';
 
 export interface MotionProfile {
   name: string;
+  /** The SOLDIER FAMILY: the soldier and his variants (juggernaut, ...). A
+   *  family member gets the soldier's regional injury rules, armour kit
+   *  breakoff + sparks, casings, planted footwork, structural collapse and
+   *  corpse handling. These were `name === 'soldier'` checks; a variant with
+   *  its own name would silently have lost all of it. Test with
+   *  isSoldierFamily(), never with the name. */
+  family?: 'soldier';
   /** walk and run gaits. A single-gait character passes the same profile
    *  twice and runWeight is 0 everywhere. */
   gait: { walk: GaitProfile; run: GaitProfile };
@@ -48,6 +55,11 @@ export interface MotionProfile {
   flail?: FlailTuning;
 }
 
+/** True for the soldier and his variants (MotionProfile.family). */
+export function isSoldierFamily(profile: Pick<MotionProfile, 'family'> | null | undefined): boolean {
+  return profile?.family === 'soldier';
+}
+
 export interface FlailTuning {
   /** Arm swing out to the side. */
   abduct: number;
@@ -81,6 +93,7 @@ export const ZOMBIE_PROFILE: MotionProfile = {
 
 export const SOLDIER_PROFILE: MotionProfile = {
   name: 'soldier',
+  family: 'soldier',
   gait: { walk: MARCH, run: RUN },
   // Cruise and the walk→run band come from the reference clips' implied
   // speeds (Task 1's sampling, for a 0.84 m leg):

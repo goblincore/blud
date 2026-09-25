@@ -34,7 +34,7 @@ import {
   type ActorMotion, type ActorSignals,
 } from '../actor';
 import { MOTION_TUNING } from '../motion';
-import { motionProfileFor, speedForBand, type MotionProfile } from '../motion-profile';
+import { motionProfileFor, speedForBand, isSoldierFamily, type MotionProfile } from '../motion-profile';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import {
   createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn, killBurning,
@@ -1001,7 +1001,7 @@ async function bootstrap(): Promise<void> {
       // motionDt is 0 in a frozen capture, so the velocities go to zero and the
       // lag straightens — the deterministic still the cards already rely on.
       const caps = fireCapsules(posed, {
-        legKitRadius: a.view.entry.name === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0,
+        legKitRadius: isSoldierFamily(a.view.entry.profile) ? SOLDIER_LEG_KIT_RADIUS : 0,
       });
       a.vels = capsuleVelocities(a.caps, caps, motionDt);
       a.caps = caps;
@@ -1091,7 +1091,7 @@ async function bootstrap(): Promise<void> {
         // mesh shell. The zombie has no kit, so his leg cards keep the old bias.
         // A live override (a --kit-sweep capture) wins for tuning.
         cf.kitRadius = kitStandoffOverride
-          ?? (a.view.entry.name === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0);
+          ?? (isSoldierFamily(a.view.entry.profile) ? SOLDIER_LEG_KIT_RADIUS : 0);
         cf.vel = [
           (bodyPos[0] - a.lastPos[0]) * inv, 0, (bodyPos[2] - a.lastPos[2]) * inv,
         ];

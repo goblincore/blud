@@ -52,7 +52,7 @@ import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
-import type { MotionProfile } from '../motion-profile';
+import { isSoldierFamily, type MotionProfile } from '../motion-profile';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
@@ -637,7 +637,7 @@ export function createZombieActor(opts: {
    */
   let lastPlayerPos: Vec3 | null = null;
   let bodyYaw = 0;
-  const soldierDamage = opts.profile?.name === 'soldier';
+  const soldierDamage = isSoldierFamily(opts.profile);
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
