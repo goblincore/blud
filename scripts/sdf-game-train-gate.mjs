@@ -5,7 +5,7 @@
 //   1. BOOT: night-train with its art, window glass and swaying pieces.
 //   2. WINDOWS: a dining-car window shows scenery that moves (two frames differ) and is not flat.
 //   3. SWAY: the camera roll varies over 2 s.
-//   4. WALK: an autopilot walk from the guard's van reaches the cab.
+//   4. WALK: an autopilot walk visits every room of the approved layout, van to cab.
 //   5. COST: art off/on A/B at three poses (draw calls, fenced frame time); BUDGET.
 //
 // Usage: LAB_VITE_PORT=5295 LAB_CDP_PORT=9295 node scripts/sdf-game-train-gate.mjs
@@ -147,8 +147,8 @@ pass(`boot: ${art.meshes} art meshes (${art.instanced} instanced, ${art.instance
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
 await evaluate('__sdfGame.freeze(true)');
 
-// 2. WINDOWS — the first dining-car bay's west window (z -19.15 .. -18.05, y 1.05 .. 1.85).
-await evaluate(`__sdfGame.setPose(0.3, -18.6, ${-Math.PI / 2}, -0.08)`);
+// 2. WINDOWS — the first dining-car bay's west window (wall x -2.1; z -19.15 .. -18.05, y 1.05 .. 1.85).
+await evaluate(`__sdfGame.setPose(-0.4, -18.6, ${-Math.PI / 2}, -0.05)`);
 await sleep(1000);
 const a = await shoot('train-window-a'); await sleep(500); const b = await shoot('train-window-b');
 const sa = stats(a, 0.42, 0.30, 0.58, 0.45), sb = stats(b, 0.42, 0.30, 0.58, 0.45);
@@ -164,17 +164,39 @@ const span = Math.max(...rolls) - Math.min(...rolls);
 if (!(span > 0.002)) fail(`camera roll does not vary (${span.toFixed(4)} rad)`);
 pass(`sway: roll spans ${span.toFixed(4)} rad over 2 s`);
 
-// 4. WALK — the van's back to the cab.
+// 4. WALK — room by room through the approved layout (docs/game/levels/01-night-train/layout.md),
+// Its own boot with ?nospawn: bodies block the player, and this checks the layout, not the fights.
+const ROUTE = [
+  ['baggage hold', -0.2, -2.5], ['hold door (west)', -1.0, -5.55], ['mail cage', -0.3, -8.0],
+  ['cage door (east)', 1.0, -10.55], ['guard\'s office', 0.0, -12.5], ['vestibule 1', 0, -16.6],
+  ['dining saloon', 0, -22.0], ['lounge, west lane', -1.35, -29.7], ['galley door', -1.3, -32.65],
+  ['galley', -1.0, -33.4], ['vestibule 2', 0, -35.8], ['sleeper south lobby', 0, -37.3],
+  ['sleeper corridor', -1.3, -40.0], ['corridor at C3', -1.3, -45.46], ['inside C3', 0.4, -45.46],
+  ['back in the corridor', -1.3, -45.46], ['sleeper north lobby', -0.2, -53.6], ['vestibule 3', 0, -55.0],
+  ['party, south', 0, -57.5], ['party, west of the pillars', -1.7, -62.0], ['party, past the pillars', -1.7, -70.5],
+  ['party, north', 0, -75.0], ['vestibule 4', 0, -76.2], ['cab', 0, -80.0],
+];
+if (!(await boot('level=night-train&frozen&nospawn'))) { console.error(consoleEvents.slice(-8)); fail('night-train (nospawn) did not boot'); }
 await evaluate('__sdfGame.setPose(0, -1, 0, 0)');
-await evaluate('__sdfGame.walkTo(0, -62)');
-let room = null;
-for (let i = 0; i < 60 && room !== 'cab'; i++) { await sleep(500); room = await evaluate('__sdfGame.room()'); }
-await evaluate('__sdfGame.walkCancel()');
-if (room !== 'cab') fail(`the walk stopped in ${room} at ${JSON.stringify(await evaluate('__sdfGame.pose().pos'))}`);
-pass('walk: guard\'s van to the cab through three vestibules');
+for (const [name, x, z] of ROUTE) {
+  await evaluate(`__sdfGame.walkTo(${x}, ${z})`);
+  let d = Infinity;
+  for (let i = 0; i < 40 && d > 0.8; i++) {
+    await sleep(250);
+    const p = (await evaluate('__sdfGame.pose()')).pos;
+    d = Math.hypot(p[0] - x, p[2] - z);
+  }
+  await evaluate('__sdfGame.walkCancel()');
+  if (d > 0.8) fail(`walk: stuck before ${name} (${d.toFixed(2)} m short) at ${JSON.stringify((await evaluate('__sdfGame.pose()')).pos.map((v) => +v.toFixed(2)))}`);
+}
+if ((await evaluate('__sdfGame.room()')) !== 'cab') fail('walk ended outside the cab');
+pass(`walk: ${ROUTE.length} waypoints, every room from the baggage hold to the cab`);
 
 // 5. COST
-const POSES = { van: [0, -2, 0, 0], dining: [0, -19, 0, 0], party: [0, -38, 0, 0] };
+const POSES = { office: [0, -11, 0, 0], dining: [0, -18, 0, 0], sleeper: [-1.3, -38, 0, 0], party: [0, -56.5, 0, 0] };
+if (!(await boot('level=night-train&frozen'))) fail('night-train did not re-boot for the cost');
+await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
+await evaluate('__sdfGame.freeze(true)');
 await evaluate('__sdfGame.setFrameCap(1)');
 const med = (x) => [...x].sort((p, q) => p - q)[x.length >> 1];
 async function sample(on) {

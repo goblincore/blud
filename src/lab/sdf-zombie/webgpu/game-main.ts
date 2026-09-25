@@ -3372,7 +3372,8 @@ async function main() {
     }
   }
 
-  spawnAll(ctx.boot.errors);
+  // ?nospawn (dev/gates): boot the level with no enemies, e.g. to walk its layout.
+  if (!new URLSearchParams(location.search).has('nospawn')) spawnAll(ctx.boot.errors);
   setLoader(ctx, 'level + actors');
   if (ctx.boot.errors.length > 0) {
     console.error('[sdf-game] body errors:', ctx.boot.errors.join(' | '));

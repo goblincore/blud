@@ -35,7 +35,8 @@
 - [x] 3a **Level mesh key** ([spec](docs/superpowers/specs/2026-09-24-level-mesh-key-design.md) · [plan](docs/superpowers/plans/2026-09-24-level-mesh-key.md)): `dressing` → `<id>.art.glb` (kit linked + GPU-instanced, rest joined per room/material), `shell: "art"`; with art, solids/furniture are collision only. The Wake draws its dressing (359 meshes → 53). Gate `scripts/sdf-game-art-gate.sh` passes; budget +75 draws / +5 ms (owner-approved). Art emission capped at 1 (Blender strengths blew out).
 - [x] 3b **Train carriage kit** ([spec](docs/superpowers/specs/2026-09-25-train-carriage-kit-design.md) · [plan](docs/superpowers/plans/2026-09-25-train-carriage-kit.md)): `kit.blend` (23 pieces, 6 baked textures) → `night-train` carriages 1, 3, 5, 8 (310 linked pieces → 71 instanced meshes), WGSL window scenery, sway; the Void's portal → `night-train`. Gate `scripts/sdf-game-train-gate.sh` passes. Budget +175 draws / +10 ms (owner-approved). Art nits open: lamp bloom, ceiling brackets, black hills.
 - [x] 4a **Night Train layout** draft 1 approved ([layout.md](docs/game/levels/01-night-train/layout.md)): five carriages as chains of rooms (van 3 rooms, dining saloon + island + galley, **sleeper** 5 compartments, party, cab); widths 3.6/4.2/4.0/4.2/3.0.
-- [ ] 4b Rebuild the carriages from the layout (kit additions, cultist spawn kind), then gameplay (encounters, the Stoker; dawn later).
+- [x] 4b **Carriages rebuilt from the layout** ([plan](docs/superpowers/plans/2026-09-25-night-train-rebuild.md)): `cultist` spawn kind; kit walls at the wall plane, shells sized per carriage, partitions, layout props; `build_night_train.py` reads `night_train_layout.py`. Gate: every room walked (24 waypoints, `?nospawn`). **Cost: office pose +177 draws vs +175 budget (frame +3..+5.9 ms ok) — owner call pending.**
+- [ ] 4c Gameplay: encounters (wake-up triggers), the Stoker; dawn later.
 
 ## Wake level pipeline — Plan 1 in flight — 2026-09-23
 
