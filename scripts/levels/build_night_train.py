@@ -1,7 +1,8 @@
 # scripts/levels/build_night_train.py
 """Night Train's first slice (carriage kit spec docs/superpowers/specs/2026-09-25-train-carriage-kit-design.md §4).
 
-    blender --background --factory-startup --python scripts/levels/build_night_train.py
+    blender --background --factory-startup --python scripts/levels/build_night_train.py \
+        [-- --width 3.0 --ceiling 2.6 --kit PATH --out PATH --only NAME]
 
 Builds assets-source/levels/night-train.blend from the CARRIAGES table: four art-shelled
 carriages (1 the guard's van, 3 the dining car, 5 the party carriage, 8 the cab) toward -z,
@@ -18,9 +19,19 @@ import sys
 import bpy
 
 ROOT = os.path.abspath("assets-source/levels")
-KIT = os.path.join(ROOT, "kit.blend")
-OUT = os.path.join(ROOT, "night-train.blend")
-BAY, W, VESTIBULE = 1.9, 1.5, 1.2
+ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+
+
+def arg(name, default):
+    return ARGV[ARGV.index(name) + 1] if name in ARGV else default
+
+
+KIT = os.path.abspath(arg("--kit", os.path.join(ROOT, "kit.blend")))
+OUT = os.path.abspath(arg("--out", os.path.join(ROOT, "night-train.blend")))
+ONLY = arg("--only", None)
+BAY, VESTIBULE = 1.9, 1.2
+W = float(arg("--width", "3.0")) / 2   # half the inside width
+CEIL = float(arg("--ceiling", "2.6"))
 PI = math.pi
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -79,8 +90,8 @@ def glight(name, pos, color, power):
 
 # id, name, length (m), ceiling (m), recipe
 CARRIAGES = [
-    (1, "guards-van", 16.0, 2.6, "van"),
-    (3, "dining-car", 18.0, 2.6, "dining"),
+    (1, "guards-van", 16.0, CEIL, "van"),
+    (3, "dining-car", 18.0, CEIL, "dining"),
     (5, "party-carriage", 20.0, 3.2, "party"),
     (8, "cab", 8.0, 2.6, "cab"),
 ]
@@ -129,7 +140,7 @@ def carriage(rid, name, length, ceiling, recipe, max_z):
         return min_z
     bays = int(length // BAY)
     pad = (length - bays * BAY) / 2
-    ceil_piece = "bay-ceiling-32" if ceiling > 3.0 else "bay-ceiling-26"
+    ceil_piece = f"bay-ceiling-{int(round(ceiling * 10))}"
     floor_piece = "bay-floor-planks" if recipe == "van" else "bay-floor-runner"
     # End pads: plain wall, ceiling and floor scaled to the pad length.
     for zs in (max_z, min_z + pad):
@@ -152,33 +163,33 @@ def carriage(rid, name, length, ceiling, recipe, max_z):
             if b % 2 == 0:
                 put("luggage-rack", -W, 0, zs)
                 put("luggage-rack", W, 0, zs - BAY, PI)
-            put("trunk", -1.2, 0, mid)
-            furn(f"trunk:{rid}:{b}", -1.45, -0.95, mid - 0.45, mid + 0.45, 0.5)
+            put("trunk", -(W - 0.3), 0, mid)
+            furn(f"trunk:{rid}:{b}", -(W - 0.05), -(W - 0.55), mid - 0.45, mid + 0.45, 0.5)
             if b in (2, 5):
-                put("coffin", 1.15, 0, mid)
-                furn(f"coffin:{rid}:{b}", 0.85, 1.45, mid - 1.0, mid + 1.0, 0.5)
+                put("coffin", W - 0.35, 0, mid)
+                furn(f"coffin:{rid}:{b}", W - 0.65, W - 0.05, mid - 1.0, mid + 1.0, 0.5)
         elif recipe == "dining":
             buffet = b >= bays - 2
             sides = (1,) if buffet else (-1, 1)
             for side in sides:
-                x = side * 1.15
+                x = side * (W - 0.35)
                 put("dining-table", x, 0, mid)
                 put("dining-chair", x, 0, mid + 0.65)
                 put("dining-chair", x, 0, mid - 0.65, PI)
                 furn(f"table:{rid}:{b}:{side}", min(x - 0.35, x + 0.35), max(x - 0.35, x + 0.35), mid - 0.9, mid + 0.9, 0.95)
         elif recipe == "party":
             if b < 3:
-                put("favour-table", -1.15, 0, mid)
-                furn(f"favours:{rid}:{b}", -1.5, -0.79, mid - 0.81, mid + 0.81, 0.76)
+                put("favour-table", -(W - 0.35), 0, mid)
+                furn(f"favours:{rid}:{b}", -W, -(W - 0.71), mid - 0.81, mid + 0.81, 0.76)
             if b % 2 == 0:
                 put("lamp-hanging", 0, ceiling, zs)
     if recipe == "dining":
         put("buffet-counter", -W, 0, min_z + pad + 3.0)
         furn(f"buffet:{rid}", -W, -W + 0.62, min_z + pad, min_z + pad + 3.0, 1.03)
     if recipe == "party":
-        put("jukebox", 1.1, 0, min_z + pad + 0.4)
-        furn(f"jukebox:{rid}", 0.7, 1.5, min_z + pad + 0.15, min_z + pad + 0.65, 1.5)
-    end = "end-wall-door-32" if ceiling > 3.0 else "end-wall-door"
+        put("jukebox", W - 0.4, 0, min_z + pad + 0.4)
+        furn(f"jukebox:{rid}", W - 0.8, W, min_z + pad + 0.15, min_z + pad + 0.65, 1.5)
+    end = "end-wall-door" if abs(ceiling - 2.6) < 1e-3 else f"end-wall-door-{int(round(ceiling * 10))}"
     put(end, 0, 0, max_z)
     put(end, 0, 0, min_z, PI)
     return min_z
@@ -186,7 +197,7 @@ def carriage(rid, name, length, ceiling, recipe, max_z):
 
 z = 0.0
 prev = None
-for rid, name, length, ceiling, recipe in CARRIAGES:
+for rid, name, length, ceiling, recipe in [c for c in CARRIAGES if ONLY in (None, c[1])]:
     if prev is not None:
         # The vestibule between the previous carriage (south) and this one: a 1.4 m tunnel.
         put("vestibule", 0, 0, z + VESTIBULE)

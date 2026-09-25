@@ -1,7 +1,8 @@
 # scripts/levels/build_train_kit.py
 """The train carriage kit (spec docs/superpowers/specs/2026-09-25-train-carriage-kit-design.md §3).
 
-    blender --background --factory-startup --python scripts/levels/build_train_kit.py [-- --renders DIR]
+    blender --background --factory-startup --python scripts/levels/build_train_kit.py \
+        [-- --width 3.0 --ceilings 2.6,3.2 --out PATH --renders DIR]
 
 Writes assets-source/levels/kit.blend (one collection per kit piece) and the baked textures in
 assets-source/levels/kit-textures/. Levels link the pieces (collection instances); the level
@@ -23,9 +24,17 @@ import mathutils
 
 ROOT = os.path.abspath("assets-source/levels")
 TEX = os.path.join(ROOT, "kit-textures")
-OUT = os.path.join(ROOT, "kit.blend")
+ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+
+
+def arg(name, default):
+    return ARGV[ARGV.index(name) + 1] if name in ARGV else default
+
+
+OUT = os.path.abspath(arg("--out", os.path.join(ROOT, "kit.blend")))
 BAY = 1.9
-W = 1.5          # half the carriage's inside width
+W = float(arg("--width", "3.0")) / 2          # half the carriage's inside width
+CEILINGS = [float(c) for c in arg("--ceilings", "2.6,3.2").split(",")]
 DADO = 0.95
 WALL_TOP = 2.2
 
@@ -159,7 +168,8 @@ def final_materials(paths):
         bsdf = nodes["Principled BSDF"]
         tex = nodes.new("ShaderNodeTexImage")
         tex.image = bpy.data.images.load(paths[name])
-        tex.image.filepath = bpy.path.relpath(paths[name], start=ROOT)
+        # Relative to where the kit is SAVED (--out may be outside assets-source/levels).
+        tex.image.filepath = bpy.path.relpath(paths[name], start=os.path.dirname(OUT))
         links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
         bsdf.inputs["Metallic"].default_value = metal
         bsdf.inputs["Roughness"].default_value = rough
@@ -282,7 +292,8 @@ def ceiling_bay(height):
     for side in (-1, 1):
         if base > WALL_TOP + 1e-3:
             p.wall_x("train.panel", side * W, -side, -BAY, 0, WALL_TOP, base)
-    for (xa, ya), (xb, yb) in zip(CEIL_PROFILE, CEIL_PROFILE[1:]):
+    prof = [(x * W / 1.5, y) for x, y in CEIL_PROFILE]  # the profile is drawn for 3.0 m; scale it
+    for (xa, ya), (xb, yb) in zip(prof, prof[1:]):
         # A strip across the bay, facing down/inward (wound so the normal points into the carriage).
         pts = [(xa, base + ya, 0), (xb, base + yb, 0), (xb, base + yb, -BAY), (xa, base + ya, -BAY)]
         p.quad("train.panel", pts)
@@ -486,8 +497,8 @@ def main():
     mats = final_materials(bake_textures())
     pieces = [
         wall_bay("window"), wall_bay("plain"), wall_bay("door"), pillar(),
-        ceiling_bay(2.6), ceiling_bay(3.2), floor_bay(False), floor_bay(True),
-        end_wall(2.6), end_wall(3.2), vestibule(), lamp_hanging(), curtain(),
+        *[ceiling_bay(c) for c in CEILINGS], floor_bay(False), floor_bay(True),
+        *[end_wall(c) for c in CEILINGS], vestibule(), lamp_hanging(), curtain(),
         seat_bench(), luggage_rack(), trunk(), coffin(), dining_table(), dining_chair(),
         buffet_counter(), jukebox(), favour_table(), cab_shell(),
     ]
@@ -497,9 +508,8 @@ def main():
         bpy.data.materials.remove(m)
     bpy.ops.wm.save_as_mainfile(filepath=OUT, relative_remap=True)
     print(f"saved {OUT}: {len(pieces)} pieces")
-    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    if "--renders" in argv:
-        render_pieces(argv[argv.index("--renders") + 1])
+    if "--renders" in ARGV:
+        render_pieces(arg("--renders", ""))
 
 
 def render_pieces(out):
