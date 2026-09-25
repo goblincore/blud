@@ -144,7 +144,9 @@ def procedural(kind, t):
         col = t.mix(t.math("MULTIPLY", scratch, 0.45), base, (0.55, 0.56, 0.58))
         if dark:  # grime patches
             grime = t.noise(1.4, 3.0)
-            col = t.mix(t.math("MULTIPLY", t.math("GREATER_THAN", grime, 0.55), 0.6), col, (0.05, 0.045, 0.04))
+            # Soft-edged grime (a hard threshold read as camouflage; first render 2026-09-25).
+            soft = t.node("ShaderNodeMapRange", {"Value": grime, "From Min": 0.45, "From Max": 0.75, "To Min": 0.0, "To Max": 0.6}).outputs[0]
+            col = t.mix(soft, col, (0.05, 0.045, 0.04))
             rough = t.math("ADD", t.math("MULTIPLY", grime, 0.3), 0.38)
         else:
             rough = t.math("ADD", t.math("MULTIPLY", streak, 0.15), 0.28)
@@ -192,7 +194,8 @@ def procedural(kind, t):
     if kind == "canvas":
         fine, stain = t.noise(40.0, 2.0), t.noise(2.0, 4.0)
         base = t.ramp(fine, [(0.0, (0.2, 0.19, 0.16)), (1.0, (0.3, 0.28, 0.23))])
-        col = t.mix(t.math("MULTIPLY", t.math("GREATER_THAN", stain, 0.55), 0.7), base, (0.07, 0.06, 0.04))
+        soft = t.node("ShaderNodeMapRange", {"Value": stain, "From Min": 0.45, "From Max": 0.75, "To Min": 0.0, "To Max": 0.6}).outputs[0]
+        col = t.mix(soft, base, (0.07, 0.06, 0.04))
         return col, 0.9, t.math("MULTIPLY", fine, 0.2)
     if kind == "soot":
         v = t.node("ShaderNodeSeparateXYZ", {"Vector": t.uv}).outputs["Y"]
@@ -200,9 +203,15 @@ def procedural(kind, t):
         alpha = t.math("MULTIPLY", t.math("MULTIPLY", fade, fade), t.math("ADD", t.math("MULTIPLY", t.noise(6.0), 0.6), 0.4))
         return t.ramp(alpha, [(0.0, (0, 0, 0)), (1.0, (1, 1, 1))]), 1.0, 0.0   # the colour map IS the alpha
     if kind == "party":
-        vor = t.node("ShaderNodeTexVoronoi", {"Vector": t.uv, "Scale": 14.0}, feature="F1").outputs["Color"]
-        hsv = t.node("ShaderNodeHueSaturation", {"Color": vor, "Saturation": 1.8, "Value": 1.1}).outputs["Color"]
-        return hsv, 0.7, 0.0
+        # A limited, grubby palette (rainbow confetti read as noise; first render 2026-09-25):
+        # each Voronoi cell picks red, gold, teal or rose by its random value.
+        vor = t.node("ShaderNodeTexVoronoi", {"Vector": t.uv, "Scale": 6.0}, feature="F1").outputs["Color"]
+        r = t.node("ShaderNodeSeparateColor", {"Color": vor}).outputs["Red"]
+        col = t.ramp(r, [(0.0, (0.42, 0.04, 0.05)), (0.25, (0.55, 0.38, 0.08)), (0.5, (0.05, 0.3, 0.3)), (0.75, (0.5, 0.16, 0.22))],
+                     constant=True)
+        dirt = t.noise(9.0, 3.0)
+        col = t.mix(t.math("MULTIPLY", dirt, 0.35), col, (0.05, 0.04, 0.03))
+        return col, 0.7, 0.0
     raise ValueError(kind)
 
 
@@ -807,9 +816,8 @@ def gauges():
 def streamers():
     """Party streamers hanging from the ceiling pipe across one bay (origin: the pipe's underside)."""
     p = Piece("streamers", sway="curtain")
-    for i, (x, z, drop) in enumerate(((-0.8, -0.3, 0.7), (-0.45, -0.8, 0.9), (-0.1, -1.3, 0.5), (0.3, -0.5, 0.8),
-                                        (0.6, -1.1, 0.65), (0.85, -1.6, 0.9))):
-        p.box("train.party", (x - 0.025, -drop, z - 0.003), (x + 0.025, 0.0, z + 0.003))
+    for x, z, drop in ((-0.8, -0.3, 0.45), (-0.4, -0.9, 0.6), (0.3, -0.5, 0.5), (0.75, -1.4, 0.35)):
+        p.box("train.party", (x - 0.015, -drop, z - 0.002), (x + 0.015, 0.0, z + 0.002))
     return p
 
 
@@ -821,7 +829,8 @@ def bunting(width):
     pts = [(-W + 2 * W * i / n, -0.35 * (1 - ((2 * i / n) - 1) ** 2)) for i in range(n + 1)]
     for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
         b = p.bm("train.party")
-        v = [b.verts.new(g(xa, ya, 0)), b.verts.new(g(xb, yb, 0)), b.verts.new(g((xa + xb) / 2, (ya + yb) / 2 - 0.25, 0))]
+        mx = (xa + xb) / 2
+        v = [b.verts.new(g(mx - 0.08, ya, 0)), b.verts.new(g(mx + 0.08, yb, 0)), b.verts.new(g(mx, (ya + yb) / 2 - 0.15, 0))]
         b.faces.new(v)
     return p
 

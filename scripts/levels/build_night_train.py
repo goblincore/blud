@@ -1,5 +1,6 @@
 # scripts/levels/build_night_train.py
-"""Night Train's first slice, built from the approved layout.
+"""Night Train's first slice, built from the approved layout, in the art v2 dressing
+(docs/superpowers/specs/2026-09-25-night-train-art-v2-design.md).
 
     blender --background --factory-startup --python scripts/levels/build_night_train.py [-- --kit PATH --out PATH]
 
@@ -34,6 +35,7 @@ OUT = os.path.abspath(arg("--out", os.path.join(ROOT, "night-train.blend")))
 BAY = 1.9
 PI = math.pi
 WARM = (1.0, 0.72, 0.45)
+LIGHT_POWER = 1.5  # art v2: dark carriages; the flashlight carries the view
 
 
 def dm(v):
@@ -120,17 +122,24 @@ def walls(kind_w, kind_e, w2, zs, length):
     put(f"bay-wall-{kind_e}", w2, 0, zs - length, PI, k)
 
 
-def partition(h, x0, x1, u0, u1, g):
-    """A thin partition from the layout's walls table, plus its collision solid."""
-    piece = f"partition-{dm(h)}"
-    if (x1 - x0) >= (u1 - u0):   # runs across the carriage
-        put(piece, x0, 0, g((u0 + u1) / 2), -PI / 2, x1 - x0)
-    else:                        # runs along it
-        put(piece, (x0 + x1) / 2, 0, g(u0), 0.0, u1 - u0)
-    gbox("solids", f"partition:{COUNT[piece]}", (x0, 0, g(u1)), (x1, h, g(u0)))
+def partition(h, x0, x1, u0, u1, g, cage=False):
+    """A thin partition from the layout's walls table, plus its collision solid. A cage is
+    tiled in 1 m pieces (the last one scaled) so its bars keep their spacing."""
+    across = (x1 - x0) >= (u1 - u0)
+    length = (x1 - x0) if across else (u1 - u0)
+    piece = f"{'cage-partition' if cage else 'partition'}-{dm(h)}"
+    tiles = [(k, min(1.0, length - k)) for k in range(int(math.ceil(length - 1e-6)))] if cage else [(0, length)]
+    for k, part in tiles:
+        if part < 1e-3:
+            continue
+        if across:   # runs across the carriage
+            put(piece, x0 + k, 0, g((u0 + u1) / 2), -PI / 2, part)
+        else:        # runs along it
+            put(piece, (x0 + x1) / 2, 0, g(u0 + k), 0.0, part)
+    gbox("solids", f"partition:{sum(COUNT.values())}", (x0, 0, g(u1)), (x1, h, g(u0)))
 
 
-def prop(label, x0, x1, u0, u1, h, g, rid, n):
+def prop(label, x0, x1, u0, u1, h, g, rid, n, w2):
     """A layout prop: its kit piece(s) and its furniture box."""
     xc, zc = (x0 + x1) / 2, g((u0 + u1) / 2)
     if label == "trunks":
@@ -139,15 +148,17 @@ def prop(label, x0, x1, u0, u1, h, g, rid, n):
         put("trunk", xc, 0.5, zc)
     elif label == "big trunk":
         put("trunk-big", xc, 0, zc)
-    elif label == "table":
-        put("dining-table", xc, 0, zc)
-        put("dining-chair", xc, 0, zc + 0.65)
-        put("dining-chair", xc, 0, zc - 0.65, PI)
+    elif label == "table":   # art v2: a booth against its wall, with party hats on the table
+        west = xc < 0
+        put("booth", -w2 if west else w2, 0, zc, 0.0 if west else PI)
+        put("party-hats", -(w2 - 0.4) if west else w2 - 0.4, 0.76, zc)
     elif label != "backhead":  # the cab shell has its own backhead
         piece = {"coffin": "coffin", "desk": "desk", "stove": "stove", "buffet island": "buffet-island",
                  "stoves": "galley-stoves", "counter": "galley-counter", "bunk": "bunk", "favours": "favour-table",
                  "pillar": "pillar-round", "bar": "bar", "jukebox": "jukebox"}[label]
         put(piece, xc, 0, zc)
+    if label == "favours":
+        put("party-hats", xc, 0.76, zc)
     gbox("furniture", f"{label}:{rid}:{n}", (x0, 0, g(u1)), (x1, h, g(u0)))
 
 
@@ -159,7 +170,7 @@ def carriage(c, zs):
     room["shell"] = "art"
     lamps = max(1, round(L / 8))
     for i in range(lamps):
-        glight(f"lamp:{rid}:{i}", (0, h - 0.4, g(L * (i + 0.5) / lamps)), WARM, 3)
+        glight(f"lamp:{rid}:{i}", (0, h - 0.4, g(L * (i + 0.5) / lamps)), WARM, LIGHT_POWER)
     if name == "cab":
         put("cab-shell", 0, 0, zs)
         glight(f"firebox:{rid}", (0, 1.0, g(L - 1.0)), (1.0, 0.42, 0.12), 4)
@@ -167,7 +178,7 @@ def carriage(c, zs):
         bays = int(L // BAY)
         pad = (L - bays * BAY) / 2
         ceil_piece, end_piece = f"bay-ceiling-{dm(w)}-{dm(h)}", f"end-wall-door-{dm(w)}-{dm(h)}"
-        floor_piece = f"bay-floor-{'planks' if name == 'guards-van' else 'runner'}-{dm(w)}"
+        floor_piece = f"bay-floor-{'plate' if name == 'guards-van' else 'grate'}-{dm(w)}"
         for z0 in (zs, g(L - pad)):
             walls("plain", "plain", w2, z0, pad)
             put(ceil_piece, 0, 0, z0, 0.0, pad / BAY)
@@ -189,12 +200,35 @@ def carriage(c, zs):
                 put("luggage-rack", w2, 0, z0 - BAY, PI)
             if name == "party-carriage" and b % 2 == 0:
                 put("lamp-hanging", 0, h, z0)
+            # Industrial dressing: a valve or gauges on alternate bays, both sides; grilles in the van.
+            if b % 2 == 0:
+                fit = "valve" if b % 4 == 0 else "gauges"
+                put(fit, -w2, 0, z0 - BAY / 2)
+                put(fit, w2, 0, z0 - BAY / 2, PI)
+            if name == "guards-van" and not windowed:
+                put("grille", -w2, 1.3, z0 - BAY / 2)
+            # Party remnants: streamers from the ceiling pipe, bunting across the party carriage.
+            if name == "party-carriage" or (name == "dining-car" and b % 2 == 1):
+                put("streamers", 0, h - 0.33, z0)
+            if name == "party-carriage" and b % 2 == 1:
+                put(f"bunting-{dm(w)}", 0, h - 0.45, z0 - BAY / 2)
         put(end_piece, 0, 0, zs)
         put(end_piece, 0, 0, g(L), PI)
+        if w >= 4.0:   # exposed gears on each bulkhead, west of the door (the van is too narrow)
+            put("gear-housing", -(w2 - 0.6), 1.5, zs - 0.01, PI / 2)
+            put("gear-housing", -(w2 - 0.6), 1.5, g(L) + 0.01, -PI / 2)
+    # Wall boilers, with their collision (clear of the spawns and the corridor entrance).
+    boilers = {"sleeper": 0.6, "party-carriage": 0.7}
+    if name in boilers:
+        u = boilers[name]
+        put("boiler", w2, 0, g(u), PI)
+        gbox("furniture", f"boiler:{rid}", (w2 - 0.8, 0, g(u + 0.4)), (w2, 2.0, g(u - 0.4)))
     for x0, x1, u0, u1 in c["walls"]:
-        partition(h, x0, x1, u0, u1, g)
+        # Cages (art v2): the van's partitions and the sleeper's corridor wall (compartment fronts).
+        cage = name == "guards-van" or (name == "sleeper" and (x1 - x0) < (u1 - u0))
+        partition(h, x0, x1, u0, u1, g, cage)
     for n, (label, x0, x1, u0, u1, ph) in enumerate(c["props"]):
-        prop(label, x0, x1, u0, u1, ph, g, rid, n)
+        prop(label, x0, x1, u0, u1, ph, g, rid, n, w2)
     for sid, kind, x, u in c["spawns"]:
         gempty(f"spawn:{kind}:{sid}", (x, 0, g(u)), PI)   # facing south, toward the player
     for pid, item, x, u in c["pickups"]:
