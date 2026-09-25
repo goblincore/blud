@@ -198,6 +198,15 @@ export interface PlantSignal {
   footPos: Vec3;
   /** Ground height — the lock clamps the plant point to this plane. */
   groundY: number;
+  /** REACH SLIDE (opt-in, both or neither): this frame's hip target and the
+   *  farthest a held plant may sit from it (m). A stance hold whose plant is
+   *  farther than `maxReach` slides it along the floor, keeping its bearing,
+   *  to exactly `maxReach` — the foot is dragged with a root that surged past
+   *  the leg's reach instead of dragging the hips back to it. Absent: the
+   *  plain lock (ordinary gaits stretch past 1.3x leg length at toe-off, so
+   *  this is NOT a general rule — the wiring enables it for root surges). */
+  hip?: Vec3;
+  maxReach?: number;
 }
 
 /** A fresh plant: foot free, no contact yet. */
@@ -215,9 +224,25 @@ export function stepPlant(state: PlantState, sig: PlantSignal, dt: number): Plan
     if (state.phase !== 'stance') {
       return { phase: 'stance', plantPoint: [sig.footPos[0], sig.groundY, sig.footPos[2]], age: 0 };
     }
-    return { ...state, age: state.age + Math.max(dt, 0) };
+    const held = { ...state, age: state.age + Math.max(dt, 0) };
+    return sig.hip && sig.maxReach !== undefined ? slideWithinReach(held, sig.hip, sig.maxReach, sig.groundY) : held;
   }
   return state.phase === 'stance' ? { phase: 'swing', plantPoint: state.plantPoint, age: 0 } : state;
+}
+
+/** The reach slide (see PlantSignal.hip): a held plant farther than
+ *  `maxReach` from `hip` moves along the floor plane toward the hip, on its
+ *  own bearing, until it sits exactly `maxReach` away (straight under the hip
+ *  when the hip itself is higher than that). Within reach: untouched. */
+function slideWithinReach(state: PlantState, hip: Vec3, maxReach: number, groundY: number): PlantState {
+  const p = state.plantPoint;
+  if (len(sub(p, hip)) <= maxReach) return state;
+  const h = hip[1] - groundY;
+  const r = h >= maxReach ? 0 : Math.sqrt(maxReach * maxReach - h * h);
+  const dx = p[0] - hip[0], dz = p[2] - hip[2];
+  const d = Math.hypot(dx, dz);
+  const k = d > 0 ? r / d : 0;
+  return { ...state, plantPoint: [hip[0] + dx * k, groundY, hip[2] + dz * k] };
 }
 
 /**
