@@ -1289,8 +1289,9 @@ export function stepMotion(
   // The jaw point is KINEMATIC: the head target's frame, opened about the
   // hinge by the sword swing's gape (sword-swing.ts jawGapeAt — wide on the
   // wind-up, snapped shut by the strike's end). Written after the head aim so
-  // it rides the look; pinned below (posePins). rig-bind reads the gape back
-  // off this target to open the `on jaw` prims.
+  // it rides the look; pinned below (posePins). The gape itself travels to
+  // rig-bind as the explicit scalar MotionFrame.jawGape (jaw.ts), never read
+  // back off this point, which would be a step stale.
   // The frame is the head AS rig-bind POSES IT: the current rig points'
   // pivot->tip, clamped to the same IK_TUNING cone headTransform uses. Not
   // the targets: the aim lays the head target out along the gaze (tilted

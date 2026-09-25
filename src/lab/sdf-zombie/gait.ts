@@ -54,8 +54,9 @@ export type GaitJointName =
   | 'hem'
   // THE JAW: the tail of a `jaw` bone (bride, 2026-09-24). Kinematic, never a
   // Verlet point: motion.ts pins it to the head frame turned by the gape
-  // about the hinge (jaw.ts), and rig-bind.ts reads the gape back off it to pose the
-  // `on jaw` prims. Optional like `hem`: a body without the bone never names it.
+  // about the hinge (jaw.ts); rig-bind.ts poses the `on jaw` prims from the
+  // explicit gape scalar (rig.jawGape), not from this point. Optional like
+  // `hem`: a body without the bone never names it.
   | 'jaw';
 
 /** Every joint, primary first — the ORDER is the naming priority when two

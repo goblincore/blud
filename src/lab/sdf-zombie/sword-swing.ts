@@ -131,7 +131,7 @@ export function lungeAdvance(
 }
 
 /** THE JAW GAPE (Task 12, hook 2): how far the bride's jaw swings open
- *  (rad, about the hinge gait.ts jawHinge() places) on each variant. The
+ *  (rad, about jaw.ts's JAW_HINGE) on each variant. The
  *  cleave is the big one, the overhead scream; the sweep is a side cut
  *  thrown faster, the lunge a thrust, so they open less. At 0.55 rad the
  *  chin drops ~3.5 cm (bride-blob.test.ts pins >= 3 cm), which splits the

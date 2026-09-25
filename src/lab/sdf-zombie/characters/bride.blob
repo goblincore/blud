@@ -96,9 +96,10 @@ skeleton
   # bone: a CARRIER for one kinematic rig point. It hangs off the neck's top
   # (the skull's own pivot, joint `neck`) forward to the chin (tail y 1.597,
   # z 0.069 = the chin prim's centre) so gait.ts can name its tail `jaw`.
-  # The jaw ROTATES about the hinge gait.ts jawHinge() puts on the skull axis
-  # (skull at 0.38, 1.5 cm back: y 1.659, just below the nose tip, where a
-  # jaw joint sits in front of the ear), not about this bone's head; the rig
+  # The jaw ROTATES about jaw.ts's JAW_HINGE on the skull axis (skull at
+  # 0.30, 2 cm back: y ~1.640, level with the upper lip — lower than an
+  # anatomical jaw joint on purpose; at the ear the lower lip swung back
+  # into the face), not about this bone's head; the rig
   # pins the tail to that rotated target and rig-bind turns the jaw prims
   # (lower lip, chin, mouth) with the head plus the gape. Only prims declared
   # `on jaw` may ride it.

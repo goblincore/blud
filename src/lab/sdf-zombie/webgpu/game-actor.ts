@@ -823,7 +823,9 @@ export function createZombieActor(opts: {
     if (keep.length === next.rig.points.length) {
       next = {
         ...next,
-        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, points: keep.map(p => ({ ...p, pinned: false })) },
+        // jawGape carries over so a limb severed mid-swing does not shut the
+        // bride's jaw for a frame (absent on every other body).
+        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
     bound = next;
