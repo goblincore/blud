@@ -11,6 +11,7 @@ import type { Vec3 } from '../types';
 import { ENGINE_CAPABILITIES, missingCapabilities } from './active-level';
 import { createEncounterNavigation } from './encounter-navigation';
 import { gateColliders, layoutColliders, roomAtPoint } from './level-def';
+import { glbJson } from './level-art';
 import { parseLevelJson } from './level-json';
 
 const wake = parseLevelJson(JSON.parse(readFileSync('public/assets/levels/the-wake.level.json', 'utf8')));
@@ -37,7 +38,7 @@ describe('the-wake.level.json', () => {
   });
 
   it('loads in the web engine (flat floor; windows, open sky)', () => {
-    expect(wake.requires).toEqual(['windows', 'open-sky']);
+    expect(wake.requires).toEqual(['windows', 'open-sky', 'art']);
     expect(missingCapabilities(wake, ENGINE_CAPABILITIES)).toEqual([]);
   });
 
@@ -79,5 +80,16 @@ describe('the-wake.level.json', () => {
   it('keeps every spawn and grave standable', () => {
     const nav = createEncounterNavigation(wake.rooms, wake.tunnels, layoutColliders(wake));
     for (const m of [...wake.spawns, ...wake.graves]) expect(nav.canStand([m.pos[0], 0, m.pos[2]]), m.id).toBe(true);
+  });
+
+  it('its dressing ships as the-wake.art.glb, every mesh tagged with a real room', () => {
+    expect(wake.art).toBe('the-wake.art.glb');
+    type Node = { name?: string; extras?: Record<string, unknown> };
+    const glb = glbJson(new Uint8Array(readFileSync('public/assets/levels/the-wake.art.glb'))) as { nodes: Node[] };
+    const ids = new Set(wake.rooms.map(r => r.id));
+    const art = glb.nodes.filter(n => /^(art|kit):/.test(n.name ?? ''));
+    expect(art.length).toBeGreaterThan(0);
+    expect(art.length).toBeLessThanOrEqual(wake.rooms.length * 24); // joined per room and material
+    for (const n of art) expect(ids.has(n.extras?.room as number), n.name).toBe(true);
   });
 });
