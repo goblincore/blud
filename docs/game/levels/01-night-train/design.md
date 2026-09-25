@@ -18,6 +18,11 @@ vision §10.3.)
 > ends with the dawn, then the first CD's pull-back into the Flat. **First slice:** carriages 1,
 > 3, 5, 8; revised beats in the spec.
 
+> **Art direction v2 (owner, 2026-09-25) supersedes the note below:** a grimy industrial prison
+> train carrying a party train's guests as cargo: brushed and scratched steel, pipes, gears, cages,
+> soot; dark, hazy, volumetric light; the flashlight is found in the first room.
+> [Spec](../../../superpowers/specs/2026-09-25-night-train-art-v2-design.md).
+>
 > **Art direction (owner, 2026-09-24):** an old-timey interior, wood floors and wood-panelled
 > walls. Inspiration: the first train level of *Resident Evil 0* (the owner has a fan
 > recreation), as a *type*, like Blood: its mood and materials, never its layout or assets.
