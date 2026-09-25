@@ -10,6 +10,8 @@
 // the other copy (lab-renderer.ts header). Do not split these imports.
 import * as THREE from 'three/webgpu';
 import { OCCLUDER_LAYER, SHADOW_HULL_LAYER } from './sdf-layer';
+import { KIT_BEAM_LAYER } from './kit-lights';
+import { fitMeshBeam } from '../mesh-beam-fit';
 
 export type Vec3 = [number, number, number];
 
@@ -91,9 +93,23 @@ export interface Flashlight {
   /** Shadow-only twin of the spot: same pose, layer-0 casters only.
    *  Perf round 2 task 7 — see below. */
   levelShadow: THREE.SpotLight;
+  /** The KIT twin (owner option 1, 2026-09-25): same pose, cone and colour,
+   *  but intensity/decay/distance fitted to the SDF body beam
+   *  (mesh-beam-fit.ts), so polygon kits and held props read at the flesh's
+   *  exposure instead of 28.6x albedo at 1 m. Lights ONLY materials routed
+   *  through kit-lights.ts applyKitBeam — it sits on KIT_BEAM_LAYER, which no
+   *  camera enables, so it is never in the scene light list. No shadow: kits
+   *  do not receive shadows. */
+  kitSpot: THREE.SpotLight;
+  /** Re-derive the twin's intensity from the live beam gain (beamTuning.gain).
+   *  Intensity is a uniform: no recompile. */
+  setKitBeamGain(gain: number): void;
   /** Pose the light from the camera each frame. */
   update(camera: THREE.PerspectiveCamera): void;
 }
+
+/** The SDF beam's default key gain (game-main beamTuning.gain). */
+export const DEFAULT_BEAM_GAIN = 4;
 
 /** Shadow map edge for BOTH the flashlight's map and the level twin.
  *  512 ships (2026-09-10 owner call: "fine with both at 512 or lower");
@@ -156,6 +172,23 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG, opts: { shadowMa
   levelShadowLight.penumbra = spot.penumbra;
   levelShadowLight.distance = spot.distance;
 
+  // Kit twin. Fitted ONCE against the spot's range (the shape only depends on
+  // range); intensity is exactly linear in gain, so the live knob is a scale.
+  const kitFit = fitMeshBeam({ gain: 1, range: spot.distance });
+  const kitSpot = new THREE.SpotLight(
+    spot.color.clone(), kitFit.intensityPerGain * DEFAULT_BEAM_GAIN, kitFit.distance,
+    spot.angle, spot.penumbra, kitFit.decay,
+  );
+  kitSpot.castShadow = false;
+  kitSpot.layers.set(KIT_BEAM_LAYER);
+  kitSpot.target = spot.target;
+  let kitGain = DEFAULT_BEAM_GAIN;
+  function setKitBeamGain(gain: number) {
+    if (gain === kitGain) return;
+    kitGain = gain;
+    kitSpot.intensity = kitFit.intensityPerGain * gain;
+  }
+
   const eye = new THREE.Vector3();
   const off = new THREE.Vector3();
   const fwd = new THREE.Vector3();
@@ -170,7 +203,9 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG, opts: { shadowMa
     spot.target.position.copy(spot.position).addScaledVector(fwd, 10);
     spot.target.updateMatrixWorld();
     spot.updateMatrixWorld();
+    kitSpot.position.copy(spot.position);
+    kitSpot.updateMatrixWorld();
   }
 
-  return { spot, levelShadow: levelShadowLight, update };
+  return { spot, levelShadow: levelShadowLight, kitSpot, setKitBeamGain, update };
 }
