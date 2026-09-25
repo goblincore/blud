@@ -412,9 +412,10 @@ def dining_chair():
 
 
 def buffet_counter():
+    """Along the wall (origin at the wall, like the luggage rack): 0.6 m deep, 3.0 m long."""
     p = Piece("buffet-counter")
-    p.box("train.wood-dark", (-W, 0, -0.6), (0, 1.0, 0))
-    p.box("train.brass", (-W, 1.0, -0.62), (0, 1.03, 0.02))
+    p.box("train.wood-dark", (0, 0, -3.0), (0.6, 1.0, 0))
+    p.box("train.brass", (0, 1.0, -3.02), (0.62, 1.03, 0.02))
     return p
 
 
