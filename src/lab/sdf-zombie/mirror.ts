@@ -36,7 +36,8 @@ export function expandMirror(def: BodyDef): ExpandedBody {
   /** Which side each emitted bone came out on; null for bones that were not mirrored. */
   const sideOf = new Map<BoneDef, 'l' | 'r' | null>();
 
-  for (const b of def.bones) {
+  for (const src of def.bones) {
+    const { lengthR, ...b } = src;
     if (!b.mirror) {
       const kept = { ...b };
       bones.push(kept);
@@ -53,6 +54,8 @@ export function expandMirror(def: BodyDef): ExpandedBody {
     const r: BoneDef = {
       ...b, name: `${b.name}.r`, side: -side, mirror: false,
       dir: [-b.dir[0], b.dir[1], b.dir[2]],
+      // Asymmetric pair (`lenR=`): only the right copy takes the other length.
+      length: lengthR ?? b.length,
     };
     bones.push(l, r);
     sideOf.set(l, 'l');

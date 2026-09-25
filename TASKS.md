@@ -4,6 +4,29 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Bride (sword melee enemy) — first pass 2026-09-24
+
+- [x] **Body, face, cloth, kit:** SDF flesh (wrong anatomy, stigmata), corpse-makeup face sheet, shell
+  bodice/skirt/veil/hair/stockings, WAM plate+boots+chain+crosses kit. [Notes](docs/dev-notes/2026-09-24-bride/NOTES.md)
+- [x] **Sword carry + swing:** `swordGuard`/`swordTrail` carries, `STALK` gait, `BRIDE_PROFILE`; phase-keyed
+  cleave/sweep/lunge tracks with `fistOnGrip` and pinned arms; jaw gapes on the wind-up.
+- [x] **Game wiring:** `?spawn=bride` fights on the sword mind; hits flash/shake/count (no player health).
+  `node scripts/bride-melee-gate.mjs 5271 9271` passed as of Task 11 (`64285c82`'s jaw-adjacent
+  edits are untested in a browser since). Crowd gate's negative control fails on the base commit
+  too (pre-existing, unrelated).
+- [x] **Unit-test verification (Task 13):** `tsc --noEmit` clean, all targeted tests pass after the
+  kit gained Task 12's `jaw` bone (skeleton parity had caught it; geometry unchanged, WAM rebuild).
+- [ ] Perf census vs cultist (fallback-B gate) deferred by the owner (2026-09-24).
+- [ ] Polish: jaw red interior + corner tear; plate detail (lames, rivets, rolled edges); the boot
+  top edge (reads as a seam against the stocking); the skirt reading as crumpled cloth rather than
+  lace ruffles; the veil's crown reading like a nun's coif; the STALK gait's trailing-foot kick
+  (reads brisker than a stalk); she doesn't re-face between swings; the head tilts ~45° looking
+  around (jaw-gape measurement had to account for it).
+- [ ] Out of scope (by design): a second elbow, veil collapse on a head hit, a ranged special,
+  real player damage (health), sounds.
+- [ ] Room to grow: `MAX_PRIMS` is now 256 (landed on main, see below), so the Task 3 wish-list (third skirt
+  tier, hair volume, veil hem, part sweeps) is unblocked; the next wall is 64 prims per cluster.
+
 ## New game flow restructure — design approved 2026-09-24
 
 [Spec](docs/superpowers/specs/2026-09-24-new-game-flow-design.md): intro → menu → **the void** (hub, unlit, one portal) → **Night Train first**; the Wake moves later (train crash).

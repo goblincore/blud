@@ -490,3 +490,27 @@ describe('glow= — per-prim emissive, gated on paint (hard-surface task 3)', ()
     expect(d.parts[1]!.glow).toBeNull();
   });
 });
+
+describe('parseBlob — lenR= (asymmetric mirrored bone)', () => {
+  const src = (line: string, inMirror = true) => `model t
+  height 1.0
+
+skeleton
+  root pelvis at 0.5
+${inMirror ? '  mirror\n' : ''}    ${line}
+${inMirror ? '  end\n' : ''}`;
+
+  it('reads lenR on a mirrored bone', () => {
+    const b = parseBlob(src('bone thigh parent=pelvis dir=down len=0.40 lenR=0.45')).bones[0]!;
+    expect(b.len).toBe(0.40);
+    expect(b.lenR).toBe(0.45);
+  });
+
+  it('leaves lenR undefined when absent', () => {
+    expect(parseBlob(src('bone thigh parent=pelvis dir=down len=0.40')).bones[0]!.lenR).toBeUndefined();
+  });
+
+  it('rejects lenR outside a mirror block — there is no right copy to lengthen', () => {
+    expect(() => parseBlob(src('bone spine parent=pelvis dir=up len=0.40 lenR=0.45', false))).toThrow(/lenR/);
+  });
+});

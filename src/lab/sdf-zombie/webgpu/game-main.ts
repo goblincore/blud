@@ -82,7 +82,8 @@ import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from 
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
-import { makeSoldierMind } from './enemy-mind';
+import { makeSoldierMind, makeSwordMind } from './enemy-mind';
+import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
 import { SMG_TUNING, SOLDIER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
@@ -3261,6 +3262,12 @@ async function main() {
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
       boundedWounds: ctx.vfx.boundedWoundPreview,
+      // A SWORD profile (motion-profile.ts `melee.kind === 'sword'`, the
+      // bride) gets the ring brain on SWORD_TUNING plus strike contact and
+      // the lunge's root advance (enemy-mind.ts makeSwordMind).
+      ...(characterEntry(name).profile.melee?.kind === 'sword' ? {
+        mind: makeSwordMind(),
+      } : {}),
       // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
       // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
       // gun. Was `name === 'soldier'`.
@@ -3296,6 +3303,14 @@ async function main() {
       furniture: roomFurniture,
       navigation: ctx.world.encounterNav,
       onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
+      // A melee hit on the player. There is no player health, so a hit is
+      // FEEDBACK only: the red flash, the camera shake and the counter
+      // (player-hit-feedback.ts). Every actor gets it; the zombie mind never
+      // reports contact, so for the zombie this never fires. No sound: the
+      // SDF game loads no audio at all, so there is none to reuse.
+      onMeleeContact: ({ variant }) => {
+        ctx.player.hitFeedback = hitFeedback(ctx.player.hitFeedback, variant);
+      },
       // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
       // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
       // the whole swollen head (blood-sim.ts burstVolume — the 10-bead point
@@ -6570,6 +6585,15 @@ async function main() {
       + '</g></svg>';
     document.body.appendChild(ctx.player.reticleEl);
   }
+  // THE HIT FLASH: a full-screen red multiply the tick drives from
+  // ctx.player.hitFeedback.flash when an enemy blade lands.
+  {
+    ctx.player.hitFlashEl = document.createElement('div');
+    ctx.player.hitFlashEl.setAttribute('style',
+      'position:fixed; inset:0; z-index:34; pointer-events:none;'
+      + ' background:#8a0000; mix-blend-mode:multiply; opacity:0;');
+    document.body.appendChild(ctx.player.hitFlashEl);
+  }
 
   ctx.boot.hudEl = document.getElementById('hud');
   ctx.boot.hud = { lockHint: true };
@@ -7554,7 +7578,13 @@ async function main() {
       ctx.panels.impactSplashLayer?.step(cdt);
     }
 
-    const eye = eyeOf(ctx.player.player);
+    // Melee hit feedback: the shake offsets the eye (and so the look target,
+    // which is taken from `eye` below: the view shakes, it does not swivel);
+    // the flash drives the overlay.
+    ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, dt);
+    if (ctx.player.hitFlashEl) ctx.player.hitFlashEl.style.opacity = String(ctx.player.hitFeedback.flash * 0.55);
+    const eye0 = eyeOf(ctx.player.player), shake = ctx.player.hitFeedback.offset;
+    const eye: Vec3 = [eye0[0] + shake[0], eye0[1] + shake[1], eye0[2] + shake[2]];
     camera.position.set(eye[0], eye[1], eye[2]);
     const cp = Math.cos(ctx.player.player.pitch + ctx.weapon.recoilPitch);
     camera.lookAt(

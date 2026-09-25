@@ -24,6 +24,7 @@ import type { Vec3 } from '../types';
 // aliased to keep the two apart.
 import type { PlayerState as PlayerMotionState } from './game-player';
 import type { DemoFrame } from './demo-recorder';
+import { makeHitFeedback, type HitFeedback } from '../player-hit-feedback';
 
 export interface PlayerState {
   /** Center FOV handed to the fisheye lens, degrees; the lens and camera.fov
@@ -73,6 +74,12 @@ export interface PlayerState {
   strafeDir: number;
   /** Last walk position sampled by the stuck detector. */
   lastWalkPos: [number, number] | null;
+  /** What enemy melee hits have done to the player (player-hit-feedback.ts):
+   *  the red flash, the camera shake and the hit counter. There is no player
+   *  health yet; this is the feedback half of `onMeleeContact`. */
+  hitFeedback: HitFeedback;
+  /** The full-screen red flash overlay, created once at boot. */
+  hitFlashEl: HTMLDivElement | null;
 }
 
 /** Every call returns a fresh object, nested objects, arrays and sets included. */
@@ -99,6 +106,8 @@ export function makePlayerState(): PlayerState {
     strafeT: 0,
     strafeDir: 1,
     lastWalkPos: null,
+    hitFeedback: makeHitFeedback(),
+    hitFlashEl: null,
   };
 }
 

@@ -19,6 +19,8 @@ import {
   makeSoldierBrain, staggerSoldierNow, stepSoldierBrain, SOLDIER_TUNING,
   type SoldierBrain, type SoldierTuning,
 } from '../soldier-brain';
+import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
+import type { BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
 import type { WanderBounds } from '../wander';
@@ -69,6 +71,9 @@ export interface MindOutput {
   committed: boolean;
   contact: boolean;
   aimError: number;
+  /** World XZ root delta to apply THIS frame (the sword lunge), or null.
+   *  The actor applies it only where canMoveTo allows. */
+  advance?: Vec3 | null;
 }
 
 /** Fields every mind reports, merged into ZombieActor.debug() by the actor. */
@@ -221,6 +226,56 @@ export function makeSoldierMind(tuning: SoldierTuning = SOLDIER_TUNING): EnemyMi
       hasToken: false,
       aimT,
       cooldown: brain.cooldown,
+    }),
+  };
+}
+
+/** The bride's sword: the zombie's ring brain (brain.ts) on SWORD_TUNING —
+ *  wider reach, cleave/sweep inside it, a lunge from the band beyond — plus
+ *  the two things the zombie mind never produced: a real contact on the
+ *  strike frame, and the lunge's root advance. */
+export function makeSwordMind(tuning: BrainTuning = SWORD_TUNING.brain): EnemyMind {
+  let brain: Brain = makeBrain();
+  let lastToken = false;
+  let prevPhase = 0;
+  return {
+    kind: 'zombie',
+    meleeCapable: true,
+    step(input) {
+      lastToken = input.hasToken;
+      const out = stepBrain(brain, {
+        dt: input.dt, self: input.self, player: input.player, alerted: input.alerted,
+        hasToken: input.hasToken, drift: input.drift, roll: input.roll, lineOfSight: input.lineOfSight,
+      }, tuning);
+      brain = out.brain;
+      let contact = false;
+      let advance: Vec3 | null = null;
+      const a = out.attack;
+      // Without her sword arm she has dropped the sword (game-actor): the
+      // swing that is left is the zombie's bare-armed swipe, which never hits.
+      if (a && input.player && isSwordVariant(a.variant) && !input.missing?.armR) {
+        const dx = input.player.x - input.self.x, dz = input.player.z - input.self.z;
+        const dist = Math.hypot(dx, dz);
+        contact = swordContact({ prevPhase, phase: a.phase, variant: a.variant, self: input.self, player: input.player });
+        if (a.variant === 'lunge' && dist > 1e-6) {
+          const d = lungeAdvance(prevPhase, a.phase, dist);
+          if (d > 0) advance = [(dx / dist) * d, 0, (dz / dist) * d];
+        }
+        prevPhase = a.phase;
+      } else {
+        prevPhase = 0;
+      }
+      return {
+        target: out.target, halt: out.halt, attack: out.attack,
+        fire: false, weaponUp: false, faceHeading: null,
+        engaged: out.engaged, committed: out.committed,
+        contact, aimError: 0, advance,
+      };
+    },
+    stagger() { brain = staggerNow(brain, tuning); prevPhase = 0; },
+    debug: () => ({
+      state: brain.state, alert: brain.alert, side: brain.swing.side, variant: brain.swing.variant,
+      swingT: brain.swingT, holdSecs: brain.holdSecs, hasToken: lastToken, aimT: 0, cooldown: brain.cooldown,
     }),
   };
 }

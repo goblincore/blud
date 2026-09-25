@@ -100,6 +100,11 @@ export interface BoneDef {
   /** Direction in world axes (this body is authored in a rest pose, no rotations). */
   dir: Vec3;
   length: number;
+  /**
+   * Mirrored bones only: the `.r` copy's length when the sides differ (the
+   * bride's sword forearm). Consumed by expandMirror; absent = symmetric.
+   */
+  lengthR?: number;
   /** Lateral (x) offset of this bone's head from its parent's tail. Negated on the mirrored side. */
   side?: number;
   /** When true, expands into `<name>.l` and `<name>.r`. */

@@ -1,8 +1,9 @@
 // src/lab/sdf-zombie/webgpu/enemy-mind.test.ts
 import { describe, it, expect } from 'vitest';
-import { makeZombieMind, makeSoldierMind, type MindInput } from './enemy-mind';
+import { makeZombieMind, makeSoldierMind, makeSwordMind, type MindInput } from './enemy-mind';
 import { SOLDIER_TUNING } from '../soldier-brain';
 import { BRAIN_TUNING } from '../brain';
+import { SWORD_TUNING } from '../sword-swing';
 
 /** The soldier's preferred range, derived so a retune cannot rot the fixture —
  *  see soldier-brain.test.ts's note. Zombie pursuit uses its own range below. */
@@ -94,5 +95,52 @@ describe('makeSoldierMind', () => {
     m.step(mindInput({ missing: { armL: false, armR: true, legL: false, legR: false } }));
     expect(m.meleeCapable).toBe(true);
     expect(m.kind).toBe('soldier');
+  });
+});
+
+const swordInput = (dist: number, over: Partial<MindInput> = {}): MindInput => ({
+  dt: 1 / 60, self: { x: 0, z: 0, yaw: 0, room: 1 }, player: { x: 0, z: dist, room: 1 },
+  alerted: true, hasToken: true, drift: 0, roll: 0.2, rollDrift: 0.5, ...over,
+});
+
+describe('makeSwordMind', () => {
+  it('is a melee mind', () => {
+    expect(makeSwordMind().meleeCapable).toBe(true);
+  });
+
+  it('cleaves inside reach and reports contact exactly once per swing', () => {
+    const mind = makeSwordMind();
+    let contacts = 0, swung = false;
+    for (let i = 0; i < 180; i++) {
+      const out = mind.step(swordInput(1.5));
+      if (out.attack) { swung = true; expect(out.attack.variant).toBe('cleave'); }
+      if (out.contact) contacts++;
+      if (swung && !out.attack) break;
+    }
+    expect(swung).toBe(true);
+    expect(contacts).toBe(1);
+  });
+
+  it('lunges from 2.6 m and emits an advance toward the player that sums to the lunge', () => {
+    const mind = makeSwordMind();
+    let total = 0, variant = '';
+    for (let i = 0; i < 180; i++) {
+      const out = mind.step(swordInput(2.6 - total));
+      if (out.attack) variant = out.attack.variant;
+      if (out.advance) {
+        expect(out.advance[0]).toBeCloseTo(0, 6);
+        expect(out.advance[2]).toBeGreaterThan(0);   // toward +z, the player
+        total += out.advance[2];
+      }
+      if (variant && !out.attack) break;
+    }
+    expect(variant).toBe('lunge');
+    expect(total).toBeCloseTo(Math.min(SWORD_TUNING.lungeDistance, 2.6 - SWORD_TUNING.lungeStopShort), 2);
+  });
+
+  it('the zombie mind never advances', async () => {
+    const { makeZombieMind } = await import('./enemy-mind');
+    const z = makeZombieMind();
+    for (let i = 0; i < 120; i++) expect(z.step(swordInput(1.0)).advance ?? null).toBeNull();
   });
 });
