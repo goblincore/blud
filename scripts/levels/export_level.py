@@ -102,11 +102,17 @@ def export_art(doc, json_path):
         inst.select_set(True)
         view.objects.active = inst
         room = room_for(inst, doc["rooms"])
+        piece = inst.instance_collection
+        originals = {ob.data.name: ob for ob in piece.all_objects if ob.type == "MESH"}
         bpy.ops.object.duplicates_make_real(use_base_parent=False, use_hierarchy=False)
         for o in bpy.context.selected_objects:
             if o.type == "MESH":
                 o["room"] = room
-                o["kit"] = base_name(inst).split(":")[0]
+                o["kit"] = piece.name
+                o["kit_parts"] = len(originals)
+                src = originals.get(o.data.name)
+                if src is not None and "sway" in src.keys():
+                    o["sway"] = str(src["sway"])
         bpy.data.objects.remove(inst)
     view.update()
     meshes = [o for o in dressing.all_objects if o.type == "MESH"]
@@ -121,14 +127,19 @@ def export_art(doc, json_path):
                 if max(n.image.size) > 1024:
                     raise SystemExit(f"texture {n.image.name} is {n.image.size[0]}x{n.image.size[1]} (max 1024)")
     shared = {o.data.name for o in meshes if o.data.users > 1}
-    # 2. Kit instances: one parent empty per (room, piece), so each room's copies are
-    #    siblings (the exporter instances siblings that share a mesh).
+    # 2. Kit instances: one parent empty per (room, piece, part mesh), so each room's copies
+    #    of one part are siblings (the exporter instances siblings that share a mesh). A
+    #    one-mesh piece keeps the name kit:<room>:<piece>; a multi-part piece adds .<part>.
     parents = {}
     for o in [o for o in meshes if o.data.name in shared]:
-        key = (int(o["room"]), o.get("kit", o.data.name))
+        kit = o.get("kit", o.data.name)
+        key = (int(o["room"]), kit, o.data.name)
         if key not in parents:
-            p = bpy.data.objects.new(f"kit:{key[0]}:{key[1]}", None)
+            name = f"kit:{key[0]}:{kit}" if int(o.get("kit_parts", 1)) == 1 else f"kit:{key[0]}:{kit}.{o.data.name}"
+            p = bpy.data.objects.new(name, None)
             p["room"] = key[0]
+            if "sway" in o.keys():
+                p["sway"] = o["sway"]
             dressing.objects.link(p)
             parents[key] = p
         mw = o.matrix_world.copy()
