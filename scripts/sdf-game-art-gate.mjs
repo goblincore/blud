@@ -119,8 +119,8 @@ function meanRgb(img, fx0, fy0, fx1, fy1) {
   return acc.map((v) => v / n / 255);
 }
 
-/** Cost of the Wake's art over the art-less Wake (worst pose). PROPOSED 2026-09-24, pending
- *  owner approval: measured +49..+62 draws, +2.1..+3.9 ms paired, on a loaded machine (load ~20). */
+/** Cost of the Wake's art over the art-less Wake (worst pose). Owner-approved 2026-09-24;
+ *  measured +49..+62 draws, +2.1..+3.9 ms paired, on a loaded machine (load ~20). */
 const BUDGET = { drawCalls: 75, frameMs: 5 };
 const f3 = (v) => v.map((x) => x.toFixed(3)).join(',');
 const shoot = async (name) => {

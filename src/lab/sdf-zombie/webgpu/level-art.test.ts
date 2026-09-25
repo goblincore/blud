@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/level-art.test.ts
 
 import { describe, expect, it } from 'vitest';
-import { artRoomOf, artUrl, checkArtBudget, glbJson } from './level-art';
+import { ART_EMISSIVE_CAP, artRoomOf, artUrl, capEmissive, checkArtBudget, glbJson } from './level-art';
 
 describe('level art', () => {
   it('the art file resolves beside the level JSON', () => {
@@ -18,6 +18,10 @@ describe('level art', () => {
     expect(checkArtBudget({ drawCalls: 100, frameMs: 10 }, { drawCalls: 140, frameMs: 11.5 }, b)).toEqual([]);
     expect(checkArtBudget({ drawCalls: 100, frameMs: 10 }, { drawCalls: 160, frameMs: 13 }, b))
       .toEqual(['draw calls +60 > +50', 'frame +3.00 ms > +2 ms']);
+  });
+  it('caps Blender emission strengths at the game cap', () => {
+    expect(capEmissive(12)).toBe(ART_EMISSIVE_CAP);
+    expect(capEmissive(0.5)).toBe(0.5);
   });
   it('reads the JSON chunk of a GLB', () => {
     const json = new TextEncoder().encode(JSON.stringify({ asset: { version: '2.0' } }) + '  ');

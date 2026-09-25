@@ -7,7 +7,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GameContext } from './game-context';
-import { artRoomOf, artUrl } from './level-art';
+import { artRoomOf, artUrl, capEmissive } from './level-art';
 
 /** Fetch + parse the level's art; null when the level has none or `?art=0`. */
 export async function loadLevelArt(levelParam: string | null, file: string | null): Promise<THREE.Group | null> {
@@ -39,6 +39,10 @@ export function placeLevelArt(ctx: GameContext, scene: THREE.Group, file: string
     if (!shadow) m.userData.shadow = false;
     m.castShadow = shadow;
     m.receiveShadow = true;
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      const std = mat as THREE.MeshStandardMaterial;
+      if (std.isMeshStandardMaterial) std.emissiveIntensity = capEmissive(std.emissiveIntensity);
+    }
     if ((m as THREE.InstancedMesh).isInstancedMesh) { instanced++; instances += (m as THREE.InstancedMesh).count; }
   }
   ctx.world.art = { file, meshes: found.length, instanced, instances, objects: found };

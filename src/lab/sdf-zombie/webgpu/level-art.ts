@@ -17,6 +17,14 @@ export function artRoomOf(chain: readonly Record<string, unknown>[]): number | n
   return null;
 }
 
+/** Blender's emission strengths (5-12 on the Wake) are calibrated for Cycles and blow out
+ *  under the game's exposure; art emission is capped here (owner, 2026-09-24). The game's
+ *  own window planes run at 1. */
+export const ART_EMISSIVE_CAP = 1;
+export function capEmissive(intensity: number): number {
+  return Math.min(intensity, ART_EMISSIVE_CAP);
+}
+
 export interface ArtCost { drawCalls: number; frameMs: number }
 /** Overruns of `after` over `before`, as messages; empty = within budget. */
 export function checkArtBudget(before: ArtCost, after: ArtCost, budget: ArtCost): string[] {

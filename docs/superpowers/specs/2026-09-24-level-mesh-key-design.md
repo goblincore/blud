@@ -71,7 +71,8 @@ The `.blend` is never modified; the joins happen in the temporary copy.
   and gives it the room's lights and probe node. The room comes from the mesh's `room` extra
   (`userData.room`), not its position.
 - **Shadows:** `castShadow` / `receiveShadow` on, except `…:noshadow` meshes.
-- **Emissive** works as it does on the Wake's windows, with no extra light (authored `lights` still
+- **Emissive** is capped at intensity 1 (`ART_EMISSIVE_CAP`; Blender's Cycles-calibrated
+  strengths of 5–12 blew out). It works as it does on the Wake's windows, with no extra light (authored `lights` still
   light the room).
 - **`?art=0`** skips loading the art (dev flag, for A/B and the gate's baseline).
 - Pure decisions (room tagging from a name, the budget check) live in `level-art.ts`; the three
@@ -101,8 +102,8 @@ The `.blend` is never modified; the joins happen in the temporary copy.
   - the Wake boots with its art; the gate records draw calls (`renderer.info.render.drawCalls`)
     and median frame time over 120 frames at three fixed poses, before (art off: `?art=0`) and
     after.
-- **Budget:** measured first, then proposed to the owner and written into the gate. Starting
-  point: at most +50 draw calls and +2 ms median frame time at the worst pose.
+- **Budget (owner-approved 2026-09-24):** at most +75 draw calls and +5 ms paired frame time at
+  the worst pose (measured +49..+62 and +2.1..+3.9 ms on a loaded machine).
 - **Regression:** the ring, Void, Wake and shorty gates pass; boot `drawOnce` within noise.
 
 ## 8. Open
