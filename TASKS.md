@@ -4,13 +4,30 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
-## Bride (sword enemy) — Tasks 1-3 of [the plan](docs/superpowers/plans/2026-09-24-bride-sword-enemy.md)
+## Bride (sword melee enemy) — first pass 2026-09-24
 
-- [x] **Task 3, cloth + hair:** shell bodice open over the ribs with laces, two-tier ruffle skirt on a `hem`
-  pendulum, rigid veil, strand hair, painted stockings. 123/128 prims. Uncut in game. [Notes](docs/dev-notes/2026-09-24-bride/NOTES.md)
-- [ ] Perf census vs cultist (fallback-B gate) deferred by the owner (2026-09-24). Next: Task 4 (kit + boots).
-- [x] **Task 11, game wiring:** `?spawn=bride` fights on the sword mind; hits flash/shake/count (no player health).
-  `node scripts/bride-melee-gate.mjs 5271 9271` passes. Crowd gate's negative control fails on the base too (pre-existing).
+- [x] **Body, face, cloth, kit:** SDF flesh (wrong anatomy, stigmata), corpse-makeup face sheet, shell
+  bodice/skirt/veil/hair/stockings, WAM plate+boots+chain+crosses kit. [Notes](docs/dev-notes/2026-09-24-bride/NOTES.md)
+- [x] **Sword carry + swing:** `swordGuard`/`swordTrail` carries, `STALK` gait, `BRIDE_PROFILE`; phase-keyed
+  cleave/sweep/lunge tracks with `fistOnGrip` and pinned arms; jaw gapes on the wind-up.
+- [x] **Game wiring:** `?spawn=bride` fights on the sword mind; hits flash/shake/count (no player health).
+  `node scripts/bride-melee-gate.mjs 5271 9271` passed as of Task 11 (`64285c82`'s jaw-adjacent
+  edits are untested in a browser since). Crowd gate's negative control fails on the base commit
+  too (pre-existing, unrelated).
+- [x] **Unit-test verification (Task 13):** `tsc --noEmit` clean, 610/612 targeted tests pass. One
+  new failure: `bride-kit.test.ts` skeleton parity — the kit `.wam` has no `jaw` bone to match the
+  one Task 12 added to `bride.blob`. Not fixed here; needs a kit rebuild (Blender).
+- [ ] Perf census vs cultist (fallback-B gate) deferred by the owner (2026-09-24).
+- [ ] **`bride-kit.test.ts` jaw-bone regression** (found in Task 13): add a `jaw` node to
+  `bride-kit.wam` and rebuild `bride-kit.gltf`, or otherwise reconcile skeleton parity.
+- [ ] Polish: jaw red interior + corner tear; plate detail (lames, rivets, rolled edges); the boot
+  top edge (reads as a seam against the stocking); the skirt reading as crumpled cloth rather than
+  lace ruffles; the veil's crown reading like a nun's coif; the STALK gait's trailing-foot kick
+  (reads brisker than a stalk); she doesn't re-face between swings; the head tilts ~45° looking
+  around (jaw-gape measurement had to account for it).
+- [ ] Out of scope (by design): a second elbow, veil collapse on a head hit, a ranged special,
+  real player damage (health), sounds.
+- [ ] `MAX_PRIMS` evaluation — running separately (owner), not part of this plan.
 
 ## Thin-prim "lines in the air" (bride) — fixed 2026-09-24
 

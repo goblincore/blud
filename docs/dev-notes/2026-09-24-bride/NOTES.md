@@ -1,4 +1,119 @@
-# Bride — sword enemy, Task 1: the flesh body (2026-09-24)
+# Bride — sword melee enemy, first pass (2026-09-24)
+
+Owner brief: this game's version of Quake 1's death knight — a relentless melee swordsman,
+fleshy and sexy rather than armoured head to toe, because body horror is what this game mines.
+Reference is an owner-supplied photo (not committed): a pale waifish woman, long dark hair, a
+white lace veil, a white corset bodice, a short tiered lace ruffle skirt, cream suede thigh-high
+boots, a chain belt and cross pendants, plate-armoured arms, a longsword held two-handed in a
+high guard. Spec: `docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md`. The tension is
+the brief: grotesque, yet still attractive — every beat is beautiful at first glance and wrong on
+the second look, and neither half wins (the broodmother's rule).
+
+## What exists
+
+| Piece | Source | Built into |
+| --- | --- | --- |
+| SDF flesh body (wrong anatomy, stigmata) | `characters/bride.blob` | runtime (Blobforge) |
+| Face sheet (corpse makeup, sutures) | `scripts/make-bride-face.py` | `public/assets/lab/faces/bride-face.png` |
+| Cloth shells: bodice, laces, skirt, veil, hair, stockings | `characters/bride.blob` | runtime |
+| WAM kit: plate arms/pauldron, boots, chain, crosses | `characters/bride-kit.wam` → `scripts/build-wam-kit.sh bride` | `public/assets/lab/bride-kit.gltf` |
+| Sword prop | `scripts/model-bride-sword.py` | `public/assets/lab/bride-sword.glb` |
+| `swordGuard` / `swordTrail` carries, `STALK` gait, `BRIDE_PROFILE` | `carry.ts`, `gait.ts`, `motion-profile.ts` | runtime, via `motionProfileFor('bride')` |
+| Swing tracks, lunge advance, contact test, `SWORD_TUNING` | `sword-swing.ts` | `motion.ts`, `webgpu/enemy-mind.ts`, `webgpu/game-actor.ts` |
+| Sword mind | `makeSwordMind` in `webgpu/enemy-mind.ts` | `webgpu/game-main.ts` (any `profile.melee.kind === 'sword'`) |
+| Melee hit feedback (flash/shake/count) | `player-hit-feedback.ts` | `webgpu/game-main.ts`, `ctx.player.hitFeedback` |
+| Jaw gape on the wind-up | `jaw.ts`, `bride.blob`'s `jaw` bone | `motion.ts`, `rig-bind.ts` |
+| Tests | `bride-blob.test.ts` (52), `bride-kit.test.ts` (8), `sword-swing.test.ts` (22), `player-hit-feedback.test.ts` (4), `game-actor-bride.test.ts` (5) | |
+
+How to look at her:
+- Lab: `npm run dev` then `/sdf-lab-webgpu.html?character=bride` (private ports for headless
+  capture: `LAB_TMP=.lab-tmp LAB_VITE_PORT=5271 LAB_CDP_PORT=9271`, sanity-shoot `cultist` first).
+- Game: `/sdf-game.html?spawn=bride`.
+- Melee gate: `node scripts/bride-melee-gate.mjs 5271 9271`.
+- A swing frame in the lab: `BLOB_SWING=<variant>:<phase>` with `variant` one of `cleave` /
+  `sweep` / `lunge` and `phase` in [0, 1] (e.g. `BLOB_SWING=cleave:0.25`).
+
+## Design — one beat per horror hook
+
+1. **Fused gauntlets.** Plate covers both arms with a pauldron on the sword shoulder; flesh
+   bulges swell from the elbow crease and under the pauldron rim, raw red where metal meets
+   skin; a flesh cuff grows over the sword hand into the grip — she cannot let go.
+2. **The veil hides a wrong face.** Pretty in its parts (large dark eyes, a fine nose, high
+   cheekbones, pale lips), painted with smoky sockets, a hollowed cheek contour and fine
+   stitched sutures from the mouth corners toward the ears, saying the mouth opens too wide —
+   and on the sword wind-up, the jaw drops open.
+3. **Wrong anatomy, the cheap version.** ~1.85 m tall, legs ~10% too long, stick-thin thighs, a
+   wasp waist, a neck ~20% too long; reads as graceful and female at distance, turns wrong on
+   approach. No second elbow — the sword forearm is lengthened under the vambrace instead, and
+   the swing arcs fake the whip-like snap.
+4. **Stigmata / reliquary.** The corset bodice is clipped open down the sternum; laces cross a
+   gap that shows pale ribs against the skin. Cruciform wounds on the throat and inner thighs
+   weep dark drips down under the painted stockings.
+
+## Deviations from the plan
+
+- **Armour sheds rather than blocks.** The spec asked for armour hits to leave no wound; the
+  existing soldier mechanism (spark, shed a plate after 2-3 hits, let the flesh under it take
+  the wound) was reused instead, since it bares the raw fused seams the brief wants (Task 4).
+- **No perf census.** Owner direction: visuals first, optimise later (2026-09-24).
+- **Four shells, not three.** The plan's material split lists bodice/skirt/veil as `shell`;
+  hair is also shell-built (scalp mass + strand bundles), on the broodmother/schoolgirl-described
+  precedent.
+- **A new `lenR=` keyword.** A mirror block cannot make an asymmetric pair (the sword arm is
+  longer); `lenR=` gives the `.r` copy its own length (`blob-parse.ts`, `mirror.ts`).
+- **`fistOnGrip`, and the arms pinned for the whole two-handed carry.** The forearm-seated grip
+  didn't turn with the hand; `prop.fistOnGrip` lays the hand along the solved forearm, and
+  `motion.ts` pins both arms for the whole sword carry (not just mid-swing) so the soft rest
+  pull can't let the arms lag the guard (Tasks 8, 9, 11).
+- **Per-variant hit phase**, not one contact instant shared by all three swings — timed against
+  each swing's own measured arc (Task 9/10).
+- **No hit sound.** The plan asked for one reused sample; the SDF game loads no audio at all
+  under `src/lab/sdf-zombie/`, so there is none to reuse (Task 11).
+- **The jaw is a drop, not a corner tear.** The opening is vertical (lip line to chin); tearing
+  the sutured corners would mean moving the sheet's paint with the jaw, which the projection
+  can't do (Task 12).
+- **The sweep stays diagonal-into-flat**, not a pure horizontal (owner decision via the shape
+  pin — a two-handed grip can't cock the blade flat right without running the left hand off
+  `Fore_Hand`, Task 9).
+- **Jaw polish deferred** (owner decision, inside Task 12's time-box): red interior colour and
+  a corner tear are left for later.
+
+## Things found on the way
+
+- **The lab's statue-yaw fix.** `blob:shot` froze the rig but left `lastBodyYaw` and the rig
+  points at the wander's last heading, so the face and feet pointed different ways in every
+  early frame; fixed in `lab-main.ts`'s `setMotionEnabled(false)` (Task 1, second look pass).
+- **The hem rig-bind fix, and a cherry-pick from main.** The hem pendulum's tail stole the
+  stocking tops (nearest bone point, not nearest limb); fixed by restricting the hem tail to
+  its own distal set, building on main's `cab14582` (distal joints bind only their own limb's
+  prims), cherry-picked onto this branch because it wasn't here yet (Task 3).
+- **Thin-capsule streaks.** A 10 cm × r 0.0024 drip (length/radius ~50) drew dark lines 30+ cm
+  into the air; a CPU-empty field. Fixed by thickening the drip to ratio ~24; a renderer-side
+  cull/bounds bug for long thin prims is still open (Task 1).
+- **Squashed shells steal paint.** A shell's base distance, taken in scaled space, comes back
+  multiplied by the smallest axis; at `tall 0.35` the bodice under-reported its distance and
+  `nearestPrim`/`hitBest` painted the ribs behind it ivory. Fixed at `tall 0.60` (Task 3).
+- **The game/lab face-anchor mismatch:** the game doesn't measure the face sheet's mean luma
+  the way the lab does (`game-vfx-leaves.ts faceFor` reads the registry value); the registry
+  declares the lab-measured mean explicitly, as the soldier's entry does (Task 2).
+- **A held prop ignored the glb's `Muzzle`/grip locator** until `fistOnGrip` was added — the
+  forearm-seated grip didn't turn with the hand once the elbow swivelled (Task 8/11).
+- **`?frozen=1` never posed a kit** — the frozen game capture skips the body block, and
+  `character.pose` only runs there, so a kit sat at its bind pose at the origin; the capture
+  script now unfreezes for a few ticks after teleport (Task 4).
+- **A WAM `group`'s `offset=` is silently ignored** — every cross box stacked on the group
+  origin until moved to `at=` (Task 4).
+- **A blob prim's binding ignores its bone's declared `at=` fraction when picking a rig point**
+  — `bindRig` binds to the NEAREST rig point on the whole body, not the bone segment a prim's
+  `at=` sits on, so the hem tail (a bone the stocking overlay's `at=` never named) still stole
+  the stocking tops by proximity; fixed by restricting distal binds to their own limb (Task 3).
+- **Pre-existing failures, unrelated to this branch:** `sdf-game-crowd-gate.mjs`'s negative
+  control fails identically at this branch's base commit `aac99621` (checked in a temporary
+  detached worktree, same ports, every number before the failure matches exactly). Separately,
+  `game-context-coverage` fails on `spawnOverride`, a second `main()`-scope state binding from
+  commit `06884bb3` on `main` — not touched by this plan.
+
+## Task 1: the flesh body (2026-09-24)
 
 Spec: `docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md`.
 Body: `src/lab/sdf-zombie/characters/bride.blob` (the header is the design brief).
@@ -864,3 +979,50 @@ plate, not a mouth. Crops are 2× of the frame's face region.
 - **Her head is pitched well down in the `aim` pose**, so the mouth faces the floor. The low camera
   (pitch -0.2) is what shows it. From the player's eye height, at game distance, the gape will be a
   small dark gap under the nose. It has not been checked in `sdf-game.html`.
+
+## Task 13: notes, TASKS.md, final verification (same day)
+
+**Machine is resource-constrained: unit tests only, no browser gates run in this task.**
+
+- **The last melee-gate PASS was in Task 11** (`node scripts/bride-melee-gate.mjs 5271 9271`,
+  transcript above under Task 11). Task 12's `64285c82` (jaw wiring touching `motion.ts`,
+  `rig-bind.ts`, `actor.ts`, `game-actor.ts`) and the review-follow-up gate-timing edit are
+  **untested in a browser** — nothing has re-run the melee gate since.
+- **The crowd gate's negative control fails identically at `aac99621`** (this branch's base
+  commit, checked in a temporary detached worktree on the same ports — every number before the
+  failure matches exactly). Pre-existing, not touched by this plan; not re-verified this task
+  since browser gates were out of scope here.
+
+### Test run
+
+```
+npx tsc --noEmit && npm test -- bride-blob bride-kit sword-swing enemy-mind player-hit-feedback \
+  brain attack motion-profile carry gait game-actor game-actor-bride motion rig-bind \
+  cultist-blob ogre-blob soldier-kit zombie-blob
+```
+
+`tsc --noEmit`: clean.
+
+```
+ Test Files  1 failed | 27 passed (28)
+      Tests  1 failed | 610 passed | 1 skipped (612)
+```
+
+**One failure, newly found by this run, not a previously-known pre-existing one:**
+
+```
+FAIL  src/lab/sdf-zombie/characters/bride-kit.test.ts > bride-kit.gltf fits bride.blob
+      > carries the same skeleton as the .blob (height fractions x 1.85)
+AssertionError: kit has no bone jaw: expected undefined to be defined
+```
+
+Task 12 (`9c1d0d8a`) added a `jaw` bone to `bride.blob`'s skeleton but did not add a matching
+node to `bride-kit.wam` / regenerate `bride-kit.gltf`. `bride-kit.test.ts`'s skeleton-parity
+check walks every `.blob` bone and now fails on the one the kit doesn't carry. This is a real
+regression, not the known `game-context-coverage`/crowd-gate pre-existing failures. **Not fixed
+in this task** (out of scope for "notes and verification"; the fix belongs with a `.wam`/kit
+rebuild, which needs Blender). Flagged for a follow-up session.
+
+Everything else in the run is green, including all 52 `bride-blob.test.ts` cases (carries,
+swing tracks, jaw gape), the 5 `game-actor-bride.test.ts` game-path cases (fight, both severed-arm
+paths) and the 22 `sword-swing.test.ts` pure-logic cases.
