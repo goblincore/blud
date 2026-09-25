@@ -19,7 +19,7 @@ import {
 } from './level-def';
 
 /** Capabilities the web engine can load today (spec §8). */
-export const ENGINE_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['windows', 'open-sky', 'void', 'portals']);
+export const ENGINE_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['windows', 'open-sky', 'void', 'portals', 'art']);
 
 export function missingCapabilities(def: LevelDef, supported: ReadonlySet<Capability>): Capability[] {
   return def.requires.filter(c => !supported.has(c));

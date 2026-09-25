@@ -35,7 +35,7 @@ export const DEFAULT_PALETTE: LevelPalette = {
   solid: [0.34, 0.33, 0.32],
 };
 
-export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals';
+export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art';
 export type WallSide = 'n' | 's' | 'e' | 'w';
 export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd';
 export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd'];
@@ -75,6 +75,9 @@ export interface LevelRoom extends RoomDef {
   edge: EdgeDef | null;
   /** Void v1 §3: nothing drawn (walls, floor, ceiling); collision unchanged. */
   void: boolean;
+  /** Mesh key §3: 'art' = the level art is the room's whole look (no generated
+   *  surfaces drawn; collision, lights and bounce colours unchanged). */
+  shell: 'generated' | 'art';
 }
 export interface LevelTunnel extends TunnelDef { floor: number }
 export interface StairDef { id: string; up: '+x' | '-x' | '+z' | '-z'; box: Aabb }
@@ -115,6 +118,8 @@ export interface LevelDef {
   pickups: PickupDef[];
   bells: BellDef[];
   portals: PortalDef[];
+  /** Mesh key §3: the level's art file (beside the JSON), or null. */
+  art: string | null;
 }
 
 export interface Mouth { lo: number; hi: number; tunnel: LevelTunnel }
@@ -221,7 +226,7 @@ export function layoutSurfaces(level: LevelDef): LevelSurfaceSet {
     surface ? { min, max, axis, facing, color, surface } : { min, max, axis, facing, color };
 
   for (const r of level.rooms) {
-    if (r.void) continue; // Void v1 §3: collision only
+    if (r.void || r.shell === 'art') continue; // Void v1 / mesh key §3: collision only
     const f = r.floor, top = r.floor + r.height;
     const wallTop = f + displayTop(r);
     const wallTag: SurfaceTag = r.edge ? `edge:${r.edge.style}` : 'wall';

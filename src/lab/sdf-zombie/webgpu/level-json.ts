@@ -27,9 +27,9 @@ const MAX_STAIR_RISE = 3;
 const KEYS: Record<string, readonly string[]> = {
   top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
     'stairs', 'furniture', 'solids', 'gates', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
-    'pickups', 'bells', 'portals'],
+    'pickups', 'bells', 'portals', 'art'],
   palette: ['wall', 'floor', 'ceil', 'tunnel', 'solid'],
-  room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'void', 'states'],
+  room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'void', 'shell', 'states'],
   path: ['ground', 'min', 'max'],
   edge: ['style', 'height'],
   tunnel: ['a', 'b', 'min', 'max', 'height', 'states'],
@@ -103,6 +103,8 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     errors.push(`${where}: unknown ${what} ${v} (known: ${known.join(', ')})`);
     return false;
   };
+  const art = j.art === undefined ? null : str(j.art, 'art');
+  if (art !== null && !/^[a-z0-9-]+\.art\.glb$/.test(art)) errors.push('art: must match <id>.art.glb');
   let skyline: SkylineName | null = null;
   if (j.skyline !== undefined) {
     const s = str(j.skyline, 'skyline');
@@ -178,11 +180,14 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     }
     const isVoid = o.void === undefined ? false : o.void === true ? true : (errors.push(`${where}.void: expected true or false`), false);
     if (isVoid && (o.sky !== undefined || o.edge !== undefined || o.paths !== undefined)) errors.push(`${where}: void rooms have no sky, edge or paths`);
+    const shell: 'generated' | 'art' = o.shell === undefined ? 'generated'
+      : o.shell === 'generated' || o.shell === 'art' ? o.shell : (errors.push(`${where}.shell: generated or art`), 'generated');
+    if (shell === 'art' && (isVoid || o.paths !== undefined)) errors.push(`${where}: art-shelled rooms are not void and have no paths`);
     if (!keep) return;
     if (rooms.some(r => r.id === rid)) errors.push(`${where}.id: duplicate room id ${rid}`);
     if (rooms.some(r => r.name === rname)) errors.push(`${where}.name: duplicate room name ${rname}`);
     rooms.push({
-      id: rid, name: rname, minX: minX!, maxX: maxX!, minZ: minZ!, maxZ: maxZ!, floor, height, sky, ground, paths, edge, void: isVoid,
+      id: rid, name: rname, minX: minX!, maxX: maxX!, minZ: minZ!, maxZ: maxZ!, floor, height, sky, ground, paths, edge, void: isVoid, shell,
       wallColor: palette.wall, floorColor: palette.floor, ceilColor: palette.ceil,
       accents: [], zombies: 0, soldiers: 0,
     });
@@ -419,10 +424,11 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
   if (rooms.some(r => r.sky !== null)) requires.push('open-sky');
   if (rooms.some(r => r.void)) requires.push('void');
   if (portals.length > 0) requires.push('portals');
+  if (art !== null || rooms.some(r => r.shell === 'art')) requires.push('art');
 
   return {
     id, name, ammo, palette, loadout, completeOn, state, states, requires, skyline,
     rooms, tunnels, stairs, furniture, solids, gates, triggers, windows,
-    playerStart, spawns, graves, pickups, bells, portals,
+    playerStart, spawns, graves, pickups, bells, portals, art,
   };
 }
