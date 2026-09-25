@@ -18,6 +18,11 @@ vision §10.3.)
 > ends with the dawn, then the first CD's pull-back into the Flat. **First slice:** carriages 1,
 > 3, 5, 8; revised beats in the spec.
 
+> **Art direction (owner, 2026-09-24):** an old-timey interior, wood floors and wood-panelled
+> walls. Inspiration: the first train level of *Resident Evil 0* (the owner has a fan
+> recreation), as a *type*, like Blood: its mood and materials, never its layout or assets.
+> Divergences welcome. Built with the [mesh key](../../../superpowers/specs/2026-09-24-level-mesh-key-design.md).
+
 ## 1. Decisions so far
 
 - **Type:** a night train, the classic FPS train level as a *type* (Blood's

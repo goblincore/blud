@@ -9,7 +9,8 @@
 [Spec](docs/superpowers/specs/2026-09-24-new-game-flow-design.md): intro → menu → **the void** (hub, unlit, one portal) → **Night Train first**; the Wake moves later (train crash).
 - [x] 1 Design + doc updates (vision §6.1/§10.3/§10.4, Night Train, Wake).
 - [x] 2 **The Void + portal** ([spec](docs/superpowers/specs/2026-09-24-void-portal-design.md) · [plan](docs/superpowers/plans/2026-09-24-void-portal.md)): `?level=the-void`; Esc → New game starts there. WGSL portal (flame rim, haze, ray-cast tracks), embers, glow pool; format `void` rooms + `portals`. Gate `scripts/sdf-game-void-gate.sh` 3/3; Wake + shorty gates pass. First level with no bodies (boot seeds guarded). **Next:** owner look review; portal targets `the-wake` until Night Train exists.
-- [ ] 3 Train carriage kit (Blender, windows with scrolling scenery, sway) · 4 Night Train first slice (carriages 1, 3, 5, 8).
+- [~] 3a **Level mesh key** [spec](docs/superpowers/specs/2026-09-24-level-mesh-key-design.md) approved: `dressing` → `<id>.art.glb` (kit.blend linked, GPU instances, joined per room/material), `shell: "art"` rooms, glTF PBR; proof = the Wake's dressing + `art-shell` fixture. **Next:** plan.
+- [ ] 3b Train carriage kit (old-timey wood interior, RE0 train as inspiration; windows with scrolling scenery, sway) · 4 Night Train first slice (carriages 1, 3, 5, 8).
 
 ## Wake level pipeline — Plan 1 in flight — 2026-09-23
 
