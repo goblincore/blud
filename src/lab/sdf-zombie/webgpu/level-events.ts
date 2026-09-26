@@ -5,7 +5,7 @@
 // carries out. Pure: game-main feeds positions and applies commands.
 
 import type { Vec3 } from '../types';
-import type { GateDef, TriggerDef } from './level-def';
+import type { CueDef, GateDef, TriggerDef } from './level-def';
 
 export interface TriggerState {
   /** Triggers the player was inside last step (edge detection). */
@@ -45,7 +45,11 @@ export function gatesOpenedBy(gates: readonly GateDef[], open: ReadonlySet<strin
 export type LevelCommand =
   | { kind: 'wave'; wave: number }
   | { kind: 'alert-room'; room: number }
-  | { kind: 'complete' };
+  | { kind: 'complete' }
+  | { kind: 'light'; mode: LightMode; room: number };
+
+/** Dynamic light §3: scripted lamp events, `light.<mode>.room.<n>`. */
+export type LightMode = 'die' | 'blackout' | 'strobe';
 
 /** What an event asks the game to do. `bell.toll.<n>` also calls wave n. */
 export function commandsFor(event: string, completeOn: string): LevelCommand[] {
@@ -55,5 +59,15 @@ export function commandsFor(event: string, completeOn: string): LevelCommand[] {
   if (wave) out.push({ kind: 'wave', wave: Number(wave[1]) });
   const alert = /^alert\.room\.(\d+)$/.exec(event);
   if (alert) out.push({ kind: 'alert-room', room: Number(alert[1]) });
+  const light = /^light\.(die|blackout|strobe)\.room\.(\d+)$/.exec(event);
+  if (light) out.push({ kind: 'light', mode: light[1] as LightMode, room: Number(light[2]) });
+  return out;
+}
+
+/** The events plus what their cues emit, one level deep (a cue's output is not expanded
+ *  again, so an authoring cycle cannot loop). */
+export function expandCues(events: readonly string[], cues: readonly CueDef[]): string[] {
+  const out = [...events];
+  for (const ev of events) for (const c of cues) if (c.on === ev) out.push(...c.emit);
   return out;
 }

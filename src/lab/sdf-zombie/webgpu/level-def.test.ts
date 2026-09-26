@@ -26,7 +26,7 @@ function twoRooms(): LevelDef {
       height: 2.2, color: P.tunnel, axis: 'x', floor: 0 }],
     stairs: [], furniture: [], solids: [],
     gates: [{ id: 'door', opensOn: 'open.door', box: { min: [8.6, 0, 3.2], max: [9.0, 2.2, 4.8] } }],
-    triggers: [],
+    triggers: [], cues: [],
     windows: [{ id: 'w1', view: 'night', room: 1, side: 'n', box: { min: [3, 1, -0.05], max: [5, 2, 0.05] } }],
     playerStart: { x: 4, y: 0, z: 4, yaw: Math.PI / 2, pitch: 0 },
     spawns: [], graves: [], pickups: [], bells: [], portals: [], art: null,

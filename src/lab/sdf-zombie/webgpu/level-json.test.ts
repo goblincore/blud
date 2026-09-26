@@ -124,3 +124,32 @@ describe('parseLevelJson: outdoor keys (Outdoor v1 spec §4)', () => {
     expect(bad(j => { j.rooms[0].edge.colour = 'red'; })).toMatch(/rooms\[0\]\.edge: unknown key colour/);
   });
 });
+
+describe('parseLevelJson: dynamic light keys (dynamic light spec §3)', () => {
+  it('reads a light mood, cues and the flashlight pickup', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].mood = 'dying';
+    f.cues = [{ on: 'pickup.flashlight', emit: ['light.die.room.1'] }];
+    f.pickups.push({ id: 'torch', item: 'flashlight', pos: [2, 1.4, 2] });
+    const L = parseLevelJson(f);
+    expect(L.rooms.flatMap(r => r.accents).some(a => a.mood === 'dying')).toBe(true);
+    expect(L.cues).toEqual([{ on: 'pickup.flashlight', emit: ['light.die.room.1'] }]);
+    expect(L.pickups.find(p => p.id === 'torch')?.item).toBe('flashlight');
+  });
+
+  it('defaults to no cues and no mood', () => {
+    const L = parseLevelJson(fixture('two-rooms'));
+    expect(L.cues).toEqual([]);
+    expect(L.rooms.flatMap(r => r.accents).every(a => a.mood === undefined)).toBe(true);
+  });
+
+  it.each([
+    ['an unknown mood', (f: any) => { f.lights[0].mood = 'sad'; }, 'mood'],
+    ['a cue without emit', (f: any) => { f.cues = [{ on: 'x' }]; }, 'cues[0].emit'],
+    ['a cue without on', (f: any) => { f.cues = [{ emit: ['x'] }]; }, 'cues[0].on'],
+  ])('rejects %s', (_label, mutate, needle) => {
+    const f = fixture('two-rooms');
+    mutate(f);
+    expect(() => parseLevelJson(f)).toThrow(needle);
+  });
+});

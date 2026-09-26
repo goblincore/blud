@@ -37,8 +37,8 @@ export const DEFAULT_PALETTE: LevelPalette = {
 
 export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art';
 export type WallSide = 'n' | 's' | 'e' | 'w';
-export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd';
-export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd'];
+export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight';
+export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight'];
 
 /** Outdoor v1 §4.1: a strip of another ground laid over a room's floor. */
 export interface PathDef { ground: GroundName; minX: number; maxX: number; minZ: number; maxZ: number }
@@ -89,6 +89,8 @@ export interface GraveDef { id: string; wave: number; pos: Vec3; yaw: number }
 export interface BellDef { id: string; pos: Vec3; radius: number }
 export interface TriggerDef { id: string; event: string; once: boolean; box: Aabb }
 export interface GateDef { id: string; opensOn: string; box: Aabb }
+/** Dynamic light §3: when `on` fires, the level also fires every event in `emit`. */
+export interface CueDef { on: string; emit: string[] }
 
 /** A parsed level, already filtered to one state (spec §7). */
 export interface LevelDef {
@@ -112,6 +114,7 @@ export interface LevelDef {
   solids: Aabb[];
   gates: GateDef[];
   triggers: TriggerDef[];
+  cues: CueDef[];
   windows: WindowDef[];
   playerStart: { x: number; y: number; z: number; yaw: number; pitch: number };
   spawns: SpawnDef[];

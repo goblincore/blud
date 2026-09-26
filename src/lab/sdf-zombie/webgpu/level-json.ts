@@ -11,8 +11,9 @@ import {
   DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type PortalDef, type GateDef,
   type EdgeDef, type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
   type PathDef, type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
-  type WallSide, type WindowDef,
+  type WallSide, type WindowDef, type CueDef,
 } from './level-def';
+import { LAMP_MOODS, type LampMood } from './lamp-moods';
 import {
   EDGE_STYLES, GROUND_NAMES, SKYLINE_NAMES, SKY_NAMES,
   type EdgeStyle, type GroundName, type SkyName, type SkylineName,
@@ -27,7 +28,7 @@ const MAX_STAIR_RISE = 3;
 const KEYS: Record<string, readonly string[]> = {
   top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
     'stairs', 'furniture', 'solids', 'gates', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
-    'pickups', 'bells', 'portals', 'art'],
+    'pickups', 'bells', 'portals', 'art', 'cues'],
   palette: ['wall', 'floor', 'ceil', 'tunnel', 'solid'],
   room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'void', 'shell', 'states'],
   path: ['ground', 'min', 'max'],
@@ -38,7 +39,8 @@ const KEYS: Record<string, readonly string[]> = {
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
-  light: ['pos', 'color', 'power', 'states'],
+  light: ['pos', 'color', 'power', 'mood', 'states'],
+  cue: ['on', 'emit'],
   start: ['pos', 'yaw'],
   spawn: ['id', 'kind', 'pos', 'yaw', 'states'],
   grave: ['id', 'wave', 'pos', 'yaw', 'states'],
@@ -330,9 +332,25 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     const pos = vec(o.pos, 3, `lights[${i}].pos`) as unknown as Vec3;
     const color = vec(o.color, 3, `lights[${i}].color`) as unknown as Vec3;
     const power = num(o.power, `lights[${i}].power`, 9);
+    let mood: LampMood | undefined;
+    if (o.mood !== undefined) {
+      mood = LAMP_MOODS.find(m => m === o.mood);
+      if (!mood) errors.push(`lights[${i}].mood: must be one of ${LAMP_MOODS.join(', ')}`);
+    }
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`lights[${i}]: outside every room`);
-    else if (keep) room.accents.push({ pos, color, power });
+    else if (keep) room.accents.push(mood ? { pos, color, power, mood } : { pos, color, power });
+  });
+
+  // --- cues (dynamic light §3) --------------------------------------------------
+  const cues: CueDef[] = [];
+  list(j.cues, 'cues').forEach((o, i) => {
+    keys(o, 'cue', `cues[${i}]`);
+    const on = typeof o.on === 'string' && o.on ? o.on : null;
+    if (!on) errors.push(`cues[${i}].on: must be an event name`);
+    const emit = Array.isArray(o.emit) && o.emit.length > 0 && o.emit.every(e => typeof e === 'string' && e) ? o.emit as string[] : null;
+    if (!emit) errors.push(`cues[${i}].emit: must be a non-empty list of event names`);
+    if (on && emit) cues.push({ on, emit: [...emit] });
   });
 
   // --- markers -----------------------------------------------------------------
@@ -428,7 +446,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
 
   return {
     id, name, ammo, palette, loadout, completeOn, state, states, requires, skyline,
-    rooms, tunnels, stairs, furniture, solids, gates, triggers, windows,
+    rooms, tunnels, stairs, furniture, solids, gates, triggers, cues, windows,
     playerStart, spawns, graves, pickups, bells, portals, art,
   };
 }

@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/level-events.test.ts
 import { describe, expect, it } from 'vitest';
 import type { GateDef, TriggerDef } from './level-def';
-import { commandsFor, gatesOpenedBy, makeTriggerState, stepTriggers } from './level-events';
+import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers } from './level-events';
 
 const trig = (id: string, event: string, once = true): TriggerDef =>
   ({ id, event, once, box: { min: [0, 0, 0], max: [2, 2, 2] } });
@@ -50,5 +50,20 @@ describe('commandsFor', () => {
     expect(commandsFor('pickup.cd', 'pickup.cd')).toEqual([{ kind: 'complete' }]);
     expect(commandsFor('pickup.shells', 'pickup.cd')).toEqual([]);
     expect(commandsFor('wave.x', 'pickup.cd')).toEqual([]);
+  });
+});
+
+describe('light commands and cues (dynamic light §3)', () => {
+  it('parses light.<mode>.room.<n>', () => {
+    expect(commandsFor('light.blackout.room.4', 'pickup.cd')).toEqual([{ kind: 'light', mode: 'blackout', room: 4 }]);
+    expect(commandsFor('light.die.room.1', 'pickup.cd')).toEqual([{ kind: 'light', mode: 'die', room: 1 }]);
+    expect(commandsFor('light.strobe.room.5', 'pickup.cd')).toEqual([{ kind: 'light', mode: 'strobe', room: 5 }]);
+    expect(commandsFor('light.melt.room.5', 'pickup.cd')).toEqual([]);
+  });
+
+  it('expands cues one level deep', () => {
+    const cues = [{ on: 'pickup.flashlight', emit: ['light.die.room.1', 'alert.room.1'] }, { on: 'light.die.room.1', emit: ['x'] }];
+    expect(expandCues(['pickup.flashlight'], cues)).toEqual(['pickup.flashlight', 'light.die.room.1', 'alert.room.1']);
+    expect(expandCues(['other'], cues)).toEqual(['other']);
   });
 });

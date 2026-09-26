@@ -20,6 +20,7 @@
 // tunnel length, which is what makes a doorway a passage rather than a hole.
 
 import type { Box, EnclosureWalls, Vec3 } from '../ambient';
+import type { LampMood } from './lamp-moods';
 
 export const ROOM_HALF = 4;          // room interior half-size
 export const BAND_HALF = 0.8;        // divider half-thickness = tunnel half-length
@@ -53,6 +54,8 @@ export interface AccentLight {
   pos: Vec3;
   color: Vec3;
   power: number;
+  /** Dynamic light §2.5: the lamp's ambient mood (absent: steady). */
+  mood?: LampMood;
 }
 
 /** Distance at which an accent's albedo contribution has fallen to half. */

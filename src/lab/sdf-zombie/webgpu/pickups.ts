@@ -23,10 +23,12 @@ export interface Inventory {
   weapons: readonly string[];
   shellsReserve: number;
   cds: readonly string[];
+  /** Dynamic light §2.1: the flashlight, found in the level (levels without one start with it on). */
+  flashlight: boolean;
 }
 
 export function makeInventory(weapons: readonly string[] = []): Inventory {
-  return { weapons: [...weapons], shellsReserve: 0, cds: [] };
+  return { weapons: [...weapons], shellsReserve: 0, cds: [], flashlight: false };
 }
 
 export interface PickupResult {
@@ -60,6 +62,10 @@ export function collectPickups(
       case 'shells':
         if (inv.shellsReserve >= PICKUP.maxReserve) continue;
         inv = { ...inv, shellsReserve: Math.min(PICKUP.maxReserve, inv.shellsReserve + PICKUP.shells) };
+        break;
+      case 'flashlight':
+        if (inv.flashlight) continue;
+        inv = { ...inv, flashlight: true };
         break;
       case 'cd':
         inv = { ...inv, cds: [...inv.cds, p.id] };
