@@ -7,13 +7,21 @@
 //  - distance fall 1 / (1 + distFall d²);
 //  - facing falloff: backKey + (1 - backKey) x facing (back to the light: dimmer, never black;
 //    a light straight overhead counts as side-on, a crown-only light reads dark).
-// Unlike presentingLamp (room level only) the weight also carries the light's rgb luminance,
-// which already includes intensity x level gain, so lights of different strength compare.
 //
-// The top 4 by weight win, ties by list index. Each lane packs index + weight (weight < 1),
-// -1 empty. The packed weight is a SHARE OF THE DOMINANT: the dominant gets 0.999, the others
-// w / w_dominant x 0.999. Absolute brightness comes from the light's own list rgb x profile
-// gain in the shader, so the dominant lights a body at its rgb x gain, the rest at their share.
+// The packed weight is ABSOLUTE PRESENCE (cover x distFall x facing), NOT a share of the
+// dominant light (review fix, Task 4): a body standing only in a tube's dim floor region, far
+// off, back to the light, must pack a small weight even when that tube is its only light — the
+// old "dominant always gets 0.999" rule discarded the dominant's own attenuation and lit such a
+// body at full tube strength. The shader multiplies the packed weight by the light's list rgb
+// (intensity x level gain already folded in) and the profile gain, so absolute brightness comes
+// from presence x rgb x gain, matching presentingLamp's own math (room level only there).
+//
+// Ranking (which 4 lights win the body's slots) additionally multiplies presence by the light's
+// rgb luminance, so a dim light close up and a bright light far off compare on what they'd
+// actually contribute, not just geometry. Ties by list index.
+//
+// Each lane packs index + weight (weight < 1, clamped to 0.999 so index + weight never rolls
+// into the next index), -1 empty.
 
 import { LIGHT_PROFILES } from './light-profiles';
 import type { ListLight, Vec3 } from './light-list';
@@ -32,25 +40,30 @@ export interface Pick { idx: [number, number, number, number]; weight: [number, 
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 export const FEET_Y = 0.05;
-/** The dominant light's packed weight: < 1 so index + weight never rolls into the next index. */
-const TOP_SHARE = 0.999;
+/** The packed weight's ceiling: < 1 so index + weight never rolls into the next index. */
+const MAX_WEIGHT = 0.999;
+/** Below this a light contributes nothing worth a slot (rank, not raw presence). */
+const RANK_FLOOR = 1e-4;
 
-export function lightWeight(l: ListLight, b: PickBody): number {
+/** cover x distFall x facing — what the light actually delivers at the body, no luminance.
+ *  This is the value packed as the GPU weight (absolute presence, review fix Task 4). */
+export function lightPresence(l: ListLight, b: PickBody): number {
   if (l.room >= 0 && b.room >= 0 && l.room !== b.room) return 0;
   const prof = LIGHT_PROFILES[l.profile]!;
-  let toL: Vec3, cover = 1, dist = 0;
+  let toLx: number, toLz: number, cover = 1, dist = 0;
   if (l.kind === 'directional') {
-    toL = l.pos;
+    toLx = l.pos[0]; toLz = l.pos[2];
   } else {
-    const d: Vec3 = [l.pos[0] - b.pos[0], l.pos[1] - b.pos[1], l.pos[2] - b.pos[2]];
-    dist = Math.hypot(d[0], d[1], d[2]);
+    const dx = l.pos[0] - b.pos[0], dy = l.pos[1] - b.pos[1], dz = l.pos[2] - b.pos[2];
+    dist = Math.hypot(dx, dy, dz);
     if (l.range > 0 && dist > l.range) return 0;
-    toL = [d[0] / (dist || 1), d[1] / (dist || 1), d[2] / (dist || 1)];
+    const inv = 1 / (dist || 1);
+    toLx = dx * inv; toLz = dz * inv;
     if (l.kind === 'spot') {
       // Coverage at the feet: the ray from the lamp to the body's feet against the cone.
-      const f: Vec3 = [b.pos[0] - l.pos[0], (b.feetY ?? FEET_Y) - l.pos[1], b.pos[2] - l.pos[2]];
-      const fl = Math.hypot(f[0], f[1], f[2]) || 1;
-      const c = (f[0] * l.axis[0] + f[1] * l.axis[1] + f[2] * l.axis[2]) / fl;
+      const fx = b.pos[0] - l.pos[0], fy = (b.feetY ?? FEET_Y) - l.pos[1], fz = b.pos[2] - l.pos[2];
+      const fl = Math.hypot(fx, fy, fz) || 1;
+      const c = (fx * l.axis[0] + fy * l.axis[1] + fz * l.axis[2]) / fl;
       // presentingLamp: full inside the inner cone, smoothstep to zero at the outer ANGLE x edge
       // (edge 1.25: the light lets go a quarter past the visible cone), then the floor.
       const zero = Math.cos(Math.min(Math.PI, Math.acos(Math.max(-1, Math.min(1, l.cosOuter))) * prof.edge));
@@ -59,27 +72,54 @@ export function lightWeight(l: ListLight, b: PickBody): number {
     }
   }
   const distFall = 1 / (1 + prof.distFall * dist * dist);
-  const hl = Math.hypot(toL[0], toL[2]);
+  const hl = Math.hypot(toLx, toLz);
   // Straight overhead: side-on (presentingLamp's facing 0.5), not "in front".
-  const facingDot = hl > 1e-4 ? (toL[0] * b.facing[0] + toL[2] * b.facing[1]) / hl : 0;
+  const facingDot = hl > 1e-4 ? (toLx * b.facing[0] + toLz * b.facing[1]) / hl : 0;
   const facing = prof.backKey + (1 - prof.backKey) * clamp01(facingDot * 0.5 + 0.5);
-  const lum = l.color[0] * 0.2126 + l.color[1] * 0.7152 + l.color[2] * 0.0722;
-  return cover * distFall * facing * lum;
+  return cover * distFall * facing;
 }
 
-export function pickLights(list: readonly ListLight[], b: PickBody): Pick {
-  const scored = list.map((l, i) => ({ i, w: lightWeight(l, b) })).filter(x => x.w > 1e-4)
-    .sort((a, c) => c.w - a.w || a.i - c.i).slice(0, 4);
-  const top = scored[0]?.w ?? 1;
-  const idx = [-1, -1, -1, -1] as Pick['idx'];
-  const weight = [0, 0, 0, 0] as Pick['weight'];
-  const packed = [-1, -1, -1, -1] as Pick['packed'];
-  scored.forEach((s, k) => {
-    idx[k] = s.i;
-    weight[k] = Math.min(TOP_SHARE, s.w / top * TOP_SHARE);
-    packed[k] = s.i + weight[k];
-  });
-  return { idx, weight, packed };
+/** presence x luminance(rgb) — used only to RANK lights against each other (different kinds/
+ *  intensities compare); not what gets packed. */
+export function lightRank(l: ListLight, b: PickBody): number {
+  const presence = lightPresence(l, b);
+  if (presence === 0) return 0;
+  const lum = l.color[0] * 0.2126 + l.color[1] * 0.7152 + l.color[2] * 0.0722;
+  return presence * lum;
+}
+
+export function pickLights(list: readonly ListLight[], b: PickBody, out?: Pick): Pick {
+  const p = out ?? { idx: [-1, -1, -1, -1], weight: [0, 0, 0, 0], packed: [-1, -1, -1, -1] };
+  const idx = p.idx, weight = p.weight, packed = p.packed;
+  const rank: [number, number, number, number] = [0, 0, 0, 0];
+  idx[0] = idx[1] = idx[2] = idx[3] = -1;
+  weight[0] = weight[1] = weight[2] = weight[3] = 0;
+  packed[0] = packed[1] = packed[2] = packed[3] = -1;
+
+  for (let i = 0; i < list.length; i++) {
+    const l = list[i]!;
+    const r = lightRank(l, b);
+    if (r <= RANK_FLOOR) continue;
+    // Fixed 4-slot insertion, index order, strictly greater so ties keep the lower index.
+    if (r > rank[3]!) {
+      let slot = 3;
+      while (slot > 0 && r > rank[slot - 1]!) {
+        rank[slot] = rank[slot - 1]!;
+        idx[slot] = idx[slot - 1]!;
+        slot--;
+      }
+      rank[slot] = r;
+      idx[slot] = i;
+    }
+  }
+
+  for (let k = 0; k < 4; k++) {
+    if (idx[k]! < 0) continue;
+    const presence = lightPresence(list[idx[k]!]!, b);
+    weight[k] = Math.min(MAX_WEIGHT, presence);
+    packed[k] = idx[k]! + weight[k]!;
+  }
+  return p;
 }
 
 /** WGSL decodes the same way: i32(floor(v)), fract(v); negative = empty. */

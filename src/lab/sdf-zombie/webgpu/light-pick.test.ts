@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildLightList, type LightSource } from './light-list';
 import { LIGHT_PROFILES, PROFILE_ID } from './light-profiles';
-import { lightWeight, pickLights, unpackPick } from './light-pick';
+import { lightPresence, lightRank, pickLights, unpackPick, type Pick } from './light-pick';
 
 const tube = (x: number, z: number, i = 7): LightSource => ({ kind: 'spot', profile: 'tube', pos: [x, 2.2, z], color: [0.8, 0.9, 1], intensity: i, range: 6, axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45), room: 3 });
 const body = (x: number, z: number, facing: [number, number] = [0, 1]) => ({ pos: [x, 0.9, z] as [number, number, number], room: 3, facing });
@@ -19,8 +19,8 @@ describe('pickLights (spec §4)', () => {
   it('coverage is judged at the feet: a body at the pool edge is still lit, well outside it drops to the floor', () => {
     const list = buildLightList([tube(0, 0)]);
     const pool = 2.2 * Math.tan(0.6);
-    const edge = lightWeight(list[0]!, body(pool * 0.9, 0));
-    const out = lightWeight(list[0]!, body(pool * 2.5, 0));
+    const edge = lightPresence(list[0]!, body(pool * 0.9, 0));
+    const out = lightPresence(list[0]!, body(pool * 2.5, 0));
     expect(edge).toBeGreaterThan(0.2);
     // presentingLamp's floor: outside the cone (still in range) the tube keeps a small share,
     // never zero; so "not lit" means "only the floor", well under the pool edge.
@@ -29,8 +29,8 @@ describe('pickLights (spec §4)', () => {
   });
   it('facing falloff: back to the light is dimmer, not black', () => {
     const list = buildLightList([{ ...tube(0, 0), kind: 'point', pos: [0, 1.5, 2] }]);
-    const front = lightWeight(list[0]!, body(0, 0, [0, 1]));
-    const back = lightWeight(list[0]!, body(0, 0, [0, -1]));
+    const front = lightPresence(list[0]!, body(0, 0, [0, 1]));
+    const back = lightPresence(list[0]!, body(0, 0, [0, -1]));
     expect(back).toBeLessThan(front);
     expect(back).toBeGreaterThan(0);
   });
@@ -51,7 +51,7 @@ describe('pickLights (spec §4)', () => {
   });
 });
 
-describe('lightWeight keeps presentingLamp (game-dynamic-light-leaves.ts) rules', () => {
+describe('lightRank keeps presentingLamp (game-dynamic-light-leaves.ts) rules', () => {
   const tubeProf = LIGHT_PROFILES[PROFILE_ID.tube]!;
   it('the coverage floor: far outside the cone but in range, the cover term is exactly the floor', () => {
     const list = buildLightList([tube(0, 0)]);
@@ -60,19 +60,19 @@ describe('lightWeight keeps presentingLamp (game-dynamic-light-leaves.ts) rules'
     const lum = (0.8 * 0.2126 + 0.9 * 0.7152 + 0.0722) * 7;
     const facingDot = 1;
     const facing = tubeProf.backKey + (1 - tubeProf.backKey) * (facingDot * 0.5 + 0.5);
-    expect(lightWeight(list[0]!, b)).toBeCloseTo(tubeProf.coverFloor * lum * facing / (1 + tubeProf.distFall * dist * dist), 6);
+    expect(lightRank(list[0]!, b)).toBeCloseTo(tubeProf.coverFloor * lum * facing / (1 + tubeProf.distFall * dist * dist), 6);
   });
   it('the pick reads coverFloor, not the shader wrap floor (review fix, Task 4)', () => {
     const list = buildLightList([tube(0, 0)]);
     const b = body(4, 0, [-1, 0]);
-    const w = lightWeight(list[0]!, b);
+    const w = lightRank(list[0]!, b);
     const dist = Math.hypot(4, 1.3);
     const lum = (0.8 * 0.2126 + 0.9 * 0.7152 + 0.0722) * 7;
     expect(w / (lum / (1 + tubeProf.distFall * dist * dist))).toBeCloseTo(tubeProf.coverFloor, 6);
   });
   it('full cover inside the inner cone, a smoothstep down to zero at the edge angle (outer angle x edge)', () => {
     const list = buildLightList([tube(0, 0)]);
-    const at = (a: number) => lightWeight(list[0]!, { ...body(Math.tan(a) * (2.2 - 0.05), 0, [0, 1]), pos: [Math.tan(a) * (2.2 - 0.05), 2.2, 0] });
+    const at = (a: number) => lightRank(list[0]!, { ...body(Math.tan(a) * (2.2 - 0.05), 0, [0, 1]), pos: [Math.tan(a) * (2.2 - 0.05), 2.2, 0] });
     // pos.y = the lamp's height, so distance is purely horizontal and facing is side-on: only cover varies
     const base = (a: number) => (1 + tubeProf.distFall * (Math.tan(a) * 2.15) ** 2);
     const inner = at(0.44) * base(0.44), edge = at(0.6 * tubeProf.edge + 0.01) * base(0.6 * tubeProf.edge + 0.01);
@@ -83,13 +83,14 @@ describe('lightWeight keeps presentingLamp (game-dynamic-light-leaves.ts) rules'
   });
   it('a light straight overhead counts as side-on for facing (presentingLamp: crown-only reads dark)', () => {
     const list = buildLightList([{ ...tube(0, 0), kind: 'point' }]);
-    const a = lightWeight(list[0]!, body(0, 0, [0, 1]));
-    const side = lightWeight(list[0]!, body(0, 0, [1, 0]));
+    const a = lightRank(list[0]!, body(0, 0, [0, 1]));
+    const side = lightRank(list[0]!, body(0, 0, [1, 0]));
     expect(a).toBeCloseTo(side, 9);
   });
   it('out of range: zero, and the pick leaves the slot empty', () => {
     const list = buildLightList([tube(0, 0)]);
-    expect(lightWeight(list[0]!, body(7, 0))).toBe(0);
+    expect(lightPresence(list[0]!, body(7, 0))).toBe(0);
+    expect(lightRank(list[0]!, body(7, 0))).toBe(0);
     expect(pickLights(list, body(7, 0)).packed).toEqual([-1, -1, -1, -1]);
   });
 });
@@ -103,11 +104,45 @@ describe('pick packing survives the GPU f32 lane', () => {
     expect(d!.index).toBe(31);
     expect(d!.weight).toBeCloseTo(0.999, 4);
   });
-  it('the dominant gets 0.999, the rest their share of it', () => {
-    const list = buildLightList([tube(0, 0), tube(1.5, 0)]);
-    const p = pickLights(list, body(0, 0));
+});
+
+describe('packed weight is absolute presence, not a share of the dominant (review fix, Task 4)', () => {
+  it('THE REGRESSION: a body in the pool gets a higher packed weight than a body at the dim floor region of the same tube, even when it is each body\'s only light', () => {
+    const list = buildLightList([tube(0, 0)]);
+    const pool = 2.2 * Math.tan(0.6);
+    const inPool = pickLights(list, body(pool * 0.9, 0));
+    const atFloor = pickLights(list, body(pool * 2.5, 0));
+    // Old (share) rule: both would pack weight 0.999, since a lone light is always "the dominant".
+    expect(inPool.weight[0]).toBeGreaterThan(atFloor.weight[0]!);
+    expect(atFloor.weight[0]).toBeLessThan(0.3);
+    expect(inPool.weight[0]).toBeGreaterThan(0.2);
+  });
+  it('weights never exceed 0.999, even when presence hits 1 exactly (directional light aligned with facing)', () => {
+    const list = buildLightList([{ kind: 'directional', profile: 'window', pos: [0, 0, 1], color: [1, 1, 1], intensity: 1, range: 0, room: 3 }]);
+    const b = body(0, 0, [0, 1]);
+    expect(lightPresence(list[0]!, b)).toBeCloseTo(1, 9);
+    const p = pickLights(list, b);
     expect(p.weight[0]).toBe(0.999);
-    const w0 = lightWeight(list[0]!, body(0, 0)), w1 = lightWeight(list[1]!, body(0, 0));
-    expect(p.weight[1]).toBeCloseTo(w1 / w0 * 0.999, 9);
+    // and it still decodes as this light's index, not rolled into the next one.
+    const [d] = unpackPick(p.packed);
+    expect(d!.index).toBe(0);
+  });
+  it('ranking still prefers a brighter light over a dimmer one at equal presence', () => {
+    const dim: LightSource = { kind: 'point', profile: 'lamp', pos: [0, 0.9, 3], color: [1, 1, 1], intensity: 1, range: 10, room: 3 };
+    const bright: LightSource = { ...dim, intensity: 50 };
+    const list = buildLightList([dim, bright]);   // co-located: identical presence, different luminance
+    const b = body(0, 0);
+    const bIdx = list.findIndex(l => l.intensity === Math.max(...list.map(x => x.intensity)));
+    const p = pickLights(list, b);
+    expect(p.idx[0]).toBe(bIdx);
+    // presence (and so the packed weight) is the same for both — only the rank differs.
+    expect(lightPresence(list[0]!, b)).toBeCloseTo(lightPresence(list[1]!, b), 9);
+  });
+  it('passing `out` reuses the same object', () => {
+    const list = buildLightList([tube(0, 0)]);
+    const out: Pick = { idx: [-1, -1, -1, -1], weight: [0, 0, 0, 0], packed: [-1, -1, -1, -1] };
+    const p = pickLights(list, body(0, 0), out);
+    expect(p).toBe(out);
+    expect(p.idx[0]).toBe(0);
   });
 });
