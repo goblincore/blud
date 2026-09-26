@@ -99,7 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
-import { adoptLightFx, applyRoomFill, applyStormBodyKey, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
+import { adoptLightFx, applyRoomFill, applySelfShadow, applyStormBodyKey, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -1962,7 +1962,7 @@ async function main() {
           c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
         }
         a.view.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
-        { const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); }
+        { const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); applySelfShadow(a.view.uniforms as never); }
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
@@ -2112,6 +2112,7 @@ async function main() {
         if (src) {
           const near = nearestCrowdBody(t);
           if (near) applyWindowKey(ctx, t.uniforms as never, near);
+          applySelfShadow(t.uniforms as never);
         }
         ctx.telemetry.telemetry.end('crowd-uniform-copy', copyTiming);
         // CROWD REQUIRES ITS TILE LIST (task 8). The per-body tile playtest

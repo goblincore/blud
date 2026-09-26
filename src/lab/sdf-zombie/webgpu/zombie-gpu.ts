@@ -541,8 +541,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * rather than a packed spare: every channel of woundCfg/woundCfg2/
      * surfCfg/lodCfg is already consumed (woundCfg2.w overrides hitEps in
      * volume mode — NOT spare), so nothing here could be reused safely.
+     * Widened to a vec4 for the SDF self-shadow (shared light list spec §6,
+     * self-shadow.ts): z self-shadow strength (0 = off, the lab default; the
+     * game writes it via applySelfShadow), w self-shadow reach in metres.
      */
-    woundShadowCfg: uniform(new THREE.Vector2(0.0, 12.0)),
+    woundShadowCfg: uniform(new THREE.Vector4(0.0, 12.0, 0.0, 0.4)),
     /**
      * ENVIRONMENT BOUNCE (lighting P1). The enclosure's bounds and its six
      * wall colours, from which `ambientAt` derives an analytic chromatic
@@ -837,7 +840,7 @@ export type RefineTail = 'full' | 'slim';
  * Run 5b: the refine twin's lighting tail. 'slim' (the default) is a SHALLOW COPY of the
  * body's uniforms in which the terms the refine head does not need are twin-owned zeros —
  * the shader already skips each one at 0 (pinned in zombie-gpu.test.ts): scatter
- * (surfCfg.w), the wound soft shadow (woundShadowCfg.x), the ambient bounce
+ * (surfCfg.w), the wound soft shadow (woundShadowCfg.x) and self-shadow (.z), the ambient bounce
  * (bounceCfg.x = 0 is the flat fill "exactly as before"), and the probe gather
  * (probeCfg.x, probeDynCfg.x/.y). Key light, flashlight beam, level shadow and bodyFlash
  * stay. 'full' binds the body's own uniforms (run 5's behaviour), kept for the A/B bench.
@@ -851,7 +854,7 @@ export function refineTailUniforms(u: MarchUniforms, tail: RefineTail):
   if (tail === 'full') return { uniforms: u, sync: () => {} };
   const s = u.surfCfg.value;
   const surfCfg = uniform(new THREE.Vector4(s.x, s.y, s.z, 0));
-  const woundShadowCfg = uniform(new THREE.Vector2(0, u.woundShadowCfg.value.y));
+  const woundShadowCfg = uniform(new THREE.Vector4(0, u.woundShadowCfg.value.y, 0, 0));
   const bounceCfg = uniform(new THREE.Vector4(0, 1, 1, 1));
   const probeCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
   const probeDynCfg = uniform(new THREE.Vector4(0, 0, 0, 0));

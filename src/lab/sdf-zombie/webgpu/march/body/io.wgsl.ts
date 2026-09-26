@@ -159,7 +159,7 @@ struct MarchIn {
   headAxes: vec3<f32>,
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
-  woundShadowCfg: vec2<f32>,
+  woundShadowCfg: vec4<f32>,
   bounceCfg: vec4<f32>,
   // ---- enclosure and debug ----
   boxMin: vec3<f32>,

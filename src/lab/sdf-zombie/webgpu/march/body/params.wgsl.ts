@@ -68,6 +68,7 @@
 //              (0 = off, the shipping default)
 //   woundShadowCfg  x strength (0 = off — the whole march is skipped),
 //                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
+//                   z self-shadow strength (0 = off), w self-shadow reach m
 //   bounceCfg  x probeWeight (0 = flat fill, bit-identical to pre-bounce),
 //              y ambientGain, z ceilingEnabled, w chromaGain
 //   tileHdr/tileEnt/tileCfg/screenUV  per-tile fold lists (perf task 5,
@@ -159,7 +160,7 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   headAxes: vec3<f32>,
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
-  woundShadowCfg: vec2<f32>,
+  woundShadowCfg: vec4<f32>,
   bounceCfg: vec4<f32>,
   boxMin: vec3<f32>,
   boxMax: vec3<f32>,

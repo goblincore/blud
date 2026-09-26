@@ -654,7 +654,7 @@ describe('run 5b slim twin lighting tail (source pins)', () => {
   it('the WGSL gates the slim tail relies on still exist', async () => {
     const { MARCH_BODY_LIGHT } = await import('./march.wgsl');
     expect(MARCH_BODY_LIGHT).toContain('select(lodCfg.x > 0.5, surfCfg.w > 0.0, k == 0)');
-    expect(MARCH_BODY_LIGHT).toContain('if (woundShadowCfg.x > 0.0 && hitNearWound)');
+    expect(MARCH_BODY_LIGHT).toContain('if (wsOn || ssOn) {');
     expect(MARCH_BODY_LIGHT).toContain('if (probeCfg.x > 0.0) {');
     expect(MARCH_BODY_LIGHT).toContain('if (probeDynCfg.x > 0.0 || probeDynCfg.y > 0.0)');
     expect(MARCH_BODY_LIGHT).toMatch(/bounceCfg\.x == 0/);

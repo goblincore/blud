@@ -24,9 +24,10 @@ import type { LightMode } from './level-events';
 import { moonShadowFrame } from './outdoor-light';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
 import { STORM, stormSchedule, windowLightAt, type Bolt, type StormSchedule } from './storm';
+import { selfShadowCfg, type SelfShadowCfg } from './self-shadow';
 
 /** Window-light shadow map size (one per windowed carriage; only the player's re-renders). */
-const WINDOW_SHADOW_SIZE = 1024;
+const WINDOW_SHADOW_SIZE = 512;
 /** Hours of storm scheduled at boot (the schedule is cheap; no runtime extension needed). */
 const STORM_HOURS = 4;
 /** The lightning's default direction (toward the light), for each carriage's first map. */
@@ -496,6 +497,18 @@ function strongestLamp(ctx: GameContext, at: readonly [number, number, number]):
   lampTmp.k = bestK;
   return lampTmp;
 }
+/** The SDF self-shadow tuning (spec §6, self-shadow.ts): module state, written by the
+ *  `setSelfShadow` look seam; `?selfshadow=0` turns it off at boot. */
+let selfShadow: SelfShadowCfg = selfShadowCfg({ enabled: typeof location === 'undefined' || new URLSearchParams(location.search).get('selfshadow') !== '0' });
+
+/** Spec §6: the SDF self-shadow on the dominant key, for a body's (or a crowd type's) uniforms. */
+export function applySelfShadow(u: { woundShadowCfg?: { value: THREE.Vector4 } }): void {
+  const c = u.woundShadowCfg?.value;
+  if (!c) return;
+  c.z = selfShadow.strength;
+  c.w = selfShadow.reach;
+}
+
 /** The lightning side rim's strength per unit of window-light intensity (compose.wgsl.ts). */
 const BODY_RIM_GAIN = 0.4;
 const bodyBase = new WeakMap<object, { dir: THREE.Vector3; color: THREE.Color }>();
@@ -625,6 +638,12 @@ export function createDynamicLightSeams(ctx: GameContext) {
       for (const l of rt.windowLights.values()) l.shadow.intensity = shadow;
       rt.storm.hold = intensity === null ? null : { intensity, side };
       return rt.storm.hold;
+    },
+    /** Look tuning (spec §6): self-shadow strength/reach/k; enabled false = off. The spike's
+     *  WGSL uses a literal k of 24, so k is recorded here but not yet applied. */
+    setSelfShadow: (enabled: boolean, strength?: number, reach?: number, k?: number) => {
+      selfShadow = selfShadowCfg({ enabled, strength, reach, k });
+      return selfShadow;
     },
     windowLightInfo: () => {
       const rt = ctx.world.light;
