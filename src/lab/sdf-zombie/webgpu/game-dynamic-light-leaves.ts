@@ -17,6 +17,7 @@ import { roomIdAt } from './game-level-leaves';
 import { lampLevel, type LampMood, type LampScript } from './lamp-moods';
 import type { LightMode } from './level-events';
 import { moonShadowFrame } from './outdoor-light';
+import { SHADOW_HULL_LAYER } from './sdf-layer';
 import { STORM, stormSchedule, windowLightAt, type Bolt, type StormSchedule } from './storm';
 
 /** Window-light shadow map size (one per windowed carriage; only the player's re-renders). */
@@ -25,6 +26,8 @@ const WINDOW_SHADOW_SIZE = 1024;
 const STORM_HOURS = 4;
 /** The lightning's default direction (toward the light), for each carriage's first map. */
 const IDLE_DIR: [number, number, number] = [...STORM.boltDir];
+/** The rig's ambient floor on a storm level (the lamps and the lightning carry the light). */
+const STORM_AMBIENT = 0.3;
 /** Switching the flashlight on: a ramp with two stutters, seconds. */
 const TORCH_ON_S = 0.25;
 /** The accent bowl's emissive at level 1 (game-main's accent loop). */
@@ -64,6 +67,8 @@ export interface DynamicLightRuntime {
   /** The art's lamp and firebox glass, per room (found on the first step, after the light-list pass). */
   glass: Glass[] | null;
   shadowFrames: number;
+  /** Each room's live light, 0..~1: its lamps' and fires' levels weighted by power. */
+  roomLight: Map<number, number>;
   /** The carriage whose window light re-rendered its shadow this step, or null. */
   shadowRoom: number | null;
 }
@@ -84,6 +89,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     glass: null,
     shadowFrames: 0,
     shadowRoom: null,
+    roomLight: new Map(),
   };
   // A level that starts dark idles the flashlight's two shadow maps until it is switched on.
   if (dark) {
@@ -97,7 +103,8 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     rt.storm = { seed, schedule: stormSchedule(seed, STORM_HOURS * 3600), flash: 0, bolt: null, intensity: 0, hold: null, fitted: null, ambient: null, ambientBase: 0,
       dir: [...STORM.boltDir], color: [...STORM.boltColor] };
     const amb = ctx.boot.handle.scene.children.find(o => o instanceof THREE.AmbientLight) as THREE.AmbientLight | undefined;
-    if (amb) { rt.storm.ambient = amb; rt.storm.ambientBase = amb.intensity; }
+    // Doom 3 dark (owner, 2026-09-26): on a storm level the ambient floor is a third of the rig's.
+    if (amb) { rt.storm.ambient = amb; rt.storm.ambientBase = amb.intensity * STORM_AMBIENT; }
     const group = new THREE.Group();
     group.name = 'train.window-lights';
     const rooms = new Set<number>();
@@ -112,6 +119,8 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
       l.shadow.bias = -0.0005;
       l.shadow.autoUpdate = false;
       l.userData.onlyRooms = new Set([id]);
+      // The bodies' inflated shadow hulls, as the flashlight sees them: zombies throw shadows in a flash.
+      l.shadow.camera.layers.enable(SHADOW_HULL_LAYER);
       fitWindowLight(l, room, IDLE_DIR);
       l.shadow.needsUpdate = true;   // one render at boot, so a stale map is never empty
       group.add(l, l.target);
@@ -210,6 +219,13 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
     s.n++; s.v += l.level;
     sum.set(key, s);
   }
+  const acc = new Map<number, { w: number; v: number }>();
+  for (const l of rt.lamps) {
+    const a = acc.get(l.room) ?? { w: 0, v: 0 };
+    a.w += l.base; a.v += l.base * Math.min(1, l.level);
+    acc.set(l.room, a);
+  }
+  for (const [room, a] of acc) rt.roomLight.set(room, a.w > 0 ? a.v / a.w : 1);
   rt.glass ??= findGlass(ctx);
   for (const g of rt.glass) {
     const s = sum.get(`${g.room}:${g.kind}`);
@@ -288,6 +304,31 @@ export function applyWindowKey(ctx: GameContext, u: KeyUniforms): void {
   }
 }
 
+/** How much of a body's baked fill survives when its room's lamps are all out (Doom 3 dark). */
+const BODY_DARK_FLOOR = 0.06;
+const fillBase = new WeakMap<object, { fill: number; gain: number; wroteFill: number; wroteGain: number }>();
+
+type FillUniforms = { lightCfg?: { value: { y: number } }; probeCfg?: { value: { y: number } } };
+
+/** A body's fill (the flat fill and the room-probe gain, both baked with every lamp at full
+ *  power) follows its room's live lamps: dark when they die, flickering when they flicker.
+ *  Re-bases whenever something else rewrites the uniforms (a room change re-binds probes). */
+export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: number): void {
+  const rt = ctx.world.light;
+  if (!rt || !u.lightCfg || !u.probeCfg) return;
+  const room = roomIdAt(ctx, x, z);
+  const lit = rt.roomLight.get(room) ?? 1;
+  const f = BODY_DARK_FLOOR + (1 - BODY_DARK_FLOOR) * lit;
+  let b = fillBase.get(u);
+  const lc = u.lightCfg.value, pc = u.probeCfg.value;
+  if (!b || lc.y !== b.wroteFill) { b = { fill: lc.y, gain: b?.gain ?? pc.y, wroteFill: lc.y, wroteGain: b?.wroteGain ?? pc.y }; fillBase.set(u, b); }
+  if (pc.y !== b.wroteGain) { b.gain = pc.y; }
+  lc.y = b.fill * f;
+  pc.y = b.gain * f;
+  b.wroteFill = lc.y;
+  b.wroteGain = pc.y;
+}
+
 /** Seams: `__sdfGame.lights()`, `setFlashlight(on)`, `forceBolt(side)`, `forceSweep(side)`, `lightCommand(mode, room)`. */
 export function createDynamicLightSeams(ctx: GameContext) {
   const insert = <T extends { t: number }>(list: T[], item: T) => {
@@ -309,6 +350,8 @@ export function createDynamicLightSeams(ctx: GameContext) {
         flash: rt.storm?.flash ?? 0,
         shadowFrames: rt.shadowFrames,
         shadowRoom: rt.shadowRoom,
+        roomLight: Object.fromEntries(rt.roomLight),
+        glass: rt.glass?.length ?? null,
         nextBolt: rt.storm ? next(rt.storm.schedule.bolts) : null,
         nextSweep: rt.storm ? next(rt.storm.schedule.sweeps) : null,
       };

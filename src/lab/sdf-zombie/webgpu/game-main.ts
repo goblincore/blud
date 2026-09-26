@@ -99,7 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
-import { applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
+import { applyRoomFill, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -1957,6 +1957,7 @@ async function main() {
         }
         a.view.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
         applyWindowKey(ctx, a.view.uniforms);
+        { const bp = a.pose().pos; applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); }
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
