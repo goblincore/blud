@@ -422,7 +422,7 @@ const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0, back
  *  lamp's; direction is a three-quarter key from above and from the viewer's side, blended with the
  *  real direction to the brightest lamp so bodies still differ. Flicker, blackouts and strobes ride
  *  the room level. */
-const PRESENT = { gain: 1.3, viewBias: 0.3, floor: 0.12, edge: 1.15, distFall: 0.06, backKey: 0.35, backRim: 2.5 } as const;
+const PRESENT = { gain: 1.3, viewBias: 0.3, floor: 0.18, edge: 1.25, distFall: 0.06, backKey: 0.35, backRim: 2.5 } as const;
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 function presentingLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
   const rt = ctx.world.light;
@@ -441,7 +441,10 @@ function presentingLamp(ctx: GameContext, at: readonly [number, number, number])
     const d = Math.hypot(dx, dy, dz) || 1;
     let cover = 1;
     if (l.tube) {
-      const cosA = -dy / d;   // the cone points straight down
+      // Coverage is judged at the FEET, where the player sees the pool: at the chest the cone is
+      // only ~1 m across, so a body walking through the visible pool was mostly "outside" it.
+      const fy = at[1] + 0.2 - p.y, fd = Math.hypot(dx, fy, dz) || 1;
+      const cosA = -fy / fd;   // the cone points straight down
       const inner = Math.cos(TUBE.angle * (1 - TUBE.penumbra)), outer = Math.cos(TUBE.angle * PRESENT.edge);
       const t = Math.min(1, Math.max(0, (cosA - outer) / Math.max(1e-4, inner - outer)));
       cover = t * t * (3 - 2 * t);
