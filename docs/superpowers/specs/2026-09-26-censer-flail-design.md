@@ -1,6 +1,6 @@
 # The censer flail (first player melee weapon) — Design
 
-**Date:** 2026-09-26 · **Status:** v1 built (plan [2026-09-26-censer-flail](../plans/2026-09-26-censer-flail.md)); owner playtest pending.
+**Date:** 2026-09-26 · **Status:** SUPERSEDED 2026-09-26 by [the spike flail](2026-09-26-spike-flail-design.md) — built, playtested and scrapped by the owner (too hard to land a hit; too goofy). Kept for the record.
 Gate: `node scripts/censer-gate.mjs <vite> <cdp>`; measurements and photos in
 [`docs/dev-notes/2026-09-26-censer/NOTES.md`](../../dev-notes/2026-09-26-censer/NOTES.md).
 **Resolves:** the Wake's open starting-weapon question

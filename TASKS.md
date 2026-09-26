@@ -4,16 +4,17 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
-## Censer flail (player melee) — designed 2026-09-26
+## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [~] **v1 built, gate passing; owner playtest pending.** [Plan](docs/superpowers/plans/2026-09-26-censer-flail.md) ·
-  gate `node scripts/censer-gate.mjs <vite> <cdp>` · [NOTES](docs/dev-notes/2026-09-26-censer/NOTES.md) (how to try it + feel questions).
+- [ ] **Spec approved, plan next:** [spike flail design](docs/superpowers/specs/2026-09-26-spike-flail-design.md) — click =
+  preset swing (alternating L/R), forgiving strike window, one big crater per hit. Builds on branch
+  `claude/melee-weapon-design-7d1423` (PR #22) after stripping the censer.
+- [x] ~~Censer flail~~ — built and playtested 2026-09-26, **scrapped by the owner** (too hard to land a hit, too goofy).
+  [Spec](docs/superpowers/specs/2026-09-26-censer-flail-design.md) · [NOTES](docs/dev-notes/2026-09-26-censer/NOTES.md), kept for the record.
+  Kept from it: the melee slot/pickup, `blast()` reaction option, gib-shutter hitch fix.
 - [ ] **Severed limbs as physical debris** (owner likes it, 2026-09-26): cut-off limbs/heads land as objects the
-  censer (and shots) can knock about. Deferred from the censer spec §5; needs its own design.
-- [ ] **Embers on charged strikes** (spec option C): 2–4 `burn` wounds + an ember burst on a heavy hit.
-- [ ] **The censer as a light source** — after the dynamic-light work lands (spec §5 item 2).
-- [ ] **First-strike cloth/robe check on cultists**: a censer tap/slam through a robe (clothify, soft-target death).
-- [ ] **Demo recording of censer input**: the swing is not a recorded DemoFrame verb yet (replays don't swing it).
+  flail (and shots) can knock about. Needs its own design.
+- [ ] **Demo recording of melee input**: the swing is not a recorded DemoFrame verb yet.
 
 ## Bride (sword melee enemy) — first pass 2026-09-24
 
