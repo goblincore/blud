@@ -188,9 +188,13 @@ if ((await lights()).windowIntensity === 0 && after1 !== after0) fail(`shadow ke
 pass(`lightning: window light peak ${peak.toFixed(2)}, ${litFrames} shadow frames lit (room ${shadowRoom}); idle ${idle1 - idle0}, after ${after1 - after0}`);
 
 // 4. THE STORM IN THE GLASS
+// The bolt flickers (spike, dip, restrike): take the brightest of a few captures across it.
 await evaluate('__sdfGame.forceBolt(-1, -18)');
-await sleep(40);
-const withBolt = stats(await shoot('light-dining-bolt'), 0.42, 0.30, 0.58, 0.45).mean;
+let withBolt = 0;
+for (let i = 0; i < 4; i++) {
+  const m = stats(await shoot(`light-dining-bolt-${i}`), 0.42, 0.30, 0.58, 0.45).mean;
+  withBolt = Math.max(withBolt, m);
+}
 if (!(withBolt > noBolt * 2)) fail(`the glass did not flash: ${noBolt.toFixed(4)} -> ${withBolt.toFixed(4)}`);
 pass(`storm glass: mean ${noBolt.toFixed(4)} idle -> ${withBolt.toFixed(4)} with a bolt`);
 await evaluate('__sdfGame.setPose(0, -24, 0, 0)');

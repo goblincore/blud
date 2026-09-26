@@ -25,7 +25,7 @@ Train gate (`scripts/sdf-game-train-gate.sh`): windows, sway, a 24-waypoint walk
 
 ## Next session, in order
 
-1. **Part 2: dynamic light and the flashlight** ([spec](../superpowers/specs/2026-09-26-night-train-dynamic-light-design.md),
+1. ~~**Part 2: dynamic light and the flashlight**~~ **built 2026-09-26** (TASKS 4g; gate `scripts/sdf-game-light-gate.sh`). Was: ([spec](../superpowers/specs/2026-09-26-night-train-dynamic-light-design.md),
    decisions done): the flashlight as a pickup on a hook in the dark baggage hold (picking it up
    wakes the trunk zombie); a `storm` window preset (clouds, rain on glass, bolts); **lightning and
    passing-light sweeps** through one shadowed directional "window light" per carriage (idle
