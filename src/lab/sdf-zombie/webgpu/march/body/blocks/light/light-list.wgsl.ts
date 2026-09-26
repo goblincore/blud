@@ -7,6 +7,12 @@
 // every light's back rim are added in compose.wgsl.ts (listDiff * albedo + listSpec) * ao + listRim,
 // where albedo and ao are in scope.
 //
+// TASK 9 REVIEW. In list mode: keyC is only replaced when a dominant exists (else the fresnel
+// rim, which rides keyC, would die); the flashlight's level shadow (lvl, occlusion) is 1.0, since
+// plan 1 has no level-to-body shadows; the highlight shoulder runs; FLASHLIGHT_BLOCK's per-pixel
+// beam is skipped (its L / keyC / keyI would be overwritten here anyway); and the dominant's wrap
+// and H use Lk (its view-biased Lb) while scatter and the wound shadow keep the raw L.
+//
 // OFF BY DEFAULT. lightListCfg.x is 0 on every view until Task 10 turns it on in the game; at 0
 // the if is skipped, the list* vars stay zero, the compose add is + 0 and the dominant's wrap
 // keeps the old max(dot(n, L), 0) expression, so the lit output is unchanged.
@@ -25,11 +31,17 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
   var listSpec = vec3<f32>(0.0);
   var listRim = vec3<f32>(0.0);
   var listDomFloor = 0.0;
+  // Lk: the dominant's VIEW-BIASED direction (its Lb), for its wrap and highlight; L stays the raw
+  // direction for scatter and the wound shadow. Off, Lk == L exactly.
+  var Lk = L;
   if (lightListCfg.x > 0.0) {
     let bl = bodyLights(p, n, -rd, gInstLights, lightList, true);
     let peak = max(bl.domC.x, max(bl.domC.y, bl.domC.z));
     L = bl.domL;
-    keyC = bl.domC / max(peak, 1e-4);
+    Lk = bl.domLb;
+    // No dominant (slot 0 empty): keep keyC, so the fresnel rim (keyC x fres in compose) stays
+    // on; keyI = 0 still gives no key diffuse.
+    keyC = select(keyC, bl.domC / max(peak, 1e-4), peak > 1e-4);
     keyI = peak;
     listDiff = bl.diffuse;
     listSpec = bl.spec;

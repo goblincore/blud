@@ -47,10 +47,11 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
 ${FLASHLIGHT_BLOCK}
 ${LIGHT_LIST_BLOCK}
   let V = -rd;
-  let H = normalize(L + V);
-  // The dominant list light wraps by its profile floor; off, the old expression.
+  // Lk == L when the list is off, so H is the old normalize(L + V); on, the dominant's Lb.
+  let H = normalize(Lk + V);
+  // The dominant list light wraps its view-biased Lk by its profile floor; off, the old expression.
   var diff = max(dot(n, L), 0.0);
-  if (lightListCfg.x > 0.0) { diff = max((dot(n, L) + listDomFloor) / (1.0 + listDomFloor), 0.0); }
+  if (lightListCfg.x > 0.0) { diff = max((dot(n, Lk) + listDomFloor) / (1.0 + listDomFloor), 0.0); }
 
   // wet, specPow and glow now live ABOVE the flashlight in
   // MARCH_BODY_SURFACE_PREP (the task-2 section split — see its header).

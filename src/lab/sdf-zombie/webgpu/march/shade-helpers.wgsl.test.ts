@@ -20,7 +20,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
   it('applies the level shadow map to the key term only, and only when enabled', () => {
     expect(LEVEL_SHADOW).toContain('fn levelShadow(p: vec3<f32>, n: vec3<f32>, shadowTex: texture_depth_2d, shadowMat: mat4x4<f32>, cfg: vec4<f32>) -> f32');
     expect(LEVEL_SHADOW).toContain('if (cfg.x < 0.5) { return 1.0; }');
-    expect(MARCH_BODY).toContain('let lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg);');
+    expect(MARCH_BODY).toContain('if (lightListCfg.x <= 0.0) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }');
     expect(MARCH_BODY).toContain('diff * wShadow * lvl * keyI * keyC');
   });
   it('darkens the key specular with the same factor; the signature ends with the three new slots', () => {

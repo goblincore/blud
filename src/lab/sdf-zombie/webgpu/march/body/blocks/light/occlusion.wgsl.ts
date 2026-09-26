@@ -69,4 +69,7 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // until the game page's seam turns it on. Applied to the KEY diffuse and
   // key specular ONLY — the same discipline as wShadow above: ambient, fill
   // and scatter stay untouched or a shadowed body goes pitch black.
-  let lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg);`;
+  // In list mode the flashlight's map does not gate the dominant (plan 1: no level-to-body
+  // shadows): lvl stays 1.0, shader-side, since the game rewrites levelShadowCfg.x at runtime.
+  var lvl = 1.0;
+  if (lightListCfg.x <= 0.0) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }`;

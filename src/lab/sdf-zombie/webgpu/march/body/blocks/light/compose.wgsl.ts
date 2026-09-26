@@ -12,7 +12,8 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // [knee, 1) monotonically, so those differences survive as differences.
   //
   // Gated on the beam existing at all, so the lab and every stock preset keep
-  // their old arithmetic bit-for-bit.
+  // their old arithmetic bit-for-bit. The shared light list (lightListCfg.x)
+  // counts as a beam: list-lit bodies get the shoulder too.
   //
   // METAL (hard-surface task 2), at metal 1:
   //  - the whole diffuse FAMILY (ambient bounce + key diffuse) scales to a
@@ -109,7 +110,7 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   fleshLit = mix(fleshLit,
                  albedo * (amb + 0.30 * lightCfg.x * keyColor),
                  faceFlat * 0.85);
-  if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
+  if ((spotCfg.x > 0.0 || lightListCfg.x > 0.0) && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
     fleshLit = vec3<f32>(softShoulder(fleshLit.x, knee),
                          softShoulder(fleshLit.y, knee),

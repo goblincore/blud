@@ -25,6 +25,10 @@
 // skipFirst = true (slot 0 is shaded by its own key path from domL/domC); bones and chunks false.
 // In HELPERS, last (Task 9); the march light block calls it behind lightListCfg.x.
 //
+// domLb (Task 9 review) is slot 0's view-biased direction Lb, the one its wrap and highlight use,
+// so the march's dominant honours viewBias; domL stays the raw direction for scatter and the
+// wound shadow, which sample the field toward the real light. Empty slot 0: both (0, 1, 0).
+//
 // NAMING. `meta` is a WGSL reserved word, so the light's fourth vec4 is `lm`.
 
 import { LIGHT_VEC4S, LIST_LIGHTS_AT } from '../light-list';
@@ -35,6 +39,7 @@ export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>,
   // through its own key path); its rim and its dom fields are still returned.
   var o: BodyLit;
   o.domL = vec3<f32>(0.0, 1.0, 0.0);
+  o.domLb = vec3<f32>(0.0, 1.0, 0.0);
   let nv = max(dot(n, V), 0.0);
   for (var k = 0; k < 4; k = k + 1) {
     let pv = picks[k];
@@ -69,7 +74,7 @@ export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>,
       o.spec = o.spec + c * sp;
     }
     o.rim = o.rim + c * pc.rgb * rim;
-    if (k == 0) { o.domL = L; o.domC = c; o.domFloor = pa.z; }
+    if (k == 0) { o.domL = L; o.domLb = Lb; o.domC = c; o.domFloor = pa.z; }
   }
   return o;
 }
@@ -78,6 +83,7 @@ struct BodyLit {
   spec: vec3<f32>,
   rim: vec3<f32>,
   domL: vec3<f32>,
+  domLb: vec3<f32>,
   domC: vec3<f32>,
   domFloor: f32,
 }`;

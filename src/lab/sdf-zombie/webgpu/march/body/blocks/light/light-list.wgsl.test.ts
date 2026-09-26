@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { LIGHT_LIST_BLOCK } from './light-list.wgsl';
 import { FLASHLIGHT_BLOCK } from './flashlight.wgsl';
 import { COMPOSE_BLOCK } from './compose.wgsl';
+import { OCCLUSION_BLOCK } from './occlusion.wgsl';
 import { MARCH_BODY_LIGHT } from '../../light.wgsl';
 import { MARCH_BODY, REFINE_BODY } from '../../entry.wgsl';
 
@@ -20,7 +21,8 @@ describe('LIGHT_LIST_BLOCK', () => {
   it('replaces the key with the dominant: L, keyC normalised to peak 1, keyI the peak', () => {
     expect(LIGHT_LIST_BLOCK).toContain('let peak = max(bl.domC.x, max(bl.domC.y, bl.domC.z));');
     expect(LIGHT_LIST_BLOCK).toContain('L = bl.domL;');
-    expect(LIGHT_LIST_BLOCK).toContain('keyC = bl.domC / max(peak, 1e-4);');
+    expect(LIGHT_LIST_BLOCK).toContain('keyC = select(keyC, bl.domC / max(peak, 1e-4), peak > 1e-4);');
+    expect(LIGHT_LIST_BLOCK).not.toContain('    keyC = bl.domC / max(peak, 1e-4);');
     expect(LIGHT_LIST_BLOCK).toContain('keyI = peak;');
   });
 
@@ -42,7 +44,7 @@ describe('MARCH_BODY_LIGHT splice', () => {
 
   it('the dominant wraps by its floor only when the list is on; off keeps the old expression', () => {
     expect(MARCH_BODY_LIGHT).toContain('var diff = max(dot(n, L), 0.0);');
-    expect(MARCH_BODY_LIGHT).toContain('if (lightListCfg.x > 0.0) { diff = max((dot(n, L) + listDomFloor) / (1.0 + listDomFloor), 0.0); }');
+    expect(MARCH_BODY_LIGHT).toContain('if (lightListCfg.x > 0.0) { diff = max((dot(n, Lk) + listDomFloor) / (1.0 + listDomFloor), 0.0); }');
     expect(MARCH_BODY_LIGHT).not.toContain('let diff = max(dot(n, L), 0.0);');
   });
 
@@ -57,6 +59,48 @@ describe('MARCH_BODY_LIGHT splice', () => {
   it('both lit entries carry the block exactly once', () => {
     for (const e of [MARCH_BODY, REFINE_BODY]) {
       expect(e.split('bodyLights(p, n, -rd, gInstLights, lightList, true)').length).toBe(2);
+    }
+  });
+});
+
+describe('Task 9 review: list mode keeps the rim, the shoulder and viewBias; no flashlight shadow', () => {
+  it('Lk is declared as L before the gate (off: Lk == L) and set to the dominant Lb inside it', () => {
+    const gate = LIGHT_LIST_BLOCK.indexOf('if (lightListCfg.x > 0.0) {');
+    const decl = LIGHT_LIST_BLOCK.indexOf('var Lk = L;');
+    expect(decl).toBeGreaterThan(-1);
+    expect(decl).toBeLessThan(gate);
+    expect(LIGHT_LIST_BLOCK.indexOf('Lk = bl.domLb;')).toBeGreaterThan(gate);
+  });
+
+  it('H and the list-mode wrap use Lk; the off diff stays max(dot(n, L), 0)', () => {
+    expect(MARCH_BODY_LIGHT).toContain('let H = normalize(Lk + V);');
+    expect(MARCH_BODY_LIGHT).not.toContain('let H = normalize(L + V);');
+    expect(MARCH_BODY_LIGHT).toContain('var diff = max(dot(n, L), 0.0);');
+    expect(MARCH_BODY_LIGHT).toContain('if (lightListCfg.x > 0.0) { diff = max((dot(n, Lk) + listDomFloor) / (1.0 + listDomFloor), 0.0); }');
+  });
+
+  it('scatter and the wound shadow keep the raw L', () => {
+    expect(OCCLUSION_BLOCK).toContain('p + L * 0.06');
+    expect(OCCLUSION_BLOCK).toContain('woundShadow(p, L, ');
+    expect(OCCLUSION_BLOCK).not.toMatch(/\bLk\b/);
+  });
+
+  it('the level shadow is 1.0 in list mode, computed only when the list is off', () => {
+    expect(OCCLUSION_BLOCK).toContain('var lvl = 1.0;');
+    expect(OCCLUSION_BLOCK).toContain('if (lightListCfg.x <= 0.0) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }');
+    expect(OCCLUSION_BLOCK).not.toContain('let lvl = ');
+  });
+
+  it('the highlight shoulder runs for the beam OR the list', () => {
+    expect(COMPOSE_BLOCK).toContain('if ((spotCfg.x > 0.0 || lightListCfg.x > 0.0) && spotCfg2.y > 0.0) {');
+    expect(COMPOSE_BLOCK).not.toContain('if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {');
+  });
+
+  it('the flashlight beam is skipped in list mode; beamAmt, its only other output, is unread', () => {
+    expect(FLASHLIGHT_BLOCK).toContain('if (spotCfg.x > 0.0 && lightListCfg.x <= 0.0) {');
+    for (const e of [MARCH_BODY, REFINE_BODY]) {
+      const code = e.replace(/\/\/.*$/gm, '');
+      expect(code.match(/\bbeamAmt\b/g)?.length).toBe(2);   // the var and the one write
     }
   });
 });

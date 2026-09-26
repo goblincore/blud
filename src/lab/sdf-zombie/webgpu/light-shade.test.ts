@@ -16,7 +16,7 @@ const EMPTY = [-1, -1, -1, -1];
 describe('shadeBodyLights (the CPU reference of bodyLights)', () => {
   it('zero vectors never make NaN: a light exactly at p, and Lb == -V (viewBias 0)', () => {
     const finite = (o: ReturnType<typeof shadeBodyLights>) =>
-      [...o.diffuse, ...o.spec, ...o.rim, ...o.domL, ...o.domC, o.domFloor].every(Number.isFinite);
+      [...o.diffuse, ...o.spec, ...o.rim, ...o.domL, ...o.domLb, ...o.domC, o.domFloor].every(Number.isFinite);
     const n: Vec3 = [0, 0, 1];
     // A point light sitting on the shaded point: L = 0, so direction-dependent terms vanish.
     const atP = shadeBodyLights(P, n, V, [0.9, -1, -1, -1], packed([point([0, 0, 0], 'tube')]));
@@ -73,6 +73,28 @@ describe('shadeBodyLights (the CPU reference of bodyLights)', () => {
     const r = shadeBodyLights(P, [0, 0, 1], V, EMPTY, packed([point([0, 0, 5])]));
     expect([...r.diffuse, ...r.spec, ...r.rim, ...r.domC, r.domFloor]).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     expect(r.domL).toEqual([0, 1, 0]);
+    expect(r.domLb).toEqual([0, 1, 0]);
+  });
+
+  it('domLb is slot 0 Lb = normalize(mix(L, V, viewBias)); bias 0 gives domLb == domL', () => {
+    const list = packed([point([0.97 * 5, 0, -0.24 * 5], 'tube')]);
+    const n: Vec3 = [0, 0, 1];
+    const r = shadeBodyLights(P, n, V, [0.9, -1, -1, -1], list);
+    const b = LIGHT_PROFILES[PROFILE_ID.tube]!.viewBias;
+    expect(b).toBeGreaterThan(0);
+    const m = [0, 1, 2].map((i) => r.domL[i]! + (V[i]! - r.domL[i]!) * b);
+    const len = Math.hypot(m[0]!, m[1]!, m[2]!);
+    for (let i = 0; i < 3; i++) expect(r.domLb[i]).toBeCloseTo(m[i]! / len, 6);
+    // The dominant's wrap is taken on Lb: with skipFirst off, diffuse = c x max((n.Lb + floor) / (1 + floor), 0).
+    const f = LIGHT_PROFILES[PROFILE_ID.tube]!.floor;
+    expect(r.diffuse[0]).toBeCloseTo(r.domC[0] * Math.max((r.domLb[2] + f) / (1 + f), 0), 5);
+    const unbiased = list.slice();
+    unbiased[PROFILE_ID.tube * PROFILE_VEC4S * 4 + 1] = 0;   // lane a.y = viewBias
+    const u = shadeBodyLights(P, n, V, [0.9, -1, -1, -1], unbiased);
+    for (let i = 0; i < 3; i++) expect(u.domLb[i]).toBeCloseTo(u.domL[i]!, 6);
+    // Lb == -V (muzzle, bias 0, straight behind) is the zero-safe vec3(0), not NaN.
+    const behind = shadeBodyLights(P, n, V, [0.9, -1, -1, -1], packed([point([0, 0, -5], 'muzzle')]));
+    expect(behind.domLb.every(Number.isFinite)).toBe(true);
   });
 
   it('weight scales linearly: half the weight gives half the output', () => {
@@ -99,6 +121,7 @@ describe('shadeBodyLights (the CPU reference of bodyLights)', () => {
       expect(skip.rim[i]).toBeCloseTo(all.rim[i]!, 6);
     }
     expect(skip.domL).toEqual(all.domL);
+    expect(skip.domLb).toEqual(all.domLb);
     expect(skip.domC).toEqual(all.domC);
     expect(skip.domFloor).toBe(all.domFloor);
     expect(sum(only0.diffuse)).toBeGreaterThan(0);

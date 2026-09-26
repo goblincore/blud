@@ -22,11 +22,11 @@ describe('BODY_LIGHTS — parse contract', () => {
     expect(parsed.outputType).toBe('BodyLit');
   });
 
-  it('declares BodyLit after the fn (trailing-declaration pattern) with the six fields', () => {
+  it('declares BodyLit after the fn (trailing-declaration pattern) with the seven fields', () => {
     const s = BODY_LIGHTS.indexOf('struct BodyLit {');
     expect(s).toBeGreaterThan(BODY_LIGHTS.indexOf('return o;'));
     const body = BODY_LIGHTS.slice(s);
-    for (const f of ['diffuse: vec3<f32>', 'spec: vec3<f32>', 'rim: vec3<f32>', 'domL: vec3<f32>', 'domC: vec3<f32>', 'domFloor: f32']) {
+    for (const f of ['diffuse: vec3<f32>', 'spec: vec3<f32>', 'rim: vec3<f32>', 'domL: vec3<f32>', 'domLb: vec3<f32>', 'domC: vec3<f32>', 'domFloor: f32']) {
       expect(body).toContain(f);
     }
   });
@@ -73,7 +73,13 @@ describe('BODY_LIGHTS — offsets and guards', () => {
     expect(gated).toContain('o.diffuse = o.diffuse + c * wrap;');
     expect(gated).toContain('o.spec = o.spec + c * sp;');
     expect(gated).not.toContain('o.rim');
-    expect(BODY_LIGHTS).toContain('if (k == 0) { o.domL = L; o.domC = c; o.domFloor = pa.z; }');
+    expect(BODY_LIGHTS).toContain('if (k == 0) { o.domL = L; o.domLb = Lb; o.domC = c; o.domFloor = pa.z; }');
+  });
+
+  it('domLb is slot 0 view-biased Lb; empty slot 0 defaults it to domL default (0, 1, 0)', () => {
+    expect(BODY_LIGHTS).toContain('o.domL = vec3<f32>(0.0, 1.0, 0.0);');
+    expect(BODY_LIGHTS).toContain('o.domLb = vec3<f32>(0.0, 1.0, 0.0);');
+    expect(BODY_LIGHTS).toContain('o.domLb = Lb;');
   });
 
   it('directional lights (kind 2) use pos as the direction; the rest aim at the point', () => {

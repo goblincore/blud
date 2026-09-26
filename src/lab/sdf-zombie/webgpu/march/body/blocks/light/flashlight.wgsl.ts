@@ -21,7 +21,8 @@ export const FLASHLIGHT_BLOCK = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   var keyC = keyColor;
   var keyI = lightCfg.x;
   var beamAmt = 0.0;
-  if (spotCfg.x > 0.0) {
+  // List mode (lightListCfg.x > 0) skips the beam: LIGHT_LIST_BLOCK overwrites L / keyC / keyI.
+  if (spotCfg.x > 0.0 && lightListCfg.x <= 0.0) {
     let toLamp = spotPos - p;
     let dist = length(toLamp);
     let Ls = toLamp / max(dist, 1e-4);

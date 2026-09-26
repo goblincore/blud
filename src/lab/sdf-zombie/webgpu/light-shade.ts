@@ -14,13 +14,14 @@
 //   c    = rgb x weight x gain
 // The cone and distance falloff are already in the CPU weight (light-pick.ts, absolute presence):
 // nothing here re-evaluates them, so a light lights a body as a whole (presentingLamp's rule).
-// Slot 0 also returns domL / domC / domFloor for the march's key path. skipFirst leaves slot 0's
+// Slot 0 also returns domL / domLb / domC / domFloor for the march's key path (domLb = slot 0's
+// Lb, which its wrap and highlight use; domL the raw direction for scatter and the wound shadow). skipFirst leaves slot 0's
 // diffuse and spec out (the march shades the dominant through its own key); its rim and dom* stay.
 
 import { LIGHT_VEC4S, LIST_LIGHTS_AT, type Vec3 } from './light-list';
 import { PROFILE_VEC4S } from './light-profiles';
 
-export interface BodyLit { diffuse: Vec3; spec: Vec3; rim: Vec3; domL: Vec3; domC: Vec3; domFloor: number }
+export interface BodyLit { diffuse: Vec3; spec: Vec3; rim: Vec3; domL: Vec3; domLb: Vec3; domC: Vec3; domFloor: number }
 
 const dot = (a: readonly number[], b: readonly number[]) => a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
 // Zero-safe, the WGSL's exact form: v * inverseSqrt(max(dot(v, v), 1e-12)), so a zero vector
@@ -29,7 +30,7 @@ const normalize = (a: readonly number[]): Vec3 => { const k = 1 / Math.sqrt(Math
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<number>, list: Float32Array, skipFirst = false): BodyLit {
-  const o: BodyLit = { diffuse: [0, 0, 0], spec: [0, 0, 0], rim: [0, 0, 0], domL: [0, 1, 0], domC: [0, 0, 0], domFloor: 0 };
+  const o: BodyLit = { diffuse: [0, 0, 0], spec: [0, 0, 0], rim: [0, 0, 0], domL: [0, 1, 0], domLb: [0, 1, 0], domC: [0, 0, 0], domFloor: 0 };
   const nv = Math.max(dot(n, V), 0);
   for (let k = 0; k < 4; k++) {
     const pv = picks[k]!;
@@ -60,7 +61,7 @@ export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<numb
     };
     if (!(skipFirst && k === 0)) { acc(o.diffuse, wrap); acc(o.spec, sp); }
     acc(o.rim, rim, pc);
-    if (k === 0) { o.domL = L; o.domC = c; o.domFloor = pa[2]!; }
+    if (k === 0) { o.domL = L; o.domLb = Lb; o.domC = c; o.domFloor = pa[2]!; }
   }
   return o;
 }
