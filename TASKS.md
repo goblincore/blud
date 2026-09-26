@@ -9,6 +9,8 @@
 - [ ] **Plan written, ready to execute:** [censer flail design](docs/superpowers/specs/2026-09-26-censer-flail-design.md) ·
   [plan](docs/superpowers/plans/2026-09-26-censer-flail.md) (10 tasks) — a burning thurible on a broken candlestick; tap/charge
   strokes by dead-zone position; crater + gouge wounds through `blast()`. Resolves Wake W-B4.
+- [x] **Task 9 — in-game gate passes** (`scripts/censer-gate.mjs`), heavy speed fixed in game, sever tuning, look pass;
+  6 feel questions for the owner in [NOTES](docs/dev-notes/2026-09-26-censer/NOTES.md).
 - [ ] **Severed limbs as physical debris** (owner likes it, 2026-09-26): cut-off limbs/heads land as objects the
   censer (and shots) can knock about. Deferred from the censer spec §5; needs its own design.
 

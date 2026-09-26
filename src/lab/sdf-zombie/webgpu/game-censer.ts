@@ -22,7 +22,7 @@ import { reticleNdc } from './fisheye';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
-import { BEND_R_VIEW, SHOULDER_R_VIEW } from './game-weapon-leaves';
+import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
   cancelCenserSwing, deadzoneOffset, handHold, handlePose, hitWindow, makeCenserSwing, ropeLength, stepCenserSwing,
@@ -31,13 +31,17 @@ import {
 import { CENSER_HEAD, makeCenserHead, stepCenserHead, type CenserHead, type HandHold, type HeadWorld } from './censer-head';
 import { makeStrokeHits, sweepHead, type ActorProbe, type HitEvent, type StrokeHits } from './censer-hit';
 import {
-  CENSER_BLUR_IDS, CENSER_CHAIN_SAMPLES, CENSER_HAFT_BLUR_GAIN, CENSER_HAFT_BLUR_RADIUS, censerBlurActive,
+  CENSER_BLUR_IDS, CENSER_CHAIN_BLUR_GAIN, CENSER_CHAIN_SAMPLES, CENSER_HAFT_BLUR_GAIN, CENSER_HAFT_BLUR_RADIUS, censerBlurActive,
   censerMotionState, chainRodStates, makeMotionState, scaledPrior, scaleMotion, setMotionState, swingAngularVelocity,
 } from './censer-blur';
 import type { GibBlurSubject } from './gib-shutter-layer';
 import { GIB_BLUR_LAYER } from './gib-motion-blur';
 
 const CENSER_GLB = '/assets/lab/censer.glb';
+/** A render layer no camera draws (three's layers are 0–31; 1–10 are taken —
+ *  sdf-layer SDF_LAYER … gib-motion-blur GIB_BLUR_LAYER): the censer's torch FILL
+ *  lives here so only the censer's own light list sees it. */
+const CENSER_FILL_LAYER = 30;
 /** The grip's rest, aim-rig (view) space: low right, the haft tipped well
  *  forward so the knot sits out in front and the reeled-in head (reelRest)
  *  dangles in the lower right of the frame. Measured headless on Night Train
@@ -65,6 +69,39 @@ export const CENSER_FEEL = {
   shoveHeavy: 6,
   /** Charge above which a strike staggers rather than flinches. */
   staggerCharge: 0.5,
+} as const;
+
+/** THE LOOK (Task 9 look pass, docs/dev-notes/2026-09-26-censer/NOTES.md; before/after
+ *  numbers from scripts/censer-look.mjs). Plain numbers the leaf reads every frame. */
+export const CENSER_LOOK = {
+  /** The censer's share of the FLASHLIGHT. The torch hangs ~1 m above the eye with
+   *  a 1.6 decay at 90: the head, ~0.9 m from it, took ~4× the light of a zombie two
+   *  metres out and rendered blown-out near-white (97.8% of its pixels clipped,
+   *  mean luma 251), the hand and bracer too. The censer's own light list (OWN LIGHT
+   *  LIST) therefore swaps the torch for a FILL: the same pose, cone and colour, no
+   *  distance falloff, at this fraction of the torch's live intensity (so it dims and
+   *  flickers with it) — the head reads as rusted iron with its piercings glowing. */
+  flashFill: 0.018,
+  /** THE HAND (the goblin arm holding the haft). Uniform scale of the arm, and the
+   *  grip's height up the haft (m, from its foot). The fist sits at the haft's foot
+   *  and the arm is smaller, so the spiked bracer no longer fills the lower right. */
+  handScale: 0.8,
+  handGrip: 0.0,
+  /** Where the arm's IK shoulder sits, view metres (the gun arms' SHOULDER_R_VIEW is
+   *  0.26, −0.30, 0.06): lower and further right, so the forearm leaves the frame
+   *  down the corner rather than across it. */
+  handShoulder: new THREE.Vector3(0.35, -0.47, 0.08),
+  /** INCENSE SMOKE (a pooled overlay of camera-facing puffs). Each puff is STRETCHED
+   *  along the head's motion when it was shed (or along its own rise at rest) into a
+   *  wisp — length size × (stretchBase + speed × stretchPerMps, ≤ stretchMax), width
+   *  size × width — fades in, drifts up and sideways, and fades out. Fewer, longer-lived,
+   *  softer and greyer than the first cut's round bubbles (every 0.05 s, 1.4 s, alpha
+   *  0.35, 0xb8b0a4, square). */
+  smoke: {
+    puffs: 30, everySec: 0.075, lifeSec: 2.2, riseMps: 0.1, driftMps: 0.05,
+    size0: 0.05, size1: 0.24, alpha: 0.3, fadeIn: 0.15, color: 0x96938f,
+    width: 0.45, stretchBase: 1.6, stretchPerMps: 0.3, stretchMax: 3.5,
+  },
 } as const;
 
 export interface CenserDeps {
@@ -213,6 +250,34 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   // map. Forward route only (deferred has its own lighting and no gib blur).
   const lightList = lights([]);
   let listed: THREE.Light[] = [];
+  // THE FILL (CENSER_LOOK.flashFill): stands in for the torch in this list only.
+  // On a layer no camera renders (so three's default per-camera lists skip it) and
+  // `onlyRooms` empty (so the level's per-room lists skip it too —
+  // game-lighting-leaves levelSceneLights). Parented to the scene root, never
+  // hidden; its pose and intensity follow the torch every frame (syncFill).
+  const fill = new THREE.SpotLight(0xffffff, 0, 16, Math.PI * 0.12, 0.45, 0);
+  fill.name = 'censer-flash-fill';
+  fill.castShadow = false;
+  fill.layers.set(CENSER_FILL_LAYER);
+  fill.userData.onlyRooms = new Set<number>();
+  fill.target.layers.set(CENSER_FILL_LAYER);
+  const _fp = new THREE.Vector3();
+  function syncFill(): void {
+    const spot = ctx.lighting.flashlight?.spot;
+    if (!spot || !spot.visible) { fill.intensity = 0; return; }   // the torch is off in this rig (outdoor)
+    spot.updateMatrixWorld();
+    spot.target.updateMatrixWorld();
+    fill.position.copy(spot.getWorldPosition(_fp));
+    fill.target.position.copy(spot.target.getWorldPosition(_fp));
+    fill.color.copy(spot.color);
+    fill.angle = spot.angle;
+    fill.penumbra = spot.penumbra;
+    fill.distance = spot.distance;
+    fill.intensity = spot.intensity * CENSER_LOOK.flashFill;
+    fill.updateMatrixWorld();
+    fill.target.updateMatrixWorld();
+  }
+  if (!ctx.boot.deferredMode) ctx.boot.handle.scene.add(fill, fill.target);
   const litMaterials = new Set<THREE.Material>();
   const shownInTree = (o: THREE.Object3D): boolean => {
     for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
@@ -221,10 +286,14 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   /** Re-list; true when the list changed. */
   function relist(): boolean {
     const next: THREE.Light[] = [];
+    // The torch (and its shadow-only twin) is swapped for the FILL — see CENSER_LOOK.
+    const torch = ctx.lighting.flashlight;
     ctx.boot.handle.scene.traverse((o) => {
       const l = o as THREE.Light;
-      if (l.isLight && l.layers.test(deps.camera.layers) && shownInTree(l)) next.push(l);
+      if (!l.isLight || l === torch?.spot || l === torch?.levelShadow) return;
+      if (l.layers.test(deps.camera.layers) && shownInTree(l)) next.push(l);
     });
+    if (fill.parent) next.push(fill);
     if (next.length === listed.length && next.every((l, i) => l === listed[i])) return false;
     listed = next;
     lightList.setLights(next);
@@ -300,19 +369,21 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   // In the character-effects overlay (the scene tracers use — game-weapon-leaves.ts
   // newTracerView) so bodies occlude it correctly. ctx.vfx.smokeBurstTex is created
   // later in boot than the censer, so its texture is picked up lazily, once ready.
-  const PUFFS = 14;
-  const SMOKE = { everySec: 0.05, lifeSec: 1.4, riseMps: 0.12, size0: 0.06, size1: 0.22, alpha: 0.35 } as const;
+  const SMOKE = CENSER_LOOK.smoke;
   const puffGeo = new THREE.PlaneGeometry(1, 1);
-  const puffs = Array.from({ length: PUFFS }, () => {
+  const puffs = Array.from({ length: SMOKE.puffs }, () => {
     const mesh = new THREE.Mesh(puffGeo, new THREE.MeshBasicMaterial({
-      color: 0xb8b0a4, transparent: true, opacity: 0, depthWrite: false,
+      color: SMOKE.color, transparent: true, opacity: 0, depthWrite: false,
     }));
     mesh.visible = false;
     mesh.frustumCulled = false;
     ctx.vfx.characterEffects.scene.add(mesh);
-    return { mesh, age: Infinity, pos: new THREE.Vector3() };
+    // dir: the head's direction of travel when it was shed (unit, world); stretch:
+    // its length/size ratio; sway: a per-puff phase for the sideways drift.
+    return { mesh, age: Infinity, pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 1, 0), stretch: 1, sway: 0 };
   });
   let puffCursor = 0, puffClock = 0;
+  const _cr = new THREE.Vector3(), _cu = new THREE.Vector3(), _puffRoll = new THREE.Quaternion(), _zAxis = new THREE.Vector3(0, 0, 1);
   /** tick(dt) knows dt but not this frame's FINAL head/camera pose (it runs
    *  before the camera settles); sync() knows the final pose but has no dt.
    *  tick() stashes its dt here; sync() calls stepSmoke with it once the
@@ -331,20 +402,35 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     puffClock += dt;
     if (shown && headSim && puffClock >= SMOKE.everySec) {
       puffClock = 0;
-      const p = puffs[puffCursor++ % PUFFS]!;
+      const p = puffs[puffCursor++ % puffs.length]!;
       p.age = 0;
       p.pos.set(headSim.pos[0], headSim.pos[1] + CENSER_HEAD.radius * 0.6, headSim.pos[2]);
+      // A wisp drawn out along the head's motion; at rest, along its own rise.
+      const v = headSim.vel, sp = Math.hypot(v[0], v[1], v[2]);
+      if (sp > 0.3) p.dir.set(v[0] / sp, v[1] / sp, v[2] / sp); else p.dir.set(0, 1, 0);
+      p.stretch = Math.min(SMOKE.stretchMax, SMOKE.stretchBase + sp * SMOKE.stretchPerMps);
+      p.sway = (puffCursor * 2.399) % (Math.PI * 2);   // golden-angle phases: no two neighbours alike
     }
+    deps.camera.updateMatrixWorld();
+    _cr.setFromMatrixColumn(deps.camera.matrixWorld, 0);
+    _cu.setFromMatrixColumn(deps.camera.matrixWorld, 1);
     for (const p of puffs) {
       p.age += dt;
       const live = p.age < SMOKE.lifeSec;
       p.mesh.visible = live && hidden !== 'smoke';
       if (!live) continue;
       const k = p.age / SMOKE.lifeSec;
-      p.mesh.position.set(p.pos.x, p.pos.y + SMOKE.riseMps * p.age, p.pos.z);
-      p.mesh.quaternion.copy(deps.camera.quaternion);
-      p.mesh.scale.setScalar(lerp(SMOKE.size0, SMOKE.size1, k));
-      (p.mesh.material as THREE.MeshBasicMaterial).opacity = SMOKE.alpha * (1 - k);
+      const drift = SMOKE.driftMps * p.age * Math.sin(p.sway + p.age * 1.7);
+      p.mesh.position.set(p.pos.x + drift * _cr.x, p.pos.y + SMOKE.riseMps * p.age, p.pos.z + drift * _cr.z);
+      // Camera-facing, rolled so the plane's long (x) axis runs along the wisp's
+      // direction as the player sees it.
+      const roll = Math.atan2(p.dir.dot(_cu), p.dir.dot(_cr));
+      p.mesh.quaternion.copy(deps.camera.quaternion).multiply(_puffRoll.setFromAxisAngle(_zAxis, roll));
+      const size = lerp(SMOKE.size0, SMOKE.size1, k);
+      // The stretch relaxes as the wisp rises and spreads.
+      p.mesh.scale.set(size * lerp(p.stretch, 1.4, k), size * SMOKE.width * (1 + k), 1);
+      const fade = Math.min(1, k / SMOKE.fadeIn) * (1 - k) * (1 - k);
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = SMOKE.alpha * fade;
     }
   }
   /** This tick's dt, stashed for sync() — see stepSmoke's note above. */
@@ -413,7 +499,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     arms.right.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g) keep.add(g); });
     arms.left.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && !keep.has(g)) g.dispose(); });
     hand.name = 'censer-hand';
-    hand.position.set(0, 0.03, 0);
+    hand.position.set(0, CENSER_LOOK.handGrip, 0);
+    hand.scale.setScalar(CENSER_LOOK.handScale);
     haft.add(hand);
     ownLights(hand);
   }).catch((e) => console.warn('[sdf-game] censer hand: goblin-arm.glb failed', e))
@@ -422,8 +509,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   function aimHand(): void {
     if (!hand) return;
     const view = ctx.weapon.viewModelAnchor;
-    view.localToWorld(_sh.copy(SHOULDER_R_VIEW));
-    view.localToWorld(_bend.copy(SHOULDER_R_VIEW).add(BEND_R_VIEW));
+    view.localToWorld(_sh.copy(CENSER_LOOK.handShoulder));
+    view.localToWorld(_bend.copy(CENSER_LOOK.handShoulder).add(BEND_R_VIEW));
     haft.worldToLocal(_sh);
     haft.worldToLocal(_bend);
     _bend.sub(_sh).normalize();
@@ -612,6 +699,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
    *  is one span), the subjects' ageSeconds: the first swung frame exposes one
    *  frame of motion, never a streak back into the rest pose. */
   let blurAge = 0;
+  /** The view-model gains (censer-blur.ts) — one object so a capture can A/B them. */
+  const blurGain = { haft: CENSER_HAFT_BLUR_GAIN, chain: CENSER_CHAIN_BLUR_GAIN };
   let lastOffered = 0;
   // POOLS (no per-frame allocation): 1 head + 1 haft + CENSER_CHAIN_SAMPLES states, and the subject records.
   const headState = makeMotionState(), haftState = makeMotionState();
@@ -729,8 +818,9 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       // moves like the haft it hangs from (at the view-model gain), the ring
       // end like the head, so the streak tapers from the hand's to the head's.
       if (links.count > 0) {
-        const knotPrior = scaledPrior(toW(prevKnotL), knotCur, CENSER_HAFT_BLUR_GAIN);
-        const rods = chainRodStates(knotPrior, toW(prevRingL), knotCur, ringCur, dt, CENSER_CHAIN_SAMPLES, chainPool);
+        const knotPrior = scaledPrior(toW(prevKnotL), knotCur, blurGain.haft);
+        const ringPrior = scaledPrior(toW(prevRingL), ringCur, blurGain.chain);
+        const rods = chainRodStates(knotPrior, ringPrior, knotCur, ringCur, dt, CENSER_CHAIN_SAMPLES, chainPool);
         for (let i = 0; i < rods.length; i++) offer(CENSER_BLUR_IDS.chain + i, rods[i]!, links, age);
       }
       // HAFT + HAND: a rigid camera-relative pose, scaled to the view-model
@@ -745,7 +835,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       scaleMotion(censerMotionState(
         { pos: v3(_dp), quat: q4(_dq) }, { pos: v3(_cp), quat: q4(_cq) }, dt, CENSER_HAFT_BLUR_RADIUS,
         haftSupport, haftState,
-      ), CENSER_HAFT_BLUR_GAIN);
+      ), blurGain.haft);
       collectMeshes(haft, haftMeshes);
       for (const mesh of haftMeshes) offer(CENSER_BLUR_IDS.haft, haftState, mesh, age);
     } else if (!active) {
@@ -828,6 +918,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       if (events.length > 0) applyHits(events);
     },
     sync() {
+      syncFill();
       // Always ages/fades the puffs (so hiding the censer fades the trail
       // rather than freezing it); only spawns and re-anchors while shown.
       stepSmoke(smokeDt, rig.visible && !!headSim);

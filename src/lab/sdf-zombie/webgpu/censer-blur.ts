@@ -37,8 +37,15 @@ import type { Quat } from '../vec';
  *  full motion the thin brass haft smeared to near-invisibility and the
  *  forearm became a long ghost band (measured headless, heavy stroke). A
  *  view-model reads better held steadier than physics — the eye tracks the
- *  weapon in hand — so its motion is scaled for the blur only. */
-export const CENSER_HAFT_BLUR_GAIN = 0.35;
+ *  weapon in hand — so its motion is scaled for the blur only. The owner's first
+ *  look still found the thin haft nearly gone mid-stroke at 0.35. */
+export const CENSER_HAFT_BLUR_GAIN = 0.2;
+/** The same for the CHAIN's ring end (its knot end rides the haft's gain): at the
+ *  head's full speed the 1.5 cm links smeared into a faint band — 6% of their
+ *  contrast left mid-recover (scripts/censer-look.mjs, heavy f22). At 0.12 about
+ *  two-thirds survives; the head itself keeps its full streak. (Task 9 look pass:
+ *  haft 0.35 → 0.2, chain 1 → 0.12.) */
+export const CENSER_CHAIN_BLUR_GAIN = 0.12;
 
 /** Stream ids for censer subjects: far above any gib/sprite id. */
 export const CENSER_BLUR_ID_BASE = 1_000_000;

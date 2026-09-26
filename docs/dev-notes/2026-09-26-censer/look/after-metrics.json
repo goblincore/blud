@@ -1,0 +1,147 @@
+{
+  "tag": "after",
+  "rest": {
+    "headNdc": [
+      0.363,
+      -0.723
+    ],
+    "knotNdc": [
+      0.398,
+      -0.246
+    ],
+    "headPixels": 9800,
+    "headMeanLuma": 88.6,
+    "headClippedFrac": 0.076,
+    "handFrameFrac": 0.018,
+    "handBox": [
+      887,
+      633,
+      1173,
+      799
+    ]
+  },
+  "tap": [
+    {
+      "name": "tap-f4",
+      "phase": "stroke",
+      "speed": 5.2,
+      "offered": 49,
+      "haft": null,
+      "haftPx": 0,
+      "chain": 0.64,
+      "chainPx": 178
+    },
+    {
+      "name": "tap-f5",
+      "phase": "stroke",
+      "speed": 8.8,
+      "offered": 49,
+      "haft": 0.99,
+      "haftPx": 191,
+      "chain": null,
+      "chainPx": 0
+    },
+    {
+      "name": "tap-f6",
+      "phase": "stroke",
+      "speed": 8.9,
+      "offered": 49,
+      "haft": 0.96,
+      "haftPx": 1426,
+      "chain": 1,
+      "chainPx": 179
+    },
+    {
+      "name": "tap-f7",
+      "phase": "stroke",
+      "speed": 8.9,
+      "offered": 49,
+      "haft": 0.71,
+      "haftPx": 671,
+      "chain": 0.82,
+      "chainPx": 764
+    },
+    {
+      "name": "tap-f8",
+      "phase": "stroke",
+      "speed": 10.8,
+      "offered": 49,
+      "haft": null,
+      "haftPx": 0,
+      "chain": 0.75,
+      "chainPx": 699
+    }
+  ],
+  "heavy": [
+    {
+      "name": "heavy-f6",
+      "phase": "stroke",
+      "speed": 14.3,
+      "offered": 49,
+      "haft": null,
+      "haftPx": 0,
+      "chain": null,
+      "chainPx": 0
+    },
+    {
+      "name": "heavy-f8",
+      "phase": "stroke",
+      "speed": 18.2,
+      "offered": 49,
+      "haft": 0.97,
+      "haftPx": 106,
+      "chain": null,
+      "chainPx": 0
+    },
+    {
+      "name": "heavy-f18",
+      "phase": "recover",
+      "speed": 12.3,
+      "offered": 49,
+      "haft": null,
+      "haftPx": 0,
+      "chain": null,
+      "chainPx": 0
+    },
+    {
+      "name": "heavy-f22",
+      "phase": "recover",
+      "speed": 11,
+      "offered": 49,
+      "haft": null,
+      "haftPx": 0,
+      "chain": 0.59,
+      "chainPx": 692
+    },
+    {
+      "name": "heavy-f26",
+      "phase": "recover",
+      "speed": 10.5,
+      "offered": 49,
+      "haft": null,
+      "haftPx": 0,
+      "chain": null,
+      "chainPx": 0
+    }
+  ],
+  "smoke": {
+    "rest": {
+      "pixels": 31113,
+      "meanContrast": 16,
+      "blobs": 4,
+      "medianElong": 1.42
+    },
+    "spin": {
+      "pixels": 49722,
+      "meanContrast": 15.6,
+      "blobs": 14,
+      "medianElong": 3.32
+    },
+    "after": {
+      "pixels": 50373,
+      "meanContrast": 12.6,
+      "blobs": 22,
+      "medianElong": 3.43
+    }
+  }
+}
