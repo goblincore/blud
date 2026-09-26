@@ -18,10 +18,28 @@ export function createCenserSeams(ctx: GameContext) {
       /** Off for deterministic frame counts in gates. */
       setHitStop: (on: boolean) => { ctx.weapon.censer?.setHitStop(on); },
       state: () => ctx.weapon.censer?.debug() ?? null,
-      /** Live (not dead, not carve) prims on one limb of an actor — a sever readback. -1 = no actor. */
+      /** Capture A/B: hide 'all' (the whole censer), 'hand', 'smoke', or null. */
+      hide: (part: 'all' | 'hand' | 'smoke' | null) => { ctx.weapon.censer?.debugHide(part); },
+      /** A world point as the player sees it: screen NDC through the fisheye (y up). */
+      toScreen: (x: number, y: number, z: number) => ctx.weapon.censer?.screenNdc([x, y, z]) ?? null,
+      /** Live (not dead, not carve) prims on one limb of an actor — a sever readback. -1 = no actor.
+       *  Counts only prims of a LIVE cluster: a full-limb sever (sever.ts severLimb — a
+       *  decapitation, an arm off at the shoulder) marks the CLUSTER dead and leaves its
+       *  prims' own `dead` flags alone (only a distal cut marks prims), so counting prims
+       *  alone read a severed head as 5 of 5 alive. */
       limbAlive: (id: number, limb: string) => {
         const a = ctx.world.actors.find(q => q.id === id);
-        return a ? a.drawnBody().prims.filter(p => p.limb === limb && !p.dead && p.op !== 'sub').length : -1;
+        if (!a) return -1;
+        const b = a.drawnBody();
+        let n = 0;
+        for (const c of b.clusters) {
+          if (c.limb !== limb || !c.alive) continue;
+          for (let i = c.start; i < c.start + c.count; i++) {
+            const p = b.prims[i]!;
+            if (!p.dead && p.op !== 'sub') n++;
+          }
+        }
+        return n;
       },
     },
   };

@@ -99,6 +99,14 @@ export interface CenserDebug {
   /** The censer's blur-layer pipelines: 'pending' | 'running' | 'done'. No
    *  subject is offered until 'done' (a cold first swing hitched ~100+66 ms). */
   blurWarm: string;
+  /** The rendered camera's world position and quaternion [x, y, z, w] — a
+   *  gate's frame for the head (world → view) without a second seam. */
+  eye: Vec3;
+  eyeQuat: [number, number, number, number];
+  /** Where the player sees the grip (the haft's foot) and points along the
+   *  drawn chain, knot → ring (screen NDC through the lens) — gate crops. */
+  gripNdc: [number, number];
+  chainNdc: [number, number][];
 }
 
 export interface CenserWeapon {
@@ -135,6 +143,14 @@ export interface CenserWeapon {
   release(): void;
   setHitStop(on: boolean): void;
   debug(): CenserDebug;
+  /** Where the player SEES a world point: screen NDC through the fisheye lens
+   *  (the same projection as debug().headNdc). For gates' crops. */
+  screenNdc(p: Vec3): [number, number];
+  /** CAPTURE A/B ONLY: hide one part of the censer so a gate can difference it
+   *  out of a frame (null shows everything). 'all' = haft, hand, head and chain;
+   *  never the rig itself, so the swing, the pendulum and the blur's history
+   *  carry on untouched. Works under the render lock (applied immediately). */
+  debugHide(part: 'all' | 'hand' | 'smoke' | null): void;
   /** The swing phase alone — cheap (the HUD reads it every frame; debug() projects). */
   phase(): string;
 }
@@ -322,7 +338,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     for (const p of puffs) {
       p.age += dt;
       const live = p.age < SMOKE.lifeSec;
-      p.mesh.visible = live;
+      p.mesh.visible = live && hidden !== 'smoke';
       if (!live) continue;
       const k = p.age / SMOKE.lifeSec;
       p.mesh.position.set(p.pos.x, p.pos.y + SMOKE.riseMps * p.age, p.pos.z);
@@ -333,6 +349,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   }
   /** This tick's dt, stashed for sync() — see stepSmoke's note above. */
   let smokeDt = 0;
+  /** CAPTURE A/B (debugHide): the part hidden for a difference shot, or null. */
+  let hidden: 'all' | 'hand' | 'smoke' | null = null;
 
   /** The model's and the hand's loads have settled (either way): the blur warm waits for both. */
   let glbSettled = false, handSettled = false;
@@ -428,7 +446,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   let hitCount = 0;
   let lastHit: CenserDebug['lastHit'] = null;
   const anchorW = new THREE.Vector3();
-  const _rigQ = new THREE.Quaternion(), _n = new THREE.Vector3();
+  const _rigQ = new THREE.Quaternion(), _n = new THREE.Vector3(), _eyeQ = new THREE.Quaternion(), _eyeP = new THREE.Vector3();
   /** This tick's rope length, for the sync pass's chain. */
   let ropeNow = ropeLength(swing, CENSER_HEAD.ropeLen);
   /** Where the chain was last drawn from (debug chainGap). */
@@ -443,7 +461,11 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   const _m = new THREE.Matrix4();
   const _q = new THREE.Quaternion(), _roll = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1);
 
-  const _ndc = new THREE.Vector3();
+  const _ndc = new THREE.Vector3(), _ndcIn = new THREE.Vector3();
+  /** Sampled link positions of the last drawn chain (debug chainNdc). */
+  const CHAIN_PTS = 12;
+  const chainPts = Array.from({ length: CHAIN_PTS }, () => new THREE.Vector3());
+  let chainPtsN = 0;
   function screenNdc(w: THREE.Vector3): [number, number] {
     deps.camera.updateMatrixWorld();
     _ndc.copy(w).project(deps.camera);
@@ -546,6 +568,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     // The links the paid-out chain needs: knot to ring, at the link pitch.
     const n = Math.min(MAX_LINKS, Math.max(2, Math.round(Math.max(0, rope - rr) / LINK_PITCH)));
     links.count = n;
+    chainPtsN = 0;
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n, u = 1 - t;
       _p.set(
@@ -563,6 +586,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       _roll.setFromAxisAngle(_tan, i % 2 === 0 ? 0 : Math.PI / 2);   // alternate links cross
       _q.premultiply(_roll);
       links.setMatrixAt(i, _m.compose(_p, _q, _one));
+      if (i % Math.max(1, Math.floor(n / (CHAIN_PTS - 1))) === 0 && chainPtsN < CHAIN_PTS) chainPts[chainPtsN++]!.copy(_p);
     }
     links.instanceMatrix.needsUpdate = true;
   }
@@ -817,8 +841,16 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       rig.rotation.set(THREE.MathUtils.degToRad(38) * lower, 0, 0);
       const shown = lower < 0.999 && ownsSlot(ctx, 'censer');
       rig.visible = shown;
-      head.visible = shown;
-      chain.visible = shown;
+      head.visible = shown && hidden !== 'all';
+      chain.visible = shown && hidden !== 'all';
+    },
+    debugHide(part) {
+      hidden = part;
+      haft.visible = part !== 'all';
+      if (hand) hand.visible = part !== 'all' && part !== 'hand';
+      head.visible = rig.visible && part !== 'all';
+      chain.visible = rig.visible && part !== 'all';
+      for (const p of puffs) if (part === 'smoke') p.mesh.visible = false;
     },
     hitStopScale(dt) {
       if (hitStop <= 0) return 1;
@@ -845,8 +877,13 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
         chainGap: knotNow().distanceTo(chainStart),
         blurOffered: lastOffered,
         blurWarm: warm,
+        eye: v3(deps.camera.getWorldPosition(_eyeP)),
+        gripNdc: screenNdc(haft.getWorldPosition(_ndcIn)),
+        chainNdc: chainPts.slice(0, chainPtsN).map((p) => screenNdc(_ndcIn.copy(p))),
+        eyeQuat: q4(deps.camera.getWorldQuaternion(_eyeQ)),
       };
     },
     phase: () => swing.phase,
+    screenNdc: (p) => screenNdc(_ndcIn.set(p[0], p[1], p[2])),
   };
 }
