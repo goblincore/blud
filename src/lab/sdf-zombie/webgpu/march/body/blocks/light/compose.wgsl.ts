@@ -80,10 +80,14 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // light from the side"). spotCfg2.w is the rim's strength, set by the game only while a window
   // light is live (lightDir then points at the window): a hard grazing edge on the side facing the
   // flash, in the key colour. 0 (everything else, the lab) adds nothing.
+  // Harder and colder than the key (owner, 2026-09-26), plus a soft cold fill on the side facing
+  // the camera, through the albedo, so the wounds on a zombie's front still read in the flash.
   if (spotCfg2.w > 0.0) {
     let sideLit = max(dot(n, normalize(lightDir)), 0.0);
-    let edge = pow(1.0 - max(dot(n, V), 0.0), 2.5);
-    fleshLit = fleshLit + keyC * (spotCfg2.w * edge * sideLit);
+    let edge = pow(1.0 - max(dot(n, V), 0.0), 4.0);
+    let rimC = mix(keyC, vec3<f32>(0.55, 0.75, 1.3), 0.6);
+    fleshLit = fleshLit + rimC * (spotCfg2.w * edge * sideLit)
+                        + albedo * vec3<f32>(0.7, 0.82, 1.0) * (spotCfg2.w * 0.025 * max(dot(n, V), 0.0));
   }
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its

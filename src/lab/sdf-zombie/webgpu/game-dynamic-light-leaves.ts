@@ -286,7 +286,7 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
  *  (the key is lightCfg.x × spotCfg2.z in the dungeon; the beam's own gain is 4). */
 const BODY_WINDOW_GAIN = 0.035;
 /** The lightning side rim's strength per unit of window-light intensity (compose.wgsl.ts). */
-const BODY_RIM_GAIN = 0.25;
+const BODY_RIM_GAIN = 0.4;
 const bodyBase = new WeakMap<object, { dir: THREE.Vector3; color: THREE.Color }>();
 
 type KeyUniforms = { lightDir?: { value: THREE.Vector3 }; keyColor?: { value: THREE.Color }; spotCfg2: { value: THREE.Vector4 } };
