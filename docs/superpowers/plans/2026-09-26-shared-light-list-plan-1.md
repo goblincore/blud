@@ -1147,6 +1147,17 @@ The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the g
   - **Crowd members:** every crowd member is an actor with its own record, so its picks are its own. The type-shared `lightListCfg` is set once on the crowd type's source uniforms. `copyUniformValues` copies it; check that the copy includes `lightListCfg`, and add it if the copy is an explicit list.
 - Modify: `src/lab/sdf-zombie/webgpu/game-state-*.ts` only if `tsc` or the coverage test demands it. Nothing new should be a `main()` binding.
 
+**Watch items from the Task 9 review (2026-09-27), all must hold in list mode:**
+- **Keep writing `keyColor` as the fill colour.** It drives `ambientAt`'s hue, so a frozen value leaves a stale fill. That means the cold `COLD_FILL` on storm levels (today's `applyWindowKey`/`applyStormBodyKey` behaviour), even though those functions stop steering the key.
+- **Set `lightListCfg.x = 1` on every crowd type's uniforms**, as well as on single views. It is a per-uniform-set value.
+- **Never set it on views without picks** (chunks, hands) until Task 12.
+- **Zero `spotCfg2.w` and `bodyFlash.w`.** Leave `spotCfg` and `levelShadowCfg` alone, because the shader gates them in list mode (Task 9 follow-up).
+- **Prove the never-flat-black rule in a dark corridor with a number:** the body-box dark share with no picks at all. The key floor `spotCfg2.z` is bypassed in list mode, so `amb` (BODY_DARK_FLOOR) has to carry it.
+- **Eyeball two things:**
+  - flat-lit face areas against the body in a dark carriage (the face mix still uses `lightCfg.x * keyColor`);
+  - shine and fresnel on a dim dominant (keyC is normalised to peak 1, today's convention).
+- **Measure cost with refine on.** The refine twin runs the list loop at output resolution.
+
 - [ ] **Step 1: Failing test (pure part).** Add to `game-light-list-leaves.test.ts` a pure `pickBodyFor(root, room, camPos)`. It returns `{ pos: root+1.2y, feetY: root.y+0.2, room, facing: unit xz (cam − root) }`. If the camera is directly overhead (xz length < 1e-4), facing falls back to `[0, 1]`. Pin those three cases.
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement** the pure part and the wiring.
