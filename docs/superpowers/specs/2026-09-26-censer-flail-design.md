@@ -52,7 +52,8 @@ toward the opposite side**:
 
 Directions blend continuously: one canonical stroke arc, rotated by `atan2(d.y, d.x)`, with the
 centred default taking over smoothly inside the 0.25 radius. The direction is read **at release**
-(for a tap, at press), so during a charged spin the player can drift the weapon to aim the slam.
+(for a tap too, which is under 0.18 s after the press), so during a charged spin the player can drift
+the weapon to aim the slam.
 
 ### 3.2 States and timing
 
@@ -69,8 +70,9 @@ centred default taking over smoothly inside the 0.25 radius. The direction is re
 | Heavy recover | 0.50 s |
 
 During the spin the handle traces a small circle above the head and the censer head orbits
-overhead. The stroke's handle path is a keyframe table with smoothstep between keys, in the same
-style as `RELOAD_KEYS` in `game-viewmodel.ts`.
+overhead. The stroke's handle path is a smoothstepped arc: from 0.32 m on the weapon's side to 0.32 m
+on the far side along the stroke direction, bulging 0.18 m forward at its middle, with the first 30%
+blending in from wherever the handle was (so a release mid-spin does not pop).
 
 ### 3.3 Impact
 
@@ -97,7 +99,7 @@ the eye (just outside a zombie's bite).
 Logic lives in pure, renderer-free modules (per the [plan template](../plan-template.md)); the game
 side only wires them in.
 
-### 4.1 Pure modules (`src/lab/sdf-zombie/`)
+### 4.1 Pure modules (`src/lab/sdf-zombie/webgpu/`, beside `free-aim.ts` and `game-weapon-slots.ts`)
 
 | Module | Owns | In → out |
 | --- | --- | --- |
@@ -116,23 +118,26 @@ against each nearby actor with the existing `traceProjectile(from, to, q => sdBo
 - **Energy loss:** each stamp calls `censer-head.absorb`, so the head slows and bounces out rather
   than passing through.
 - **Once per stroke per actor:** a second actor in the same stroke is hit with the remaining speed.
+- **The hit window is the stroke and its recover** (same stroke id): the head lags the handle, so
+  its fastest moment often comes after the handle has stopped.
 
 ### 4.2 Wounds
 
-- A new **`'crush'` wound type** in `WOUND_PROFILES` (`damage.ts`). The collapse meter weights
-  wounds by *type* profile radius, not by the wound's actual radius, so crush needs its own entry.
-  Gouge spheres after the crater credit the meter at a reduced rate (they are the same hit), passed
-  as a direct `meterCredit` like `blast()` does rather than as fresh wounds.
-- Craters and gouge spheres are ordinary sphere wounds pushed through the actor's existing hit path
-  (`applyProjectileHit` / `pushWound`), carrying `severRadius`, so severing needs no new code: a
-  crater plus gouge across a joint covers its cross-section and `runSeverChecks` cuts it.
-- **Wound budget:** a gouge uses up to 7 slots per hit. Raise `MAX_WOUNDS` from 16 to 24 for all
-  bodies (matching `MAX_WOUND_SLOTS` on the humanoid path), and **merge** a new gouge sphere into
-  the previous one when their centres are closer than half the smaller radius (grow the kept
-  sphere instead of adding one).
-- **Perf risk:** wound-zone hits are already the largest share of close-up march cost (cost census,
-  2026-09-22). Measure 16 → 24 with `scripts/sdf-game-melee-bench.sh` before and after; if it costs
-  too much, keep 16 and rely on merging.
+- **No new wound type** (revised 2026-09-26, planning). Craters and gouge spheres are ordinary
+  `'blast'`-type sphere wounds (the blast profile's tamed rim suits a blunt crater), resolved with
+  `worldHitToWound` against the actor's posed body and carrying `severRadius`. They go in through
+  the actor's existing **`blast(effect)`** path, which already credits the collapse meter with a
+  direct `meterCredit` (so the meter's by-type weighting is sidestepped; gouge spheres credit a
+  quarter of their crater) and already runs the sever checks: a crater plus gouge across a joint
+  covers its cross-section and `runSeverChecks` cuts it. A new `WoundType` would have touched the
+  shader's type ids; this touches nothing on the GPU.
+- `ActorBlastEffect` gains an optional **`reaction: 'blast' | 'flinch' | 'none'`** (default
+  `'blast'`, today's behaviour): a tap sends `'flinch'` (a pellet-class signal, no knock), a charged
+  strike `'blast'` (stagger + knock), and gouge-only batches `'none'`.
+- **Wound budget:** a gouge uses up to 7 slots per hit. `MAX_WOUNDS` **stays 16** for v1; gouge
+  spheres closer than half the smaller radius to the previous one are **merged** (skipped). Raising
+  the cap is a feel/perf decision for after play (owner, 2026-09-26: tune performance by how it
+  feels); `scripts/sdf-game-melee-bench.sh` measures it when it comes up.
 
 ### 4.3 Game wiring (`src/lab/sdf-zombie/webgpu/`)
 
@@ -175,8 +180,8 @@ into a ring during the spin. The coal glow is emissive only in v1.
 
 ## 5. Scope
 
-**v1 (this spec):** §3 in full; the three pure modules; the `crush` profile; crater + gouge with
-the budget change and merging; hit-stop, camera kick and actor reactions; the slot, pickup and key
+**v1 (this spec):** §3 in full; the three pure modules; the actor `reaction` option; crater + gouge with
+gouge merging (cap stays 16); hit-stop, camera kick and actor reactions; the slot, pickup and key
 binding; `censer.glb` with the chain, coal glow and smoke trail.
 
 **Later, in order of value:**
@@ -186,7 +191,7 @@ binding; `censer.glb` with the chain, coal glow and smoke trail.
    [dynamic-light work](2026-09-26-night-train-dynamic-light-design.md) lands; the censer lights
    the crypt.
 3. **The spin as a fend zone.** The spinning head damages anything that walks into it.
-4. **Knocking severed parts about**, if severed limbs exist as physical debris (check in the plan).
+4. **Severed limbs as physical debris you can knock about** (owner likes it; its own TASKS item).
 5. **A simulated link chain** that wraps around arms, behind the `censer-head` interface.
 6. **World dents** where the head strikes walls.
 
@@ -230,7 +235,6 @@ the look. The feel (timing, weight, hit-stop) is judged in play, not claimed fro
 
 ## 8. Open (for the plan)
 
-- Whether severed limbs are physical debris (§5 item 4).
-- Whether the view-model pass can draw world-space head and chain without depth artefacts against
-  near walls, or whether the head needs to draw in the main pass.
+- The head and chain draw in the main scene (world space, like any prop); the gate's photos show
+  whether they read correctly against flesh while gouging.
 - Final tuning of rope length, stroke keyframes and gouge thresholds (in play).
