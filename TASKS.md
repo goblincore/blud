@@ -29,6 +29,8 @@
 
 ## New game flow restructure — design approved 2026-09-24
 
+**Hand-off:** [2026-09-26 night train](docs/dev-notes/2026-09-26-night-train-handoff.md) — next: part 2 (flashlight pickup, storm + lightning, lamps, furnaces).
+
 [Spec](docs/superpowers/specs/2026-09-24-new-game-flow-design.md): intro → menu → **the void** (hub, unlit, one portal) → **Night Train first**; the Wake moves later (train crash).
 - [x] 1 Design + doc updates (vision §6.1/§10.3/§10.4, Night Train, Wake).
 - [x] 2 **The Void + portal** ([spec](docs/superpowers/specs/2026-09-24-void-portal-design.md) · [plan](docs/superpowers/plans/2026-09-24-void-portal.md)): `?level=the-void`; Esc → New game starts there. WGSL portal (flame rim, haze, ray-cast tracks), embers, glow pool; format `void` rooms + `portals`. Gate `scripts/sdf-game-void-gate.sh` 3/3; Wake + shorty gates pass. First level with no bodies (boot seeds guarded). **Next:** owner look review; portal targets `the-wake` until Night Train exists.
