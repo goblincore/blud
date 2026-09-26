@@ -498,8 +498,9 @@ function strongestLamp(ctx: GameContext, at: readonly [number, number, number]):
   return lampTmp;
 }
 /** The SDF self-shadow tuning (spec §6, self-shadow.ts): module state, written by the
- *  `setSelfShadow` look seam; `?selfshadow=0` turns it off at boot. */
-let selfShadow: SelfShadowCfg = selfShadowCfg({ enabled: typeof location === 'undefined' || new URLSearchParams(location.search).get('selfshadow') !== '0' });
+ *  `setSelfShadow` look seam. OFF by default (owner, 2026-09-27: too subtle on these bodies to
+ *  earn ~1.3 ms of GPU — docs/dev-notes/2026-09-27-self-shadow-spike.md); `?selfshadow=1` opts in. */
+let selfShadow: SelfShadowCfg = selfShadowCfg({ enabled: typeof location !== 'undefined' && new URLSearchParams(location.search).get('selfshadow') === '1' });
 
 /** Spec §6: the SDF self-shadow on the dominant key, for a body's (or a crowd type's) uniforms. */
 export function applySelfShadow(u: { woundShadowCfg?: { value: THREE.Vector4 } }): void {

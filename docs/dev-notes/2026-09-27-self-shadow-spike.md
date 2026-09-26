@@ -119,4 +119,8 @@ Steps and reach are the plan's cost fallbacks (12 → 8, then 0.6 → 0.4). They
 
 ## Owner verdict
 
-_Pending._
+**Rejected — option B (owner, 2026-09-27):** "it honestly is so subtle — maybe how our characters are constructed so i dont think its worth it at all".
+
+- The self-shadow is dropped from part 3 plan 1. The code stays in, switched **off** by default; `?selfshadow=1` or the `setSelfShadow(true)` seam turn it on for experiments. With it off, `woundShadowCfg.z` is 0 and the march skips the walk, so it costs nothing.
+- Kept from this spike: the window-light shadow maps at 512² (spec §6), and the `reach`/`steps` parameters on `woundShadow`.
+- A likely reason it reads so little: the bodies are rounded, blobby clay forms with few overhangs to cast from, and the tube key is weak and bent toward the viewer. That is not measured.

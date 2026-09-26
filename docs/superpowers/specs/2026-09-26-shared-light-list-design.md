@@ -33,7 +33,7 @@ Hand-wired feeds (`applyWindowKey`, `applyRoomFill`, `presentingLamp`, `stronges
    - **Plan 3:** haze and raymarched volumetric light for every light, reading the same list and atlas, composited in `sdf-layer`'s `lateScene`. It replaces the tube-beam stand-in.
 3. **4 lights per body, a 32-light list** (owner, §4).
 4. **Profiles are fixed per light kind in code, plus an optional per-light `gain` and `tint` in the level JSON** (owner: option A, §5).
-5. **No level-to-body shadows until plan 2.** Plan 1 gives bodies an SDF self-shadow on the dominant light (owner, §6).
+5. **No level-to-body shadows until plan 2.** ~~Plan 1 gives bodies an SDF self-shadow on the dominant light.~~ **Dropped after the spike (owner, 2026-09-27):** too subtle on these bodies to earn its ~1.3 ms (§6).
 6. **Shadow quality is sacrificed freely** (owner): 512² at most, lower where it holds up.
 7. **Cost ceiling: +1.5 ms on the worst carriage** over the old path (owner, §7).
 
@@ -102,13 +102,12 @@ Their tuned constants become profile values (§5). The old path stays behind an 
 | `backRim` + rim tint | PRESENT.backRim 2.5; the bolt's cold rim `(0.55,0.75,1.3)` | the hard coloured edge when the light is behind or to the side |
 | `edge`, `distFall` | PRESENT.edge 1.25, distFall 0.06 | how fast the cone and the distance let go |
 | `spec` | the current latex highlight | highlight strength and tightness |
-| `shadow` | new | self-shadow strength (§6); below 1 so shadowed flesh keeps some of this light |
 
 **Per-light overrides.** A level's light may set `gain` and `tint`. `export_level.py` and `level-json.ts` carry them, and they are folded into vec4 1 when the list is built. There are no per-level profile definitions.
 
 **The loop** is a shared WGSL include, `bodyLights`:
 - For each of the 4 picked lights, it runs the cheap per-pixel wrapped diffuse, facing falloff, highlight and back rim with that light's profile, and sums them.
-- **Only the dominant light** drives the field-sampling terms: wound self-shadow, backlit scatter, the high-relief normal read, and the new self-shadow (§6). This is the existing code with `L` taken from the dominant light.
+- **Only the dominant light** drives the field-sampling terms: wound self-shadow, backlit scatter and the high-relief normal read. This is the existing code with `L` taken from the dominant light.
 - **Two rules stay global, not per light:**
   - the fresnel rim (always on);
   - the "never flat black" body floor (BODY_DARK_FLOOR 0.25, from ambient and probes).
@@ -123,10 +122,11 @@ Their tuned constants become profile values (§5). The old path stays behind an 
 - **Casting stays on three.js maps.** Zombies (the hull layer) keep casting onto the level through the existing maps.
   - The window-light maps drop from 1024² to **512²**.
   - The tube maps stay at 512², and 256² is tried first; it is kept if it reads.
-- **Self-shadow on the dominant light.** The march walks the field toward the dominant light from each hit, extending the wound-shadow walk.
-  - It gives a short, **hard-edged** shadow: an arm across the chest, the jaw onto the neck, the brow into the eye sockets.
-  - Caps: 12 steps, 0.6 m reach, off beyond 12 m from the camera.
-  - The shadowed area keeps `1 − shadow` of that light and all of the other three lights, plus the body floor. Self-shadow never produces a black silhouette.
+- **~~Self-shadow on the dominant light.~~ Dropped (owner, 2026-09-27).** The spike (`docs/dev-notes/2026-09-27-self-shadow-spike.md`) marched the smooth field toward the key through the existing wound-shadow call site.
+  - Results: it was invisible under the tubes and a modest sculpting in a lightning flash, with no black holes. It cost +1.3 ms of GPU even at 8 steps and 0.4 m.
+  - The owner: "so subtle … i dont think its worth it at all".
+  - The code stays in, off by default (`?selfshadow=1`).
+  - Kept from the spike: `woundShadow`'s `reach`/`steps` parameters and the 512² window maps.
 - **No level-to-body shadows.** A zombie inside a seat's shadow stays lit until plan 2. The slot field is written as −1 and reserved.
 
 **Plan 2: one shadow atlas, 1024².** The level and the bodies both read it, so the bodies darken inside level shadows.
@@ -153,13 +153,11 @@ That is about 8 tiles in use out of 16.
 |---|---|---|
 | CPU | `pickLights` for about 40 bodies × 32 lights, and one buffer write | about 0.1 ms; it replaces the per-actor uniform copies |
 | GPU, march | 4-light loop per hit pixel, ALU only | small (low march resolution) |
-| GPU, march | self-shadow on the dominant light | the risky one; capped (§6) |
 | GPU, bones and gibs | the same loop on meshes | negligible |
 | Draws | none added | 0 |
 
 **Ceiling: the worst carriage (third class, the Boiler Room) must be no more than +1.5 ms over `?lightlist=0`.**
 - The light gate (`scripts/sdf-game-light-gate.*`, `LAB_TMP=.lab-tmp`) measures it A/B and fails past the ceiling.
-- If the self-shadow breaks the budget, cut it in this order: half-resolution self-shadow, then a shorter reach, then fewer steps.
 
 ## 8. Testing
 

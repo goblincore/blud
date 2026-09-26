@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Every SDF body, crowd member, bone mesh and gib chunk is lit by its own 4 strongest lights from one shared per-frame light list, with the owner's presentation rules as per-light profiles and a hard SDF self-shadow on the dominant light.
+**Goal:** Every SDF body, crowd member, bone mesh and gib chunk is lit by its own 4 strongest lights from one shared per-frame light list, with the owner's presentation rules as per-light profiles.
+
+**Status 2026-09-27:** Task 1 is done, and the owner **rejected** the self-shadow (too subtle, +1.3 ms). It ships off (`?selfshadow=1` opts in). Tasks 2-13 below have had every self-shadow dependency removed.
 
 **Spec:** `docs/superpowers/specs/2026-09-26-shared-light-list-design.md`. Read it first.
 
@@ -419,7 +421,7 @@ Established by the 2026-09-26 file map. All paths are under `src/lab/sdf-zombie/
 | | 24 | header: `x` light count, `yzw` spare |
 | | 25..152 | 32 lights × 4 vec4 |
 | **Profile, 3 vec4** | a | `(gain, viewBias, floor, backKey)` |
-| | b | `(backRim, spec, shadow, specPow)` |
+| | b | `(backRim, spec, 0 (spare), specPow)` |
 | | c | `(rimTint.rgb, 0)` |
 | **Light, 4 vec4 (spec §4)** | 0 | `pos.xyz` (directional: the unit direction toward the light), `w` kind (0 point, 1 spot, 2 directional) |
 | | 1 | `rgb` colour × intensity × level gain, with the tint applied; `w` range |
@@ -470,15 +472,12 @@ describe('light profiles (spec §5)', () => {
   it('window carries the cold lightning rim tint', () => {
     expect(LIGHT_PROFILES[PROFILE_ID.window]!.rimTint).toEqual([0.55, 0.75, 1.3]);
   });
-  it('every shadow strength is below 1 (never a black hole)', () => {
-    for (const p of LIGHT_PROFILES) expect(p.shadow).toBeLessThan(1);
-  });
   it('packs 8 x 3 vec4 in the documented lane order', () => {
     const f = packProfiles();
     expect(f.length).toBe(8 * PROFILE_VEC4S * 4);
     const t = LIGHT_PROFILES[PROFILE_ID.tube]!, o = PROFILE_ID.tube * 12;
     expect([...f.slice(o, o + 4)]).toEqual([t.gain, t.viewBias, t.floor, t.backKey].map(Math.fround));
-    expect([...f.slice(o + 4, o + 8)]).toEqual([t.backRim, t.spec, t.shadow, t.specPow].map(Math.fround));
+    expect([...f.slice(o + 4, o + 8)]).toEqual([t.backRim, t.spec, 0, t.specPow].map(Math.fround));
     expect([...f.slice(o + 8, o + 11)]).toEqual(t.rimTint.map(Math.fround));
   });
 });
@@ -495,15 +494,13 @@ describe('light profiles (spec §5)', () => {
 // realism: a flattering key, a fill, a rim, visible relief, never a flat black silhouette.
 // One profile per light KIND, fixed in code; a level may scale a light's gain and tint
 // (light-list.ts), never define profiles. GPU lanes: a (gain, viewBias, floor, backKey),
-// b (backRim, spec, shadow, specPow), c (rimTint.rgb, 0). edge/distFall are CPU-only (pick).
+// b (backRim, spec, 0 spare, specPow), c (rimTint.rgb, 0). edge/distFall are CPU-only (pick).
 
 export interface LightProfile {
   gain: number; viewBias: number; floor: number; backKey: number;
   backRim: number; rimTint: [number, number, number];
   edge: number; distFall: number;
   spec: number; specPow: number;
-  /** Self-shadow strength when this light is dominant (spec §6); < 1. */
-  shadow: number;
 }
 
 export const PROFILE_ID = { tube: 0, lamp: 1, window: 2, flashlight: 3, muzzle: 4, fire: 5 } as const;
@@ -516,29 +513,29 @@ const WARM_RIM: [number, number, number] = [1.2, 0.8, 0.5];
 
 export const LIGHT_PROFILES: readonly LightProfile[] = [
   // tube: game-dynamic-light-leaves.ts PRESENT (tuned with the owner 2026-09-26)
-  { gain: 1.3, viewBias: 0.3, floor: 0.18, backKey: 0.35, backRim: 2.5, rimTint: COLD_RIM, edge: 1.25, distFall: 0.06, spec: 1.0, specPow: 24, shadow: 0.7 },
+  { gain: 1.3, viewBias: 0.3, floor: 0.18, backKey: 0.35, backRim: 2.5, rimTint: COLD_RIM, edge: 1.25, distFall: 0.06, spec: 1.0, specPow: 24 },
   // lamp (warm bulbs)
-  { gain: 1.1, viewBias: 0.3, floor: 0.18, backKey: 0.4, backRim: 1.5, rimTint: WARM_RIM, edge: 1.25, distFall: 0.08, spec: 0.8, specPow: 20, shadow: 0.6 },
+  { gain: 1.1, viewBias: 0.3, floor: 0.18, backKey: 0.4, backRim: 1.5, rimTint: WARM_RIM, edge: 1.25, distFall: 0.08, spec: 0.8, specPow: 20 },
   // window / lightning: hard, cold, side rim (compose.wgsl.ts's lightning rim)
-  { gain: 1.0, viewBias: 0.15, floor: 0.1, backKey: 0.5, backRim: 3.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0, spec: 1.2, specPow: 32, shadow: 0.8 },
+  { gain: 1.0, viewBias: 0.15, floor: 0.1, backKey: 0.5, backRim: 3.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0, spec: 1.2, specPow: 32 },
   // flashlight: the beam is the key (flashlight.wgsl.ts), little bias, it is at the eye
-  { gain: 1.0, viewBias: 0.0, floor: 0.1, backKey: 1.0, backRim: 0.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0.04, spec: 1.0, specPow: 24, shadow: 0.5 },
+  { gain: 1.0, viewBias: 0.0, floor: 0.1, backKey: 1.0, backRim: 0.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0.04, spec: 1.0, specPow: 24 },
   // muzzle: compose.wgsl.ts flashDirect's warm colour lives in the light's rgb
-  { gain: 1.0, viewBias: 0.0, floor: 0.0, backKey: 1.0, backRim: 0.5, rimTint: WARM_RIM, edge: 1.0, distFall: 0.2, spec: 0.5, specPow: 16, shadow: 0.0 },
+  { gain: 1.0, viewBias: 0.0, floor: 0.0, backKey: 1.0, backRim: 0.5, rimTint: WARM_RIM, edge: 1.0, distFall: 0.2, spec: 0.5, specPow: 16 },
   // fire
-  { gain: 1.0, viewBias: 0.1, floor: 0.2, backKey: 0.6, backRim: 1.2, rimTint: WARM_RIM, edge: 1.0, distFall: 0.1, spec: 0.4, specPow: 12, shadow: 0.4 },
+  { gain: 1.0, viewBias: 0.1, floor: 0.2, backKey: 0.6, backRim: 1.2, rimTint: WARM_RIM, edge: 1.0, distFall: 0.1, spec: 0.4, specPow: 12 },
 ];
 
 export function packProfiles(profiles: readonly LightProfile[] = LIGHT_PROFILES): Float32Array {
   const f = new Float32Array(MAX_PROFILES * PROFILE_VEC4S * 4);
   profiles.slice(0, MAX_PROFILES).forEach((p, i) => {
-    f.set([p.gain, p.viewBias, p.floor, p.backKey, p.backRim, p.spec, p.shadow, p.specPow, ...p.rimTint, 0], i * 12);
+    f.set([p.gain, p.viewBias, p.floor, p.backKey, p.backRim, p.spec, 0, p.specPow, ...p.rimTint, 0], i * 12);
   });
   return f;
 }
 ```
 
-- [ ] **Step 4: Run it.** Expected: PASS, 5 tests.
+- [ ] **Step 4: Run it.** Expected: PASS, 4 tests.
 - [ ] **Step 5: Commit.** `git commit -m "feat(light): presentation profiles per light kind (spec §5)"` with both files.
 
 ---
@@ -978,7 +975,7 @@ out.diffuse += c * wrap
 out.spec    += c * spec
 out.rim     += c * rim
 ```
-- Slot 0 also returns `domL = L` and `domC = c`. They drive the march's existing key path: scatter, wound and self-shadow, and the highlight shoulder.
+- Slot 0 also returns `domL = L` and `domC = c`. They drive the march's existing key path: scatter, the wound shadow, and the highlight shoulder.
 - The per-light cone and distance are already in the CPU `weight`. The shader does not re-evaluate them, so a body is lit as a whole by a light and does not get cut by a cone edge. That is today's `presentingLamp` behaviour, which the owner approved.
 
 - [ ] **Step 1: Failing CPU tests** in `light-shade.test.ts`, one per rule:
@@ -990,19 +987,18 @@ out.rim     += c * rim
 
   Write each with concrete vectors: `n=[0,0,1]`, `V=[0,0,1]`, and so on.
 - [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement `light-shade.ts`**, exporting `shadeBodyLights(p, n, V, picks, list: Float32Array, skipFirst = false)`. It returns `{ diffuse, spec, rim, domL, domC, domShadow, domFloor }` and reads **the packed buffer** (`light-list.ts` offsets), so it tests the packing too. Add a sixth test to Step 1: with `skipFirst`, `diffuse` and `spec` equal the full sums minus slot 0's contribution, and `rim` is unchanged.
+- [ ] **Step 3: Implement `light-shade.ts`**, exporting `shadeBodyLights(p, n, V, picks, list: Float32Array, skipFirst = false)`. It returns `{ diffuse, spec, rim, domL, domC, domFloor }` and reads **the packed buffer** (`light-list.ts` offsets), so it tests the packing too. Add a sixth test to Step 1: with `skipFirst`, `diffuse` and `spec` equal the full sums minus slot 0's contribution, and `rim` is unchanged.
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Implement the WGSL.** `body-lights.wgsl.ts` exports `BODY_LIGHTS`, a single `fn`, per the repo's one-fn-per-string rule:
 
 ```wgsl
-struct BodyLit { diffuse: vec3<f32>, spec: vec3<f32>, rim: vec3<f32>, domL: vec3<f32>, domC: vec3<f32>, domShadow: f32, domFloor: f32 }
+struct BodyLit { diffuse: vec3<f32>, spec: vec3<f32>, rim: vec3<f32>, domL: vec3<f32>, domC: vec3<f32>, domFloor: f32 }
 
 // skipFirst: slot 0's diffuse and spec are left out of the sums (the march shades the dominant
 // through its own key path); its rim and its dom* fields are still returned.
 fn bodyLights(p: vec3<f32>, n: vec3<f32>, V: vec3<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, skipFirst: bool) -> BodyLit {
   var o: BodyLit;
   o.domL = vec3<f32>(0.0, 1.0, 0.0);
-  o.domShadow = 0.0;
   for (var k = 0; k < 4; k = k + 1) {
     let pv = picks[k];
     if (pv < 0.0) { continue; }
@@ -1030,7 +1026,7 @@ fn bodyLights(p: vec3<f32>, n: vec3<f32>, V: vec3<f32>, picks: vec4<f32>, lights
       o.spec = o.spec + c * sp;
     }
     o.rim = o.rim + c * pc.rgb * rim;
-    if (k == 0) { o.domL = L; o.domC = c; o.domShadow = pb.z; o.domFloor = pa.z; }
+    if (k == 0) { o.domL = L; o.domC = c; o.domFloor = pa.z; }
   }
   return o;
 }
@@ -1041,7 +1037,7 @@ fn bodyLights(p: vec3<f32>, n: vec3<f32>, V: vec3<f32>, picks: vec4<f32>, lights
   - pin the offsets: the string contains `${LIST_LIGHTS_AT} + li * 4` after interpolation, i.e. `25 + li * 4`;
   - pin `pr + 2`;
   - pin the `if (pv < 0.0) { continue; }` guard and the `if (!(skipFirst && k == 0))` gate;
-  - add a **parity test**: the TS reference and the WGSL text use the same lane for every param. Assert that the WGSL reads `pa.x` as gain, `pa.y` viewBias, `pa.z` floor, `pb.x` backRim, `pb.y` spec, `pb.z` shadow, `pb.w` specPow, `pc.rgb` rimTint. This matches `packProfiles`' order.
+  - add a **parity test**: the TS reference and the WGSL text use the same lane for every param. Assert that the WGSL reads `pa.x` as gain, `pa.y` viewBias, `pa.z` floor, `pb.x` backRim, `pb.y` spec, `pb.w` specPow, `pc.rgb` rimTint. This matches `packProfiles`' order.
 - [ ] **Step 7: Run** both tests. Expected: PASS.
 - [ ] **Step 8: Commit.** `git commit -m "feat(light): bodyLights — the 4-light presentation loop (WGSL) and its CPU reference"`.
 
@@ -1060,7 +1056,6 @@ Task 11 (bones) and Task 12 (chunks) call it with `skipFirst = false`, and Task 
 - Create: `src/lab/sdf-zombie/webgpu/march/body/blocks/light/light-list.wgsl.ts`: the `LIGHT_LIST_BLOCK`, spliced into `MARCH_BODY_LIGHT` (`march/body/light.wgsl.ts`) right after `${FLASHLIGHT_BLOCK}`.
 - Modify: `src/lab/sdf-zombie/webgpu/march/body/light.wgsl.ts`: `let diff` becomes `var diff`; splice in the block.
 - Modify: `src/lab/sdf-zombie/webgpu/march/body/blocks/light/compose.wgsl.ts`: add the extra lights to `fleshLit`.
-- Modify: `src/lab/sdf-zombie/webgpu/march/body/blocks/light/occlusion.wgsl.ts`: in list mode the self-shadow strength comes from `bl.domShadow` × `woundShadowCfg.z`.
 - Modify: `src/lab/sdf-zombie/webgpu/zombie-gpu.ts`:
   - `defaultUniforms` gains `lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0))`;
   - `callMarch` (:1287-1463) passes `lightListCfg: u.lightListCfg` and `lightList: (sources.lightList ?? fallbackLightListNode()) as never`, **after** `inst`/`instCfg` and the rest, in parameter order;
@@ -1079,13 +1074,12 @@ Task 11 (bones) and Task 12 (chunks) call it with `skipFirst = false`, and Task 
 ```wgsl
   // ---- SHARED LIGHT LIST (spec §4-§5) ------------------------------------
   // lightListCfg.x > 0: this body is lit by its 4 picked lights (gInstLights, REC_LIGHTS).
-  // Slot 0, the dominant, REPLACES the key (L, keyC, keyI), so scatter, the wound and self
-  // shadow, and the shoulder follow it; slots 1-3 and every rim are added in compose.
+  // Slot 0, the dominant, REPLACES the key (L, keyC, keyI), so scatter, the wound shadow and
+  // the shoulder follow it; slots 1-3 and every rim are added in compose.
   // At x = 0 nothing here runs and the old key path is untouched.
   var listDiff = vec3<f32>(0.0);
   var listSpec = vec3<f32>(0.0);
   var listRim = vec3<f32>(0.0);
-  var listShadow = 1.0;
   var listDomFloor = 0.0;
   if (lightListCfg.x > 0.0) {
     let bl = bodyLights(p, n, -rd, gInstLights, lightList, true);
@@ -1096,7 +1090,6 @@ Task 11 (bones) and Task 12 (chunks) call it with `skipFirst = false`, and Task 
     listDiff = bl.diffuse;
     listSpec = bl.spec;
     listRim = bl.rim;
-    listShadow = bl.domShadow;
     listDomFloor = bl.domFloor;
   }
 ```
@@ -1119,8 +1112,6 @@ Task 11 (bones) and Task 12 (chunks) call it with `skipFirst = false`, and Task 
 ```
 
 The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the game writes `spotCfg2.w = 0`, and the window profile's rim takes over.
-
-**Occlusion** (`occlusion.wgsl.ts`, in Task 1's block): use `select(woundShadowCfg.z, woundShadowCfg.z * listShadow, lightListCfg.x > 0.0)` as the self-shadow strength. Note that `LIGHT_LIST_BLOCK` runs **before** `OCCLUSION_BLOCK` (flashlight → list → occlusion), so `listShadow` is in scope.
 
 - [ ] **Step 1: Failing pins.**
   - `io.wgsl.test.ts`: the struct and list agree, with the new names.
@@ -1227,7 +1218,7 @@ The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the g
   - boot `lightlist=1`, then `lightlist=0` (fresh navigations);
   - at third class `(0, -12.0, 0, -0.05)` and at the Boiler Room `(0, -96.0, 0, 0)`, take `__sdfGame.timeDraws(9)` five times after 3 warm-up frames, with the frame cap at 1 and `holdWindowLight(0, -1)`, as in Task 1 Step 11;
   - **fail** if the median `on − off` is **> 1.5 ms** in either carriage (spec §7).
-- [ ] **Step 2: Run** the gate. If it fails, cut the self-shadow in the spec's order (half resolution, then reach, then steps) and re-run. Record every run.
+- [ ] **Step 2: Run** the gate. If it fails, profile the march (`passTimings`) and report to the owner with the numbers before cutting anything. Record every run.
 - [ ] **Step 3: The owner's look check.** Run the gate with `LIGHT_GATE_SHOT` set, and add A/B pairs (`lightlist=1` vs `0`) at:
   - third class under a tube;
   - the dining car during a held bolt;
@@ -1260,9 +1251,9 @@ The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the g
 | §5 profiles fixed per kind + level gain/tint | 2, 5 |
 | §5 loop, the dominant drives field terms, global fresnel and floor kept | 8, 9 (fresnel and BODY_DARK_FLOOR untouched: they live outside `fleshLit`'s key terms) |
 | §5 golden held for the one-light gallery | 9: `lightListCfg.x` is 0 in the lab, so the lab image is unchanged. The **text** hash moves and is documented |
-| §6 self-shadow, window maps 512 | 1, 9 (profile shadow) |
+| §6 self-shadow (rejected after the spike), window maps 512 | 1 |
 | §6 tube maps 256 tried | 13 (Step 3) |
-| §7 +1.5 ms ceiling, gate | 1 (≤ 1.0 ms spike budget), 13 |
+| §7 +1.5 ms ceiling, gate | 13 |
 | §8 tests | throughout |
 
 **Deviations from the spec, all to be recorded in the Task 13 dev note:**
