@@ -14,6 +14,24 @@ const sum = (v: readonly number[]) => v[0]! + v[1]! + v[2]!;
 const EMPTY = [-1, -1, -1, -1];
 
 describe('shadeBodyLights (the CPU reference of bodyLights)', () => {
+  it('zero vectors never make NaN: a light exactly at p, and Lb == -V (viewBias 0)', () => {
+    const finite = (o: ReturnType<typeof shadeBodyLights>) =>
+      [...o.diffuse, ...o.spec, ...o.rim, ...o.domL, ...o.domC, o.domFloor].every(Number.isFinite);
+    const n: Vec3 = [0, 0, 1];
+    // A point light sitting on the shaded point: L = 0, so direction-dependent terms vanish.
+    const atP = shadeBodyLights(P, n, V, [0.9, -1, -1, -1], packed([point([0, 0, 0], 'tube')]));
+    expect(finite(atP)).toBe(true);
+    expect(atP.domL).toEqual([0, 0, 0]);
+    // Muzzle (viewBias 0) straight behind the body: L = -V, Lb = -V, Lb + V = 0 so H = 0.
+    expect(LIGHT_PROFILES[PROFILE_ID.muzzle]!.viewBias).toBe(0);
+    const behind = shadeBodyLights(P, n, V, [0.9, -1, -1, -1], packed([point([0, 0, -5], 'muzzle')]));
+    expect(finite(behind)).toBe(true);
+    expect(sum(behind.spec)).toBe(0);
+    // The flashlight profile too, as the dominant and skipped.
+    const flash = shadeBodyLights(P, n, V, [0.9, -1, -1, -1], packed([point([0, 0, -5], 'flashlight')]), true);
+    expect(finite(flash)).toBe(true);
+  });
+
   it('the floor keeps a terminator lit: n.L = 0 with floor 0.18 still gives diffuse', () => {
     // Light at +x, normal up: n.L = 0, and the view bias (toward +z) keeps n.Lb = 0 too.
     const n: Vec3 = [0, 1, 0];

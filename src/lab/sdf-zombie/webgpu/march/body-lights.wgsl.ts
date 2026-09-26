@@ -49,10 +49,16 @@ export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>,
     let pa = (*lights)[pr];
     let pb = (*lights)[pr + 1];
     let pc = (*lights)[pr + 2];
-    let L = select(normalize(a.xyz - p), a.xyz, a.w > 1.5);
-    let Lb = normalize(mix(L, V, pa.y));
+    // Zero-safe normalizes: v * inverseSqrt(max(dot(v, v), 1e-12)) is vec3(0) for a zero vector,
+    // where normalize(0) is NaN and 0 x NaN poisons the pixel. That happens for a light exactly
+    // at p, and for Lb == -V (flashlight and muzzle have viewBias 0). The CPU twin matches.
+    let lv = a.xyz - p;
+    let L = select(lv * inverseSqrt(max(dot(lv, lv), 1e-12)), a.xyz, a.w > 1.5);
+    let lbv = mix(L, V, pa.y);
+    let Lb = lbv * inverseSqrt(max(dot(lbv, lbv), 1e-12));
     let wrap = max((dot(n, Lb) + pa.z) / (1.0 + pa.z), 0.0);
-    let H = normalize(Lb + V);
+    let hv = Lb + V;
+    let H = hv * inverseSqrt(max(dot(hv, hv), 1e-12));
     let sp = pb.y * pow(max(dot(n, H), 0.0), pb.w);
     let side = max(dot(n, L), 0.0);
     let back = clamp(-dot(L, V) * 0.5 + 0.5, 0.0, 1.0);

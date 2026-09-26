@@ -76,7 +76,16 @@ describe('BODY_LIGHTS — offsets and guards', () => {
   });
 
   it('directional lights (kind 2) use pos as the direction; the rest aim at the point', () => {
-    expect(BODY_LIGHTS).toContain('let L = select(normalize(a.xyz - p), a.xyz, a.w > 1.5);');
+    expect(BODY_LIGHTS).toContain('let L = select(lv * inverseSqrt(max(dot(lv, lv), 1e-12)), a.xyz, a.w > 1.5);');
+  });
+
+  it('every normalize is zero-safe: a light at p or Lb == -V gives vec3(0), never NaN', () => {
+    expect(BODY_LIGHTS).toContain('let lv = a.xyz - p;');
+    expect(BODY_LIGHTS).toContain('let lbv = mix(L, V, pa.y);');
+    expect(BODY_LIGHTS).toContain('let Lb = lbv * inverseSqrt(max(dot(lbv, lbv), 1e-12));');
+    expect(BODY_LIGHTS).toContain('let hv = Lb + V;');
+    expect(BODY_LIGHTS).toContain('let H = hv * inverseSqrt(max(dot(hv, hv), 1e-12));');
+    expect(BODY_LIGHTS.replace(/\/\/.*$/gm, '')).not.toMatch(/\bnormalize\(/);   // code, not comments
   });
 
   it('never re-evaluates cone or distance: the colour is rgb x weight x gain', () => {
@@ -91,7 +100,7 @@ describe('BODY_LIGHTS — lane parity with packProfiles and the CPU reference', 
   // that reads it. light-shade.ts reads the same lanes (pa[0] gain, pa[1] viewBias, ...).
   const LANES: { param: keyof (typeof LIGHT_PROFILES)[number] | 'rimTint.rgb'; flat: number | number[]; wgsl: string }[] = [
     { param: 'gain', flat: 0, wgsl: 'let c = col.rgb * (w * pa.x);' },
-    { param: 'viewBias', flat: 1, wgsl: 'let Lb = normalize(mix(L, V, pa.y));' },
+    { param: 'viewBias', flat: 1, wgsl: 'let lbv = mix(L, V, pa.y);' },
     { param: 'floor', flat: 2, wgsl: 'let wrap = max((dot(n, Lb) + pa.z) / (1.0 + pa.z), 0.0);' },
     { param: 'backRim', flat: 4, wgsl: 'let rim = pb.x * pow(1.0 - nv, 4.0) * max(side, back * 0.5);' },
     { param: 'spec', flat: 5, wgsl: 'let sp = pb.y * pow(max(dot(n, H), 0.0), pb.w);' },

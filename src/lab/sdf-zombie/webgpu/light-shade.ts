@@ -8,6 +8,7 @@
 //   Lb   = normalize(mix(L, V, viewBias))
 //   wrap = max((n.Lb + floor) / (1 + floor), 0)
 //   H    = normalize(Lb + V);  spec = spec x max(n.H, 0)^specPow
+//   (every normalize is zero-safe, v x inverseSqrt(max(v.v, 1e-12)): a zero vector gives 0, not NaN)
 //   side = max(n.L, 0);  back = clamp(-L.V x 0.5 + 0.5, 0, 1)
 //   rim  = backRim x (1 - max(n.V, 0))^4 x max(side, back x 0.5) x rimTint
 //   c    = rgb x weight x gain
@@ -22,7 +23,9 @@ import { PROFILE_VEC4S } from './light-profiles';
 export interface BodyLit { diffuse: Vec3; spec: Vec3; rim: Vec3; domL: Vec3; domC: Vec3; domFloor: number }
 
 const dot = (a: readonly number[], b: readonly number[]) => a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
-const normalize = (a: readonly number[]): Vec3 => { const l = Math.hypot(a[0]!, a[1]!, a[2]!) || 1; return [a[0]! / l, a[1]! / l, a[2]! / l]; };
+// Zero-safe, the WGSL's exact form: v * inverseSqrt(max(dot(v, v), 1e-12)), so a zero vector
+// gives [0, 0, 0] (never NaN) and a tiny one shrinks the same way on both sides.
+const normalize = (a: readonly number[]): Vec3 => { const k = 1 / Math.sqrt(Math.max(dot(a, a), 1e-12)); return [a[0]! * k, a[1]! * k, a[2]! * k]; };
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<number>, list: Float32Array, skipFirst = false): BodyLit {
