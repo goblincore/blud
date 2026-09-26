@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CENSER_SWING, cancelCenserSwing, deadzoneOffset, handlePose, hitWindow,
-  makeCenserSwing, stepCenserSwing, strokeDirection, type CenserSwing, type Dir2,
+  makeCenserSwing, ropeLength, stepCenserSwing, strokeDirection, type CenserSwing, type Dir2,
 } from './censer-swing';
 import { FREE_AIM } from './free-aim';
 
@@ -215,5 +215,60 @@ describe('handlePose', () => {
   });
   it('rests at zero when idle', () => {
     expect(handlePose(makeCenserSwing())).toEqual([0, 0, 0]);
+  });
+});
+
+describe('ropeLength (reeled in at rest, paid out to swing)', () => {
+  const FULL = 0.55;
+  it('is reelRest at idle and while a press is pending', () => {
+    expect(ropeLength(makeCenserSwing(), FULL)).toBe(CENSER_SWING.reelRest);
+    const s = run(makeCenserSwing(), 0.05, true);
+    expect(s.phase).toBe('pending');
+    expect(ropeLength(s, FULL)).toBe(CENSER_SWING.reelRest);
+  });
+  it('is full mid-stroke, for a tap and for a heavy', () => {
+    let s = run(makeCenserSwing(), 0.05, true);
+    s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);
+    s = run(s, CENSER_SWING.tapStrokeSec * 0.5, false);
+    expect(s.phase).toBe('stroke');
+    expect(ropeLength(s, FULL)).toBeCloseTo(FULL, 6);
+    let h = run(makeCenserSwing(), CENSER_SWING.holdSec + 0.6, true);
+    expect(h.phase).toBe('windup');
+    expect(ropeLength(h, FULL)).toBeCloseTo(FULL, 6);
+    h = stepCenserSwing(h, { down: false, offset: { x: 0, y: 0 } }, DT);
+    h = run(h, CENSER_SWING.heavyStrokeSec * 0.5, false);
+    expect(h.phase).toBe('stroke');
+    expect(ropeLength(h, FULL)).toBeCloseTo(FULL, 6);
+  });
+  it('is full early in recover and reelRest again once idle', () => {
+    let s = run(makeCenserSwing(), 0.05, true);
+    s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);
+    s = run(s, CENSER_SWING.tapStrokeSec + 0.02, false);
+    expect(s.phase).toBe('recover');
+    expect(ropeLength(s, FULL)).toBeCloseTo(FULL, 6);
+    s = run(s, 1, false);
+    expect(s.phase).toBe('idle');
+    expect(ropeLength(s, FULL)).toBe(CENSER_SWING.reelRest);
+  });
+  it('has no pops (< 3.5 cm per 240 Hz step) through taps, a heavy, an early release and a buffered re-press', () => {
+    let s = makeCenserSwing();
+    let prev = ropeLength(s, FULL);
+    let worst = 0;
+    const seq: Array<[number, boolean]> = [
+      [0.1, true], [0.7, false], [1.6, true], [1.0, false],
+      [CENSER_SWING.holdSec + 0.03, true], [0.5, false],                       // release early in wind-up
+      [0.05, true], [CENSER_SWING.tapStrokeSec + CENSER_SWING.tapRecoverSec - 0.08, false],
+      [0.05, true], [1.0, false],                                               // buffered press
+    ];
+    for (const [sec, down] of seq) {
+      const n = Math.round(sec / DT);
+      for (let i = 0; i < n; i++) {
+        s = stepCenserSwing(s, { down, offset: { x: 0.6, y: 0.4 } }, DT);
+        const r = ropeLength(s, FULL);
+        worst = Math.max(worst, Math.abs(r - prev));
+        prev = r;
+      }
+    }
+    expect(worst).toBeLessThan(POP_BOUND);
   });
 });

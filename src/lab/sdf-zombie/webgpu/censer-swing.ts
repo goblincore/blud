@@ -61,6 +61,15 @@ export const CENSER_SWING = {
   /** A fresh press landing this close to the end of a recover is remembered
    *  and starts the next swing as soon as idle is reached. */
   bufferSec: 0.12,
+  /** REELED IN: at rest the hand has the chain wrapped short, so the head
+   *  dangles this far (metres) below the knot, in frame. The chain pays out to
+   *  full length for the wind-up and the strokes and reels back in during the
+   *  recover (ropeLength). */
+  reelRest: 0.17,
+  /** Fraction of a stroke over which the chain pays out to full length when
+   *  the stroke starts reeled in (a tap). Longer than leadFrac: at leadFrac a
+   *  tap's 0.38 m pay-out runs just over the 3.5 cm-per-240 Hz-step pop bound. */
+  payoutFrac: 0.4,
 } as const;
 
 export type CenserPhase = 'idle' | 'pending' | 'windup' | 'stroke' | 'recover';
@@ -83,6 +92,8 @@ export interface CenserSwing {
   strokeId: number;
   /** Handle pose when the stroke started; blended out over leadFrac. */
   from: Vec3;
+  /** Rope pay-out (0 = reelRest, 1 = full) when the stroke started; blended out over leadFrac. */
+  fromReel: number;
   /** The button state as of the last step. idle→pending needs the RISING
    *  EDGE (down && !wasDown), not just "down" — otherwise a button held
    *  through a cancel, or held from before a recover finishes, would
@@ -109,7 +120,7 @@ export function makeCenserSwing(): CenserSwing {
   const a = CENSER_SWING.defaultAngle;
   return {
     phase: 'idle', t: 0, charge: 0, heavy: false,
-    dir: { x: Math.cos(a), y: Math.sin(a) }, spin: 0, strokeId: 0, from: ZERO,
+    dir: { x: Math.cos(a), y: Math.sin(a) }, spin: 0, strokeId: 0, from: ZERO, fromReel: 0,
     wasDown: false, buffered: false,
   };
 }
@@ -168,10 +179,32 @@ export function handlePose(s: CenserSwing): Vec3 {
   }
 }
 
+/** How far the chain is paid out: 0 = reeled in (reelRest), 1 = full length.
+ *  Continuous across every transition, like handlePose. */
+function reelFrac(s: CenserSwing): number {
+  const S = CENSER_SWING;
+  switch (s.phase) {
+    case 'idle':
+    case 'pending':
+      return 0;
+    case 'windup':
+      return smooth(0, S.spinLiftSec, s.t);
+    case 'stroke':
+      return lerp(s.fromReel, 1, smooth(0, S.payoutFrac, clamp01(s.t / strokeSec(s.heavy))));
+    case 'recover':
+      return 1 - smooth(0.5, 1, s.t / recoverSec(s.heavy));
+  }
+}
+
+/** The rope's current length, metres: reelRest at rest, `full` for the wind-up and strokes. */
+export function ropeLength(s: CenserSwing, full: number): number {
+  return lerp(CENSER_SWING.reelRest, full, reelFrac(s));
+}
+
 function beginStroke(s: CenserSwing, heavy: boolean, offset: Dir2, t: number): CenserSwing {
   return {
     ...s, phase: 'stroke', t, heavy, charge: heavy ? s.charge : 0,
-    dir: strokeDirection(offset), strokeId: s.strokeId + 1, from: handlePose(s), buffered: false,
+    dir: strokeDirection(offset), strokeId: s.strokeId + 1, from: handlePose(s), fromReel: reelFrac(s), buffered: false,
   };
 }
 

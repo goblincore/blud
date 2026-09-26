@@ -58,9 +58,9 @@ export interface CenserHead {
  *  [0, 1] since the hook only ever soaks up energy, never adds it. */
 export type SubstepHook = (from: Vec3, to: Vec3, vel: Vec3) => number | void;
 
-export function makeCenserHead(anchor: Vec3): CenserHead {
+export function makeCenserHead(anchor: Vec3, ropeLen: number = CENSER_HEAD.ropeLen): CenserHead {
   return {
-    pos: [anchor[0], anchor[1] - CENSER_HEAD.ropeLen, anchor[2]],
+    pos: [anchor[0], anchor[1] - ropeLen, anchor[2]],
     vel: [0, 0, 0],
     anchor: [anchor[0], anchor[1], anchor[2]],
     acc: 0,
@@ -91,6 +91,10 @@ function collide(p: Mut3, v: Mut3, world: HeadWorld): void {
 
 export function stepCenserHead(
   s: CenserHead, anchor: Vec3, dt: number, world: HeadWorld, hook?: SubstepHook,
+  /** This frame's rope length (the reel, censer-swing.ts ropeLength). A
+   *  shorter rope than last frame is taken up by the position projection
+   *  alone — it never adds velocity, so reeling in cannot fling the head. */
+  ropeLen: number = CENSER_HEAD.ropeLen,
 ): CenserHead {
   const H = CENSER_HEAD;
 
@@ -102,7 +106,7 @@ export function stepCenserHead(
   // computing an anchor velocity that would fling it at absurd speed.
   const a0In = s.anchor;
   const jump = Math.hypot(anchor[0] - a0In[0], anchor[1] - a0In[1], anchor[2] - a0In[2]);
-  if (jump > H.snapDist) return makeCenserHead(anchor);
+  if (jump > H.snapDist) return makeCenserHead(anchor, ropeLen);
 
   const h = 1 / H.stepHz;
   // Real time elapsed since a0 (s.anchor) was sampled — this, not steps*h, is
@@ -134,9 +138,9 @@ export function stepCenserHead(
     for (let k = 0; k < 3; k++) { v[k] = v[k]! * decay; p[k] = p[k]! + v[k]! * h; }
     const d: Mut3 = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
     const L = Math.hypot(d[0], d[1], d[2]);
-    if (L > H.ropeLen) {
+    if (L > ropeLen) {
       const n: Mut3 = [d[0] / L, d[1] / L, d[2] / L];
-      for (let k = 0; k < 3; k++) p[k] = a[k]! + n[k]! * H.ropeLen;
+      for (let k = 0; k < 3; k++) p[k] = a[k]! + n[k]! * ropeLen;
       const rel = (v[0] - av[0]) * n[0] + (v[1] - av[1]) * n[1] + (v[2] - av[2]) * n[2];
       if (rel > 0) for (let k = 0; k < 3; k++) v[k] = v[k]! - n[k]! * rel;
     }

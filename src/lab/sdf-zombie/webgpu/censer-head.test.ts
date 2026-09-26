@@ -208,4 +208,39 @@ describe('censer head (rope pendulum)', () => {
     expect(hNaN.pos).toEqual(h.pos);
     expect(hNaN.vel).toEqual(h.vel);
   });
+
+  it('never exceeds a passed (shorter) rope length', () => {
+    const L = 0.2;
+    let h = makeCenserHead([0, 2, 0], L);
+    expect(dist(h.pos, [0, 2, 0])).toBeCloseTo(L, 9);
+    let worst = -Infinity;
+    for (let i = 0; i < 240; i++) {
+      const t = i / 60;
+      const a: Vec3 = [0.3 * Math.cos(t * 12), 2 + 0.2 * Math.sin(t * 9), 0.3 * Math.sin(t * 12)];
+      h = stepCenserHead(h, a, 1 / 60, OPEN, undefined, L);
+      worst = Math.max(worst, dist(h.pos, a) - L);
+    }
+    expect(worst).toBeLessThan(1e-6);
+  });
+
+  it('reeling in pulls the head up without injecting speed (≤ anchor speed + 1 m/s)', () => {
+    for (const av of [0, 2]) {
+      let h = makeCenserHead([0, 2, 0]);
+      const dt = 1 / 240;
+      let worst = 0, len: number = CENSER_HEAD.ropeLen;
+      // The reel window (0.1 s) and a beat after. Longer than that, a head
+      // dragged by a moving anchor swings ahead of it on its own (pendulum
+      // dynamics, same with a fixed rope), which is not what this pins.
+      for (let i = 0; i < 36; i++) {
+        const t = (i + 1) * dt;
+        len = Math.max(0.2, CENSER_HEAD.ropeLen - t * 3.5);   // 0.35 m reeled in over 0.1 s
+        const a: Vec3 = [av * t, 2, 0];
+        h = stepCenserHead(h, a, dt, OPEN, undefined, len);
+        worst = Math.max(worst, speed(h) - av);
+        expect(dist(h.pos, a)).toBeLessThanOrEqual(len + 1e-6);
+      }
+      expect(h.pos[1]).toBeGreaterThan(2 - 0.2 - 0.02);
+      expect(worst).toBeLessThan(1);
+    }
+  });
 });

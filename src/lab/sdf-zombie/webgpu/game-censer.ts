@@ -17,24 +17,33 @@ import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
 import { worldHitToWound, type Wound } from '../damage';
+import { reticleNdc } from './fisheye';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
 import { BEND_R_VIEW, SHOULDER_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
-  cancelCenserSwing, deadzoneOffset, handlePose, hitWindow, makeCenserSwing, stepCenserSwing,
+  cancelCenserSwing, deadzoneOffset, handlePose, hitWindow, makeCenserSwing, ropeLength, stepCenserSwing,
   type CenserSwing,
 } from './censer-swing';
 import { CENSER_HEAD, makeCenserHead, stepCenserHead, type CenserHead, type HeadWorld } from './censer-head';
 import { makeStrokeHits, sweepHead, type ActorProbe, type HitEvent, type StrokeHits } from './censer-hit';
 
 const CENSER_GLB = '/assets/lab/censer.glb';
-/** The grip's rest, aim-rig (view) space: low right, like the shotgun's grip. */
-export const CENSER_REST = { pos: new THREE.Vector3(0.16, -0.2, -0.34), haftTiltDeg: -35 } as const;
+/** The grip's rest, aim-rig (view) space: low right, the haft tipped well
+ *  forward so the knot sits out in front and the reeled-in head (reelRest)
+ *  dangles in the lower right of the frame. Measured headless on Night Train
+ *  (2026-09-26, 60 settle frames): head screen NDC ≈ (0.38, −0.77), knot ≈
+ *  (0.40, −0.25) — debug().headNdc / knotNdc. */
+export const CENSER_REST = { pos: new THREE.Vector3(0.22, -0.16, -0.46), haftTiltDeg: -65 } as const;
 /** The knot's height up the primitive haft; the GLB's ChainAnchor replaces it. */
 const PRIM_ANCHOR_Y = 0.26;
-const CHAIN_LINKS = 12;
+/** The chain: one instanced mesh, as many links as the paid-out rope needs
+ *  (reeled in ~25, full ~55). Each link is normalised to LINK_LEN long. */
+const LINK_LEN = 0.015;
+const LINK_PITCH = 0.011;
+const MAX_LINKS = 64;
 /** Feel numbers (spec §3.3), lerped from a tap to a full charge. */
 export const CENSER_FEEL = {
   hitStopTapSec: 0.03,
@@ -65,6 +74,12 @@ export interface CenserDebug {
   headSpeed: number;
   hits: number;
   lastHit: { actor: number; spheres: number; speedIn: number } | null;
+  /** The rope's current length (reeled in at rest), metres. */
+  rope: number;
+  /** Where the player SEES the head and the knot: screen NDC (−1..1, y up),
+   *  through the fisheye lens — not the wider render camera's NDC. */
+  headNdc: [number, number];
+  knotNdc: [number, number];
 }
 
 export interface CenserWeapon {
@@ -84,6 +99,19 @@ export interface CenserWeapon {
 }
 
 const lerp = THREE.MathUtils.lerp;
+
+/** Centre a link's geometry, turn its longest axis onto +Y (the chain tangent)
+ *  and scale it to LINK_LEN — the GLB's link arrives in its own units and pose. */
+function normaliseLink(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  g.computeBoundingBox();
+  const size = g.boundingBox!.getSize(new THREE.Vector3());
+  g.center();
+  if (size.x > size.y && size.x >= size.z) { g.rotateZ(Math.PI / 2); size.set(size.y, size.x, size.z); }
+  else if (size.z > size.y && size.z > size.x) { g.rotateX(Math.PI / 2); size.set(size.x, size.z, size.y); }
+  const k = LINK_LEN / (size.y || 1);
+  g.scale(k, k, k);
+  return g;
+}
 
 export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   // ---- The rig: holster travel → handle (swing pose) → haft (tilt) --------
@@ -123,14 +151,13 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
 
   const chain = new THREE.Group();
   chain.name = 'censer-chain';
-  const links: THREE.Mesh[] = [];
-  const primLink = new THREE.TorusGeometry(0.01, 0.0025, 6, 10);
-  for (let i = 0; i < CHAIN_LINKS; i++) {
-    const m = new THREE.Mesh(primLink, iron);
-    m.matrixAutoUpdate = false;
-    links.push(m);
-    chain.add(m);
-  }
+  // An oval ring in the XY plane, long axis +Y (the chain's tangent).
+  const primLink = normaliseLink(new THREE.TorusGeometry(0.01, 0.0028, 6, 10).scale(0.7, 1, 1));
+  const links = new THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>(primLink, iron, MAX_LINKS);
+  links.name = 'censer-links';
+  links.count = 0;
+  links.frustumCulled = false;   // the instances move every frame; the bound never would
+  chain.add(links);
   ctx.boot.handle.scene.add(head, chain);
   if (ctx.boot.deferredApi) {
     for (const o of [rig, head, chain]) ctx.boot.deferredApi.router.register(o, 'mesh', 'level-only');
@@ -171,7 +198,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       const found: THREE.Mesh[] = [];
       linkNode.traverse((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
       const lm = found[0];
-      if (lm) for (const m of links) { m.geometry = lm.geometry; m.material = lm.material; }
+      if (lm) { links.geometry = normaliseLink(lm.geometry.clone()); links.material = lm.material; }
     } catch (e) {
       console.warn('[sdf-game] censer.glb absent or unreadable — using the primitive censer', e);
     }
@@ -209,7 +236,16 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   const anchorW = new THREE.Vector3();
   const Y = new THREE.Vector3(0, 1, 0);
   const _up = new THREE.Vector3(), _p = new THREE.Vector3(), _tan = new THREE.Vector3();
+  const _m = new THREE.Matrix4();
   const _q = new THREE.Quaternion(), _roll = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1);
+
+  const _ndc = new THREE.Vector3();
+  function screenNdc(w: THREE.Vector3): [number, number] {
+    deps.camera.updateMatrixWorld();
+    _ndc.copy(w).project(deps.camera);
+    const p = reticleNdc({ x: _ndc.x, y: _ndc.y }, ctx.render.postAa.lens);
+    return [p.x, p.y];
+  }
 
   function anchorWorld(): Vec3 {
     const hp = handlePose(swing);
@@ -269,7 +305,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     }
   }
 
-  function drawHead(anchor: Vec3): void {
+  function drawHead(anchor: Vec3, rope: number): void {
     const h = headSim!.pos;
     head.position.set(h[0], h[1], h[2]);
     _up.set(anchor[0] - h[0], anchor[1] - h[1], anchor[2] - h[2]);
@@ -279,10 +315,13 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     // sagging by the rope's slack (straight when taut).
     const rr = CENSER_HEAD.radius * 1.3;
     const ring: Vec3 = [h[0] + _up.x * rr, h[1] + _up.y * rr, h[2] + _up.z * rr];
-    const sag = Math.max(0, CENSER_HEAD.ropeLen - span) * 0.6;
+    const sag = Math.max(0, rope - span) * 0.6;
     const c: Vec3 = [(anchor[0] + ring[0]) / 2, (anchor[1] + ring[1]) / 2 - sag, (anchor[2] + ring[2]) / 2];
-    for (let i = 0; i < CHAIN_LINKS; i++) {
-      const t = (i + 0.5) / CHAIN_LINKS, u = 1 - t;
+    // The links the paid-out chain needs: knot to ring, at the link pitch.
+    const n = Math.min(MAX_LINKS, Math.max(2, Math.round(Math.max(0, rope - rr) / LINK_PITCH)));
+    links.count = n;
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n, u = 1 - t;
       _p.set(
         u * u * anchor[0] + 2 * u * t * c[0] + t * t * ring[0],
         u * u * anchor[1] + 2 * u * t * c[1] + t * t * ring[1],
@@ -297,9 +336,9 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       _q.setFromUnitVectors(Y, _tan);
       _roll.setFromAxisAngle(_tan, i % 2 === 0 ? 0 : Math.PI / 2);   // alternate links cross
       _q.premultiply(_roll);
-      links[i]!.matrix.compose(_p, _q, _one);
-      links[i]!.matrixWorldNeedsUpdate = true;
+      links.setMatrixAt(i, _m.compose(_p, _q, _one));
     }
+    links.instanceMatrix.needsUpdate = true;
   }
 
   return {
@@ -324,9 +363,11 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
         swing = stepCenserSwing(swing, { down: held, offset: deadzoneOffset(ctx.weapon.aim) }, dt);
       }
       const anchor = anchorWorld();
+      // REELED IN at rest, paid out for the wind-up and strokes (censer-swing.ts ropeLength).
+      const rope = ropeLength(swing, CENSER_HEAD.ropeLen);
       // The head re-hangs whenever it was out of frame, so a raise never
       // starts with a swing carried over from wherever it was put away.
-      if (!headSim || !rig.visible) headSim = makeCenserHead(anchor);
+      if (!headSim || !rig.visible) headSim = makeCenserHead(anchor, rope);
       if (hitWindow(swing)) {
         if (!hits || hits.strokeId !== swing.strokeId) hits = makeStrokeHits(swing.strokeId, swing.heavy ? swing.charge : 0);
       } else {
@@ -342,9 +383,9 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
           for (const e of r.events) events.push(e);
           return r.velScale;
         }
-        : undefined);
+        : undefined, rope);
       if (events.length > 0) applyHits(events);
-      drawHead(anchor);
+      drawHead(anchor, rope);
       aimHand();
     },
     updateRig() {
@@ -375,6 +416,9 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
         headSpeed: h ? Math.hypot(h.vel[0], h.vel[1], h.vel[2]) : 0,
         hits: hitCount,
         lastHit,
+        rope: ropeLength(swing, CENSER_HEAD.ropeLen),
+        headNdc: screenNdc(head.position),
+        knotNdc: screenNdc(anchorW),
       };
     },
   };
