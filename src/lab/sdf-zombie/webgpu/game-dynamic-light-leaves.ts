@@ -410,6 +410,35 @@ const COLD_FILL: [number, number, number] = [0.62, 0.74, 1.0];
 const BODY_LAMP_RIM = 0.35;
 const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0 };
 
+/** THE LAMPS PRESENT THE ZOMBIES (owner, 2026-09-26: "more of screenshot 2" — a body lit from the
+ *  front-side reads as modeled, a body straight under a tube lit only on its crown reads dark).
+ *  Strength is the room's live lamp level (the light reaches past the visible cone), colour the
+ *  lamp's; direction is a three-quarter key from above and from the viewer's side, blended with the
+ *  real direction to the brightest lamp so bodies still differ. Flicker, blackouts and strobes ride
+ *  the room level. */
+const PRESENT = { gain: 1.1, realDir: 0.35, floor: 0.3 } as const;
+const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
+function presentingLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
+  const rt = ctx.world.light;
+  if (!rt) return null;
+  const room = roomIdAt(ctx, at[0], at[2]);
+  const lit = rt.roomLight.get(room) ?? 0;
+  // A room whose lamps are all dead or scripted off (a blackout) presents nothing: the drama stays.
+  if (!rt.lamps.some(l => l.room === room && l.mood !== 'fire' && l.mood !== 'dead' && !(l.script && l.level === 0))) return null;
+  const real = strongestLamp(ctx, at);
+  const cam = ctx.boot.handle.camera;
+  cam.getWorldDirection(camFwd);
+  camRight.crossVectors(camFwd, cam.up).normalize();
+  const dir = new THREE.Vector3().copy(camFwd).multiplyScalar(-0.55)
+    .addScaledVector(cam.up, 0.7).addScaledVector(camRight, 0.4).normalize();
+  if (real) dir.lerp(real.dir, PRESENT.realDir).normalize();
+  lampTmp.dir.copy(dir);
+  if (real) lampTmp.color.copy(real.color); else lampTmp.color.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);
+  // A floor while the room has any light: a flicker's dark instant dims a body, never erases it.
+  lampTmp.k = Math.max(lit, PRESENT.floor) * PRESENT.gain;
+  return lampTmp;
+}
+
 /** The brightest lamp on a point in its room (power × level / d², d at least 1 m): its direction
  *  from the point and colour. Fires count too (the firebox models the Stoker). */
 function strongestLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
@@ -447,7 +476,7 @@ export function applyWindowKey(ctx: GameContext, u: KeyUniforms, at?: readonly [
   const s = ctx.world.light?.storm;
   if (!u.lightDir || !u.keyColor) return;
   const kw = s ? s.intensity * BODY_WINDOW_GAIN : 0;
-  const lamp = at ? strongestLamp(ctx, at) : null;
+  const lamp = at ? presentingLamp(ctx, at) : null;
   const kl = lamp ? lamp.k * BODY_LAMP_GAIN : 0;
   let base = bodyBase.get(u);
   if (s || kw + kl > 0) {
