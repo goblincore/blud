@@ -28,6 +28,13 @@ T = 0.1  # internal partition thickness
 #   spawns:  (id, kind, x, u)
 #   pickups: (id, item, x, u)
 #   gates:   (id, event, x0, x1, u0, u1)
+#   pickups may add a height: (id, item, x, u, y)
+#   moods:    one per ceiling lamp, south to north (lamp-moods.ts; dynamic light spec §3)
+#   fires:    (id, x, u, y, power)       orange fire lights (stoves, boilers, the firebox)
+#   triggers: (id, event, x0, x1, u0, u1) once, floor to 2.2 m
+FIRE = (1.0, 0.42, 0.12)
+# When `on` fires, the level also fires `emit` (dynamic light spec §3).
+CUES = [("pickup.flashlight", ["light.die.room.1", "alert.room.1"])]
 CARRIAGES = [
     dict(rid=1, name="guards-van", w=3.6, L=16.0, h=2.8,
          walls=[(-1.8, -1.7, 5.5, 5.5 + T), (-0.3, 1.8, 5.5, 5.5 + T),        # hold | cage, door west
@@ -41,8 +48,8 @@ CARRIAGES = [
          spawns=[("van-trunk", "zombie", 1.05, 4.45), ("van-coffin-w", "zombie", -1.25, 8.2),
                  ("van-coffin-e", "zombie", 1.25, 7.0), ("van-guard", "zombie", 0.6, 13.8)],
          pickups=[("sawn-off", "shotgun", 1.4, 2.9), ("van-shells", "shells", -1.4, 12.8),
-                  ("van-health", "health", -1.4, 13.3)],
-         gates=[]),
+                  ("van-health", "health", -1.4, 13.3), ("torch", "flashlight", -1.45, 4.6, 1.4)],
+         gates=[], moods=["dying", "stutter"], fires=[("office-stove", 1.1, 15.2, 0.5, 0.8)], triggers=[]),
     dict(rid=3, name="dining-car", w=4.2, L=18.0, h=3.0,
          walls=[(-2.1, -2.0, 15.4, 15.4 + T), (-0.6, 2.1, 15.4, 15.4 + T)],   # saloon | galley, door west
          areas=[("saloon (tables)", -2.1, 2.1, 0, 9.6), ("buffet lounge", -2.1, 2.1, 9.6, 15.4),
@@ -55,7 +62,7 @@ CARRIAGES = [
                  ("cultist-island", "cultist", 0.0, 15.0), ("cultist-lounge", "cultist", -1.4, 13.0),
                  ("cook", "zombie", 0.3, 16.8)],
          pickups=[("galley-health", "health", -1.85, 17.2), ("galley-shells", "shells", 1.7, 17.2)],
-         gates=[]),
+         gates=[], moods=["flicker", "dead"], fires=[("galley-stoves", 1.2, 16.6, 0.6, 0.8)], triggers=[]),
     dict(rid=4, name="sleeper", w=4.0, L=18.0, h=2.8,
          walls=[(-0.6, 2.0, 1.6, 1.6 + T), (-0.6, 2.0, 16.3, 16.3 + T),       # lobbies | compartments
                 *[(-0.5, 2.0, u, u + T) for u in (4.56, 7.52, 10.48, 13.44)],  # between compartments
@@ -68,7 +75,9 @@ CARRIAGES = [
          spawns=[("c1-sleeper", "zombie", 0.6, 3.1), ("c3-sleeper", "zombie", 0.6, 9.0),
                  ("cultist-c4", "cultist", 0.2, 12.0), ("lobby-1", "zombie", -1.0, 17.2), ("lobby-2", "zombie", 1.0, 17.2)],
          pickups=[("c2-shells", "shells", 1.5, 6.0), ("new-weapon", "dynamite", 1.5, 9.0)],
-         gates=[("c5-door", "never", -0.6, -0.5, 14.28, 15.68)]),
+         gates=[("c5-door", "never", -0.6, -0.5, 14.28, 15.68)],
+         moods=["stutter", "stutter"], fires=[("sleeper-boiler", 1.4, 0.6, 0.6, 1.0)],
+         triggers=[("blackout", "light.blackout.room.4", -2.0, -0.6, 8.6, 9.4)]),
     dict(rid=5, name="party-carriage", w=4.2, L=20.0, h=3.4,
          walls=[],
          areas=[("dance floor", -2.1, 2.1, 0, 20.0)],
@@ -79,13 +88,26 @@ CARRIAGES = [
                      ((-1.0, 8.5), (0.8, 8.8), (-0.6, 10.0), (1.0, 10.4), (-1.2, 11.4), (0.4, 11.8), (-0.3, 14.5), (0.9, 15.2)), 1)],
                  ("cultist-bar-1", "cultist", 1.1, 13.0), ("cultist-bar-2", "cultist", 1.1, 16.5)],
          pickups=[("favour-dynamite", "dynamite", -1.75, 3.0), ("bar-health", "health", 1.8, 17.8), ("jukebox-cd", "cd", -1.7, 19.2)],
-         gates=[]),
+         gates=[], moods=["steady", "steady"], fires=[("party-boiler", 1.5, 0.7, 0.6, 1.0)],
+         triggers=[("strobe", "light.strobe.room.5", -2.1, 2.1, 5.5, 6.5)]),
     dict(rid=8, name="cab", w=3.0, L=8.0, h=2.6,
          walls=[],
          areas=[("cab: the Stoker at the firebox", -1.5, 1.5, 0, 8.0)],
          props=[("backhead", -1.5, 1.5, 7.6, 8.0, 2.4)],
-         spawns=[], pickups=[], gates=[]),
+         spawns=[], pickups=[], gates=[], moods=["steady"], fires=[("firebox", 0.0, 7.0, 1.0, 4.0)], triggers=[]),
 ]
+
+
+WARM = (1.0, 0.72, 0.45)
+LIGHT_POWER = 1.5  # art v2: dark carriages; the flashlight carries the view
+
+
+def lamps(c):
+    """The ceiling lamps of a carriage, in its frame: ((x, y, u), mood), south to north."""
+    n = max(1, round(c["L"] / 8))
+    if len(c["moods"]) != n:
+        raise SystemExit(f"{c['name']}: {n} lamps but {len(c['moods'])} moods")
+    return [((0.0, c["h"] - 0.4, c["L"] * (i + 0.5) / n), c["moods"][i]) for i in range(n)]
 
 
 def placed():
@@ -100,7 +122,8 @@ def placed():
 
 def to_level() -> dict:
     doc = {"version": 1, "id": "night-train", "name": "Night Train", "ammo": "finite", "loadout": ["melee"],
-           "rooms": [], "tunnels": [], "furniture": [], "solids": [], "gates": [], "spawns": [], "pickups": []}
+           "rooms": [], "tunnels": [], "furniture": [], "solids": [], "gates": [], "triggers": [], "lights": [],
+           "spawns": [], "pickups": [], "cues": [{"on": on, "emit": list(emit)} for on, emit in CUES]}
     prev = None
     for c, zs in placed():
         w2 = c["w"] / 2
@@ -116,8 +139,14 @@ def to_level() -> dict:
             doc["furniture"].append({"min": [x0, 0, g(u1)], "max": [x1, h, g(u0)]})
         for sid, kind, x, u in c["spawns"]:
             doc["spawns"].append({"id": sid, "kind": kind, "pos": [x, 0, g(u)], "yaw": 3.1416})
-        for pid, item, x, u in c["pickups"]:
-            doc["pickups"].append({"id": pid, "item": item, "pos": [x, 0.3, g(u)]})
+        for pid, item, x, u, *y in c["pickups"]:
+            doc["pickups"].append({"id": pid, "item": item, "pos": [x, y[0] if y else 0.3, g(u)]})
+        for i, (pos, mood) in enumerate(lamps(c)):
+            doc["lights"].append({"pos": [pos[0], pos[1], g(pos[2])], "color": list(WARM), "power": LIGHT_POWER, "mood": mood})
+        for _, x, u, y, power in c["fires"]:
+            doc["lights"].append({"pos": [x, y, g(u)], "color": list(FIRE), "power": power, "mood": "fire"})
+        for tid, event, x0, x1, u0, u1 in c["triggers"]:
+            doc["triggers"].append({"id": tid, "event": event, "once": True, "min": [x0, 0, g(u1)], "max": [x1, 2.2, g(u0)]})
         for gid, event, x0, x1, u0, u1 in c["gates"]:
             doc["gates"].append({"id": gid, "opensOn": event, "min": [x0, 0, g(u1)], "max": [x1, 2.2, g(u0)]})
     doc["start"] = {"pos": [0, 0, -1.0], "yaw": 0.0}

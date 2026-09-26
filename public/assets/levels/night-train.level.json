@@ -6,6 +6,15 @@
   "loadout": [
     "melee"
   ],
+  "cues": [
+    {
+      "on": "pickup.flashlight",
+      "emit": [
+        "light.die.room.1",
+        "alert.room.1"
+      ]
+    }
+  ],
   "rooms": [
     {
       "id": 1,
@@ -764,7 +773,95 @@
       ]
     }
   ],
+  "triggers": [
+    {
+      "id": "blackout",
+      "event": "light.blackout.room.4",
+      "min": [
+        -2.0,
+        0.0,
+        -45.8
+      ],
+      "max": [
+        -0.6,
+        2.2,
+        -45.0
+      ],
+      "once": true
+    },
+    {
+      "id": "strobe",
+      "event": "light.strobe.room.5",
+      "min": [
+        -2.1,
+        0.0,
+        -62.1
+      ],
+      "max": [
+        2.1,
+        2.2,
+        -61.1
+      ],
+      "once": true
+    }
+  ],
   "lights": [
+    {
+      "pos": [
+        1.1,
+        0.5,
+        -15.2
+      ],
+      "color": [
+        1.0,
+        0.42,
+        0.12
+      ],
+      "power": 0.8,
+      "mood": "fire"
+    },
+    {
+      "pos": [
+        1.2,
+        0.6,
+        -33.8
+      ],
+      "color": [
+        1.0,
+        0.42,
+        0.12
+      ],
+      "power": 0.8,
+      "mood": "fire"
+    },
+    {
+      "pos": [
+        1.4,
+        0.6,
+        -37.0
+      ],
+      "color": [
+        1.0,
+        0.42,
+        0.12
+      ],
+      "power": 1.0,
+      "mood": "fire"
+    },
+    {
+      "pos": [
+        1.5,
+        0.6,
+        -56.3
+      ],
+      "color": [
+        1.0,
+        0.42,
+        0.12
+      ],
+      "power": 1.0,
+      "mood": "fire"
+    },
     {
       "pos": [
         0.0,
@@ -776,7 +873,8 @@
         0.42,
         0.12
       ],
-      "power": 4.0
+      "power": 4.0,
+      "mood": "fire"
     },
     {
       "pos": [
@@ -789,7 +887,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "dying"
     },
     {
       "pos": [
@@ -802,7 +901,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "stutter"
     },
     {
       "pos": [
@@ -815,7 +915,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "flicker"
     },
     {
       "pos": [
@@ -828,7 +929,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "dead"
     },
     {
       "pos": [
@@ -841,7 +943,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "stutter"
     },
     {
       "pos": [
@@ -854,7 +957,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "stutter"
     },
     {
       "pos": [
@@ -867,7 +971,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "steady"
     },
     {
       "pos": [
@@ -880,7 +985,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "steady"
     },
     {
       "pos": [
@@ -893,7 +999,8 @@
         0.72,
         0.45
       ],
-      "power": 1.5
+      "power": 1.5,
+      "mood": "steady"
     }
   ],
   "spawns": [
@@ -1164,6 +1271,15 @@
         1.5,
         0.3,
         -45.4
+      ]
+    },
+    {
+      "id": "torch",
+      "item": "flashlight",
+      "pos": [
+        -1.45,
+        1.4,
+        -4.6
       ]
     },
     {

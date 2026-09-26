@@ -113,6 +113,8 @@ def export_art(doc, json_path):
                 src = originals.get(o.data.name)
                 if src is not None and "sway" in src.keys():
                     o["sway"] = str(src["sway"])
+                if "shadow" in inst.keys():
+                    o["shadow"] = bool(inst["shadow"])
         bpy.data.objects.remove(inst)
     view.update()
     meshes = [o for o in dressing.all_objects if o.type == "MESH"]
@@ -133,13 +135,15 @@ def export_art(doc, json_path):
     parents = {}
     for o in [o for o in meshes if o.data.name in shared]:
         kit = o.get("kit", o.data.name)
-        key = (int(o["room"]), kit, o.data.name)
+        key = (int(o["room"]), kit, o.data.name, bool(o.get("shadow", True)))
         if key not in parents:
             name = f"kit:{key[0]}:{kit}" if int(o.get("kit_parts", 1)) == 1 else f"kit:{key[0]}:{kit}.{o.data.name}"
             p = bpy.data.objects.new(name, None)
             p["room"] = key[0]
             if "sway" in o.keys():
                 p["sway"] = o["sway"]
+            if "shadow" in o.keys() and not o["shadow"]:
+                p["shadow"] = False
             dressing.objects.link(p)
             parents[key] = p
         mw = o.matrix_world.copy()
@@ -206,6 +210,8 @@ def main():
         doc["completeOn"] = scene["complete_on"]
     if scene.get("states"):
         doc["states"] = csv(scene["states"])
+    if scene.get("cues"):
+        doc["cues"] = [{"on": on, "emit": list(emit)} for on, emit in json.loads(scene["cues"])]
     for key in ("rooms", "tunnels", "stairs", "furniture", "solids", "gates", "triggers", "windows",
                 "lights", "spawns", "graves", "pickups", "bells", "portals"):
         doc[key] = []
@@ -283,7 +289,8 @@ def main():
         c = o.data.color
         doc["lights"].append(with_states(o, {"pos": to_game(o.matrix_world.translation),
                                              "color": [rnd(c[0]), rnd(c[1]), rnd(c[2])],
-                                             "power": rnd(o.get("power", o.data.energy / 10.0))}))
+                                             "power": rnd(o.get("power", o.data.energy / 10.0)),
+                                             **({"mood": str(o["mood"])} if "mood" in o.keys() else {})}))
 
     start = None
     for o in objects("markers"):

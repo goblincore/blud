@@ -13,6 +13,7 @@ plan of record: change them and rebuild.
 
 Game space (x, y, z), y up, the train runs toward -z; Blender gets (x, -z, y).
 """
+import json
 import math
 import os
 import sys
@@ -20,7 +21,7 @@ import sys
 import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from night_train_layout import CARRIAGES, VESTIBULE, placed  # noqa: E402
+from night_train_layout import CARRIAGES, CUES, FIRE, LIGHT_POWER, VESTIBULE, WARM, lamps, placed  # noqa: E402
 
 ROOT = os.path.abspath("assets-source/levels")
 ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -34,8 +35,8 @@ KIT = os.path.abspath(arg("--kit", os.path.join(ROOT, "kit.blend")))
 OUT = os.path.abspath(arg("--out", os.path.join(ROOT, "night-train.blend")))
 BAY = 1.9
 PI = math.pi
-WARM = (1.0, 0.72, 0.45)
-LIGHT_POWER = 1.5  # art v2: dark carriages; the flashlight carries the view
+# Small dressing casts no shadow (dynamic light spec §3: the window light's shadow pass).
+NO_SHADOW = ("valve", "gauges", "grille", "gear-housing", "streamers", "bunting", "party-hats", "lamp-hanging")
 
 
 def dm(v):
@@ -48,6 +49,7 @@ SC["level_id"] = "night-train"
 SC["level_name"] = "Night Train"
 SC["ammo"] = "finite"
 SC["loadout"] = "melee"
+SC["cues"] = json.dumps(CUES)
 
 COLLS = {}
 
@@ -85,13 +87,15 @@ def gempty(name, pos, yaw=0.0, **props):
     return obj
 
 
-def glight(name, pos, color, power):
+def glight(name, pos, color, power, mood=None):
     data = bpy.data.lights.new(name, "POINT")
     data.color = color
     data.energy = power * 10.0
     obj = bpy.data.objects.new(name, data)
     obj.location = (pos[0], -pos[2], pos[1])
     obj["power"] = power
+    if mood:
+        obj["mood"] = mood
     coll("lights").objects.link(obj)
 
 
@@ -111,6 +115,8 @@ def put(piece, x, y, z, yaw=0.0, zscale=1.0):
     e.location = (x, -z, y)
     e.rotation_euler = (0.0, 0.0, yaw)
     e.scale = (1.0, zscale, 1.0)
+    if piece.startswith(NO_SHADOW):
+        e["shadow"] = False
     coll("dressing").objects.link(e)
     return e
 
@@ -168,12 +174,12 @@ def carriage(c, zs):
     g = lambda u: zs - u  # noqa: E731  (carriage frame u -> game z)
     room = gbox("rooms", f"room:{rid}:{name}", (-w2, 0, g(L)), (w2, h, zs), wire=True)
     room["shell"] = "art"
-    lamps = max(1, round(L / 8))
-    for i in range(lamps):
-        glight(f"lamp:{rid}:{i}", (0, h - 0.4, g(L * (i + 0.5) / lamps)), WARM, LIGHT_POWER)
+    for i, ((x, y, u), mood) in enumerate(lamps(c)):
+        glight(f"lamp:{rid}:{i}", (x, y, g(u)), WARM, LIGHT_POWER, mood)
+    for fid, x, u, y, power in c["fires"]:
+        glight(f"fire:{rid}:{fid}", (x, y, g(u)), FIRE, power, "fire")
     if name == "cab":
         put("cab-shell", 0, 0, zs)
-        glight(f"firebox:{rid}", (0, 1.0, g(L - 1.0)), (1.0, 0.42, 0.12), 4)
     else:
         bays = int(L // BAY)
         pad = (L - bays * BAY) / 2
@@ -231,8 +237,11 @@ def carriage(c, zs):
         prop(label, x0, x1, u0, u1, ph, g, rid, n, w2)
     for sid, kind, x, u in c["spawns"]:
         gempty(f"spawn:{kind}:{sid}", (x, 0, g(u)), PI)   # facing south, toward the player
-    for pid, item, x, u in c["pickups"]:
-        gempty(f"pickup:{item}:{pid}", (x, 0.3, g(u)))
+    for pid, item, x, u, *y in c["pickups"]:
+        gempty(f"pickup:{item}:{pid}", (x, y[0] if y else 0.3, g(u)))
+    for tid, event, x0, x1, u0, u1 in c["triggers"]:
+        t = gbox("triggers", f"trigger:{event}:{tid}", (x0, 0, g(u1)), (x1, 2.2, g(u0)), wire=True)
+        t["once"] = True
     for gid, event, x0, x1, u0, u1 in c["gates"]:
         gbox("gates", f"gate:{event}:{gid}", (x0, 0, g(u1)), (x1, 2.2, g(u0)))
 

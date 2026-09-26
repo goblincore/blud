@@ -65,3 +65,24 @@ describe('night-train.level.json', () => {
     for (const [name, p] of Object.entries(points)) expect(nav.route(start, p).length, name).toBeGreaterThan(0);
   });
 });
+
+describe('night-train dynamic light (dynamic light spec §3)', () => {
+  const moods = (name: string) => room(name).accents.map(a => a.mood);
+  it('lamp moods and fires per carriage', () => {
+    expect(moods('guards-van')).toEqual(expect.arrayContaining(['dying', 'stutter', 'fire']));
+    expect(moods('dining-car')).toEqual(expect.arrayContaining(['flicker', 'dead', 'fire']));
+    expect(moods('sleeper')).toEqual(expect.arrayContaining(['stutter', 'fire']));
+    expect(moods('cab')).toEqual(expect.arrayContaining(['steady', 'fire']));
+    expect(t.rooms.flatMap(r => r.accents).every(a => a.mood !== undefined)).toBe(true);
+  });
+  it('the flashlight hangs in the baggage hold', () => {
+    const torch = t.pickups.find(p => p.item === 'flashlight')!;
+    expect(torch.id).toBe('torch');
+    expect(torch.pos[2]).toBeGreaterThan(-5.5);   // the hold: z 0..-5.5
+    expect(roomAtPoint(t, torch.pos[0], torch.pos[2])?.name).toBe('guards-van');
+  });
+  it('taking it kills the van lamp and wakes the van; blackout and strobe triggers', () => {
+    expect(t.cues).toEqual([{ on: 'pickup.flashlight', emit: ['light.die.room.1', 'alert.room.1'] }]);
+    expect(t.triggers.map(tr => [tr.event, tr.once])).toEqual([['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
+  });
+});
