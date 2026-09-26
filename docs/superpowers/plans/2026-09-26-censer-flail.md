@@ -2167,6 +2167,56 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
+### Task 8b: Swing motion blur through the gib shutter layer (owner request, 2026-09-26)
+
+**Files:**
+- Create: `src/lab/sdf-zombie/webgpu/censer-blur.ts` (pure: censer parts → `GibBlurSubject`-compatible motion states) + `censer-blur.test.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/game-censer.ts` (expose `blurSubjects()`), `src/lab/sdf-zombie/webgpu/game-main.ts:~7686`
+  (the single `ctx.gibs.shutter.select(...)` call)
+
+The game already smears fast OPAQUE meshes: `gib-shutter-layer.ts` moves selected meshes to
+`GIB_BLUR_LAYER` (10), renders a clean background without them, draws them alone, and resolves a
+rotation-aware motion seed (`gib-motion-blur.ts` `planGibMotionStamps`) over the frame. It is on in
+the default (legacy) route and hard-off on `?renderer=deferred`. The censer's head, chain links and
+haft are exactly this kind of subject during a swing.
+
+- [ ] **Step 1: Read the contract.** `GibBlurSubject { id, state: Chunk, mesh: THREE.Mesh, baseLayer, ageSeconds }`
+  (`gib-shutter-layer.ts:73`). `gib-motion-blur.ts` reads only `state.pos/vel/quat/angVel/radius/squash/support`
+  (verify with grep). Selection is by `isGibSelectedForBlur` (speed ≥ 0.12 m/s or ω ≥ 0.5 rad/s).
+  `select()` must be called ONCE per frame with ALL subjects, BEFORE the base render; it puts
+  everything not passed back on its base layer.
+- [ ] **Step 2: Pure adapter (TDD).** `censer-blur.ts` exports
+  `censerMotionState(prev: {pos, quat}, cur: {pos, quat}, dt, radius): Chunk-shaped` — velocity from
+  the position delta, angular velocity from the shortest-arc quaternion delta (reuse the quaternion
+  helpers in `../vec`), `squash: 0`, one origin support sphere, and the remaining `Chunk` fields
+  filled with neutral values (`limb: 'torso'`, `kind: 'gob'`, `longAxis: [0,1,0]` — check `Chunk`
+  for the full list). Tests: a pure translation gives the right `vel` and zero `angVel`; a 90°/s spin
+  gives `|angVel| ≈ π/2`; `dt ≤ 0` gives zero motion; the shortest arc never takes the long way.
+- [ ] **Step 3: Subjects from the censer.** In `game-censer.ts` keep each part's previous world
+  pose and expose `blurSubjects(dt): GibBlurSubject[]` for: the head (one subject per MESH under the
+  head group — layers are per-object, not inherited — all sharing the head's motion state, radius
+  `CENSER_HEAD.radius`), each chain link (radius 0.01), and the haft's meshes (world motion of the
+  haft, radius 0.03, including the hand/arm meshes so they smear with it). Stable ids in a range
+  that cannot collide with gib ids (e.g. `1_000_000 + n`). Return `[]` when the censer is hidden,
+  and only during `hitWindow` or `windup` (a resting censer never blurs). `ageSeconds`: time since
+  the swing phase began (so a fresh stroke does not streak backwards).
+- [ ] **Step 4: Wire it.** At `game-main.ts:~7686` pass
+  `[...gibBlurSubjects(ctx), ...(ctx.weapon.censer?.blurSubjects(dt) ?? [])]` (respecting
+  `GIB_BLUR_MAX_PIECES` = 64: censer subjects first, gibs fill the rest, or raise the cap if the
+  layer allows — report which). Keep the `enabled` gate. Camera-parented meshes (the haft) are fine:
+  layers are per object and the seed projects through the current camera.
+- [ ] **Step 5: Verify headless** (the Task 7 harness): hold a charged spin and capture mid-stroke with
+  blur on and with `__sdfGame.setGibBlur(false)` (or the seam in `game-seams-fx.ts` ~line 522 — check
+  its name). Measure the streak: the count of pixels in a 200×200 crop around the head's screen
+  position whose colour differs from the blur-off frame by > 8 levels must be > 5% of the crop.
+  Save `docs/dev-notes/2026-09-26-censer/swing-blur-on.png` / `-off.png`; LOOK at them: the head and
+  chain should smear along the arc, the background must show through the trail, the haft should
+  smear less than the head. Check `__sdfGame.gibBlurDiagnostics()` (or equivalent) reports the
+  censer pieces selected and no error.
+- [ ] **Step 6: Commit** `feat(censer): swing motion blur through the gib shutter layer`.
+
+---
+
 ### Task 9: The in-game gate (`scripts/censer-gate.mjs`) and first tuning pass
 
 **Files:**
