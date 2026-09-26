@@ -903,6 +903,7 @@ describe('collectLightSources', () => {
    - Window: `ctx.world.light.storm` (`dir`, `color`, `intensity`), with the room from `ctx.world.light.windowLights` (the room of the player's carriage, or the key whose light is live).
    - Flashlight: `ctx.lighting.flashlight.spot`, only when its intensity > 0.
    - Flashes: `directFlashes`. Read its element type at `game-main.ts:1906-1925` and mark burning entries (`pushFlashes`) as `fire: true`. If entries carry no such flag, add one in `game-burning.ts:457`.
+   - **Fire sources get `range: 3`.** This covers both fire-mood lamps and burning-body flashes, and reproduces `strongestLamp`'s rule that fire keys a body only within 3 m. `presentingLamp` skipped fire outright. This was settled after Task 4.
 3. **`createLightListGpu()` and `writeLightList(ctx, directFlashes)`.**
    - `createLightListGpu()`:
      ```ts
@@ -1134,7 +1135,9 @@ The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the g
 - Modify: `src/lab/sdf-zombie/webgpu/game-light-list-leaves.ts`: `LIGHT_LIST_ON = new URLSearchParams(location.search).get('lightlist') !== '0'`, plus `applyBodyLights(ctx, u, body: PickBody)`, which writes `u.bodyLights` (the packed pick) and `u.lightListCfg.x = 1`.
 - Modify: `src/lab/sdf-zombie/webgpu/game-main.ts`, the actor site at :1965 and the crowd site at :2114.
   - When `LIGHT_LIST_ON`:
-    - call `applyBodyLights` with `{ pos: a.pose().pos, room: a.room, facing: <the actor's unit xz facing, from its yaw> }`;
+    - call `applyBodyLights` with `{ pos: <root + (0, 1.2, 0), the chest>, feetY: <root.y + 0.2>, room: a.room, facing: <unit xz direction from the body to the CAMERA> }`.
+      - **Facing is toward the viewer, not the body's heading.** That is `presentingLamp`'s rule, settled after Task 4: the light that presents the body to the camera wins, and the backKey falloff darkens a body lit from behind as the player sees it.
+      - The chest and feet offsets are `presentingLamp`'s own (root + 1.2, root + 0.2).
     - **skip** `applyWindowKey`, `applyRoomFill` and `applyStormBodyKey` for SDF bodies;
     - set `u.bodyFlash.value.w = 0` (the muzzle is now a list light: no double count);
     - keep `applySelfShadow`.
@@ -1144,7 +1147,7 @@ The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the g
   - **Crowd members:** every crowd member is an actor with its own record, so its picks are its own. The type-shared `lightListCfg` is set once on the crowd type's source uniforms. `copyUniformValues` copies it; check that the copy includes `lightListCfg`, and add it if the copy is an explicit list.
 - Modify: `src/lab/sdf-zombie/webgpu/game-state-*.ts` only if `tsc` or the coverage test demands it. Nothing new should be a `main()` binding.
 
-- [ ] **Step 1: Failing test (pure part).** Add to `game-light-list-leaves.test.ts`: `facingFromYaw(yaw)` returns a unit xz vector matching the repo's yaw convention. Take the convention from `setPose`'s camera math, or from the actor's forward in `game-ai` leaves. Pin two angles.
+- [ ] **Step 1: Failing test (pure part).** Add to `game-light-list-leaves.test.ts` a pure `pickBodyFor(root, room, camPos)`. It returns `{ pos: root+1.2y, feetY: root.y+0.2, room, facing: unit xz (cam − root) }`. If the camera is directly overhead (xz length < 1e-4), facing falls back to `[0, 1]`. Pin those three cases.
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement** the pure part and the wiring.
 - [ ] **Step 4: Run** the unit tests, `npx tsc --noEmit`, and `LAB_TMP=.lab-tmp bash scripts/sdf-game-light-gate.sh`. The gate passes, and the list is now **on**.
