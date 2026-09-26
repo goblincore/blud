@@ -7638,6 +7638,9 @@ async function main() {
     applyTrainCamera(ctx, camera);
     applyDeathCamera(ctx, camera);
     camera.updateMatrixWorld();
+    // The censer's DRAW pass: the knot re-read off the camera just finalised
+    // (its tick ran ~500 lines up, before the camera moved this frame).
+    ctx.weapon.censer?.sync();
 
     // Optional impact crown: rebuild from the current event times after the
     // camera is final (its sync takes the camera for parity; geometry is

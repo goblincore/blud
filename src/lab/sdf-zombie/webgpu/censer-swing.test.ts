@@ -5,6 +5,8 @@ import {
   makeCenserSwing, ropeLength, stepCenserSwing, strokeDirection, type CenserSwing, type Dir2,
 } from './censer-swing';
 import { FREE_AIM } from './free-aim';
+import { CENSER_HEAD, makeCenserHead, stepCenserHead } from './censer-head';
+import type { Vec3 } from '../types';
 
 const DT = 1 / 240;
 const run = (s: CenserSwing, sec: number, down: boolean, offset: Dir2 = { x: 0, y: 0 }): CenserSwing => {
@@ -270,5 +272,66 @@ describe('ropeLength (reeled in at rest, paid out to swing)', () => {
       }
     }
     expect(worst).toBeLessThan(POP_BOUND);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HEAD-SPEED BASELINE (a regression floor, NOT a target).
+//
+// Spec §3.3 wants the head at ~9 m/s on a tap and ~16 m/s on a full charge
+// (CENSER_HIT.tap/heavy.speedRef). The reeled-in rest pose (2026-09-26) starts
+// every tap slack, so today's numbers sit far below that; Task 9 tunes toward
+// the targets. These tests only stop them getting WORSE unnoticed: floors are
+// 0.9 x what this model measured when they were written (printed below).
+//
+// The model: the camera fixed at the origin looking down -z (view = world, y
+// up), the knot at the rest grip + the haft's knot offset + handlePose — the
+// haft's tilt applied to a fixed offset, not rotated by the swing (game-censer
+// rotates nothing either: the handle only translates). Mirrors CENSER_REST in
+// game-censer.ts (0.22, -0.16, -0.46; tilt -65 deg; knot 0.255 up the haft).
+const REST: Vec3 = [0.22, -0.16, -0.46];
+const TILT = (-65 * Math.PI) / 180;
+const KNOT_UP = 0.255;
+const knotAt = (s: CenserSwing): Vec3 => {
+  const p = handlePose(s);
+  return [REST[0] + p[0], REST[1] + p[1] + KNOT_UP * Math.cos(TILT), REST[2] + p[2] + KNOT_UP * Math.sin(TILT)];
+};
+const OPEN_WORLD = { floorY: -100, boxes: [] };
+/** Measured 2026-09-26 with this model (reelRest 0.17, full rope 0.55). Note the
+ *  heavy is SLOWER than the tap today — a finding for Task 9, not a target. */
+const TAP_PEAK_MEASURED = 2.888;
+const HEAVY_PEAK_MEASURED = 2.458;
+/** Settle at rest, press for `holdSec`, release; measure over the hit window. */
+function measureStroke(holdSec: number): { peak: number; ext: number } {
+  let s = makeCenserSwing();
+  let h = makeCenserHead(knotAt(s), ropeLength(s, CENSER_HEAD.ropeLen));
+  const step = (down: boolean) => {
+    s = stepCenserSwing(s, { down, offset: { x: 0, y: 0 } }, DT);
+    h = stepCenserHead(h, knotAt(s), DT, OPEN_WORLD, undefined, ropeLength(s, CENSER_HEAD.ropeLen));
+  };
+  for (let i = 0; i < 240; i++) step(false);
+  for (let i = 0; i < Math.round(holdSec / DT); i++) step(true);
+  let peak = 0, ext = 0, seen = false;
+  for (let i = 0; i < 480; i++) {
+    step(false);
+    if (!hitWindow(s)) { if (seen) break; continue; }
+    seen = true;
+    const k = knotAt(s);
+    peak = Math.max(peak, Math.hypot(h.vel[0], h.vel[1], h.vel[2]));
+    ext = Math.max(ext, Math.hypot(h.pos[0] - k[0], h.pos[1] - k[1], h.pos[2] - k[2]));
+  }
+  return { peak, ext };
+}
+
+describe('head speed over the hit window (baseline floor; spec targets tap ~9, heavy ~16 m/s)', () => {
+  it('a tap', () => {
+    const m = measureStroke(0.05);
+    console.log(`[censer baseline] tap peak ${m.peak.toFixed(3)} m/s, max extension ${m.ext.toFixed(3)} m`);
+    expect(m.peak).toBeGreaterThanOrEqual(0.9 * TAP_PEAK_MEASURED);
+  });
+  it('a full-charge heavy', () => {
+    const m = measureStroke(CENSER_SWING.holdSec + CENSER_SWING.chargeSec + 0.1);
+    console.log(`[censer baseline] heavy peak ${m.peak.toFixed(3)} m/s, max extension ${m.ext.toFixed(3)} m`);
+    expect(m.peak).toBeGreaterThanOrEqual(0.9 * HEAVY_PEAK_MEASURED);
   });
 });

@@ -16,7 +16,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
-import { worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, worldHitToWound, type Wound } from '../damage';
 import { reticleNdc } from './fisheye';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
@@ -40,7 +40,8 @@ export const CENSER_REST = { pos: new THREE.Vector3(0.22, -0.16, -0.46), haftTil
 /** The knot's height up the primitive haft; the GLB's ChainAnchor replaces it. */
 const PRIM_ANCHOR_Y = 0.26;
 /** The chain: one instanced mesh, as many links as the paid-out rope needs
- *  (reeled in ~25, full ~55). Each link is normalised to LINK_LEN long. */
+ *  from the knot to the head's ring (reeled in ~7, full ~42). Each link is
+ *  normalised to LINK_LEN long. */
 const LINK_LEN = 0.015;
 const LINK_PITCH = 0.011;
 const MAX_LINKS = 64;
@@ -80,14 +81,24 @@ export interface CenserDebug {
    *  through the fisheye lens — not the wider render camera's NDC. */
   headNdc: [number, number];
   knotNdc: [number, number];
+  /** Metres between where the chain was last DRAWN from and where the knot is
+   *  now (the rendered camera). Non-zero = the chain was placed off a stale
+   *  camera — the sync pass exists to keep this at 0. */
+  chainGap: number;
 }
 
 export interface CenserWeapon {
   /** A mousedown while the censer is live. True = consumed. */
   onMouseDown(button: number): boolean;
   onMouseUp(button: number): void;
-  /** Once per tick, AFTER the aim rig is placed and stepWeaponSlots has run. */
+  /** Once per tick, AFTER the aim rig is placed and stepWeaponSlots has run:
+   *  the swing, the pendulum and the hits. Reads the knot off the PREVIOUS
+   *  frame's camera — a one-frame lag in the physics is invisible. */
   tick(dt: number): void;
+  /** Once per frame, AFTER the camera's final updateMatrixWorld: re-reads the
+   *  knot with this frame's camera and draws the head, chain and hand from it,
+   *  so the chain never leaves the knot when the player walks or turns. */
+  sync(): void;
   /** Holster travel from the shared slot state (stepWeaponSlots calls it). */
   updateRig(): void;
   /** This tick's dt multiplier while a hit-stop runs (1 otherwise); counts down on the unscaled dt. */
@@ -96,6 +107,8 @@ export interface CenserWeapon {
   release(): void;
   setHitStop(on: boolean): void;
   debug(): CenserDebug;
+  /** The swing phase alone — cheap (the HUD reads it every frame; debug() projects). */
+  phase(): string;
 }
 
 const lerp = THREE.MathUtils.lerp;
@@ -130,8 +143,10 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
 
   // Metal is black without something to reflect (the flare's note).
   const pmrem = new THREE.PMREMGenerator(ctx.boot.handle.renderer);
-  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const room = new RoomEnvironment();
+  const env = pmrem.fromScene(room, 0.04).texture;
   pmrem.dispose();
+  room.dispose();
   const brass = new THREE.MeshStandardMaterial({ color: 0x9c7a34, metalness: 1, roughness: 0.38, envMap: env, envMapIntensity: 1.1 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2c2b2a, metalness: 0.9, roughness: 0.55, envMap: env, envMapIntensity: 0.8 });
   const glow = new THREE.MeshStandardMaterial({ color: 0x220800, emissive: 0xff6a1c, emissiveIntensity: 3 });
@@ -183,13 +198,15 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
           }
         }
       });
-      // The knot in the haft's own frame — read BEFORE the haft is re-parented.
-      anchorLocal.copy(haftNode.worldToLocal(anchorNode.getWorldPosition(new THREE.Vector3())));
       haftNode.removeFromParent();
       haftNode.position.set(0, 0, 0);
       haftNode.quaternion.identity();
       haft.add(haftNode);
       haftPrim.visible = false;
+      // The knot in OUR haft's frame, read AFTER the re-parent with fresh
+      // matrices, so whatever scale the GLB's Haft node carries is included.
+      haft.updateWorldMatrix(true, true);
+      anchorLocal.copy(haft.worldToLocal(anchorNode.getWorldPosition(new THREE.Vector3())));
       headNode.removeFromParent();
       headNode.position.set(0, 0, 0);
       headNode.quaternion.identity();
@@ -198,7 +215,11 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       const found: THREE.Mesh[] = [];
       linkNode.traverse((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
       const lm = found[0];
-      if (lm) { links.geometry = normaliseLink(lm.geometry.clone()); links.material = lm.material; }
+      if (lm) {
+        links.geometry = normaliseLink(lm.geometry.clone());
+        links.material = lm.material;
+        primLink.dispose();   // orphaned: nothing else draws the primitive link
+      }
     } catch (e) {
       console.warn('[sdf-game] censer.glb absent or unreadable — using the primitive censer', e);
     }
@@ -208,6 +229,11 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   let hand: THREE.Group | null = null;
   void loadGoblinArms(GOBLIN_ARM_GLB, { env, envMapIntensity: 1.1 }).then((arms) => {
     hand = arms.right;
+    // Only the right arm is used: free the left's geometry (the skin material
+    // is shared with the right, so it stays).
+    const keep = new Set<THREE.BufferGeometry>();
+    arms.right.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g) keep.add(g); });
+    arms.left.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && !keep.has(g)) g.dispose(); });
     hand.name = 'censer-hand';
     hand.position.set(0, 0.03, 0);
     haft.add(hand);
@@ -225,6 +251,12 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   }
 
   // ---- State ---------------------------------------------------------------
+  // A release that happens off-window (alt-tab, lock lost) never reaches the
+  // mouseup listener: drop the hold rather than spin forever.
+  window.addEventListener('blur', () => { held = false; });
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement !== ctx.boot.canvas) held = false;
+  });
   let swing: CenserSwing = makeCenserSwing();
   let headSim: CenserHead | null = null;
   let hits: StrokeHits | null = null;
@@ -234,6 +266,10 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   let hitCount = 0;
   let lastHit: CenserDebug['lastHit'] = null;
   const anchorW = new THREE.Vector3();
+  /** This tick's rope length, for the sync pass's chain. */
+  let ropeNow = ropeLength(swing, CENSER_HEAD.ropeLen);
+  /** Where the chain was last drawn from (debug chainGap). */
+  const chainStart = new THREE.Vector3();
   const Y = new THREE.Vector3(0, 1, 0);
   const _up = new THREE.Vector3(), _p = new THREE.Vector3(), _tan = new THREE.Vector3();
   const _m = new THREE.Matrix4();
@@ -245,6 +281,13 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     _ndc.copy(w).project(deps.camera);
     const p = reticleNdc({ x: _ndc.x, y: _ndc.y }, ctx.render.postAa.lens);
     return [p.x, p.y];
+  }
+
+  /** The knot where it is NOW, off the current (rendered) camera — no handle pose rewrite. */
+  const _knot = new THREE.Vector3();
+  function knotNow(): THREE.Vector3 {
+    haft.updateWorldMatrix(true, false);
+    return haft.localToWorld(_knot.copy(anchorLocal));
   }
 
   function anchorWorld(): Vec3 {
@@ -280,7 +323,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       let credit = 0;
       let crater: { at: Vec3; wound: Wound } | null = null;
       for (const e of list) for (const s of e.spheres) {
-        const w = worldHitToWound(posed.prims, s.at, s.radius, 'blast', yaw, field);
+        // Through cloth a heavy blow TEARS, like the slug (game-weapon.ts).
+        const w = clothifyWound(posed.prims, worldHitToWound(posed.prims, s.at, s.radius, 'blast', yaw, field), 'heavy');
         w.severRadius = s.severRadius;
         wounds.push(w);
         credit += s.meterCredit;
@@ -313,6 +357,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     if (span > 1e-6) { _up.divideScalar(span); head.quaternion.setFromUnitVectors(Y, _up); } else _up.copy(Y);
     // The chain: links along a quadratic curve from the knot to the ring,
     // sagging by the rope's slack (straight when taut).
+    chainStart.set(anchor[0], anchor[1], anchor[2]);
     const rr = CENSER_HEAD.radius * 1.3;
     const ring: Vec3 = [h[0] + _up.x * rr, h[1] + _up.y * rr, h[2] + _up.z * rr];
     const sag = Math.max(0, rope - span) * 0.6;
@@ -362,12 +407,18 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       } else {
         swing = stepCenserSwing(swing, { down: held, offset: deadzoneOffset(ctx.weapon.aim) }, dt);
       }
+      // Holstered: nothing to simulate. Dropping the head makes the next raise
+      // re-hang it, so a raise never starts with a swing carried over from
+      // wherever it was put away.
+      if (!rig.visible) { headSim = null; hits = null; return; }
+      // NOTE the dt here is already hit-stop-scaled (game-main tick), and the
+      // demo recorder stores that scaled dt: a replay is deterministic, but a
+      // strike replays as a run of slow frames rather than a pause.
       const anchor = anchorWorld();
       // REELED IN at rest, paid out for the wind-up and strokes (censer-swing.ts ropeLength).
       const rope = ropeLength(swing, CENSER_HEAD.ropeLen);
-      // The head re-hangs whenever it was out of frame, so a raise never
-      // starts with a swing carried over from wherever it was put away.
-      if (!headSim || !rig.visible) headSim = makeCenserHead(anchor, rope);
+      ropeNow = rope;
+      if (!headSim) headSim = makeCenserHead(anchor, rope);
       if (hitWindow(swing)) {
         if (!hits || hits.strokeId !== swing.strokeId) hits = makeStrokeHits(swing.strokeId, swing.heavy ? swing.charge : 0);
       } else {
@@ -385,7 +436,10 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
         }
         : undefined, rope);
       if (events.length > 0) applyHits(events);
-      drawHead(anchor, rope);
+    },
+    sync() {
+      if (!rig.visible || !headSim) return;
+      drawHead(anchorWorld(), ropeNow);
       aimHand();
     },
     updateRig() {
@@ -418,8 +472,10 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
         lastHit,
         rope: ropeLength(swing, CENSER_HEAD.ropeLen),
         headNdc: screenNdc(head.position),
-        knotNdc: screenNdc(anchorW),
+        knotNdc: screenNdc(knotNow()),
+        chainGap: knotNow().distanceTo(chainStart),
       };
     },
+    phase: () => swing.phase,
   };
 }

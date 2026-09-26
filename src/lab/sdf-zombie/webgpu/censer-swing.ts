@@ -192,6 +192,10 @@ function reelFrac(s: CenserSwing): number {
     case 'stroke':
       return lerp(s.fromReel, 1, smooth(0, S.payoutFrac, clamp01(s.t / strokeSec(s.heavy))));
     case 'recover':
+      // Reeling in during the recover's second half can drag the head back
+      // through a body while the hit hook is still live (hitWindow covers the
+      // recover). Accepted: the ledger allows one contact per body per stroke,
+      // and a head being hauled in is a plausible second scrape.
       return 1 - smooth(0.5, 1, s.t / recoverSec(s.heavy));
   }
 }
