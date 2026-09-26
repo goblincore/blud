@@ -11,6 +11,24 @@
 //
 // The stroke runs FROM the weapon's side of the dead zone TOWARD the opposite
 // side, read at release, so a charged spin can be steered before it lands.
+//
+// A swing starts only on a fresh press (the rising edge), never merely because
+// the button happens to be down — a button held through a cancel or through a
+// recover must not auto-restart the swing (see `wasDown`). A fresh press that
+// lands in the last `bufferSec` of a recover is remembered (`buffered`) and
+// starts the next swing the moment idle is reached, so a quick next tap is
+// never silently lost to timing.
+//
+// strokeDirection's blend is continuous everywhere but one seam: when the
+// weapon sits lower-left of centre, inside centreRadius — near the default
+// angle's own resting corner — the shortest-way-round choice is ambiguous and
+// the blend can approach from either side as the offset crosses it. That is a
+// feel question (which side players expect the stroke to lean), not a bug.
+//
+// A release just past holdSec enters `stroke` with `heavy: true` but
+// `charge` ≈ 0: it runs on heavy timings (heavyStrokeSec/heavyRecoverSec) yet
+// lands with a near-tap impact. Hit impact should scale with `charge`, never
+// with the `heavy` flag alone.
 
 import type { Vec3 } from '../types';
 import { FREE_AIM, type AimPoint } from './free-aim';
@@ -40,6 +58,9 @@ export const CENSER_SWING = {
   spinHzMax: 2.6,
   /** Travel angle of the centred stroke: upper right → lower left. */
   defaultAngle: Math.atan2(-1, -1),
+  /** A fresh press landing this close to the end of a recover is remembered
+   *  and starts the next swing as soon as idle is reached. */
+  bufferSec: 0.12,
 } as const;
 
 export type CenserPhase = 'idle' | 'pending' | 'windup' | 'stroke' | 'recover';
@@ -62,6 +83,14 @@ export interface CenserSwing {
   strokeId: number;
   /** Handle pose when the stroke started; blended out over leadFrac. */
   from: Vec3;
+  /** The button state as of the last step. idle→pending needs the RISING
+   *  EDGE (down && !wasDown), not just "down" — otherwise a button held
+   *  through a cancel, or held from before a recover finishes, would
+   *  auto-restart the swing without an actual new press. */
+  wasDown: boolean;
+  /** A fresh press landed in the last `bufferSec` of a recover; consumed the
+   *  moment idle is reached (see `stepCenserSwing`'s `'recover'` case). */
+  buffered: boolean;
 }
 
 export interface SwingInput { down: boolean; offset: Dir2 }
@@ -81,6 +110,7 @@ export function makeCenserSwing(): CenserSwing {
   return {
     phase: 'idle', t: 0, charge: 0, heavy: false,
     dir: { x: Math.cos(a), y: Math.sin(a) }, spin: 0, strokeId: 0, from: ZERO,
+    wasDown: false, buffered: false,
   };
 }
 
@@ -138,34 +168,68 @@ export function handlePose(s: CenserSwing): Vec3 {
   }
 }
 
-function beginStroke(s: CenserSwing, heavy: boolean, offset: Dir2): CenserSwing {
+function beginStroke(s: CenserSwing, heavy: boolean, offset: Dir2, t: number): CenserSwing {
   return {
-    ...s, phase: 'stroke', t: 0, heavy, charge: heavy ? s.charge : 0,
-    dir: strokeDirection(offset), strokeId: s.strokeId + 1, from: handlePose(s),
+    ...s, phase: 'stroke', t, heavy, charge: heavy ? s.charge : 0,
+    dir: strokeDirection(offset), strokeId: s.strokeId + 1, from: handlePose(s), buffered: false,
   };
 }
 
+/** dt must be > 0 — a non-positive dt (paused, or a bad frame) leaves the state untouched. */
 export function stepCenserSwing(s: CenserSwing, input: SwingInput, dt: number): CenserSwing {
+  if (dt <= 0) return s;
   const S = CENSER_SWING;
-  const d = dt > 0 ? dt : 0;
+  const d = dt;
   const t = s.t + d;
+  let next: CenserSwing;
   switch (s.phase) {
-    case 'idle':
-      return input.down ? { ...s, phase: 'pending', t: 0, charge: 0 } : s;
+    case 'idle': {
+      const pressed = input.down && !s.wasDown;
+      // The release that starts this press is treated as landing at the START of
+      // this step (not at its end), so the stroke it eventually leads to isn't
+      // short-changed by a step's worth of time — see `pending` below.
+      next = pressed ? { ...s, phase: 'pending', t: d, charge: 0 } : s;
+      break;
+    }
     case 'pending':
-      if (!input.down) return beginStroke({ ...s, t }, false, input.offset);
-      return t >= S.holdSec ? { ...s, phase: 'windup', t: t - S.holdSec, spin: 0 } : { ...s, t };
+      next = input.down
+        ? (t >= S.holdSec ? { ...s, phase: 'windup', t: t - S.holdSec, spin: 0 } : { ...s, t })
+        // Release treated as landing at the start of this step: the stroke
+        // starts already `d` seconds in, so tiny steps don't lose time.
+        : beginStroke(s, false, input.offset, d);
+      break;
     case 'windup': {
       const charge = Math.min(1, t / S.chargeSec);
       const hz = lerp(S.spinHzMin, S.spinHzMax, charge);
-      const next: CenserSwing = { ...s, t, charge, spin: s.spin + 2 * Math.PI * hz * d };
-      return input.down ? next : beginStroke(next, true, input.offset);
+      const spun: CenserSwing = { ...s, t, charge, spin: s.spin + 2 * Math.PI * hz * d };
+      next = input.down ? spun : beginStroke(spun, true, input.offset, 0);
+      break;
     }
     case 'stroke':
-      return t >= strokeSec(s.heavy) ? { ...s, phase: 'recover', t: t - strokeSec(s.heavy) } : { ...s, t };
-    case 'recover':
-      return t >= recoverSec(s.heavy) ? { ...s, phase: 'idle', t: 0, charge: 0, heavy: false } : { ...s, t };
+      next = t >= strokeSec(s.heavy) ? { ...s, phase: 'recover', t: t - strokeSec(s.heavy) } : { ...s, t };
+      break;
+    case 'recover': {
+      const dur = recoverSec(s.heavy);
+      const pressedNow = input.down && !s.wasDown;
+      const buffered = s.buffered || (pressedNow && dur - s.t <= S.bufferSec);
+      if (t < dur) {
+        next = { ...s, t, buffered };
+      } else {
+        const leftover = t - dur;
+        if (buffered && input.down) {
+          // Still held when idle is reached: queue a fresh press, same as idle→pending.
+          next = { ...s, phase: 'pending', t: leftover, charge: 0, buffered: false };
+        } else if (buffered) {
+          // Already released: it was a tap, so go straight to the next stroke.
+          next = beginStroke(s, false, input.offset, leftover);
+        } else {
+          next = { ...s, phase: 'idle', t: 0, charge: 0, heavy: false, buffered: false };
+        }
+      }
+      break;
+    }
   }
+  return { ...next, wasDown: input.down };
 }
 
 /** Hits count during the stroke AND its recover: the head lags the handle, so its
@@ -174,7 +238,9 @@ export function hitWindow(s: CenserSwing): boolean {
   return s.phase === 'stroke' || s.phase === 'recover';
 }
 
-/** Weapon switch or death: back to idle; the stroke counter survives so a stale hit ledger never matches. */
+/** Weapon switch or death: back to idle; the stroke counter survives so a stale hit ledger never
+ *  matches. `wasDown` also survives — a button already held when the censer is cancelled must not
+ *  auto-restart a swing the instant it's drawn again; the player has to actually press it. */
 export function cancelCenserSwing(s: CenserSwing): CenserSwing {
-  return { ...makeCenserSwing(), strokeId: s.strokeId };
+  return { ...makeCenserSwing(), strokeId: s.strokeId, wasDown: s.wasDown };
 }

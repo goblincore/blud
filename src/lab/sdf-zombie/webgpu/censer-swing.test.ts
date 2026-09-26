@@ -100,10 +100,86 @@ describe('stepCenserSwing', () => {
     expect(c.phase).toBe('idle');
     expect(c.strokeId).toBe(1);
   });
+  it('strokeId increments on a heavy stroke', () => {
+    let s = run(makeCenserSwing(), CENSER_SWING.holdSec + 0.6, true);
+    const idBefore = s.strokeId;
+    s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);
+    expect(s.phase).toBe('stroke');
+    expect(s.heavy).toBe(true);
+    expect(s.strokeId).toBe(idBefore + 1);
+  });
+  it('dt 0 or negative leaves the state unchanged', () => {
+    const s = run(makeCenserSwing(), 0.05, true);
+    expect(stepCenserSwing(s, { down: true, offset: { x: 0, y: 0 } }, 0)).toEqual(s);
+    expect(stepCenserSwing(s, { down: true, offset: { x: 0, y: 0 } }, -0.01)).toEqual(s);
+  });
 });
 
+describe('press edge and buffer', () => {
+  it('holding through a whole tap cycle does not start a second swing', () => {
+    let s = run(makeCenserSwing(), 0.05, true);   // pending (fresh press)
+    s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);   // release -> tap stroke
+    expect(s.phase).toBe('stroke');
+    // re-press immediately and hold continuously through stroke, recover, into idle and beyond
+    s = run(s, CENSER_SWING.tapStrokeSec + CENSER_SWING.tapRecoverSec + 1, true);
+    expect(s.phase).toBe('idle');   // never restarted — the hold was never a fresh edge at idle
+  });
+  it('release then press again at idle starts a new one', () => {
+    let s = run(makeCenserSwing(), 0.05, true);
+    s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);   // tap stroke
+    s = run(s, CENSER_SWING.tapStrokeSec + 0.01, false);
+    s = run(s, CENSER_SWING.tapRecoverSec + 0.01, false);
+    expect(s.phase).toBe('idle');
+    s = stepCenserSwing(s, { down: true, offset: { x: 0, y: 0 } }, DT);
+    expect(s.phase).toBe('pending');
+  });
+  it('a press in the last 0.1s of recover produces the next stroke without another press', () => {
+    let s = run(makeCenserSwing(), 0.05, true);
+    s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);   // tap stroke, strokeId 1
+    s = run(s, CENSER_SWING.tapStrokeSec + 0.01, false);   // recover
+    expect(s.phase).toBe('recover');
+    // advance to leave < 0.1s of recover remaining
+    s = run(s, CENSER_SWING.tapRecoverSec - 0.08, false);
+    // a quick tap (press then release), still inside recover, within the last 0.1s
+    s = stepCenserSwing(s, { down: true, offset: { x: 0, y: 0 } }, DT);
+    s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);
+    const idBefore = s.strokeId;
+    // let recover finish naturally (no further press) and catch it just after
+    expect(s.buffered).toBe(true);
+    s = run(s, 0.1, false);
+    expect(s.phase).toBe('stroke');
+    expect(s.strokeId).toBe(idBefore + 1);
+  });
+});
+
+describe('dt-independent timing', () => {
+  it('recover.t after exactly 0.30s since the release step agrees at 1/240 and 1/60 steps', () => {
+    // 0.30 is an exact multiple of both 1/240 and 1/60, so it lands on a step
+    // boundary either way — the release step itself counts as the first of
+    // that 0.30s (the release is deemed to land at the START of its step).
+    const recoverTAt030 = (dt: number): number => {
+      let s = makeCenserSwing();
+      s = stepCenserSwing(s, { down: true, offset: { x: 0, y: 0 } }, dt);    // press
+      s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, dt);   // release -> stroke, t = dt
+      const totalSteps = Math.round(0.3 / dt);
+      for (let i = 1; i < totalSteps; i++) {
+        s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, dt);
+      }
+      expect(s.phase).toBe('recover');
+      return s.t;
+    };
+    const t240 = recoverTAt030(1 / 240);
+    const t60 = recoverTAt030(1 / 60);
+    expect(t240).toBeCloseTo(0.3 - CENSER_SWING.tapStrokeSec, 6);
+    expect(t60).toBeCloseTo(0.3 - CENSER_SWING.tapStrokeSec, 6);
+    expect(Math.abs(t240 - t60)).toBeLessThan(1e-6);
+  });
+});
+
+const POP_BOUND = 0.035;
+
 describe('handlePose', () => {
-  it('has no pops through a tap and a full heavy swing (< 5 cm per 240 Hz step)', () => {
+  it('has no pops through a tap and a full heavy swing (< 3.5 cm per 240 Hz step)', () => {
     let s = makeCenserSwing();
     let prev = handlePose(s);
     let worst = 0;
@@ -117,12 +193,23 @@ describe('handlePose', () => {
         prev = p;
       }
     }
-    expect(worst).toBeLessThan(0.05);
+    expect(worst).toBeLessThan(POP_BOUND);
+  });
+  it('a release during the first 0.1s of wind-up has no pop', () => {
+    let s = run(makeCenserSwing(), CENSER_SWING.holdSec + 0.05, true);
+    expect(s.phase).toBe('windup');
+    expect(s.t).toBeLessThan(0.1);
+    const prev = handlePose(s);
+    s = stepCenserSwing(s, { down: false, offset: { x: 0.6, y: 0.4 } }, DT);
+    expect(s.phase).toBe('stroke');
+    const p = handlePose(s);
+    const delta = Math.hypot(p[0] - prev[0], p[1] - prev[1], p[2] - prev[2]);
+    expect(delta).toBeLessThan(POP_BOUND);
   });
   it('the stroke sweeps along its direction', () => {
     let s = run(makeCenserSwing(), 0.05, true, { x: 1, y: 0 });
     s = stepCenserSwing(s, { down: false, offset: { x: 1, y: 0 } }, DT);   // travel (-1, 0)
-    s = run(s, CENSER_SWING.tapStrokeSec * 0.99, false, { x: 1, y: 0 });
+    s = run(s, CENSER_SWING.tapStrokeSec * 0.95, false, { x: 1, y: 0 });
     expect(s.phase).toBe('stroke');
     expect(handlePose(s)[0]).toBeLessThan(-0.2);   // swept to the left
   });
