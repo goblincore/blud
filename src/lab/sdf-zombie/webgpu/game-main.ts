@@ -100,7 +100,7 @@ import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
-import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
+import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, ownsSlot, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -265,6 +265,7 @@ import { createFxSeams } from './game-seams-fx';
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
+import { createCenser } from './game-censer';
 import { createMiscSeams } from './game-seams-misc';
 import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
@@ -281,6 +282,7 @@ import { registerBleed, stepGutRopes } from './game-world-leaves3';
 import { headPopDebris } from '../head-pop';
 import { demoRecordStop } from './game-demo-leaves2';
 import { createFireSeams } from './game-seams-fire';
+import { createCenserSeams } from './game-seams-censer';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
 import { createMarchDebugSeams } from './game-seams-march-debug';
@@ -3689,6 +3691,8 @@ async function main() {
       if (e.button === 0) ctx.dynamite.press = true;        // light it
       return;
     }
+    // SLOT 1: a HELD input (tap = stroke, hold = spin), read by the tick.
+    if (ctx.weapon.censer?.onMouseDown(e.button)) return;
     // SLOT 4: left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
@@ -3705,6 +3709,8 @@ async function main() {
     if (ctx.weapon.slotState.live !== 'dynamite') return;
     ctx.dynamite.release = true;
   });
+  // The censer's release: no pointer-lock check, so letting go anywhere ends the hold.
+  window.addEventListener('mouseup', (e) => ctx.weapon.censer?.onMouseUp(e.button));
 
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
@@ -3736,6 +3742,12 @@ async function main() {
   // WEAPON SLOT 4 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+  });
+  // WEAPON SLOT 1 (the censer flail, game-censer.ts): its own rig on aimRig,
+  // its head and chain in the world.
+  ctx.weapon.censer = createCenser(ctx, {
+    camera,
+    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
@@ -5228,7 +5240,10 @@ async function main() {
    *  tuning tool, not a grenade-spam simulator. */
   const MAX_BUNDLES = 4;
 
-  ctx.weapon.slotState = makeWeaponSlotState('shotgun');
+  // Start on the shotgun when it is owned; a melee-only loadout (Night Train,
+  // the Wake) starts with the censer in hand instead of empty hands.
+  ctx.weapon.slotState = makeWeaponSlotState(
+    !ownsSlot(ctx, 'shotgun') && ownsSlot(ctx, 'censer') ? 'censer' : 'shotgun');
   ctx.vfx.cook = { phase: 'idle', phaseAt: 0, cookStart: 0 };
   /** The cook clock in SIM seconds, advanced by tick(dt) — not a wall clock,
    *  so a frozen/render-locked capture cannot advance the fuse behind its own
@@ -6660,6 +6675,9 @@ async function main() {
 
   function tick(dt: number) {
     if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
+    // CENSER HIT-STOP: a landed strike nearly freezes the sim for 30–70 ms
+    // (game-censer.ts). Its timer counts down on the UNSCALED step.
+    dt *= ctx.weapon.censer?.hitStopScale(dt) ?? 1;
     // The sim clock advances ONLY here, from the step's own dt — never from
     // wall time. This is the single source of "how much simulated time has
     // passed", so every dwell/timer that reads it is reproducible under a
@@ -7073,6 +7091,9 @@ async function main() {
     // not care where the rig is — but the burst sprites the dynamite spawns are
     // world-space and want the frame's final camera).
     stepWeaponSlots(ctx, dt);
+    // The censer, after the rig AND the holster are placed: its anchor is the
+    // knot on the haft, in world space, this frame.
+    ctx.weapon.censer?.tick(dt);
     stepDynamite(dt);
     if (ctx.player.reticleEl) {
       ctx.player.reticleEl.style.display = ctx.player.freeAimOn ? 'block' : 'none';
@@ -8144,6 +8165,7 @@ async function main() {
     createRenderQualitySeams(ctx),
     createWeaponAimSeams(ctx),
     createFireSeams(ctx),
+    createCenserSeams(ctx),
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
     createMarchDebugSeams(ctx),
