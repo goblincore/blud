@@ -77,6 +77,15 @@ export function segmentDrawn(live: boolean, owner: unknown, shown?: ReadonlySet<
   return live;
 }
 
+/** BONE EXPOSURE CULL (optimisation pass, 2026-09-26): bone shows only where a wound carve
+ *  reached it (the header's smax-then-min rule), so an owner with nothing exposed draws only the
+ *  segments that carry something visible through intact flesh: the eyes. `exposed` omitted =
+ *  every owner is exposed (the pre-cull behaviour). Night Train: ~250 draws a frame were whole
+ *  skeletons hidden inside unwounded bodies. */
+export function segmentNeeded(owner: unknown, hasEyes: boolean, exposed?: ReadonlySet<unknown>): boolean {
+  return !exposed || exposed.has(owner) || hasEyes;
+}
+
 export interface SegmentMeshRenderer {
   object: THREE.Group;
   uniforms: BoneInstancerUniforms;
@@ -86,7 +95,7 @@ export interface SegmentMeshRenderer {
    *  owner outside it has its meshes set invisible and receives NO pose
    *  writes (meshes stay allocated, so re-showing is one update away).
    *  Omitted = draw every entry, the pre-cull behaviour. */
-  update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>): void;
+  update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>, exposed?: ReadonlySet<unknown>): void;
   impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
   stepDebris(dt: number): void;
   eyeState(owner: object): { missing: number[]; debris: number };
@@ -278,7 +287,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
         if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
       }
     },
-    update(entries, owners, shown) {
+    update(entries, owners, shown, exposed) {
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
       stats.verts = stats.tris = 0;
@@ -326,7 +335,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
           // pose writes. Eyes are children of the segment mesh and hide
           // with it; the mesh stays in its slot, so re-showing the owner
           // restores visibility and the current pose in one update.
-          const live = segmentDrawn(s.isLive(), owner, shown);
+          const live = segmentDrawn(s.isLive(), owner, shown) && segmentNeeded(owner, mesh.children.length > 0, exposed);
           mesh.visible = live;
           if (!live) { stats.hidden++; return; }
           stats.verts += baked.verts;

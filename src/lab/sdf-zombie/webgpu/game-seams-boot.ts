@@ -5,9 +5,11 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import { type DeferredDebugView } from './deferred-layer';
 import { hashFrame } from './demo-hash';
+import { setPassLabelObserver } from './gpu-pass-timing';
 import { type GameDeferredRendererDiagnostics, type GameSurfaceHash } from './game-deferred-renderer';
 
 // Type aliases copied from game-main.ts, where they are module-scope and
@@ -105,6 +107,46 @@ export function createBootSeams(ctx: GameContext) {
     // ticks measure the display for free) -- check it before trusting
     // any arithmetic that assumes 60 Hz.
     // ---------------------------------------------------------------
+    /** DRAW CENSUS BY PASS (optimisation pass, 2026-09-26): draw calls per pass label over `n`
+     *  drawn frames, per frame. Borrows the pass-label observer for its duration (the telemetry's
+     *  CPU attribution is off while it runs). */
+    drawsByLabel: async (n = 6) => {
+      const info = ctx.boot.handle.renderer.info;
+      info.autoReset = false;
+      const by: Record<string, number> = {};
+      let label = 'frame:start', last = info.render.drawCalls;
+      setPassLabelObserver((next) => {
+        const now = info.render.drawCalls;
+        by[label] = (by[label] ?? 0) + (now - last);
+        last = now; label = next;
+      });
+      try {
+        for (let i = 0; i < n; i++) { ctx.boot.handle.drawOnce(); await ctx.boot.handle.resolveGpu(); }
+      } finally {
+        setPassLabelObserver(null);
+      }
+      by[label] = (by[label] ?? 0) + (info.render.drawCalls - last);
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(by)) if (v > 0) out[k] = Math.round(v / n);
+      return out;
+    },
+    /** What the main camera's polygonal pass can draw: visible meshes on its layers, grouped by
+     *  the nearest named ancestor (optimisation pass census). */
+    sceneCensus: () => {
+      const cam = ctx.boot.handle.camera;
+      const out: Record<string, number> = {};
+      ctx.boot.handle.scene.traverseVisible(o => {
+        const m = o as THREE.Mesh;
+        if (!(m.isMesh || (o as THREE.Sprite).isSprite || (o as THREE.Line).isLine || (o as THREE.Points).isPoints)) return;
+        if (!o.layers.test(cam.layers)) return;
+        let n: THREE.Object3D | null = o, key = '';
+        while (n && !key) { key = n.name; n = n.parent; }
+        const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+        key = `${(key || '(unnamed)').split(/[:.#\d]/)[0]}|${o.type}|${(mat as THREE.Material | undefined)?.type ?? '-'}`;
+        out[key] = (out[key] ?? 0) + 1;
+      });
+      return out;
+    },
     setFrameCap: (fps: number) => {
       ctx.boot.handle.setFrameCap(fps);
       return { frameCap: ctx.boot.handle.frameCap, refreshMs: ctx.boot.handle.refreshMs };

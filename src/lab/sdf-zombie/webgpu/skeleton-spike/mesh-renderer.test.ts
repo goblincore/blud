@@ -127,3 +127,14 @@ describe('SegmentMeshRenderer update(…, shown)', () => {
     cache.dispose();
   });
 });
+
+describe('segmentNeeded (bone exposure cull)', () => {
+  it('draws everything without an exposed set; else only exposed owners, plus eye-carrying segments', async () => {
+    const { segmentNeeded } = await import('./mesh-renderer');
+    const a = {}, b = {};
+    expect(segmentNeeded(a, false)).toBe(true);
+    expect(segmentNeeded(a, false, new Set([a]))).toBe(true);
+    expect(segmentNeeded(b, false, new Set([a]))).toBe(false);
+    expect(segmentNeeded(b, true, new Set([a]))).toBe(true);
+  });
+});

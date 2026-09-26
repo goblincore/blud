@@ -1624,9 +1624,9 @@ async function main() {
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
         let e = ctx.render.skeletonSources.get(a);
         if (!e) { e = buildSkeletonSources(a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); }
-        else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); ctx.render.skeletonSources.set(a, e); }
+        else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); (e as { severed?: boolean }).severed = true; ctx.render.skeletonSources.set(a, e); }
         return e.sources;
-      }), ctx.world.actors, ctx.render.visualActors);
+      }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx));
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }
@@ -6669,6 +6669,15 @@ async function main() {
   ctx.player.strafeT = 0;
   ctx.player.strafeDir = 1;
   ctx.player.lastWalkPos = null;
+
+  /** Owners whose bone can show (segmentNeeded): any carving wound, or a sever re-derive. */
+  function boneExposedActors(c: typeof ctx): Set<unknown> {
+    const out = new Set<unknown>();
+    for (const a of c.render.visualActors) {
+      if ((c.render.skeletonSources.get(a) as { severed?: boolean } | undefined)?.severed || a.visualWounds().some(w => !w.decal)) out.add(a);
+    }
+    return out;
+  }
 
   function tick(dt: number) {
     if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
