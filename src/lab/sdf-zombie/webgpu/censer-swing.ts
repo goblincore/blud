@@ -70,13 +70,19 @@ export const CENSER_SWING = {
     /** Start/end angles of the arc, radians. */
     arc: [(-61 * Math.PI) / 180, (85 * Math.PI) / 180] as readonly [number, number],
     /** Angular speed ramps up over [0, accelEnd], cruises, then brakes to a
-     *  stop over the last brakeFrac: the head whips past the stopped hand. */
+     *  stop over the last brakeFrac: the head whips past the stopped hand.
+     *  INVARIANT: accelEnd + brakeFrac < 1 for tap AND heavy (arcProgress's
+     *  ramp and brake must not overlap, or its progress runs backwards) —
+     *  checked at module load, see assertStrokeShape. */
     accelEnd: 0.14,
     brakeFrac: 0.12,
     /** Fraction of the stroke spent blending in from the pose it started at. */
     lead: 0.42,
     /** Stroke fractions over which the chain pays out to full. */
     payout: [0.39, 0.77] as readonly [number, number],
+    /** Unused by a tap itself (a tap carries no wind-up circle, carryR = 0);
+     *  set equal to heavy's so shapeOf's blend keeps it constant. */
+    spinFade: 1,
   },
   /** A full-charge heavy: the head is already orbiting, so a shorter 85° arc,
    *  driven while the wind-up circle carries on under it (spinFade). Partial
@@ -99,9 +105,11 @@ export const CENSER_SWING = {
    *  orbits as a windmill and a release at any phase adds to it. */
   spinLift: 0.13,
   spinFwd: 0.17,
-  /** Handle circle radius at the start of the wind-up and at full charge. */
-  spinRadius0: 0.24,
-  spinRadius: 0.23,
+  /** Handle circle radius at charge 0 and at full charge (lerped by charge,
+   *  like spinHzMin/Max — the ends of the charge ramp, not bounds: Min may
+   *  exceed Max, and currently does, a slightly wider circle to start). */
+  spinRadiusMin: 0.24,
+  spinRadiusMax: 0.23,
   spinLiftSec: 0.15,
   spinHzMin: 1.2,
   spinHzMax: 2.9,
@@ -149,13 +157,16 @@ export interface CenserSwing {
   spinDir: Dir2;
   /** Increments at every stroke start — the hit ledger's key. */
   strokeId: number;
-  /** Handle pose when the stroke started; blended out over leadFrac. */
+  /** Handle pose when the stroke started; blended out over the stroke's
+   *  shapeOf(s).lead (tap.lead, blending to heavy.lead with charge). */
   from: Vec3;
-  /** Rope pay-out (0 = reelRest, 1 = full) when the stroke started; blended out over leadFrac. */
+  /** Rope pay-out (0 = reelRest, 1 = full; negative if released mid choke-up)
+   *  when the stroke started; blended out over the stroke's shapeOf(s).payout
+   *  window (tap.payout, blending to heavy.payout with charge). */
   fromReel: number;
   /** The wind-up circle carried into a heavy stroke: its radius and rate at
    *  release (0 for a tap). The handle keeps circling, fading out over
-   *  heavy.spinFade, so the head's orbit is not stopped dead by the release. */
+   *  shapeOf(s).spinFade, so the head's orbit is not stopped dead by the release. */
   carryR: number;
   carryHz: number;
   /** The button state as of the last step. idle→pending needs the RISING
@@ -223,8 +234,23 @@ const smoothInt = (x: number) => x * x * x - (x * x * x * x) / 2;
 
 interface StrokeShape {
   arc: readonly [number, number]; accelEnd: number; brakeFrac: number; lead: number;
-  payout: readonly [number, number];
+  payout: readonly [number, number]; spinFade: number;
 }
+
+/** arcProgress needs its ramp [0, accelEnd] and brake [1 - brakeFrac, 1] not
+ *  to overlap (and both non-empty); otherwise the cruise length goes negative
+ *  and the arc runs backwards. Throws naming the offending shape. Blends of
+ *  two valid shapes are valid (the sum is linear in the blend). */
+export function assertStrokeShape(name: string, K: StrokeShape): void {
+  if (!(K.accelEnd > 0 && K.brakeFrac > 0 && K.accelEnd + K.brakeFrac < 1)) {
+    throw new Error(
+      `CENSER_SWING.${name}: needs accelEnd > 0, brakeFrac > 0 and accelEnd + brakeFrac < 1 ` +
+      `(got accelEnd ${K.accelEnd}, brakeFrac ${K.brakeFrac}) — arcProgress would run backwards`,
+    );
+  }
+}
+assertStrokeShape('tap', CENSER_SWING.tap);
+assertStrokeShape('heavy', CENSER_SWING.heavy);
 
 /** A stroke's shape: the tap's, blending into the heavy's with charge (a
  *  release just past holdSec swings like a tap; a full charge like a heavy). */
@@ -238,6 +264,7 @@ function shapeOf(s: CenserSwing): StrokeShape {
     brakeFrac: lerp(T.brakeFrac, H.brakeFrac, k),
     lead: lerp(T.lead, H.lead, k),
     payout: [lerp(T.payout[0], H.payout[0], k), lerp(T.payout[1], H.payout[1], k)],
+    spinFade: lerp(T.spinFade, H.spinFade, k),
   };
 }
 
@@ -263,7 +290,7 @@ function strokePath(dir: Dir2, K: StrokeShape, u: number): Vec3 {
 }
 
 const spinRadiusAt = (t: number, charge: number): number =>
-  lerp(CENSER_SWING.spinRadius0, CENSER_SWING.spinRadius, charge) * smooth(0, CENSER_SWING.spinLiftSec, t);
+  lerp(CENSER_SWING.spinRadiusMin, CENSER_SWING.spinRadiusMax, charge) * smooth(0, CENSER_SWING.spinLiftSec, t);
 const spinHzAt = (charge: number): number => lerp(CENSER_SWING.spinHzMin, CENSER_SWING.spinHzMax, charge);
 
 function spinPose(t: number, spin: number, dir: Dir2, charge: number): Vec3 {
@@ -293,7 +320,7 @@ export function handlePose(s: CenserSwing): Vec3 {
       const centre: Vec3 = [s.from[0] - c0[0], s.from[1] - c0[1], s.from[2] - c0[2]];
       const base = lerp3(centre, strokePath(s.dir, K, u), smooth(0, K.lead, u));
       const c = inPlane(s.spinDir, s.spin + 2 * Math.PI * s.carryHz * s.t,
-        s.carryR * (1 - smooth(0, CENSER_SWING.heavy.spinFade, u)));
+        s.carryR * (1 - smooth(0, K.spinFade, u)));
       return [base[0] + c[0], base[1] + c[1], base[2] + c[2]];
     }
     case 'recover':
@@ -302,7 +329,10 @@ export function handlePose(s: CenserSwing): Vec3 {
 }
 
 /** How far the chain is paid out: 0 = reeled in (reelRest), 1 = full length.
- *  Continuous across every transition, like handlePose. */
+ *  Goes NEGATIVE (down to spinChoke, −0.11) early in the wind-up, while the
+ *  hand chokes up on the chain shorter than reelRest; a release then carries
+ *  that negative value into the stroke as fromReel. Continuous across every
+ *  transition, like handlePose. */
 function reelFrac(s: CenserSwing): number {
   const S = CENSER_SWING;
   switch (s.phase) {
@@ -325,7 +355,9 @@ function reelFrac(s: CenserSwing): number {
   }
 }
 
-/** The rope's current length, metres: reelRest at rest, `full` for the wind-up and strokes. */
+/** The rope's current length, metres: reelRest at rest, `full` for the wind-up
+ *  and strokes. Intentionally EXTRAPOLATES below reelRest when reelFrac is
+ *  negative (the wind-up choke-up: ≈ 0.13 m with a 0.55 m chain). */
 export function ropeLength(s: CenserSwing, full: number): number {
   return lerp(CENSER_SWING.reelRest, full, reelFrac(s));
 }

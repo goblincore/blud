@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/censer-swing.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  CENSER_SWING, cancelCenserSwing, deadzoneOffset, handlePose, hitWindow,
+  CENSER_SWING, assertStrokeShape, cancelCenserSwing, deadzoneOffset, handlePose, hitWindow,
   makeCenserSwing, ropeLength, stepCenserSwing, strokeDirection, type CenserSwing, type Dir2,
 } from './censer-swing';
 import { FREE_AIM } from './free-aim';
@@ -40,6 +40,22 @@ describe('strokeDirection', () => {
       expect(Math.acos(Math.min(1, d.x * prev.x + d.y * prev.y))).toBeLessThan(0.25);
       prev = d;
     }
+  });
+});
+
+describe('stroke shape invariant (arcProgress needs accelEnd + brakeFrac < 1)', () => {
+  it('the current tap and heavy constants satisfy it', () => {
+    for (const K of [CENSER_SWING.tap, CENSER_SWING.heavy]) {
+      expect(K.accelEnd).toBeGreaterThan(0);
+      expect(K.brakeFrac).toBeGreaterThan(0);
+      expect(K.accelEnd + K.brakeFrac).toBeLessThan(1);
+    }
+    expect(() => assertStrokeShape('tap', CENSER_SWING.tap)).not.toThrow();
+    expect(() => assertStrokeShape('heavy', CENSER_SWING.heavy)).not.toThrow();
+  });
+  it('a violating shape throws, naming it', () => {
+    expect(() => assertStrokeShape('heavy', { ...CENSER_SWING.heavy, accelEnd: 0.7, brakeFrac: 0.4 }))
+      .toThrow(/CENSER_SWING\.heavy/);
   });
 });
 
@@ -352,7 +368,7 @@ const expectInFront = (at: Vec3) => {
   expect(Math.hypot(...at)).toBeLessThan(1.6);
 };
 
-describe('head speed over the hit window (spec targets tap ~9, heavy ~16 m/s)', () => {
+describe('head speed over the hit window (spec targets tap ~9, heavy ~16; measured 13/21; gates 8/14)', () => {
   it('a tap reaches >= 8 m/s, in front of the player, on the full rope', () => {
     const m = measureStroke(0.05);
     console.log(`[censer power] tap ${fmt(m)}`);
