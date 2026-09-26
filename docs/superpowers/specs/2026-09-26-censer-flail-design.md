@@ -1,6 +1,8 @@
 # The censer flail (first player melee weapon) — Design
 
-**Date:** 2026-09-26 · **Status:** decisions approved (owner, 2026-09-26)
+**Date:** 2026-09-26 · **Status:** v1 built (plan [2026-09-26-censer-flail](../plans/2026-09-26-censer-flail.md)); owner playtest pending.
+Gate: `node scripts/censer-gate.mjs <vite> <cdp>`; measurements and photos in
+[`docs/dev-notes/2026-09-26-censer/NOTES.md`](../../dev-notes/2026-09-26-censer/NOTES.md).
 **Resolves:** the Wake's open starting-weapon question
 ([design §3](../../game/levels/00-the-wake/design.md)) and task W-B4 (melee prototype), with a
 weapon none of the listed candidates were: a **funeral censer (thurible) on a chain, knotted to a
@@ -31,6 +33,9 @@ chainsaw (mid-episode) will make a continuous cut. A blunt, momentum-driven furr
 4. **Wound: crater + gouge (option B) first; embers on charged strikes (option C) when time
    allows.**
 5. **Look: the censer on a broken altar candlestick** (brass haft, brass head, one-handed).
+6. **Charged release timing is a skill** (2026-09-26): speed varies ~13–20 m/s with the orbit's
+   phase at release. The stroke's arc either adds to the wind-up orbit or fights it; this is kept
+   deliberately, not flattened.
 
 ## 3. Controls and swing feel
 
@@ -95,21 +100,29 @@ Now (`CENSER_SWING` in `censer-swing.ts`):
   the hand) from the press through the choke-up, and during the wind-up a wrist floor holds the
   head's speed round the knot, in the stroke plane, to ≥ 2 → 9 m/s by charge. Without them a wind-up
   pressed while the head still swung from the last stroke could miss its orbit (full charge at
-  2–5 m/s: 4 of 13 in game). In game now: tap 13–14, full charge 13–20 m/s by release phase.
+  2–5 m/s: 4 of 13 in game). In game now: tap 13–14, full charge 13–20 m/s by release phase (decision 6: a timing skill).
 
 ### 3.3 Impact
 
 | | Tap | Charged (full) |
 | --- | --- | --- |
 | Head speed at contact (target) | ~9 m/s | ~16 m/s |
-| Crater radius | 0.06 m | 0.11 m |
+| Crater radius | 0.06 m | 0.13 m (was 0.11; Task 9 tuning) |
 | Gouge | ≤ 3 spheres | ≤ 6 spheres |
-| Hits to sever a limb / the neck | ~3 | 1 |
+| Hits to sever a limb / the neck | ~3 (measured: a forearm at the elbow on the 2nd) | 1 |
 | Hit-stop + camera kick | 30 ms, small | 70 ms, heavy |
 | Zombie reaction | flinch | stagger + shove ≈ 1 m |
 
 Partial charge interpolates between the two columns. Reach: rope 0.55 m plus the arm, ≈ 1.6 m from
-the eye (just outside a zombie's bite).
+the eye (just outside a zombie's bite). **At rest the chain is reeled in** to 0.17 m (the head
+dangles in the lower right of the frame) and pays out to 0.55 m for the wind-up and the strokes,
+reeling back in through the recover (`CENSER_SWING.reelRest`, `ropeLength`).
+
+**Severing (Task 9 tuning).** Every wound sphere carries `severRadius = radius × severMul`, with
+`severMul` 1.6 (was 1.15) for craters and gouge spheres alike: the head's cut section is tested at
+the neck base, ~8 cm inside the shoulders, and the nearest a slam's crater lands is ~0.15 m away on
+the shoulder's top, so a decapitation needs a sever radius over ~0.2 m. A full tap's crater is
+0.096 (the grapeshot pellet's 0.10).
 
 ### 3.4 Rules
 
@@ -135,9 +148,14 @@ against each nearby actor with the existing `traceProjectile(from, to, q => sdBo
 (`game-weapon.ts`), behind the torso-sphere broad phase the pellet loop uses.
 - **First contact** with an actor this stroke: a crater sphere at the hit point. Radius and depth
   scale with the head's speed along the surface normal (§3.3 table).
+- **The glance rule (Task 9):** a contact is a *graze* unless at least 30% of the head's speed
+  goes into the skin (`glanceFrac`) and at least 1.5 m/s (`minInSpeed`). A grazing head slides on
+  inside the contact shell and strikes where it turns into the skin (a slam that brushes the skull
+  and lands on the shoulder craters the shoulder). A glance that slides off again, or sinks in
+  without ever turning in, leaves **nothing** — not a smaller wound.
 - **While the head stays inside** (`sdBody < 0`): stamp a gouge sphere every 3 cm of travel, each
   ×0.8 the previous radius, up to the per-stroke cap (3 tap / 6 charged). The gouge ends when the
-  speed into the surface falls below a threshold or the head exits.
+  head's total speed falls below a threshold (2 m/s) or the head exits.
 - **Energy loss:** each stamp calls `censer-head.absorb`, so the head slows and bounces out rather
   than passing through.
 - **Once per stroke per actor:** a second actor in the same stroke is hit with the remaining speed.
@@ -198,8 +216,10 @@ A Blender Python script, `scripts/model_censer.py` (like `model_grapeshot_shorty
 
 **The chain** is drawn as links placed along a quadratic curve from `ChainAnchor` to the head's
 ring. The curve sags by the rope's slack (rope length minus anchor–head distance) and goes straight
-when taut. **Smoke:** a thin incense trail of a few camera-facing puffs behind the head, stretched
-into a ring during the spin. The coal glow is emissive only in v1.
+when taut. **Smoke:** a thin incense trail of camera-facing puffs behind the head, each stretched
+along the head's motion into a wisp (`CENSER_LOOK.smoke`). The coal glow is emissive only in v1.
+**Lighting (Task 9):** the censer's own light list swaps the player's torch (which blew the head
+out to white at arm's length) for a falloff-free fill at 1.8% of its intensity.
 
 ## 5. Scope
 

@@ -1,5 +1,42 @@
 # Censer flail — in-game gate, first tuning pass, look pass (Task 9)
 
+## For the owner
+
+**How to try it.** `npm run dev` opens the game; Night Train starts with the censer in hand, or
+press **1** anywhere you own it. Free aim (**G**, on by default) lets the weapon drift inside the
+dead zone — **where it sits picks the stroke**: high → an overhead slam, low → an uppercut,
+right/left → a hook back across, centred → a diagonal forehand.
+- **Tap** the left button (under 0.18 s) for a quick stroke.
+- **Hold** to wind up — the censer whirls in the stroke's plane and charges over 1 s — and
+  **release** for the heavy stroke. You can drift the weapon while spinning to aim the slam.
+- **Where to aim.** The head is fastest ~0.9–1.3 m in front of you and well below eye level.
+  Stand about arm-and-chain's length from a zombie (1–1.3 m) and hit its chest or hips. A tap
+  aimed at the chest from close up tends to land on the curve of the torso at a glancing angle:
+  it gouges, but the crater is small (3 cm) and hard to see. Hooks land squarer (6 cm craters).
+
+**Decided (2026-09-26): charged release timing is a skill.** A full charge swings at ~13–20 m/s
+depending on where in the orbit you let go — the stroke either adds to the whirl or fights it.
+Kept on purpose, not flattened. (Every full charge now *does* spin up; see Part B below.)
+
+**Things to know, and open questions:**
+1. **Glancing heavy blows now leave NOTHING**, not a smaller wound: a blow with under 30% of its
+   speed going into the skin skids off unless it turns into the flesh further along. Should a fast
+   glance leave a scrape instead?
+2. **Severing is generous.** `severMul` 1.6 applies to *every* wound sphere, taps included: a
+   well-placed tap takes a forearm off at the elbow on the **2nd** hit (the spec said ~3), and the
+   one full-charge slam that took the head off **took the right arm too** (its crater sat on the
+   shoulder). A decapitation needs that much: the neck's cut section sits inside the shoulders.
+   The margin for the head is thin (a slam 1 cm further out fails). Want a heavy-only sever
+   multiplier instead, so taps sever less?
+3. **Reach.** Should the sweet spot move up toward the reticle, so chest taps land square?
+4. **Hit-stop and the camera kick are untested** — the gate runs with hit-stop off. Judge the
+   30–70 ms pause and the kick in play.
+5. **The look** — the head's fill light (1.8% of your torch), the hand at ×0.8 and the faint
+   resting smoke are first guesses from screenshots.
+
+---
+
+
 2026-09-26. Plan: [`2026-09-26-censer-flail.md`](../../superpowers/plans/2026-09-26-censer-flail.md) Task 9.
 Spec: [`2026-09-26-censer-flail-design.md`](../../superpowers/specs/2026-09-26-censer-flail-design.md).
 Earlier notes in this folder: [`NOTES-blur-hitch.md`](NOTES-blur-hitch.md) (Task 8b).
@@ -119,8 +156,8 @@ After: 0 of 1,280 pure-model presses fail; **every in-game full charge spins at 
 
 **What remains is a real feel property: the release phase.** A full charge released at a
 different point of the orbit peaks at 13–20 m/s in game; the pure model, sampled finely (48
-phases), gives 14.5–21. The stroke's arc either adds to the orbit or fights it. Reported, not
-fixed (see the feel questions). Checked and not the cause: collisions with level boxes (arena
+phases), gives 14.5–21. The stroke's arc either adds to the orbit or fights it. **Owner
+decision (2026-09-26): kept as a timing skill** (spec §2, decision 6). Checked and not the cause: collisions with level boxes (arena
 centre, no box within reach), hit-stop (off), `velScale` (no bodies), dt (1/60 both), the camera
 anchor (the knot is re-read off the final camera; the physics lags one frame, invisible).
 
@@ -233,23 +270,15 @@ raw frames (`before-*`, `after-*`, `blur-before-*`) and both metrics JSONs.
 
 ## Open feel questions for the owner
 
-1. **Release timing.** A full charge now always spins up, but its stroke peaks at 13–20 m/s
-   depending on where in the orbit you let go. Keep it as a skill (release on the down-swing),
-   or phase-lock the release so every full charge lands at ~20?
-2. **Decapitation calibre.** Taking a head off needed a sever calibre of ~0.21 m, because the
-   neck's cut section sits inside the shoulders. It is now `heavy.craterR 0.13 × severMul 1.6`,
-   which also makes the heavy crater itself bigger (0.11 → 0.13; the slug's is 0.16) and taps
-   sever at 0.096 (a forearm at the elbow on the second well-placed tap, the spec's "~3"). The
-   margin is thin: a slam landing 1 cm further from the neck fails. Alternatives: a heavy-only
-   sever multiplier (keep the visual crater at 0.11), or test the head's section higher up the
-   neck.
-3. **Glancing blows.** A blow with < 30% of its speed into the skin now skids off and leaves
-   nothing unless it turns in. Should a fast glance leave a scrape?
-4. **Reach and framing.** The best contact for a tap is ~0.9–1.3 m out and well below the eye;
-   standing at a zombie and looking at its chest, the high and low taps land glancing (4–5 m/s
-   into the skin, small craters that do not read). Pull the arc's sweet spot up toward the
-   reticle?
-5. **Hit-stop** was off throughout the gate (deterministic frame counts); its 30–70 ms length
-   and the camera kick are untested here — judge in play.
-6. **The look**: the fill level (1.8% of the torch), the hand size (×0.8) and the faint resting
-   smoke are first guesses from screenshots.
+Moved to the top ("For the owner"). Release timing is decided: a skill.
+
+## Update after the branch review
+
+- **A graze that turns into flesh now strikes at game step length** (`6e0163dc`). The grazing
+  branch bailed on `grazeDepth` before judging the blow; at 16–20 m/s the head moves 6.7–8.3 cm per
+  240 Hz substep, so the substep it turned into the shoulder was already past the depth and left
+  no wound. The skull→shoulder test now runs at 5 mm and at `speed / CENSER_HEAD.stepHz`; the two
+  step-length cases fail on the previous code. The gate still passes (same numbers).
+- Cleanups (`5f0a187b`): no per-frame allocation in the censer's tick, `CENSER_FILL_LAYER`
+  registered beside `GIB_BLUR_LAYER`, the wind-up sweep committed as
+  `scripts/censer-windup-sweep.ts`.

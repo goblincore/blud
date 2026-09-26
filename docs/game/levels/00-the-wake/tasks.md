@@ -62,10 +62,11 @@ The level can't be tested without these. Build them small.
 - [ ] **W-B2 Encounters in.** Spawns and triggers from W-D2. *Deps:* W-B1, L-4.
 - [ ] **W-B3 Playtest pass.** Timing (5–8 min target), difficulty, readability in
   fog/dark. *Deps:* W-B2, L-1, L-2.
-- [ ] **W-B4 Melee prototype.** Shovel, pickaxe and axe as quick variants on a
+- [~] **W-B4 Melee prototype** — censer built; owner playtest pending. Shovel, pickaxe and axe as quick variants on a
   zombie: swing, hit, deformation read. *Deps:* none beyond the current game.
   **2026-09-26:** decided instead: the censer flail
-  ([spec](../../../superpowers/specs/2026-09-26-censer-flail-design.md)).
+  ([spec](../../../superpowers/specs/2026-09-26-censer-flail-design.md)). v1 built, in-game gate
+  passing ([notes](../../../dev-notes/2026-09-26-censer/NOTES.md)).
 - [ ] **W-B5 Zombie tuning** for this level's pacing (slow mourners, the parlour turn).
 - [ ] **W-B6 The bell set piece** (design §4.1). Shootable bell with toll
   events; each toll opens graves and spawns a wave; the first opens the crypt

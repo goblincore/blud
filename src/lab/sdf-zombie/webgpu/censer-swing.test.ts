@@ -403,6 +403,9 @@ describe('head speed over the hit window (spec targets tap ~9, heavy ~16; measur
     expect(m.ext).toBeGreaterThanOrEqual(CENSER_HEAD.ropeLen - 1e-3);
     expectInFront(m.at);
   });
+  // The SPREAD across release phases (~14-21 here, ~13-20 in game) is intended: the owner
+  // decided (2026-09-26, spec §2 decision 6) that charged release timing is a skill. This
+  // guards only its floor.
   it('a full-charge heavy stays >= 14 m/s whatever the spin phase at release', () => {
     // One spin period at spinHzMax is ~0.34 s; sample 0.5 s of release times.
     const peaks: number[] = [];
