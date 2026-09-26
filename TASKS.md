@@ -20,8 +20,9 @@
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
 **Elsewhere** (see the area pages for the full lists)
-- [ ] Characters: cultist perf pass and cloth feel (paused), bride polish; the cultist returns to
-  Night Train when finished — [characters](docs/tasks/characters.md).
+- [ ] Characters: the **Juggernaut** (power-armour chaingunner, first soldier variant) — build his
+  WAM kit and its test, then the owner look; cultist perf pass and cloth feel (paused), bride polish —
+  [characters](docs/tasks/characters.md).
 - [ ] Rendering: merged crowd march, baked mesh LOD, corpse bake for every character —
   [rendering](docs/tasks/rendering.md); the 0.25 march + checker work and telemetry v3 live in
   [combat and gore](docs/tasks/combat-and-gore.md) (older sections mixed topics).

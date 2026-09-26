@@ -12,6 +12,7 @@ import type { Vec3 } from '../types';
 import {
   FURNITURE, PLAYER_START, ROOMS, TUNNELS, enclosureKeyAt, enclosureOf, levelColliders, levelSurfaces,
   spawnPoints, type Aabb, type FurnitureDef, type RoomDef, type TunnelDef,
+  slotCharacter,
 } from './game-level';
 import {
   enclosureKeyIn, enclosureOfIn, gateColliders, layoutColliders, layoutSurfaces,
@@ -65,7 +66,7 @@ export function ringLevel(): ActiveLevel {
     portals: [],
     spawnList: () => ROOMS.flatMap(room => spawnPoints(room).map((pos, index) => ({
       id: `ring-${room.id}-${index}`,
-      kind: index < (room.soldiers ?? 0) ? 'soldier' as const : 'zombie' as const,
+      kind: slotCharacter(room, index),
       room,
       pos,
     }))),

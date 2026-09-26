@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { BuildResult } from '../build-body';
 import type { LimbId, Vec3 } from '../types';
 import { woundWorldPos, type Wound } from '../damage';
+import { plateFor, type ArmorSpec } from '../plate-armor';
 
 const boneKey = (s: string) => s.toLowerCase().replace(/[._]/g, '');
 function boneLimb(name: string): LimbId {
@@ -24,6 +25,10 @@ interface Piece {
 }
 interface Debris { mesh: THREE.Mesh; velocity: THREE.Vector3; spin: THREE.Vector3; resting: boolean }
 export interface KitDamageEvent { kind:'armor-hit'|'armor-shed'; point:Vec3; limb:LimbId }
+/** PLATE ARMOUR MODE (the juggernaut, plate-armor.ts): the actor's plate
+ *  state decides what sheds, not this file's own wound count. `hits` are the
+ *  plate impacts since the last frame (sparks); `shed` the plates at zero. */
+export interface KitArmorInput { spec: ArmorSpec; shed: ReadonlySet<string>; hits: readonly Vec3[] }
 
 /** WAM keeps part shapes disconnected but merges them per material. Join
  * UV-seam duplicates by position, then collect triangle islands once at load.
@@ -133,7 +138,7 @@ export function createKitDamage(object:THREE.Object3D) {
   return {
     debris,
     reset,
-    update(body:BuildResult,wounds:readonly Wound[],bodyYaw:number,dt:number):KitDamageEvent[] {
+    update(body:BuildResult,wounds:readonly Wound[],bodyYaw:number,dt:number,armor?:KitArmorInput|null):KitDamageEvent[] {
       const events:KitDamageEvent[]=[];
       // Gibs clear their wound list before a healthy body is respawned.
       // Equipment loss, not the previous wound count, records that reset.
@@ -144,8 +149,21 @@ export function createKitDamage(object:THREE.Object3D) {
         seen.add(w.eventId!); return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),weight:w.type==='blast'?3:1};
       });
       const changed=new Set<THREE.SkinnedMesh>();
+      // Plate mode: a spark per plate impact, wherever the actor says it was.
+      if(armor) for(const point of armor.hits) events.push({kind:'armor-hit',point,limb:'torso'});
       for(const piece of pieces) {
         if(piece.released) continue;
+        if(armor) {
+          // Everything skinned to a shed plate's bones goes with it (matched by
+          // bone): the plate islands, and what is mounted on them, so the
+          // helmet's lenses and snout never hang in front of a bare face.
+          const plate=plateFor(armor.spec,piece.bone);
+          if(!attached(piece,body) || (plate && armor.shed.has(plate.id))) {
+            const point=bake(piece); changed.add(piece.source);
+            if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
+          }
+          continue;
+        }
         if(piece.armor) for(const hit of impacts) {
           if(hit.limb!==piece.limb) continue;
           if(worldBounds(piece).distanceToPoint(new THREE.Vector3(...hit.point))<=.07) {

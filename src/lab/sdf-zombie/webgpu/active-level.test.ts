@@ -33,9 +33,11 @@ describe('ringLevel', () => {
     expect(L.gateColliders(new Set())).toEqual([]);
   });
 
-  it('lists spawns in spawnAll order: per room, soldiers first', () => {
+  it('lists spawns in spawnAll order: per room, soldiers first, then juggernauts', () => {
     const expected = ROOMS.flatMap(room => spawnPoints(room).map((pos, index) => ({
-      kind: index < (room.soldiers ?? 0) ? 'soldier' : 'zombie', roomId: room.id, pos,
+      kind: index < (room.soldiers ?? 0) ? 'soldier'
+        : index < (room.soldiers ?? 0) + (room.juggernauts ?? 0) ? 'juggernaut' : 'zombie',
+      roomId: room.id, pos,
     })));
     expect(L.spawnList().map(s => ({ kind: s.kind, roomId: s.room.id, pos: s.pos }))).toEqual(expected);
   });

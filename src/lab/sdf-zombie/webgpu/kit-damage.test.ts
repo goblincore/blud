@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { createKitDamage } from './kit-damage';
+import { JUGGERNAUT_ARMOR } from '../plate-armor';
 import { buildBody } from '../build-body';
 import { compileBlob } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
@@ -116,6 +117,29 @@ describe('damaged kit pieces', () => {
     expect(damage.update(b,[w],0,0).filter(e=>e.kind==='armor-hit')).toHaveLength(1);
     damage.update(b,[],0,0);
     expect(damage.update(b,[{...w,ageSec:2}],0,0).filter(e=>e.kind==='armor-hit')).toHaveLength(1);
+    damage.dispose();
+  });
+});
+
+// PLATE ARMOUR MODE (the juggernaut): the actor's plate state decides.
+describe('kit damage in plate-armour mode', () => {
+  it('ignores its own wound count and sheds exactly the plates the actor says are gone', () => {
+    const {mesh,damage}=fixture();
+    const b=body();
+    const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
+    const wound={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:1};
+    const second={...wound,local:[...wound.local] as typeof wound.local,eventId:2};
+    // Two local hits would shed a soldier's plate; the actor says intact.
+    const intact=damage.update(b,[wound,second],0,0,{spec:JUGGERNAUT_ARMOR,shed:new Set(),hits:[[-.14,1.38,.01]]});
+    expect(intact.filter(e=>e.kind==='armor-hit')).toHaveLength(1);
+    expect(intact.some(e=>e.kind==='armor-shed')).toBe(false);
+    expect(mesh.geometry.index!.count).toBe(12);
+    // The actor sheds the LEFT upper-arm plate: only the island skinned to
+    // upperarml goes.
+    const shed=damage.update(b,[wound,second],0,0,{spec:JUGGERNAUT_ARMOR,shed:new Set(['upperarm.l']),hits:[]});
+    expect(shed.filter(e=>e.kind==='armor-shed')).toHaveLength(1);
+    expect(mesh.geometry.index!.count).toBe(6);
+    expect(damage.debris.children).toHaveLength(1);
     damage.dispose();
   });
 });

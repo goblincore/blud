@@ -35,7 +35,8 @@ import {
   type Wound, type WoundType,
 } from '../damage';
 import { severLimb, severDistal, type SeverResult } from '../sever';
-import { soldierInjury, soldierArmCutAllowed } from '../soldier-damage';
+import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
+import { blastPlates, freshPlates, hitPlate, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
 import { sdBody } from '../validate';
@@ -52,7 +53,8 @@ import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
-import type { MotionProfile } from '../motion-profile';
+import { isSoldierFamily, type MotionProfile } from '../motion-profile';
+import { BARREL_REST, barrelsDriven, stepBarrelSpin, type BarrelSpin } from '../barrel-spin';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
@@ -98,6 +100,9 @@ const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.
  *  blast response (stagger.ts StaggerHit.gain; default 1 = lab amplitudes).
  *  Pellets send no gain: eight arrive together and re-flinch the body. */
 const SLUG_GAIN = 1.3;
+/** A round his armour stopped shoves the rig this fraction of IMPULSE: the
+ *  plate takes the hit, the man barely rocks (the juggernaut). */
+const ARMOR_SHOVE = 0.35;
 
 /** SOFT TARGETS (MotionProfile.soft — the cultist; owner playtest 2026-09-24,
  *  second pass). Trigger pulls to kill; the range (m) inside which a slug
@@ -395,6 +400,12 @@ export interface ZombieActor {
   motionFrame: () => MotionFrame | null;
   /** Seconds since this body last fired. Feeds the held prop's muzzle rise. */
   sinceFire: () => number;
+  /** The chaingun's barrel angle (rad; barrel-spin.ts), 0 for every other
+   *  weapon. Feeds the held prop's `Barrels` node. */
+  barrelSpin: () => number;
+  /** Plate armour for the kit view (plate-armor.ts): the shed plate ids and
+   *  the impact points since the last call (drained). null = no armour. */
+  armorView: () => { shed: ReadonlySet<string>; hits: Vec3[] } | null;
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
@@ -649,7 +660,7 @@ export function createZombieActor(opts: {
    */
   let lastPlayerPos: Vec3 | null = null;
   let bodyYaw = 0;
-  const soldierDamage = opts.profile?.name === 'soldier';
+  const soldierDamage = isSoldierFamily(opts.profile);
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
@@ -722,10 +733,28 @@ export function createZombieActor(opts: {
   // Visual slots evict at MAX_WOUNDS; injury must not heal when a crater
   // disappears. Live regional histories stop growing after severing/death.
   const soldierWounds: Wound[] = soldierDamage ? [...woundRing.all()] : [];
+  // PLATE ARMOUR (the juggernaut; plate-armor.ts). Absent for every other
+  // character, so every branch below is a no-op for them.
+  const armor = opts.profile?.armor ?? null;
+  let plates: PlateState | null = armor ? freshPlates(armor.spec) : null;
+  const injuryTuning = armor?.injury ?? SOLDIER_INJURY_TUNING;
+  /** Plate impacts since the view last drained them (sparks). */
+  const armorHits: Vec3[] = [];
+  /** Explosion wounds crack every plate they reach, once per blast, and are
+   *  never absorbed (dynamite is the answer to a tank). */
+  function armorBlast(ws: readonly Wound[]): void {
+    if (!armor || !plates || ws.length === 0) return;
+    const r = blastPlates(armor.spec, plates, ws.map(w => current.prims[w.primIdx]?.bone));
+    plates = r.state;
+    for (const id of r.hit) {
+      const w = ws.find(x => { const b = current.prims[x.primIdx]?.bone; return !!b && armor.spec.plates.find(p => p.id === id)!.bones.includes(b); });
+      if (w) armorHits.push(woundWorldPos(posed.prims, w, bodyYaw));
+    }
+  }
   function recordSoldierInjury(w: Wound): void {
     if (!soldierDamage || soldierFatal || w.injuryIgnored || w.type === 'burn') return;
     const prim = current.prims[w.primIdx];
-    if (prim && soldierInjury(current, soldierWounds).missing[prim.limb as keyof MissingLimbs]) return;
+    if (prim && soldierInjury(current, soldierWounds, injuryTuning).missing[prim.limb as keyof MissingLimbs]) return;
     if (prim && !prim.dead && current.clusters.find(c => c.limb === prim.limb)?.alive) soldierWounds.push(w);
   }
   const torsoWounds = opts.boundedWounds ? createTorsoWounds() : null;
@@ -754,6 +783,9 @@ export function createZombieActor(opts: {
     routeCache.age+=dt;return nav.follow(state.wander.pos,routeCache.path);
   };
   let lastFrame: ReturnType<typeof stepMotion>['frame'] | null = null;
+  // The chaingun's spin follows the mind's state (barrel-spin.ts header).
+  const spins = opts.profile?.gunner?.weapon === 'chaingun';
+  let barrel: BarrelSpin = BARREL_REST;
   /** prop.fistOnGrip: the right hand tip, pinned along its motion target
    *  each step (pinTips `only`); the one-element list, built once. */
   const fistTips = ((): { tips: BoundRig['tips']; only: ReadonlySet<number> } | null => {
@@ -799,7 +831,7 @@ export function createZombieActor(opts: {
   let detourSide: -1 | 0 | 1 = 0;
 
   function woundedLimbs() {
-    if (soldierDamage) return soldierInjury(current, soldierWounds).wounded;
+    if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).wounded;
     const w = { armL: false, armR: false, legL: false, legR: false };
     for (const wound of woundRing.all()) {
       const prim = current.prims[wound.primIdx];
@@ -812,7 +844,7 @@ export function createZombieActor(opts: {
   }
 
   function missingLimbs(): MissingLimbs {
-    if (soldierDamage) return soldierInjury(current, soldierWounds).missing;
+    if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).missing;
     const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     // A leg with ANY distal cut has lost its foot (severDistal kills the prim
     // and everything outward), so it can no longer bear weight: count it as
@@ -940,7 +972,7 @@ export function createZombieActor(opts: {
       const distance = (p: Vec3) => Math.hypot(p[0] - joint[0], p[1] - joint[1], p[2] - joint[2]);
       at = distance(first.a) >= distance(first.b) ? first.a : first.b;
     }
-    return soldierArmCutAllowed(current, soldierWounds, limb, at);
+    return soldierArmCutAllowed(current, soldierWounds, limb, at, injuryTuning);
   }
 
   /** HEAD POP: the head goes in a burst — no flying chunk (onHeadPop). */
@@ -977,7 +1009,7 @@ export function createZombieActor(opts: {
 
   function runSeverChecks() {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
-    const injury = soldierDamage ? soldierInjury(current, soldierWounds) : null;
+    const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
     const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
@@ -994,7 +1026,7 @@ export function createZombieActor(opts: {
       opts.character?.releaseProp([0, 0, 0], opts.seed);
     }
     if (soldierDamage) {
-      const after = soldierInjury(current, soldierWounds);
+      const after = soldierInjury(current, soldierWounds, injuryTuning);
       soldierFatal ||= after.fatal;
       if (soldierFatal || after.downed) { shotWindow = []; seenReactionShots.clear(); }
       if (!propReleaseRequested && (soldierFatal || after.downed || after.missing.armR)) {
@@ -1197,7 +1229,7 @@ export function createZombieActor(opts: {
         signals.wounded = woundedLimbs();
       }
       if (soldierDamage) {
-        const injury = soldierInjury(current, soldierWounds);
+        const injury = soldierInjury(current, soldierWounds, injuryTuning);
         soldierFatal ||= injury.fatal;
         signals.downed = injury.downed;
         signals.mobilityInjury = injury.mobilityInjury;
@@ -1460,6 +1492,7 @@ export function createZombieActor(opts: {
     if (woundRing.all().length) {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
+    if (spins) barrel = stepBarrelSpin(barrel, !lastFrame?.collapsed && barrelsDriven(mind.debug().state), dt);
     posed = applyRig(current, bound, bodyYaw);
     if (headPop && swellDur > 0) {
       swellClock += dt;
@@ -1547,6 +1580,7 @@ export function createZombieActor(opts: {
     // This is also the wound-only diagnostic seam. Only the explosion
     // resolver may identify a bundle as damaging explosion provenance.
     for (const w of blastWounds) if (w.shot?.weapon === 'explosion') recordSoldierInjury(w);
+    armorBlast(blastWounds.filter(w => w.shot?.weapon === 'explosion'));
     woundRing.stampBundle(blastWounds);
     if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
     for (const w of blastWounds) pendingWounds.push(w);
@@ -1594,6 +1628,7 @@ export function createZombieActor(opts: {
       beginSoftDeath(effect.impulse ? unitOrZero(effect.impulse.vel) : [0, 0, 0], undefined, undefined, 'blast');
 
     for (const w of blastWounds) if (w.shot?.weapon === 'explosion') recordSoldierInjury(w);
+    armorBlast(blastWounds.filter(w => w.shot?.weapon === 'explosion'));
     woundRing.stampBundle(blastWounds);
     if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
 
@@ -1706,7 +1741,7 @@ export function createZombieActor(opts: {
    * dedup identities beyond the 1.5s combo window and after a full reaction. */
   function progressiveHit(wound: Wound): boolean {
     if (!soldierDamage || wound.injuryIgnored || wound.type === 'burn' || wound.shot?.weapon === 'explosion') return false;
-    const injury = soldierInjury(current, soldierWounds);
+    const injury = soldierInjury(current, soldierWounds, injuryTuning);
     if (soldierFatal || injury.fatal || injury.downed) { shotWindow = []; seenReactionShots.clear(); return false; }
     for (const [id, at] of seenReactionShots) if (reactionTime - at > 3) seenReactionShots.delete(id);
     shotWindow = shotWindow.filter(at => reactionTime - at <= 1.5);
@@ -1750,6 +1785,19 @@ export function createZombieActor(opts: {
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
   }
+  /** A round the armour stopped: sparks (queued above), no wound, no injury.
+   *  A slug still rocks him (a medium stagger); a pellet only shoves the rig
+   *  a little. Returns null: nothing was stamped, so nothing bleeds. */
+  function absorbedHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): null {
+    if (wound.type === 'blast') {
+      selectPendingShot({ type: 'blast', dirWorld: [...dirWorld] as Vec3, woundWorld: [...hitWorld] as Vec3,
+        torso: posed.prims[wound.primIdx]?.limb === 'torso', soldierLevel: 'medium', gain: SLUG_GAIN });
+      mind.stagger(soldierStaggerDuration('medium'));
+    }
+    const push = IMPULSE[wound.type] * ARMOR_SHOVE;
+    bound = impulseAt(bound, hitWorld, [dirWorld[0] * push, dirWorld[1] * push, dirWorld[2] * push]);
+    return null;
+  }
   function beginHits(): void { hitBatching = true; hitPending = false; diagnosticBatchShot = ++diagnosticShotSerial; }
   function endHits(): void {
     hitBatching = false;
@@ -1757,7 +1805,14 @@ export function createZombieActor(opts: {
   }
 
 
-  function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound {
+  function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound | null {
+    // An intact plate stops the round before anything is stamped.
+    if (armor && plates && !soldierFatal && wound.type !== 'burn') {
+      const r = hitPlate(armor.spec, plates, posed.prims[wound.primIdx]?.bone, injuryPoints(wound));
+      plates = r.state;
+      if (r.plate) armorHits.push([...hitWorld] as Vec3);
+      if (r.absorbed) return absorbedHit(wound, hitWorld, dirWorld);
+    }
     damageRevision++; bakePaused = false;
     const field = posed;
     // stamp() records the pre-impulse position for us — BEFORE the shove
@@ -1798,7 +1853,10 @@ export function createZombieActor(opts: {
     woundRing.stamp(wound, field, bodyYaw);
     torsoWounds?.record(wound, current);
     pendingWounds.push(wound);
-    const fullStagger = progressiveHit(wound);
+    // STAGGER RESISTANCE (the juggernaut): pellets never stagger him, even on
+    // bare flesh; slugs and blasts still do.
+    const resist = !!armor && wound.type === 'pellet';
+    const fullStagger = !resist && progressiveHit(wound);
     const shot: NonNullable<MotionSignals['shot']> = {
       ...(softReact ?? {}),
       type: fullStagger ? 'blast' : wound.type,
@@ -1813,9 +1871,9 @@ export function createZombieActor(opts: {
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
       ...(softReact ?? {}),
     };
-    selectPendingShot(shot);
+    if (!resist) selectPendingShot(shot);
     if (fullStagger) mind.stagger(soldierStaggerDuration('heavy', true));
-    if (wound.type === 'pellet') { pendingPelletHits++; pendingPelletShot = shot; }
+    if (wound.type === 'pellet' && !resist) { pendingPelletHits++; pendingPelletShot = shot; }
     if (wound.type === 'blast') {
       // Interrupt immediately. Soldier motion owns severity-scaled recovery
       // travel; Zombies retain the existing actor-level root knock.
@@ -1925,6 +1983,12 @@ export function createZombieActor(opts: {
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
+    barrelSpin: () => barrel.angle,
+    armorView: () => {
+      if (!plates) return null;
+      const hits = armorHits.splice(0);
+      return { shed: shedPlates(plates), hits };
+    },
     boundRig: () => bound,
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
     nudge,

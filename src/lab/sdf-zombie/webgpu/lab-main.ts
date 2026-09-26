@@ -97,7 +97,7 @@ import {
   type ActorMotion, type ActorSignals,
 } from '../actor';
 import type { ArmStyle } from '../gait';
-import { speedForBand, motionProfileFor, type MotionProfile } from '../motion-profile';
+import { speedForBand, motionProfileFor, isSoldierFamily, type MotionProfile } from '../motion-profile';
 import type { CarryName } from '../carry';
 import type { SwingVariant } from '../attack';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
@@ -1215,7 +1215,7 @@ async function main() {
     pendingFire = false;
     sinceFire = Infinity;
     lastMotionFrame = null;
-    const injury = motionProfile.name === 'soldier' ? soldierInjury(current, woundRing.all()) : null;
+    const injury = isSoldierFamily(motionProfile) ? soldierInjury(current, woundRing.all()) : null;
     heroSignals.downed = injury?.downed ?? false;
     heroSignals.fatal = injury?.fatal ?? false;
     heroSignals.forcedCollapse = false;
@@ -1232,7 +1232,7 @@ async function main() {
   /** Full-limb severance map from cluster alive flags (mid-limb distal cuts
    *  leave the cluster alive and do NOT count — hop/collapse see full legs). */
   function missingLimbs(): MissingLimbs {
-    if (motionProfile.name === 'soldier') return soldierInjury(current, woundRing.all()).missing;
+    if (isSoldierFamily(motionProfile)) return soldierInjury(current, woundRing.all()).missing;
     const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
@@ -1240,7 +1240,7 @@ async function main() {
   /** Present-but-hurt limbs for the gait limp skew — a limb carrying at
    *  least one live wound on a still-alive cluster. */
   function woundedLimbs() {
-    if (motionProfile.name === 'soldier') return soldierInjury(current, woundRing.all()).wounded;
+    if (isSoldierFamily(motionProfile)) return soldierInjury(current, woundRing.all()).wounded;
     const alive = (l: LimbId) => current.clusters.find(c => c.limb === l)?.alive ?? false;
     const w = { armL: false, armR: false, legL: false, legR: false };
     for (const wound of woundRing.all()) {
@@ -1504,10 +1504,10 @@ async function main() {
 
   function applyHeroSever(limb: LimbId, result: SeverResult) {
     if (result.chunk.prims.length === 0) return;
-    const world = motionProfile.name === 'soldier';
+    const world = isSoldierFamily(motionProfile);
     const chunk = world ? posedDetachedChunk(current, lastPosed, result.chunk, heroMotion.lastBodyYaw) : result.chunk;
     current = result.body;
-    if (motionProfile.name === 'soldier') {
+    if (isSoldierFamily(motionProfile)) {
       const injury = soldierInjury(current, woundRing.all());
       forcedCollapse ||= injury.fatal;
       if (injury.missing.armR || injury.missing.armL || injury.downed || injury.fatal) heroView.releaseProp([0, 0, 0], MOTION_SEED);
@@ -1526,10 +1526,10 @@ async function main() {
   }
 
   function runHeroSeverChecks() {
-    const soldier = motionProfile.name === 'soldier';
+    const soldier = isSoldierFamily(motionProfile);
     const cuttingWounds = soldier ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
     const fullCuts = cutLimbs(current, cuttingWounds, torsoCentre());
-    if (motionProfile.name === 'soldier') {
+    if (isSoldierFamily(motionProfile)) {
       const injury = soldierInjury(current, woundRing.all());
       forcedCollapse ||= injury.fatal;
       if (injury.downed) heroView.releaseProp([0, 0, 0], MOTION_SEED);
@@ -1601,7 +1601,7 @@ async function main() {
     heroMotion.bound = impulseAt(heroMotion.bound, hit, [d.x * push, d.y * push, d.z * push]);
     refreshWounds();
 
-    if (motionProfile.name === 'soldier') pendingFire = false;
+    if (isSoldierFamily(motionProfile)) pendingFire = false;
     runHeroSeverChecks();
   });
 
@@ -2082,7 +2082,7 @@ async function main() {
     },
     applyChainCuts(cuts) {
       for (const cut of cuts) applyHeroSever(cut.limb, severDistal(current, cut));
-      if (motionProfile.name === 'soldier') runHeroSeverChecks();
+      if (isSoldierFamily(motionProfile)) runHeroSeverChecks();
     },
     gibBody() { gibEverything(); },
     impulseChunks(list) {
@@ -2666,11 +2666,11 @@ async function main() {
       heroSignals.wounded = woundedLimbs();
       heroSignals.missing = missingLimbs();
       heroSignals.headAlive = current.clusters.find(c => c.limb === 'head')?.alive ?? false;
-      heroSignals.forcedCollapse = forcedCollapse || (motionProfile.name === 'soldier' && soldierInjury(current, woundRing.all()).fatal);
+      heroSignals.forcedCollapse = forcedCollapse || (isSoldierFamily(motionProfile) && soldierInjury(current, woundRing.all()).fatal);
       // severed/freshWounds ARE pendingSevered/pendingWounds (same array
       // references): drained in place after the first sub-step.
       heroSignals.severed = pendingSevered;
-      const injury = motionProfile.name === 'soldier' ? soldierInjury(current, woundRing.all()) : null;
+      const injury = isSoldierFamily(motionProfile) ? soldierInjury(current, woundRing.all()) : null;
       heroSignals.downed = injury?.downed ?? false;
       heroSignals.fatal = injury?.fatal ?? false;
       heroSignals.fire = pendingFire && !(injury && (injury.downed || injury.fatal || injury.missing.armL || injury.missing.armR));

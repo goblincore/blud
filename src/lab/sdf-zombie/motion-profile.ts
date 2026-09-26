@@ -7,9 +7,23 @@
 import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
+import type { Vec3 } from './types';
+import { JUGGERNAUT_ARMOR, type ArmorSpec } from './plate-armor';
+import { JUGGERNAUT_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
+
+/** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
+ *  brain tuning; game-main's onFire picks the round). */
+export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun';
 
 export interface MotionProfile {
   name: string;
+  /** The SOLDIER FAMILY: the soldier and his variants (juggernaut, ...). A
+   *  family member gets the soldier's regional injury rules, armour kit
+   *  breakoff + sparks, casings, planted footwork, structural collapse and
+   *  corpse handling. These were `name === 'soldier'` checks; a variant with
+   *  its own name would silently have lost all of it. Test with
+   *  isSoldierFamily(), never with the name. */
+  family?: 'soldier';
   /** walk and run gaits. A single-gait character passes the same profile
    *  twice and runWeight is 0 everywhere. */
   gait: { walk: GaitProfile; run: GaitProfile };
@@ -27,8 +41,11 @@ export interface MotionProfile {
    *  that far PAST the wrist along the forearm — the rig's hand joint is the
    *  WRIST (forearm tail), so a character whose fist is a long hand bone (the
    *  ogre's 0.15 m, fist centred at its midpoint) otherwise holds the handle
-   *  inside its forearm. The soldier's short hand never showed it. */
-  prop?: { url: string; scale?: number; gripReach?: number;
+   *  inside its forearm. The soldier's short hand never showed it.
+   *  `foreHand` (prop-local, like carry.ts GUN_GRIP) replaces the shared
+   *  fore-end as the support hand's target: the juggernaut's chaingun is held
+   *  by its top carry handle (make-juggernaut-chaingun.ts). */
+  prop?: { url: string; scale?: number; gripReach?: number; foreHand?: Vec3;
     /** The hand bone lies along the forearm while the prop is held (motion.ts
      *  carry block) instead of keeping its rest hang: a two-handed hilt held
      *  HIGH needs the fist round the grip, not dangling off the wrist. Absent
@@ -38,7 +55,7 @@ export interface MotionProfile {
    *  (enemy-mind.ts makeSoldierMind) with this weapon's tuning, and its
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
-  gunner?: { weapon: 'shotgun' | 'smg' };
+  gunner?: { weapon: GunnerWeapon };
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
@@ -52,9 +69,19 @@ export interface MotionProfile {
    *  full flail, the hunch; soldier-stagger.ts) instead of the zombie's
    *  lurch/shudder. The soldier always has it. */
   staggerStyle?: 'soldier';
+  /** PLATE ARMOUR that absorbs rounds (plate-armor.ts), and the regional
+   *  injury thresholds for the flesh once a plate is off (soldier-damage.ts).
+   *  Also makes him stagger-resistant: pellets never stagger him. Absent =
+   *  the soldier's visual-only plates and thresholds. The juggernaut's. */
+  armor?: { spec: ArmorSpec; injury: SoldierInjuryTuning };
   /** The FULL flail's shape and timing (soldier-stagger fullOpen). Absent =
    *  the soldier's, exactly (SOLDIER_FLAIL). Angles in radians, body-local. */
   flail?: FlailTuning;
+}
+
+/** True for the soldier and his variants (MotionProfile.family). */
+export function isSoldierFamily(profile: Pick<MotionProfile, 'family'> | null | undefined): boolean {
+  return profile?.family === 'soldier';
 }
 
 export interface FlailTuning {
@@ -90,6 +117,7 @@ export const ZOMBIE_PROFILE: MotionProfile = {
 
 export const SOLDIER_PROFILE: MotionProfile = {
   name: 'soldier',
+  family: 'soldier',
   gait: { walk: MARCH, run: RUN },
   // Cruise and the walk→run band come from the reference clips' implied
   // speeds (Task 1's sampling, for a 0.84 m leg):
@@ -188,6 +216,35 @@ export const CULTIST_PROFILE: MotionProfile = {
   flail: { abduct: 1.45, liftL: 1.2, liftR: 1.2, yawOut: 2.6, lagL: false, riseSec: 0.07, durationSec: 0.85, arch: 0.12 },
 };
 
+/** The juggernaut: the soldier's power-armoured chaingunner variant
+ *  (docs/superpowers/specs/2026-09-25-juggernaut-design.md). A soldier-family
+ *  member (family inherited), so every soldier system applies. Only what
+ *  makes him a TANK differs: slower, heavier turn, never runs, and a
+ *  hip-fired chaingun on CHAINGUN_TUNING (soldier-brain.ts). */
+export const JUGGERNAUT_PROFILE: MotionProfile = {
+  ...SOLDIER_PROFILE,
+  name: 'juggernaut',
+  // MARCH only: a tank does not sprint. runBand at Infinity keeps runWeight 0.
+  gait: { walk: MARCH, run: MARCH },
+  runBand: { from: Infinity, to: Infinity },
+  // Spec table: ~0.9 m/s against the soldier's 1.25. Under the zombie's 1.15
+  // on purpose: he closes by being unstoppable, not fast (the ogre's 0.95).
+  cruise: 0.9,
+  // Spec table: ~1.8 rad/s against the soldier's 5.5. The slow sweep IS the
+  // dodge: a strafing player outruns his aim.
+  turnRate: 1.8,
+  // One hold for everything (carry.ts `heavy`): the gun never leaves the hip.
+  carries: { walk: 'heavy', run: 'heavy', fire: 'heavy' },
+  // scripts/make-juggernaut-chaingun.ts. Scale 1.45: muzzle ~0.6 m past the
+  // grip, a gun sized to a 2.3 m man; the `heavy` solve used this scale.
+  // foreHand: the TOP CARRY HANDLE, prop-local (the .glb's Fore_Hand node).
+  prop: { url: '/assets/lab/juggernaut-chaingun.glb', scale: 1.45, foreHand: [0, 0.110, 0] },
+  gunner: { weapon: 'chaingun' },
+  // Plates that stop rounds until shot off, tougher flesh under them, and no
+  // pellet staggers (spec, "Damage").
+  armor: { spec: JUGGERNAUT_ARMOR, injury: JUGGERNAUT_INJURY_TUNING },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -214,6 +271,7 @@ export const BRIDE_PROFILE: MotionProfile = {
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   soldier: SOLDIER_PROFILE,
+  juggernaut: JUGGERNAUT_PROFILE,
   ogre: OGRE_PROFILE,
   cultist: CULTIST_PROFILE,
   bride: BRIDE_PROFILE,

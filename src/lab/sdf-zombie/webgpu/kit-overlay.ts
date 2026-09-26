@@ -44,7 +44,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
-import { createKitDamage, type KitDamageEvent } from './kit-damage';
+import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -139,6 +139,15 @@ const LOOK: Record<string, {
   plate:   { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
   webbing: { metalness: 0.05, roughness: 0.70, envIntensity: 0.25 },
 
+  // ---- juggernaut (juggernaut-kit.wam) ----
+  // The power-armour helmet's two round eye lenses: `glass`'s sheen plus a
+  // DIM red self-glow (spec: "a dim glow behind them"). The goblin's glass
+  // rejected an emissive because a lit visor was the wrong note for HIM; a
+  // sealed helmet with lit eyes is exactly the note for a tank. The body under
+  // it has no light to show through (see the emissive docstring), so the
+  // lens carries it. Plate, iron and brass reuse the entries above.
+  lens: { metalness: 0.35, roughness: 0.05, envIntensity: 1.6, emissive: [0.9, 0.06, 0.03], emissiveIntensity: 0.9 },
+
   // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
   // entries exist mostly for the ENV MAP — without one, a rough dielectric's
   // shadow side falls to near-black under the lab's single key, and the
@@ -207,7 +216,7 @@ export interface KitOverlay {
    * At rest every frame is (bind head, identity) and the result is exactly
    * the static placement this overlay had before it could move.
    */
-  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number }): KitDamageEvent[];
+  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number; armor?: KitArmorInput | null }): KitDamageEvent[];
   resetDamage(): void;
   dispose(): void;
 }
@@ -329,7 +338,7 @@ export async function loadKit(
     // stayed behind as the soldier walked away. Camera turns then culled his
     // entire kit. Refresh after posing to keep ordinary frustum culling valid.
     for (const mesh of skinned) mesh.computeBoundingSphere();
-    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt) ?? [] : [];
+    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor) ?? [] : [];
   };
 
   return {

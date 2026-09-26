@@ -1,0 +1,156 @@
+# Juggernaut — the soldier's power-armoured chaingunner variant (spec:
+# docs/superpowers/specs/2026-09-25-juggernaut-design.md).
+#
+# THIS IS SOLDIER.BLOB, SCALED. Same skeleton topology, same bone names, same
+# primitive list minus the hair, so every soldier-family system (gait, carry,
+# rig bind, regional injury, structural collapse) applies unchanged. Every
+# number below is the soldier's number times one of these factors. The
+# soldier's comments explain the numbers themselves; this file only
+# explains the factors. If the soldier's body is retuned, re-derive rather than
+# hand-drifting the two apart.
+#
+#   H    1.15  everything: lengths, radii, offsets, blends, face lengths.
+#              1.992 m -> 2.291 m. He is visibly bigger than a soldier
+#              standing next to him, not a different species.
+#   WT   1.13  extra torso WIDTH (x). With H that is 1.30x the soldier's
+#              shoulders and chest: the brief's "taller AND broader".
+#   DT   1.06  extra torso DEPTH (z). Barrel chest, but less than the width:
+#              the power armour's bulk is the kit's job, not the flesh's.
+#   SH   1.13  extra clavicle side + length, matching WT: the shoulder
+#              socket must move out with the chest wall it sits proud of
+#              (the goblin lesson in soldier.blob's skeleton comment).
+#   ARM  1.12  extra arm girth. Tilt stays 8 deg: the torso and arm both
+#              grew, so the arm-to-belt clearance scales with them.
+#   LEG  1.10  extra leg girth, and HIP 1.10 extra hip spacing so the
+#              thicker thighs do not merge at the crotch.
+#   NECK 1.15  extra neck girth: the neck carries a helmet.
+#
+# Dropped: the green flat-top (two `color=2e6034` head prims). The helmet
+# (juggernaut-kit.wam) covers the skull and the hair would poke through it.
+#
+# The flesh here is mostly hidden. Power armour covers everything but the
+# joints, and the kit is authored in juggernaut-kit.wam against THIS body.
+model juggernaut
+  # soldier 1.992 x H
+  height 2.291
+  stance humanoid
+
+skeleton
+  # Lengths x H. Pitch and tilt verbatim: the soldier's pose, bigger.
+  root pelvis at 1.145433 len=0.138
+  bone spine1 parent=pelvis dir=up pitch=-1 len=0.2208
+  bone chest  parent=spine1 dir=up pitch=-1 len=0.2346
+  bone spine2 parent=chest  dir=up pitch=0  len=0.0828
+  bone neck   parent=spine2 dir=up pitch=0  len=0.1104
+  bone skull  parent=neck   dir=up pitch=2  len=0.3036
+
+  mirror
+    # side + len x H x SH (0.048/0.12 -> 0.0624/0.1559).
+    bone clavicle parent=spine2  side=0.0624 dir=side  len=0.1559
+    # tilt 12, not the soldier's 8: the one angle that is NOT the soldier's.
+    # Scaled verbatim, his forearm sank 6.4 cm into the widened waist (the
+    # soldier's own forearm/waist overlap is 4.4 cm, hidden by his kit). 12
+    # brings it back to 4.6 cm, under the soldier's scaled 5.1, and power
+    # armour hangs its arms out from a bulky torso anyway.
+    bone upperarm parent=clavicle dir=down tilt=12 pitch=2  len=0.3588
+    bone forearm  parent=upperarm dir=down tilt=4 pitch=8  len=0.3312
+    bone hand     parent=forearm  dir=down pitch=6         len=0.1311
+    # side x H x HIP (0.0816 -> 0.1032).
+    bone thigh    parent=pelvis dir=down tilt=2 side=0.1032 len=0.5244
+    bone shin     parent=thigh  dir=down tilt=2            len=0.5796
+    bone foot     parent=shin   dir=fwd                    len=0.1794
+  end
+
+body
+  # TORSO: r x H; wide x WT, deep x DT (a prim with no wide/deep gains one).
+  # Trouser olive on the hips, bare above, as on the soldier.
+  blob torso on pelvis at=0.40 r=0.196 wide=1.1865 tall=0.90 deep=0.8904 blend=0.0138 color=5c5d41
+  bar  torso on spine1 from=0.40 to=1.00 r=0.178 r2=0.1863 wide=1.13 deep=0.901 blend=0.011
+  bar  torso on chest  from=0.20 to=0.95 r=0.1835 r2=0.2001 wide=1.13 deep=0.8904 blend=0.011
+
+  # ARMS: r x H x ARM. The orb fist stays an orb: the chaingun's rear grip
+  # and carry handle both need something round to sit in.
+  blob arm on upperarm at=0.06 r=0.1515 tall=1.05 blend=0.0138 mirror
+  bar  arm on upperarm from=0.12 to=0.95 r=0.1329 r2=0.0896 blend=0.011 mirror
+  blob arm on forearm  at=0.00 r=0.0989 blend=0.0083 mirror
+  bar  arm on forearm  from=0.05 to=0.95 r=0.1113 r2=0.0742 blend=0.011 mirror
+  blob arm on hand at=0.55 offset=(0,0,0.011) r=0.0804 wide=1.00 tall=1.00 deep=1.00 blend=0.0069 mirror
+
+  # LEGS: r x H x LEG. No flesh foot, as on the soldier: the kit's boot IS
+  # the foot, and the foot bone only carries it.
+  blob leg on thigh at=0.00 r=0.1275 deep=1.05 blend=0.011 mirror core color=5c5d41
+  bar  leg on thigh from=0.02 to=1.00 r=0.1199 r2=0.0926 deep=1.05 blend=0.0097 mirror color=5c5d41
+  bar  leg on shin from=0.08 to=1.00 r=0.0911 r2=0.0668 blend=0.0083 mirror color=676549
+
+  # NECK: r x H x NECK.
+  bar head on neck from=0.05 to=0.95 r=0.0698 deep=1.10 blend=0.0055
+
+bones
+  ratio 0.38
+  # Skull and jaw x H. Rib cage: x components x H x WT, z x H x DT, so the
+  # cage widens with the chest it sits in and keeps the soldier's skin wall.
+  blob head on skull at=0.45 r=0.092 wide=0.94 tall=1.10 deep=1.06
+  blob head on skull at=0.18 offset=(0,-0.0253,0.0403) r=0.0598 wide=0.90 tall=0.78 deep=1.00
+  bar torso on chest from=0.78 to=0.78 offset=(0,0,-0.0634) tip=(0.1559,-0.0115,0.0549) bend=(0.026,0,0.0219) r=0.0115 both
+  bar torso on chest from=0.78 to=0.78 offset=(0.1559,-0.0115,-0.0085) tip=(-0.1559,0.0115,0.0853) bend=(0,0,0.0219) r=0.0115 both
+  bar torso on chest from=0.55 to=0.55 offset=(0,0,-0.0658) tip=(0.1715,-0.0161,0.0585) bend=(0.0286,0,0.0244) r=0.0126 both
+  bar torso on chest from=0.55 to=0.55 offset=(0.1715,-0.0161,-0.0073) tip=(-0.1715,0.0161,0.0902) bend=(0,0,0.0244) r=0.0126 both
+  bar torso on chest from=0.32 to=0.32 offset=(0,0,-0.0634) tip=(0.1455,-0.023,0.0549) bend=(0.0234,0,0.0195) r=0.0115 both
+  bar torso on chest from=0.32 to=0.32 offset=(0.1455,-0.023,-0.0085) tip=(-0.1455,0.023,0.0805) bend=(0,0,0.0195) r=0.0115 both
+  bar torso on chest from=0.28 to=0.88 r=0.0149 offset=(0,0,0.1121)
+  bar torso on chest from=0.18 to=0.95 r=0.0172 offset=(0,0,-0.1)
+
+# FACE: the soldier's owner-tuned block, lengths x H, ratios verbatim. The
+# helmet hides it in play; it shows when the helmet is shot off.
+face
+  headRadius 0.1035
+  headWidth  0.980
+  headHeight 1.150
+  headDepth  1.050
+  jawWidth   0.816
+  jawHeight  0.900
+  jawDrop    0.0828
+  jawJut     0.0511
+  noseLength 0.0428
+  noseWidth  1.085
+  noseDrop   0.0193
+  browHeavy  0.0193
+  browRise   0.0483
+  headBlend  0.0069
+  headRise   0
+  headLead   0
+
+# The soldier's baked face and projection. The projection is a fraction of
+# the head, so it scales with headRadius and needs no change.
+sheet
+  image       soldier-face.png
+  decal       1
+  blendLuma   0
+  projScaleX  0.210
+  projScaleY  0.210
+  projCentreX 0.50
+  projCentreY 0.510
+  eyeGlowAmp  2.2
+  eyeGlowCut  0.55
+  eyeGlowRedOnly 1
+  texRelief   1.050
+  texStrength 1
+  projSpherical 0
+  faceForward 1
+
+# The soldier's palette verbatim: he is a soldier, in a bigger suit.
+palette
+  surfaceNoiseAmp 0.06
+  silhouetteNoiseAmp 0.016
+  baseColor     0.522 0.424 0.333
+  deepColor     0.50 0.08 0.08
+  charColor     0.20 0.12 0.09
+  fatColor      0.64 0.25 0.18
+  specIntensity 0.35
+  specRoughness 0.5
+  fresnelBoost  1.5
+  translucency  0.2
+  wetness       0.79
+  mottleAmp     0.10
+  mottleScale   1.4
+  mottleColor   0.54 0.39 0.28
