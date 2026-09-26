@@ -132,7 +132,19 @@ export function createBootSeams(ctx: GameContext) {
     },
     /** What the main camera's polygonal pass can draw: visible meshes on its layers, grouped by
      *  the nearest named ancestor (optimisation pass census). */
-    sceneCensus: () => {
+    /** Diagnostics: visible objects whose name matches `re`, with world position, scale and bounds. */
+    findObjects: (re: string, max = 12) => {
+      const rx = new RegExp(re, 'i'), out: unknown[] = [];
+      const p = new THREE.Vector3(), sc = new THREE.Vector3(), box = new THREE.Box3();
+      ctx.boot.handle.scene.traverseVisible(o => {
+        if (out.length >= max || !rx.test(o.name)) return;
+        o.getWorldPosition(p); o.getWorldScale(sc); box.setFromObject(o);
+        out.push({ name: o.name, type: o.type, pos: p.toArray().map(v => +v.toFixed(2)), scale: +sc.x.toFixed(3),
+          size: box.isEmpty() ? null : box.getSize(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)), layers: o.layers.mask });
+      });
+      return out;
+    },
+    drawCensus: () => {
       const cam = ctx.boot.handle.camera;
       const out: Record<string, number> = {};
       ctx.boot.handle.scene.traverseVisible(o => {

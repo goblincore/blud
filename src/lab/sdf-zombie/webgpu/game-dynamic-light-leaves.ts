@@ -414,7 +414,7 @@ const BODY_LAMP_GAIN = 1.5;
 const COLD_FILL: [number, number, number] = [0.62, 0.74, 1.0];
 /** And the rim a lamp adds, per unit of that key. */
 const BODY_LAMP_RIM = 0.35;
-const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0 };
+const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0, back: 0 };
 
 /** THE LAMPS PRESENT THE ZOMBIES (owner, 2026-09-26: "more of screenshot 2" — a body lit from the
  *  front-side reads as modeled, a body straight under a tube lit only on its crown reads dark).
@@ -422,7 +422,7 @@ const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0 };
  *  lamp's; direction is a three-quarter key from above and from the viewer's side, blended with the
  *  real direction to the brightest lamp so bodies still differ. Flicker, blackouts and strobes ride
  *  the room level. */
-const PRESENT = { gain: 0.7, realDir: 0.15, floor: 0.3 } as const;
+const PRESENT = { gain: 0.7, realDir: 0.15, floor: 0.3, backKey: 0.35, backRim: 2.5 } as const;
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 function presentingLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
   const rt = ctx.world.light;
@@ -443,8 +443,19 @@ function presentingLamp(ctx: GameContext, at: readonly [number, number, number])
   if (real) dir.lerp(real.dir, PRESENT.realDir).normalize();
   lampTmp.dir.copy(dir);
   if (real) lampTmp.color.copy(real.color); else lampTmp.color.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);
+  // FALLOFF BY FACING (owner, 2026-09-26: back to the light, the front should be dimmer, never
+  // black): how much the real lamp is on the viewer's side of the body. Behind the body, the front
+  // key falls to `backKey` and the back-light rim takes over.
+  let back = 0;
+  if (real) {
+    const tvx = cam.position.x - at[0], tvz = cam.position.z - at[2];
+    const tl = Math.hypot(tvx, tvz) || 1, rl = Math.hypot(real.dir.x, real.dir.z) || 1;
+    const facing = ((real.dir.x * tvx + real.dir.z * tvz) / (tl * rl) + 1) / 2;
+    back = 1 - facing;
+  }
   // A floor while the room has any light: a flicker's dark instant dims a body, never erases it.
-  lampTmp.k = Math.max(lit, PRESENT.floor) * PRESENT.gain;
+  lampTmp.k = Math.max(lit, PRESENT.floor) * PRESENT.gain * (1 - back * (1 - PRESENT.backKey));
+  lampTmp.back = back;
   return lampTmp;
 }
 
@@ -504,7 +515,7 @@ export function applyWindowKey(ctx: GameContext, u: KeyUniforms, at?: readonly [
       u.keyColor.value.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);
     }
     u.spotCfg2.value.z += kw + kl;
-    u.spotCfg2.value.w = (s ? s.intensity * BODY_RIM_GAIN : 0) + kl * BODY_LAMP_RIM;
+    u.spotCfg2.value.w = (s ? s.intensity * BODY_RIM_GAIN : 0) + kl * BODY_LAMP_RIM * (1 + (lamp?.back ?? 0) * PRESENT.backRim);
   } else if (base) {
     u.lightDir.value.copy(base.dir);
     u.keyColor.value.copy(base.color);
