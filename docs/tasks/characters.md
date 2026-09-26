@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Juggernaut (power-armour chaingunner, first soldier variant) — started 2026-09-25
+## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 
 - [x] **Soldier family trait**: `MotionProfile.family` + `isSoldierFamily()` replace ~37 `name === 'soldier'` checks,
   so a renamed variant keeps injury rules, kit breakoff, casings, footwork, collapse. No behaviour change.
@@ -10,13 +10,15 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   (power armour, sealed helmet, lenses, backpack). `?character=juggernaut`. [Notes](../../docs/dev-notes/2026-09-25-juggernaut/NOTES.md)
 - [x] **Chaingun**: TS-generated `juggernaut-chaingun.glb`, `heavy` hip carry (both hands pinned), `CHAINGUN_TUNING`
   (0.9 s spin-up, 15-24 rounds at ~10/s, sweep, no strafe or back-off), single rounds, spinning barrels, brass casings.
-- [ ] **Blocked on WAM**: run `scripts/build-wam-kit.sh juggernaut` locally, then `juggernaut-kit.test.ts` (skips until then).
-  Then GPU frames for the owner look, and a first playtest (the plan's open items).
+- [x] **Kit built** (`juggernaut-kit.gltf` on main) and `juggernaut-kit.test.ts` green (9 tests: containment, sealed helmet,
+  pauldron crown, boots on the floor, rest identity). **Owner playtest 2026-09-26:** "quite decent, does what it says on the tin".
 - [x] **Plate armour works** (`plate-armor.ts`): plates absorb rounds until shot off (helmet guards the head), hips bare,
   blasts wound through, pellets never stagger him, slugs do; the kit sheds by the actor's plate state.
 - [x] **In the game**: one juggernaut in the arena (`RoomDef.juggernauts`); `?spawn=juggernaut` fills the zombie slots.
   [Spec](../../docs/superpowers/specs/2026-09-25-juggernaut-design.md) · [Plan](../../docs/superpowers/plans/2026-09-25-juggernaut.md)
-- [ ] *Next variant candidate:* Grenadier (gas mask, grenades flush last-known position, dodges dynamite).
+- [ ] **Armour aesthetic refinement** (owner, 2026-09-26): the power-armour design wants a polish pass (`juggernaut-kit.wam`).
+- [ ] Unmeasured: cold boot with the extra `juggernaut@6` crowd type; chaingun audio (spin-up whine, stream, spin-down).
+- [ ] *Deferred (owner, 2026-09-26):* the Grenadier variant (gas mask, grenades flush last-known position, dodges dynamite).
 
 ## Bride (sword melee enemy) — first pass 2026-09-24
 
