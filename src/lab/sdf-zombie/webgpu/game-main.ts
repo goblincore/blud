@@ -1698,7 +1698,10 @@ async function main() {
       // setFaceTexture) and the gate tracks the seam AND the beam: no beam,
       // no directional key, nothing for a level shadow to modulate.
       const map = twin.shadow.map?.depthTexture ?? null;
-      const lvlOn = spotOn > 0 && twin.castShadow && map !== null && ctx.lighting.levelShadowEnabled ? 1 : 0;
+      // Only while the flashlight is actually lit: spotOn keeps a hair above 0 in the dark (the
+      // dungeon flag), and a dark flashlight's stale twin map shadowed the lamps' key on the bodies
+      // by the camera's heading (owner, 2026-09-26: lit obliquely, dark head-on).
+      const lvlOn = flashlightGate(ctx) > 0.01 && twin.castShadow && map !== null && ctx.lighting.levelShadowEnabled ? 1 : 0;
       // MUZZLE FLASH -- the marched bodies. They cannot see the PointLight
       // above, so the flash rides the beam that is already replayed here.
       // Nothing is saved or restored: these uniforms are rewritten from the
