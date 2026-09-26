@@ -600,7 +600,7 @@ export function createWorldSeams(ctx: GameContext) {
     /** Mesh key: what the level's art placed (null without art). */
     artInfo: () => {
       const a = ctx.world.art;
-      return a ? { file: a.file, meshes: a.meshes, instanced: a.instanced, instances: a.instances } : null;
+      return a ? { file: a.file, meshes: a.meshes, sourceMeshes: a.sourceMeshes ?? a.meshes, instanced: a.instanced, instances: a.instances } : null;
     },
     /** Show or hide the level art (the gate's same-page A/B; visibility, never castShadow). */
     setArtVisible: (on: boolean) => {

@@ -60,7 +60,7 @@ export interface WorldState {
   /** Gate meshes by gate id, hidden when the gate opens. */
   gateMeshes: Map<string, THREE.Object3D>;
   /** Mesh key: what the level's art file placed, or null (no art / `?art=0`). */
-  art: { file: string; meshes: number; instanced: number; instances: number; objects: THREE.Object3D[] } | null;
+  art: { file: string; meshes: number; instanced: number; instances: number; objects: THREE.Object3D[]; sourceMeshes?: number } | null;
   /** Mesh key: the level's art scene, loaded at boot and placed with the level
    *  group; null for the ring or a level without art. */
   artScene: THREE.Group | null;

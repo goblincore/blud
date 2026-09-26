@@ -43,3 +43,28 @@ export function glbJson(bytes: Uint8Array): unknown {
   if (dv.getUint32(16, true) !== 0x4e4f534a) throw new Error('GLB: first chunk is not JSON');
   return JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + len)));
 }
+
+/** What a placed art mesh is, for batching (optimisation pass, 2026-09-26). */
+export interface ArtBatchInfo {
+  room: number | null;
+  /** The material's identity (its uuid) and name. */
+  materialId: string;
+  materialName: string;
+  shadow: boolean;
+  /** `sway` extras: a moving piece (lamp, curtain, spin, piston) or a steam vent. */
+  sway: string | null;
+  /** The geometry's attribute names, sorted and joined (merging needs the same set). */
+  attributes: string;
+  /** Indexed or not (merging needs one or the other throughout). */
+  indexed: boolean;
+}
+
+/** The batch a static art mesh merges into (one draw per room, material, shadow flag and
+ *  vertex layout), or null for a mesh that must stay on its own: anything that moves or spawns
+ *  from its own transform (`sway`), the train's window glass (its material is swapped per pane),
+ *  and a mesh with no room (the per-room light lists need one). */
+export function artBatchKey(m: ArtBatchInfo): string | null {
+  if (m.room === null || m.sway !== null) return null;
+  if (m.materialName.startsWith('window:')) return null;
+  return `${m.room}|${m.materialId}|${m.shadow ? 1 : 0}|${m.indexed ? 'i' : 'n'}|${m.attributes}`;
+}

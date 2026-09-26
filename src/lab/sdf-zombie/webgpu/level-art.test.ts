@@ -32,3 +32,23 @@ describe('level art', () => {
     expect(glbJson(buf)).toEqual({ asset: { version: '2.0' } });
   });
 });
+
+describe('art batching (optimisation pass)', () => {
+  const base = { room: 3, materialId: 'm1', materialName: 'train.steel', shadow: true, sway: null, attributes: 'normal,position,uv', indexed: true };
+  it('static meshes batch by room, material, shadow flag and layout', async () => {
+    const { artBatchKey } = await import('./level-art');
+    expect(artBatchKey(base)).toBe(artBatchKey({ ...base }));
+    expect(artBatchKey(base)).not.toBe(artBatchKey({ ...base, room: 4 }));
+    expect(artBatchKey(base)).not.toBe(artBatchKey({ ...base, materialId: 'm2' }));
+    expect(artBatchKey(base)).not.toBe(artBatchKey({ ...base, shadow: false }));
+    expect(artBatchKey(base)).not.toBe(artBatchKey({ ...base, attributes: 'position' }));
+    expect(artBatchKey(base)).not.toBe(artBatchKey({ ...base, indexed: false }));
+  });
+  it('moving pieces, window glass and roomless meshes stay on their own', async () => {
+    const { artBatchKey } = await import('./level-art');
+    expect(artBatchKey({ ...base, sway: 'lamp' })).toBeNull();
+    expect(artBatchKey({ ...base, sway: 'steam' })).toBeNull();
+    expect(artBatchKey({ ...base, materialName: 'window:night' })).toBeNull();
+    expect(artBatchKey({ ...base, room: null })).toBeNull();
+  });
+});
