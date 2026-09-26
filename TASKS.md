@@ -10,10 +10,10 @@
 ## In flight / next
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4i)
-- [ ] **Optimisation pass** (owner, next): the draft-2 train costs +115..+329 draws and +7.7..+33.2 ms
-  over its art-less shell (budget raised to +400 / +40 ms). Draws (one per kit piece / atlas, merge
-  small dressing), lights per room (neighbour accents, window-light shadow sampling), shadow passes.
-  640×480 is no faster: the frame is draw- and light-bound.
+- [~] **Optimisation pass** (owner): round 1 done — the frame was CPU-bound on draw calls; static
+  batching at load (`batchArt`: static art merged per room, material, shadow flag) took the art from
+  +115..+329 draws / +7.7..+33.2 ms to **+61..+164 / +3.2..+5.8 ms**; budget back to +200 / +12 ms.
+  Next: the bodies' own draws (116–355 per frame with no art), lamps/curtains that stay separate.
 - [ ] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
   shadows read by the level shaders and the SDF march, each with its own stylized shading.
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.

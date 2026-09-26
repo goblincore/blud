@@ -132,8 +132,10 @@ const shoot = async (name) => {
  *  +400 draws / +40 ms for layout draft 2 and the dynamic light (owner, 2026-09-26: eight carriages,
  *  a shadowed window light per carriage; measured +115..+329 draws, +7.7..+33.2 ms at load ~6.5,
  *  the coat check the worst and the noisiest). An optimisation pass is next (owner): small-dressing
- *  shadows, one draw per piece, lights per room. */
-const BUDGET = { drawCalls: 400, frameMs: 40 };
+ *  shadows, one draw per piece, lights per room.
+ *  Tightened back to +200 / +12 ms after static batching (2026-09-26: measured +61..+164 draws,
+ *  +3.2..+5.8 ms; game-art-leaves.ts batchArt). */
+const BUDGET = { drawCalls: 200, frameMs: 12 };
 const stats = (img, fx0, fy0, fx1, fy1) => {
   const { w, h, ch, data } = img; const v = [];
   for (let y = Math.floor(fy0 * h); y < Math.floor(fy1 * h); y++) for (let x = Math.floor(fx0 * w); x < Math.floor(fx1 * w); x++) {
