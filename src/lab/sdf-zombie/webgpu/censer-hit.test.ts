@@ -5,6 +5,7 @@ import {
   CENSER_HIT, hitTier, makeStrokeHits, sweepHead, type ActorProbe, type HitEvent, type StrokeHits,
 } from './censer-hit';
 import type { Vec3 } from '../types';
+import { CENSER_HEAD } from './censer-head';
 
 const R = 0.07;   // CENSER_HEAD.radius
 const ball = (id: number, c: Vec3, r = 0.3): ActorProbe => ({
@@ -145,7 +146,10 @@ describe('sweepHead', () => {
     expect(back.spheres[0]?.kind).toBe('crater');
   });
 
-  it('a graze that slides on into flesh under it strikes there (a skull brushed, the shoulder hit)', () => {
+  // Stepped at 5 mm AND at the game's own step (speed / 240 Hz: 6.7 cm at 16 m/s,
+  // 8.3 cm at 20) — at game step length the head is past grazeDepth on the very
+  // substep it turns in, which the first cut of this rule dropped with no wound.
+  for (const [speed, step] of [[16, 0.005], [16, 16 / CENSER_HEAD.stepHz], [20, 20 / CENSER_HEAD.stepHz]] as const) it(`a graze that slides on into flesh under it strikes there (a skull brushed, the shoulder hit) — ${speed} m/s, ${(step * 100).toFixed(1)} cm steps`, () => {
     // A "skull" ball sunk into a flat "shoulder" (the half-space y < 0), one
     // body (their union), so close that their contact shells overlap: a head
     // sliding off the skull never gets back outside before it meets the
@@ -159,11 +163,11 @@ describe('sweepHead', () => {
     };
     // Straight down, just inside the skull's contact shell (≈ 1.2 m/s into it: a graze).
     const x = 0.1 + R + CENSER_HIT.hitEps - 0.0005;
-    const { spheres, events } = dragBy(makeStrokeHits(1, 1), [x, 0.6, 0], [x, 0.02, 0], [0, -16, 0], [body], 0.005);
+    const { spheres, events } = dragBy(makeStrokeHits(1, 1), [x, 0.6, 0], [x, 0.02, 0], [0, -speed, 0], [body], step);
     expect(spheres[0]?.kind).toBe('crater');
     // In the crease and onto the shoulder — below the skull's equator (y 0.09), a real blow.
     expect(spheres[0]!.at[1]).toBeLessThan(0.075);
-    expect(events[0]!.speedIn).toBeGreaterThanOrEqual(CENSER_HIT.glanceFrac * 16);
+    expect(events[0]!.speedIn).toBeGreaterThanOrEqual(CENSER_HIT.glanceFrac * speed);
   });
 
   it('a fast glance (little of the speed into the skin) is a graze: it slides off and leaves nothing', () => {

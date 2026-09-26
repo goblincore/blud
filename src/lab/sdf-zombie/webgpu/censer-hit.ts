@@ -47,9 +47,9 @@ export const CENSER_HIT = {
    *  shrinking gouge (censer gate, Task 9). */
   glanceFrac: 0.3,
   /** A GRAZING head slides on inside the contact shell (it has not struck yet)
-   *  and strikes, where it is, once it turns into the skin (the same test) —
-   *  until its centre sinks this far (m) under the shell; past that it has
-   *  sunk in without a blow and waits to leave the body, as before. A glance
+   *  and strikes, where it is, once it turns into the skin (the same test).
+   *  If its centre has sunk this far (m) under the shell and it is STILL not a
+   *  blow, it has sunk in without one and waits to leave the body, as before. A glance
    *  that slides off again leaves no wound. */
   grazeDepth: 0.035,
   /** m/s below which a head inside the flesh has stalled and the gouge ends. */
@@ -210,11 +210,17 @@ export function sweepHead(
         // skin under it and the speed into that. It used to disarm at the
         // graze, and a full-charge slam that brushed the skull then plowed
         // into the shoulder at 19 m/s left no wound at all (censer gate).
+        // The blow is judged BEFORE the depth bail: at game step length (a
+        // 16–20 m/s head moves 6.7–8.3 cm per 240 Hz substep) the head turning
+        // into the shoulder is already past grazeDepth on the very substep it
+        // turns in, and bailing first dropped it with no wound (review, Task 9).
         const dTo = a.field(to);
         if (dTo - headR > C.hitEps) { c.grazing = false; continue; }          // slid off: outside again, still armed
-        if (dTo - headR < -C.grazeDepth) { c.grazing = false; c.armed = false; continue; }   // sank in without a blow
         n = surfaceNormal(a.field, to);
         at = sub(to, scl(n, dTo));
+        if (dTo - headR < -C.grazeDepth && -dot(v, n) < Math.max(C.minInSpeed, C.glanceFrac * len(v))) {
+          c.grazing = false; c.armed = false; continue;                        // sank in without a blow
+        }
       }
       const speedIn = -dot(v, n);
       if (speedIn < Math.max(C.minInSpeed, C.glanceFrac * len(v))) { c.grazing = true; continue; }   // a graze: keep sliding
