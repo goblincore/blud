@@ -32,6 +32,12 @@ describe('crowd instance state', () => {
     expect(INSTANCE_STATE).toContain(`fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32)`);
     expect(INSTANCE_STATE).toContain(`${REC_VEC4S}`);
     expect(INSTANCE_STATE).toContain(`+ ${REC_ANCHOR_BAND}]`);
+    // The WGSL record stride IS REC_VEC4S (17 since REC_LIGHTS): a hard-coded
+    // stride would misread every body after slot 0.
+    expect(INSTANCE_STATE).toContain(`let base = slot * ${REC_VEC4S};`);
+    expect(INSTANCE_STATE).toContain('let base = slot * 17;');
+    expect(globals).toContain('var<private> gInstLights: vec4<f32>');
+    expect(INSTANCE_STATE).toContain('gInstLights = (*inst)[base + 16];');
   });
   it('removes every per-instance parameter from the signature and adds inst/instCfg/instCentre/instHalf last', () => {
     for (const p of ['counts:', 'counts2:', 'woundBound:', 'bodyCentre:', 'bodyHalf:', 'bodyAnchor:',

@@ -525,7 +525,7 @@ try {
   const recScan = await evaluate(`(() => {
     window.__sdfGame.installDebugProbe();
     const d = window.__sdfGameDebug.normalCaptureState();
-    const STRIDE = 64, BURN = 15 * 4;
+    const STRIDE = 68, BURN = 15 * 4; // REC_VEC4S (17) * 4 floats; REC_BURN = 15
     const out = [];
     for (const p of d.pieces) {
       if (!p.records || p.records.length < STRIDE) continue;

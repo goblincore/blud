@@ -56,7 +56,7 @@ export function createMarchDebugSeams(ctx: GameContext) {
      *  each attached actor's own view (per-instance/record-driven keys skipped). Textures compared by identity. */
     crowdUniformDiff() {
       const skip = new Set(['counts', 'counts2', 'woundBound', 'bodyCentre', 'bodyHalf', 'bodyAnchor', 'windDrift',
-        'meltCfg', 'bodyFlash', 'headCentre', 'headQuat', 'volumePose0', 'volumePose1', 'tileCfg', 'debugCfg']);
+        'meltCfg', 'bodyFlash', 'bodyLights', 'headCentre', 'headQuat', 'volumePose0', 'volumePose1', 'tileCfg', 'debugCfg']);
       const out: Record<string, Record<string, string[]>> = {};
       for (const [name, t] of ctx.crowd.types) {
         const per: Record<string, string[]> = {};

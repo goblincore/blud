@@ -695,6 +695,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  world space, w its intensity (0 = none, bit-identical). Stamped per
      *  frame by the game from the player's and the soldiers' flashes. */
     bodyFlash: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** SHARED LIGHT LIST: this body's four packed light picks (`index +
+     *  weight`, -1 empty; slot 0 the dominant light). NOT bound to the march:
+     *  it is a per-view holding slot that writeViewRecord copies into the
+     *  body's record (REC_LIGHTS), like bodyFlash. */
+    bodyLights: uniform(new THREE.Vector4(-1, -1, -1, -1)),
     /** BURNING BODY (flame lab): x = burn 0..1, y = seconds alight, z = char
      *  0..1, w spare. Per VIEW, so a single body burns through this; crowd
      *  instances burn through REC_BURN. */
@@ -1659,6 +1664,9 @@ export function writeViewRecord(
     // The per-instance half of the burn ramp, for the same reason as `gore`:
     // burnCfg is per VIEW and the crowd shares one material.
     burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z,
+    // The body's light picks ride its record (REC_LIGHTS): every SDF view is a
+    // crowd slot, so this is the one path to the march for single actors too.
+    lights: u.bodyLights.value.toArray(),
   }, band);
 }
 
