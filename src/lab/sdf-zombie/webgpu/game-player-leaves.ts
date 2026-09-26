@@ -6,6 +6,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 
+import { ownsSlot } from './game-loop-leaves';
 import { type GameContext } from './game-context';
 import { moveAim } from './free-aim';
 import { PLAYER } from './game-player';
@@ -57,6 +58,7 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     if (ctx.player.prevInputKeys.has(code)) continue;
     const wantSlot = slotForKey(code);
     if (wantSlot === null) continue;
+    if (!ownsSlot(ctx, wantSlot)) continue;   // the game loop: only weapons the player has found
     if (ctx.vfx.cook.phase === 'cooking') {
       ctx.telemetry.telemetry.event('weapon-switch-refused', { slot: wantSlot, reason: 'cooking' });
     } else {

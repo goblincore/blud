@@ -6,6 +6,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 
+import { loopBlocksInput, ownsSlot, reloadBlocked } from './game-loop-leaves';
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { rngStreams, seedFromUnit } from './rng';
@@ -84,6 +85,7 @@ export function setQuadMatrix(ctx: GameContext,
 }
 
 export function startReload(ctx: GameContext): void {
+  if (reloadBlocked(ctx)) return;   // an empty reserve on a finite level: a dry click
   ctx.weapon.reloadAge = 0;
   ctx.weapon.reloadSeed = ctx.weapon.pinnedReloadSeed ?? 1 + Math.floor(rngStreams.reload() * 1e6);
 }
@@ -419,6 +421,7 @@ export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
   // switch has settled — __sdfGame.fire()/fireSlug() go through here too, so
   // a driver cannot fire the shotgun through a lit bundle.
   if (ctx.weapon.slotState.live !== 'shotgun' || !slotReady(ctx.weapon.slotState)) return false;
+  if (!ownsSlot(ctx, 'shotgun') || loopBlocksInput(ctx)) return false;   // the game loop: not found yet, or dead
   if (!ctx.weapon.gunReady || ctx.weapon.cooldown > 0) return false;
   if (ctx.weapon.reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
   if (!ctx.weapon.infiniteAmmo && ctx.weapon.shells <= 0) { startReload(ctx); return false; } // click -> start reloading

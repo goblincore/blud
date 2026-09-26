@@ -99,6 +99,8 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
+import { VITALS, segmentHitsCapsule } from './player-vitals';
+import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -723,6 +725,8 @@ async function main() {
   // THE TRAIN: window scenery and sway (null unless the art has them). Before the
   // per-room light lists: the glass is unlit and skipped there.
   ctx.world.train = createTrain(ctx);
+  // THE GAME LOOP: health, pickups, events (docs/superpowers/plans/2026-09-26-game-loop.md).
+  createLoop(ctx);
 
   // CEILING FILL. The sun points down; ceilings (and north-south walls in
   // shadow) have normals pointing away from it, so with only a dim ambient
@@ -3315,6 +3319,7 @@ async function main() {
       // SDF game loads no audio at all, so there is none to reuse.
       onMeleeContact: ({ variant }) => {
         ctx.player.hitFeedback = hitFeedback(ctx.player.hitFeedback, variant);
+        damagePlayer(ctx, VITALS.swordHit, 'melee');   // the game loop: a landed blade hurts
       },
       // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
       // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
@@ -3353,6 +3358,7 @@ async function main() {
     // until their source fixtures have been validated.
     if (ctx.render.segVolumeCache && name === 'zombie') bindSkeletonVolume(actor, name);
     ctx.world.encounterHomes.set(actor.id,[...start] as Vec3);
+    if (characterEntry(name).profile.melee?.kind === 'sword') ctx.world.loop?.biteExempt.add(actor.id);   // swings, never bites
     return actor;
   }
 
@@ -4526,7 +4532,7 @@ async function main() {
    *  zombies — whether soldiers hurt them is a real encounter-design decision,
    *  not one to make by accident.
    *
-   *  There is no player health in the SDF game, so these hit nothing at all.
+   *  They hit the player (the game loop's damagePlayer), never actors.
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   ctx.weapon.soldierPellets = [];
   ctx.weapon.soldierPelletViews = [];
@@ -6663,6 +6669,7 @@ async function main() {
     stepOutdoor(ctx, dt);
     stepVoid(ctx, dt);
     stepTrain(ctx, dt);
+    stepLoop(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
@@ -6744,6 +6751,7 @@ async function main() {
       const p = a.pose().pos;
       return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
     });
+    if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
     stepPlayer(ctx.player.player, input, dt, [...ctx.world.colliders, ...zombieBoxes]);
 
     // Damage transitions use their own clock; frozen pose captures must
@@ -7249,7 +7257,7 @@ async function main() {
       }
 
       if (reloadPhaseAt(ctx.weapon.reloadAge) === 'done') {
-        ctx.weapon.shells = MAGAZINE_CAPACITY;
+        refillMagazine(ctx);   // from the reserve on finite-ammo levels
         ctx.weapon.reloadAge = Infinity;
         if (ctx.weapon.hingePivot) ctx.weapon.hingePivot.rotation.x = 0;
         if (ctx.weapon.topLeverNode) ctx.weapon.topLeverNode.rotation.y = 0;
@@ -7429,8 +7437,14 @@ async function main() {
       const soldierFrom = ctx.weapon.soldierPellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(ctx.weapon.soldierPellets, dt);
       for (let i = ctx.weapon.soldierPellets.length - 1; i >= 0; i--) {
-        if (expired(ctx.weapon.soldierPellets[i]!) || ctx.world.colliders.some(box =>
-          segmentHitsBox(soldierFrom[i]!, ctx.weapon.soldierPellets[i]!.pos, box))) ctx.weapon.soldierPellets.splice(i, 1);
+        const p = ctx.weapon.soldierPellets[i]!;
+        if (expired(p) || ctx.world.colliders.some(box => segmentHitsBox(soldierFrom[i]!, p.pos, box))) {
+          ctx.weapon.soldierPellets.splice(i, 1);
+        } else if (segmentHitsCapsule(soldierFrom[i]!, p.pos, ctx.player.player.pos, PLAYER.radius, PLAYER.height)) {
+          // The game loop: soldier pellets and cultist rounds hit the player (never actors).
+          damagePlayer(ctx, VITALS.soldierPellet, 'pellet');
+          ctx.weapon.soldierPellets.splice(i, 1);
+        }
       }
       // The eye every tracer billboards around this frame. Declared here (not
       // reused from the block below) because that one is scoped to the hit
@@ -7601,6 +7615,7 @@ async function main() {
     );
     // The train's roll and bob ride on the view only (never the player or collision).
     applyTrainCamera(ctx, camera);
+    applyDeathCamera(ctx, camera);
     camera.updateMatrixWorld();
 
     // Optional impact crown: rebuild from the current event times after the
@@ -8141,6 +8156,7 @@ async function main() {
     createOutdoorSeams(ctx),
     createVoidSeams(ctx),
     createTrainSeams(ctx),
+    createLoopSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),

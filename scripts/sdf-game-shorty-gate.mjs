@@ -90,7 +90,9 @@ await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceSc
 // reload never starts and every assertion below would fail for a reason that
 // has nothing to do with the view-model. Pinned the same way the bench pins its
 // seams — a gate that can be silently reconfigured by a default is not a gate.
-const url = `http://localhost:${VITE}/sdf-game.html?ammo=finite`;
+// &god (2026-09-26, the game loop): ring enemies now hurt the player, and a hurt or dead
+// player moves the camera (the death drop) under the viewmodel this gate measures.
+const url = `http://localhost:${VITE}/sdf-game.html?ammo=finite&god`;
 console.log(`game ${url}`);
 await send('Page.navigate', { url });
 
