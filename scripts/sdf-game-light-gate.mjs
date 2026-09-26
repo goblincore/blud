@@ -201,8 +201,13 @@ await sleep(3000);
 L = await lights();
 if (!roomLamps(L, 4).every((x) => x.script === 'blackout' && x.level === 0)) fail(`sleeper not blacked out: ${JSON.stringify(roomLamps(L, 4))}`);
 await shoot('light-sleeper-blackout');
-await sleep(6500);
-L = await lights();
+// The light clock is SIM time, slower than wall time headless: wait for the recovery, up to 15 s.
+let back = false;
+for (let i = 0; i < 30 && !back; i++) {
+  await sleep(500);
+  L = await lights();
+  back = roomLamps(L, 4).some((x) => x.level > 0) && L.time - roomLamps(L, 4)[0].scriptAt > 7.5;
+}
 if (!roomLamps(L, 4).some((x) => x.level > 0)) fail(`sleeper lamps did not come back: ${JSON.stringify(roomLamps(L, 4))}`);
 pass('blackout: the sleeper corridor trigger cuts the lamps, and they come back');
 

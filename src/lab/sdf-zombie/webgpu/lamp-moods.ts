@@ -52,9 +52,12 @@ export function moodLevel(mood: LampMood, t: number, seed: number): number {
     case 'steady':
       return 1 + wobble(t, seed) * 0.14;
     case 'flicker': {
-      const slot = Math.floor(t / 0.1);
-      const dip = hash01(s, slot) < 0.125 ? 0.3 : 1;
-      return clamp((1 + wobble(t, seed) * 0.35) * dip, 0, 1.4);
+      // A failing fluorescent tube (owner, 2026-09-26: "very dramatic flicker"): mostly on, with
+      // hard drop-outs in 0.05 s slots and the odd longer gasp.
+      const slot = Math.floor(t / 0.05);
+      if (hash01(s, slot) < 0.14) return 0;
+      if (hash01(s + 5, Math.floor(t / 0.6)) < 0.08) return hash01(s + 9, slot) < 0.5 ? 0 : 0.25;
+      return clamp(1 + wobble(t, seed) * 0.12, 0, 1.4);
     }
     case 'stutter': {
       if (inBurst(t, s) && hash01(s + 7, Math.floor(t / 0.06)) < 0.5) return 0;

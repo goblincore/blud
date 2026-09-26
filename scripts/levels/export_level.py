@@ -290,7 +290,8 @@ def main():
         doc["lights"].append(with_states(o, {"pos": to_game(o.matrix_world.translation),
                                              "color": [rnd(c[0]), rnd(c[1]), rnd(c[2])],
                                              "power": rnd(o.get("power", o.data.energy / 10.0)),
-                                             **({"mood": str(o["mood"])} if "mood" in o.keys() else {})}))
+                                             **({"mood": str(o["mood"])} if "mood" in o.keys() else {}),
+                                             **({"fixture": str(o["fixture"])} if "fixture" in o.keys() else {})}))
 
     start = None
     for o in objects("markers"):

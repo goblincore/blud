@@ -99,7 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
-import { applyRoomFill, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
+import { applyRoomFill, applyStormBodyKey, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -802,8 +802,10 @@ async function main() {
       pl.userData.accentRoom = r.id;
       ctx.world.accentGroup.add(pl);
       // A visible source. Without it the light has no cause and reads as a bug.
+      // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl.
+      const tubeGeo = a.fixture === 'tube' ? new THREE.CylinderGeometry(0.035, 0.035, 1.3, 10).rotateX(Math.PI / 2) : null;
       const bowl = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.16, 1),
+        tubeGeo ?? new THREE.IcosahedronGeometry(0.16, 1),
         new THREE.MeshStandardMaterial({
           color: new THREE.Color(a.color[0], a.color[1], a.color[2]),
           emissive: new THREE.Color(a.color[0], a.color[1], a.color[2]),
@@ -1955,8 +1957,7 @@ async function main() {
           c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
         }
         a.view.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
-        applyWindowKey(ctx, a.view.uniforms);
-        { const bp = a.pose().pos; applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); }
+        { const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); }
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
@@ -1982,19 +1983,23 @@ async function main() {
       // march's own cone formula on these exact values).
       ctx.render.boneInstancer.uniforms.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
       ctx.render.boneInstancer.uniforms.spotAxis.value.copy(sAxis);
-      ctx.render.boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+      // The muzzle flash rides the beam here too (owner, 2026-09-26: a flash lit the flesh but left
+      // the mesh skull dark): the same gate, widened cone and warm push as the bodies above.
+      ctx.render.boneInstancer.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, ctx.lighting.flashlight.spot.distance);
       ctx.render.boneInstancer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+      if (fv > 0) { const c = ctx.render.boneInstancer.uniforms.spotColor.value; c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b); }
       ctx.render.boneInstancer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
-      applyWindowKey(ctx, ctx.render.boneInstancer.uniforms);
+      { const pp = ctx.player.player.pos; applyWindowKey(ctx, ctx.render.boneInstancer.uniforms, [pp[0], pp[1], pp[2]]); }
       if (ctx.render.segMeshRenderer) {
         // skeleton=mesh: the SAME beam — segment boneShade is the march's
         // formula on the same uniform values, like the tubes.
         ctx.render.segMeshRenderer.uniforms.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
         ctx.render.segMeshRenderer.uniforms.spotAxis.value.copy(sAxis);
-        ctx.render.segMeshRenderer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+        ctx.render.segMeshRenderer.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, ctx.lighting.flashlight.spot.distance);
         ctx.render.segMeshRenderer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+        if (fv > 0) { const c = ctx.render.segMeshRenderer.uniforms.spotColor.value; c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b); }
         ctx.render.segMeshRenderer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
-        applyWindowKey(ctx, ctx.render.segMeshRenderer.uniforms);
+        { const pp = ctx.player.player.pos; applyWindowKey(ctx, ctx.render.segMeshRenderer.uniforms, [pp[0], pp[1], pp[2]]); }
       }
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
@@ -3154,6 +3159,9 @@ async function main() {
       LIGHT_PRESETS['practical-hard-key']);
     // Outdoor v1 §7: a body in an open room takes the moon as its key light.
     if ((room as Partial<LevelRoom>).sky) applyMoonKey(ctx, view.uniforms);
+    // Storm levels (Night Train): the body's base key is cold, not the practical's orange — the
+    // crowd draw shares these uniforms, so this is what every crowd body is lit with.
+    applyStormBodyKey(ctx, view.uniforms);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
     // or a rebuild would silently reset the ramp (the silent-reset class

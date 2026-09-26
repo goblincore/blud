@@ -199,7 +199,12 @@ function findGlass(ctx: GameContext): Glass[] {
       o.material = mat;
     }
     owner.set(mat, room);
-    if (!out.some(g => g.mat === mat)) out.push({ room, mat, base: mat.emissiveIntensity, kind });
+    if (!out.some(g => g.mat === mat)) {
+      out.push({ room, mat, base: mat.emissiveIntensity, kind });
+      // The glass glows the colour of its room's lamps (the cold tubes on Night Train).
+      const lamp = kind === 'lamp' ? ctx.world.light?.lamps.find(l => l.room === room && l.mood !== 'fire') : null;
+      if (lamp && mat.emissive) mat.emissive.copy(lamp.light.color);
+    }
   }
   return out;
 }
@@ -285,6 +290,38 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
 /** How hard the window light drives an SDF body's key, per unit of window-light intensity
  *  (the key is lightCfg.x × spotCfg2.z in the dungeon; the beam's own gain is 4). */
 const BODY_WINDOW_GAIN = 0.035;
+/** A lamp's key on a body per unit of its power × level / d² (the lamps model the zombies). */
+const BODY_LAMP_GAIN = 0.55;
+/** The flat fill's colour on a storm level when no lamp or flash keys the body. */
+const COLD_FILL: [number, number, number] = [0.62, 0.74, 1.0];
+/** And the rim a lamp adds, per unit of that key. */
+const BODY_LAMP_RIM = 0.8;
+const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0 };
+
+/** The brightest lamp on a point in its room (power × level / d², d at least 1 m): its direction
+ *  from the point and colour. Fires count too (the firebox models the Stoker). */
+function strongestLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
+  const rt = ctx.world.light;
+  if (!rt) return null;
+  const room = roomIdAt(ctx, at[0], at[2]);
+  let best: Lamp | null = null, bestK = 0;
+  for (const l of rt.lamps) {
+    if (l.room !== room || l.level <= 0) continue;
+    const p = l.light.position;
+    const d2 = Math.max(1, (p.x - at[0]) ** 2 + (p.y - at[1] - 1.2) ** 2 + (p.z - at[2]) ** 2);
+    // A fire keys a body only up close (the firebox and the Stoker); across a carriage the cold
+    // tubes model the zombies, not a stove's orange.
+    if (l.mood === 'fire' && d2 > 9) continue;
+    const k = l.base * l.level / d2;
+    if (k > bestK) { bestK = k; best = l; }
+  }
+  if (!best) return null;
+  const p = best.light.position;
+  lampTmp.dir.set(p.x - at[0], p.y - at[1] - 1.2, p.z - at[2]).normalize();
+  lampTmp.color.copy(best.light.color);
+  lampTmp.k = bestK;
+  return lampTmp;
+}
 /** The lightning side rim's strength per unit of window-light intensity (compose.wgsl.ts). */
 const BODY_RIM_GAIN = 0.4;
 const bodyBase = new WeakMap<object, { dir: THREE.Vector3; color: THREE.Color }>();
@@ -294,17 +331,30 @@ type KeyUniforms = { lightDir?: { value: THREE.Vector3 }; keyColor?: { value: TH
 /** The SDF bodies shade in the march and never see the window light: during a flash or a
  *  sweep, turn their key toward it and raise its floor; restore the preset key after. Call
  *  after spotCfg2 is written for the frame. */
-export function applyWindowKey(ctx: GameContext, u: KeyUniforms): void {
+export function applyWindowKey(ctx: GameContext, u: KeyUniforms, at?: readonly [number, number, number]): void {
   const s = ctx.world.light?.storm;
   if (!u.lightDir || !u.keyColor) return;
-  const k = s ? s.intensity * BODY_WINDOW_GAIN : 0;
+  const kw = s ? s.intensity * BODY_WINDOW_GAIN : 0;
+  const lamp = at ? strongestLamp(ctx, at) : null;
+  const kl = lamp ? lamp.k * BODY_LAMP_GAIN : 0;
   let base = bodyBase.get(u);
-  if (k > 0 && s) {
+  if (s || kw + kl > 0) {
     if (!base) { base = { dir: u.lightDir.value.clone(), color: u.keyColor.value.clone() }; bodyBase.set(u, base); }
-    u.lightDir.value.set(s.dir[0], s.dir[1], s.dir[2]);
-    u.keyColor.value.setRGB(s.color[0], s.color[1], s.color[2]);
-    u.spotCfg2.value.z += k;
-    u.spotCfg2.value.w = s.intensity * BODY_RIM_GAIN;
+    // The stronger source sets the direction (a flash beats a lamp; a lamp models the body
+    // between flashes, so it never reads as a flat silhouette — owner, 2026-09-26).
+    if (s && kw >= kl) {
+      u.lightDir.value.set(s.dir[0], s.dir[1], s.dir[2]);
+      u.keyColor.value.setRGB(s.color[0], s.color[1], s.color[2]);
+    } else if (lamp) {
+      u.lightDir.value.copy(lamp.dir);
+      u.keyColor.value.copy(lamp.color);
+    } else {
+      // Nothing lit nearby on a storm level: the fill that keeps the body readable is cold (the
+      // preset's key colour is a warm practical, which turned every zombie orange in the dark).
+      u.keyColor.value.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);
+    }
+    u.spotCfg2.value.z += kw + kl;
+    u.spotCfg2.value.w = (s ? s.intensity * BODY_RIM_GAIN : 0) + kl * BODY_LAMP_RIM;
   } else if (base) {
     u.lightDir.value.copy(base.dir);
     u.keyColor.value.copy(base.color);
@@ -312,11 +362,20 @@ export function applyWindowKey(ctx: GameContext, u: KeyUniforms): void {
   }
 }
 
+/** At spawn on a storm level: the body's base key colour is the cold fill. */
+export function applyStormBodyKey(ctx: GameContext, u: { keyColor: { value: THREE.Color } }): void {
+  if (!ctx.world.light?.storm) return;
+  u.keyColor.value.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);
+}
+
 /** How much of a body's baked fill survives when its room's lamps are all out (Doom 3 dark). */
-const BODY_DARK_FLOOR = 0.06;
+const BODY_DARK_FLOOR = 0.25;
+/** On a storm level the room probes (baked with the stoves and fires) weigh this much against the
+ *  cold flat fill, so the dark reads cold, not orange. */
+const STORM_PROBE_WEIGHT = 0.35;
 const fillBase = new WeakMap<object, { fill: number; gain: number; wroteFill: number; wroteGain: number }>();
 
-type FillUniforms = { lightCfg?: { value: { y: number } }; probeCfg?: { value: { y: number } } };
+type FillUniforms = { lightCfg?: { value: { y: number } }; probeCfg?: { value: { x: number; y: number } } };
 
 /** A body's fill (the flat fill and the room-probe gain, both baked with every lamp at full
  *  power) follows its room's live lamps: dark when they die, flickering when they flicker.
@@ -333,6 +392,7 @@ export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: n
   if (pc.y !== b.wroteGain) { b.gain = pc.y; }
   lc.y = b.fill * f;
   pc.y = b.gain * f;
+  if (rt.storm) pc.x = Math.min(pc.x, STORM_PROBE_WEIGHT);
   b.wroteFill = lc.y;
   b.wroteGain = pc.y;
 }
@@ -352,7 +412,7 @@ export function createDynamicLightSeams(ctx: GameContext) {
         time: rt.time,
         flashlight: rt.flashlight.level,
         spotIntensity: ctx.lighting.flashlight.spot.intensity,
-        lamps: rt.lamps.map(l => ({ room: l.room, mood: l.mood, level: l.level, script: l.script?.mode ?? null, intensity: l.light.intensity })),
+        lamps: rt.lamps.map(l => ({ room: l.room, mood: l.mood, level: l.level, script: l.script?.mode ?? null, scriptAt: l.script?.at ?? null, intensity: l.light.intensity })),
         windowLights: [...rt.windowLights.keys()],
         windowIntensity: rt.storm?.intensity ?? 0,
         flash: rt.storm?.flash ?? 0,

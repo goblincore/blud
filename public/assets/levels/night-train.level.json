@@ -1280,12 +1280,13 @@
         -4.0
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "flicker"
+      "power": 2.4,
+      "mood": "flicker",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1294,12 +1295,13 @@
         -12.0
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "stutter"
+      "power": 2.4,
+      "mood": "stutter",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1308,12 +1310,13 @@
         -21.7
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "stutter"
+      "power": 2.4,
+      "mood": "stutter",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1322,12 +1325,13 @@
         -30.7
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "flicker"
+      "power": 2.4,
+      "mood": "flicker",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1336,12 +1340,13 @@
         -40.9
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "flicker"
+      "power": 2.4,
+      "mood": "flicker",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1350,12 +1355,13 @@
         -49.9
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "dead"
+      "power": 2.4,
+      "mood": "dead",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1364,12 +1370,13 @@
         -75.3
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "dying"
+      "power": 2.4,
+      "mood": "dying",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1378,12 +1385,13 @@
         -84.3
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "stutter"
+      "power": 2.4,
+      "mood": "stutter",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1392,12 +1400,13 @@
         -95.0
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "steady"
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1406,12 +1415,13 @@
         -105.0
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "steady"
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1420,12 +1430,13 @@
         -59.1
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "dead"
+      "power": 2.4,
+      "mood": "dead",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1434,12 +1445,13 @@
         -66.1
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "dying"
+      "power": 2.4,
+      "mood": "dying",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1448,12 +1460,13 @@
         -116.2
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "dying"
+      "power": 2.4,
+      "mood": "dying",
+      "fixture": "tube"
     },
     {
       "pos": [
@@ -1462,12 +1475,13 @@
         -126.4
       ],
       "color": [
-        1.0,
-        0.72,
-        0.45
+        0.78,
+        0.9,
+        1.0
       ],
-      "power": 1.1,
-      "mood": "steady"
+      "power": 2.4,
+      "mood": "steady",
+      "fixture": "tube"
     }
   ],
   "spawns": [

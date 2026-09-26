@@ -39,7 +39,7 @@ const KEYS: Record<string, readonly string[]> = {
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
-  light: ['pos', 'color', 'power', 'mood', 'states'],
+  light: ['pos', 'color', 'power', 'mood', 'fixture', 'states'],
   cue: ['on', 'emit'],
   start: ['pos', 'yaw'],
   spawn: ['id', 'kind', 'pos', 'yaw', 'states'],
@@ -337,9 +337,14 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
       mood = LAMP_MOODS.find(m => m === o.mood);
       if (!mood) errors.push(`lights[${i}].mood: must be one of ${LAMP_MOODS.join(', ')}`);
     }
+    let fixture: 'bulb' | 'tube' | undefined;
+    if (o.fixture !== undefined) {
+      if (o.fixture === 'bulb' || o.fixture === 'tube') fixture = o.fixture;
+      else errors.push(`lights[${i}].fixture: must be bulb or tube`);
+    }
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`lights[${i}]: outside every room`);
-    else if (keep) room.accents.push(mood ? { pos, color, power, mood } : { pos, color, power });
+    else if (keep) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}) });
   });
 
   // --- cues (dynamic light §3) --------------------------------------------------

@@ -129,7 +129,10 @@ CARRIAGES = [
 
 
 WARM = (1.0, 0.72, 0.45)
-LIGHT_POWER = 1.1  # Doom 3 dark (owner, 2026-09-26): the lamps and the lightning carry the view
+# Harsh cold fluorescent tubes (owner, 2026-09-26: 'cold lighting similar to the lightning ... very
+# dramatic flicker'), bright enough to light the zombies; the flicker carries the drama.
+COLD = (0.78, 0.9, 1.0)
+LIGHT_POWER = 2.4
 
 
 def lamps(c):
@@ -172,7 +175,7 @@ def to_level() -> dict:
         for pid, item, x, u, *y in c["pickups"]:
             doc["pickups"].append({"id": pid, "item": item, "pos": [x, y[0] if y else 0.3, g(u)]})
         for i, (pos, mood) in enumerate(lamps(c)):
-            doc["lights"].append({"pos": [pos[0], pos[1], g(pos[2])], "color": list(WARM), "power": LIGHT_POWER, "mood": mood})
+            doc["lights"].append({"pos": [pos[0], pos[1], g(pos[2])], "color": list(COLD), "power": LIGHT_POWER, "mood": mood, "fixture": "tube"})
         for _, x, u, y, power in c["fires"]:
             doc["lights"].append({"pos": [x, y, g(u)], "color": list(FIRE), "power": power, "mood": "fire"})
         for tid, event, x0, x1, u0, u1 in c["triggers"]:
