@@ -37,9 +37,17 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
   fire: { gain: 1.0, viewBias: 0.1, floor: 0.2, backKey: 0.6, backRim: 1.2, rimTint: WARM_RIM, edge: 1.0, distFall: 0.1, spec: 0.4, specPow: 12 },
 };
 
-export const LIGHT_PROFILES: readonly LightProfile[] = (Object.keys(PROFILE_ID) as ProfileName[])
+// Frozen (review fix, Task 3): light-list.ts packs this table ONCE at module load, so a runtime
+// write would silently desync the CPU pick from the GPU copy. Freezing makes such a write throw
+// (strict mode) instead. The shared rim tints are frozen too, since profiles hold them by reference.
+Object.freeze(COLD_RIM);
+Object.freeze(WARM_RIM);
+for (const p of Object.values(PROFILES_BY_NAME)) { Object.freeze(p.rimTint); Object.freeze(p); }
+Object.freeze(PROFILES_BY_NAME);
+
+export const LIGHT_PROFILES: readonly LightProfile[] = Object.freeze((Object.keys(PROFILE_ID) as ProfileName[])
   .sort((a, b) => PROFILE_ID[a] - PROFILE_ID[b])
-  .map(name => PROFILES_BY_NAME[name]);
+  .map(name => PROFILES_BY_NAME[name]));
 
 export function packProfiles(profiles: readonly LightProfile[] = LIGHT_PROFILES): Float32Array {
   const f = new Float32Array(MAX_PROFILES * PROFILE_VEC4S * 4);

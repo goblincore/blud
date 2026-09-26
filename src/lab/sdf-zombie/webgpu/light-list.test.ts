@@ -43,4 +43,12 @@ describe('light list (spec §4)', () => {
     expect(Math.hypot(f[o]!, f[o + 1]!, f[o + 2]!)).toBeCloseTo(1, 5);
     expect(f[o + 3]).toBe(2);
   });
+  it('clamps an inverted spot cone to a hard edge: cosInner >= cosOuter (review fix, Task 3)', () => {
+    const [l] = buildLightList([{ ...tube(0, 5), cosOuter: Math.cos(0.45), cosInner: Math.cos(0.6) }]);
+    expect(l!.cosInner).toBe(l!.cosOuter);
+    expect(l!.cosOuter).toBe(Math.cos(0.45));
+    const [ok] = buildLightList([tube(0, 5)]);
+    expect(ok!.cosInner).toBe(Math.cos(0.45));
+    expect(ok!.cosOuter).toBe(Math.cos(0.6));
+  });
 });

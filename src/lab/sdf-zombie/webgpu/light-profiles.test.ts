@@ -28,4 +28,14 @@ describe('light profiles (spec §5)', () => {
     expect([...f.slice(o + 4, o + 8)]).toEqual([t.backRim, t.spec, 0, t.specPow].map(Math.fround));
     expect([...f.slice(o + 8, o + 11)]).toEqual(t.rimTint.map(Math.fround));
   });
+  it('the table is frozen: a runtime write throws and changes nothing (review fix, Task 3)', () => {
+    const t = LIGHT_PROFILES[PROFILE_ID.tube]! as { gain: number; rimTint: number[] };
+    expect(() => { t.gain = 99; }).toThrow(TypeError);
+    expect(() => { t.rimTint[0] = 99; }).toThrow(TypeError);
+    expect(() => { (LIGHT_PROFILES as unknown as unknown[]).push({}); }).toThrow(TypeError);
+    expect(() => { (PROFILES_BY_NAME as Record<string, unknown>).tube = {}; }).toThrow(TypeError);
+    expect(t.gain).toBe(1.3);
+    expect(t.rimTint[0]).toBe(0.55);
+    expect(Object.isFrozen(LIGHT_PROFILES)).toBe(true);
+  });
 });

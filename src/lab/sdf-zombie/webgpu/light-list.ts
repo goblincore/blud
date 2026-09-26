@@ -46,12 +46,15 @@ export function buildLightList(src: readonly LightSource[]): ListLight[] {
     .map(({ s, e }) => {
       const t = s.levelTint ?? [1, 1, 1];
       const tl = Math.max(t[0], t[1], t[2], 1e-6);
+      // An inverted cone (inner wider than outer) becomes a hard-edged one: cosInner >= cosOuter.
+      const cosOuter = s.cosOuter ?? -1;
+      const cosInner = Math.max(s.cosInner ?? -1, cosOuter);
       return {
         kind: s.kind, profile: PROFILE_ID[s.profile],
         pos: s.kind === 'directional' ? norm(s.pos) : [...s.pos] as Vec3,
         color: [s.color[0] * e * t[0] / tl, s.color[1] * e * t[1] / tl, s.color[2] * e * t[2] / tl],
         intensity: e, range: s.range,
-        axis: norm(s.axis ?? [0, -1, 0]), cosOuter: s.cosOuter ?? -1, cosInner: s.cosInner ?? -1, room: s.room,
+        axis: norm(s.axis ?? [0, -1, 0]), cosOuter, cosInner, room: s.room,
       };
     });
 }
