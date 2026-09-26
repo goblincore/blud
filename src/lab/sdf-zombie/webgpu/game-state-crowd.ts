@@ -32,6 +32,8 @@ export interface CrowdState {
   types: Map<string, CrowdType>;
   /** The first attached view per type — the source of per-type uniform values. */
   sourceView: Map<CrowdType, ZombieGpuView>;
+  /** Each attached view's type (the crowd key for its nearest-to-the-player body). */
+  typeOfView: WeakMap<ZombieGpuView, CrowdType>;
   /** Types whose shared segVolume atlas/meta were bound from the first actor. */
   volumeBound: Set<CrowdType>;
   /** True once the missing-seg-meta warning has been logged, so it is logged once. */
@@ -49,6 +51,7 @@ export function makeCrowdState(): CrowdState {
     fallbackReason: null,
     types: new Map<string, CrowdType>(),
     sourceView: new Map<CrowdType, ZombieGpuView>(),
+    typeOfView: new WeakMap<ZombieGpuView, CrowdType>(),
     volumeBound: new Set<CrowdType>(),
     segMetaWarned: false,
     refineWarned: false,
@@ -63,6 +66,7 @@ export const CROWD_BINDINGS = {
   crowdFallbackReason: 'crowd.fallbackReason',
   crowdTypes: 'crowd.types',
   crowdSourceView: 'crowd.sourceView',
+  crowdTypeOfView: 'crowd.typeOfView',
   crowdVolumeBound: 'crowd.volumeBound',
   crowdSegMetaWarned: 'crowd.segMetaWarned',
   crowdRefineWarned: 'crowd.refineWarned',

@@ -12,6 +12,11 @@
 // lights); all of it exists before the per-room light lists are built.
 
 import * as THREE from 'three/webgpu';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { cameraPosition, normalWorld, positionLocal, positionWorld, uniform, vec3, vec4, wgslFn } from 'three/tsl';
+import { lampSwing } from './train-motion';
+import { STORM_HASH, STORM_NOISE } from './train-window.wgsl';
+import { TUBE_BEAM_WGSL } from './tube-beam.wgsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-leaves';
 import { lampLevel, type LampMood, type LampScript } from './lamp-moods';
@@ -33,8 +38,21 @@ const TORCH_ON_S = 0.25;
 /** The accent bowl's emissive at level 1 (game-main's accent loop). */
 const BOWL_EMISSIVE = 2.2;
 
+/** A fluorescent tube's overhead cone (owner, 2026-09-26): a hard downward spot that swings with
+ *  the train and casts the zombies' shadows, and a dusty beam mesh under it. */
+interface Tube {
+  spot: THREE.SpotLight;
+  mesh: THREE.Mesh | null;
+  beam: THREE.Mesh;
+  beamLit: { value: THREE.Vector4 };
+  /** The tube's rest position (the spot sits just under it). */
+  pos: THREE.Vector3;
+  drop: number;
+}
+
 interface Lamp {
   light: THREE.PointLight;
+  tube: Tube | null;
   bowl: THREE.MeshStandardMaterial | null;
   base: number;
   mood: LampMood;
@@ -71,6 +89,8 @@ export interface DynamicLightRuntime {
   shadowFrames: number;
   /** Each room's live light, 0..~1: its lamps' and fires' levels weighted by power. */
   roomLight: Map<number, number>;
+  /** Steps since boot, for the tube shadows' half-rate update. */
+  shadowTick: number;
   /** The carriage whose window light re-rendered its shadow this step, or null. */
   shadowRoom: number | null;
 }
@@ -78,10 +98,14 @@ export interface DynamicLightRuntime {
 export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   const def = ctx.world.level.def;
   const dark = !!def?.pickups.some(p => p.item === 'flashlight') && !new URLSearchParams(location.search).has('torch');
+  const tubeGroup = new THREE.Group();
+  tubeGroup.name = 'train.tube-spots';
   const lamps: Lamp[] = ctx.lighting.flickerLights.map(f => ({
     light: f.light, bowl: f.bowl ?? null, base: f.base, mood: f.mood ?? 'steady', room: f.room ?? -1,
     seed: f.phase, script: null, level: 1,
+    tube: f.fixture === 'tube' && new URLSearchParams(location.search).get('tubes') !== '0' ? makeTube(ctx, f.light, f.bowlMesh ?? null, f.room ?? -1, tubeGroup) : null,
   }));
+  if (tubeGroup.children.length > 0) ctx.boot.handle.scene.add(tubeGroup);
   const rt: DynamicLightRuntime = {
     time: 0,
     lamps,
@@ -92,6 +116,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     shadowFrames: 0,
     shadowRoom: null,
     roomLight: new Map(),
+    shadowTick: 0,
   };
   // A level that starts dark idles the flashlight's two shadow maps until it is switched on.
   if (dark) {
@@ -132,6 +157,74 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   }
   ctx.world.light = rt;
   return rt;
+}
+
+/** Tube cone tuning. The spot is the tube's main light; the omni stays as ceiling spill. */
+const TUBE = {
+  /** Half-angle (rad): ~3.3 m across at the floor under a 2.4 m drop, a pool per tube. */
+  angle: 0.6, penumbra: 0.25, decay: 1.2,
+  /** Spot intensity per unit of the lamp's power; the omni's share of it as spill. */
+  spotGain: 7, spill: 0.2,
+  /** Swing: the train's lamp swing, amplified for a tube on chains. */
+  swing: 2.2,
+  /** Hard, low-res shadows (owner): the zombies' hulls and the art. */
+  shadowSize: 512,
+  /** The dusty beam's strength. */
+  beam: 0.035,
+} as const;
+
+let beamFn: ReturnType<typeof wgslFn> | null = null;
+
+function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | null, room: number, group: THREE.Group): Tube {
+  const pos = light.position.clone();
+  const roomDef = ctx.world.level.rooms.find(r => r.id === room);
+  const drop = Math.max(1.5, (roomDef ? roomDef.height : 2.8) - 0.4 + 0.2);
+  const spot = new THREE.SpotLight(light.color.clone(), 0, drop * 2.2, TUBE.angle, TUBE.penumbra, TUBE.decay);
+  spot.name = `train.tube-spot:${room}`;
+  spot.position.set(pos.x, pos.y - 0.06, pos.z);
+  spot.target.position.set(pos.x, pos.y - 3, pos.z);
+  spot.castShadow = true;                         // decided at boot, never toggled
+  spot.shadow.mapSize.set(TUBE.shadowSize, TUBE.shadowSize);
+  spot.shadow.bias = -0.001;
+  spot.shadow.radius = 1;
+  spot.shadow.autoUpdate = false;
+  spot.shadow.needsUpdate = true;                 // one render at boot
+  spot.shadow.camera.near = 0.15;
+  spot.shadow.camera.far = drop * 2.2;
+  spot.shadow.camera.layers.enable(SHADOW_HULL_LAYER);
+  spot.userData.onlyRooms = new Set([room]);
+  group.add(spot, spot.target);
+  // The beam: an open cone, apex at the tube, pointing down; drawn after the bodies.
+  const r = Math.tan(TUBE.angle) * drop;
+  const geo = new THREE.ConeGeometry(r, drop, 24, 1, true).translate(0, -drop / 2, 0);
+  const lit = uniform(new THREE.Vector4(1, drop, TUBE.beam, 0));
+  const col = uniform(new THREE.Color(light.color));
+  if (!beamFn) {
+    type Include = NonNullable<Parameters<typeof wgslFn>[1]>[number];
+    const hashFn = wgslFn(STORM_HASH) as unknown as Include;
+    beamFn = wgslFn(TUBE_BEAM_WGSL, [hashFn, wgslFn(STORM_NOISE, [hashFn]) as unknown as Include]);
+  }
+  const mat = new MeshBasicNodeMaterial();
+  mat.colorNode = vec4(beamFn({ local: positionLocal, wpos: positionWorld, n: normalWorld, eye: cameraPosition, t: rtTime, cfg: lit, color: col }) as unknown as ReturnType<typeof vec3>, 1);
+  mat.transparent = true; mat.blending = THREE.AdditiveBlending; mat.depthWrite = false; mat.side = THREE.DoubleSide; mat.fog = false;
+  mat.name = 'train.tube-beam';
+  const beam = new THREE.Mesh(geo, mat);
+  beam.name = `train.tube-beam:${room}`;
+  beam.position.copy(pos);
+  beam.frustumCulled = false;
+  beam.userData.skipLevelLights = true;
+  ctx.boot.handle.scene.add(beam);                // moved to the late-effects scene by adoptLightFx
+  return { spot, mesh, beam, beamLit: lit as unknown as { value: THREE.Vector4 }, pos, drop };
+}
+
+/** Shared clock for the beams' drifting dust (sim seconds). */
+const rtTime = uniform(0);
+
+/** Once the SDF layer exists: the beams draw after the bodies (sdf-layer lateScene). */
+export function adoptLightFx(ctx: GameContext): void {
+  const late = ctx.render.sdfLayer?.lateScene;
+  if (!late) return;
+  for (const l of ctx.world.light?.lamps ?? []) if (l.tube) late.add(l.tube.beam);
 }
 
 type RoomBox = { id: number; minX: number; maxX: number; minZ: number; maxZ: number; height: number };
@@ -217,9 +310,28 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
   const t = rt.time;
 
   const sum = new Map<string, { n: number; v: number }>();
+  (rtTime as unknown as { value: number }).value = t;
+  rt.shadowTick++;
+  const [ppx, , ppz] = ctx.player.player.pos;
+  const here = roomIdAt(ctx, ppx, ppz);
+  const speed = ctx.world.train?.speed ?? 0;
   for (const l of rt.lamps) {
     l.level = lampLevel(l.mood, l.script, t, l.seed);
-    l.light.intensity = l.base * l.level;
+    l.light.intensity = l.base * l.level * (l.tube ? TUBE.spill : 1);
+    if (l.tube) {
+      const tb = l.tube;
+      tb.spot.intensity = l.base * TUBE.spotGain * l.level;
+      tb.beamLit.value.x = l.level;
+      // Swing along the train (x-axis rotation), the tube, its cone and its beam together.
+      const a = lampSwing(t, speed, l.seed) * TUBE.swing;
+      tb.spot.target.position.set(tb.pos.x, tb.pos.y - 3 * Math.cos(a), tb.pos.z + 3 * Math.sin(a));
+      tb.spot.target.updateMatrixWorld();
+      tb.beam.rotation.x = a;
+      if (tb.mesh) tb.mesh.rotation.x = a;
+      // Hard shadows, live only in the player's carriage (the zombies move, the tube swings).
+      // Every other step (half-rate: the zombies move slowly enough; the cost is ~2 shadow passes).
+      if (l.room === here && l.level > 0 && (rt.shadowTick & 1) === 0) tb.spot.shadow.needsUpdate = true;
+    }
     if (l.bowl) l.bowl.emissiveIntensity = BOWL_EMISSIVE * l.level;
     const key = `${l.room}:${l.mood === 'fire' ? 'fire' : 'lamp'}`;
     const s = sum.get(key) ?? { n: 0, v: 0 };
@@ -291,11 +403,11 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
  *  (the key is lightCfg.x × spotCfg2.z in the dungeon; the beam's own gain is 4). */
 const BODY_WINDOW_GAIN = 0.035;
 /** A lamp's key on a body per unit of its power × level / d² (the lamps model the zombies). */
-const BODY_LAMP_GAIN = 0.55;
+const BODY_LAMP_GAIN = 1.5;
 /** The flat fill's colour on a storm level when no lamp or flash keys the body. */
 const COLD_FILL: [number, number, number] = [0.62, 0.74, 1.0];
 /** And the rim a lamp adds, per unit of that key. */
-const BODY_LAMP_RIM = 0.8;
+const BODY_LAMP_RIM = 0.35;
 const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0 };
 
 /** The brightest lamp on a point in its room (power × level / d², d at least 1 m): its direction

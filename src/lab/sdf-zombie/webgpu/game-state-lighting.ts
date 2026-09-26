@@ -46,7 +46,7 @@ export interface LightingState {
   /** Room-probe lighting nodes, keyed by room id. */
   levelProbeNodes: Map<number, ProbeLightingNode>;
   /** Accent lights that pulse, each with its base power and phase. */
-  flickerLights: { light: THREE.PointLight; base: number; phase: number; bowl?: THREE.MeshStandardMaterial; mood?: LampMood; room?: number }[];
+  flickerLights: { light: THREE.PointLight; base: number; phase: number; bowl?: THREE.MeshStandardMaterial; mood?: LampMood; room?: number; bowlMesh?: THREE.Mesh; fixture?: 'bulb' | 'tube' }[];
   /** Dungeon rig on/off; the gallery must render unchanged when false. */
   dungeonOn: boolean;
   /** Beam + shadow rig; the codemod supplies the real flashlight. */

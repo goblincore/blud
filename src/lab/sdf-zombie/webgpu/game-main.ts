@@ -99,7 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
-import { applyRoomFill, applyStormBodyKey, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
+import { adoptLightFx, applyRoomFill, applyStormBodyKey, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -818,6 +818,7 @@ async function main() {
       ctx.lighting.flickerLights.push({
         light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7,
         bowl: bowl.material as THREE.MeshStandardMaterial, mood: a.mood ?? 'steady', room: r.id,
+        bowlMesh: bowl, fixture: a.fixture ?? 'bulb',
       });
     }
   }
@@ -1213,6 +1214,7 @@ async function main() {
   // reprojects with (boot-time: the attachment count is fixed with the march target).
   ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: isAccumBoot() && new URLSearchParams(location.search).get('accummotion') !== '0' });
   adoptLateFx(ctx);
+  adoptLightFx(ctx);
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -2101,6 +2103,13 @@ async function main() {
         const src = ctx.crowd.sourceView.get(t);
         const copyTiming = ctx.telemetry.telemetry.begin();
         if (src) copyUniformValues(ctx, t.uniforms, src.uniforms);
+        // The crowd shares one key per type (character, room): key it for the type's body nearest the
+        // player (the one you are looking at), not whichever body seeded the type (owner, 2026-09-26).
+        // Per-body keys in a crowd come with part 3's shared light list.
+        if (src) {
+          const near = nearestCrowdBody(t);
+          if (near) applyWindowKey(ctx, t.uniforms as never, near);
+        }
         ctx.telemetry.telemetry.end('crowd-uniform-copy', copyTiming);
         // CROWD REQUIRES ITS TILE LIST (task 8). The per-body tile playtest
         // (`gameTiles`) gates only the per-body path; the crowd type owns its
@@ -3237,6 +3246,7 @@ async function main() {
       const t = crowdAttach.type;
       t.attachAt(view, crowdAttach.slot);
       if (!ctx.crowd.sourceView.has(t)) ctx.crowd.sourceView.set(t, view);
+      ctx.crowd.typeOfView.set(view, t);
       // attach/detach is the crowd's visibility gate, so the per-body proxy
       // and its depth-pre twin stay in the scene but hidden. They ARE drawn
       // while the crowd program is not ready: the draw fn re-shows them each
@@ -6679,6 +6689,18 @@ async function main() {
   ctx.player.lastWalkPos = null;
 
   /** Owners whose bone can show (segmentNeeded): any carving wound, or a sever re-derive. */
+  /** The position of a crowd type's live body nearest the player, or null. */
+  function nearestCrowdBody(t: unknown): [number, number, number] | null {
+    const pp = ctx.player.player.pos;
+    let best: [number, number, number] | null = null, bd = Infinity;
+    for (const a of ctx.render.visualActors) {
+      if (ctx.crowd.typeOfView.get(a.view) !== t) continue;
+      const p = a.pose().pos, d = (p[0] - pp[0]) ** 2 + (p[2] - pp[2]) ** 2;
+      if (d < bd) { bd = d; best = [p[0], p[1], p[2]]; }
+    }
+    return best;
+  }
+
   function boneExposedActors(c: typeof ctx): Set<unknown> {
     const out = new Set<unknown>();
     for (const a of c.render.visualActors) {

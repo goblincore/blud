@@ -44,6 +44,6 @@ describe('CROWD_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(CROWD_BINDINGS)).toHaveLength(9);
+    expect(Object.keys(CROWD_BINDINGS)).toHaveLength(10);
   });
 });
