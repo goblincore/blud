@@ -98,7 +98,7 @@ import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial
 import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
-import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
+import { applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
 import { applyRoomFill, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
@@ -6683,6 +6683,7 @@ async function main() {
     stepVoid(ctx, dt);
     stepTrain(ctx, dt);
     stepDynamicLight(ctx, dt);
+    lightSteam(ctx);
     stepLoop(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never

@@ -40,3 +40,18 @@ export function curtainSway(t: number, speed: number, phase: number): number {
   const k = Math.min(1, speed / 20);
   return Math.max(0, Math.min(1, (0.5 + 0.35 * Math.sin(t * 0.9 + phase) + 0.15 * joltAt(t - 0.15, speed)) * k));
 }
+
+/** Boiler Room machinery (layout draft 2): a pneumatic hammer's stroke, 0 (up) .. 1 (down).
+ *  A slow lift and a fast slam, one cycle per PISTON_PERIOD_S, offset by phase (seconds). */
+export const PISTON_PERIOD_S = 1.6;
+export const PISTON_STROKE_M = 0.35;
+export function pistonStroke(t: number, phase: number): number {
+  const k = ((((t + phase) / PISTON_PERIOD_S) % 1) + 1) % 1;
+  return k < 0.8 ? 1 - k / 0.8 : Math.pow((k - 0.8) / 0.2, 2);
+}
+
+/** The disco ball's turn (radians): a steady spin. */
+export const DISCO_RAD_PER_S = 0.7;
+export function discoSpin(t: number): number {
+  return t * DISCO_RAD_PER_S;
+}
