@@ -7,7 +7,7 @@
 //      and dark share (the "never black" guard).
 //   2. COST: timeDraws medians at third class, off/on/off/on.
 //
-// Usage: LAB_VITE_PORT=5299 LAB_CDP_PORT=9299 LIGHT_GATE_SHOT=<dir> node scripts/sdf-selfshadow-spike.mjs
+// Usage: node scripts/sdf-selfshadow-spike.mjs <vitePort> <cdpPort>, with LIGHT_GATE_SHOT=<dir>
 import { execFileSync } from 'node:child_process';
 import { inflateSync } from 'node:zlib';
 

@@ -5,7 +5,7 @@ Script: `scripts/sdf-selfshadow-spike.sh` (`LAB_TMP=.lab-tmp`, `LIGHT_GATE_SHOT=
 Images and raw JSON: [`2026-09-27-self-shadow-spike/`](2026-09-27-self-shadow-spike/). Start with
 [`contact-sheet.png`](2026-09-27-self-shadow-spike/contact-sheet.png): each row is OFF | ON | the on-minus-off difference ×8 (red means darker with it on).
 
-**Status: waiting on the OWNER LOOK GATE.** Two of the four acceptance criteria fail (the tube scenes show no change, and the cost is over 1 ms). See the verdict section below.
+**Status: REJECTED by the owner, 2026-09-27; shipped off (`?selfshadow=1` opts in); see Owner verdict.** Two of the four acceptance criteria fail (the tube scenes show no change, and the cost is over 1 ms). See the verdict section below.
 
 ## What was built
 
@@ -15,7 +15,7 @@ Images and raw JSON: [`2026-09-27-self-shadow-spike/`](2026-09-27-self-shadow-sp
   - **Self-shadow mode** runs otherwise, when `woundShadowCfg.z > 0` and the hit is within 12 m. It uses the **smooth field** (`woundCfg.x` = 0 wounds), k = 24 (a literal), `woundShadowCfg.w` as the reach, and a break after 8 steps.
   - It uses the same `mapBody` inline, so no new call site is added.
 - `woundShadowCfg` is now a vec4: z is the self-shadow strength, w is the reach. The lab default z = 0 leaves the self-shadow off. The refine twin forces z = 0.
-- The pure module is `webgpu/self-shadow.ts`. The game writes the uniform with `applySelfShadow` at the actor site and at the crowd-type site. `?selfshadow=0` turns it off at boot. The look seam is `__sdfGame.setSelfShadow(enabled, strength?, reach?, k?)`. In the spike, `k` is recorded but not applied: the WGSL uses a literal 24.
+- The pure module is `webgpu/self-shadow.ts`. The game writes the uniform with `applySelfShadow` at the actor site and at the crowd-type site. `?selfshadow=1` turns it on at boot (default off since 0bf9f9e2). The look seam is `__sdfGame.setSelfShadow(enabled, strength?, reach?, k?)`. In the spike, `k` is recorded but not applied: the WGSL uses a literal 24.
 - `WINDOW_SHADOW_SIZE` went from 1024 to 512 (spec §6).
 - `wShadow` still multiplies only the key diffuse and the key specular. Ambient, fill, scatter, fresnel and the rim are untouched.
 
@@ -99,10 +99,10 @@ base 3  {"drawOnce":1483.9,"warmMs":2153}
 
 The task's two runs each show a gap of +9% (1403 against 1531), which is just inside the ±10% noise band. The reversed pair flips the sign (new is 25 ms faster). Over all three runs each, base averages 1430 and new 1507, a gap of +5%, which is within run-to-run noise. The extra `select` arguments do not look like they changed the inline. That verdict is soft: the ordering effect is as large as the gap.
 
-## Tuning that shipped
+## Tuning used when opted in
 
 `SELF_SHADOW = { strength: 0.7, reach: 0.4 (maxReach 0.8), k: 24 (a WGSL literal, not live), steps: 8, maxCamDist: 12 }`.
-The uniform default is `woundShadowCfg = (0, 12, 0, 0.4)`, so the lab keeps it off. The game writes z and w for every body.
+The uniform default is `woundShadowCfg = (0, 12, 0, 0.4)`, so the lab keeps it off. The game writes z and w for every body; z is 0 unless opted in.
 
 Steps and reach are the plan's cost fallbacks (12 → 8, then 0.6 → 0.4). They were applied because criterion 4 failed at 12 steps and 0.6 m. The cost still misses the 1 ms budget.
 
@@ -124,3 +124,4 @@ Steps and reach are the plan's cost fallbacks (12 → 8, then 0.6 → 0.4). They
 - The self-shadow is dropped from part 3 plan 1. The code stays in, switched **off** by default; `?selfshadow=1` or the `setSelfShadow(true)` seam turn it on for experiments. With it off, `woundShadowCfg.z` is 0 and the march skips the walk, so it costs nothing.
 - Kept from this spike: the window-light shadow maps at 512² (spec §6), and the `reach`/`steps` parameters on `woundShadow`.
 - A likely reason it reads so little: the bodies are rounded, blobby clay forms with few overhangs to cast from, and the tube key is weak and bent toward the viewer. That is not measured.
+- **Known limitation if revived:** the self-shadow walks the smooth field, so a crater-floor hit (inside the smooth body, h < 0) isn't shadowed consistently — gate `ssOn` with `!hitNearWound` or a wound-mask feather if this is ever turned back on. Also, live gib chunks copy `woundShadowCfg` only at spawn (`zombie-gpu.ts` `copyTemplateLook`), so a runtime toggle doesn't reach existing gibs.

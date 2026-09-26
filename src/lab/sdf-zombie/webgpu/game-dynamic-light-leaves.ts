@@ -503,9 +503,8 @@ function strongestLamp(ctx: GameContext, at: readonly [number, number, number]):
 let selfShadow: SelfShadowCfg = selfShadowCfg({ enabled: typeof location !== 'undefined' && new URLSearchParams(location.search).get('selfshadow') === '1' });
 
 /** Spec §6: the SDF self-shadow on the dominant key, for a body's (or a crowd type's) uniforms. */
-export function applySelfShadow(u: { woundShadowCfg?: { value: THREE.Vector4 } }): void {
-  const c = u.woundShadowCfg?.value;
-  if (!c) return;
+export function applySelfShadow(u: { woundShadowCfg: { value: THREE.Vector4 } }): void {
+  const c = u.woundShadowCfg.value;
   c.z = selfShadow.strength;
   c.w = selfShadow.reach;
 }

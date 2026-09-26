@@ -23,7 +23,7 @@
 - **Port-ready by construction (release is a Rust + wgpu port — production scope §4.6):**
   - Game logic goes in a **pure, renderer-free module with its own tests**: no `three` import, plain data in and plain data out (the `burn-state`, `burn-behaviour`, `burn-room-light` pattern). The renderer-facing module only reads that logic's output and writes uniforms and objects.
   - Rendering that matters goes in **hand-written WGSL** (`*.wgsl.ts` string modules). TSL node graphs are for thin glue (binding, blending), not for the effect itself.
-  - State lives on `ctx` (`GameContext` slices) or inside a feature module, never as new `main()` bindings (`npm test -- game-context-coverage`).
+  - State lives on `ctx` (`GameContext` slices) or inside a feature module, never as new `main()` bindings (`npx vitest run src/lab/sdf-zombie/webgpu/game-context.test.ts`).
   - Keep the simulation deterministic: seeded RNG, sim-time clocks, no wall-clock in logic. Console and capture seams stay plain data.
 - Never `git stash`. `node_modules` is symlinked, so do not reinstall.
 - **Targeted tests only** (`npx vitest run <paths>`), plus `npx tsc --noEmit`. Never run the bare full suite.
@@ -61,7 +61,7 @@ The dominant light is today's key `L`: `applyWindowKey` already points `lightDir
 - Create: `scripts/sdf-selfshadow-spike.mjs` and `scripts/sdf-selfshadow-spike.sh`.
 - Create: `docs/dev-notes/2026-09-27-self-shadow-spike.md` (numbers plus a contact sheet for the owner).
 
-- [ ] **Step 1: Write the failing pure test**
+- [x] **Step 1: Write the failing pure test**
 
 `src/lab/sdf-zombie/webgpu/self-shadow.test.ts`:
 
@@ -90,12 +90,12 @@ describe('self-shadow cfg (spec §6)', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/self-shadow.test.ts`
 Expected: FAIL, "Failed to resolve import './self-shadow'".
 
-- [ ] **Step 3: Write the pure module**
+- [x] **Step 3: Write the pure module**
 
 `src/lab/sdf-zombie/webgpu/self-shadow.ts`:
 
@@ -133,12 +133,12 @@ export function selfShadowCfg(o: { enabled: boolean; strength?: number; reach?: 
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/self-shadow.test.ts`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Update the WGSL source pins first (failing)**
+- [x] **Step 5: Update the WGSL source pins first (failing)**
 
 In `src/lab/sdf-zombie/webgpu/march/fields/wounds.wgsl.test.ts`, replace each pinned `woundShadow(p, L, abs(woundShadowCfg.y), data, woundCfg, woundCfg2, ...)` string (lines 87 and 144) with the new call below. Change the gate pin at line 113 to `'if (wsOn || ssOn) {'`. Add one test after line 102:
 
@@ -160,7 +160,7 @@ In `src/lab/sdf-zombie/webgpu/zombie-gpu.test.ts:657`, change the pin to `'if (w
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march/fields/wounds.wgsl.test.ts src/lab/sdf-zombie/webgpu/zombie-gpu.test.ts`
 Expected: FAIL on the changed pins.
 
-- [ ] **Step 6: Give `woundShadow` a reach and a step count**
+- [x] **Step 6: Give `woundShadow` a reach and a step count**
 
 In `march/fields/wounds.wgsl.ts`, add two trailing parameters and use them. The wound path passes `0.4, 14`, so its arithmetic is unchanged.
 
@@ -188,7 +188,7 @@ In `march/fields/wounds.wgsl.ts`, add two trailing parameters and use them. The 
 
 Keep the existing comment block above the loop. The loop bound stays the literal 14, and `steps` only breaks early. A literal bound keeps the Metal unroll decision where it is today.
 
-- [ ] **Step 7: One call site, two modes**
+- [x] **Step 7: One call site, two modes**
 
 In `march/body/blocks/light/occlusion.wgsl.ts`, replace the `var wShadow = 1.0; if (woundShadowCfg.x > 0.0 && hitNearWound) { ... }` block with the code below. Keep the WOUND SOFT SHADOW comment above it, and append a paragraph pointing to spec §6 and `self-shadow.ts`.
 
@@ -213,7 +213,7 @@ In `march/body/blocks/light/occlusion.wgsl.ts`, replace the `var wShadow = 1.0; 
 
 `wShadow` already multiplies only the key diffuse and the key specular (`compose.wgsl.ts`: `diff * wShadow * lvl`, `shine * wShadow * lvl`). Ambient, fill, scatter and fresnel stay untouched, which is exactly the "never black" rule.
 
-- [ ] **Step 8: Widen the uniform to vec4**
+- [x] **Step 8: Widen the uniform to vec4**
 
 - `march/body/params.wgsl.ts:162` and `march/body/io.wgsl.ts:162`: change `woundShadowCfg: vec2<f32>,` to `woundShadowCfg: vec4<f32>,`.
 - `params.wgsl.ts:69-70` doc comment: add a line `//                   z self-shadow strength (0 = off), w self-shadow reach m`. **No `:` in that comment.**
@@ -222,7 +222,7 @@ In `march/body/blocks/light/occlusion.wgsl.ts`, replace the `var wShadow = 1.0; 
 
 `zombie-gpu.ts:3095` (`.value.copy(template...)`) works unchanged with a Vector4. Run `npx tsc --noEmit` and fix any other `Vector2` typing that `tsc` reports for `woundShadowCfg`.
 
-- [ ] **Step 9: Run the pins and the type check**
+- [x] **Step 9: Run the pins and the type check**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march/fields/wounds.wgsl.test.ts src/lab/sdf-zombie/webgpu/zombie-gpu.test.ts src/lab/sdf-zombie/webgpu/self-shadow.test.ts && npx tsc --noEmit`
 Expected: PASS, and `tsc` is clean.
@@ -236,7 +236,7 @@ Then run the march tests: `npx vitest run src/lab/sdf-zombie/webgpu/march`.
 
 The previous deliberate update was the lightning-rim change on 2026-09-26.
 
-- [ ] **Step 10: The game writes it**
+- [x] **Step 10: The game writes it**
 
 In `game-dynamic-light-leaves.ts`, add near `applyWindowKey`:
 
@@ -276,7 +276,7 @@ In `game-main.ts`:
 Run: `npx tsc --noEmit && npx vitest run src/lab/sdf-zombie/webgpu/game-context-coverage.test.ts`. If that file name differs, find the test that `npm test -- game-context-coverage` resolves to and run it.
 Expected: clean. No new `main()` bindings: `selfShadow` is module state in the leaves file.
 
-- [ ] **Step 11: The spike capture script**
+- [x] **Step 11: The spike capture script**
 
 `scripts/sdf-selfshadow-spike.sh`: copy `scripts/sdf-game-light-gate.sh` exactly, with these changes:
 - ports `5299`/`9299`;
@@ -347,7 +347,7 @@ process.exit(0);
 
 Before running it, read `timeDraws` in `src/lab/sdf-zombie/webgpu/game-seams-boot.ts:92` and confirm what it returns (a number of ms, or an object). If it returns an object, keep the whole object in `cost`, and read the GPU march ms from it in the notes.
 
-- [ ] **Step 12: Run the spike**
+- [x] **Step 12: Run the spike**
 
 ```bash
 mkdir -p .lab-tmp/selfshadow && LAB_TMP=.lab-tmp LIGHT_GATE_SHOT=$PWD/.lab-tmp/selfshadow bash scripts/sdf-selfshadow-spike.sh
@@ -365,7 +365,7 @@ Look at every PNG yourself. Acceptance, all four must hold:
 
 If criterion 2 or 3 fails, lower `SELF_SHADOW.strength` in steps of 0.1 through the seam. If criterion 4 fails, drop `steps` to 8, then reach to 0.4. Re-run after each change and record every run in the notes.
 
-- [ ] **Step 13: Boot time**
+- [x] **Step 13: Boot time**
 
 The shader text is what changed, so the base must be the old text, not a URL switch. Commit Step 15 first, then build the base worktree from the commit before it:
 
@@ -379,7 +379,7 @@ git worktree remove --force .lab-tmp/ss-base
 
 Record all four JSON lines in the notes. Expected: `drawOnce` stays within run-to-run noise (about ±10%). A bigger rise means the extra `select` arguments changed the inline, and must be reported. Never use `git stash`.
 
-- [ ] **Step 14: Notes and contact sheet for the owner**
+- [x] **Step 14: Notes and contact sheet for the owner**
 
 Write `docs/dev-notes/2026-09-27-self-shadow-spike.md` with:
 - the table of scene × off/on (mean, std, dark %);
@@ -390,7 +390,7 @@ Write `docs/dev-notes/2026-09-27-self-shadow-spike.md` with:
 
 Then show the owner the pairs and **stop for the look gate**.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/self-shadow.ts src/lab/sdf-zombie/webgpu/self-shadow.test.ts \

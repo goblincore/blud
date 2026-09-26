@@ -50,7 +50,7 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // SELF-SHADOW (shared light list spec §6, self-shadow.ts): the same walk over the SMOOTH
   // field (wound count 0, so no crater-lip rings), toward the key, hard edged, capped. The
   // wound shadow wins inside wound zones when both are on. woundShadowCfg z strength,
-  // w reach; z = 0 (the lab, the refine twin, ?selfshadow=0) skips it.
+  // w reach; z = 0 (the default everywhere; ?selfshadow=1 opts in) skips it.
   var wShadow = 1.0;
   let wsOn = woundShadowCfg.x > 0.0 && hitNearWound;
   let ssOn = woundShadowCfg.z > 0.0 && t < 12.0;

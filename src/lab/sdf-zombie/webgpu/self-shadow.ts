@@ -12,11 +12,14 @@ export const SELF_SHADOW = {
   /** How far toward the light the walk looks, metres; and its cap. Spike (2026-09-27): 0.6 cost
    *  +1.6 ms of march GPU at third class, so it ships at the plan's fallback 0.4. */
   reach: 0.4,
+  /** With the walk's 6 cm stride cap (clamp(h, 0.01, 0.06) in the field march), 8 steps reaches at
+   *  most ~0.5 m — so a maxReach of 0.8 needs more steps than the default 8 to actually be hit. */
   maxReach: 0.8,
   /** iq's penumbra factor: high = hard edge (the owner's harsh-tube look). */
   k: 24,
-  /** Field samples per walk (the WGSL early break, occlusion.wgsl.ts; the loop's literal bound
-   *  stays 14 for the wound path). Spike: 12 -> 8, the plan's first cost fallback. */
+  /** Field samples per walk: the walk breaks after sample index `steps`, so up to steps+1 field
+   *  samples (the WGSL early break, occlusion.wgsl.ts; the loop's literal bound stays 14 for the
+   *  wound path). Spike: 12 -> 8, the plan's first cost fallback. */
   steps: 8,
   /** Off past this camera distance (distant bodies are fogged anyway). */
   maxCamDist: 12,

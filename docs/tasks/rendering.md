@@ -2,6 +2,20 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Shared light list, Part 3 plan 1 — self-shadow spike rejected 2026-09-27
+
+- [x] Spec written: [`docs/superpowers/specs/2026-09-26-shared-light-list-design.md`](../superpowers/specs/2026-09-26-shared-light-list-design.md);
+  plan 1 (bodies, crowd, bones, gibs): [`docs/superpowers/plans/2026-09-26-shared-light-list-plan-1.md`](../superpowers/plans/2026-09-26-shared-light-list-plan-1.md).
+- [x] **Task 1 (owner look gate): SDF self-shadow on the dominant key — REJECTED by the owner, 2026-09-27**
+  ("it honestly is so subtle ... i dont think its worth it at all"). Invisible under the tube key,
+  modest under lightning, and +1.3 ms of march GPU even at the plan's cost fallback (8 steps, 0.4 m
+  reach). The code stays in, off by default; `?selfshadow=1` opts in for experiments.
+  [Dev note with the numbers and images](../dev-notes/2026-09-27-self-shadow-spike.md).
+- [x] Kept from the spike: window-light shadow maps dropped from 1024 to 512² (spec §6); `reach`/`steps`
+  parameters added to `woundShadow`.
+- [ ] Next: Task 2, presentation profiles (pure) — every remaining task in the plan has had its
+  self-shadow dependency removed.
+
 ## Selective shutter blur — owner accepted and merged 2026-09-17
 
 - [x] Blood + rotating gibs default ON at 44.44 ms / 120 px; lab comparison and in-game controls shipped.

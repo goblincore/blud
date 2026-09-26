@@ -16,7 +16,12 @@
   +61..+164 draws / +3..+6 ms (budget +200 / +12 ms). The tube cones (shadowed spots) cost ~4–9 ms
   per carriage; part 3's shared light list is where that is won back.
 - [ ] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
-  shadows read by the level shaders and the SDF march, each with its own stylized shading.
+  shadows read by the level shaders and the SDF march, each with its own stylized shading. Plan 1
+  ([spec](docs/superpowers/specs/2026-09-26-shared-light-list-design.md),
+  [plan](docs/superpowers/plans/2026-09-26-shared-light-list-plan-1.md)): Task 1's self-shadow spike
+  was **rejected by the owner** (2026-09-27, too subtle, +1.3 ms GPU) and ships off by default
+  (`?selfshadow=1` opts in); window-light shadow maps are now 512². Next: Task 2 (presentation
+  profiles) — see [rendering](docs/tasks/rendering.md).
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
