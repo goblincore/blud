@@ -186,4 +186,26 @@ describe('cultist: soft target, two hits', () => {
     }
     expect(moved.reduce((a, b) => a + b, 0) / moved.length).toBeGreaterThan(0.2);
   });
+
+  it("a censer 'flinch' does not insta-kill a soft target, but a charged 'blast' does", () => {
+    const tapped = cultist();
+    const chest = tapped.actor.posed().prims.find(p => p.limb === 'torso' && p.core)!;
+    tapped.actor.blast({
+      wounds: [], meterCredit: 0.2,
+      impulse: { at: mid(chest), vel: [0, 0, -1] },
+      reaction: 'flinch',
+    });
+    tapped.step(120);
+    expect(tapped.actor.motionFrame()!.collapsed).toBe(false);
+
+    const charged = cultist();
+    const chest2 = charged.actor.posed().prims.find(p => p.limb === 'torso' && p.core)!;
+    charged.actor.blast({
+      wounds: [], meterCredit: 0.2,
+      impulse: { at: mid(chest2), vel: [0, 0, -1] },
+      reaction: 'blast',
+    });
+    charged.step(120);
+    expect(charged.actor.motionFrame()!.collapsed).toBe(true);
+  });
 });

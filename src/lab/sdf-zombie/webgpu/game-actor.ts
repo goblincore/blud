@@ -1596,7 +1596,12 @@ export function createZombieActor(opts: {
   function blast(effect: ActorBlastEffect): void {
     damageRevision++; bakePaused = false;
     const { wounds: blastWounds, meterCredit, impulse } = effect;
-    if (softTarget && meterCredit > 0 && !softKilled)
+    const reaction = effect.reaction ?? 'blast';
+    // Soft-target death only starts from a charged, blast-class hit: a censer
+    // tap ('flinch') or a gouge-only follow-up ('none') must not insta-kill a
+    // cultist. Tap-COUNTING toward a soft-target kill is a later tuning
+    // question — for now taps simply cannot trigger it.
+    if (softTarget && reaction === 'blast' && meterCredit > 0 && !softKilled)
       beginSoftDeath(effect.impulse ? unitOrZero(effect.impulse.vel) : [0, 0, 0], undefined, undefined, 'blast');
 
     for (const w of blastWounds) if (w.shot?.weapon === 'explosion') recordSoldierInjury(w);
@@ -1620,7 +1625,6 @@ export function createZombieActor(opts: {
     //     `effect.reaction` ('flinch' | 'none', the censer) narrows or skips this step.
     const at: Vec3 = impulse ? impulse.at : bodyCentreWorld();
     const dirWorld: Vec3 = impulse ? unitOrZero(impulse.vel) : [0, 0, 0];
-    const reaction = effect.reaction ?? 'blast';
     if (reaction === 'flinch') {
       // A melee tap: the pellet-class flinch, no stagger, no root knock.
       selectPendingShot({
