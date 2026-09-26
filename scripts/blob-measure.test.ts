@@ -86,9 +86,13 @@ describe('blob-measure', () => {
       expect(mesh.poseMismatch).toBe(true);
     }, 120_000);
 
+  // 0.8, not 0.75: the half-strength round-blend default (3662c1ca6,
+  // 2026-09-17) moved the built mouse's fingertips from ~0.74 to ~0.76 of its
+  // height, into a window that used to start just below them. 0.8 leaves a
+  // band or two of margin under the hands.
   it(
     'clears the flag in a window where the poses agree', () => {
-      const out = JSON.parse(run('mouse', '--json', '--range', '0.75:1', '--glb', maus));
+      const out = JSON.parse(run('mouse', '--json', '--range', '0.8:1', '--glb', maus));
       const mesh = out.refs.find((r: { kind: string }) => r.kind === 'mesh');
       expect(mesh.poseMismatch).toBe(false);
     }, 120_000);

@@ -61,6 +61,9 @@ export interface WorldState {
   gateMeshes: Map<string, THREE.Object3D>;
   /** Mesh key: what the level's art file placed, or null (no art / `?art=0`). */
   art: { file: string; meshes: number; instanced: number; instances: number; objects: THREE.Object3D[] } | null;
+  /** Mesh key: the level's art scene, loaded at boot and placed with the level
+   *  group; null for the ring or a level without art. */
+  artScene: THREE.Group | null;
   /** Carriage kit: window scenery, sway, camera motion; null without windows/sway art. */
   train: TrainRuntime | null;
   /** The game loop: vitals, inventory, pickups, triggers, events, completion. */
@@ -123,6 +126,7 @@ export function makeWorldState(): WorldState {
     openGates: new Set<string>(),
     gateMeshes: new Map<string, THREE.Object3D>(),
     art: null,
+    artScene: null,
     train: null,
     loop: null,
     light: null,
@@ -158,6 +162,7 @@ export const WORLD_BINDINGS = {
   openGates: 'world.openGates',
   gateMeshes: 'world.gateMeshes',
   art: 'world.art',
+  artScene: 'world.artScene',
   train: 'world.train',
   loop: 'world.loop',
   light: 'world.light',

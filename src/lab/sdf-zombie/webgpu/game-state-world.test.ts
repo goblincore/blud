@@ -46,6 +46,7 @@ describe('makeWorldState', () => {
     expect(s.sightA).toEqual([0, 0, 0]);
     expect(s.levelNodeMaterials).toEqual([]);
     expect(s.soldierCorpses).toBeNull();
+    expect(s.artScene).toBeNull();
     expect(s.litChunkMaterials).toEqual([]);
   });
 });
@@ -60,6 +61,6 @@ describe('WORLD_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(30);
+    expect(Object.keys(WORLD_BINDINGS)).toHaveLength(31); // +artScene, +light (2026-09-26)
   });
 });
