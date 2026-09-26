@@ -116,7 +116,7 @@ CARRIAGES = [
          walls=[],
          areas=[("tender: the coal bunker (west), a walkway (east)", -1.7, 1.7, 0, 10.0)],
          props=[("coal", -1.7, -0.2, 1.6, 8.4, 1.2)],
-         spawns=[("coal-1", "zombie", 0.9, 3.5), ("coal-2", "zombie", 0.9, 7.0)],
+         spawns=[("coal-1", "zombie", 0.9, 3.5), ("tender-juggernaut", "juggernaut", 0.9, 7.2)],   # guards the way to the cab
          pickups=[("tender-health", "health", 1.2, 9.2)],
          gates=[], moods=["dying"], fires=[], triggers=[]),
     dict(rid=8, name="cab", w=3.0, L=8.0, h=2.6,

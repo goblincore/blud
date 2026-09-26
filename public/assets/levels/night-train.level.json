@@ -1486,6 +1486,16 @@
   ],
   "spawns": [
     {
+      "id": "tender-juggernaut",
+      "kind": "juggernaut",
+      "pos": [
+        0.9,
+        0.0,
+        -118.4
+      ],
+      "yaw": -3.1416
+    },
+    {
       "id": "soldier-bar-1",
       "kind": "soldier",
       "pos": [
@@ -1572,16 +1582,6 @@
         0.9,
         0.0,
         -114.7
-      ],
-      "yaw": -3.1416
-    },
-    {
-      "id": "coal-2",
-      "kind": "zombie",
-      "pos": [
-        0.9,
-        0.0,
-        -118.2
       ],
       "yaw": -3.1416
     },

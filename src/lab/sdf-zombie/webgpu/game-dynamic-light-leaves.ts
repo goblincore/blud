@@ -422,7 +422,7 @@ const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0 };
  *  lamp's; direction is a three-quarter key from above and from the viewer's side, blended with the
  *  real direction to the brightest lamp so bodies still differ. Flicker, blackouts and strobes ride
  *  the room level. */
-const PRESENT = { gain: 1.1, realDir: 0.35, floor: 0.3 } as const;
+const PRESENT = { gain: 0.7, realDir: 0.15, floor: 0.3 } as const;
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 function presentingLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
   const rt = ctx.world.light;
@@ -435,8 +435,11 @@ function presentingLamp(ctx: GameContext, at: readonly [number, number, number])
   const cam = ctx.boot.handle.camera;
   cam.getWorldDirection(camFwd);
   camRight.crossVectors(camFwd, cam.up).normalize();
-  const dir = new THREE.Vector3().copy(camFwd).multiplyScalar(-0.55)
-    .addScaledVector(cam.up, 0.7).addScaledVector(camRight, 0.4).normalize();
+  // Mostly from the viewer's side, a little above and to the right: a chest facing the player
+  // takes the light (a key from overhead left a head-on body dark — owner, 2026-09-26).
+  camFwd.y = 0; camFwd.normalize();
+  const dir = new THREE.Vector3().copy(camFwd).multiplyScalar(-0.8)
+    .add(new THREE.Vector3(0, 0.45, 0)).addScaledVector(camRight, 0.35).normalize();
   if (real) dir.lerp(real.dir, PRESENT.realDir).normalize();
   lampTmp.dir.copy(dir);
   if (real) lampTmp.color.copy(real.color); else lampTmp.color.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);

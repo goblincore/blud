@@ -33,8 +33,9 @@ describe('night-train.level.json', () => {
     for (const v of t.tunnels) expect(v.maxX - v.minX).toBeGreaterThanOrEqual(1.4 - 1e-6);
   });
 
-  it('24 zombies and 6 soldiers (no cultists yet); the pickups the layout places', () => {
-    expect(t.spawns.filter(s => s.kind === 'zombie')).toHaveLength(24);
+  it('23 zombies, 6 soldiers and the juggernaut in the tender (no cultists yet); the pickups', () => {
+    expect(t.spawns.filter(s => s.kind === 'zombie')).toHaveLength(23);
+    expect(t.spawns.filter(s => s.kind === 'juggernaut').map(s => roomAtPoint(t, s.pos[0], s.pos[2])?.name)).toEqual(['tender']);
     expect(t.spawns.filter(s => s.kind === 'soldier')).toHaveLength(6);
     expect(t.spawns.filter(s => s.kind === 'cultist')).toHaveLength(0);
     expect(t.spawns.filter(s => roomAtPoint(t, s.pos[0], s.pos[2])?.name === 'boiler-room' && s.kind === 'zombie')).toHaveLength(4);
