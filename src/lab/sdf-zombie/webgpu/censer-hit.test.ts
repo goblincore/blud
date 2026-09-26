@@ -145,6 +145,42 @@ describe('sweepHead', () => {
     expect(back.spheres[0]?.kind).toBe('crater');
   });
 
+  it('a graze that slides on into flesh under it strikes there (a skull brushed, the shoulder hit)', () => {
+    // A "skull" ball sunk into a flat "shoulder" (the half-space y < 0), one
+    // body (their union), so close that their contact shells overlap: a head
+    // sliding off the skull never gets back outside before it meets the
+    // shoulder (on the zombie the smooth-unioned skull and shoulders are
+    // closer still). Measured in game before this: a full-charge slam that
+    // brushed the skull left NO wound in the shoulder it then plowed into.
+    const skull: Vec3 = [0, 0.09, 0];
+    const body: ActorProbe = {
+      id: 1, centre: [0, 0, 0],
+      field: p => Math.min(Math.hypot(p[0] - skull[0], p[1] - skull[1], p[2] - skull[2]) - 0.1, p[1]),
+    };
+    // Straight down, just inside the skull's contact shell (≈ 1.2 m/s into it: a graze).
+    const x = 0.1 + R + CENSER_HIT.hitEps - 0.0005;
+    const { spheres, events } = dragBy(makeStrokeHits(1, 1), [x, 0.6, 0], [x, 0.02, 0], [0, -16, 0], [body], 0.005);
+    expect(spheres[0]?.kind).toBe('crater');
+    // In the crease and onto the shoulder — below the skull's equator (y 0.09), a real blow.
+    expect(spheres[0]!.at[1]).toBeLessThan(0.075);
+    expect(events[0]!.speedIn).toBeGreaterThanOrEqual(CENSER_HIT.glanceFrac * 16);
+  });
+
+  it('a fast glance (little of the speed into the skin) is a graze: it slides off and leaves nothing', () => {
+    // 16 m/s skimming the top of a ball (≈ 3.4 m/s into it at the touch): over minInSpeed, under glanceFrac.
+    const { spheres } = dragBy(makeStrokeHits(1, 1), [-0.6, 0, 0.378], [0.6, 0, 0.378], [16, 0, -1.8], [ball(1, [0, 0, 0])], 0.01);
+    expect(spheres).toHaveLength(0);
+  });
+
+  it('a graze that sinks in without ever striking waits to leave the body', () => {
+    const body = [ball(1, [0, 0, 0])];
+    const hits = makeStrokeHits(1, 0);
+    // Onto the top of the ball at 1.2 m/s (under minInSpeed), sinking well past grazeDepth.
+    expect(dragBy(hits, [-0.03, 0.39, 0], [0.03, 0.28, 0], [0.6, -1.2, 0], body, 0.005).spheres).toHaveLength(0);
+    // Still inside: even a fast push now is no first contact until the head has left.
+    expect(dragBy(hits, [0.03, 0.28, 0], [0.03, 0.2, 0], [0, -9, 0], body, 0.01).spheres).toHaveLength(0);
+  });
+
   it('the gouge ends when the head stalls in the flesh', () => {
     const body = [ball(1, [0, 0, 0])];
     const hits = makeStrokeHits(1, 0);

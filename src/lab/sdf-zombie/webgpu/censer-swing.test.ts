@@ -409,9 +409,9 @@ describe('head speed over the hit window (spec targets tap ~9, heavy ~16; measur
 });
 
 describe('handHold (the hand on the chain)', () => {
-  it('grips while pending and through the choke-up, then lets go; free in a stroke and at rest', () => {
+  it('grips lightly at rest, fully while pending and through the choke-up, then lets go; free in a stroke', () => {
     let s = makeCenserSwing();
-    expect(handHold(s)).toEqual({ grip: 0, drive: null });
+    expect(handHold(s)).toEqual({ grip: CENSER_SWING.gripRest, drive: null });
     s = run(s, 0.05, true);
     expect(s.phase).toBe('pending');
     expect(handHold(s).grip).toBe(CENSER_SWING.gripHold);

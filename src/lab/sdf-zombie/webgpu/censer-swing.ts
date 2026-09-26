@@ -143,6 +143,14 @@ export const CENSER_SWING = {
    *  conserves its spin), the windmill drove it into the anti-phase wobble and
    *  a full charge peaked at 2–5 m/s (measured in game, 4 of 13 strokes). */
   gripHold: 14,
+  /** The resting hand's grip on the reeled-in chain, 1/s (Task 9 tuning, was
+   *  0). Free, the short dangle kept whirling for seconds after a stroke (the
+   *  reel-in conserves the head's spin: 4–5 m/s at idle entry, still 1.8 m/s a
+   *  second later against drag 0.6/s), so the next TAP — whose 3-frame press
+   *  grips too briefly to settle it — started from wherever it happened to be
+   *  and landed ~0.15 m off. At 3 the dangle still swings visibly after a
+   *  stroke but is calm within ~1 s. */
+  gripRest: 3,
   /** THE WRIST. The scripted hand circle is open-loop, and from a head that
    *  is not hanging still (the last stroke's swing: the reel conserves its
    *  spin, so the reeled head whirls at 4–5 m/s at idle entry) it sometimes
@@ -388,13 +396,16 @@ function reelFrac(s: CenserSwing): number {
  *  GRIP, 1/s — full while the button is down before the swing (pending) and
  *  through the wind-up's choke-up, released as the chain starts paying out;
  *  THE WRIST — during the wind-up, once paying out, a speed floor round the
- *  knot in the stroke plane (CENSER_SWING.spinFloor). Both off otherwise, so a
- *  stroke, its recover and the dangle at rest swing free. `normal` is the
+ *  knot in the stroke plane (CENSER_SWING.spinFloor). At rest a light grip
+ *  (gripRest) calms the dangle. Both off in a stroke and its recover, which
+ *  swing free. `normal` is the
  *  stroke plane's normal in handlePose's frame; the caller turns it into the
  *  world. The spin runs round it right-handed. */
 export function handHold(s: CenserSwing): { grip: number; drive: { normal: Vec3; speed: number; gain: number; maxAccel: number } | null } {
   const S = CENSER_SWING;
   switch (s.phase) {
+    case 'idle':
+      return { grip: S.gripRest, drive: null };
     case 'pending':
       return { grip: S.gripHold, drive: null };
     case 'windup': {

@@ -8,7 +8,10 @@
 //
 //   first contact  → one CRATER at the surface under the head, sized by the
 //                    head's speed INTO the surface against the stroke's
-//                    reference speed (a graze below minInSpeed stamps nothing)
+//                    reference speed (a graze — under minInSpeed or under
+//                    glanceFrac of the head's speed — stamps nothing YET: the
+//                    head slides on and strikes further along if it turns
+//                    into the skin before it sinks grazeDepth under the shell)
 //   while inside   → a GOUGE sphere every gougeStep of travel, each gougeShrink
 //                    smaller, up to the stroke's cap; ends when the head exits
 //                    or its TOTAL speed stalls below gougeMinSpeed — total,
@@ -29,13 +32,26 @@ import type { Vec3 } from '../types';
 import { GRAPESHOT, traceProjectile } from './game-weapon';
 
 export const CENSER_HIT = {
-  /** Tap (charge 0) and full-charge ends of every per-stroke number; lerped by charge. */
+  /** Tap (charge 0) and full-charge ends of every per-stroke number; lerped by charge.
+   *  heavy.craterR 0.11 → 0.13 (Task 9 gate, with severMul below): see severMul. */
   tap: { craterR: 0.06, gougeMax: 3, speedRef: 9, meter: 0.1 },
-  heavy: { craterR: 0.11, gougeMax: 6, speedRef: 16, meter: 0.3 },
+  heavy: { craterR: 0.13, gougeMax: 6, speedRef: 16, meter: 0.3 },
   /** Floor on the speed factor: a slow but real hit still leaves a mark. */
   minSpeedFrac: 0.4,
   /** m/s into the surface below which a contact is a graze. */
   minInSpeed: 1.5,
+  /** …and a contact is a graze too unless at least this fraction of the head's
+   *  speed goes INTO the skin (0.3 ≈ 17°). A full-charge slam that brushed a
+   *  skull at 1.9 m/s (of 20) spent its one crater per body there — a
+   *  floor-sized dent — and the shoulder it plowed into next got only the
+   *  shrinking gouge (censer gate, Task 9). */
+  glanceFrac: 0.3,
+  /** A GRAZING head slides on inside the contact shell (it has not struck yet)
+   *  and strikes, where it is, once it turns into the skin (the same test) —
+   *  until its centre sinks this far (m) under the shell; past that it has
+   *  sunk in without a blow and waits to leave the body, as before. A glance
+   *  that slides off again leaves no wound. */
+  grazeDepth: 0.035,
   /** m/s below which a head inside the flesh has stalled and the gouge ends. */
   gougeMinSpeed: 2.0,
   gougeStep: 0.03,
@@ -43,8 +59,17 @@ export const CENSER_HIT = {
   gougeMeterFrac: 0.25,
   /** A gouge sphere closer than this × the smaller radius to the last one is merged (skipped). */
   mergeFrac: 0.5,
-  /** severRadius = radius × this: the carve union the sever test sees. */
-  severMul: 1.15,
+  /** severRadius = radius × this: the carve union the sever test sees.
+   *  1.15 → 1.6 (Task 9, scripts/censer-gate.mjs). The head's section is tested
+   *  at the NECK BASE (connectivity.ts cutLimbs), sunk ~8 cm into the shoulders
+   *  and shielded by the skull; the nearest a slam's crater lands is on the
+   *  shoulder's top ~0.15 m away, so cutting it needs a sever calibre over
+   *  ~0.2 m (distance + the neck's 0.045 m girth). At 1.15 even heavy.craterR
+   *  0.14 (the plan's cap) gave 0.161; at 1.6 the heavy's 0.13 gives 0.208,
+   *  the first that severed (0.11 / 0.12 did not). A tap is 0.096 at full
+   *  speed — the grapeshot pellet's proven 0.10, which "severs a shoulder in
+   *  ~8": the gate's taps take a forearm off at the elbow on the second. */
+  severMul: 1.6,
   absorbCrater: 0.35,
   absorbGouge: 0.12,
   /** Segment-to-torso distance past which a body is not tested at all, metres. */
@@ -82,6 +107,8 @@ export interface HitEvent {
 interface Contact {
   /** False until the head has been seen outside this body (stroke started inside). */
   armed: boolean;
+  /** Touched at a graze and still sliding along inside the shell. */
+  grazing: boolean;
   inside: boolean;
   done: boolean;
   stamps: number;
@@ -154,7 +181,7 @@ export function sweepHead(
     const outside = (p: Vec3) => a.field(p) - headR > C.hitEps;
     let c = hits.contacts.get(a.id);
     if (!c) {
-      c = { armed: outside(from), inside: false, done: false, stamps: 0, last: [0, 0, 0], lastR: 0, k: 1 };
+      c = { armed: outside(from), grazing: false, inside: false, done: false, stamps: 0, last: [0, 0, 0], lastR: 0, k: 1 };
       hits.contacts.set(a.id, c);
     }
     if (c.done) continue;
@@ -163,23 +190,37 @@ export function sweepHead(
     const v = scl(vel, velScale);
     const dir = unit(v, unit(sub(to, from), [0, 0, -1]));
     if (!c.inside) {
-      const hp = traceProjectile(from, to, q => a.field(q) - headR);
-      if (!hp) continue;
-      // traceProjectile returns `from` outright when `from` is already
-      // within hitEps of the shell — true anywhere inside it, however deep.
-      // A graze that skipped firing (below) leaves `armed` true otherwise,
-      // so a later substep, still inside but now moving fast, would re-read
-      // this stale `hp` as a fresh contact deep under the skin. Disarming on
-      // any non-fire outcome here (deep OR a graze) forces the head to
-      // actually leave the shell (`outside`, above) before it can count.
-      const dHp = a.field(hp);
-      if (dHp - headR < -C.hitEps) { c.armed = false; continue; }   // hp is deep: not a valid first contact
-      const n = surfaceNormal(a.field, hp);
+      let n: Vec3, at: Vec3;
+      if (!c.grazing) {
+        const hp = traceProjectile(from, to, q => a.field(q) - headR);
+        if (!hp) continue;
+        // traceProjectile returns `from` outright when `from` is already
+        // within hitEps of the shell — true anywhere inside it, however deep.
+        // So a first contact whose point is DEEP is not one: disarm, and the
+        // head must actually leave the shell (`outside`, above) before it can
+        // count. (A graze is handled below — it keeps sliding.)
+        const dHp = a.field(hp);
+        if (dHp - headR < -C.hitEps) { c.armed = false; continue; }   // hp is deep: not a valid first contact
+        n = surfaceNormal(a.field, hp);
+        at = sub(hp, scl(n, dHp));         // project onto the true skin, same as the gouge does below
+      } else {
+        // GRAZING: the head touched at a glancing angle and slides on inside
+        // the shell — down a skull's side into the shoulder under it, say.
+        // Judge the contact where the head is NOW (never a stale point): the
+        // skin under it and the speed into that. It used to disarm at the
+        // graze, and a full-charge slam that brushed the skull then plowed
+        // into the shoulder at 19 m/s left no wound at all (censer gate).
+        const dTo = a.field(to);
+        if (dTo - headR > C.hitEps) { c.grazing = false; continue; }          // slid off: outside again, still armed
+        if (dTo - headR < -C.grazeDepth) { c.grazing = false; c.armed = false; continue; }   // sank in without a blow
+        n = surfaceNormal(a.field, to);
+        at = sub(to, scl(n, dTo));
+      }
       const speedIn = -dot(v, n);
-      if (speedIn < C.minInSpeed) { c.armed = false; continue; }   // a graze
+      if (speedIn < Math.max(C.minInSpeed, C.glanceFrac * len(v))) { c.grazing = true; continue; }   // a graze: keep sliding
+      c.grazing = false;
       c.k = Math.min(1, Math.max(C.minSpeedFrac, speedIn / T.speedRef));
       const r = T.craterR * c.k;
-      const at = sub(hp, scl(n, dHp));         // project onto the true skin, same as the gouge does below
       c.inside = true; c.stamps = 1; c.last = at; c.lastR = r;
       velScale *= 1 - C.absorbCrater;
       events.push({
