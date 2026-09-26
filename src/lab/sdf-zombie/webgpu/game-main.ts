@@ -99,7 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
-import { createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
+import { applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -1671,7 +1671,11 @@ async function main() {
       ctx.lighting.flashlight.spot.target.getWorldPosition(sAxis).sub(ctx.lighting.flashlight.spot.position).normalize();
       // x intensity gate, y cosInner, z cosOuter, w range — the cone edge
       // comes straight off the light so the two systems cannot drift.
-      const spotOn = (ctx.lighting.dungeonOn ? 1 : 0) * flashlightGate(ctx);
+      // The flashlight's switch scales the beam, but never to 0 in the dungeon: spotCfg.x = 0
+      // is also the march's "no dungeon" flag, which falls back to the gallery key and lights
+      // every body brightly from nowhere (the dark-start bug, 2026-09-26). A hair above 0 keeps
+      // the dungeon's key floor with no beam.
+      const spotOn = ctx.lighting.dungeonOn ? Math.max(1e-4, flashlightGate(ctx)) : 0;
       const cosInner = Math.cos(ctx.lighting.flashlight.spot.angle * (1 - ctx.lighting.flashlight.spot.penumbra));
       const cosOuter = Math.cos(ctx.lighting.flashlight.spot.angle);
       // LEVEL SHADOW twin (perf round 2 task 7): exact flashlight pose, then
@@ -1952,6 +1956,7 @@ async function main() {
           c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
         }
         a.view.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        applyWindowKey(ctx, a.view.uniforms);
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
@@ -1971,6 +1976,7 @@ async function main() {
         u.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
         u.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
         u.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        applyWindowKey(ctx, u);
       }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
@@ -1979,6 +1985,7 @@ async function main() {
       ctx.render.boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
       ctx.render.boneInstancer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
       ctx.render.boneInstancer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+      applyWindowKey(ctx, ctx.render.boneInstancer.uniforms);
       if (ctx.render.segMeshRenderer) {
         // skeleton=mesh: the SAME beam — segment boneShade is the march's
         // formula on the same uniform values, like the tubes.
@@ -1987,6 +1994,7 @@ async function main() {
         ctx.render.segMeshRenderer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
         ctx.render.segMeshRenderer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
         ctx.render.segMeshRenderer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        applyWindowKey(ctx, ctx.render.segMeshRenderer.uniforms);
       }
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
@@ -2030,6 +2038,7 @@ async function main() {
         bu.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
         bu.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
         bu.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        applyWindowKey(ctx, bu);
         if (detailAmp !== null) {
           bu.fleshDetail.value.set(
             detailAmp, ctx.bake.detailFreq, ctx.bake.detailAlbedo, 0);

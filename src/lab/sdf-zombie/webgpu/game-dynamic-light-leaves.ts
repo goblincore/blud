@@ -56,6 +56,9 @@ export interface DynamicLightRuntime {
     fitted: number | null;
     ambient: THREE.AmbientLight | null;
     ambientBase: number;
+    /** This step's window light, for the SDF bodies' key (applyWindowKey). */
+    dir: [number, number, number];
+    color: [number, number, number];
   } | null;
   windowLights: Map<number, THREE.DirectionalLight>;
   /** The art's lamp and firebox glass, per room (found on the first step, after the light-list pass). */
@@ -91,7 +94,8 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   const train = ctx.world.train;
   if (train?.storm) {
     const seed = 1;
-    rt.storm = { seed, schedule: stormSchedule(seed, STORM_HOURS * 3600), flash: 0, bolt: null, intensity: 0, hold: null, fitted: null, ambient: null, ambientBase: 0 };
+    rt.storm = { seed, schedule: stormSchedule(seed, STORM_HOURS * 3600), flash: 0, bolt: null, intensity: 0, hold: null, fitted: null, ambient: null, ambientBase: 0,
+      dir: [...STORM.boltDir], color: [...STORM.boltColor] };
     const amb = ctx.boot.handle.scene.children.find(o => o instanceof THREE.AmbientLight) as THREE.AmbientLight | undefined;
     if (amb) { rt.storm.ambient = amb; rt.storm.ambientBase = amb.intensity; }
     const group = new THREE.Group();
@@ -224,6 +228,8 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
     storm.flash = w.flash;
     storm.bolt = w.bolt;
     storm.intensity = w.intensity;
+    storm.dir = [...w.dir];
+    storm.color = [...w.color];
     for (const l of rt.windowLights.values()) {
       l.color.setRGB(w.color[0], w.color[1], w.color[2]);
       l.intensity = w.intensity;
@@ -252,6 +258,33 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
       if (b) train.storm.bolt.value.set(b.side, b.z, b.seed, t - b.t);
       else train.storm.bolt.value.set(0, 0, 0, 0);
     }
+  }
+}
+
+/** How hard the window light drives an SDF body's key, per unit of window-light intensity
+ *  (the key is lightCfg.x × spotCfg2.z in the dungeon; the beam's own gain is 4). */
+const BODY_WINDOW_GAIN = 0.08;
+const bodyBase = new WeakMap<object, { dir: THREE.Vector3; color: THREE.Color }>();
+
+type KeyUniforms = { lightDir?: { value: THREE.Vector3 }; keyColor?: { value: THREE.Color }; spotCfg2: { value: THREE.Vector4 } };
+
+/** The SDF bodies shade in the march and never see the window light: during a flash or a
+ *  sweep, turn their key toward it and raise its floor; restore the preset key after. Call
+ *  after spotCfg2 is written for the frame. */
+export function applyWindowKey(ctx: GameContext, u: KeyUniforms): void {
+  const s = ctx.world.light?.storm;
+  if (!u.lightDir || !u.keyColor) return;
+  const k = s ? s.intensity * BODY_WINDOW_GAIN : 0;
+  let base = bodyBase.get(u);
+  if (k > 0 && s) {
+    if (!base) { base = { dir: u.lightDir.value.clone(), color: u.keyColor.value.clone() }; bodyBase.set(u, base); }
+    u.lightDir.value.set(s.dir[0], s.dir[1], s.dir[2]);
+    u.keyColor.value.setRGB(s.color[0], s.color[1], s.color[2]);
+    u.spotCfg2.value.z += k;
+  } else if (base) {
+    u.lightDir.value.copy(base.dir);
+    u.keyColor.value.copy(base.color);
+    bodyBase.delete(u);
   }
 }
 
