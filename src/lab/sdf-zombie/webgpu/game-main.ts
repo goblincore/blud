@@ -83,7 +83,7 @@ import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
-import { SMG_TUNING, SOLDIER_TUNING } from '../soldier-brain';
+import { GUNNER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import type { Vec3 } from '../types';
@@ -140,7 +140,7 @@ import { createComputeTileBinding } from './tile-bin-compute';
 import { sdBody, smax, bodyPrimStride } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
-  GRAPESHOT, SLUG, expired, spawnPellets, spawnSlug,
+  GRAPESHOT, SLUG, expired, spawnPellets, spawnRound, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
 } from './game-weapon';
 import {
@@ -3176,9 +3176,9 @@ async function main() {
       boundedWounds: ctx.vfx.boundedWoundPreview,
       // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
       // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
-      // gun. Was `name === 'soldier'`.
+      // gun, the juggernaut's chaingun. Was `name === 'soldier'`.
       ...(characterEntry(name).profile.gunner ? {
-        mind: makeSoldierMind(characterEntry(name).profile.gunner!.weapon === 'smg' ? SMG_TUNING : SOLDIER_TUNING),
+        mind: makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
           ctx.world.encounter.shot(zombieId);
@@ -3190,9 +3190,12 @@ async function main() {
           // (2026-09-23 capture). The barrel still climbs on screen; the ROUNDS
           // keep the gun's heading (the brain's aim error, so bursts can miss
           // sideways) but take their vertical from the player's chest. The
-          // soldier's single shotgun round is unchanged.
+          // soldier's single shotgun round is unchanged. The juggernaut's
+          // chaingun gets the same treatment: its heading is the SWEEP (the
+          // slow turn the player outruns), its vertical the player's chest.
+          const weapon = characterEntry(name).profile.gunner?.weapon;
           let shotDir = dir;
-          if (characterEntry(name).profile.gunner?.weapon === 'smg') {
+          if (weapon === 'smg' || weapon === 'chaingun') {
             const pp = ctx.player.player.pos;
             const hx = dir[0], hz = dir[2], hl = Math.hypot(hx, hz) || 1;
             const dist = Math.hypot(pp[0] - muz[0], pp[2] - muz[2]);
@@ -3200,7 +3203,10 @@ async function main() {
             const l = Math.hypot(dist, rise) || 1;
             shotDir = [hx / hl * dist / l, rise / l, hz / hl * dist / l];
           }
-          ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
+          // The chaingun fires ONE round per trigger event (game-weapon.ts
+          // spawnRound); the shotgun and the tommy gun keep their volley.
+          if (weapon === 'chaingun') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
+          else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
       profile: characterEntry(name).profile,
@@ -3249,7 +3255,7 @@ async function main() {
     return actor;
   }
 
-  /** Height above the player's feet an enemy SMG round is aimed at (m). */
+  /** Height above the player's feet an enemy SMG or chaingun round is aimed at (m). */
   const SMG_TARGET_CHEST_Y = 1.25;
   const spawnOverride = ((): string | null => {
     const v = new URLSearchParams(location.search).get('spawn');
@@ -6772,7 +6778,7 @@ async function main() {
         for (const a of ctx.world.actors) {
           if (!a.character) continue;
           const p = a.pose();
-          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
+          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin());
         }
       }
       // The actor animation phase: wall-clock in play, the SIM CLOCK while a

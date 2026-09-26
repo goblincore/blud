@@ -10,8 +10,10 @@
   so a renamed variant keeps injury rules, kit breakoff, casings, footwork, collapse. No behaviour change.
 - [x] **Body + kit authored**: `juggernaut.blob` (soldier x 1.15, 1.3x shoulders, no hair) and `juggernaut-kit.wam`
   (power armour, sealed helmet, lenses, backpack). `?character=juggernaut`. [Notes](docs/dev-notes/2026-09-25-juggernaut/NOTES.md)
+- [x] **Chaingun**: TS-generated `juggernaut-chaingun.glb`, `heavy` hip carry (both hands pinned), `CHAINGUN_TUNING`
+  (0.9 s spin-up, 15-24 rounds at ~10/s, sweep, no strafe or back-off), single rounds, spinning barrels, brass casings.
 - [ ] **Blocked on WAM**: run `scripts/build-wam-kit.sh juggernaut` locally, then `juggernaut-kit.test.ts` (skips until then).
-  Then GPU frames for the owner look. Then chaingun (hip, spin-up, 15-25 round stream), absorbing plates, game spawn.
+  Then GPU frames for the owner look. Next: absorbing plates + helmet + stagger resistance (Task 4), game spawn (Task 5).
   [Spec](docs/superpowers/specs/2026-09-25-juggernaut-design.md) · [Plan](docs/superpowers/plans/2026-09-25-juggernaut.md)
 - [ ] *Next variant candidate:* Grenadier (gas mask, grenades flush last-known position, dodges dynamite).
 

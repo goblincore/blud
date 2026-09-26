@@ -958,6 +958,7 @@ export function stepMotion(
     carryTargetPose = {
       right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
+      gunYaw: mix(previous.gunYaw ?? 0, wanted.gunYaw ?? 0),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
       // A hand is on the prop or it is not — snap to the wanted carry's flag.
       ...(wanted.oneHanded ? { oneHanded: wanted.oneHanded } : {}),
@@ -984,6 +985,7 @@ export function stepMotion(
     const carry: CarrySpec = {
       right: { ...carryTargetPose.right },
       gunPitch: carryTargetPose.gunPitch,
+      gunYaw: carryTargetPose.gunYaw ?? 0,
       leftPole: [...carryTargetPose.leftPole],
       ...(carryTargetPose.oneHanded ? { oneHanded: carryTargetPose.oneHanded } : {}),
       ...(carryTargetPose.rightPole ? { rightPole: carryTargetPose.rightPole } : {}),
@@ -1026,7 +1028,9 @@ export function stepMotion(
       const fist = reachPast > 0
         ? add(targets[iH]!, scale(normalize(sub(targets[iH]!, targets[iE]!)), reachPast))
         : targets[iH]!;
-      gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale);
+      // gunYaw is OUTWARD-positive (carry.ts); world +y rotation toward +x is
+      // inward for this arm when inward = +1, hence the sign.
+      gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale, -inward * (carry.gunYaw ?? 0) * armPresence);
       // Keep the authored wrist/gun orientation, then swivel the elbow out
       // of the vest. The shoulder and grip do not move, nor do arm lengths.
       const rp = carry.rightPole;
@@ -1048,7 +1052,9 @@ export function stepMotion(
     // Left arm: FABRIK onto the fore-end, elbow poled outward.
     if (gun && !sig.missing.armL && !carry.oneHanded) {
       const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
-      const grip = gunPoint(gun, GUN_GRIP.foreHand);
+      // The prop's own support-hand locator when it has one (the chaingun's
+      // top carry handle), else the shared fore-end.
+      const grip = gunPoint(gun, profile.prop?.foreHand ?? GUN_GRIP.foreHand);
       let target = grip;
       if (soldierStagger.active && soldierStaggerSupport) {
         const base = add(targets[iS]!, rotateYaw(soldierStaggerSupport, bodyYaw));

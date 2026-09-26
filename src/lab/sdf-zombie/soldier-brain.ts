@@ -166,7 +166,9 @@ export const SOLDIER_TUNING = {
   /** Slack around preferredRange before he bothers closing (m). Stops a
    *  half-metre drift from starting a walk. */
   rangeSlack: 0.6,
-  /** Every uninterrupted burst has two shots; chance of adding a third. */
+  /** Shots every uninterrupted burst is guaranteed (was a literal 2). */
+  burstMin: 2,
+  /** Every uninterrupted burst has burstMin shots; chance of adding another. */
   burstChance: 0.65,
   /** Hard cap on follow-ups, so a burst is at most burstMax+1 shots.
    *
@@ -206,12 +208,24 @@ export const SOLDIER_TUNING = {
   meleeSwingSec: 0.7,
   meleeCooldownSec: 1.1,
   meleeContactPhase: 0.5,
+  /** Sidestep around the player between shots (the soldier's dance). false =
+   *  he only ever closes radially toward preferredRange, sidestepping only
+   *  round a blocked path (the juggernaut: a tank does not dance). */
+  strafe: true,
+  /** Back off inside tooClose. false = he holds his ground. */
+  retreat: true,
+  /** Follow-up rounds fire along wherever the gun points, without waiting for
+   *  his facing to settle on the player. The FIRST round of a burst still
+   *  waits for aimTolerance. true = the chaingun's sweep: a slow turn trails a
+   *  strafing player, and outrunning it is the dodge. */
+  sweepFire: false,
 } as const;
 
 /** SOLDIER_TUNING's shape with its numbers WIDENED (it is `as const`), so a
  *  second weapon (SMG_TUNING) can be a SoldierTuning with other values. */
 export type SoldierTuning = {
-  readonly [K in keyof typeof SOLDIER_TUNING]: (typeof SOLDIER_TUNING)[K] extends number ? number : (typeof SOLDIER_TUNING)[K];
+  readonly [K in keyof typeof SOLDIER_TUNING]: (typeof SOLDIER_TUNING)[K] extends number ? number
+    : (typeof SOLDIER_TUNING)[K] extends boolean ? boolean : (typeof SOLDIER_TUNING)[K];
 };
 
 /** The cultist's TOMMY GUN on the soldier's brain (2026-09-23). Same states,
@@ -230,6 +244,43 @@ export const SMG_TUNING: SoldierTuning = {
   recoverSec: 0.09,
   settleSec: 0.35,
   minCooldownSec: 1.1,
+};
+
+/** The juggernaut's CHAINGUN on the soldier's brain (spec
+ *  2026-09-25-juggernaut-design.md, "Behaviour"): plant and fire. The same
+ *  states and telegraph, with every knob pushed toward a tank:
+ *   - the aim telegraph is the SPIN-UP (0.9 s, the barrels visibly spinning),
+ *     the only warning before a stream;
+ *   - a burst is 15-24 rounds at ~10 rounds/s (followAim + recover + the fire
+ *     frame), and follow-ups sweep (sweepFire): with his 1.8 rad/s turn the
+ *     stream trails a strafing player instead of tracking him;
+ *   - then a spin-down beat and a long cooldown: the punish window;
+ *   - no strafing, no backing off; he closes to a long preferred range. */
+export const CHAINGUN_TUNING: SoldierTuning = {
+  ...SOLDIER_TUNING,
+  noticeRange: 10,
+  fireRange: 9.0,
+  preferredRange: 5.0,
+  rangeSlack: 1.0,
+  burstMin: 15,
+  burstMax: 23,
+  burstChance: 0.8,
+  aimSec: 0.9,
+  followAimSec: 0.04,
+  recoverSec: 0.05,
+  settleSec: 0.6,
+  minCooldownSec: 1.5,
+  refireRoll: 0.9,
+  strafe: false,
+  retreat: false,
+  sweepFire: true,
+};
+
+/** Brain tuning per gunner weapon (MotionProfile.gunner). */
+export const GUNNER_TUNING: Record<import('./motion-profile').GunnerWeapon, SoldierTuning> = {
+  shotgun: SOLDIER_TUNING,
+  smg: SMG_TUNING,
+  chaingun: CHAINGUN_TUNING,
 };
 
 export function makeSoldierBrain(): SoldierBrain {
@@ -366,7 +417,8 @@ export function stepSoldierBrain(
     const oneHand = missing.armL;
     const aimDuration = (burstShots > 0 ? tuning.followAimSec : tuning.aimSec) * (oneHand ? tuning.oneHandAimScale : 1);
     phaseT = Math.min(aimDuration, phaseT + dt);
-    if (phaseT < aimDuration || Math.abs(wrapPi(faceBearing - self.yaw)) > tuning.aimTolerance) {
+    const sweeping = tuning.sweepFire && burstShots > 0;
+    if (phaseT < aimDuration || (!sweeping && Math.abs(wrapPi(faceBearing - self.yaw)) > tuning.aimTolerance)) {
       return pack({
         halt: true, faceHeading: faceBearing, weaponUp: true,
         aimT: aimDuration > 0 ? phaseT / aimDuration : 1,
@@ -377,7 +429,7 @@ export function stepSoldierBrain(
     // Roll the follow-up HERE, as the shot lands, so a burst is decided by the
     // same event that fired it rather than by the next decision tick.
     burstShots += 1;
-    burstLeft = (burstShots < 2 || (burstShots <= tuning.burstMax && input.roll < tuning.burstChance)) ? 1 : 0;
+    burstLeft = (burstShots < tuning.burstMin || (burstShots <= tuning.burstMax && input.roll < tuning.burstChance)) ? 1 : 0;
     return pack({
       halt: true, faceHeading: faceBearing, weaponUp: true, fire: true, aimT: 1,
       aimError: oneHand ? (input.rollDrift * 2 - 1) * tuning.oneHandSpreadRad : 0,
@@ -461,11 +513,12 @@ export function stepSoldierBrain(
     return pack({ target: moveGoal, faceHeading: faceBearing });
   }
 
-  const crowded = dist < tuning.tooClose;
+  const crowded = tuning.retreat && dist < tuning.tooClose;
   const far = dist > tuning.preferredRange + tuning.rangeSlack;
   // Comfortable soldiers can hold a good firing position. A move is a
-  // decision, not the default every frame between shots.
-  if (!decision && !crowded && !far) return pack({ halt: true, faceHeading: faceBearing });
+  // decision, not the default every frame between shots. A non-strafing
+  // gunner (the juggernaut) never makes that decision: comfortable = planted.
+  if ((!decision || !tuning.strafe) && !crowded && !far) return pack({ halt: true, faceHeading: faceBearing });
 
   const candidate = (side: number): Vec3 => {
     const radial = crowded ? -1 : far ? 1 : 0;

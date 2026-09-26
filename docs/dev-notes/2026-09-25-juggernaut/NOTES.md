@@ -66,3 +66,63 @@ Plan: `docs/superpowers/plans/2026-09-25-juggernaut.md`, Task 2.
   the plan names; that is the owner's pick once there are frames.
 
 ![body vs soldier](body-vs-soldier.png)
+
+# Task 3 — the chaingun, 2026-09-26
+
+## The prop
+
+`scripts/make-juggernaut-chaingun.ts` writes `juggernaut-chaingun.glb` (336
+triangles). It is a small glTF writer, not a Blender script: Blender is not
+in the cloud container, and a rotary gun is only boxes and cylinders. Re-run
+it with `npx tsx scripts/make-juggernaut-chaingun.ts`. The locators are:
+
+- Grip_Hand and Muzzle: `GUN_GRIP`'s.
+- Fore_Hand: the top carry handle (0, 0.11, 0), not the shared fore-end.
+
+Preview (CPU raster of the .glb, rough shading: brass reads too bright):
+
+![chaingun](chaingun.png)
+
+## The hold: why a new carry, a wrist yaw, and a foreHand override
+
+The rounds fly along the gun's forward axis (game-actor.ts onFire), so the
+hip hold must point the muzzle where he faces. A grid search over carry
+angles on his rest rig used `armPivot` and `gunPoseFromArm`, as motion.ts
+does, and ruled out two things:
+
+- **Forearm straight ahead, gun at the right hip, shared fore-end:** the left
+  hand falls short by 4% at best. It has to reach 0.44 m across and 0.6 m
+  forward.
+- **The same with a wrist yaw:** every solution dragged the right fist across
+  to his LEFT side.
+
+What works is the minigun hold: the support hand on a TOP CARRY HANDLE near
+the grip (`prop.foreHand`), plus a cocked wrist. The forearm yaws 0.40 in and
+`gunYaw` 0.30 back out. Solved values: pitch 0.10, yaw 0.40, fold 1.00,
+gunPitch 0.40, gunYaw 0.30, prop scale 1.45. In that pose:
+
+- the fist sits at his right hip (-0.17, 1.37, 0.36);
+- the muzzle is 0.5° off his facing and 3° up;
+- the left hand reaches the handle at 91% of its arm length;
+- the barrel clears his torso by 3.8 cm.
+
+`juggernaut-blob.test.ts` pins it through the real motion pipeline, walking
+and standing:
+
+- the grip within 2 cm of the fist;
+- the left hand within 3 cm of the handle;
+- the muzzle within 7° of his facing.
+
+## Behaviour (CHAINGUN_TUNING, soldier-brain.ts)
+
+He runs on the soldier's brain with four new tuning flags, which the soldier
+leaves at his old behaviour:
+
+- `strafe: false`: comfortable means planted, with no drift moves.
+- `retreat: false`: he never backs off.
+- `sweepFire: true`: follow-up rounds do not wait for his facing, so the
+  stream trails a strafing player at his 1.8 rad/s turn.
+- `burstMin: 15`: the burst length is 15-24.
+
+The spin-up is the aim telegraph (0.9 s). Barrel spin follows the mind's
+state (`barrel-spin.ts`), so the barrels are at speed before the first round.

@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -35,6 +35,11 @@ export interface CarrySpec {
   right: CarryArm;
   /** Muzzle pitch off the forearm direction (rad, positive = up). */
   gunPitch: number;
+  /** Muzzle yaw off the forearm direction (rad, positive = OUTWARD, away
+   *  from the midline): a cocked wrist. Lets the forearm angle in across the
+   *  body, so the support hand can reach the fore-end, while the gun still
+   *  points ahead (the juggernaut's hip-fire `heavy` carry). Absent = 0. */
+  gunYaw?: number;
   /** Body-local pole for the left elbow's IK (outward and down). */
   leftPole: Vec3;
   /** ONE-HANDED: the left hand is NOT solved onto the prop's fore locator; it
@@ -98,6 +103,18 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // showed as a 7 cm gap between fist and handle. ogre-blob.test.ts pins the
   // trail and the grip. The left arm is free and swings.
   drag:  { right: { pitch: -1.05, yaw: 0.20, fold: 0.65 }, gunPitch: -0.85, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.35 }, rightPole: [0.2, 0, -1] },
+  // HEAVY — the juggernaut's hip-fired chaingun (juggernaut.blob +
+  // juggernaut-chaingun.glb at prop scale 1.45), in every state: he walks
+  // and fires from the same hold. Grid-solved on his rest rig (2026-09-25,
+  // docs/dev-notes/2026-09-25-juggernaut/NOTES.md) for: the rear grip at his
+  // right hip (fist ~(-0.17, 1.37, 0.36)), the muzzle pointing where he faces
+  // (0.5 deg off, 3 deg up; the rounds fly along it, so a skewed hold would
+  // miss by design), the barrel clear of his torso, and the left hand on the
+  // TOP CARRY HANDLE (the prop's foreHand override) at 91% of arm reach.
+  // `hip` could not do it: its forearm points across the body, and a forearm
+  // pointed ahead leaves the handle out of reach. The fix is the cocked wrist:
+  // the forearm angles in (yaw 0.40) and the gun yaws back out (gunYaw 0.30).
+  heavy: { right: { pitch: 0.10, yaw: 0.40, fold: 1.00 }, gunPitch: 0.40, gunYaw: 0.30, leftPole: [0.6, -0.5, 0.1] },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from
@@ -135,10 +152,13 @@ export function lookQuat(fwd: Vec3, up: Vec3): Quat {
 }
 
 /** The gun's world pose from the right forearm: Grip_Hand on `hand`, muzzle
- *  along elbow→hand pitched by `gunPitch` about `bodyRight`. */
-export function gunPoseFromArm(elbow: Vec3, hand: Vec3, bodyRight: Vec3, gunPitch: number, size = 1): GunPose {
+ *  along elbow→hand pitched by `gunPitch` about `bodyRight`, then yawed by
+ *  `gunYaw` about world up (+ swings the muzzle toward +x; motion.ts passes
+ *  the carry's outward yaw with the arm's side sign). */
+export function gunPoseFromArm(elbow: Vec3, hand: Vec3, bodyRight: Vec3, gunPitch: number, size = 1, gunYaw = 0): GunPose {
   const fwd0 = normalize(sub(hand, elbow));
-  const fwd = gunPitch === 0 ? fwd0 : qRotate(qFromAxisAngle(bodyRight, -gunPitch), fwd0);
+  const pitched = gunPitch === 0 ? fwd0 : qRotate(qFromAxisAngle(bodyRight, -gunPitch), fwd0);
+  const fwd = gunYaw === 0 ? pitched : qRotate(qFromAxisAngle([0, 1, 0], gunYaw), pitched);
   const quat = lookQuat(fwd, [0, 1, 0]);
   const root = sub(hand, qRotate(quat, scale(GUN_GRIP.gripHand, size)));
   return { root, quat, scale: size };

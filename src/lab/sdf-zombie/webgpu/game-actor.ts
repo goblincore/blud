@@ -53,6 +53,7 @@ import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { isSoldierFamily, type MotionProfile } from '../motion-profile';
+import { BARREL_REST, barrelsDriven, stepBarrelSpin, type BarrelSpin } from '../barrel-spin';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
@@ -392,6 +393,9 @@ export interface ZombieActor {
   motionFrame: () => MotionFrame | null;
   /** Seconds since this body last fired. Feeds the held prop's muzzle rise. */
   sinceFire: () => number;
+  /** The chaingun's barrel angle (rad; barrel-spin.ts), 0 for every other
+   *  weapon. Feeds the held prop's `Barrels` node. */
+  barrelSpin: () => number;
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
@@ -742,6 +746,9 @@ export function createZombieActor(opts: {
     routeCache.age+=dt;return nav.follow(state.wander.pos,routeCache.path);
   };
   let lastFrame: ReturnType<typeof stepMotion>['frame'] | null = null;
+  // The chaingun's spin follows the mind's state (barrel-spin.ts header).
+  const spins = opts.profile?.gunner?.weapon === 'chaingun';
+  let barrel: BarrelSpin = BARREL_REST;
 
   // Heavy-hit choreography state (blast-profile hits — the slug): the ROOT
   // knock. Knocked back along the shot's ground-plane direction from
@@ -1382,6 +1389,7 @@ export function createZombieActor(opts: {
     if (woundRing.all().length) {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
+    if (spins) barrel = stepBarrelSpin(barrel, !lastFrame?.collapsed && barrelsDriven(mind.debug().state), dt);
     posed = applyRig(current, bound, bodyYaw);
     if (headPop && swellDur > 0) {
       swellClock += dt;
@@ -1845,6 +1853,7 @@ export function createZombieActor(opts: {
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
+    barrelSpin: () => barrel.angle,
     boundRig: () => bound,
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
     nudge,

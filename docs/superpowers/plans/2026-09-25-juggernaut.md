@@ -76,19 +76,30 @@ Notes: `docs/dev-notes/2026-09-25-juggernaut/NOTES.md`.
 - [ ] GPU frames next to the soldier (front, side, 3/4, walk); STOMP vs slowed
   MARCH, owner's pick. A CPU flesh-only comparison is in the notes.
 
-## Task 3 — Chaingun, single rounds, CHAINGUN_TUNING
+## Task 3 — Chaingun, single rounds, CHAINGUN_TUNING — done 2026-09-26
 
-- [ ] `scripts/make-juggernaut-chaingun.py` -> `juggernaut-chaingun.glb` on the
-  `GUN_GRIP` locators, with a named barrel-cluster node for spin.
-- [ ] `hip` carry for all three states; check the left-hand IK reaches the carry handle.
-- [ ] Widen `gunner.weapon` to include `'chaingun'`; game-main picks `CHAINGUN_TUNING`.
-- [ ] `strafe: false` tuning flag: engage only closes radially toward
-  preferredRange and never backs off. Brain tests: no lateral goal, never
-  retreats, and a burst of 15 or more rounds.
-- [ ] Single-round projectile (one pellet per shot) for `'chaingun'` ONLY. The
-  cultist's SMG keeps its 8-pellet rounds (owner, 2026-09-25).
-- [ ] Spin-up: barrel spin rate driven by brain state (aim, fire, settle) as
-  plain data, applied by the view. Placeholder whine and brass casings.
+Notes: `docs/dev-notes/2026-09-25-juggernaut/NOTES.md` ("Task 3").
+
+- [x] `scripts/make-juggernaut-chaingun.ts` -> `juggernaut-chaingun.glb`. It is
+  a TS glTF writer, not Blender (Blender is not available in the cloud
+  session). Six barrels on a `Barrels` node, receiver, motor, pistol grip, top
+  carry handle, brass feed stub.
+- [x] New `heavy` carry, grid-solved on the juggernaut rig, plus `CarrySpec.gunYaw`
+  (a cocked wrist) and `prop.foreHand` (the top carry handle). The shared
+  fore-end was out of reach in every forward-pointing hip hold.
+- [x] `GunnerWeapon` gains `'chaingun'`; `GUNNER_TUNING` maps weapon to tuning (game-main).
+- [x] Brain flags `strafe` / `retreat` / `sweepFire` / `burstMin` (the soldier's
+  values reproduce the old behaviour); `CHAINGUN_TUNING`: 0.9 s spin-up, 15-24
+  rounds at ~10/s, sweep, 0.6 s spin-down, 1.5 s cooldown, no strafe or back-off.
+- [x] `spawnRound`: one round per trigger event for `'chaingun'` ONLY. The
+  cultist's SMG keeps its 8-pellet rounds (owner, 2026-09-25). Rounds keep the
+  gun's heading (the sweep) and take their pitch from the player's chest.
+- [x] Barrel spin: `barrel-spin.ts` (pure), driven by the mind's aim, fire and
+  recover states, so it winds up before the first round. The actor steps it
+  and `held-prop` spins the `Barrels` node. Brass casings (256-slot pool).
+- [ ] Audio (spin-up whine, stream, spin-down): none yet, same as the cultist SMG.
+- [ ] GPU frames of the hold and the spin (the carry is solved and pinned
+  headless; nobody has seen it rendered).
 
 ## Task 4 — Armour that works + helmet + stagger resistance
 

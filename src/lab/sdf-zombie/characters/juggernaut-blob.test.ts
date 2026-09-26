@@ -19,6 +19,12 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { checkStance, clearOf, daylightOf, fusedOf, strandedOf } from '../blob-checks';
+// @ts-expect-error — node:fs available in vitest (silhouette.test.ts's pattern)
+import { readFileSync } from 'node:fs';
+import { JUGGERNAUT_PROFILE } from '../motion-profile';
+import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
+import { makeRng } from '../wander';
+import { GUN_GRIP, gunPoint } from '../carry';
 
 const doc = parseBlob(src);
 const soldierDoc = parseBlob(soldierSrc);
@@ -104,5 +110,61 @@ describe('juggernaut.blob', () => {
       const gap = strandedOf(jug, c);
       if (gap !== null) expect(gap, `${c.limb} has a stranded prim`).toBeLessThan(0.005);
     }
+  });
+});
+
+// THE CHAINGUN HOLD (carry.ts `heavy`), through the real motion pipeline:
+// the rear grip in the right fist, the left hand on the TOP CARRY HANDLE (the
+// prop's foreHand override), and the muzzle pointing where he faces, because
+// the rounds fly along it (game-actor.ts onFire).
+describe('juggernaut chaingun hold', () => {
+  // Read off disk from the repo root (vitest's cwd), as silhouette.test.ts
+  // and others do: Vite has no asset handling for .glb in a glob import.
+  const GLB = 'public/assets/lab/juggernaut-chaingun.glb';
+
+  it('ships the chaingun prop with its locators where the profile and GUN_GRIP say', () => {
+    const bytes = readFileSync(GLB) as Uint8Array;
+    const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + new DataView(bytes.buffer, bytes.byteOffset).getUint32(12, true)))) as { nodes: { name: string; translation?: number[] }[] };
+    const at = (n: string) => json.nodes.find(x => x.name === n)!.translation!;
+    for (let k = 0; k < 3; k++) {
+      expect(at('Grip_Hand')[k]).toBeCloseTo(GUN_GRIP.gripHand[k]!, 5);
+      expect(at('Muzzle')[k]).toBeCloseTo(GUN_GRIP.muzzle[k]!, 5);
+      expect(at('Fore_Hand')[k]).toBeCloseTo(JUGGERNAUT_PROFILE.prop!.foreHand![k]!, 5);
+    }
+    expect(json.nodes.some(n => n.name === 'Barrels')).toBe(true);
+  });
+
+  it.each([['walking', JUGGERNAUT_PROFILE.cruise], ['standing', 0]] as const)('%s: both hands on the gun, muzzle ahead', (_, speed) => {
+    const m = makeActorMotion(jug, { seed: 7 });
+    const rng = makeRng(7);
+    const J = m.motionJoints!.index;
+    let grip = 0, fore = 0, yawErr = 0, pitch = 0, n = 0;
+    for (let i = 0; i < 240; i++) {
+      const f = stepActorMotion(m, {
+        current: jug, dt: 1 / 60, wander: speed > 0, armStyle: undefined,
+        headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+        rng, signals: emptyActorSignals(), profile: JUGGERNAUT_PROFILE, forceSpeed: speed,
+      })!;
+      expect(f.carry).toBe('heavy');
+      if (i < 60) continue; // the verlet settles into the carry
+      const pts = m.bound.rig.points;
+      const d = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+      grip += d(pts[J.handR!]!.pos, gunPoint(f.gun!, GUN_GRIP.gripHand));
+      fore += d(pts[J.handL!]!.pos, gunPoint(f.gun!, JUGGERNAUT_PROFILE.prop!.foreHand!));
+      const a = gunPoint(f.gun!, [0, 0, 0]), b = gunPoint(f.gun!, [0, 0, 1]);
+      const dir = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(dir[0]!, dir[1]!, dir[2]!);
+      const wrap = (x: number) => Math.atan2(Math.sin(x), Math.cos(x));
+      yawErr = Math.max(yawErr, Math.abs(wrap(Math.atan2(dir[0]!, dir[2]!) - f.bodyYaw)));
+      pitch = Math.max(pitch, Math.abs(Math.asin(dir[1]! / l)));
+      n++;
+    }
+    // The grip seats on the wrist (the soldier-family 2 cm rule); the left
+    // hand is a FABRIK solve onto the handle, allowed 3 cm.
+    expect(grip / n).toBeLessThan(0.02);
+    expect(fore / n).toBeLessThan(0.03);
+    // Where he faces, within ~7 deg in yaw across the stride, and roughly
+    // level (the rounds take their vertical from the player's chest anyway).
+    expect(yawErr).toBeLessThan(0.12);
+    expect(pitch).toBeLessThan(0.2);
   });
 });

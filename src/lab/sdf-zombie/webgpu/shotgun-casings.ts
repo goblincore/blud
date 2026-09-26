@@ -30,13 +30,17 @@ interface Shell {
 
 /** Cosmetic only: no collision-system registration or raycast targets. Oldest
  * shells recycle at capacity; settled shells cost no simulation or uploads. */
-export function createShotgunCasings(capacity = 128) {
+/** `hullColor` recolours the hull: the juggernaut's chaingun throws BRASS
+ *  (0xc8963c), not red shotgun shells, and at ~10 rounds/s it wants a bigger
+ *  pool (character-view.ts). Defaults are the soldier's shells. */
+export function createShotgunCasings(capacity = 128, hullColor = 0xc53424) {
   const object = new THREE.Group();
   object.name = 'spent-shotgun-shells';
   const hullGeometry = new THREE.CylinderGeometry(.011, .011, .04, 8);
   const brassGeometry = new THREE.CylinderGeometry(.012, .012, .009, 8);
   brassGeometry.translate(0, -.0245, 0);
-  const hullMaterial = new THREE.MeshStandardMaterial({ color: 0xc53424, roughness: .72 });
+  const hullMaterial = new THREE.MeshStandardMaterial(hullColor === 0xc53424
+    ? { color: hullColor, roughness: .72 } : { color: hullColor, metalness: .35, roughness: .48 });
   const brassMaterial = new THREE.MeshStandardMaterial({ color: 0xe5b755, metalness: .35, roughness: .48 });
   const meshes = [
     new THREE.InstancedMesh(hullGeometry, hullMaterial, capacity),

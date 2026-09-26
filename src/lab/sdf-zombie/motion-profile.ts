@@ -7,6 +7,11 @@
 import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
+import type { Vec3 } from './types';
+
+/** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
+ *  brain tuning; game-main's onFire picks the round). */
+export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun';
 
 export interface MotionProfile {
   name: string;
@@ -34,13 +39,16 @@ export interface MotionProfile {
    *  that far PAST the wrist along the forearm — the rig's hand joint is the
    *  WRIST (forearm tail), so a character whose fist is a long hand bone (the
    *  ogre's 0.15 m, fist centred at its midpoint) otherwise holds the handle
-   *  inside its forearm. The soldier's short hand never showed it. */
-  prop?: { url: string; scale?: number; gripReach?: number };
+   *  inside its forearm. The soldier's short hand never showed it.
+   *  `foreHand` (prop-local, like carry.ts GUN_GRIP) replaces the shared
+   *  fore-end as the support hand's target: the juggernaut's chaingun is held
+   *  by its top carry handle (make-juggernaut-chaingun.ts). */
+  prop?: { url: string; scale?: number; gripReach?: number; foreHand?: Vec3 };
   /** A RANGED enemy: the game gives it the soldier's shooting brain
    *  (enemy-mind.ts makeSoldierMind) with this weapon's tuning, and its
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
-  gunner?: { weapon: 'shotgun' | 'smg' };
+  gunner?: { weapon: GunnerWeapon };
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -195,10 +203,8 @@ export const CULTIST_PROFILE: MotionProfile = {
 /** The juggernaut: the soldier's power-armoured chaingunner variant
  *  (docs/superpowers/specs/2026-09-25-juggernaut-design.md). A soldier-family
  *  member (family inherited), so every soldier system applies. Only what
- *  makes him a TANK differs: slower, heavier turn, and he never breaks into a
- *  run. Task 2 of the plan: the body + kit. He still carries the soldier's
- *  shotgun (scaled to his hand) until the chaingun prop, the `hip` carry and
- *  CHAINGUN_TUNING land in Task 3. */
+ *  makes him a TANK differs: slower, heavier turn, never runs, and a
+ *  hip-fired chaingun on CHAINGUN_TUNING (soldier-brain.ts). */
 export const JUGGERNAUT_PROFILE: MotionProfile = {
   ...SOLDIER_PROFILE,
   name: 'juggernaut',
@@ -211,9 +217,13 @@ export const JUGGERNAUT_PROFILE: MotionProfile = {
   // Spec table: ~1.8 rad/s against the soldier's 5.5. The slow sweep IS the
   // dodge: a strafing player outruns his aim.
   turnRate: 1.8,
-  // Placeholder until Task 3: the soldier's shotgun x 1.15 (his hand is
-  // 1.15x the soldier's, so the grip seats the same way).
-  prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.38 },
+  // One hold for everything (carry.ts `heavy`): the gun never leaves the hip.
+  carries: { walk: 'heavy', run: 'heavy', fire: 'heavy' },
+  // scripts/make-juggernaut-chaingun.ts. Scale 1.45: muzzle ~0.6 m past the
+  // grip, a gun sized to a 2.3 m man; the `heavy` solve used this scale.
+  // foreHand: the TOP CARRY HANDLE, prop-local (the .glb's Fore_Hand node).
+  prop: { url: '/assets/lab/juggernaut-chaingun.glb', scale: 1.45, foreHand: [0, 0.110, 0] },
+  gunner: { weapon: 'chaingun' },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {
