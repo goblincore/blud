@@ -69,10 +69,26 @@ the weapon to aim the slam.
 | Heavy stroke | 0.28 s |
 | Heavy recover | 0.50 s |
 
-During the spin the handle traces a small circle above the head and the censer head orbits
-overhead. The stroke's handle path is a smoothstepped arc: from 0.32 m on the weapon's side to 0.32 m
-on the far side along the stroke direction, bulging 0.18 m forward at its middle, with the first 30%
-blending in from wherever the handle was (so a release mid-spin does not pop).
+**Revised 2026-09-26 (swing power).** The first cut (a 0.64 m smoothstepped sweep, a 10 cm spin
+circle) measured tap 2.9 and heavy 2.5 m/s in the pure model; a flail's speed comes from rotation.
+Now (`CENSER_SWING` in `censer-swing.ts`):
+
+- **Stroke:** the handle swings on an arc about a shoulder pivot (level with the eye plane, 20 cm
+  under the eye, off the right shoulder; radius 0.57 m) in the plane of the stroke direction and
+  forward — a tap sweeps 146° (−61° → +85°), ramps up fast, cruises, and brakes over its last 12% so
+  the head whips past the stopped hand. The chain stays reeled in while the hand gets the head
+  moving and pays out through the cruise (paying out first leaves it slack and costs ~2 m/s). The
+  hand holds its follow-through for half the recover so the whip plays out in front.
+- **Spin:** the hand first chokes up on the chain, then whirls a 23 cm circle **in the stroke
+  plane** (a windmill, same sense as the stroke; the plane follows the aim at ≤ 5 rad/s) at
+  1.2 → 2.9 Hz, paying the chain out so the head flies onto a wide orbit (10+ m/s by full charge).
+  A small hand circle alone never gets there: driven above the pendulum's natural frequency the head
+  settles into a small anti-phase wobble.
+- **Heavy:** an 85° arc with the wind-up circle carried on under it and fading out, so a release at
+  any spin phase keeps the orbit's speed; partial charges blend the tap's arc into the heavy's.
+- The handle never exceeds the 3.5 cm-per-240 Hz-step pop bound (≈ 8.4 m/s); the extra speed is
+  the chain's. Pure-model peaks: tap 13, half 16, full 21 m/s (15–21 over the release phase),
+  fastest 1.1–1.4 m in front of the eye.
 
 ### 3.3 Impact
 

@@ -27,8 +27,16 @@
 //
 // A release just past holdSec enters `stroke` with `heavy: true` but
 // `charge` ≈ 0: it runs on heavy timings (heavyStrokeSec/heavyRecoverSec) yet
-// lands with a near-tap impact. Hit impact should scale with `charge`, never
-// with the `heavy` flag alone.
+// lands with a near-tap impact (its arc is the tap's shape — shapeOf blends
+// by charge). Hit impact should scale with `charge`, never with the `heavy`
+// flag alone.
+//
+// POWER (tuned in the pure model, censer-swing.test.ts "head speed"): the
+// handle swings on an arc about a shoulder pivot and brakes at the end so the
+// head whips past it; the wind-up chokes up on the chain, whirls the head in
+// the stroke plane and pays the chain out so it orbits; the heavy stroke
+// carries that orbit into its arc. The handle never exceeds the pop bound
+// (3.5 cm per 240 Hz step); all the extra speed is the chain's.
 
 import type { Vec3 } from '../types';
 import { FREE_AIM, type AimPoint } from './free-aim';
@@ -44,18 +52,71 @@ export const CENSER_SWING = {
   heavyRecoverSec: 0.5,
   /** Dead-zone radius (dead-zone units) inside which the default diagonal takes over. */
   centreRadius: 0.25,
-  /** The stroke sweeps from −halfSpan to +halfSpan along its direction, metres. */
-  strokeHalfSpan: 0.32,
-  /** Forward (−z) bulge at the middle of the stroke, metres. */
-  strokeReach: 0.18,
-  /** Fraction of the stroke spent blending in from the pose it started at. */
-  leadFrac: 0.3,
-  /** The wind-up: the handle rises this far and circles at this radius. */
-  spinLift: 0.22,
-  spinRadius: 0.1,
+  /** THE ARC. A flail's speed comes from rotation, so a stroke swings the
+   *  handle on a circle about a SHOULDER PIVOT — offset from the handle's rest,
+   *  view metres: level with the eye plane, 20 cm under the eye, off the right
+   *  shoulder — in the plane spanned by the stroke direction and forward (−z).
+   *  Angle 0 is straight forward of the pivot (≈ the rest grip); negative is
+   *  the weapon's side. The handle is capped by the 3.5 cm-per-240 Hz-step pop
+   *  bound (≈ 8.4 m/s); the head outruns it by riding a wider circle, then
+   *  whipping past when the arc brakes. */
+  arcPivot: [0, -0.035, 0.44] as readonly [number, number, number],
+  arcRadius: 0.57,
+  /** A tap from rest: a 146° arc. The chain stays REELED IN (reelRest) while
+   *  the arc gets the head moving with the hand, and pays out through the
+   *  cruise so the head flies out onto the wide circle — paying out first
+   *  leaves it slack and costs ~2 m/s (measured). */
+  tap: {
+    /** Start/end angles of the arc, radians. */
+    arc: [(-61 * Math.PI) / 180, (85 * Math.PI) / 180] as readonly [number, number],
+    /** Angular speed ramps up over [0, accelEnd], cruises, then brakes to a
+     *  stop over the last brakeFrac: the head whips past the stopped hand. */
+    accelEnd: 0.14,
+    brakeFrac: 0.12,
+    /** Fraction of the stroke spent blending in from the pose it started at. */
+    lead: 0.42,
+    /** Stroke fractions over which the chain pays out to full. */
+    payout: [0.39, 0.77] as readonly [number, number],
+  },
+  /** A full-charge heavy: the head is already orbiting, so a shorter 85° arc,
+   *  driven while the wind-up circle carries on under it (spinFade). Partial
+   *  charges blend tap → heavy by charge^shapeCurve (shapeOf). */
+  heavy: {
+    arc: [(-35 * Math.PI) / 180, (50 * Math.PI) / 180] as readonly [number, number],
+    accelEnd: 0.13,
+    brakeFrac: 0.2,
+    lead: 0.58,
+    payout: [0, 0.65] as readonly [number, number],
+    /** Stroke fraction over which the carried wind-up circle fades out. */
+    spinFade: 1,
+  },
+  shapeCurve: 1.2,
+  /** Fraction of a recover the hand holds its follow-through (so the whip
+   *  plays out in front) before it returns to rest. */
+  recoverHold: 0.48,
+  /** THE WIND-UP: the handle rises and goes forward (spinLift, spinFwd) and
+   *  circles IN THE STROKE PLANE, turning the way the stroke does, so the head
+   *  orbits as a windmill and a release at any phase adds to it. */
+  spinLift: 0.13,
+  spinFwd: 0.17,
+  /** Handle circle radius at the start of the wind-up and at full charge. */
+  spinRadius0: 0.24,
+  spinRadius: 0.23,
   spinLiftSec: 0.15,
   spinHzMin: 1.2,
-  spinHzMax: 2.6,
+  spinHzMax: 2.9,
+  /** How fast the spin plane follows the weapon's drift, rad/s (no pops). */
+  spinSteer: 5,
+  /** CHOKE UP. A small hand circle driven open-loop above the pendulum's
+   *  natural frequency settles into a small ANTI-phase wobble (measured ~2 m/s),
+   *  never an orbit. So the wind-up first shortens the chain (a reel fraction;
+   *  negative = shorter than reelRest) so the head is carried round WITH the
+   *  hand, then pays it out over [spinPayoutStart, spinPayoutSec] s: the head
+   *  flies out onto a wide in-phase orbit already moving the right way. */
+  spinChoke: -0.11,
+  spinChokeSec: 0.1,
+  spinPayoutStart: 0.11,
+  spinPayoutSec: 0.46,
   /** Travel angle of the centred stroke: upper right → lower left. */
   defaultAngle: Math.atan2(-1, -1),
   /** A fresh press landing this close to the end of a recover is remembered
@@ -66,10 +127,6 @@ export const CENSER_SWING = {
    *  full length for the wind-up and the strokes and reels back in during the
    *  recover (ropeLength). */
   reelRest: 0.17,
-  /** Fraction of a stroke over which the chain pays out to full length when
-   *  the stroke starts reeled in (a tap). Longer than leadFrac: at leadFrac a
-   *  tap's 0.38 m pay-out runs just over the 3.5 cm-per-240 Hz-step pop bound. */
-  payoutFrac: 0.4,
 } as const;
 
 export type CenserPhase = 'idle' | 'pending' | 'windup' | 'stroke' | 'recover';
@@ -86,14 +143,21 @@ export interface CenserSwing {
   heavy: boolean;
   /** Unit direction of travel of the current (or last) stroke. */
   dir: Dir2;
-  /** Wind-up spin angle, radians. */
+  /** Wind-up spin angle, radians, in the stroke plane (0 = forward, −π/2 = the weapon's side). */
   spin: number;
+  /** The wind-up's plane: a stroke direction that follows strokeDirection(offset) at spinSteer rad/s. */
+  spinDir: Dir2;
   /** Increments at every stroke start — the hit ledger's key. */
   strokeId: number;
   /** Handle pose when the stroke started; blended out over leadFrac. */
   from: Vec3;
   /** Rope pay-out (0 = reelRest, 1 = full) when the stroke started; blended out over leadFrac. */
   fromReel: number;
+  /** The wind-up circle carried into a heavy stroke: its radius and rate at
+   *  release (0 for a tap). The handle keeps circling, fading out over
+   *  heavy.spinFade, so the head's orbit is not stopped dead by the release. */
+  carryR: number;
+  carryHz: number;
   /** The button state as of the last step. idle→pending needs the RISING
    *  EDGE (down && !wasDown), not just "down" — otherwise a button held
    *  through a cancel, or held from before a recover finishes, would
@@ -120,7 +184,7 @@ export function makeCenserSwing(): CenserSwing {
   const a = CENSER_SWING.defaultAngle;
   return {
     phase: 'idle', t: 0, charge: 0, heavy: false,
-    dir: { x: Math.cos(a), y: Math.sin(a) }, spin: 0, strokeId: 0, from: ZERO, fromReel: 0,
+    dir: { x: Math.cos(a), y: Math.sin(a) }, spin: 0, spinDir: { x: Math.cos(a), y: Math.sin(a) }, strokeId: 0, from: ZERO, fromReel: 0, carryR: 0, carryHz: 0,
     wasDown: false, buffered: false,
   };
 }
@@ -150,16 +214,63 @@ export const strokeSec = (heavy: boolean): number =>
 export const recoverSec = (heavy: boolean): number =>
   heavy ? CENSER_SWING.heavyRecoverSec : CENSER_SWING.tapRecoverSec;
 
-function strokePath(dir: Dir2, u: number): Vec3 {
-  const S = CENSER_SWING;
-  const along = lerp(-S.strokeHalfSpan, S.strokeHalfSpan, u);
-  return [dir.x * along, dir.y * along, -S.strokeReach * Math.sin(Math.PI * u)];
+/** A point `r` out from the origin at `ang` in the plane of `dir` and forward (−z). */
+const inPlane = (dir: Dir2, ang: number, r: number): Vec3 =>
+  [r * Math.sin(ang) * dir.x, r * Math.sin(ang) * dir.y, -r * Math.cos(ang)];
+
+/** ∫₀ˣ smoothstep = x³ − x⁴/2. */
+const smoothInt = (x: number) => x * x * x - (x * x * x * x) / 2;
+
+interface StrokeShape {
+  arc: readonly [number, number]; accelEnd: number; brakeFrac: number; lead: number;
+  payout: readonly [number, number];
 }
 
-function spinPose(t: number, spin: number): Vec3 {
+/** A stroke's shape: the tap's, blending into the heavy's with charge (a
+ *  release just past holdSec swings like a tap; a full charge like a heavy). */
+function shapeOf(s: CenserSwing): StrokeShape {
+  const T = CENSER_SWING.tap, H = CENSER_SWING.heavy;
+  if (!s.heavy) return T;
+  const k = Math.pow(s.charge, CENSER_SWING.shapeCurve);
+  return {
+    arc: [lerp(T.arc[0], H.arc[0], k), lerp(T.arc[1], H.arc[1], k)],
+    accelEnd: lerp(T.accelEnd, H.accelEnd, k),
+    brakeFrac: lerp(T.brakeFrac, H.brakeFrac, k),
+    lead: lerp(T.lead, H.lead, k),
+    payout: [lerp(T.payout[0], H.payout[0], k), lerp(T.payout[1], H.payout[1], k)],
+  };
+}
+
+/** The arc's progress 0..1 at stroke time u: angular speed smoothly ramps up
+ *  over [0, accelEnd], cruises, then brakes to zero over the last brakeFrac
+ *  (the velocity profile is smoothstepped at both ends, so the pose is C²). */
+function arcProgress(u: number, K: StrokeShape): number {
+  const a = K.accelEnd, br = K.brakeFrac, b = 1 - br;
+  const total = 0.5 * a + (b - a) + 0.5 * br;
+  const x = clamp01(u);
+  let w: number;
+  if (x < a) w = a * smoothInt(x / a);
+  else if (x <= b) w = 0.5 * a + (x - a);
+  else { const y = (x - b) / br; w = 0.5 * a + (b - a) + br * (y - smoothInt(y)); }
+  return w / total;
+}
+
+function strokePath(dir: Dir2, K: StrokeShape, u: number): Vec3 {
+  const S = CENSER_SWING;
+  const [a0, a1] = K.arc;
+  const p = inPlane(dir, lerp(a0, a1, arcProgress(u, K)), S.arcRadius);
+  return [S.arcPivot[0] + p[0], S.arcPivot[1] + p[1], S.arcPivot[2] + p[2]];
+}
+
+const spinRadiusAt = (t: number, charge: number): number =>
+  lerp(CENSER_SWING.spinRadius0, CENSER_SWING.spinRadius, charge) * smooth(0, CENSER_SWING.spinLiftSec, t);
+const spinHzAt = (charge: number): number => lerp(CENSER_SWING.spinHzMin, CENSER_SWING.spinHzMax, charge);
+
+function spinPose(t: number, spin: number, dir: Dir2, charge: number): Vec3 {
   const S = CENSER_SWING;
   const k = smooth(0, S.spinLiftSec, t);
-  return [S.spinRadius * k * Math.cos(spin), S.spinLift * k, -S.spinRadius * k * Math.sin(spin)];
+  const p = inPlane(dir, spin, spinRadiusAt(t, charge));
+  return [p[0], S.spinLift * k + p[1], -S.spinFwd * k + p[2]];
 }
 
 /** The handle's offset from its rest, view-space metres. Continuous across every transition. */
@@ -169,13 +280,24 @@ export function handlePose(s: CenserSwing): Vec3 {
     case 'pending':
       return ZERO;
     case 'windup':
-      return spinPose(s.t, s.spin);
+      return spinPose(s.t, s.spin, s.spinDir, s.charge);
     case 'stroke': {
       const u = clamp01(s.t / strokeSec(s.heavy));
-      return lerp3(s.from, strokePath(s.dir, smooth(0, 1, u)), smooth(0, CENSER_SWING.leadFrac, u));
+      const K = shapeOf(s);
+      // The pose the stroke started from, minus the wind-up circle it was on;
+      // the arc blends in from there while that circle keeps turning at the
+      // release rate and fades out (carryR = 0 for a tap), so a release never
+      // stops the orbit dead — whatever its phase, the head keeps its speed and
+      // the arc adds to it.
+      const c0 = inPlane(s.spinDir, s.spin, s.carryR);
+      const centre: Vec3 = [s.from[0] - c0[0], s.from[1] - c0[1], s.from[2] - c0[2]];
+      const base = lerp3(centre, strokePath(s.dir, K, u), smooth(0, K.lead, u));
+      const c = inPlane(s.spinDir, s.spin + 2 * Math.PI * s.carryHz * s.t,
+        s.carryR * (1 - smooth(0, CENSER_SWING.heavy.spinFade, u)));
+      return [base[0] + c[0], base[1] + c[1], base[2] + c[2]];
     }
     case 'recover':
-      return lerp3(strokePath(s.dir, 1), ZERO, smooth(0, 1, s.t / recoverSec(s.heavy)));
+      return lerp3(strokePath(s.dir, shapeOf(s), 1), ZERO, smooth(CENSER_SWING.recoverHold, 1, s.t / recoverSec(s.heavy)));
   }
 }
 
@@ -188,9 +310,12 @@ function reelFrac(s: CenserSwing): number {
     case 'pending':
       return 0;
     case 'windup':
-      return smooth(0, S.spinLiftSec, s.t);
-    case 'stroke':
-      return lerp(s.fromReel, 1, smooth(0, S.payoutFrac, clamp01(s.t / strokeSec(s.heavy))));
+      return S.spinChoke * smooth(0, S.spinChokeSec, s.t)
+        + (1 - S.spinChoke) * smooth(S.spinPayoutStart, S.spinPayoutSec, s.t);
+    case 'stroke': {
+      const [p0, p1] = shapeOf(s).payout;
+      return lerp(s.fromReel, 1, smooth(p0, p1, clamp01(s.t / strokeSec(s.heavy))));
+    }
     case 'recover':
       // Reeling in during the recover's second half can drag the head back
       // through a body while the hit hook is still live (hitWindow covers the
@@ -209,7 +334,18 @@ function beginStroke(s: CenserSwing, heavy: boolean, offset: Dir2, t: number): C
   return {
     ...s, phase: 'stroke', t, heavy, charge: heavy ? s.charge : 0,
     dir: strokeDirection(offset), strokeId: s.strokeId + 1, from: handlePose(s), fromReel: reelFrac(s), buffered: false,
+    carryR: s.phase === 'windup' ? spinRadiusAt(s.t, s.charge) : 0,
+    carryHz: s.phase === 'windup' ? spinHzAt(s.charge) : 0,
   };
+}
+
+/** Rotate unit `from` toward unit `to` by at most `maxRad`. */
+function steerToward(from: Dir2, to: Dir2, maxRad: number): Dir2 {
+  const a = Math.atan2(from.y, from.x);
+  const diff = Math.atan2(to.y, to.x) - a;
+  const d = Math.atan2(Math.sin(diff), Math.cos(diff));
+  const b = a + Math.max(-maxRad, Math.min(maxRad, d));
+  return { x: Math.cos(b), y: Math.sin(b) };
 }
 
 /** dt must be > 0 — a non-positive dt (paused, or a bad frame) leaves the state untouched. */
@@ -230,15 +366,20 @@ export function stepCenserSwing(s: CenserSwing, input: SwingInput, dt: number): 
     }
     case 'pending':
       next = input.down
-        ? (t >= S.holdSec ? { ...s, phase: 'windup', t: t - S.holdSec, spin: 0 } : { ...s, t })
+        ? (t >= S.holdSec
+          ? { ...s, phase: 'windup', t: t - S.holdSec, spin: 0, spinDir: strokeDirection(input.offset) }
+          : { ...s, t })
         // Release treated as landing at the start of this step: the stroke
         // starts already `d` seconds in, so tiny steps don't lose time.
         : beginStroke(s, false, input.offset, d);
       break;
     case 'windup': {
       const charge = Math.min(1, t / S.chargeSec);
-      const hz = lerp(S.spinHzMin, S.spinHzMax, charge);
-      const spun: CenserSwing = { ...s, t, charge, spin: s.spin + 2 * Math.PI * hz * d };
+      const hz = spinHzAt(charge);
+      const spun: CenserSwing = {
+        ...s, t, charge, spin: s.spin + 2 * Math.PI * hz * d,
+        spinDir: steerToward(s.spinDir, strokeDirection(input.offset), S.spinSteer * d),
+      };
       next = input.down ? spun : beginStroke(spun, true, input.offset, 0);
       break;
     }

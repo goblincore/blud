@@ -215,6 +215,23 @@ describe('handlePose', () => {
     expect(s.phase).toBe('stroke');
     expect(handlePose(s)[0]).toBeLessThan(-0.2);   // swept to the left
   });
+  it('has no pops for a release at any phase of the spin, in any direction', () => {
+    let worst = 0;
+    const offs: Dir2[] = [{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }, { x: 1, y: 0 }, { x: -0.7, y: -0.7 }];
+    for (const offset of offs) {
+      for (const hold of [0.25, 0.4, 0.55, 0.7, 1.2, 1.28, 1.36, 1.44]) {
+        let s = makeCenserSwing();
+        let prev = handlePose(s);
+        for (let i = 0; i < Math.round((hold + 1) / DT); i++) {
+          s = stepCenserSwing(s, { down: i * DT < hold, offset }, DT);
+          const p = handlePose(s);
+          worst = Math.max(worst, Math.hypot(p[0] - prev[0], p[1] - prev[1], p[2] - prev[2]));
+          prev = p;
+        }
+      }
+    }
+    expect(worst).toBeLessThan(POP_BOUND);
+  });
   it('rests at zero when idle', () => {
     expect(handlePose(makeCenserSwing())).toEqual([0, 0, 0]);
   });
@@ -228,10 +245,12 @@ describe('ropeLength (reeled in at rest, paid out to swing)', () => {
     expect(s.phase).toBe('pending');
     expect(ropeLength(s, FULL)).toBe(CENSER_SWING.reelRest);
   });
-  it('is full mid-stroke, for a tap and for a heavy', () => {
+  it('is full late in a tap (it pays out through the cruise) and mid-stroke in a heavy', () => {
     let s = run(makeCenserSwing(), 0.05, true);
     s = stepCenserSwing(s, { down: false, offset: { x: 0, y: 0 } }, DT);
     s = run(s, CENSER_SWING.tapStrokeSec * 0.5, false);
+    expect(ropeLength(s, FULL)).toBeLessThan(FULL);   // still reeled in part-way: the hand drags the head first
+    s = run(s, CENSER_SWING.tapStrokeSec * 0.3, false);
     expect(s.phase).toBe('stroke');
     expect(ropeLength(s, FULL)).toBeCloseTo(FULL, 6);
     let h = run(makeCenserSwing(), CENSER_SWING.holdSec + 0.6, true);
@@ -276,19 +295,20 @@ describe('ropeLength (reeled in at rest, paid out to swing)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// HEAD-SPEED BASELINE (a regression floor, NOT a target).
+// HEAD SPEED (spec §3.3: ~9 m/s on a tap, ~16 m/s on a full charge).
 //
-// Spec §3.3 wants the head at ~9 m/s on a tap and ~16 m/s on a full charge
-// (CENSER_HIT.tap/heavy.speedRef). The reeled-in rest pose (2026-09-26) starts
-// every tap slack, so today's numbers sit far below that; Task 9 tunes toward
-// the targets. These tests only stop them getting WORSE unnoticed: floors are
-// 0.9 x what this model measured when they were written (printed below).
+// The pure model the swing was tuned in. The camera fixed at the origin looking
+// down -z (view = world, y up), the knot at the rest grip + the haft's knot
+// offset + handlePose — the haft's tilt applied to a fixed offset, not rotated
+// by the swing (game-censer rotates nothing either: the handle only
+// translates). Mirrors CENSER_REST in game-censer.ts (0.22, -0.16, -0.46; tilt
+// -65 deg; knot 0.255 up the haft). No camera motion, no bodies in the way.
 //
-// The model: the camera fixed at the origin looking down -z (view = world, y
-// up), the knot at the rest grip + the haft's knot offset + handlePose — the
-// haft's tilt applied to a fixed offset, not rotated by the swing (game-censer
-// rotates nothing either: the handle only translates). Mirrors CENSER_REST in
-// game-censer.ts (0.22, -0.16, -0.46; tilt -65 deg; knot 0.255 up the haft).
+// Measured 2026-09-26 (printed below): tap 13.11, half charge 16.32, full
+// charge 20.96 m/s, all with the head fastest ~1.1-1.4 m out in front of the
+// eye. Before the arc/orbit rework the same model gave tap 2.89 and heavy 2.46.
+// Floors are the spec's acceptance numbers, not the measurements, so tuning
+// has room; the regression guard is the 0.9 x measured floor.
 const REST: Vec3 = [0.22, -0.16, -0.46];
 const TILT = (-65 * Math.PI) / 180;
 const KNOT_UP = 0.255;
@@ -297,41 +317,77 @@ const knotAt = (s: CenserSwing): Vec3 => {
   return [REST[0] + p[0], REST[1] + p[1] + KNOT_UP * Math.cos(TILT), REST[2] + p[2] + KNOT_UP * Math.sin(TILT)];
 };
 const OPEN_WORLD = { floorY: -100, boxes: [] };
-/** Measured 2026-09-26 with this model (reelRest 0.17, full rope 0.55). Note the
- *  heavy is SLOWER than the tap today — a finding for Task 9, not a target. */
-const TAP_PEAK_MEASURED = 2.888;
-const HEAVY_PEAK_MEASURED = 2.458;
+const TAP_PEAK_MEASURED = 13.11;
+const HEAVY_PEAK_MEASURED = 20.96;
+const FULL_HOLD = CENSER_SWING.holdSec + CENSER_SWING.chargeSec + 0.1;
 /** Settle at rest, press for `holdSec`, release; measure over the hit window. */
-function measureStroke(holdSec: number): { peak: number; ext: number } {
+function measureStroke(holdSec: number, offset: Dir2 = { x: 0, y: 0 }): { peak: number; ext: number; at: Vec3 } {
   let s = makeCenserSwing();
   let h = makeCenserHead(knotAt(s), ropeLength(s, CENSER_HEAD.ropeLen));
   const step = (down: boolean) => {
-    s = stepCenserSwing(s, { down, offset: { x: 0, y: 0 } }, DT);
+    s = stepCenserSwing(s, { down, offset }, DT);
     h = stepCenserHead(h, knotAt(s), DT, OPEN_WORLD, undefined, ropeLength(s, CENSER_HEAD.ropeLen));
   };
   for (let i = 0; i < 240; i++) step(false);
   for (let i = 0; i < Math.round(holdSec / DT); i++) step(true);
   let peak = 0, ext = 0, seen = false;
+  let at: Vec3 = [0, 0, 0];
   for (let i = 0; i < 480; i++) {
     step(false);
     if (!hitWindow(s)) { if (seen) break; continue; }
     seen = true;
     const k = knotAt(s);
-    peak = Math.max(peak, Math.hypot(h.vel[0], h.vel[1], h.vel[2]));
+    const v = Math.hypot(h.vel[0], h.vel[1], h.vel[2]);
+    if (v > peak) { peak = v; at = h.pos; }
     ext = Math.max(ext, Math.hypot(h.pos[0] - k[0], h.pos[1] - k[1], h.pos[2] - k[2]));
   }
-  return { peak, ext };
+  return { peak, ext, at };
 }
+const fmt = (m: { peak: number; ext: number; at: Vec3 }) =>
+  `peak ${m.peak.toFixed(3)} m/s at (${m.at.map((c) => c.toFixed(2)).join(', ')}), ${Math.hypot(...m.at).toFixed(2)} m from the eye; max extension ${m.ext.toFixed(3)} m`;
+/** Where a zombie would be: in front of the eye, 0.8-1.6 m out. */
+const expectInFront = (at: Vec3) => {
+  expect(at[2]).toBeLessThan(-0.6);
+  expect(Math.hypot(...at)).toBeGreaterThan(0.8);
+  expect(Math.hypot(...at)).toBeLessThan(1.6);
+};
 
-describe('head speed over the hit window (baseline floor; spec targets tap ~9, heavy ~16 m/s)', () => {
-  it('a tap', () => {
+describe('head speed over the hit window (spec targets tap ~9, heavy ~16 m/s)', () => {
+  it('a tap reaches >= 8 m/s, in front of the player, on the full rope', () => {
     const m = measureStroke(0.05);
-    console.log(`[censer baseline] tap peak ${m.peak.toFixed(3)} m/s, max extension ${m.ext.toFixed(3)} m`);
+    console.log(`[censer power] tap ${fmt(m)}`);
+    expect(m.peak).toBeGreaterThanOrEqual(8);
     expect(m.peak).toBeGreaterThanOrEqual(0.9 * TAP_PEAK_MEASURED);
+    expect(m.ext).toBeGreaterThanOrEqual(CENSER_HEAD.ropeLen - 1e-3);
+    expectInFront(m.at);
   });
-  it('a full-charge heavy', () => {
-    const m = measureStroke(CENSER_SWING.holdSec + CENSER_SWING.chargeSec + 0.1);
-    console.log(`[censer baseline] heavy peak ${m.peak.toFixed(3)} m/s, max extension ${m.ext.toFixed(3)} m`);
+  it('a tap in any direction reaches >= 8 m/s', () => {
+    for (const o of [{ x: 0, y: 1 }, { x: 0, y: -1 }, { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0.7, y: -0.7 }]) {
+      const m = measureStroke(0.05, o);
+      expect(m.peak).toBeGreaterThanOrEqual(8);
+      expectInFront(m.at);
+    }
+  });
+  it('a half charge', () => {
+    const m = measureStroke(CENSER_SWING.holdSec + 0.5 * CENSER_SWING.chargeSec);
+    console.log(`[censer power] half charge ${fmt(m)}`);
+    expect(m.peak).toBeGreaterThanOrEqual(8);
+    expectInFront(m.at);
+  });
+  it('a full-charge heavy reaches >= 14 m/s, faster than a tap, in front, on the full rope', () => {
+    const m = measureStroke(FULL_HOLD);
+    console.log(`[censer power] heavy ${fmt(m)}`);
+    expect(m.peak).toBeGreaterThanOrEqual(14);
     expect(m.peak).toBeGreaterThanOrEqual(0.9 * HEAVY_PEAK_MEASURED);
+    expect(m.peak).toBeGreaterThan(measureStroke(0.05).peak);
+    expect(m.ext).toBeGreaterThanOrEqual(CENSER_HEAD.ropeLen - 1e-3);
+    expectInFront(m.at);
+  });
+  it('a full-charge heavy stays >= 14 m/s whatever the spin phase at release', () => {
+    // One spin period at spinHzMax is ~0.34 s; sample 0.5 s of release times.
+    const peaks: number[] = [];
+    for (let k = 0; k < 12; k++) peaks.push(measureStroke(FULL_HOLD + (k * 0.5) / 12).peak);
+    console.log(`[censer power] heavy by release phase: ${peaks.map((p) => p.toFixed(1)).join(' ')}`);
+    expect(Math.min(...peaks)).toBeGreaterThanOrEqual(14);
   });
 });
