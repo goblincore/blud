@@ -11,7 +11,7 @@ import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { woundCarveNormal, woundWorldPos } from '../damage';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
-import { ROOMS, TUNNELS, FURNITURE, enclosureKeyAt, enclosureOf } from './game-level';
+import { openGate } from './game-level-leaves';
 import { RING_TUNING } from '../melee-ring';
 import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
@@ -168,7 +168,7 @@ export function createWorldSeams(ctx: GameContext) {
       }));
     },
     setProbes: (weight: number, gain = -1) => { ctx.world.roomProbes.setProbes(weight, gain); return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain }; },
-    get probes() { return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain, ready: ctx.world.roomProbes.ready, matched: ROOMS.map(r => [r.id, ctx.world.roomProbes.matchedGain(r.id)]) }; },
+    get probes() { return { weight: ctx.world.roomProbes.weight, gain: ctx.world.roomProbes.gain, ready: ctx.world.roomProbes.ready, matched: ctx.world.level.rooms.map(r => [r.id, ctx.world.roomProbes.matchedGain(r.id)]) }; },
     /** TASK-6 TRUE-EMPTY PROOF SEAM: hide/show the static level meshes
      *  (dungeon shell + accents). With them hidden and the camera aimed at
      *  the (now absent) ceiling, verified rays see NO producer at any depth:
@@ -477,16 +477,20 @@ export function createWorldSeams(ctx: GameContext) {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, kind: a.kind, phase:a.debug().phase, state: b.state, alert: b.alert,
+        id: a.id, room: a.room, kind: a.kind, name: a.profileName(), phase:a.debug().phase, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
         meleeContacts: a.debug().meleeContacts,
+        carry: a.debug().carry, fistGrip: a.debug().fistGrip, fistGripAuthored: a.debug().fistGripAuthored,
         speed: a.debug().speed, target: a.debug().target,
         dist: Math.hypot(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
         bearing: Math.atan2(p[0] - ctx.player.player.pos[0], p[2] - ctx.player.player.pos[2]),
       };
     }),
+    /** Enemy melee hits the player has taken (player-hit-feedback.ts). No
+     *  player health yet: a hit flashes, shakes and counts. */
+    playerHits: () => ctx.player.hitFeedback.hits,
     /** Ring tuning, so a capture driver asserts against the real numbers
      *  rather than duplicating them. */
     ringTuning: () => ({ ...RING_TUNING }),
@@ -576,18 +580,41 @@ export function createWorldSeams(ctx: GameContext) {
      *  piece stayed in the room" needs the room's rectangle, and hard-coding it
      *  in the rig would let the level move out from under the assertion. */
     enclosureBoxAt: (x: number, z: number) => {
-      const key = enclosureKeyAt(x, z);
-      const enc = enclosureOf(key);
+      const key = ctx.world.level.keyAt(x, z);
+      const enc = ctx.world.level.enclosureFor(key);
       return enc ? { key, min: enc.box.min, max: enc.box.max } : null;
     },
 
-    rooms: ROOMS.map(r => ({
+    /** The active level: id, state, rooms, gate state, capabilities. */
+    level: () => ({
+      id: ctx.world.level.id,
+      state: ctx.world.level.def?.state ?? null,
+      rooms: ctx.world.level.rooms.map(r => r.name),
+      colliders: ctx.world.colliders.length,
+      openGates: [...ctx.world.openGates],
+      requires: ctx.world.level.def?.requires ?? [],
+      windows: ctx.world.level.surfaces.windows.map(w => w.id),
+    }),
+    /** Open an authored level's gate by id (false if unknown or already open). */
+    openGate: (id: string) => openGate(ctx, id),
+    /** Mesh key: what the level's art placed (null without art). */
+    artInfo: () => {
+      const a = ctx.world.art;
+      return a ? { file: a.file, meshes: a.meshes, instanced: a.instanced, instances: a.instances } : null;
+    },
+    /** Show or hide the level art (the gate's same-page A/B; visibility, never castShadow). */
+    setArtVisible: (on: boolean) => {
+      for (const o of ctx.world.art?.objects ?? []) o.visible = on;
+      return ctx.world.art !== null;
+    },
+
+    rooms: ctx.world.level.rooms.map(r => ({
       id: r.id, name: r.name, zombies: r.zombies,
       bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },
     })),
-    tunnels: TUNNELS.map(t => t.name),
-    furniture: FURNITURE,
+    tunnels: ctx.world.level.tunnels.map(t => t.name),
+    furniture: ctx.world.level.furniture,
     /** Accent lights per room — capture/measurement seam (pair-shot framing). */
-    accents: ROOMS.flatMap(r => r.accents.map(a => ({ room: r.id, ...a })))
+    accents: ctx.world.level.rooms.flatMap(r => r.accents.map(a => ({ room: r.id, ...a })))
   };
 }

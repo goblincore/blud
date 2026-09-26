@@ -580,7 +580,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   let equipmentRetired = false;
   const wounds = createWoundRing();
   const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
-  const armorSparks = isSoldierFamily(entry.profile) && opts.effectsScene ? createArmorSparks() : null;
+  const armorSparks = entry.armoured === true && opts.effectsScene ? createArmorSparks() : null;
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   if (armorSparks) opts.effectsScene!.add(armorSparks.object);
   const chaingun = entry.profile.gunner?.weapon === 'chaingun';
@@ -591,7 +591,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   if (casings) opts.scene.add(casings.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
-    loadKit(kitUrl, opts.renderer, [0, 0, 0], isSoldierFamily(entry.profile))
+    loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true)
       .then(k => {
         if (disposed || equipmentRetired) { k.dispose(); return; }
         kit = k; opts.scene.add(k.object, k.debris);

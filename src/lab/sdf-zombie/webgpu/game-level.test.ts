@@ -11,6 +11,7 @@ import {
   enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
   OUTER, BAND_HALF, slotCharacter,
 } from './game-level';
+import { ringLevel } from './active-level';
 import { PLAYER, resolveCapsule, stepPlayer, eyeOf, type PlayerState } from './game-player';
 
 function makePlayer(x: number, z: number, yaw: number): PlayerState {
@@ -439,18 +440,17 @@ describe('mixed encounter annex', () => {
 });
 
 describe('spawn slots: soldiers, then juggernauts, then zombies', () => {
-  it('puts one juggernaut in the arena, in slot 0, among seven zombies', () => {
+  it('puts one juggernaut in the arena, in slot 0, among seven zombies (the ring level\'s spawn list)', () => {
     const arena = ROOMS.find(r => r.name === 'arena')!;
-    const names = spawnPoints(arena).map((_, i) => slotCharacter(arena, i, null));
-    expect(names.filter(n => n === 'juggernaut')).toEqual(['juggernaut']);
-    expect(names[0]).toBe('juggernaut');
-    expect(names.filter(n => n === 'zombie')).toHaveLength(names.length - 1);
+    const kinds = ringLevel().spawnList().filter(s => s.room === arena).map(s => s.kind);
+    expect(kinds.filter(k => k === 'juggernaut')).toEqual(['juggernaut']);
+    expect(kinds[0]).toBe('juggernaut');
+    expect(kinds.filter(k => k === 'zombie')).toHaveLength(kinds.length - 1);
     // No other room gained one.
     for (const r of ROOMS) if (r !== arena) expect(r.juggernauts ?? 0).toBe(0);
   });
-  it('orders soldiers first, and ?spawn replaces only the zombie slots', () => {
+  it('orders soldiers first, then juggernauts, then zombies', () => {
     const room = { ...ROOMS[0]!, zombies: 5, soldiers: 2, juggernauts: 1 };
-    expect([0, 1, 2, 3, 4].map(i => slotCharacter(room, i, null))).toEqual(['soldier', 'soldier', 'juggernaut', 'zombie', 'zombie']);
-    expect([0, 1, 2, 3, 4].map(i => slotCharacter(room, i, 'cultist'))).toEqual(['soldier', 'soldier', 'juggernaut', 'cultist', 'cultist']);
+    expect([0, 1, 2, 3, 4].map(i => slotCharacter(room, i))).toEqual(['soldier', 'soldier', 'juggernaut', 'zombie', 'zombie']);
   });
 });

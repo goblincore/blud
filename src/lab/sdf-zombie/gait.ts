@@ -51,7 +51,13 @@ export type GaitJointName =
   // No gait offset ever names it, so its target just rides the body's
   // translation and yaw while the Verlet rig swings it on its constraint —
   // which is exactly the lag a robe's skirt should have (cultist, 2026-09-23).
-  | 'hem';
+  | 'hem'
+  // THE JAW: the tail of a `jaw` bone (bride, 2026-09-24). Kinematic, never a
+  // Verlet point: motion.ts pins it to the head frame turned by the gape
+  // about the hinge (jaw.ts); rig-bind.ts poses the `on jaw` prims from the
+  // explicit gape scalar (rig.jawGape), not from this point. Optional like
+  // `hem`: a body without the bone never names it.
+  | 'jaw';
 
 /** Every joint, primary first — the ORDER is the naming priority when two
  *  bone ends share a position (jointNamesForBody). */
@@ -60,7 +66,7 @@ export const GAIT_JOINTS: readonly GaitJointName[] = [
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
   'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR',
   'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
-  'hem',
+  'hem', 'jaw',
 ];
 
 /** A GAIT PROFILE — every knob of one way of walking. The zombie's numbers
@@ -309,6 +315,21 @@ export const GLIDE: GaitProfile = {
  *  arm style from the GAIT (pickArmStyle), never from MotionProfile.armStyle,
  *  so a gunner needs a carry-style gait. */
 export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyle: 'carry', armSwing: 0.03 };
+
+/** The bride's STALK: the soldier's march clip slowed and lengthened for her
+ *  long legs, with a hip sway the `hem` pendulum picks up and a slight
+ *  forward lean. Carry-style arms (the sword owns them). */
+export const STALK: GaitProfile = {
+  ...MARCH,
+  name: 'stalk',
+  strideFreq: MARCH.strideFreq * 0.8,
+  strideLen: 0.42,
+  swayAmp: 0.06,
+  shoulderSway: 0.2,
+  bobAmp: 0.015,
+  torsoLean: 2.3, // degrees (gait.ts converts); ~0.04 rad
+  armSwing: 0.02,
+};
 
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
@@ -675,6 +696,9 @@ export function stepGait(
     // side to side over a hem that stays put, and the Verlet constraint
     // between them tilts the skirt — the hem lagging the waist, as cloth does.
     hem: [0, bob * 0.9, 0],
+    // Rigid with the head (motion.ts re-derives the jaw target from the
+    // head frame anyway; this keeps the pre-override target sane).
+    jaw: [-sway * 0.2, -bob * T.headBob, 0],
   };
 
   let p = (phiL % TAU) / TAU;
@@ -720,6 +744,9 @@ const JOINT_AT: Record<string, { head: string; tail: string }> = {
   foot:     { head: 'foot',     tail: 'toe' },
   // Cloth pendulum off the pelvis (see GaitJointName 'hem').
   hem:      { head: 'hips',     tail: 'hem' },
+  // The jaw carrier hangs off the skull's pivot (the neck joint) to the chin
+  // (see GaitJointName 'jaw').
+  jaw:      { head: 'neck',     tail: 'jaw' },
 };
 
 /** The joint names that carry a per-side suffix (centerline joints never do). */

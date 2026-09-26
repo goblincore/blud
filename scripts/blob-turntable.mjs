@@ -201,6 +201,11 @@ await evaluate(`(() => {
 // yaw, and the same document still yields the same frames.
 const POSE = process.env.BLOB_POSE ?? 'rest';
 const POSE_FRAMES = Number(process.env.BLOB_POSE_FRAMES ?? 90);
+// BLOB_SWING=<variant>:<phase> (e.g. cleave:0.4) holds a melee swing at that
+// phase over the pose's last 30 frames (holdPose's `swing`).
+const SWING = process.env.BLOB_SWING
+  ? (([variant, phase]) => ({ variant, phase: Number(phase) }))(process.env.BLOB_SWING.split(':'))
+  : undefined;
 const poseResult = await evaluate(`(() => {
   // Dynamic resolution would change the SDF pixel count between frames and
   // runs; frames are judged by eye, so pin it.
@@ -211,7 +216,7 @@ const poseResult = await evaluate(`(() => {
     window.__sdfLab.setWander(false);
     return 'rest';
   }
-  return JSON.stringify(window.__sdfLab.holdPose(${JSON.stringify(POSE)}, ${POSE_FRAMES}));
+  return JSON.stringify(window.__sdfLab.holdPose(${JSON.stringify(POSE)}, ${POSE_FRAMES}${SWING ? ', ' + JSON.stringify(SWING) : ''}));
 })()`);
 console.log('pose:', poseResult);
 await sleep(4000);

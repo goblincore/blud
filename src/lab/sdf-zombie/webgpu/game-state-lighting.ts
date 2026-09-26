@@ -19,6 +19,8 @@
 
 import type * as THREE from 'three/webgpu';
 import type { Flashlight } from './dungeon-lighting';
+import type { OutdoorRuntime } from './game-outdoor-leaves';
+import type { VoidRuntime } from './game-void-leaves';
 import type { Projectile } from './game-weapon';
 import type { ProbeLightingNode } from './probe-lighting-node';
 
@@ -70,6 +72,12 @@ export interface LightingState {
   levelShadowEnabled: boolean;
   /** `?fxlight` scale applied to both explosion light peaks. */
   fxLightScale: number;
+  /** Outdoor v1: the moon, sky dome, skyline and fog blend; null when the level
+   *  has no open-sky room (the ring). */
+  outdoor: OutdoorRuntime | null;
+  /** The Void: portals, glow pools, embers and the portal trigger; null when the
+   *  level has no portal. */
+  void: VoidRuntime | null;
 }
 
 /** Every call returns a fresh object, nested arrays and maps included. */
@@ -95,6 +103,8 @@ export function makeLightingState(): LightingState {
     bounceSpotGain: 0,
     levelShadowEnabled: false,
     fxLightScale: 0,
+    outdoor: null,
+    void: null,
   };
 }
 
@@ -120,4 +130,6 @@ export const LIGHTING_BINDINGS = {
   bounceSpotGain: 'lighting.bounceSpotGain',
   levelShadowEnabled: 'lighting.levelShadowEnabled',
   fxLightScale: 'lighting.fxLightScale',
+  outdoor: 'lighting.outdoor',
+  void: 'lighting.void',
 } as const;

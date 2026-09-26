@@ -115,14 +115,14 @@ export interface RoomDef {
   juggernauts?: number;
 }
 
-/** Which registry character spawn slot `index` of `room` gets: soldiers
- *  first, then juggernauts, then zombies. `override` (?spawn=<name>, the
- *  playtest seam) replaces only the ZOMBIE slots. */
-export function slotCharacter(room: RoomDef, index: number, override: string | null): string {
+/** The spawn KIND of ring-level slot `index` in `room` (active-level.ts
+ *  ringLevel): soldiers first, then juggernauts, then zombies. The ?spawn=
+ *  playtest override swaps zombie slots later, in game-main. */
+export function slotCharacter(room: RoomDef, index: number): 'soldier' | 'juggernaut' | 'zombie' {
   const soldiers = room.soldiers ?? 0;
   if (index < soldiers) return 'soldier';
   if (index < soldiers + (room.juggernauts ?? 0)) return 'juggernaut';
-  return override ?? 'zombie';
+  return 'zombie';
 }
 
 export interface TunnelDef {

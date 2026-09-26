@@ -62,7 +62,7 @@ import type { WanderBounds, WanderState } from './wander';
 import { headingDir, stepWander, wrapPi, type Rng } from './wander';
 import type { PlantState, AimState } from './ik';
 import {
-  IK_TUNING, makeAim, makePlant, poleReflect, solveChain, solveHingeLeg, solvePlantedLeg,
+  IK_TUNING, clampDir, makeAim, makePlant, poleReflect, solveChain, solveHingeLeg, solvePlantedLeg,
   stepAim, stepPlant,
 } from './ik';
 import type { StaggerKind, StaggerState } from './stagger';
@@ -74,6 +74,8 @@ import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
+import { isSwordVariant, jawGapeAt, swordCarryAt } from './sword-swing';
+import { jawRestOf, jawTargetAt, type JawRest } from './jaw';
 
 /** Motion knobs owned by the wiring (the modules own their own). */
 export const MOTION_TUNING = {
@@ -236,6 +238,8 @@ export interface MotionJoints {
   arm: { L: readonly [number, number]; R: readonly [number, number] };
   /** Chest→neck, neck→head lengths (the aim chain). */
   neck: readonly [number, number];
+  /** The jaw's rest geometry (jaw.ts), when the body has a `jaw` bone. */
+  jaw?: JawRest;
   /** Authored foot height — the floor-contact plane for plants. */
   groundY: number;
   /** The pelvis base position — rootShift is measured from it. */
@@ -273,6 +277,8 @@ export function makeMotionJoints(
       R: [d('shoulderR', 'elbowR'), d('elbowR', 'handR')],
     },
     neck: [d('chest', 'neck'), d('neck', 'head')],
+    ...(index.jaw === undefined ? {} : {
+      jaw: jawRestOf(baseRest[index.neck!]!, baseRest[index.head!]!, baseRest[index.jaw]!) }),
     groundY: Math.min(baseRest[index.footL!]![1], baseRest[index.footR!]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
@@ -455,6 +461,9 @@ export interface MotionFrame {
   restPose: Vec3[];
   /** Firm combat leg joints; absent returns the whole body to Verlet. */
   posePins?: readonly number[];
+  /** The jaw's gape (rad, jaw.ts) — the wiring copies it to rig.jawGape.
+   *  0 for a body without a jaw and whenever no sword swing is live. */
+  jawGape: number;
   /** Multiply stepRig's restStiffness by this (the collapse ramp). */
   restPull: number;
   /** Gravity for stepRig this frame (soft standing vs full falling weight). */
@@ -695,8 +704,10 @@ export function stepMotion(
 
   // --- fire hold ------------------------------------------------------------
   // A GUNNER with no right arm cannot hold the gun (was soldier-only, so the
-  // cultist would have kept firing a tommy gun from a stump).
-  const canHold = (!isSoldierFamily(profile) && !profile.gunner) || !sig.missing.armR;
+  // cultist would have kept firing a tommy gun from a stump). Nor can a MELEE
+  // prop's owner hold her sword: the bride drops it (game-actor releases the
+  // prop) and the carry, the fist seat and the arm pins all switch off.
+  const canHold = (!isSoldierFamily(profile) && !profile.gunner && !profile.melee) || !sig.missing.armR;
   const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;
@@ -933,6 +944,12 @@ export function stepMotion(
   }
   let gun: GunPose | null = null;
   let carryUsed: CarryName | null = null;
+  /** prop.fistOnGrip: the right hand tip's offset from the wrist, laid along
+   *  the grip line — re-applied after the tip follow pass below. */
+  let fistTipR: Vec3 | null = null;
+  /** A live sword swing, or the two-handed sword carry, pins both arms to
+   *  their targets (frame.posePins). */
+  let swordArmPins = false;
   const carries = profile.carries;
   const broadSoldierOpen = soldierStagger.active && !soldierStagger.state.fullOpen && soldierStagger.variant === 1
     && soldierStagger.state.level !== 'small';
@@ -952,10 +969,24 @@ export function stepMotion(
       ?? (fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
     carryUsed = carryName;
     const wanted = CARRIES[carryName];
+    // A SWORD SWING owns the carry (sword-swing.ts): the track pose, UNSMOOTHED
+    // — the swing is authored motion, and the exp(-9 dt) chase below would lag
+    // a 0.9 s sweep by a third of its arc. Its phase-0 and phase-1 poses are
+    // the walk guard exactly, so entering and leaving needs no blend.
+    const swordSwing = attack && cfg.attack && profile.melee?.kind === 'sword'
+      && isSwordVariant(cfg.attack.variant)
+      ? swordCarryAt(cfg.attack.phase, cfg.attack.variant, CARRIES[carries.walk])
+      : null;
+    // Pinned for the whole two-handed carry, not only the swing (Task 11): in
+    // the guard the soft rest pull let the solved arms lag their targets by
+    // up to 14 cm whenever she turned or set off (measured in the game), and
+    // with the sword seated on the solved fist the left hand then came off
+    // Fore_Hand. The one-handed run (swordTrail) keeps its free left arm.
+    swordArmPins = swordSwing !== null || (profile.melee?.kind === 'sword' && !wanted.oneHanded);
     const previous = carryTargetPose ?? wanted;
     const amount = 1 - Math.exp(-9 * dt);
     const mix = (a: number, b: number) => a + (b - a) * amount;
-    carryTargetPose = {
+    carryTargetPose = swordSwing ?? {
       right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
       gunYaw: mix(previous.gunYaw ?? 0, wanted.gunYaw ?? 0),
@@ -1031,6 +1062,15 @@ export function stepMotion(
       // gunYaw is OUTWARD-positive (carry.ts); world +y rotation toward +x is
       // inward for this arm when inward = +1, hence the sign.
       gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale, -inward * (carry.gunYaw ?? 0) * armPresence);
+      // The FIST CLOSES ON THE GRIP (prop.fistOnGrip): the hand bone lies
+      // along the forearm, the line the grip was just seated on, instead of
+      // keeping its rest hang. The tip follow pass only TRANSLATES the hand
+      // tip, so a raised forearm (the bride's high guard) otherwise leaves the
+      // fist hanging 4 cm below the wrist while the grip rides above it.
+      if (profile.prop?.fistOnGrip && idx.handTipR !== undefined) {
+        const handLen = len(sub(joints.base[idx.handTipR]!, joints.base[iH]!));
+        fistTipR = scale(normalize(sub(targets[iH]!, targets[iE]!)), handLen);
+      }
       // Keep the authored wrist/gun orientation, then swivel the elbow out
       // of the vest. The shoulder and grip do not move, nor do arm lengths.
       const rp = carry.rightPole;
@@ -1227,6 +1267,8 @@ export function stepMotion(
   };
   follow('handTipL', 'handL', before.handL);
   follow('handTipR', 'handR', before.handR);
+  if (fistTipR && idx.handTipR !== undefined && idx.handR !== undefined)
+    targets[idx.handTipR] = add(targets[idx.handR]!, fistTipR);
   follow('toeL', 'footL', before.footL);
   follow('toeR', 'footR', before.footR);
 
@@ -1269,6 +1311,28 @@ export function stepMotion(
     targets[idx.head!] = add(targets[idx.head!]!, sub(stepped.points[1]!, restHead));
   }
 
+  // --- the jaw (bride Task 12, jaw.ts) --------------------------------------
+  // The jaw point is KINEMATIC: the head target's frame, opened about the
+  // hinge by the sword swing's gape (sword-swing.ts jawGapeAt — wide on the
+  // wind-up, snapped shut by the strike's end). Written after the head aim so
+  // it rides the look; pinned below (posePins). The gape itself travels to
+  // rig-bind as the explicit scalar MotionFrame.jawGape (jaw.ts), never read
+  // back off this point, which would be a step stale.
+  // The frame is the head AS rig-bind POSES IT: the current rig points'
+  // pivot->tip, clamped to the same IK_TUNING cone headTransform uses. Not
+  // the targets: the aim lays the head target out along the gaze (tilted
+  // ~40 degrees on the bride's upright skull), and the Verlet head point
+  // chases it; only the clamp says where the drawn head is.
+  let jawGape = 0;
+  if (joints.jaw && idx.jaw !== undefined && idx.neck !== undefined && idx.head !== undefined) {
+    jawGape = attack && cfg.attack && profile.melee?.kind === 'sword' && isSwordVariant(cfg.attack.variant)
+      ? jawGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
+    const at = (i: number): Vec3 => (havePoints ? points[i]!.pos : targets[i]!);
+    const dir = clampDir(normalize(sub(at(idx.head), at(idx.neck))), rotateYaw(joints.jaw.restDir, bodyYaw),
+      IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+    targets[idx.jaw] = jawTargetAt(joints.jaw, at(idx.neck), dir, bodyYaw, jawGape);
+  }
+
   // --- localized hit recoil -------------------------------------------------
   // The rig point NEAREST the hit takes a world-space shove along the shot
   // ray, attack-decaying over ~0.45 s; the verlet constraints drag the
@@ -1281,6 +1345,7 @@ export function stepMotion(
     let best: GaitJointName | null = null;
     let bestD = Infinity;
     joints.names.forEach((name, i) => {
+      if (name === 'jaw') return; // kinematic; would steal the head's recoil
       const p = havePoints ? points[i]!.pos : targets[i]!;
       const d = len(sub(p, at));
       if (d < bestD) { bestD = d; best = name; }
@@ -1347,10 +1412,32 @@ export function stepMotion(
       heading: wander.heading,
       bodyYaw,
       restPose: targets,
+      jawGape,
       // Hit reactions offset joints independently. Let Verlet absorb those
       // impulses rather than hard-pinning incompatible torso/leg targets.
-      ...(footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null ? { posePins: (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const)
-        .map(name => idx[name]).filter(i => i !== undefined) } : {}),
+      // A SWORD SWING also pins both arms to the track. The verlet's soft
+      // rest pull lags a 1 s swing by up to 20 cm, and the prop is seated on
+      // the TARGETS, so an unpinned fist visibly lets go of the grip
+      // mid-strike. A hit reaction releases the pins, as for the soldier's
+      // legs. The two lists are MERGED into one posePins (a second spread of
+      // the key would silently drop the first).
+      ...((): { posePins?: number[] } => {
+        const legs = footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null
+          ? (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const) : [];
+        // Never pin a MISSING arm's joints (a severed left arm under the
+        // one-armed carry; the right arm cannot reach here, canHold is off).
+        const arms = swordArmPins && !stagger.staggered && recoil.joint === null
+          ? ([
+            ...(sig.missing.armR ? [] : ['elbowR', 'handR', 'handTipR'] as const),
+            ...(sig.missing.armL ? [] : ['elbowL', 'handL', 'handTipL'] as const),
+          ]) : [];
+        // The JAW is always pinned while she stands: it is kinematic (the
+        // head frame plus the gape), and a free chin point would sag on a
+        // stiffness-0 bone (rig-bind.ts).
+        const jaw = !collapsed && idx.jaw !== undefined ? (['jaw'] as const) : [];
+        const pins = [...legs, ...arms, ...jaw].map(name => idx[name]).filter((i): i is number => i !== undefined);
+        return pins.length ? { posePins: pins } : {};
+      })(),
       restPull: structural ? 1 : collapse.restPull,
       gravity: structural ? [0, -1.5, 0] : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]

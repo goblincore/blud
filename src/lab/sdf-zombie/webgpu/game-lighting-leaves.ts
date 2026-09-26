@@ -8,7 +8,6 @@
 
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
-import { TUNNELS } from './game-level';
 
 export function applyHemi(ctx: GameContext) { ctx.lighting.hemi.intensity = ctx.lighting.hemiBase * (1 - ctx.lighting.levelProbeWeight); }
 
@@ -17,7 +16,7 @@ export function applyHemi(ctx: GameContext) { ctx.lighting.hemi.intensity = ctx.
  *  room, and a doorway wall sees the light across the arch). */
 export function accentRoomsFor(ctx: GameContext, roomId: number): Set<number> {
   const set = new Set<number>([roomId]);
-  for (const t of TUNNELS) { if (t.a === roomId) set.add(t.b); if (t.b === roomId) set.add(t.a); }
+  for (const t of ctx.world.level.tunnels) { if (t.a === roomId) set.add(t.b); if (t.b === roomId) set.add(t.a); }
   return set;
 }
 
@@ -34,6 +33,9 @@ export function levelSceneLights(ctx: GameContext, roomId: number): THREE.Light[
     if (!l.isLight) return;
     const accentRoom = l.userData.accentRoom as number | undefined;
     if (accentRoom !== undefined && !allowed.has(accentRoom)) return;
+    // Outdoor v1: the moon lights only the open-sky rooms' surfaces.
+    const only = l.userData.onlyRooms as ReadonlySet<number> | undefined;
+    if (only !== undefined && !only.has(roomId)) return;
     ls.push(l);
   });
   return ls;

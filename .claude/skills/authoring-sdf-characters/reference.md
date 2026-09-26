@@ -82,6 +82,27 @@ Two rejections you will meet, both deliberate:
 - `chamfer` on a `carve` — carving folds through `smax`, which has no
   chamfered form here. Rejected rather than silently ignored.
 
+**Chamfer reach is `4 x blend` and is NOT halved.** `buildBody` scales only
+ROUND unions by `roundBlendScale` (0.5); a chamfer keeps its full reach. A
+`blend=0.008 chamfer` on the bride's cheekbones bevelled 3.2 cm of air into
+flesh and grew a band round her head at eye level. Start chamfers at
+0.002-0.003.
+
+## Asymmetric mirrored bones: `lenR=` (added 2026-09-24)
+
+A `mirror` block gives both sides one length, and a bone outside the block
+can neither parent to `upperarm.r` (that name exists only after expansion)
+nor carry `arm`/`leg` prims (they need a side). `lenR=` on a bone INSIDE the
+block sets the `.r` copy's length; the `.l` copy keeps `len=`. It is an error
+outside a mirror block.
+
+```
+bone forearm parent=upperarm dir=down tilt=6 pitch=10 len=0.26 lenR=0.30
+```
+
+The bride's sword forearm. `makeMotionJoints` measures `arm.L`/`arm.R`
+separately, so the rig carries the difference.
+
 ## Curved primitives: `bend=`
 
 Horns, tusks, tails, claws, curved fingers, ribs, hooked noses. Before this

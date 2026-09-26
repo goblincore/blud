@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy' | 'swordGuard' | 'swordTrail';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -58,7 +58,8 @@ export interface CarrySpec {
 
 /** Low/chest/hip are cross-body holds. Aim raises the forearm from a low
  *  elbow so the barrel can face forward while the fore-end remains
- *  reachable. All four preserve the authored arm segment lengths. */
+ *  reachable. saw/drag are the ogre's chainsaw, swordGuard/swordTrail the
+ *  bride's longsword. All preserve the authored arm segment lengths. */
 export const CARRIES: Record<CarryName, CarrySpec> = {
   // Low ready: grip at the waist near the midline, muzzle forward-down
   // across the body, the left hand resting on the fore-end.
@@ -115,6 +116,36 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // pointed ahead leaves the handle out of reach. The fix is the cocked wrist:
   // the forearm angles in (yaw 0.40) and the gun yaws back out (gunYaw 0.30).
   heavy: { right: { pitch: 0.10, yaw: 0.40, fold: 1.00 }, gunPitch: 0.40, gunYaw: 0.30, leftPole: [0.6, -0.5, 0.1] },
+  // SWORD GUARD — the bride's walk/stand/fire hold (bride.blob +
+  // bride-sword.glb at scale 1, profile gripReach 0.04 + fistOnGrip): the
+  // HIGH GUARD (vom Tag) of the reference, both hands on the grip at her right
+  // shoulder, the blade up and back over it. TWO-HANDED: the left hand IKs
+  // onto Fore_Hand, which sits 23 cm UP the grip, above the right fist.
+  // Grid-solved on the bride rig through the real motion pipeline
+  // (makeActorMotion, 60 Hz, scored after a 1 s settle; lab walk speed 1.1 and
+  // standing agree within a few mm). The angles are relative to HER authored
+  // hang (upper arm tilted 14 out, forearm 12, the 0.30 m sword forearm), not
+  // to the soldier's. Solved for:
+  //   fist on the grip 0.8 cm, left hand on Fore_Hand 0.8 cm;
+  //   grip at the shoulder (body-local ~(-0.22, 1.47, 0.15)), top hand beside
+  //   the jaw ((-0.25, 1.67, 0.05)) — OUTSIDE the face: a first solve
+  //   (pitch 0.80 / yaw 0.50 / fold 2.20) held the grip 8 cm higher and the
+  //   left forearm lay across her eyes in the front frame;
+  //   blade ~27 degrees back of vertical and ~9 out, tip 0.86 m over the head
+  //   point, the blade 24 cm clear of it;
+  //   both elbows >= 9 cm outside the torso field (sdBody): the upper arm
+  //   hangs nearly at rest (pitch 0.30) with the elbow out, and the forearm
+  //   folds up past vertical (fold 2.70) to put the fist at the shoulder.
+  // bride-blob.test.ts pins the grip, the fore-hand and the tip over the head.
+  swordGuard: { right: { pitch: 0.30, yaw: 0.70, fold: 2.70 }, gunPitch: 0.70, leftPole: [0.6, -0.5, 0.2] },
+  // SWORD TRAIL — her run: ONE-HANDED, the right arm hanging back (the ogre
+  // drag's elbow-back pole) with the point trailing low behind her right hip,
+  // outboard of the leg; the left arm is free and swings. The plan's starting
+  // values held on the rig as written: fist on the grip 0.9 cm, the tip at
+  // y 0.21 (never above 0.35, the pin) about 1.2 m behind and 0.57 m out of
+  // the pelvis, the right elbow 2.5 cm and the swinging left elbow 0.6 cm
+  // outside the torso field.
+  swordTrail: { right: { pitch: -0.55, yaw: 0.10, fold: 0.30 }, gunPitch: -0.90, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.40 }, rightPole: [0.2, 0, -1] },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from

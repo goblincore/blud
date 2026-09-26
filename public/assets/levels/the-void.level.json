@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "the-void",
+  "name": "The Void",
+  "ammo": "infinite",
+  "rooms": [
+    {
+      "id": 1,
+      "name": "void",
+      "min": [
+        -20.0,
+        -40.0
+      ],
+      "max": [
+        20.0,
+        0.0
+      ],
+      "height": 8.0,
+      "void": true
+    }
+  ],
+  "lights": [
+    {
+      "pos": [
+        0.0,
+        1.7,
+        -17.6
+      ],
+      "color": [
+        1.0,
+        0.12,
+        0.08
+      ],
+      "power": 6.0
+    }
+  ],
+  "portals": [
+    {
+      "id": "first",
+      "pos": [
+        0.0,
+        0.0,
+        -18.0
+      ],
+      "yaw": -3.1416,
+      "target": "night-train",
+      "width": 2.2,
+      "height": 3.4
+    }
+  ],
+  "start": {
+    "pos": [
+      0.0,
+      0.0,
+      -6.0
+    ],
+    "yaw": 0.0
+  }
+}

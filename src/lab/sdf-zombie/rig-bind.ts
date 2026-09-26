@@ -7,6 +7,7 @@ import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig'
 import { IK_TUNING, clampDir } from './ik';
 import { jointForBoneEnd, rotateYaw } from './gait';
 import { segmentQuat } from './rig-frames';
+import { JAW_MAX_GAPE, jawOrient, jawRestOf, openAboutHinge, type JawRest } from './jaw';
 import {
   add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
   scale as vscale, sub,
@@ -62,6 +63,10 @@ export interface HeadRigid {
    * exists to prevent. Keyed by index into body.bonePrims.
    */
   bones: Map<number, { a: Vec3; b: Vec3 }>;
+  /** THE JAW (jaw.ts), when the body has a `jaw` bone: its rig point, its
+   *  rest geometry, and which of `prims`/`bones` are `on jaw` — those are
+   *  opened about the hinge by the gape before the head's rotation. */
+  jaw?: { point: number; rest: JawRest; prims: Set<number>; bones: Set<number> };
 }
 
 /**
@@ -155,10 +160,14 @@ export function bindRig(body: BuildResult): BoundRig {
   };
 
   const constraints: { a: number; b: number; rest: number; stiffness: number }[] = [];
-  for (const bone of body.bones.values()) {
+  for (const [name, bone] of body.bones) {
     const h = indexOf(bone.head);
     const t = indexOf(bone.tail);
-    if (h !== t) constraints.push({ a: h, b: t, rest: len(sub(bone.tail, bone.head)), stiffness: 1 });
+    // The JAW carrier's length is not rigid: the jaw point swings about a
+    // hinge (jaw.ts), not about this bone's head, so pivot->chin shortens
+    // ~4 cm at full gape. Stiffness 0 keeps the bone (and its joint name)
+    // without letting it yank the neck point toward the pinned chin.
+    if (h !== t) constraints.push({ a: h, b: t, rest: len(sub(bone.tail, bone.head)), stiffness: name === 'jaw' ? 0 : 1 });
   }
 
   // Pin the lowest joint — without an anchor the whole rig falls under gravity.
@@ -226,9 +235,12 @@ export function bindRig(body: BuildResult): BoundRig {
   // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.
   // Mirrored bones expand to `name.l` / `name.r` (mirror.ts), so the suffix is
   // the honest marker. Falls back to every joint when a body has none.
+  // The `hem` bone is a CLOTH PENDULUM, not anatomy: it is unmirrored but
+  // never axial. Its swinging tail must not anchor a rib, and its segment
+  // must not frame one (the bride's pelvis bone sits exactly on it).
   const axialJoints: number[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name)) continue;
+    if (/\.[lr]$/.test(name) || name === 'hem' || name === 'jaw') continue;
     for (const j of [indexOf(bone.head), indexOf(bone.tail)])
       if (!axialJoints.includes(j)) axialJoints.push(j);
   }
@@ -236,7 +248,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // rigid torso-bone frames below.
   const axialSegs: { head: number; tail: number }[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name)) continue;
+    if (/\.[lr]$/.test(name) || name === 'hem' || name === 'jaw') continue;
     const h = indexOf(bone.head), t = indexOf(bone.tail);
     if (h !== t) axialSegs.push({ head: h, tail: t });
   }
@@ -301,6 +313,21 @@ export function bindRig(body: BuildResult): BoundRig {
     for (const [h, t] of boneEnds.values())
       if (distal.has(h) && !distal.has(t)) { distal.add(t); grew = true; }
   }
+  // The HEM PENDULUM's free end swings like a distal joint, and further: it
+  // is cloth, so only the garments on the hem bone (and bones sharing its
+  // hip joint) may ride it. The bride's stocking tops (thigh prims at
+  // y 0.78) ended nearer the hem tail (y 0.64, on the centreline) than the
+  // hip or knee, and in a walk rose off the leg as tubes to the swinging
+  // hem (2026-09-24).
+  const hemPendulum = body.bones.get('hem');
+  if (hemPendulum) distal.add(indexOf(hemPendulum.tail));
+  // The JAW point is stricter still: ONLY prims declared `on jaw` may bind
+  // to it. The upper lip ends 7 cm from it and 10 cm from the skull pivot,
+  // so a nearest-point bind would hang the upper lip (and the nose, and the
+  // throat stigmata) on the jaw; and the jaw shares the skull's pivot, so the
+  // bone-ring rule above would still let every skull prim reach it.
+  const jawBone = body.bones.get('jaw');
+  const jawTip = jawBone ? indexOf(jawBone.tail) : -1;
   const ringCache = new Map<string, Set<number>>();
   const boneRing = (bone: string): Set<number> | null => {
     const own = boneEnds.get(bone);
@@ -320,6 +347,7 @@ export function bindRig(body: BuildResult): BoundRig {
     let bestD = Infinity;
     positions.forEach((q, i) => {
       if (ring && distal.has(i) && !ring.has(i)) return;
+      if (i === jawTip && bone !== 'jaw') return;
       const d = len(sub(p, q)); if (d < bestD) { bestD = d; best = i; }
     });
     return { point: best, offset: sub(p, positions[best]!) };
@@ -355,10 +383,13 @@ export function bindRig(body: BuildResult): BoundRig {
   /** Does this prim ride the ONE rigid head transform? Shared by the rigid
    *  set built below and by boneFrames further down, which must agree with it
    *  exactly — a bone prim posed BOTH rigidly and axially is posed twice. */
+  // `on jaw` prims ride the head TOO (then the gape, in headTransform): the
+  // jaw is part of the rigid head that also hinges.
   const ridesHead = (p: { limb: string; a: Vec3; b: Vec3; bone?: string }): boolean =>
     skullPts !== null
     && p.limb === 'head'
-    && (len(sub(p.a, p.b)) < KEY_EPS
+    && ((jawBone !== undefined && p.bone === 'jaw')
+      || len(sub(p.a, p.b)) < KEY_EPS
       || (skullPts.has(bindEnd(p.a, p.bone).point) && skullPts.has(bindEnd(p.b, p.bone).point)));
   let head: HeadRigid | null = null;
   if (skull) {
@@ -378,6 +409,12 @@ export function bindRig(body: BuildResult): BoundRig {
     if (prims.size > 0 || bones.size > 0) {
       const restTip = sub(positions[tip]!, positions[pivot]!);
       head = { pivot, tip, restDir: normalize(restTip), restTip, prims, bones };
+      if (jawBone) {
+        const jp = new Set<number>(), jb = new Set<number>();
+        body.prims.forEach((p, i) => { if (p.bone === 'jaw' && prims.has(i)) jp.add(i); });
+        body.bonePrims.forEach((p, i) => { if (p.bone === 'jaw' && bones.has(i)) jb.add(i); });
+        head.jaw = { point: jawTip, rest: jawRestOf(skull.head, skull.tail, jawBone.tail), prims: jp, bones: jb };
+      }
     }
   }
 
@@ -465,12 +502,18 @@ export function bindRig(body: BuildResult): BoundRig {
 }
 
 /** Snap every rigid tip to anchor + yawed rest offset (pos AND prev, so the
- *  verlet carries no velocity into the next step). Pure; returns new points. */
-export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0, targets?: readonly Vec3[]): RigPoint[] {
+ *  verlet carries no velocity into the next step). With `targets`, a tip
+ *  points along its target direction instead — every tip, or only the tip
+ *  points in `only` (a held fist closing on its grip, motion.ts fistOnGrip).
+ *  Pure; returns new points. */
+export function pinTips(
+  points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0, targets?: readonly Vec3[],
+  only?: ReadonlySet<number>,
+): RigPoint[] {
   if (tips.length === 0) return points as RigPoint[];
   const out = points.slice();
   for (const t of tips) {
-    const offset = targets ? vscale(normalize(sub(targets[t.point]!, targets[t.anchor]!)), len(t.rest))
+    const offset = targets && (!only || only.has(t.point)) ? vscale(normalize(sub(targets[t.point]!, targets[t.anchor]!)), len(t.rest))
       : bodyYaw === 0 ? t.rest : rotateYaw(t.rest, bodyYaw);
     const pos = add(out[t.anchor]!.pos, offset);
     out[t.point] = { ...out[t.point]!, pos, prev: pos };
@@ -534,7 +577,7 @@ function poseShellPlane(rest: Primitive, posedA: Vec3, q: Quat): NonNullable<Pri
 
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
-  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig) : null;
+  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig, bound.rig.jawGape) : null;
   // Every rib/vertebra on an axial segment uses the same rotation. Derive it
   // once per applyRig call; a cache lasting across calls would retain a stale
   // pose after Verlet, yaw changes, or a collapse. Check restDir too because
@@ -584,10 +627,12 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // control point by orient along with the endpoints, so a rest-space
       // bend bowed a turned head's curve back into the skull — the ogre's
       // painted lips showed only their two end caps (rig-bind.test.ts).
+      // A jaw prim turns by the head AND the gape (jaw.ts jawOrient).
+      const q = rigid.jawPrims.has(i) ? rigid.jawQ : rigid.q;
       const a = add(rigid.origin, face.a);
-      return { ...p, a, b: add(rigid.origin, face.b), orient: rigid.q,
-        ...(p.bend ? { bend: qRotate(rigid.q, p.bend) } : {}),
-        ...(p.shell ? { shell: poseShellPlane(p, a, rigid.q) } : {}) };
+      return { ...p, a, b: add(rigid.origin, face.b), orient: q,
+        ...(p.bend ? { bend: qRotate(q, p.bend) } : {}),
+        ...(p.shell ? { shell: poseShellPlane(p, a, q) } : {}) };
     }
     return posePrimitive(p, bound.binding[i]!);
   });
@@ -616,8 +661,9 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       : frame ? `axial:${frame.head}-${frame.tail}`
       : `limb:${p.limb}:${bound.boneBinding[i]!.a.point}-${bound.boneBinding[i]!.b.point}`);
     if (face && rigid) {
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q,
-        ...(p.bend ? { bend: qRotate(rigid.q, p.bend) } : {}), boneSegment };
+      const q = rigid.jawBones.has(i) ? rigid.jawQ : rigid.q;
+      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: q,
+        ...(p.bend ? { bend: qRotate(q, p.bend) } : {}), boneSegment };
     }
     if (frame) {
       // Same composition as headTransform: the known body yaw first (the
@@ -704,12 +750,18 @@ export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): Clus
  * rest direction to the clamped solve — the residual only ever expresses the
  * in-cone look-at tilt it can see.
  */
-function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = false): {
+function headTransform(
+  h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = false, jawGape = 0,
+): {
   origin: Vec3;
   prims: Map<number, { a: Vec3; b: Vec3 }>;
   bones: Map<number, { a: Vec3; b: Vec3 }>;
   /** The clamped rigid rotation — applyRig also stamps it as prim.orient. */
   q: Quat;
+  /** The jaw prims' rotation (q with the gape) and which prims/bones take it. */
+  jawQ: Quat;
+  jawPrims: ReadonlySet<number>;
+  jawBones: ReadonlySet<number>;
 } {
   const pivot = pos[h.pivot]!.pos;
   const tip = pos[h.tip]!.pos;
@@ -730,12 +782,23 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, foll
     ? add(pivot, vscale(drift, HEAD_RIGID_TUNING.driftMax / d))
     : pivot;
 
+  // THE GAPE (rig.jawGape, from motion.ts): the `on jaw` prims open about
+  // the hinge in the head's REST frame, then turn with the head. No jaw: shut.
+  const jaw = h.jaw;
+  const gape = jaw && Number.isFinite(jawGape) ? Math.max(0, Math.min(JAW_MAX_GAPE, jawGape)) : 0;
+  const open = (i: number, set: ReadonlySet<number> | undefined, v: Vec3): Vec3 =>
+    gape !== 0 && jaw && set?.has(i) ? openAboutHinge(jaw.rest, v, gape) : v;
+
   const prims = new Map<number, { a: Vec3; b: Vec3 }>();
-  h.prims.forEach((rest, i) => prims.set(i, { a: qRotate(q, rest.a), b: qRotate(q, rest.b) }));
+  h.prims.forEach((rest, i) => prims.set(i, {
+    a: qRotate(q, open(i, jaw?.prims, rest.a)), b: qRotate(q, open(i, jaw?.prims, rest.b)) }));
   const bones = new Map<number, { a: Vec3; b: Vec3 }>();
-  h.bones.forEach((rest, i) => bones.set(i, { a: qRotate(q, rest.a), b: qRotate(q, rest.b) }));
-  return { origin, prims, bones, q };
+  h.bones.forEach((rest, i) => bones.set(i, {
+    a: qRotate(q, open(i, jaw?.bones, rest.a)), b: qRotate(q, open(i, jaw?.bones, rest.b)) }));
+  return { origin, prims, bones, q, jawQ: jawOrient(q, gape),
+    jawPrims: jaw?.prims ?? EMPTY_SET, jawBones: jaw?.bones ?? EMPTY_SET };
 }
+const EMPTY_SET: ReadonlySet<number> = new Set();
 
 /**
  * The rigid head's CURRENT clamped rotation (the same quaternion applyRig
@@ -776,9 +839,12 @@ export function kickHem(bound: BoundRig, delta: Vec3): BoundRig {
 export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
   let best = 0;
   let bestD = Infinity;
+  // Never the JAW point: it is kinematic (motion.ts pins it to the head
+  // frame), so a shove there would be erased next step and steal a headshot.
+  const jawPoint = bound.head?.jaw?.point;
   bound.rig.points.forEach((p, i) => {
     const d = len(sub(world, p.pos));
-    if (d < bestD && !p.pinned) { bestD = d; best = i; }
+    if (d < bestD && !p.pinned && i !== jawPoint) { bestD = d; best = i; }
   });
   return {
     ...bound,

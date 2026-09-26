@@ -20,7 +20,7 @@ import type { EncounterOrder } from './encounter-director';
 // not navigation.
 
 import type { BuildResult } from '../build-body';
-import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-bind';
+import { bindRig, applyRig, headQuatOf, impulseAt, pinTips, type BoundRig } from '../rig-bind';
 import {
   TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
@@ -388,6 +388,9 @@ export interface ZombieActor {
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
   readonly kind: 'zombie' | 'soldier';
+  /** The motion profile's character name ('zombie' when none) — which
+   *  character this is, where `kind` is only which decision vocabulary. */
+  profileName(): string;
   meleeCapable(): boolean;
   /** The LAST motion frame, or null before the first step. character-view's
    *  pose() reads `gun` (the held prop's transform) and `collapsed` (release
@@ -449,6 +452,15 @@ export interface ZombieActor {
     /** Ranged vocabulary — the soldier's aim progress 0..1; zombies 0. */
     aimT: number;
     meleeContacts: number;
+    /** The carry motion.ts used on the last step (carry.ts name), or null. */
+    carry: string | null;
+    /** prop.fistOnGrip bodies: metres from the fist (the middle of the right
+     *  hand bone, wrist to hand tip) to the seated prop's grip on the last
+     *  step. Null for every other body. The bride melee gate's number. */
+    fistGrip: number | null;
+    /** The same gap BEFORE the seat, to the grip where motion.ts put it:
+     *  how far the solved fist is from the authored grip. */
+    fistGripAuthored: number | null;
   };
   /**
    * One pellet lands at `hitWorld`, travelling along `dirWorld`.
@@ -774,6 +786,17 @@ export function createZombieActor(opts: {
   // The chaingun's spin follows the mind's state (barrel-spin.ts header).
   const spins = opts.profile?.gunner?.weapon === 'chaingun';
   let barrel: BarrelSpin = BARREL_REST;
+  /** prop.fistOnGrip: the right hand tip, pinned along its motion target
+   *  each step (pinTips `only`); the one-element list, built once. */
+  const fistTips = ((): { tips: BoundRig['tips']; only: ReadonlySet<number> } | null => {
+    const i = joints.index.handTipR;
+    if (!opts.profile?.prop?.fistOnGrip || i === undefined) return null;
+    const tips = bound.tips.filter(t => t.point === i);
+    return tips.length ? { tips, only: new Set([i]) } : null;
+  })();
+  /** See debug().fistGrip / fistGripAuthored. */
+  let lastFistGrip: number | null = null;
+  let lastFistGripAuthored: number | null = null;
 
   // Heavy-hit choreography state (blast-profile hits — the slug): the ROOT
   // knock. Knocked back along the shot's ground-plane direction from
@@ -901,7 +924,9 @@ export function createZombieActor(opts: {
     if (keep.length === next.rig.points.length) {
       next = {
         ...next,
-        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, points: keep.map(p => ({ ...p, pinned: false })) },
+        // jawGape carries over so a limb severed mid-swing does not shut the
+        // bride's jaw for a frame (absent on every other body).
+        rig: { ...next.rig, bodyYaw, headFollowsRig: bound.rig.headFollowsRig, jawGape: bound.rig.jawGape, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
     bound = next;
@@ -1023,6 +1048,12 @@ export function createZombieActor(opts: {
   let damageRevision = 0;
   function step(dt: number) {
     if (bakePaused) return;
+    // A MELEE prop falls with its sword arm (the bride): motion.ts stops the
+    // carry (canHold), so drop the sword rather than leave it hanging in air.
+    if (opts.profile?.melee && opts.profile.prop && !propReleaseRequested && missingLimbs().armR) {
+      propReleaseRequested = true;
+      opts.character?.releaseProp([0, 0, 0], opts.seed);
+    }
     reactionTime += Math.max(0, dt);
     let firstSub = true;
     // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
@@ -1069,7 +1100,12 @@ export function createZombieActor(opts: {
           headAlive: current.clusters.find(c => c.limb === 'head')?.alive ?? false,
           freshWounds: pendingWounds,
         }
-        : { ...CALM, dt: sdt };
+        // A MELEE carry (the bride) needs her real missing limbs on EVERY
+        // sub-step, not only on damage frames: motion.ts's canHold and arm
+        // pins read sig.missing, and CALM would re-pin a severed arm's joints
+        // to guard targets the frame after the cut (Task 11 review). Other
+        // profiles keep CALM exactly (the zombie no-op contract).
+        : opts.profile?.melee ? { ...CALM, dt: sdt, missing: missingLimbs() } : { ...CALM, dt: sdt };
       firstSub = false;
       // Decide before locomotion integrates, so the target this sub-step walks
       // toward is this sub-step's target.
@@ -1109,7 +1145,7 @@ export function createZombieActor(opts: {
       if (doomed) {
         think = {
           ...think, target: null, halt: true,
-          attack: null, fire: false, weaponUp: false, contact: false,
+          attack: null, fire: false, weaponUp: false, contact: false, advance: null,
         };
       }
       if (encounterOrder) {
@@ -1260,6 +1296,17 @@ export function createZombieActor(opts: {
       } else {
         detourSide = 0;
       }
+      // The sword LUNGE (enemy-mind.ts makeSwordMind): the brain halts
+      // locomotion during a swing, so the surge is applied to the root here,
+      // and only where the level allows it (the same combat-move check fed
+      // into MindInput.canMoveTo above).
+      if (think.advance) {
+        const p = state.wander.pos;
+        const next: Vec3 = [p[0] + think.advance[0], p[1], p[2] + think.advance[2]];
+        if (clearCombatMove(p, next, opts.furniture)) {
+          state = { ...state, wander: { ...state.wander, pos: next } };
+        }
+      }
       const beforeMove = state.wander.pos;
       const stepR = stepMotion(
         state, joints,
@@ -1361,19 +1408,44 @@ export function createZombieActor(opts: {
         },
       ).points;
       if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+      // THE FIST CLOSES ON THE GRIP (profile.prop.fistOnGrip, the bride). The
+      // game rig never pins tips (only the lab's stepActorMotion does), so the
+      // hand tip reached its grip-line target only through the soft rest pull:
+      // measured 3.1 cm fist-to-grip at the guard and up to 4.8 cm mid-swing.
+      // Point JUST that tip along its motion target, as actor.ts does. Every
+      // other tip (and every other character) keeps the unpinned verlet.
+      if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
+        points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
+      }
       if (f.collapsed) {
         points = applyFloorContact(points, f.floorY);
       }
       bound = {
         ...bound,
-        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw },
+        rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
           f.collapsed ? f.floorY : undefined),
       };
       for (const kick of f.kicks) {
         const i = joints.index[kick.joint];
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
       }
-      if ((soldierDamage || opts.profile?.gunner) && f.gun && !f.collapsed) {
+      // Seat the held prop on the solved hand: the soldier, every gunner, and
+      // every MELEE prop (the bride's sword; Task 11). The ogre carries a prop
+      // but has no `melee`, so his chainsaw keeps riding the motion target as
+      // it always has.
+      // prop.fistOnGrip (the bride): the fist is the middle of the solved
+      // hand bone (wrist to the pinned tip), where the fist prim sits.
+      const fistTipI = joints.index.handTipR;
+      const fistPt: Vec3 | null = opts.profile?.prop?.fistOnGrip && f.gun && fistTipI !== undefined && !propReleaseRequested
+        ? (() => {
+          const w = bound.rig.points[joints.index.handR]!.pos, t = bound.rig.points[fistTipI]!.pos;
+          return [(w[0] + t[0]) / 2, (w[1] + t[1]) / 2, (w[2] + t[2]) / 2] as Vec3;
+        })()
+        : null;
+      const gapTo = (g: Vec3 | null) => (fistPt && g
+        ? Math.hypot(fistPt[0] - g[0], fistPt[1] - g[1], fistPt[2] - g[2]) : null);
+      lastFistGripAuthored = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
+      if ((soldierDamage || opts.profile?.gunner || (opts.profile?.prop && opts.profile.melee)) && f.gun && !f.collapsed) {
         // Motion authors the grip target before Verlet and bend constraints.
         // Seat the prop on the solved hand without changing its authored
         // wrist rotation (the elbow pole adjustment must not repitch it).
@@ -1385,9 +1457,14 @@ export function createZombieActor(opts: {
         const reach = opts.profile?.prop?.gripReach ?? 0;
         const fdx = wrist[0] - elbow[0], fdy = wrist[1] - elbow[1], fdz = wrist[2] - elbow[2];
         const fl = Math.hypot(fdx, fdy, fdz) || 1;
-        const hand: Vec3 = reach > 0
+        // A fistOnGrip prop seats on the FIST, not on the forearm line: after
+        // motion.ts seats the grip it swivels the elbow out (alignElbow), so
+        // the solved forearm is no longer the line the grip and the hand bone
+        // were laid on. Seating the sword on that line left it 3.1 cm off the
+        // fist at the guard and 4.8 cm mid-swing (measured, Task 11).
+        const hand: Vec3 = fistPt ?? (reach > 0
           ? [wrist[0] + fdx / fl * reach, wrist[1] + fdy / fl * reach, wrist[2] + fdz / fl * reach]
-          : wrist;
+          : wrist);
         const grip = gunPoint(f.gun, GUN_GRIP.gripHand);
         f.gun = { ...f.gun, root: [
           f.gun.root[0] + hand[0] - grip[0],
@@ -1395,6 +1472,7 @@ export function createZombieActor(opts: {
           f.gun.root[2] + hand[2] - grip[2],
         ] };
       }
+      lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
       if (signals.fire && f.gun && !f.collapsed) {
         const fwd = qRotate(f.gun.quat, [0, 0, 1]);
         // The death burst sprays HIGH and wide: up 15-60 deg, +-25 deg yaw.
@@ -1455,6 +1533,8 @@ export function createZombieActor(opts: {
         hasToken: md.hasToken,
         aimT: md.aimT,
         meleeContacts,
+        carry: d.carry ?? null,
+        fistGrip: lastFistGrip, fistGripAuthored: lastFistGripAuthored,
       };
     }
   }
@@ -1969,6 +2049,7 @@ export function createZombieActor(opts: {
       hasToken: mind.debug().hasToken,
       aimT: mind.debug().aimT,
       meleeContacts,
+      carry: null, fistGrip: null, fistGripAuthored: null,
     },
     hit,
     hitSlug,
@@ -1978,6 +2059,7 @@ export function createZombieActor(opts: {
      *  `at` = 'full' → severLimb (whole cluster); a number n → severDistal
      *  from the n-th prim of the limb's chain (0 = root; for the head,
      *  1 leaves the neck on the body — the headshot-stump case). */
+    profileName: () => opts.profile?.name ?? 'zombie',
     debugSever: (limb: LimbId, at: 'full' | number = 'full') => {
       const cluster = current.clusters.find(c => c.limb === limb);
       if (!cluster?.alive) return false;

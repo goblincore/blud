@@ -43,6 +43,7 @@ import ogreBlobSrc from './characters/ogre.blob?raw';
 import broodmotherBlobSrc from './characters/broodmother.blob?raw';
 import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
+import brideBlobSrc from './characters/bride.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -66,6 +67,9 @@ export interface CharacterEntry {
    *  every frame the hero loop re-poses it from rig-frames.ts's per-bone
    *  transforms (see the `kit?.pose(frames)` call). */
   kit?: string;
+  /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
+   *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
+  armoured?: boolean;
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -214,6 +218,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   soldier: {
     name: 'soldier', src: soldierBlobSrc,
     kit: '/assets/lab/soldier-kit.gltf',
+    armoured: true,
     // Measured from the original PNG, excluding alpha < 8, exactly like
     // the lab's applyMeanOf. The fallback 1 halved its level in the game.
     face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
@@ -226,6 +231,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   juggernaut: {
     name: 'juggernaut', src: juggernautBlobSrc,
     kit: '/assets/lab/juggernaut-kit.gltf',
+    armoured: true,
     // The soldier's baked face and its measured mean: same PNG, same crop.
     face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
     profile: JUGGERNAUT_PROFILE,
@@ -329,6 +335,25 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     name: 'cultist-cowled', src: cultistCowledBlobSrc,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('cultist'),
+  },
+  // The bride — Blud's death knight: a pale, lace-dressed swordswoman.
+  // docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md. Flesh,
+  // shell cloth and the corpse-makeup face sheet in the .blob (Tasks 1-3);
+  // plate arms, pauldron, thigh boots, chains and crosses in the kit
+  // (characters/bride-kit.wam, compiled by scripts/build-wam-kit.sh bride;
+  // committed as the glTF). ARMOURED like the soldier: her plate sparks and
+  // sheds, baring the raw fused seams under it. BRIDE_PROFILE (Task 8):
+  // the STALK gait, the sword prop and its guard/trail carries; the sword
+  // mind that swings it comes later. The face is GENERATED
+  // (scripts/make-bride-face.py) and worn at rgb multiply. mean is MEASURED off the PNG (the painter prints it): the lab
+  // re-measures off the decoded pixels, but the game uses this value as is,
+  // and bakedFace's fallback of 1 would darken her whole face ~28% there.
+  bride: {
+    name: 'bride', src: brideBlobSrc,
+    kit: '/assets/lab/bride-kit.gltf',
+    armoured: true,
+    face: { ...bakedFace('bride-face.png'), mean: 0.712472 },
+    profile: motionProfileFor('bride'),
   },
 
 };

@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
-import { ROOMS, spawnPoints } from './game-level';
+import { roomSpawnPoints } from './game-level-leaves';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 import { rngStreams } from './rng';
 import { CHUNK_TUNING } from '../gib-chunks';
@@ -207,7 +207,8 @@ export function createSpawnGooSeams(ctx: GameContext, d: SpawnGooDeps) {
       name: string, n: number,
       opts?: { spacing?: number; ring?: boolean; region?: FloorRect },
     ) => {
-      const room = ROOMS.find(r => r.id === d.playerRoomId()) ?? ROOMS[0]!;
+      const rooms = ctx.world.level.rooms;
+      const room = rooms.find(r => r.id === d.playerRoomId()) ?? rooms[0]!;
       const spacing = opts?.spacing ?? 1.2;
       let p0: Vec3;
       let floor: FloorRect;
@@ -220,8 +221,9 @@ export function createSpawnGooSeams(ctx: GameContext, d: SpawnGooDeps) {
         floor = r;
         gridOpts = { centre: [cxs, czs], inset: REGION_INSET_M };
       } else {
-        const starts = spawnPoints(room);
-        p0 = starts[0] ?? ([0, 0, 0] as Vec3);
+        const starts = roomSpawnPoints(ctx, room);
+        // Authored rooms carry no ring spawn slots: fall back to the room centre.
+        p0 = starts[0] ?? ([(room.minX + room.maxX) / 2, 0, (room.minZ + room.maxZ) / 2] as Vec3);
         floor = { minX: room.minX, maxX: room.maxX, minZ: room.minZ, maxZ: room.maxZ };
       }
       const points = crowdGridPoints(p0, n, spacing, floor, gridOpts);

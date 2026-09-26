@@ -82,18 +82,25 @@ import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from 
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
-import { makeSoldierMind } from './enemy-mind';
+import { makeSoldierMind, makeSwordMind } from './enemy-mind';
+import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
 import { GUNNER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import type { Vec3 } from '../types';
 import type { Quat } from '../vec';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
-import {
-  ROOMS, TUNNELS, FURNITURE, levelColliders, levelSurfaces,
-  enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START, slotCharacter,
-  type RoomDef,
-} from './game-level';
+import { wanderBounds, type RoomDef } from './game-level';
+import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel } from './active-level';
+import { parseLevelJson } from './level-json';
+import { levelCeilingM, roomSpawnPoints } from './game-level-leaves';
+import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor-leaves';
+import { mountGameMenu } from './game-menu-dom';
+import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
+import { loadLevelArt, placeLevelArt } from './game-art-leaves';
+import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
+import type { LevelPlane, LevelRoom } from './level-def';
+import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
@@ -286,9 +293,9 @@ import { bodiesOnScreen, traceSlugHitFrom } from './game-world-leaves';
 import { captureTelemetryScene } from './game-telemetry-leaves';
 import { demoScenarioOf } from './game-demo-leaves';
 import { awaitBakes, registerLitChunkMaterial } from './game-bake-leaves';
-import { ROOM_ID_BY_NAME, playerRoomId } from './game-player-leaves';
+import { playerRoomId } from './game-player-leaves';
 import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDirToRig } from './game-weapon-leaves';
-import { BUNDLE_CEIL_M, ceilingAt } from './game-world-leaves';
+import { ceilingAt } from './game-world-leaves';
 import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-leaves';
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-leaves';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-vfx-leaves';
@@ -521,7 +528,29 @@ async function main() {
   mark('world-start');
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
-  ctx.world.colliders = levelColliders();
+  // --- ACTIVE LEVEL (Level Format v1 — spec 2026-09-23). ?level=<id> loads
+  // public/assets/levels/<id>.level.json (&state=<name> picks a state); no
+  // param is the ring testbed, bit-identical to before.
+  // Mesh key: the level's art, parsed here and placed with the level group below.
+  let artScene: THREE.Group | null = null;
+  {
+    const q = new URLSearchParams(location.search);
+    const levelParam = q.get('level');
+    if (levelParam) {
+      const res = await fetch(`/assets/levels/${levelParam}.level.json`);
+      if (!res.ok) throw new Error(`level ${levelParam}: HTTP ${res.status}`);
+      const def = parseLevelJson(await res.json(), { state: q.get('state') ?? undefined });
+      const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
+      if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
+      ctx.world.level = authoredLevel(def);
+      artScene = await loadLevelArt(levelParam, def.art);
+    } else {
+      ctx.world.level = ringLevel();
+    }
+  }
+  // The same array object for the session (movers hold the reference);
+  // refreshGateColliders (game-level-leaves) rewrites it in place.
+  ctx.world.colliders = [...ctx.world.level.staticColliders, ...ctx.world.level.gateColliders(ctx.world.openGates)];
   // ---- ACTOR VISIBILITY CULL STATE ---------------------------------------
   //
   // EVERY binding updateVisibleActors closes over lives here, above the draw
@@ -602,10 +631,11 @@ async function main() {
   ctx.world.coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
   ctx.world.sightA = [0, 0, 0];
 
-  ctx.world.encounterNav = createEncounterNavigation(ROOMS, TUNNELS, ctx.world.colliders);
+  // Static colliders: enemies route with gates open (spec §6.4).
+  ctx.world.encounterNav = createEncounterNavigation(ctx.world.level.rooms, ctx.world.level.tunnels, ctx.world.level.staticColliders);
   ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
   ctx.world.encounterHomes = new Map<number, Vec3>();
-  ctx.world.surfaces = levelSurfaces();
+  ctx.world.surfaces = { planes: ctx.world.level.surfaces.planes, boxes: ctx.world.level.surfaces.boxes };
   ctx.world.levelGroup = new THREE.Group();
   ctx.world.levelGroup.name = 'ring-level';
   ctx.world.stoneSet = dungeonMaterialSet();
@@ -625,14 +655,19 @@ async function main() {
     // failure pointing up. A small emissive term in their own colour keeps
     // them legible as the room's top surface without flattening the mood.
     const isCeiling = axis === 1 && p.facing < 0;
+    // Outdoor v1 §8: grounds, paths and edges by surface tag; null keeps the
+    // stone path below exactly (the ring's planes carry no tag).
+    const outdoorMat = outdoorSurfaceMaterial((p as LevelPlane).surface, w, h);
     const base = stoneFor(axis, p.facing) as THREE.MeshStandardMaterial;
-    const mesh = new THREE.Mesh(geo, base.clone());
-    const mm = mesh.material as THREE.MeshStandardMaterial;
-    mm.color = new THREE.Color(p.color[0], p.color[1], p.color[2]);
-    // Ceilings keep a whisper of self-light so they do not read as a void —
-    // but far less than the gallery needed, because the flashlight now
-    // reaches them.
-    if (isCeiling) mm.emissive = new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.10);
+    const mesh = new THREE.Mesh(geo, outdoorMat ?? base.clone());
+    if (!outdoorMat) {
+      const mm = mesh.material as THREE.MeshStandardMaterial;
+      mm.color = new THREE.Color(p.color[0], p.color[1], p.color[2]);
+      // Ceilings keep a whisper of self-light so they do not read as a void —
+      // but far less than the gallery needed, because the flashlight now
+      // reaches them.
+      if (isCeiling) mm.emissive = new THREE.Color(p.color[0], p.color[1], p.color[2]).multiplyScalar(0.10);
+    }
     const mid: Vec3 = [
       (p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2,
     ];
@@ -642,7 +677,7 @@ async function main() {
     else if (p.facing < 0) mesh.rotation.y = Math.PI;
     ctx.world.levelGroup.add(mesh);
   }
-  for (const b of ctx.world.surfaces.boxes) {
+  const addBoxMesh = (b: { min: Vec3; max: Vec3; color: Vec3 }): THREE.Mesh => {
     const geo = new THREE.BoxGeometry(
       b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
     const mesh = new THREE.Mesh(geo, (ctx.world.stoneSet.coverLow as THREE.MeshStandardMaterial).clone());
@@ -651,8 +686,43 @@ async function main() {
     mesh.position.set(
       (b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
     ctx.world.levelGroup.add(mesh);
+    return mesh;
+  };
+  for (const b of ctx.world.surfaces.boxes) addBoxMesh(b);
+  // Authored levels only (the ring has neither). Gates are boxes built like
+  // the rest, kept by id so openGate can hide them.
+  for (const g of ctx.world.level.surfaces.gates) ctx.world.gateMeshes.set(g.id, addBoxMesh(g.box));
+  // Windows (spec §8, v1 placeholder): a flat self-lit plane on the wall. It
+  // takes the walls' material path, not an unlit MeshBasicNodeMaterial: the
+  // deferred router hides unstamped basic materials as unsupported.
+  for (const win of ctx.world.level.surfaces.windows) {
+    const p = win.plane;
+    const hex = win.view === 'train-waiting' ? 0x6a3a1a : 0x101828;
+    const w = p.axis === 0 ? p.max[2] - p.min[2] : p.max[0] - p.min[0];
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, p.max[1] - p.min[1]),
+      (ctx.world.stoneSet.wall as THREE.MeshStandardMaterial).clone());
+    const mm = mesh.material as THREE.MeshStandardMaterial;
+    mm.color = new THREE.Color(0x000000);
+    mm.emissive = new THREE.Color(hex);
+    mesh.position.set((p.min[0] + p.max[0]) / 2, (p.min[1] + p.max[1]) / 2, (p.min[2] + p.max[2]) / 2);
+    if (p.axis === 0) mesh.rotation.y = p.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
+    else if (p.facing < 0) mesh.rotation.y = Math.PI;
+    mesh.name = `window:${win.id}`;
+    ctx.world.levelGroup.add(mesh);
   }
+  // Mesh key §5: the art joins the group BEFORE the per-room light lists are
+  // assigned (below), so it is lit exactly like the walls.
+  if (artScene && ctx.world.level.def?.art) placeLevelArt(ctx, artScene, ctx.world.level.def.art);
   scene.add(ctx.world.levelGroup);
+  // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
+  // (null for the ring). Before the per-room light lists are built, so the moon
+  // joins the open rooms' lists (levelSceneLights honours userData.onlyRooms).
+  ctx.lighting.outdoor = createOutdoor(ctx);
+  // THE VOID: portals, glow pools, embers (null without a portal).
+  ctx.lighting.void = createVoid(ctx);
+  // THE TRAIN: window scenery and sway (null unless the art has them). Before the
+  // per-room light lists: the glass is unlit and skipped there.
+  ctx.world.train = createTrain(ctx);
 
   // CEILING FILL. The sun points down; ceilings (and north-south walls in
   // shadow) have normals pointing away from it, so with only a dim ambient
@@ -719,7 +789,7 @@ async function main() {
     ctx.vfx.explosionLightPool.push(pl);
   }
   ctx.lighting.flickerLights = [];
-  for (const r of ROOMS) {
+  for (const r of ctx.world.level.rooms) {
     for (const a of r.accents) {
       const pl = new THREE.PointLight(
         new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
@@ -773,7 +843,7 @@ async function main() {
   ctx.lighting.flashlight = createFlashlight(DUNGEON_RIG, ctx.boot.shadowMapParam > 0 ? { shadowMapSize: ctx.boot.shadowMapParam } : {});
   // BOOT-TIME shadow ablation (?spotshadow=0), for the dungeon bench legs.
   // castShadow has to be decided BEFORE the first frame: toggling it live
-  // crashes three r185 WebGPU (ShadowNode.updateShadow dereferences the
+  // crashes three r185 WebGPU, and r186 keeps the unguarded read (ShadowNode.updateShadow dereferences the
   // disposed map's depthTexture — see the __dungeon note below), and
   // shadow.intensity=0 cannot stand in — it only zeroes the SAMPLING term;
   // the 1024² map still renders every frame, so it would measure the wrong
@@ -793,7 +863,7 @@ async function main() {
   // maps (deferred-shadows.ts) are explicit raster passes that never consult
   // renderer.shadowMap, and every opaque surface is an unlit G-buffer
   // producer — three's per-light shadow maps would be 1024² passes of pure
-  // waste per renderer.render call. Boot-time decision: three r185 WebGPU
+  // waste per renderer.render call. Boot-time decision: three r185/r186 WebGPU
   // crashes when castShadow is toggled after maps were built, so this ships
   // as a boot property like the legacy ?spotshadow=0 ablation above.
   ctx.boot.handle.renderer.shadowMap.enabled = !ctx.boot.deferredMode;
@@ -806,7 +876,8 @@ async function main() {
   // recompile); changing the radius after that does not.
   ctx.boot.handle.renderer.shadowMap.type = THREE.PCFShadowMap;
   ctx.world.levelGroup.traverse((o) => {
-    if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; }
+    // Level art may opt out of casting (mesh key §4: `shadow = false`).
+    if (o instanceof THREE.Mesh) { o.castShadow = o.userData.shadow !== false; o.receiveShadow = true; }
   });
 
   function applyRig(rig: AmbientRig) {
@@ -838,7 +909,7 @@ async function main() {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
     get on() { return ctx.lighting.dungeonOn; },
     /** The weapon light itself, for runtime A/Bs (shadow.intensity 0/1 is the
-     *  shadow kill switch — do NOT toggle spot.castShadow live, three r185
+     *  shadow kill switch — do NOT toggle spot.castShadow live, three r185/r186
      *  WebGPU crashes rebuilding a disposed shadow map). */
     spot: ctx.lighting.flashlight.spot,
     /** Beam knobs, also on the tuning panel. */
@@ -1640,22 +1711,26 @@ async function main() {
       // walls as-is. bounceSpotGain 0 (?bouncespot=0) is bit-identical.
       let bounceSpot: ReturnType<typeof computeBounceSpot> = null;
       if (ctx.lighting.bounceSpotGain > 0 && flashGate > 0) {
-        const key = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
-        const roomDef = ROOMS.find(r => r.name === key);
-        const enc = enclosureOf(key);
+        const key = ctx.world.level.keyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
+        const roomDef = ctx.world.level.rooms.find(r => r.name === key);
+        const enc = ctx.world.level.enclosureFor(key);
         if (enc) {
           const walls = roomDef ? {
             negX: roomDef.wallColor, posX: roomDef.wallColor, negY: roomDef.floorColor,
             posY: roomDef.ceilColor, negZ: roomDef.wallColor, posZ: roomDef.wallColor,
           } : enc.walls;
-          const occ = roomDef ? FURNITURE.filter(f => f.room === roomDef.id)
+          const occ = roomDef ? ctx.world.level.furniture.filter(f => f.room === roomDef.id)
             .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 })) : [];
           const sp = ctx.lighting.flashlight.spot.position, sc = ctx.lighting.flashlight.spot.color;
           bounceSpot = computeBounceSpot({
             pos: [sp.x, sp.y, sp.z], axis: [sAxis.x, sAxis.y, sAxis.z],
             intensity: flashGate, cosInner: flashInner, cosOuter: flashOuter,
             range: ctx.lighting.flashlight.spot.distance, keyGain: ctx.vfx.beamTuning.gain, color: [sc.r, sc.g, sc.b],
-          }, enc.box, walls, occ);
+          }, enc.box, walls, occ,
+          // Outdoor v1 §7: no bounce patch on the sky (top face, walls above the edge).
+          roomDef && (roomDef as Partial<LevelRoom>).sky
+            ? { above: ((roomDef as Partial<LevelRoom>).floor ?? 0) + ((roomDef as Partial<LevelRoom>).edge?.height ?? roomDef.height) }
+            : undefined);
         }
       }
       // GPU PROBE GATHER (P3/P4 dynamic layer). Once per frame for the
@@ -1666,11 +1741,11 @@ async function main() {
       // doorway — the NEAREST room by centre, so stepping back to watch a
       // firefight through the arch does not switch the layer off (owner:
       // "close it works, medium or far it doesn't").
-      const dynKey = enclosureKeyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
-      let dynRoom: RoomDef | null = ROOMS.find(r => r.name === dynKey) ?? null;
+      const dynKey = ctx.world.level.keyAt(ctx.player.player.pos[0], ctx.player.player.pos[2]);
+      let dynRoom: RoomDef | null = ctx.world.level.rooms.find(r => r.name === dynKey) ?? null;
       if (!dynRoom) {
         let bestD = Infinity;
-        for (const r of ROOMS) {
+        for (const r of ctx.world.level.rooms) {
           const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
           const d = (cx - ctx.player.player.pos[0]) ** 2 + (cz - ctx.player.player.pos[2]) ** 2;
           if (d < bestD) { bestD = d; dynRoom = r; }
@@ -1782,7 +1857,7 @@ async function main() {
           grid: dynGrid,
           enclosure: { min: [dynRoom.minX, 0, dynRoom.minZ], max: [dynRoom.maxX, dynRoom.height, dynRoom.maxZ] },
           wallAlbedo: dynRoom.wallColor,
-          occluders: FURNITURE.filter(f => f.room === dynRoom.id).map(f => ({
+          occluders: ctx.world.level.furniture.filter(f => f.room === dynRoom.id).map(f => ({
             box: { min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 },
             albedo: [0.35, 0.33, 0.30] as Vec3,
           })),
@@ -2827,7 +2902,20 @@ async function main() {
   ctx.probes.probesParam = new URLSearchParams(location.search).get('probes');
   ctx.probes.probesOff = ctx.probes.probesParam === '0' || ctx.probes.probesParam === 'off';
   ctx.world.roomProbes = createRoomProbes({
-    rooms: ROOMS, furniture: FURNITURE,
+    rooms: ctx.world.level.rooms, furniture: ctx.world.level.furniture,
+    // Outdoor v1 §7: an open room bakes against its sky (through the top and
+    // above its edge) with the moon as its key. Closed rooms are unchanged.
+    skyFor: r => {
+      const lr = r as Partial<LevelRoom>;
+      return lr.sky ? { radiance: SKY_PRESETS[lr.sky].ambient, above: (lr.floor ?? 0) + (lr.edge?.height ?? r.height) } : null;
+    },
+    lightFor: r => {
+      const lr = r as Partial<LevelRoom>;
+      const P = LIGHT_PRESETS['practical-hard-key'];
+      if (!lr.sky) return { dir: P.keyDir, keyColor: P.keyColor, keyIntensity: P.keyIntensity, fillIntensity: P.fillIntensity };
+      const m = SKY_PRESETS[lr.sky].moon;
+      return { dir: m.dir, keyColor: m.color, keyIntensity: m.intensity, fillIntensity: P.fillIntensity };
+    },
     light: {
       dir: LIGHT_PRESETS['practical-hard-key'].keyDir,
       keyColor: LIGHT_PRESETS['practical-hard-key'].keyColor,
@@ -2863,12 +2951,12 @@ async function main() {
   // rides the pipeline cache key.
   // -----------------------------------------------------------------------
   const roomIdAt = (x: number, z: number): number => {
-    const key = enclosureKeyAt(x, z);
-    const inRoom = ROOMS.find(r => r.name === key);
+    const key = ctx.world.level.keyAt(x, z);
+    const inRoom = ctx.world.level.rooms.find(r => r.name === key);
     if (inRoom) return inRoom.id;
     // Tunnel and doorway surfaces: the nearest room by centre (dynRoom's rule).
-    let best = ROOMS[0]!, bestD = Infinity;
-    for (const r of ROOMS) {
+    let best = ctx.world.level.rooms[0]!, bestD = Infinity;
+    for (const r of ctx.world.level.rooms) {
       const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
       const d = (cx - x) ** 2 + (cz - z) ** 2;
       if (d < bestD) { bestD = d; best = r; }
@@ -2877,7 +2965,7 @@ async function main() {
   };
   if (!ctx.boot.deferredMode) {
     const gatherNode = ctx.probes.gather.probeDynNode;
-    for (const r of ROOMS) {
+    for (const r of ctx.world.level.rooms) {
       const slots = createProbeLevelSlots(gatherNode);
       const node = new ProbeLightingNode(slots);
       ctx.lighting.levelProbeNodes.set(r.id, node);
@@ -2896,7 +2984,10 @@ async function main() {
     const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
     for (const mesh of ctx.world.levelGroup.children) {
       if (!(mesh instanceof THREE.Mesh)) continue;
-      const list = ctx.world.levelLightLists.get(roomIdAt(mesh.position.x, mesh.position.z));
+      if (mesh.userData.skipLevelLights) continue; // unlit art (the train's window scenery)
+      // Art carries its room (mesh key §5); generated surfaces go by position.
+      const room = typeof mesh.userData.room === 'number' ? mesh.userData.room as number : roomIdAt(mesh.position.x, mesh.position.z);
+      const list = ctx.world.levelLightLists.get(room);
       if (!list) continue;
       const nm = library.fromMaterial(mesh.material as THREE.Material);
       if (!nm) continue;
@@ -2907,8 +2998,8 @@ async function main() {
   }
 
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
-    const enc = enclosureOf(room.name)!;
-    const roomFurniture = FURNITURE
+    const enc = ctx.world.level.enclosureFor(room.name)!;
+    const roomFurniture = ctx.world.level.furniture
       .filter(f => f.room === room.id)
       .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 }));
     // THE SHARED PATH (character-view.ts). Compile, bone-ratio override,
@@ -3045,6 +3136,8 @@ async function main() {
     // the zombie's wet black latex. The zombie keeps the panel-tunable flesh.
     view.applyMaterial(name !== 'zombie' ? character.palette ?? ctx.vfx.flesh : ctx.vfx.flesh,
       LIGHT_PRESETS['practical-hard-key']);
+    // Outdoor v1 §7: a body in an open room takes the moon as its key light.
+    if ((room as Partial<LevelRoom>).sky) applyMoonKey(ctx, view.uniforms);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
     // or a rebuild would silently reset the ramp (the silent-reset class
@@ -3174,6 +3267,12 @@ async function main() {
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
       boundedWounds: ctx.vfx.boundedWoundPreview,
+      // A SWORD profile (motion-profile.ts `melee.kind === 'sword'`, the
+      // bride) gets the ring brain on SWORD_TUNING plus strike contact and
+      // the lunge's root advance (enemy-mind.ts makeSwordMind).
+      ...(characterEntry(name).profile.melee?.kind === 'sword' ? {
+        mind: makeSwordMind(),
+      } : {}),
       // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
       // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
       // gun, the juggernaut's chaingun. Was `name === 'soldier'`.
@@ -3215,6 +3314,14 @@ async function main() {
       furniture: roomFurniture,
       navigation: ctx.world.encounterNav,
       onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
+      // A melee hit on the player. There is no player health, so a hit is
+      // FEEDBACK only: the red flash, the camera shake and the counter
+      // (player-hit-feedback.ts). Every actor gets it; the zombie mind never
+      // reports contact, so for the zombie this never fires. No sound: the
+      // SDF game loads no audio at all, so there is none to reuse.
+      onMeleeContact: ({ variant }) => {
+        ctx.player.hitFeedback = hitFeedback(ctx.player.hitFeedback, variant);
+      },
       // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
       // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
       // the whole swollen head (blood-sim.ts burstVolume — the 10-bead point
@@ -3263,18 +3370,17 @@ async function main() {
   })();
 
   function spawnAll(errs: string[]): void {
-    for (const room of ROOMS) {
-      for (const [index,start] of spawnPoints(room).entries()) {
-        // Soldiers, then juggernauts, then zombies (game-level slotCharacter).
-        // ?spawn=<character> (playtest): every ZOMBIE slot spawns that
-        // registry character instead, e.g. ?spawn=cultist, ?spawn=juggernaut.
-        const name = slotCharacter(room, index, spawnOverride);
-        ctx.world.actors.push(spawnEnemy(name, room, start, errs));
-      }
+    // ?spawn=<character> (playtest): every ZOMBIE slot spawns that registry
+    // character instead, e.g. ?spawn=cultist, ?spawn=juggernaut. Soldier,
+    // cultist and juggernaut slots keep their kind (level-def SpawnKind).
+    for (const s of ctx.world.level.spawnList()) {
+      const name = s.kind === 'zombie' ? spawnOverride ?? 'zombie' : s.kind;
+      ctx.world.actors.push(spawnEnemy(name, s.room, s.pos, errs));
     }
   }
 
-  spawnAll(ctx.boot.errors);
+  // ?nospawn (dev/gates): boot the level with no enemies, e.g. to walk its layout.
+  if (!new URLSearchParams(location.search).has('nospawn')) spawnAll(ctx.boot.errors);
   setLoader(ctx, 'level + actors');
   if (ctx.boot.errors.length > 0) {
     console.error('[sdf-game] body errors:', ctx.boot.errors.join(' | '));
@@ -3344,9 +3450,10 @@ async function main() {
   ctx.bake.lastBakeInfo = null;
   // Bone tubes (task 5): the instancer owns its own light set — seed it once
   // from body 1's view, which just took the LIGHT_PRESETS apply above, so
-  // the tube pass cannot drift from the march's key.
-  {
-    const v = ctx.world.actors[0]!.view.uniforms;
+  // the tube pass cannot drift from the march's key. A level with no bodies
+  // (the Void) has nothing to seed from and nothing to draw bones for.
+  if (ctx.world.actors[0]) {
+    const v = ctx.world.actors[0].view.uniforms;
     ctx.render.boneInstancer.uniforms.lightDir.value.copy(v.lightDir.value);
     ctx.render.boneInstancer.uniforms.keyColor.value.copy(v.keyColor.value);
     ctx.render.boneInstancer.uniforms.lightCfg.value.copy(v.lightCfg.value);
@@ -3378,9 +3485,10 @@ async function main() {
   // Baked chunks (close-up task 5): same seed from body 1's view — the
   // mesh shade fn is boneShade's formula, so it takes the same diet. The
   // per-frame FLASHLIGHT refresh happens in the render callback beside the
-  // bone instancer's; this seed is the room's key/ambient.
-  {
-    const v = ctx.world.actors[0]!.view.uniforms;
+  // bone instancer's; this seed is the room's key/ambient. No bodies (the
+  // Void): no seed, and chunks never bake.
+  if (ctx.world.actors[0]) {
+    const v = ctx.world.actors[0].view.uniforms;
     const seedBaked = (m: BakedChunkMaterial) => {
       m.uniforms.lightDir.value.copy(v.lightDir.value);
       m.uniforms.keyColor.value.copy(v.keyColor.value);
@@ -3491,19 +3599,19 @@ async function main() {
   // BOOT SELECT. `?room=6` (or any room id, or its name) starts the player at
   // that room's centre facing +z — the tuning loop's entry point, so a reload
   // with a different ?fxsize lands you straight in the arena instead of walking
-  // there. Absent = PLAYER_START, bit-identical to before this existed. The
+  // there. Absent = the level's player start, bit-identical to before this existed. The
   // in-page equivalent is __sdfGame.teleport(id).
   ctx.boot.roomParam = new URLSearchParams(location.search).get('room');
   ctx.boot.room = ctx.boot.roomParam === null ? null
-    : ROOMS.find(r => r.name === ctx.boot.roomParam
+    : ctx.world.level.rooms.find(r => r.name === ctx.boot.roomParam
       || r.id === Number(ctx.boot.roomParam)) ?? null;
   ctx.player.player = {
     pos: ctx.boot.room
       ? [(ctx.boot.room.minX + ctx.boot.room.maxX) / 2, 0, (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2]
-      : [PLAYER_START.x, 0, PLAYER_START.z],
+      : [ctx.world.level.playerStart.x, 0, ctx.world.level.playerStart.z],
     vel: [0, 0, 0],
-    yaw: ctx.boot.room ? 0 : PLAYER_START.yaw,
-    pitch: PLAYER_START.pitch,
+    yaw: ctx.boot.room ? 0 : ctx.world.level.playerStart.yaw,
+    pitch: ctx.world.level.playerStart.pitch,
     grounded: true,
   };
   ctx.player.keys = new Set<string>();
@@ -3514,6 +3622,8 @@ async function main() {
   document.addEventListener('pointerlockchange', () => {
     ctx.boot.hud.lockHint = document.pointerLockElement !== ctx.boot.canvas;
   });
+  // Esc menu: Resume / New game (level picker), shown once the pointer is released.
+  mountGameMenu(ctx.boot.canvas, ctx.world.level.id);
 
   // -----------------------------------------------------------------------
   // THE INPUT SEAM (deterministic demo recordings stage 3, 2026-09-14).
@@ -6488,6 +6598,15 @@ async function main() {
       + '</g></svg>';
     document.body.appendChild(ctx.player.reticleEl);
   }
+  // THE HIT FLASH: a full-screen red multiply the tick drives from
+  // ctx.player.hitFeedback.flash when an enemy blade lands.
+  {
+    ctx.player.hitFlashEl = document.createElement('div');
+    ctx.player.hitFlashEl.setAttribute('style',
+      'position:fixed; inset:0; z-index:34; pointer-events:none;'
+      + ' background:#8a0000; mix-blend-mode:multiply; opacity:0;');
+    document.body.appendChild(ctx.player.hitFlashEl);
+  }
 
   ctx.boot.hudEl = document.getElementById('hud');
   ctx.boot.hud = { lockHint: true };
@@ -6548,6 +6667,9 @@ async function main() {
     // replay. See the declaration next to lastSeenMs for the why.
     advanceSimClock(dt);
     ctx.demo.simFrame++;
+    stepOutdoor(ctx, dt);
+    stepVoid(ctx, dt);
+    stepTrain(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
@@ -6739,7 +6861,7 @@ async function main() {
         const p = a.pose().pos;
         return {
           x: p[0], z: p[2],
-          r: enclosureKeyAt(p[0],p[2]).startsWith('tunnel') ? .34 : a.engagedForCrowd() ? ENGAGED_RADIUS : .45,
+          r: ctx.world.level.keyAt(p[0],p[2]).startsWith('tunnel') ? .34 : a.engagedForCrowd() ? ENGAGED_RADIUS : .45,
           mobile: !a.motionFrame()?.collapsed,
         };
       });
@@ -7470,7 +7592,13 @@ async function main() {
       ctx.panels.impactSplashLayer?.step(cdt);
     }
 
-    const eye = eyeOf(ctx.player.player);
+    // Melee hit feedback: the shake offsets the eye (and so the look target,
+    // which is taken from `eye` below: the view shakes, it does not swivel);
+    // the flash drives the overlay.
+    ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, dt);
+    if (ctx.player.hitFlashEl) ctx.player.hitFlashEl.style.opacity = String(ctx.player.hitFeedback.flash * 0.55);
+    const eye0 = eyeOf(ctx.player.player), shake = ctx.player.hitFeedback.offset;
+    const eye: Vec3 = [eye0[0] + shake[0], eye0[1] + shake[1], eye0[2] + shake[2]];
     camera.position.set(eye[0], eye[1], eye[2]);
     const cp = Math.cos(ctx.player.player.pitch + ctx.weapon.recoilPitch);
     camera.lookAt(
@@ -7478,6 +7606,8 @@ async function main() {
       eye[1] + Math.sin(ctx.player.player.pitch + ctx.weapon.recoilPitch),
       eye[2] - Math.cos(ctx.player.player.yaw) * cp,
     );
+    // The train's roll and bob ride on the view only (never the player or collision).
+    applyTrainCamera(ctx, camera);
     camera.updateMatrixWorld();
 
     // Optional impact crown: rebuild from the current event times after the
@@ -8015,11 +8145,14 @@ async function main() {
     createBootSeams(ctx),
     createRenderSeams(ctx),
     createWorldSeams(ctx),
+    createOutdoorSeams(ctx),
+    createVoidSeams(ctx),
+    createTrainSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
     createShellDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), shellAmpOf: withCtx(ctx, shellAmpOf), camera }),
-    createSpawnGooSeams(ctx, { BUNDLE_CEIL_M, playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
+    createSpawnGooSeams(ctx, { BUNDLE_CEIL_M: levelCeilingM(ctx), playerRoomId: withCtx(ctx, playerRoomId), spawnChunkPiece }),
     {
     /** Replay a `.dem` (`file` object, or a path/URL to fetch) headlessly and
      *  return `{ frames, census, ... }`. `hash: true` also digests the frame
@@ -8140,11 +8273,14 @@ async function main() {
       return dropped;
     },
     spawnDebugCharacter: (name: string, start?: Vec3) => {
-      const room = ROOMS.find(r => r.id === playerRoomId(ctx)) ?? ROOMS[0]!;
-      const starts = spawnPoints(room);
+      const rooms = ctx.world.level.rooms;
+      const room = rooms.find(r => r.id === playerRoomId(ctx)) ?? rooms[0]!;
+      const starts = roomSpawnPoints(ctx, room);
       // The game's own debug seam keeps the modulo default; crowdGridPoints()
-      // callers pass an explicit point (perf 7f).
-      const chosen = start ?? starts[ctx.world.actors.filter(a => a.room === room.id).length % starts.length]!;
+      // callers pass an explicit point (perf 7f). An authored room with no
+      // spawns falls back to its centre.
+      const chosen = start ?? starts[ctx.world.actors.filter(a => a.room === room.id).length % starts.length]
+        ?? [(room.minX + room.maxX) / 2, 0, (room.minZ + room.maxZ) / 2] as Vec3;
       const errs: string[] = [];
       const actor = spawnEnemy(name, room, chosen, errs);
       ctx.world.actors.push(actor);

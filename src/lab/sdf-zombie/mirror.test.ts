@@ -230,3 +230,33 @@ describe('single-sided prims (side=l|r)', () => {
     })).toThrow(/not a mirrored bone/);
   });
 });
+
+// `lenR=` (bride, 2026-09-24): an ASYMMETRIC mirrored bone. The bride's sword
+// forearm is longer than her off forearm, but a mirror block gives both sides
+// one length, and a bone outside it cannot parent to `upperarm.l` (that name
+// only exists after this expansion) nor carry arm prims (arm limbs need a
+// side). So the right copy takes its own length and nothing else changes.
+describe('expandMirror — lengthR', () => {
+  const asym: BodyDef = {
+    ...def,
+    bones: [
+      def.bones[0]!,
+      { name: 'thigh', parent: 'pelvis', dir: [0, -1, 0], length: 0.4, lengthR: 0.46, side: 0.09, mirror: true },
+    ],
+  };
+  const out = expandMirror(asym);
+
+  it('gives the .r copy lengthR and the .l copy length', () => {
+    expect(out.bones.find(b => b.name === 'thigh.l')!.length).toBe(0.4);
+    expect(out.bones.find(b => b.name === 'thigh.r')!.length).toBe(0.46);
+  });
+
+  it('leaves no lengthR on the expanded copies', () => {
+    for (const b of out.bones) expect(b.lengthR).toBeUndefined();
+  });
+
+  it('is a no-op when absent', () => {
+    const plain = expandMirror(def);
+    expect(plain.bones.find(b => b.name === 'thigh.r')!.length).toBe(0.4);
+  });
+});

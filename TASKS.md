@@ -19,6 +19,59 @@
 - [x] **In the game**: one juggernaut in the arena (`RoomDef.juggernauts`); `?spawn=juggernaut` fills the zombie slots.
   [Spec](docs/superpowers/specs/2026-09-25-juggernaut-design.md) · [Plan](docs/superpowers/plans/2026-09-25-juggernaut.md)
 - [ ] *Next variant candidate:* Grenadier (gas mask, grenades flush last-known position, dodges dynamite).
+## Bride (sword melee enemy) — first pass 2026-09-24
+
+- [x] **Body, face, cloth, kit:** SDF flesh (wrong anatomy, stigmata), corpse-makeup face sheet, shell
+  bodice/skirt/veil/hair/stockings, WAM plate+boots+chain+crosses kit. [Notes](docs/dev-notes/2026-09-24-bride/NOTES.md)
+- [x] **Sword carry + swing:** `swordGuard`/`swordTrail` carries, `STALK` gait, `BRIDE_PROFILE`; phase-keyed
+  cleave/sweep/lunge tracks with `fistOnGrip` and pinned arms; jaw gapes on the wind-up.
+- [x] **Game wiring:** `?spawn=bride` fights on the sword mind; hits flash/shake/count (no player health).
+  `node scripts/bride-melee-gate.mjs 5271 9271` passed as of Task 11 (`64285c82`'s jaw-adjacent
+  edits are untested in a browser since). Crowd gate's negative control fails on the base commit
+  too (pre-existing, unrelated).
+- [x] **Unit-test verification (Task 13):** `tsc --noEmit` clean, all targeted tests pass after the
+  kit gained Task 12's `jaw` bone (skeleton parity had caught it; geometry unchanged, WAM rebuild).
+- [ ] Perf census vs cultist (fallback-B gate) deferred by the owner (2026-09-24).
+- [ ] Polish: jaw red interior + corner tear; plate detail (lames, rivets, rolled edges); the boot
+  top edge (reads as a seam against the stocking); the skirt reading as crumpled cloth rather than
+  lace ruffles; the veil's crown reading like a nun's coif; the STALK gait's trailing-foot kick
+  (reads brisker than a stalk); she doesn't re-face between swings; the head tilts ~45° looking
+  around (jaw-gape measurement had to account for it).
+- [ ] Out of scope (by design): a second elbow, veil collapse on a head hit, a ranged special,
+  real player damage (health), sounds.
+- [ ] Room to grow: `MAX_PRIMS` is now 256 (landed on main, see below), so the Task 3 wish-list (third skirt
+  tier, hair volume, veil hem, part sweeps) is unblocked; the next wall is 64 prims per cluster.
+
+## New game flow restructure — design approved 2026-09-24
+
+[Spec](docs/superpowers/specs/2026-09-24-new-game-flow-design.md): intro → menu → **the void** (hub, unlit, one portal) → **Night Train first**; the Wake moves later (train crash).
+- [x] 1 Design + doc updates (vision §6.1/§10.3/§10.4, Night Train, Wake).
+- [x] 2 **The Void + portal** ([spec](docs/superpowers/specs/2026-09-24-void-portal-design.md) · [plan](docs/superpowers/plans/2026-09-24-void-portal.md)): `?level=the-void`; Esc → New game starts there. WGSL portal (flame rim, haze, ray-cast tracks), embers, glow pool; format `void` rooms + `portals`. Gate `scripts/sdf-game-void-gate.sh` 3/3; Wake + shorty gates pass. First level with no bodies (boot seeds guarded). **Next:** owner look review; portal targets `the-wake` until Night Train exists.
+- [x] 3a **Level mesh key** ([spec](docs/superpowers/specs/2026-09-24-level-mesh-key-design.md) · [plan](docs/superpowers/plans/2026-09-24-level-mesh-key.md)): `dressing` → `<id>.art.glb` (kit linked + GPU-instanced, rest joined per room/material), `shell: "art"`; with art, solids/furniture are collision only. The Wake draws its dressing (359 meshes → 53). Gate `scripts/sdf-game-art-gate.sh` passes; budget +75 draws / +5 ms (owner-approved). Art emission capped at 1 (Blender strengths blew out).
+- [x] 3b **Train carriage kit** ([spec](docs/superpowers/specs/2026-09-25-train-carriage-kit-design.md) · [plan](docs/superpowers/plans/2026-09-25-train-carriage-kit.md)): `kit.blend` (23 pieces, 6 baked textures) → `night-train` carriages 1, 3, 5, 8 (310 linked pieces → 71 instanced meshes), WGSL window scenery, sway; the Void's portal → `night-train`. Gate `scripts/sdf-game-train-gate.sh` passes. Budget +175 draws / +10 ms (owner-approved). Art nits open: lamp bloom, ceiling brackets, black hills.
+- [x] 4a **Night Train layout** draft 1 approved ([layout.md](docs/game/levels/01-night-train/layout.md)): five carriages as chains of rooms (van 3 rooms, dining saloon + island + galley, **sleeper** 5 compartments, party, cab); widths 3.6/4.2/4.0/4.2/3.0.
+- [x] 4b **Carriages rebuilt from the layout** ([plan](docs/superpowers/plans/2026-09-25-night-train-rebuild.md)): `cultist` spawn kind; kit walls at the wall plane, shells sized per carriage, partitions, layout props; `build_night_train.py` reads `night_train_layout.py`. Gate: every room walked (24 waypoints, `?nospawn`). Budget raised to +200 draws / +10 ms (owner; optimise once the level feels good).
+- [ ] 4c Gameplay: encounters (wake-up triggers), the Stoker; dawn later.
+
+## Wake level pipeline — Plan 1 in flight — 2026-09-23
+
+**Hand-off:** [2026-09-24 wake + outdoor](docs/dev-notes/2026-09-24-wake-outdoor-handoff.md). Merged to `main` 2026-09-24 (99669277). [Plan 1](docs/superpowers/plans/2026-09-11-wake-1-level-format.md) · [spec](docs/superpowers/specs/2026-09-23-level-format-design.md) · [Wake tasks](docs/game/levels/00-the-wake/tasks.md).
+- [x] T1 `level-def.ts` (types + spec §6 generators), 13 tests. Dispatched, verified in session.
+- [x] T2 `level-json.ts` + shared fixtures (`two-rooms` = spec §4.2 verbatim, `two-floors`), 30 tests with T1.
+- [x] T3 `active-level.ts`: `ringLevel()` (byte-for-byte the testbed) and `authoredLevel(def)`; 64 tests with T1–T2 + game-level.
+- [x] T4 Blender exporter + conventions. Fixed in session: stale `matrix_world` (markers exported at origin), yaw rounding.
+- [x] T6 `ctx.world.level` wired; `?level=the-wake` plays; ring shorty gate passes; boot within noise of base.
+- [x] T7 `scripts/sdf-game-wake-gate.sh` passes (boot, layout, crypt slab, multi-floor refusal).
+- [x] T5a [reference study](docs/game/levels/00-the-wake/reference-study.md): 256 BU/m (doorways), 10 lessons.
+- [x] T5b [layout](docs/game/levels/00-the-wake/layout.md) approved (no soldier); T5c rebuilt from it: 8 rooms, level test 7/7, gate passes.
+- [x] T5d placeholder dressing in the `.blend` (67/67 solids) + Blender review renders (`scripts/levels/render_level_views.py`).
+- [x] Layout review (owner): route bends (lane SW → slab NE), funeral home is a gothic manor on the graveyard's north edge.
+- [ ] Next: outdoor rendering spec (below). Dispatch skill default is now `zai/glm-5.3-flash`.
+- [x] **Esc menu** (`game-menu.ts` + `game-menu-dom.ts`): Resume / New game → Ring or The Wake (reloads with `?level=`). The sim does not pause behind it.
+- [~] **Outdoor v1** [spec](docs/superpowers/specs/2026-09-23-outdoor-v1-design.md) · [plan](docs/superpowers/plans/2026-09-23-outdoor-v1.md): T1–T6 dispatched + verified, T7 wired (ring unchanged, boot within noise), T8 Wake adopted (gate 5/5). **Next: owner tuning of the `night` preset** (`__sdfGame.setSky`); ground reads too dark. Terrain = spec 2; mesh key (manor in-game) next spec. Was: the engine only knows enclosed dungeon rooms. Open: moon key +
+  sky ambient vs. per-room probe boxes in open-sky rooms; ground/terrain materials (grass, gravel, dirt) instead of stone
+  floors; open-sky room edges as fence/hedge/treeline + horizon instead of 8.5 m walls; a sky, not fog-as-clear-colour;
+  per-room materials (every room shares one stone palette); terrain elevation. Brainstorm → spec before the Wake's art pass.
 
 ## Prim ceiling 128 -> 256, per-body texture width — done 2026-09-24
 

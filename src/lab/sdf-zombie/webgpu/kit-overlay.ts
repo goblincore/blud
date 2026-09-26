@@ -171,6 +171,13 @@ const LOOK: Record<string, {
   cloth: { metalness: 0.0, roughness: 0.92, envIntensity: 0.22 },
   boot:  { metalness: 0.0, roughness: 0.62, envIntensity: 0.35 },
 
+  // --- bride kit (bride-kit.wam): her chains are steel links, so they take
+  // `iron`'s numbers. Unlisted, they fell to LOOK_DEFAULT's near-dielectric
+  // sheen and read as grey cord. (Her `boot` is cream suede and shares the
+  // ogre's dull-sheen `boot` entry above; her `plate` is breakable armour and
+  // gets loadKit's own duller look.)
+  chain: { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
+
   // SHARED BY BOTH KITS, so it is listed once. The clown's pom-poms and mitts
   // and the mouse's shoe highlight are both plain white cloth; this table is
   // keyed by material NAME across every kit, not per character, so a name

@@ -31,6 +31,7 @@ import { constrainRigBends, stepRig } from './rig';
 import { relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
+import type { SwingVariant } from './attack';
 import { isSoldierFamily, type MotionProfile } from './motion-profile';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
@@ -136,6 +137,9 @@ export interface ActorStepInput {
   forceSpeed?: number;
   /** Hold this carry regardless of gait/fire state — see MotionConfig. */
   carryOverride?: CarryName;
+  /** A live swing (attack.ts's phase clock) — see MotionConfig.attack. Only
+   *  forwarded when set, so callers without one step bit-identically. */
+  attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
 }
 
 /**
@@ -162,6 +166,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
         headingFollow: input.headingFollow, gazeFollow: input.gazeFollow,
         profile: input.profile, forceSpeed: input.forceSpeed,
         carryOverride: input.carryOverride,
+        ...(input.attack ? { attack: input.attack } : {}),
       },
       {
         dt: sdt,
@@ -203,13 +208,19 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
     // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
-    points = pinTips(points, m.bound.tips, f.bodyYaw, isSoldierFamily(input.profile) && f.collapsed ? f.restPose : undefined);
+    // A fist closed on its prop's grip (profile.prop.fistOnGrip) points along
+    // the motion target motion.ts laid on the grip line, not the rest hang.
+    const soldierDown = isSoldierFamily(input.profile) && f.collapsed;
+    const fistTip = m.motionJoints.index.handTipR;
+    const fist = !soldierDown && input.profile?.prop?.fistOnGrip && f.gun && fistTip !== undefined
+      ? new Set([fistTip]) : undefined;
+    points = pinTips(points, m.bound.tips, f.bodyYaw, soldierDown || fist ? f.restPose : undefined, fist);
     if (f.collapsed) {
       points = applyFloorContact(points, f.floorY);
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw },
+      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
         f.collapsed ? f.floorY : undefined),
     };
     // Fire kicks: point shoves THROUGH the rig, after the bend constraints

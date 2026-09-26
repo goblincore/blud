@@ -1,0 +1,430 @@
+# Bride kit — the POLYGON half of the bride, authored in WAM.
+#
+# WHY TWO LANGUAGES: goblin-kit.wam's header, and the owner's rule
+# (2026-09-08): flesh is SDF, armour and accessories are MESH. Plate wants
+# edges smooth-min cannot keep; her flesh wants exactly the roundness it gives.
+#
+# WHAT SHE WEARS (spec: docs/superpowers/specs/2026-09-24-bride-sword-enemy-design.md):
+#   * PLATE (dull steel, `plate` = breakable armour, webgpu/kit-damage.ts):
+#     vambraces on both forearms, couters cupping the backs of both elbows,
+#     fingered gauntlets on both hands, and ONE pauldron, on the RIGHT (sword)
+#     shoulder. The left shoulder and both upper arms stay bare.
+#   * BOOT: cream suede thigh-highs.
+#   * CHAIN: a chain girdle over the skirt's waist, a choker and a long
+#     necklace that falls onto the top of the bodice slot.
+#   * IRON: three crosses: two hanging off the girdle, one off the necklace,
+#     dangling over the laced rib window.
+#
+# HOOK 4, THE FUSED GAUNTLETS (bride.blob's header). The plate is built
+# AROUND raw-red flesh the .blob already grows, and must never cover it:
+#   * the ELBOW CREASE (upperarm at=1.00, +z): the couter cups only the BACK
+#     of the elbow and the vambrace starts 4-5 cm below the joint, so the
+#     front of the elbow is an open, red seam between two plates;
+#   * UNDER THE PAULDRON (upperarm.r at=0.24-0.30): the pauldron's skirt ends
+#     at y ~1.37, above the two swellings, and is open underneath (no cap) —
+#     the red flesh bulges out from under the rim;
+#   * THE SWORD-HAND CUFF (forearm.r at=0.97, hand.r's tendril): the right
+#     vambrace stops short of the wrist and the right gauntlet is a back-of-
+#     hand plate whose fingers sink into the flesh, so the red wrist ring
+#     and the tendril that grows on past the fist (toward the sword grip,
+#     Task 5) both show.
+#
+# THE SKELETON BELOW MIRRORS characters/bride.blob AND MUST TRACK IT.
+# bride-kit.test.ts checks every bone head to 10 mm. The two conversions
+# from goblin-kit.wam's header, neither optional:
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. The
+#     bride's height is 1.85 (bride.blob's `height`), so every number here —
+#     bones, rings, offsets, attach sizes — is the metre value / 1.85. (The
+#     compiled glTF is in metres again: WAM multiplies back by `height`.)
+#   * PITCH SIGN ON `down` BONES. Up bones share pitch verbatim; every down
+#     bone NEGATES it. tilt needs no flip.
+#
+# THE UNEVEN FOREARM. bride.blob gives the sword forearm its own length
+# (`forearm len=0.26 lenR=0.30`); a WAM mirror block always gives .l and .r
+# one length (wam/skeleton.py solve()). So forearm.l / forearm.r are written
+# OUT of the mirror, as explicit sided bones parented to the mirrored
+# upperarm.l / upperarm.r (WAM resolves `parent=upperarm.r` literally; checked
+# with a ten-line test .wam first). Being outside the mirror, the .r bone
+# is not reflected for us: its tilt is written NEGATIVE by hand (tilt splays
+# a down bone toward +x, and the right arm splays toward -x). The hands then
+# go back in a second mirror block, whose `parent=forearm` resolves to the
+# suffixed forearm.l / forearm.r.
+#
+# FLESH THIS WRAPS, marched off bride.blob with sdBody bisects PER LIMB-
+# ISOLATED CLUSTER (the soldier's method; arms after the 2026-09-24 splay),
+# as the RADIUS from the bone axis, in METRES:
+#   forearm (both; t is the fraction of each side's own length)
+#     t0.10 0.032  t0.20 0.029  t0.40 0.027  t0.60 0.0255  t0.80 0.0235
+#     t0.90 0.023 (L) / 0.025 (R)  t1.00 0.026 (L) / 0.036 (R: the red cuff)
+#   hand.l  t0.20 w0.040 d0.052  t0.45 w0.036 d0.055  t0.70 w0.026 d0.040,
+#           flesh ends at ~t0.8 (y 0.80)
+#   hand.r  t0.00 w0.072 d0.073  t0.45 w0.059 d0.068  t1.00 0.045, the
+#           tendril on to t1.6 (0.034)
+#   elbow   w0.074 d0.083 (the crease bulge is +0.047 in front)
+#   deltoid upperarm t0.10 0.044, t0.30 0.036 (the .r bulges reach 0.05)
+#   thigh   t0.58 0.052  t0.70 0.050  t0.90 0.043  knee 0.041
+#   shin    t0.10 0.033  t0.20 w0.082 d0.089 (calf, -z 0.050)  t0.30 w0.078
+#           d0.084  t0.40 0.037  t0.50 0.031  t0.60 0.026  t0.80 0.023
+#           t1.00 0.022
+#   foot    flesh x 0.054..0.116, y 0.012..~0.05, z -0.030..0.136 (ankle
+#           at x 0.085, y 0.071)
+#   girdle  skirt dome at y 1.070: half-width 0.175, half-depth 0.164
+#   neck    t0.30 w0.081 d0.085; the shoulder yoke tops out at y 1.466
+#   chest   front surface z at x=0: y1.44 0.049, 1.41 0.072, 1.38 0.105,
+#           1.35 0.111 (the bodice top / bust)
+#
+# RING MARGINS. `style chunky` lofts are 8-sided and a facet midpoint sits
+# at cos(22.5) = 92.4% of the nominal radius, so every plate ring is
+# (flesh / 0.924) + ~6 mm. The boots are 12-sided (cos 15 = 96.6%) — suede,
+# not plate — at ~+7 mm.
+#
+# SKIRT CLEARANCE. The vambraces hang beside the ruffle skirt's widest tier.
+# With the Task 1 arm hang (upperarm tilt 11, forearm 6) the forearm FLESH
+# already ran 5-14 mm into the skirt at y 0.94-1.04 (probed at the forearm's
+# own z), so any plate there punched straight through it. bride.blob's arms
+# now splay to tilt 14 / 12: flesh-to-skirt clearance is >= 13 mm at rest,
+# and the vambrace's ~6 mm margin leaves the plate clear of the cloth.
+#
+# BUILD:  scripts/build-wam-kit.sh bride
+#   -> public/assets/lab/bride-kit.gltf (committed; WAM lives outside the repo).
+#
+# EXPECTED LINTS, correct to ignore: bones with no geometry near them (the
+# flesh lives in the .blob — pelvis, spine1, chest, skull, upperarm.l,
+# clavicle, ...).
+model bride-kit
+  height 1.85
+  style chunky
+
+palette
+  # DULL STEEL. A neutral grey (no hue to go blue under the env sheen; the
+  # soldier kit's note). kit-overlay.ts gives BREAKABLE plate its own duller
+  # look (metalness 0.70, roughness 0.24), which is the brief: worn, not
+  # mirror-bright — the shine in her read belongs to the wet red seams.
+  plate #6c7075
+  # CREAM SUEDE. A warm cream, a step darker than the ivory stockings
+  # (e8e0d0) and skirt (f4f1ea), so the boot top reads as a separate layer
+  # against the stocking band rather than as more stocking.
+  boot  #c9b48e
+  # Chains: darkened steel, a step below the plate so the fine links read
+  # against it. kit-overlay.ts LOOK gives `chain` the iron sheen.
+  chain #4c4f54
+  # Blackened iron crosses.
+  iron  #34363a
+
+skeleton
+  # .blob `root pelvis at 0.96 len=0.08` -> a WAM root POINT + `hips`.
+  # 0.96/1.85, 0.08/1.85. Every .blob `parent=pelvis` becomes `parent=hips`.
+  root pelvis at 0.51892
+  bone hips   parent=pelvis dir=up len=0.04324
+  # up-bone pitches verbatim.
+  bone spine1 parent=hips   dir=up pitch=-2 len=0.08108
+  bone chest  parent=spine1 dir=up pitch=-3 len=0.09189
+  bone spine2 parent=chest  dir=up pitch=0  len=0.03784
+  bone neck   parent=spine2 dir=up pitch=8  len=0.07568
+  bone skull  parent=neck   dir=up pitch=-4 len=0.12973
+  # THE JAW (bride.blob, Task 12): a point-carrier from the skull pivot to
+  # the chin, driven by the sword wind-up. No kit piece rides it; it is
+  # transcribed so the skeleton-parity test sees every .blob bone. Up bone:
+  # pitch verbatim; 0.070 m / 1.85.
+  bone jaw    parent=neck   dir=up pitch=66 len=0.03784
+  # THE HEM PENDULUM (bride.blob, Task 3): a down bone from the hip joint
+  # whose tail is a loose Verlet point; the rigid ruffle skirt rides it. It
+  # is transcribed because the girdle and its crosses ride it TOO — a chain
+  # on the hips would be crossed by the swinging skirt every stride.
+  bone hem    parent=hips   dir=down len=0.21622
+  mirror
+    # clavicle dir=side: tilt verbatim (toward +y on both languages).
+    bone clavicle parent=spine2   side=0.01081 dir=side tilt=-8 len=0.07027
+    # down: .blob upperarm tilt 14 pitch 2 -> pitch -2.
+    bone upperarm parent=clavicle dir=down tilt=14 pitch=-2 len=0.16216
+    # down: .blob thigh pitch 2 -> -2, shin -1 -> 1.
+    bone thigh    parent=hips     dir=down tilt=-1.5 pitch=-2 side=0.04595 len=0.26486
+    bone shin     parent=thigh    dir=down tilt=1.5  pitch=1  len=0.25946
+    bone foot     parent=shin     dir=fwd                     len=0.07027
+  end
+  # THE UNEVEN FOREARM (see the header): .blob `forearm tilt=12 pitch=10
+  # len=0.26 lenR=0.30`. pitch negated (down bone); .r's tilt negated by
+  # hand because nothing mirrors it.
+  bone forearm.l parent=upperarm.l dir=down tilt=12  pitch=-10 len=0.14054
+  bone forearm.r parent=upperarm.r dir=down tilt=-12 pitch=-10 len=0.16216
+  mirror
+    # .blob hand pitch 8 -> -8. `parent=forearm` resolves forearm.l / .r.
+    bone hand parent=forearm dir=down pitch=-8 len=0.04324
+  end
+  # KIT-ONLY BONES: the long necklace's path, which no blob bone follows.
+  # A chain of short bones hung off spine2's tail, running from behind the
+  # left side of the neck, over the collarbone, down to the top of the bodice
+  # slot (x 0, y 1.362, z 0.118) and back up the right side. Each point sits
+  # ~6-8 mm off the probed chest surface. The rig has no frames for these
+  # names, so kit-overlay.ts poses them from their parent (spine2) — they
+  # ride the upper chest rigidly, which is what a necklace lying on it does.
+  #   P0 ( 0.050, 1.472, -0.020)  P1 ( 0.062, 1.452, 0.040)
+  #   P2 ( 0.048, 1.412,  0.074)  P3 ( 0.024, 1.378, 0.108)
+  #   P4 ( 0.000, 1.362,  0.118)  ... and back, x mirrored.
+  bone nk0 parent=spine2 at=1.0 offset=(0.02703,0.02286,-0.00319) dir=(0.1864,-0.3107,0.9321) len=0.0348
+  bone nk1 parent=nk0 dir=(-0.2577,-0.7362,0.6258) len=0.02937
+  bone nk2 parent=nk1 dir=(-0.4466,-0.6327,0.6327) len=0.02905
+  bone nk3 parent=nk2 dir=(-0.7861,-0.5241,0.3276) len=0.0165
+  bone nk4 parent=nk3 dir=(-0.7861,0.5241,-0.3276) len=0.0165
+  bone nk5 parent=nk4 dir=(-0.4466,0.6327,-0.6327) len=0.02905
+  bone nk6 parent=nk5 dir=(-0.2577,0.7362,-0.6258) len=0.02937
+  bone nk7 parent=nk6 dir=(0.1864,0.3107,-0.9321) len=0.0348
+
+parts
+  # ==========================================================================
+  # VAMBRACES — plate tubes on both forearms, from 4-5 cm below the elbow
+  # (the crease stays OPEN) to the wrist. (flesh / 0.924) + 6 mm per ring.
+  # Written per side, not mirrored: the rings are the same fractions, but the
+  # sword side stops SHORT of the wrist so the red cuff (forearm.r at=0.97)
+  # shows between it and the gauntlet, while the off side runs on under the
+  # gauntlet's flared cuff.
+  # The rings beside the skirt are 2 mm narrower and sit 3 mm OUTWARD
+  # (side=, which is world +x on a down bone, so negative on the right arm):
+  # the plate stays full on the outside and hugs the flesh (~4 mm) on the
+  # inside, where the ruffle skirt's warp came within 1-2 mm of it at rest.
+  # ==========================================================================
+  loft vambrace.l bones=forearm.l..forearm.l material=plate
+    ring 0.17 w=0.04324 d=0.04324
+    ring 0.22 w=0.04054 d=0.04162 side=0.00162
+    ring 0.45 w=0.0373 d=0.03838 side=0.00162
+    ring 0.70 w=0.03459 d=0.03568 side=0.00162
+    ring 0.90 w=0.03351 d=0.03405 side=0.00108
+    ring 0.98 w=0.03676 d=0.03784
+    cap start=none end=none
+  loft vambrace.r bones=forearm.r..forearm.r material=plate
+    ring 0.15 w=0.04324 d=0.04324
+    ring 0.20 w=0.04054 d=0.04162 side=-0.00162
+    ring 0.43 w=0.0373 d=0.03838 side=-0.00162
+    ring 0.68 w=0.03459 d=0.03568 side=-0.00162
+    ring 0.84 w=0.03459 d=0.03514 side=-0.00108
+    ring 0.88 w=0.03784 d=0.03892
+    cap start=none end=none
+
+  mirror
+    # ========================================================================
+    # COUTERS — a cup over the BACK of each elbow, never the front: a free ray
+    # from the elbow joint aimed back (-z) and a little outward, starting
+    # 10 mm behind the joint so the rim rides the sides of the joint and the
+    # crease in front stays bare. The rim ring is buried in the arm above and
+    # below the joint (that is where a couter's lames tuck), the apex stands
+    # ~15 mm off the point of the elbow. yaw=-25 turns a back-pointing ray
+    # toward +x (outward on .l; mirrored for .r).
+    # ========================================================================
+    # FLAT AND SPIKED, not a dome: the first build's 45 mm domed cup read as
+    # a steel BALL on the back of each elbow (the back frames). Shorter, with
+    # a wide shoulder, and a short point on the back — the death knight.
+    loft couter bone=upperarm at=1.0 offset=(0,0,-0.00541) dir=back yaw=-25 len=0.01838 material=plate
+      ring 0.00 w=0.05297 d=0.06054
+      ring 0.45 w=0.04973 d=0.05622
+      ring 0.80 w=0.03784 d=0.04324
+      ring 1.00 w=0.01622 d=0.01838 tip
+      cap start=none end=none
+
+    # ========================================================================
+    # THIGH-HIGH BOOTS — cream suede from y ~0.756 (thigh t0.58) down to the
+    # ankle, 12-sided (suede, not plate). The top sits 2-3 cm UNDER the
+    # stocking's lace band (y 0.77-0.79), so a strip of ivory stocking and the
+    # band show between boot and skirt hem (0.855). A folded cuff at the top.
+    # Chain t = thigh 0.49 + shin 0.48; the knee is at chain t 0.505. The calf
+    # rings carry the flesh's backward swell (fwd<0).
+    # ========================================================================
+    loft bootshaft bones=thigh..shin material=boot sides=12
+      ring 0.293 w=0.07135 d=0.07405
+      ring 0.306 w=0.07027 d=0.07297
+      ring 0.318 w=0.06595 d=0.06919
+      ring 0.354 w=0.06378 d=0.06703
+      ring 0.455 w=0.05568 d=0.05838
+      ring 0.505 w=0.05405 d=0.05622
+      ring 0.555 w=0.04649 d=0.04757
+      ring 0.604 w=0.05405 d=0.06162 fwd=-0.00324
+      ring 0.653 w=0.05189 d=0.05838 fwd=-0.0027
+      ring 0.703 w=0.04865 d=0.05189 fwd=-0.00162
+      ring 0.752 w=0.04324 d=0.04432
+      ring 0.802 w=0.03784 d=0.03784
+      ring 0.901 w=0.03459 d=0.03459
+      ring 1.000 w=0.03351 d=0.03459
+      cap start=none end=none
+
+    # BOOT FOOT — a free ray along +z from behind the heel to past the toe,
+    # frame=up so d is HEIGHT. Centre y 0.040 (offset -0.031 from the 0.0707
+    # ankle), so the tallest ring (0.080) puts the sole on y 0.000. Starts
+    # 45 mm behind the ankle, runs 200 mm to a pointed toe 10 mm past the
+    # flesh. The ankle rings swallow the shaft's bottom ring.
+    loft bootfoot bone=foot at=0.0 offset=(0,-0.01676,-0.02919) dir=fwd len=0.10811 frame=up material=boot sides=12
+      ring 0.00 w=0.02703 d=0.03243
+      ring 0.10 w=0.03892 d=0.04324
+      ring 0.30 w=0.04216 d=0.04324
+      ring 0.55 w=0.04216 d=0.03459
+      ring 0.78 w=0.03784 d=0.02703
+      ring 0.93 w=0.02703 d=0.02162
+      ring 1.00 w=0.01405 d=0.01622
+      cap start=flat end=flat
+  end
+
+  # ==========================================================================
+  # GAUNTLETS. The off hand: a full fingered gauntlet — a flared cuff over
+  # the vambrace's end, a plated back of hand, and four articulated claws
+  # (plus a thumb) that run on 3-4 cm past the flesh fingers: plate hands
+  # that end in points. The hand hangs palm-in, so the fingers stand in a
+  # row along z (index in front).
+  # ==========================================================================
+  loft gauntlet.l bones=hand.l..hand.l material=plate
+    ring 0.00 w=0.03459 d=0.04
+    ring 0.12 w=0.03027 d=0.03784
+    ring 0.40 w=0.02703 d=0.03676
+    ring 0.62 w=0.02378 d=0.03351
+    cap start=none end=none
+  loft finger1.l bone=hand.l at=0.55 offset=(-0.00108,0,0.00973) dir=down tilt=-6 pitch=6 len=0.03135 material=plate shape=squarish
+    ring 0.00 w=0.00757 d=0.00703
+    ring 0.50 w=0.00649 d=0.00649
+    ring 1.00 w=0.00108 d=0.00108 tip
+    cap start=none end=none
+  loft finger2.l bone=hand.l at=0.55 offset=(-0.00108,0,0.00324) dir=down tilt=-6 pitch=2 len=0.03459 material=plate shape=squarish
+    ring 0.00 w=0.00757 d=0.00703
+    ring 0.50 w=0.00649 d=0.00649
+    ring 1.00 w=0.00108 d=0.00108 tip
+    cap start=none end=none
+  loft finger3.l bone=hand.l at=0.55 offset=(-0.00108,0,-0.00324) dir=down tilt=-6 pitch=-2 len=0.03243 material=plate shape=squarish
+    ring 0.00 w=0.00757 d=0.00703
+    ring 0.50 w=0.00649 d=0.00649
+    ring 1.00 w=0.00108 d=0.00108 tip
+    cap start=none end=none
+  loft finger4.l bone=hand.l at=0.55 offset=(-0.00108,0,-0.00973) dir=down tilt=-6 pitch=-6 len=0.02703 material=plate shape=squarish
+    ring 0.00 w=0.00703 d=0.00649
+    ring 0.50 w=0.00595 d=0.00595
+    ring 1.00 w=0.00108 d=0.00108 tip
+    cap start=none end=none
+  loft thumb.l bone=hand.l at=0.25 offset=(-0.00216,0,0.01405) dir=down tilt=-12 pitch=-30 len=0.02432 material=plate shape=squarish
+    ring 0.00 w=0.00865 d=0.00811
+    ring 0.50 w=0.00703 d=0.00703
+    ring 1.00 w=0.00108 d=0.00108 tip
+    cap start=none end=none
+
+  # The SWORD hand: a plated back of hand only, starting past the red wrist
+  # cuff, open at the end, with the flesh tendril (hand.r at=0.10 -> 12.5 cm
+  # on, toward the grip) growing out of it. Four short plated fingers curl
+  # into that flesh and sink there: the hand cannot let go.
+  loft gauntlet.r bones=hand.r..hand.r material=plate
+    ring 0.10 w=0.04216 d=0.04432
+    ring 0.35 w=0.03892 d=0.04324
+    ring 0.62 w=0.03568 d=0.04
+    cap start=none end=none
+  loft finger1.r bone=hand.r at=0.55 offset=(0,0,0.01081) dir=down tilt=14 pitch=4 len=0.01946 material=plate shape=squarish
+    ring 0.00 w=0.00865 d=0.00811
+    ring 1.00 w=0.00649 d=0.00649
+    cap start=none end=flat
+  loft finger2.r bone=hand.r at=0.55 offset=(0,0,0.00378) dir=down tilt=14 len=0.02162 material=plate shape=squarish
+    ring 0.00 w=0.00865 d=0.00811
+    ring 1.00 w=0.00649 d=0.00649
+    cap start=none end=flat
+  loft finger3.r bone=hand.r at=0.55 offset=(0,0,-0.00378) dir=down tilt=14 len=0.02054 material=plate shape=squarish
+    ring 0.00 w=0.00865 d=0.00811
+    ring 1.00 w=0.00649 d=0.00649
+    cap start=none end=flat
+  loft finger4.r bone=hand.r at=0.55 offset=(0,0,-0.01081) dir=down tilt=14 pitch=-4 len=0.0173 material=plate shape=squarish
+    ring 0.00 w=0.00811 d=0.00757
+    ring 1.00 w=0.00595 d=0.00595
+    cap start=none end=flat
+
+  # ==========================================================================
+  # PAULDRON — the RIGHT (sword) shoulder only. A domed shell over the
+  # deltoid, on a free ray down the upper arm starting 55 mm above the
+  # shoulder socket, its skirt flaring to a lip that ends at y ~1.37, ABOVE
+  # the two raw-red swellings (upperarm.r at=0.24-0.30, y 1.32-1.34, reaching
+  # 0.05 off the arm axis). No bottom cap: the underside is open and the red
+  # flesh bulges out from under the lip. tilt=-6 is the right side's
+  # outward lean, written by hand (nothing mirrors it); pitch -2 is the
+  # upper arm's (negated). A tall flange (haute-piece) stands on its inner
+  # edge beside the neck: the death-knight silhouette.
+  # ==========================================================================
+  loft pauldron bone=upperarm.r at=0.0 offset=(-0.00649,0.02811,0) dir=down tilt=-6 pitch=-2 len=0.05405 material=plate
+    ring 0.00 w=0.03351 d=0.03243
+    ring 0.22 w=0.0627 d=0.05838
+    ring 0.50 w=0.07351 d=0.06703
+    ring 0.80 w=0.07784 d=0.07027
+    ring 1.00 w=0.08432 d=0.07568
+    cap start=dome end=none
+  attach hautepiece bone=upperarm.r kind=box at=0.0 offset=(0.01514,0.04432,0) w=0.00378 h=0.02162 d=0.04973 taper=1.15 material=plate
+
+  # ==========================================================================
+  # CHAINS
+  # ==========================================================================
+  # GIRDLE — a chain band over the skirt's waist (the dome top, y ~1.070),
+  # riding the HEM pendulum with the skirt so the two never cross. 16-sided
+  # for a round band; a 10 mm band with a rolled edge (the mid ring proud).
+  # Sized to the probed skirt: half-width 0.175, half-depth 0.164 at 1.070.
+  # 16 mm, not the first build's 10: at 10 mm it read as a sewn SEAM round
+  # the skirt, not as a chain on it.
+  loft girdle bone=hem at=0.0 offset=(0,0.02054,0) dir=down len=0.00865 frame=fwd material=chain sides=16
+    ring 0.00 w=0.19459 d=0.18378
+    ring 0.50 w=0.20649 d=0.19568
+    ring 1.00 w=0.20757 d=0.19676
+    cap start=none end=none
+
+  # CHOKER — a thin chain round the neck at neck t0.63 (y ~1.517), just ABOVE
+  # the painted throat cross (y 1.47-1.506), which bleeds out from under it.
+  # Lower was tried first: at t0.30 the whole ring sat 12 mm inside the
+  # shoulder yoke, which rises to y 1.466 either side of the neck. Neck flesh
+  # w 0.075 d 0.079 here.
+  loft choker bones=neck..neck material=chain sides=12
+    ring 0.60 w=0.04649 d=0.04865
+    ring 0.63 w=0.04919 d=0.05135
+    ring 0.66 w=0.04595 d=0.04811
+    cap start=none end=none
+
+  # LONG NECKLACE — a 9 mm chain along the nk0..nk7 path (skeleton above).
+  loft necklace bones=nk0..nk7 material=chain sides=6
+    ring 0.00 w=0.00486 d=0.00486
+    ring 1.00 w=0.00486 d=0.00486
+    cap start=flat end=flat
+
+  # ==========================================================================
+  # IRON CROSSES. Each is two boxes in a group's own frame (the upright hangs
+  # DOWN from its `at` point: a box's top face sits there), mounted by aiming
+  # the group's +Y. Inside a group a part is placed with `at=(x,y,z)`;
+  # `offset=` is silently ignored there, which stacked every box on the
+  # group origin and turned the first build's crosses into T's. Latin
+  # proportions: the top arm is about as long as each side arm (17-21 mm).
+  # ==========================================================================
+  # The necklace cross: hangs from the necklace's lowest point (P4, the top
+  # of the bodice slot), in the gap between the bust, over the laces.
+  group ncross bone=nk3 at=1.0 offset=(0,-0.00216,0.00162) dir=up pitch=-8
+    attach nbail kind=box at=(0,0.00216,0) w=0.00216 h=0.00432 d=0.00216 material=iron
+    attach nup kind=box at=(0,-0.00216,0) w=0.00541 h=0.03351 d=0.00324 material=iron
+    attach nbar kind=box at=(0,-0.01135,0) w=0.01946 h=0.00541 d=0.00324 material=iron
+  end
+  # The girdle crosses: two hanging from its front, left and right of centre,
+  # each turned to the skirt's surface normal there (spin) and leaned back
+  # with the bell (pitch). A short link ties each to the band.
+  group gcross.l bone=hem at=0.0 offset=(0.03892,0.01243,0.09946) dir=up pitch=-14 spin=-21
+    attach glink.l kind=box at=(0,0.00649,0) w=0.00216 h=0.00757 d=0.00216 material=chain
+    attach gup.l kind=box at=(0,0,0) w=0.00595 h=0.03135 d=0.00324 material=iron
+    attach gbar.l kind=box at=(0,-0.00919,0) w=0.01838 h=0.00541 d=0.00324 material=iron
+  end
+  group gcross.r bone=hem at=0.0 offset=(-0.03892,0.01243,0.09946) dir=up pitch=-14 spin=21
+    attach glink.r kind=box at=(0,0.00649,0) w=0.00216 h=0.00757 d=0.00216 material=chain
+    attach gup.r kind=box at=(0,0,0) w=0.00595 h=0.03135 d=0.00324 material=iron
+    attach gbar.r kind=box at=(0,-0.00919,0) w=0.01838 h=0.00541 d=0.00324 material=iron
+  end
+
+textures
+  # Plate: worn steel — a painted top-light, fine noise, crevice ao.
+  texture plate base=#6c7075
+    gradient axis=v from=-0.08 to=0.10
+    noise scale=0.10 amount=0.05
+    ao amount=0.18
+  # Suede: a soft nap (fine low-contrast noise), no grain, gentle ao.
+  texture boot base=#c9b48e
+    gradient axis=v from=-0.06 to=0.06
+    noise scale=0.03 amount=0.07
+    ao amount=0.14
+  # Chain: LINKS as dark seams around (girdle, choker) and along (the
+  # necklace's u runs round it, v along) each band.
+  texture chain base=#4c4f54
+    planks dir=u count=36 width=0.35
+    planks dir=v count=24 width=0.30
+    noise scale=0.05 amount=0.06
+  texture iron base=#34363a
+    gradient axis=v from=-0.08 to=0.12
+    noise scale=0.06 amount=0.08
+    ao amount=0.10

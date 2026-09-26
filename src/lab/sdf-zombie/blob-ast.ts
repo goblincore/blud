@@ -36,6 +36,11 @@ export interface BlobBone {
   pitchDeg: number;
   tiltDeg: number;
   len: number;
+  /**
+   * `lenR=` — the RIGHT copy's length on a mirrored bone, when the two sides
+   * differ (the bride's longer sword forearm). Absent means symmetric.
+   */
+  lenR?: number;
   side: number;
   mirror: boolean;
   at: number | null;

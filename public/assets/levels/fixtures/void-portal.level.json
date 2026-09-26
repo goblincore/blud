@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "id": "void-portal",
+  "rooms": [{ "id": 1, "name": "void", "min": [-20, -40], "max": [20, 0], "height": 8, "void": true }],
+  "start": { "pos": [0, 0, -6], "yaw": 0 },
+  "portals": [{ "id": "first", "pos": [0, 0, -18], "yaw": 3.1416, "width": 2.2, "height": 3.4, "target": "the-wake" }]
+}
