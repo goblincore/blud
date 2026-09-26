@@ -432,7 +432,7 @@ Established by the 2026-09-26 file map. All paths are under `src/lab/sdf-zombie/
 - **Why one buffer:** profiles and lights share it, so the march binds **one** new storage buffer and no new uniform arrays.
 
 **Picks:** each body carries one vec4 of **four packed floats, `index + weight`**:
-- `weight` in [0, 0.999] is the CPU's per-body strength for that light: feet coverage × distance falloff × facing falloff. Profile gain is applied in the shader, not here.
+- `weight` in [0, 0.999] is the CPU's **absolute** per-body strength for that light: `min(0.999, cover × distance falloff × facing falloff)`. It carries no luminance and no share. The light's rgb in the list already carries intensity × level, and the profile gain is applied in the shader. **Ranking** uses `weight × rgb luminance`. (This was fixed after the Task 4 review. The first draft packed a share of the dominant light, which lit a body at a tube's dim edge as if it stood in the pool.)
 - `−1` means an empty slot.
 - Slot 0 is the dominant light. WGSL decodes with `i32(floor(v))` and `fract(v)`.
 
@@ -817,7 +817,7 @@ export function unpackPick(p: readonly number[]): { index: number; weight: numbe
 
 Worked check for the "pool edge" case: the feet angle is about 0.55 rad, so c ≈ 0.852. That gives zero = 0.825 − 0.06 = 0.765 and cover = ((0.852 − 0.765) / 0.135)² ≈ 0.41. Also, if `presentingLamp` has tests (`grep -rln presentingLamp src --include=*.test.ts`), port their cases here as extra checks.
 
-The weight's meaning changed. It is a **share of the dominant light**, times the light's own absolute rgb in the list. So a dominant light at 0.999 lights a body at the light's rgb × profile gain, and the others at their share. **The spec is unaffected.** Document it in the file header.
+**Superseded (Task 4 review):** the weight is absolute. See Shared facts: pack `min(0.999, cover × distFall × facing)`, and rank by that × luminance. The code block above shows the first draft.
 
 - [ ] **Step 4: Run it.** Expected: PASS, 6 tests.
 - [ ] **Step 5: Commit.** `git commit -m "feat(light): per-body 4-light pick with the presentation rules (spec §4)"`.
@@ -1233,7 +1233,7 @@ The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the g
 
   Also try the tube shadow maps at 256² (spec §6): set the tube's `shadow.mapSize` in `makeTube` (`game-dynamic-light-leaves.ts`) to 256, and add one pair at third class, 512 vs 256. Keep 256 only if the owner approves that pair.
 - [ ] **Step 4: Docs.**
-  - Write the dev note: what shipped, the numbers, the deviations (profile 3 vec4, weight as a share of the dominant, chunks per material), and the A/B switch.
+  - Write the dev note: what shipped, the numbers, the deviations (profile 3 vec4, chunks per material), and the A/B switch.
   - `TASKS.md` front page: part 3 plan 1 "done pending owner sign-off", with a link to the note.
   - `docs/tasks/rendering.md`: the detail, and plan 2 next.
 - [ ] **Step 5: Commit.** `git commit -m "docs(light): shared light list plan 1 — numbers, A/B pairs, deviations; cost gate"`.
@@ -1261,6 +1261,5 @@ The lightning side-rim block (`if (spotCfg2.w > 0.0)`) stays. In list mode the g
 
 **Deviations from the spec, all to be recorded in the Task 13 dev note:**
 - profiles are 3 vec4, not 2;
-- the pick weight is a share of the dominant light;
 - chunks pick per material;
 - the golden is text, so it moves deliberately rather than being held.
