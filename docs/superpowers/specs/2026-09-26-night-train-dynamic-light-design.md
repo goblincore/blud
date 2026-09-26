@@ -1,6 +1,6 @@
 # Night Train dynamic light and the flashlight — Design
 
-**Date:** 2026-09-26 · **Status:** decisions approved (owner, 2026-09-25/26); **waits on the game loop**
+**Date:** 2026-09-26 · **Status:** decisions approved (owner, 2026-09-25/26); open items settled 2026-09-26 (§3); plan: [2026-09-26-night-train-dynamic-light](../plans/2026-09-26-night-train-dynamic-light.md)
 **Part 2 of 3** of the Night Train look revision ([part 1, the restyle](2026-09-25-night-train-art-v2-design.md)
 §1 lists all three). **Depends on:** the game loop ([Wake Plan 2](../plans/2026-09-11-wake-2-game-loop.md),
 refreshed with Night Train as its test level): pickups and trigger events.
@@ -33,10 +33,37 @@ through the windows; passing lights sweep through them; furnaces glow.
 6. **Furnaces and the firebox** pulse with orange fire light (the kit's boilers and the cab's firebox
    get flickering point lights).
 
-## 3. Open (for the plan, after the game loop)
+## 3. Settled (2026-09-26)
 
-- The storm preset's look in detail (cloud layers, rain streaks on the glass, bolt shapes and rate).
-- The exact scripted events per carriage (they come with the encounter script).
-- Cost: the window light's shadow pass redraws the carriage's art during flashes and sweeps; fold
-  in the deferred small-dressing shadow cut (no shadows on valves, gauges, hats, streamers,
-  bunting, grilles, gears, lamp cages).
+- **The storm is violent (owner: B):** clouds churning and lit from within, scrolling with the
+  train; rain streaks running on the glass; big forked bolts close by. A flash whitens the sky and
+  shows the poles and treeline for a moment. Inside, lightning is a hard blue-white spike. Bolts
+  come every 6–14 s (seeded), each on one side of the train, so its light comes through that
+  side's windows. Passing-light sweeps come about every 20 s: warm, swinging from ahead to behind
+  over about 1.5 s.
+- **Scripted light events** (a `light.<mode>.room.<n>` command; `cues` in the level map one event to
+  more). Until encounters exist, trigger boxes stand in for the dancers turning:
+  1. The baggage hold: taking the flashlight kills the van lamp (it sputters, then goes dark) and
+     alerts room 1, the trunk zombie. Alerting stays a no-op until the encounter work.
+  2. The sleeper: a blackout at the corridor's midpoint. The lamps cut for 6 s, then stutter back.
+  3. The party carriage: a surge, a 3 s strobe, then dark for good, once you are past its threshold.
+- **Lamp moods:**
+
+  | Carriage | Mood |
+  | --- | --- |
+  | van | dying |
+  | dining | flickering, with one lamp dead |
+  | sleeper | stuttering |
+  | party | steady |
+  | cab | steady |
+  | fires (boilers, office stove, galley stoves, firebox) | `fire` |
+
+  Moods run on the sim clock, so replays match.
+- **The flashlight is off when a level has a `flashlight` pickup;** every other level keeps it on
+  from the start. Its brightness scales the spot, the beam on the bodies and the bounce. It is
+  never hidden.
+- **Cost:** only the window light of the carriage the player is in re-renders its shadow, and only
+  while it is lit. The other carriages keep their last map. Small dressing (valves, gauges, grilles,
+  gears, streamers, bunting, hats) stops casting shadows.
+- **Known gap:** the SDF bodies do not see the window light (they shade in the march). Lightning
+  reaches them only through the scene; direct lightning on bodies comes with part 3 or later.
