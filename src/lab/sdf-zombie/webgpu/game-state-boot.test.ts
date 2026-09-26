@@ -50,6 +50,6 @@ describe('BOOT_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(BOOT_BINDINGS)).toHaveLength(43); // +onGoreDispatch (head pop, 2026-09-24)
+    expect(Object.keys(BOOT_BINDINGS)).toHaveLength(44); // +onGoreDispatch (head pop, 2026-09-24), +spawnOverride (2026-09-26)
   });
 });

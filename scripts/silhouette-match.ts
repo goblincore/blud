@@ -6,7 +6,7 @@
 //
 //   npx tsx scripts/silhouette-match.ts <character> [reference.png] [--side] [--range lo:hi]
 //   npx tsx scripts/silhouette-match.ts mouse
-//   npx tsx scripts/silhouette-match.ts mouse --range 0.75:1      # legs + shoes only
+//   npx tsx scripts/silhouette-match.ts mouse --range 0.8:1      # legs + shoes only
 //   npx tsx scripts/silhouette-match.ts mouse --bands 40           # finer profile
 //   npx tsx scripts/silhouette-match.ts clown docs/dev-notes/refs/clown-1-ref.png
 //
@@ -25,7 +25,7 @@
 // pose their arms; a .blob rasterises in its authored rest pose, and that gap
 // dominates the score — the owner-APPROVED clown scores worse than the
 // owner-REJECTED mouse. Use `--range` to score a height window where the poses
-// actually agree (the mouse's legs and shoes at 0.75:1), and otherwise treat
+// actually agree (the mouse's legs and shoes at 0.8:1), and otherwise treat
 // the numbers as a before/after gradient for ONE character against ONE plate.
 //
 // This does not replace looking at the render — it has no idea about colour,

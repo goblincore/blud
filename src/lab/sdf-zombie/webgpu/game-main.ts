@@ -533,8 +533,6 @@ async function main() {
   // --- ACTIVE LEVEL (Level Format v1 — spec 2026-09-23). ?level=<id> loads
   // public/assets/levels/<id>.level.json (&state=<name> picks a state); no
   // param is the ring testbed, bit-identical to before.
-  // Mesh key: the level's art, parsed here and placed with the level group below.
-  let artScene: THREE.Group | null = null;
   {
     const q = new URLSearchParams(location.search);
     const levelParam = q.get('level');
@@ -545,7 +543,7 @@ async function main() {
       const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
       if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
       ctx.world.level = authoredLevel(def);
-      artScene = await loadLevelArt(levelParam, def.art);
+      ctx.world.artScene = await loadLevelArt(levelParam, def.art);
     } else {
       ctx.world.level = ringLevel();
     }
@@ -714,7 +712,7 @@ async function main() {
   }
   // Mesh key §5: the art joins the group BEFORE the per-room light lists are
   // assigned (below), so it is lit exactly like the walls.
-  if (artScene && ctx.world.level.def?.art) placeLevelArt(ctx, artScene, ctx.world.level.def.art);
+  if (ctx.world.artScene && ctx.world.level.def?.art) placeLevelArt(ctx, ctx.world.artScene, ctx.world.level.def.art);
   scene.add(ctx.world.levelGroup);
   // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
   // (null for the ring). Before the per-room light lists are built, so the moon
@@ -3364,7 +3362,7 @@ async function main() {
 
   /** Height above the player's feet an enemy SMG round is aimed at (m). */
   const SMG_TARGET_CHEST_Y = 1.25;
-  const spawnOverride = ((): string | null => {
+  ctx.boot.spawnOverride = ((): string | null => {
     const v = new URLSearchParams(location.search).get('spawn');
     return v && characterNames().includes(v) ? v : null;
   })();
@@ -3373,7 +3371,7 @@ async function main() {
     // ?spawn=<character> (playtest): every non-soldier slot spawns that
     // registry character instead of the zombie, e.g. ?spawn=cultist.
     for (const s of ctx.world.level.spawnList()) {
-      const name = s.kind === 'zombie' ? spawnOverride ?? 'zombie' : s.kind;
+      const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
       ctx.world.actors.push(spawnEnemy(name, s.room, s.pos, errs));
     }
   }

@@ -71,7 +71,9 @@
   to base; melee `sdf:march` 13.9-14.7 vs 13.4-14.7 ms; cold `drawOnce` median 1218 vs 1242 ms (noise, load ~12).
   Costs per width in `.claude/skills/authoring-sdf-characters/reference.md` ("Primitive budget").
 - [ ] Next wall for the bride: **64 prims per cluster** (`MAX_CLUSTER_PRIMS`) — hair + face both land in `head` (34 now).
-- [ ] (pre-existing, not this change) `game-context-coverage` fails on main: `spawnOverride` binding in game-main.
+- [x] 2026-09-26 `game-context-coverage` green again: `spawnOverride` -> `ctx.boot.spawnOverride`, `artScene` -> `ctx.world.artScene`.
+- [x] 2026-09-26 `blob-measure` "clears the flag" green again: the half-blend default (3662c1ca6) moved the mouse's
+  fingertips from ~0.74 to ~0.76 of height, into the old `--range 0.75:1` legs window; the window is now `0.8:1`.
 
 ## Thin-prim "lines in the air" (bride) — fixed 2026-09-24
 

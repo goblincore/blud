@@ -4,7 +4,7 @@
 // block hands to everything after it: the lab renderer and its canvas, the
 // pass-timing wrapper, the loop-intent controller, the URL seams read once at
 // startup (?res / ?seed / ?loader / ?renderer / ?shadowmap / ?vhs / ?graphics /
-// ?sscs / ?spotshadow / ?fields / ?room / ?warm / ?tiles-playtest), the zombie
+// ?sscs / ?spotshadow / ?fields / ?room / ?spawn / ?warm / ?tiles-playtest), the zombie
 // blob document, the sever-dispatch indirection, the tile-playtest controller,
 // the HUD root and the frame-hash dependency set.
 //
@@ -140,6 +140,9 @@ export interface BootState {
   roomParam: string | null;
   /** The room `?room` selected, or null. */
   room: RoomDef | null;
+  /** `?spawn=<character>` (playtest): the registry character every zombie
+   *  spawn slot uses instead, or null (unset or not a known character). */
+  spawnOverride: string | null;
   /** The renderer's canvas, cached for the pointer-lock listeners. */
   canvas: HTMLCanvasElement;
   /** `?warm=0` skips the pipeline warm-up (bench determinism). */
@@ -211,6 +214,7 @@ export function makeBootState(): BootState {
     nextId: 1,
     roomParam: null,
     room: null,
+    spawnOverride: null,
     canvas: unbuilt<HTMLCanvasElement>(),
     warmRequested: false,
     warmPromise: Promise.resolve<WarmOutcome>('ok'),
@@ -263,6 +267,7 @@ export const BOOT_BINDINGS = {
   nextId: 'boot.nextId',
   bootRoomParam: 'boot.roomParam',
   bootRoom: 'boot.room',
+  spawnOverride: 'boot.spawnOverride',
   canvas: 'boot.canvas',
   warmRequested: 'boot.warmRequested',
   warmPromise: 'boot.warmPromise',
