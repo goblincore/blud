@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIGHT_PROFILES, PROFILE_ID, PROFILE_VEC4S, packProfiles } from './light-profiles';
+import { LIGHT_PROFILES, PROFILE_ID, PROFILE_VEC4S, PROFILES_BY_NAME, packProfiles } from './light-profiles';
 
 describe('light profiles (spec §5)', () => {
   it('has the six starting kinds, at most 8', () => {
@@ -13,6 +13,12 @@ describe('light profiles (spec §5)', () => {
   });
   it('window carries the cold lightning rim tint', () => {
     expect(LIGHT_PROFILES[PROFILE_ID.window]!.rimTint).toEqual([0.55, 0.75, 1.3]);
+  });
+  it('table order always follows PROFILE_ID, never comment order (review fix)', () => {
+    expect(LIGHT_PROFILES.length).toBe(Object.keys(PROFILE_ID).length);
+    for (const name of Object.keys(PROFILE_ID) as (keyof typeof PROFILE_ID)[]) {
+      expect(LIGHT_PROFILES[PROFILE_ID[name]]).toBe(PROFILES_BY_NAME[name]);
+    }
   });
   it('packs 8 x 3 vec4 in the documented lane order', () => {
     const f = packProfiles();
