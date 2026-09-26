@@ -312,6 +312,12 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
   const sum = new Map<string, { n: number; v: number }>();
   (rtTime as unknown as { value: number }).value = t;
   rt.shadowTick++;
+  // The viewmodel (hands, gun, dynamite, flare) casts no shadow: under a tube it threw a big dark
+  // hands-and-gun shape on the floor in front of the player (owner, 2026-09-26). Re-applied each
+  // step because weapons load and swap; a small tree.
+  if (rt.lamps.some(l => l.tube)) {
+    for (const g of [ctx.weapon.aimRig, ctx.weapon.gunRig, ctx.weapon.gunGroup]) g?.traverse(o => { o.castShadow = false; });
+  }
   const [ppx, , ppz] = ctx.player.player.pos;
   const here = roomIdAt(ctx, ppx, ppz);
   const speed = ctx.world.train?.speed ?? 0;
