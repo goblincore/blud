@@ -13,9 +13,10 @@
 - [x] **Chaingun**: TS-generated `juggernaut-chaingun.glb`, `heavy` hip carry (both hands pinned), `CHAINGUN_TUNING`
   (0.9 s spin-up, 15-24 rounds at ~10/s, sweep, no strafe or back-off), single rounds, spinning barrels, brass casings.
 - [ ] **Blocked on WAM**: run `scripts/build-wam-kit.sh juggernaut` locally, then `juggernaut-kit.test.ts` (skips until then).
-  Then GPU frames for the owner look. Next: game spawn (Task 5).
+  Then GPU frames for the owner look, and a first playtest (the plan's open items).
 - [x] **Plate armour works** (`plate-armor.ts`): plates absorb rounds until shot off (helmet guards the head), hips bare,
   blasts wound through, pellets never stagger him, slugs do; the kit sheds by the actor's plate state.
+- [x] **In the game**: one juggernaut in the arena (`RoomDef.juggernauts`); `?spawn=juggernaut` fills the zombie slots.
   [Spec](docs/superpowers/specs/2026-09-25-juggernaut-design.md) · [Plan](docs/superpowers/plans/2026-09-25-juggernaut.md)
 - [ ] *Next variant candidate:* Grenadier (gas mask, grenades flush last-known position, dodges dynamite).
 

@@ -131,8 +131,18 @@ Notes: `docs/dev-notes/2026-09-25-juggernaut/NOTES.md` ("Task 3").
   plates are a game-actor feature.
 - [ ] Optional: the ammo drum cook-off.
 
-## Task 5 — Game spawn
+## Task 5 — Game spawn — done 2026-09-26
 
-- [ ] `?spawn=juggernaut` and/or a `RoomDef` slot; encounter director treats him
-  as a ranged soldier.
-- [ ] Playtest notes; update `TASKS.md`.
+- [x] `RoomDef.juggernauts` plus `slotCharacter()` (game-level.ts): soldiers
+  first, then juggernauts, then zombies. `?spawn=<name>` replaces only the
+  zombie slots, so `?spawn=juggernaut` fills every zombie slot with one.
+- [x] One juggernaut in the ARENA (slot 0, seven zombies remain): the biggest
+  room, his 5 m preferred range, and the dynamite room.
+- [x] The encounter director already treats him as a ranged soldier (`mind.kind`
+  'soldier', no melee); alone in the arena he always holds the fire lease.
+- [ ] Unmeasured here (no GPU): cold boot with the extra `juggernaut@6` crowd
+  type. His body is 128-wide like the rest, so no new atlas width, but the
+  type is new. Measure `drawOnce` against the base branch on the first
+  local run.
+- [ ] Playtest notes after the first fight: sweep speed, burst length, plate
+  hit points, the forearm-across-the-chest shield.

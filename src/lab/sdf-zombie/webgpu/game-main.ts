@@ -91,7 +91,7 @@ import type { Quat } from '../vec';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import {
   ROOMS, TUNNELS, FURNITURE, levelColliders, levelSurfaces,
-  enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
+  enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START, slotCharacter,
   type RoomDef,
 } from './game-level';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -3265,9 +3265,10 @@ async function main() {
   function spawnAll(errs: string[]): void {
     for (const room of ROOMS) {
       for (const [index,start] of spawnPoints(room).entries()) {
-        // ?spawn=<character> (playtest): every non-soldier slot spawns that
-        // registry character instead of the zombie, e.g. ?spawn=cultist.
-        const name = index < (room.soldiers ?? 0) ? 'soldier' : spawnOverride ?? 'zombie';
+        // Soldiers, then juggernauts, then zombies (game-level slotCharacter).
+        // ?spawn=<character> (playtest): every ZOMBIE slot spawns that
+        // registry character instead, e.g. ?spawn=cultist, ?spawn=juggernaut.
+        const name = slotCharacter(room, index, spawnOverride);
         ctx.world.actors.push(spawnEnemy(name, room, start, errs));
       }
     }
