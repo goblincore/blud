@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+import { LIGHT_PROFILES, PROFILE_ID, PROFILE_VEC4S, packProfiles } from './light-profiles';
+
+describe('light profiles (spec §5)', () => {
+  it('has the six starting kinds, at most 8', () => {
+    expect(Object.keys(PROFILE_ID)).toEqual(['tube', 'lamp', 'window', 'flashlight', 'muzzle', 'fire']);
+    expect(LIGHT_PROFILES.length).toBeLessThanOrEqual(8);
+  });
+  it('tube starts from the tuned PRESENT constants', () => {
+    const t = LIGHT_PROFILES[PROFILE_ID.tube]!;
+    expect(t.gain).toBe(1.3); expect(t.viewBias).toBe(0.3); expect(t.floor).toBe(0.18);
+    expect(t.backKey).toBe(0.35); expect(t.backRim).toBe(2.5); expect(t.edge).toBe(1.25); expect(t.distFall).toBe(0.06);
+  });
+  it('window carries the cold lightning rim tint', () => {
+    expect(LIGHT_PROFILES[PROFILE_ID.window]!.rimTint).toEqual([0.55, 0.75, 1.3]);
+  });
+  it('packs 8 x 3 vec4 in the documented lane order', () => {
+    const f = packProfiles();
+    expect(f.length).toBe(8 * PROFILE_VEC4S * 4);
+    const t = LIGHT_PROFILES[PROFILE_ID.tube]!, o = PROFILE_ID.tube * 12;
+    expect([...f.slice(o, o + 4)]).toEqual([t.gain, t.viewBias, t.floor, t.backKey].map(Math.fround));
+    expect([...f.slice(o + 4, o + 8)]).toEqual([t.backRim, t.spec, 0, t.specPow].map(Math.fround));
+    expect([...f.slice(o + 8, o + 11)]).toEqual(t.rimTint.map(Math.fround));
+  });
+});
