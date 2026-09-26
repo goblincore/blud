@@ -10,10 +10,11 @@
 ## In flight / next
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4i)
-- [~] **Optimisation pass** (owner): round 1 done — the frame was CPU-bound on draw calls; static
-  batching at load (`batchArt`: static art merged per room, material, shadow flag) took the art from
-  +115..+329 draws / +7.7..+33.2 ms to **+61..+164 / +3.2..+5.8 ms**; budget back to +200 / +12 ms.
-  Next: the bodies' own draws (116–355 per frame with no art), lamps/curtains that stay separate.
+- [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
+  batching of the art (`batchArt`), the bone-exposure cull (unwounded enemies draw only their eyes)
+  and instanced bone meshes took third class from ~440 to ~300 draws; bones + eyes ~3 draws; art
+  +61..+164 draws / +3..+6 ms (budget +200 / +12 ms). The tube cones (shadowed spots) cost ~4–9 ms
+  per carriage; part 3's shared light list is where that is won back.
 - [ ] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
   shadows read by the level shaders and the SDF march, each with its own stylized shading.
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.
