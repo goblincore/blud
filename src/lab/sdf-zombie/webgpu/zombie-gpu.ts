@@ -26,6 +26,7 @@ import type { Primitive, Vec3 } from '../types';
 import { bendCtrl, qRotate, qMul, type Quat, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { createFallbackHandVolumeTexture } from './hand-volume';
+import { LIST_VEC4S } from './light-list';
 import {
   TILE_SIZE_PX,
 } from './tile-cull';
@@ -737,6 +738,17 @@ function fallbackProbeDyn() {
     fallbackProbeDynNode = storage(a, 'vec4', 4).toReadOnly();
   }
   return fallbackProbeDynNode;
+}
+let fallbackLightListNodeRef: unknown;
+/** The shared light list's zero fallback (LIST_VEC4S zeros): the header's light count reads 0,
+ *  so a view without the game's list still binds a well-formed storage buffer, never null.
+ *  Not bound yet (Task 9 binds the list into the march). */
+export function fallbackLightListNode() {
+  if (!fallbackLightListNodeRef) {
+    const a = new THREE.StorageBufferAttribute(LIST_VEC4S, 4);
+    fallbackLightListNodeRef = storage(a, 'vec4', LIST_VEC4S).toReadOnly();
+  }
+  return fallbackLightListNodeRef;
 }
 let fallbackInstCfgNode: ReturnType<typeof uniform> | null = null;
 /** One-instance config for materials built without a crowd (tests, hands view). */

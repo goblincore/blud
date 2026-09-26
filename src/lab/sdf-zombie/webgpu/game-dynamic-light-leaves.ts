@@ -25,6 +25,8 @@ import { moonShadowFrame } from './outdoor-light';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
 import { STORM, stormSchedule, windowLightAt, type Bolt, type StormSchedule } from './storm';
 import { selfShadowCfg, type SelfShadowCfg } from './self-shadow';
+import { createLightListGpu, lightListView, type LightListGpu } from './game-light-list-leaves';
+import type { Vec3 } from '../types';
 
 /** Window-light shadow map size (one per windowed carriage; only the player's re-renders). */
 const WINDOW_SHADOW_SIZE = 512;
@@ -61,6 +63,9 @@ interface Lamp {
   seed: number;
   script: LampScript | null;
   level: number;
+  /** Level JSON per-light overrides (spec §5 option A), for the shared light list. */
+  gain?: number;
+  tint?: Vec3;
 }
 
 interface Glass { room: number; mat: THREE.MeshStandardMaterial; base: number; kind: 'lamp' | 'fire' }
@@ -94,6 +99,8 @@ export interface DynamicLightRuntime {
   shadowTick: number;
   /** The carriage whose window light re-rendered its shadow this step, or null. */
   shadowRoom: number | null;
+  /** The shared light list's GPU buffer, written once a frame by writeLightList. */
+  list: LightListGpu;
 }
 
 export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
@@ -104,6 +111,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   const lamps: Lamp[] = ctx.lighting.flickerLights.map(f => ({
     light: f.light, bowl: f.bowl ?? null, base: f.base, mood: f.mood ?? 'steady', room: f.room ?? -1,
     seed: f.phase, script: null, level: 1,
+    ...(f.gain !== undefined ? { gain: f.gain } : {}), ...(f.tint ? { tint: f.tint } : {}),
     tube: f.fixture === 'tube' && new URLSearchParams(location.search).get('tubes') !== '0' ? makeTube(ctx, f.light, f.bowlMesh ?? null, f.room ?? -1, tubeGroup) : null,
   }));
   if (tubeGroup.children.length > 0) ctx.boot.handle.scene.add(tubeGroup);
@@ -118,6 +126,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     shadowRoom: null,
     roomLight: new Map(),
     shadowTick: 0,
+    list: createLightListGpu(),
   };
   // A level that starts dark idles the flashlight's two shadow maps until it is switched on.
   if (dark) {
@@ -584,7 +593,7 @@ export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: n
   b.wroteGain = pc.y;
 }
 
-/** Seams: `__sdfGame.lights()`, `setFlashlight(on)`, `forceBolt(side)`, `forceSweep(side)`, `lightCommand(mode, room)`. */
+/** Seams: `__sdfGame.lights()`, `lightList()`, `setFlashlight(on)`, `forceBolt(side)`, `forceSweep(side)`, `lightCommand(mode, room)`. */
 export function createDynamicLightSeams(ctx: GameContext) {
   const insert = <T extends { t: number }>(list: T[], item: T) => {
     list.push(item);
@@ -631,6 +640,8 @@ export function createDynamicLightSeams(ctx: GameContext) {
       return rt.time;
     },
     lightCommand: (mode: LightMode, room: number) => { runLightCommand(ctx, mode, room); },
+    /** The shared light list this frame: `{ kind, profile, pos, intensity, room }` per light. */
+    lightList: () => lightListView(ctx.world.light?.list),
     /** Look tuning: hold the window light at an intensity from one side (null: back to the storm). */
     holdWindowLight: (intensity: number | null, side: 1 | -1 = 1, shadow = 1) => {
       const rt = ctx.world.light;

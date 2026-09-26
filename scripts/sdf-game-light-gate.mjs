@@ -151,6 +151,13 @@ const coats = roomLamps(L, 6);
 if (coats.map((x) => x.mood).join('/') !== 'dead/dying') fail(`coat-check lamp moods ${coats.map((x) => x.mood)}`);
 if (L.windowLights.length < 5) fail(`window lights: ${JSON.stringify(L.windowLights)}`);
 pass(`dark start: flashlight 0, coat-check lamps ${coats.map((x) => x.mood).join('/')}, window lights in rooms ${L.windowLights.join(',')}`);
+// The shared light list (plan 1, Task 6): filled once a frame, capped at 32.
+const LL = await evaluate('__sdfGame.lightList()');
+if (!Array.isArray(LL) || LL.length === 0 || LL.length > 32) fail(`lightList(): ${JSON.stringify(LL)?.slice(0, 300)}`);
+const llKinds = {};
+for (const l of LL) llKinds[`${l.kind}:${l.profile}`] = (llKinds[`${l.kind}:${l.profile}`] ?? 0) + 1;
+const llWin = LL.find((l) => l.profile === 'window');
+pass(`light list: ${LL.length} lights ${JSON.stringify(llKinds)}; window room ${llWin ? llWin.room : 'none'}`);
 await evaluate('__sdfGame.setPose(1.2, -57.0, 0, 0)');
 await settle(1200);
 const coatsDark = stats(await shoot('light-coats-dark'), 0.1, 0.1, 0.9, 0.9).mean;

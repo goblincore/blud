@@ -1,0 +1,208 @@
+// src/lab/sdf-zombie/webgpu/game-light-list-leaves.ts
+//
+// THE SHARED LIGHT LIST, GAME SIDE (Shared Light List plan 1, Task 6). Three parts:
+//  1. collectLightSources: PURE. Plain source data in (lamps, tubes, the storm's window light,
+//     the flashlight, the direct flashes), typed LightSource[] out (light-list.ts).
+//  2. readSourceInput: the three.js reader that fills that plain data from ctx each frame.
+//  3. createLightListGpu / writeLightList: the list's one storage buffer (profiles + lights,
+//     LIST_VEC4S vec4), owned by the dynamic-light runtime (ctx.world.light.list) and written
+//     once a frame. Nothing reads it yet (Task 9 binds it into the march).
+
+import * as THREE from 'three/webgpu';
+import { storage } from 'three/tsl';
+import type { GameContext } from './game-context';
+import { roomIdAt } from './game-level-leaves';
+import type { LampMood } from './lamp-moods';
+import { buildLightList, LIST_VEC4S, packLightList, type LightSource, type ListLight, type Vec3 } from './light-list';
+import { PROFILE_ID, type ProfileName } from './light-profiles';
+
+type RVec3 = readonly [number, number, number];
+
+// ---------------------------------------------------------------------------------------------
+// 1. Pure: plain source data -> LightSource[]
+// ---------------------------------------------------------------------------------------------
+
+export interface LampInput {
+  pos: Vec3; color: Vec3; intensity: number; range: number; room: number;
+  /** The tube's cone (the lamp's main light is then the spot), or null for a point lamp. */
+  tube: { axis: Vec3; cosOuter: number; cosInner: number } | null;
+  gain?: number; tint?: RVec3;
+  mood: LampMood;
+}
+export interface WindowInput { dir: Vec3; color: Vec3; intensity: number; room: number }
+export interface FlashlightInput { pos: Vec3; axis: Vec3; color: Vec3; intensity: number; range: number; cosOuter: number; cosInner: number }
+export interface FlashInput { pos: RVec3; intensity: number; fire?: boolean }
+
+export interface SourceInput {
+  lamps: LampInput[];
+  window: WindowInput | null;
+  flashlight: FlashlightInput | null;
+  flashes: FlashInput[];
+}
+
+/** Fire keys a body only within 3 m (strongestLamp's rule; settled after Task 4). */
+export const FIRE_RANGE = 3;
+/** A muzzle flash's reach, metres. */
+const FLASH_RANGE = 8;
+/** The gather's muzzle colour (game-main's player flash). */
+const MUZZLE_COLOR: Vec3 = [1.0, 0.81, 0.58];
+/** The burning bodies' gather colour (game-burning pushGatherLights). */
+const FIRE_COLOR: Vec3 = [1.0, 0.5, 0.18];
+
+/** Plain data in, LightSource[] out, in source order: lamps, window, flashlight, flashes.
+ *  Zero-intensity sources are kept; buildLightList drops them. */
+export function collectLightSources(input: SourceInput): LightSource[] {
+  const out: LightSource[] = [];
+  for (const l of input.lamps) {
+    const fire = l.mood === 'fire';
+    const profile: ProfileName = fire ? 'fire' : l.tube ? 'tube' : 'lamp';
+    const s: LightSource = {
+      kind: l.tube ? 'spot' : 'point', profile,
+      pos: l.pos, color: l.color, intensity: l.intensity, range: fire ? FIRE_RANGE : l.range, room: l.room,
+    };
+    if (l.tube) { s.axis = l.tube.axis; s.cosOuter = l.tube.cosOuter; s.cosInner = l.tube.cosInner; }
+    if (l.gain !== undefined) s.levelGain = l.gain;
+    if (l.tint) s.levelTint = [l.tint[0], l.tint[1], l.tint[2]];
+    out.push(s);
+  }
+  const w = input.window;
+  if (w) out.push({ kind: 'directional', profile: 'window', pos: w.dir, color: w.color, intensity: w.intensity, range: 0, room: w.room });
+  const f = input.flashlight;
+  if (f) {
+    out.push({ kind: 'spot', profile: 'flashlight', pos: f.pos, color: f.color, intensity: f.intensity, range: f.range,
+      axis: f.axis, cosOuter: f.cosOuter, cosInner: f.cosInner, room: -1 });
+  }
+  for (const fl of input.flashes) {
+    out.push({ kind: 'point', profile: fl.fire ? 'fire' : 'muzzle', pos: [fl.pos[0], fl.pos[1], fl.pos[2]],
+      color: fl.fire ? FIRE_COLOR : MUZZLE_COLOR, intensity: fl.intensity,
+      range: fl.fire ? FIRE_RANGE : FLASH_RANGE, room: -1 });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// 2. The three.js reader
+// ---------------------------------------------------------------------------------------------
+
+/** A point light's distance of 0 means "no cutoff"; the list needs a finite range. */
+const DEFAULT_RANGE = 12;
+
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const v3 = (v: THREE.Vector3, out: Vec3): Vec3 => { out[0] = v.x; out[1] = v.y; out[2] = v.z; return out; };
+const c3 = (c: THREE.Color, out: Vec3): Vec3 => { out[0] = c.r; out[1] = c.g; out[2] = c.b; return out; };
+
+/** Reused across frames (the reader rewrites these records in place). */
+function makeInput(): SourceInput { return { lamps: [], window: null, flashlight: null, flashes: [] }; }
+const scratchWindow: WindowInput = { dir: [0, 1, 0], color: [1, 1, 1], intensity: 0, room: -1 };
+const scratchTorch: FlashlightInput = { pos: [0, 0, 0], axis: [0, 0, -1], color: [1, 1, 1], intensity: 0, range: 0, cosOuter: 1, cosInner: 1 };
+
+/** Fill the plain source data from the live lights. `into` is rewritten in place. */
+export function readSourceInput(
+  ctx: GameContext, directFlashes: readonly FlashInput[], into: SourceInput = makeInput(),
+): SourceInput {
+  const rt = ctx.world.light;
+  const lamps = rt?.lamps ?? [];
+  into.lamps.length = lamps.length;
+  for (let i = 0; i < lamps.length; i++) {
+    const l = lamps[i]!;
+    const rec = (into.lamps[i] ??= { pos: [0, 0, 0], color: [1, 1, 1], intensity: 0, range: DEFAULT_RANGE, room: -1, tube: null, mood: 'steady' });
+    rec.room = l.room; rec.mood = l.mood;
+    rec.gain = l.gain; rec.tint = l.tint;
+    const spot = l.tube?.spot;
+    if (spot) {
+      // A tube lamp's main light is its spot (the omni is a 0.2 spill, left out of the list).
+      spot.getWorldPosition(_a);
+      spot.target.getWorldPosition(_b);
+      v3(_a, rec.pos); c3(spot.color, rec.color);
+      rec.intensity = spot.intensity;
+      rec.range = spot.distance > 0 ? spot.distance : DEFAULT_RANGE;
+      const t = (rec.tube ??= { axis: [0, -1, 0], cosOuter: 1, cosInner: 1 });
+      v3(_b.sub(_a).normalize(), t.axis);
+      t.cosOuter = Math.cos(spot.angle);
+      t.cosInner = Math.cos(spot.angle * (1 - spot.penumbra));
+    } else {
+      l.light.getWorldPosition(_a);
+      v3(_a, rec.pos); c3(l.light.color, rec.color);
+      rec.intensity = l.light.intensity;
+      rec.range = l.light.distance > 0 ? l.light.distance : DEFAULT_RANGE;
+      rec.tube = null;
+    }
+  }
+
+  // The storm's window light: one per level, for the player's carriage when it has a window
+  // light (the one stepDynamicLight re-fits every step), otherwise any room (-1).
+  into.window = null;
+  const storm = rt?.storm;
+  if (storm) {
+    const [px, , pz] = ctx.player.player.pos;
+    const here = roomIdAt(ctx, px, pz);
+    scratchWindow.dir[0] = storm.dir[0]; scratchWindow.dir[1] = storm.dir[1]; scratchWindow.dir[2] = storm.dir[2];
+    scratchWindow.color[0] = storm.color[0]; scratchWindow.color[1] = storm.color[1]; scratchWindow.color[2] = storm.color[2];
+    scratchWindow.intensity = storm.intensity;
+    scratchWindow.room = rt.windowLights.has(here) ? here : -1;
+    into.window = scratchWindow;
+  }
+
+  // The flashlight: only while the dungeon rig is on and its switch has it lit.
+  into.flashlight = null;
+  const fl = ctx.lighting.flashlight;
+  if (ctx.lighting.dungeonOn && fl && fl.spot.intensity > 0) {
+    const s = fl.spot;
+    s.getWorldPosition(_a);
+    s.target.getWorldPosition(_b);
+    v3(_a, scratchTorch.pos); v3(_b.sub(_a).normalize(), scratchTorch.axis); c3(s.color, scratchTorch.color);
+    scratchTorch.intensity = s.intensity;
+    scratchTorch.range = s.distance > 0 ? s.distance : DEFAULT_RANGE;
+    scratchTorch.cosOuter = Math.cos(s.angle);
+    scratchTorch.cosInner = Math.cos(s.angle * (1 - s.penumbra));
+    into.flashlight = scratchTorch;
+  }
+
+  into.flashes.length = 0;
+  for (const f of directFlashes) into.flashes.push(f);
+  return into;
+}
+
+// ---------------------------------------------------------------------------------------------
+// 3. The GPU buffer and its single writer
+// ---------------------------------------------------------------------------------------------
+
+const makeListNode = (attr: THREE.StorageBufferAttribute) => storage(attr, 'vec4', LIST_VEC4S).toReadOnly();
+
+export interface LightListGpu {
+  floats: Float32Array<ArrayBuffer>;
+  attr: THREE.StorageBufferAttribute;
+  /** Read-only storage node, LIST_VEC4S vec4 (profiles, header, lights). Bound by Task 9. */
+  node: ReturnType<typeof makeListNode>;
+  /** This frame's list (plain data; the lightList() seam reads it). */
+  list: ListLight[];
+  /** The reader's reused plain input. */
+  input: SourceInput;
+}
+
+export function createLightListGpu(): LightListGpu {
+  const floats = new Float32Array(LIST_VEC4S * 4);
+  packLightList([], floats);   // the profile table is valid from the first frame
+  const attr = new THREE.StorageBufferAttribute(floats, 4);
+  attr.setUsage(THREE.DynamicDrawUsage);
+  const node = makeListNode(attr);
+  return { floats, attr, node, list: [], input: makeInput() };
+}
+
+/** Once a frame, after the direct flashes are complete: rebuild the list and upload it.
+ *  buildLightList still allocates a little per frame (a map/filter/sort chain, ≤ 32 lights). */
+export function writeLightList(ctx: GameContext, directFlashes: readonly FlashInput[]): void {
+  const g = ctx.world.light?.list;
+  if (!g) return;
+  g.list = buildLightList(collectLightSources(readSourceInput(ctx, directFlashes, g.input)));
+  packLightList(g.list, g.floats);
+  g.attr.needsUpdate = true;
+}
+
+const PROFILE_NAME = Object.fromEntries(Object.entries(PROFILE_ID).map(([k, v]) => [v, k])) as Record<number, ProfileName>;
+
+/** The seam's plain view of the list. */
+export function lightListView(g: LightListGpu | undefined | null) {
+  return (g?.list ?? []).map(l => ({ kind: l.kind, profile: PROFILE_NAME[l.profile] ?? l.profile, pos: [...l.pos], intensity: l.intensity, room: l.room }));
+}

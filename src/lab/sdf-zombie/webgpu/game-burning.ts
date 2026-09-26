@@ -71,7 +71,7 @@ export interface GameBurning {
   /** The draw-side half: pose the card pool against the frame's camera. */
   updateCards(camera: THREE.Camera): void;
   /** Push each alight body into the bodyFlash source list. */
-  pushFlashes(out: { pos: Vec3; intensity: number }[]): void;
+  pushFlashes(out: { pos: Vec3; intensity: number; fire?: boolean }[]): void;
   /** Push the ROOM's gather light slots for the burning bodies in `room`.
    *  Merges surplus burners into the nearest slot (see burn-room-light.ts). */
   pushGatherLights(
@@ -479,6 +479,7 @@ export function createGameBurning(ctx: GameContext): GameBurning {
             s.burn, s.char, tuning.lightPeak, flickerDepth,
             burnLightFlicker(t, flickerDepth, a.id * 2.7),
           ),
+          fire: true,
         });
       });
     },

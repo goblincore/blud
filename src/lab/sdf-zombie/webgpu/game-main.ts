@@ -99,6 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
+import { writeLightList } from './game-light-list-leaves';
 import { adoptLightFx, applyRoomFill, applySelfShadow, applyStormBodyKey, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
@@ -1907,7 +1908,7 @@ async function main() {
       // DIRECT FLASH SOURCES for the bodyFlash slot: every burning muzzle in
       // play (the player's and the soldiers'), unboosted; each body takes the
       // strongest by I/d^2 from its own position.
-      const directFlashes: { pos: Vec3; intensity: number }[] = [];
+      const directFlashes: { pos: Vec3; intensity: number; fire?: boolean }[] = [];
       const playerFlashI = playerFlashLightIntensity();
       if (ctx.weapon.flashLight && playerFlashI > 0) {
         ctx.weapon.flashLight.getWorldPosition(_flashWorld);
@@ -1924,6 +1925,8 @@ async function main() {
       }
       // BURNING BODIES feed the SAME bodyFlash slot (flare test harness).
       ctx.vfx.burning.pushFlashes(directFlashes);
+      // The shared light list: every light that can touch a body, one buffer, once a frame.
+      writeLightList(ctx, directFlashes);
       // The level's rooms take the same dynamic cfg as the bodies: the room
       // the gather serves reads it, every other room reads 0 — and with the
       // level probes off the level never reads the buffer at all.
