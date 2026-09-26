@@ -44,7 +44,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
-import { createKitDamage, type KitDamageEvent } from './kit-damage';
+import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -209,7 +209,7 @@ export interface KitOverlay {
    * At rest every frame is (bind head, identity) and the result is exactly
    * the static placement this overlay had before it could move.
    */
-  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number }): KitDamageEvent[];
+  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number; armor?: KitArmorInput | null }): KitDamageEvent[];
   resetDamage(): void;
   dispose(): void;
 }
@@ -331,7 +331,7 @@ export async function loadKit(
     // stayed behind as the soldier walked away. Camera turns then culled his
     // entire kit. Refresh after posing to keep ordinary frustum culling valid.
     for (const mesh of skinned) mesh.computeBoundingSphere();
-    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt) ?? [] : [];
+    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor) ?? [] : [];
   };
 
   return {

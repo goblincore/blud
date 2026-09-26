@@ -101,16 +101,35 @@ Notes: `docs/dev-notes/2026-09-25-juggernaut/NOTES.md` ("Task 3").
 - [ ] GPU frames of the hold and the spin (the carry is solved and pinned
   headless; nobody has seen it rendered).
 
-## Task 4 — Armour that works + helmet + stagger resistance
+## Task 4 — Armour that works + helmet + stagger resistance — done 2026-09-26
 
-- [ ] `plate-armor.ts` (pure): plates carry hit points, a hit maps to a plate by
-  kit part, and a break-off emits a shed event. Tests: an intact plate absorbs
-  hits, a broken plate lets damage through, and a head hit through an intact
-  helmet does nothing.
-- [ ] Wire into `game-actor` damage before `soldier-damage`; drive
-  `kit-damage` break-off from the shed events.
-- [ ] Stagger resistance: pellets do not stagger; slugs and blasts do.
-- [ ] Higher injury thresholds (Juggernaut tuning of `SOLDIER_INJURY_TUNING`).
+- [x] `plate-armor.ts` (pure, 5 tests). One plate per bone group:
+  - helmet (skull and neck) 8;
+  - cuirass (chest, spine2, spine1) 20;
+  - upper arm 8, forearm 6, thigh 8, shin 6.
+
+  The pelvis is bare: it is the weak spot. A round on an intact plate is
+  absorbed; the hit that breaks a plate is absorbed too; after that, rounds
+  wound the flesh. Blasts are never absorbed, and crack each plate they reach
+  once per explosion (10).
+- [x] `game-actor`, only for profiles with `armor`:
+  - `applyProjectileHit` asks the plates first. An absorbed round returns
+    null (no wound, no injury, no bleed), queues a spark and shoves at 0.35x.
+  - A slug on armour still medium-staggers.
+  - Explosions crack plates through `armorBlast`.
+  - `armorView()` feeds the kit.
+- [x] `kit-damage` plate mode: the actor's shed set decides. Every kit island
+  skinned to a shed plate's bones goes, so the lenses and snout go with the
+  helmet. Sparks come from the actor's impact points (also with no kit loaded).
+- [x] Stagger resistance: pellets never stagger him (no flinch signal, no
+  progressive or volley stagger); slugs and blasts do.
+- [x] `JUGGERNAUT_INJURY_TUNING` (soldier x 1.5); `soldierInjury` and
+  `soldierArmCutAllowed` take a tuning.
+- Found while testing: in the chaingun hold his left gauntlet crosses the
+  chest, so frontal chest fire strips the forearm plate first (pinned).
+- [ ] Lab hero (`lab-main`) still uses the soldier's thresholds and no plates;
+  plates are a game-actor feature.
+- [ ] Optional: the ammo drum cook-off.
 
 ## Task 5 — Game spawn
 

@@ -126,3 +126,22 @@ leaves at his old behaviour:
 
 The spin-up is the aim telegraph (0.9 s). Barrel spin follows the mind's
 state (`barrel-spin.ts`), so the barrels are at speed before the first round.
+
+# Task 4 — plate armour, 2026-09-26
+
+`plate-armor.ts` holds the plates' hit points (plan, Task 4, for the table).
+The actor asks the plates before it stamps anything, so an absorbed round
+leaves no wound, no injury and no blood: just sparks and a small shove.
+
+- **Kit visual.** In plate mode, `kit-damage.ts` stops counting wounds and
+  sheds by the actor's plate state, matched by bone. Everything on a shed
+  plate's bones goes with it, lenses and snout included.
+- **Dynamite.** Explosions still wound through the armour, and crack every
+  plate they reach.
+- **Stagger resistance.** Pellets never stagger him; slugs and blasts do.
+
+`webgpu/game-actor-juggernaut.test.ts` found one thing worth knowing for
+playtests: in the chaingun hold, the left forearm crosses the chest to the
+top handle. Frontal chest fire strips the gauntlet (6 hp) before it reaches
+the cuirass. The hips, below the iron girdle, are the one bare target from
+the front.

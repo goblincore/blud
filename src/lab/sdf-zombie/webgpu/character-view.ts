@@ -490,6 +490,8 @@ export interface CharacterView {
     /** The held prop's barrel angle (rad), for a prop with a `Barrels` node
      *  (the juggernaut's chaingun). Absent = 0. */
     barrelSpin?: number,
+    /** Plate armour state (game-actor armorView): the kit sheds by it. */
+    armor?: { shed: ReadonlySet<string>; hits: readonly Vec3[] } | null,
   ): void;
   /** World muzzle of the held prop, or null when this character carries
    *  nothing or the glTF has not loaded yet. The soldier's shot reads it. */
@@ -627,7 +629,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
-    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0) {
+    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null) {
       if (equipmentRetired) return;
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
@@ -638,7 +640,12 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         return;
       }
       const frames = boneFrames(body, bound, bodyYaw);
-      const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt }) ?? [];
+      const armorSpec = entry.profile.armor?.spec;
+      const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt,
+        armor: armor && armorSpec ? { spec: armorSpec, shed: armor.shed, hits: armor.hits } : null }) ?? [];
+      // Sparks with no kit loaded yet (the juggernaut before his glTF is built)
+      // still show the round glancing off.
+      if (!kit && armor) for (const p of armor.hits) armorSparks?.burst(p, 5);
       for(const e of events) armorSparks?.burst(e.point,e.kind==='armor-shed'?10:5);
       armorSparks?.step(dt);
       if (heldProp) {

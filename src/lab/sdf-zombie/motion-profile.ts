@@ -8,6 +8,8 @@ import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, type ArmStyle, type GaitProfil
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
+import { JUGGERNAUT_ARMOR, type ArmorSpec } from './plate-armor';
+import { JUGGERNAUT_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
@@ -58,6 +60,11 @@ export interface MotionProfile {
    *  full flail, the hunch; soldier-stagger.ts) instead of the zombie's
    *  lurch/shudder. The soldier always has it. */
   staggerStyle?: 'soldier';
+  /** PLATE ARMOUR that absorbs rounds (plate-armor.ts), and the regional
+   *  injury thresholds for the flesh once a plate is off (soldier-damage.ts).
+   *  Also makes him stagger-resistant: pellets never stagger him. Absent =
+   *  the soldier's visual-only plates and thresholds. The juggernaut's. */
+  armor?: { spec: ArmorSpec; injury: SoldierInjuryTuning };
   /** The FULL flail's shape and timing (soldier-stagger fullOpen). Absent =
    *  the soldier's, exactly (SOLDIER_FLAIL). Angles in radians, body-local. */
   flail?: FlailTuning;
@@ -224,6 +231,9 @@ export const JUGGERNAUT_PROFILE: MotionProfile = {
   // foreHand: the TOP CARRY HANDLE, prop-local (the .glb's Fore_Hand node).
   prop: { url: '/assets/lab/juggernaut-chaingun.glb', scale: 1.45, foreHand: [0, 0.110, 0] },
   gunner: { weapon: 'chaingun' },
+  // Plates that stop rounds until shot off, tougher flesh under them, and no
+  // pellet staggers (spec, "Damage").
+  armor: { spec: JUGGERNAUT_ARMOR, injury: JUGGERNAUT_INJURY_TUNING },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {
