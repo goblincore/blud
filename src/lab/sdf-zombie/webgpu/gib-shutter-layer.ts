@@ -69,7 +69,10 @@ export function readGibShutterSettings(search: string): GibShutterSettings {
 }
 
 /** A piece the layer may blur. `mesh` is the real drawn node; `baseLayer` is
- *  where it renders when it is NOT selected. */
+ *  where it renders when it is NOT selected. A piece drawn by SEVERAL meshes
+ *  (the censer's head, haft + hand) passes one subject per mesh sharing ONE
+ *  `state` object: the piece cap counts distinct states and the seed plans each
+ *  state's stamps once, so a many-mesh piece costs one piece, not N. */
 export interface GibBlurSubject {
   id: number;
   state: Chunk;
@@ -205,6 +208,9 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
   let lastStats: SweepSeedStats & { buildMs: number } = { ...EMPTY_SEED_STATS, buildMs: 0 };
 
   const selected: GibBlurSubject[] = [];
+  /** Distinct `state` objects among `selected` — the piece count the cap bounds. */
+  const selectedStates = new Set<Chunk>();
+  const plannedStates = new Set<Chunk>();
   const stamps: SweepStamp[] = [];
   const viewProj = new THREE.Matrix4();
   const clearColor = new THREE.Color();
@@ -223,6 +229,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
       if (s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
     }
     selected.length = 0;
+    selectedStates.clear();
     selectedPieces = 0;
   }
 
@@ -305,8 +312,11 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
 
   function planSelectedStamps(camera: THREE.PerspectiveCamera): number {
     stamps.length = 0;
+    plannedStates.clear();
     const proj = buildProjection(camera);
     for (const s of selected) {
+      if (plannedStates.has(s.state)) continue;   // another mesh of the same piece
+      plannedStates.add(s.state);
       const planned = planGibMotionStamps(s.state, s.id, proj, exposureSeconds, {
         maxStreakPx,
         ageSeconds: s.ageSeconds,
@@ -322,7 +332,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     const active = enabled && exposureSeconds > 0;
     if (!active) return 0;
     for (const s of subjects) {
-      if (selected.length >= GIB_BLUR_MAX_PIECES) {
+      if (!selectedStates.has(s.state) && selectedStates.size >= GIB_BLUR_MAX_PIECES) {
         if (s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
         continue;
       }
@@ -332,8 +342,9 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
       }
       s.mesh.layers.set(GIB_BLUR_LAYER);
       selected.push(s);
+      selectedStates.add(s.state);
     }
-    selectedPieces = selected.length;
+    selectedPieces = selectedStates.size;
     return selectedPieces;
   }
 

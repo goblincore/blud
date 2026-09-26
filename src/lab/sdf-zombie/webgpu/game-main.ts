@@ -7685,8 +7685,20 @@ async function main() {
     // layer BEFORE the base scene renders (the draw callback follows this tick),
     // so the capture's clean background has no selected gib in it. When the
     // switch is off the list is empty and every mesh is put back where it was.
+    //
+    // THE CENSER rides the same layer (censer Task 8b). Its subjects come from
+    // the pose sync() drew ~50 lines up, so ORDER is: camera final → censer
+    // sync → select → (render callback) base render. blurSubjects runs every
+    // frame even with the switch off, so its previous-pose history never goes
+    // stale. Censer pieces go FIRST (the layer keeps the first
+    // GIB_BLUR_MAX_PIECES), and only while the gib program is warm: the layer's
+    // capture — the only thing that draws a selected mesh — is skipped until
+    // then, and a censer lifted onto the layer with no capture would vanish.
+    const censerBlur = ctx.weapon.censer?.blurSubjects(dt) ?? [];
     if (ctx.gibs.shutter) {
-      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? gibBlurSubjects(ctx) : []);
+      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled
+        ? [...(ctx.boot.warmBackground.gibDraw() === 'draw' ? censerBlur : []), ...gibBlurSubjects(ctx)]
+        : []);
       if (!ctx.gibs.shutter.enabled) ctx.gibs.blurPrevKeys = new Set();
     }
     ctx.telemetry.telemetry.end('goo-sync', gooTiming);

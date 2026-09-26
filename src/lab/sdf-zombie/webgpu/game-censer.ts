@@ -11,6 +11,7 @@
 //
 // Not a recorded DemoFrame verb (like the flare): a replay does not swing it.
 import * as THREE from 'three/webgpu';
+import { lights } from 'three/tsl';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { GameContext } from './game-context';
@@ -29,6 +30,11 @@ import {
 } from './censer-swing';
 import { CENSER_HEAD, makeCenserHead, stepCenserHead, type CenserHead, type HeadWorld } from './censer-head';
 import { makeStrokeHits, sweepHead, type ActorProbe, type HitEvent, type StrokeHits } from './censer-hit';
+import {
+  CENSER_BLUR_IDS, CENSER_HAFT_BLUR_GAIN, CENSER_HAFT_BLUR_RADIUS, censerBlurActive, censerMotionState,
+  chainRodStates, scaledPrior, scaleMotion, type Pose,
+} from './censer-blur';
+import type { GibBlurSubject } from './gib-shutter-layer';
 
 const CENSER_GLB = '/assets/lab/censer.glb';
 /** The grip's rest, aim-rig (view) space: low right, the haft tipped well
@@ -85,6 +91,8 @@ export interface CenserDebug {
    *  now (the rendered camera). Non-zero = the chain was placed off a stale
    *  camera — the sync pass exists to keep this at 0. */
   chainGap: number;
+  /** Subjects the last blurSubjects() call handed the gib shutter layer (0 at rest). */
+  blurSubjects: number;
 }
 
 export interface CenserWeapon {
@@ -101,6 +109,16 @@ export interface CenserWeapon {
   sync(): void;
   /** Holster travel from the shared slot state (stepWeaponSlots calls it). */
   updateRig(): void;
+  /**
+   * Once per frame, AFTER sync() (the drawn pose is final) and BEFORE the gib
+   * shutter's select() — which must precede the base render. Records this
+   * frame's drawn poses (always, so the next frame's velocity is never taken
+   * off a stale pose) and returns the head, chain and haft as gib-shutter
+   * subjects while the censer is being swung; [] at rest or hidden. `dt` is
+   * the tick's (hit-stop-scaled) step, so velocities are SIM velocities — the
+   * same convention as a gib's `state.vel`.
+   */
+  blurSubjects(dt: number): GibBlurSubject[];
   /** This tick's dt multiplier while a hit-stop runs (1 otherwise); counts down on the unscaled dt. */
   hitStopScale(dt: number): number;
   press(): void;
@@ -151,6 +169,57 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   const iron = new THREE.MeshStandardMaterial({ color: 0x2c2b2a, metalness: 0.9, roughness: 0.55, envMap: env, envMapIntensity: 0.8 });
   const glow = new THREE.MeshStandardMaterial({ color: 0x220800, emissive: 0xff6a1c, emissiveIntensity: 3 });
 
+  // ---- OWN LIGHT LIST (swing blur, Task 8b) ----------------------------------
+  // While swung, the censer is drawn by the gib shutter layer with the camera
+  // on GIB_BLUR_LAYER — which also culls every scene light (they live on layer
+  // 0), so through the renderer's default list a blurred censer rendered UNLIT
+  // (measured: the lamp-lit head went from near-white to dark brown the frame
+  // the blur engaged). `material.lightsNode` REPLACES the scene's list (the
+  // level does this per room, game-main "LEVEL SURFACES"), and it is not
+  // layer-culled, so both passes light the censer with the same lights. The
+  // list mirrors the default one (every visible light the base camera sees); the scene's
+  // lights are pooled at boot (explosion/fire pools are never re-keyed), so a
+  // cheap periodic re-list only ever catches boot-time additions (the muzzle
+  // flash arrives with the gun). Shadows: none of these meshes receiveShadow,
+  // and three only sets up a shadow node for a receiver, so the layer draw
+  // never re-renders a shadow map. Forward route only (deferred has its own
+  // lighting and no gib blur).
+  const lightList = lights([]);
+  let listed: THREE.Light[] = [];
+  function relist(): void {
+    const next: THREE.Light[] = [];
+    ctx.boot.handle.scene.traverse((o) => {
+      const l = o as THREE.Light;
+      if (l.isLight && l.visible && l.layers.test(deps.camera.layers)) next.push(l);
+    });
+    if (next.length === listed.length && next.every((l, i) => l === listed[i])) return;
+    listed = next;
+    lightList.setLights(next);
+  }
+  const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
+  const lit = new Map<THREE.Material, THREE.Material>();
+  function ownLights(root: THREE.Object3D): void {
+    if (ctx.boot.deferredMode) return;
+    const conv = (m: THREE.Material): THREE.Material => {
+      let nm = lit.get(m);
+      if (!nm) {
+        const node = library.fromMaterial(m);
+        if (!node) return m;
+        node.lightsNode = lightList;
+        lit.set(m, node);
+        lit.set(node, node);
+        nm = node;
+      }
+      return nm;
+    };
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(conv) : conv(mesh.material);
+    });
+  }
+  let relistClock = 0;
+
   // PRIMITIVES FIRST, GLB OVER THEM (the flare's rule): the game never waits on the model.
   const haftPrim = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.3, 12), brass);
   haftPrim.position.y = 0.15;
@@ -174,6 +243,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   links.frustumCulled = false;   // the instances move every frame; the bound never would
   chain.add(links);
   ctx.boot.handle.scene.add(head, chain);
+  relist();
+  ownLights(rig); ownLights(head); ownLights(chain);
   if (ctx.boot.deferredApi) {
     for (const o of [rig, head, chain]) ctx.boot.deferredApi.router.register(o, 'mesh', 'level-only');
   }
@@ -277,6 +348,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     } catch (e) {
       console.warn('[sdf-game] censer.glb absent or unreadable — using the primitive censer', e);
     }
+    ownLights(rig); ownLights(head); ownLights(chain);
   })();
 
   // ---- The hand: a second goblin right arm, fist on the haft -----------------
@@ -291,6 +363,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     hand.name = 'censer-hand';
     hand.position.set(0, 0.03, 0);
     haft.add(hand);
+    ownLights(hand);
   }).catch((e) => console.warn('[sdf-game] censer hand: goblin-arm.glb failed', e));
   const _sh = new THREE.Vector3(), _bend = new THREE.Vector3();
   function aimHand(): void {
@@ -324,6 +397,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   let ropeNow = ropeLength(swing, CENSER_HEAD.ropeLen);
   /** Where the chain was last drawn from (debug chainGap). */
   const chainStart = new THREE.Vector3();
+  /** Where the chain was last drawn TO: the head's ring. */
+  const chainEnd = new THREE.Vector3();
   const Y = new THREE.Vector3(0, 1, 0);
   const _up = new THREE.Vector3(), _p = new THREE.Vector3(), _tan = new THREE.Vector3();
   const _m = new THREE.Matrix4();
@@ -414,6 +489,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     chainStart.set(anchor[0], anchor[1], anchor[2]);
     const rr = CENSER_HEAD.radius * 1.3;
     const ring: Vec3 = [h[0] + _up.x * rr, h[1] + _up.y * rr, h[2] + _up.z * rr];
+    chainEnd.set(ring[0], ring[1], ring[2]);
     const sag = Math.max(0, rope - span) * 0.6;
     const c: Vec3 = [(anchor[0] + ring[0]) / 2, (anchor[1] + ring[1]) / 2 - sag, (anchor[2] + ring[2]) / 2];
     // The links the paid-out chain needs: knot to ring, at the link pitch.
@@ -440,7 +516,103 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     links.instanceMatrix.needsUpdate = true;
   }
 
+  // ---- Swing motion blur (Task 8b): drawn poses → gib-shutter subjects -------
+  // The head and chain are WORLD objects: their motion is world motion, like a
+  // gib's. The haft (and the hand on it) rides the camera, so its motion is
+  // taken CAMERA-RELATIVE: last frame's camera-local pose re-placed through
+  // THIS frame's camera. World motion would streak the view-model every time
+  // the player turns — the seed projects through the current camera, and a
+  // camera-locked object does not move on screen when the view turns.
+  let prevHead: Pose | null = null;
+  let prevHaftLocal: THREE.Matrix4 | null = null;
+  /** The knot's previous position in CAMERA space (it rides the haft). */
+  let prevKnot: Vec3 | null = null;
+  let prevRing: Vec3 | null = null;
+  /** Seconds the blur has been continuously active (windup → stroke → recover
+   *  is one span), the subjects' ageSeconds: the first swung frame exposes one
+   *  frame of motion, never a streak back into the rest pose. */
+  let blurAge = 0;
+  let lastBlurCount = 0;
+  const _camInv = new THREE.Matrix4(), _haftLocal = new THREE.Matrix4(), _prevW = new THREE.Matrix4();
+  const _kl = new THREE.Vector3();
+  const _dp = new THREE.Vector3(), _dq = new THREE.Quaternion(), _ds = new THREE.Vector3();
+  const _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cs = new THREE.Vector3();
+  const headMeshes: THREE.Mesh[] = [], haftMeshes: THREE.Mesh[] = [];
+  function collectMeshes(root: THREE.Object3D, out: THREE.Mesh[]): void {
+    out.length = 0;
+    root.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh) out.push(o as THREE.Mesh); });
+  }
+  const v3 = (v: THREE.Vector3): Vec3 => [v.x, v.y, v.z];
+  const q4 = (q: THREE.Quaternion): [number, number, number, number] => [q.x, q.y, q.z, q.w];
+
+  function blurSubjects(dt: number): GibBlurSubject[] {
+    if (!rig.visible || !headSim) {
+      prevHead = null; prevHaftLocal = null; prevKnot = null; prevRing = null;
+      blurAge = 0; lastBlurCount = 0;
+      return [];
+    }
+    const cam = deps.camera;
+    haft.updateWorldMatrix(true, false);
+    _camInv.copy(cam.matrixWorld).invert();
+    _haftLocal.multiplyMatrices(_camInv, haft.matrixWorld);
+    const headNow: Pose = { pos: v3(head.position), quat: q4(head.quaternion) };
+    const knotCur: Vec3 = v3(chainStart), ringCur: Vec3 = v3(chainEnd);
+    const knotLocal: Vec3 = v3(_kl.copy(chainStart).applyMatrix4(_camInv));
+    const active = censerBlurActive(swing.phase);
+    const out: GibBlurSubject[] = [];
+    if (active && prevHead && prevHaftLocal && prevKnot && prevRing) {
+      blurAge += dt;
+      const age = blurAge;
+      // HEAD: every visible mesh under the group (layers are per object, not
+      // inherited), all sharing the head's state and ONE stream id.
+      const headState = censerMotionState(prevHead, headNow, dt, CENSER_HEAD.radius);
+      collectMeshes(head, headMeshes);
+      for (const mesh of headMeshes) {
+        out.push({ id: CENSER_BLUR_IDS.head, state: headState, mesh, baseLayer: 0, ageSeconds: age });
+      }
+      // CHAIN: ONE InstancedMesh, passed once per rod sample, each sample with
+      // its own velocity (knot speed → head speed). select() only sets the
+      // mesh's layer, so repeating it is harmless; each sample adds its stamps.
+      // The knot end moves like the haft it hangs from (camera-relative, at
+      // the view-model gain) and the ring end like the head, so the chain's
+      // streak tapers from the hand's to the head's — and a chain stamp never
+      // hands the haft's top a stronger smear than the haft's own.
+      if (links.count > 0) {
+        const knotPrior = scaledPrior(v3(_kl.set(...prevKnot).applyMatrix4(cam.matrixWorld)), knotCur, CENSER_HAFT_BLUR_GAIN);
+        const rods = chainRodStates(knotPrior, prevRing, knotCur, ringCur, dt);
+        rods.forEach((state, i) => {
+          out.push({ id: CENSER_BLUR_IDS.chain + i, state, mesh: links, baseLayer: 0, ageSeconds: age });
+        });
+      }
+      // HAFT + HAND: camera-relative motion (see above). Support spheres run
+      // from the grip up to the knot so the seed reaches the haft's far end.
+      haft.matrixWorld.decompose(_cp, _cq, _cs);
+      _prevW.multiplyMatrices(cam.matrixWorld, prevHaftLocal).decompose(_dp, _dq, _ds);
+      const k = _cs.x;
+      const tip: Vec3 = [anchorLocal.x * k, anchorLocal.y * k, anchorLocal.z * k];
+      const r = CENSER_HAFT_BLUR_RADIUS;
+      // Scaled down (CENSER_HAFT_BLUR_GAIN): the view-model smears less than the head.
+      const haftState = scaleMotion(censerMotionState(
+        { pos: v3(_dp), quat: q4(_dq) }, { pos: v3(_cp), quat: q4(_cq) }, dt, r,
+        [{ c: [0, 0, 0], r }, { c: [tip[0] / 2, tip[1] / 2, tip[2] / 2], r }, { c: tip, r }],
+      ), CENSER_HAFT_BLUR_GAIN);
+      collectMeshes(haft, haftMeshes);
+      for (const mesh of haftMeshes) {
+        out.push({ id: CENSER_BLUR_IDS.haft, state: haftState, mesh, baseLayer: 0, ageSeconds: age });
+      }
+    } else if (!active) {
+      blurAge = 0;
+    }
+    prevHead = headNow;
+    prevHaftLocal = (prevHaftLocal ?? new THREE.Matrix4()).copy(_haftLocal);
+    prevKnot = knotLocal;
+    prevRing = ringCur;
+    lastBlurCount = out.length;
+    return out;
+  }
+
   return {
+    blurSubjects,
     onMouseDown(button) {
       if (ctx.weapon.slotState.live !== 'censer') return false;
       if (button === 0) held = true;
@@ -496,6 +668,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       // Always ages/fades the puffs (so hiding the censer fades the trail
       // rather than freezing it); only spawns and re-anchors while shown.
       stepSmoke(smokeDt, rig.visible && !!headSim);
+      if (++relistClock >= 60) { relistClock = 0; relist(); }
       if (!rig.visible || !headSim) return;
       drawHead(anchorWorld(), ropeNow);
       aimHand();
@@ -532,6 +705,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
         headNdc: screenNdc(head.position),
         knotNdc: screenNdc(knotNow()),
         chainGap: knotNow().distanceTo(chainStart),
+        blurSubjects: lastBlurCount,
       };
     },
     phase: () => swing.phase,

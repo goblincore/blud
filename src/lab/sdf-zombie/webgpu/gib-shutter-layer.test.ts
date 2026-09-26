@@ -144,7 +144,7 @@ describe('gib shutter — integration tripwires', () => {
 
   it('bounds the per-frame work', () => {
     expect(GIB_BLUR_MAX_PIECES).toBeGreaterThan(0);
-    expect(layerSrc).toContain('selected.length >= GIB_BLUR_MAX_PIECES');
+    expect(layerSrc).toContain('selectedStates.size >= GIB_BLUR_MAX_PIECES');
     expect(GIB_BLUR_LAYER).toBe(10);
   });
 
