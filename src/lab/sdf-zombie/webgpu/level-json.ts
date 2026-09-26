@@ -39,7 +39,7 @@ const KEYS: Record<string, readonly string[]> = {
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
-  light: ['pos', 'color', 'power', 'mood', 'fixture', 'states'],
+  light: ['pos', 'color', 'power', 'mood', 'fixture', 'gain', 'tint', 'states'],
   cue: ['on', 'emit'],
   start: ['pos', 'yaw'],
   spawn: ['id', 'kind', 'pos', 'yaw', 'states'],
@@ -342,9 +342,20 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
       if (o.fixture === 'bulb' || o.fixture === 'tube') fixture = o.fixture;
       else errors.push(`lights[${i}].fixture: must be bulb or tube`);
     }
+    let gain: number | undefined;
+    if (o.gain !== undefined) {
+      gain = num(o.gain, `lights[${i}].gain`, 1);
+      if (gain < 0) errors.push(`lights[${i}].gain: must be >= 0`);
+    }
+    let tint: Vec3 | undefined;
+    if (o.tint !== undefined) {
+      tint = vec(o.tint, 3, `lights[${i}].tint`) as unknown as Vec3;
+      if (tint.some(c => c < 0)) errors.push(`lights[${i}].tint: every component must be >= 0`);
+    }
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`lights[${i}]: outside every room`);
-    else if (keep) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}) });
+    else if (keep) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}),
+      ...(gain !== undefined ? { gain } : {}), ...(tint ? { tint } : {}) });
   });
 
   // --- cues (dynamic light §3) --------------------------------------------------

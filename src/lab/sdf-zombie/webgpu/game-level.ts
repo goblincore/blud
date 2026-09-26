@@ -58,6 +58,12 @@ export interface AccentLight {
   mood?: LampMood;
   /** The visible fixture: a bulb (absent) or a fluorescent tube (Night Train, 2026-09-26). */
   fixture?: 'bulb' | 'tube';
+  /** Level-authored scale on this light's presentation gain (spec §5 option A);
+   *  absent means the kind's fixed profile gain is unscaled. Must be >= 0. */
+  gain?: number;
+  /** Level-authored tint multiplied into this light's colour (spec §5 option A);
+   *  absent means the kind's fixed profile tint is unscaled. Each component >= 0. */
+  tint?: Vec3;
 }
 
 /** Distance at which an accent's albedo contribution has fallen to half. */

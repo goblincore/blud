@@ -18,6 +18,7 @@
 // supplies the real value at the binding's original line.
 
 import type * as THREE from 'three/webgpu';
+import type { Vec3 } from '../types';
 import type { LampMood } from './lamp-moods';
 import type { Flashlight } from './dungeon-lighting';
 import type { OutdoorRuntime } from './game-outdoor-leaves';
@@ -46,7 +47,7 @@ export interface LightingState {
   /** Room-probe lighting nodes, keyed by room id. */
   levelProbeNodes: Map<number, ProbeLightingNode>;
   /** Accent lights that pulse, each with its base power and phase. */
-  flickerLights: { light: THREE.PointLight; base: number; phase: number; bowl?: THREE.MeshStandardMaterial; mood?: LampMood; room?: number; bowlMesh?: THREE.Mesh; fixture?: 'bulb' | 'tube' }[];
+  flickerLights: { light: THREE.PointLight; base: number; phase: number; bowl?: THREE.MeshStandardMaterial; mood?: LampMood; room?: number; bowlMesh?: THREE.Mesh; fixture?: 'bulb' | 'tube'; gain?: number; tint?: Vec3 }[];
   /** Dungeon rig on/off; the gallery must render unchanged when false. */
   dungeonOn: boolean;
   /** Beam + shadow rig; the codemod supplies the real flashlight. */

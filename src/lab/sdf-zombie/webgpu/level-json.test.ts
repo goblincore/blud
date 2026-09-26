@@ -153,3 +153,31 @@ describe('parseLevelJson: dynamic light keys (dynamic light spec §3)', () => {
     expect(() => parseLevelJson(f)).toThrow(needle);
   });
 });
+
+describe('parseLevelJson: per-light gain and tint (spec §5 option A)', () => {
+  it('reads a light gain and tint', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].gain = 1.5;
+    f.lights[0].tint = [1, 0.6, 0.6];
+    const L = parseLevelJson(f);
+    expect(L.rooms[0]!.accents[0]).toMatchObject({ gain: 1.5, tint: [1, 0.6, 0.6] });
+  });
+
+  it('defaults to no gain and no tint', () => {
+    const L = parseLevelJson(fixture('two-rooms'));
+    expect(L.rooms[0]!.accents[0]!.gain).toBeUndefined();
+    expect(L.rooms[0]!.accents[0]!.tint).toBeUndefined();
+  });
+
+  it('rejects a negative gain', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].gain = -1;
+    expect(() => parseLevelJson(f)).toThrow('lights[0].gain');
+  });
+
+  it('rejects a negative tint component', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].tint = [1, -0.2, 0.6];
+    expect(() => parseLevelJson(f)).toThrow('lights[0].tint');
+  });
+});
