@@ -23,7 +23,7 @@
 // march passes its light-list storage param straight through, the way it passes `probeDyn` to
 // probeDynamic (a `ptr<storage, array<vec4<f32>>, read>` param). The march calls it with
 // skipFirst = true (slot 0 is shaded by its own key path from domL/domC); bones and chunks false.
-// Not yet in HELPERS (Task 9 adds it), so the march golden does not move here.
+// In HELPERS, last (Task 9); the march light block calls it behind lightListCfg.x.
 //
 // NAMING. `meta` is a WGSL reserved word, so the light's fourth vec4 is `lm`.
 

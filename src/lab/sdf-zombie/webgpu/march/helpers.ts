@@ -19,6 +19,7 @@ import { CALC_NORMAL, MAP_BODY } from './map-body.wgsl';
 import { FBM, HASH13, NOISE3, NOISE_LOCAL, Q_FROM_TO, Q_MUL, Q_ROT } from './math.wgsl';
 import { CONE_BEND, CONE_CAP, CONE_STRAND, SD_BEZIER_T, SD_GROOVE, SD_PRIM, SD_PRIM_ORIENTED, SD_ROUND_BOX, SD_SHELL, SMAX, SMIN, SMIN_CHAMFER, STRAND_HASH4, STRAND_LIPSCHITZ } from './primitives.wgsl';
 import { FLICKER, LEVEL_SHADOW, SOFT_SHOULDER, TEXEL } from './shade-helpers.wgsl';
+import { BODY_LIGHTS } from './body-lights.wgsl';
 
 export const HELPERS = [
   // ORDER IS LOAD-BEARING: WGSL requires declaration before use, and wgslFn
@@ -49,4 +50,7 @@ export const HELPERS = [
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_MISS, DEPTH_PRE_FETCH,
+  // Shared light list presentation loop (light list plan 1 task 9). Calls no
+  // helper, so it rides last, ahead of MARCH_BODY's light block which calls it.
+  BODY_LIGHTS,
 ];

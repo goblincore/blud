@@ -36,8 +36,9 @@ describe('BODY_LIGHTS — parse contract', () => {
     expect(BODY_LIGHTS).not.toMatch(/\blet meta\b/);
   });
 
-  it('is not in HELPERS yet (Task 9 wires it; the march golden does not move here)', () => {
-    expect(HELPERS).not.toContain(BODY_LIGHTS);
+  it('is in HELPERS (Task 9), after every helper it could need', () => {
+    expect(HELPERS).toContain(BODY_LIGHTS);
+    expect(HELPERS.at(-1)).toBe(BODY_LIGHTS);
   });
 });
 

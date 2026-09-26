@@ -76,6 +76,9 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                // soldier wounds only; applied at the consumer so the hoisted wet statement stays pinned.
                + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, soldierWound)
                + scatter;
+  // SHARED LIGHT LIST: the other 3 lights and every light's back rim (spec §5). Through AO, not
+  // the wound/level shadow (those belong to the dominant). Zero when the list is off.
+  fleshLit = fleshLit + (listDiff * albedo + listSpec) * ao + listRim;
   // LIGHTNING SIDE RIM (owner, 2026-09-26: "a strong rim light on one side, like a coldish powerful
   // light from the side"). spotCfg2.w is the rim's strength, set by the game only while a window
   // light is live (lightDir then points at the window): a hard grazing edge on the side facing the

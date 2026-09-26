@@ -7,16 +7,16 @@
 // WHAT RIDES IN THE STRUCT, AND WHAT CANNOT. The WGSL spec restricts
 // structure member types to plain data — "a pointer, texture, or sampler
 // must not appear in any level of nesting within an array or structure"
-// (gpuweb WGSL, Structure Types). Of MARCH_BODY_PARAMS' 99 parameters, 86 are
-// values and go into MarchIn; 13 stay positional in the entry signature
+// (gpuweb WGSL, Structure Types). Of MARCH_BODY_PARAMS' 101 parameters, 87 are
+// values and go into MarchIn; 14 stay positional in the entry signature
 // FOREVER, for as long as the entries carry the bindings themselves:
 //   textures (9):  data, volumeTex, faceTex, segVolumeAtlas, segVolumeMeta,
 //                  levelShadowTex, depthPreTex, probeTex, lastTex
-//   storage ptrs (4): tileHdr, tileEnt, probeDyn, inst
+//   storage ptrs (5): tileHdr, tileEnt, probeDyn, inst, lightList
 // Where each excluded param sits in the list order, the struct marks the gap
 // with a one-line comment, so an audit of struct-vs-list stays mechanical.
 //
-// The field order is EXACTLY MARCH_BODY_PARAMS' order minus those 13 —
+// The field order is EXACTLY MARCH_BODY_PARAMS' order minus those 14 —
 // WGSL's positional struct constructor takes fields in declaration order,
 // so the pack statement and the struct can only agree if both follow the
 // list. The pack (MARCH_IN_PACK) is GENERATED from MARCH_BODY_PARAMS below;
@@ -218,5 +218,8 @@ struct MarchIn {
   burnFireCoverage: f32,
   burnSkeleton: f32,
   burnSkeletonDepth: f32,
+  // ---- shared light list ----
+  lightListCfg: vec4<f32>,
+  // (lightList stays positional — a storage pointer)
 }
 `;

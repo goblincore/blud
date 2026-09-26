@@ -88,7 +88,8 @@ describe('surface-entry wgslFn parse contract', () => {
     // +1 burnFireCoverage (flame lab fix pass) after burnFireGain, same rule.
     // +1 burnSkeleton (flame lab fix pass task 3) after burnFireCoverage.
     // +1 skeletonDepth (flame polish task 4) after burnSkeleton.
-    expect(legacy.length).toBe(99); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    // +2 shared light list (lightListCfg, lightList storage) after burnSkeletonDepth — plan 1 task 9.
+    expect(legacy.length).toBe(101); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });

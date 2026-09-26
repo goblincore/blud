@@ -1,0 +1,39 @@
+// src/lab/sdf-zombie/webgpu/march/body/blocks/light/light-list.wgsl.ts
+//
+// Shared light list plan 1, Task 9: the march reads the list. Spliced into MARCH_BODY_LIGHT
+// (../../light.wgsl.ts) right after FLASHLIGHT_BLOCK, so the dominant pick can REPLACE the key
+// (L, keyC, keyI) before anything downstream reads it: the dominant's wrap in light.wgsl.ts, the
+// scatter and wound shadow in occlusion, the shoulder in compose. The other three lights and
+// every light's back rim are added in compose.wgsl.ts (listDiff * albedo + listSpec) * ao + listRim,
+// where albedo and ao are in scope.
+//
+// OFF BY DEFAULT. lightListCfg.x is 0 on every view until Task 10 turns it on in the game; at 0
+// the if is skipped, the list* vars stay zero, the compose add is + 0 and the dominant's wrap
+// keeps the old max(dot(n, L), 0) expression, so the lit output is unchanged.
+//
+// Names used from the enclosing entry, all in scope at the splice point: p (the hit, used by
+// FLASHLIGHT_BLOCK), n (the shading normal) and rd (the ray; light.wgsl.ts's V = -rd follows the
+// block), L / keyC / keyI (FLASHLIGHT_BLOCK's vars), gInstLights (the REC_LIGHTS private, loaded
+// by loadInstance), lightList (the entry's storage param, MARCH_BODY_PARAMS).
+
+export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §4-§5) ------------------------------------
+  // lightListCfg.x > 0: this body is lit by its 4 picked lights (gInstLights, REC_LIGHTS).
+  // Slot 0, the dominant, REPLACES the key (L, keyC, keyI), so scatter, the wound shadow and
+  // the shoulder follow it; slots 1-3 and every rim are added in compose.
+  // At x = 0 nothing here runs and the old key path is untouched.
+  var listDiff = vec3<f32>(0.0);
+  var listSpec = vec3<f32>(0.0);
+  var listRim = vec3<f32>(0.0);
+  var listDomFloor = 0.0;
+  if (lightListCfg.x > 0.0) {
+    let bl = bodyLights(p, n, -rd, gInstLights, lightList, true);
+    let peak = max(bl.domC.x, max(bl.domC.y, bl.domC.z));
+    L = bl.domL;
+    keyC = bl.domC / max(peak, 1e-4);
+    keyI = peak;
+    listDiff = bl.diffuse;
+    listSpec = bl.spec;
+    listRim = bl.rim;
+    listDomFloor = bl.domFloor;
+  }
+  // ---- END SHARED LIGHT LIST ----------------------------------------------`;

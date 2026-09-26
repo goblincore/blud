@@ -27,7 +27,9 @@ describe('burn uniform plumbing', () => {
       expect(next, p).toBeGreaterThan(at);
       at = next;
     }
-    expect(params).toMatch(/burnSkeletonDepth: f32\s*\)/);
+    // Light list task 9 appends lightListCfg and the lightList storage after the burn tail.
+    expect(params).toContain('burnSkeletonDepth: f32,');
+    expect(src).toContain('lightListCfg: u.lightListCfg,');
     const binds = [...src.matchAll(/burnCfg: u\.burnCfg,/g)];
     expect(binds.length).toBeGreaterThan(0);
     for (const name of BURN_SCALARS) expect(src).toContain(`${name}: u.${name},`);
@@ -37,5 +39,23 @@ describe('burn uniform plumbing', () => {
     expect(src).toContain('burn: u.burnCfg.value.x');
     expect(src).toContain('burnSec: u.burnCfg.value.y');
     expect(src).toContain('charAmount: u.burnCfg.value.z');
+  });
+});
+
+describe('shared light list plumbing (light list plan 1 task 9)', () => {
+  it('binds lightListCfg then the list node after the burn tail, the fallback when no list is passed', () => {
+    const at = src.indexOf('burnSkeletonDepth: u.burnSkeletonDepth,');
+    const cfg = src.indexOf('lightListCfg: u.lightListCfg,', at);
+    const list = src.indexOf('lightList: (lightList ?? fallbackLightListNode()) as never,', cfg);
+    expect(at).toBeGreaterThan(0);
+    expect(cfg).toBeGreaterThan(at);
+    expect(list).toBeGreaterThan(cfg);
+    expect(src.indexOf('...(extra ?? {}),', list)).toBeGreaterThan(list);
+  });
+
+  it('defaults lightListCfg to 0 (the old key path) and routes the game list to bodies, crowds and the refine twin', () => {
+    expect(src).toContain('lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),');
+    expect(src).toContain('sources?.lightList?.node,');
+    expect(src.split('opts.lightList?.node,').length - 1).toBe(2);   // the body view and its refine twin
   });
 });

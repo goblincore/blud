@@ -3101,6 +3101,9 @@ async function main() {
       // The dynamic probe layer's storage node (P3/P4). Bound at material
       // creation like the tile binding — a storage node cannot be rebound.
       ...(ctx.probes.gather ? { probeDyn: { node: ctx.probes.gather.probeDynNode } } : {}),
+      // The shared light list's storage node (plan 1 task 9), bound at material
+      // creation like probeDyn. lightListCfg.x stays 0 until task 10.
+      ...(ctx.world.light?.list ? { lightList: { node: ctx.world.light.list.node } } : {}),
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU
       // lazy-init submit conflict that rejects the WHOLE producer pass

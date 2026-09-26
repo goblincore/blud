@@ -723,6 +723,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  (flame-polish task 4). The old shader constant was 0.08; exposed so the
      *  panel and capture can trade limb clutter for rib coverage. */
     burnSkeletonDepth: uniform(0.08),
+    /** SHARED LIGHT LIST (plan 1 task 9): x > 0 lights this body by its four
+     *  REC_LIGHTS picks from the list buffer (the march's `lightList` storage
+     *  param); 0 (the default everywhere until task 10) takes the old key path,
+     *  unchanged. yzw spare. */
+    lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
   };
 }
 
@@ -747,7 +752,8 @@ function fallbackProbeDyn() {
 let fallbackLightListNodeRef: unknown;
 /** The shared light list's zero fallback (LIST_VEC4S zeros): the header's light count reads 0,
  *  so a view without the game's list still binds a well-formed storage buffer, never null.
- *  Not bound yet (Task 9 binds the list into the march). */
+ *  createMarchMaterial binds it wherever no real list is passed (an unbound declared storage
+ *  input kills the pipeline); lightListCfg.x = 0 there, so it is never read. */
 export function fallbackLightListNode() {
   if (!fallbackLightListNodeRef) {
     const a = new THREE.StorageBufferAttribute(LIST_VEC4S, 4);
@@ -1274,6 +1280,10 @@ export function createMarchMaterial(
     inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform>;
     instCentre?: unknown; instHalf?: unknown;
   },
+  // Shared light list (plan 1 task 9), POSITIONALLY LAST: the read-only storage
+  // node of the game's one list buffer (ctx.world.light.list.node). Omitted,
+  // the zero fallback is bound; u.lightListCfg.x gates every read.
+  lightList?: unknown,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1482,6 +1492,12 @@ export function createMarchMaterial(
     burnFireCoverage: u.burnFireCoverage,
     burnSkeleton: u.burnSkeleton,
     burnSkeletonDepth: u.burnSkeletonDepth,
+    // SHARED LIGHT LIST (plan 1 task 9) — POSITIONALLY LAST after
+    // burnSkeletonDepth, bound in the same commit as the WGSL inputs. The
+    // storage node is ALWAYS bound (the zero fallback when this view has no
+    // list); lightListCfg.x = 0 keeps the old key path.
+    lightListCfg: u.lightListCfg,
+    lightList: (lightList ?? fallbackLightListNode()) as never,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 
@@ -1630,6 +1646,8 @@ export interface CrowdMaterialSources {
   depthPre?: DepthPreSource;
   lastFrame?: LastFrameSource;
   probeDyn?: { node: unknown };
+  /** The shared light list's storage node (plan 1 task 9). Undefined = fallback. */
+  lightList?: { node: unknown };
 }
 
 /**
@@ -1772,6 +1790,7 @@ export function createCrowdMaterial(
     sharedLevelShadowTex,
     undefined, undefined,
     { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
+    sources?.lightList?.node,
   );
   if (quad) {
     // Full-screen quad: the raw clip-space vertex; the ray override above
@@ -2185,6 +2204,9 @@ export interface GpuViewOpts {
   /** GPU probe gather (P3/P4 dynamic layer): the read-only storage node of
    *  the dynamic probe buffer this view's march reads. Undefined = fallback. */
   probeDyn?: { node: unknown };
+  /** The shared light list's read-only storage node (plan 1 task 9), bound at
+   *  material creation like probeDyn. Undefined = the zero fallback. */
+  lightList?: { node: unknown };
   /**
    * Pack bone rows (op 'bone') into the inside-flesh array. Default TRUE —
    * the shipped layout. The bone-tubes renderer sets it FALSE via
@@ -2495,6 +2517,7 @@ export function createZombieGpuView(
     opts.lastFrame,
     undefined, undefined, undefined, undefined,
     { inst: records.node, instCfg },
+    opts.lightList?.node,
   );
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
@@ -2701,6 +2724,8 @@ export function createZombieGpuView(
         .segVolumeMeta as unknown as ReturnType<typeof texture>,
       // Crowd stage a: the refine twin marches the SAME record band.
       { inst: records.node, instCfg },
+      // It shares MARCH_BODY_LIGHT, so it reads the SAME light list as the main material.
+      opts.lightList?.node,
     );
   };
   if (opts.refine) {

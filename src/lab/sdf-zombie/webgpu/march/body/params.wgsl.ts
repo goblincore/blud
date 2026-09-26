@@ -274,6 +274,15 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // BurnTuning.skeletonDepth so the panel can trade limb clutter for rib
   // coverage. Bound in the same slot order in zombie-gpu.ts. NO COLONS and NO
   // PARENS in this comment either.
-  burnSkeletonDepth: f32
+  burnSkeletonDepth: f32,
+  // Shared light list - light list plan 1 task 9 - POSITIONALLY LAST after
+  // burnSkeletonDepth. lightListCfg x above 0 lights this body by its four
+  // picked lights from gInstLights, and 0 keeps the old key path untouched.
+  // lightList is the one list buffer of profiles, header and lights; every
+  // view that does not light by the list binds the shared fallback. Bound in
+  // the same slot order in zombie-gpu.ts. NO COLONS and NO PARENS in this
+  // comment either.
+  lightListCfg: vec4<f32>,
+  lightList: ptr<storage, array<vec4<f32>>, read>
 ) -> vec4<f32> {
 `;
