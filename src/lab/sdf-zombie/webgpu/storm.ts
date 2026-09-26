@@ -16,14 +16,14 @@ export const STORM = {
   /** A sweep's length, seconds. */
   sweepS: 1.5,
   boltColor: [0.72, 0.82, 1.0] as Vec3,
-  boltPeak: 16,
+  boltPeak: 24,
   sweepColor: [1.0, 0.68, 0.38] as Vec3,
-  sweepPeak: 2.4,
+  sweepPeak: 4,
   /** The lightning's direction toward the light, for side +1 (x flips with the side). Low, so it
    *  reaches across the aisle through the windows. */
   boltDir: [0.9, 0.3, 0.15] as Vec3,
   /** Ambient bounce added per unit of window-light intensity (the flash fills the room a little). */
-  bounce: 0.05,
+  bounce: 0.07,
   /** A bolt's life, seconds. */
   boltLife: 0.6,
 } as const;

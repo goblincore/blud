@@ -154,7 +154,7 @@ describe('metal modifier (hard-surface task 2)', () => {
     expect(SHADE_BODY).toContain(
       'min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5))');
     expect(SHADE_BODY).toContain(
-      'metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * rimLit * mix(1.0, 2.5, gloss)) * wet');
+      'metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet');
   });
 
   it('collapses to an EXACTLY white tint at metal 0 — flesh keeps its highlight', () => {

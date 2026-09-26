@@ -71,14 +71,10 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
     let fl = fv * inverseSqrt(fd2);
     flashDirect = vec3<f32>(1.0, 0.72, 0.45) * (gInstFlash.w * max(dot(n, fl), 0.0) / fd2);
   }
-  // THE RIM FOLLOWS THE LIGHT in the dungeon (owner, 2026-09-26: "turn off the fresnel rim so
-  // they don't look outlined in the dark"): fresnel is an environment term, and in the dark there
-  // is no environment. It scales with the key (the beam, a flash); the lab (spotCfg.x = 0) keeps it.
-  let rimLit = select(1.0, clamp(keyI, 0.0, 1.0), spotCfg.x > 0.0);
   var fleshLit = albedo * (amb + flashDirect + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
                // * woundGlint: MEAT DETAIL (soldierWound block) — the wet highlight broken into glints,
                // soldier wounds only; applied at the consumer so the hoisted wet statement stays pinned.
-               + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * rimLit * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, soldierWound)
+               + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, soldierWound)
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its

@@ -207,7 +207,7 @@ export function stepTrain(ctx: GameContext, dt: number): void {
 export function lightSteam(ctx: GameContext): void {
   const rt = ctx.world.train, dl = ctx.world.light;
   if (!rt || rt.steam.length === 0) return;
-  const flash = dl?.storm ? dl.storm.intensity / 16 : 0;
+  const flash = dl?.storm ? dl.storm.intensity / 24 : 0;
   for (const s of rt.steam) {
     const lit = dl?.roomLight.get(s.room) ?? 1;
     s.light.value.set(0.04 + 0.22 * lit + 0.5 * flash, 0.04 + 0.18 * lit + 0.55 * flash, 0.045 + 0.14 * lit + 0.65 * flash);
