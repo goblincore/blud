@@ -3,7 +3,7 @@ import { buildLightList, type LightSource } from './light-list';
 import { LIGHT_PROFILES, PROFILE_ID } from './light-profiles';
 import { lightPresence, lightRank, pickLights, unpackPick, type Pick } from './light-pick';
 
-const tube = (x: number, z: number, i = 7): LightSource => ({ kind: 'spot', profile: 'tube', pos: [x, 2.2, z], color: [0.8, 0.9, 1], intensity: i, range: 6, axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45), room: 3 });
+const tube = (x: number, z: number, i = 7): LightSource => ({ kind: 'spot', profile: 'tube', pos: [x, 2.2, z], color: [0.8, 0.9, 1], intensity: i, range: 6, axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45), rooms: [3] });
 const body = (x: number, z: number, facing: [number, number] = [0, 1]) => ({ pos: [x, 0.9, z] as [number, number, number], room: 3, facing });
 
 describe('pickLights (spec §4)', () => {
@@ -35,10 +35,23 @@ describe('pickLights (spec §4)', () => {
     expect(back).toBeGreaterThan(0);
   });
   it('skips lights for another room; directional lights reach any body in their room', () => {
-    const list = buildLightList([{ ...tube(0, 0), room: 9 }, { kind: 'directional', profile: 'window', pos: [1, 0.3, 0], color: [1, 1, 1], intensity: 20, range: 0, room: 3 }]);
+    const list = buildLightList([{ ...tube(0, 0), rooms: [9] }, { kind: 'directional', profile: 'window', pos: [1, 0.3, 0], color: [1, 1, 1], intensity: 20, range: 0, rooms: [3] }]);
     const p = pickLights(list, body(0, 0));
     expect(list[p.idx[0]!]!.kind).toBe('directional');
     expect(p.idx.slice(1)).toEqual([-1, -1, -1]);
+  });
+  it('the window light (a room set) reaches bodies in every windowed carriage, not the windowless tender (Task 6 review)', () => {
+    const list = buildLightList([{ kind: 'directional', profile: 'window', pos: [1, 0.3, 0], color: [0.72, 0.82, 1], intensity: 20, range: 0, rooms: [1, 2, 3, 4, 5, 6, 8] }]);
+    const at = (room: number) => lightPresence(list[0]!, { ...body(0, 0), room });
+    expect(at(2)).toBeGreaterThan(0);
+    expect(at(4)).toBeGreaterThan(0);
+    expect(at(7)).toBe(0);
+    expect(at(-1)).toBeGreaterThan(0);   // a body in no room (a tunnel) matches every light
+    expect(pickLights(list, { ...body(0, 0), room: 7 }).idx).toEqual([-1, -1, -1, -1]);
+  });
+  it('an any-room light (no rooms) reaches every body', () => {
+    const list = buildLightList([{ kind: 'point', profile: 'muzzle', pos: [0, 1.4, 1], color: [1, 0.81, 0.58], intensity: 35, range: 8 }]);
+    expect(lightPresence(list[0]!, { ...body(0, 0), room: 7 })).toBeGreaterThan(0);
   });
   it('packs index + weight, decodes back, -1 for empty; ties by index', () => {
     const list = buildLightList([tube(0, -1), tube(0, 1)]);
@@ -118,7 +131,7 @@ describe('packed weight is absolute presence, not a share of the dominant (revie
     expect(inPool.weight[0]).toBeGreaterThan(0.2);
   });
   it('weights never exceed 0.999, even when presence hits 1 exactly (directional light aligned with facing)', () => {
-    const list = buildLightList([{ kind: 'directional', profile: 'window', pos: [0, 0, 1], color: [1, 1, 1], intensity: 1, range: 0, room: 3 }]);
+    const list = buildLightList([{ kind: 'directional', profile: 'window', pos: [0, 0, 1], color: [1, 1, 1], intensity: 1, range: 0, rooms: [3] }]);
     const b = body(0, 0, [0, 1]);
     expect(lightPresence(list[0]!, b)).toBeCloseTo(1, 9);
     const p = pickLights(list, b);
@@ -128,7 +141,7 @@ describe('packed weight is absolute presence, not a share of the dominant (revie
     expect(d!.index).toBe(0);
   });
   it('ranking still prefers a brighter light over a dimmer one at equal presence', () => {
-    const dim: LightSource = { kind: 'point', profile: 'lamp', pos: [0, 0.9, 3], color: [1, 1, 1], intensity: 1, range: 10, room: 3 };
+    const dim: LightSource = { kind: 'point', profile: 'lamp', pos: [0, 0.9, 3], color: [1, 1, 1], intensity: 1, range: 10, rooms: [3] };
     const bright: LightSource = { ...dim, intensity: 50 };
     const list = buildLightList([dim, bright]);   // co-located: identical presence, different luminance
     const b = body(0, 0);

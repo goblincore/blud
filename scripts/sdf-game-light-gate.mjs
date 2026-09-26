@@ -157,7 +157,9 @@ if (!Array.isArray(LL) || LL.length === 0 || LL.length > 32) fail(`lightList(): 
 const llKinds = {};
 for (const l of LL) llKinds[`${l.kind}:${l.profile}`] = (llKinds[`${l.kind}:${l.profile}`] ?? 0) + 1;
 const llWin = LL.find((l) => l.profile === 'window');
-pass(`light list: ${LL.length} lights ${JSON.stringify(llKinds)}; window room ${llWin ? llWin.room : 'none'}`);
+// The window light reaches every windowed carriage (room mask, Task 6 review), not the tender.
+if (llWin && llWin.rooms.join(',') !== [...L.windowLights].sort((x, y) => x - y).join(',')) fail(`window light rooms ${JSON.stringify(llWin.rooms)} != window lights ${JSON.stringify(L.windowLights)}`);
+pass(`light list: ${LL.length} lights ${JSON.stringify(llKinds)}; window rooms ${llWin ? llWin.rooms.join(',') : 'none'}`);
 await evaluate('__sdfGame.setPose(1.2, -57.0, 0, 0)');
 await settle(1200);
 const coatsDark = stats(await shoot('light-coats-dark'), 0.1, 0.1, 0.9, 0.9).mean;
@@ -184,11 +186,21 @@ const idle1 = (await lights()).shadowFrames;
 const noBolt = stats(await shoot('light-dining-idle'), 0.42, 0.30, 0.58, 0.45).mean;
 await evaluate('__sdfGame.forceBolt(-1, -37)');
 let peak = 0, frames0 = (await lights()).shadowFrames, shadowRoom = null;
-for (let i = 0; i < 6; i++) { await sleep(30); const l = await lights(); if (l.windowIntensity > peak) { peak = l.windowIntensity; shadowRoom = l.shadowRoom ?? shadowRoom; } }
+let boltWin = null;
+for (let i = 0; i < 6; i++) {
+  await sleep(30);
+  const l = await lights();
+  if (l.windowIntensity > peak) { peak = l.windowIntensity; shadowRoom = l.shadowRoom ?? shadowRoom; }
+  boltWin ??= (await evaluate('__sdfGame.lightList()')).find((x) => x.profile === 'window') ?? null;
+}
 const litFrames = (await lights()).shadowFrames - frames0;
 if (!(peak > 3)) fail(`forced bolt: window light peaked at ${peak.toFixed(2)}`);
 if (!(litFrames > 0)) fail('the window light rendered no shadow while lit');
-pass(`lightning: window light peak ${peak.toFixed(2)}, ${litFrames} shadow frames lit (room ${shadowRoom}); idle ${idle1 - idle0}`);
+// The list's window light reaches every windowed carriage, not the tender (room mask, Task 6 review).
+const winRooms = [...L.windowLights].sort((x, y) => x - y).join(',');
+if (!boltWin) fail('forced bolt: no window light in the light list');
+if (boltWin.rooms.join(',') !== winRooms) fail(`list window light rooms ${JSON.stringify(boltWin.rooms)} != window lights ${winRooms}`);
+pass(`lightning: window light peak ${peak.toFixed(2)}, ${litFrames} shadow frames lit (room ${shadowRoom}); list window rooms ${boltWin.rooms.join(',')}; idle ${idle1 - idle0}`);
 
 // 4. THE STORM IN THE GLASS — the bolt flickers: the brightest of a few captures.
 await sleep(1200);

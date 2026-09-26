@@ -7,13 +7,18 @@
 //  3. createLightListGpu / writeLightList: the list's one storage buffer (profiles + lights,
 //     LIST_VEC4S vec4), owned by the dynamic-light runtime (ctx.world.light.list) and written
 //     once a frame. Nothing reads it yet (Task 9 binds it into the march).
+//
+// The 32 cap is relevance-first (Task 6 review): writeLightList hands buildLightList the
+// player's position and the mask of the player's room plus the rooms the level's tunnels join
+// to it (nearRoomMask), so a far carriage's bright lamps never evict the dim ones around the
+// player.
 
 import * as THREE from 'three/webgpu';
 import { storage } from 'three/tsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-leaves';
 import type { LampMood } from './lamp-moods';
-import { buildLightList, LIST_VEC4S, packLightList, type LightSource, type ListLight, type Vec3 } from './light-list';
+import { buildLightList, LIST_VEC4S, packLightList, ROOM_MASK_BITS, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
 import { PROFILE_ID, type ProfileName } from './light-profiles';
 
 type RVec3 = readonly [number, number, number];
@@ -29,7 +34,9 @@ export interface LampInput {
   gain?: number; tint?: RVec3;
   mood: LampMood;
 }
-export interface WindowInput { dir: Vec3; color: Vec3; intensity: number; room: number }
+/** The storm's one window light. `rooms`: every carriage that has a window light (lightning
+ *  enters each of them, seen through a door or not); empty = any room. */
+export interface WindowInput { dir: Vec3; color: Vec3; intensity: number; rooms: number[] }
 export interface FlashlightInput { pos: Vec3; axis: Vec3; color: Vec3; intensity: number; range: number; cosOuter: number; cosInner: number }
 export interface FlashInput { pos: RVec3; intensity: number; fire?: boolean }
 
@@ -58,26 +65,56 @@ export function collectLightSources(input: SourceInput): LightSource[] {
     const profile: ProfileName = fire ? 'fire' : l.tube ? 'tube' : 'lamp';
     const s: LightSource = {
       kind: l.tube ? 'spot' : 'point', profile,
-      pos: l.pos, color: l.color, intensity: l.intensity, range: fire ? FIRE_RANGE : l.range, room: l.room,
+      pos: l.pos, color: l.color, intensity: l.intensity, range: fire ? FIRE_RANGE : l.range,
     };
+    if (l.room >= 0) s.rooms = [l.room];
     if (l.tube) { s.axis = l.tube.axis; s.cosOuter = l.tube.cosOuter; s.cosInner = l.tube.cosInner; }
     if (l.gain !== undefined) s.levelGain = l.gain;
     if (l.tint) s.levelTint = [l.tint[0], l.tint[1], l.tint[2]];
     out.push(s);
   }
   const w = input.window;
-  if (w) out.push({ kind: 'directional', profile: 'window', pos: w.dir, color: w.color, intensity: w.intensity, range: 0, room: w.room });
+  if (w) out.push({ kind: 'directional', profile: 'window', pos: w.dir, color: w.color, intensity: w.intensity, range: 0, rooms: w.rooms });
   const f = input.flashlight;
   if (f) {
     out.push({ kind: 'spot', profile: 'flashlight', pos: f.pos, color: f.color, intensity: f.intensity, range: f.range,
-      axis: f.axis, cosOuter: f.cosOuter, cosInner: f.cosInner, room: -1 });
+      axis: f.axis, cosOuter: f.cosOuter, cosInner: f.cosInner });
   }
   for (const fl of input.flashes) {
     out.push({ kind: 'point', profile: fl.fire ? 'fire' : 'muzzle', pos: [fl.pos[0], fl.pos[1], fl.pos[2]],
       color: fl.fire ? FIRE_COLOR : MUZZLE_COLOR, intensity: fl.intensity,
-      range: fl.fire ? FIRE_RANGE : FLASH_RANGE, room: -1 });
+      range: fl.fire ? FIRE_RANGE : FLASH_RANGE });
   }
   return out;
+}
+
+/** The rect and rooms of a tunnel (TunnelDef's fields the relevance needs). */
+export interface TunnelLink { a: number; b: number; minX: number; maxX: number; minZ: number; maxZ: number }
+
+/** The player's surroundings as a room mask (light-list roomMaskOf): the player's room plus
+ *  every room a tunnel joins to it; in a tunnel (room -1), the rooms of the tunnels the point
+ *  stands in. 0 = unknown (no tier; the cap then ranks by distance alone), also when a room id
+ *  does not fit the mask. Pure, allocation-free. */
+export function nearRoomMask(tunnels: readonly TunnelLink[], room: number, x: number, z: number): number {
+  let m = 0;
+  const add = (r: number): boolean => {
+    if (r < 0 || r >= ROOM_MASK_BITS) return false;
+    m |= 1 << r;
+    return true;
+  };
+  if (room >= 0) {
+    if (!add(room)) return 0;
+    for (const t of tunnels) {
+      if (t.a === room && !add(t.b)) return 0;
+      if (t.b === room && !add(t.a)) return 0;
+    }
+    return m;
+  }
+  for (const t of tunnels) {
+    if (x < t.minX || x > t.maxX || z < t.minZ || z > t.maxZ) continue;
+    if (!add(t.a) || !add(t.b)) return 0;
+  }
+  return m;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -94,7 +131,7 @@ const c3 = (c: THREE.Color, out: Vec3): Vec3 => { out[0] = c.r; out[1] = c.g; ou
 
 /** Reused across frames (the reader rewrites these records in place). */
 function makeInput(): SourceInput { return { lamps: [], window: null, flashlight: null, flashes: [] }; }
-const scratchWindow: WindowInput = { dir: [0, 1, 0], color: [1, 1, 1], intensity: 0, room: -1 };
+const scratchWindow: WindowInput = { dir: [0, 1, 0], color: [1, 1, 1], intensity: 0, rooms: [] };
 const scratchTorch: FlashlightInput = { pos: [0, 0, 0], axis: [0, 0, -1], color: [1, 1, 1], intensity: 0, range: 0, cosOuter: 1, cosInner: 1 };
 
 /** Fill the plain source data from the live lights. `into` is rewritten in place. */
@@ -130,17 +167,17 @@ export function readSourceInput(
     }
   }
 
-  // The storm's window light: one per level, for the player's carriage when it has a window
-  // light (the one stepDynamicLight re-fits every step), otherwise any room (-1).
+  // The storm's window light: one per level, entering EVERY carriage that has a window light
+  // (a body seen through a door into the next carriage still takes the lightning; the
+  // windowless tender does not). A level with a storm but no window lights: any room.
   into.window = null;
   const storm = rt?.storm;
   if (storm) {
-    const [px, , pz] = ctx.player.player.pos;
-    const here = roomIdAt(ctx, px, pz);
     scratchWindow.dir[0] = storm.dir[0]; scratchWindow.dir[1] = storm.dir[1]; scratchWindow.dir[2] = storm.dir[2];
     scratchWindow.color[0] = storm.color[0]; scratchWindow.color[1] = storm.color[1]; scratchWindow.color[2] = storm.color[2];
     scratchWindow.intensity = storm.intensity;
-    scratchWindow.room = rt.windowLights.has(here) ? here : -1;
+    scratchWindow.rooms.length = 0;
+    for (const id of rt.windowLights.keys()) scratchWindow.rooms.push(id);
     into.window = scratchWindow;
   }
 
@@ -179,6 +216,8 @@ export interface LightListGpu {
   list: ListLight[];
   /** The reader's reused plain input. */
   input: SourceInput;
+  /** The reused relevance context (the player's position and surroundings). */
+  rel: ListRelevance;
 }
 
 export function createLightListGpu(): LightListGpu {
@@ -187,22 +226,34 @@ export function createLightListGpu(): LightListGpu {
   const attr = new THREE.StorageBufferAttribute(floats, 4);
   attr.setUsage(THREE.DynamicDrawUsage);
   const node = makeListNode(attr);
-  return { floats, attr, node, list: [], input: makeInput() };
+  return { floats, attr, node, list: [], input: makeInput(), rel: { pos: [0, 0, 0], nearMask: 0 } };
 }
 
-/** Once a frame, after the direct flashes are complete: rebuild the list and upload it.
- *  buildLightList still allocates a little per frame (a map/filter/sort chain, ≤ 32 lights). */
+/** Once a frame, after the direct flashes are complete: rebuild the list and upload it, the
+ *  cap preferring the player's room and the rooms joined to it. Per-frame allocation is bounded
+ *  by the source count: collectLightSources' records and buildLightList's map/filter/sort
+ *  chain (the reader and the relevance context are reused). */
 export function writeLightList(ctx: GameContext, directFlashes: readonly FlashInput[]): void {
   const g = ctx.world.light?.list;
   if (!g) return;
-  g.list = buildLightList(collectLightSources(readSourceInput(ctx, directFlashes, g.input)));
+  const [px, py, pz] = ctx.player.player.pos;
+  g.rel.pos[0] = px; g.rel.pos[1] = py; g.rel.pos[2] = pz;
+  g.rel.nearMask = nearRoomMask(ctx.world.level.tunnels, roomIdAt(ctx, px, pz), px, pz);
+  g.list = buildLightList(collectLightSources(readSourceInput(ctx, directFlashes, g.input)), g.rel);
   packLightList(g.list, g.floats);
   g.attr.needsUpdate = true;
 }
 
 const PROFILE_NAME = Object.fromEntries(Object.entries(PROFILE_ID).map(([k, v]) => [v, k])) as Record<number, ProfileName>;
 
-/** The seam's plain view of the list. */
+/** The mask's room ids, ascending ([] = any room). */
+export function maskRooms(mask: number): number[] {
+  const out: number[] = [];
+  for (let r = 0; r < ROOM_MASK_BITS; r++) if (mask & (1 << r)) out.push(r);
+  return out;
+}
+
+/** The seam's plain view of the list (`rooms: []` = any room). */
 export function lightListView(g: LightListGpu | undefined | null) {
-  return (g?.list ?? []).map(l => ({ kind: l.kind, profile: PROFILE_NAME[l.profile] ?? l.profile, pos: [...l.pos], intensity: l.intensity, room: l.room }));
+  return (g?.list ?? []).map(l => ({ kind: l.kind, profile: PROFILE_NAME[l.profile] ?? l.profile, pos: [...l.pos], intensity: l.intensity, rooms: maskRooms(l.roomMask) }));
 }

@@ -640,7 +640,7 @@ export function createDynamicLightSeams(ctx: GameContext) {
       return rt.time;
     },
     lightCommand: (mode: LightMode, room: number) => { runLightCommand(ctx, mode, room); },
-    /** The shared light list this frame: `{ kind, profile, pos, intensity, room }` per light. */
+    /** The shared light list this frame: `{ kind, profile, pos, intensity, rooms }` per light (`rooms: []` = any). */
     lightList: () => lightListView(ctx.world.light?.list),
     /** Look tuning: hold the window light at an intensity from one side (null: back to the storm). */
     holdWindowLight: (intensity: number | null, side: 1 | -1 = 1, shadow = 1) => {

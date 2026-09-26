@@ -24,11 +24,12 @@
 // into the next index), -1 empty.
 
 import { LIGHT_PROFILES } from './light-profiles';
-import type { ListLight, Vec3 } from './light-list';
+import { maskHasRoom, type ListLight, type Vec3 } from './light-list';
 
 export interface PickBody {
   /** The body's centre (chest height): distance and the direction to the light are taken here. */
   pos: Vec3;
+  /** The body's room, or -1 (unknown / a tunnel): matches every light. */
   room: number;
   /** Unit xz direction the presentation treats as the body's FRONT. presentingLamp used the
    *  direction from the body toward the viewer here; pass that to keep its look exactly. */
@@ -48,7 +49,7 @@ const RANK_FLOOR = 1e-4;
 /** cover x distFall x facing — what the light actually delivers at the body, no luminance.
  *  This is the value packed as the GPU weight (absolute presence, review fix Task 4). */
 export function lightPresence(l: ListLight, b: PickBody): number {
-  if (l.room >= 0 && b.room >= 0 && l.room !== b.room) return 0;
+  if (!maskHasRoom(l.roomMask, b.room)) return 0;
   const prof = LIGHT_PROFILES[l.profile]!;
   let toLx: number, toLz: number, cover = 1, dist = 0;
   if (l.kind === 'directional') {
