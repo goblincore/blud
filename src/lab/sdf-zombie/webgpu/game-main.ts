@@ -261,7 +261,7 @@ import { createRenderSeams } from './game-seams-render';
 import { createBootSeams } from './game-seams-boot';
 import { createWeaponPlayerSeams } from './game-seams-weapon-player';
 import { createFxSeams } from './game-seams-fx';
-// ——— IN-GAME BURNING + SLOT 3 FLARE (2026-09-18 flare test harness). Both live
+// ——— IN-GAME BURNING + SLOT 4 FLARE (2026-09-18 flare test harness). Both live
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
@@ -3677,7 +3677,7 @@ async function main() {
 
   // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
   // locks the pointer; shots need lock so a stray desktop click cannot fire.
-  // DYNAMITE (slot 2) takes the same left button but as a HELD input: press
+  // DYNAMITE (slot 3) takes the same left button but as a HELD input: press
   // lights the fuse, release throws (fpv.ts's cook machine). Right button stays
   // a shotgun verb — a bundle has no second barrel.
   ctx.boot.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -3689,7 +3689,7 @@ async function main() {
       if (e.button === 0) ctx.dynamite.press = true;        // light it
       return;
     }
-    // SLOT 3: left click only, deferred to the tick like every other edge.
+    // SLOT 4: left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
     // on exactly one frame or a recording cannot replay it. The dynamite press
@@ -3733,11 +3733,11 @@ async function main() {
   ctx.weapon.aimRig = new THREE.Group();
   ctx.weapon.aimRig.name = 'aim-rig';
   ctx.weapon.viewModelAnchor.add(ctx.weapon.aimRig);
-  // WEAPON SLOT 3 (flare test harness, game-flare.ts): its own rig on aimRig.
+  // WEAPON SLOT 4 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
   });
-  // WEAPON SLOT 1's own subtree. Everything the grapeshot owns — the gun, both
+  // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
   // its point light — hangs off THIS rather than off aimRig directly, so a
   // weapon switch is ONE transform (drop it out of frame) instead of a
@@ -8252,7 +8252,7 @@ async function main() {
         letterboxed: cap.mode === 'fixed',
       };
     },
-    // ——— DYNAMITE (slot 2) ————————————————————————————————————————————————
+    // ——— DYNAMITE (slot 3) ————————————————————————————————————————————————
     /** The REAL detonation — the same call a thrown bundle makes, gibs and all.
      *  `explode` above stays the wound-only capture twin: this one displaces
      *  bodies and destroys them, so a still frame of it is not reproducible. */

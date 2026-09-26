@@ -153,18 +153,18 @@ if (!before.ready) fail('slot machine is not settled at boot');
 // applyInputEdges' rising-edge scan (the input-seam refactor, 2026-09-15 —
 // so a replayed key set switches weapons exactly as a live press did). This
 // gate predates that and read the slot state straight after dispatch, before
-// any tick, so it failed "Digit2 did not target the dynamite slot" against a
+// any tick, so it failed "Digit3 did not target the dynamite slot" against a
 // game that switches fine. Two animation frames guarantee a tick has run;
 // the keyup releases the key so the held-key snapshot is clean afterwards.
 await evaluate(`(async () => {
-  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit2', bubbles: true }));
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit3', bubbles: true }));
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Digit2', bubbles: true }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Digit3', bubbles: true }));
   return true;
 })()`);
 const midSwitch = await evaluate('window.__sdfGame.dynamite()');
-console.log('immediately after Digit2:', JSON.stringify({ live: midSwitch.live, target: midSwitch.target, phase: midSwitch.phase, ready: midSwitch.ready }));
-if (midSwitch.target !== 'dynamite') fail('Digit2 did not target the dynamite slot');
+console.log('immediately after Digit3:', JSON.stringify({ live: midSwitch.live, target: midSwitch.target, phase: midSwitch.phase, ready: midSwitch.ready }));
+if (midSwitch.target !== 'dynamite') fail('Digit3 did not target the dynamite slot');
 if (midSwitch.ready) fail('the switch completed instantly — the lower/raise travel is not running');
 if (midSwitch.live !== 'shotgun') fail('the shotgun stopped being live before it was lowered out');
 
@@ -187,15 +187,15 @@ if (shotgunThroughDyn !== false) fail('fire() succeeded while the dynamite was t
 console.log('shotgun refused while dynamite is out: ok');
 
 // ——— 2b. THE SLOT IS A NAME, AND THE SEAM REFUSES ANYTHING ELSE ——————————
-// `selectSlot(2)` looks right — 2 is the key, the HUD says 2 — and it used to
+// `selectSlot(3)` looks right — 3 is the key, the HUD says 3 — and it used to
 // POISON the state: the switch ran, the phase read 'up', nothing was live, and
 // every later press was dropped by `liveDyn` with no error anywhere. A soak rig
 // lost an hour to it ("the throws never detonate"). The refusal is the fix, and
 // this is what keeps it a refusal.
 {
-  const bad = await evaluate('window.__sdfGame.selectSlot(2)');
-  console.log('selectSlot(2) (a key number, not a name):', JSON.stringify(bad));
-  if (bad?.ok) fail('selectSlot accepted the NUMBER 2 — the slot machine will go inert in silence');
+  const bad = await evaluate('window.__sdfGame.selectSlot(3)');
+  console.log('selectSlot(3) (a key number, not a name):', JSON.stringify(bad));
+  if (bad?.ok) fail('selectSlot accepted the NUMBER 3 — the slot machine will go inert in silence');
   if (!String(bad?.reason ?? '').startsWith('unknown-slot')) {
     fail(`selectSlot refused a number for the wrong reason: ${bad?.reason}`);
   }

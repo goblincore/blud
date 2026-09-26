@@ -25,21 +25,23 @@
 // OTHER slot is at 1 (fully holstered). No caller needs to know which phase it
 // is in.
 
-/** Which weapon the player is holding. `shotgun` is the grapeshot double.
- *  `flare` is the 2026-09-18 in-game burning-test harness: slot 3, no
- *  projectile, no damage — its only verb is igniting the actor it hits. */
-export type WeaponSlot = 'shotgun' | 'dynamite' | 'flare';
+/** Which weapon the player is holding. `censer` is the melee flail
+ *  (game-censer.ts, 2026-09-26). `shotgun` is the grapeshot double.
+ *  `flare` is the 2026-09-18 in-game burning-test harness: no projectile, no
+ *  damage — its only verb is igniting the actor it hits. */
+export type WeaponSlot = 'censer' | 'shotgun' | 'dynamite' | 'flare';
 
-/** Slot order, which is ALSO the number-key order (1 → shotgun, 2 → dynamite,
- *  3 → flare). */
-export const WEAPON_SLOTS: readonly WeaponSlot[] = ['shotgun', 'dynamite', 'flare'];
+/** Slot order, which is ALSO the number-key order (1 → censer, 2 → shotgun,
+ *  3 → dynamite, 4 → flare). Melee on 1, as in Blood. */
+export const WEAPON_SLOTS: readonly WeaponSlot[] = ['censer', 'shotgun', 'dynamite', 'flare'];
 
 /** `event.code` → slot. Only these keys select a weapon; every other key falls
  *  through to the existing handlers untouched. */
 export const SLOT_BY_KEY: Readonly<Record<string, WeaponSlot>> = {
-  Digit1: 'shotgun',
-  Digit2: 'dynamite',
-  Digit3: 'flare',
+  Digit1: 'censer',
+  Digit2: 'shotgun',
+  Digit3: 'dynamite',
+  Digit4: 'flare',
 };
 
 /** Slot for a keydown code, or null when the key is not a slot key. */
