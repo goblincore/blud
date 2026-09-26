@@ -90,7 +90,11 @@ export function readGibShutterSettings(search: string): GibShutterSettings {
  *  where it renders when it is NOT selected. A piece drawn by SEVERAL meshes
  *  (the censer's head, haft + hand) passes one subject per mesh sharing ONE
  *  `state` object: the piece cap counts distinct states and the seed plans each
- *  state's stamps once, so a many-mesh piece costs one piece, not N. */
+ *  state's stamps once (from the FIRST such subject), so a many-mesh piece
+ *  costs one piece, not N. Subjects sharing a state MUST therefore share `id`
+ *  and `ageSeconds` too — the later ones' values are never read. Conversely
+ *  several states may share one mesh (the chain's rod samples); select() never
+ *  demotes a mesh an earlier subject lifted in the same call. */
 export interface GibBlurSubject {
   id: number;
   state: Chunk;
@@ -355,20 +359,26 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     return stamps.length;
   }
 
+  /** Meshes lifted onto the blur layer by the CURRENT select() call. */
+  const liftedMeshes = new Set<THREE.Object3D>();
+
   function select(subjects: readonly GibBlurSubject[]): number {
     restoreLayers();
+    liftedMeshes.clear();
     const active = enabled && exposureSeconds > 0;
     if (!active) return 0;
+    // A rejected subject puts its mesh back on its base layer ONLY if no
+    // earlier subject of this call lifted that mesh: several subjects may
+    // share one mesh (the censer chain's rod samples on one InstancedMesh), and
+    // demoting it would leave a selected piece that is not on the layer.
+    const reject = (s: GibBlurSubject): void => {
+      if (!liftedMeshes.has(s.mesh) && s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
+    };
     for (const s of subjects) {
-      if (!selectedStates.has(s.state) && selectedStates.size >= GIB_BLUR_MAX_PIECES) {
-        if (s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
-        continue;
-      }
-      if (!isGibSelectedForBlur(s.state)) {
-        if (s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
-        continue;
-      }
+      if (!selectedStates.has(s.state) && selectedStates.size >= GIB_BLUR_MAX_PIECES) { reject(s); continue; }
+      if (!isGibSelectedForBlur(s.state)) { reject(s); continue; }
       s.mesh.layers.set(GIB_BLUR_LAYER);
+      liftedMeshes.add(s.mesh);
       selected.push(s);
       selectedStates.add(s.state);
     }

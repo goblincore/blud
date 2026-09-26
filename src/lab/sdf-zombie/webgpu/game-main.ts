@@ -4105,6 +4105,8 @@ async function main() {
     ctx.weapon.aimRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights(ctx);
+    // …and so was the censer's own list (game-censer.ts OWN LIGHT LIST).
+    ctx.weapon.censer?.refreshLights();
     ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');
@@ -6677,6 +6679,9 @@ async function main() {
     if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
     // CENSER HIT-STOP: a landed strike nearly freezes the sim for 30–70 ms
     // (game-censer.ts). Its timer counts down on the UNSCALED step.
+    // The blur's motion is camera-relative (screen-true), so it wants the
+    // UNSCALED step: a turn during a hit-stop is not 12x faster on screen.
+    const censerBlurDt = dt;
     dt *= ctx.weapon.censer?.hitStopScale(dt) ?? 1;
     // The sim clock advances ONLY here, from the step's own dt — never from
     // wall time. This is the single source of "how much simulated time has
@@ -7691,14 +7696,13 @@ async function main() {
     // sync → select → (render callback) base render. blurSubjects runs every
     // frame even with the switch off, so its previous-pose history never goes
     // stale. Censer pieces go FIRST (the layer keeps the first
-    // GIB_BLUR_MAX_PIECES), and only while the gib program is warm: the layer's
+    // GIB_BLUR_MAX_PIECES). The censer offers nothing until its own layer
+    // pipelines are warm, which itself waits for the gib program (the layer's
     // capture — the only thing that draws a selected mesh — is skipped until
-    // then, and a censer lifted onto the layer with no capture would vanish.
-    const censerBlur = ctx.weapon.censer?.blurSubjects(dt) ?? [];
+    // then, and a censer lifted with no capture would vanish).
+    const censerBlur = ctx.weapon.censer?.blurSubjects(censerBlurDt) ?? [];
     if (ctx.gibs.shutter) {
-      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled
-        ? [...(ctx.boot.warmBackground.gibDraw() === 'draw' ? censerBlur : []), ...gibBlurSubjects(ctx)]
-        : []);
+      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? [...censerBlur, ...gibBlurSubjects(ctx)] : []);
       if (!ctx.gibs.shutter.enabled) ctx.gibs.blurPrevKeys = new Set();
     }
     ctx.telemetry.telemetry.end('goo-sync', gooTiming);

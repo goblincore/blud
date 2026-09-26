@@ -135,3 +135,43 @@ Headless Chrome, night-train, 1280x800, hand-stepped `step(1, 1/60)` with a
     props hash as `{}`.
   - Whether a changed list is picked up by the censer shader at all is
     unverified.
+
+## Update 2026-09-26: first swing warmed on clones (review I2)
+
+`game-censer.ts` now compiles CLONES of the head, the chain and the haft (with
+the hand) in the layer context. It uses `precompileSubjectInBackground`, and
+the clones are kept and never drawn. The censer offers no blur subject until
+this compile is `done`. Two details were needed for the live meshes to hit the
+warm cache:
+
+- **`frustumCulled = false` on every clone node.** `compileAsync` culls like a
+  draw. The parentless haft clone sits near the world origin, outside the
+  frustum, so it was skipped and the hand still built cold.
+- **The chain clone borrows the live `links.uuid`.** An `InstancedMesh`'s
+  material cache key includes `object.uuid`.
+
+Same probe (`LEGS=censer`), first engage of the session, +0/+1 frames:
+
+- **Before:** 101.8 / 69.9 ms (1 program, 2+ synchronous pipelines, 5 node
+  builds).
+- **After:** 29.0 / 28.5 ms. The +1 frame still creates 33 render objects
+  (bind groups only), but has no node build and no pipeline. The one remaining
+  +0 node build and synchronous pipeline belong to a non-censer
+  `MeshBasicNodeMaterial` (context 9).
+
+The warm itself runs once, shortly after the gib program is ready. With a fence
+on every frame, its heaviest frame measured 165.7 ms wall but only 15.7 ms CPU.
+That frame is async pipeline creation (`createRenderPipelineAsync`) showing up
+in the fenced wall time.
+
+**A changed light list never reached the shader.** `LightsNode.setLights()`
+does not bump the node's version, so the list's cache key stayed stale. The
+test added a blue light next to the head:
+
+| Step | Head-crop blue |
+| --- | --- |
+| Before `setLights` | 245 |
+| After a raw `setLights` | 245 (unchanged) |
+| After the node and its materials were set to `needsUpdate` | 255 |
+
+`relist()` now does both, once, at the event.

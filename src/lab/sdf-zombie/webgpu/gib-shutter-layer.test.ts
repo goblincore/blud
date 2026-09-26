@@ -291,3 +291,43 @@ describe('gib shutter — the layer draw owns its render objects (engage hitch, 
     layer.dispose();
   });
 });
+
+describe('gib shutter — select() lifts shared meshes and never demotes a lifted one (I1)', () => {
+  // select() does not render, so a bare stub renderer is enough.
+  const layer = () => createGibShutterLayer({ renderer: {} as unknown as THREE.WebGPURenderer });
+  const moving = (vx: number) => ({
+    limb: 'torso', kind: 'gob', pos: [0, 1, 0], vel: [vx, 0, 0], radius: 0.05, squash: 0,
+    quat: [0, 0, 0, 1], angVel: [0, 0, 0], longAxis: [0, 1, 0], support: [{ c: [0, 0, 0], r: 0.05 }],
+  }) as unknown as import('../gib-chunks').Chunk;
+  const sub = (id: number, mesh: THREE.Mesh, vx: number) => ({ id, state: moving(vx), mesh, baseLayer: 0, ageSeconds: Infinity });
+
+  it('a later rejected subject sharing a lifted mesh leaves it on the blur layer', () => {
+    const l = layer();
+    const chain = new THREE.Mesh();
+    // Sample 0 moves; samples 1..2 are below the speed threshold.
+    const n = l.select([sub(1, chain, 5), sub(2, chain, 0), sub(3, chain, 0)]);
+    expect(n).toBe(1);
+    expect(chain.layers.mask).toBe(1 << GIB_BLUR_LAYER);
+  });
+
+  it('the cap falling mid-chain does not demote a mesh an earlier sample lifted', () => {
+    const l = layer();
+    const fillers = Array.from({ length: GIB_BLUR_MAX_PIECES - 1 }, (_, i) => sub(100 + i, new THREE.Mesh(), 5));
+    const chain = new THREE.Mesh();
+    const n = l.select([...fillers, sub(1, chain, 5), sub(2, chain, 5)]);
+    expect(n).toBe(GIB_BLUR_MAX_PIECES);
+    expect(chain.layers.mask).toBe(1 << GIB_BLUR_LAYER);
+  });
+
+  it('a rejected mesh nobody lifted goes back to its base layer, and the next select restores all', () => {
+    const l = layer();
+    const still = new THREE.Mesh();
+    still.layers.set(GIB_BLUR_LAYER);   // left over from an earlier frame
+    const flying = new THREE.Mesh();
+    l.select([sub(1, still, 0), sub(2, flying, 5)]);
+    expect(still.layers.mask).toBe(1);
+    expect(flying.layers.mask).toBe(1 << GIB_BLUR_LAYER);
+    l.select([]);
+    expect(flying.layers.mask).toBe(1);
+  });
+});

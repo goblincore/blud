@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CENSER_CHAIN_SAMPLES, CENSER_HAFT_BLUR_GAIN, angularVelocity, censerBlurActive, censerMotionState, chainRodStates,
   scaleMotion, scaledPrior, type Pose,
+  axisQuat, makeMotionState, setMotionState, swingAngularVelocity,
 } from './censer-blur';
 import { gibPriorState, isGibSelectedForBlur } from './gib-motion-blur';
-import { qFromAxisAngle, type Quat } from '../vec';
+import { qFromAxisAngle, qRotate, type Quat } from '../vec';
 import type { Vec3 } from '../types';
 
 const ID: Quat = [0, 0, 0, 1];
@@ -76,7 +77,9 @@ describe('chainRodStates', () => {
     // Each sample spans its share of the rod, and it rotates with the rod.
     const span = Math.hypot(0.2, 0.5);
     expect(s[0]!.radius).toBeCloseTo(span / CENSER_CHAIN_SAMPLES / 2, 6);
-    expect(mag(s[0]!.angVel)).toBeGreaterThan(0);
+    // The rod turned from straight down to atan(0.2/0.5) off it, in one dt.
+    const angle = Math.atan2(0.2, 0.5);
+    for (const c of s) expect(mag(c.angVel)).toBeCloseTo(angle / dt, 6);
   });
 
   it('a still chain has no motion', () => {
@@ -113,5 +116,73 @@ describe('scaledPrior', () => {
     expect(scaledPrior([1, 2, 3], [0, 0, 0], 0.5)).toEqual([0.5, 1, 1.5]);
     expect(scaledPrior([1, 2, 3], [0, 0, 0], 0)).toEqual([0, 0, 0]);
     expect(scaledPrior([1, 2, 3], [0, 0, 0], 1)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('swing-only angular velocity (C1: no twist singularity at −Y)', () => {
+  const dt = 1 / 60;
+  it('a rod hanging straight down that drifts 2 mm gives |ω| = angle/dt, not a twist spike', () => {
+    const a: Vec3 = [0, -0.5, 0];
+    const b: Vec3 = [0.002, -0.5, 0.0005];
+    const w = swingAngularVelocity(a, b, dt);
+    const angle = Math.acos((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (mag(a) * mag(b)));
+    expect(mag(w)).toBeCloseTo(angle / dt, 6);
+    expect(mag(w)).toBeLessThan(0.5);
+    // Swing only: ω is perpendicular to the rod (no component about its axis).
+    expect(Math.abs(w[0] * b[0] + w[1] * b[1] + w[2] * b[2]) / mag(b)).toBeLessThan(1e-9);
+  });
+  it('parallel axes or dt <= 0 give zero', () => {
+    expect(swingAngularVelocity([0, -1, 0], [0, -2, 0], dt)).toEqual([0, 0, 0]);
+    expect(swingAngularVelocity([0, -1, 0], [1, 0, 0], 0)).toEqual([0, 0, 0]);
+  });
+  it('a quarter swing in one second is π/2 about the cross axis', () => {
+    const w = swingAngularVelocity([0, -1, 0], [1, 0, 0], 1);
+    expect(w[2]).toBeCloseTo(Math.PI / 2, 9);
+    expect(Math.abs(w[0]) + Math.abs(w[1])).toBeLessThan(1e-9);
+  });
+  it('a hanging chain drifting 2 mm is below the blur selection threshold', () => {
+    const s = chainRodStates([0, 1, 0], [0, 0.5, 0], [0, 1, 0], [0.002, 0.5, 0.0005], dt);
+    for (const c of s) {
+      expect(mag(c.angVel)).toBeLessThan(0.5);
+      expect(isGibSelectedForBlur(c)).toBe(false);
+    }
+  });
+});
+
+describe('axisQuat', () => {
+  it('maps local +Y onto the axis, including straight down, continuously', () => {
+    for (const d of [[0, -1, 0], [0.001, -1, 0], [0, -1, 0.001], [1, 0, 0], [0, 0, 1], [0.3, 0.4, -0.2]] as Vec3[]) {
+      const q = axisQuat(d);
+      const y = qRotate(q, [0, 1, 0]);
+      const n = mag(d);
+      for (let i = 0; i < 3; i++) expect(y[i]).toBeCloseTo(d[i]! / n, 9);
+    }
+    // No flip near −Y: two nearby axes give nearby frames.
+    const q1 = axisQuat([0.001, -1, 0]), q2 = axisQuat([-0.001, -1, 0]);
+    const dq = Math.abs(q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3]);
+    expect(dq).toBeGreaterThan(0.999);
+  });
+});
+
+describe('setMotionState (pooled)', () => {
+  it('writes into the same object and arrays every call', () => {
+    const out = makeMotionState();
+    const vel = out.vel, pos = out.pos;
+    const r = setMotionState(out, [0, 0, 0], [0.1, 0, 0], [0, 0, 0, 1], [0, 2, 0], 0.01, 0.07);
+    expect(r).toBe(out);
+    expect(out.vel).toBe(vel);
+    expect(out.pos).toBe(pos);
+    expect(out.vel[0]).toBeCloseTo(10, 9);
+    expect(out.angVel).toEqual([0, 2, 0]);
+    expect(out.radius).toBe(0.07);
+    expect(out.support).toEqual([{ c: [0, 0, 0], r: 0.07 }]);
+    setMotionState(out, [0, 0, 0], [0, 0, 0], [0, 0, 0, 1], [0, 0, 0], 0, 0.03);
+    expect(out.vel).toEqual([0, 0, 0]);
+    expect(out.support[0]!.r).toBe(0.03);
+  });
+  it('chainRodStates reuses a passed pool', () => {
+    const pool = Array.from({ length: CENSER_CHAIN_SAMPLES }, () => makeMotionState());
+    const s = chainRodStates([0, 1, 0], [0, 0.5, 0], [0, 1, 0], [0.2, 0.5, 0], 0.01, CENSER_CHAIN_SAMPLES, pool);
+    for (let i = 0; i < s.length; i++) expect(s[i]).toBe(pool[i]);
   });
 });
