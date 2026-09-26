@@ -16,14 +16,17 @@ export const STORM = {
   /** A sweep's length, seconds. */
   sweepS: 1.5,
   boltColor: [0.72, 0.82, 1.0] as Vec3,
-  boltPeak: 24,
+  boltPeak: 32,
   sweepColor: [1.0, 0.68, 0.38] as Vec3,
   sweepPeak: 4,
   /** The lightning's direction toward the light, for side +1 (x flips with the side). Low, so it
    *  reaches across the aisle through the windows. */
   boltDir: [0.9, 0.3, 0.15] as Vec3,
   /** Ambient bounce added per unit of window-light intensity (the flash fills the room a little). */
-  bounce: 0.07,
+  bounce: 0.09,
+  /** The whole-screen lightning grade (post-flash-grade.wgsl.ts): the strike's white punch, the
+   *  black crush at full grade (a little, owner), and the afterglow's release (seconds). */
+  grade: { punch: 0.8, crush: 0.06, releaseS: 0.5 },
   /** A bolt's life, seconds. */
   boltLife: 0.6,
 } as const;

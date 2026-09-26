@@ -94,6 +94,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, texture3D, storage, uv, vec2, vec4, uniform } from 'three/tsl';
+import { FLASH_GRADE_WGSL } from './post-flash-grade.wgsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 import { setPassLabel } from './gpu-pass-timing';
@@ -599,6 +600,8 @@ export interface PostAa {
   setSscsFleshTex(t: THREE.Texture): void;
   /** Per-frame matrices + flashlight feed — see the implementation note. */
   setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3): void;
+  /** The lightning grade at the final blit: flash (the strike), grade (with its afterglow), punch, crush. */
+  setFlashGrade(flash: number, grade: number, punch: number, crush: number): void;
   /** A live term override, clamped to SSCS_TERM_RANGES. */
   setSscsTerm(name: keyof SscsTerms, value: number): void;
   /** Whether the SSCS stage runs. */
@@ -1359,9 +1362,12 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     heatSamp: fireResolvedTex,
     heat: uFireHeat,
   }) as unknown as Swizzled;
+  // The lightning grade (post-flash-grade.wgsl.ts): (flash, grade, punch, crush); 0,0 is inert.
+  const uFlashGrade = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const graded = wgslFn(FLASH_GRADE_WGSL)({ c: blitOut.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
   const blitMat = new MeshBasicNodeMaterial();
   blitMat.name = 'post:blit';
-  blitMat.colorNode = vec4(blitOut.xyz as never, 1.0);
+  blitMat.colorNode = vec4(graded.xyz as never, 1.0);
   blitMat.depthWrite = false;
   blitMat.depthTest = false;
   blitMat.fog = false;
@@ -1877,6 +1883,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     /** Per-frame feed. camera.matrixWorld must be CURRENT (game-main calls
      *  this right after flashlight.update, which re-runs updateMatrixWorld);
      *  matrixWorldInverse itself is last render's, so it is rebuilt here. */
+    setFlashGrade(flash: number, grade: number, punch: number, crush: number) {
+      uFlashGrade.value.set(flash, grade, punch, crush);
+    },
     setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3) {
       _sscsView.copy(camera.matrixWorld).invert();
       _sscsVp.multiplyMatrices(camera.projectionMatrix, _sscsView);

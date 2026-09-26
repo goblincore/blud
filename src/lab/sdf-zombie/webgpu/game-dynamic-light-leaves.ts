@@ -59,6 +59,8 @@ export interface DynamicLightRuntime {
     fitted: number | null;
     ambient: THREE.AmbientLight | null;
     ambientBase: number;
+    /** The screen grade's afterglow: the bolt's envelope with a slow release. */
+    grade: number;
     /** This step's window light, for the SDF bodies' key (applyWindowKey). */
     dir: [number, number, number];
     color: [number, number, number];
@@ -100,7 +102,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   const train = ctx.world.train;
   if (train?.storm) {
     const seed = 1;
-    rt.storm = { seed, schedule: stormSchedule(seed, STORM_HOURS * 3600), flash: 0, bolt: null, intensity: 0, hold: null, fitted: null, ambient: null, ambientBase: 0,
+    rt.storm = { seed, schedule: stormSchedule(seed, STORM_HOURS * 3600), flash: 0, bolt: null, intensity: 0, hold: null, fitted: null, ambient: null, ambientBase: 0, grade: 0,
       dir: [...STORM.boltDir], color: [...STORM.boltColor] };
     const amb = ctx.boot.handle.scene.children.find(o => o instanceof THREE.AmbientLight) as THREE.AmbientLight | undefined;
     // Doom 3 dark (owner, 2026-09-26): on a storm level the ambient floor is a third of the rig's.
@@ -242,6 +244,9 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
       ? { intensity: storm.hold.intensity, color: [...STORM.boltColor] as [number, number, number], dir: [storm.hold.side * STORM.boltDir[0], STORM.boltDir[1], STORM.boltDir[2]] as [number, number, number], bolt: null, flash: 0, event: -1 }
       : windowLightAt(storm.schedule, t);
     storm.flash = w.flash;
+    storm.grade = Math.max(w.flash, storm.grade * Math.exp(-dt / STORM.grade.releaseS));
+    if (storm.grade < 1e-3) storm.grade = 0;
+    ctx.render.postAa?.setFlashGrade(w.flash, storm.grade, STORM.grade.punch, STORM.grade.crush);
     storm.bolt = w.bolt;
     storm.intensity = w.intensity;
     storm.dir = [...w.dir];
