@@ -17,7 +17,9 @@ import { describe, it, expect, vi } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three/webgpu';
-import { createGibShutterLayer, readGibShutterSettings } from './gib-shutter-layer';
+import { createGibShutterLayer, readGibShutterSettings, GIB_SHUTTER_PASS_ID } from './gib-shutter-layer';
+// @ts-expect-error — three's internal render-object cache ships no typings.
+import RenderObjects from 'three/src/renderers/common/RenderObjects.js';
 import { SHUTTER_GAME_DEFAULTS, SHUTTER_GAME_MAX_STREAK_PX } from './shutter-game-layer';
 import { GIB_BLUR_LAYER, GIB_BLUR_MAX_PIECES, GIB_SHUTTER_DEFAULT_ENABLED } from './gib-motion-blur';
 
@@ -212,5 +214,80 @@ describe('gib shutter — background subject precompile', () => {
 
     layer.dispose();
     previousTarget.dispose();
+  });
+});
+
+describe('gib shutter — the layer draw owns its render objects (engage hitch, 2026-09-26)', () => {
+  // THE ROOT CAUSE, IN THREE'S OWN CACHE. r186 keys a render object by
+  // (object, material, render context, scene lights node) inside a per-pass-id
+  // map, and the render context is keyed only by the target's attachment
+  // signature — the layer target and the base pass' capture target share one.
+  // The scene lights are part of the key's dynamic half: all of them in the
+  // base pass, none in the layer pass (camera on GIB_BLUR_LAYER). This drives
+  // the REAL RenderObjects cache with that key flip and counts rebuilds.
+  function simulate(layerPassId: string | undefined, cycles: number): number {
+    let lightsKey = 0;
+    const nodes = { getCacheKey: () => lightsKey, delete: () => {} };
+    const renderer = { contextNode: { id: 1, version: 0 }, _currentSourceMaterial: null, backend: { isWebGPUBackend: true } };
+    const objects = new RenderObjects(renderer, nodes, {}, { delete: () => {} }, { deleteForRender: () => {} }, {});
+    const sharedContext = { id: 7 };   // one context: same attachment signature
+    const lightsNode = {};
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardNodeMaterial());
+    const seen = new Set<unknown>();
+    const draw = (passId: string | undefined) => {
+      seen.add(objects.get(mesh, mesh.material, {}, {}, lightsNode, sharedContext, null, passId));
+    };
+    for (let i = 0; i < cycles; i++) {
+      lightsKey = 111; draw(undefined);      // base pass: every scene light
+      lightsKey = 222; draw(layerPassId);    // engage: layer pass, no scene light
+      draw(layerPassId);                     // held: same key, reused
+    }
+    lightsKey = 111; draw(undefined);        // released
+    return seen.size;
+  }
+
+  it('in the shared default pass, every engage and release rebuilds the render object', () => {
+    // 1 + 2 per cycle: the churn behind the ~50-100 ms engage/release frames.
+    expect(simulate(undefined, 5)).toBe(11);
+  });
+
+  it('under GIB_SHUTTER_PASS_ID the base and layer render objects are built once each', () => {
+    expect(simulate(GIB_SHUTTER_PASS_ID, 5)).toBe(2);
+  });
+
+  it('capture() draws through GIB_SHUTTER_PASS_ID and restores the previous function', () => {
+    const passIds: (string | null | undefined)[] = [];
+    let objectFn: ((...a: unknown[]) => void) | null = null;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicNodeMaterial());
+    const renderer = {
+      getRenderTarget: () => null, setRenderTarget: () => {},
+      getClearColor: (c: THREE.Color) => c, getClearAlpha: () => 1, setClearColor: () => {},
+      clear: () => {}, autoClear: true, setScissorTest: () => {}, setViewport: () => {},
+      compileAsync: () => Promise.resolve(),
+      getRenderObjectFunction: () => objectFn,
+      setRenderObjectFunction: (fn: typeof objectFn) => { objectFn = fn; },
+      renderObject: (...a: unknown[]) => { passIds.push(a[8] as string | null | undefined); },
+      // What three's render loop does per visible object: the current object
+      // function, with passId null (or 'backSide' for a double-pass transparent).
+      render: () => {
+        const fn = objectFn ?? renderer.renderObject;
+        fn(mesh, null, null, mesh.geometry, mesh.material, null, null, null, null);
+        fn(mesh, null, null, mesh.geometry, mesh.material, null, null, null, 'backSide');
+      },
+    };
+    const layer = createGibShutterLayer({ renderer: renderer as unknown as THREE.WebGPURenderer, settings: readGibShutterSettings('') });
+    const capture = new THREE.RenderTarget(8, 8, { type: THREE.HalfFloatType });
+    capture.depthTexture = new THREE.DepthTexture(8, 8);
+    const state = {
+      limb: 'torso', kind: 'gob', pos: [0, 0, -2], vel: [4, 0, 0], radius: 0.1, squash: 0,
+      quat: [0, 0, 0, 1], angVel: [0, 0, 0], longAxis: [0, 1, 0], support: [{ c: [0, 0, 0], r: 0.1 }],
+    } as unknown as Parameters<typeof layer.select>[0][number]['state'];
+    expect(layer.select([{ id: 1, state, mesh, baseLayer: 0, ageSeconds: Infinity }])).toBe(1);
+    expect(layer.capture(capture, new THREE.Scene(), new THREE.PerspectiveCamera())).not.toBeNull();
+    // Layer draw on its own pass id; the fullscreen resolve after it is back on
+    // the default function (the mock's render stands in for both draws).
+    expect(passIds).toEqual([GIB_SHUTTER_PASS_ID, `${GIB_SHUTTER_PASS_ID}:backSide`, null, 'backSide']);
+    expect(objectFn).toBeNull();
+    layer.dispose();
   });
 });

@@ -49,6 +49,24 @@ import {
   readGibShutterEnabled,
 } from './gib-motion-blur';
 
+/**
+ * The render-object pass id the layer draw uses (see capture step 1).
+ *
+ * WHY IT EXISTS (blur-engage hitch, 2026-09-26). three r186 keys a render
+ * object by (object, material, render CONTEXT, scene lights node) inside a
+ * per-pass-id map, and the render context is keyed only by the target's
+ * attachment signature — so the half-float+depth layer target and the base
+ * pass' half-float+depth capture target share ONE context, hence ONE render
+ * object per mesh. The layer draw sees no scene lights (the camera is on
+ * GIB_BLUR_LAYER), the base pass sees all of them, and the lights are part of
+ * the render object's cache key: every time a mesh moved between the passes
+ * three disposed its render object and rebuilt it — node build, shader
+ * modules and a SYNCHRONOUS pipeline — on the engage frame AND the release
+ * frame of every censer swing (~50 + 35 ms CPU, measured). A distinct pass id
+ * gives the layer draw its own render objects, each with a stable key.
+ */
+export const GIB_SHUTTER_PASS_ID = 'gib-shutter';
+
 export interface GibShutterSettings {
   enabled: boolean;
   exposureSeconds: number;
@@ -216,6 +234,16 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
   const clearColor = new THREE.Color();
   const warmCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   warmCam.position.z = 1;
+  /** The layer draw's render-object function: the default one, re-namespaced
+   *  onto GIB_SHUTTER_PASS_ID (a pass three already names, e.g. 'backSide',
+   *  keeps its meaning inside the namespace). */
+  type ObjectFn = NonNullable<Parameters<THREE.WebGPURenderer['setRenderObjectFunction']>[0]>;
+  const drawInLayerPass: ObjectFn = (object, scn, cam, geometry, material, group, lightsNode, clippingContext, passId) => {
+    renderer.renderObject(
+      object, scn, cam, geometry, material, group, lightsNode, clippingContext,
+      passId ? `${GIB_SHUTTER_PASS_ID}:${passId}` : GIB_SHUTTER_PASS_ID,
+    );
+  };
 
   function fail(message: string, err?: unknown): void {
     lastError = err ? `${message}: ${String((err as Error)?.message ?? err)}` : message;
@@ -378,9 +406,18 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
       renderer.autoClear = false;
       camera.layers.set(GIB_BLUR_LAYER);
       setPassLabel('gib:selected');
-      renderer.render(scene, camera);
-      camera.layers.mask = prevMask;
-      renderer.autoClear = prevAutoClear;
+      // OWN RENDER OBJECTS (GIB_SHUTTER_PASS_ID): without them a mesh lifted
+      // here re-keys, and three rebuilds, the render object it shares with the
+      // base pass on every engage and every release.
+      const prevObjectFn = renderer.getRenderObjectFunction();
+      renderer.setRenderObjectFunction(drawInLayerPass);
+      try {
+        renderer.render(scene, camera);
+      } finally {
+        renderer.setRenderObjectFunction(prevObjectFn);
+        camera.layers.mask = prevMask;
+        renderer.autoClear = prevAutoClear;
+      }
 
       // 2. CPU motion seed — per-surface, rotation-aware (see gib-motion-blur).
       const buildStart = performance.now();
