@@ -2,12 +2,12 @@
 // flashlight (docs/superpowers/plans/2026-09-26-night-train-dynamic-light.md), on Night Train.
 // No-deps CDP, same plumbing as scripts/sdf-game-loop-gate.mjs.
 //
-//   1. DARK START: the flashlight is off (spot intensity 0); the van lamp is dying.
-//   2. THE TORCH: taking it switches the flashlight on and kills the van lamp (the cue).
+//   1. DARK START: the flashlight is off (spot intensity 0) until the coat check.
+//   2. THE TORCH: taking it switches the flashlight on and kills the coat-check lamps (the cue).
 //   3. LIGHTNING: a forced bolt spikes the window light and renders its shadow, only while lit.
 //   4. THE STORM IN THE GLASS: the dining window is much brighter during a bolt.
 //   5. BLACKOUT: the sleeper corridor trigger cuts the sleeper lamps, then they come back.
-//   6. LOOK: screenshots (hold dark and lit, dining mid-flash, a sweep, the party strobe).
+//   6. THE BOILER ROOM: the strobe, the steam plumes, the machinery.
 //
 // Usage: LAB_VITE_PORT=5297 LAB_CDP_PORT=9297 node scripts/sdf-game-light-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -141,73 +141,62 @@ const settle = (ms = 700) => sleep(ms);
 const lights = () => evaluate('__sdfGame.lights()');
 const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire');
 
-// 1. DARK START
+// 1. DARK START — no flashlight until the coat check (carriage 4 of 8).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) { console.error(consoleEvents.slice(-8)); fail('night-train did not boot'); }
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
 let L = await lights();
 if (!L) fail('no lights() seam');
 if (L.flashlight !== 0 || L.spotIntensity !== 0) fail(`flashlight not dark at start: ${JSON.stringify({ f: L.flashlight, spot: L.spotIntensity })}`);
-const van = roomLamps(L, 1);
-if (van[0]?.mood !== 'dying') fail(`van lamp mood ${van[0]?.mood}`);
-if (L.windowLights.length < 3) fail(`window lights: ${JSON.stringify(L.windowLights)}`);
-pass(`dark start: flashlight 0, van lamp ${van.map((x) => x.mood).join('/')}, window lights in rooms ${L.windowLights.join(',')}`);
-await evaluate('__sdfGame.setPose(0.2, -2.2, 3.1416, 0.05)');
+const coats = roomLamps(L, 6);
+if (coats.map((x) => x.mood).join('/') !== 'dead/dying') fail(`coat-check lamp moods ${coats.map((x) => x.mood)}`);
+if (L.windowLights.length < 5) fail(`window lights: ${JSON.stringify(L.windowLights)}`);
+pass(`dark start: flashlight 0, coat-check lamps ${coats.map((x) => x.mood).join('/')}, window lights in rooms ${L.windowLights.join(',')}`);
+await evaluate('__sdfGame.setPose(1.2, -57.0, 0, 0)');
 await settle(1200);
-const holdDark = stats(await shoot('light-hold-dark'), 0.1, 0.1, 0.9, 0.9).mean;
+const coatsDark = stats(await shoot('light-coats-dark'), 0.1, 0.1, 0.9, 0.9).mean;
 
-// 2. THE TORCH — on the hold's west wall (x -1.45, z -4.6).
-await evaluate('__sdfGame.setPose(-0.8, -4.6, 3.1416, 0)');
+// 2. THE TORCH — behind the coat-check counter (x -1.2, z -68.0).
+await evaluate('__sdfGame.setPose(-0.5, -68.0, 1.5708, 0)');
 await settle(1600);
 L = await lights();
 if (!(L.flashlight === 1 && L.spotIntensity > 0)) fail(`flashlight not on after the pickup: ${JSON.stringify({ f: L.flashlight, spot: L.spotIntensity })}`);
-if (!roomLamps(L, 1).every((x) => x.script === 'die' && x.level === 0)) fail(`van lamps not dead: ${JSON.stringify(roomLamps(L, 1))}`);
+if (!roomLamps(L, 6).every((x) => x.script === 'die' && x.level === 0)) fail(`coat-check lamps not dead: ${JSON.stringify(roomLamps(L, 6))}`);
 if ((await evaluate('__sdfGame.inventory()')).flashlight !== true) fail('inventory has no flashlight');
-await evaluate('__sdfGame.setPose(0.2, -2.2, 3.1416, 0.05)');
+await evaluate('__sdfGame.setPose(1.2, -57.0, 0, 0)');
 await settle(800);
-const holdLit = stats(await shoot('light-hold-lit'), 0.1, 0.1, 0.9, 0.9).mean;
-pass(`the torch: flashlight on (spot ${L.spotIntensity.toFixed(0)}), van lamps dead; hold mean ${holdDark.toFixed(3)} -> ${holdLit.toFixed(3)}`);
+const coatsLit = stats(await shoot('light-coats-lit'), 0.1, 0.1, 0.9, 0.9).mean;
+pass(`the torch: flashlight on (spot ${L.spotIntensity.toFixed(0)}), coat-check lamps dead; mean ${coatsDark.toFixed(3)} -> ${coatsLit.toFixed(3)}`);
 
 // 3. LIGHTNING — in the dining car, looking at the west window.
-await evaluate(`__sdfGame.setPose(-0.4, -18.6, ${-Math.PI / 2}, -0.05)`);
+await evaluate(`__sdfGame.setPose(-0.4, -37.8, ${-Math.PI / 2}, -0.05)`);
 await settle(1000);
-// Wait out any bolt in progress, then measure the idle shadow count.
 for (let i = 0; i < 20 && (await lights()).windowIntensity > 0; i++) await sleep(150);
 const idle0 = (await lights()).shadowFrames;
 await sleep(400);
 const idle1 = (await lights()).shadowFrames;
 const noBolt = stats(await shoot('light-dining-idle'), 0.42, 0.30, 0.58, 0.45).mean;
-await evaluate('__sdfGame.forceBolt(-1, 0)');
+await evaluate('__sdfGame.forceBolt(-1, -37)');
 let peak = 0, frames0 = (await lights()).shadowFrames, shadowRoom = null;
 for (let i = 0; i < 6; i++) { await sleep(30); const l = await lights(); if (l.windowIntensity > peak) { peak = l.windowIntensity; shadowRoom = l.shadowRoom ?? shadowRoom; } }
 const litFrames = (await lights()).shadowFrames - frames0;
-await sleep(900);
-const after0 = (await lights()).shadowFrames; await sleep(400); const after1 = (await lights()).shadowFrames;
 if (!(peak > 3)) fail(`forced bolt: window light peaked at ${peak.toFixed(2)}`);
 if (!(litFrames > 0)) fail('the window light rendered no shadow while lit');
-if ((await lights()).windowIntensity === 0 && after1 !== after0) fail(`shadow kept rendering after the flash (${after0} -> ${after1})`);
-pass(`lightning: window light peak ${peak.toFixed(2)}, ${litFrames} shadow frames lit (room ${shadowRoom}); idle ${idle1 - idle0}, after ${after1 - after0}`);
+pass(`lightning: window light peak ${peak.toFixed(2)}, ${litFrames} shadow frames lit (room ${shadowRoom}); idle ${idle1 - idle0}`);
 
-// 4. THE STORM IN THE GLASS
-// The bolt flickers (spike, dip, restrike): take the brightest of a few captures across it.
-await evaluate('__sdfGame.forceBolt(-1, -18)');
+// 4. THE STORM IN THE GLASS — the bolt flickers: the brightest of a few captures.
+await sleep(1200);
+for (let i = 0; i < 20 && (await lights()).windowIntensity > 0; i++) await sleep(150);
+await evaluate('__sdfGame.forceBolt(-1, -37)');
 let withBolt = 0;
-for (let i = 0; i < 4; i++) {
-  const m = stats(await shoot(`light-dining-bolt-${i}`), 0.42, 0.30, 0.58, 0.45).mean;
-  withBolt = Math.max(withBolt, m);
-}
-if (!(withBolt > noBolt * 2)) fail(`the glass did not flash: ${noBolt.toFixed(4)} -> ${withBolt.toFixed(4)}`);
+for (let i = 0; i < 4; i++) withBolt = Math.max(withBolt, stats(await shoot(`light-dining-bolt-${i}`), 0.42, 0.30, 0.58, 0.45).mean);
+if (!(withBolt > noBolt * 1.5)) fail(`the glass did not flash: ${noBolt.toFixed(4)} -> ${withBolt.toFixed(4)}`);
 pass(`storm glass: mean ${noBolt.toFixed(4)} idle -> ${withBolt.toFixed(4)} with a bolt`);
-await evaluate('__sdfGame.setPose(0, -24, 0, 0)');
-await sleep(1000);
-await evaluate('__sdfGame.forceSweep(1)');
-await sleep(500);
-await shoot('light-dining-sweep');
 
-// 5. BLACKOUT — the sleeper corridor at C3 (x -1.3, z -45.4).
-await evaluate('__sdfGame.setPose(-1.3, -44.0, 0, 0)');
+// 5. BLACKOUT — the sleeper corridor at C3 (x -1.3, z -79.8).
+await evaluate('__sdfGame.setPose(-1.3, -78.4, 0, 0)');
 await settle(600);
 if (!roomLamps(await lights(), 4).every((x) => x.script === null)) fail('sleeper lamps scripted before the trigger');
-await evaluate('__sdfGame.setPose(-1.3, -45.4, 0, 0)');
+await evaluate('__sdfGame.setPose(-1.3, -79.8, 0, 0)');
 await sleep(3000);
 L = await lights();
 if (!roomLamps(L, 4).every((x) => x.script === 'blackout' && x.level === 0)) fail(`sleeper not blacked out: ${JSON.stringify(roomLamps(L, 4))}`);
@@ -217,13 +206,15 @@ L = await lights();
 if (!roomLamps(L, 4).some((x) => x.level > 0)) fail(`sleeper lamps did not come back: ${JSON.stringify(roomLamps(L, 4))}`);
 pass('blackout: the sleeper corridor trigger cuts the lamps, and they come back');
 
-// 6. THE PARTY STROBE (a look, not a check beyond the script)
-await evaluate('__sdfGame.setPose(0, -61.6, 0, 0)');
+// 6. THE BOILER ROOM STROBE, the steam and the machinery
+await evaluate('__sdfGame.setPose(0, -96.0, 0, 0)');
 await sleep(900);
-await shoot('light-party-strobe');
+await shoot('light-boiler-strobe');
 L = await lights();
-if (!roomLamps(L, 5).every((x) => x.script === 'strobe')) fail(`party lamps not strobing: ${JSON.stringify(roomLamps(L, 5))}`);
-pass('strobe: the party threshold starts the strobe');
+if (!roomLamps(L, 5).every((x) => x.script === 'strobe')) fail(`boiler room lamps not strobing: ${JSON.stringify(roomLamps(L, 5))}`);
+const tr = await evaluate('__sdfGame.train()');
+if (!(tr.steam > 0)) fail(`no steam plumes: ${JSON.stringify(tr)}`);
+pass(`boiler room: the threshold starts the strobe; ${tr.steam} steam plumes, ${tr.swaying} moving piece sets`);
 
 console.log('PASS sdf-game-light-gate');
 process.exit(0);

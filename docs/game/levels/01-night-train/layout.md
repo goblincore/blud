@@ -1,4 +1,24 @@
-# Night Train: layout (first slice)
+# Night Train: layout
+
+## Draft 2 (2026-09-26, approved by the owner; built)
+
+![Plan, draft 2](layout-draft2.png)
+
+After the first playtest: the level was under 5 minutes, too many zombies in the last car, the
+flashlight came too early. Eight carriages, about 130 m: **guard's van** (start; lamps flicker)
+→ **third class** (new: benches both sides of a 1.5 m aisle, zombies slumped between them)
+→ **dining car** → **coat check** (new, the midpoint: a serpentine of coat racks, dead lamps,
+**the flashlight behind the attendant's counter**; taking it kills the last lamp and wakes the
+room) → **sleeper** (corridor blackout) → **the Boiler Room** (was the party carriage: disco
+ball, DJ deck, strobes, steam vents, pneumatic hammers; 4 dancers instead of 8) → **tender**
+(new: coal bunker and walkway) → **cab** (the level ends at the firebox until the Stoker exists).
+Cultists are soldiers until the cultist is finished (6 soldiers, 24 zombies). Lamps at power 1.1
+(Doom 3 dark). The tables in `scripts/levels/night_train_layout.py` are the record; the rest of
+this document describes draft 1.
+
+---
+
+# Draft 1 (first slice)
 
 **Date:** 2026-09-25 · **Status:** draft 1 **approved by the owner 2026-09-25** (dynamite in C3, five compartments, three van rooms) · **Design:** [design.md](design.md)
 · **Study:** [reference-study-re0.md](reference-study-re0.md) · **Guide:** [level design guide](../level-design-guide.md) §5

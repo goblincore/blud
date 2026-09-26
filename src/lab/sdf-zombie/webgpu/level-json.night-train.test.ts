@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/level-json.night-train.test.ts
 //
-// The committed Night Train first slice, built from the approved layout
-// (docs/game/levels/01-night-train/layout.md).
+// The committed Night Train, built from the approved layout draft 2
+// (docs/game/levels/01-night-train/layout.md, 2026-09-26: eight carriages).
 
 // @ts-expect-error — node:fs available in vitest
 import { readFileSync } from 'node:fs';
@@ -15,28 +15,34 @@ const t = parseLevelJson(JSON.parse(readFileSync('public/assets/levels/night-tra
 const room = (name: string) => t.rooms.find(r => r.name === name)!;
 
 describe('night-train.level.json', () => {
-  it('five art-shelled carriages in order, at the layout\'s sizes', () => {
-    expect(t.rooms.map(r => r.name)).toEqual(['guards-van', 'dining-car', 'sleeper', 'party-carriage', 'cab']);
+  const ORDER = ['guards-van', 'third-class', 'dining-car', 'coat-check', 'sleeper', 'boiler-room', 'tender', 'cab'];
+  const inOrder = () => [...t.rooms].sort((a, b) => b.maxZ - a.maxZ);
+  it('eight art-shelled carriages in order, at the layout\'s sizes', () => {
+    const rs = inOrder();
+    expect(rs.map(r => r.name)).toEqual(ORDER);
     expect(t.rooms.every(r => r.shell === 'art')).toBe(true);
-    for (let i = 1; i < t.rooms.length; i++) expect(t.rooms[i]!.maxZ).toBeLessThan(t.rooms[i - 1]!.minZ);
-    expect(t.rooms.map(r => +(r.maxX - r.minX).toFixed(2))).toEqual([3.6, 4.2, 4.0, 4.2, 3.0]);
-    expect(t.rooms.map(r => r.height)).toEqual([2.8, 3.0, 2.8, 3.4, 2.6]);
+    for (let i = 1; i < rs.length; i++) expect(rs[i]!.maxZ).toBeLessThan(rs[i - 1]!.minZ);
+    expect(rs.map(r => +(r.maxX - r.minX).toFixed(2))).toEqual([3.6, 3.8, 4.2, 3.8, 4.0, 4.2, 3.4, 3.0]);
+    expect(rs.map(r => r.height)).toEqual([2.8, 2.8, 3.0, 2.8, 2.8, 3.4, 2.6, 2.6]);
     expect(t.art).toBe('night-train.art.glb');
     expect(missingCapabilities(t, ENGINE_CAPABILITIES)).toEqual([]);
   });
 
-  it('four vestibules, each at least 1.4 m wide', () => {
-    expect(t.tunnels).toHaveLength(4);
+  it('seven vestibules, each at least 1.4 m wide', () => {
+    expect(t.tunnels).toHaveLength(7);
     for (const v of t.tunnels) expect(v.maxX - v.minX).toBeGreaterThanOrEqual(1.4 - 1e-6);
   });
 
-  it('19 zombies and 5 cultists; the pickups the layout places', () => {
-    expect(t.spawns.filter(s => s.kind === 'zombie')).toHaveLength(19);
-    expect(t.spawns.filter(s => s.kind === 'cultist')).toHaveLength(5);
+  it('24 zombies and 6 soldiers (no cultists yet); the pickups the layout places', () => {
+    expect(t.spawns.filter(s => s.kind === 'zombie')).toHaveLength(24);
+    expect(t.spawns.filter(s => s.kind === 'soldier')).toHaveLength(6);
+    expect(t.spawns.filter(s => s.kind === 'cultist')).toHaveLength(0);
+    expect(t.spawns.filter(s => roomAtPoint(t, s.pos[0], s.pos[2])?.name === 'boiler-room' && s.kind === 'zombie')).toHaveLength(4);
     const at = (item: string) => t.pickups.filter(p => p.item === item).map(p => roomAtPoint(t, p.pos[0], p.pos[2])?.name);
     expect(at('shotgun')).toEqual(['guards-van']);
-    expect(at('dynamite').sort()).toEqual(['party-carriage', 'sleeper']);
-    expect(at('cd')).toEqual(['party-carriage']);
+    expect(at('dynamite').sort()).toEqual(['boiler-room', 'sleeper']);
+    expect(at('cd')).toEqual(['boiler-room']);
+    expect(at('flashlight')).toEqual(['coat-check']);
   });
 
   it('the sleeper has its compartments and the locked C5', () => {
@@ -60,7 +66,10 @@ describe('night-train.level.json', () => {
       'lounge west lane': [-1.35, 0, z('dining-car', 12.5)], 'lounge east lane': [1.35, 0, z('dining-car', 12.5)],
       'galley': [0, 0, z('dining-car', 16.8)], 'sleeper corridor': [-1.3, 0, z('sleeper', 9)],
       'C1': [0.8, 0, z('sleeper', 3.1)], 'C3': [0.8, 0, z('sleeper', 9)], 'C4': [0.8, 0, z('sleeper', 12)],
-      'party': [0, 0, z('party-carriage', 10)], 'cab': [0, 0, z('cab', 5)],
+      'third class': [0, 0, z('third-class', 9)], 'third, between benches': [-1.3, 0, z('third-class', 2.4)],
+      'coats, west lane': [-1.2, 0, z('coat-check', 6.8)], 'behind the counter': [-1.2, 0, z('coat-check', 12.4)],
+      'boiler room': [0, 0, z('boiler-room', 10)], 'DJ deck': [-0.8, 0, z('boiler-room', 18.3)],
+      'tender walkway': [0.9, 0, z('tender', 7)], 'cab': [0, 0, z('cab', 5)],
     };
     for (const [name, p] of Object.entries(points)) expect(nav.route(start, p).length, name).toBeGreaterThan(0);
   });
@@ -69,20 +78,21 @@ describe('night-train.level.json', () => {
 describe('night-train dynamic light (dynamic light spec §3)', () => {
   const moods = (name: string) => room(name).accents.map(a => a.mood);
   it('lamp moods and fires per carriage', () => {
-    expect(moods('guards-van')).toEqual(expect.arrayContaining(['dying', 'stutter', 'fire']));
+    expect(moods('guards-van')).toEqual(expect.arrayContaining(['flicker', 'stutter', 'fire']));
+    expect(moods('coat-check')).toEqual(['dead', 'dying']);
     expect(moods('dining-car')).toEqual(expect.arrayContaining(['flicker', 'dead', 'fire']));
     expect(moods('sleeper')).toEqual(expect.arrayContaining(['stutter', 'fire']));
     expect(moods('cab')).toEqual(expect.arrayContaining(['steady', 'fire']));
     expect(t.rooms.flatMap(r => r.accents).every(a => a.mood !== undefined)).toBe(true);
   });
-  it('the flashlight hangs in the baggage hold', () => {
+  it('the flashlight hangs behind the coat-check counter, mid-level', () => {
     const torch = t.pickups.find(p => p.item === 'flashlight')!;
     expect(torch.id).toBe('torch');
-    expect(torch.pos[2]).toBeGreaterThan(-5.5);   // the hold: z 0..-5.5
-    expect(roomAtPoint(t, torch.pos[0], torch.pos[2])?.name).toBe('guards-van');
+    expect(roomAtPoint(t, torch.pos[0], torch.pos[2])?.name).toBe('coat-check');
   });
-  it('taking it kills the van lamp and wakes the van; blackout and strobe triggers', () => {
-    expect(t.cues).toEqual([{ on: 'pickup.flashlight', emit: ['light.die.room.1', 'alert.room.1'] }]);
-    expect(t.triggers.map(tr => [tr.event, tr.once])).toEqual([['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
+  it('taking it kills the coat-check lamps and wakes the room; blackout, strobe and end triggers', () => {
+    expect(t.cues).toEqual([{ on: 'pickup.flashlight', emit: ['light.die.room.6', 'alert.room.6'] }]);
+    expect(t.triggers.map(tr => [tr.event, tr.once]).sort()).toEqual([['level.end', true], ['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
+    expect(t.completeOn).toBe('level.end');
   });
 });

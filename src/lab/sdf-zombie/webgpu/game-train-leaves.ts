@@ -35,7 +35,8 @@ const SWAY_KINDS: readonly string[] = ['lamp', 'curtain', 'spin', 'piston'];
 interface Steam { sprite: THREE.Sprite; room: number; light: { value: THREE.Vector3 } }
 
 interface Sway {
-  mesh: THREE.InstancedMesh;
+  /** An instanced piece, or a one-off mesh (a single disco ball exports un-instanced). */
+  mesh: THREE.InstancedMesh | THREE.Mesh;
   kind: SwayKind;
   base: { p: THREE.Vector3; q: THREE.Quaternion; s: THREE.Vector3 }[];
 }
@@ -67,7 +68,11 @@ export function createTrain(ctx: GameContext): TrainRuntime | null {
   const sway: Sway[] = [];
   for (const m of objects) {
     const kind = m.userData.sway as SwayKind;
-    if (!SWAY_KINDS.includes(kind) || !(m as THREE.InstancedMesh).isInstancedMesh) continue;
+    if (!SWAY_KINDS.includes(kind)) continue;
+    if (!(m as THREE.InstancedMesh).isInstancedMesh) {
+      sway.push({ mesh: m, kind, base: [{ p: m.position.clone(), q: m.quaternion.clone(), s: m.scale.clone() }] });
+      continue;
+    }
     const im = m as THREE.InstancedMesh, mat4 = new THREE.Matrix4(), base: Sway['base'] = [];
     for (let i = 0; i < im.count; i++) {
       im.getMatrixAt(i, mat4);
@@ -176,20 +181,25 @@ export function stepTrain(ctx: GameContext, dt: number): void {
   rt.roll = s.roll;
   rt.bob = s.bob;
   for (const sw of rt.sway) {
+    const im = (sw.mesh as THREE.InstancedMesh).isInstancedMesh ? sw.mesh as THREE.InstancedMesh : null;
     for (let i = 0; i < sw.base.length; i++) {
       const b = sw.base[i]!;
+      const put = (p: THREE.Vector3, q: THREE.Quaternion) => {
+        if (im) im.setMatrixAt(i, m4.compose(p, q, b.s));
+        else { sw.mesh.position.copy(p); sw.mesh.quaternion.copy(q); }
+      };
       if (sw.kind === 'piston') {
         pv.copy(b.p);
         pv.y -= pistonStroke(t, i * 0.53) * PISTON_STROKE_M;
-        sw.mesh.setMatrixAt(i, m4.compose(pv, b.q, b.s));
+        put(pv, b.q);
         continue;
       }
       if (sw.kind === 'spin') qz.setFromAxisAngle(Y, discoSpin(t) + i);
       else qz.setFromAxisAngle(Z, sw.kind === 'lamp' ? lampSwing(t, rt.speed, i * 0.7) : curtainSway(t, rt.speed, i * 0.9) * CURTAIN_DEG * DEG);
       qm.multiplyQuaternions(qz, b.q);
-      sw.mesh.setMatrixAt(i, m4.compose(b.p, qm, b.s));
+      put(b.p, qm);
     }
-    sw.mesh.instanceMatrix.needsUpdate = true;
+    if (im) im.instanceMatrix.needsUpdate = true;
   }
 }
 

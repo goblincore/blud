@@ -149,8 +149,8 @@ pass(`boot: ${art.meshes} art meshes (${art.instanced} instanced, ${art.instance
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
 await evaluate('__sdfGame.freeze(true)');
 
-// 2. WINDOWS — the first dining-car bay's west window (wall x -2.1; z -19.15 .. -18.05, y 1.05 .. 1.85).
-await evaluate(`__sdfGame.setPose(-0.4, -18.6, ${-Math.PI / 2}, -0.05)`);
+// 2. WINDOWS — the first dining-car bay's west window (wall x -2.1; z -38.35 .. -37.25, y 1.05 .. 1.85).
+await evaluate(`__sdfGame.setPose(-0.4, -37.8, ${-Math.PI / 2}, -0.05)`);
 await sleep(1000);
 const a = await shoot('train-window-a'); await sleep(500); const b = await shoot('train-window-b');
 const sa = stats(a, 0.42, 0.30, 0.58, 0.45), sb = stats(b, 0.42, 0.30, 0.58, 0.45);
@@ -171,12 +171,16 @@ pass(`sway: roll spans ${span.toFixed(4)} rad over 2 s`);
 const ROUTE = [
   ['baggage hold', -0.2, -2.5], ['hold door (west)', -1.0, -5.55], ['mail cage', -0.3, -8.0],
   ['cage door (east)', 1.0, -10.55], ['guard\'s office', 0.0, -12.5], ['vestibule 1', 0, -16.6],
-  ['dining saloon', 0, -22.0], ['lounge, west lane', -1.35, -29.7], ['galley door', -1.3, -32.65],
-  ['galley', -1.0, -33.4], ['vestibule 2', 0, -35.8], ['sleeper south lobby', 0, -37.3],
-  ['sleeper corridor', -1.3, -40.0], ['corridor at C3', -1.3, -45.46], ['inside C3', 0.4, -45.46],
-  ['back in the corridor', -1.3, -45.46], ['sleeper north lobby', -0.2, -53.6], ['vestibule 3', 0, -55.0],
-  ['party, south', 0, -57.5], ['party, west of the pillars', -1.7, -62.0], ['party, past the pillars', -1.7, -70.5],
-  ['party, north', 0, -75.0], ['vestibule 4', 0, -76.2], ['cab', 0, -80.0],
+  ['third class, south', 0, -20.0], ['third class, middle', 0, -26.0], ['third class, north', 0, -33.0], ['vestibule 2', 0, -35.8],
+  ['dining saloon', 0, -41.2], ['lounge, west lane', -1.35, -48.9], ['galley door', -1.3, -51.85],
+  ['galley', -1.0, -52.6], ['vestibule 3', 0, -55.0],
+  ['coats, south', 1.2, -57.6], ['coats, past rack 1', 1.2, -59.6], ['coats, rack 2 gap', -1.2, -61.1], ['coats, west lane', -1.2, -62.4],
+  ['coats, rack 3 gap', 1.2, -63.8], ['coats, before the counter', 1.2, -65.5], ['coats, past the counter', 1.2, -66.8], ['the counter\'s back', 0, -68.5],
+  ['vestibule 4', 0, -70.2], ['sleeper south lobby', 0, -71.7], ['sleeper corridor', -1.3, -74.4], ['corridor at C3', -1.3, -79.86],
+  ['inside C3', 0.4, -79.86], ['back in the corridor', -1.3, -79.86], ['sleeper north lobby', -0.2, -88.0], ['vestibule 5', 0, -89.4],
+  ['boiler room, south', 0, -91.9], ['boiler room, west of the pillars', -1.7, -96.4], ['boiler room, by the pistons', -0.9, -104.9],
+  ['boiler room, north', 0, -109.2], ['vestibule 6', 0, -110.6], ['tender, south', 0.9, -113.5], ['tender, north', 0.9, -119.5],
+  ['vestibule 7', 0, -121.8], ['cab', 0, -126.0],
 ];
 if (!(await boot('level=night-train&frozen&nospawn'))) { console.error(consoleEvents.slice(-8)); fail('night-train (nospawn) did not boot'); }
 await evaluate('__sdfGame.setPose(0, -1, 0, 0)');
@@ -195,7 +199,7 @@ if ((await evaluate('__sdfGame.room()')) !== 'cab') fail('walk ended outside the
 pass(`walk: ${ROUTE.length} waypoints, every room from the baggage hold to the cab`);
 
 // 5. COST
-const POSES = { office: [0, -11, 0, 0], dining: [0, -18, 0, 0], sleeper: [-1.3, -38, 0, 0], party: [0, -56.5, 0, 0] };
+const POSES = { office: [0, -11, 0, 0], third: [0, -18, 0, 0], dining: [0, -37.2, 0, 0], coats: [1.2, -57, 0, 0], sleeper: [-1.3, -72.4, 0, 0], boiler: [0, -90.9, 0, 0] };
 if (!(await boot('level=night-train&frozen'))) fail('night-train did not re-boot for the cost');
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
 await evaluate('__sdfGame.freeze(true)');

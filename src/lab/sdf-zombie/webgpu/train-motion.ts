@@ -44,7 +44,7 @@ export function curtainSway(t: number, speed: number, phase: number): number {
 /** Boiler Room machinery (layout draft 2): a pneumatic hammer's stroke, 0 (up) .. 1 (down).
  *  A slow lift and a fast slam, one cycle per PISTON_PERIOD_S, offset by phase (seconds). */
 export const PISTON_PERIOD_S = 1.6;
-export const PISTON_STROKE_M = 0.35;
+export const PISTON_STROKE_M = 0.55;  // the kit hammer lands on its anvil at 0.55 (build_train_kit.py piston)
 export function pistonStroke(t: number, phase: number): number {
   const k = ((((t + phase) / PISTON_PERIOD_S) % 1) + 1) % 1;
   return k < 0.8 ? 1 - k / 0.8 : Math.pow((k - 0.8) / 0.2, 2);

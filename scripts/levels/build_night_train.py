@@ -21,7 +21,7 @@ import sys
 import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from night_train_layout import CARRIAGES, CUES, FIRE, LIGHT_POWER, VESTIBULE, WARM, lamps, placed  # noqa: E402
+from night_train_layout import CARRIAGES, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, VESTIBULE, WARM, lamps, placed  # noqa: E402
 
 ROOT = os.path.abspath("assets-source/levels")
 ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -50,6 +50,7 @@ SC["level_name"] = "Night Train"
 SC["ammo"] = "finite"
 SC["loadout"] = "melee"
 SC["cues"] = json.dumps(CUES)
+SC["complete_on"] = COMPLETE_ON
 
 COLLS = {}
 
@@ -154,6 +155,20 @@ def prop(label, x0, x1, u0, u1, h, g, rid, n, w2):
         put("trunk", xc, 0.5, zc)
     elif label == "big trunk":
         put("trunk-big", xc, 0, zc)
+    # Layout draft 2 (2026-09-26). Kit conventions: build_train_kit.py (floor pieces centred on
+    # their footprint; wall pieces at the wall plane, west wall yaw 0).
+    elif label == "bench":   # rows face each other in pairs
+        put("third-bench", xc, 0, zc, 0.0 if (n // 2) % 2 == 0 else PI)
+    elif label == "coat rack":
+        put("coat-rack", xc, 0, zc, PI / 2)
+    elif label == "attendant counter":   # its front faces south, toward the player
+        put("counter", xc, 0, zc, -PI / 2)
+    elif label == "piston":
+        put("piston", -w2, 0, zc)
+    elif label == "dj deck":
+        put("dj-deck", -w2, 0, zc)
+    elif label == "coal":
+        put("coal-heap", -w2, 0, zc)
     elif label == "table":   # art v2: a booth against its wall, with party hats on the table
         west = xc < 0
         put("booth", -w2 if west else w2, 0, zc, 0.0 if west else PI)
@@ -191,20 +206,20 @@ def carriage(c, zs):
             put(floor_piece, 0, 0, z0, 0.0, pad / BAY)
         for b in range(bays):
             z0 = g(pad + b * BAY)
-            windowed = name != "guards-van" or b in (1, 4)
+            windowed = name not in ("guards-van", "tender") or (name == "guards-van" and b in (1, 4))
             kind = "window" if windowed else "plain"
             walls(kind, kind, w2, z0, BAY)
             put(ceil_piece, 0, 0, z0)
             put(floor_piece, 0, 0, z0)
             put("bay-pillar", -w2, 0, z0)
             put("bay-pillar", w2, 0, z0, PI)
-            if windowed and name in ("dining-car", "party-carriage", "sleeper"):
+            if windowed and name in ("dining-car", "boiler-room", "sleeper", "third-class"):
                 put("curtain", -w2, 1.9, z0 - 0.4)
                 put("curtain", w2, 1.9, z0 - 1.5, PI)
             if name == "guards-van" and b % 2 == 0:
                 put("luggage-rack", -w2, 0, z0)
                 put("luggage-rack", w2, 0, z0 - BAY, PI)
-            if name == "party-carriage" and b % 2 == 0:
+            if name == "boiler-room" and b % 2 == 0:
                 put("lamp-hanging", 0, h, z0)
             # Industrial dressing: a valve or gauges on alternate bays, both sides; grilles in the van.
             if b % 2 == 0:
@@ -214,9 +229,9 @@ def carriage(c, zs):
             if name == "guards-van" and not windowed:
                 put("grille", -w2, 1.3, z0 - BAY / 2)
             # Party remnants: streamers from the ceiling pipe, bunting across the party carriage.
-            if name == "party-carriage" or (name == "dining-car" and b % 2 == 1):
+            if name == "boiler-room" or (name == "dining-car" and b % 2 == 1):
                 put("streamers", 0, h - 0.33, z0)
-            if name == "party-carriage" and b % 2 == 1:
+            if name == "boiler-room" and b % 2 == 1:
                 put(f"bunting-{dm(w)}", 0, h - 0.45, z0 - BAY / 2)
         put(end_piece, 0, 0, zs)
         put(end_piece, 0, 0, g(L), PI)
@@ -224,11 +239,18 @@ def carriage(c, zs):
             put("gear-housing", -(w2 - 0.6), 1.5, zs - 0.01, PI / 2)
             put("gear-housing", -(w2 - 0.6), 1.5, g(L) + 0.01, -PI / 2)
     # Wall boilers, with their collision (clear of the spawns and the corridor entrance).
-    boilers = {"sleeper": 0.6, "party-carriage": 0.7}
+    boilers = {"sleeper": 0.6, "boiler-room": 0.7}
     if name in boilers:
         u = boilers[name]
         put("boiler", w2, 0, g(u), PI)
         gbox("furniture", f"boiler:{rid}", (w2 - 0.8, 0, g(u + 0.4)), (w2, 2.0, g(u - 0.4)))
+    # Boiler Room: the disco ball over the dance floor, steam vents; shovels in the tender and cab.
+    if name == "boiler-room":
+        put("disco-ball", 0, h - 0.33, g(10.0))
+        for vx, vu in ((1.6, 6.8), (-1.6, 12.6), (1.6, 18.6)):
+            put("steam-vent", vx, 0, g(vu))
+    if name in ("tender", "cab"):
+        put("shovel", w2, 0, g(1.2 if name == "tender" else 3.0), PI)
     for x0, x1, u0, u1 in c["walls"]:
         # Cages (art v2): the van's partitions and the sleeper's corridor wall (compartment fronts).
         cage = name == "guards-van" or (name == "sleeper" and (x1 - x0) < (u1 - u0))
