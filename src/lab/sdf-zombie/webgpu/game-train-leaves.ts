@@ -162,7 +162,7 @@ function steamAt(ctx: GameContext, m: THREE.Mesh, time: ReturnType<typeof unifor
     sprite.count = STEAM_PUFFS;
     sprite.frustumCulled = false;
     sprite.name = 'train.steam';
-    ctx.boot.handle.scene.add(sprite);
+    ctx.boot.handle.scene.add(sprite);   // moved to the late-effects scene by adoptLateFx
     out.push({ sprite, room: typeof m.userData.room === 'number' ? m.userData.room as number : -1, light: light as unknown as { value: THREE.Vector3 } });
   }
   return out;
@@ -201,6 +201,14 @@ export function stepTrain(ctx: GameContext, dt: number): void {
     }
     if (im) im.instanceMatrix.needsUpdate = true;
   }
+}
+
+/** Once the SDF layer exists: the steam draws after the bodies (sdf-layer lateScene), so a plume
+ *  can hang in front of a zombie instead of behind it. */
+export function adoptLateFx(ctx: GameContext): void {
+  const late = ctx.render.sdfLayer?.lateScene;
+  if (!late) return;
+  for (const s of ctx.world.train?.steam ?? []) late.add(s.sprite);
 }
 
 /** Steam catches its room's lamps (warm) and the lightning (cold). */

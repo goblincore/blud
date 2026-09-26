@@ -33,7 +33,7 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
+import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul, mix, perspectiveDepthToViewZ, smoothstep, float } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
 import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickMotionFrame, setMotionOutAll, setEdgeOutAll, marchNormalRead, marchAnchorRead, marchBurnRead, marchMotionRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
@@ -1144,6 +1144,10 @@ export type FieldStyle = 'off' | 'sdf' | 'bodies' | 'frame';
 export interface SdfLayer {
   /** Draws the polygonal scene, then the SDF layer, then composites. */
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void;
+  /** Transparent effects drawn AFTER the flesh composite, depth-tested against it (steam,
+   *  later haze), so they can hang in front of a body. No lights: it never renders a shadow map.
+   *  Takes the main scene's fog each frame. */
+  lateScene: THREE.Scene;
   /** Builds a prospective SDF object's pipeline in this layer's real float
    * render-target context, before the object enters the live scene. */
   precompile(
@@ -2100,8 +2104,18 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     heldReproject: uHeldReproject,
   }) as unknown as { xyz: unknown; w: unknown };
 
+  // THE SCENE'S FOG ON THE FLESH (owner, 2026-09-26: "distant enemies stand out ... like the distance
+  // fog doesn't affect them, like they are on a different layer"). The polygonal pass fogs the level;
+  // the bodies arrive afterwards through this quad, so they get the same range fog here, from their
+  // own depth. uFogCfg: x on, y fog near, z fog far; uCamClip: camera near, far. x = 0 is the old
+  // composite exactly.
+  const uFogColor = uniform(new THREE.Vector3());
+  const uFogCfg = uniform(new THREE.Vector4());
+  const uCamClip = uniform(new THREE.Vector2(0.1, 100));
+  const viewDist = perspectiveDepthToViewZ(sampled.w as never, uCamClip.x, uCamClip.y).negate();
+  const fogK = smoothstep(uFogCfg.y, uFogCfg.z, viewDist).mul(uFogCfg.x);
   const quadMat = new MeshBasicNodeMaterial();
-  quadMat.colorNode = vec4(sampled.xyz as never, 1.0);
+  quadMat.colorNode = vec4(mix(sampled.xyz as never, uFogColor, fogK) as never, float(1.0));
   // Writing the SDF's own depth is what lets the hardware depth test resolve
   // the flesh against the floor and the reference cube.
   quadMat.depthNode = sampled.w as never;
@@ -2123,6 +2137,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   }
 
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+  const lateScene = new THREE.Scene();
+  lateScene.name = 'sdf.late-fx';
 
   quadCam.position.z = 1;
 
@@ -2287,6 +2303,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   }
 
   return {
+    lateScene,
     async precompile(object, scene, camera) {
       const previousTarget = renderer.getRenderTarget();
       const previousMask = camera.layers.mask;
@@ -2882,11 +2899,26 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       setPassLabel('sdf:composite');
+      {
+        const fog = scene.fog as THREE.Fog | null;
+        const pc = camera as THREE.PerspectiveCamera;
+        if (fog && (fog as THREE.Fog).isFog) {
+          uFogColor.value.set(fog.color.r, fog.color.g, fog.color.b);
+          uFogCfg.value.set(1, fog.near, fog.far, 0);
+        } else uFogCfg.value.x = 0;
+        uCamClip.value.set(pc.near ?? 0.1, pc.far ?? 100);
+      }
       camera.layers.mask = restore;
       renderer.setRenderTarget(fieldStyle === 'frame' ? fieldFull : outputTarget);
       const prevAutoClear = renderer.autoClear;
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
+      // LATE EFFECTS over the flesh (see SdfLayer.lateScene).
+      if (lateScene.children.length > 0) {
+        setPassLabel('sdf:late-fx');
+        lateScene.fog = scene.fog;
+        void renderer.render(lateScene, camera);
+      }
       renderer.autoClear = prevAutoClear;
 
       if (fieldStyle === 'bodies') {
