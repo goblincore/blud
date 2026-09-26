@@ -60,7 +60,15 @@ describe('lightWeight keeps presentingLamp (game-dynamic-light-leaves.ts) rules'
     const lum = (0.8 * 0.2126 + 0.9 * 0.7152 + 0.0722) * 7;
     const facingDot = 1;
     const facing = tubeProf.backKey + (1 - tubeProf.backKey) * (facingDot * 0.5 + 0.5);
-    expect(lightWeight(list[0]!, b)).toBeCloseTo(tubeProf.floor * lum * facing / (1 + tubeProf.distFall * dist * dist), 6);
+    expect(lightWeight(list[0]!, b)).toBeCloseTo(tubeProf.coverFloor * lum * facing / (1 + tubeProf.distFall * dist * dist), 6);
+  });
+  it('the pick reads coverFloor, not the shader wrap floor (review fix, Task 4)', () => {
+    const list = buildLightList([tube(0, 0)]);
+    const b = body(4, 0, [-1, 0]);
+    const w = lightWeight(list[0]!, b);
+    const dist = Math.hypot(4, 1.3);
+    const lum = (0.8 * 0.2126 + 0.9 * 0.7152 + 0.0722) * 7;
+    expect(w / (lum / (1 + tubeProf.distFall * dist * dist))).toBeCloseTo(tubeProf.coverFloor, 6);
   });
   it('full cover inside the inner cone, a smoothstep down to zero at the edge angle (outer angle x edge)', () => {
     const list = buildLightList([tube(0, 0)]);
@@ -69,8 +77,8 @@ describe('lightWeight keeps presentingLamp (game-dynamic-light-leaves.ts) rules'
     const base = (a: number) => (1 + tubeProf.distFall * (Math.tan(a) * 2.15) ** 2);
     const inner = at(0.44) * base(0.44), edge = at(0.6 * tubeProf.edge + 0.01) * base(0.6 * tubeProf.edge + 0.01);
     const mid = at(0.6) * base(0.6);
-    expect(edge / inner).toBeCloseTo(tubeProf.floor, 5);
-    expect(mid / inner).toBeGreaterThan(tubeProf.floor);
+    expect(edge / inner).toBeCloseTo(tubeProf.coverFloor, 5);
+    expect(mid / inner).toBeGreaterThan(tubeProf.coverFloor);
     expect(mid / inner).toBeLessThan(1);
   });
   it('a light straight overhead counts as side-on for facing (presentingLamp: crown-only reads dark)', () => {

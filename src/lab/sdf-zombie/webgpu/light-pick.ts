@@ -3,7 +3,7 @@
 // presentingLamp, ported rule for rule and generalised to every kind):
 //  - spot coverage judged at the FEET (the visible pool; a chest-height cone is only ~1 m),
 //    full inside the inner cone, a smoothstep down to zero at the outer angle x profile.edge;
-//  - a small coverage floor (profile.floor) while the body is in range: never pitch black;
+//  - a small coverage floor (profile.coverFloor, CPU-only) while the body is in range: never pitch black;
 //  - distance fall 1 / (1 + distFall d²);
 //  - facing falloff: backKey + (1 - backKey) x facing (back to the light: dimmer, never black;
 //    a light straight overhead counts as side-on, a crown-only light reads dark).
@@ -55,7 +55,7 @@ export function lightWeight(l: ListLight, b: PickBody): number {
       // (edge 1.25: the light lets go a quarter past the visible cone), then the floor.
       const zero = Math.cos(Math.min(Math.PI, Math.acos(Math.max(-1, Math.min(1, l.cosOuter))) * prof.edge));
       const t = clamp01((c - zero) / Math.max(l.cosInner - zero, 1e-4));
-      cover = prof.floor + (1 - prof.floor) * t * t * (3 - 2 * t);
+      cover = prof.coverFloor + (1 - prof.coverFloor) * t * t * (3 - 2 * t);
     }
   }
   const distFall = 1 / (1 + prof.distFall * dist * dist);

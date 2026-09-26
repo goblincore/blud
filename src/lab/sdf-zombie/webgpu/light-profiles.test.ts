@@ -38,4 +38,9 @@ describe('light profiles (spec §5)', () => {
     expect(t.rimTint[0]).toBe(0.55);
     expect(Object.isFrozen(LIGHT_PROFILES)).toBe(true);
   });
+  it('coverFloor is CPU-only: equal to floor today, never packed (review fix, Task 4)', () => {
+    for (const p of LIGHT_PROFILES) expect(p.coverFloor).toBe(p.floor);
+    const moved = LIGHT_PROFILES.map(p => ({ ...p, coverFloor: 0.77 }));
+    expect([...packProfiles(moved)]).toEqual([...packProfiles()]);
+  });
 });
