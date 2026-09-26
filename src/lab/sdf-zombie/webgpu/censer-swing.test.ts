@@ -333,6 +333,10 @@ const knotAt = (s: CenserSwing): Vec3 => {
   return [REST[0] + p[0], REST[1] + p[1] + KNOT_UP * Math.cos(TILT), REST[2] + p[2] + KNOT_UP * Math.sin(TILT)];
 };
 const OPEN_WORLD = { floorY: -100, boxes: [] };
+/** The measured peaks, printed only with CENSER_POWER_LOG=1 (a tuning aid, not test output). */
+const powerLog = (msg: string) => {
+  if ((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CENSER_POWER_LOG) console.log(msg);
+};
 const TAP_PEAK_MEASURED = 13.11;
 const HEAVY_PEAK_MEASURED = 20.96;
 const FULL_HOLD = CENSER_SWING.holdSec + CENSER_SWING.chargeSec + 0.1;
@@ -371,7 +375,7 @@ const expectInFront = (at: Vec3) => {
 describe('head speed over the hit window (spec targets tap ~9, heavy ~16; measured 13/21; gates 8/14)', () => {
   it('a tap reaches >= 8 m/s, in front of the player, on the full rope', () => {
     const m = measureStroke(0.05);
-    console.log(`[censer power] tap ${fmt(m)}`);
+    powerLog(`[censer power] tap ${fmt(m)}`);
     expect(m.peak).toBeGreaterThanOrEqual(8);
     expect(m.peak).toBeGreaterThanOrEqual(0.9 * TAP_PEAK_MEASURED);
     expect(m.ext).toBeGreaterThanOrEqual(CENSER_HEAD.ropeLen - 1e-3);
@@ -386,13 +390,13 @@ describe('head speed over the hit window (spec targets tap ~9, heavy ~16; measur
   });
   it('a half charge', () => {
     const m = measureStroke(CENSER_SWING.holdSec + 0.5 * CENSER_SWING.chargeSec);
-    console.log(`[censer power] half charge ${fmt(m)}`);
+    powerLog(`[censer power] half charge ${fmt(m)}`);
     expect(m.peak).toBeGreaterThanOrEqual(8);
     expectInFront(m.at);
   });
   it('a full-charge heavy reaches >= 14 m/s, faster than a tap, in front, on the full rope', () => {
     const m = measureStroke(FULL_HOLD);
-    console.log(`[censer power] heavy ${fmt(m)}`);
+    powerLog(`[censer power] heavy ${fmt(m)}`);
     expect(m.peak).toBeGreaterThanOrEqual(14);
     expect(m.peak).toBeGreaterThanOrEqual(0.9 * HEAVY_PEAK_MEASURED);
     expect(m.peak).toBeGreaterThan(measureStroke(0.05).peak);
@@ -403,7 +407,7 @@ describe('head speed over the hit window (spec targets tap ~9, heavy ~16; measur
     // One spin period at spinHzMax is ~0.34 s; sample 0.5 s of release times.
     const peaks: number[] = [];
     for (let k = 0; k < 12; k++) peaks.push(measureStroke(FULL_HOLD + (k * 0.5) / 12).peak);
-    console.log(`[censer power] heavy by release phase: ${peaks.map((p) => p.toFixed(1)).join(' ')}`);
+    powerLog(`[censer power] heavy by release phase: ${peaks.map((p) => p.toFixed(1)).join(' ')}`);
     expect(Math.min(...peaks)).toBeGreaterThanOrEqual(14);
   });
 });
@@ -466,7 +470,7 @@ describe('a full charge forms whatever the head was doing at the press', () => {
       for (let i = 0; i < 60; i++) { step(false); if (hitWindow(s)) peak = Math.max(peak, Math.hypot(...h.vel)); }
       worst = Math.min(worst, peak);
     }
-    console.log(`[censer power] worst full charge after a previous stroke: ${worst.toFixed(1)} m/s`);
+    powerLog(`[censer power] worst full charge after a previous stroke: ${worst.toFixed(1)} m/s`);
     expect(worst).toBeGreaterThanOrEqual(14);
   });
 });

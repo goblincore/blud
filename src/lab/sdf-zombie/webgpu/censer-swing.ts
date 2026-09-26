@@ -40,6 +40,7 @@
 
 import type { Vec3 } from '../types';
 import { FREE_AIM, type AimPoint } from './free-aim';
+import type { HandHold } from './censer-head';
 
 export const CENSER_SWING = {
   /** Held longer than this, a press becomes a wind-up instead of a tap. */
@@ -167,7 +168,7 @@ export const CENSER_SWING = {
    *  shifted its phase and cost the heavy up to 2.6 m/s at some release
    *  phases; at 9 the release-phase spread is 15.8–20.9 (was 15.4–21.2) and
    *  none of 1,280 presses after a previous stroke (5 sides × 8 previous
-   *  strokes × 16 gaps × 2 holds, .lab-tmp/windup-sweep.ts) failed to form. */
+   *  strokes × 16 gaps × 2 holds, scripts/censer-windup-sweep.ts) failed to form. */
   spinFloor: [2, 9] as readonly [number, number],
   spinFloorCharge: [0.3, 0.85] as readonly [number, number],
   spinFloorGain: 8,
@@ -401,24 +402,39 @@ function reelFrac(s: CenserSwing): number {
  *  swing free. `normal` is the
  *  stroke plane's normal in handlePose's frame; the caller turns it into the
  *  world. The spin runs round it right-handed. */
-export function handHold(s: CenserSwing): { grip: number; drive: { normal: Vec3; speed: number; gain: number; maxAccel: number } | null } {
+export function handHold(
+  s: CenserSwing,
+  /** Written in place and returned (no per-frame allocation in the game). */
+  out: HandHold = { grip: 0, drive: null },
+  /** The drive record `out.drive` points at while the wrist is on (reused). */
+  driveBuf: NonNullable<HandHold['drive']> = { normal: [0, 0, 0], speed: 0, gain: 0, maxAccel: 0 },
+): HandHold {
   const S = CENSER_SWING;
+  out.drive = null;
   switch (s.phase) {
     case 'idle':
-      return { grip: S.gripRest, drive: null };
+      out.grip = S.gripRest;
+      return out;
     case 'pending':
-      return { grip: S.gripHold, drive: null };
+      out.grip = S.gripHold;
+      return out;
     case 'windup': {
-      const grip = S.gripHold * (1 - smooth(S.spinChokeSec, S.spinPayoutStart + 0.04, s.t));
+      out.grip = S.gripHold * (1 - smooth(S.spinChokeSec, S.spinPayoutStart + 0.04, s.t));
       const speed = lerp(S.spinFloor[0], S.spinFloor[1], smooth(S.spinFloorCharge[0], S.spinFloorCharge[1], s.charge))
         * smooth(S.spinPayoutStart, S.spinPayoutSec, s.t);
-      // The plane of spinDir and forward (−z); inPlane() turns from forward
-      // toward spinDir, which is right-handed about forward × spinDir.
-      const normal: Vec3 = [s.spinDir.y, -s.spinDir.x, 0];
-      return { grip, drive: speed > 0 ? { normal, speed, gain: S.spinFloorGain, maxAccel: S.spinFloorAccel } : null };
+      if (speed > 0) {
+        // The plane of spinDir and forward (−z); inPlane() turns from forward
+        // toward spinDir, which is right-handed about forward × spinDir.
+        const n = driveBuf.normal as unknown as number[];
+        n[0] = s.spinDir.y; n[1] = -s.spinDir.x; n[2] = 0;
+        driveBuf.speed = speed; driveBuf.gain = S.spinFloorGain; driveBuf.maxAccel = S.spinFloorAccel;
+        out.drive = driveBuf;
+      }
+      return out;
     }
     default:
-      return { grip: 0, drive: null };
+      out.grip = 0;
+      return out;
   }
 }
 

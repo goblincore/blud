@@ -47,6 +47,11 @@ import { projectWorldToPixel } from './shutter-reference';
  *  are invisible to the ordinary pass (the camera enables only layer 0 by
  *  default) and are drawn into the blur layer by the capture stage alone. */
 export const GIB_BLUR_LAYER = 10;
+/** The censer's torch FILL light (game-censer.ts CENSER_LOOK.flashFill) lives on
+ *  this layer, which NO camera draws, so three's default per-camera light lists
+ *  skip it and only the censer's own light list carries it. Registered here, next
+ *  to the other taken bits (1..9 sdf-layer, 10 above), so nothing claims it. */
+export const CENSER_FILL_LAYER = 30;
 /** Most pieces that may be blurred in one frame. A full-body gib is 19–20, a
  *  point-blank bundle into a crowd can be several bodies; 64 is the marched
  *  pool's own ceiling and keeps the seed/single-layer cost bounded. */

@@ -43,8 +43,12 @@ ws.onmessage = (e) => {
   if (m.method === 'Runtime.exceptionThrown') errors.push(JSON.stringify(m.params.exceptionDetails).slice(0, 300));
 };
 const send = (method, params = {}) => new Promise((res) => { const id = ++seq; pending.set(id, res); ws.send(JSON.stringify({ id, method, params })); });
-const E = async (expression) => {
-  const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+function withTimeout(p, ms, what) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`TIMEOUT(${ms}ms): ${what}`)), ms))]);
+}
+const E = async (expression, ms = 60000) => {
+  const r = await withTimeout(send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }), ms,
+    `evaluate: ${expression.slice(0, 80)}`);
   if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 400));
   return r.result?.result?.value;
 };
@@ -77,7 +81,7 @@ function decodePng(buf) {
 /** Lock the sim, re-render twice (screenshots lag hand-stepped frames by one), shoot. */
 async function frame(name) {
   await E('__sdfGame.step(2, 1 / 60)');
-  const s = await send('Page.captureScreenshot', { format: 'png' });
+  const s = await withTimeout(send('Page.captureScreenshot', { format: 'png' }), 60000, 'captureScreenshot');
   const buf = Buffer.from(s.result.data, 'base64');
   if (name) writeFileSync(`${OUT}/${name}.png`, buf);
   return decodePng(buf);

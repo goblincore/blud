@@ -35,13 +35,9 @@ import {
   censerMotionState, chainRodStates, makeMotionState, scaledPrior, scaleMotion, setMotionState, swingAngularVelocity,
 } from './censer-blur';
 import type { GibBlurSubject } from './gib-shutter-layer';
-import { GIB_BLUR_LAYER } from './gib-motion-blur';
+import { CENSER_FILL_LAYER, GIB_BLUR_LAYER } from './gib-motion-blur';
 
 const CENSER_GLB = '/assets/lab/censer.glb';
-/** A render layer no camera draws (three's layers are 0–31; 1–10 are taken —
- *  sdf-layer SDF_LAYER … gib-motion-blur GIB_BLUR_LAYER): the censer's torch FILL
- *  lives here so only the censer's own light list sees it. */
-const CENSER_FILL_LAYER = 30;
 /** The grip's rest, aim-rig (view) space: low right, the haft tipped well
  *  forward so the knot sits out in front and the reeled-in head (reelRest)
  *  dangles in the lower right of the frame. Measured headless on Night Train
@@ -186,7 +182,13 @@ export interface CenserWeapon {
   /** CAPTURE A/B ONLY: hide one part of the censer so a gate can difference it
    *  out of a frame (null shows everything). 'all' = haft, hand, head and chain;
    *  never the rig itself, so the swing, the pendulum and the blur's history
-   *  carry on untouched. Works under the render lock (applied immediately). */
+   *  carry on untouched. Works under the render lock (applied immediately).
+   *  CAVEATS: the state STICKS until debugHide(null) — updateRig and the smoke
+   *  honour it every frame, so a forgotten hide is an invisible weapon; a hidden
+   *  part offers no blur subjects (the frame's blur differs from the shown one's
+   *  only by that part); the hand arrives asynchronously (goblin-arm.glb), and a
+   *  hide set before it loads does not reach it until the next call; showing
+   *  ('all' → null) re-shows the haft even if another system hid it. */
   debugHide(part: 'all' | 'hand' | 'smoke' | null): void;
   /** The swing phase alone — cheap (the HUD reads it every frame; debug() projects). */
   phase(): string;
@@ -533,6 +535,9 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   let hitCount = 0;
   let lastHit: CenserDebug['lastHit'] = null;
   const anchorW = new THREE.Vector3();
+  /** handHold's pooled output (its drive normal is rotated to the world in place). */
+  const handBuf: HandHold = { grip: 0, drive: null };
+  const driveBuf: NonNullable<HandHold['drive']> = { normal: [0, 0, 0], speed: 0, gain: 0, maxAccel: 0 };
   const _rigQ = new THREE.Quaternion(), _n = new THREE.Vector3(), _eyeQ = new THREE.Quaternion(), _eyeP = new THREE.Vector3();
   /** This tick's rope length, for the sync pass's chain. */
   let ropeNow = ropeLength(swing, CENSER_HEAD.ropeLen);
@@ -577,7 +582,11 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     // in game: tap 8.6 m/s against the model's 13). The REST pose is framing and
     // stays squeezed with the other weapons; the swing's excursion is physics —
     // it drives a world-space pendulum — so it is un-squeezed here and no longer
-    // depends on the lens setting.
+    // depends on the lens setting. EXACT only while nothing ROTATES between the
+    // FOV rig and the censer rig: the free-aim lean (aimRig pitch/yaw/roll) and
+    // the holster tilt (rig.rotation) turn the offset before the squeeze applies,
+    // so there the divide-back is approximate (small: the lean is a few degrees,
+    // and a holstered censer is not simulated).
     const fs = ctx.weapon.fovRig?.scale;
     const kx = fs && fs.x > 1e-6 ? fs.x : 1, ky = fs && fs.y > 1e-6 ? fs.y : 1;
     handle.position.set(CENSER_REST.pos.x + hp[0] / kx, CENSER_REST.pos.y + hp[1] / ky, CENSER_REST.pos.z + hp[2]);
@@ -699,8 +708,6 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
    *  is one span), the subjects' ageSeconds: the first swung frame exposes one
    *  frame of motion, never a streak back into the rest pose. */
   let blurAge = 0;
-  /** The view-model gains (censer-blur.ts) — one object so a capture can A/B them. */
-  const blurGain = { haft: CENSER_HAFT_BLUR_GAIN, chain: CENSER_CHAIN_BLUR_GAIN };
   let lastOffered = 0;
   // POOLS (no per-frame allocation): 1 head + 1 haft + CENSER_CHAIN_SAMPLES states, and the subject records.
   const headState = makeMotionState(), haftState = makeMotionState();
@@ -818,8 +825,8 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       // moves like the haft it hangs from (at the view-model gain), the ring
       // end like the head, so the streak tapers from the hand's to the head's.
       if (links.count > 0) {
-        const knotPrior = scaledPrior(toW(prevKnotL), knotCur, blurGain.haft);
-        const ringPrior = scaledPrior(toW(prevRingL), ringCur, blurGain.chain);
+        const knotPrior = scaledPrior(toW(prevKnotL), knotCur, CENSER_HAFT_BLUR_GAIN);
+        const ringPrior = scaledPrior(toW(prevRingL), ringCur, CENSER_CHAIN_BLUR_GAIN);
         const rods = chainRodStates(knotPrior, ringPrior, knotCur, ringCur, dt, CENSER_CHAIN_SAMPLES, chainPool);
         for (let i = 0; i < rods.length; i++) offer(CENSER_BLUR_IDS.chain + i, rods[i]!, links, age);
       }
@@ -835,7 +842,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       scaleMotion(censerMotionState(
         { pos: v3(_dp), quat: q4(_dq) }, { pos: v3(_cp), quat: q4(_cq) }, dt, CENSER_HAFT_BLUR_RADIUS,
         haftSupport, haftState,
-      ), blurGain.haft);
+      ), CENSER_HAFT_BLUR_GAIN);
       collectMeshes(haft, haftMeshes);
       for (const mesh of haftMeshes) offer(CENSER_BLUR_IDS.haft, haftState, mesh, age);
     } else if (!active) {
@@ -872,7 +879,9 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
         // Not steppable (holstered, mid-switch, dead): back to idle, but keep
         // tracking the button so one held through the raise is not a fresh
         // press the instant the censer is ready (censer-swing.ts `wasDown`).
-        swing = { ...cancelCenserSwing(swing), wasDown: held };
+        // Only when there is something to cancel: this runs every frame while
+        // another weapon is out, and a fresh object per frame is garbage.
+        if (swing.phase !== 'idle' || swing.wasDown !== held) swing = { ...cancelCenserSwing(swing), wasDown: held };
       } else {
         swing = stepCenserSwing(swing, { down: held, offset: deadzoneOffset(ctx.weapon.aim) }, dt);
       }
@@ -901,12 +910,12 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       // in the rig's frame; the rig's world ROTATION takes it to the world (the
       // FOV rig's squeeze is undone for the swing — anchorWorld — so the
       // stroke plane in the world is the unsqueezed one).
-      const hh = handHold(swing);
-      let hand: HandHold = hh;
-      if (hh.drive) {
+      const hand = handHold(swing, handBuf, driveBuf);   // pooled: written in place
+      if (hand.drive) {
         rig.getWorldQuaternion(_rigQ);
-        _n.set(hh.drive.normal[0], hh.drive.normal[1], hh.drive.normal[2]).applyQuaternion(_rigQ);
-        hand = { grip: hh.grip, drive: { ...hh.drive, normal: [_n.x, _n.y, _n.z] } };
+        const nrm = hand.drive.normal as unknown as number[];
+        _n.set(nrm[0]!, nrm[1]!, nrm[2]!).applyQuaternion(_rigQ);
+        nrm[0] = _n.x; nrm[1] = _n.y; nrm[2] = _n.z;
       }
       headSim = stepCenserHead(headSim, anchor, dt, world, ledger
         ? (from, to, vel) => {
