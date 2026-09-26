@@ -1,3 +1,4 @@
+// src/lab/sdf-zombie/webgpu/censer-swing.test.ts
 import { describe, expect, it } from 'vitest';
 import {
   CENSER_SWING, cancelCenserSwing, deadzoneOffset, handlePose, hitWindow,

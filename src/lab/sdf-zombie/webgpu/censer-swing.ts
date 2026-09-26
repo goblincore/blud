@@ -1,3 +1,5 @@
+// src/lab/sdf-zombie/webgpu/censer-swing.ts
+//
 // THE CENSER'S SWING (spec docs/superpowers/specs/2026-09-26-censer-flail-design.md §3).
 // Pure: button state, dt and the weapon's place in the dead zone in; the phase,
 // the charge and the HANDLE's pose (view-space metres, relative to its rest) out.
