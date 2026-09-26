@@ -110,6 +110,19 @@ export interface RoomDef {
   zombies: number;
   /** First N spawn slots use soldiers; remaining slots use zombies. */
   soldiers?: number;
+  /** The next N slots, after the soldiers, use juggernauts (the power-armour
+   *  chaingunner). Counted inside `zombies`, like the soldiers. */
+  juggernauts?: number;
+}
+
+/** The spawn KIND of ring-level slot `index` in `room` (active-level.ts
+ *  ringLevel): soldiers first, then juggernauts, then zombies. The ?spawn=
+ *  playtest override swaps zombie slots later, in game-main. */
+export function slotCharacter(room: RoomDef, index: number): 'soldier' | 'juggernaut' | 'zombie' {
+  const soldiers = room.soldiers ?? 0;
+  if (index < soldiers) return 'soldier';
+  if (index < soldiers + (room.juggernauts ?? 0)) return 'juggernaut';
+  return 'zombie';
 }
 
 export interface TunnelDef {
@@ -218,7 +231,10 @@ export const ROOMS: RoomDef[] = [
       { pos: [ARENA_MAX_X - 1.8, 1.15, ARENA_MIN_Z + 1.8], color: [0.98, 0.46, 0.14], power: 13 },
     ],
     // A HORDE, not a fireteam: this room exists so a blast has bodies to spend.
-    zombies: 8, soldiers: 0 },
+    // ...and one JUGGERNAUT among them (2026-09-26): the biggest room suits his
+    // 5 m preferred range and 9 m reach, and dynamite, which this room is
+    // for, is the intended answer to his plates. Slot 0; seven zombies remain.
+    zombies: 8, soldiers: 0, juggernauts: 1 },
   { id: 5, name: 'room5', minX: ANNEX_MIN_X, maxX: ANNEX_MAX_X, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     accents: [

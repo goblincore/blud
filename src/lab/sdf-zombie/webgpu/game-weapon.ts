@@ -84,7 +84,7 @@ function normalize(v: Vec3): Vec3 {
  * Uniform-in-disc sampling (r = θ_max·sqrt(u)) keeps density flat, not
  * centre-crowded.
  */
-export function spreadDirections(dir: Vec3, count: number, seed: number): Vec3[] {
+export function spreadDirections(dir: Vec3, count: number, seed: number, spreadRad: number = GRAPESHOT.spreadRad): Vec3[] {
   const axis = normalize(dir);
   // Orthonormal basis around the axis.
   const helper = Math.abs(axis[1]) < 0.9 ? [0, 1, 0] as Vec3 : [1, 0, 0] as Vec3;
@@ -101,7 +101,7 @@ export function spreadDirections(dir: Vec3, count: number, seed: number): Vec3[]
   const rng = mulberry32(seed);
   const out: Vec3[] = [];
   for (let i = 0; i < count; i++) {
-    const r = GRAPESHOT.spreadRad * Math.sqrt(rng());
+    const r = spreadRad * Math.sqrt(rng());
     const theta = rng() * Math.PI * 2;
     const cr = Math.cos(r);
     const sr = Math.sin(r);
@@ -177,6 +177,36 @@ export function spawnPellets(
     radius: GRAPESHOT.radius,
     kind: 'pellet' as const,
   }));
+}
+
+/**
+ * ENEMY CHAINGUN ROUND (the juggernaut, 2026-09-25): ONE travelling round per
+ * trigger event, not the 8-pellet volley `spawnPellets(.., 1, ..)` fires for
+ * the soldier's shotgun and the cultist's tommy gun (owner: the cultist keeps
+ * its volley). The spread is a jitter on the gun's heading, so a stream
+ * reads as a hose rather than a laser; the SWEEP (the slow turn) is what
+ * decides where it lands. A pellet-kind projectile, so the tracer, trace and
+ * impact paths are the ones every enemy round already uses.
+ */
+export const CHAINGUN_ROUND = {
+  /** Cone half-angle, rad (~1.7 deg): tighter than a pellet volley. */
+  spreadRad: 0.03,
+  /** m/s, the pellet's dodgeable band: you see the stream coming. */
+  speed: GRAPESHOT.speed,
+  /** Drawn radius, m: a bullet, smaller than a 10 cm pellet ball. */
+  radius: 0.035,
+} as const;
+
+export function spawnRound(origin: Vec3, aimDir: Vec3, seed: number): Projectile {
+  const d = spreadDirections(aimDir, 1, seed, CHAINGUN_ROUND.spreadRad)[0]!;
+  return {
+    shot: { weapon: 'shotgun' as const, shotId: nextShotId++, barrels: 1, barrel: 0 },
+    pos: [...origin] as Vec3,
+    vel: [d[0] * CHAINGUN_ROUND.speed, d[1] * CHAINGUN_ROUND.speed, d[2] * CHAINGUN_ROUND.speed],
+    ageSec: 0,
+    radius: CHAINGUN_ROUND.radius,
+    kind: 'pellet',
+  };
 }
 
 /**

@@ -32,7 +32,7 @@ import { relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
 import type { SwingVariant } from './attack';
-import type { MotionProfile } from './motion-profile';
+import { isSoldierFamily, type MotionProfile } from './motion-profile';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -210,7 +210,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
     // A fist closed on its prop's grip (profile.prop.fistOnGrip) points along
     // the motion target motion.ts laid on the grip line, not the rest hang.
-    const soldierDown = input.profile?.name === 'soldier' && f.collapsed;
+    const soldierDown = isSoldierFamily(input.profile) && f.collapsed;
     const fistTip = m.motionJoints.index.handTipR;
     const fist = !soldierDown && input.profile?.prop?.fistOnGrip && f.gun && fistTip !== undefined
       ? new Set([fistTip]) : undefined;
@@ -220,7 +220,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: input.profile?.name === 'soldier' && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
         f.collapsed ? f.floorY : undefined),
     };
     // Fire kicks: point shoves THROUGH the rig, after the bend constraints

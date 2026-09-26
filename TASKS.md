@@ -4,6 +4,21 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Juggernaut (power-armour chaingunner, first soldier variant) — started 2026-09-25
+
+- [x] **Soldier family trait**: `MotionProfile.family` + `isSoldierFamily()` replace ~37 `name === 'soldier'` checks,
+  so a renamed variant keeps injury rules, kit breakoff, casings, footwork, collapse. No behaviour change.
+- [x] **Body + kit authored**: `juggernaut.blob` (soldier x 1.15, 1.3x shoulders, no hair) and `juggernaut-kit.wam`
+  (power armour, sealed helmet, lenses, backpack). `?character=juggernaut`. [Notes](docs/dev-notes/2026-09-25-juggernaut/NOTES.md)
+- [x] **Chaingun**: TS-generated `juggernaut-chaingun.glb`, `heavy` hip carry (both hands pinned), `CHAINGUN_TUNING`
+  (0.9 s spin-up, 15-24 rounds at ~10/s, sweep, no strafe or back-off), single rounds, spinning barrels, brass casings.
+- [ ] **Blocked on WAM**: run `scripts/build-wam-kit.sh juggernaut` locally, then `juggernaut-kit.test.ts` (skips until then).
+  Then GPU frames for the owner look, and a first playtest (the plan's open items).
+- [x] **Plate armour works** (`plate-armor.ts`): plates absorb rounds until shot off (helmet guards the head), hips bare,
+  blasts wound through, pellets never stagger him, slugs do; the kit sheds by the actor's plate state.
+- [x] **In the game**: one juggernaut in the arena (`RoomDef.juggernauts`); `?spawn=juggernaut` fills the zombie slots.
+  [Spec](docs/superpowers/specs/2026-09-25-juggernaut-design.md) · [Plan](docs/superpowers/plans/2026-09-25-juggernaut.md)
+- [ ] *Next variant candidate:* Grenadier (gas mask, grenades flush last-known position, dodges dynamite).
 ## Bride (sword melee enemy) — first pass 2026-09-24
 
 - [x] **Body, face, cloth, kit:** SDF flesh (wrong anatomy, stigmata), corpse-makeup face sheet, shell

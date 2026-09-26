@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/soldier-brain.test.ts
 import { describe, it, expect } from 'vitest';
 import {
-  SOLDIER_TUNING, makeSoldierBrain, staggerSoldierNow, stepSoldierBrain,
+  SOLDIER_TUNING, CHAINGUN_TUNING, GUNNER_TUNING, makeSoldierBrain, staggerSoldierNow, stepSoldierBrain,
   type SoldierBrain, type SoldierInput,
 } from './soldier-brain';
 
@@ -437,5 +437,92 @@ describe('soldier pressure bursts', () => {
       expect(shots[i]! - shots[i - 1]!).toBeGreaterThan(.2);
       expect(shots[i]! - shots[i - 1]!).toBeLessThan(.5);
     }
+  });
+});
+
+// THE CHAINGUN (the juggernaut, CHAINGUN_TUNING): plant and fire.
+describe('stepSoldierBrain — chaingun tuning', () => {
+  const T = CHAINGUN_TUNING;
+  const step = (b: SoldierBrain, over: Partial<SoldierInput>) => stepSoldierBrain(b, input(over), T);
+  const alertedC = () => step(makeSoldierBrain(), { player: { x: 0, z: T.preferredRange, room: 3 } }).brain;
+
+  it('never strafes: comfortable in range, every decision tick holds him planted', () => {
+    let b = alertedC();
+    for (let i = 0; i < 600; i++) {
+      const out = step(b, { player: { x: 0, z: T.preferredRange, room: 3 }, rollDrift: (i % 7) / 7 });
+      expect(out.target, `frame ${i}`).toBeNull();
+      b = out.brain;
+    }
+  });
+
+  it('never backs off when crowded: it holds its ground where the soldier retreats', () => {
+    const near = { player: { x: 0, z: SOLDIER_TUNING.tooClose * 0.5, room: 3 } };
+    let b = alertedC();
+    for (let i = 0; i < 300; i++) {
+      const out = step(b, near);
+      expect(out.target).toBeNull();
+      b = out.brain;
+    }
+    // Control: the soldier's tuning does give ground from the same spot.
+    let s = alerted(), moved = false;
+    for (let i = 0; i < 300 && !moved; i++) {
+      const out = stepSoldierBrain(s, input(near));
+      if (out.target && out.target[2] < 0) moved = true;
+      s = out.brain;
+    }
+    expect(moved).toBe(true);
+  });
+
+  it('closes radially when the player is beyond his range, straight at him', () => {
+    const far = { player: { x: 0, z: T.preferredRange + T.rangeSlack + 2, room: 3 } };
+    let b = alertedC(), target = null as null | readonly number[];
+    for (let i = 0; i < 120 && !target; i++) { const out = step(b, far); target = out.target; b = out.brain; }
+    expect(target).not.toBeNull();
+    expect(Math.abs(target![0]!)).toBeLessThan(1e-6);
+    expect(target![2]).toBeGreaterThan(0);
+  });
+
+  /** Spin up and hold the trigger with every roll winning; count rounds. */
+  function burst(over: Partial<SoldierInput> = {}) {
+    let b = alertedC(), shots = 0, firstAt = -1, lastAt = -1;
+    for (let i = 0; i < 60 * 6; i++) {
+      const out = step(b, { roll: 0, player: { x: 0, z: T.preferredRange, room: 3 }, ...over });
+      if (out.fire) { shots++; if (firstAt < 0) firstAt = i; lastAt = i; }
+      b = out.brain;
+      if (shots > 0 && b.state === 'settle') break;
+    }
+    return { shots, firstAt, lastAt };
+  }
+
+  it('spins up for the aim telegraph, then streams 15+ rounds at ~10 rounds/s', () => {
+    const { shots, firstAt, lastAt } = burst();
+    expect(firstAt * DT).toBeGreaterThanOrEqual(T.aimSec - DT);
+    expect(shots).toBeGreaterThanOrEqual(T.burstMin);
+    expect(shots).toBeLessThanOrEqual(T.burstMax + 1);
+    const rate = (shots - 1) / ((lastAt - firstAt) * DT);
+    expect(rate).toBeGreaterThan(8);
+    expect(rate).toBeLessThan(13);
+  });
+
+  it('sweeps: follow-up rounds keep coming while the player is outside his aim tolerance', () => {
+    // First round needs facing; then he stays facing +z while the player
+    // stands 30 degrees off it. The soldier would stop and re-aim.
+    let b = alertedC(), shots = 0;
+    for (let i = 0; i < 60 * 3; i++) {
+      const off = shots > 0 ? { x: T.preferredRange * Math.sin(0.52), z: T.preferredRange * Math.cos(0.52), room: 3 } : { x: 0, z: T.preferredRange, room: 3 };
+      const out = step(b, { roll: 0, player: off });
+      if (out.fire) shots++;
+      b = out.brain;
+    }
+    expect(shots).toBeGreaterThanOrEqual(T.burstMin);
+  });
+
+  it('leaves the soldier tuning as it was: two-shot minimum, strafing, retreating, no sweep', () => {
+    expect(SOLDIER_TUNING.burstMin).toBe(2);
+    expect(SOLDIER_TUNING.strafe).toBe(true);
+    expect(SOLDIER_TUNING.retreat).toBe(true);
+    expect(SOLDIER_TUNING.sweepFire).toBe(false);
+    expect(GUNNER_TUNING.shotgun).toBe(SOLDIER_TUNING);
+    expect(GUNNER_TUNING.chaingun).toBe(CHAINGUN_TUNING);
   });
 });

@@ -71,10 +71,10 @@ describe('flame lab page', () => {
   });
 
   it('feeds the soldier his measured kit radius for the leg-card standoff', () => {
-    // flame-polish task 3, step 3: the zombie has no kit, so only the soldier
+    // flame-polish task 3, step 3: the zombie has no kit, so only the soldier family
     // gets the radius; a live override lets a capture sweep it in one load.
     expect(src).toContain('SOLDIER_LEG_KIT_RADIUS');
-    expect(src).toContain("a.view.entry.name === 'soldier' ? SOLDIER_LEG_KIT_RADIUS : 0");
+    expect(src).toContain('isSoldierFamily(a.view.entry.profile) ? SOLDIER_LEG_KIT_RADIUS : 0');
     expect(src).toContain('kitStandoffOverride');
     expect(src).toContain('setKitStandoff(m: number | null)');
   });

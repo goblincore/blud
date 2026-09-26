@@ -21,7 +21,7 @@ export interface HeldProp {
   object: THREE.Object3D;
   /** Pose from this frame's gun pose. `sinceFire` (s) adds the muzzle rise;
    *  `bodyRight` is the axis the rise pitches about. */
-  pose(gun: GunPose, sinceFire: number, bodyRight: Vec3): void;
+  pose(gun: GunPose, sinceFire: number, bodyRight: Vec3, barrelSpin?: number): void;
   /** Let go: the prop tumbles from where it is with the hand's velocity. */
   release(handVel: Vec3, seed: number): void;
   /** Advance a released prop. No-op while held or resting. */
@@ -59,6 +59,9 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
       }
     });
   }
+  // A rotary gun's barrel cluster (make-juggernaut-chaingun.ts): a node on
+  // the bore axis, spun about its local Z by pose()'s barrelSpin.
+  const barrels = gltf.scene.getObjectByName('Barrels') ?? null;
   object.matrixAutoUpdate = false;
   const pos = new THREE.Vector3(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
   let last: GunPose = { root: [0, 0, 0], quat: [0, 0, 0, 1] };
@@ -79,8 +82,9 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
       drop = null;
       object.visible = true;
     },
-    pose(gun, sinceFire, bodyRight) {
+    pose(gun, sinceFire, bodyRight, barrelSpin = 0) {
       if (drop) return;
+      if (barrels) barrels.rotation.z = barrelSpin;
       const rise = muzzleRise(sinceFire);
       const quat: Quat = rise === 0 ? gun.quat : qMul(qFromAxisAngle(bodyRight, -rise), gun.quat);
       // Rise pivots about the grip, not the root: keep Grip_Hand where it is.

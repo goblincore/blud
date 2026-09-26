@@ -18,9 +18,20 @@ export interface SoldierInjury {
  * Pellet = 1; torso survives one scattered volley. Knee/leg failure disables
  * locomotion before the focused hits required to tear a limb away. */
 export const SOLDIER_INJURY_TUNING = { legDowned: 6, limbSever: 8, armScatteredSever: 16, armFocusedSever: 8, armCutPoints: 4, armFocusRadius: .12, torsoFatal: 24, headFatal: 12, directHeadPellets: 4 } as const;
+export type SoldierInjuryTuning = { readonly [K in keyof typeof SOLDIER_INJURY_TUNING]: number };
+
+/** The juggernaut's flesh, once a plate is off (plate-armor.ts): the
+ *  soldier's thresholds x 1.5, the focus radius x 1.15 with his size. His
+ *  armour does most of the soaking; this keeps a stripped limb from dropping
+ *  to the one volley that kills a soldier's. */
+export const JUGGERNAUT_INJURY_TUNING: SoldierInjuryTuning = {
+  legDowned: 9, limbSever: 12, armScatteredSever: 24, armFocusedSever: 12, armCutPoints: 6,
+  armFocusRadius: .14, torsoFatal: 36, headFatal: 18, directHeadPellets: 6,
+};
 
 interface ArmHit { wound: Wound; limb: 'armL' | 'armR'; point: Vec3; points: number; joint: boolean }
-const injuryPoints = (wound: Wound) => wound.type === 'pellet' ? 1
+/** Injury points one wound is worth: pellet 1, slug 3, a blast by radius. */
+export const injuryPoints = (wound: Wound) => wound.type === 'pellet' ? 1
   : wound.shot?.weapon === 'slug' ? 3 : Math.min(3, 3 * wound.radius / .13);
 function armHits(body: BuildResult, wounds: readonly Wound[]): ArmHit[] {
   const hits: ArmHit[] = [];
@@ -40,14 +51,15 @@ function armHits(body: BuildResult, wounds: readonly Wound[]): ArmHit[] {
 
 /** Geometry alone uses an enlarged sever calibre. Require multiple impacts
  * near THIS cut before allowing it to remove a Soldier arm. */
-export function soldierArmCutAllowed(body: BuildResult, wounds: readonly Wound[], limb: LimbId, at: Vec3): boolean {
+export function soldierArmCutAllowed(body: BuildResult, wounds: readonly Wound[], limb: LimbId, at: Vec3,
+  tuning: SoldierInjuryTuning = SOLDIER_INJURY_TUNING): boolean {
   return armHits(body, wounds).filter(h => h.limb === limb
-    && len(sub(h.point, at)) <= SOLDIER_INJURY_TUNING.armFocusRadius)
-    .reduce((sum, h) => sum + h.points, 0) >= SOLDIER_INJURY_TUNING.armCutPoints;
+    && len(sub(h.point, at)) <= tuning.armFocusRadius)
+    .reduce((sum, h) => sum + h.points, 0) >= tuning.armCutPoints;
 }
 
 /** Soldier injury policy. Callers keep the zombie's existing damage path. */
-export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): SoldierInjury {
+export function soldierInjury(body: BuildResult, wounds: readonly Wound[], tuning: SoldierInjuryTuning = SOLDIER_INJURY_TUNING): SoldierInjury {
   const intact = { armL: false, armR: false, legL: false, legR: false };
   const missing = { ...intact }, wounded = { ...intact };
   const sever: LimbId[] = [];
@@ -74,7 +86,7 @@ export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): Sold
       headShots.set(wound.shot.shotId, volley);
       // A direct hit requires a concentrated group from BOTH barrels, not
       // a stray head pellet in a body volley or two unrelated trigger pulls.
-      if (volley.hits >= SOLDIER_INJURY_TUNING.directHeadPellets && volley.barrels === 3) {
+      if (volley.hits >= tuning.directHeadPellets && volley.barrels === 3) {
         fatal = true;
         if (!sever.includes('head')) sever.push('head');
       }
@@ -93,13 +105,13 @@ export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): Sold
   for (const limb of Object.keys(intact) as (keyof MissingLimbs)[]) {
     if (missing[limb]) continue;
     if (limb === 'legL' || limb === 'legR') {
-      if (points[limb] >= SOLDIER_INJURY_TUNING.limbSever) sever.push(limb);
+      if (points[limb] >= tuning.limbSever) sever.push(limb);
       continue;
     }
     const hits = arms.filter(h => h.limb === limb);
     const focused = hits.some(anchor => {
-      const local = hits.filter(h => len(sub(h.point, anchor.point)) <= SOLDIER_INJURY_TUNING.armFocusRadius);
-      if (local.reduce((sum, h) => sum + h.points, 0) >= SOLDIER_INJURY_TUNING.armFocusedSever) return true;
+      const local = hits.filter(h => len(sub(h.point, anchor.point)) <= tuning.armFocusRadius);
+      if (local.reduce((sum, h) => sum + h.points, 0) >= tuning.armFocusedSever) return true;
       const volleys = new Map<number, { hits: number; barrels: number }>();
       for (const h of local) {
         const shot = h.wound.shot;
@@ -111,11 +123,11 @@ export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): Sold
       }
       return false;
     });
-    if (focused || points[limb] >= SOLDIER_INJURY_TUNING.armScatteredSever) sever.push(limb);
+    if (focused || points[limb] >= tuning.armScatteredSever) sever.push(limb);
   }
-  fatal ||= points.torso >= SOLDIER_INJURY_TUNING.torsoFatal || points.head >= SOLDIER_INJURY_TUNING.headFatal;
-  downed ||= points.legL >= SOLDIER_INJURY_TUNING.legDowned || points.legR >= SOLDIER_INJURY_TUNING.legDowned
-    || mobility.pelvis >= SOLDIER_INJURY_TUNING.legDowned;
+  fatal ||= points.torso >= tuning.torsoFatal || points.head >= tuning.headFatal;
+  downed ||= points.legL >= tuning.legDowned || points.legR >= tuning.legDowned
+    || mobility.pelvis >= tuning.legDowned;
   const severity = Math.min(1, Math.max(mobility.pelvis, mobility.L, mobility.R) / 3);
   const side = mobility.pelvis > 0 || (mobility.L > 0 && mobility.R > 0) ? 'both' as const
     : mobility.L > 0 ? 'L' as const : 'R' as const;

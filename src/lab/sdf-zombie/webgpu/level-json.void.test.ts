@@ -40,10 +40,12 @@ describe('void rooms and portals', () => {
     const j = raw(); j.portals[0].width = 0;
     expect(() => parseLevelJson(j)).toThrow(/width and height must be > 0/);
   });
-  it('spawns may be cultists; unknown kinds are refused', () => {
+  it('spawns may be cultists or juggernauts; unknown kinds are refused', () => {
     const j = raw(); j.spawns = [{ id: 'c', kind: 'cultist', pos: [0, 0, -10], yaw: 0 }];
     expect(parseLevelJson(j).spawns[0]!.kind).toBe('cultist');
+    j.spawns[0].kind = 'juggernaut';
+    expect(parseLevelJson(j).spawns[0]!.kind).toBe('juggernaut');
     j.spawns[0].kind = 'imp';
-    expect(() => parseLevelJson(j)).toThrow(/kind must be zombie, soldier or cultist/);
+    expect(() => parseLevelJson(j)).toThrow(/kind must be zombie, soldier, cultist or juggernaut/);
   });
 });

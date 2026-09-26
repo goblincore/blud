@@ -50,6 +50,7 @@ import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
   type Wound, type WoundType,
 } from '../damage';
+import { isSoldierFamily } from '../motion-profile';
 
 // ---------------------------------------------------------------------------
 // The build step
@@ -486,6 +487,11 @@ export interface CharacterView {
     dt: number,
     releaseSeed: number,
     damageBody?: BuildResult,
+    /** The held prop's barrel angle (rad), for a prop with a `Barrels` node
+     *  (the juggernaut's chaingun). Absent = 0. */
+    barrelSpin?: number,
+    /** Plate armour state (game-actor armorView): the kit sheds by it. */
+    armor?: { shed: ReadonlySet<string>; hits: readonly Vec3[] } | null,
   ): void;
   /** World muzzle of the held prop, or null when this character carries
    *  nothing or the glTF has not loaded yet. The soldier's shot reads it. */
@@ -577,7 +583,9 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const armorSparks = entry.armoured === true && opts.effectsScene ? createArmorSparks() : null;
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   if (armorSparks) opts.effectsScene!.add(armorSparks.object);
-  const casings = entry.name === 'soldier' ? createShotgunCasings() : null;
+  const chaingun = entry.profile.gunner?.weapon === 'chaingun';
+  const casings = isSoldierFamily(entry.profile)
+    ? (chaingun ? createShotgunCasings(256, 0xc8963c) : createShotgunCasings()) : null;
   const ejection = createEjectionCycle();
   const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();
   if (casings) opts.scene.add(casings.object);
@@ -621,7 +629,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
-    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody) {
+    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null) {
       if (equipmentRetired) return;
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
@@ -632,12 +640,17 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         return;
       }
       const frames = boneFrames(body, bound, bodyYaw);
-      const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt }) ?? [];
+      const armorSpec = entry.profile.armor?.spec;
+      const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt,
+        armor: armor && armorSpec ? { spec: armorSpec, shed: armor.shed, hits: armor.hits } : null }) ?? [];
+      // Sparks with no kit loaded yet (the juggernaut before his glTF is built)
+      // still show the round glancing off.
+      if (!kit && armor) for (const p of armor.hits) armorSparks?.burst(p, 5);
       for(const e of events) armorSparks?.burst(e.point,e.kind==='armor-shed'?10:5);
       armorSparks?.step(dt);
       if (heldProp) {
         if (frame?.gun && !heldProp.released) {
-          heldProp.pose(frame.gun, sinceFire, rotateYaw([1, 0, 0], bodyYaw));
+          heldProp.pose(frame.gun, sinceFire, rotateYaw([1, 0, 0], bodyYaw), barrelSpin);
         }
         if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed);
         heldProp.step(Math.min(dt, 1 / 30), 0);
