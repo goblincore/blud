@@ -111,4 +111,101 @@ describe('censer head (rope pendulum)', () => {
       expect(inside(h.pos)).toBe(false);
     }
   });
+
+  /** Same 0.22s stroke as "the handle drags the head", but timed by real elapsed
+   *  seconds rather than frame count, so it can be replayed at any dt. */
+  function strokePeak(dt: number): number {
+    const strokeDuration = 13 / 60;
+    let a: Vec3 = [-0.32, 2, 0];
+    let h = makeCenserHead(a);
+    let peak = 0;
+    let time = 0;
+    const totalDuration = 0.5;
+    const steps = Math.round(totalDuration / dt);
+    for (let i = 0; i < steps; i++) {
+      time += dt;
+      const t = Math.min(1, time / strokeDuration);
+      a = [-0.32 + 0.64 * t, 2, 0];
+      h = stepCenserHead(h, a, dt, OPEN);
+      peak = Math.max(peak, speed(h));
+    }
+    return peak;
+  }
+
+  it('the yank is frame-rate independent (time-based anchor interpolation)', () => {
+    const p60 = strokePeak(1 / 60);
+    const p165 = strokePeak(1 / 165);
+    expect(Math.abs(p165 - p60) / p60).toBeLessThan(0.03);
+  });
+
+  it('a lag-spike frame does not inject extra energy into the yank', () => {
+    const dt = 1 / 60;
+    const strokeDuration = 13 / 60;
+    const totalDuration = 0.5;
+    const steps = Math.round(totalDuration / dt);
+    const spikeAt = Math.round(steps / 2);
+    let a: Vec3 = [-0.32, 2, 0];
+    let h = makeCenserHead(a);
+    let peak = 0;
+    let time = 0;
+    for (let i = 0; i < steps; i++) {
+      const frameDt = i === spikeAt ? 0.25 : dt;
+      time += frameDt;
+      const t = Math.min(1, time / strokeDuration);
+      a = [-0.32 + 0.64 * t, 2, 0];
+      h = stepCenserHead(h, a, frameDt, OPEN);
+      peak = Math.max(peak, speed(h));
+    }
+    const p60 = strokePeak(dt);
+    expect(peak).toBeLessThanOrEqual(p60 * 1.05);
+  });
+
+  it('a teleporting handle re-hangs the head instead of flinging it', () => {
+    const a: Vec3 = [0, 2, 0];
+    let h = makeCenserHead(a);
+    h = stepCenserHead(h, a, 1 / 60, OPEN);
+    let hookCalled = false;
+    const jumped: Vec3 = [5, 2, 0];
+    h = stepCenserHead(h, jumped, 1 / 60, OPEN, () => { hookCalled = true; });
+    expect(h.pos[0]).toBeCloseTo(jumped[0], 9);
+    expect(h.pos[1]).toBeCloseTo(jumped[1] - CENSER_HEAD.ropeLen, 9);
+    expect(h.pos[2]).toBeCloseTo(jumped[2], 9);
+    expect(speed(h)).toBe(0);
+    expect(hookCalled).toBe(false);
+  });
+
+  it('clamps the hook\'s return to soaking energy only, ignoring NaN and >1', () => {
+    const a: Vec3 = [0, 2, 0];
+    let vNaN = swungOut(a), vBig = swungOut(a), vRef = swungOut(a);
+    for (let i = 0; i < 5; i++) {
+      vNaN = stepCenserHead(vNaN, a, 1 / 60, OPEN, () => NaN);
+      vBig = stepCenserHead(vBig, a, 1 / 60, OPEN, () => 1.1);
+      vRef = stepCenserHead(vRef, a, 1 / 60, OPEN);
+    }
+    expect(speed(vNaN)).toBeCloseTo(speed(vRef), 9);
+    expect(speed(vBig)).toBeCloseTo(speed(vRef), 9);
+  });
+
+  it('never gains energy from one frame to the next when the anchor is still', () => {
+    const a: Vec3 = [0, 2, 0];
+    let h = swungOut(a);
+    let prevEnergy = energy(h);
+    for (let i = 0; i < 180; i++) {
+      h = stepCenserHead(h, a, 1 / 60, OPEN);
+      const e = energy(h);
+      expect(e).toBeLessThanOrEqual(prevEnergy + 1e-9);
+      prevEnergy = e;
+    }
+  });
+
+  it('ignores a zero or NaN dt (no time, no motion)', () => {
+    const a: Vec3 = [0, 2, 0];
+    const h = swungOut(a);
+    const hZero = stepCenserHead(h, a, 0, OPEN);
+    expect(hZero.pos).toEqual(h.pos);
+    expect(hZero.vel).toEqual(h.vel);
+    const hNaN = stepCenserHead(h, a, NaN, OPEN);
+    expect(hNaN.pos).toEqual(h.pos);
+    expect(hNaN.vel).toEqual(h.vel);
+  });
 });
