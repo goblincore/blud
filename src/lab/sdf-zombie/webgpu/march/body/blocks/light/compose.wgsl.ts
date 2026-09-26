@@ -76,6 +76,15 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                // soldier wounds only; applied at the consumer so the hoisted wet statement stays pinned.
                + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, soldierWound)
                + scatter;
+  // LIGHTNING SIDE RIM (owner, 2026-09-26: "a strong rim light on one side, like a coldish powerful
+  // light from the side"). spotCfg2.w is the rim's strength, set by the game only while a window
+  // light is live (lightDir then points at the window): a hard grazing edge on the side facing the
+  // flash, in the key colour. 0 (everything else, the lab) adds nothing.
+  if (spotCfg2.w > 0.0) {
+    let sideLit = max(dot(n, normalize(lightDir)), 0.0);
+    let edge = pow(1.0 - max(dot(n, V), 0.0), 2.5);
+    fleshLit = fleshLit + keyC * (spotCfg2.w * edge * sideLit);
+  }
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
   // own shading, and real shading on top drew hard shadow lines from the

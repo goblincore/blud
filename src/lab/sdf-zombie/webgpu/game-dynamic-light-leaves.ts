@@ -284,7 +284,9 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
 
 /** How hard the window light drives an SDF body's key, per unit of window-light intensity
  *  (the key is lightCfg.x × spotCfg2.z in the dungeon; the beam's own gain is 4). */
-const BODY_WINDOW_GAIN = 0.1;
+const BODY_WINDOW_GAIN = 0.035;
+/** The lightning side rim's strength per unit of window-light intensity (compose.wgsl.ts). */
+const BODY_RIM_GAIN = 0.25;
 const bodyBase = new WeakMap<object, { dir: THREE.Vector3; color: THREE.Color }>();
 
 type KeyUniforms = { lightDir?: { value: THREE.Vector3 }; keyColor?: { value: THREE.Color }; spotCfg2: { value: THREE.Vector4 } };
@@ -302,6 +304,7 @@ export function applyWindowKey(ctx: GameContext, u: KeyUniforms): void {
     u.lightDir.value.set(s.dir[0], s.dir[1], s.dir[2]);
     u.keyColor.value.setRGB(s.color[0], s.color[1], s.color[2]);
     u.spotCfg2.value.z += k;
+    u.spotCfg2.value.w = s.intensity * BODY_RIM_GAIN;
   } else if (base) {
     u.lightDir.value.copy(base.dir);
     u.keyColor.value.copy(base.color);
