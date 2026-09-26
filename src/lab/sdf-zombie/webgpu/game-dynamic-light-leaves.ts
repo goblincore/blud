@@ -422,39 +422,49 @@ const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0, back
  *  lamp's; direction is a three-quarter key from above and from the viewer's side, blended with the
  *  real direction to the brightest lamp so bodies still differ. Flicker, blackouts and strobes ride
  *  the room level. */
-const PRESENT = { gain: 0.7, realDir: 0.15, floor: 0.3, backKey: 0.35, backRim: 2.5 } as const;
+const PRESENT = { gain: 1.3, viewBias: 0.3, floor: 0.12, edge: 1.15, distFall: 0.06, backKey: 0.35, backRim: 2.5 } as const;
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 function presentingLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
   const rt = ctx.world.light;
   if (!rt) return null;
   const room = roomIdAt(ctx, at[0], at[2]);
-  const lit = rt.roomLight.get(room) ?? 0;
-  // A room whose lamps are all dead or scripted off (a blackout) presents nothing: the drama stays.
-  if (!rt.lamps.some(l => l.room === room && l.mood !== 'fire' && l.mood !== 'dead' && !(l.script && l.level === 0))) return null;
-  const real = strongestLamp(ctx, at);
-  const cam = ctx.boot.handle.camera;
-  cam.getWorldDirection(camFwd);
-  camRight.crossVectors(camFwd, cam.up).normalize();
-  // Mostly from the viewer's side, a little above and to the right: a chest facing the player
-  // takes the light (a key from overhead left a head-on body dark — owner, 2026-09-26).
-  camFwd.y = 0; camFwd.normalize();
-  const dir = new THREE.Vector3().copy(camFwd).multiplyScalar(-0.8)
-    .add(new THREE.Vector3(0, 0.45, 0)).addScaledVector(camRight, 0.35).normalize();
-  if (real) dir.lerp(real.dir, PRESENT.realDir).normalize();
-  lampTmp.dir.copy(dir);
-  if (real) lampTmp.color.copy(real.color); else lampTmp.color.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);
-  // FALLOFF BY FACING (owner, 2026-09-26: back to the light, the front should be dimmer, never
-  // black): how much the real lamp is on the viewer's side of the body. Behind the body, the front
-  // key falls to `backKey` and the back-light rim takes over.
-  let back = 0;
-  if (real) {
-    const tvx = cam.position.x - at[0], tvz = cam.position.z - at[2];
-    const tl = Math.hypot(tvx, tvz) || 1, rl = Math.hypot(real.dir.x, real.dir.z) || 1;
-    const facing = ((real.dir.x * tvx + real.dir.z * tvz) / (tl * rl) + 1) / 2;
-    back = 1 - facing;
+  // THE CONE DECIDES (owner, 2026-09-26: "it should be within the light cone ... the falloff should
+  // happen quicker ... more directional and respect the position of the light"). The tube whose cone
+  // best covers the body's chest keys it: full inside the cone, a quick fall past its edge and with
+  // distance, down to a small floor while the lamp is lit (never pitch black).
+  const chestY = at[1] + 1.2;
+  let best: Lamp | null = null, bestK = 0;
+  for (const l of rt.lamps) {
+    if (l.room !== room || l.level <= 0 || l.mood === 'fire') continue;
+    const p = l.light.position;
+    const dx = at[0] - p.x, dy = chestY - p.y, dz = at[2] - p.z;
+    const d = Math.hypot(dx, dy, dz) || 1;
+    let cover = 1;
+    if (l.tube) {
+      const cosA = -dy / d;   // the cone points straight down
+      const inner = Math.cos(TUBE.angle * (1 - TUBE.penumbra)), outer = Math.cos(TUBE.angle * PRESENT.edge);
+      const t = Math.min(1, Math.max(0, (cosA - outer) / Math.max(1e-4, inner - outer)));
+      cover = t * t * (3 - 2 * t);
+    }
+    const k = l.level * (PRESENT.floor + (1 - PRESENT.floor) * cover) / (1 + PRESENT.distFall * d * d);
+    if (k > bestK) { bestK = k; best = l; }
   }
-  // A floor while the room has any light: a flicker's dark instant dims a body, never erases it.
-  lampTmp.k = Math.max(lit, PRESENT.floor) * PRESENT.gain * (1 - back * (1 - PRESENT.backKey));
+  if (!best) return null;
+  const cam = ctx.boot.handle.camera;
+  const bp = best.light.position;
+  const toLamp = new THREE.Vector3(bp.x - at[0], bp.y - chestY, bp.z - at[2]).normalize();
+  // Mostly the tube's real direction; a little of the viewer's side so a chest facing the player
+  // is not left black when the tube is overhead.
+  const toView = new THREE.Vector3(cam.position.x - at[0], 0, cam.position.z - at[2]).normalize();
+  const dir = toLamp.clone().lerp(toView.add(new THREE.Vector3(0, 0.5, 0)).normalize(), PRESENT.viewBias).normalize();
+  lampTmp.dir.copy(dir);
+  lampTmp.color.copy(best.light.color);
+  // FALLOFF BY FACING: a tube behind the body (away from the viewer) drops the front key and lets the
+  // back-light rim carry the edge.
+  const tl = Math.hypot(toLamp.x, toLamp.z) || 1;
+  const facing = ((toLamp.x * toView.x + toLamp.z * toView.z) / tl + 1) / 2;
+  const back = 1 - facing;
+  lampTmp.k = bestK * PRESENT.gain * (1 - back * (1 - PRESENT.backKey));
   lampTmp.back = back;
   return lampTmp;
 }
