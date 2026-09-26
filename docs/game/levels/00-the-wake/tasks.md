@@ -64,6 +64,8 @@ The level can't be tested without these. Build them small.
   fog/dark. *Deps:* W-B2, L-1, L-2.
 - [ ] **W-B4 Melee prototype.** Shovel, pickaxe and axe as quick variants on a
   zombie: swing, hit, deformation read. *Deps:* none beyond the current game.
+  **2026-09-26:** decided instead: the censer flail
+  ([spec](../../../superpowers/specs/2026-09-26-censer-flail-design.md)).
 - [ ] **W-B5 Zombie tuning** for this level's pacing (slow mourners, the parlour turn).
 - [ ] **W-B6 The bell set piece** (design §4.1). Shootable bell with toll
   events; each toll opens graves and spawns a wave; the first opens the crypt

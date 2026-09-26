@@ -4,6 +4,11 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Censer flail (player melee) — designed 2026-09-26
+
+- [ ] **Spec approved, plan next:** [censer flail design](docs/superpowers/specs/2026-09-26-censer-flail-design.md) — a burning
+  thurible on a broken candlestick; tap/charge strokes by dead-zone position; crater + gouge wounds. Resolves Wake W-B4.
+
 ## Bride (sword melee enemy) — first pass 2026-09-24
 
 - [x] **Body, face, cloth, kit:** SDF flesh (wrong anatomy, stigmata), corpse-makeup face sheet, shell
