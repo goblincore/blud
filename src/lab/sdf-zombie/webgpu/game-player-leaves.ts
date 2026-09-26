@@ -125,7 +125,7 @@ export function applyInputFrame(ctx: GameContext, f: DemoFrame): void {
   }
   if (f.fire === 1) fire(ctx, 1);
   else if (f.fire === 2) fire(ctx, 2);
-  // Slot 3's edge, consumed on the tick like every other verb.
+  // Slot 4's edge, consumed on the tick like every other verb.
   ctx.weapon.flare?.consumeEdge();
   // The KeyR edge above already covers a live press; this covers a recorded
   // frame whose reload was folded into the flag rather than the keys.

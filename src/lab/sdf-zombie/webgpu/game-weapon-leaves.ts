@@ -256,7 +256,7 @@ export function stepWeaponSlots(ctx: GameContext, dt: number): void {
   // Only the LIVE weapon's model is drawn: during the drop the bundle is
   // still holstered, and it appears the instant the frame changes hands.
   ctx.bake.bundleRig.visible = ctx.weapon.slotState.live === 'dynamite' && ctx.weapon.heldProp !== null;
-  // Slot 3: the same one-transform holster travel.
+  // Slot 4: the same one-transform holster travel.
   ctx.weapon.flare?.updateRig();
 }
 

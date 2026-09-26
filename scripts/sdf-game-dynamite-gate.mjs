@@ -1,4 +1,4 @@
-// scripts/sdf-game-dynamite-gate.mjs — SLOT 2 (dynamite) boot + throw + gib gate.
+// scripts/sdf-game-dynamite-gate.mjs — SLOT 3 (dynamite) boot + throw + gib gate.
 //
 // What this gate is FOR: the feature exists so the blast and the gib can be
 // judged in play, so the gate has to prove the two things that make judging
@@ -535,5 +535,5 @@ if (pageErrors.length > 0) {
   for (const e of pageErrors.slice(0, 6)) console.error(`  ${e}`);
   fail('the page reported errors');
 }
-console.log('PASS: slot 2 switches, throws, detonates and gibs');
+console.log('PASS: slot 3 switches, throws, detonates and gibs');
 process.exit(0);

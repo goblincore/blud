@@ -84,7 +84,7 @@ export interface WeaponState {
   viewModelAnchor: THREE.Group;
   /** The aim (yaw/pitch) pivot for the gun rig, or null before it is built. */
   aimRig: THREE.Group | null;
-  /** Slot 3 (flare test harness, game-flare.ts); null until the aim rig exists. */
+  /** Slot 4 (flare test harness, game-flare.ts); null until the aim rig exists. */
   flare: FlareHarness | null;
   /** The gun's own rig group; the codemod supplies the real group. */
   gunRig: THREE.Group;

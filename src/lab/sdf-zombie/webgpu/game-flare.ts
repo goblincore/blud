@@ -1,9 +1,9 @@
 // src/lab/sdf-zombie/webgpu/game-flare.ts
 //
-// WEAPON SLOT 3: THE FLARE TEST HARNESS (2026-09-18), lifted beside
+// WEAPON SLOT 4: THE FLARE TEST HARNESS (2026-09-18), lifted beside
 // game-main.ts. Deliberately minimal: a placeholder model in hand and an
-// ignite-on-hit verb. No projectile, no damage, no stagger. The rig is slot 3's
-// whole subtree, so the switch is one transform exactly like the other two.
+// ignite-on-hit verb. No projectile, no damage, no stagger. The rig is slot 4's
+// whole subtree, so the switch is one transform exactly like the other three.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -30,9 +30,9 @@ export interface FlareHarnessDeps {
 }
 
 export interface FlareHarness {
-  /** A mousedown while slot 3 is live. True = consumed. */
+  /** A mousedown while slot 4 is live. True = consumed. */
   onMouseDown(button: number): boolean;
-  /** The tick's edge consumer (slot 3 is not a recorded DemoFrame verb). */
+  /** The tick's edge consumer (slot 4 is not a recorded DemoFrame verb). */
   consumeEdge(): void;
   tickCooldown(dt: number): void;
   /** Holster travel, from the same slot state the other rigs read. */
@@ -124,7 +124,7 @@ export function createFlareHarness(ctx: GameContext, deps: FlareHarnessDeps): Fl
   })();
 
   /**
-   * Slot 3's only verb: run the SAME ballistic hit test the grapeshot slug
+   * Slot 4's only verb: run the SAME ballistic hit test the grapeshot slug
    * uses and, if it names an actor, set that actor alight. Deliberately NOT a
    * projectile and NOT a hit: no damage, no stagger, no wound.
    */
@@ -135,7 +135,7 @@ export function createFlareHarness(ctx: GameContext, deps: FlareHarnessDeps): Fl
     // It is still a weapon: the shot makes a noise and turns heads.
     ctx.weapon.shotAlert = true;
     // FROM THE EYE, not the grapeshot muzzle: the shotgun is holstered while
-    // slot 3 is live, so its muzzle has dropped out of frame.
+    // slot 4 is live, so its muzzle has dropped out of frame.
     const hit = deps.traceSlugHitFrom(deps.eye(), deps.aimDir());
     // The shotgun logs 'shot'; without this a flare shot left no trace in a
     // recording, and its cost read as a causeless tick stall.

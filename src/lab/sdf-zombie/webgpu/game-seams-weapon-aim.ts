@@ -91,10 +91,10 @@ export function createWeaponAimSeams(ctx: GameContext) {
       if (ctx.vfx.cook.phase === 'cooking') return { ok: false, reason: 'cooking' };
       // VALIDATED, because a bad argument here does not fail — it POISONS.
       // `WeaponSlot` is the string union 'censer' | 'shotgun' | 'dynamite' |
-      // 'flare' and the slot
-      // machine only ever compares against those, so a caller passing the
-      // NUMBER 2 (the obvious mistake for a driving script: the key is 2, the
-      // HUD says 2) gets a state whose `live`/`target` are 2 — the switch runs,
+      // 'flare' and the slot machine only ever compares against those, so a
+      // caller passing the NUMBER 2 (the obvious mistake for a driving
+      // script: the key is 2, the HUD says 2) gets a state whose
+      // `live`/`target` are 2 — the switch runs,
       // reports `phase: 'up'`, makes NOTHING live, and every later press is
       // dropped by `liveDyn` with no error anywhere. That cost a soak rig an
       // hour of "the throws never detonate". A refusal is cheap; a silently

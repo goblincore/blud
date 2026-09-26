@@ -7,7 +7,7 @@
 // What it establishes, in order:
 //   0. COLD      the page boots with NO burn state, NO cards and NO burn
 //                uniforms — the no-op contract, read from the seams.
-//   1. ONE       slot 3 + fireFlare() ignites exactly the actor the eye ray
+//   1. ONE       slot 4 + fireFlare() ignites exactly the actor the eye ray
 //                names (the fire = ignite-what-you-hit verb).
 //   2. CROWD     igniteAll() sets every live actor alight; a couple of seconds
 //                of frames later the fire is on screen.
@@ -359,9 +359,9 @@ try {
   await capture('flare-00-cold', 'boot + spawned bodies, nothing burning');
 
   // =======================================================================
-  // 1. ONE BURNING: slot 3's ignite-what-you-hit verb
+  // 1. ONE BURNING: slot 4's ignite-what-you-hit verb
   // =======================================================================
-  console.log('\n=== one burning (slot 3 verb) ===');
+  console.log('\n=== one burning (slot 4 verb) ===');
   const one = await igniteOne();
   report.checks.one = one;
   console.log('igniteOne:', JSON.stringify(one));

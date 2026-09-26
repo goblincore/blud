@@ -44,7 +44,7 @@ export function bodiesOnScreen(ctx: GameContext): number { return ctx.world.cull
  *  with the same code the placement gate uses, rather than trusting a
  *  cluster centre. No state mutated. */
 /** The ballistic slug march itself, parameterised by the firing ray. The
- *  grapeshot's wrapper below calls it from the muzzle; slot 3's flare calls
+ *  grapeshot's wrapper below calls it from the muzzle; slot 4's flare calls
  *  it from the EYE, because its own gun is holstered when it fires. No state
  *  mutated. */
 /** Slack over a cluster sphere before a slug segment is allowed to skip the

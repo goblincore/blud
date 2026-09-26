@@ -2,12 +2,12 @@
 //
 // IN-GAME BURNING (2026-09-18 flare test harness), lifted beside game-main.ts
 // rather than into its closure (the decomposition's rule for new features).
-// Slot 3 ignites an actor; this is the flame lab's per-body burn loop
+// Slot 4 ignites an actor; this is the flame lab's per-body burn loop
 // (flame-lab-main.ts) ported onto the game's actors.
 //
 // LAZY BY DESIGN: the registry allocates no BurnState until the first ignite,
 // and the flame cards are not even created until then, so a session that never
-// selects slot 3 and never calls igniteAll() pays for none of it.
+// selects slot 4 and never calls igniteAll() pays for none of it.
 import { burnBehaviourEnabled } from '../burn-behaviour';
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
@@ -61,7 +61,7 @@ export interface GameBurning {
   readonly tuning: BurnTuning;
   /** The pool, or null while nothing has ever ignited. */
   flameCards(): FlameCards | null;
-  /** Slot 3's one verb: set this actor alight. Idempotent. */
+  /** Slot 4's one verb: set this actor alight. Idempotent. */
   igniteActor(a: ZombieActor): void;
   /** A body leaving the world (gibbed/retired). */
   retire(a: ZombieActor): void;
