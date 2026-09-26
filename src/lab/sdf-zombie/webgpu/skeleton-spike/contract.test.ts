@@ -303,21 +303,20 @@ describe.each([['soldier', soldierSrc], ['zombie', zombieSrc]])('%s distal skele
     const sources = createSkeletonSources(intact, bindRig(intact), { character }).filter(s => s.segment.startsWith('limb:armR:'));
     const cache = new SegmentMeshCache(), renderer = createSegmentMeshRenderer(cache), owner = {};
     renderer.update([sources], [owner]);
-    const originalCount = renderer.object.children.length;
+    const segsDrawn = () => renderer.drawn.filter(d => !d.eye);
+    const originalCount = segsDrawn().length;
     const cut = severDistal(intact, { limb: 'armR', fromPrim: intact.prims.findIndex(p => p.bone?.toLowerCase() === 'forearm.r') });
     const rebuilt = createSkeletonSources(cut.body, bindRig(cut.body), { character }).filter(s => s.segment.startsWith('limb:armR:'));
     renderer.update([rebuilt], [owner]);
-    expect(renderer.object.children.length).toBeLessThan(originalCount);
-    expect(renderer.object.children.length).toBe(rebuilt.length);
+    expect(segsDrawn().length).toBeLessThan(originalCount);
+    expect(segsDrawn().length).toBe(rebuilt.length);
     expect(rebuilt.reduce((n, s) => n + s.primCount, 0)).toBe(cut.body.bonePrims.filter(p => p.limb === 'armR' && !p.dead && p.op !== 'organ').length);
     const posed = applyRig(cut.body, bindRig(cut.body));
     let vertices = 0;
-    for (const object of renderer.object.children) {
-      const mesh = object as THREE.Mesh;
-      mesh.updateMatrixWorld(true);
-      const pos = mesh.geometry.getAttribute('position');
+    for (const d of segsDrawn()) {
+      const pos = d.geometry.getAttribute('position');
       for (let i = 0; i < pos.count; i++) {
-        const world = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+        const world = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(d.matrix);
         expect(referenceBoneDistance(posed, world.toArray() as Vec3)).toBeLessThanOrEqual(MESH_CELL);
         vertices++;
       }

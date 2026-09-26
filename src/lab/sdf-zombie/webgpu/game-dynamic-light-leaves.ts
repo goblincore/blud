@@ -211,7 +211,7 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
   const beam = new THREE.Mesh(geo, mat);
   beam.name = `train.tube-beam:${room}`;
   beam.position.copy(pos);
-  beam.frustumCulled = false;
+  beam.frustumCulled = true;   // its bounds cover the small swing; off-screen carriages skip it
   beam.userData.skipLevelLights = true;
   ctx.boot.handle.scene.add(beam);                // moved to the late-effects scene by adoptLightFx
   return { spot, mesh, beam, beamLit: lit as unknown as { value: THREE.Vector4 }, pos, drop };
