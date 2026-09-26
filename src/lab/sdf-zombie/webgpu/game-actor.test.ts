@@ -931,3 +931,27 @@ describe('blast reaction — the body must not tear in half', () => {
     expect(worst).toBeLessThan(0.5);
   });
 });
+
+describe('blast() reaction option (the censer)', () => {
+  const chestOf = (a: ReturnType<typeof makeTestActor>): Vec3 =>
+    [...a.posed().clusters.find(c => c.limb === 'torso')!.center] as Vec3;
+  const travelAfter = (reaction: 'blast' | 'flinch' | 'none') => {
+    const hit = makeTestActor({ start: [0, 0, 0] });
+    const control = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) { hit.step(1 / 60); control.step(1 / 60); }
+    hit.blast({ wounds: [], meterCredit: 0, impulse: { at: chestOf(hit), vel: [6, 0, 0] }, reaction });
+    for (let f = 0; f < 30; f++) { hit.step(1 / 60); control.step(1 / 60); }
+    const a = hit.pose().pos, b = control.pose().pos;
+    return Math.hypot(a[0] - b[0], a[2] - b[2]);
+  };
+
+  it("'blast' still knocks the root (today's behaviour)", () => {
+    expect(travelAfter('blast')).toBeGreaterThan(0.05);
+  });
+  it("'flinch' does not knock the root", () => {
+    expect(travelAfter('flinch')).toBeLessThan(0.02);
+  });
+  it("'none' changes nothing", () => {
+    expect(travelAfter('none')).toBeLessThan(1e-6);
+  });
+});

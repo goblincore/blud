@@ -507,6 +507,8 @@ export interface ZombieActor {
    *
    * `wounds` must have been resolved against THIS actor's posed body with
    * `bodyYaw: pose().yaw`, exactly as `stampBlast` requires.
+   *
+   * `effect.reaction` narrows the reaction for melee: 'flinch' or 'none'.
    */
   blast(effect: ActorBlastEffect): void;
 }
@@ -519,6 +521,10 @@ export interface ActorBlastEffect {
   /** Concussion shove at the nearest surface point, or null. `vel` is the
    *  world-space velocity; its direction also anchors the reaction. */
   impulse: { at: Vec3; vel: Vec3 } | null;
+  /** How the body reacts (default 'blast'). The censer (game-censer.ts) sends
+   *  'flinch' for a tap — a pellet-class signal, no stagger, no knock — and
+   *  'none' for a gouge-only batch, whose crater already raised the reaction. */
+  reaction?: 'blast' | 'flinch' | 'none';
 }
 
 export function createZombieActor(opts: {
@@ -1611,23 +1617,36 @@ export function createZombieActor(opts: {
     //     `unitOrZero`, NOT the raw velocity: the signal's direction is scaled by
     //     metre amplitudes downstream, so passing 25.2 m/s here put 8.5 m of
     //     lurch into the chest and neck. See `unitOrZero`'s block.
+    //     `effect.reaction` ('flinch' | 'none', the censer) narrows or skips this step.
     const at: Vec3 = impulse ? impulse.at : bodyCentreWorld();
     const dirWorld: Vec3 = impulse ? unitOrZero(impulse.vel) : [0, 0, 0];
-    selectPendingShot({
-      type: 'blast',
-      dirWorld: [...dirWorld] as Vec3,
-      woundWorld: [...at] as Vec3,
-      torso: true,
-      ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
-      gain: SLUG_GAIN,
-    });
-    if (soldierDamage) {
-      mind.stagger(soldierStaggerDuration('medium'));
-    } else {
-      const l = Math.hypot(dirWorld[0], dirWorld[2]);
-      if (l > 1e-6) {
-        knockV = Math.max(knockV, BLAST_KNOCK_MPS);
-        knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
+    const reaction = effect.reaction ?? 'blast';
+    if (reaction === 'flinch') {
+      // A melee tap: the pellet-class flinch, no stagger, no root knock.
+      selectPendingShot({
+        type: 'pellet',
+        dirWorld: [...dirWorld] as Vec3,
+        woundWorld: [...at] as Vec3,
+        torso: true,
+        ...(soldierDamage ? { soldierLevel: 'small' as const } : {}),
+      });
+    } else if (reaction === 'blast') {
+      selectPendingShot({
+        type: 'blast',
+        dirWorld: [...dirWorld] as Vec3,
+        woundWorld: [...at] as Vec3,
+        torso: true,
+        ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
+        gain: SLUG_GAIN,
+      });
+      if (soldierDamage) {
+        mind.stagger(soldierStaggerDuration('medium'));
+      } else {
+        const l = Math.hypot(dirWorld[0], dirWorld[2]);
+        if (l > 1e-6) {
+          knockV = Math.max(knockV, BLAST_KNOCK_MPS);
+          knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
+        }
       }
     }
 
