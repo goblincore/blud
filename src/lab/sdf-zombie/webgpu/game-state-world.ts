@@ -20,6 +20,7 @@
 // type-correct placeholder in the factory; the codemod supplies the real value
 // at the binding's original line. Every call still hands out fresh containers.
 
+import type { DynamicLightRuntime } from './game-dynamic-light-leaves';
 import type { LoopRuntime } from './game-loop-leaves';
 import type { TrainRuntime } from './game-train-leaves';
 import type * as THREE from 'three/webgpu';
@@ -64,6 +65,8 @@ export interface WorldState {
   train: TrainRuntime | null;
   /** The game loop: vitals, inventory, pickups, triggers, events, completion. */
   loop: LoopRuntime | null;
+  /** Dynamic light: lamp moods and scripts, the flashlight's switch, the storm's window lights. */
+  light: DynamicLightRuntime | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -122,6 +125,7 @@ export function makeWorldState(): WorldState {
     art: null,
     train: null,
     loop: null,
+    light: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -156,6 +160,7 @@ export const WORLD_BINDINGS = {
   art: 'world.art',
   train: 'world.train',
   loop: 'world.loop',
+  light: 'world.light',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

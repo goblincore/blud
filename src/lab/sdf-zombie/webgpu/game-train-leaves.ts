@@ -13,7 +13,7 @@ import type { GameContext } from './game-context';
 import { SKY_PRESETS } from './outdoor-presets';
 import { SKY_COLOR } from './sky.wgsl';
 import { cameraSway, curtainSway, lampSwing } from './train-motion';
-import { TRAIN_WINDOW } from './train-window.wgsl';
+import { STORM_HASH, STORM_NOISE, TRAIN_STORM, TRAIN_WINDOW } from './train-window.wgsl';
 import { WINDOW_PRESETS } from './train-window';
 
 const DEG = Math.PI / 180;
@@ -37,6 +37,9 @@ export interface TrainRuntime {
   /** This frame's camera roll (radians) and bob (metres); the gate reads them. */
   roll: number;
   bob: number;
+  /** The storm outside (dynamic light spec §3): the flash (0..1) and the live bolt
+   *  (side ±1 or 0, along-track z, seed, age), written by the dynamic-light leaf. */
+  storm: { flash: { value: number }; bolt: { value: THREE.Vector4 } } | null;
 }
 
 /** Set the window glass and collect the swaying pieces; null when the art has neither. */
@@ -62,12 +65,25 @@ export function createTrain(ctx: GameContext): TrainRuntime | null {
   if (windows.length === 0 && sway.length === 0) return null;
 
   const time = uniform(0), travelled = uniform(0);
+  // The storm (owner, 2026-09-26): every train window looks out on it; ?window=night for the calm view.
+  const storm = windows.length > 0 && new URLSearchParams(location.search).get('window') !== 'night';
+  const flash = uniform(0), bolt = uniform(new THREE.Vector4());
   const preset = WINDOW_PRESETS.night, sky = SKY_PRESETS.night;
   // wgslFn's result proxies its FunctionNode, so it works as an include as is (the types
   // only accept the node).
   const skyFn = wgslFn(SKY_COLOR) as unknown as NonNullable<Parameters<typeof wgslFn>[1]>[number];
   const windowFn = wgslFn(TRAIN_WINDOW, [skyFn]);
-  const node = windowFn({
+  type Include = NonNullable<Parameters<typeof wgslFn>[1]>[number];
+  const hashFn = wgslFn(STORM_HASH) as unknown as Include;
+  const noiseFn = wgslFn(STORM_NOISE, [hashFn]) as unknown as Include;
+  const stormFn = wgslFn(TRAIN_STORM, [hashFn, noiseFn]);
+  const node = storm ? stormFn({
+    wpos: positionWorld, eye: cameraPosition, t: travelled, time,
+    cfg0: vec4(1, preset.poleDist, preset.polePitch, preset.poleHeight),
+    cfg1: vec4(preset.postDist, preset.postPitch, preset.postHeight, preset.treeDist),
+    cfg2: vec4(preset.treeHeight, preset.hillDist, preset.hillHeight, 0),
+    flash, bolt,
+  }) as unknown as ReturnType<typeof vec3> : windowFn({
     // `t` is the distance travelled (metres) with speed 1: the CPU integrates speed, so a
     // speed change never makes the scenery jump.
     wpos: positionWorld, eye: cameraPosition, t: travelled,
@@ -87,9 +103,15 @@ export function createTrain(ctx: GameContext): TrainRuntime | null {
     w.material = glass;
     // Unlit: the per-room light-list pass must not convert it back to a lit material.
     w.userData.skipLevelLights = true;
+    // Glass lets the storm in: no shadow (userData too, or the boot's shadow pass turns it back on).
+    w.userData.shadow = false;
     w.castShadow = false;
   }
-  return { speed: preset.speed, time: time as unknown as { value: number }, travelled: travelled as unknown as { value: number }, windows, sway, roll: 0, bob: 0 };
+  return {
+    speed: preset.speed, time: time as unknown as { value: number }, travelled: travelled as unknown as { value: number },
+    windows, sway, roll: 0, bob: 0,
+    storm: storm ? { flash: flash as unknown as { value: number }, bolt: bolt as unknown as { value: THREE.Vector4 } } : null,
+  };
 }
 
 const qz = new THREE.Quaternion(), qm = new THREE.Quaternion(), m4 = new THREE.Matrix4();

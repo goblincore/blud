@@ -99,6 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
+import { createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -802,8 +803,6 @@ async function main() {
       // the OTHER rooms' accents (see levelSceneLights below).
       pl.userData.accentRoom = r.id;
       ctx.world.accentGroup.add(pl);
-      ctx.lighting.flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
-
       // A visible source. Without it the light has no cause and reads as a bug.
       const bowl = new THREE.Mesh(
         new THREE.IcosahedronGeometry(0.16, 1),
@@ -815,6 +814,11 @@ async function main() {
         }));
       bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
       ctx.world.accentGroup.add(bowl);
+      // The dynamic-light leaf drives each lamp (and its bowl) by its mood and scripts.
+      ctx.lighting.flickerLights.push({
+        light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7,
+        bowl: bowl.material as THREE.MeshStandardMaterial, mood: a.mood ?? 'steady', room: r.id,
+      });
     }
   }
   scene.add(ctx.world.accentGroup);
@@ -908,6 +912,9 @@ async function main() {
     ctx.lighting.flashlight.levelShadow.visible = rig === DUNGEON_RIG;
   }
   applyRig(DUNGEON_RIG);
+  // Dynamic light (lamp moods and scripts, the flashlight's switch, the train's storm window
+  // lights): after the accents and the flashlight exist, before the per-room light lists.
+  createDynamicLight(ctx);
 
   (globalThis as Record<string, unknown>).__dungeon = {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
@@ -1559,13 +1566,9 @@ async function main() {
     // (setLightClockFrozen), ft pins to the freeze instant so two renders of
     // a locked scene have identical practical intensity; gameplay never
     // freezes it.
-    {
-      const ft = ctx.lighting.clockFrozen ? ctx.lighting.flickerClockFrozenAt : performance.now() * 0.001;
-      for (const f of ctx.lighting.flickerLights) {
-        const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
-        f.light.intensity = f.base * (1 + w * 0.14);
-      }
-    }
+    // Lamp levels now come from the dynamic-light leaf (stepDynamicLight, on the sim clock:
+    // moods, scripted blackouts, fires); the flashlight's brightness is its switch.
+    ctx.lighting.flashlight.spot.intensity = (ctx.world.light?.flashlight.base ?? ctx.lighting.flashlight.spot.intensity) * flashlightGate(ctx);
     // Bone tubes: feed this frame's posed bones (actors stepped in tick
     // ahead of this draw; chunks repacked world-space there too — posed()
     // and posedBones() are always current). Both modes: in deferred mode the
@@ -1668,7 +1671,7 @@ async function main() {
       ctx.lighting.flashlight.spot.target.getWorldPosition(sAxis).sub(ctx.lighting.flashlight.spot.position).normalize();
       // x intensity gate, y cosInner, z cosOuter, w range — the cone edge
       // comes straight off the light so the two systems cannot drift.
-      const spotOn = ctx.lighting.dungeonOn ? 1 : 0;
+      const spotOn = (ctx.lighting.dungeonOn ? 1 : 0) * flashlightGate(ctx);
       const cosInner = Math.cos(ctx.lighting.flashlight.spot.angle * (1 - ctx.lighting.flashlight.spot.penumbra));
       const cosOuter = Math.cos(ctx.lighting.flashlight.spot.angle);
       // LEVEL SHADOW twin (perf round 2 task 7): exact flashlight pose, then
@@ -6669,6 +6672,7 @@ async function main() {
     stepOutdoor(ctx, dt);
     stepVoid(ctx, dt);
     stepTrain(ctx, dt);
+    stepDynamicLight(ctx, dt);
     stepLoop(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
@@ -8157,6 +8161,7 @@ async function main() {
     createVoidSeams(ctx),
     createTrainSeams(ctx),
     createLoopSeams(ctx),
+    createDynamicLightSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
