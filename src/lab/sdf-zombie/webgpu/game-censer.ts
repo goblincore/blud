@@ -178,6 +178,60 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
     for (const o of [rig, head, chain]) ctx.boot.deferredApi.router.register(o, 'mesh', 'level-only');
   }
 
+  // ---- Incense smoke: a pooled trail of camera-facing puffs ------------------
+  // In the character-effects overlay (the scene tracers use — game-weapon-leaves.ts
+  // newTracerView) so bodies occlude it correctly. ctx.vfx.smokeBurstTex is created
+  // later in boot than the censer, so its texture is picked up lazily, once ready.
+  const PUFFS = 14;
+  const SMOKE = { everySec: 0.05, lifeSec: 1.4, riseMps: 0.12, size0: 0.06, size1: 0.22, alpha: 0.35 } as const;
+  const puffGeo = new THREE.PlaneGeometry(1, 1);
+  const puffs = Array.from({ length: PUFFS }, () => {
+    const mesh = new THREE.Mesh(puffGeo, new THREE.MeshBasicMaterial({
+      color: 0xb8b0a4, transparent: true, opacity: 0, depthWrite: false,
+    }));
+    mesh.visible = false;
+    mesh.frustumCulled = false;
+    ctx.vfx.characterEffects.scene.add(mesh);
+    return { mesh, age: Infinity, pos: new THREE.Vector3() };
+  });
+  let puffCursor = 0, puffClock = 0;
+  /** tick(dt) knows dt but not this frame's FINAL head/camera pose (it runs
+   *  before the camera settles); sync() knows the final pose but has no dt.
+   *  tick() stashes its dt here; sync() calls stepSmoke with it once the
+   *  camera is final, so `deps.camera.quaternion` below is never one frame
+   *  stale. Spawning + placement both happen in sync — only the AGING
+   *  (puffClock, p.age) truly needs to run every tick regardless of visibility,
+   *  so the trail fades out rather than freezing while the censer is hidden:
+   *  tick() zeroes headSim and bails out before spawning a new puff, but sync()
+   *  still calls stepSmoke(dt, false) every frame, which ages and fades the
+   *  puffs already in flight without spawning more. */
+  function stepSmoke(dt: number, shown: boolean): void {
+    const mat0 = puffs[0]!.mesh.material as THREE.MeshBasicMaterial;
+    if (!mat0.map && ctx.vfx.smokeBurstTex) {
+      for (const p of puffs) { const m = p.mesh.material as THREE.MeshBasicMaterial; m.map = ctx.vfx.smokeBurstTex; m.needsUpdate = true; }
+    }
+    puffClock += dt;
+    if (shown && headSim && puffClock >= SMOKE.everySec) {
+      puffClock = 0;
+      const p = puffs[puffCursor++ % PUFFS]!;
+      p.age = 0;
+      p.pos.set(headSim.pos[0], headSim.pos[1] + CENSER_HEAD.radius * 0.6, headSim.pos[2]);
+    }
+    for (const p of puffs) {
+      p.age += dt;
+      const live = p.age < SMOKE.lifeSec;
+      p.mesh.visible = live;
+      if (!live) continue;
+      const k = p.age / SMOKE.lifeSec;
+      p.mesh.position.set(p.pos.x, p.pos.y + SMOKE.riseMps * p.age, p.pos.z);
+      p.mesh.quaternion.copy(deps.camera.quaternion);
+      p.mesh.scale.setScalar(lerp(SMOKE.size0, SMOKE.size1, k));
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = SMOKE.alpha * (1 - k);
+    }
+  }
+  /** This tick's dt, stashed for sync() — see stepSmoke's note above. */
+  let smokeDt = 0;
+
   void (async () => {
     try {
       const gltf = await new GLTFLoader().loadAsync(CENSER_GLB);
@@ -396,6 +450,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       if (button === 0) held = false;
     },
     tick(dt) {
+      smokeDt = dt;
       const live = ctx.weapon.slotState.live === 'censer';
       const ready = live && slotReady(ctx.weapon.slotState) && !loopBlocksInput(ctx);
       if (!live) held = false;
@@ -438,6 +493,9 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       if (events.length > 0) applyHits(events);
     },
     sync() {
+      // Always ages/fades the puffs (so hiding the censer fades the trail
+      // rather than freezing it); only spawns and re-anchors while shown.
+      stepSmoke(smokeDt, rig.visible && !!headSim);
       if (!rig.visible || !headSim) return;
       drawHead(anchorWorld(), ropeNow);
       aimHand();
