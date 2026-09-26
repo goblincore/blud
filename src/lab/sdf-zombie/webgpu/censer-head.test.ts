@@ -244,3 +244,40 @@ describe('censer head (rope pendulum)', () => {
     }
   });
 });
+
+describe('the hand on the chain (HandHold)', () => {
+  it('grip damps the swing relative to the hand: a gripped head settles, a free one keeps swinging', () => {
+    const a: Vec3 = [0, 2, 0];
+    let free = swungOut(a), held = swungOut(a);
+    for (let i = 0; i < 30; i++) {
+      free = stepCenserHead(free, a, 1 / 60, OPEN);
+      held = stepCenserHead(held, a, 1 / 60, OPEN, undefined, CENSER_HEAD.ropeLen, { grip: 14, drive: null });
+    }
+    expect(speed(held)).toBeLessThan(0.3 * speed(free));
+  });
+  it('grip carries the head WITH a moving hand rather than stopping it', () => {
+    let h = makeCenserHead([0, 2, 0]);
+    const v = 1.5;   // m/s, the hand walking the knot along +x
+    for (let i = 1; i <= 60; i++) {
+      h = stepCenserHead(h, [v * i / 60, 2, 0], 1 / 60, OPEN, undefined, CENSER_HEAD.ropeLen, { grip: 14, drive: null });
+    }
+    expect(h.vel[0]).toBeCloseTo(v, 1);
+  });
+  it('the drive lifts a slow head up to its floor round the anchor, in its plane, and never brakes a faster one', () => {
+    const a: Vec3 = [0, 2, 0];
+    const drive = { normal: [0, 0, 1] as Vec3, speed: 6, gain: 8, maxAccel: 40 };
+    let h = makeCenserHead(a);
+    let peak = 0;
+    for (let i = 0; i < 120; i++) {
+      h = stepCenserHead(h, a, 1 / 60, OPEN, undefined, CENSER_HEAD.ropeLen, { grip: 0, drive });
+      peak = Math.max(peak, speed(h));
+      expect(Math.abs(h.pos[2])).toBeLessThan(1e-9);   // stays in the drive's plane (z = 0)
+    }
+    expect(peak).toBeGreaterThan(5.5);
+    // A head already going faster than the floor is not slowed by it.
+    const fast: CenserHead = { ...swungOut(a), pos: [a[0], a[1] - CENSER_HEAD.ropeLen, a[2]], vel: [12, 0, 0] };
+    const d1 = stepCenserHead(fast, a, 1 / 240, OPEN, undefined, CENSER_HEAD.ropeLen, { grip: 0, drive });
+    const f1 = stepCenserHead(fast, a, 1 / 240, OPEN);
+    expect(speed(d1)).toBeCloseTo(speed(f1), 9);
+  });
+});

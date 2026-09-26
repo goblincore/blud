@@ -25,10 +25,10 @@ import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
 import { BEND_R_VIEW, SHOULDER_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
-  cancelCenserSwing, deadzoneOffset, handlePose, hitWindow, makeCenserSwing, ropeLength, stepCenserSwing,
+  cancelCenserSwing, deadzoneOffset, handHold, handlePose, hitWindow, makeCenserSwing, ropeLength, stepCenserSwing,
   type CenserSwing,
 } from './censer-swing';
-import { CENSER_HEAD, makeCenserHead, stepCenserHead, type CenserHead, type HeadWorld } from './censer-head';
+import { CENSER_HEAD, makeCenserHead, stepCenserHead, type CenserHead, type HandHold, type HeadWorld } from './censer-head';
 import { makeStrokeHits, sweepHead, type ActorProbe, type HitEvent, type StrokeHits } from './censer-hit';
 import {
   CENSER_BLUR_IDS, CENSER_CHAIN_SAMPLES, CENSER_HAFT_BLUR_GAIN, CENSER_HAFT_BLUR_RADIUS, censerBlurActive,
@@ -428,6 +428,7 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
   let hitCount = 0;
   let lastHit: CenserDebug['lastHit'] = null;
   const anchorW = new THREE.Vector3();
+  const _rigQ = new THREE.Quaternion(), _n = new THREE.Vector3();
   /** This tick's rope length, for the sync pass's chain. */
   let ropeNow = ropeLength(swing, CENSER_HEAD.ropeLen);
   /** Where the chain was last drawn from (debug chainGap). */
@@ -459,7 +460,18 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
 
   function anchorWorld(): Vec3 {
     const hp = handlePose(swing);
-    handle.position.set(CENSER_REST.pos.x + hp[0], CENSER_REST.pos.y + hp[1], CENSER_REST.pos.z + hp[2]);
+    // The swing is authored in TRUE view metres (censer-swing.ts, tuned in the
+    // pure model), but the rig hangs under the view model's FOV-compensation
+    // rig, which squeezes x and y by viewmodelFovScale (≈ 0.735 at the default
+    // lens; z stays 1). Applied raw, that shrank the arc and the wind-up circle
+    // by ~26% sideways and vertically, and with them every head speed (measured
+    // in game: tap 8.6 m/s against the model's 13). The REST pose is framing and
+    // stays squeezed with the other weapons; the swing's excursion is physics —
+    // it drives a world-space pendulum — so it is un-squeezed here and no longer
+    // depends on the lens setting.
+    const fs = ctx.weapon.fovRig?.scale;
+    const kx = fs && fs.x > 1e-6 ? fs.x : 1, ky = fs && fs.y > 1e-6 ? fs.y : 1;
+    handle.position.set(CENSER_REST.pos.x + hp[0] / kx, CENSER_REST.pos.y + hp[1] / ky, CENSER_REST.pos.z + hp[2]);
     rig.updateWorldMatrix(true, true);
     haft.localToWorld(anchorW.copy(anchorLocal));
     return [anchorW.x, anchorW.y, anchorW.z];
@@ -771,13 +783,24 @@ export function createCenser(ctx: GameContext, deps: CenserDeps): CenserWeapon {
       const ps = ledger ? probes() : [];
       const events: HitEvent[] = [];
       const world: HeadWorld = { floorY: ctx.player.player.pos[1], boxes: ctx.world.colliders };
+      // The hand on the chain (grip + the wind-up's wrist). Its plane normal is
+      // in the rig's frame; the rig's world ROTATION takes it to the world (the
+      // FOV rig's squeeze is undone for the swing — anchorWorld — so the
+      // stroke plane in the world is the unsqueezed one).
+      const hh = handHold(swing);
+      let hand: HandHold = hh;
+      if (hh.drive) {
+        rig.getWorldQuaternion(_rigQ);
+        _n.set(hh.drive.normal[0], hh.drive.normal[1], hh.drive.normal[2]).applyQuaternion(_rigQ);
+        hand = { grip: hh.grip, drive: { ...hh.drive, normal: [_n.x, _n.y, _n.z] } };
+      }
       headSim = stepCenserHead(headSim, anchor, dt, world, ledger
         ? (from, to, vel) => {
           const r = sweepHead(ledger, from, to, vel, CENSER_HEAD.radius, ps);
           for (const e of r.events) events.push(e);
           return r.velScale;
         }
-        : undefined, rope);
+        : undefined, rope, hand);
       if (events.length > 0) applyHits(events);
     },
     sync() {

@@ -44,6 +44,19 @@ export const CENSER_HEAD = {
 export interface Box { min: Vec3; max: Vec3 }
 export interface HeadWorld { floorY: number; boxes: readonly Box[] }
 
+/** The hand on the chain (censer-swing.ts handHold):
+ *  - `grip`, 1/s: damps the head's velocity RELATIVE TO THE ANCHOR's, so a
+ *    gripped head is carried with the hand rather than stopped dead;
+ *  - `drive` (the wrist): while the head's speed round the anchor, in the plane
+ *    with this `normal` (world, right-handed), is under `speed`, accelerate it
+ *    along that circle by gain × the deficit, at most maxAccel m/s². It only
+ *    ever adds speed that is missing; it never brakes a faster head. */
+export interface HandHold {
+  grip: number;
+  drive: { normal: Vec3; speed: number; gain: number; maxAccel: number } | null;
+}
+export const FREE_HAND: HandHold = { grip: 0, drive: null };
+
 export interface CenserHead {
   pos: Vec3;
   vel: Vec3;
@@ -95,6 +108,9 @@ export function stepCenserHead(
    *  shorter rope than last frame is taken up by the position projection
    *  alone — it never adds velocity, so reeling in cannot fling the head. */
   ropeLen: number = CENSER_HEAD.ropeLen,
+  /** What the hand does to the chain besides moving the knot (censer-swing.ts
+   *  handHold); omitted = a free pendulum. */
+  hand: HandHold = FREE_HAND,
 ): CenserHead {
   const H = CENSER_HEAD;
 
@@ -123,6 +139,10 @@ export function stepCenserHead(
   const v: Mut3 = [s.vel[0], s.vel[1], s.vel[2]];
   const a0: Mut3 = [a0In[0], a0In[1], a0In[2]];
   const decay = Math.exp(-H.drag * h);
+  const grip = hand.grip;
+  const held = grip > 0 && Number.isFinite(grip) ? Math.exp(-grip * h) : 1;
+  const dr = hand.drive;
+  const dn = dr ? Math.hypot(dr.normal[0], dr.normal[1], dr.normal[2]) : 0;
   // Anchor velocity is constant across this frame's substeps (linear interpolation by time).
   const av: Mut3 = [
     (anchor[0] - a0[0]) / span, (anchor[1] - a0[1]) / span, (anchor[2] - a0[2]) / span,
@@ -135,6 +155,20 @@ export function stepCenserHead(
     lastA = a;
     const from: Vec3 = [p[0], p[1], p[2]];
     v[1] += H.gravity * h;
+    if (held < 1) for (let k = 0; k < 3; k++) v[k] = av[k]! + (v[k]! - av[k]!) * held;
+    if (dr && dn > 1e-9) {
+      // Tangent of the circle round the anchor in the drive's plane: n × r.
+      const n0 = dr.normal[0] / dn, n1 = dr.normal[1] / dn, n2 = dr.normal[2] / dn;
+      const r0 = p[0] - a[0], r1 = p[1] - a[1], r2 = p[2] - a[2];
+      let t0 = n1 * r2 - n2 * r1, t1 = n2 * r0 - n0 * r2, t2 = n0 * r1 - n1 * r0;
+      const tl = Math.hypot(t0, t1, t2);
+      if (tl > 1e-4) {
+        t0 /= tl; t1 /= tl; t2 /= tl;
+        const vt = (v[0] - av[0]) * t0 + (v[1] - av[1]) * t1 + (v[2] - av[2]) * t2;
+        const acc = Math.min(dr.maxAccel, dr.gain * (dr.speed - vt));
+        if (acc > 0) { v[0] += t0 * acc * h; v[1] += t1 * acc * h; v[2] += t2 * acc * h; }
+      }
+    }
     for (let k = 0; k < 3; k++) { v[k] = v[k]! * decay; p[k] = p[k]! + v[k]! * h; }
     const d: Mut3 = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
     const L = Math.hypot(d[0], d[1], d[2]);

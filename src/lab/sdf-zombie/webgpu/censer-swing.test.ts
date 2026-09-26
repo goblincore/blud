@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/censer-swing.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  CENSER_SWING, assertStrokeShape, cancelCenserSwing, deadzoneOffset, handlePose, hitWindow,
+  CENSER_SWING, assertStrokeShape, cancelCenserSwing, deadzoneOffset, handHold, handlePose, hitWindow,
   makeCenserSwing, ropeLength, stepCenserSwing, strokeDirection, type CenserSwing, type Dir2,
 } from './censer-swing';
 import { FREE_AIM } from './free-aim';
@@ -342,7 +342,7 @@ function measureStroke(holdSec: number, offset: Dir2 = { x: 0, y: 0 }): { peak: 
   let h = makeCenserHead(knotAt(s), ropeLength(s, CENSER_HEAD.ropeLen));
   const step = (down: boolean) => {
     s = stepCenserSwing(s, { down, offset }, DT);
-    h = stepCenserHead(h, knotAt(s), DT, OPEN_WORLD, undefined, ropeLength(s, CENSER_HEAD.ropeLen));
+    h = stepCenserHead(h, knotAt(s), DT, OPEN_WORLD, undefined, ropeLength(s, CENSER_HEAD.ropeLen), handHold(s));
   };
   for (let i = 0; i < 240; i++) step(false);
   for (let i = 0; i < Math.round(holdSec / DT); i++) step(true);
@@ -405,5 +405,68 @@ describe('head speed over the hit window (spec targets tap ~9, heavy ~16; measur
     for (let k = 0; k < 12; k++) peaks.push(measureStroke(FULL_HOLD + (k * 0.5) / 12).peak);
     console.log(`[censer power] heavy by release phase: ${peaks.map((p) => p.toFixed(1)).join(' ')}`);
     expect(Math.min(...peaks)).toBeGreaterThanOrEqual(14);
+  });
+});
+
+describe('handHold (the hand on the chain)', () => {
+  it('grips while pending and through the choke-up, then lets go; free in a stroke and at rest', () => {
+    let s = makeCenserSwing();
+    expect(handHold(s)).toEqual({ grip: 0, drive: null });
+    s = run(s, 0.05, true);
+    expect(s.phase).toBe('pending');
+    expect(handHold(s).grip).toBe(CENSER_SWING.gripHold);
+    s = run(s, CENSER_SWING.holdSec + 0.02, true);
+    expect(s.phase).toBe('windup');
+    expect(handHold(s).grip).toBeGreaterThan(0.9 * CENSER_SWING.gripHold);
+    s = run(s, CENSER_SWING.spinPayoutStart + 0.1, true);
+    expect(handHold(s).grip).toBe(0);
+    s = run(s, 0.02, false);
+    expect(s.phase).toBe('stroke');
+    expect(handHold(s)).toEqual({ grip: 0, drive: null });
+  });
+  it("the wrist's floor starts with the pay-out, rises with the charge, and lies in the stroke plane", () => {
+    const offset = { x: 0, y: 1 };
+    let s = run(makeCenserSwing(), CENSER_SWING.holdSec + 1 / 240, true, offset);
+    expect(s.phase).toBe('windup');
+    expect(handHold(s).drive).toBeNull();                       // t ≈ 0: still choking up
+    s = run(s, 0.5, true, offset);
+    const half = handHold(s).drive!;
+    s = run(s, CENSER_SWING.chargeSec, true, offset);
+    const full = handHold(s).drive!;
+    expect(full.speed).toBeGreaterThan(half.speed);
+    expect(full.speed).toBeCloseTo(CENSER_SWING.spinFloor[1], 5);
+    // Overhead slam: the plane is vertical (up/down + forward), its normal is ±x.
+    expect(Math.abs(full.normal[0])).toBeCloseTo(1, 5);
+    expect(full.normal[1]).toBeCloseTo(0, 5);
+    expect(full.normal[2]).toBeCloseTo(0, 5);
+  });
+});
+
+// The wind-up used to form its orbit only from a head hanging still. Pressed
+// while the reeled head was still swinging from the last stroke, the open-loop
+// windmill sometimes drove the anti-phase wobble instead and a full charge
+// swung at 3–5 m/s (3% of presses in this model, 14% overhead; 4 of 13 in game).
+describe('a full charge forms whatever the head was doing at the press', () => {
+  const ROBUST_OFFSETS: Dir2[] = [{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }, { x: 1, y: 0 }, { x: -1, y: 0 }];
+  it('after a tap or a heavy, pressed 0-0.9 s into idle, from every side: >= 14 m/s', () => {
+    let worst = Infinity;
+    for (const offset of ROBUST_OFFSETS) for (const prevHold of [0.05, 0.4, 1.3]) for (let gap = 0; gap <= 0.9; gap += 0.15) {
+      let s = makeCenserSwing();
+      let h = makeCenserHead(knotAt(s), ropeLength(s, CENSER_HEAD.ropeLen));
+      const step = (down: boolean) => {
+        s = stepCenserSwing(s, { down, offset }, 1 / 60);
+        h = stepCenserHead(h, knotAt(s), 1 / 60, OPEN_WORLD, undefined, ropeLength(s, CENSER_HEAD.ropeLen), handHold(s));
+      };
+      for (let i = 0; i < 60; i++) step(false);
+      for (let i = 0; i < Math.round(prevHold * 60); i++) step(true);
+      for (let i = 0; i < 200 && s.phase !== 'idle'; i++) step(false);
+      for (let i = 0; i < Math.round(gap * 60); i++) step(false);
+      for (let i = 0; i < Math.round(FULL_HOLD * 60); i++) step(true);
+      let peak = 0;
+      for (let i = 0; i < 60; i++) { step(false); if (hitWindow(s)) peak = Math.max(peak, Math.hypot(...h.vel)); }
+      worst = Math.min(worst, peak);
+    }
+    console.log(`[censer power] worst full charge after a previous stroke: ${worst.toFixed(1)} m/s`);
+    expect(worst).toBeGreaterThanOrEqual(14);
   });
 });

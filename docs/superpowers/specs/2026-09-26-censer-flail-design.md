@@ -87,8 +87,15 @@ Now (`CENSER_SWING` in `censer-swing.ts`):
 - **Heavy:** an 85° arc with the wind-up circle carried on under it and fading out, so a release at
   any spin phase keeps the orbit's speed; partial charges blend the tap's arc into the heavy's.
 - The handle never exceeds the 3.5 cm-per-240 Hz-step pop bound (≈ 8.4 m/s); the extra speed is
-  the chain's. Pure-model peaks: tap 13, half 16, full 21 m/s (15–21 over the release phase),
-  fastest 1.1–1.4 m in front of the eye.
+  the chain's. Pure-model peaks: tap 13, half 17, full 21 m/s (14–21 over the release phase,
+  sampled finely), fastest 1.1–1.4 m in front of the eye.
+- **Revised 2026-09-26 (Task 9, in-game).** Two fixes so the game matches the model: the swing's
+  excursion is un-squeezed from the view model's FOV-compensation rig (it had shrunk the arc ~26%:
+  tap 8.6 in game vs 13), and **the hand holds the chain**: it grips (damps the head relative to
+  the hand) from the press through the choke-up, and during the wind-up a wrist floor holds the
+  head's speed round the knot, in the stroke plane, to ≥ 2 → 9 m/s by charge. Without them a wind-up
+  pressed while the head still swung from the last stroke could miss its orbit (full charge at
+  2–5 m/s: 4 of 13 in game). In game now: tap 13–14, full charge 13–20 m/s by release phase.
 
 ### 3.3 Impact
 

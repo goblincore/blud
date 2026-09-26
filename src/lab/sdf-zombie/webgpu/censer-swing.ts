@@ -135,6 +135,35 @@ export const CENSER_SWING = {
    *  full length for the wind-up and the strokes and reels back in during the
    *  recover (ropeLength). */
   reelRest: 0.17,
+  /** GRIP (1/s, censer-head.ts `grip`): from the press until the chain starts
+   *  paying out, the hand steadies it — the head's motion relative to the hand
+   *  is damped at this rate. Without it the wind-up only formed its orbit from
+   *  a head hanging still: pressed while the reeled head was still whirling
+   *  from the last stroke (4–5 m/s on the short chain at idle entry — the reel
+   *  conserves its spin), the windmill drove it into the anti-phase wobble and
+   *  a full charge peaked at 2–5 m/s (measured in game, 4 of 13 strokes). */
+  gripHold: 14,
+  /** THE WRIST. The scripted hand circle is open-loop, and from a head that
+   *  is not hanging still (the last stroke's swing: the reel conserves its
+   *  spin, so the reeled head whirls at 4–5 m/s at idle entry) it sometimes
+   *  never lifts the head into the orbit — the windmill drives the anti-phase
+   *  wobble instead and a FULL charge swings at 2–5 m/s. Measured: 4 of 13
+   *  in-game presses; pure model 3% (the overhead windmill 14%, it fights
+   *  gravity over the top). A person feels a flagging spin and whips it on; so
+   *  once the chain is paying out, the head's speed round the knot, in the
+   *  stroke plane, is held up to a FLOOR that rises with the charge
+   *  (spinFloor: m/s at charge 0 → 1, reached over spinFloorCharge) at up to
+   *  spinFloorAccel m/s² (censer-head.ts `drive`). A floor, never a target: it
+   *  only adds speed that is missing. Kept well under the orbit a good spin
+   *  reaches (~17 m/s): a floor of 13 also sped up the orbit's slow top, which
+   *  shifted its phase and cost the heavy up to 2.6 m/s at some release
+   *  phases; at 9 the release-phase spread is 15.8–20.9 (was 15.4–21.2) and
+   *  none of 1,280 presses after a previous stroke (5 sides × 8 previous
+   *  strokes × 16 gaps × 2 holds, .lab-tmp/windup-sweep.ts) failed to form. */
+  spinFloor: [2, 9] as readonly [number, number],
+  spinFloorCharge: [0.3, 0.85] as readonly [number, number],
+  spinFloorGain: 8,
+  spinFloorAccel: 40,
 } as const;
 
 export type CenserPhase = 'idle' | 'pending' | 'windup' | 'stroke' | 'recover';
@@ -352,6 +381,33 @@ function reelFrac(s: CenserSwing): number {
       // recover). Accepted: the ledger allows one contact per body per stroke,
       // and a head being hauled in is a plausible second scrape.
       return 1 - smooth(0.5, 1, s.t / recoverSec(s.heavy));
+  }
+}
+
+/** What the hand does to the chain this frame (censer-head.ts HandHold):
+ *  GRIP, 1/s — full while the button is down before the swing (pending) and
+ *  through the wind-up's choke-up, released as the chain starts paying out;
+ *  THE WRIST — during the wind-up, once paying out, a speed floor round the
+ *  knot in the stroke plane (CENSER_SWING.spinFloor). Both off otherwise, so a
+ *  stroke, its recover and the dangle at rest swing free. `normal` is the
+ *  stroke plane's normal in handlePose's frame; the caller turns it into the
+ *  world. The spin runs round it right-handed. */
+export function handHold(s: CenserSwing): { grip: number; drive: { normal: Vec3; speed: number; gain: number; maxAccel: number } | null } {
+  const S = CENSER_SWING;
+  switch (s.phase) {
+    case 'pending':
+      return { grip: S.gripHold, drive: null };
+    case 'windup': {
+      const grip = S.gripHold * (1 - smooth(S.spinChokeSec, S.spinPayoutStart + 0.04, s.t));
+      const speed = lerp(S.spinFloor[0], S.spinFloor[1], smooth(S.spinFloorCharge[0], S.spinFloorCharge[1], s.charge))
+        * smooth(S.spinPayoutStart, S.spinPayoutSec, s.t);
+      // The plane of spinDir and forward (−z); inPlane() turns from forward
+      // toward spinDir, which is right-handed about forward × spinDir.
+      const normal: Vec3 = [s.spinDir.y, -s.spinDir.x, 0];
+      return { grip, drive: speed > 0 ? { normal, speed, gain: S.spinFloorGain, maxAccel: S.spinFloorAccel } : null };
+    }
+    default:
+      return { grip: 0, drive: null };
   }
 }
 
