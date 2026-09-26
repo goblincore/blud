@@ -112,7 +112,8 @@ and sway are unchanged.
   and remnants from a small dressing table per carriage).
 - **Review:** Blender eye-height renders of every room, then in-game screenshots, for the owner.
 - **Checks:** the level tests (the layout is unchanged), the train gate (windows, sway, the walk
-  through every room, cost within **+200 draws / +10 ms**), the other gates; textures at most 1024 px.
+  through every room, cost within **+200 draws / +10 ms**; raised by the owner to **+350 / +12 ms**
+  after the build measured +229..+332 draws, +8.7..+11.4 ms, 2026-09-26), the other gates; textures at most 1024 px.
 
 ## 7. Out of scope
 
