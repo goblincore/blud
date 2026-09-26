@@ -85,7 +85,19 @@ The GPU march delta is the reliable cost number. It barely moves with the step c
 
 The base is the commit before the spike's code commit (`HEAD~1` at the time of the run), built in a throwaway worktree.
 
-BOOT_TIME_PLACEHOLDER
+The runs are listed in the order they ran:
+
+```
+base 1  {"drawOnce":1387,"warmMs":1976}
+base 2  {"drawOnce":1419.2,"warmMs":2084}
+new  1  {"drawOnce":1511.2,"warmMs":2080}
+new  2  {"drawOnce":1550.5,"warmMs":2340}
+extra pair, run in reversed order (new first) to check for an ordering bias:
+new  3  {"drawOnce":1458.7,"warmMs":2110}
+base 3  {"drawOnce":1483.9,"warmMs":2153}
+```
+
+The task's two runs each show a gap of +9% (1403 against 1531), which is just inside the ±10% noise band. The reversed pair flips the sign (new is 25 ms faster). Over all three runs each, base averages 1430 and new 1507, a gap of +5%, which is within run-to-run noise. The extra `select` arguments do not look like they changed the inline. That verdict is soft: the ordering effect is as large as the gap.
 
 ## Tuning that shipped
 
