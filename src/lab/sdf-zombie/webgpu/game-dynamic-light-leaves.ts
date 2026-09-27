@@ -571,7 +571,7 @@ export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: n
   b.wroteGain = pc.y;
 }
 
-/** Seams: `__sdfGame.lights()`, `setFlashlight(on)`, `forceBolt(side)`, `forceSweep(side)`, `lightCommand(mode, room)`. */
+/** Seams: `__sdfGame.lights()`, `setFlashlight(on)`, `forceBolt(side)`, `forceSweep(side)`, `lightCommand(mode, room)`, `setLightTime(t)`. */
 export function createDynamicLightSeams(ctx: GameContext) {
   const insert = <T extends { t: number }>(list: T[], item: T) => {
     list.push(item);
@@ -618,6 +618,15 @@ export function createDynamicLightSeams(ctx: GameContext) {
       return rt.time;
     },
     lightCommand: (mode: LightMode, room: number) => { runLightCommand(ctx, mode, room); },
+    /** Gate-only: set the light clock (sim seconds). setLightClockFrozen stops it but leaves it
+     *  wherever boot timing put it; a cross-boot pixel gate pins it here (scripts/march-hash.mjs). */
+    setLightTime: (t: number) => {
+      const rt = ctx.world.light;
+      if (!rt) return null;
+      rt.time = t;
+      (rtTime as unknown as { value: number }).value = t;
+      return rt.time;
+    },
     /** Look tuning: hold the window light at an intensity from one side (null: back to the storm). */
     holdWindowLight: (intensity: number | null, side: 1 | -1 = 1, shadow = 1) => {
       const rt = ctx.world.light;
