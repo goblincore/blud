@@ -17,8 +17,8 @@ export function updateHud(ctx: GameContext) {
   const S = ctx.weapon.slotState;
   const slot = S.phase !== 'up'
     ? `switching ${S.target}`
-    : S.live === 'censer'
-      ? `1 CENSER ${ctx.weapon.censer?.phase() ?? ''}`.trimEnd()
+    : S.live === 'flail'
+      ? '1 FLAIL'
       : S.live === 'dynamite'
         ? `3 DYNAMITE ${ctx.vfx.cook.phase === 'cooking'
           ? `${(ctx.dynamite.charge * 100).toFixed(0)}% LIT`

@@ -521,7 +521,7 @@ export interface ActorBlastEffect {
   /** Concussion shove at the nearest surface point, or null. `vel` is the
    *  world-space velocity; its direction also anchors the reaction. */
   impulse: { at: Vec3; vel: Vec3 } | null;
-  /** How the body reacts (default 'blast'). The censer (game-censer.ts) sends
+  /** How the body reacts (default 'blast'). A melee weapon sends
    *  'flinch' for a tap — a pellet-class signal, no stagger, no knock — and
    *  'none' for a gouge-only batch, whose crater already raised the reaction. */
   reaction?: 'blast' | 'flinch' | 'none';
@@ -1597,7 +1597,7 @@ export function createZombieActor(opts: {
     damageRevision++; bakePaused = false;
     const { wounds: blastWounds, meterCredit, impulse } = effect;
     const reaction = effect.reaction ?? 'blast';
-    // Soft-target death only starts from a charged, blast-class hit: a censer
+    // Soft-target death only starts from a charged, blast-class hit: a melee
     // tap ('flinch') or a gouge-only follow-up ('none') must not insta-kill a
     // cultist. Tap-COUNTING toward a soft-target kill is a later tuning
     // question — for now taps simply cannot trigger it.
@@ -1622,7 +1622,7 @@ export function createZombieActor(opts: {
     //     `unitOrZero`, NOT the raw velocity: the signal's direction is scaled by
     //     metre amplitudes downstream, so passing 25.2 m/s here put 8.5 m of
     //     lurch into the chest and neck. See `unitOrZero`'s block.
-    //     `effect.reaction` ('flinch' | 'none', the censer) narrows or skips this step.
+    //     `effect.reaction` ('flinch' | 'none', melee) narrows or skips this step.
     const at: Vec3 = impulse ? impulse.at : bodyCentreWorld();
     const dirWorld: Vec3 = impulse ? unitOrZero(impulse.vel) : [0, 0, 0];
     if (reaction === 'flinch') {

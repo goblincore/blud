@@ -932,7 +932,7 @@ describe('blast reaction — the body must not tear in half', () => {
   });
 });
 
-describe('blast() reaction option (the censer)', () => {
+describe('blast() reaction option (melee)', () => {
   const chestOf = (a: ReturnType<typeof makeTestActor>): Vec3 =>
     [...a.posed().clusters.find(c => c.limb === 'torso')!.center] as Vec3;
   const travelAfter = (reaction: 'blast' | 'flinch' | 'none') => {

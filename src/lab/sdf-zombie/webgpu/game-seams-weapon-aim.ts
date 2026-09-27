@@ -90,7 +90,7 @@ export function createWeaponAimSeams(ctx: GameContext) {
     selectSlot: (slot: WeaponSlot) => {
       if (ctx.vfx.cook.phase === 'cooking') return { ok: false, reason: 'cooking' };
       // VALIDATED, because a bad argument here does not fail — it POISONS.
-      // `WeaponSlot` is the string union 'censer' | 'shotgun' | 'dynamite' |
+      // `WeaponSlot` is the string union 'flail' | 'shotgun' | 'dynamite' |
       // 'flare' and the slot machine only ever compares against those, so a
       // caller passing the NUMBER 2 (the obvious mistake for a driving
       // script: the key is 2, the HUD says 2) gets a state whose

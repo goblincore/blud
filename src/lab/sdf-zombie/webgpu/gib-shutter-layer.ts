@@ -62,7 +62,7 @@ import {
  * the render object's cache key: every time a mesh moved between the passes
  * three disposed its render object and rebuilt it — node build, shader
  * modules and a SYNCHRONOUS pipeline — on the engage frame AND the release
- * frame of every censer swing (~50 + 35 ms CPU, measured). A distinct pass id
+ * frame of every melee swing (~50 + 35 ms CPU, measured). A distinct pass id
  * gives the layer draw its own render objects, each with a stable key.
  */
 export const GIB_SHUTTER_PASS_ID = 'gib-shutter';
@@ -88,7 +88,7 @@ export function readGibShutterSettings(search: string): GibShutterSettings {
 
 /** A piece the layer may blur. `mesh` is the real drawn node; `baseLayer` is
  *  where it renders when it is NOT selected. A piece drawn by SEVERAL meshes
- *  (the censer's head, haft + hand) passes one subject per mesh sharing ONE
+ *  (a weapon's parts) passes one subject per mesh sharing ONE
  *  `state` object: the piece cap counts distinct states and the seed plans each
  *  state's stamps once (from the FIRST such subject), so a many-mesh piece
  *  costs one piece, not N. Subjects sharing a state MUST therefore share `id`
@@ -369,7 +369,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     if (!active) return 0;
     // A rejected subject puts its mesh back on its base layer ONLY if no
     // earlier subject of this call lifted that mesh: several subjects may
-    // share one mesh (the censer chain's rod samples on one InstancedMesh), and
+    // share one mesh (e.g. several samples of one InstancedMesh), and
     // demoting it would leave a selected piece that is not on the layer.
     const reject = (s: GibBlurSubject): void => {
       if (!liftedMeshes.has(s.mesh) && s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);

@@ -130,12 +130,12 @@ export function loopBlocksInput(ctx: GameContext): boolean {
   return !!rt && (rt.vitals.dead || rt.done);
 }
 
-/** May the player select or fire this slot? The censer is owned as the
+/** May the player select or fire this slot? The flail is owned as the
  *  'melee' inventory item (the level format's name). The flare is a dev
  *  harness: always. */
 export function ownsSlot(ctx: GameContext, slot: WeaponSlot): boolean {
   const rt = ctx.world.loop;
-  const item = slot === 'censer' ? 'melee' : slot;
+  const item = slot === 'flail' ? 'melee' : slot;
   return !rt || slot === 'flare' || rt.inventory.weapons.includes(item);
 }
 
@@ -205,8 +205,8 @@ export function stepLoop(ctx: GameContext, dt: number): void {
         ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, 'shotgun');
       }
       if (p.item === 'melee' && !hadMelee && !ownsSlot(ctx, ctx.weapon.slotState.live)) {
-        // Empty-handed: the censer comes straight up.
-        ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, 'censer');
+        // Empty-handed: the flail comes straight up.
+        ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, 'flail');
       }
     }
     updateStatus(ctx);

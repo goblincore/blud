@@ -265,7 +265,6 @@ import { createFxSeams } from './game-seams-fx';
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
-import { createCenser } from './game-censer';
 import { createMiscSeams } from './game-seams-misc';
 import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
@@ -282,7 +281,6 @@ import { registerBleed, stepGutRopes } from './game-world-leaves3';
 import { headPopDebris } from '../head-pop';
 import { demoRecordStop } from './game-demo-leaves2';
 import { createFireSeams } from './game-seams-fire';
-import { createCenserSeams } from './game-seams-censer';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
 import { createMarchDebugSeams } from './game-seams-march-debug';
@@ -3691,8 +3689,6 @@ async function main() {
       if (e.button === 0) ctx.dynamite.press = true;        // light it
       return;
     }
-    // SLOT 1: a HELD input (tap = stroke, hold = spin), read by the tick.
-    if (ctx.weapon.censer?.onMouseDown(e.button)) return;
     // SLOT 4: left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
@@ -3709,9 +3705,6 @@ async function main() {
     if (ctx.weapon.slotState.live !== 'dynamite') return;
     ctx.dynamite.release = true;
   });
-  // The censer's release: no pointer-lock check, so letting go anywhere ends the hold.
-  window.addEventListener('mouseup', (e) => ctx.weapon.censer?.onMouseUp(e.button));
-
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
   // The FOV-compensation rig sits between the camera and everything the
@@ -3742,12 +3735,6 @@ async function main() {
   // WEAPON SLOT 4 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
-  });
-  // WEAPON SLOT 1 (the censer flail, game-censer.ts): its own rig on aimRig,
-  // its head and chain in the world.
-  ctx.weapon.censer = createCenser(ctx, {
-    camera,
-    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
@@ -4105,8 +4092,6 @@ async function main() {
     ctx.weapon.aimRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights(ctx);
-    // …and so was the censer's own list (game-censer.ts OWN LIGHT LIST).
-    ctx.weapon.censer?.refreshLights();
     ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');
@@ -5243,9 +5228,9 @@ async function main() {
   const MAX_BUNDLES = 4;
 
   // Start on the shotgun when it is owned; a melee-only loadout (Night Train,
-  // the Wake) starts with the censer in hand instead of empty hands.
+  // the Wake) starts with the flail in hand instead of empty hands.
   ctx.weapon.slotState = makeWeaponSlotState(
-    !ownsSlot(ctx, 'shotgun') && ownsSlot(ctx, 'censer') ? 'censer' : 'shotgun');
+    !ownsSlot(ctx, 'shotgun') && ownsSlot(ctx, 'flail') ? 'flail' : 'shotgun');
   ctx.vfx.cook = { phase: 'idle', phaseAt: 0, cookStart: 0 };
   /** The cook clock in SIM seconds, advanced by tick(dt) — not a wall clock,
    *  so a frozen/render-locked capture cannot advance the fuse behind its own
@@ -6677,12 +6662,6 @@ async function main() {
 
   function tick(dt: number) {
     if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
-    // CENSER HIT-STOP: a landed strike nearly freezes the sim for 30–70 ms
-    // (game-censer.ts). Its timer counts down on the UNSCALED step.
-    // The blur's motion is camera-relative (screen-true), so it wants the
-    // UNSCALED step: a turn during a hit-stop is not 12x faster on screen.
-    const censerBlurDt = dt;
-    dt *= ctx.weapon.censer?.hitStopScale(dt) ?? 1;
     // The sim clock advances ONLY here, from the step's own dt — never from
     // wall time. This is the single source of "how much simulated time has
     // passed", so every dwell/timer that reads it is reproducible under a
@@ -7096,9 +7075,6 @@ async function main() {
     // not care where the rig is — but the burst sprites the dynamite spawns are
     // world-space and want the frame's final camera).
     stepWeaponSlots(ctx, dt);
-    // The censer, after the rig AND the holster are placed: its anchor is the
-    // knot on the haft, in world space, this frame.
-    ctx.weapon.censer?.tick(dt);
     stepDynamite(dt);
     if (ctx.player.reticleEl) {
       ctx.player.reticleEl.style.display = ctx.player.freeAimOn ? 'block' : 'none';
@@ -7643,9 +7619,6 @@ async function main() {
     applyTrainCamera(ctx, camera);
     applyDeathCamera(ctx, camera);
     camera.updateMatrixWorld();
-    // The censer's DRAW pass: the knot re-read off the camera just finalised
-    // (its tick ran ~500 lines up, before the camera moved this frame).
-    ctx.weapon.censer?.sync();
 
     // Optional impact crown: rebuild from the current event times after the
     // camera is final (its sync takes the camera for parity; geometry is
@@ -7690,19 +7663,8 @@ async function main() {
     // layer BEFORE the base scene renders (the draw callback follows this tick),
     // so the capture's clean background has no selected gib in it. When the
     // switch is off the list is empty and every mesh is put back where it was.
-    //
-    // THE CENSER rides the same layer (censer Task 8b). Its subjects come from
-    // the pose sync() drew ~50 lines up, so ORDER is: camera final → censer
-    // sync → select → (render callback) base render. blurSubjects runs every
-    // frame even with the switch off, so its previous-pose history never goes
-    // stale. Censer pieces go FIRST (the layer keeps the first
-    // GIB_BLUR_MAX_PIECES). The censer offers nothing until its own layer
-    // pipelines are warm, which itself waits for the gib program (the layer's
-    // capture — the only thing that draws a selected mesh — is skipped until
-    // then, and a censer lifted with no capture would vanish).
-    const censerBlur = ctx.weapon.censer?.blurSubjects(censerBlurDt) ?? [];
     if (ctx.gibs.shutter) {
-      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? [...censerBlur, ...gibBlurSubjects(ctx)] : []);
+      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? gibBlurSubjects(ctx) : []);
       if (!ctx.gibs.shutter.enabled) ctx.gibs.blurPrevKeys = new Set();
     }
     ctx.telemetry.telemetry.end('goo-sync', gooTiming);
@@ -8184,7 +8146,6 @@ async function main() {
     createRenderQualitySeams(ctx),
     createWeaponAimSeams(ctx),
     createFireSeams(ctx),
-    createCenserSeams(ctx),
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
     createMarchDebugSeams(ctx),

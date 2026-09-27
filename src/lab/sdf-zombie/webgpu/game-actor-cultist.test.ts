@@ -187,7 +187,7 @@ describe('cultist: soft target, two hits', () => {
     expect(moved.reduce((a, b) => a + b, 0) / moved.length).toBeGreaterThan(0.2);
   });
 
-  it("a censer 'flinch' does not insta-kill a soft target, but a charged 'blast' does", () => {
+  it("a melee 'flinch' does not insta-kill a soft target, but a 'blast' does", () => {
     const tapped = cultist();
     const chest = tapped.actor.posed().prims.find(p => p.limb === 'torso' && p.core)!;
     tapped.actor.blast({
