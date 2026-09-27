@@ -50,13 +50,31 @@ skeleton
   bone spine1 parent=pelvis dir=up pitch=2 len=0.154112
   bone chest  parent=spine1 dir=up pitch=2 len=0.154112
   bone spine2 parent=chest  dir=up pitch=1 len=0.061952
-  bone neck   parent=spine2 dir=up pitch=0 len=0.136064
-  # LONG ON PURPOSE (minotaur.blob, "bonewalker's pattern"): the face block
-  # rides skull at=0.45, so the length places the cranium, not a joint.
-  bone skull  parent=neck   dir=up pitch=0 len=1.0752
+  # WARBULL: THE NECK IS LONG AND THE SKULL SHORT, the minotaur's the other
+  # way round. The minotaur ends its neck at 1.775 (x 1.28), deep in the trap
+  # shelf, and carries its cranium on a 1.08 m skull bone (its "bonewalker's
+  # pattern": the face rides skull at=0.45). But the HEAD PIVOTS AT THE
+  # NECK TAIL: motion.ts aims the head bone at the gaze point through
+  # IK_TUNING's cone, a ~28 degree nod on every character, and at the
+  # minotaur's pivot, 0.48 m under the cranium, that nod swung his head
+  # 24 cm standing and ~0.5 m walking (the soldier's: 6 cm). Measured with
+  # the real motion pipeline (docs/dev-notes/2026-09-27-warbull/NOTES.md,
+  # Task 5). So the pivot moves up to 2.05, the skull's base behind the
+  # jaw: the neck runs 0.411, and the skull is 0.4644, which keeps the
+  # cranium centre at 2.05 + 0.45 x 0.4644 = 2.259, exactly where it was.
+  # Every prim on the neck and skull is re-fractioned to the same world
+  # place (the old fraction x old len / new len). The clavicles move to
+  # spine2 (below).
+  bone neck   parent=spine2 dir=up pitch=0 len=0.411
+  bone skull  parent=neck   dir=up pitch=0 len=0.4644
 
   mirror
-    bone clavicle parent=neck    side=0.11136 dir=side tilt=32 len=0.384512
+    # WARBULL: hung from spine2 (the soldier's topology), not the neck: the
+    # neck now runs up to the head pivot, and a clavicle on its tail would
+    # carry the shoulders up 27 cm. Tilt and length re-solved so the TAIL,
+    # where the deltoid ball and the whole arm hang, lands exactly on the
+    # minotaur's x 1.28: (0.4374, 1.9788) from (0.1114, 1.6390).
+    bone clavicle parent=spine2  side=0.11136 dir=side tilt=46.1820 len=0.470969
     # Arms rest down-and-out: a heavy powerlifter spread.
     bone upperarm parent=clavicle dir=down tilt=40 pitch=8  len=0.391552
     bone forearm  parent=upperarm dir=down tilt=18 pitch=20 len=0.448128
@@ -82,22 +100,22 @@ body
   # (wider rendered as a mushroom).
   bar  torso on chest   from=0.30 to=2.50 r=0.192 wide=1.700 deep=1.430 blend=0.01664 offset=(0,0.0064,0.0128)
   # Trap shelf either side of the neck.
-  blob torso on neck    at=0.90 r=0.2432 wide=1.90 tall=1.50 deep=1.30 blend=0.01408 both offset=(0.2074,0.0512,-0.0128)
+  blob torso on neck    at=0.2980 r=0.2432 wide=1.90 tall=1.50 deep=1.30 blend=0.01408 both offset=(0.2074,0.0512,-0.0128)
   # WARBULL: THE HUMP. A bull's muscle mound behind the neck, on the
   # centreline, BETWEEN and behind the trap pair. Sized to rise above the
   # trap shelf's back surface so it reads in profile, and set behind the neck
   # so it never swells the throat (the minotaur's worst relief-map cell was
   # a throat filled by the traps). It is the base the kit's spine rack is
   # bolted to, so it must be flesh: the rack's flange bites into it.
-  blob torso on neck    at=0.55 r=0.2000 wide=1.35 tall=1.10 deep=1.20 blend=0.02000 offset=(0,0.030,-0.1700)
+  blob torso on neck    at=0.1821 r=0.2000 wide=1.35 tall=1.10 deep=1.20 blend=0.02000 offset=(0,0.030,-0.1700)
 
   # MUSCLE RELIEF (the minotaur's round 6): pec pair, lower-pec shelf,
   # sternum, upper-ab mass, linea alba, ab cross-lines, obliques. Engine
   # limited today (the AO term cannot see relief this shallow, TASKS X4);
   # kept because the masses improved the form and the grooves are free.
-  blob torso on neck   at=0.72 offset=(0.1254,0,0.1638) r=0.13824 wide=1.30 tall=1.15 deep=0.62 blend=0.00768 both
-  groove torso on neck at=0.30 offset=(0.1152,0,0.192) r=0.1472 wide=1.39 tall=0.05 depth=0.0192 width=0.00045 both
-  groove torso on neck at=0.60 offset=(0,0,0.2176) r=0.128 wide=0.05 tall=1.50 depth=0.02816 width=0.00038
+  blob torso on neck   at=0.2384 offset=(0.1254,0,0.1638) r=0.13824 wide=1.30 tall=1.15 deep=0.62 blend=0.00768 both
+  groove torso on neck at=0.0993 offset=(0.1152,0,0.192) r=0.1472 wide=1.39 tall=0.05 depth=0.0192 width=0.00045 both
+  groove torso on neck at=0.1986 offset=(0,0,0.2176) r=0.128 wide=0.05 tall=1.50 depth=0.02816 width=0.00038
   bar  torso on chest  from=0.85 to=1.75 r=0.192 wide=1.79 deep=1.66 blend=0.0128 offset=(0,0,0.0256)
   groove torso on spine1 at=1.10 offset=(0,0,0.2432) r=0.1152 wide=0.05 tall=1.60 depth=0.01536 width=0.00032
   groove torso on spine1 at=1.35 offset=(0,0,0.2368) r=0.1664 wide=1.25 tall=0.05 depth=0.01664 width=0.00038
@@ -105,24 +123,24 @@ body
   blob torso on spine1 at=0.10 offset=(0.2061,0,0.0896) r=0.12928 wide=0.95 tall=1.39 deep=1.10 blend=0.01024 both
 
   # Neck: a short bar swallowed by the traps, fusing head -> torso.
-  bar  head on neck from=-0.30 to=1.20 r=0.0768 deep=1.20 blend=0.00768
+  bar  head on neck from=-0.0993 to=0.3973 r=0.0768 deep=1.20 blend=0.00768
 
   # ============================================================
   # HORNS. Root bosses at the temple/crown corner, both sides: the left one
   # grows the flesh horn, the right one is the socket the kit's steel horn
   # is collared into.
   # ============================================================
-  blob head on skull at=0.58 offset=(0.1254,0,0.0256) r=0.0704 wide=1.0 tall=0.85 deep=1.0 blend=0.0064 both color=6e4426
+  blob head on skull at=0.7507 offset=(0.1254,0,0.0256) r=0.0704 wide=1.0 tall=0.85 deep=1.0 blend=0.0064 both color=6e4426
   # WARBULL: the wrapped sweep on the LEFT only (+x; a head prim without
   # `both` is placed exactly where its offset says). Leaves the skull
   # sideways and hooks up at the tip (the bend pulls the curve out and down
   # of the chord); tip at ~2.60 m.
-  bar  head on skull from=0.575 to=0.70 offset=(0.1254,0,0.0256) tip=(0.2074,0.0589,-0.0064) bend=(0.0614,-0.0538,0) r=0.064 r2=0.01664 blend=0.00512 chamfer color=221a1a gloss=0.45
+  bar  head on skull from=0.7391 to=1.0285 offset=(0.1254,0,0.0256) tip=(0.2074,0.0589,-0.0064) bend=(0.0614,-0.0538,0) r=0.064 r2=0.01664 blend=0.00512 chamfer color=221a1a gloss=0.45
 
   # WARBULL: the glowing eye bead on the LEFT only. The right eye socket is
   # the kit's optic housing. Placement: the minotaur's decal-solve eye row,
   # sunk to ~60% depth (minotaur.blob, EYES).
-  blob head on skull at=0.41 offset=(0.0448,0,0.2342) r=0.01536 blend=0.00512 color=ff2200 glow=0.9
+  blob head on skull at=0.3571 offset=(0.0448,0,0.2342) r=0.01536 blend=0.00512 color=ff2200 glow=0.9
 
   # ============================================================
   # ARMS — huge. Deltoid ball is the arm's core (the fuse probe must not

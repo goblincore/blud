@@ -84,11 +84,14 @@ skeleton
   bone spine1 parent=hips   dir=up pitch=2 len=0.063368
   bone chest  parent=spine1 dir=up pitch=2 len=0.063368
   bone spine2 parent=chest  dir=up pitch=1 len=0.025474
-  bone neck   parent=spine2 dir=up pitch=0 len=0.055947
-  bone skull  parent=neck   dir=up pitch=0 len=0.442105
+  # warbull.blob's long neck / short skull (the head pivots at the neck tail,
+  # 2.05 m, behind the jaw; the .blob's skeleton comment has the why).
+  bone neck   parent=spine2 dir=up pitch=0 len=0.168997
+  bone skull  parent=neck   dir=up pitch=0 len=0.190954
   mirror
-    # dir=side: tilt verbatim (toward +y in both languages; bride-kit.wam).
-    bone clavicle parent=neck side=0.045789 dir=side tilt=32 len=0.158105
+    # On spine2, like the .blob. dir=side: tilt verbatim (toward +y in both
+    # languages; bride-kit.wam).
+    bone clavicle parent=spine2 side=0.045789 dir=side tilt=46.1820 len=0.193655
     # DOWN BONES WITH BOTH PITCH AND TILT ARE RE-SOLVED, not sign-flipped.
     # The .blob applies pitch THEN tilt (blob-compile.ts dirVector); WAM
     # applies tilt THEN pitch (skeleton.py resolve_dir: rotY.rotX.rotZ). At
@@ -265,7 +268,7 @@ parts
   # tip (0.333, 2.587, 0.031), out first, then hooking up): segment bends
   # accumulate, so the tip lands within a few cm of the flesh one mirrored.
   # Two brass bands read as a machined, segmented part.
-  sweep steelhorn bone=skull at=0.575 offset=(-0.0516,0.0000,0.0105) dir=in material=chrome
+  sweep steelhorn bone=skull at=0.7391 offset=(-0.0516,0.0000,0.0105) dir=in material=chrome
     seg len=0.0329 r=0.0247 up=0
     seg len=0.0288 r=0.0206 up=12 material=brass
     seg len=0.0288 r=0.0164 up=28
@@ -274,25 +277,25 @@ parts
   # HORN COLLAR: a brass ring clamping the steel horn where it leaves the
   # root boss: x -0.155..-0.185, where the boss (r 0.070, surface x
   # -0.196) narrows to the horn's r ~0.058, so the ring bites both.
-  loft horncollar bone=skull at=0.575 offset=(-0.0637,0.0000,0.0105) dir=in len=0.0123 material=brass
+  loft horncollar bone=skull at=0.7391 offset=(-0.0637,0.0000,0.0105) dir=in len=0.0123 material=brass
     ring 0.00 w=0.0543 d=0.0543
     ring 1.00 w=0.0526 d=0.0526
     cap start=none end=none
 
   # OPTIC: the right eye is a camera. A chrome barrel sunk into the socket,
   # a red lens proud of it, and an LED on its rim.
-  loft optic bone=skull at=0.41 offset=(-0.0185,0.0000,0.0781) dir=fwd len=0.0308 material=chrome sides=10
+  loft optic bone=skull at=0.3571 offset=(-0.0185,0.0000,0.0781) dir=fwd len=0.0308 material=chrome sides=10
     ring 0.00 w=0.0350
     ring 1.00 w=0.0329
     cap start=none end=none
-  attach opticlens bone=skull kind=sphere at=0.41 offset=(-0.0185,0.0000,0.1077) size=0.0255 w=0.0255 h=0.0255 d=0.0115 material=lens
-  attach opticled bone=skull kind=sphere at=0.41 offset=(-0.0350,0.0123,0.1007) size=0.0074 material=led
+  attach opticlens bone=skull kind=sphere at=0.3571 offset=(-0.0185,0.0000,0.1077) size=0.0255 w=0.0255 h=0.0255 d=0.0115 material=lens
+  attach opticled bone=skull kind=sphere at=0.3571 offset=(-0.0350,0.0123,0.1007) size=0.0074 material=led
 
   # CHEEK PLATE: an iron plate bolted along the right cheek from beside the
   # optic back toward the jaw hinge, half sunk (y 2.18-2.25, where the
   # head's right side is at x -0.154..-0.158; any lower and it runs into
   # the trap shelf, which reaches y 2.18 at x -0.2).
-  attach cheekplate bone=skull kind=box at=0.0 offset=(-0.0617,0.1953,0.0485) size=0.0288 w=0.0144 h=0.0288 d=0.0658 material=iron
+  attach cheekplate bone=skull kind=box at=0.0 offset=(-0.0617,0.0822,0.0485) size=0.0288 w=0.0144 h=0.0288 d=0.0658 material=iron
 
 textures
   texture chrome base=#aab0b8

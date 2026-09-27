@@ -77,11 +77,26 @@ describe('warbull.blob', () => {
     expect([...bull.bones.keys()].sort()).toEqual([...soldier.bones.keys()].sort());
   });
 
-  it('is the minotaur scaled 1.28: every bone head moves by exactly S', () => {
+  // The two exceptions are the head pivot (warbull.blob's skeleton comment):
+  // the skull starts at 2.05, not the minotaur's 1.775 x S, and the clavicles
+  // hang from spine2, so their HEADS move while their tails, where the arms
+  // attach, stay exactly on the minotaur's.
+  it('is the minotaur scaled 1.28: every bone joint moves by exactly S, bar the head pivot', () => {
     expect(doc.height! / minoDoc.height!).toBeCloseTo(S, 3);
-    for (const [name, bone] of mino.bones)
-      for (let k = 0; k < 3; k++)
-        expect(bull.bones.get(name)!.head[k], `${name}[${k}]`).toBeCloseTo(bone.head[k]! * S, 3);
+    for (const [name, bone] of mino.bones) {
+      const moved = name === 'skull' || name.startsWith('clavicle');
+      for (let k = 0; k < 3; k++) {
+        if (!moved) expect(bull.bones.get(name)!.head[k], `${name}[${k}]`).toBeCloseTo(bone.head[k]! * S, 3);
+        if (name !== 'skull' && name !== 'neck') expect(bull.bones.get(name)!.tail[k], `${name} tail[${k}]`).toBeCloseTo(bone.tail[k]! * S, 3);
+      }
+    }
+    expect(bull.bones.get('skull')!.head[1]).toBeCloseTo(2.05, 2);
+  });
+
+  // The cranium stays where the minotaur's face block puts it, x S.
+  it('keeps the cranium where the minotaur has it, scaled', () => {
+    const cran = (b: Built) => { const h = limb(b, 'head'); return b.prims.slice(h.start, h.start + h.count).reduce((a, p) => (p.radius > a.radius ? p : a)); };
+    for (let k = 0; k < 3; k++) expect(cran(bull).a[k]).toBeCloseTo(cran(mino).a[k]! * S, 3);
   });
 
   // The horn is his highest point, and it must clear no ceiling: rooms are

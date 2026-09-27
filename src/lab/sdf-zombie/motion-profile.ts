@@ -8,8 +8,8 @@ import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type Gai
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
-import { JUGGERNAUT_ARMOR, type ArmorSpec } from './plate-armor';
-import { JUGGERNAUT_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
+import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
+import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
@@ -73,7 +73,10 @@ export interface MotionProfile {
    *  injury thresholds for the flesh once a plate is off (soldier-damage.ts).
    *  Also makes him stagger-resistant: pellets never stagger him. Absent =
    *  the soldier's visual-only plates and thresholds. The juggernaut's. */
-  armor?: { spec: ArmorSpec; injury: SoldierInjuryTuning };
+  armor?: { spec: ArmorSpec; injury: SoldierInjuryTuning;
+    /** The plate whose shedding DISARMS him: the held prop drops and the
+     *  ranged mode ends (the warbull's launcher). Absent = never. */
+    disarmPlate?: string };
   /** The FULL flail's shape and timing (soldier-stagger fullOpen). Absent =
    *  the soldier's, exactly (SOLDIER_FLAIL). Angles in radians, body-local. */
   flail?: FlailTuning;
@@ -271,6 +274,9 @@ export const WARBULL_PROFILE: MotionProfile = {
   // built round it) seats at the fist, not at the wrist.
   prop: { url: '/assets/lab/warbull-launcher.glb', scale: 1.6, gripReach: 0.09 },
   gunner: { weapon: 'rocket' },
+  // Plates on the machinery only (plate-armor.ts WARBULL_ARMOR); shooting
+  // the launcher off disarms him (spec, "Disarm").
+  armor: { spec: WARBULL_ARMOR, injury: WARBULL_INJURY_TUNING, disarmPlate: 'launcher' },
 };
 
 /** The bride: a slow STALK in a high sword guard; the point trails on the

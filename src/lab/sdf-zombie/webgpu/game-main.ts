@@ -6973,6 +6973,14 @@ async function main() {
         for (const a of ctx.world.actors) {
           if (!a.character) continue;
           const p = a.pose();
+          // THE DISARM (the warbull's launcher plate shot off, profile
+          // armor.disarmPlate): the launcher tears off his arm and falls,
+          // flung out to his right. With the prop released, onFire refuses to
+          // shoot, so the ranged mode is over for good.
+          if (a.disarmed() && a.character.prop && !a.character.prop.released) {
+            a.character.releaseProp(rotateYaw([-1.4, 1.6, 0.5], p.yaw), a.id);
+            ctx.telemetry.telemetry.event('disarm', { actor: a.id });
+          }
           a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights());
         }
       }

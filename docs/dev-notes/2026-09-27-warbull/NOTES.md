@@ -239,3 +239,100 @@ of the kit.
     detonateAt wounds every body in range, firer included).
 
   All three are for the owner's playtest.
+
+# Task 5 — plates on the machinery, and the disarm, 2026-09-27
+
+## Plates that cover only the metal
+
+The Juggernaut's plates cover whole bone groups, because his suit covers
+everything. The Warbull's metal is embedded in flesh that shares its bones:
+the neck bone carries his pecs *and* the spine rack behind them. So
+`PlateSpec` gained two optional fields (`plate-armor.ts`):
+
+- **`region`**: a rest-body sphere the hit must also land in.
+- **`kitBones`**: which bones' kit islands shed with the plate, when that is
+  narrower than `bones`.
+
+`WARBULL_ARMOR`:
+
+| Plate | Covers | HP |
+| --- | --- | --- |
+| `launcher` | the whole right forearm and fist (bone-only) | 14 |
+| `headgear` | steel horn, optic and cheek plate (region on the right side of the head) | 6 |
+| `reactor` | the housing below the pecs (region) | 12 |
+| `rack` | the spine plates down the hump (region) | 12 |
+
+Everything else is flesh on the first round. `WARBULL_INJURY_TUNING` is the
+soldier's thresholds ×2.
+
+**Hit points are carried back to the rest body** by `restHitPoint`:
+
+- de-yaw about his root, then re-seat the hit on the rest prim along its
+  segment;
+- for a rigid head prim, undo its orient quaternion exactly.
+
+The world point de-yawed about the root was not enough: the stomp's hunch and
+the head's nod carry the chest and head centimetres off their rest places.
+Blasts are judged by bone and crack every plate on a wounded bone.
+
+## The disarm
+
+- **When the launcher plate sheds,** `GameActor.disarmed()` goes true.
+  game-main then releases the held prop, which is flung off to his right, and
+  logs a `disarm` telemetry event.
+- **With the prop released, `onFire` refuses to shoot,** so the ranged mode
+  is over.
+- **The status lights' core turns red** (`enraged`).
+- **The kit's sleeve and elbow collar shed with it:** `kitShedFor` on
+  `forearm.r`.
+- **Until Task 6** his mind still raises the arm to "aim" at nothing. Task 6's
+  warbull mind takes over when he is disarmed.
+
+`webgpu/game-actor-warbull.test.ts` (5 tests):
+
+- the reactor absorbs until it breaks;
+- a pec beside it wounds at once;
+- the rack guards his back;
+- the left eye is flesh while the optic side is steel;
+- 14 rounds on the forearm disarm him and turn the core red;
+- his left arm is flesh.
+
+## Found on the way: the head pivot (fixed for the Warbull; the minotaur still has it)
+
+The actor test's head shots missed, and the reason was the rig:
+
+- `motion.ts` aims the head bone at the gaze point through IK_TUNING's cone,
+  which gives a ~28° nod on every character.
+- The head pivots at the neck bone's tail.
+- The minotaur ends its neck at 1.775 m (×1.28), deep in the trap shelf, and
+  carries the cranium 0.48 m higher on a 1.08 m skull bone.
+
+**Measured in the motion pipeline (cranium drift from its rest place,
+relative to the pelvis):**
+
+| Character | Standing | Walking |
+| --- | --- | --- |
+| soldier | 6 cm | 6 cm |
+| minotaur | 19 cm | 36 cm |
+| Warbull before | 24 cm | 55 cm |
+| **Warbull after** | **10 cm** | **30 cm** |
+
+After the fix the Warbull is in proportion with the ogre, whose head sits at
+a similar height above its pivot; walking adds the gaze leading into turns.
+
+**The fix, in `warbull.blob`:**
+
+- The neck runs up to **2.05 m** (behind the jaw) and the skull is 0.4644 m,
+  which keeps the cranium centre exactly where it was.
+- Every neck and skull prim is re-fractioned to the same world place.
+- The clavicles move to **spine2** (the soldier's topology), with the tilt and
+  length re-solved so their tails, where the arms hang, don't move. A bone
+  `at=` would have been simpler, but the grammar parses it and never compiles
+  it: a gap, noted here.
+
+The kit's skeleton and skull parts followed. The pre-flight numbers are
+unchanged, and the kit test passes against a shadow glTF again.
+
+**`minotaur.blob` has the same pivot problem** and was not touched here. That
+is the owner's call: the minotaur is "done enough", and fixing it means the
+same re-fraction.

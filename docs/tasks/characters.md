@@ -18,7 +18,11 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Launcher + rockets** (Task 4): generated `warbull-launcher.glb` (casing swallows the fist, 3-tube indexing
   cluster), grid-solved one-handed `launcher`/`launcherLow` carries, `ROCKET_TUNING` (1 s telegraph, exactly 3 rockets),
   pure `rockets.ts` (slow 9 m/s warheads) detonating through the dynamite path, player blast damage with falloff.
-- [ ] Task 5 plates + disarm; Task 6 charge/gore/enrage; Task 7 arena spawn.
+- [x] **Plates on the machinery + the disarm** (Task 5): region plates (`PlateSpec.region`, `kitBones`) so only the metal
+  stops rounds; shooting the launcher off drops the prop, ends the ranged mode, turns the core red. Also fixed his head
+  pivot (the minotaur rig's neck ends deep in the traps, so the gaze nod swung his head 24-55 cm).
+- [ ] Minotaur has the same head-pivot problem (cranium 0.48 m above the neck pivot); fix = the warbull's re-fraction.
+- [ ] Task 6 charge/gore/enrage; Task 7 arena spawn.
 
 ## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 

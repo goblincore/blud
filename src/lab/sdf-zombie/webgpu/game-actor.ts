@@ -36,7 +36,7 @@ import {
 } from '../damage';
 import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
-import { blastPlates, freshPlates, hitPlate, shedPlates, type PlateState } from '../plate-armor';
+import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
 import { sdBody } from '../validate';
@@ -412,6 +412,10 @@ export interface ZombieActor {
    *  heartbeat / strobe / stutter, LEDs dropping out as the plates take
    *  damage. Only kits with `led`/`core` materials show it. */
   statusLights: () => StatusLights;
+  /** True once the profile's disarm plate (armor.disarmPlate, the warbull's
+   *  launcher) has been shot off: game-main drops the held prop, the ranged
+   *  mode ends, and the status lights burn red. */
+  disarmed: () => boolean;
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
@@ -743,6 +747,7 @@ export function createZombieActor(opts: {
   // character, so every branch below is a no-op for them.
   const armor = opts.profile?.armor ?? null;
   let plates: PlateState | null = armor ? freshPlates(armor.spec) : null;
+  const disarmedNow = () => !!(armor?.disarmPlate && plates && isShed(plates, armor.disarmPlate));
   const injuryTuning = armor?.injury ?? SOLDIER_INJURY_TUNING;
   /** Plate impacts since the view last drained them (sparks). */
   const armorHits: Vec3[] = [];
@@ -1823,7 +1828,14 @@ export function createZombieActor(opts: {
   function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound | null {
     // An intact plate stops the round before anything is stamped.
     if (armor && plates && !soldierFatal && wound.type !== 'burn') {
-      const r = hitPlate(armor.spec, plates, posed.prims[wound.primIdx]?.bone, injuryPoints(wound));
+      // The hit in the REST body's frame, for plates that cover only a patch
+      // of a bone (plate-armor.ts PlateSpec.region): re-seated on the rest
+      // prim (restHitPoint), not merely de-yawed about his root. The stomp's
+      // hunch and sway carry his head and chest centimetres off their rest
+      // places, and a region is authored against the rest body.
+      const pp = posed.prims[wound.primIdx], rp = current.prims[wound.primIdx];
+      const rest = pp && rp ? restHitPoint(hitWorld, state.wander.pos, bodyYaw, pp, rp) : undefined;
+      const r = hitPlate(armor.spec, plates, posed.prims[wound.primIdx]?.bone, injuryPoints(wound), rest);
       plates = r.state;
       if (r.plate) armorHits.push([...hitWorld] as Vec3);
       if (r.absorbed) return absorbedHit(wound, hitWorld, dirWorld);
@@ -2009,9 +2021,10 @@ export function createZombieActor(opts: {
       }
       return statusLights({
         mode: lightsModeFor(d.state, { alert: d.alert, collapsed: !!lastFrame?.collapsed }),
-        t: lightsClock, damage, phase: opts.id * 0.37,
+        t: lightsClock, damage, phase: opts.id * 0.37, enraged: disarmedNow(),
       });
     },
+    disarmed: () => disarmedNow(),
     armorView: () => {
       if (!plates) return null;
       const hits = armorHits.splice(0);
