@@ -20,7 +20,7 @@
 // (each interior key's tangent is the central difference against its real
 // neighbouring key times; the two rest ends get a zero tangent, since the
 // flail is stationary between swings). Uniform Catmull-Rom ignored the keys'
-// uneven spacing (0.12/0.06/0.12/0.15s) and let the ball slow into the strike
+// uneven spacing and let the ball slow into the strike
 // key and then pop on the far side; matching each tangent to the key's actual
 // time spacing carries the ball through the strike near full speed instead.
 
@@ -83,13 +83,27 @@ export const FLAIL_REST: FlailPose = {
 // deeper than the strike's (−1.30 vs −1.12) for the same reason. The haft's `rot`
 // here is (pitch, 0, lean): the lean tips it inward/outward, the pitch
 // forward/back (XYZ Euler of the haft's +Y).
+//
+// The 0.15 s and 0.37 s keys (v1.1 look pass) keep the chain from going slack.
+// The haft sweeps ~107° between the wind-up and the strike, so the bolt runs
+// along an ARC while the ball's spline cuts the CHORD. With only the wind-up →
+// strike keys the keyed ball passed 0.19 m from the bolt at t ≈ 0.16, and the
+// chain bunched into a loop above the haft tip on the frames just before the
+// hit. The return to rest had the same problem (0.24 m at t ≈ 0.36). Each extra
+// key takes the grip and rot the old curve had at that time, and puts the ball
+// out on the arc, 0.34–0.36 m from the bolt. The minimum over the swing is now
+// 0.31 m (R) and 0.32 m (L); flail-swing.test.ts holds it at ≥ 0.28 m. The ball
+// offsets were found by a constrained search that kept every other swing test
+// passing (overshoot, speed jump, strike speed, reach), then rounded to the cm.
 
 /** R: wind back up and right, strike across the front, follow through low left. */
 const KEYS_R: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
   { t: 0.1, grip: [0.34, -0.05, -0.35], rot: [0.1, 0, -0.41], ball: [0.68, 0.17, -0.57] },
+  { t: 0.15, grip: [0.2, -0.12, -0.36], rot: [-1.13, 0, -0.02], ball: [0.29, -0.15, -1.03] },
   { t: 0.18, grip: [0.12, -0.18, -0.37], rot: [-1.76, 0, 0.24], ball: [-0.05, -0.36, -1.12] },
   { t: 0.3, grip: [-0.1, -0.34, -0.61], rot: [-1.89, 0, 0.49], ball: [-0.46, -0.56, -1.3] },
+  { t: 0.37, grip: [0.13, -0.34, -0.56], rot: [-1.31, 0, 0.31], ball: [-0.11, -0.52, -1.12] },
   { t: 0.45, ...FLAIL_REST },
 ];
 
@@ -97,8 +111,10 @@ const KEYS_R: readonly Key[] = [
 const KEYS_L: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
   { t: 0.1, grip: [-0.02, -0.08, -0.35], rot: [0.1, 0, 0.52], ball: [-0.42, 0.13, -0.56] },
+  { t: 0.15, grip: [0.12, -0.13, -0.36], rot: [-1.13, 0, 0.34], ball: [-0.17, -0.15, -1] },
   { t: 0.18, grip: [0.22, -0.18, -0.37], rot: [-1.76, 0, 0.17], ball: [0.1, -0.36, -1.13] },
   { t: 0.3, grip: [0.45, -0.34, -0.61], rot: [-1.89, 0, -0.43], ball: [0.77, -0.56, -1.32] },
+  { t: 0.37, grip: [0.43, -0.34, -0.56], rot: [-1.31, 0, -0.19], ball: [0.38, -0.45, -1.23] },
   { t: 0.45, ...FLAIL_REST },
 ];
 
@@ -195,8 +211,8 @@ const STRIKE_BIAS = 1.25;
  * dead stop there between swings.
  *
  * The raw central difference is then limited per axis (Fritsch–Carlson): our
- * keys are unevenly spaced (0.1/0.08/0.12/0.15s) with a short middle segment
- * sandwiched between two much longer ones, and a plain central difference
+ * keys are unevenly spaced (0.1/0.05/0.03/0.12/0.07/0.08s), with short segments
+ * next to much longer ones, and a plain central difference
  * there whips the curve — the two neighbouring secants can have very
  * different magnitudes, and an unclipped tangent overshoots position past
  * the key and spikes the ball's speed far above either neighbouring secant.
@@ -211,7 +227,7 @@ const STRIKE_BIAS = 1.25;
  * only, the tangent instead leans on (and, at STRIKE_BIAS > 1, slightly past)
  * the incoming secant `dPrev` — the ball carries the swing's momentum
  * through the impact; the follow-through afterwards is free to bend away
- * from it. This key's own two neighbouring key positions (the windup and the
+ * from it. This key's own two neighbouring key positions (the 0.15 s key and the
  * follow-through) were chosen so this lean doesn't reintroduce overshoot
  * (verified by the overshoot test below, not just asserted). The lean only
  * applies to the BALL — the grip and haft rotation don't need to "carry

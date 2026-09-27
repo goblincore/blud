@@ -238,12 +238,27 @@ describe('flailPose', () => {
   it('keeps the ball within chain reach of the eye bolt at every key (the chain sim can reach every key)', () => {
     expect(chainReach()).toBeCloseTo(FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset, 9);
     for (const side of ['R', 'L'] as const) {
-      for (const t of [0, 0.1, FLAIL_SWING.strikeT, 0.3, FLAIL_SWING.swingSec]) {
+      for (const t of [0, 0.1, 0.15, FLAIL_SWING.strikeT, 0.3, 0.37, FLAIL_SWING.swingSec]) {
         const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
         expect(dist(p.ball, bolt(p.grip, p.rot)), `${side} t=${t}`).toBeLessThanOrEqual(chainReach());
       }
     }
     expect(dist(FLAIL_REST.ball, bolt(FLAIL_REST.grip, FLAIL_REST.rot))).toBeLessThanOrEqual(chainReach());
+  });
+
+  it('keeps the keyed ball ≥ 0.28 m from the eye bolt over the whole swing (no slack loop above the haft)', () => {
+    // The ball's spline is a chord between keys while the bolt sweeps an arc
+    // with the haft; with only wind-up → strike keys the chord cut to 0.19 m
+    // of the bolt just before the strike, and the chain bunched into a loop.
+    for (const side of ['R', 'L'] as const) {
+      let min = Infinity, at = 0;
+      for (let t = 0; t <= FLAIL_SWING.swingSec + 1e-9; t += 1 / 480) {
+        const p = flailPose({ phase: 'swing', side, t: Math.min(t, FLAIL_SWING.swingSec), struck: false, queued: false, nextSide: side, swingId: 1 });
+        const r = dist(p.ball, bolt(p.grip, p.rot));
+        if (r < min) { min = r; at = t; }
+      }
+      expect(min, `${side} min at t=${at.toFixed(3)}`).toBeGreaterThanOrEqual(0.28);
+    }
   });
 
   it('holds the chain nearly taut at the strike: the ball 0.34–0.36 m from the bolt', () => {

@@ -103,8 +103,9 @@ export function makeChain(anchor: Vec3, toward: Vec3): ChainState {
   };
 }
 
-/** FABRIK passes on a pinned substep. */
-const PIN_FABRIK = 16;
+/** FABRIK passes on a pinned substep (16 left 0.2% on the L ring link once the
+ *  0.15 s key reshaped the approach; 32 is exact to < 0.1%, once per strike). */
+const PIN_FABRIK = 32;
 
 /** Move `q` to `rest` from `from`, along from → q. */
 function place(from: M3, q: M3, rest: number): void {
