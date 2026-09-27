@@ -68,3 +68,21 @@ export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<numb
   }
   return o;
 }
+
+// THE BEAM TAIL, CPU REFERENCE (compose.wgsl.ts, owner 2026-09-27). Where the flashlight lights a
+// body (bodyLights' beam weight), the march's highlight shoulder is hue-preserving: a Reinhard on
+// LUMINANCE from the shoulder's knee, rgb scaled by lumOut / lumIn, then a per-channel exponential
+// shoulder from 0.9 that rounds off a saturated channel that passed 1. Change one, change both.
+const shoulderExp = (x: number, knee: number): number => {
+  if (x <= knee) return x;
+  const head = Math.max(1 - knee, 1e-4);
+  return knee + head * (1 - Math.exp(-(x - knee) / head));
+};
+export function beamTail(rgb: Vec3, knee: number): Vec3 {
+  const head = 1 - knee;
+  const lumIn = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  const tl = Math.max(lumIn - knee, 0) / head;
+  const lumOut = lumIn > knee ? knee + head * tl / (1 + tl) : lumIn;
+  const s = lumOut / Math.max(lumIn, 1e-4);
+  return [shoulderExp(rgb[0] * s, 0.9), shoulderExp(rgb[1] * s, 0.9), shoulderExp(rgb[2] * s, 0.9)];
+}

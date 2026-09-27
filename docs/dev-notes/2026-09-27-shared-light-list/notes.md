@@ -866,3 +866,119 @@ After (the committed code), body pixels:
   hand-held torch a weight of 0.09 while its beam is visibly on the chest. That is why the torch
   is weak at 1.5-2 m and strongest at 4-6 m. It needs a light-pick change (a per-profile cover
   height) and a re-calibration.
+
+## Flashlight judged at the chest, retuned (owner 2026-09-27)
+
+Owner report, in the default level and Night Train: "up close it's not so blown out, but at ~2 m
+it's blown out." Then: "it must feel like a flashlight in terms of the difference in illumination
+vs ambient, but at the same time not completely blown out."
+
+![before | after](flashlight-retune.png)
+
+(Rows, before (83dcd38c) and after in pairs: Night Train in the body's tube with the torch on;
+Night Train with the tubes killed, torch only; the default level (`sdf-game.html`, no level
+param, room 1, actor 1 seen from the player's start direction) in its lamp with the torch on.
+Columns: 1.5, 2.5, 4, 6 m. Captions: body-pixel mean / std / blown (> 0.95) / chroma, and x = the
+same body with the torch off at the same pose.)
+
+### Why it was white at 2-4 m
+
+- **The pick judged the torch's cone at the feet.** Right for ceiling tubes (the visible pool),
+  wrong for a hand-held beam: up close the feet are below the cone, so the list's torch weight
+  was 0.09 at 1.5 m, 0.17 at 2.5 m, 0.59 at 4 m and 0.40 at 6 m. The torch was weakest up close
+  and full strength at 2-4 m.
+- **`FLASHLIGHT_LIST_TRIM` 2.8 matched the old beam**, which is itself 60-67% blown on the body at
+  2-2.5 m (`?lightlist=0`, gate 7b).
+- **The shoulder is per channel.** As a pink body brightens, green and blue climb the exponential
+  shoulder after red has flattened, so the three converge and the pink drains to white before
+  anything clips. Blown (> 0.95) was 0% at 4 m, but the body's chroma, mean (max - min) / max,
+  was 0.10 (0.34 for the same body at midtones under the same torch).
+
+### The fix
+
+- **`coverAt` (new CPU-only profile field, `light-profiles.ts`).** `'feet'` for the tube, lamp,
+  window, muzzle, fire and beacon (unchanged); `'chest'` for the flashlight. `lightPresence`
+  judges the cone at `b.pos` (the pick body's centre, root + 1.2 m) for a chest profile.
+  Chunk bodies have pos = feet, so gibs are unchanged by it. The torch's weight is now its
+  distance fall alone inside the cone at every distance from 1.5 m (0.98 at 1.5 m).
+- **Retuned on bodies** (by look, on body pixels, not against the old path):
+  - `FLASHLIGHT_LIST_TRIM` 2.8 → **0.43** (profile gain 11.2 → 1.72).
+  - flashlight `distFall` 0.04 → **0.01**: the torch falls about 25% from 1.5 to 6 m. "A
+    flashlight" comes from the beam against the ambient (4.5-8x the torch-off body), not from a
+    steep fall-off; with 0.03 the 6 m body went dim (0.38) and the default level's to 0.23.
+- **The beam shoulder is hue-preserving** (`compose.wgsl.ts`, CPU reference `light-shade.ts`
+  `beamTail`). Where the flashlight lights the body (`listBeam`, unchanged), the tail is a
+  Reinhard on LUMINANCE from the shoulder's own knee (0.65; the 83dcd38c knee - 0.1 is gone) with
+  rgb scaled by lumOut / lumIn, then a per-channel exponential shoulder from 0.9 that rounds off a
+  saturated channel that passed 1. A white specular glint stays near-white. No flashlight pick
+  (every other light) and `?lightlist=0` are bit-identical. March golden re-pinned (`-u`): the
+  compose block only.
+
+Tried and rejected (same rig):
+- **Trim 0.8, 1.2** (distFall 0.04): 1.2 read 0.79 at 1.5 m in Night Train torch-only, salmon and
+  flat; 0.8 had a small bump (0.46 → 0.48 at 1.5 → 2.5 m, default level).
+- **Trim 0.55, distFall 0.03**: monotonic, but 0.70 at 1.5 m (brighter than the owner's "good"
+  torch-only look, 0.45) and 0.38 at 6 m.
+- **The hue tail from knee - 0.1 (0.55)**: tube + torch std 0.077 (flat).
+- **A softer tail (slope ((1 - y) / head)^1.5, between exponential and Reinhard)**: tube + torch
+  std 0.091 → 0.097 only, with 1.6% blown at 1.5 m. Not worth the extra curve.
+
+### Measured (body pixels; the rig is the 83dcd38c one: clocks pinned, train stopped, view-model hidden, `setMarchDebugMode(1)` mask)
+
+Night Train third class, the UNDER_A body. x = against the same body with the torch off (tube
+alone, or the tubes-killed fill).
+
+| m | tube + torch, before: mean / std / blown / chroma, x | after | torch only, before | after |
+|---|---|---|---|---|
+| 1.5 | 0.813 / 0.102 / 0.0% / 0.08, 1.01x | 0.857 / 0.091 / 0.1% / 0.15, 1.06x | 0.440 / 0.115 / 0.0% / 0.34, 5.5x | 0.644 / 0.148 / 0.0% / 0.34, 8.0x |
+| 2.5 | 0.836 / 0.090 / 0.0% / 0.09, 1.06x | 0.842 / 0.086 / 0.0% / 0.15, 1.06x | 0.640 / 0.123 / 0.0% / 0.20, 7.7x | 0.631 / 0.137 / 0.0% / 0.34, 7.6x |
+| 4 | 0.832 / 0.076 / 0.0% / 0.10, 1.13x | 0.783 / 0.087 / 0.0% / 0.15, 1.06x | 0.799 / 0.091 / 0.0% / 0.10, 9.0x | 0.568 / 0.126 / 0.0% / 0.35, 6.3x |
+| 6 | 0.694 / 0.067 / 0.0% / 0.10, 1.10x | 0.664 / 0.070 / 0.0% / 0.15, 1.05x | 0.648 / 0.075 / 0.0% / 0.11, 6.7x | 0.440 / 0.097 / 0.0% / 0.36, 4.5x |
+
+The default level, room 1, actor 1 (its warm wall lamp, which tints the torch-off body red: chroma
+0.7):
+
+| m | lamp + torch, before | after | torch only (lamp killed), before | after |
+|---|---|---|---|---|
+| 1.5 | 0.425 / 0.164 / 0.0% / 0.40, 2.2x | 0.551 / 0.195 / 0.0% / 0.40, 3.0x | 0.317 / 0.130 / 0.0% / 0.30, 3.5x | 0.462 / 0.182 / 0.0% / 0.31, 5.1x |
+| 2.5 | 0.477 / 0.218 / 0.0% / 0.36, 3.0x | 0.463 / 0.218 / 0.0% / 0.45, 3.1x | 0.410 / 0.208 / 0.0% / 0.31, 6.0x | 0.374 / 0.197 / 0.0% / 0.34, 5.4x |
+| 4 | 0.694 / 0.185 / 0.0% / 0.26, 4.6x | 0.426 / 0.202 / 0.0% / 0.46, 3.0x | 0.674 / 0.199 / 0.0% / 0.25, 9.9x | 0.331 / 0.180 / 0.0% / 0.33, 4.9x |
+| 6 | 0.541 / 0.181 / 0.0% / 0.29, 3.7x | 0.355 / 0.158 / 0.0% / 0.46, 2.5x | 0.515 / 0.196 / 0.0% / 0.26, 6.5x | 0.262 / 0.129 / 0.0% / 0.29, 3.3x |
+
+- **The bump is gone.** Every column falls with distance (before: torch only 0.44 → 0.80 from
+  1.5 to 4 m in Night Train, 0.32 → 0.67 in the default level).
+- **Never blown** (≤ 0.1%), and the torch-lit body keeps its colour: chroma 0.34-0.36 at every
+  distance torch only (before 0.10 at 4-6 m), 0.40-0.46 in the default level.
+- **Contrast vs outside the beam:** torch only 4.5-8x (Night Train), 3.3-5.4x (default level);
+  default level lamp + torch 2.5-3.1x.
+
+### Targets not met (honest)
+
+- **In its tube, the torch adds almost nothing: 1.05-1.07x.** The tube alone already puts this
+  body at 0.80 (the shoulder's knee region, 2-3% blown at 1.5 m on its own), so there is no room
+  for 2x. What the torch changes there is the colour (chroma 0.13 → 0.15, visibly pinker) and
+  it no longer whitens it. Getting a flashlight contrast under a tube needs the tube's body
+  level down (`LAMP_LIST_TRIM` 0.7, Task 10 calibration), which moves the tube calibration row:
+  an owner call, not done here.
+- **Tube + torch std 0.070-0.091** (< 0.1). Partly the Reinhard's compression at 0.8+, partly
+  physics: a light from the eye fills the relief the overhead tube carved (the tube alone reads
+  0.147). Torch only, std is 0.148 at 1.5 m.
+- **The default level reads darker than Night Train** at the same torch (its zombie's albedo and
+  room): torch only 0.46 → 0.26, lamp + torch 0.55 → 0.36, under the 0.45 floor from 4 m. The
+  trim is set by Night Train's torch-only look (0.64 at 1.5 m; the owner's "good" close shot was
+  0.45 there); raising it for the default level brightens Night Train's close body toward salmon
+  (0.70 at 0.55).
+
+### Gate
+
+- **Section 7's flashlight row** (list on/off at the calibration pose, the fixed box) is
+  reported, no longer bounded 0.9-1.2x: the old path it matched is the thing that was too white.
+  It read 0.93x. Tube and bolt keep their bounds (1.05x, 1.00x).
+- **7b is now a sweep**, list on, at 1.5 / 2.5 / 4 / 6 m on the body's pixels: in the tube + torch
+  (after section 7) and torch only against the torch-off body (after section 9: it kills the
+  third-class tubes, last in the list boot). Bounds: blown ≤ 3%; the mean never rises with
+  distance by more than 0.02; torch only mean 0.40-0.75, std ≥ 0.08, chroma ≥ 0.25, ≥ 2x the
+  torch-off body (1.5x at 6 m); tube + torch mean 0.45-0.90. `?lightlist=0` at 2 m is reported
+  (60% blown).
+- Gibs in the beam (section 9) are still inside their bounds (baked torch mean 0.368, marched
+  0.531).

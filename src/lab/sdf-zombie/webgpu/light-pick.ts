@@ -1,8 +1,12 @@
 // EACH BODY'S 4 LIGHTS (spec §4). Pure. A light's weight on a body is what it DELIVERS there,
 // by the presentation rules tuned with the owner on 2026-09-26 (game-dynamic-light-leaves.ts
 // presentingLamp, ported rule for rule and generalised to every kind):
-//  - spot coverage judged at the FEET (the visible pool; a chest-height cone is only ~1 m),
-//    full inside the inner cone, a smoothstep down to zero at the outer angle x profile.edge;
+//  - spot coverage judged at the FEET (the visible pool; a chest-height cone is only ~1 m) for
+//    ceiling lights, at the CHEST (the body's pos) for a profile with coverAt 'chest' (the
+//    flashlight: a hand-held beam aimed at the body. Judged at the feet it scored 0.09 at 1.5 m,
+//    where the feet are below its cone, and 0.59 at 4 m, so the torch was weakest up close and
+//    strongest at 4 m, owner 2026-09-27); full inside the inner cone, a smoothstep down to zero
+//    at the outer angle x profile.edge;
 //  - a small coverage floor (profile.coverFloor, CPU-only) while the body is in range: never pitch black;
 //  - distance fall 1 / (1 + distFall d²);
 //  - facing falloff: backKey + (1 - backKey) x facing (back to the light: dimmer, never black;
@@ -20,7 +24,7 @@
 // x the profile's GPU gain x the light's bodyNorm, the exact scalar the shader multiplies rgb by
 // (light-shade.ts: c = rgb x weight x gain x bodyNorm). rgb alone is PHYSICAL (plan 2's level
 // materials read it), and since the Task 10 calibration gain x bodyNorm differs ~6x by kind (a
-// lit tube ~0.19, the flashlight 0.124, the window 0.109, a muzzle 0.039, fire 0.033), ranking on
+// lit tube ~0.19, the flashlight 0.019 (retuned 2026-09-27; 0.124 at the Task 10 trim), the window 0.109, a muzzle 0.039, fire 0.033), ranking on
 // rgb let a 35-intensity muzzle flash near a body steal slot 0 (the dominant: scatter, the wound
 // shadow, the shine) from the tube it stands under (Task 10 review). Ties by list index.
 //
@@ -38,7 +42,8 @@ export interface PickBody {
   /** Unit xz direction the presentation treats as the body's FRONT. presentingLamp used the
    *  direction from the body toward the viewer here; pass that to keep its look exactly. */
   facing: [number, number];
-  /** World y of the feet, where spot coverage is judged (default FEET_Y: a floor at y = 0). */
+  /** World y of the feet, where spot coverage is judged for coverAt 'feet' profiles (default
+   *  FEET_Y: a floor at y = 0). coverAt 'chest' profiles judge it at pos. */
   feetY?: number;
 }
 export interface Pick { idx: [number, number, number, number]; weight: [number, number, number, number]; packed: [number, number, number, number] }
@@ -65,8 +70,10 @@ export function lightPresence(l: ListLight, b: PickBody): number {
     const inv = 1 / (dist || 1);
     toLx = dx * inv; toLz = dz * inv;
     if (l.kind === 'spot') {
-      // Coverage at the feet: the ray from the lamp to the body's feet against the cone.
-      const fx = b.pos[0] - l.pos[0], fy = (b.feetY ?? FEET_Y) - l.pos[1], fz = b.pos[2] - l.pos[2];
+      // Coverage at the feet (or the chest, profile.coverAt): the ray from the lamp to that
+      // point against the cone.
+      const cy = prof.coverAt === 'chest' ? b.pos[1] : (b.feetY ?? FEET_Y);
+      const fx = b.pos[0] - l.pos[0], fy = cy - l.pos[1], fz = b.pos[2] - l.pos[2];
       const fl = Math.hypot(fx, fy, fz) || 1;
       const c = (fx * l.axis[0] + fy * l.axis[1] + fz * l.axis[2]) / fl;
       // presentingLamp: full inside the inner cone, smoothstep to zero at the outer ANGLE x edge

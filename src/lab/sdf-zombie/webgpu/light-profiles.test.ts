@@ -58,6 +58,19 @@ describe('light profiles (spec §5)', () => {
       expect(f[PROFILE_ID[name] * 12 + 6]).toBe(want);
     }
   });
+  it('coverAt (CPU-only): the flashlight judges its cone at the chest, every ceiling/wall light at the feet (owner 2026-09-27)', () => {
+    for (const name of Object.keys(PROFILE_ID) as (keyof typeof PROFILE_ID)[]) {
+      expect(PROFILES_BY_NAME[name].coverAt).toBe(name === 'flashlight' ? 'chest' : 'feet');
+    }
+  });
+  it('flashlight retune (owner 2026-09-27, judged at the chest): trim 0.43 (was 2.8), distFall 0.01 (was 0.04)', () => {
+    const f = PROFILES_BY_NAME.flashlight;
+    expect(FLASHLIGHT_LIST_TRIM).toBe(0.43);
+    expect(f.gain).toBeCloseTo(4 * 0.43, 9);
+    expect(f.distFall).toBe(0.01);
+    // Only the flashlight moved: the tube keeps its calibration.
+    expect(PROFILES_BY_NAME.tube.distFall).toBe(0.06);
+  });
   it('the table is frozen: a runtime write throws and changes nothing (review fix, Task 3)', () => {
     const t = LIGHT_PROFILES[PROFILE_ID.tube]! as { gain: number; rimTint: number[] };
     expect(() => { t.gain = 99; }).toThrow(TypeError);

@@ -4,6 +4,7 @@ import { LIGHT_PROFILES, PROFILE_ID } from './light-profiles';
 import { collectLightSources, pickBodyFor } from './game-light-list-leaves';
 import { lightPresence, lightRank, pickLights, unpackPick, type Pick } from './light-pick';
 import { BEACON, beaconAxis } from './beacon';
+import { FLASHLIGHT_OFFSET } from './dungeon-lighting';
 
 const tube = (x: number, z: number, i = 7): LightSource => ({ kind: 'spot', profile: 'tube', pos: [x, 2.2, z], color: [0.8, 0.9, 1], intensity: i, range: 6, axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45), rooms: [3] });
 const body = (x: number, z: number, facing: [number, number] = [0, 1]) => ({ pos: [x, 0.9, z] as [number, number, number], room: 3, facing });
@@ -219,5 +220,56 @@ describe('a Boiler Room beacon (spec 2026-09-27-boiler-room-beacons-design.md)',
     const off = buildLightList(beaconSource(beaconAxis(0.5 / 0.7, 0.7, 0)));   // half a turn later: -x
     const w = (l: typeof on) => { const p = pickLights(l, b); const i = p.idx.findIndex(k => k >= 0 && l[k]!.profile === PROFILE_ID.beacon); return i < 0 ? 0 : p.weight[i]!; };
     expect(w(on)).toBeGreaterThan(w(off));
+  });
+});
+
+describe('the flashlight is judged at the CHEST (owner 2026-09-27: blown at ~2 m, not up close)', () => {
+  // The player's torch as dungeon-lighting.ts rigs it: FLASHLIGHT_OFFSET from an eye at 1.62 m,
+  // the spot's cone (0.12 pi half-angle, penumbra 0.45), aimed down the view (the gate's framing
+  // pitch -0.12) at a body standing d metres ahead.
+  const EYE = 1.62, PITCH = -0.12, ANGLE = Math.PI * 0.12, PENUMBRA = 0.45;
+  const torchAt = (): LightSource[] => collectLightSources({
+    lamps: [], window: null, flashes: [],
+    flashlight: {
+      pos: [FLASHLIGHT_OFFSET[0], EYE + FLASHLIGHT_OFFSET[1], FLASHLIGHT_OFFSET[2]],
+      axis: [0, Math.sin(PITCH), -Math.cos(PITCH)], color: [0.94, 0.96, 1], intensity: 90, range: 16,
+      cosOuter: Math.cos(ANGLE), cosInner: Math.cos(ANGLE * (1 - PENUMBRA)), ref: 90,
+    },
+  });
+  const weightAt = (d: number) => {
+    const list = buildLightList(torchAt());
+    return lightPresence(list[0]!, pickBodyFor([0, 0, -d], 1, [0, EYE, 0]));
+  };
+  const DISTS = [1.5, 2, 2.5, 3, 4, 5, 6];
+  it('the torch counts fully up close: in its cone at 1.5 m, the weight is its distance fall alone', () => {
+    const l = buildLightList(torchAt())[0]!, b = pickBodyFor([0, 0, -1.5], 1, [0, EYE, 0]);
+    const d = Math.hypot(l.pos[0] - b.pos[0], l.pos[1] - b.pos[1], l.pos[2] - b.pos[2]);
+    const fall = 1 / (1 + LIGHT_PROFILES[PROFILE_ID.flashlight]!.distFall * d * d);
+    // Judged at the feet it was 0.09 here (the feet are below a hand-held cone up close).
+    expect(weightAt(1.5)).toBeGreaterThan(0.9);
+    expect(weightAt(1.5)).toBeCloseTo(fall, 6);
+  });
+  it('monotonic in distance inside its cone: never a bump at 2-4 m', () => {
+    const w = DISTS.map(weightAt);
+    for (let i = 1; i < w.length; i++) expect(w[i]!).toBeLessThan(w[i - 1]!);
+    expect(w.at(-1)!).toBeGreaterThan(0.5);   // still a flashlight at 6 m
+  });
+  it('the same torch judged at the feet (the old rule) is what made the bump', () => {
+    const list = buildLightList(torchAt());
+    const l = list[0]!;
+    const feet = (d: number) => {
+      const b = pickBodyFor([0, 0, -d], 1, [0, EYE, 0]);
+      // The feet rule, by hand: the ray to (x, feetY, z) against the cone, as tubes still use.
+      const fx = b.pos[0] - l.pos[0], fy = b.feetY! - l.pos[1], fz = b.pos[2] - l.pos[2];
+      const c = (fx * l.axis[0] + fy * l.axis[1] + fz * l.axis[2]) / Math.hypot(fx, fy, fz);
+      return c > l.coverZero ? 1 : 0;
+    };
+    expect(feet(1.5)).toBe(0);    // outside the cone at the feet: only the coverage floor
+    expect(weightAt(1.5)).toBeGreaterThan(0.9);
+  });
+  it('the flashlight still falls off the body when aimed away (the cone still counts)', () => {
+    const list = buildLightList(torchAt());
+    const aside = pickBodyFor([2.5, 0, -2], 1, [0, EYE, 0]);
+    expect(lightPresence(list[0]!, aside)).toBeLessThan(weightAt(2) * 0.25);
   });
 });

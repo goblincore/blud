@@ -116,22 +116,29 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                              softShoulder(fleshLit.y, knee),
                              softShoulder(fleshLit.z, knee));
     // BEAM SHOULDER (owner 2026-09-27: "direct flashlight beam at close/mediumish ranges causes
-    // enemies to blow out"). The exponential shoulder above reaches 0.95 at 2x its headroom past the knee, so a
-    // list-lit body in the flashlight (its tube plus the beam) sat at 0.95-1.0 over half its
-    // pixels at 1.5-2.5 m: relief and wounds gone. Where the flashlight lights the body, the
-    // tail becomes a Reinhard curve from a knee 0.1 lower (0.55 at the shipped shoulder 0.35).
-    // Like softShoulder it is monotonic, C1 at its knee and never reaches 1, but it only reaches
-    // 0.95 at 8x its headroom instead of 2x, so the highlights compress instead of
-    // clipping; the lower knee keeps a beam-lit body about as bright as the same body in its
-    // tube alone at 1.5 m, not brighter. listBeam is bodyLights' sum of beamShoulder x delivered
-    // luminance (the flashlight's beamShoulder 2: full from 0.5); 0 (no flashlight pick, every
-    // other light, the list off) is the exponential shoulder exactly.
-    // Measured (dev note 2026-09-27-shared-light-list, "Flashlight up close").
+    // enemies to blow out"; then "it must feel like a flashlight vs the ambient, but not
+    // completely blown out"). The exponential shoulder above works PER CHANNEL: as a pink body
+    // brightens, green and blue climb the shoulder after red has flattened, so the three
+    // converge and the pink drains to white long before anything clips (a torch-lit body at
+    // 4 m read 0.10 chroma, (max - min) / max, against ~0.33 at midtones under the same white
+    // light). Where the flashlight lights the body the tail is instead HUE-PRESERVING: a
+    // Reinhard on LUMINANCE from the same knee (monotonic, C1 there, 0.95 only at 8x its
+    // headroom instead of the exponential's 2x), with rgb scaled by lumOut / lumIn, so the skin
+    // keeps its colour and goes bright PINK, not white. A saturated channel can then pass 1 (a
+    // pink body's red is ~1.3x its luminance), so a last per-channel softShoulder from 0.9
+    // rounds that one channel off (a touch of desaturation in the very top only; a white
+    // specular glint, all channels equal, still goes near-white: the hot-light sparkle).
+    // listBeam is bodyLights' sum of beamShoulder x delivered luminance (the flashlight's
+    // beamShoulder 2: full from 0.5); 0 (no flashlight pick, every other light, the list off)
+    // is the exponential shoulder exactly.
+    // Measured (dev note 2026-09-27-shared-light-list, "Flashlight judged at the chest").
     if (listBeam > 0.0) {
-      let kb = max(knee - 0.1, 0.05);
-      let head = 1.0 - kb;
-      let t = max(fleshLit - vec3<f32>(kb), vec3<f32>(0.0)) / head;
-      let beamTail = select(fleshLit, vec3<f32>(kb) + head * t / (vec3<f32>(1.0) + t), fleshLit > vec3<f32>(kb));
+      let head = 1.0 - knee;
+      let lumIn = dot(fleshLit, vec3<f32>(0.2126, 0.7152, 0.0722));
+      let tl = max(lumIn - knee, 0.0) / head;
+      let lumOut = select(lumIn, knee + head * tl / (1.0 + tl), lumIn > knee);
+      let hued = fleshLit * (lumOut / max(lumIn, 1e-4));
+      let beamTail = vec3<f32>(softShoulder(hued.x, 0.9), softShoulder(hued.y, 0.9), softShoulder(hued.z, 0.9));
       fleshLit = mix(shoulder, beamTail, clamp(listBeam, 0.0, 1.0));
     } else {
       fleshLit = shoulder;

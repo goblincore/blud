@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildLightList, packLightList, type LightSource, type Vec3 } from './light-list';
 import { LIGHT_PROFILES, PROFILE_ID, PROFILE_VEC4S } from './light-profiles';
 import { pickLights } from './light-pick';
-import { shadeBodyLights } from './light-shade';
+import { beamTail, shadeBodyLights } from './light-shade';
 
 // Every rule is judged at the origin with the camera straight down +z (V = [0, 0, 1]).
 const P: Vec3 = [0, 0, 0];
@@ -173,5 +173,42 @@ describe('shadeBodyLights (the CPU reference of bodyLights)', () => {
     const r = shadeBodyLights([0, 0.9, 0.2], [0, 0.3, 0.95], V, pick.packed, packLightList(ll));
     expect(r.domC[1]).toBeCloseTo(0.9 * 7 * pick.weight[0]! * LIGHT_PROFILES[PROFILE_ID.tube]!.gain, 4);
     expect(sum(r.diffuse)).toBeGreaterThan(0);
+  });
+});
+
+describe('beamTail (compose.wgsl.ts beam shoulder, owner 2026-09-27: pink, not white)', () => {
+  const KNEE = 0.65;   // 1 - the shipped beamTuning.shoulder 0.35
+  const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+  const chroma = (c: readonly number[]) => (Math.max(...c) - Math.min(...c)) / Math.max(...c);
+  const pink: Vec3 = [1.0, 0.62, 0.6];
+  it('identity below the knee (a body the torch keeps in the midtones shades as before)', () => {
+    const c: Vec3 = [0.5, 0.3, 0.3];
+    expect(beamTail(c, KNEE)).toEqual(c);
+  });
+  it('keeps the hue: a bright pink body stays pink where the per-channel shoulder whitens it', () => {
+    for (const k of [1.2, 1.6, 2.4, 4]) {
+      const c: Vec3 = [pink[0] * k, pink[1] * k, pink[2] * k];
+      const out = beamTail(c, KNEE);
+      // The old per-channel exponential shoulder, for comparison.
+      const exp = c.map(x => x <= KNEE ? x : KNEE + (1 - KNEE) * (1 - Math.exp(-(x - KNEE) / (1 - KNEE))));
+      // 1.2x: 0.33 vs 0.23; 2.4x: 0.22 vs 0.03 (white); 4x: 0.18 vs 0.00. Red rounds off at 1
+      // while green and blue still rise: a gentle desaturation at the very top, never white.
+      expect(chroma(out)).toBeGreaterThan(chroma(exp) + 0.09);
+      expect(chroma(out)).toBeGreaterThan(0.15);
+    }
+  });
+  it('monotonic in brightness and never reaches 1 on any channel', () => {
+    let prev = 0;
+    for (let k = 0.2; k < 20; k *= 1.25) {
+      const out = beamTail([pink[0] * k, pink[1] * k, pink[2] * k], KNEE);
+      expect(lum(out)).toBeGreaterThan(prev);
+      prev = lum(out);
+      for (const v of out) expect(v).toBeLessThan(1);
+    }
+  });
+  it('a white specular glint still goes near-white (the hot-light sparkle)', () => {
+    const out = beamTail([6, 6, 6], KNEE);
+    expect(Math.min(...out)).toBeGreaterThan(0.9);
+    expect(chroma(out)).toBeLessThan(1e-9);
   });
 });

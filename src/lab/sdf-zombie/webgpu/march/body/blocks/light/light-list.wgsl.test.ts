@@ -101,12 +101,17 @@ describe('Task 9 review: list mode keeps the rim, the shoulder and viewBias; no 
     expect(COMPOSE_BLOCK).not.toContain('if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {');
   });
 
-  it('the beam shoulder (owner 2026-09-27): listBeam from bodyLights picks a Reinhard tail; 0 keeps the exponential shoulder', () => {
+  it('the beam shoulder (owner 2026-09-27): listBeam from bodyLights picks a hue-preserving luminance tail; 0 keeps the exponential shoulder', () => {
     expect(LIGHT_LIST_BLOCK).toContain('var listBeam = 0.0;');
     expect(LIGHT_LIST_BLOCK).toContain('listBeam = bl.beam;');
     expect(LIGHT_LIST_BLOCK.indexOf('listBeam = bl.beam;')).toBeGreaterThan(LIGHT_LIST_BLOCK.indexOf('if (lightListCfg.x > 0.0) {'));
     expect(COMPOSE_BLOCK).toContain('if (listBeam > 0.0) {');
-    expect(COMPOSE_BLOCK).toContain('let kb = max(knee - 0.1, 0.05);');
+    // The CPU reference is light-shade.ts beamTail: the same four lines.
+    expect(COMPOSE_BLOCK).toContain('let lumIn = dot(fleshLit, vec3<f32>(0.2126, 0.7152, 0.0722));');
+    expect(COMPOSE_BLOCK).toContain('let lumOut = select(lumIn, knee + head * tl / (1.0 + tl), lumIn > knee);');
+    expect(COMPOSE_BLOCK).toContain('let hued = fleshLit * (lumOut / max(lumIn, 1e-4));');
+    expect(COMPOSE_BLOCK).toContain('let beamTail = vec3<f32>(softShoulder(hued.x, 0.9), softShoulder(hued.y, 0.9), softShoulder(hued.z, 0.9));');
+    expect(COMPOSE_BLOCK).not.toContain('knee - 0.1');
     expect(COMPOSE_BLOCK).toContain('fleshLit = mix(shoulder, beamTail, clamp(listBeam, 0.0, 1.0));');
     expect(COMPOSE_BLOCK).toContain('} else {\n      fleshLit = shoulder;\n    }');
   });
