@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseLevelJson } from './level-json';
+import { BEACON } from './beacon';
 
 const fixture = (name: string): any =>
   JSON.parse(readFileSync(`public/assets/levels/fixtures/${name}.level.json`, 'utf8'));
@@ -189,6 +190,23 @@ describe('parseLevelJson: beacon fixture (Boiler Room beacons spec)', () => {
     f.lights[0].spin = 0.7;
     const L = parseLevelJson(f);
     expect(L.rooms[0]!.accents[0]).toMatchObject({ fixture: 'beacon', spin: 0.7 });
+  });
+
+  it('a beacon with no spin turns at the default BEACON.spin', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'beacon';
+    const L = parseLevelJson(f);
+    expect(L.rooms[0]!.accents[0]).toMatchObject({ fixture: 'beacon', spin: BEACON.spin });
+  });
+
+  it('rejects a spin on a light that is not a beacon', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'tube';
+    f.lights[0].spin = 0.7;
+    expect(() => parseLevelJson(f)).toThrow('lights[0].spin: only a beacon fixture turns');
+    const g = fixture('two-rooms');
+    g.lights[0].spin = 0.7;   // no fixture at all (a bulb)
+    expect(() => parseLevelJson(g)).toThrow('lights[0].spin');
   });
 
   it('rejects a spin beyond 5 rev/s', () => {

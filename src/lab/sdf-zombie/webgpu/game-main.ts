@@ -808,6 +808,10 @@ async function main() {
       // Tagged with its room so the level's per-room light lists can drop
       // the OTHER rooms' accents (see levelSceneLights below).
       pl.userData.accentRoom = r.id;
+      // A beacon's omni stays at 0 (its swept spot is the light): list-only, it carries the
+      // lamp's position and colour for the shared list, never a level material's light or a
+      // deferred practical (levelSceneLights and the deferred candidates skip it).
+      if (a.fixture === 'beacon') pl.userData.listOnly = true;
       ctx.world.accentGroup.add(pl);
       // A visible source. Without it the light has no cause and reads as a bug.
       // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl. A beacon
@@ -1282,8 +1286,9 @@ async function main() {
           { id: 'flashlight', role: 'flashlight', light: ctx.lighting.flashlight.spot },
         ];
         if (ctx.weapon.muzzleLight) candidates.push({ id: 'muzzle', role: 'muzzle', light: ctx.weapon.muzzleLight });
-        ctx.lighting.flickerLights.forEach((f, i) =>
-          candidates.push({ id: `fire-${String(i).padStart(2, '0')}`, role: 'practical', light: f.light }));
+        ctx.lighting.flickerLights.forEach((f, i) => {
+          if (!f.light.userData.listOnly) candidates.push({ id: `fire-${String(i).padStart(2, '0')}`, role: 'practical', light: f.light });
+        });
         return candidates;
       },
       environment: () => deferredEnvironmentFromRig(ctx.lighting.dungeonOn ? DUNGEON_RIG : GALLERY_RIG),

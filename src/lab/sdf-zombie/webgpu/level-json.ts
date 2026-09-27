@@ -14,6 +14,7 @@ import {
   type WallSide, type WindowDef, type CueDef,
 } from './level-def';
 import { LAMP_MOODS, type LampMood } from './lamp-moods';
+import { BEACON } from './beacon';
 import {
   EDGE_STYLES, GROUND_NAMES, SKYLINE_NAMES, SKY_NAMES,
   type EdgeStyle, type GroundName, type SkyName, type SkylineName,
@@ -346,7 +347,10 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     if (o.spin !== undefined) {
       if (typeof o.spin === 'number' && Number.isFinite(o.spin) && Math.abs(o.spin) <= 5) spin = o.spin;
       else errors.push(`lights[${i}].spin: must be a number of rev/s within [-5, 5]`);
+      if (fixture !== 'beacon') errors.push(`lights[${i}].spin: only a beacon fixture turns`);
     }
+    // A beacon always turns: no spin means the default (BEACON.spin rev/s).
+    if (fixture === 'beacon' && o.spin === undefined) spin = BEACON.spin;
     let gain: number | undefined;
     if (o.gain !== undefined) {
       gain = num(o.gain, `lights[${i}].gain`, 1);

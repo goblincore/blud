@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEACON, beaconAxis, beaconPhase, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
+import { BEACON, beaconAxis, beaconAxisInto, beaconPhase, beaconShadowLive, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
 import { LAMP_SCRIPT, lampLevel } from './lamp-moods';
 
 describe('beaconAxis', () => {
@@ -13,6 +13,12 @@ describe('beaconAxis', () => {
     expect(a1[0]).toBeCloseTo(-a0[0], 6); expect(a1[2]).toBeCloseTo(-a0[2], 6);
     const cw = beaconAxis(0.25, 1, 0), ccw = beaconAxis(0.25, -1, 0);
     expect(cw[2]).toBeCloseTo(-ccw[2], 6);   // a quarter turn each way: z flips
+  });
+  it('beaconAxisInto writes the same axis into the caller\'s tuple', () => {
+    const out: [number, number, number] = [9, 9, 9];
+    expect(beaconAxisInto(out, 1.3, -0.7, 0.4)).toBe(out);
+    const a = beaconAxis(1.3, -0.7, 0.4);
+    for (let i = 0; i < 3; i++) expect(out[i]).toBe(a[i]);
   });
   it('phase offsets the sweep', () => {
     const a = beaconAxis(0, 1, Math.PI / 2), b = beaconAxis(0.25, 1, 0);
@@ -40,6 +46,26 @@ describe('scriptFor (arming)', () => {
     expect(scriptFor('strobe', false)).toBe('strobe');
     expect(scriptFor('die', true)).toBe('die');
     expect(scriptFor('blackout', true)).toBe('blackout');
+    expect(scriptFor('die', true, null)).toBe('die');
+  });
+  it('once armed, an emergency light stays on: every later command keeps its script', () => {
+    for (const m of ['die', 'blackout', 'strobe'] as const) expect(scriptFor(m, true, 'emergency')).toBeNull();
+    // Not a beacon (or not armed): commands still apply.
+    expect(scriptFor('die', false, 'strobe')).toBe('die');
+    expect(scriptFor('strobe', true, 'blackout')).toBe('emergency');
+  });
+});
+
+describe('beaconShadowLive (the rotating shadow refresh)', () => {
+  const m = (...rooms: number[]) => rooms.reduce((a, r) => a | (1 << r), 0);
+  it('refreshes while lit and its room is near the player (its room, or joined by a tunnel)', () => {
+    expect(beaconShadowLive(1, 5, m(5, 4, 6))).toBe(true);      // in the Boiler Room
+    expect(beaconShadowLive(1, 5, m(4, 5))).toBe(true);         // next door / in the vestibule
+    expect(beaconShadowLive(1, 5, m(1, 2))).toBe(false);        // far carriages
+  });
+  it('never while dark; an unknown mask refreshes', () => {
+    expect(beaconShadowLive(0, 5, m(5))).toBe(false);
+    expect(beaconShadowLive(1, 5, 0)).toBe(true);
   });
 });
 

@@ -20,14 +20,32 @@ export const BEACON = {
   shadowSize: 512,
   /** The beam's strength (the tube beam's is 0.035). */
   beam: 0.05,
+  /** rev/s when the level gives a beacon no `spin` (level-json fills it in). */
+  spin: 0.7,
 } as const;
 
 export type Vec3 = [number, number, number];
 
 export function beaconAxis(t: number, spin: number, phase: number): Vec3 {
+  return beaconAxisInto([0, 0, 0], t, spin, phase);
+}
+
+/** beaconAxis into `out` (the per-step path: no allocation). Returns `out`. */
+export function beaconAxisInto(out: Vec3, t: number, spin: number, phase: number): Vec3 {
   const a = phase + t * spin * Math.PI * 2;
   const c = Math.cos(BEACON.tilt);
-  return [Math.cos(a) * c, -Math.sin(BEACON.tilt), Math.sin(a) * c];
+  out[0] = Math.cos(a) * c; out[1] = -Math.sin(BEACON.tilt); out[2] = Math.sin(a) * c;
+  return out;
+}
+
+/** Does a beacon re-render its (rotating) shadow this step? While it is lit and its room is near
+ *  the player: the player's room or one a tunnel joins to it (nearRoomMask), so a Boiler Room
+ *  floor seen through the door from the vestibule never shows a shadow frozen at an old angle.
+ *  `nearMask` 0 = unknown: refresh (a wrong shadow is worse than a pass). */
+export function beaconShadowLive(level: number, room: number, nearMask: number): boolean {
+  if (!(level > 0)) return false;
+  if (nearMask === 0) return true;
+  return room >= 0 && room < 31 && (nearMask & (1 << room)) !== 0;
 }
 
 /** A beacon's sweep start angle (rad): a room's beacons spread evenly round the turn, so two start
@@ -39,8 +57,12 @@ export function beaconPhase(indexInRoom: number, countInRoom: number): number {
 
 
 /** Arming: the room's `strobe` gives a beacon the `emergency` script (dark through the strobe,
- *  then on for good); every other command applies to it as to any lamp. */
-export function scriptFor(mode: LightMode, isBeacon: boolean): LampScript['mode'] {
+ *  then on for good); before that every command applies to it as to any lamp. Once armed
+ *  (`current` is `emergency`) an emergency light stays on: every later command returns null,
+ *  keep the script as it is (a blackout or die would otherwise expire into the beacon's `dead`
+ *  mood and kill it for good; a second strobe would restart its dark spell). */
+export function scriptFor(mode: LightMode, isBeacon: boolean, current: LampScript['mode'] | null = null): LampScript['mode'] | null {
+  if (isBeacon && current === 'emergency') return null;
   return isBeacon && mode === 'strobe' ? 'emergency' : mode;
 }
 
