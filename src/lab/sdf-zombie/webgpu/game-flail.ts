@@ -9,6 +9,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { lights } from 'three/tsl';
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
@@ -22,8 +23,14 @@ import {
   FLAIL_IMPACT, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing, type FlailSide, type FlailSwing,
 } from './flail-swing';
 import { resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
+import { reticleNdc } from './fisheye';
 
 const FLAIL_GLB = '/assets/lab/flail.glb';
+/** A render layer no camera draws (three's layers are 0–31; 1–10 are taken —
+ *  sdf-layer SDF_LAYER … gib-motion-blur GIB_BLUR_LAYER): the flail's torch FILL
+ *  lives here so only the flail's own light list sees it (the scrapped censer's
+ *  fix, commit 8c24de2a). */
+const FLAIL_FILL_LAYER = 30;
 
 /** Feel numbers (spec §6). */
 export const FLAIL_FEEL = {
@@ -55,6 +62,14 @@ export const FLAIL_LOOK = {
   handShoulder: new THREE.Vector3(0.35, -0.47, 0.08),
   /** Primitive haft tip (the GLB's ChainAnchor replaces it), haft-local. */
   primAnchorY: 0.3,
+  /** The flail's share of the FLASHLIGHT (the censer's look-pass fix, ported).
+   *  The torch hangs ~1 m above the eye with a 1.6 decay: the flail, ~0.5–0.9 m
+   *  from it, took several times the light of a zombie two metres out and the
+   *  brown haft rendered white (Task 6 look pass, NOTES.md). The flail's own
+   *  light list (OWN LIGHT LIST) swaps the torch for a FILL — the same pose, cone
+   *  and colour, no distance falloff — at this fraction of the torch's live
+   *  intensity, so it still dims and flickers with it. */
+  flashFill: 0.018,
 } as const;
 
 export interface FlailDeps {
@@ -72,9 +87,10 @@ export interface FlailDebug {
   /** This frame's eye-bolt → ball-centre distance (view metres): `keyed` is the
    *  swing's own ball pose, `drawn` the ball after the chain clamp. */
   ballBolt: { keyed: number; drawn: number };
-  /** The drawn ball centre and eye bolt in NDC (gate photos), and the ball's
-   *  on-screen radius in NDC-x units. */
-  ndc: { ball: [number, number]; bolt: [number, number]; ballR: number };
+  /** The drawn ball centre, eye bolt and grip (the haft's foot) in SCREEN NDC —
+   *  through the fisheye lens, so they land on the photo's pixels — and the
+   *  ball's on-screen radius in NDC-x units. */
+  ndc: { ball: [number, number]; bolt: [number, number]; grip: [number, number]; ballR: number };
 }
 
 export interface FlailWeapon {
@@ -90,6 +106,10 @@ export interface FlailWeapon {
   hold(on: boolean): void;
   setHitStop(on: boolean): void;
   debug(): FlailDebug;
+  /** Where the player SEES a world point: screen NDC through the fisheye lens (gate crops). */
+  toScreen(x: number, y: number, z: number): [number, number] | null;
+  /** Re-list the flail's own lights (OWN LIGHT LIST) after a light is added. */
+  refreshLights(): void;
 }
 
 const MAX_LINKS = 40;
@@ -114,6 +134,101 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   const wood = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.8 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2c2b2a, metalness: 0.85, roughness: 0.5, envMap: env, envMapIntensity: 0.8 });
 
+  // ---- OWN LIGHT LIST (ported from the censer, commit 8c24de2a) -------------
+  // `material.lightsNode` REPLACES the scene's light list for that material
+  // (the level does this per room, game-main "LEVEL SURFACES"). The flail's
+  // list mirrors the default one — every light the camera sees whose whole
+  // ancestor chain is visible — EXCEPT the torch, which is swapped for the FILL
+  // (FLAIL_LOOK.flashFill). Re-listed on events, not polled: here (the level's
+  // lights and the flashlight exist before the flail) and via refreshLights()
+  // when game-main adds the muzzle flash with the gun. Forward route only
+  // (deferred has its own lighting).
+  const lightList = lights([]);
+  let listed: THREE.Light[] = [];
+  // THE FILL: on a layer no camera renders (so three's default per-camera lists
+  // skip it) and with `onlyRooms` empty (so the level's per-room lists skip it
+  // too — game-lighting-leaves levelSceneLights). Parented to the scene root,
+  // never hidden; its pose and intensity follow the torch every tick (syncFill).
+  const fill = new THREE.SpotLight(0xffffff, 0, 16, Math.PI * 0.12, 0.45, 0);
+  fill.name = 'flail-flash-fill';
+  fill.castShadow = false;
+  fill.layers.set(FLAIL_FILL_LAYER);
+  fill.userData.onlyRooms = new Set<number>();
+  fill.target.layers.set(FLAIL_FILL_LAYER);
+  const _fp = new THREE.Vector3();
+  function syncFill(): void {
+    const spot = ctx.lighting.flashlight?.spot;
+    if (!spot || !spot.visible) { fill.intensity = 0; return; }   // the torch is off in this rig (outdoor)
+    spot.updateMatrixWorld();
+    spot.target.updateMatrixWorld();
+    fill.position.copy(spot.getWorldPosition(_fp));
+    fill.target.position.copy(spot.target.getWorldPosition(_fp));
+    fill.color.copy(spot.color);
+    fill.angle = spot.angle;
+    fill.penumbra = spot.penumbra;
+    fill.distance = spot.distance;
+    fill.intensity = spot.intensity * FLAIL_LOOK.flashFill;
+    fill.updateMatrixWorld();
+    fill.target.updateMatrixWorld();
+  }
+  if (!ctx.boot.deferredMode) ctx.boot.handle.scene.add(fill, fill.target);
+  const litMaterials = new Set<THREE.Material>();
+  const shownInTree = (o: THREE.Object3D): boolean => {
+    for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  };
+  /** Re-list; true when the list changed. */
+  function relist(): boolean {
+    if (ctx.boot.deferredMode) return false;
+    const next: THREE.Light[] = [];
+    const torch = ctx.lighting.flashlight;
+    const camera = ctx.boot.handle.camera;
+    ctx.boot.handle.scene.traverse((o) => {
+      const l = o as THREE.Light;
+      if (!l.isLight || l === torch?.spot || l === torch?.levelShadow) return;
+      if (l.layers.test(camera.layers) && shownInTree(l)) next.push(l);
+    });
+    if (fill.parent) next.push(fill);
+    if (next.length === listed.length && next.every((l, i) => l === listed[i])) return false;
+    listed = next;
+    lightList.setLights(next);
+    // setLights() does not bump the node's version, so the materials' cache keys
+    // would never change and three would never rebuild them with the new list:
+    // bump the node, then the materials (the censer's verified fix).
+    lightList.needsUpdate = true;
+    for (const m of litMaterials) m.needsUpdate = true;
+    return true;
+  }
+  const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
+  const lit = new Map<THREE.Material, THREE.Material>();
+  /** Point every mesh under `root` at the flail's own light list. */
+  function ownLights(root: THREE.Object3D): void {
+    if (ctx.boot.deferredMode) return;
+    const conv = (m: THREE.Material): THREE.Material => {
+      let nm = lit.get(m);
+      if (!nm) {
+        // A material that is ALREADY a node material (the goblin skin) may be
+        // shared with other meshes: give the flail its own copy rather than
+        // re-point someone else's lights.
+        const node = (m as THREE.NodeMaterial).isNodeMaterial
+          ? (m as THREE.NodeMaterial).clone() as THREE.NodeMaterial
+          : library.fromMaterial(m);
+        if (!node) return m;
+        node.lightsNode = lightList;
+        lit.set(m, node);
+        lit.set(node, node);
+        litMaterials.add(node);
+        nm = node;
+      }
+      return nm;
+    };
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(conv) : conv(mesh.material);
+    });
+  }
+
   // PRIMITIVES FIRST, GLB OVER THEM (the flare's rule).
   const haftPrim = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.42, 12), wood);
   haftPrim.position.y = 0.09;
@@ -127,6 +242,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   chain.frustumCulled = false;
   chain.count = 0;
   rig.add(chain);
+  relist();
+  ownLights(rig);
   if (ctx.boot.deferredApi) ctx.boot.deferredApi.router.register(rig, 'mesh', 'level-only');
 
   void (async () => {
@@ -156,6 +273,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const found: THREE.Mesh[] = [];
       linkNode.traverse((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
       if (found[0]) { chain.geometry = found[0].geometry; chain.material = found[0].material; linkGeo.dispose(); }
+      ownLights(haft); ownLights(ball); ownLights(chain);
     } catch (e) {
       console.warn('[sdf-game] flail.glb absent or unreadable — using the primitive flail', e);
     }
@@ -166,17 +284,25 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     hand = arms.right;
     hand.name = 'flail-hand';
     hand.scale.setScalar(FLAIL_LOOK.handScale);
+    ownLights(hand);
     haft.add(hand);
   }).catch((e) => console.warn('[sdf-game] flail hand: goblin-arm.glb failed', e));
   const _sh = new THREE.Vector3(), _bend = new THREE.Vector3();
   function aimHand(): void {
     if (!hand) return;
     const view = ctx.weapon.viewModelAnchor;
-    view.updateMatrixWorld(true);
+    // The view anchor is an ancestor of the haft: refreshing the haft's
+    // ancestor chain refreshes it too, without re-walking the whole subtree.
+    haft.updateWorldMatrix(true, false);
     view.localToWorld(_sh.copy(FLAIL_LOOK.handShoulder));
     view.localToWorld(_bend.copy(FLAIL_LOOK.handShoulder).add(BEND_R_VIEW));
     haft.worldToLocal(_sh); haft.worldToLocal(_bend);
     _bend.sub(_sh).normalize();
+    // aimArm solves with the arm's UNSCALED bone lengths (FORE_LEN_M/UPPER_LEN_M)
+    // in the haft's space, but the arm is drawn at handScale: solve against the
+    // shoulder's offset from the hand divided by handScale, so the drawn (scaled)
+    // upper arm ends AT the shoulder instead of ~20% short of it.
+    _sh.sub(hand.position).divideScalar(FLAIL_LOOK.handScale).add(hand.position);
     aimArm(hand, _sh, _bend);
   }
 
@@ -230,6 +356,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   const _p = new THREE.Vector3(), _tan = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1);
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
   const Y = new THREE.Vector3(0, 1, 0);
+  const _rigQ = new THREE.Quaternion(), _down = new THREE.Vector3();
   const ballBolt = { keyed: 0, drawn: 0 };
   function draw(): void {
     const pose = flailPose(swing);
@@ -257,7 +384,11 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     _b.copy(ball.position).addScaledVector(_tan, FLAIL_LOOK.ringOffset); // the ring, rig-local
     const span = _a.distanceTo(_b);
     const sag = Math.max(0, FLAIL_LOOK.chainLen - span) * 0.6;
-    _c.copy(_a).add(_b).multiplyScalar(0.5); _c.y -= sag;
+    // The sag droops toward the FLOOR: world down in rig-local space (rig-local
+    // −Y tilts with the aim pitch and the holster).
+    rig.getWorldQuaternion(_rigQ);
+    _down.set(0, -1, 0).applyQuaternion(_rigQ.invert());
+    _c.copy(_a).add(_b).multiplyScalar(0.5).addScaledVector(_down, sag);
     const n = Math.min(MAX_LINKS, Math.max(2, Math.round(Math.max(span, FLAIL_LOOK.chainLen * 0.8) / FLAIL_LOOK.linkPitch)));
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n, u = 1 - t;
@@ -274,15 +405,25 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     aimHand();
   }
 
-  /** Gate readback only (never per frame): where the ball and bolt are on screen. */
+  /** A world point → screen NDC through the fisheye lens (gate readback only). */
+  function screenNdc(w: THREE.Vector3): [number, number] {
+    const cam = ctx.boot.handle.camera;
+    cam.updateMatrixWorld();
+    const v = w.clone().project(cam);
+    const lens = ctx.render.postAa?.lens;
+    const p = lens ? reticleNdc({ x: v.x, y: v.y }, lens) : { x: v.x, y: v.y };
+    return [p.x, p.y];
+  }
+  /** Gate readback only (never per frame): where the ball, bolt and grip are on screen. */
   function ndcNow(): FlailDebug['ndc'] {
     const cam = ctx.boot.handle.camera;
     rig.updateMatrixWorld(true);
     const b = ball.getWorldPosition(new THREE.Vector3());
     const r = b.clone().add(new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(0.06));
     const k = haft.localToWorld(anchorLocal.clone());
-    b.project(cam); r.project(cam); k.project(cam);
-    return { ball: [b.x, b.y], bolt: [k.x, k.y], ballR: Math.hypot(r.x - b.x, r.y - b.y) };
+    const g = haft.getWorldPosition(new THREE.Vector3());
+    const bn = screenNdc(b), rn = screenNdc(r);
+    return { ball: bn, bolt: screenNdc(k), grip: screenNdc(g), ballR: Math.hypot(rn[0] - bn[0], rn[1] - bn[1]) };
   }
 
   return {
@@ -304,6 +445,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
         for (const side of r.strikes) strike(side);
       }
       click = false;
+      syncFill();
       draw();
     },
     updateRig() {
@@ -321,6 +463,14 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     click() { click = true; },
     hold(on) { held = on; },
     setHitStop(on) { hitStopOn = on; if (!on) hitStop = 0; },
+    toScreen(x, y, z) {
+      const cam = ctx.boot.handle.camera;
+      cam.updateMatrixWorld();
+      const v = new THREE.Vector3(x, y, z).project(cam);
+      if (v.z > 1) return null;
+      return screenNdc(new THREE.Vector3(x, y, z));
+    },
+    refreshLights() { relist(); },
     debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, ballBolt: { ...ballBolt }, ndc: ndcNow() }),
   };
 }

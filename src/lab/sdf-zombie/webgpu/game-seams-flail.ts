@@ -13,6 +13,8 @@ export function createFlailSeams(ctx: GameContext) {
       /** Off for deterministic frame counts in gates. */
       setHitStop: (on: boolean) => { ctx.weapon.flail?.setHitStop(on); },
       state: () => ctx.weapon.flail?.debug() ?? null,
+      /** A world point → screen NDC through the fisheye lens (null behind the camera). */
+      toScreen: (x: number, y: number, z: number) => ctx.weapon.flail?.toScreen(x, y, z) ?? null,
       /** Live (not dead, not carve) prims on one limb of an actor — a sever readback. -1 = no actor.
        *  Counts only prims of a LIVE cluster: a full-limb sever (sever.ts severLimb) marks the
        *  CLUSTER dead and leaves its prims' own `dead` flags alone. */

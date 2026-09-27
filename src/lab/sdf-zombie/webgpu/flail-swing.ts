@@ -40,28 +40,44 @@ export interface FlailPose { grip: Vec3; rot: Vec3; ball: Vec3 }
 
 interface Key extends FlailPose { t: number }
 
-/** Idle: the fist low right, the haft tipped forward, the ball hanging below its tip. */
+/** Idle: the fist just below the frame's lower-right corner, the haft rising
+ *  from it up and a little inward, the ball hanging ~0.33 m under the eye bolt
+ *  in the lower-right third (measured in game through the fisheye: ball screen
+ *  NDC (0.54, −0.71); see docs/dev-notes/2026-09-26-flail/NOTES.md). The first cut (grip 0.22, −0.3,
+ *  −0.4; haft tipped −1.1 rad; ball 0.5 m down) hung the ball below the frame. */
 export const FLAIL_REST: FlailPose = {
-  grip: [0.22, -0.3, -0.4],
-  rot: [-1.1, 0, 0],
-  ball: [0.24, -0.5, -0.55],
+  grip: [0.4, -0.33, -0.5],
+  rot: [-0.6, 0, 0.1],
+  ball: [0.355, -0.29, -0.75],
 };
+
+// Every key keeps the ball within chain reach of the eye bolt (the haft's
+// ChainAnchor, 0.448 m up the haft; game-flail.ts clamps the DRAWN ball to
+// 0.415 m of it), so the drawn motion follows the authored arc instead of a
+// clamped one (between keys the spline can still overrun it briefly: R's
+// follow-through reaches 0.49 m near t 0.23 and is clamped for ~4 frames). The
+// follow-through ball sits deeper than the strike's (−1.33 vs −1.15) because
+// the strike tangent carries the ball forward: a shallower follow-through key
+// overshoots the overshoot test's 3 cm. At the strike the haft points at the ball, the chain straight
+// out past its tip: the ball leads the hand into the hit. The haft's `rot`
+// here is (pitch, 0, lean): the lean tips it inward/outward, the pitch
+// forward/back (XYZ Euler of the haft's +Y).
 
 /** R: wind back up and right, strike across the front, follow through low left. */
 const KEYS_R: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
-  { t: 0.1, grip: [0.32, -0.02, -0.3], rot: [0.3, 0, -0.6], ball: [0.55, 0.25, -0.3] },
-  { t: 0.18, grip: [0.05, -0.2, -0.55], rot: [-1.2, 0.6, 0.3], ball: [-0.05, -0.35, -1.15] },
-  { t: 0.3, grip: [-0.2, -0.35, -0.45], rot: [-1.4, 1.0, 0.6], ball: [-0.6, -0.6, -1.6] },
+  { t: 0.1, grip: [0.34, -0.05, -0.35], rot: [0.1, 0, -0.41], ball: [0.7, 0.15, -0.6] },
+  { t: 0.18, grip: [0.12, -0.22, -0.46], rot: [-1.76, 0, 0.24], ball: [-0.05, -0.35, -1.15] },
+  { t: 0.3, grip: [-0.1, -0.34, -0.61], rot: [-1.89, 0, 0.49], ball: [-0.5, -0.58, -1.33] },
   { t: 0.45, ...FLAIL_REST },
 ];
 
 /** L: wind back across the chest to the left, strike across the front, follow through low right. */
 const KEYS_L: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
-  { t: 0.1, grip: [-0.05, -0.05, -0.3], rot: [0.3, 0, 0.6], ball: [-0.35, 0.2, -0.35] },
-  { t: 0.18, grip: [0.12, -0.2, -0.55], rot: [-1.2, -0.6, -0.3], ball: [0.1, -0.35, -1.15] },
-  { t: 0.3, grip: [0.35, -0.35, -0.45], rot: [-1.4, -1.0, -0.6], ball: [0.65, -0.55, -1.6] },
+  { t: 0.1, grip: [-0.02, -0.08, -0.35], rot: [0.1, 0, 0.52], ball: [-0.45, 0.1, -0.6] },
+  { t: 0.18, grip: [0.22, -0.22, -0.46], rot: [-1.76, 0, 0.17], ball: [0.1, -0.35, -1.15] },
+  { t: 0.3, grip: [0.45, -0.34, -0.61], rot: [-1.89, 0, -0.43], ball: [0.8, -0.58, -1.33] },
   { t: 0.45, ...FLAIL_REST },
 ];
 

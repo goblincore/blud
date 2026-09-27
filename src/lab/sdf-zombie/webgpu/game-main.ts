@@ -4103,6 +4103,8 @@ async function main() {
     ctx.weapon.aimRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights(ctx);
+    // …and so was the flail's own list (game-flail.ts OWN LIGHT LIST).
+    ctx.weapon.flail?.refreshLights();
     ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');
