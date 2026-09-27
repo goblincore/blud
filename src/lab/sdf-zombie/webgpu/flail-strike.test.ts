@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/flail-strike.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { FLAIL_STRIKE, inStrikeArc, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
+import { FLAIL_HEAD, FLAIL_STRIKE, flailWound, inStrikeArc, isHeadRegion, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
 import type { Vec3 } from '../types';
 
 /** Standard polynomial smooth-min (k = blend radius). */
@@ -144,5 +144,26 @@ describe('resolveStrike placement on a two-part body (torso + forward-hanging he
     const hits = resolveStrike(EYE, 0, impact, [hugger]);
     expect(hits).toHaveLength(1);
     expect(hits[0]!.point[2]).toBeGreaterThan(-0.2); // front half, not the -0.48 back wall
+  });
+});
+
+describe('gradual head damage', () => {
+  it('a head prim, or a point within regionDist of the head centre, is the head region', () => {
+    expect(isHeadRegion('head', [0, 0, 0], null)).toBe(true);
+    expect(isHeadRegion('torso', [0, 1.4, 0], [0, 1.6, 0])).toBe(true);
+    expect(isHeadRegion('torso', [0, 1.2, 0], [0, 1.6, 0])).toBe(false);
+    expect(isHeadRegion('armL', [0, 1.0, 0], null)).toBe(false);
+  });
+  it('head hits before the last cave the face in without severing; the last one severs', () => {
+    for (let before = 0; before < FLAIL_HEAD.hitsToSever - 1; before++) {
+      expect(flailWound(true, before, 0.14, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0 });
+    }
+    const last = flailWound(true, FLAIL_HEAD.hitsToSever - 1, 0.14, 1.3);
+    expect(last.radius).toBe(0.14);
+    expect(last.severRadius).toBeCloseTo(0.182, 9);
+  });
+  it('body hits are unchanged', () => {
+    expect(flailWound(false, 0, 0.14, 1.3).radius).toBe(0.14);
+    expect(flailWound(false, 7, 0.14, 1.3).severRadius).toBeCloseTo(0.182, 9);
   });
 });

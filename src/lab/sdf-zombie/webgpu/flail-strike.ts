@@ -202,3 +202,21 @@ export function resolveStrike(eye: Vec3, yaw: number, impactWorld: Vec3, actors:
   }
   return hits;
 }
+
+/** Gradual head damage (spec §10.5): head-region hits before the last cave the face
+ *  in (a smaller crater, no sever); the last one takes the head off. */
+export const FLAIL_HEAD = { regionDist: 0.25, hitsToSever: 3, faceCraterR: 0.09 } as const;
+
+export function isHeadRegion(limb: string | undefined, point: Vec3, headCentre: Vec3 | null): boolean {
+  if (limb === 'head') return true;
+  if (!headCentre) return false;
+  return Math.hypot(point[0] - headCentre[0], point[1] - headCentre[1], point[2] - headCentre[2]) < FLAIL_HEAD.regionDist;
+}
+
+/** The wound for one hit. `headHitsBefore` counts this actor's earlier head-region hits. */
+export function flailWound(
+  headRegion: boolean, headHitsBefore: number, craterR: number, severMul: number,
+): { radius: number; severRadius: number } {
+  if (!headRegion || headHitsBefore + 1 >= FLAIL_HEAD.hitsToSever) return { radius: craterR, severRadius: craterR * severMul };
+  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0 };
+}
