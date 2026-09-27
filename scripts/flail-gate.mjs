@@ -1,6 +1,6 @@
 // scripts/flail-gate.mjs — the spike flail lands one big crater, refuses out-of-reach and
-// out-of-arc targets, caves a head in over three hits and takes it off on the third
-// (Tasks 6 and 11 of the spike-flail plan; spec
+// out-of-arc targets, caves a head in over four crosshair-aimed hits and takes it off on the
+// fourth, and needs at least four body hits to drop a zombie (Tasks 6, 11 and 12 of the spike-flail plan; spec
 // docs/superpowers/specs/2026-09-26-spike-flail-design.md; notes and photos in
 // docs/dev-notes/2026-09-26-flail/NOTES.md).
 //
