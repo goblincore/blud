@@ -336,3 +336,47 @@ unchanged, and the kit test passes against a shadow glTF again.
 **`minotaur.blob` has the same pivot problem** and was not touched here. That
 is the owner's call: the minotaur is "done enough", and fixing it means the
 same re-fraction.
+
+# Task 6 — the charge, the brawl and the rage, 2026-09-27
+
+- **`charge.ts` (pure, 7 tests), the bull charge:**
+  - **Windup** (0.85 s; 0.6 s enraged): halted, squared up to the player,
+    tracking them. The line **locks at the end** of the windup, so a sidestep
+    after the lock makes him miss.
+  - **Run:** straight and uncorrectable at 3.2 m/s. It carries 2 m past the
+    player's locked spot, or runs out at 1.8 s.
+  - **One hit per charge.**
+  - **A wall in his line stuns him for 2 s:** the punish window. It is
+    detected with his half-depth plus a stride of probe, through the actor's
+    `canMoveTo` and the room bounds.
+  - **Cooldown:** 5 s, or 2.2 s enraged, then a roll (1.2/s), not a timer.
+  - **Eligibility:**
+    - armed: only when the player is inside 4.5 m (too close to rocket), and
+      never mid-volley;
+    - enraged: from 2.2 to 9 m.
+- **`makeWarbullMind` (`enemy-mind.ts`)** layers the charge over the soldier
+  brain:
+  - Armed, the brain shoots rocket volleys (`ROCKET_TUNING`).
+  - **Disarmed,** a second soldier brain on `WARBULL_BRAWL_TUNING` (reach
+    1.9 m, engage 3.6 m) is told its right arm is gone. It takes the soldier
+    brain's existing one-armed melee path: pursue, left-arm hook, melee-ring
+    tokens.
+  - A running charge ignores staggers; a stagger in the windup calls it off.
+  - `MotionProfile.charger` selects this mind in game-main.
+- **Running legs:** the new `MindOutput.runSpeed` scales the gait's cruise
+  through the same `cruiseScale` the burning panic run uses. The legs run the
+  run instead of the root sliding under a walk. The actor test measures over
+  2 m/s through the real actor.
+- **Damage:** the charge's hit is `VITALS.chargeHit` 30 (a sword hit is 15);
+  the brawl's swings use the sword's value.
+- **Status lights:** windup and run strobe; stunned stutters.
+- **`game-actor-warbull.test.ts`,** 3 more tests:
+  - a close player is charged (windup, a real run, one `shove` contact);
+  - a player at rocket range is not charged;
+  - disarmed, he brawls (melee-capable, attacks, `hook` contacts) and never
+    fires.
+- **Visual, not verified here:**
+  - **The run's arms:** the arms are thrown forward on the `shove` swing
+    through the run. Whether that reads as a bull charge or wants a
+    head-down pose is for the owner's playtest.
+  - **The run's legs:** whether STOMP at 3.2 m/s reads as a run.

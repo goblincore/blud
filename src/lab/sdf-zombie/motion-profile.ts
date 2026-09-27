@@ -56,6 +56,10 @@ export interface MotionProfile {
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
   gunner?: { weapon: GunnerWeapon };
+  /** A CHARGER: the game gives it the warbull mind (enemy-mind.ts
+   *  makeWarbullMind), the bull charge (charge.ts) over its gunner brain,
+   *  and a brawl once disarmed. Needs `gunner`. */
+  charger?: boolean;
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
@@ -277,6 +281,8 @@ export const WARBULL_PROFILE: MotionProfile = {
   // Plates on the machinery only (plate-armor.ts WARBULL_ARMOR); shooting
   // the launcher off disarms him (spec, "Disarm").
   armor: { spec: WARBULL_ARMOR, injury: WARBULL_INJURY_TUNING, disarmPlate: 'launcher' },
+  // The bull charge up close, and the brawl once disarmed (spec, "Melee").
+  charger: true,
 };
 
 /** The bride: a slow STALK in a high sword guard; the point trails on the

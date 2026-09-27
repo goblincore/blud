@@ -82,7 +82,7 @@ import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from 
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
-import { makeSoldierMind, makeSwordMind } from './enemy-mind';
+import { makeSoldierMind, makeWarbullMind, makeSwordMind } from './enemy-mind';
 import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
 import { GUNNER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
@@ -3315,7 +3315,9 @@ async function main() {
       // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
       // gun, the juggernaut's chaingun. Was `name === 'soldier'`.
       ...(characterEntry(name).profile.gunner ? {
-        mind: makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
+        mind: characterEntry(name).profile.charger
+          ? makeWarbullMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon])
+          : makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
           ctx.world.encounter.shot(zombieId);
@@ -3364,7 +3366,11 @@ async function main() {
       // SDF game loads no audio at all, so there is none to reuse.
       onMeleeContact: ({ variant }) => {
         ctx.player.hitFeedback = hitFeedback(ctx.player.hitFeedback, variant);
-        damagePlayer(ctx, VITALS.swordHit, 'melee');   // the game loop: a landed blade hurts
+        // A landed blade hurts; the warbull's charge (a charger's 'shove',
+        // charge.ts, one per run) hurts twice as much. Its brawl swings keep
+        // the sword's value.
+        const charged = characterEntry(name).profile.charger && variant === 'shove';
+        damagePlayer(ctx, charged ? VITALS.chargeHit : VITALS.swordHit, 'melee');
       },
       // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
       // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from

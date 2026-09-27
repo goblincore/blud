@@ -11,7 +11,8 @@ import { WARBULL_PROFILE } from '../motion-profile';
 import { ROCKET_TUNING } from '../soldier-brain';
 import { WARBULL_ARMOR } from '../plate-armor';
 import { STATUS_LIGHTS } from '../status-lights';
-import { makeSoldierMind } from './enemy-mind';
+import { makeSoldierMind, makeWarbullMind } from './enemy-mind';
+import { CHARGE } from '../charge';
 import { createZombieActor } from './game-actor';
 import type { Vec3 } from '../types';
 import { sdBody } from '../validate';
@@ -129,5 +130,72 @@ describe('warbull machinery plates (game actor)', () => {
 
   it('his left arm is bare flesh: the first round wounds', () => {
     expect(pelletOnBone(bull(), 'upperarm.l')).not.toBeNull();
+  });
+});
+
+describe('warbull charge (game actor, warbull mind)', () => {
+  function charger(playerZ: number) {
+    const contacts: string[] = [];
+    const fired = { n: 0 };
+    const actor = createZombieActor({
+      id: 2, room: 1, seed: 11, start: [0, 0, 0],
+      bounds: { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, furniture: [],
+      body,
+      view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any,
+      profile: WARBULL_PROFILE, mind: makeWarbullMind(ROCKET_TUNING),
+      character: { wounds: undefined, releaseProp() {} } as any,
+      onMeleeContact: ({ variant }) => contacts.push(variant),
+      onFire: () => { fired.n++; },
+    });
+    const states: string[] = [], pos: number[] = [];
+    const step = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        actor.setBrainInput({ x: 0, z: playerZ, room: 1 }, true);
+        actor.step(1 / 60);
+        states.push(actor.debug().state); pos.push(actor.pose().pos[2]);
+      }
+    };
+    return { actor, step, states, pos, contacts, fired };
+  }
+
+  it('a player who closes in gets charged: windup, a real run, one hit', () => {
+    const c = charger(3.8);
+    c.step(60 * 6);
+    const w = c.states.indexOf('windup'), r = c.states.indexOf('charge');
+    expect(w).toBeGreaterThanOrEqual(0);
+    expect(r).toBeGreaterThan(w);
+    // The run is a RUN: over some 0.25 s of it the root covers >= 2 m/s.
+    let best = 0;
+    for (let i = r; i + 15 < c.states.length && c.states[i + 15] === 'charge'; i++) best = Math.max(best, (c.pos[i + 15]! - c.pos[i]!) / 0.25);
+    expect(best).toBeGreaterThan(2);
+    expect(best).toBeLessThan(CHARGE.speed * 1.3);
+    expect(c.contacts.length).toBeGreaterThanOrEqual(1);
+    expect(c.contacts[0]).toBe('shove');
+  });
+
+  it('armed, a player out at rocket range is shelled, not charged', () => {
+    const c = charger(8);
+    c.step(60 * 4);
+    expect(c.states).not.toContain('charge');
+  });
+
+  it('disarmed, he brawls: closes in and swings, claiming melee tokens, and never fires', () => {
+    const c = charger(1.6);
+    c.step(5);
+    for (let i = 0; i < hp('launcher'); i++) {
+      const prim = c.actor.posed().prims.find(p => p.bone === 'forearm.r' && p.op !== 'sub' && !p.shell)!;
+      const x = (prim.a[0] + prim.b[0]) / 2, y = (prim.a[1] + prim.b[1]) / 2;
+      let z = 3, field = c.actor.posed();
+      for (let k = 0; k < 600; k++) { const d = sdBody([x, y, z], field); if (d < 0.001) break; z -= Math.max(d, 0.001); }
+      c.actor.beginHits(); c.actor.hit([x, y, z], [0, 0, -1], { weapon: 'shotgun', shotId: ++shotId, barrels: 1, barrel: 0 }); c.actor.endHits();
+    }
+    expect(c.actor.disarmed()).toBe(true);
+    c.actor.setRingInput(true, 0);
+    const firedBefore = c.fired.n;
+    for (let i = 0; i < 60 * 4; i++) { c.actor.setRingInput(true, 0); c.step(1); }
+    expect(c.actor.mind().meleeCapable).toBe(true);
+    expect(c.states.slice(-60 * 4)).toContain('attack');
+    expect(c.contacts).toContain('hook');
+    expect(c.fired.n).toBe(firedBefore);
   });
 });

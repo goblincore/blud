@@ -20,6 +20,9 @@ export const VITALS = {
   biteReach: 0.9,
   /** One landed swing of the bride's sword (its mind reports contact). */
   swordHit: 15,
+  /** The warbull's bull charge landing (its one hit per charge, charge.ts):
+   *  twice a sword hit, the price of not sidestepping a telegraphed run. */
+  chargeHit: 30,
   /** One soldier pellet or cultist SMG round (they share a projectile list). */
   soldierPellet: 3,
   /** After a melee hit, further melee is ignored for this long. */

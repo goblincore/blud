@@ -1137,6 +1137,7 @@ export function createZombieActor(opts: {
         ...(encounterOrder ? { lineOfSight: encounterOrder.visible, mayFire: encounterOrder.fireAllowed } : {}),
         hasToken: ringToken,
         drift: ringDrift,
+        ...(armor?.disarmPlate ? { disarmed: disarmedNow() } : {}),
         roll: swingRng(),
         rollDrift: swingRng(),
         missing: missingLimbs(),
@@ -1228,7 +1229,9 @@ export function createZombieActor(opts: {
       }
       // The burn override's speed multiplier rides the same signals object
       // stepMotion consumes; 1 (absent-equivalent) when not burning.
-      signals.cruiseScale = burnCruiseScale;
+      signals.cruiseScale = burnCruiseScale
+        // The warbull's charge runs at its own speed (MindOutput.runSpeed).
+        * (think.runSpeed !== undefined && opts.profile ? think.runSpeed / opts.profile.cruise : 1);
       brainAlerted = false;   // one-shot: the first sub-step consumes it
       lastEngaged = think.engaged;
       lastCommitted = think.committed;

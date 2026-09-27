@@ -22,7 +22,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   stops rounds; shooting the launcher off drops the prop, ends the ranged mode, turns the core red. Also fixed his head
   pivot (the minotaur rig's neck ends deep in the traps, so the gaze nod swung his head 24-55 cm).
 - [ ] Minotaur has the same head-pivot problem (cranium 0.48 m above the neck pivot); fix = the warbull's re-fraction.
-- [ ] Task 6 charge/gore/enrage; Task 7 arena spawn.
+- [x] **Charge + brawl + rage** (Task 6): pure `charge.ts` (telegraphed windup, locked line, 3.2 m/s run, one hit,
+  wall = 2 s stun); `makeWarbullMind` layers it over the rocket brain, and once disarmed a one-armed brawl brain;
+  `MindOutput.runSpeed` makes the legs run the charge; charge hit 30.
+- [ ] Task 7 arena spawn.
 
 ## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 
