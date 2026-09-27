@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildLightList, type LightSource } from './light-list';
 import { LIGHT_PROFILES, PROFILE_ID } from './light-profiles';
+import { collectLightSources, pickBodyFor } from './game-light-list-leaves';
 import { lightPresence, lightRank, pickLights, unpackPick, type Pick } from './light-pick';
 
 const tube = (x: number, z: number, i = 7): LightSource => ({ kind: 'spot', profile: 'tube', pos: [x, 2.2, z], color: [0.8, 0.9, 1], intensity: i, range: 6, axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45), rooms: [3] });
@@ -73,7 +74,8 @@ describe('lightRank keeps presentingLamp (game-dynamic-light-leaves.ts) rules', 
     const lum = (0.8 * 0.2126 + 0.9 * 0.7152 + 0.0722) * 7;
     const facingDot = 1;
     const facing = tubeProf.backKey + (1 - tubeProf.backKey) * (facingDot * 0.5 + 0.5);
-    expect(lightRank(list[0]!, b)).toBeCloseTo(tubeProf.coverFloor * lum * facing / (1 + tubeProf.distFall * dist * dist), 6);
+    // Rank is on delivered light: x the profile gain x bodyNorm (1 here: no refIntensity).
+    expect(lightRank(list[0]!, b)).toBeCloseTo(tubeProf.coverFloor * lum * tubeProf.gain * facing / (1 + tubeProf.distFall * dist * dist), 6);
   });
   it('the pick reads coverFloor, not the shader wrap floor (review fix, Task 4)', () => {
     const list = buildLightList([tube(0, 0)]);
@@ -81,7 +83,7 @@ describe('lightRank keeps presentingLamp (game-dynamic-light-leaves.ts) rules', 
     const w = lightRank(list[0]!, b);
     const dist = Math.hypot(4, 1.3);
     const lum = (0.8 * 0.2126 + 0.9 * 0.7152 + 0.0722) * 7;
-    expect(w / (lum / (1 + tubeProf.distFall * dist * dist))).toBeCloseTo(tubeProf.coverFloor, 6);
+    expect(w / (lum * tubeProf.gain / (1 + tubeProf.distFall * dist * dist))).toBeCloseTo(tubeProf.coverFloor, 6);
   });
   it('full cover inside the inner cone, a smoothstep down to zero at the edge angle (outer angle x edge)', () => {
     const list = buildLightList([tube(0, 0)]);
@@ -157,5 +159,34 @@ describe('packed weight is absolute presence, not a share of the dominant (revie
     const p = pickLights(list, body(0, 0), out);
     expect(p).toBe(out);
     expect(p.idx[0]).toBe(0);
+  });
+});
+
+describe('ranking is on DELIVERED light (Task 10 review: rgb x gain x bodyNorm, not physical rgb)', () => {
+  // A lit third-class tube overhead (base power 1, spot 7 = base x TUBE_SPOT_GAIN, the reader's
+  // refIntensity) and the player's 35-intensity muzzle flash 1.5 m from the body's chest.
+  const sources = () => collectLightSources({
+    lamps: [{ pos: [0, 2.2, 0], color: [0.8, 0.9, 1], intensity: 7, ref: 7, range: 6, room: 3, mood: 'steady',
+      tube: { axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45) } }],
+    window: null, flashlight: null,
+    flashes: [{ pos: [0, 1.2, 1.5], intensity: 35 }],
+  });
+  const b = pickBodyFor([0, 0, 0], 3, [0, 1.6, 4]);
+  it('a muzzle flash near a body under a lit tube does not steal slot 0 from the tube', () => {
+    const list = buildLightList(sources());
+    const tubeIdx = list.findIndex(l => l.profile === PROFILE_ID.tube);
+    const muzzleIdx = list.findIndex(l => l.profile === PROFILE_ID.muzzle);
+    const p = pickLights(list, b);
+    expect(p.idx[0]).toBe(tubeIdx);
+    expect(p.idx[1]).toBe(muzzleIdx);
+    // Physical rgb alone would have ranked the muzzle first (the bug this pins).
+    const lum = (c: readonly number[]) => c[0]! * 0.2126 + c[1]! * 0.7152 + c[2]! * 0.0722;
+    expect(lightPresence(list[muzzleIdx]!, b) * lum(list[muzzleIdx]!.color))
+      .toBeGreaterThan(lightPresence(list[tubeIdx]!, b) * lum(list[tubeIdx]!.color));
+  });
+  it('the packed weight stays absolute presence (the delivered scale only ranks)', () => {
+    const list = buildLightList(sources());
+    const p = pickLights(list, b);
+    for (let k = 0; k < 2; k++) expect(p.weight[k]).toBeCloseTo(Math.min(0.999, lightPresence(list[p.idx[k]!]!, b)), 9);
   });
 });

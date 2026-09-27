@@ -18,6 +18,7 @@
 import { execFileSync } from 'node:child_process';
 import { inflateSync } from 'node:zlib';
 
+const T0 = Date.now();
 const VITE = Number(process.argv[2] ?? 5297);
 const CDP = Number(process.argv[3] ?? 9297);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -289,8 +290,11 @@ const SCENES = [
   // the clock with the tubes lit.
   { name: 'flashlight', frame: UNDER_B, setup: ['holdWindowLight(0, -1)', 'setLightClockFrozen(false)', 'setFlashlight(true)'], repin: true },
   // The coat check (room 6): its lamps are dead at the start, nothing picks these bodies.
-  { name: 'dark', frame: [-1.2, -62.4], setup: ['holdWindowLight(0, -1)', 'setFlashlight(false)'] },
+  { name: 'dark', frame: [-1.2, -62.4], room: 6, setup: ['holdWindowLight(0, -1)', 'setFlashlight(false)'] },
 ];
+/** How far the framed actor may stand from a scene's target point (Task 10 review): the nearest
+ *  actor must really be the one placed there, not a body in another carriage. */
+const FRAME_NEAR = 2;
 /** Pin the flicker clock at a moment when third class's tubes are all at full level (one of them
  *  flickers; its frozen phase is otherwise boot-to-boot luck), so both boots, the crowd pair and
  *  every scene see the same lamps. */
@@ -343,6 +347,14 @@ async function listScenes(tag) {
       const a = await frameNearest(...sc.frame);
       console.log('DBG', tag, sc.name, JSON.stringify(await evaluate(`(() => { const z = __sdfGame.zombie(${a.id}); const u = z.view.uniforms; const L = __sdfGame.lights(); return { id: ${a.id}, room: z.room, pos: z.pose().pos, s2: u.spotCfg2.value.toArray(), kc: u.keyColor.value.toArray(), ld: u.lightDir.value.toArray(), lc: u.lightCfg.value.toArray(), ll: u.lightListCfg.value.toArray(), bl: u.bodyLights.value.toArray(), win: L.windowIntensity, flash: L.flash, r1: L.lamps.filter(x => x.room === 1).map(x => x.level), rl: L.roomLight }; })()`)));
     }
+    if (sc.room !== undefined) {
+      // The framed actor really is in the scene's room, at its target (Task 10 review): else the
+      // "dark" A/B could silently measure a body in a lit carriage.
+      const a = await frameNearest(...sc.frame);
+      const room = a.room;
+      const d = Math.hypot(a.pos[0] - sc.frame[0], a.pos[2] - sc.frame[1]);
+      if (room !== sc.room || !(d <= FRAME_NEAR)) fail(`${sc.name} scene (${tag}): framed actor ${a.id} in room ${room} (want ${sc.room}), ${d.toFixed(2)} m from the target (max ${FRAME_NEAR})`);
+    }
     if (sc.name === 'dark' && tag === 'on') {
       const a = await frameNearest(...sc.frame);
       const p = (await evaluate('__sdfGame.bodyPicks()')).find((q) => q.id === a.id);
@@ -385,5 +397,5 @@ for (const n of ['tube', 'bolt', 'flashlight']) if (!(listOn[n].dark <= 0.15)) f
 if (!(listOn.dark.dark <= Math.max(0.15, listOff.dark.dark + 0.05))) fail(`dark coat check: body box ${(listOn.dark.dark * 100).toFixed(1)}% near-black (off ${(listOff.dark.dark * 100).toFixed(1)}%)`);
 pass(`shared list look: on/off mean tube ${(listOn.tube.mean / listOff.tube.mean).toFixed(2)}x bolt ${(listOn.bolt.mean / listOff.bolt.mean).toFixed(2)}x flashlight ${(listOn.flashlight.mean / listOff.flashlight.mean).toFixed(2)}x; near-black tube ${(listOn.tube.dark * 100).toFixed(1)}% bolt ${(listOn.bolt.dark * 100).toFixed(1)}% flashlight ${(listOn.flashlight.dark * 100).toFixed(1)}% dark-corridor ${(listOn.dark.dark * 100).toFixed(1)}%`);
 
-console.log('PASS sdf-game-light-gate');
+console.log(`PASS sdf-game-light-gate (wall ${((Date.now() - T0) / 1000).toFixed(0)} s)`);
 process.exit(0);

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type TunnelLink } from './game-light-list-leaves';
 import { buildLightList, roomMaskOf } from './light-list';
+import { PROFILE_ID } from './light-profiles';
 import { lightPresence } from './light-pick';
 import { BODY_LAMP_GAIN, BODY_WINDOW_GAIN, PRESENT } from './game-dynamic-light-leaves';
-import { LAMP_LIST_TRIM, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, PROFILES_BY_NAME } from './light-profiles';
+import { LAMP_LIST_TRIM, OLD_BEAM_GAIN, OLD_BODY_FLASH_GAIN, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, PROFILES_BY_NAME } from './light-profiles';
+import { makeVfxState } from './game-state-vfx';
+import { makeLightingState } from './game-state-lighting';
 
 describe('collectLightSources', () => {
   it('maps lamps, tubes, window light, flashlight and flashes to typed sources', () => {
@@ -104,6 +107,28 @@ describe('the body-key calibration mirrors the old path (Task 10)', () => {
     expect(OLD_BODY_LAMP_GAIN).toBe(BODY_LAMP_GAIN);
     expect(OLD_BODY_WINDOW_GAIN).toBe(BODY_WINDOW_GAIN);
     expect(PROFILES_BY_NAME.tube.gain / (2.4 * OLD_BODY_LAMP_GAIN * LAMP_LIST_TRIM)).toBeCloseTo(PRESENT.gain, 9);
+  });
+  it('OLD_BEAM_GAIN and OLD_BODY_FLASH_GAIN equal the state factories\' defaults (Task 10 review)', () => {
+    expect(OLD_BEAM_GAIN).toBe(makeVfxState().beamTuning.gain);
+    expect(OLD_BODY_FLASH_GAIN).toBe(makeLightingState().bodyFlashGain);
+  });
+  it('fire-mood lamps carry no refIntensity (bodyNorm 1): the fire gain is on raw intensity (Task 10 review)', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 1, 0], color: [1, 0.6, 0.3], intensity: 2, ref: 3, range: 12, room: 1, tube: null, mood: 'fire' },
+              { pos: [0, 2, 0], color: [1, 1, 1], intensity: 1.5, ref: 3, range: 8, room: 1, tube: null, mood: 'steady' }],
+      window: null, flashlight: null,
+      flashes: [{ pos: [3, 1, 0], intensity: 5, fire: true }],
+    });
+    expect(s.map(x => x.refIntensity)).toEqual([undefined, 3, undefined]);
+    const list = buildLightList(s);
+    for (const l of list) if (l.profile === PROFILE_ID.fire) expect(l.bodyNorm).toBe(1);
+  });
+  it('pickBodyFor with `out` rewrites and returns it, equal to a fresh call', () => {
+    const out = pickBodyFor([9, 9, 9], 7, [9, 9, 10]);
+    const r = pickBodyFor([2, 0.5, -3], 4, [5, 1.6, 1], out);
+    expect(r).toBe(out);
+    expect(r).toEqual(pickBodyFor([2, 0.5, -3], 4, [5, 1.6, 1]));
+    expect(pickBodyFor([1, 0, 1], 2, [1, 5, 1], out).facing).toEqual([0, 1]);
   });
   it('lamps and the flashlight carry their base intensity as refIntensity', () => {
     const s = collectLightSources({

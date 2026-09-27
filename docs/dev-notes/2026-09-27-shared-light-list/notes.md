@@ -155,3 +155,82 @@ measurement on a quiet machine.
 
 `?refine=1` puts the game on the per-body path (the crowd path falls back), so its rows measure the
 refine twin's list loop at output resolution.
+
+## Task 10 review fixes
+
+**Ranking is on delivered light.** `lightRank` (and the pick) now rank on presence × lum(rgb) ×
+profile gain × bodyNorm, the same scalar the shader multiplies rgb by. Before this, rgb was
+physical, and gain × bodyNorm varies about 6× by kind (lit tube ≈0.19, flashlight 0.124, window
+0.109, muzzle 0.039, fire 0.033). So a 35-intensity muzzle flash 1.5 m from a body under a lit tube
+outranked the tube and took slot 0 (the dominant: scatter, the wound shadow, the shine). A
+light-pick test pins this case. The packed weight is still absolute presence. `RANK_FLOOR` (1e-4)
+now applies to the delivered scale.
+
+**Fire-mood lamps are not normalised twice.** The fire profile's gain converts raw intensity
+(bodyNorm 1), and burning-body flashes use it the same way. `collectLightSources` and the reader
+no longer set a reference intensity for fire-mood lamps.
+
+**Pinned mirrors.** `OLD_BEAM_GAIN` and `OLD_BODY_FLASH_GAIN` are test-pinned to
+`makeVfxState().beamTuning.gain` and `makeLightingState().bodyFlashGain`. The lamp's 1.1 is now
+`LAMP_PRESENT_GAIN`. The plan chose it and nobody has measured it; a warm bulb keys about 15% under
+the old path's 1.3.
+
+**Allocation-free pick path.** `pickBodyFor` takes an `out`, and the actor loop reuses one scratch
+body. `pickLights` keeps its rank and presence scratch at module level, and it packs the presence
+from the ranking pass instead of recomputing it. A spot's cover-zero cosine is computed once per
+light in `buildLightList` (`ListLight.coverZero`, CPU-only). List mode skips the bodyFlash
+best-flash scan, since that slot is zeroed anyway. Everything else behaves the same.
+
+**`a.room` keeps `||`.** In `game-actor.ts`, `roomAt(pos) || opts.room` stays as it is. Room id 0
+is never valid: `level-json.ts` rejects ids below 1, and the three levels use 1..8. Navigation's
+`roomAt` returns 0 to mean "in no room or tunnel". `||` falls back to the spawn room there. `??`
+would keep 0, and a room-0 body would then match no room-masked light.
+
+**The gate's dark scene is checked.** The framed actor must be in room 6 and within 2 m of the
+target (both boots).
+
+### Gate after the fixes (loaded machine, load average 27-95)
+
+```
+shared list: 15 lights in third class; crowd actors 27/28 (room 1, 8.2 m apart) dominants 0 (w 0.901) / 1 (w 0.497); 26/30 bodies picked
+tube       on  mean 0.349 std 0.306 dark 0.9% | off mean 0.331 std 0.290 dark 0.9%
+bolt       on  mean 0.375 std 0.335 dark 0.0% | off mean 0.373 std 0.336 dark 0.0%
+flashlight on  mean 0.595 std 0.357 dark 1.8% | off mean 0.593 std 0.364 dark 2.0%
+dark       on  mean 0.051 std 0.053 dark 60.3% | off mean 0.054 std 0.056 dark 57.9%
+shared list look: on/off mean tube 1.05x bolt 1.00x flashlight 1.00x
+PASS sdf-game-light-gate (wall 404 s)
+```
+
+The ratios are unchanged within noise (they were 1.04 / 0.99 / 1.00). The first run failed in section
+4 ("the glass did not flash: 0.2719 -> 0.3839"). That section comes before any list code, and the
+bolt flickers. The rerun passed.
+
+### Known gaps (for the owner)
+
+- **Muzzle and fire gains are derived only, never measured.** The old flash curve (I × 0.06 / d²)
+  and the list's (I × gain / (1 + distFall d²)) cross at 1.5 m. The list is about 3× brighter than
+  the old flash at 3 m and dimmer inside 1 m.
+- **The live tuning seams stop reaching bodies in list mode.** `setBodyFlash` / `bodyFlashGain` and
+  `beamTuning` no longer affect list-lit bodies. The profile gains bake in their defaults.
+- **BODY_DARK_FLOOR** still leaves about 60% of a body with no picks near-black (the dark coat
+  check: 60.3% against 57.9% today), the same as today.
+- **Non-storm levels keep the preset's warm keyColor as fill in list mode.** Only storm levels set
+  it to COLD_FILL at spawn. This needs a look on a non-storm level.
+- **Boiler Room cost.** +1.6 to 1.9 ms march GPU, measured on a loaded machine (see Cost). Deferred
+  to Task 13.
+
+### Cold boot, bodyLights WGSL (scripts/boot-time.mjs, fresh profile each run)
+
+The runs alternate head and base. Head is this commit (bodyLights WGSL from 6540bd05). Base is
+17b7ffe4 (before it), in a temporary worktree. The machine was loaded.
+
+```
+HEAD run 1: {"drawOnce":3364.5,"warmMs":4825}
+BASE run 1: {"drawOnce":3992.3,"warmMs":68570}
+HEAD run 2: {"drawOnce":3710.5,"warmMs":5471}
+BASE run 2: {"drawOnce":3727.3,"warmMs":5451}
+```
+
+drawOnce is within run-to-run noise: head 3.36 / 3.71 s against base 3.99 / 3.73 s. No cold-boot
+regression shows. Base run 1's 68.6 s warmMs is an outlier from the fresh worktree's first Vite
+dependency pre-bundle. Its second run is 5.45 s, level with head.

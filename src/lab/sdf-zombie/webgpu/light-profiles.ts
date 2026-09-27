@@ -38,11 +38,20 @@ export const MAX_PROFILES = 8;
 //  - muzzle and burning flashes: compose's flashDirect = warm x I x bodyFlashGain 0.06 x n.l / d².
 /** lightCfg.x (practical-hard-key's keyIntensity, material.ts). */
 export const OLD_KEY = LIGHT_PRESETS['practical-hard-key'].keyIntensity;
-/** game-dynamic-light-leaves.ts BODY_LAMP_GAIN / BODY_WINDOW_GAIN; game-main beamTuning.gain; bodyFlashGain. */
+/** Mirrors of the old path's live constants, each pinned equal to its home by a test
+ *  (game-light-list-leaves.test.ts): game-dynamic-light-leaves.ts BODY_LAMP_GAIN /
+ *  BODY_WINDOW_GAIN; makeVfxState().beamTuning.gain (game-state-vfx.ts); makeLightingState()
+ *  .bodyFlashGain (game-state-lighting.ts). They are the DEFAULTS: in list mode the live tuning
+ *  seams (setBodyFlash, beamTuning) no longer move the list's bodies. */
 export const OLD_BODY_LAMP_GAIN = 1.5;
 export const OLD_BODY_WINDOW_GAIN = 0.035;
 export const OLD_BEAM_GAIN = 4;
 export const OLD_BODY_FLASH_GAIN = 0.06;
+/** The warm-bulb lamp profile's presentation gain, from the plan's profile table (shared light
+ *  list plan 1, Task 1: `lamp: { gain: 1.1, ... }`), standing where the tube has PRESENT.gain 1.3.
+ *  The old presentingLamp applied 1.3 to every lamp, so a warm bulb keys a body ~15% under the
+ *  old path at equal presence: a deliberate, UNMEASURED presentation choice (no warm-bulb A/B). */
+export const LAMP_PRESENT_GAIN = 1.1;
 /** Measured trims (gate section 7's A/B: a body in a third-class tube's pool, the tube between it
  *  and the camera, the train stopped so the tube hangs still). The old key was ONE lamp; the list
  *  adds up to three more lights, each light's backRim, the wrap floor and the highlight shoulder
@@ -74,10 +83,10 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
   // LEVEL x level gain, exactly the old key's level term (flicker and blackouts still ride it);
   // then x LAMP_LIST_TRIM 0.7 (measured, see above) = 3.276.
   tube: { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * 1.3 * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.35, backRim: 2.5, rimTint: COLD_RIM, edge: 1.25, distFall: 0.06, spec: 1.0, specPow: 24 },
-  // lamp (warm bulbs): as the tube, normalised by its base power, keeping the lamp's own 1.1
-  // presentation gain (vs the tube's 1.3): 2.4 x 1.5 x 1.1 x LAMP_LIST_TRIM = 2.772 (the trim
+  // lamp (warm bulbs): as the tube, normalised by its base power, keeping the lamp's own
+  // LAMP_PRESENT_GAIN 1.1 (vs the tube's 1.3): 2.4 x 1.5 x 1.1 x LAMP_LIST_TRIM = 2.772 (the trim
   // is the tube's; no warm-bulb lamp was measured).
-  lamp: { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * 1.1 * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.4, backRim: 1.5, rimTint: WARM_RIM, edge: 1.25, distFall: 0.08, spec: 0.8, specPow: 20 },
+  lamp: { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * LAMP_PRESENT_GAIN * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.4, backRim: 1.5, rimTint: WARM_RIM, edge: 1.25, distFall: 0.08, spec: 0.8, specPow: 20 },
   // window / lightning: hard, cold, side rim (compose.wgsl.ts's lightning rim).
   // gain = lightCfg.x 2.4 x BODY_WINDOW_GAIN 0.035 x WINDOW_LIST_TRIM 1.3 = 0.1092 on the raw
   // intensity (bodyNorm 1): the window's intensity IS the storm's signal (a bolt peaks near 27-32).
@@ -91,11 +100,15 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
   // muzzle: compose.wgsl.ts flashDirect's warm colour lives in the light's rgb.
   // Old: I x 0.06 / d²; the list: I x gain / (1 + 0.2 d²) (the pick's distFall). Equal at a typical
   // 1.5 m (0.06 / 2.25 = gain / 1.45): gain = 0.06 x 1.45 / 2.25 = 0.039 (bodyNorm 1).
+  // DERIVED ONLY, never measured: the curves cross at 1.5 m, so the list is ~3x brighter than the
+  // old flash at 3 m and dimmer inside 1 m.
   muzzle: { gain: OLD_BODY_FLASH_GAIN * 1.45 / 2.25, viewBias: 0.0, floor: 0.0, coverFloor: 0.0, backKey: 1.0, backRim: 0.5, rimTint: WARM_RIM, edge: 1.0, distFall: 0.2, spec: 0.5, specPow: 16 },
   // fire: burning bodies fed the same bodyFlash slot as the muzzle, so the same conversion, with
-  // the fire profile's distFall 0.1 (0.06 x 1.225 / 2.25 = 0.033; bodyNorm 1). Fire-mood lamps did
-  // not key bodies in the old path (presentingLamp skips them); at their ~1-4 intensity this
-  // keeps them a faint warm touch within 3 m.
+  // the fire profile's distFall 0.1 (0.06 x 1.225 / 2.25 = 0.033), on the RAW intensity: every
+  // fire light has bodyNorm 1 (burning-body flashes carry no reference, and collectLightSources
+  // drops a fire-mood lamp's base power as its reference, Task 10 review). Derived only, never
+  // measured. Fire-mood lamps did not key bodies in the old path (presentingLamp skips them); at
+  // their ~1-4 intensity this keeps them a faint warm touch within 3 m.
   fire: { gain: OLD_BODY_FLASH_GAIN * 1.225 / 2.25, viewBias: 0.1, floor: 0.2, coverFloor: 0.2, backKey: 0.6, backRim: 1.2, rimTint: WARM_RIM, edge: 1.0, distFall: 0.1, spec: 0.4, specPow: 12 },
 };
 

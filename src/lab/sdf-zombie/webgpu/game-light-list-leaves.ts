@@ -78,7 +78,9 @@ export function collectLightSources(input: SourceInput): LightSource[] {
     if (l.room >= 0) s.rooms = [l.room];
     if (l.tube) { s.axis = l.tube.axis; s.cosOuter = l.tube.cosOuter; s.cosInner = l.tube.cosInner; }
     if (l.gain !== undefined) s.levelGain = l.gain;
-    if (l.ref !== undefined) s.refIntensity = l.ref;
+    // Not for fire: the fire profile's gain converts RAW intensity (bodyNorm 1, as for the
+    // burning-body flashes it also serves); a reference would normalise it twice (Task 10 review).
+    if (l.ref !== undefined && !fire) s.refIntensity = l.ref;
     if (l.tint) s.levelTint = [l.tint[0], l.tint[1], l.tint[2]];
     out.push(s);
   }
@@ -155,7 +157,8 @@ export function readSourceInput(
     const rec = (into.lamps[i] ??= { pos: [0, 0, 0], color: [1, 1, 1], intensity: 0, range: DEFAULT_RANGE, room: -1, tube: null, mood: 'steady' });
     rec.room = l.room; rec.mood = l.mood;
     rec.gain = l.gain; rec.tint = l.tint;
-    rec.ref = l.base * (l.tube?.spot ? TUBE_SPOT_GAIN : 1);
+    // Fire-mood lamps carry no reference (bodyNorm 1): see collectLightSources.
+    rec.ref = l.mood === 'fire' ? undefined : l.base * (l.tube?.spot ? TUBE_SPOT_GAIN : 1);
     const spot = l.tube?.spot;
     if (spot) {
       // A tube lamp's main light is its spot (the omni is a 0.2 spill, left out of the list).
@@ -287,20 +290,23 @@ export function setLightListOn(on: boolean): void { listOn = on; }
  *  direction at the chest (root + 1.2), spot coverage at the feet (root + 0.2), and the FRONT is
  *  the unit xz direction toward the VIEWER (the light that presents the body to the camera wins;
  *  a light behind it, as the player sees it, takes the backKey falloff). A camera straight
- *  overhead falls back to [0, 1]. Pure. */
-export function pickBodyFor(root: RVec3, room: number, camPos: RVec3): PickBody {
+ *  overhead falls back to [0, 1]. Pure; `out` (optional) is rewritten in place and returned, so
+ *  the per-actor loop allocates nothing. */
+export function pickBodyFor(root: RVec3, room: number, camPos: RVec3, out?: PickBody): PickBody {
+  const b = out ?? { pos: [0, 0, 0], feetY: 0, room: -1, facing: [0, 1] };
   const fx = camPos[0] - root[0], fz = camPos[2] - root[2];
   const h = Math.hypot(fx, fz);
-  return {
-    pos: [root[0], root[1] + 1.2, root[2]],
-    feetY: root[1] + 0.2,
-    room,
-    facing: h < 1e-4 ? [0, 1] : [fx / h, fz / h],
-  };
+  b.pos[0] = root[0]; b.pos[1] = root[1] + 1.2; b.pos[2] = root[2];
+  b.feetY = root[1] + 0.2;
+  b.room = room;
+  if (h < 1e-4) { b.facing[0] = 0; b.facing[1] = 1; } else { b.facing[0] = fx / h; b.facing[1] = fz / h; }
+  return b;
 }
 
 type Vec4U = { value: THREE.Vector4 };
 const scratchPick: Pick = { idx: [-1, -1, -1, -1], weight: [0, 0, 0, 0], packed: [-1, -1, -1, -1] };
+/** The actor loop's reused pick body (pickBodyFor's `out`): one per frame loop, never retained. */
+export const scratchPickBody: PickBody = { pos: [0, 0, 0], feetY: 0, room: -1, facing: [0, 1] };
 
 /** Pick the body's 4 lights from this frame's list and write them to its view (`bodyLights`,
  *  copied into the record by syncRecord) with the list switched on (`lightListCfg.x = 1`). Call

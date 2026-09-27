@@ -99,7 +99,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
-import { applyBodyLights, lightListOn, pickBodyFor, writeLightList } from './game-light-list-leaves';
+import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, writeLightList } from './game-light-list-leaves';
 import { adoptLightFx, applyRoomFill, applySelfShadow, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
@@ -1941,7 +1941,8 @@ async function main() {
         const inDyn = dynOn && dynRoom !== null && nearRoom(a, dynRoom);
         a.view.uniforms.probeDynCfg.value.set(inDyn ? ctx.probes.dynGain : 0, inDyn ? ctx.probes.visStrength : 0, 0, 0);
         let best: { pos: Vec3; intensity: number } | null = null, bestScore = 0;
-        if (ctx.lighting.bodyFlashGain > 0 && directFlashes.length > 0) {
+        // List mode zeroes bodyFlash below (the flashes are list lights): skip the scan.
+        if (!listOn && ctx.lighting.bodyFlashGain > 0 && directFlashes.length > 0) {
           const q = a.pose().pos;
           for (const f of directFlashes) {
             const dx = f.pos[0] - q[0], dy = f.pos[1] - (q[1] + 1.0), dz = f.pos[2] - q[2];
@@ -1977,7 +1978,7 @@ async function main() {
           // room's live lamps (applyRoomFill): it is the body's only floor where no light picks it.
           const bp = a.pose().pos;
           releaseWindowKey(a.view.uniforms);
-          applyBodyLights(ctx, a.view.uniforms, pickBodyFor(bp, a.room, camPos));
+          applyBodyLights(ctx, a.view.uniforms, pickBodyFor(bp, a.room, camPos, scratchPickBody));
           a.view.uniforms.bodyFlash.value.w = 0;
           applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]);
           applySelfShadow(a.view.uniforms);

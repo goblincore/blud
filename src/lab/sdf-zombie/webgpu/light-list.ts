@@ -9,7 +9,7 @@
 // joined to it) then every other light, each tier ranked by effective intensity / (1 + d²) to
 // the viewer. Without a context it ranks by effective intensity alone.
 
-import { MAX_PROFILES, PROFILE_ID, PROFILE_VEC4S, packProfiles, type ProfileName } from './light-profiles';
+import { LIGHT_PROFILES, MAX_PROFILES, PROFILE_ID, PROFILE_VEC4S, packProfiles, type ProfileName } from './light-profiles';
 
 export type Vec3 = [number, number, number];
 export type LightKind = 'point' | 'spot' | 'directional';
@@ -41,6 +41,10 @@ export interface ListLight {
   /** 1 / refIntensity (1 when absent): the body shader's per-light normaliser, packed in light
    *  v3.z. rgb stays physical (plan 2's level materials read it and ignore this lane). */
   bodyNorm: number;
+  /** CPU-only (light-pick.ts, never packed): a spot's coverage-zero cosine, cos(min(pi,
+   *  acos(cosOuter) x profile.edge)), computed once per light here instead of once per body
+   *  (Task 10 review). Unused for point/directional lights. */
+  coverZero: number;
 }
 
 /** Room ids that fit the mask: bits 0..30 keep the mask a positive int32 (it may be packed
@@ -122,13 +126,16 @@ export function buildLightList(src: readonly LightSource[], rel?: ListRelevance)
       // An inverted cone (inner wider than outer) becomes a hard-edged one: cosInner >= cosOuter.
       const cosOuter = s.cosOuter ?? -1;
       const cosInner = Math.max(s.cosInner ?? -1, cosOuter);
+      const profile = PROFILE_ID[s.profile];
+      const coverZero = Math.cos(Math.min(Math.PI, Math.acos(Math.max(-1, Math.min(1, cosOuter))) * LIGHT_PROFILES[profile]!.edge));
       return {
-        kind: s.kind, profile: PROFILE_ID[s.profile],
+        kind: s.kind, profile,
         pos: s.kind === 'directional' ? norm(s.pos) : [...s.pos] as Vec3,
         color: [s.color[0] * e * t[0] / tl, s.color[1] * e * t[1] / tl, s.color[2] * e * t[2] / tl],
         intensity: e, range: s.range,
         axis: norm(s.axis ?? [0, -1, 0]), cosOuter, cosInner, roomMask: mask,
         bodyNorm: s.refIntensity && s.refIntensity > 0 ? 1 / s.refIntensity : 1,
+        coverZero,
       };
     });
 }

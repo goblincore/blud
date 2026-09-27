@@ -16,9 +16,13 @@
 // (intensity x level gain already folded in) and the profile gain, so absolute brightness comes
 // from presence x rgb x gain, matching presentingLamp's own math (room level only there).
 //
-// Ranking (which 4 lights win the body's slots) additionally multiplies presence by the light's
-// rgb luminance, so a dim light close up and a bright light far off compare on what they'd
-// actually contribute, not just geometry. Ties by list index.
+// Ranking (which 4 lights win the body's slots) is on DELIVERED light: presence x luminance(rgb)
+// x the profile's GPU gain x the light's bodyNorm, the exact scalar the shader multiplies rgb by
+// (light-shade.ts: c = rgb x weight x gain x bodyNorm). rgb alone is PHYSICAL (plan 2's level
+// materials read it), and since the Task 10 calibration gain x bodyNorm differs ~6x by kind (a
+// lit tube ~0.19, the flashlight 0.124, the window 0.109, a muzzle 0.039, fire 0.033), ranking on
+// rgb let a 35-intensity muzzle flash near a body steal slot 0 (the dominant: scatter, the wound
+// shadow, the shine) from the tube it stands under (Task 10 review). Ties by list index.
 //
 // Each lane packs index + weight (weight < 1, clamped to 0.999 so index + weight never rolls
 // into the next index), -1 empty.
@@ -66,8 +70,9 @@ export function lightPresence(l: ListLight, b: PickBody): number {
       const fl = Math.hypot(fx, fy, fz) || 1;
       const c = (fx * l.axis[0] + fy * l.axis[1] + fz * l.axis[2]) / fl;
       // presentingLamp: full inside the inner cone, smoothstep to zero at the outer ANGLE x edge
-      // (edge 1.25: the light lets go a quarter past the visible cone), then the floor.
-      const zero = Math.cos(Math.min(Math.PI, Math.acos(Math.max(-1, Math.min(1, l.cosOuter))) * prof.edge));
+      // (edge 1.25: the light lets go a quarter past the visible cone), then the floor. The
+      // zero cosine is per light, precomputed by buildLightList (ListLight.coverZero).
+      const zero = l.coverZero;
       const t = clamp01((c - zero) / Math.max(l.cosInner - zero, 1e-4));
       cover = prof.coverFloor + (1 - prof.coverFloor) * t * t * (3 - 2 * t);
     }
@@ -80,44 +85,60 @@ export function lightPresence(l: ListLight, b: PickBody): number {
   return cover * distFall * facing;
 }
 
-/** presence x luminance(rgb) — used only to RANK lights against each other (different kinds/
- *  intensities compare); not what gets packed. */
+/** The delivered-light factor the shader multiplies the packed weight by, reduced to a scalar:
+ *  luminance(rgb) x profile gain x bodyNorm. Presence x this = what the light delivers. */
+function deliveredScale(l: ListLight): number {
+  const lum = l.color[0] * 0.2126 + l.color[1] * 0.7152 + l.color[2] * 0.0722;
+  return lum * LIGHT_PROFILES[l.profile]!.gain * l.bodyNorm;
+}
+
+/** presence x luminance(rgb) x profile gain x bodyNorm: what the light DELIVERS at the body,
+ *  used only to RANK lights against each other (different kinds/intensities compare on the
+ *  shader's own scale); not what gets packed. */
 export function lightRank(l: ListLight, b: PickBody): number {
   const presence = lightPresence(l, b);
   if (presence === 0) return 0;
-  const lum = l.color[0] * 0.2126 + l.color[1] * 0.7152 + l.color[2] * 0.0722;
-  return presence * lum;
+  return presence * deliveredScale(l);
 }
+
+// Module-level scratch (the actor loop picks for every body every frame): the 4 slots' ranks
+// and presences. pickLights is synchronous and non-reentrant, so one set is enough.
+const rank: [number, number, number, number] = [0, 0, 0, 0];
+const pres: [number, number, number, number] = [0, 0, 0, 0];
 
 export function pickLights(list: readonly ListLight[], b: PickBody, out?: Pick): Pick {
   const p = out ?? { idx: [-1, -1, -1, -1], weight: [0, 0, 0, 0], packed: [-1, -1, -1, -1] };
   const idx = p.idx, weight = p.weight, packed = p.packed;
-  const rank: [number, number, number, number] = [0, 0, 0, 0];
+  rank[0] = rank[1] = rank[2] = rank[3] = 0;
+  pres[0] = pres[1] = pres[2] = pres[3] = 0;
   idx[0] = idx[1] = idx[2] = idx[3] = -1;
   weight[0] = weight[1] = weight[2] = weight[3] = 0;
   packed[0] = packed[1] = packed[2] = packed[3] = -1;
 
   for (let i = 0; i < list.length; i++) {
     const l = list[i]!;
-    const r = lightRank(l, b);
+    const pr = lightPresence(l, b);
+    if (pr === 0) continue;
+    const r = pr * deliveredScale(l);
     if (r <= RANK_FLOOR) continue;
     // Fixed 4-slot insertion, index order, strictly greater so ties keep the lower index.
-    if (r > rank[3]!) {
+    if (r > rank[3]) {
       let slot = 3;
       while (slot > 0 && r > rank[slot - 1]!) {
         rank[slot] = rank[slot - 1]!;
+        pres[slot] = pres[slot - 1]!;
         idx[slot] = idx[slot - 1]!;
         slot--;
       }
       rank[slot] = r;
+      pres[slot] = pr;
       idx[slot] = i;
     }
   }
 
   for (let k = 0; k < 4; k++) {
     if (idx[k]! < 0) continue;
-    const presence = lightPresence(list[idx[k]!]!, b);
-    weight[k] = Math.min(MAX_WEIGHT, presence);
+    weight[k] = Math.min(MAX_WEIGHT, pres[k]!);
     packed[k] = idx[k]! + weight[k]!;
   }
   return p;
