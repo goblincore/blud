@@ -20,6 +20,7 @@ import { roomIdAt } from './game-level-leaves';
 import type { LampMood } from './lamp-moods';
 import { buildLightList, LIST_VEC4S, packLightList, ROOM_MASK_BITS, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
 import { PROFILE_ID, type ProfileName } from './light-profiles';
+import { BEACON } from './beacon';
 import { pickLights, unpackPick, type Pick, type PickBody } from './light-pick';
 
 type RVec3 = readonly [number, number, number];
@@ -37,8 +38,11 @@ export interface LampInput {
   /** The lamp's full-level intensity (its base power; a tube's base x TUBE_SPOT_GAIN): the body
    *  key reads intensity / ref, the lamp's live level (Task 10 calibration). */
   ref?: number;
-  /** The tube's cone (the lamp's main light is then the spot), or null for a point lamp. */
+  /** The tube's cone (the lamp's main light is then the spot), or null for a point lamp. A
+   *  beacon's swept cone rides here too, with `beacon` set. */
   tube: { axis: Vec3; cosOuter: number; cosInner: number } | null;
+  /** A Boiler Room emergency beacon: its cone is a spot with the `beacon` profile (red rim). */
+  beacon?: boolean;
   gain?: number; tint?: RVec3;
   mood: LampMood;
 }
@@ -70,7 +74,7 @@ export function collectLightSources(input: SourceInput): LightSource[] {
   const out: LightSource[] = [];
   for (const l of input.lamps) {
     const fire = l.mood === 'fire';
-    const profile: ProfileName = fire ? 'fire' : l.tube ? 'tube' : 'lamp';
+    const profile: ProfileName = fire ? 'fire' : l.beacon && l.tube ? 'beacon' : l.tube ? 'tube' : 'lamp';
     const s: LightSource = {
       kind: l.tube ? 'spot' : 'point', profile,
       pos: l.pos, color: l.color, intensity: l.intensity, range: fire ? FIRE_RANGE : l.range,
@@ -158,8 +162,10 @@ export function readSourceInput(
     rec.room = l.room; rec.mood = l.mood;
     rec.gain = l.gain; rec.tint = l.tint;
     // Fire-mood lamps carry no reference (bodyNorm 1): see collectLightSources.
-    rec.ref = l.mood === 'fire' ? undefined : l.base * (l.tube?.spot ? TUBE_SPOT_GAIN : 1);
-    const spot = l.tube?.spot;
+    rec.ref = l.mood === 'fire' ? undefined : l.base * (l.beacon ? BEACON.spotGain : l.tube?.spot ? TUBE_SPOT_GAIN : 1);
+    rec.beacon = !!l.beacon;
+    // A beacon's light is its swept spot (its omni stays at 0), read like a tube's.
+    const spot = l.beacon?.spot ?? l.tube?.spot;
     if (spot) {
       // A tube lamp's main light is its spot (the omni is a 0.2 spill, left out of the list).
       spot.getWorldPosition(_a);

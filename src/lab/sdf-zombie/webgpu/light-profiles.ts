@@ -18,7 +18,7 @@ export interface LightProfile {
   spec: number; specPow: number;
 }
 
-export const PROFILE_ID = { tube: 0, lamp: 1, window: 2, flashlight: 3, muzzle: 4, fire: 5 } as const;
+export const PROFILE_ID = { tube: 0, lamp: 1, window: 2, flashlight: 3, muzzle: 4, fire: 5, beacon: 6 } as const;
 export type ProfileName = keyof typeof PROFILE_ID;
 export const PROFILE_VEC4S = 3;
 export const MAX_PROFILES = 8;
@@ -72,6 +72,10 @@ export const WINDOW_LIST_TRIM = 1.3;
 
 const COLD_RIM: [number, number, number] = [0.55, 0.75, 1.3];
 const WARM_RIM: [number, number, number] = [1.2, 0.8, 0.5];
+const RED_RIM: [number, number, number] = [1.3, 0.2, 0.15];
+
+/** The tube's calibrated profile (the beacon starts from it). */
+const TUBE_PROFILE: LightProfile = { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * 1.3 * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.35, backRim: 2.5, rimTint: COLD_RIM, edge: 1.25, distFall: 0.06, spec: 1.0, specPow: 24 };
 
 // Keyed by name so table order can never drift from PROFILE_ID (review fix, Task 2):
 // a missing or misspelt key is a TypeScript error, and LIGHT_PROFILES below is derived
@@ -82,7 +86,7 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
   // tube's own base spot power (bodyNorm = 1 / (base x TUBE.spotGain)): what is left is the lamp's
   // LEVEL x level gain, exactly the old key's level term (flicker and blackouts still ride it);
   // then x LAMP_LIST_TRIM 0.7 (measured, see above) = 3.276.
-  tube: { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * 1.3 * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.35, backRim: 2.5, rimTint: COLD_RIM, edge: 1.25, distFall: 0.06, spec: 1.0, specPow: 24 },
+  tube: TUBE_PROFILE,
   // lamp (warm bulbs): as the tube, normalised by its base power, keeping the lamp's own
   // LAMP_PRESENT_GAIN 1.1 (vs the tube's 1.3): 2.4 x 1.5 x 1.1 x LAMP_LIST_TRIM = 2.772 (the trim
   // is the tube's; no warm-bulb lamp was measured).
@@ -110,6 +114,10 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
   // measured. Fire-mood lamps did not key bodies in the old path (presentingLamp skips them); at
   // their ~1-4 intensity this keeps them a faint warm touch within 3 m.
   fire: { gain: OLD_BODY_FLASH_GAIN * 1.225 / 2.25, viewBias: 0.1, floor: 0.2, coverFloor: 0.2, backKey: 0.6, backRim: 1.2, rimTint: WARM_RIM, edge: 1.0, distFall: 0.1, spec: 0.4, specPow: 12 },
+  // beacon (Boiler Room emergency beacons, spec 2026-09-27-boiler-room-beacons-design.md): the
+  // tube's calibrated profile (a spot normalised by its base spot power, base x BEACON.spotGain),
+  // with a hard red rim. Not measured on its own: the owner tunes from the contact sheet.
+  beacon: { ...TUBE_PROFILE, backRim: 2.5, rimTint: RED_RIM },
 };
 
 // Frozen (review fix, Task 3): light-list.ts packs this table ONCE at module load, so a runtime
@@ -117,6 +125,7 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
 // (strict mode) instead. The shared rim tints are frozen too, since profiles hold them by reference.
 Object.freeze(COLD_RIM);
 Object.freeze(WARM_RIM);
+Object.freeze(RED_RIM);
 for (const p of Object.values(PROFILES_BY_NAME)) { Object.freeze(p.rimTint); Object.freeze(p); }
 Object.freeze(PROFILES_BY_NAME);
 

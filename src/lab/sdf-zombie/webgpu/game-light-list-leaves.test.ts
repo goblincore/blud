@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type TunnelLink } from './game-light-list-leaves';
 import { buildLightList, roomMaskOf } from './light-list';
 import { PROFILE_ID } from './light-profiles';
+import { BEACON } from './beacon';
 import { lightPresence } from './light-pick';
 import { BODY_DARK_FLOOR, BODY_LAMP_GAIN, BODY_WINDOW_GAIN, PRESENT, fillFactorOf, roomFillFactor } from './game-dynamic-light-leaves';
 import type { GameContext } from './game-context';
@@ -36,6 +37,15 @@ describe('collectLightSources', () => {
       flashes: [{ pos: [3, 1, 0], intensity: 5, fire: true }],
     });
     expect(s.map(x => x.range)).toEqual([3, 3]);
+  });
+  it('a beacon lamp becomes one spot:beacon source with its sweep axis, its room and its reference', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 3.3, -94], color: [1, 0.08, 0.05], intensity: 16.8, range: 9, room: 5, ref: 2.4 * BEACON.spotGain,
+        tube: { axis: [0.8, -0.57, 0.17], cosOuter: Math.cos(BEACON.angle), cosInner: Math.cos(BEACON.angle * (1 - BEACON.penumbra)) }, beacon: true, mood: 'dead' }],
+      window: null, flashlight: null, flashes: [],
+    });
+    expect(s.map(x => `${x.kind}:${x.profile}`)).toEqual(['spot:beacon']);
+    expect(s[0]).toMatchObject({ axis: [0.8, -0.57, 0.17], rooms: [5], range: 9, refIntensity: 2.4 * BEACON.spotGain, intensity: 16.8 });
   });
   it('the tube cone, the flashlight cone and the level tint pass through', () => {
     const s = collectLightSources({

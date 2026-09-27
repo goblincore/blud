@@ -2,9 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { WINDOW_LIST_TRIM, FLASHLIGHT_LIST_TRIM, LAMP_LIST_TRIM, LIGHT_PROFILES, OLD_BEAM_GAIN, OLD_BODY_FLASH_GAIN, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, OLD_KEY, PROFILE_ID, PROFILE_VEC4S, PROFILES_BY_NAME, packProfiles } from './light-profiles';
 
 describe('light profiles (spec §5)', () => {
-  it('has the six starting kinds, at most 8', () => {
-    expect(Object.keys(PROFILE_ID)).toEqual(['tube', 'lamp', 'window', 'flashlight', 'muzzle', 'fire']);
+  it('has the six starting kinds plus the beacon, at most 8', () => {
+    expect(Object.keys(PROFILE_ID)).toEqual(['tube', 'lamp', 'window', 'flashlight', 'muzzle', 'fire', 'beacon']);
     expect(LIGHT_PROFILES.length).toBeLessThanOrEqual(8);
+  });
+  it('beacon (Boiler Room, 7th of 8 slots): the tube\'s calibrated profile with a hard red rim', () => {
+    expect(PROFILE_ID.beacon).toBe(6);
+    const b = LIGHT_PROFILES[PROFILE_ID.beacon]!, t = PROFILES_BY_NAME.tube;
+    expect(b).toBe(PROFILES_BY_NAME.beacon);
+    expect(b.rimTint).toEqual([1.3, 0.2, 0.15]);
+    expect(b.rimTint[0]).toBeGreaterThan(4 * Math.max(b.rimTint[1], b.rimTint[2]));   // red
+    expect(b.backRim).toBe(2.5);
+    expect({ ...b, rimTint: t.rimTint, backRim: t.backRim }).toEqual({ ...t });
+    const f = packProfiles(), o = PROFILE_ID.beacon * 12;
+    expect(f[o]).toBeCloseTo(t.gain, 5);
+    expect([f[o + 8], f[o + 9], f[o + 10]].map(v => +v!.toFixed(4))).toEqual([1.3, 0.2, 0.15]);
   });
   it('tube starts from the tuned PRESENT constants', () => {
     const t = LIGHT_PROFILES[PROFILE_ID.tube]!;

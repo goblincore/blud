@@ -3,6 +3,7 @@ import { buildLightList, type LightSource } from './light-list';
 import { LIGHT_PROFILES, PROFILE_ID } from './light-profiles';
 import { collectLightSources, pickBodyFor } from './game-light-list-leaves';
 import { lightPresence, lightRank, pickLights, unpackPick, type Pick } from './light-pick';
+import { BEACON, beaconAxis } from './beacon';
 
 const tube = (x: number, z: number, i = 7): LightSource => ({ kind: 'spot', profile: 'tube', pos: [x, 2.2, z], color: [0.8, 0.9, 1], intensity: i, range: 6, axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45), rooms: [3] });
 const body = (x: number, z: number, facing: [number, number] = [0, 1]) => ({ pos: [x, 0.9, z] as [number, number, number], room: 3, facing });
@@ -188,5 +189,35 @@ describe('ranking is on DELIVERED light (Task 10 review: rgb x gain x bodyNorm, 
     const list = buildLightList(sources());
     const p = pickLights(list, b);
     for (let k = 0; k < 2; k++) expect(p.weight[k]).toBeCloseTo(Math.min(0.999, lightPresence(list[p.idx[k]!]!, b)), 9);
+  });
+});
+
+describe('a Boiler Room beacon (spec 2026-09-27-boiler-room-beacons-design.md)', () => {
+  // Beacon at the ceiling; after the strobe the room's lamps are dead, the firebox still burns.
+  const at: [number, number, number] = [0, 3.3, -94];
+  const ref = 2.4 * BEACON.spotGain;
+  const beaconSource = (axis: [number, number, number]) => collectLightSources({
+    lamps: [
+      { pos: at, color: [...BEACON.color], intensity: ref, range: BEACON.reach, room: 5, ref, mood: 'dead', beacon: true,
+        tube: { axis, cosOuter: Math.cos(BEACON.angle), cosInner: Math.cos(BEACON.angle * (1 - BEACON.penumbra)) } },
+      { pos: [1.1, 0.5, -96], color: [1, 0.42, 0.12], intensity: 3, range: 12, room: 5, tube: null, mood: 'fire' },
+    ],
+    window: null, flashlight: null, flashes: [],
+  });
+  // Where the swept axis meets the feet (y 0.2): tilt below horizontal from 3.3 m.
+  const reach = (3.3 - 0.2) / Math.tan(BEACON.tilt);
+  it('a body whose feet the sweep points at gets the beacon as its dominant light', () => {
+    const ax = beaconAxis(0, 0.7, 0);   // +x
+    const list = buildLightList(beaconSource(ax));
+    const b = pickBodyFor([reach, 0, -94], 5, [reach + 2, 1.6, -94]);
+    const p = pickLights(list, b);
+    expect(list[p.idx[0]!]!.profile).toBe(PROFILE_ID.beacon);
+  });
+  it('as the sweep moves on, the same body loses it to the coverage floor', () => {
+    const b = pickBodyFor([reach, 0, -94], 5, [reach + 2, 1.6, -94]);
+    const on = buildLightList(beaconSource(beaconAxis(0, 0.7, 0)));
+    const off = buildLightList(beaconSource(beaconAxis(0.5 / 0.7, 0.7, 0)));   // half a turn later: -x
+    const w = (l: typeof on) => { const p = pickLights(l, b); const i = p.idx.findIndex(k => k >= 0 && l[k]!.profile === PROFILE_ID.beacon); return i < 0 ? 0 : p.weight[i]!; };
+    expect(w(on)).toBeGreaterThan(w(off));
   });
 });
