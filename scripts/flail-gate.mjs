@@ -62,6 +62,9 @@ const W = Number(process.env.W ?? 1280), H = Number(process.env.H ?? 800);
 const CRATER_R = 0.09;      // FLAIL_FEEL.craterR (game-flail.ts) — spec §11 target (was 0.14)
 const FACE_R = 0.06;        // FLAIL_HEAD.faceCraterR (flail-strike.ts) — spec §11 target (was 0.09)
 const HEAD_HITS = 4;        // crosshair-aimed clicks to take a head off (was 3 in v1.1)
+// A crosshair-aimed head hit's crater must land ON the head, not merely inside the neck-root
+// zone (FLAIL_HEAD.neckDist also counts upper-chest hits): v1.1's impact sat at chest height.
+const ON_HEAD = 0.15;
 const BALL_ERR_MAX = 0.02;  // the drawn ball on the strike frame vs FLAIL_IMPACT
 // At 144 Hz the pin must be EXACT: the pre-fix pin (review C1) landed 0.8–1.9 cm short in
 // this gate — inside the 2 cm above, so that bound could not catch it.
@@ -467,9 +470,10 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
       `headHits ${counted}; head prims ${alive}/${alive0}`);
     const firstReal = rows.find((r) => !r.stump);
     if (hit < HEAD_HITS) {
-      const ok = alive > 0 && !!firstReal && Math.abs(firstReal.radius - FACE_R) <= 0.005 && counted === hit;
-      if (ok) pass(`head hit ${hit}: the head is still on (${alive}/${alive0} prims), crater radius ${firstReal.radius.toFixed(3)}, headHits ${counted}`);
-      else fail(`head hit ${hit}: alive ${alive}/${alive0}, first non-stump wound radius ${firstReal ? firstReal.radius.toFixed(3) : 'none'} (expected ${FACE_R}), headHits ${counted}`);
+      const ok = alive > 0 && !!firstReal && Math.abs(firstReal.radius - FACE_R) <= 0.005 && counted === hit
+        && firstReal.toHead !== null && firstReal.toHead < ON_HEAD;
+      if (ok) pass(`head hit ${hit}: the head is still on (${alive}/${alive0} prims), crater radius ${firstReal.radius.toFixed(3)} ${firstReal.toHead.toFixed(3)} m from the head centre, headHits ${counted}`);
+      else fail(`head hit ${hit}: alive ${alive}/${alive0}, first non-stump wound radius ${firstReal ? firstReal.radius.toFixed(3) : 'none'} (expected ${FACE_R}), ${firstReal?.toHead?.toFixed(3) ?? '?'} m from the head centre (< ${ON_HEAD}), headHits ${counted}`);
       await photoOf(pose, head, `head-hit-${hit}`);
     } else {
       const ok = alive === 0 && counted === HEAD_HITS;

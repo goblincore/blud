@@ -383,10 +383,11 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const batch: Wound[] = [w];
       if (spec.snapNeck && neck) {
         // The killing head blow snaps the neck wherever on the head it lands: a
-        // sever-only calibre at the neck midpoint (connectivity.ts cuts the
-        // head's attachment there). The head leaves with it, so its own
-        // crater is never seen.
-        const snap = worldHitToWound(posed.prims, neck.mid, FLAIL_HEAD.neckSeverR, 'blast', yaw, field);
+        // sever calibre at the neck midpoint (connectivity.ts cuts the head's
+        // attachment there). Its visible carve is a token 2 cm: the point is on
+        // the neck's axis, so a full-size crater would have no depth cap and,
+        // were it ever bound to the torso, would open the stump.
+        const snap = worldHitToWound(posed.prims, neck.mid, FLAIL_HEAD.snapCarveR, 'blast', yaw, field);
         snap.severRadius = FLAIL_HEAD.neckSeverR;
         batch.push(snap);
       }

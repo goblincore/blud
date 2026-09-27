@@ -215,6 +215,8 @@ export const FLAIL_HEAD = {
   faceCraterR: 0.06,
   /** The neck-snap wound's sever calibre, metres (a zombie neck is ~0.07 m in radius). */
   neckSeverR: 0.12,
+  /** The neck-snap wound's visible carve, metres: a token; the sever calibre does the work. */
+  snapCarveR: 0.02,
 } as const;
 
 export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null, neckRoot: Vec3 | null): boolean {
