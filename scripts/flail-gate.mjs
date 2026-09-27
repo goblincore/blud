@@ -30,6 +30,9 @@
 //      head-hit-1/2/3.png, the view turned onto the head;
 //   5. strike-frame ball: on EVERY click's strike frame the drawn (simulated) ball sits
 //      within 2 cm of FLAIL_IMPACT (lastStrike.ballErr, set by that frame's draw);
+//   5b. the same at 144 Hz: an R and an L swing stepped at 1/144 s, then again at
+//      1/144 s ±15% (seeded jitter) — the chain carries sub-frame time at these rates
+//      (the review's C1: the pin landed 0.8–1.9 cm short here) — ball within 1 mm, one strike each;
 //   6. zero console errors or exceptions.
 // Measures (printed, not asserted): the rest pose's ball/bolt/grip screen NDC, the share of
 // clipped pixels on the ball and haft at rest, the ball ↔ eye-bolt distance through a
@@ -54,6 +57,9 @@ const CRATER_R = 0.14;      // FLAIL_FEEL.craterR (game-flail.ts)
 const FACE_R = 0.09;        // FLAIL_HEAD.faceCraterR (flail-strike.ts): head hits 1–2
 const HEAD_NEAR = 0.25;     // FLAIL_HEAD.regionDist: "on or near the head"
 const BALL_ERR_MAX = 0.02;  // the drawn ball on the strike frame vs FLAIL_IMPACT
+// At 144 Hz the pin must be EXACT: the pre-fix pin (review C1) landed 0.8–1.9 cm short in
+// this gate — inside the 2 cm above, so that bound could not catch it.
+const BALL_ERR_144_MAX = 0.001;
 const SWING_FRAMES = 30;    // 0.5 s at 60 Hz: past swingSec 0.45, back to idle
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -485,6 +491,30 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
   if (lastPose && lastHead) await photoOf(lastPose, lastHead, 'head-hit-3');
   if (worstRay < 0.05) pass(`head hits: every strike ray passed within 5 cm of the neck (worst ${(worstRay * 100).toFixed(2)} cm)`);
   else fail(`head hits: a strike ray missed the neck by ${(worstRay * 100).toFixed(1)} cm`);
+}
+
+// ---- 5b. The strike-frame ball at 144 Hz, steady and jittered ------------------------------
+{
+  let seed = 1;
+  const jitter = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return (1 + 0.15 * (2 * (seed / 2147483648) - 1)) / 144; };
+  const errs = [];
+  for (const [label, dt] of [['144 Hz', () => 1 / 144], ['144 Hz ±15%', jitter]]) {
+    for (let k = 0; k < 2; k++) {
+      const pre = await state();
+      await evaluate('__sdfGame.flail.click()');
+      for (let i = 0; i < 90; i++) await evaluate(`__sdfGame.step(1, ${dt()})`);   // ~0.62 s: back to idle
+      const post = await state();
+      const ok = post.strikes === pre.strikes + 1 && post.lastStrike?.side === pre.nextSide && post.phase === 'idle';
+      const e = post.lastStrike?.ballErr ?? Infinity;
+      console.log(`${label} ${pre.nextSide}: strike ${ok ? 'fired once' : 'MISSING/EXTRA'}, strike-frame ball error ${(e * 100).toFixed(6)} cm`);
+      if (!ok) fail(`${label} ${pre.nextSide}: the click did not strike exactly once and return to idle`);
+      errs.push(e);
+    }
+  }
+  const worst = Math.max(...errs);
+  if (worst <= BALL_ERR_144_MAX) pass(`144 Hz (steady + jittered): the drawn ball within ${(worst * 100).toFixed(6)} cm of the impact on all ${errs.length} strike frames (≤ 1 mm)`);
+  else fail(`144 Hz: worst strike-frame ball error ${(worst * 100).toFixed(2)} cm`);
+  await stepN(10);
 }
 
 // ---- 5. The drawn ball on the strike frame -------------------------------------------------
