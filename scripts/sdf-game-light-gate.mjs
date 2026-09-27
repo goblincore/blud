@@ -8,6 +8,11 @@
 //   4. THE STORM IN THE GLASS: the dining window is much brighter during a bolt.
 //   5. BLACKOUT: the sleeper corridor trigger cuts the sleeper lamps, then they come back.
 //   6. THE BOILER ROOM: the strobe, the steam plumes, the machinery.
+//  6b. BEACONS (spec 2026-09-27-boiler-room-beacons-design.md §4): a fresh boot with the cast and
+//      the light clock pinned. Before the threshold both beacons are dark; through the strobe too;
+//      after it both are at level 1, their axis turns (> 20 deg between two sim times), a Boiler
+//      Room body picks a `beacon`-profile light, and their shadow frame count rises. Beams start
+//      opposite (beaconPhase). LIGHT_GATE_ONLY_BEACONS=1 runs it alone.
 //   7. THE SHARED LIST (plan 1, Task 10): the list is on for bodies and crowds. Two crowd actors
 //      under different tubes pick different dominants; under a tube, a held bolt and the flashlight
 //      the body-box mean is within 0.9x..1.2x of `?lightlist=0` at the same pose (a second boot);
@@ -26,7 +31,9 @@
 //      LIGHT_GATE_ONLY_GIBS=1 runs section 9 alone.
 //  10. COST (Task 13, spec §7): list on - off at most +1.5 ms a frame (median) in third class and
 //      the Boiler Room (live switch, interleaved rounds). Enforced when the 1-min load average is
-//      <= 4, a WARN line above that. LIGHT_GATE_ONLY_COST=1 runs it alone.
+//      <= 4, a WARN line above that. LIGHT_GATE_ONLY_COST=1 runs it alone. The Boiler Room is
+//      measured with its beacons forced on (setBeaconsOn), then beacons on - off after the strobe
+//      (report + WARN over +1.5 ms: the beacon spec says report, never drop the shadows).
 //
 // Usage: LAB_VITE_PORT=5297 LAB_CDP_PORT=9297 node scripts/sdf-game-light-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -179,7 +186,7 @@ const lights = () => evaluate('__sdfGame.lights()');
 const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire' && !x.beacon);
 
 // LIGHT_GATE_ONLY_LIST=1 runs section 7 alone (the calibration loop).
-if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS && !process.env.LIGHT_GATE_ONLY_COST) {
+if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS && !process.env.LIGHT_GATE_ONLY_COST && !process.env.LIGHT_GATE_ONLY_BEACONS) {
 // 1. DARK START — no flashlight until the coat check (carriage 4 of 8).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) { console.error(consoleEvents.slice(-8)); fail('night-train did not boot'); }
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
@@ -445,7 +452,7 @@ const COST_ROUNDS = Number(process.env.LIGHT_GATE_COST_ROUNDS ?? 8);
 const COST_FRAMES = 9;
 const COST_CARRIAGES = [
   { name: 'third class', pose: '0, -12.0, 0, -0.05', room: 1 },
-  { name: 'Boiler Room', pose: '0, -96.0, 0, 0', room: 5 },
+  { name: 'Boiler Room', pose: '0, -96.0, 0, 0', room: 5, beacons: true },
 ];
 const median = (a) => { const b = [...a].sort((x, y) => x - y); return b.length % 2 ? b[b.length >> 1] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2; };
 /** COST_FRAMES fenced frames, each with its passes' GPU timestamps drained: frame ms, and the
@@ -458,6 +465,22 @@ const costFrames = () => evaluate(`(async () => {
   const out = [];
   for (let i = 0; i < ${COST_FRAMES}; i++) {
     const ms = await __sdfGame.timeDraws(1);
+    const pt = await __sdfGame.passTimings();
+    out.push({ ms, s: (pt?.samples ?? []).filter((x) => x.start !== undefined && x.end !== undefined).map((x) => [x.label, x.start, x.end]) });
+  }
+  return out;
+})()`, 120000);
+/** As costFrames, but each frame is a sim step (dt 0, the light clock pinned) and its draw: the
+ *  beacons' shadow re-render is requested per STEP (needsUpdate), so drawOnce alone would render
+ *  it on the first frame only. Both sides of the beacon A/B pay the same step. */
+const costStepFrames = () => evaluate(`(async () => {
+  await __sdfGame.passTimings();
+  const out = [];
+  for (let i = 0; i < ${COST_FRAMES}; i++) {
+    const t0 = performance.now();
+    __sdfGame.step(1, 0);
+    await __sdfGame.resolveGpu();
+    const ms = performance.now() - t0;
     const pt = await __sdfGame.passTimings();
     out.push({ ms, s: (pt?.samples ?? []).filter((x) => x.start !== undefined && x.end !== undefined).map((x) => [x.label, x.start, x.end]) });
   }
@@ -490,6 +513,8 @@ async function costCarriage(c) {
     await evaluate('__sdfGame.setLightClockFrozen(false)');
     await stepN(1 + (i % 5));
   }
+  // The Boiler Room with its beacons on (the strobe's lamps at a peak AND the beacons: the most picks).
+  if (c.beacons) { await evaluate('__sdfGame.setBeaconsOn(true)'); await stepN(2, 0); }
   const s = { off: [], on: [], gpuOff: [], gpuOn: [], by: { off: {}, on: {} } };
   for (let round = 0; round < COST_ROUNDS; round++) {
     for (const on of round % 2 ? [true, false] : [false, true]) {
@@ -518,15 +543,57 @@ async function costCarriage(c) {
     }
   }
   await evaluate('__sdfGame.setLightList(true)');
+  const beacons = c.beacons ? await costBeacons(c) : null;
   const byMed = (k) => Object.fromEntries(Object.entries(s.by[k]).map(([l, v]) => [l, median(v)]));
   const r = {
     name: c.name, bodies: { inRoom, picked }, off: median(s.off), on: median(s.on), gpuOff: median(s.gpuOff), gpuOn: median(s.gpuOn),
     spreadOff: [Math.min(...s.off), Math.max(...s.off)], spreadOn: [Math.min(...s.on), Math.max(...s.on)],
     // Per-round deltas (a round's on minus its own off): their spread is the bench's noise.
     deltas: s.on.map((v, i) => v - s.off[i]), gpuDeltas: s.gpuOn.map((v, i) => v - s.gpuOff[i]),
-    passOff: byMed('off'), passOn: byMed('on'), samples: s,
+    passOff: byMed('off'), passOn: byMed('on'), samples: s, beacons,
   };
   return r;
+}
+/** Beacons on - off (list on), in the real post-strobe Boiler Room: the light clock pinned 6 s
+ *  past the strobe (its lamps dead for good), the beacons forced on/off by script (setBeaconsOn;
+ *  never `.visible`), rounds interleaved. Frames are sim steps + draws (costStepFrames), so the
+ *  two per-frame shadow passes are in the "on" number. */
+async function costBeacons(c) {
+  const at = roomLamps(await lights(), c.room)[0]?.scriptAt;
+  if (typeof at !== 'number') fail(`cost ${c.name}: no strobe script to pin past: ${JSON.stringify(roomLamps(await lights(), c.room))}`);
+  await evaluate(`__sdfGame.setLightTime(${at + 6})`);
+  const b = { off: [], on: [], gpuOff: [], gpuOn: [], by: { off: {}, on: {} }, shadowFrames: 0 };
+  for (let round = 0; round < COST_ROUNDS; round++) {
+    for (const on of round % 2 ? [true, false] : [false, true]) {
+      const k = on ? 'on' : 'off';
+      await evaluate(`__sdfGame.setBeaconsOn(${on})`);
+      await stepN(3, 0);
+      const L = await lights();
+      if (!L.beacons.every((x) => x.level === (on ? 1 : 0)) || !roomLamps(L, c.room).every((x) => x.level === 0)) fail(`cost beacons ${k}: ${JSON.stringify(L.beacons)} lamps ${JSON.stringify(roomLamps(L, c.room))}`);
+      const sf0 = L.beacons.reduce((a, x) => a + x.shadowFrames, 0);
+      const fr = await costStepFrames();
+      if (on) b.shadowFrames += (await lights()).beacons.reduce((a, x) => a + x.shadowFrames, 0) - sf0;
+      b[k].push(median(fr.map((f) => f.ms)));
+      const ex = fr.filter((f) => f.s.length).map((f) => exclusivePasses(f.s));
+      if (ex.length) b[on ? 'gpuOn' : 'gpuOff'].push(median(ex.map((e) => e.span)));
+      for (const e of ex) for (const [l, v] of Object.entries(e.by)) (b.by[k][l] ??= []).push(v);
+    }
+  }
+  if (SHOT_OUT) {
+    for (const on of [false, true]) {
+      await evaluate(`__sdfGame.setBeaconsOn(${on})`);
+      await stepN(3, 0);
+      await settle(300);
+      await shoot(`cost-boiler-beacons-${on ? 'on' : 'off'}`);
+    }
+  }
+  await evaluate('__sdfGame.setBeaconsOn(true)');
+  const byMed = (k) => Object.fromEntries(Object.entries(b.by[k]).map(([l, v]) => [l, median(v)]));
+  return {
+    off: median(b.off), on: median(b.on), gpuOff: median(b.gpuOff), gpuOn: median(b.gpuOn),
+    deltas: b.on.map((v, i) => v - b.off[i]), gpuDeltas: b.gpuOn.map((v, i) => v - b.gpuOff[i]),
+    shadowFrames: b.shadowFrames, framesOn: COST_ROUNDS * COST_FRAMES, passOff: byMed('off'), passOn: byMed('on'),
+  };
 }
 async function costSection() {
   const q = `level=night-train&frozen&god${process.env.LIGHT_GATE_COST_QUERY ?? ''}`;
@@ -555,6 +622,15 @@ async function costSection() {
       .filter(([, , v]) => v > 0.05).sort((a, b) => b[2] - a[2]).slice(0, 8);
     console.log(`          passes (exclusive GPU ms: median on, on-off): ${labels.map(([l, d, v]) => `${l} ${f2(v)} (${d >= 0 ? '+' : ''}${f2(d)})`).join(', ')}`);
   }
+  for (const r of out) {
+    const b = r.beacons;
+    if (!b) continue;
+    console.log(`     cost ${r.name} beacons (after the strobe, list on) frame off ${f2(b.off)} on ${f2(b.on)} -> median on-off ${f2(b.on - b.off)} ms, per-round deltas ${spread(b.deltas)} | GPU span off ${f2(b.gpuOff)} on ${f2(b.gpuOn)} -> ${f2(b.gpuOn - b.gpuOff)} ms (rounds ${b.gpuDeltas.length ? spread(b.gpuDeltas) : 'n/a'}); ${b.shadowFrames} beacon shadow renders over ${b.framesOn} "on" frames`);
+    const labels = [...new Set([...Object.keys(b.passOff), ...Object.keys(b.passOn)])]
+      .map((l) => [l, (b.passOn[l] ?? 0) - (b.passOff[l] ?? 0), b.passOn[l] ?? 0])
+      .filter(([, d]) => Math.abs(d) > 0.05).sort((x, y) => y[1] - x[1]).slice(0, 8);
+    console.log(`          beacon passes (exclusive GPU ms: median on, on-off): ${labels.map(([l, d, v]) => `${l} ${f2(v)} (${d >= 0 ? '+' : ''}${f2(d)})`).join(', ') || 'none over 0.05'}`);
+  }
   if (!pt?.installed) console.log('     cost: no GPU timestamps on this page (passTimings not installed); frame times only');
   if (process.env.LIGHT_GATE_COST_JSON) writeFileSync(process.env.LIGHT_GATE_COST_JSON, JSON.stringify({ query: q, rounds: COST_ROUNDS, frames: COST_FRAMES, out }, null, 2));
   for (const r of out) {
@@ -565,14 +641,101 @@ async function costSection() {
       console.log(`WARN ${msg} [report-only: load average ${load.toFixed(2)}${load > COST_MAX_LOAD ? ` > ${COST_MAX_LOAD}` : ', LIGHT_GATE_COST_REPORT_ONLY'}; rerun on a quiet machine]`);
     }
   }
-  pass(`cost (${enforce ? 'enforced' : 'report-only'}, load ${load.toFixed(2)}, budget +${COST_BUDGET_MS} ms): ${out.map((r) => `${r.name} ${f2(r.on - r.off)} ms`).join(', ')}`);
+  // The beacons: reported, never dropped (spec §4): over budget is a WARN for the owner, not a fail.
+  for (const r of out) {
+    if (!r.beacons) continue;
+    if (!(r.beacons.shadowFrames > 0)) fail(`cost: ${r.name} beacons on but no shadow renders in the measured frames`);
+    const d = r.beacons.on - r.beacons.off;
+    if (d > COST_BUDGET_MS) console.log(`WARN cost: ${r.name} beacons on-off ${f2(d)} ms > ${COST_BUDGET_MS} ms (load ${load.toFixed(2)}): report to the owner; the shadows stay (spec §4)`);
+  }
+  pass(`cost (${enforce ? 'enforced' : 'report-only'}, load ${load.toFixed(2)}, budget +${COST_BUDGET_MS} ms): ${out.map((r) => `${r.name} ${f2(r.on - r.off)} ms`).join(', ')}${out.filter((r) => r.beacons).map((r) => `; ${r.name} beacons on-off ${f2(r.beacons.on - r.beacons.off)} ms (GPU ${f2(r.beacons.gpuOn - r.beacons.gpuOff)})`).join('')}`);
   return out;
 }
+// 6b. BEACONS (spec 2026-09-27-boiler-room-beacons-design.md §4). A fresh boot with the cast, the
+// light clock frozen and set by hand (setLightTime), so every level and axis below is a function of
+// the pinned time, not of how fast the headless machine stepped.
+const BEACON_BEFORE = '0, -92.0, 0, 0';   // in the Boiler Room (z -90..-110), short of the threshold (z -95.5..-96.5)
+const BEACON_DANCER = [0.9, -97.5];      // 3.6 m past the z -94 beacon (y 2.95): its cone (35 deg down, 18 deg half-angle) spans the body
+async function beaconSection() {
+  const q = 'level=night-train&frozen&god';
+  if (!(await boot(q))) { console.error(consoleEvents.slice(-8)); fail(`night-train did not boot (${q})`); }
+  await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
+  for (const c of ['setFlashlight(false)', 'setDemoHold(true)', 'setTrainSpeed(0)', 'holdWindowLight(0, -1)', 'setLightClockFrozen(true)', 'setLightTime(0)']) await evaluate(`__sdfGame.${c}`);
+  await evaluate(`__sdfGame.setPose(${BEACON_BEFORE})`);
+  await settle(3000);   // the first step at a new pose compiles
+  await stepN(6);
+  let L = await lights();
+  if (L.beacons.length !== 2 || !L.beacons.every((b) => b.room === 5)) fail(`beacons: expected 2 in room 5: ${JSON.stringify(L.beacons)}`);
+  if (!L.beacons.every((b) => b.level === 0 && b.script === null && b.intensity === 0)) fail(`beacons: lit before the threshold: ${JSON.stringify(L.beacons)}`);
+  const sf0 = L.beacons.map((b) => b.shadowFrames);
+  // Cross the threshold: the strobe (the room's lamps) arms the beacons (emergency).
+  await evaluate('__sdfGame.setPose(0, -96.0, 0, 0)');
+  await stepN(4);
+  L = await lights();
+  if (!L.beacons.every((b) => b.script === 'emergency')) fail(`beacons: not armed by the strobe: ${JSON.stringify(L.beacons)} lamps ${JSON.stringify(roomLamps(L, 5))}`);
+  const at = roomLamps(L, 5)[0].scriptAt;
+  // Dark through the strobe.
+  await evaluate(`__sdfGame.setLightTime(${at + 2})`);
+  await stepN(2, 0);
+  L = await lights();
+  if (!L.beacons.every((b) => b.level === 0)) fail(`beacons: lit during the strobe (t ${at + 2}): ${JSON.stringify(L.beacons)}`);
+  if (!L.beacons.every((b, i) => b.shadowFrames === sf0[i])) fail(`beacons: shadow renders while dark: ${JSON.stringify(L.beacons)} (was ${sf0})`);
+  // On for good once the strobe ends (surgeS 0.5 + strobeS 3 + emergencyOnS 0.3 = 3.8 s).
+  const T1 = at + 4.0, T2 = T1 + 0.18;   // 0.18 s at 0.7 rev/s: ~45 deg
+  const place = await placeNearest(...BEACON_DANCER);
+  await evaluate(`__sdfGame.setLightTime(${T1})`);
+  await stepN(12, 0);
+  L = await lights();
+  if (!L.beacons.every((b) => b.level === 1 && b.intensity > 0)) fail(`beacons: not on after the strobe (t ${T1}): ${JSON.stringify(L.beacons)}`);
+  if (!roomLamps(L, 5).every((x) => x.level === 0)) fail(`beacons: the Boiler Room lamps are still lit after the strobe: ${JSON.stringify(roomLamps(L, 5))}`);
+  const yaw = (a) => Math.atan2(a[2], a[0]);
+  const dyaw = (a, b) => { const d = Math.abs(yaw(a) - yaw(b)) % (2 * Math.PI); return Math.min(d, 2 * Math.PI - d) * 180 / Math.PI; };
+  const ax1 = L.beacons.map((b) => b.axis);
+  const split = dyaw(ax1[0], ax1[1]);
+  // The shadow renders while on (per step, the player in the room).
+  const sfOn = L.beacons.map((b) => b.shadowFrames);
+  await stepN(6, 0);
+  L = await lights();
+  const sfRise = L.beacons.map((b, i) => b.shadowFrames - sfOn[i]);
+  if (!sfRise.every((d) => d >= 5)) fail(`beacons: shadow frames did not rise while on over 6 steps: ${sfRise}`);
+  await evaluate(`__sdfGame.setLightTime(${T2})`);
+  await stepN(2, 0);
+  L = await lights();
+  const turn = L.beacons.map((b, i) => dyaw(ax1[i], b.axis));
+  if (!turn.every((d) => d > 20)) fail(`beacons: the axis turned only ${turn.map((d) => d.toFixed(1))} deg between t ${T1} and ${T2}`);
+  // A Boiler Room body picks a beacon: frame the placed dancer, and sweep the pinned clock a
+  // sixteenth of a turn at a time until a beam faces it.
+  const zs = await evaluate('__sdfGame.zombies()');
+  const dancer = zs.find((z) => z.id === place);
+  if (!dancer) fail(`beacons: placed actor ${place} gone`);
+  let hit = null, tries = 0;
+  for (let k = 0; k < 16 && !hit; k++, tries++) {
+    await evaluate(`__sdfGame.setLightTime(${T1 + k / 16 / 0.7})`);
+    await frameNearest(dancer.pos[0], dancer.pos[2]);
+    await stepN(2, 0);
+    const [LL, pk] = [await evaluate('__sdfGame.lightList()'), await evaluate('__sdfGame.bodyPicks()')];
+    const p = pk.find((q) => q.id === place);
+    if (p && p.room !== 5) fail(`beacons: the placed actor is in room ${p.room}, not the Boiler Room`);
+    const b = p?.picks.find((q) => q.index >= 0 && LL[q.index]?.profile === 'beacon');
+    if (b) hit = { t: T1 + k / 16 / 0.7, weight: b.weight, slot: p.picks.indexOf(b), n: LL.filter((l) => l.profile === 'beacon').length };
+  }
+  if (!hit) fail(`beacons: actor ${place} never picked a beacon-profile light over a full turn`);
+  await shoot('beacons-gate');
+  pass(`beacons: dark before the threshold and through the strobe; on (level 1, spot ${L.beacons.map((b) => b.intensity.toFixed(1)).join('/')}) from t+${(T1 - at).toFixed(1)} s; beams ${split.toFixed(0)} deg apart at t+4 s (counter-rotating from 0 and π); turned ${turn.map((d) => d.toFixed(0)).join('/')} deg in ${(T2 - T1).toFixed(2)} s; shadow renders +${sfRise.join('/')} over 6 steps; actor ${place} picks a beacon (${hit.n} in the list) in slot ${hit.slot} w ${hit.weight.toFixed(3)} after ${tries} sixteenth-turn(s)`);
+}
+if (process.env.LIGHT_GATE_ONLY_BEACONS) {
+  await beaconSection();
+  console.log(`PASS sdf-game-light-gate beacons only (wall ${((Date.now() - T0) / 1000).toFixed(0)} s)`);
+  process.exit(0);
+}
+
 if (process.env.LIGHT_GATE_ONLY_COST) {
   await costSection();
   console.log(`PASS sdf-game-light-gate cost only (wall ${((Date.now() - T0) / 1000).toFixed(0)} s)`);
   process.exit(0);
 }
+
+if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS) await beaconSection();
 
 await listBoot('level=night-train&frozen&god');
 const LL3 = await evaluate('__sdfGame.lightList()');

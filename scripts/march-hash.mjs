@@ -140,6 +140,12 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 //   e7155e40  e2ce8904…   (tip)
 // The quad and per-body values were not bisected separately; they moved over
 // the same range and are pinned from the tip.
+// BOILER ROOM BEACONS (2026-09-27, 94fc3935..the Task 5 commit): the level
+// changed (two beacon lights in room 5, moved to y 2.95) and NO pin moved —
+// all three held on 3/3 boots each (ports 5473/9473, LAB_TMP=.lab-tmp), the
+// wounded variants too (06eaee1b… / 5773171f… / 0e1331a0…). Expected: the
+// close-up is room 1 at light time 0; the beacons' spots are onlyRooms 5,
+// their list records room-5 only, their omni 0 and list-only.
 //
 // 2026-09-27 RE-PIN — TWO FAULTS, SEPARATED:
 //   1. STALE PIN. Bisected with the UNMODIFIED gate over 3691eb5b..23f6fcc6

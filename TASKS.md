@@ -23,6 +23,9 @@
   questions: the list is darker than today away from a front-lit pose (Boiler Room), and tube shadow
   maps at 256². After sign-off: delete the old path, then plan 2 (level materials on the list) —
   see [rendering](docs/tasks/rendering.md).
+- [x] **Boiler Room emergency beacons** (4j): two red sweeping ceiling beacons with hard shadows come
+  on as the strobe ends; +0.75 ms frame / +1.12 ms GPU ([dev note + sheet](docs/dev-notes/2026-09-27-boiler-room-beacons/notes.md)).
+  Owner look pending: a body in the beam blows out flat red.
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
