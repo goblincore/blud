@@ -2,6 +2,32 @@
 
 ## For the owner
 
+### v1.2 (2026-09-27): what changed
+
+- **The strike lands on the crosshair, both sides** (Task 15). v1.1's strike balls sat
+  ~18° under the boresight (they hit the upper chest when you aimed at a head). Both
+  sides' strike balls are now 4° under, within 6 cm on x — see `look/overhand-R-strip.png`
+  and `look/whip-L-strip.png`, frame `f11` on each, where the ball lands right on the
+  reticle.
+- **R is a big overhand swipe, not a jab.** The wind-up raises the fist over the right
+  shoulder (`look/overhand-R-strip.png` f04/f06: the ball climbs off-screen top-right,
+  the huge green fist crosses into frame), the ball crests high in front at f09, then
+  comes down diagonally onto the crosshair at the strike (f11). L is visually unchanged
+  from v1.1 (its own wind-up/strike/follow-through keys only moved by ≤ 2 cm) — see
+  `look/whip-L-strip.png`, refreshed with the current build.
+- **Gradual head damage, four hits.** Hits 1–3 cave the face in progressively (a crater
+  near the eye, then the jaw broken open with teeth showing, then a bigger cave with gore
+  spilling); hit 4 takes the head off in a burst. See `gate/head-hit-1..4.png`.
+- **Smaller craters.** Body crater 0.14 → 0.09 m, face crater 0.09 → 0.06 m (spec §11).
+  `gate/hit-wound.png` still reads as a clean ringed crater, not a gaping hole, at the
+  smaller radius.
+- **`handScale` 1.0 → 1.3** (landed in Tasks 14/15, confirmed by this look pass — see
+  below; not changed further here).
+- **What to test:** aim at a zombie's head and confirm the crosshair, not the chest, is
+  where the crater lands on both R and L swings; watch the R overhand wind-up read as a
+  big shoulder-height swipe rather than a poke; check whether the R follow-through
+  disappearing off-screen (below) bothers you in play.
+
 ### v1.1 (2026-09-27): what changed
 
 - **The chain is a whip now.** The ball hangs on a simulated 9-node chain
@@ -488,6 +514,72 @@ The `head-hit-1..4.png` photos bear this out: the face crater never appears (eve
 lands on the chest/torso, out of frame low), and the head looks visually identical across
 all four shots — it never takes any face damage, let alone comes off.
 
+## v1.2 look pass (Task 16, 2026-09-27)
+
+Same harness as the v1.1 look pass (frozen crowd, 2.4 m from a zombie, out of reach),
+adapted from `.lab-tmp/flail-look11.mjs`. Strips: `look/overhand-R-strip.png` (new, 8
+frames: f0, f4, f6, f9, f11 = STRIKE, f14, f18, f22) and `look/whip-L-strip.png`
+(refreshed, same 8 frames as v1.1: f0, f3, f6, f8, f10, f11 = STRIKE, f14, f18).
+
+- **R reads as an overhand swipe.** f4–f6: the ball climbs off the top-right of the
+  frame as the fist rises past shoulder height (green-pixel share of the canvas hits
+  1.6–1.8%, versus 0.5% at rest). f9: the ball crests high in front, well above the
+  reticle, with the fist large in the lower-right corner (4.6% green — the biggest single
+  sampled frame of the swing). f11 (strike): the ball sits on the crosshair, over the
+  zombie's neck/collarbone, exactly where the player was aiming. The motion from f6→f11 is
+  a clear diagonal from high-right down onto the target, not a jab — it reads as a big
+  swipe.
+- **R's follow-through leaves the frame, not just low-left.** Ball NDC by frame: f13
+  (−0.27, −0.70), f14 (−0.34, −0.84), f18 (−0.48, −1.10). This confirms the key
+  implementer's flag (NDC y ≈ −0.7 at frame 13) and goes further: at f14 the screenshot
+  shows *nothing* of the flail at all — no ball, no haft, no chain, no hand (0% green
+  share on the sampled frames f14/f18/f22). The whole weapon is off-screen for several
+  follow-through frames, not just the ball. It comes back into frame by the return leg
+  (f22 shows the chain re-entering low-centre, ball NDC (−0.07, −0.80), still not fully
+  on-screen). This is a look-pass finding to flag for the owner, not a tuning fix here —
+  a shallower follow-through key risks failing the overshoot test that already tuned it
+  (Tuning log, "Why the follow-through ball is deeper than the strike's").
+- **L is unchanged and stays on-screen throughout.** f6: the ball is up-left on a taut
+  chain, the fist and bracer crossing the lower-left — reads as a whip trail. f11
+  (strike): the ball lands on the crosshair, at the zombie's collarbone. f18
+  (follow-through): the ball is a small shape in the lower-right corner — visible, unlike
+  R's, though small.
+- **No frame near the strike has the fist or haft covering the crosshair.** Checked R f09,
+  f11 and L f06, f08, f11: the green fist sits in a lower corner in every one, and the
+  reticle itself is never occluded. The gate's own head-hit and front-hit checks (which
+  aim through the fisheye-warped crosshair) corroborate this — every strike ray lands
+  within centimetres of where the crosshair was aimed.
+- **`handScale` at 1.3 (Tasks 14/15), confirmed by photos — not changed further.**
+  Green-pixel share of the canvas (goblin-hand material), rest vs during-swing peaks:
+
+  | | v1.1 (`handScale` 1.0) | v1.2 (`handScale` 1.3) |
+  | --- | --- | --- |
+  | rest | 0.2% | 0.51% |
+  | R peak (sampled) | 2.9% (f8) | 4.58% (f9) |
+  | L peak (sampled) | 4.3% (f6) | 6.77% (f6) |
+
+  The fist at rest is visibly bigger (`look/rest.png` in the gate output, and
+  `.lab-tmp/look16/rest.png` from this pass), and during both wind-ups it now crosses
+  well into frame rather than staying a sliver. 1.3 sits inside the 1.2–1.4 band this task
+  was scoped to try, and the numbers above justify not pushing it further: at rest the
+  scale increase alone roughly doubled the on-screen share without the rest GRIP moving
+  (that's still the v1.1 feel question — showing more fist at rest needs the grip
+  repositioned, not more scale). No further bump is needed.
+- **Rest framing is effectively unchanged.** The gate's own rest line (front-hit setup,
+  1.5 m from a torso-height crosshair) prints ball NDC (0.54, −0.76), against v1.1's
+  documented (0.54, −0.71) — a 0.05 y difference, at the edge of, not past, this task's
+  ~0.05 tolerance. `FLAIL_REST`, `FLAIL_CHAIN` and the grip/ball keys were not touched in
+  this pass, and `handScale` scales only the drawn hand mesh, not the ball/grip/bolt
+  poses, so this small drift is measurement noise (a slightly different camera pitch
+  between test setups — see NOTES on gate test 1 aiming at the torso vs the original
+  v1 tuning capture), not a framing regression. Grip NDC (0.83, −1.05) matches v1.1
+  exactly.
+- **Gate not rerun as part of this look pass.** The photos above were captured with a
+  throwaway harness (`.lab-tmp/flail-look16.mjs`, not committed) so as not to disturb the
+  gate's own `gate/*.png` outputs, which were already current from the Task 15 run. The
+  owner should rerun `scripts/flail-gate.mjs` to get a fresh full pass/fail readout; no
+  gate-affecting constant changed in this task.
+
 ## Open feel questions for the owner
 
 - **Strike reads as a mace, not a flail.** The chain is nearly straight and short at the
@@ -499,3 +591,7 @@ all four shots — it never takes any face damage, let alone comes off.
   Try it a bit brighter?
 - **The crater:** the new contrast measure reads it strongly (rise 51), and it looks big in
   the photo. Judge it in play.
+- **R's follow-through leaves the screen entirely for several frames** (v1.2 look pass,
+  Task 16): ball, haft, chain and hand are all off-frame from about f13 through f18 of
+  27. Worth a shallower follow-through key, or is a brief "the weapon left the frame"
+  beat fine for a big overhand swing?
