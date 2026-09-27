@@ -39,11 +39,20 @@ describe('shadeBodyLights (the CPU reference of bodyLights)', () => {
     expect(LIGHT_PROFILES[PROFILE_ID.tube]!.floor).toBe(0.18);
     expect(sum(tube.diffuse)).toBeGreaterThan(0);
     // wrap = floor / (1 + floor), times c = rgb x weight x gain.
-    expect(tube.diffuse[0]).toBeCloseTo((0.18 / 1.18) * 0.5 * 1.3, 5);
+    expect(tube.diffuse[0]).toBeCloseTo((0.18 / 1.18) * 0.5 * LIGHT_PROFILES[PROFILE_ID.tube]!.gain, 5);
     // A floor-0 profile (muzzle) leaves the same terminator black.
     const muzzle = shadeBodyLights(P, n, V, [0.5, -1, -1, -1], packed([point([5, 0, 0], 'muzzle')]));
     expect(sum(muzzle.diffuse)).toBe(0);
     expect(tube.domFloor).toBeCloseTo(0.18, 6);
+  });
+
+  it('bodyNorm (light v3.z) scales c: a light with refIntensity 4 gives a quarter (Task 10)', () => {
+    const n: Vec3 = [0, 0, 1];
+    const a = shadeBodyLights(P, n, V, [0.5, -1, -1, -1], packed([point([0, 0, 5], 'lamp')]));
+    const b = shadeBodyLights(P, n, V, [0.5, -1, -1, -1], packed([{ ...point([0, 0, 5], 'lamp'), refIntensity: 4 }]));
+    expect(sum(b.diffuse)).toBeGreaterThan(0);
+    expect(sum(b.diffuse)).toBeCloseTo(sum(a.diffuse) / 4, 6);
+    expect(sum(b.rim)).toBeCloseTo(sum(a.rim) / 4, 6);
   });
 
   it('view bias: a light behind the body still wraps onto the front; bias 0 gives less', () => {

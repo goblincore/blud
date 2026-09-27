@@ -8,6 +8,11 @@
 //   4. THE STORM IN THE GLASS: the dining window is much brighter during a bolt.
 //   5. BLACKOUT: the sleeper corridor trigger cuts the sleeper lamps, then they come back.
 //   6. THE BOILER ROOM: the strobe, the steam plumes, the machinery.
+//   7. THE SHARED LIST (plan 1, Task 10): the list is on for bodies and crowds. Two crowd actors
+//      under different tubes pick different dominants; under a tube, a held bolt and the flashlight
+//      the body-box mean is within 0.9x..1.2x of `?lightlist=0` at the same pose (a second boot);
+//      the body box is never mostly black.
+//      LIGHT_GATE_SHOT=<dir> keeps the A/B shots (list-<scene>-on|off.png).
 //
 // Usage: LAB_VITE_PORT=5297 LAB_CDP_PORT=9297 node scripts/sdf-game-light-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -44,8 +49,8 @@ ws.onmessage = (ev) => {
 const send = (method, params = {}) => new Promise((resolve) => {
   const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params }));
 });
-const evaluate = async (expression) => {
-  const r = await withTimeout(send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }), 30000,
+const evaluate = async (expression, ms = 30000) => {
+  const r = await withTimeout(send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }), ms,
     `evaluate: ${expression.slice(0, 80)}`);
   if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails));
   return r.result?.result?.value;
@@ -141,6 +146,8 @@ const settle = (ms = 700) => sleep(ms);
 const lights = () => evaluate('__sdfGame.lights()');
 const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire');
 
+// LIGHT_GATE_ONLY_LIST=1 runs section 7 alone (the calibration loop).
+if (!process.env.LIGHT_GATE_ONLY_LIST) {
 // 1. DARK START — no flashlight until the coat check (carriage 4 of 8).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) { console.error(consoleEvents.slice(-8)); fail('night-train did not boot'); }
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
@@ -239,6 +246,144 @@ if (!roomLamps(L, 5).every((x) => x.script === 'strobe')) fail(`boiler room lamp
 const tr = await evaluate('__sdfGame.train()');
 if (!(tr.steam > 0)) fail(`no steam plumes: ${JSON.stringify(tr)}`);
 pass(`boiler room: the threshold starts the strobe; ${tr.steam} steam plumes, ${tr.swaying} moving piece sets`);
+}
+
+// 7. THE SHARED LIST (plan 1, Task 10). Fresh boots WITH the cast, clocks pinned so the two boots
+// render the same scene state: `lightlist` on (the default) first, then `?lightlist=0` (the old
+// key path) at the same poses.
+/** The actor nearest (x, z), moved to stand at (x, z) (the nudge's own clamps apply). */
+async function placeNearest(x, z) {
+  const zs = await evaluate('__sdfGame.zombies()');
+  const a = zs.sort((p, q) => Math.hypot(p.pos[0] - x, p.pos[2] - z) - Math.hypot(q.pos[0] - x, q.pos[2] - z))[0];
+  if (!a) fail('no actor to place');
+  await evaluate(`__sdfGame.zombieNudge(${a.id}, ${x - a.pos[0]}, ${z - a.pos[2]})`);
+  return a.id;
+}
+/** Frame the actor nearest (x, z) from `back` metres toward +z, eye height, looking at it. */
+async function frameNearest(x, z, back = 2.4) {
+  const zs = await evaluate('__sdfGame.zombies()');
+  const a = zs.sort((p, q) => Math.hypot(p.pos[0] - x, p.pos[2] - z) - Math.hypot(q.pos[0] - x, q.pos[2] - z))[0];
+  if (!a) fail('no actor to frame');
+  const cx = a.pos[0], cz = a.pos[2] + back;
+  await evaluate(`__sdfGame.setPose(${cx}, ${cz}, ${Math.atan2(-(a.pos[0] - cx), -(a.pos[2] - cz))}, -0.12)`);
+  return a;
+}
+/** A hand step: the first frames at a new pose can compile a crowd type's program (tens of s). */
+const stepN = (n, dt) => evaluate(`__sdfGame.step(${n}${dt === undefined ? '' : `, ${dt}`})`, 300000);
+/** Body-box luminance: mean, std and the share of near-black pixels (< 0.04). */
+function bodyBox(img) {
+  const s = stats(img, 0.38, 0.2, 0.62, 0.8);
+  return { mean: s.mean, std: s.std, dark: s.v.filter((v) => v < 0.04).length / s.v.length };
+}
+// Third class (room 1): tubes at z -12 and -4 (the list's first two). The A/B actor stands under
+// the z -12 tube's pool; the crowd pair stands under the two tubes.
+// Both stand just past their tube (seen from the camera, 2.4 m toward +z), so the tube is between
+// the body and the viewer: the pool presents the body's front on both paths. The train is stopped
+// (setTrainSpeed(0)) so the tubes hang still: the old key's direction follows the tube's swing, and
+// a swing frozen at a random phase moved the ?lightlist=0 tube mean 0.16-0.23 boot to boot.
+const UNDER_A = [0.4, -12.6], UNDER_B = [-0.4, -4.4];
+const SCENES = [
+  { name: 'tube', frame: UNDER_A, setup: ['holdWindowLight(0, -1)', 'setFlashlight(false)'] },
+  { name: 'bolt', frame: UNDER_A, setup: ['holdWindowLight(32, -1)', 'setFlashlight(false)'] },
+  // The torch ramps on the light clock (TORCH_ON_S): run it for the scene's 30 steps, then re-pin
+  // the clock with the tubes lit.
+  { name: 'flashlight', frame: UNDER_B, setup: ['holdWindowLight(0, -1)', 'setLightClockFrozen(false)', 'setFlashlight(true)'], repin: true },
+  // The coat check (room 6): its lamps are dead at the start, nothing picks these bodies.
+  { name: 'dark', frame: [-1.2, -62.4], setup: ['holdWindowLight(0, -1)', 'setFlashlight(false)'] },
+];
+/** Pin the flicker clock at a moment when third class's tubes are all at full level (one of them
+ *  flickers; its frozen phase is otherwise boot-to-boot luck), so both boots, the crowd pair and
+ *  every scene see the same lamps. */
+async function pinLit() {
+  for (let i = 0; ; i++) {
+    await evaluate('__sdfGame.setLightClockFrozen(true)');
+    await stepN(2);
+    if (roomLamps(await lights(), 1).every((x) => x.level > 0.97)) return;
+    if (i >= 60) fail(`third-class tubes never all lit: ${JSON.stringify(roomLamps(await lights(), 1))}`);
+    await evaluate('__sdfGame.setLightClockFrozen(false)');
+    await stepN(7);
+  }
+}
+async function listBoot(query) {
+  if (!(await boot(query))) { console.error(consoleEvents.slice(-8)); fail(`night-train did not boot (${query})`); }
+  await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
+  await evaluate('__sdfGame.setFlashlight(false)');
+  await evaluate('__sdfGame.setDemoHold(true)');
+  await evaluate('__sdfGame.setTrainSpeed(0)');
+  await evaluate('__sdfGame.holdWindowLight(0, -1)');
+  // The coat check's lamps start dead/dying on a clock: kill them, so the dark scene has no picks
+  // in either boot (a dying lamp's frozen flicker phase differs boot to boot).
+  await evaluate('__sdfGame.lightCommand("die", 6)');
+  await evaluate('__sdfGame.setPose(0, -12.0, 0, -0.05)');
+  await settle(3000);   // the first step at a new pose compiles; let the warm path finish (and the lamps die)
+  // The die script runs on the light clock (hand-stepped here): step until the coat check is dark.
+  const died = (l) => roomLamps(l, 6).every((x) => x.level === 0 && x.scriptAt !== null && l.time - x.scriptAt > 2.5);
+  for (let i = 0; !died(await lights()); i++) {
+    if (i >= 60) fail(`coat-check lamps never died: ${JSON.stringify(roomLamps(await lights(), 6))}`);
+    await stepN(10);
+  }
+  await pinLit();
+  if (!roomLamps(await lights(), 6).every((x) => x.level === 0)) fail(`coat-check lamps not dead: ${JSON.stringify(roomLamps(await lights(), 6))}`);
+  await placeNearest(...UNDER_A);
+  await placeNearest(...UNDER_B);
+  await stepN(20);
+}
+async function listScenes(tag) {
+  const out = {};
+  for (const sc of SCENES) {
+    for (const c of sc.setup) await evaluate(`__sdfGame.${c}`);
+    await frameNearest(...sc.frame);
+    await stepN(30);
+    if (sc.repin) await pinLit();
+    await stepN(12, 0);
+    if (sc.name === 'flashlight' && (await lights()).flashlight !== 1) fail(`flashlight scene: torch level ${(await lights()).flashlight}`);
+    await settle(300);
+    out[sc.name] = bodyBox(await shoot(`list-${sc.name}-${tag}`));
+    if (process.env.LIGHT_GATE_DEBUG) {
+      const a = await frameNearest(...sc.frame);
+      console.log('DBG', tag, sc.name, JSON.stringify(await evaluate(`(() => { const z = __sdfGame.zombie(${a.id}); const u = z.view.uniforms; const L = __sdfGame.lights(); return { id: ${a.id}, room: z.room, pos: z.pose().pos, s2: u.spotCfg2.value.toArray(), kc: u.keyColor.value.toArray(), ld: u.lightDir.value.toArray(), lc: u.lightCfg.value.toArray(), ll: u.lightListCfg.value.toArray(), bl: u.bodyLights.value.toArray(), win: L.windowIntensity, flash: L.flash, r1: L.lamps.filter(x => x.room === 1).map(x => x.level), rl: L.roomLight }; })()`)));
+    }
+    if (sc.name === 'dark' && tag === 'on') {
+      const a = await frameNearest(...sc.frame);
+      const p = (await evaluate('__sdfGame.bodyPicks()')).find((q) => q.id === a.id);
+      if (!p || p.picks.some((k) => k.index >= 0)) fail(`dark scene: the framed body still picks lights: ${JSON.stringify(p)}`);
+    }
+  }
+  return out;
+}
+const fmt = (b) => `mean ${b.mean.toFixed(3)} std ${b.std.toFixed(3)} dark ${(b.dark * 100).toFixed(1)}%`;
+
+await listBoot('level=night-train&frozen&god');
+const LL3 = await evaluate('__sdfGame.lightList()');
+if (!Array.isArray(LL3) || LL3.length === 0 || LL3.length > 32) fail(`lightList() in third class: ${JSON.stringify(LL3)?.slice(0, 300)}`);
+// The crowd fix: every crowd member carries its own picks (its record), not the type's.
+const zs7 = await evaluate('__sdfGame.zombies()');
+const near = (x, z) => zs7.sort((p, q) => Math.hypot(p.pos[0] - x, p.pos[2] - z) - Math.hypot(q.pos[0] - x, q.pos[2] - z))[0];
+const [ia, ib] = [near(...UNDER_A), near(...UNDER_B)];
+const picks = await evaluate('__sdfGame.bodyPicks()');
+const pa = picks.find((p) => p.id === ia.id), pb = picks.find((p) => p.id === ib.id);
+const sep = Math.hypot(ia.pos[0] - ib.pos[0], ia.pos[2] - ib.pos[2]);
+if (!pa || !pb || pa.room !== pb.room || !pa.crowd || !pb.crowd || !(sep > 1.5)) fail(`crowd pair: ${JSON.stringify({ pa, pb, sep })}`);
+if (pa.picks[0].index < 0 || pb.picks[0].index < 0 || pa.picks[0].index === pb.picks[0].index) fail(`crowd pair share a dominant: ${JSON.stringify({ a: pa.picks, b: pb.picks })}`);
+const lit = picks.filter((p) => p.picks[0].index >= 0).length;
+pass(`shared list: ${LL3.length} lights in third class; crowd actors ${pa.id}/${pb.id} (room ${pa.room}, ${sep.toFixed(1)} m apart) dominants ${pa.picks[0].index} (w ${pa.picks[0].weight.toFixed(3)}) / ${pb.picks[0].index} (w ${pb.picks[0].weight.toFixed(3)}); ${lit}/${picks.length} bodies picked`);
+const listOn = await listScenes('on');
+await listBoot('level=night-train&frozen&god&lightlist=0');
+if ((await evaluate('__sdfGame.bodyPicks()')).some((p) => p.picks.some((k) => k.index >= 0))) fail('?lightlist=0 still picks');
+const listOff = await listScenes('off');
+for (const sc of SCENES) console.log(`     ${sc.name.padEnd(10)} on  ${fmt(listOn[sc.name])} | off ${fmt(listOff[sc.name])}`);
+// Calibrated to today (Task 10): under a tube, a held bolt and the flashlight the body is neither
+// darker than ?lightlist=0 (>= 0.9x) nor blown out (<= 1.2x; the first uncalibrated cut was flat white).
+for (const n of ['tube', 'bolt', 'flashlight']) {
+  const r = listOn[n].mean / listOff[n].mean;
+  if (!(r >= 0.9)) fail(`${n}: the list is darker than ?lightlist=0: ${listOn[n].mean.toFixed(3)} < 0.9 x ${listOff[n].mean.toFixed(3)}`);
+  if (!(r <= 1.2)) fail(`${n}: the list blows the body out vs ?lightlist=0: ${listOn[n].mean.toFixed(3)} > 1.2 x ${listOff[n].mean.toFixed(3)}`);
+}
+// Never black: the body box is at most 15% near-black under a tube, a held bolt and the flashlight.
+for (const n of ['tube', 'bolt', 'flashlight']) if (!(listOn[n].dark <= 0.15)) fail(`${n}: body box ${(listOn[n].dark * 100).toFixed(1)}% near-black (> 15%)`);
+// And with no picks at all (the dark coat check) the fill floor still carries the body.
+if (!(listOn.dark.dark <= Math.max(0.15, listOff.dark.dark + 0.05))) fail(`dark coat check: body box ${(listOn.dark.dark * 100).toFixed(1)}% near-black (off ${(listOff.dark.dark * 100).toFixed(1)}%)`);
+pass(`shared list look: on/off mean tube ${(listOn.tube.mean / listOff.tube.mean).toFixed(2)}x bolt ${(listOn.bolt.mean / listOff.bolt.mean).toFixed(2)}x flashlight ${(listOn.flashlight.mean / listOff.flashlight.mean).toFixed(2)}x; near-black tube ${(listOn.tube.dark * 100).toFixed(1)}% bolt ${(listOn.bolt.dark * 100).toFixed(1)}% flashlight ${(listOn.flashlight.dark * 100).toFixed(1)}% dark-corridor ${(listOn.dark.dark * 100).toFixed(1)}%`);
 
 console.log('PASS sdf-game-light-gate');
 process.exit(0);

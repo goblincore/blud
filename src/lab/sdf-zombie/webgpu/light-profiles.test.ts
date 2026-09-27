@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIGHT_PROFILES, PROFILE_ID, PROFILE_VEC4S, PROFILES_BY_NAME, packProfiles } from './light-profiles';
+import { WINDOW_LIST_TRIM, FLASHLIGHT_LIST_TRIM, LAMP_LIST_TRIM, LIGHT_PROFILES, OLD_BEAM_GAIN, OLD_BODY_FLASH_GAIN, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, OLD_KEY, PROFILE_ID, PROFILE_VEC4S, PROFILES_BY_NAME, packProfiles } from './light-profiles';
 
 describe('light profiles (spec §5)', () => {
   it('has the six starting kinds, at most 8', () => {
@@ -8,8 +8,18 @@ describe('light profiles (spec §5)', () => {
   });
   it('tube starts from the tuned PRESENT constants', () => {
     const t = LIGHT_PROFILES[PROFILE_ID.tube]!;
-    expect(t.gain).toBe(1.3); expect(t.viewBias).toBe(0.3); expect(t.floor).toBe(0.18);
+    expect(t.gain).toBeCloseTo(4.68 * LAMP_LIST_TRIM, 9); expect(t.viewBias).toBe(0.3); expect(t.floor).toBe(0.18);
     expect(t.backKey).toBe(0.35); expect(t.backRim).toBe(2.5); expect(t.edge).toBe(1.25); expect(t.distFall).toBe(0.06);
+  });
+  it('gains are the old path\'s body-key conversions (Task 10 calibration)', () => {
+    expect(OLD_KEY).toBe(2.4);
+    const g = (n: keyof typeof PROFILE_ID) => PROFILES_BY_NAME[n].gain;
+    expect(g('tube')).toBeCloseTo(OLD_KEY * OLD_BODY_LAMP_GAIN * 1.3 * LAMP_LIST_TRIM, 9);
+    expect(g('lamp')).toBeCloseTo(OLD_KEY * OLD_BODY_LAMP_GAIN * 1.1 * LAMP_LIST_TRIM, 9);
+    expect(g("window")).toBeCloseTo(OLD_KEY * OLD_BODY_WINDOW_GAIN * WINDOW_LIST_TRIM, 9);
+    expect(g("flashlight")).toBeCloseTo(OLD_BEAM_GAIN * FLASHLIGHT_LIST_TRIM, 9);
+    expect(g('muzzle')).toBeCloseTo(OLD_BODY_FLASH_GAIN * 1.45 / 2.25, 9);
+    expect(g('fire')).toBeCloseTo(OLD_BODY_FLASH_GAIN * 1.225 / 2.25, 9);
   });
   it('window carries the cold lightning rim tint', () => {
     expect(LIGHT_PROFILES[PROFILE_ID.window]!.rimTint).toEqual([0.55, 0.75, 1.3]);
@@ -34,7 +44,7 @@ describe('light profiles (spec §5)', () => {
     expect(() => { t.rimTint[0] = 99; }).toThrow(TypeError);
     expect(() => { (LIGHT_PROFILES as unknown as unknown[]).push({}); }).toThrow(TypeError);
     expect(() => { (PROFILES_BY_NAME as Record<string, unknown>).tube = {}; }).toThrow(TypeError);
-    expect(t.gain).toBe(1.3);
+    expect(t.gain).toBeCloseTo(4.68 * LAMP_LIST_TRIM, 9);
     expect(t.rimTint[0]).toBe(0.55);
     expect(Object.isFrozen(LIGHT_PROFILES)).toBe(true);
   });

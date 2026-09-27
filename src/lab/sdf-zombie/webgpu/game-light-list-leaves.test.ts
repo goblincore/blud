@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { collectLightSources, maskRooms, nearRoomMask, type TunnelLink } from './game-light-list-leaves';
+import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type TunnelLink } from './game-light-list-leaves';
 import { buildLightList, roomMaskOf } from './light-list';
 import { lightPresence } from './light-pick';
+import { BODY_LAMP_GAIN, BODY_WINDOW_GAIN, PRESENT } from './game-dynamic-light-leaves';
+import { LAMP_LIST_TRIM, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, PROFILES_BY_NAME } from './light-profiles';
 
 describe('collectLightSources', () => {
   it('maps lamps, tubes, window light, flashlight and flashes to typed sources', () => {
@@ -77,5 +79,41 @@ describe('the storm window light through the list (Task 6 review: room mask)', (
   it('an empty room set (a storm with no window lights) is any room', () => {
     const [l] = buildLightList(collectLightSources({ lamps: [], flashlight: null, flashes: [], window: { dir: [0, 1, 0], color: [1, 1, 1], intensity: 5, rooms: [] } }));
     expect(l!.roomMask).toBe(0);
+  });
+});
+
+describe('pickBodyFor (Task 10: the pick body of an actor)', () => {
+  it('chest at root + 1.2, feet at root + 0.2, the actor\'s room', () => {
+    const b = pickBodyFor([2, 0.5, -3], 4, [2, 1.6, 7]);
+    expect(b.pos).toEqual([2, 1.7, -3]);
+    expect(b.feetY).toBeCloseTo(0.7);
+    expect(b.room).toBe(4);
+  });
+  it('facing is the unit xz direction toward the CAMERA (presentingLamp\'s rule), not the heading', () => {
+    const b = pickBodyFor([0, 0, 0], 1, [3, 1.6, 4]);
+    expect(b.facing[0]).toBeCloseTo(0.6);
+    expect(b.facing[1]).toBeCloseTo(0.8);
+  });
+  it('a camera straight overhead (xz length < 1e-4) falls back to [0, 1]', () => {
+    expect(pickBodyFor([1, 0, 1], 2, [1 + 1e-6, 5, 1]).facing).toEqual([0, 1]);
+  });
+});
+
+describe('the body-key calibration mirrors the old path (Task 10)', () => {
+  it('light-profiles\' OLD_* constants equal their homes in game-dynamic-light-leaves', () => {
+    expect(OLD_BODY_LAMP_GAIN).toBe(BODY_LAMP_GAIN);
+    expect(OLD_BODY_WINDOW_GAIN).toBe(BODY_WINDOW_GAIN);
+    expect(PROFILES_BY_NAME.tube.gain / (2.4 * OLD_BODY_LAMP_GAIN * LAMP_LIST_TRIM)).toBeCloseTo(PRESENT.gain, 9);
+  });
+  it('lamps and the flashlight carry their base intensity as refIntensity', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 2, 0], color: [1, 1, 1], intensity: 1.5, range: 8, room: 1, tube: null, mood: 'steady', ref: 3 }],
+      window: null,
+      flashlight: { pos: [0, 1.6, 0], axis: [0, 0, -1], color: [1, 1, 1], intensity: 45, range: 16, cosOuter: 0.8, cosInner: 0.93, ref: 90 },
+      flashes: [],
+    });
+    expect(s.map(x => x.refIntensity)).toEqual([3, 90]);
+    const list = buildLightList(s);
+    expect(list.map(l => l.bodyNorm).sort()).toEqual([1 / 90, 1 / 3].sort());
   });
 });

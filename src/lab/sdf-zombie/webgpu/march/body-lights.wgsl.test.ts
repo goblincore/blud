@@ -95,8 +95,8 @@ describe('BODY_LIGHTS — offsets and guards', () => {
     expect(BODY_LIGHTS.replace(/\/\/.*$/gm, '')).not.toMatch(/\bnormalize\(/);   // code, not comments
   });
 
-  it('never re-evaluates cone or distance: the colour is rgb x weight x gain', () => {
-    expect(BODY_LIGHTS).toContain('let c = col.rgb * (w * pa.x);');
+  it('never re-evaluates cone or distance: the colour is rgb x weight x gain x bodyNorm', () => {
+    expect(BODY_LIGHTS).toContain('let c = col.rgb * (w * pa.x * lm.z);');
     expect(BODY_LIGHTS).not.toMatch(/\(\*lights\)\[base \+ 2\]/);   // the spot axis/cone vec4 is unread
     expect(BODY_LIGHTS).not.toMatch(/\bcol\.w\b/);   // range is the pick's business, not the shader's
   });
@@ -106,7 +106,7 @@ describe('BODY_LIGHTS — lane parity with packProfiles and the CPU reference', 
   // The lane each param is packed into (light-profiles.ts packProfiles) and the WGSL expression
   // that reads it. light-shade.ts reads the same lanes (pa[0] gain, pa[1] viewBias, ...).
   const LANES: { param: keyof (typeof LIGHT_PROFILES)[number] | 'rimTint.rgb'; flat: number | number[]; wgsl: string }[] = [
-    { param: 'gain', flat: 0, wgsl: 'let c = col.rgb * (w * pa.x);' },
+    { param: 'gain', flat: 0, wgsl: 'let c = col.rgb * (w * pa.x * lm.z);' },
     { param: 'viewBias', flat: 1, wgsl: 'let lbv = mix(L, V, pa.y);' },
     { param: 'floor', flat: 2, wgsl: 'let wrap = max((dot(n, Lb) + pa.z) / (1.0 + pa.z), 0.0);' },
     { param: 'backRim', flat: 4, wgsl: 'let rim = pb.x * pow(1.0 - nv, 4.0) * max(side, back * 0.5);' },

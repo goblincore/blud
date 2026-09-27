@@ -26,6 +26,11 @@ export interface LightSource {
   rooms?: readonly number[];
   /** Level JSON per-light overrides (spec §5, option A). */
   levelGain?: number; levelTint?: Vec3;
+  /** The light's own reference (base, full-level) intensity, where it differs light to light
+   *  (lamps, tubes, the flashlight): the body key reads intensity / refIntensity, i.e. the
+   *  light's live level (Task 10 calibration, light-profiles.ts). Absent: 1 (the profile gain
+   *  converts the raw intensity). */
+  refIntensity?: number;
 }
 
 export interface ListLight {
@@ -33,6 +38,9 @@ export interface ListLight {
   axis: Vec3; cosOuter: number; cosInner: number;
   /** The rooms it lights as a bitmask (bit r = room r; 0 = any room). See roomMaskOf. */
   roomMask: number;
+  /** 1 / refIntensity (1 when absent): the body shader's per-light normaliser, packed in light
+   *  v3.z. rgb stays physical (plan 2's level materials read it and ignore this lane). */
+  bodyNorm: number;
 }
 
 /** Room ids that fit the mask: bits 0..30 keep the mask a positive int32 (it may be packed
@@ -120,6 +128,7 @@ export function buildLightList(src: readonly LightSource[], rel?: ListRelevance)
         color: [s.color[0] * e * t[0] / tl, s.color[1] * e * t[1] / tl, s.color[2] * e * t[2] / tl],
         intensity: e, range: s.range,
         axis: norm(s.axis ?? [0, -1, 0]), cosOuter, cosInner, roomMask: mask,
+        bodyNorm: s.refIntensity && s.refIntensity > 0 ? 1 / s.refIntensity : 1,
       };
     });
 }
@@ -134,7 +143,7 @@ export function packLightList(list: readonly ListLight[], out = new Float32Array
     out.set([l.pos[0], l.pos[1], l.pos[2], KIND_CODE[l.kind],
              l.color[0], l.color[1], l.color[2], l.range,
              l.axis[0], l.axis[1], l.axis[2], cone,
-             l.profile, -1, 0, 0], o);
+             l.profile, -1, l.bodyNorm, 0], o);
   });
   return out;
 }

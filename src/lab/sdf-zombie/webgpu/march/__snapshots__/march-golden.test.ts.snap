@@ -105,7 +105,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "WOUND_SHADOW": "2151c7d3774353131f1165826832053b2aa4322b",
   "WOUND_STEP_MUL": "num:0.6",
   "__HELPERS_count": "49",
-  "__HELPERS_joined": "3898da7087268ae96a215a3af42e50eb1d6acf70",
+  "__HELPERS_joined": "2dc0aa11dc15c22c78c11c6a906d5174bf0ca6b9",
   "__export_names": "43a134a5ffbef094bef55cb90eeaac845bcd97e0",
 }
 `;

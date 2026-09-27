@@ -25,7 +25,7 @@ import { moonShadowFrame } from './outdoor-light';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
 import { STORM, stormSchedule, windowLightAt, type Bolt, type StormSchedule } from './storm';
 import { selfShadowCfg, type SelfShadowCfg } from './self-shadow';
-import { createLightListGpu, lightListView, type LightListGpu } from './game-light-list-leaves';
+import { TUBE_SPOT_GAIN, createLightListGpu, bodyPicksView, lightListOn, lightListView, setLightListOn, type LightListGpu } from './game-light-list-leaves';
 import type { Vec3 } from '../types';
 
 /** Window-light shadow map size (one per windowed carriage; only the player's re-renders). */
@@ -174,7 +174,7 @@ const TUBE = {
   /** Half-angle (rad): ~3.3 m across at the floor under a 2.4 m drop, a pool per tube. */
   angle: 0.6, penumbra: 0.25, decay: 1.2,
   /** Spot intensity per unit of the lamp's power; the omni's share of it as spill. */
-  spotGain: 7, spill: 0.2,
+  spotGain: TUBE_SPOT_GAIN, spill: 0.2,
   /** Swing: the train's lamp swing, amplified for a tube on chains. */
   swing: 2.2,
   /** Hard, low-res shadows (owner): the zombies' hulls and the art. */
@@ -417,9 +417,9 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
 
 /** How hard the window light drives an SDF body's key, per unit of window-light intensity
  *  (the key is lightCfg.x × spotCfg2.z in the dungeon; the beam's own gain is 4). */
-const BODY_WINDOW_GAIN = 0.035;
+export const BODY_WINDOW_GAIN = 0.035;
 /** A lamp's key on a body per unit of its power × level / d² (the lamps model the zombies). */
-const BODY_LAMP_GAIN = 1.5;
+export const BODY_LAMP_GAIN = 1.5;
 /** The flat fill's colour on a storm level when no lamp or flash keys the body. */
 const COLD_FILL: [number, number, number] = [0.62, 0.74, 1.0];
 /** And the rim a lamp adds, per unit of that key. */
@@ -432,7 +432,7 @@ const lampTmp = { dir: new THREE.Vector3(), color: new THREE.Color(), k: 0, back
  *  lamp's; direction is a three-quarter key from above and from the viewer's side, blended with the
  *  real direction to the brightest lamp so bodies still differ. Flicker, blackouts and strobes ride
  *  the room level. */
-const PRESENT = { gain: 1.3, viewBias: 0.3, floor: 0.18, edge: 1.25, distFall: 0.06, backKey: 0.35, backRim: 2.5 } as const;
+export const PRESENT = { gain: 1.3, viewBias: 0.3, floor: 0.18, edge: 1.25, distFall: 0.06, backKey: 0.35, backRim: 2.5 } as const;
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 function presentingLamp(ctx: GameContext, at: readonly [number, number, number]): typeof lampTmp | null {
   const rt = ctx.world.light;
@@ -558,6 +558,17 @@ export function applyWindowKey(ctx: GameContext, u: KeyUniforms, at?: readonly [
   }
 }
 
+/** List mode (plan 1, Task 10): the old key steering is off, so hand a body's key back to its
+ *  spawn values if applyWindowKey had steered it (a live `setLightList` switch). keyColor then
+ *  stays the fill colour ambientAt's hue reads: COLD_FILL on storm levels. */
+export function releaseWindowKey(u: KeyUniforms): void {
+  const base = bodyBase.get(u);
+  if (!base || !u.lightDir || !u.keyColor) return;
+  u.lightDir.value.copy(base.dir);
+  u.keyColor.value.copy(base.color);
+  bodyBase.delete(u);
+}
+
 /** At spawn on a storm level: the body's base key colour is the cold fill. */
 export function applyStormBodyKey(ctx: GameContext, u: { keyColor: { value: THREE.Color } }): void {
   if (!ctx.world.light?.storm) return;
@@ -642,6 +653,10 @@ export function createDynamicLightSeams(ctx: GameContext) {
     lightCommand: (mode: LightMode, room: number) => { runLightCommand(ctx, mode, room); },
     /** The shared light list this frame: `{ kind, profile, pos, intensity, rooms }` per light (`rooms: []` = any). */
     lightList: () => lightListView(ctx.world.light?.list),
+    /** Each actor's 4 picks this frame: `{ id, room, picks: [{ index, weight }] }` (index into lightList(); -1 empty). */
+    bodyPicks: () => bodyPicksView(ctx.world.actors),
+    /** Cost A/B only: switch the shared list on/off live (look A/Bs boot `?lightlist=0|1`). */
+    setLightList: (on: boolean) => { setLightListOn(on); return lightListOn(); },
     /** Look tuning: hold the window light at an intensity from one side (null: back to the storm). */
     holdWindowLight: (intensity: number | null, side: 1 | -1 = 1, shadow = 1) => {
       const rt = ctx.world.light;

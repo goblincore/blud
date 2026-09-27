@@ -99,8 +99,8 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
-import { writeLightList } from './game-light-list-leaves';
-import { adoptLightFx, applyRoomFill, applySelfShadow, applyStormBodyKey, applyWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
+import { applyBodyLights, lightListOn, pickBodyFor, writeLightList } from './game-light-list-leaves';
+import { adoptLightFx, applyRoomFill, applySelfShadow, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -1927,6 +1927,9 @@ async function main() {
       ctx.vfx.burning.pushFlashes(directFlashes);
       // The shared light list: every light that can touch a body, one buffer, once a frame.
       writeLightList(ctx, directFlashes);
+      // `?lightlist=0`, or no list on this level: the old key path.
+      const listOn = lightListOn() && !!ctx.world.light?.list;
+      const camPos = ctx.boot.handle.camera.position.toArray();
       // The level's rooms take the same dynamic cfg as the bodies: the room
       // the gather serves reads it, every other room reads 0 — and with the
       // level probes off the level never reads the buffer at all.
@@ -1966,7 +1969,19 @@ async function main() {
           c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
         }
         a.view.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
-        { const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); applySelfShadow(a.view.uniforms); }
+        if (listOn) {
+          // THE SHARED LIST (plan 1, Task 10): the body is lit by its own 4 picks. The old key
+          // steering (applyWindowKey) is skipped, so keyColor stays the spawn fill colour
+          // (COLD_FILL on storm levels) and spotCfg2.w (the old lamp rim) stays 0; the muzzle is a
+          // list light now, so bodyFlash would count it twice. The room fill still follows the
+          // room's live lamps (applyRoomFill): it is the body's only floor where no light picks it.
+          const bp = a.pose().pos;
+          releaseWindowKey(a.view.uniforms);
+          applyBodyLights(ctx, a.view.uniforms, pickBodyFor(bp, a.room, camPos));
+          a.view.uniforms.bodyFlash.value.w = 0;
+          applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]);
+          applySelfShadow(a.view.uniforms);
+        } else { a.view.uniforms.lightListCfg.value.x = 0; const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); applySelfShadow(a.view.uniforms); }
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
@@ -2112,10 +2127,16 @@ async function main() {
         if (src) copyUniformValues(ctx, t.uniforms, src.uniforms);
         // The crowd shares one key per type (character, room): key it for the type's body nearest the
         // player (the one you are looking at), not whichever body seeded the type (owner, 2026-09-26).
-        // Per-body keys in a crowd come with part 3's shared light list.
+        // With the shared list on (task 10) every member carries its own picks in its record.
         if (src) {
-          const near = nearestCrowdBody(t);
-          if (near) applyWindowKey(ctx, t.uniforms as never, near);
+          // List mode: each member's picks ride its own record; the type only switches the list on
+          // (a per-uniform-set value, so set it here too, not only via the copy).
+          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; }
+          else {
+            t.uniforms.lightListCfg.value.x = 0;
+            const near = nearestCrowdBody(t);
+            if (near) applyWindowKey(ctx, t.uniforms as never, near);
+          }
           applySelfShadow(t.uniforms);
         }
         ctx.telemetry.telemetry.end('crowd-uniform-copy', copyTiming);
@@ -3102,7 +3123,7 @@ async function main() {
       // creation like the tile binding — a storage node cannot be rebound.
       ...(ctx.probes.gather ? { probeDyn: { node: ctx.probes.gather.probeDynNode } } : {}),
       // The shared light list's storage node (plan 1 task 9), bound at material
-      // creation like probeDyn. lightListCfg.x stays 0 until task 10.
+      // creation like probeDyn. The per-actor loop turns lightListCfg.x on (task 10).
       ...(ctx.world.light?.list ? { lightList: { node: ctx.world.light.list.node } } : {}),
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU

@@ -20,6 +20,7 @@ import { roomIdAt } from './game-level-leaves';
 import type { LampMood } from './lamp-moods';
 import { buildLightList, LIST_VEC4S, packLightList, ROOM_MASK_BITS, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
 import { PROFILE_ID, type ProfileName } from './light-profiles';
+import { pickLights, unpackPick, type Pick, type PickBody } from './light-pick';
 
 type RVec3 = readonly [number, number, number];
 
@@ -27,8 +28,15 @@ type RVec3 = readonly [number, number, number];
 // 1. Pure: plain source data -> LightSource[]
 // ---------------------------------------------------------------------------------------------
 
+/** A tube's spot intensity per unit of its lamp's base power (game-dynamic-light-leaves TUBE
+ *  reads it from here, so the tube's reference intensity below cannot drift from the spot). */
+export const TUBE_SPOT_GAIN = 7;
+
 export interface LampInput {
   pos: Vec3; color: Vec3; intensity: number; range: number; room: number;
+  /** The lamp's full-level intensity (its base power; a tube's base x TUBE_SPOT_GAIN): the body
+   *  key reads intensity / ref, the lamp's live level (Task 10 calibration). */
+  ref?: number;
   /** The tube's cone (the lamp's main light is then the spot), or null for a point lamp. */
   tube: { axis: Vec3; cosOuter: number; cosInner: number } | null;
   gain?: number; tint?: RVec3;
@@ -37,7 +45,7 @@ export interface LampInput {
 /** The storm's one window light. `rooms`: every carriage that has a window light (lightning
  *  enters each of them, seen through a door or not); empty = any room. */
 export interface WindowInput { dir: Vec3; color: Vec3; intensity: number; rooms: number[] }
-export interface FlashlightInput { pos: Vec3; axis: Vec3; color: Vec3; intensity: number; range: number; cosOuter: number; cosInner: number }
+export interface FlashlightInput { pos: Vec3; axis: Vec3; color: Vec3; intensity: number; range: number; cosOuter: number; cosInner: number; ref?: number }
 export interface FlashInput { pos: RVec3; intensity: number; fire?: boolean }
 
 export interface SourceInput {
@@ -70,6 +78,7 @@ export function collectLightSources(input: SourceInput): LightSource[] {
     if (l.room >= 0) s.rooms = [l.room];
     if (l.tube) { s.axis = l.tube.axis; s.cosOuter = l.tube.cosOuter; s.cosInner = l.tube.cosInner; }
     if (l.gain !== undefined) s.levelGain = l.gain;
+    if (l.ref !== undefined) s.refIntensity = l.ref;
     if (l.tint) s.levelTint = [l.tint[0], l.tint[1], l.tint[2]];
     out.push(s);
   }
@@ -78,7 +87,7 @@ export function collectLightSources(input: SourceInput): LightSource[] {
   const f = input.flashlight;
   if (f) {
     out.push({ kind: 'spot', profile: 'flashlight', pos: f.pos, color: f.color, intensity: f.intensity, range: f.range,
-      axis: f.axis, cosOuter: f.cosOuter, cosInner: f.cosInner });
+      axis: f.axis, cosOuter: f.cosOuter, cosInner: f.cosInner, ...(f.ref !== undefined ? { refIntensity: f.ref } : {}) });
   }
   for (const fl of input.flashes) {
     out.push({ kind: 'point', profile: fl.fire ? 'fire' : 'muzzle', pos: [fl.pos[0], fl.pos[1], fl.pos[2]],
@@ -146,6 +155,7 @@ export function readSourceInput(
     const rec = (into.lamps[i] ??= { pos: [0, 0, 0], color: [1, 1, 1], intensity: 0, range: DEFAULT_RANGE, room: -1, tube: null, mood: 'steady' });
     rec.room = l.room; rec.mood = l.mood;
     rec.gain = l.gain; rec.tint = l.tint;
+    rec.ref = l.base * (l.tube?.spot ? TUBE_SPOT_GAIN : 1);
     const spot = l.tube?.spot;
     if (spot) {
       // A tube lamp's main light is its spot (the omni is a 0.2 spill, left out of the list).
@@ -193,6 +203,7 @@ export function readSourceInput(
     scratchTorch.range = s.distance > 0 ? s.distance : DEFAULT_RANGE;
     scratchTorch.cosOuter = Math.cos(s.angle);
     scratchTorch.cosInner = Math.cos(s.angle * (1 - s.penumbra));
+    scratchTorch.ref = rt?.flashlight.base;
     into.flashlight = scratchTorch;
   }
 
@@ -256,4 +267,52 @@ export function maskRooms(mask: number): number[] {
 /** The seam's plain view of the list (`rooms: []` = any room). */
 export function lightListView(g: LightListGpu | undefined | null) {
   return (g?.list ?? []).map(l => ({ kind: l.kind, profile: PROFILE_NAME[l.profile] ?? l.profile, pos: [...l.pos], intensity: l.intensity, rooms: maskRooms(l.roomMask) }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// 4. Each body's 4 lights (Task 10: the game turns the list on for bodies and crowds)
+// ---------------------------------------------------------------------------------------------
+
+/** `?lightlist=0` keeps the old key path (applyWindowKey / presentingLamp); anything else, or no
+ *  param, lights every SDF body and crowd member by its own 4 picks from the shared list. */
+export const LIGHT_LIST_ON = typeof location === 'undefined'
+  || new URLSearchParams(location.search).get('lightlist') !== '0';
+/** The live switch, booted from LIGHT_LIST_ON. `__sdfGame.setLightList(on)` flips it for the cost
+ *  A/B (interleaved rounds in one boot); look A/Bs use fresh `?lightlist=0|1` boots. */
+let listOn = LIGHT_LIST_ON;
+export const lightListOn = (): boolean => listOn;
+export function setLightListOn(on: boolean): void { listOn = on; }
+
+/** The pick body of an actor rooted at `root` (feet), as presentingLamp judged it: distance and
+ *  direction at the chest (root + 1.2), spot coverage at the feet (root + 0.2), and the FRONT is
+ *  the unit xz direction toward the VIEWER (the light that presents the body to the camera wins;
+ *  a light behind it, as the player sees it, takes the backKey falloff). A camera straight
+ *  overhead falls back to [0, 1]. Pure. */
+export function pickBodyFor(root: RVec3, room: number, camPos: RVec3): PickBody {
+  const fx = camPos[0] - root[0], fz = camPos[2] - root[2];
+  const h = Math.hypot(fx, fz);
+  return {
+    pos: [root[0], root[1] + 1.2, root[2]],
+    feetY: root[1] + 0.2,
+    room,
+    facing: h < 1e-4 ? [0, 1] : [fx / h, fz / h],
+  };
+}
+
+type Vec4U = { value: THREE.Vector4 };
+const scratchPick: Pick = { idx: [-1, -1, -1, -1], weight: [0, 0, 0, 0], packed: [-1, -1, -1, -1] };
+
+/** Pick the body's 4 lights from this frame's list and write them to its view (`bodyLights`,
+ *  copied into the record by syncRecord) with the list switched on (`lightListCfg.x = 1`). Call
+ *  after writeLightList and before the view's syncRecord. */
+export function applyBodyLights(ctx: GameContext, u: { bodyLights: Vec4U; lightListCfg: Vec4U }, body: PickBody): void {
+  const p = pickLights(ctx.world.light?.list?.list ?? [], body, scratchPick).packed;
+  u.bodyLights.value.set(p[0], p[1], p[2], p[3]);
+  u.lightListCfg.value.x = 1;
+}
+
+/** The seam's plain view of each actor's picks: `{ id, room, crowd, picks: [{ index, weight }] x 4 }`
+ *  (index -1 = empty; crowd = drawn by a crowd type), read back from the views' `bodyLights`. */
+export function bodyPicksView(actors: readonly { id: number; room: number; crowd?: unknown; view: { uniforms: { bodyLights: Vec4U } } }[]) {
+  return actors.map(a => ({ id: a.id, room: a.room, crowd: !!a.crowd, picks: unpackPick(a.view.uniforms.bodyLights.value.toArray()) }));
 }

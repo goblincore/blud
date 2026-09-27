@@ -11,7 +11,7 @@
 //   (every normalize is zero-safe, v x inverseSqrt(max(v.v, 1e-12)): a zero vector gives 0, not NaN)
 //   side = max(n.L, 0);  back = clamp(-L.V x 0.5 + 0.5, 0, 1)
 //   rim  = backRim x (1 - max(n.V, 0))^4 x max(side, back x 0.5) x rimTint
-//   c    = rgb x weight x gain
+//   c    = rgb x weight x gain x bodyNorm (light v3.z: 1 / the light's reference intensity)
 // The cone and distance falloff are already in the CPU weight (light-pick.ts, absolute presence):
 // nothing here re-evaluates them, so a light lights a body as a whole (presentingLamp's rule).
 // Slot 0 also returns domL / domLb / domC / domFloor for the march's key path (domLb = slot 0's
@@ -54,7 +54,7 @@ export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<numb
     const side = Math.max(dot(n, L), 0);
     const back = clamp01(-dot(L, V) * 0.5 + 0.5);
     const rim = pb[0]! * Math.pow(1 - nv, 4) * Math.max(side, back * 0.5);
-    const g = w * pa[0]!;
+    const g = w * pa[0]! * lm[2]!;
     const c: Vec3 = [col[0]! * g, col[1]! * g, col[2]! * g];
     const acc = (v: Vec3, s: number, t: ArrayLike<number> = [1, 1, 1]) => {
       v[0] += c[0] * s * t[0]!; v[1] += c[1] * s * t[1]!; v[2] += c[2] * s * t[2]!;

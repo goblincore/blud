@@ -33,9 +33,17 @@ describe('light list (spec §4)', () => {
     expect(f[o + 7]).toBe(6);                       // range
     expect(f[o + 12]).toBe(PROFILE_ID.tube);        // profile
     expect(f[o + 13]).toBe(-1);                     // no shadow slot in plan 1
+    expect(f[o + 14]).toBe(1);                      // bodyNorm: no refIntensity = 1
     const cone = f[o + 11]!;
     expect(Math.floor(cone) / 1000).toBeCloseTo(Math.cos(0.6), 2);
     expect((cone - Math.floor(cone)) / 0.999).toBeCloseTo(Math.cos(0.45), 3);
+  });
+  it('bodyNorm = 1 / refIntensity (Task 10 calibration) in light v3.z; rgb stays physical', () => {
+    const [l] = buildLightList([{ ...tube(1, 2), refIntensity: 8 }]);
+    expect(l!.bodyNorm).toBeCloseTo(1 / 8, 9);
+    expect(Math.max(...l!.color)).toBeGreaterThan(1);   // not normalised
+    expect(packLightList([l!])[LIST_LIGHTS_AT * 4 + 14]).toBeCloseTo(1 / 8, 7);
+    expect(buildLightList([{ ...tube(1, 2), refIntensity: 0 }])[0]!.bodyNorm).toBe(1);
   });
   it('directional lights store a unit direction', () => {
     const f = packLightList(buildLightList([{ kind: 'directional', profile: 'window', pos: [3, 1, 0], color: [1, 1, 1], intensity: 4, range: 0 }]));

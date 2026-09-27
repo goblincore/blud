@@ -29,6 +29,9 @@
 // so the march's dominant honours viewBias; domL stays the raw direction for scatter and the
 // wound shadow, which sample the field toward the real light. Empty slot 0: both (0, 1, 0).
 //
+// CALIBRATION (Task 10). lm.z is the light's bodyNorm (1 / its reference intensity, light-list.ts):
+// with the profile gain it converts the list's physical rgb into the body key the old path gave.
+//
 // NAMING. `meta` is a WGSL reserved word, so the light's fourth vec4 is `lm`.
 
 import { LIGHT_VEC4S, LIST_LIGHTS_AT } from '../light-list';
@@ -68,7 +71,7 @@ export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>,
     let side = max(dot(n, L), 0.0);
     let back = clamp(-dot(L, V) * 0.5 + 0.5, 0.0, 1.0);
     let rim = pb.x * pow(1.0 - nv, 4.0) * max(side, back * 0.5);
-    let c = col.rgb * (w * pa.x);
+    let c = col.rgb * (w * pa.x * lm.z);
     if (!(skipFirst && k == 0)) {
       o.diffuse = o.diffuse + c * wrap;
       o.spec = o.spec + c * sp;
