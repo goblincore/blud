@@ -13,21 +13,26 @@
 // Asserts:
 //   1. front hit: 1.5 m from the torso centre (horizontal, eye → centre — the strike's own
 //      measure), facing it: one click + 30 frames adds EXACTLY one wound, radius within
-//      0.005 of 0.14, and state().lastStrike.hits holds the zombie;
+//      0.005 of 0.09, and state().lastStrike.hits holds the zombie;
 //   2. too far: at 2.2 m (reach is 1.8), a click adds no wound to that zombie;
 //   3. too wide: at 1.2 m but turned 70° away (the arc is ±50°), a click adds no wound;
 //      POSITIVE CONTROL on every click: strikes went up by exactly 1 and lastStrike.side is
 //      the side state().nextSide promised — a dropped click cannot pass a refusal check;
-//   4. GRADUAL head damage (spec §10.5): a fresh zombie, 1.4 m from the neck, the view
-//      aimed so the strike's eye → impact ray (viewToWorld(eye, yaw, pitch,
-//      FLAIL_IMPACT[side]), imported from the game's own modules in the page) passes
-//      through the neck — re-aimed before every click, for that click's side. Exactly 3
-//      clicks: after hits 1 and 2 the head is still ON (limbAlive(id, 'head') > 0, read off
-//      the actor's CURRENT body — see game-seams-flail.ts), each added one wound of radius
-//      0.09 ± 0.005 within 0.25 m of the head cluster's centre, and lastStrike.headHits
-//      counts 1, 2; after hit 3 the head is OFF (limbAlive === 0). Each click's REAL strike
-//      ray (lastStrike.eye → lastStrike.impact) passes within 5 cm of the neck. Photos
-//      head-hit-1/2/3.png, the view turned onto the head;
+//   4. CROSSHAIR-aimed head hits (spec §11 root-cause fix target): a fresh zombie; before
+//      EVERY click the crosshair is put on actorLimbCenter(id, 'head') from 0.9 m
+//      (standOff(head, 0.9), pitch atan2(head.y − EYE_H, 0.9)) — exactly as a player aims,
+//      not the old strike-ray solver. 4 clicks: after hits 1–3 the head is still ON
+//      (limbAlive(id, 'head') > 0), lastStrike.headHits counts 1, 2, 3, and each hit's first
+//      non-stump wound has radius FACE_R (0.06) ± 0.005; after hit 4 the head is OFF
+//      (limbAlive === 0) and headHits is 4. If the head comes off early (the confirmed
+//      v1.1 bug: the crater lands on the torso/spine, 0.16 m from the neck root, and
+//      severs the head on hit 1), the check fails and stops clicking that zombie rather
+//      than aiming at a head that is no longer there — 4b and everything after still run.
+//      Photos head-hit-1..4.png;
+//   4b. hits to collapse: a fresh zombie; before every click the crosshair is put on its
+//      CURRENT torso centre from 1.2 m. Click until collapse.ts's phase leaves 'standing'
+//      or 8 clicks. The collapse must come on hit ≥ 4 (target 5: meterThreshold 0.8,
+//      ~0.18 credit/hit ⇒ hit 5), and hit 1's wound radius is CRATER_R (0.09) ± 0.005;
 //   5. strike-frame ball: on EVERY click's strike frame the drawn (simulated) ball sits
 //      within 2 cm of FLAIL_IMPACT (lastStrike.ballErr, set by that frame's draw);
 //   5b. the same at 144 Hz: an R and an L swing stepped at 1/144 s, then again at
@@ -53,9 +58,9 @@ const VITE = Number(process.argv[2] ?? 5233);
 const CDP = Number(process.argv[3] ?? 9223);
 const OUT = process.env.OUT ?? 'docs/dev-notes/2026-09-26-flail/gate';
 const W = Number(process.env.W ?? 1280), H = Number(process.env.H ?? 800);
-const CRATER_R = 0.14;      // FLAIL_FEEL.craterR (game-flail.ts)
-const FACE_R = 0.09;        // FLAIL_HEAD.faceCraterR (flail-strike.ts): head hits 1–2
-const HEAD_NEAR = 0.25;     // FLAIL_HEAD.regionDist: "on or near the head"
+const CRATER_R = 0.09;      // FLAIL_FEEL.craterR (game-flail.ts) — spec §11 target (was 0.14)
+const FACE_R = 0.06;        // FLAIL_HEAD.faceCraterR (flail-strike.ts) — spec §11 target (was 0.09)
+const HEAD_HITS = 4;        // crosshair-aimed clicks to take a head off (was 3 in v1.1)
 const BALL_ERR_MAX = 0.02;  // the drawn ball on the strike frame vs FLAIL_IMPACT
 // At 144 Hz the pin must be EXACT: the pre-fix pin (review C1) landed 0.8–1.9 cm short in
 // this gate — inside the 2 cm above, so that bound could not catch it.
@@ -399,98 +404,134 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
   else fail(`too wide (70° off): control ${sw.control}, +${added} wounds`);
 }
 
-// ---- 4. Gradual head damage -------------------------------------------------------------
+// ---- 4. Crosshair-aimed head hits ------------------------------------------------------
 {
   const z = fresh();
-  await evaluate(`import('/src/lab/sdf-zombie/webgpu/flail-swing.ts').then((m) => { window.__flailSwing = m; return 1; })`);
-  await evaluate(`import('/src/lab/sdf-zombie/webgpu/flail-strike.ts').then((m) => { window.__flailStrike = m; return 1; })`);
-  /** The neck: the head chain's first capsule (its root sits in the shoulders), its midpoint. */
-  const neckOf = (id) => evaluate(`(() => {
-    const p = __sdfGame.zombie(${id}).posed();
-    const head = p.prims.filter(q => q.limb === 'head' && q.op !== 'sub' && !q.dead);
-    if (!head.length) return null;
-    const n = head[0];
-    return [(n.a[0] + n.b[0]) / 2, (n.a[1] + n.b[1]) / 2, (n.a[2] + n.b[2]) / 2];
-  })()`);
-  /** Solve yaw and pitch so the strike's eye → impact ray for `side` passes through `n`. */
-  const aim = (eye, n, side) => evaluate(`(() => {
-    const imp = __flailSwing.FLAIL_IMPACT['${side}'], eye = ${JSON.stringify(eye)}, n = ${JSON.stringify(n)};
-    const az = (v) => Math.atan2(v[0], -v[2]), el = (v) => Math.atan2(v[1], Math.hypot(v[0], v[2]));
-    const want = [n[0] - eye[0], n[1] - eye[1], n[2] - eye[2]];
-    let yaw = az(want), pitch = 0;
-    for (let i = 0; i < 20; i++) {
-      const w = __flailStrike.viewToWorld(eye, yaw, pitch, imp);
-      const d = [w[0] - eye[0], w[1] - eye[1], w[2] - eye[2]];
-      let dy = az(want) - az(d); dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-      yaw += dy; pitch += el(want) - el(d);
-    }
-    const w = __flailStrike.viewToWorld(eye, yaw, pitch, imp);
-    const d = [w[0] - eye[0], w[1] - eye[1], w[2] - eye[2]], l = Math.hypot(...d);
-    const tt = (want[0] * d[0] + want[1] * d[1] + want[2] * d[2]) / l;   // along the ray to the neck's foot
-    const miss = Math.hypot(...want.map((c, k) => c - d[k] / l * tt));
-    return { yaw, pitch, miss };
-  })()`);
-  /** Stand at `pose`, turn the view straight onto `p` (the strike aim looks off to one side), shoot. */
+  const woundList = (id) => evaluate(`__sdfGame.zombie(${id}).woundList()`);
+  const posedOf = (id) => evaluate(`__sdfGame.zombie(${id}).posed()`);
+  const headOf = (id) => evaluate(`__sdfGame.actorLimbCenter(${id}, 'head')`);
+  const aliveOf = (id) => evaluate(`__sdfGame.flail.limbAlive(${id}, 'head')`);
+  /** The first live non-sub head prim's `a` — the neck root, for logging only. */
+  const neckRootOf = (posed) => {
+    const n = posed.prims.find((q) => q.limb === 'head' && q.op !== 'sub' && !q.dead);
+    return n ? n.a : null;
+  };
+  /** Stand at `pose`, turn the view straight onto `p` (the crosshair aim looks off to one side), shoot. */
   async function photoOf(pose, p, name) {
     const e = [pose.x, EYE_H, pose.z];
     await place({ ...pose, yaw: yawOf(p[0] - e[0], p[2] - e[2]) }, Math.atan2(p[1] - EYE_H, Math.hypot(p[0] - e[0], p[2] - e[2])));
     await capture(name);
   }
-  const alive0 = await evaluate(`__sdfGame.flail.limbAlive(${z.id}, 'head')`);
-  let alive = alive0, worstRay = 0, lastPose = null, lastHead = null;
-  const rows = [];
-  for (let hit = 1; hit <= 3; hit++) {
-    const n = await neckOf(z.id);
-    if (!n) { fail(`head hit ${hit}: no live head prims to aim at`); break; }
-    const head = await evaluate(`__sdfGame.actorLimbCenter(${z.id}, 'head')`);
-    const t = await torso(z.id);
-    const base = standOff([n[0], t[1], n[2]], 1.4);
-    const side = (await state()).nextSide;   // the next click's side
-    const eye = [base.x, EYE_H, base.z];
-    const a = await aim(eye, n, side);
-    lastPose = { x: base.x, z: base.z, yaw: a.yaw }; lastHead = head ?? n;
-    await place(lastPose, a.pitch);
+  const alive0 = await aliveOf(z.id);
+  let lastPose = null, lastHead = null, ran4 = false;
+  for (let hit = 1; hit <= HEAD_HITS; hit++) {
+    const aliveBefore = await aliveOf(z.id);
+    if (aliveBefore === 0) { fail(`head hit ${hit}: no head to aim at (already off)`); break; }
+    const head = await headOf(z.id);
+    if (!head) { fail(`head hit ${hit}: actorLimbCenter('head') is null though limbAlive ${aliveBefore}`); break; }
+    // The crosshair on the head centre, exactly as a player aims: 0.9 m out, pitch
+    // solved from that same horizontal distance — no strike-ray solver.
+    const pose = standOff(head, 0.9);
+    const pitch = Math.atan2(head[1] - EYE_H, 0.9);
+    lastPose = pose; lastHead = head;
+    await place(pose, pitch);
     await stepN(5);
-    const before = (await wounds(z.id)).length;
+    const beforeWL = await woundList(z.id);
     const sw = await swing();
-    const st = await state();
-    // The REAL strike ray (what the game cast), its distance to the neck.
-    const e = st.lastStrike.eye, im = st.lastStrike.impact;
-    const d = [im[0] - e[0], im[1] - e[1], im[2] - e[2]], dl = Math.hypot(...d);
-    const v = [n[0] - e[0], n[1] - e[1], n[2] - e[2]], along = (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / dl;
-    const rayMiss = Math.hypot(...v.map((c, k) => c - (d[k] / dl) * along));
-    worstRay = Math.max(worstRay, rayMiss);
     if (!sw.control) fail(`head hit ${hit}: the strike did not fire as expected`);
-    const w = (await wounds(z.id)).slice(before);
-    alive = await evaluate(`__sdfGame.flail.limbAlive(${z.id}, 'head')`);
-    const counted = st.lastStrike.headHits?.[z.id] ?? null;
-    const near = head ? w.map((q) => Math.hypot(q.pos[0] - head[0], q.pos[1] - head[1], q.pos[2] - head[2])) : [];
-    rows.push({ hit, alive, added: w, near, counted });
-    console.log(`head hit ${hit} (${st.lastStrike?.side}): neck y ${n[1].toFixed(2)}, pitch ${a.pitch.toFixed(3)} (solved miss ${a.miss.toExponential(1)} m, ` +
-      `real strike ray ${(rayMiss * 100).toFixed(2)} cm from the neck); ` +
-      `+${w.length} wounds (y@radius/type ${w.map((q) => `${q.pos[1].toFixed(2)}@${q.radius.toFixed(3)}/${q.type}`).join(' ')}; ` +
-      `from the head centre ${near.map((x) => x.toFixed(3)).join(' ')} m); headHits ${counted}; head prims ${alive}/${alive0}`);
-    if (hit < 3) {
-      const ok = alive > 0 && w.length === 1 && Math.abs(w[0].radius - FACE_R) <= 0.005 && near[0] <= HEAD_NEAR && counted === hit;
-      if (ok) pass(`head hit ${hit}: the head is still on (${alive}/${alive0} prims), one ${w[0].radius.toFixed(3)} crater ${near[0].toFixed(3)} m from the head centre, headHits ${counted}`);
-      else fail(`head hit ${hit}: alive ${alive}/${alive0}, +${w.length} wounds (radii ${w.map((q) => q.radius.toFixed(3)).join(' ')}; ${near.map((x) => x.toFixed(3)).join(' ')} m from the head), headHits ${counted}`);
-      await photoOf(lastPose, lastHead, `head-hit-${hit}`);
+    const st = await state();
+    const afterWL = await woundList(z.id);
+    const afterWorld = await wounds(z.id);   // actorWounds() — world positions, same order as woundList
+    const newWL = afterWL.slice(beforeWL.length);
+    const newWorld = afterWorld.slice(beforeWL.length);
+    const posed = await posedOf(z.id);
+    const neckRoot = neckRootOf(posed);
+    const distTo = (p, o) => (o ? Math.hypot(p[0] - o[0], p[1] - o[1], p[2] - o[2]) : null);
+    const rows = newWL.map((w, i) => {
+      const prim = posed.prims[w.primIdx];
+      const pos = newWorld[i]?.pos;
+      return {
+        limb: prim?.limb, bone: prim?.bone, radius: w.radius, severRadius: w.severRadius ?? null,
+        stump: !!w.injuryIgnored, toHead: pos ? distTo(pos, head) : null, toNeck: pos ? distTo(pos, neckRoot) : null,
+      };
+    });
+    const alive = await aliveOf(z.id);
+    const counted = st.lastStrike?.headHits?.[z.id] ?? null;
+    const impactToHead = distTo(st.lastStrike?.impact ?? [0, 0, 0], head);
+    console.log(`head hit ${hit} (${st.lastStrike?.side}): impact (${f2(st.lastStrike.impact)}), ${impactToHead.toFixed(3)} m from head centre; ` +
+      `+${rows.length} wounds: ${rows.map((r) => `${r.limb}/${r.bone} r${r.radius.toFixed(3)} sev${r.severRadius === null ? '?' : r.severRadius.toFixed(3)}` +
+        `${r.stump ? ' [stump]' : ''} ${r.toHead === null ? '?' : r.toHead.toFixed(3)}m/head ${r.toNeck === null ? '?' : r.toNeck.toFixed(3)}m/neck`).join('; ')}; ` +
+      `headHits ${counted}; head prims ${alive}/${alive0}`);
+    const firstReal = rows.find((r) => !r.stump);
+    if (hit < HEAD_HITS) {
+      const ok = alive > 0 && !!firstReal && Math.abs(firstReal.radius - FACE_R) <= 0.005 && counted === hit;
+      if (ok) pass(`head hit ${hit}: the head is still on (${alive}/${alive0} prims), crater radius ${firstReal.radius.toFixed(3)}, headHits ${counted}`);
+      else fail(`head hit ${hit}: alive ${alive}/${alive0}, first non-stump wound radius ${firstReal ? firstReal.radius.toFixed(3) : 'none'} (expected ${FACE_R}), headHits ${counted}`);
+      await photoOf(pose, head, `head-hit-${hit}`);
+    } else {
+      const ok = alive === 0 && counted === HEAD_HITS;
+      if (ok) pass(`head hit ${HEAD_HITS}: the head came off (headHits ${counted})`);
+      else fail(`head hit ${HEAD_HITS}: alive ${alive}/${alive0} head prims, headHits ${counted}`);
+      ran4 = true;
     }
   }
-  const last = rows[2];
-  if (last && last.alive === 0) pass(`head hit 3: the head came off (headHits ${last.counted})`);
-  else fail(`head hit 3: ${last ? `${last.alive}/${alive0}` : '?'} head prims alive after 3 clicks`);
-  // A FROZEN actor does not step, so it is not re-posed after the sever: its drawn
-  // body still carries the head until something re-poses it (in play it steps every
-  // frame). Thaw the crowd for a few frames so the photo shows the body the game now
-  // holds, then freeze again and let the severed head fall clear (1 s).
-  await evaluate('__sdfGame.freeze(false)');
-  await stepN(3);
-  await evaluate('__sdfGame.freeze(true)');
-  await stepN(60);
-  if (lastPose && lastHead) await photoOf(lastPose, lastHead, 'head-hit-3');
-  if (worstRay < 0.05) pass(`head hits: every strike ray passed within 5 cm of the neck (worst ${(worstRay * 100).toFixed(2)} cm)`);
-  else fail(`head hits: a strike ray missed the neck by ${(worstRay * 100).toFixed(1)} cm`);
+  if (ran4 && lastPose && lastHead) {
+    // A FROZEN actor does not step, so it is not re-posed after the sever: its drawn
+    // body still carries the head until something re-poses it (in play it steps every
+    // frame). Thaw the crowd for a few frames so the photo shows the body the game now
+    // holds, then freeze again and let the severed head fall clear (1 s).
+    await evaluate('__sdfGame.freeze(false)');
+    await stepN(3);
+    await evaluate('__sdfGame.freeze(true)');
+    await stepN(60);
+    await photoOf(lastPose, lastHead, 'head-hit-4');
+  }
+}
+
+// ---- 4b. Hits to collapse --------------------------------------------------------------
+{
+  const z = fresh();
+  const woundList = (id) => evaluate(`__sdfGame.zombie(${id}).woundList()`);
+  const posedOf = (id) => evaluate(`__sdfGame.zombie(${id}).posed()`);
+  let hitsTaken = 0, finalPhase = 'standing';
+  for (let clickNum = 1; clickNum <= 8; clickNum++) {
+    // Re-place from the CURRENT torso centre every click: the thaw below lets the
+    // zombie take one step, so a stale pose could drift off-arc.
+    const t = await torso(z.id);
+    const pose = standOff(t, 1.2);
+    const pitch = Math.atan2(t[1] - EYE_H, 1.2);
+    await place(pose, pitch);
+    await stepN(3);
+    const beforeWL = await woundList(z.id);
+    const sw = await swing();
+    if (!sw.control) fail(`collapse hit ${clickNum}: the strike did not fire as expected`);
+    // Thaw one frame so the actor's debug readback (actorList's phase/meter) is fresh —
+    // it is otherwise the LAST STEPPED frame's, which is stale on a frozen actor.
+    await evaluate('__sdfGame.freeze(false)');
+    await stepOne();
+    await evaluate('__sdfGame.freeze(true)');
+    const al = (await evaluate('__sdfGame.actorList()')).find((a) => a.id === z.id);
+    const afterWL = await woundList(z.id);
+    const newWL = afterWL.slice(beforeWL.length);
+    const posed = await posedOf(z.id);
+    const severed = posed.clusters.filter((c) => !c.alive).map((c) => c.limb);
+    const phaseNow = al?.phase ?? 'unknown';
+    console.log(`collapse hit ${clickNum}: meter ${al?.meter?.toFixed(3) ?? '?'}, phase ${phaseNow}, ` +
+      `+${newWL.length} wounds (radii ${newWL.map((w) => w.radius.toFixed(3)).join(' ')}), severed [${severed.join(', ')}]`);
+    if (clickNum === 1) {
+      const r0 = newWL.find((w) => !w.injuryIgnored);
+      const ok = !!r0 && Math.abs(r0.radius - CRATER_R) <= 0.005;
+      if (ok) pass(`collapse hit 1: wound radius ${r0.radius.toFixed(3)} (CRATER_R ${CRATER_R})`);
+      else fail(`collapse hit 1: wound radius ${r0 ? r0.radius.toFixed(3) : 'none'} (expected ${CRATER_R})`);
+    }
+    hitsTaken = clickNum;
+    finalPhase = phaseNow;
+    if (phaseNow !== 'standing') break;
+  }
+  const ok = finalPhase !== 'standing' && hitsTaken >= 4;
+  if (ok) pass(`collapse: came on hit ${hitsTaken} (target 5)`);
+  else if (finalPhase !== 'standing') fail(`collapse: came too early, on hit ${hitsTaken} (target ≥ 4)`);
+  else fail(`collapse: never left 'standing' within ${hitsTaken} clicks`);
 }
 
 // ---- 5b. The strike-frame ball at 144 Hz, steady and jittered ------------------------------
