@@ -1,6 +1,6 @@
 # The spike flail (first player melee weapon, simplified) — Design
 
-**Date:** 2026-09-26 · **Status:** v1 built and playtested; v1.1 (§10, whip chain + gradual head damage) in progress
+**Date:** 2026-09-26 · **Status:** v1.1 built (§10); owner playtest pending
 **Supersedes:** [the censer flail](2026-09-26-censer-flail-design.md). The owner playtested the censer
 (physics head on a rope, dead-zone-driven strokes, tap/hold charge) and scrapped it: "too complicated
 for what it is… very hard to land a good hit… looks way too goofy." This design replaces it with a

@@ -1,6 +1,42 @@
-# Spike flail — gate and first look pass (Task 6)
+# Spike flail — gate and look passes (v1: Task 6; v1.1: Task 11)
 
 ## For the owner
+
+### v1.1 (2026-09-27): what changed
+
+- **The chain is a whip now.** The ball hangs on a simulated 9-node chain
+  (`flail-chain.ts`), pinned at the eye bolt. It trails the haft on the wind-up, is pinned
+  exactly on the impact point on the strike frame, then flies on and settles. At rest it
+  hangs under gravity and sways a little. The hits are unchanged: the crater still lands
+  where the strike window puts it. The drawn ball is 0.000 cm off the impact on all six of
+  the gate's strike frames.
+- **No slack loop before the hit.** The keyed ball used to cut inside the haft's arc and
+  pass 0.19 m from the bolt just before the strike, so the chain bunched into a loop above
+  the haft tip. Two extra keys per swing (at 0.15 s and 0.37 s) keep it 0.31–0.36 m out.
+  See the tuning log below.
+- **Gradual head damage.** Head hits 1 and 2 leave a smaller crater (0.09 m) and don't
+  sever. Hit 3 takes the head off. See `gate/head-hit-1/2/3.png`.
+- **Bigger hand** (`handScale` 0.8 → 1.0).
+- **Not in v1.1:** weapons still poke through walls when you stand close. That is its own
+  TASKS row, for all weapons.
+
+### v1.1 feel questions
+
+- **Is the whip whippy enough?** The wind-up trails the haft by up to ~16 cm. The
+  follow-through whips past, but the ball doesn't wrap around anything. Try more lag, a
+  looser guide, or less damping?
+- **Does hit 2 read?** In the gate, hits 1 and 2 land on the same spot (the neck, aimed
+  twice). Hit 2 changed only ~4% of the head crop's pixels, so the second cave-in is hard
+  to see. In play your hits will spread more. Should a repeat hit grow the crater (e.g.
+  0.09 → 0.11) so it always reads?
+- **The fist at rest is still just a sliver** (0.2% of the screen). `handScale` 1.0 only
+  shows during a swing (up to ~4% of the screen, plus the bracer, on the L wind-up). Showing
+  more fist at rest means moving the rest GRIP up and in, not scaling the hand again. Want
+  that?
+- **The ball bounces after a swing.** For ~0.3 s after the swing ends, it rides up
+  (ball–bolt 0.25 m) before it settles. Fine, or too loose?
+
+### v1 (2026-09-26)
 
 - **How to try it:** key `1` equips the flail; click to swing (alternates right→left, then
   left→right); hold to chain swings.
@@ -26,6 +62,147 @@ node scripts/flail-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"
 The gate runs in the sandbox (`seed=1`), in the arena (room 6, 8 zombies), with the zombies
 frozen and hit-stop off. Each check uses a fresh zombie, and the player stands on the
 arena-centre side of it.
+
+## v1.1 gate output (2026-09-27, headless Chrome, WebGPU, after 1cb8f702)
+
+The beheading check is now the gradual one. Exactly three clicks on a fresh zombie at neck
+height:
+- hits 1 and 2 leave the head on, add one wound of radius 0.09 ± 0.005 within 0.25 m of
+  the head centre, and `lastStrike.headHits` counts 1 and 2;
+- hit 3 takes the head off.
+
+New check: on every click's strike frame, the drawn (simulated) ball is ≤ 2 cm from
+`FLAIL_IMPACT` (`lastStrike.ballErr`). All other checks, and the per-click positive
+control, are unchanged.
+
+```
+flail ready; canvas {"x":107,"y":0,"w":1067,"h":800}
+room 6 (arena): 8 zombies; centre (28.00, 0.00, -4.80)
+rest: ball NDC (0.54, -0.76), bolt (0.58, -0.03), grip (0.83, -1.05), ball r 0.114; ball↔bolt 0.325 m
+rest clipping: ball {"n":7476,"clipped":0,"meanLuma":67.8}; haft {"n":56,"clipped":0,"meanLuma":61}
+front hit: zombie 11 +1 wounds (radii 0.140); lastStrike {"side":"R","hits":[11],"eye":[23.990598178534697,1.62,-9.358942745935575],"impact":[23.213405785011975,1.2600000000000002,-10.166947686174446],"headHits":{"11":0},"ballDrawn":[-0.05000000000000002,-0.36,-1.12],"ballErr":1.3877787807814457e-17}; swing ball↔bolt worst 0.491 m, clamped on 23/30 frames
+  f6 swing/R ball (1.19, 0.44) grip (1.03, -0.40) keyed 0.36 drawn 0.31
+  f7 swing/R ball (1.14, 0.43) grip (0.94, -0.46) keyed 0.39 drawn 0.27
+  f8 swing/R ball (0.77, 0.06) grip (0.79, -0.59) keyed 0.39 drawn 0.28
+  f9 swing/R ball (0.39, -0.28) grip (0.64, -0.72) keyed 0.36 drawn 0.30
+  f10 swing/R ball (0.13, -0.46) grip (0.48, -0.87) keyed 0.31 drawn 0.30
+  f11 swing/R ball (-0.06, -0.61) grip (0.35, -0.97) keyed 0.37 drawn 0.34
+  f12 swing/R ball (-0.25, -0.77) grip (0.22, -1.01) keyed 0.45 drawn 0.36
+  f13 swing/R ball (-0.33, -0.82) grip (0.09, -1.02) keyed 0.49 drawn 0.37
+  R-G in the 40x40 crop: 82.3 before → 88.6 after
+  crater contrast (ring 1.2–1.6 r minus disc 0–0.6 r, r 90 px): -11.3 before → 29.0 after (rise 40.3); disc luma 133.9 → 97.0
+  crater at px (604, 685): R-G rise 6.4
+PASS: front hit at 1.5 m: exactly one wound, radius 0.140, lastStrike holds 11
+too far: zombie 12 at 2.2 m, side L (expected L), strike fired true: +0 wounds; hits []
+PASS: too far (2.2 m): the L strike fired and missed
+too wide: zombie 13 at 1.2 m, turned 70°, side R (expected R), strike fired true: +0 wounds; hits []
+PASS: too wide (70° off at 1.2 m): the R strike fired and missed
+head hit 1 (L): neck y 1.48, pitch 0.206 (solved miss 4.5e-16 m, real strike ray 0.00 cm from the neck); +1 wounds (y@radius/type 1.48@0.090/blast; from the head centre 0.127 m); headHits 1; head prims 5/5
+PASS: head hit 1: the head is still on (5/5 prims), one 0.090 crater 0.127 m from the head centre, headHits 1
+head hit 2 (R): neck y 1.48, pitch 0.209 (solved miss 2.6e-15 m, real strike ray 0.00 cm from the neck); +1 wounds (y@radius/type 1.48@0.090/blast; from the head centre 0.127 m); headHits 2; head prims 5/5
+PASS: head hit 2: the head is still on (5/5 prims), one 0.090 crater 0.127 m from the head centre, headHits 2
+head hit 3 (L): neck y 1.48, pitch 0.206 (solved miss 4.5e-16 m, real strike ray 0.00 cm from the neck); +2 wounds (y@radius/type 1.48@0.140/blast 1.48@0.112/blast; from the head centre 0.127 0.110 m); headHits 3; head prims 0/5
+PASS: head hit 3: the head came off (headHits 3)
+PASS: head hits: every strike ray passed within 5 cm of the neck (worst 0.00 cm)
+strike-frame ball error per click (cm): 0.000 0.000 0.000 0.000 0.000 0.000
+PASS: strike frame: the drawn ball within 0.000 cm of the impact on all 6 clicks (≤ 2 cm)
+PASS: positive control: every click struck exactly once, on the side nextSide promised
+PASS: zero console errors or exceptions
+GATE PASSED
+```
+
+- **Hit 3 adds two wounds**, as before: the 0.14 crater and the 0.112 sever stump.
+- **The front-hit readbacks moved slightly** (clamped 23/30, crater contrast rise 40.3).
+  That is the whip: `clamped` now counts frames where the drawn ball sits inside the keyed
+  one, which is expected with a simulated chain. The contrast rise is still strong (51.1 in v1);
+  the crop geometry differs slightly (crater at px 604, 685 vs 605, 671).
+
+Photos (`gate/`):
+
+- `head-hit-1.png`: the zombie in profile. A dark crater at the jaw/throat line, the neck
+  opened to a yellow cross-section, blood running down the chest. The head is on.
+- `head-hit-2.png`: almost the same frame. The second 0.09 crater lands on the same spot as
+  the first, so the face barely changes: the cut is slightly wider and there is more blood
+  on the chest. Mean abs luma diff over the head crop is 5.2/255, and 4% of pixels changed
+  by more than 30. The ball is mid-sway after the swing.
+- `head-hit-3.png`: the head is gone. A spray of blood and chunks bursts above the
+  shoulders, and the severed head lies at the lower right beside the ball.
+- `behead-after.png` is the v1 photo (one-click beheading), kept for the record.
+
+## v1.1 look pass (2026-09-27)
+
+Captured one 60 Hz frame at a time, frozen crowd, 2.4 m from a zombie (out of reach, so no
+hits). Harness: a throwaway in `.lab-tmp/`. Strips: `look/whip-R-strip.png` and
+`look/whip-L-strip.png`, 8 frames each: f0 (rest), f3, f6, f8, f10, f11 = STRIKE, f14, f18.
+
+- **R:**
+  - f3–f6: the haft rises right, the ball goes up and off-screen right.
+  - f8: the haft is upright at the right edge, and the chain arcs over the tip to the ball,
+    which trails beside the haft. It reads as a whip trail, not a knot.
+  - f10: the haft points into the scene, the ball at its tip.
+  - f11: the ball is out ahead at the zombie's hip.
+  - f14–f18: the ball whips low-left and away.
+- **L:**
+  - f6: the ball is up-left on a taut chain, and the fist and bracer cross the lower left.
+  - f8: the clearest whip frame: the chain curves back from the tip and the ball trails
+    well behind it.
+  - f10–f11: the ball leads into the hit.
+  - f14–f18: it whips out low right.
+- **The drawn chain through the swing:**
+  - drawn ball–bolt is 0.27–0.37 m; the minimum is the wind-up trail at f7–f8;
+  - link error ≤ 0.02% on every frame;
+  - strike-frame error 0.
+  - The old loop (drawn 0.19 m at f9, chain slack 0.16 m) is gone: slack is now ≤ 0.07 m
+    in the pure 60 Hz replay.
+- **Rest hang and sway** (3 s idle): the ball hangs 0.353 m below the bolt (the chain
+  nearly straight). It sways 2.4 cm side to side and 1.6 cm fore-aft, with 0.06 cm
+  vertical. On screen that is 0.04 NDC (~21 px). Visible but subtle; left as is.
+- **The hand at `handScale` 1.0** (green-pixel share of the canvas):
+  - rest 0.2%;
+  - R wind-up peak 2.9% (f8);
+  - L wind-up 4.3% (f6), plus the brown bracer covering the lower-left quarter.
+  - Big during the L wind-up, but it reads as an arm crossing the body. Not too dominant,
+    and not changed.
+  - At rest it is still only a sliver: scale doesn't help there, the rest grip does (feel
+    question above).
+- The earlier `look/whip-R-f*.png` single frames predate the loop fix. The strips replace
+  them.
+
+### v1.1 tuning log (Task 11)
+
+- **Swing keys (flail-swing.ts): +2 keys per side, at t 0.15 s and t 0.37 s.**
+  - **Why.** The haft sweeps ~107° from the wind-up to the strike. The bolt runs on an
+    arc, and the ball's spline ran on the chord, so the keyed ball came to 0.188 m (R) /
+    0.220 m (L) from the bolt at t 0.158. On the return to rest it came to 0.24 m at
+    t 0.36.
+  - **How.** Each new key takes the old curve's grip and rot at its time. The ball offset
+    was found by a constrained random search with every swing test as a hard bound, then
+    rounded to the cm and pulled inside reach:
+
+    | side | t | ball |
+    | --- | --- | --- |
+    | R | 0.15 | (0.29, −0.15, −1.03) |
+    | R | 0.37 | (−0.11, −0.52, −1.12) |
+    | L | 0.15 | (−0.17, −0.15, −1.00) |
+    | L | 0.37 | (0.38, −0.45, −1.23) |
+
+  - **Min keyed ball–bolt over the swing:**
+    - R: 0.188 → **0.308 m**
+    - L: 0.220 → **0.318 m**
+    - New test: ≥ 0.28 m.
+  - **Other swing numbers:**
+    - speed-at-strike / peak: R 0.826 → 0.855, L 0.812 → 0.876;
+    - strike speed: R 14.6 → 15.6 m/s, L 12.4 → 13.5 m/s;
+    - worst overshoot: 2.6 → 2.3 cm;
+    - worst 240 Hz speed ratio: 1.91–1.94 → 1.91;
+    - new-key reach 0.354 / 0.356 m (≤ 0.37).
+- **`PIN_FABRIK` (flail-chain.ts): 16 → 32.** The reshaped approach left the L ring link
+  0.2% long on the pinned strike frame, against a 0.1% test. 32 passes are exact; the cost
+  is once per strike.
+- **`FLAIL_CHAIN_SIM` is unchanged** from e40f7ccb: damping 2.5, 20 iterations,
+  guideRate 140, swingFloor 0.3, guide/release windows 0.1 s, settle 0.12 s,
+  ballInvMass 0.05. The look pass didn't call for a change.
+- **`handScale`: unchanged at 1.0.**
 
 ## Gate output (2026-09-26, headless Chrome, WebGPU — after the Task 6 review fixes)
 

@@ -6,7 +6,7 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [~] **v1 built, gate passing; owner playtest pending.** [Plan](docs/superpowers/plans/2026-09-26-spike-flail.md) ·
+- [~] **v1.1 built (whip chain, gradual head damage); owner playtest pending.** Gate passing 2026-09-27. [Plan](docs/superpowers/plans/2026-09-26-spike-flail.md) ·
   [spec](docs/superpowers/specs/2026-09-26-spike-flail-design.md) · gate: `node scripts/flail-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"`
   (with servers up via `scripts/lab-servers.sh`) · [NOTES](docs/dev-notes/2026-09-26-flail/NOTES.md) — click = preset swing
   (alternating L/R), forgiving strike window, one big crater per hit. On branch
@@ -16,6 +16,8 @@
   Kept from it: the melee slot/pickup, `blast()` reaction option, gib-shutter hitch fix.
 - [ ] **Severed limbs as physical debris** (owner likes it, 2026-09-26): cut-off limbs/heads land as objects the
   flail (and shots) can knock about. Needs its own design.
+- [ ] **View-model wall clipping** (all weapons): weapons poke through walls when the player stands close; e.g. a
+  view-model depth range / separate pass, or pulling the weapon back near walls. Lower priority (owner, 2026-09-27).
 - [ ] **Demo recording of melee input**: the swing is not a recorded DemoFrame verb yet.
 
 ## Bride (sword melee enemy) — first pass 2026-09-24
