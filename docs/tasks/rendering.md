@@ -2,10 +2,12 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Shared light list, Part 3 plan 1 — self-shadow spike rejected 2026-09-27
+## Shared light list, Part 3 plan 1 — done, pending owner sign-off 2026-09-27
 
 - [x] Spec written: [`docs/superpowers/specs/2026-09-26-shared-light-list-design.md`](../superpowers/specs/2026-09-26-shared-light-list-design.md);
   plan 1 (bodies, crowd, bones, gibs): [`docs/superpowers/plans/2026-09-26-shared-light-list-plan-1.md`](../superpowers/plans/2026-09-26-shared-light-list-plan-1.md).
+  **Dev note of record: [`docs/dev-notes/2026-09-27-shared-light-list/notes.md`](../dev-notes/2026-09-27-shared-light-list/notes.md)**
+  (what shipped, numbers, A/B pairs, deviations, known gaps).
 - [x] **Task 1 (owner look gate): SDF self-shadow on the dominant key — REJECTED by the owner, 2026-09-27**
   ("it honestly is so subtle ... i dont think its worth it at all"). Invisible under the tube key,
   modest under lightning, and +1.3 ms of march GPU even at the plan's cost fallback (8 steps, 0.4 m
@@ -13,8 +15,29 @@ The march, temporal work, the upscaler, post, perf sessions. Part of the task wi
   [Dev note with the numbers and images](../dev-notes/2026-09-27-self-shadow-spike.md).
 - [x] Kept from the spike: window-light shadow maps dropped from 1024 to 512² (spec §6); `reach`/`steps`
   parameters added to `woundShadow`.
-- [ ] Next: Task 2, presentation profiles (pure) — every remaining task in the plan has had its
-  self-shadow dependency removed.
+- [x] Tasks 2-9: presentation profiles (3 vec4 each, not 2), the list (32 lights, 4 vec4, one
+  buffer, one writer), the per-body 4-light pick, per-light `gain`/`tint` in level JSON,
+  `REC_LIGHTS` in crowd records, the `bodyLights` WGSL loop and its CPU twin, the march reading the
+  list behind `lightListCfg`.
+- [x] Task 10: bodies and crowds lit by their own 4 picks, calibrated to today's pale look at a
+  front-lit pose (owner approved that baseline). Tasks 11/11b: bones and bone meshes read their
+  owner's picks, and the bone fill follows the owner's room. Task 12: every gib picks at its own
+  position; gibs lose the fresnel / edge rim on both paths (owner). The arm-gib bone showing through
+  motion blur (pre-existing) is fixed.
+- [x] Task 13: **cost +0.0..0.4 ms** frame and +0.0..0.3 ms GPU in third class and the Boiler Room,
+  refine off and on (budget +1.5 ms, spec §7), measured at load < 4 with the live switch
+  (`__sdfGame.setLightList`). Task 10's +1.6-1.9 ms was pass residency on a loaded machine, not cost.
+  The light gate's section 10 enforces the budget, with a load guard (a WARN, not a fail, at load
+  > 4). The owner A/B pairs are in the dev note.
+- [ ] **Owner sign-off on the A/B pairs.** Two open questions: (1) away from a front-lit pose the list
+  is darker than today's presented key (Boiler Room bodies 0.55-0.68x at a strobe peak); (2) tube
+  shadow maps at 256² look the same as 512² and cost below the noise: adopt them? (512 stays until
+  the owner says so.)
+- [ ] After sign-off: delete the old key path (`applyWindowKey`, `presentingLamp`, `strongestLamp`,
+  the `spotCfg2.w` rim block, `?lightlist=0`), then update the golden and the gates.
+- [ ] **Next: plan 2** — level materials on the list (a custom `LightingNode`, 4 strongest per
+  carriage) and one 1024² shadow atlas read by the level and the bodies (level-to-body shadows).
+  That is where the tube cones' ~4-9 ms per carriage is won back. The plan is not written yet.
 
 ## Selective shutter blur — owner accepted and merged 2026-09-17
 

@@ -1,10 +1,266 @@
-# Shared light list, Task 10: bodies and crowds lit by their own 4 lights
+# Shared light list, Part 3 plan 1: dev note of record
+
+Plan 1 of the shared light list ([spec](../../superpowers/specs/2026-09-26-shared-light-list-design.md),
+[plan](../../superpowers/plans/2026-09-26-shared-light-list-plan-1.md)), 2026-09-26/27, branch
+`claude/wake-level-pipeline-1afb01`. **Status: done, pending the owner's sign-off on the A/B pairs
+below.** The old path is still in the code behind `?lightlist=0`; it is deleted after sign-off (plan
+Task 13 Step 6), not before.
+
+The first section is the summary of record (Task 13). The sections after it are the per-task records
+(Tasks 10-12, the arm-gib fix), kept as they were written.
+
+## What shipped
+
+Every SDF body, crowd member, bone and gib is lit by the **4 lights it picks** from one shared list,
+built once a frame, instead of the old single key (`applyWindowKey` / `presentingLamp`).
+
+- **Profiles** (Task 2, `light-profiles.ts`): one presentation profile per light kind (tube, lamp,
+  window, flashlight, muzzle, fire). Each profile's GPU `gain` is the old path's conversion.
+- **The list** (Task 3, `light-list.ts`): up to 32 lights, 4 vec4 each, one storage buffer. Its rgb is
+  physical (colour x three.js intensity x level gain), so plan 2 can feed the same list to level
+  materials. `bodyNorm` (v3.z) turns it back into the lamp's live level for bodies.
+- **Picks** (Task 4, `light-pick.ts`): each body's 4 lights, ranked on the light it actually delivers
+  (presence x luminance x gain x bodyNorm), dominant in slot 0.
+- **Level JSON** (Task 5): per-light `gain` and `tint`.
+- **One writer** (Task 6): the GPU buffer, filled once a frame from every light source; the window
+  light reaches every windowed carriage (room mask).
+- **Crowd records** (Task 7): `REC_LIGHTS`, so every crowd member carries its own picks, not its
+  type's.
+- **`bodyLights`** (Task 8): the 4-light loop in WGSL, with a CPU twin (`shadeBodyLights`).
+- **The march reads it** (Task 9), and **the game turns it on** for bodies and crowds (Task 10),
+  **bones and bone meshes** (Task 11, 11b: the bone fill follows the owner's room) and **gib chunks**
+  (Task 12: every gib picks at its own position).
+- **The gate** (`scripts/sdf-game-light-gate.mjs` sections 7-10): the look bands, the bones, the
+  gibs, and now the cost (section 10, below).
+
+## The A/B switch
+
+- `?lightlist=0` boots the old key path.
+- `__sdfGame.setLightList(on)` flips it live. The list and the old path are one compiled shader
+  behind a uniform (`lightListCfg.x`), so the live switch gives the same frame as a second boot,
+  without the boot-to-boot noise. The cost gate uses it.
+
+## Owner decisions (2026-09-27, recorded, not open)
+
+- **The self-shadow is rejected** (Task 1): too subtle for +1.3 ms. It ships off; `?selfshadow=1`
+  opts in.
+- **The pale body baseline is approved.** The list is calibrated to match today's look at a
+  front-lit pose; the owner tunes from there.
+- **Gibs have no fresnel / edge rim**, on both paths.
+
+## Cost (spec §7: at most +1.5 ms on the worst carriage over `?lightlist=0`)
+
+**Result: the list costs nothing measurable. It is well under budget in both carriages, with refine
+off and on.**
+
+**Method** (gate section 10; `LIGHT_GATE_ONLY_COST=1` runs it alone):
+- One boot, `level=night-train&frozen&god`. The train is stopped, the window held dark, the
+  flashlight off, frame cap 1 and hand steps (the rAF loop is stopped).
+- The flicker clock is pinned with the carriage's lamps lit. In the Boiler Room that is a strobe
+  peak: the most picks.
+- Rounds interleave off and on through `setLightList`, and the order alternates per round.
+- Each sample is 9 fenced `timeDraws(1)` frames. That is CPU + GPU, and the list's CPU pick and gather
+  are inside it: both run in the draw. The per-pass GPU timestamps are drained per frame.
+- GPU ms are charged **exclusively, by completion order** (`attributePassSamples`). On this Apple GPU
+  every pass in a frame reports the same start, so a pass's own end - start is queue residency, not
+  cost. Summed, residency read 106 ms for a 16 ms frame.
+- Poses: third class (0, -12.0, 0, -0.05), 4 bodies in the carriage, all list-lit; the Boiler Room
+  (0, -96.0, 0, 0), 6 bodies, all list-lit.
+- `?refine=1` puts the game on the per-body path: **the crowd path falls back per body under
+  refine**. So the refine rows measure the refine twin's list loop at output resolution, on every
+  body.
+
+**Load at measurement:** the 1-minute load average was **2.9-3.5** on the kept runs (polled until it
+was under 4). One refine run at load 6.4 is discarded below.
+
+Medians of 12 interleaved rounds per side (frame ms; the per-round deltas show the bench's spread):
+
+| carriage | refine | frame off | frame on | on - off (median) | per-round deltas | GPU span on - off |
+|---|---|---|---|---|---|---|
+| third class | off | 15.90 | 15.90 | **+0.00** | -0.50..+1.00 | -0.05 |
+| third class | off | 16.15 | 15.90 | **-0.25** | -0.50..+0.20 | -0.03 |
+| third class | off (load 7.2 at start) | 15.90 | 16.30 | **+0.40** | -1.20..+0.50 | +0.09 |
+| Boiler Room | off | 16.80 | 16.80 | **+0.00** | -0.70..+0.70 | +0.10 |
+| Boiler Room | off | 16.85 | 17.00 | **+0.15** | -0.30..+1.10 | +0.09 |
+| Boiler Room | off (load 7.2 at start) | 17.05 | 17.00 | **-0.05** | -10.6..+1.10 | -0.00 |
+| third class | on | 30.85 | 30.75 | **-0.10** | -1.30..+2.40 | -0.05 |
+| third class | on | 30.80 | 30.75 | **-0.05** | -0.50..+1.20 | +0.14 |
+| third class | on | 30.90 | 31.15 | **+0.25** | -1.80..+1.00 | +0.10 |
+| Boiler Room | on | 35.10 | 35.20 | **+0.10** | -1.50..+2.80 | +0.24 |
+| Boiler Room | on | 32.60 | 32.70 | **+0.10** | -0.90..+1.10 | -0.11 |
+| Boiler Room | on | 33.25 | 33.30 | **+0.05** | -2.60..+2.20 | +0.29 |
+
+Per pass (exclusive GPU ms, median on, on - off): `sdf:march` 5.58 (third class) / 7.8 (Boiler Room),
+within ±0.03 ms either way; `sdf:refine` 12.0-12.6 / 15.7-16.5, within ±0.25 ms. No pass moves beyond
+its noise. The frame and the GPU span move together, so the CPU pick and gather are not measurable
+either.
+
+- **Worst kept median: +0.40 ms (frame) and +0.29 ms (GPU span), against a +1.5 ms budget.**
+- **Loaded, the bench is useless.** The discarded refine run (load 6.4-6.6) read -1.65 / -3.25 ms,
+  with rounds from -67 to +50 ms. A full-gate run at load 7 read +9.1 ms in third class.
+- **Why Task 10 read +1.6-1.9 ms.** Its "march GPU" figures summed each march pass's own end - start
+  (residency behind the queue, above), grouped under one pass frame for all 9 `timeDraws` frames, on
+  a machine at load 10-95. They were not a cost.
+
+**The gate check is enforcing, with a load guard.** It fails when the median frame on - off is over
+1.5 ms in either carriage. The median's run-to-run noise at load < 4 is about ±0.4 ms, well inside
+that. When the 1-minute load average is still over 4 after a 2-minute wait, an over-budget result
+prints a `WARN ... report-only` line instead of failing: a loaded machine gives a flake, not a
+finding. `LIGHT_GATE_COST_REPORT_ONLY=1` forces report-only.
+
+The final full gate run (all sections, 8 cost rounds):
+
+```
+     cost third class (4/4 bodies in the carriage list-lit) frame off 16.50 (16.30..17.70) on 16.50 (16.30..17.40) -> median on-off 0.00 ms, per-round deltas -0.60..0.30 | GPU span off 9.91 on 9.97 -> 0.06 ms (rounds -0.18..0.24)
+     cost Boiler Room (6/6 bodies in the carriage list-lit) frame off 17.30 (17.10..17.50) on 17.40 (17.00..17.60) -> median on-off 0.10 ms, per-round deltas -0.30..0.20 | GPU span off 12.61 on 12.62 -> 0.02 ms (rounds -0.13..0.43)
+ok   cost (enforced, load 2.80, budget +1.5 ms): third class 0.00 ms, Boiler Room 0.10 ms
+PASS sdf-game-light-gate (wall 88 s)
+```
+
+## Owner A/B pairs (`?lightlist=0` left, the list right)
+
+![owner A/B](owner-ab-off-on.png)
+
+[owner-ab-off-on.png](owner-ab-off-on.png): the pairs the plan asks for, all from one full gate run
+(`LIGHT_GATE_SHOT`, HEAD bb0324da plus the gate changes), clocks pinned, the train stopped. The
+Boiler Room row is the cost section's frame (the live switch, same boot); the others are two boots.
+Also regenerated from the same run:
+- [contact-sheet-off-on.png](contact-sheet-off-on.png): the Task 10 rows (tube, bolt, flashlight,
+  dark coat check).
+- [gibs-off-on.png](gibs-off-on.png): gibs, with the `?gibrender=march` column.
+- [skull-off-on.png](skull-off-on.png): the skull, with and without the muzzle flash.
+
+Body-box numbers from that run (gate section 7; the frame's centre box):
+
+| scene | on mean / near-black | off mean / near-black | on/off |
+|---|---|---|---|
+| third class, under a tube | 0.347 / 0.8% | 0.335 / 0.8% | 1.04x |
+| third class, held bolt | 0.374 / 0.0% | 0.381 / 0.0% | 0.98x |
+| flashlight on a crowd member | 0.594 / 1.9% | 0.595 / 1.8% | 1.00x |
+| dining car, held bolt (new, look row only) | 0.307 / 1.1% | 0.338 / 1.0% | 0.91x |
+| dark coat check (no picks) | 0.050 / 60.6% | 0.054 / 58.0% | 0.93x |
+
+Skull (dark coat check, a slug crater): crater crop 0.115 -> 0.547 with the flash (list) against
+0.150 -> 0.683 (`?lightlist=0`); skull / surrounding flesh with no flash 1.27x (bound 1.5x) against
+1.53x. Gibs under the tube: 0.205 against 0.064 (3.2x), dark 0.5% against 28.8%; with the torch
+0.514 (6.1% blown) against 0.234.
+
+**By eye:**
+
+- **Third class, under a tube.** Essentially the same pale body. The list is a touch smoother.
+- **Dining car, held bolt.** The list is a little pinker and more modelled, with a cold edge on the
+  window side. Today's is flatter and paler. The body box reads 0.91x.
+- **Boiler Room, strobe peak.** **The clearest difference.** Today's bodies are pale pink and evenly
+  front-lit. The list's are darker, redder and wet-modelled: they are lit from where the strobe lamps
+  are, not presented to the camera. Measured on the bodies: 0.293 against 0.428 (0.68x) for the
+  left body, and 0.202 against 0.365 (0.55x) for the right. The body at the third-class cost pose
+  (standing right of the camera, not front-lit) reads 0.75x. The calibration matches today only at
+  a front-lit pose; elsewhere the list is darker than today's presented key. **This is the owner's
+  call**, below.
+- **Flashlight on a crowd.** The front body is the same very pale white. The crowd member behind is
+  redder on the list: it has its own picks.
+- **Skull, muzzle flash.** The list skull is modelled by the flash (the sockets are shaded) and a
+  little darker than the blown-out flesh. Today's is flatter and paler.
+- **Gibs.** Today's pieces are near-black silhouettes under a lit tube. The list's read as maroon
+  flesh with no pale outline. In the beam they go pink-white with wet highlights and bone stripes,
+  and a few face-up pieces come close to white (6.1% blown). The marched views (`?gibrender=march`)
+  blow out more in the beam (16.7% this run): a known gap.
+- **No NaN speckles, no flat white, and no black bodies** in any frame.
+
+## Tube shadow maps at 256² (spec §6): not committed, owner question
+
+`TUBE.shadowSize` in `game-dynamic-light-leaves.ts` was set to 256, measured, shot, and **put back to
+512**.
+
+![512 vs 256](tube-shadow-512-vs-256.png)
+
+[tube-shadow-512-vs-256.png](tube-shadow-512-vs-256.png): the tube's pool from behind a body, where
+the bench cuts the pool (the tube's hard shadow edge), then the same crop at 2x, then the gate's tube
+pose.
+
+- **Look.** Indistinguishable. The largest pixel difference is 16/255, and 0.00% of pixels differ by
+  more than 24/255 in the pool shot (0.02% at the tube pose). Penumbra and PCF soften the edge more
+  than the map's resolution does.
+- **Cost.** Below the bench's noise. The tube shadows re-render on every other hand step in the
+  player's carriage, inside the `sdf:polys` pass. That pass's mean exclusive GPU time read 1.03 /
+  0.73 / 0.82 ms at 512 and 0.76 / 0.70 / 0.77 ms at 256. The step-frame medians (17-27 ms per
+  round) were dominated by the GPU's clock state, not by the map size.
+- **Question for the owner:** 256 saves memory and maybe ~0.1 ms, and looks the same. Take it or
+  keep 512?
+
+## Deviations from the plan
+
+- **Profiles are 3 vec4, not 2** (`PROFILE_VEC4S`): ten parameters per profile did not fit in two.
+- **Gibs pick per object, not per material.** The first cut of Task 12 picked per chunk material at
+  the pieces' centroid. Review I1 removed that: every drawn gib mesh picks at its own position, spec
+  §4 as written. What remains: the list is on for every drawn gib whatever it picks (no picks = fill
+  only), not "x = 0 without picks".
+- **`applyRoomFill` and `applyStormBodyKey` are kept in list mode** (Task 10): the room fill is the
+  floor where no light picks a body, and the storm key sets the fill colour.
+- **Chunk bones and ejected eyes** have no owner and keep the old key in list mode (Task 11).
+- **The cost gate uses the live switch** in one boot, not two boots (the task text): the same shader
+  behind a uniform, without the boot-to-boot noise. It is enforcing with a load guard (above).
+- **The dev note is this file** (`notes.md` in this folder), not a new
+  `2026-09-27-shared-light-list.md`.
+
+## Known gaps (consolidated)
+
+Looks, for the owner:
+- **Away from a front-lit pose the list is darker than today** (Boiler Room 0.55-0.68x, a body
+  standing to the side 0.75x). Today's key is presented to the camera; the list lights from where
+  the lamps are.
+- **Shine and fresnel on a dim dominant.** keyC is normalised to peak 1, so the wet shine and the
+  fresnel do not dim with the key.
+- **Non-storm levels keep the preset's warm keyColor as the fill** in list mode. This needs a look
+  on a non-storm level.
+- **Marched gib views blow out in the beam** (15-32% of gib pixels over 0.95): they take the list at
+  the march's full level, with no chunk trim. The gate fences it at 40%.
+- **Cover at the chunk's own height.** A piece on the bench top at the pool's edge picks the tube at
+  about 0.1 while the bench top around it is visibly lit: the list's cone is narrower than the
+  level's lit pool there.
+
+Numbers not measured:
+- **Muzzle and fire gains are derived, never measured.** The old and new flash curves cross at 1.5 m;
+  the list is about 3x brighter at 3 m and dimmer inside 1 m.
+- **The lamp's 1.1 presentation gain** (`LAMP_PRESENT_GAIN`) was chosen, not measured. A warm bulb
+  keys about 15% under the old path's 1.3.
+
+Behaviour:
+- **The live tuning seams stop reaching bodies in list mode.** `setBodyFlash` / `bodyFlashGain` and
+  `beamTuning` no longer affect list-lit bodies; the profile gains bake in their defaults.
+- **BODY_DARK_FLOOR** leaves about 60% of a body with no picks near-black (60.6% against 58.0%
+  today), the same as today.
+- **No level-to-body shadows until plan 2.** A body inside a seat's shadow stays lit.
+- **A chunk view's bones** reach the tube instancer with no owner, so they keep the old key (and
+  their fresnel) in list mode.
+- **The storm window's side rim** on chunk views (old path only, during a bolt) is untouched.
+- **Dead data:** the bake still writes the per-vertex `bakeFresnel` attribute; nothing reads it.
+
+## After sign-off
+
+1. One commit deletes the old path (plan Task 13 Step 6): `applyWindowKey`, `presentingLamp`,
+   `strongestLamp`, the `spotCfg2.w` rim block in `compose.wgsl.ts` and the `?lightlist=0` switch,
+   then updates the golden and the gates. The plan's list also names `applyRoomFill` and
+   `applyStormBodyKey`, but list mode still calls both (deviation above), so they stay unless the
+   owner decides otherwise. With no old path to compare against, the cost section goes too, or is
+   re-pointed at plan 2's level-material cost.
+2. Plan 2: level materials move onto the list (4 strongest per carriage), with one 1024² shadow atlas
+   read by the level and the bodies. The tube cones (shadowed spots, about 4-9 ms per carriage in
+   the optimisation pass) are where that wins its time back.
+
+---
+
+# Per-task records
+
+## Task 10: bodies and crowds lit by their own 4 lights
 
 Plan 1, Task 10 (2026-09-27). With `lightlist` on by default, every SDF body and crowd member is lit
 by the 4 lights it picks from the shared list. `?lightlist=0` gives the old key path
 (`applyWindowKey` / `presentingLamp`).
 
 ![off | on](contact-sheet-off-on.png)
+
+(Regenerated in Task 13 from the final run, with the same four rows.)
 
 The contact sheet has one row per scene: a body under a third-class tube, a held bolt
 (`holdWindowLight(32, -1)`), the flashlight on a crowd member under the next tube, and the dark coat
@@ -139,7 +395,10 @@ look on bodies; the owner tunes from here.
   fresnel do not dim with the key. This is the likely source of the smoother sheen under a tube. It
   is a look item for the owner.
 
-## Cost (indicative only: the machine was loaded, load average 10-70)
+## Cost (indicative only: the machine was loaded, load average 10-70). SUPERSEDED by Task 13
+
+**Superseded.** These "march GPU" figures were pass residency, not cost (see the Cost section at
+the top). The clean Task 13 measurement is +0.0..0.4 ms.
 
 Rounds interleave on and off via `__sdfGame.setLightList`, with 8 rounds of `timeDraws(9)` and the
 `passTimings` march passes. There were two runs, minutes apart:
@@ -407,7 +666,8 @@ of what the rim removal and the per-piece picks cost under the tube, and keeps t
   for the march pass (a capture landing before the pieces drew; the same tree's gibs-only run read
   3.2%).
 
-Final full run (`LIGHT_GATE_SHOT` kept the frames of gibs-off-on.png):
+Final full run of Task 12 (`LIGHT_GATE_SHOT` kept the frames of the first gibs-off-on.png; Task 13
+regenerated that image from its own run, same layout):
 
 ```
      gibs       on  mean 0.211 (3.7% of frame, 14 sprite pieces) dark 0.1% blown 0.0% | off mean 0.074 (5.7% of frame, 14 sprite pieces) dark 29.3% blown 0.0%

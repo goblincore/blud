@@ -24,6 +24,9 @@
 //      `?gibrender=march&chunkbake=0`: the marched chunk VIEWS are list-lit, rim-free (fresnel 0,
 //      no list back rim), pick the tube in its pool, and are neither black nor blown.
 //      LIGHT_GATE_ONLY_GIBS=1 runs section 9 alone.
+//  10. COST (Task 13, spec §7): list on - off at most +1.5 ms a frame (median) in third class and
+//      the Boiler Room (live switch, interleaved rounds). Enforced when the 1-min load average is
+//      <= 4, a WARN line above that. LIGHT_GATE_ONLY_COST=1 runs it alone.
 //
 // Usage: LAB_VITE_PORT=5297 LAB_CDP_PORT=9297 node scripts/sdf-game-light-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -175,7 +178,7 @@ const lights = () => evaluate('__sdfGame.lights()');
 const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire');
 
 // LIGHT_GATE_ONLY_LIST=1 runs section 7 alone (the calibration loop).
-if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS) {
+if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS && !process.env.LIGHT_GATE_ONLY_COST) {
 // 1. DARK START — no flashlight until the coat check (carriage 4 of 8).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) { console.error(consoleEvents.slice(-8)); fail('night-train did not boot'); }
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
@@ -310,12 +313,18 @@ function bodyBox(img) {
 // (setTrainSpeed(0)) so the tubes hang still: the old key's direction follows the tube's swing, and
 // a swing frozen at a random phase moved the ?lightlist=0 tube mean 0.16-0.23 boot to boot.
 const UNDER_A = [0.4, -12.6], UNDER_B = [-0.4, -4.4];
+/** The dining car (room 3), 1.3 m from its west windows: the held bolt's owner A/B (Task 13), a
+ *  look row only (not in the on/off band: the calibration scenes are the three above). The nudge's
+ *  clamps leave the actor about 2.2 m from the point, so its frame check allows 3 m. */
+const DINING = [-0.8, -42.0];
 const SCENES = [
   { name: 'tube', frame: UNDER_A, setup: ['holdWindowLight(0, -1)', 'setFlashlight(false)'] },
   { name: 'bolt', frame: UNDER_A, setup: ['holdWindowLight(32, -1)', 'setFlashlight(false)'] },
   // The torch ramps on the light clock (TORCH_ON_S): run it for the scene's 30 steps, then re-pin
   // the clock with the tubes lit.
   { name: 'flashlight', frame: UNDER_B, setup: ['holdWindowLight(0, -1)', 'setLightClockFrozen(false)', 'setFlashlight(true)'], repin: true },
+  // Before the dark scene, which drops the held bolt again for the sections after it.
+  { name: 'dining', frame: DINING, room: 3, near: 3, setup: ['holdWindowLight(32, -1)', 'setFlashlight(false)'] },
   // The coat check (room 6): its lamps are dead at the start, nothing picks these bodies.
   { name: 'dark', frame: [-1.2, -62.4], room: 6, setup: ['holdWindowLight(0, -1)', 'setFlashlight(false)'] },
 ];
@@ -358,6 +367,7 @@ async function listBoot(query) {
   if (!roomLamps(await lights(), 6).every((x) => x.level === 0)) fail(`coat-check lamps not dead: ${JSON.stringify(roomLamps(await lights(), 6))}`);
   await placeNearest(...UNDER_A);
   await placeNearest(...UNDER_B);
+  await placeNearest(...DINING);
   await stepN(20);
 }
 async function listScenes(tag) {
@@ -381,7 +391,7 @@ async function listScenes(tag) {
       const a = await frameNearest(...sc.frame);
       const room = a.room;
       const d = Math.hypot(a.pos[0] - sc.frame[0], a.pos[2] - sc.frame[1]);
-      if (room !== sc.room || !(d <= FRAME_NEAR)) fail(`${sc.name} scene (${tag}): framed actor ${a.id} in room ${room} (want ${sc.room}), ${d.toFixed(2)} m from the target (max ${FRAME_NEAR})`);
+      if (room !== sc.room || !(d <= (sc.near ?? FRAME_NEAR))) fail(`${sc.name} scene (${tag}): framed actor ${a.id} in room ${room} (want ${sc.room}), ${d.toFixed(2)} m from the target (max ${sc.near ?? FRAME_NEAR})`);
     }
     if (sc.name === 'dark' && tag === 'on') {
       const a = await frameNearest(...sc.frame);
@@ -392,6 +402,160 @@ async function listScenes(tag) {
   return out;
 }
 const fmt = (b) => `mean ${b.mean.toFixed(3)} std ${b.std.toFixed(3)} dark ${(b.dark * 100).toFixed(1)}%`;
+
+// 10. COST (plan 1, Task 13; spec §7): the list may cost at most +1.5 ms a frame over
+// `?lightlist=0` in either carriage. One boot, the live switch (`setLightList(on)`: the list and
+// the old path are one compiled shader behind a uniform, so the switch is the second boot's frame
+// without the boot-to-boot noise), rounds interleaved off/on (the order alternates per round, so a
+// drift in the machine's state lands on both sides). The rAF loop is stopped (hand steps, frame cap
+// 1); each sample is COST_FRAMES fenced `timeDraws(1)` frames (CPU + GPU, the list's CPU pick and
+// gather included: both run inside the draw) with the per-pass GPU timestamps drained per frame.
+// Third class (0, -12.0, 0, -0.05) and the Boiler Room (0, -96.0, 0, 0), the window held dark, the
+// flicker clock pinned with the carriage's lamps lit (the Boiler Room at a strobe peak: the most
+// picks). The pass/fail is the median frame on - off; the GPU passes are reported alongside.
+// ENFORCED ON A QUIET MACHINE. Measured (Task 13, dev note): the list costs +0.0..0.4 ms frame
+// median and +0.0..0.3 ms GPU span in both carriages, and the median's run-to-run noise at load
+// average < 4 is about +-0.4 ms, well under the budget. On a loaded machine the medians swing by
+// +-3 ms (one run at load 6-7 read -3.25 ms), so when the 1-minute load average is over
+// COST_MAX_LOAD at the start of the section, an over-budget result is a WARN line, not a fail
+// (a flake is not a finding). LIGHT_GATE_COST_REPORT_ONLY=1 forces report-only.
+// LIGHT_GATE_ONLY_COST=1 runs this section alone; LIGHT_GATE_COST_QUERY adds to the boot query
+// (e.g. `&refine=1`); LIGHT_GATE_COST_ROUNDS (default 8) sets the rounds;
+// LIGHT_GATE_COST_JSON=<file> keeps the samples.
+const COST_BUDGET_MS = 1.5;
+const COST_MAX_LOAD = 4;
+const COST_ROUNDS = Number(process.env.LIGHT_GATE_COST_ROUNDS ?? 8);
+const COST_FRAMES = 9;
+const COST_CARRIAGES = [
+  { name: 'third class', pose: '0, -12.0, 0, -0.05', room: 1 },
+  { name: 'Boiler Room', pose: '0, -96.0, 0, 0', room: 5 },
+];
+const median = (a) => { const b = [...a].sort((x, y) => x - y); return b.length % 2 ? b[b.length >> 1] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2; };
+/** COST_FRAMES fenced frames, each with its passes' GPU timestamps drained: frame ms, and the
+ *  GPU passes charged EXCLUSIVELY by completion order (gpu-pass-timing.ts attributePassSamples: on
+ *  this Apple GPU every pass in a frame reports the same start, so a pass's own end - start is
+ *  queue residency, not cost; summed it reads 100+ ms for a 16 ms frame). One evaluate, so no CDP
+ *  round trip sits between a frame and its timestamps. */
+const costFrames = () => evaluate(`(async () => {
+  await __sdfGame.passTimings();
+  const out = [];
+  for (let i = 0; i < ${COST_FRAMES}; i++) {
+    const ms = await __sdfGame.timeDraws(1);
+    const pt = await __sdfGame.passTimings();
+    out.push({ ms, s: (pt?.samples ?? []).filter((x) => x.start !== undefined && x.end !== undefined).map((x) => [x.label, x.start, x.end]) });
+  }
+  return out;
+})()`, 120000);
+/** Exclusive GPU ms per label for one frame's samples, and the GPU span (their sum). */
+function exclusivePasses(samples) {
+  const sorted = [...samples].sort((a, b) => a[2] - b[2]);
+  let cursor = Math.min(...sorted.map((x) => x[1]));
+  const by = {}; let span = 0;
+  for (const [label, start, end] of sorted) {
+    const ms = Math.max(0, end - Math.max(cursor, start));
+    by[label] = (by[label] ?? 0) + ms; span += ms;
+    cursor = Math.max(cursor, end);
+  }
+  return { by, span };
+}
+async function costCarriage(c) {
+  await evaluate(`__sdfGame.setPose(${c.pose})`);
+  await evaluate('__sdfGame.setLightClockFrozen(false)');
+  await stepN(3, 0);
+  await settle(1500);   // a new pose compiles; let the warm path finish
+  // Pin the flicker clock with this carriage's lamps lit (the strobe at a peak).
+  for (let i = 0; ; i++) {
+    await evaluate('__sdfGame.setLightClockFrozen(true)');
+    await stepN(2);
+    const lamps = roomLamps(await lights(), c.room);
+    if (lamps.length && Math.min(...lamps.map((x) => x.level)) > 0.9) break;
+    if (i >= 80) { console.log(`     cost ${c.name}: lamps never all lit, measuring at ${JSON.stringify(lamps.map((x) => x.level))}`); break; }
+    await evaluate('__sdfGame.setLightClockFrozen(false)');
+    await stepN(1 + (i % 5));
+  }
+  const s = { off: [], on: [], gpuOff: [], gpuOn: [], by: { off: {}, on: {} } };
+  for (let round = 0; round < COST_ROUNDS; round++) {
+    for (const on of round % 2 ? [true, false] : [false, true]) {
+      const k = on ? 'on' : 'off';
+      await evaluate(`__sdfGame.setLightList(${on})`);
+      await stepN(3, 0);
+      await evaluate('__sdfGame.timeDraws(3)');
+      const fr = await costFrames();
+      s[k].push(median(fr.map((f) => f.ms)));
+      const ex = fr.filter((f) => f.s.length).map((f) => exclusivePasses(f.s));
+      if (ex.length) s[on ? 'gpuOn' : 'gpuOff'].push(median(ex.map((e) => e.span)));
+      for (const e of ex) for (const [l, v] of Object.entries(e.by)) (s.by[k][l] ??= []).push(v);
+    }
+  }
+  // What the frame holds: the bodies that pick a light here (list on), and the A/B frames.
+  const pk = await evaluate('__sdfGame.bodyPicks()');
+  const picked = pk.filter((p) => p.room === c.room && p.picks.some((q) => q.index >= 0)).length;
+  const inRoom = pk.filter((p) => p.room === c.room).length;
+  if (SHOT_OUT) {
+    const tag = c.name.replace(/\W+/g, '-').toLowerCase();
+    for (const on of [false, true]) {
+      await evaluate(`__sdfGame.setLightList(${on})`);
+      await stepN(3, 0);
+      await settle(300);
+      await shoot(`cost-${tag}-${on ? 'on' : 'off'}`);
+    }
+  }
+  await evaluate('__sdfGame.setLightList(true)');
+  const byMed = (k) => Object.fromEntries(Object.entries(s.by[k]).map(([l, v]) => [l, median(v)]));
+  const r = {
+    name: c.name, bodies: { inRoom, picked }, off: median(s.off), on: median(s.on), gpuOff: median(s.gpuOff), gpuOn: median(s.gpuOn),
+    spreadOff: [Math.min(...s.off), Math.max(...s.off)], spreadOn: [Math.min(...s.on), Math.max(...s.on)],
+    // Per-round deltas (a round's on minus its own off): their spread is the bench's noise.
+    deltas: s.on.map((v, i) => v - s.off[i]), gpuDeltas: s.gpuOn.map((v, i) => v - s.gpuOff[i]),
+    passOff: byMed('off'), passOn: byMed('on'), samples: s,
+  };
+  return r;
+}
+async function costSection() {
+  const q = `level=night-train&frozen&god${process.env.LIGHT_GATE_COST_QUERY ?? ''}`;
+  if (!(await boot(q))) { console.error(consoleEvents.slice(-8)); fail(`night-train did not boot (${q})`); }
+  await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
+  await evaluate('__sdfGame.setFlashlight(false)');
+  await evaluate('__sdfGame.setDemoHold(true)');
+  await evaluate('__sdfGame.setTrainSpeed(0)');
+  await evaluate('__sdfGame.holdWindowLight(0, -1)');
+  await evaluate('__sdfGame.setFrameCap(1)');
+  const pt = await evaluate('__sdfGame.passTimings()');
+  // The gate's own earlier sections (shader compiles, three boots) push the 1-min load average
+  // to 6-7 by here: give it up to 2 minutes to decay before measuring.
+  const { loadavg } = await import('node:os');
+  for (let i = 0; i < 24 && loadavg()[0] > COST_MAX_LOAD; i++) await sleep(5000);
+  const load = loadavg()[0];
+  const enforce = !process.env.LIGHT_GATE_COST_REPORT_ONLY && load <= COST_MAX_LOAD;
+  const out = [];
+  for (const c of COST_CARRIAGES) out.push(await costCarriage(c));
+  const f2 = (v) => v.toFixed(2);
+  const spread = (d) => `${f2(Math.min(...d))}..${f2(Math.max(...d))}`;
+  for (const r of out) {
+    console.log(`     cost ${r.name.padEnd(11)} (${r.bodies.picked}/${r.bodies.inRoom} bodies in the carriage list-lit) frame off ${f2(r.off)} (${r.spreadOff.map(f2).join('..')}) on ${f2(r.on)} (${r.spreadOn.map(f2).join('..')}) -> median on-off ${f2(r.on - r.off)} ms, per-round deltas ${spread(r.deltas)} | GPU span off ${f2(r.gpuOff)} on ${f2(r.gpuOn)} -> ${f2(r.gpuOn - r.gpuOff)} ms (rounds ${spread(r.gpuDeltas)})`);
+    const labels = [...new Set([...Object.keys(r.passOff), ...Object.keys(r.passOn)])]
+      .map((l) => [l, (r.passOn[l] ?? 0) - (r.passOff[l] ?? 0), r.passOn[l] ?? 0])
+      .filter(([, , v]) => v > 0.05).sort((a, b) => b[2] - a[2]).slice(0, 8);
+    console.log(`          passes (exclusive GPU ms: median on, on-off): ${labels.map(([l, d, v]) => `${l} ${f2(v)} (${d >= 0 ? '+' : ''}${f2(d)})`).join(', ')}`);
+  }
+  if (!pt?.installed) console.log('     cost: no GPU timestamps on this page (passTimings not installed); frame times only');
+  if (process.env.LIGHT_GATE_COST_JSON) writeFileSync(process.env.LIGHT_GATE_COST_JSON, JSON.stringify({ query: q, rounds: COST_ROUNDS, frames: COST_FRAMES, out }, null, 2));
+  for (const r of out) {
+    const d = r.on - r.off;
+    if (d > COST_BUDGET_MS) {
+      const msg = `cost: ${r.name} median frame on-off ${f2(d)} ms > ${COST_BUDGET_MS} ms (spec §7)`;
+      if (enforce) fail(msg);
+      console.log(`WARN ${msg} [report-only: load average ${load.toFixed(2)}${load > COST_MAX_LOAD ? ` > ${COST_MAX_LOAD}` : ', LIGHT_GATE_COST_REPORT_ONLY'}; rerun on a quiet machine]`);
+    }
+  }
+  pass(`cost (${enforce ? 'enforced' : 'report-only'}, load ${load.toFixed(2)}, budget +${COST_BUDGET_MS} ms): ${out.map((r) => `${r.name} ${f2(r.on - r.off)} ms`).join(', ')}`);
+  return out;
+}
+if (process.env.LIGHT_GATE_ONLY_COST) {
+  await costSection();
+  console.log(`PASS sdf-game-light-gate cost only (wall ${((Date.now() - T0) / 1000).toFixed(0)} s)`);
+  process.exit(0);
+}
 
 await listBoot('level=night-train&frozen&god');
 const LL3 = await evaluate('__sdfGame.lightList()');
@@ -667,6 +831,8 @@ for (const n of ['tube', 'bolt', 'flashlight']) if (!(listOn[n].dark <= 0.15)) f
 // And with no picks at all (the dark coat check) the fill floor still carries the body.
 if (!(listOn.dark.dark <= Math.max(0.15, listOff.dark.dark + 0.05))) fail(`dark coat check: body box ${(listOn.dark.dark * 100).toFixed(1)}% near-black (off ${(listOff.dark.dark * 100).toFixed(1)}%)`);
 pass(`shared list look: on/off mean tube ${(listOn.tube.mean / listOff.tube.mean).toFixed(2)}x bolt ${(listOn.bolt.mean / listOff.bolt.mean).toFixed(2)}x flashlight ${(listOn.flashlight.mean / listOff.flashlight.mean).toFixed(2)}x; near-black tube ${(listOn.tube.dark * 100).toFixed(1)}% bolt ${(listOn.bolt.dark * 100).toFixed(1)}% flashlight ${(listOn.flashlight.dark * 100).toFixed(1)}% dark-corridor ${(listOn.dark.dark * 100).toFixed(1)}%`);
+
+await costSection();
 
 console.log(`PASS sdf-game-light-gate (wall ${((Date.now() - T0) / 1000).toFixed(0)} s)`);
 process.exit(0);

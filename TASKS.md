@@ -15,13 +15,14 @@
   and instanced bone meshes took third class from ~440 to ~300 draws; bones + eyes ~3 draws; art
   +61..+164 draws / +3..+6 ms (budget +200 / +12 ms). The tube cones (shadowed spots) cost ~4–9 ms
   per carriage; part 3's shared light list is where that is won back.
-- [ ] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
-  shadows read by the level shaders and the SDF march, each with its own stylized shading. Plan 1
-  ([spec](docs/superpowers/specs/2026-09-26-shared-light-list-design.md),
-  [plan](docs/superpowers/plans/2026-09-26-shared-light-list-plan-1.md)): Task 1's self-shadow spike
-  was **rejected by the owner** (2026-09-27, too subtle, +1.3 ms GPU) and ships off by default
-  (`?selfshadow=1` opts in); window-light shadow maps are now 512². Next: Task 2 (presentation
-  profiles) — see [rendering](docs/tasks/rendering.md).
+- [~] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
+  shadows read by the level shaders and the SDF march. **Plan 1 is done, pending the owner's
+  sign-off** ([dev note](docs/dev-notes/2026-09-27-shared-light-list/notes.md), A/B pairs inside):
+  bodies, crowds, bones and gibs each light from their own 4 picks (`?lightlist=0` = the old key).
+  Cost +0.0..0.4 ms against a +1.5 ms budget. The self-shadow was rejected (ships off). Owner
+  questions: the list is darker than today away from a front-lit pose (Boiler Room), and tube shadow
+  maps at 256². After sign-off: delete the old path, then plan 2 (level materials on the list) —
+  see [rendering](docs/tasks/rendering.md).
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
@@ -42,7 +43,7 @@
 | [Levels and game flow](docs/tasks/levels.md) | Night Train, the Wake, the Void and menu, level format, game design. | 8 open, 2 in progress |
 | [Characters](docs/tasks/characters.md) | SDF characters: authoring, prims, the roster, blends. | 17 open, 0 in progress |
 | [Combat, weapons and gore](docs/tasks/combat-and-gore.md) | Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. | 24 open, 6 in progress |
-| [Rendering and performance](docs/tasks/rendering.md) | The march, temporal work, the upscaler, post, perf sessions. | 9 open, 1 in progress |
+| [Rendering and performance](docs/tasks/rendering.md) | The march, temporal work, the upscaler, post, perf sessions. | 11 open, 1 in progress |
 | [Gather dispatch R1 (history)](docs/tasks/rendering-gather-r1.md) | The probe-gather dispatch work of 2026-09-10 and its measurements. | 3 open, 0 in progress |
 | [Engineering and process](docs/tasks/engineering.md) | Tests, harnesses, the game-main decomposition, tooling, process notes. | 7 open, 0 in progress |
 | [Backlog and roadmap](docs/tasks/backlog.md) | Milestones, side quests, asset pipeline, research, feel tuning. | ID tables (M, A, R, F, P) |
