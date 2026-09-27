@@ -1,12 +1,16 @@
 // src/lab/sdf-zombie/webgpu/flail-chain.ts
 //
 // THE FLAIL'S CHAIN, SIMULATED FOR LOOKS (spec §10.1). Pure. Position-based
-// rope in VIEW space, pinned at the eye bolt; the ball is its heavy last node.
-// The swing's authored ball position is a TARGET the ball is pulled toward by
-// a guide weight: loose through the wind-up (the ball lags the haft — the
-// whip), exactly 1 at strikeT (the drawn ball sits on FLAIL_IMPACT, where the
-// strike window puts the crater), loose again through the follow-through, and
-// a light hold at rest. Hits never read this module.
+// rope in VIEW (rig-local) space, pinned at the eye bolt; the ball is its heavy
+// last node. The swing's authored ball position is a TARGET the ball is guided
+// toward — PD-like: its position is pulled toward the target AND its velocity
+// toward the target's velocity, by the same weight — so it arrives MOVING with
+// the key instead of being yanked onto it. The guide is loose through the
+// wind-up (the ball trails the haft — the whip), 1 at strikeT, loose again
+// through the follow-through, and a light hold at rest. On the strike frame
+// the caller pins the ball on FLAIL_IMPACT on the LAST substep only, leaving
+// it the key's velocity, so a miss flies on through the arc. Hits never read
+// this module.
 //
 // Nodes: 0 = the bolt (pinned) … n−2 = the ball's ring … n−1 = the ball centre.
 
@@ -17,22 +21,27 @@ export const FLAIL_CHAIN_SIM = {
   nodes: 9,
   stepHz: 240,
   maxSubsteps: 24,
-  iterations: 100,
+  /** Gauss-Seidel sweeps per substep; a follow-the-leader pass after them
+   *  makes every link exact, so these only shape how corrections spread. */
+  iterations: 20,
   /** Air drag, 1/s. */
   damping: 2.5,
   gravity: 9.81,
-  /** Inverse mass of the ball node (the links are 1): a heavy ball the chain barely drags. */
-  ballInvMass: 0.2,
-  /** Pull toward the target at guide 1, 1/s (below `pinAt`). */
-  guideRate: 80,
-  /** At or above this guide the ball is pinned exactly on the target. */
-  pinAt: 0.98,
+  /** Inverse mass of the ball node (the links are 1): a heavy ball the chain barely
+   *  drags. 20x a link — at 5x the seven links together outweighed the ball and a
+   *  released ball lost most of its speed to the resting chain. */
+  ballInvMass: 0.05,
+  /** Guide rate at guide 1, 1/s: the per-substep blend is 1 − exp(−rate·guide·h). */
+  guideRate: 140,
   restGuide: 0.12,
-  swingFloor: 0.03,
+  /** The guide's floor through a swing. With the rate, it sets the wind-up
+   *  trail (~13 cm behind the key at 60 Hz) against the no-catapult rule (no
+   *  frame moves over 1.6x the key's move + 2 cm) — swept, flail-chain.test.ts gates both. */
+  swingFloor: 0.3,
   /** Seconds before strikeT over which the guide ramps up to 1. */
-  guideWindow: 0.07,
+  guideWindow: 0.1,
   /** Seconds after strikeT over which it lets go. */
-  releaseWindow: 0.05,
+  releaseWindow: 0.1,
   /** Seconds before the swing ends over which it returns to the rest hold. */
   settleWindow: 0.12,
 } as const;
@@ -40,19 +49,29 @@ export const FLAIL_CHAIN_SIM = {
 type M3 = [number, number, number];
 
 export interface ChainState {
-  p: Vec3[];
-  prev: Vec3[];
+  p: M3[];
+  prev: M3[];
   /** The anchor the last substep used. */
-  anchor: Vec3;
+  anchor: M3;
+  /** The target the last substep used. */
+  target: M3;
   /** Unsimulated time carried to the next call, seconds. */
   acc: number;
 }
 
+export interface ChainStepOpts {
+  /** Pin the ball exactly on `target` at the end of this call (the strike frame). */
+  pin?: boolean;
+  /** The target's velocity, m/s. Default: its displacement over this call. */
+  targetVel?: Vec3;
+}
+
 const N = FLAIL_CHAIN_SIM.nodes;
+const REST: readonly number[] = Array.from({ length: N - 1 }, (_, k) => (k === N - 2 ? FLAIL_CHAIN.ringOffset : FLAIL_CHAIN.len / (N - 2)));
 
 /** Rest length of link k (node k → k+1). */
 export function linkRest(k: number): number {
-  return k === N - 2 ? FLAIL_CHAIN.ringOffset : FLAIL_CHAIN.len / (N - 2);
+  return REST[k]!;
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -62,7 +81,7 @@ export function guideWeight(s: FlailSwing): number {
   const C = FLAIL_CHAIN_SIM, S = FLAIL_SWING;
   if (s.phase === 'idle') return C.restGuide;
   const t = s.t;
-  if (t <= S.strikeT) return t >= S.strikeT ? 1 : Math.max(C.swingFloor, smooth(S.strikeT - C.guideWindow, S.strikeT, t));
+  if (t <= S.strikeT) return Math.max(C.swingFloor, smooth(S.strikeT - C.guideWindow, S.strikeT, t));
   const letGo = 1 - smooth(S.strikeT, S.strikeT + C.releaseWindow, t);
   const settle = smooth(S.swingSec - C.settleWindow, S.swingSec, t) * C.restGuide;
   return Math.max(C.swingFloor, letGo, settle);
@@ -70,19 +89,50 @@ export function guideWeight(s: FlailSwing): number {
 
 export function makeChain(anchor: Vec3, toward: Vec3): ChainState {
   const d: M3 = [toward[0] - anchor[0], toward[1] - anchor[1], toward[2] - anchor[2]];
-  const l = Math.hypot(d[0], d[1], d[2]);
+  const l = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
   const u: M3 = l > 1e-9 ? [d[0] / l, d[1] / l, d[2] / l] : [0, -1, 0];
-  const p: Vec3[] = [];
+  const p: M3[] = [];
   let r = 0;
   for (let i = 0; i < N; i++) {
     p.push([anchor[0] + u[0] * r, anchor[1] + u[1] * r, anchor[2] + u[2] * r]);
-    if (i < N - 1) r += linkRest(i);
+    if (i < N - 1) r += REST[i]!;
   }
-  return { p, prev: p.map(q => [q[0], q[1], q[2]] as Vec3), anchor: [anchor[0], anchor[1], anchor[2]], acc: 0 };
+  return {
+    p, prev: p.map(q => [q[0], q[1], q[2]] as M3),
+    anchor: [anchor[0], anchor[1], anchor[2]], target: [toward[0], toward[1], toward[2]], acc: 0,
+  };
 }
 
+/** FABRIK passes on a pinned substep. */
+const PIN_FABRIK = 16;
+
+/** Move `q` to `rest` from `from`, along from → q. */
+function place(from: M3, q: M3, rest: number): void {
+  const dx = q[0] - from[0], dy = q[1] - from[1], dz = q[2] - from[2];
+  const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (d < 1e-12) return;
+  const k = rest / d;
+  q[0] = from[0] + dx * k; q[1] = from[1] + dy * k; q[2] = from[2] + dz * k;
+}
+
+function cloneChain(s: ChainState): ChainState {
+  return {
+    p: s.p.map(q => [q[0], q[1], q[2]] as M3), prev: s.prev.map(q => [q[0], q[1], q[2]] as M3),
+    anchor: [s.anchor[0], s.anchor[1], s.anchor[2]], target: [s.target[0], s.target[1], s.target[2]], acc: s.acc,
+  };
+}
+
+/** Pure: a new state, the input untouched (tests, replays). */
 export function stepChain(
-  s: ChainState, anchor: Vec3, target: Vec3, guide: number, down: Vec3, dt: number,
+  s: ChainState, anchor: Vec3, target: Vec3, guide: number, down: Vec3, dt: number, opts?: ChainStepOpts,
+): ChainState {
+  if (!(dt > 0)) return s;
+  return stepChainInPlace(cloneChain(s), anchor, target, guide, down, dt, opts);
+}
+
+/** The same step, mutating and returning `s` (the per-frame game path: no allocations). */
+export function stepChainInPlace(
+  s: ChainState, anchor: Vec3, target: Vec3, guide: number, down: Vec3, dt: number, opts?: ChainStepOpts,
 ): ChainState {
   if (!(dt > 0)) return s;
   const C = FLAIL_CHAIN_SIM;
@@ -92,50 +142,89 @@ export function stepChain(
   let acc = Math.max(0, span - steps * h);
   let capped = false;
   if (steps > C.maxSubsteps) { steps = C.maxSubsteps; acc = 0; capped = true; }
-  if (steps === 0) return { ...s, acc };
-  const p: M3[] = s.p.map(q => [q[0], q[1], q[2]]);
-  const prev: M3[] = s.prev.map(q => [q[0], q[1], q[2]]);
-  const a0 = s.anchor;
+  const pinCall = opts?.pin === true;
+  if (steps === 0) {
+    s.acc = acc;
+    if (!pinCall) return s;
+    steps = 1;   // a pin must land this call: take one substep now
+  }
+  const p = s.p, prev = s.prev, last = N - 1;
+  const a0x = s.anchor[0], a0y = s.anchor[1], a0z = s.anchor[2];
+  const t0x = s.target[0], t0y = s.target[1], t0z = s.target[2];
+  // The target's velocity: given (the key's own tangent), or its secant over this call.
+  const tv = opts?.targetVel;
+  const tvx = tv ? tv[0] : (target[0] - t0x) / span;
+  const tvy = tv ? tv[1] : (target[1] - t0y) / span;
+  const tvz = tv ? tv[2] : (target[2] - t0z) / span;
   const decay = Math.exp(-C.damping * h);
-  const g: M3 = [down[0] * C.gravity * h * h, down[1] * C.gravity * h * h, down[2] * C.gravity * h * h];
-  const pin = guide >= C.pinAt;
-  const pull = pin ? 1 : 1 - Math.exp(-C.guideRate * clamp01(guide) * h);
-  const last = N - 1;
-  let lastA: M3 = [a0[0], a0[1], a0[2]];
+  const gx = down[0] * C.gravity * h * h, gy = down[1] * C.gravity * h * h, gz = down[2] * C.gravity * h * h;
+  const pull = 1 - Math.exp(-C.guideRate * clamp01(guide) * h);
+  const b = p[last]!, bp = prev[last]!;
+  let ax = a0x, ay = a0y, az = a0z;
   for (let step = 0; step < steps; step++) {
-    const f = Math.min(1, ((step + 1) * h) / span);
-    const a: M3 = [a0[0] + (anchor[0] - a0[0]) * f, a0[1] + (anchor[1] - a0[1]) * f, a0[2] + (anchor[2] - a0[2]) * f];
-    lastA = a;
+    // Capped: spread the whole move over the substeps taken, so node 0 ends on the anchor.
+    const f = capped || steps * h > span ? (step + 1) / steps : Math.min(1, ((step + 1) * h) / span);
+    ax = a0x + (anchor[0] - a0x) * f; ay = a0y + (anchor[1] - a0y) * f; az = a0z + (anchor[2] - a0z) * f;
+    const tx = t0x + (target[0] - t0x) * f, ty = t0y + (target[1] - t0y) * f, tz = t0z + (target[2] - t0z) * f;
+    const pinHere = pinCall && step === steps - 1;
     // Verlet for the free nodes.
     for (let i = 1; i < N; i++) {
       const q = p[i]!, o = prev[i]!;
-      for (let k = 0; k < 3; k++) {
-        const v = (q[k]! - o[k]!) * decay;
-        o[k] = q[k]!;
-        q[k] = q[k]! + v + g[k]!;
-      }
+      const vx = (q[0] - o[0]) * decay, vy = (q[1] - o[1]) * decay, vz = (q[2] - o[2]) * decay;
+      o[0] = q[0]; o[1] = q[1]; o[2] = q[2];
+      q[0] += vx + gx; q[1] += vy + gy; q[2] += vz + gz;
     }
-    p[0] = [a[0], a[1], a[2]];
-    // The guide: pull (or pin) the ball toward its authored place.
-    const b = p[last]!;
-    for (let k = 0; k < 3; k++) b[k] = b[k]! + (target[k]! - b[k]!) * pull;
-    // Link constraints.
+    const n0 = p[0]!;
+    n0[0] = ax; n0[1] = ay; n0[2] = az;
+    // THE GUIDE (PD): move the ball toward the target without that move
+    // becoming velocity, and blend its velocity toward the target's.
+    if (pinHere) {
+      b[0] = tx; b[1] = ty; b[2] = tz;
+    } else if (pull > 0) {
+      const dx = b[0] - bp[0], dy = b[1] - bp[1], dz = b[2] - bp[2];
+      b[0] += (tx - b[0]) * pull; b[1] += (ty - b[1]) * pull; b[2] += (tz - b[2]) * pull;
+      bp[0] = b[0] - (dx + (tvx * h - dx) * pull);
+      bp[1] = b[1] - (dy + (tvy * h - dy) * pull);
+      bp[2] = b[2] - (dz + (tvz * h - dz) * pull);
+    }
+    // Link constraints (Gauss-Seidel).
+    const wBall = pinHere ? 0 : C.ballInvMass;
     for (let it = 0; it < C.iterations; it++) {
       for (let i = 0; i < last; i++) {
         const q0 = p[i]!, q1 = p[i + 1]!;
         const w0 = i === 0 ? 0 : 1;
-        const w1 = i + 1 === last ? (pin ? 0 : C.ballInvMass) : 1;
+        const w1 = i + 1 === last ? wBall : 1;
         const wsum = w0 + w1;
         if (wsum === 0) continue;
         const dx = q1[0] - q0[0], dy = q1[1] - q0[1], dz = q1[2] - q0[2];
-        const d = Math.hypot(dx, dy, dz) || 1e-9;
-        const c = (d - linkRest(i)) / d / wsum;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9;
+        const c = (d - REST[i]!) / d / wsum;
         q0[0] += dx * c * w0; q0[1] += dy * c * w0; q0[2] += dz * c * w0;
         q1[0] -= dx * c * w1; q1[1] -= dy * c * w1; q1[2] -= dz * c * w1;
       }
     }
-    if (pin) { b[0] = target[0]; b[1] = target[1]; b[2] = target[2]; }
+    if (pinHere) {
+      // The ball stays ON the target and keeps the key's velocity through the hit.
+      b[0] = tx; b[1] = ty; b[2] = tz;
+      bp[0] = tx - tvx * h; bp[1] = ty - tvy * h; bp[2] = tz - tvz * h;
+      // Both ends fixed: FABRIK (backward from the ball, forward from the bolt)
+      // for the links the sweeps left long or short.
+      for (let it = 0; it < PIN_FABRIK; it++) {
+        for (let i = last; i > 0; i--) place(p[i]!, p[i - 1]!, REST[i - 1]!);
+        n0[0] = ax; n0[1] = ay; n0[2] = az;   // re-root on the bolt
+        for (let i = 0; i < last - 1; i++) place(p[i]!, p[i + 1]!, REST[i]!);
+      }
+    } else {
+      // Follow-the-leader: walk out from the bolt, each node at its rest length
+      // along its current direction — every link exact after the sweeps.
+      for (let i = 0; i < last; i++) place(p[i]!, p[i + 1]!, REST[i]!);
+    }
   }
-  const anchorOut: Vec3 = capped ? [anchor[0], anchor[1], anchor[2]] : lastA;
-  return { p, prev, anchor: anchorOut, acc };
+  s.anchor[0] = ax; s.anchor[1] = ay; s.anchor[2] = az;
+  if (capped) { s.anchor[0] = anchor[0]; s.anchor[1] = anchor[1]; s.anchor[2] = anchor[2]; }
+  // The target the last substep used, likewise.
+  const fEnd = capped || steps * h > span ? 1 : Math.min(1, (steps * h) / span);
+  s.target[0] = t0x + (target[0] - t0x) * fEnd; s.target[1] = t0y + (target[1] - t0y) * fEnd; s.target[2] = t0z + (target[2] - t0z) * fEnd;
+  s.acc = steps * h > span ? 0 : acc;
+  return s;
 }

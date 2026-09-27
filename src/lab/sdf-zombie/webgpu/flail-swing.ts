@@ -267,3 +267,26 @@ export function flailPose(s: FlailSwing): FlailPose {
     ball: sample(keys, s.t, k => k.ball, true),
   };
 }
+
+/** The eye bolt (the chain's anchor) for a pose, view space: grip + R·(0, anchorY, 0),
+ *  R the haft's XYZ Euler (three's order: R = Rx·Ry·Rz). game-flail.ts gets the
+ *  same point from the haft's matrix. */
+export function flailBolt(p: FlailPose): Vec3 {
+  let x = 0, y: number = FLAIL_CHAIN.anchorY, z = 0;
+  const [ax, ay, az] = p.rot;
+  [x, y] = [x * Math.cos(az) - y * Math.sin(az), x * Math.sin(az) + y * Math.cos(az)];
+  [x, z] = [x * Math.cos(ay) + z * Math.sin(ay), -x * Math.sin(ay) + z * Math.cos(ay)];
+  [y, z] = [y * Math.cos(ax) - z * Math.sin(ax), y * Math.sin(ax) + z * Math.cos(ax)];
+  return [p.grip[0] + x, p.grip[1] + y, p.grip[2] + z];
+}
+
+/** The keyed ball's velocity (m/s, view space): a central difference of the
+ *  swing's ball curve at the swing's t (one-sided at the ends); zero at idle. */
+export function flailBallVel(s: FlailSwing, eps = 1e-4): Vec3 {
+  if (s.phase === 'idle') return [0, 0, 0];
+  const lo = Math.max(0, s.t - eps), hi = Math.min(FLAIL_SWING.swingSec, s.t + eps);
+  if (hi <= lo) return [0, 0, 0];
+  const a = flailPose({ ...s, t: lo }).ball, b = flailPose({ ...s, t: hi }).ball;
+  const k = 1 / (hi - lo);
+  return [(b[0] - a[0]) * k, (b[1] - a[1]) * k, (b[2] - a[2]) * k];
+}

@@ -2,7 +2,7 @@
 //
 import { describe, expect, it } from 'vitest';
 import {
-  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, chainReach, FLAIL_SWING, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, chainReach, FLAIL_SWING, cancelFlailSwing, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 
@@ -253,5 +253,21 @@ describe('flailPose', () => {
       expect(r, side).toBeGreaterThanOrEqual(0.34);
       expect(r, side).toBeLessThanOrEqual(0.36);
     }
+  });
+});
+
+describe('flailBolt / flailBallVel', () => {
+  it('flailBolt is the haft tip anchorY up the haft from the grip', () => {
+    const p = flailPose(makeFlailSwing());
+    expect(dist(flailBolt(p), p.grip)).toBeCloseTo(FLAIL_CHAIN.anchorY, 9);
+    expect(flailBolt({ grip: [1, 2, 3], rot: [0, 0, 0], ball: [0, 0, 0] })).toEqual([1, 2 + FLAIL_CHAIN.anchorY, 3]);
+  });
+  it('flailBallVel is zero at idle and matches the ball curve mid-swing', () => {
+    expect(flailBallVel(makeFlailSwing())).toEqual([0, 0, 0]);
+    const s: FlailSwing = { ...makeFlailSwing(), phase: 'swing', side: 'R', t: FLAIL_SWING.strikeT };
+    const v = flailBallVel(s), h = 1 / 960;
+    const a = flailPose({ ...s, t: s.t - h }).ball, b = flailPose({ ...s, t: s.t + h }).ball;
+    for (const k of [0, 1, 2] as const) expect(v[k]).toBeCloseTo((b[k] - a[k]) / (2 * h), 0);
+    expect(Math.hypot(...v)).toBeGreaterThan(5);   // the ball is moving fast through the hit
   });
 });
