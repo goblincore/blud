@@ -89,6 +89,43 @@ describe('stepFlailSwing', () => {
     expect(stepFlailSwing(s, { click: false, held: false }, 0).state).toBe(s);
     expect(stepFlailSwing(s, { click: false, held: false }, -1).state).toBe(s);
   });
+
+  it('a held button with no click does not start a swing from idle (e.g. right after a weapon switch)', () => {
+    const idle = makeFlailSwing();
+    const r = stepFlailSwing(idle, { click: false, held: true }, DT);
+    expect(r.state).toEqual(idle);
+    expect(r.strikes).toEqual([]);
+  });
+
+  it('the buffer check uses the post-step time: a step landing exactly on the boundary counts', () => {
+    const dt = DT;
+    const t0 = FLAIL_SWING.swingSec - FLAIL_SWING.bufferSec - dt; // t0 + dt lands exactly on the boundary
+    const s: FlailSwing = { phase: 'swing', side: 'R', t: t0, struck: true, queued: false, nextSide: 'L', swingId: 1 };
+    const onBoundary = stepFlailSwing(s, { click: true, held: false }, dt).state;
+    expect(onBoundary.queued).toBe(true);
+
+    const justOutside: FlailSwing = { ...s, t: t0 - dt };
+    const outside = stepFlailSwing(justOutside, { click: true, held: false }, dt).state;
+    expect(outside.queued).toBe(false);
+  });
+
+  it('one huge dt crossing both strikeT and swingSec gives exactly one strike', () => {
+    const r = stepFlailSwing(makeFlailSwing(), { click: true, held: false }, FLAIL_SWING.swingSec + 0.2);
+    expect(r.strikes).toEqual(['R']);
+    expect(r.state.phase).toBe('idle');
+  });
+
+  it('a chained huge dt strikes each swing exactly once, still alternating', () => {
+    let s = makeFlailSwing();
+    const allStrikes: FlailSide[] = [];
+    for (let i = 0; i < 6; i++) {
+      const r = stepFlailSwing(s, { click: i === 0, held: true }, FLAIL_SWING.swingSec + 0.37);
+      s = r.state;
+      allStrikes.push(...r.strikes);
+    }
+    expect(allStrikes.length).toBe(s.swingId);
+    expect(allStrikes).toEqual(allStrikes.map((_, i) => (i % 2 === 0 ? 'R' : 'L')));
+  });
 });
 
 describe('flailPose', () => {
@@ -128,5 +165,62 @@ describe('flailPose', () => {
     }
     expect(worstBall).toBeLessThan(0.15);
     expect(worstGrip).toBeLessThan(0.06);
+  });
+
+  /** Finite-difference ball speed (m/s) at time `t` within a single swing. */
+  function ballSpeed(side: FlailSide, t: number, eps = 1e-4): number {
+    const lo = Math.max(0, t - eps), hi = Math.min(FLAIL_SWING.swingSec, t + eps);
+    const a = flailPose({ phase: 'swing', side, t: lo, struck: false, queued: false, nextSide: side, swingId: 1 });
+    const b = flailPose({ phase: 'swing', side, t: hi, struck: false, queued: false, nextSide: side, swingId: 1 });
+    return dist(b.ball, a.ball) / (hi - lo);
+  }
+
+  it('carries the ball through the strike near full speed, not slowing to a stop', () => {
+    for (const side of ['R', 'L'] as const) {
+      let peak = 0;
+      for (let t = 0.12; t <= 0.3 + 1e-9; t += 1 / 480) peak = Math.max(peak, ballSpeed(side, t));
+      const atStrike = ballSpeed(side, FLAIL_SWING.strikeT);
+      expect(atStrike, side).toBeGreaterThanOrEqual(0.8 * peak);
+    }
+  });
+
+  it('has no speed jump over 2x between consecutive 240 Hz samples, away from the rest ends', () => {
+    // "Rest ends" includes the windup apex, which is a genuine momentary pause
+    // (like the top of a golf backswing) — a smooth deceleration through a
+    // near-zero speed necessarily produces large sample-to-sample RATIOS near
+    // that zero crossing even though the curve itself is perfectly continuous.
+    // REST_SPEED is well below the ~6-17 m/s the ball otherwise carries.
+    const REST_SPEED = 1.0;
+    for (const side of ['R', 'L'] as const) {
+      let prev: number | null = null;
+      for (let t = DT; t < FLAIL_SWING.swingSec - DT; t += DT) {
+        const speed = ballSpeed(side, t);
+        if (prev !== null && prev > REST_SPEED && speed > REST_SPEED) {
+          const ratio = speed / prev;
+          expect(ratio, `${side} t=${t.toFixed(4)}`).toBeLessThan(2);
+          expect(ratio, `${side} t=${t.toFixed(4)}`).toBeGreaterThan(0.5);
+        }
+        prev = speed;
+      }
+    }
+  });
+
+  it('overshoots no key by more than 3 cm, on either the ball or the grip', () => {
+    const keyTimes = [0, 0.1, 0.18, 0.3, 0.45];
+    for (const side of ['R', 'L'] as const) {
+      const at = (t: number) => flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
+      const keyPoses = keyTimes.map(at);
+      for (const field of ['ball', 'grip'] as const) {
+        for (const axis of [0, 1, 2] as const) {
+          const vals = keyPoses.map(p => p[field][axis]);
+          const lo = Math.min(...vals) - 0.03, hi = Math.max(...vals) + 0.03;
+          for (let t = 0; t <= FLAIL_SWING.swingSec + 1e-9; t += 1 / 480) {
+            const v = at(Math.min(t, FLAIL_SWING.swingSec))[field][axis];
+            expect(v, `${side} ${field}[${axis}] t=${t.toFixed(4)}`).toBeGreaterThanOrEqual(lo);
+            expect(v, `${side} ${field}[${axis}] t=${t.toFixed(4)}`).toBeLessThanOrEqual(hi);
+          }
+        }
+      }
+    }
   });
 });
