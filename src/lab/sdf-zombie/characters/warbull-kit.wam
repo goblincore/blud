@@ -60,20 +60,21 @@ model warbull-kit
 
 palette
   # Polished steel: the bolted-in machinery. kit-overlay.ts LOOK decides
-  # the real finish (WAM exports every material matte); this is the colour.
-  chrome #b4b8c0 metal=1.0 rough=0.2
+  # the real finish (WAM exports every material matte, and its palette
+  # takes no metal=/rough=); this is the colour.
+  chrome #b4b8c0
   # Dark gunmetal: the heavy frame (hooves, spine plates, cheek plate).
-  iron   #3c3c42 metal=0.8 rough=0.4
+  iron   #3c3c42
   # Fittings: every collar where metal enters flesh has a brass lip.
-  brass  #8c6a2c metal=1.0 rough=0.3
+  brass  #8c6a2c
   # Rubber-sheathed conduit, near black with a red cast.
-  cable  #2a1614 rough=0.5
+  cable  #2a1614
   # The optic's glass (the juggernaut's lens look: red glow).
   lens   #3a0806
   # Status LEDs and the reactor core. Pulsed at runtime (status-lights.ts);
-  # emit= is WAM's own preview.
-  led    #ff3018 emit=0.9
-  core   #ffb040 emit=1.0
+  # WAM's palette takes only a colour, so the glow is all runtime.
+  led    #ff3018
+  core   #ffb040
 
 skeleton
   # warbull.blob's skeleton, metres / 2.432 to six places (the rest-identity
