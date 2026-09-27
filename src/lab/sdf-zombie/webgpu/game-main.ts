@@ -1329,6 +1329,17 @@ async function main() {
     // meshes, bone tubes) registers at its own creation site below.
     ctx.boot.deferredApi.router.register(ctx.world.levelGroup, 'mesh', 'full');
     ctx.boot.deferredApi.router.register(ctx.world.accentGroup, 'mesh', 'full');
+    // Both are unlit MeshBasicNodeMaterial under levelGroup (created before
+    // deferredApi exists, so they cannot self-register at their own creation
+    // site): the level-wide 'mesh' registration above claims them first, and
+    // materialEligibility rejects an unlit material for the opaque MRT pass,
+    // hiding them in both the mesh and forward passes. Route them forward
+    // explicitly — the nearest (most specific) registration wins. The disco
+    // star mesh is added straight to the scene, outside levelGroup, so it
+    // stays unregistered and the router already leaves unregistered
+    // renderables alone in the forward pass.
+    if (ctx.world.disco) ctx.boot.deferredApi.router.register(ctx.world.disco.ball, 'forward');
+    if (ctx.world.train) for (const w of ctx.world.train.windows) ctx.boot.deferredApi.router.register(w, 'forward');
   }
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */

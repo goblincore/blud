@@ -169,8 +169,11 @@ export function stepDisco(ctx: GameContext): void {
   if (!show) return;
 
   // Where the stars land: the directions turned with the ball (stepTrain spins it by discoSpin on
-  // the train clock, instance 0), cast against the room's box.
-  const t = ctx.world.train?.time.value ?? ctx.world.light?.time ?? 0;
+  // the train clock, instance 0), cast against the room's box. The ball is night-train level art
+  // (build_train_kit.py), so a disco runtime never exists without a train runtime alongside it —
+  // asserted, not defaulted, so a level that ever decoupled them would throw here instead of
+  // silently spinning the stars from a wrong clock.
+  const t = ctx.world.train!.time.value;
   const live = discoHits(rt.dirs, discoSpin(t), rt.centre, rt.box, rt.hits);
   const m = rt.stars.instanceMatrix.array as Float32Array, f = rt.fade.array as Float32Array, h = rt.hits;
   for (let i = 0; i < live; i++) {
