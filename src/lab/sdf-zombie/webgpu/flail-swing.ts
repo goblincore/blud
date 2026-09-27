@@ -34,6 +34,26 @@ export const FLAIL_SWING = {
   bufferSec: 0.15,
 } as const;
 
+/** The chain, as the renderer (game-flail.ts) draws it. The keys below are
+ *  authored so every key's ball is within `maxBallBolt()` of the eye bolt —
+ *  flail-swing.test.ts checks it; the renderer clamps the drawn ball there. */
+export const FLAIL_CHAIN = {
+  /** The eye bolt (flail.glb's ChainAnchor), haft-local +Y, metres — fitted
+   *  in game from the probes in docs/dev-notes/2026-09-26-flail/NOTES.md. */
+  anchorY: 0.448,
+  /** The chain's rest length, metres. */
+  len: 0.3,
+  /** How far the drawn chain may stretch past `len` before the drawn ball is clamped. */
+  stretch: 1.15,
+  /** Ball centre → its ring, metres (the chain meets the ring, not the centre). */
+  ringOffset: 0.07,
+} as const;
+
+/** Furthest the drawn ball's centre may sit from the eye bolt (0.415 m). */
+export function maxBallBolt(): number {
+  return FLAIL_CHAIN.len * FLAIL_CHAIN.stretch + FLAIL_CHAIN.ringOffset;
+}
+
 export type FlailSide = 'R' | 'L';
 
 export interface FlailPose { grip: Vec3; rot: Vec3; ball: Vec3 }

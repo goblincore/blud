@@ -15,14 +15,21 @@
 //      0.005 of 0.14, and state().lastStrike.hits holds the zombie;
 //   2. too far: at 2.2 m (reach is 1.8), a click adds no wound to that zombie;
 //   3. too wide: at 1.2 m but turned 70° away (the arc is ±50°), a click adds no wound;
+//      POSITIVE CONTROL on every click: strikes went up by exactly 1 and lastStrike.side is
+//      the side state().nextSide promised — a dropped click cannot pass a refusal check;
 //   4. beheading: 1.4 m from the neck, the view aimed so the strike's eye → impact ray
 //      (viewToWorld(eye, yaw, pitch, FLAIL_IMPACT[side]), imported from the game's own
 //      modules in the page) passes through the neck — re-aimed before every click, for that
-//      click's side — up to 3 clicks sever the head (limbAlive(id, 'head') === 0);
+//      click's side — up to 3 clicks sever the head (limbAlive(id, 'head') === 0, read off the
+//      actor's CURRENT body — see game-seams-flail.ts), and each click's REAL strike ray
+//      (lastStrike.eye → lastStrike.impact) passes within 5 cm of the neck;
 //   5. zero console errors or exceptions.
 // Measures (printed, not asserted): the rest pose's ball/bolt/grip screen NDC, the share of
 // clipped pixels on the ball and haft at rest, the ball ↔ eye-bolt distance through a
-// swing, and the red-minus-green rise in a 40x40 crop on the front-hit crater.
+// swing, the red-minus-green rise in a 40x40 crop on the front-hit crater (saturated on
+// torch-lit skin), and the CRATER CONTRAST: mean luma in a ring just outside the crater
+// (1.2–1.6 r) minus mean luma inside it (0–0.6 r), after the hit vs the same regions
+// before it — a crater reads by its dark interior.
 //
 // Usage (vite + a WebGPU Chrome already listening — from BASH, e.g.
 //   . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up):
@@ -129,6 +136,18 @@ function redMinusGreen(img, cx, cy, size = 40) {
   return n ? (r - g) / n : 0;
 }
 
+/** Mean luma over an annulus rIn..rOut (px) about (cx, cy). */
+function annulusLuma(img, cx, cy, rIn, rOut) {
+  let n = 0, l = 0;
+  for (let y = Math.floor(cy - rOut); y <= Math.ceil(cy + rOut); y++) for (let x = Math.floor(cx - rOut); x <= Math.ceil(cx + rOut); x++) {
+    if (x < 0 || y < 0 || x >= img.w || y >= img.h) continue;
+    const d = Math.hypot(x - cx, y - cy);
+    if (d < rIn || d > rOut) continue;
+    l += luma(px(img, x, y)); n++;
+  }
+  return n ? l / n : 0;
+}
+
 // The canvas is letterboxed inside the viewport (4:3 in a 16:10 window): screen NDC maps
 // onto ITS rect, not the window's.
 let rect = null;
@@ -209,6 +228,10 @@ await evaluate('__sdfGame.flail.setHitStop(false)');
 const st0 = await evaluate('__sdfGame.flail.state()');
 if (!st0 || st0.phase !== 'idle') die(`flail not idle after the raise: ${JSON.stringify(st0)}`);
 if ((await evaluate('__sdfGame.dynamite()'))?.live !== 'flail') die('the live slot is not the flail');
+// The FIRST render-locked capture of a session has come back with neither the level nor
+// the flail drawn (seen twice: a dark frame, the zombie alone). Throw two away first, so
+// the rest photo — and the crater's BEFORE crop — are real frames.
+await capture(null); await capture(null);
 console.log(`flail ready; canvas ${JSON.stringify(rect)}`);
 
 // ---- The arena --------------------------------------------------------------------
@@ -242,8 +265,12 @@ async function place(p, pitch = 0) {
   await evaluate(`__sdfGame.placePlayer({ x: ${p.x}, z: ${p.z}, yaw: ${p.yaw}, pitch: ${pitch} })`);
   await stepOne();
 }
-/** One click, then `frames` frames one at a time; `onFrame(i, st)` may return a shot name. */
+/** One click, then `frames` frames one at a time; `onFrame(i, st)` may return a shot name.
+ *  Every click is its own positive control: it must strike exactly once, on the side
+ *  state().nextSide promised before it (a dropped click fails here, not silently). */
+let controlFails = 0;
 async function swing(frames = SWING_FRAMES, onFrame) {
+  const pre = await state();
   await evaluate('__sdfGame.flail.click()');
   const samples = [];
   for (let i = 1; i <= frames; i++) {
@@ -253,6 +280,14 @@ async function swing(frames = SWING_FRAMES, onFrame) {
     const name = onFrame?.(i, st);
     if (name) await capture(name);
   }
+  const post = await state();
+  const control = post.strikes === pre.strikes + 1 && post.lastStrike?.side === pre.nextSide;
+  if (!control) {
+    controlFails++;
+    console.error(`  control: strikes ${pre.strikes} → ${post.strikes}, side ${post.lastStrike?.side} (expected ${pre.nextSide})`);
+  }
+  samples.control = control;
+  samples.side = pre.nextSide;
   return samples;
 }
 const toPx = async (w) => { const n = await evaluate(`__sdfGame.flail.toScreen(${w[0]}, ${w[1]}, ${w[2]})`); return n ? ndcPx(n) : null; };
@@ -294,10 +329,22 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
       const r0 = redMinusGreen(img0, p[0], p[1]), r1 = redMinusGreen(img1, p[0], p[1]);
       rg = r1 - r0;
       console.log(`  R-G in the 40x40 crop: ${r0.toFixed(1)} before → ${r1.toFixed(1)} after`);
+      // The crater's on-screen radius: its world radius along the camera's right.
+      const w = added[0].pos, right = [Math.cos(pose.yaw), 0, Math.sin(pose.yaw)];
+      const q = await toPx([w[0] + right[0] * CRATER_R, w[1], w[2] + right[2] * CRATER_R]);
+      if (q) {
+        const rPx = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        const disc = (img) => annulusLuma(img, p[0], p[1], 0, 0.6 * rPx);
+        const contrast = (img) => annulusLuma(img, p[0], p[1], 1.2 * rPx, 1.6 * rPx) - disc(img);
+        const c0 = contrast(img0), c1 = contrast(img1);
+        console.log(`  crater contrast (ring 1.2–1.6 r minus disc 0–0.6 r, r ${rPx.toFixed(0)} px): ` +
+          `${c0.toFixed(1)} before → ${c1.toFixed(1)} after (rise ${(c1 - c0).toFixed(1)}); ` +
+          `disc luma ${disc(img0).toFixed(1)} → ${disc(img1).toFixed(1)}`);
+      }
     }
     console.log(`  crater at px (${p ? p.map((v) => v.toFixed(0)).join(', ') : 'off-screen'}): R-G rise ${rg === null ? 'n/a' : rg.toFixed(1)}`);
   }
-  const ok = added.length === 1 && Math.abs(added[0].radius - CRATER_R) <= 0.005 && st.lastStrike?.hits?.includes(z.id);
+  const ok = samples.control && added.length === 1 && Math.abs(added[0].radius - CRATER_R) <= 0.005 && st.lastStrike?.hits?.includes(z.id);
   if (ok) pass(`front hit at 1.5 m: exactly one wound, radius ${added[0].radius.toFixed(3)}, lastStrike holds ${z.id}`);
   else fail(`front hit at 1.5 m: +${added.length} wounds (radii ${added.map((w) => w.radius.toFixed(3)).join(' ')}), lastStrike ${JSON.stringify(st.lastStrike)}`);
 }
@@ -309,12 +356,12 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
   await place(standOff(t, 2.2));
   await stepN(10);
   const before = (await wounds(z.id)).length;
-  await swing(SWING_FRAMES, (i) => (i === 9 ? 'swing-L-mid' : null));
+  const sw = await swing(SWING_FRAMES, (i) => (i === 9 ? 'swing-L-mid' : null));
   const st = await state();
   const added = (await wounds(z.id)).length - before;
-  console.log(`too far: zombie ${z.id} at 2.2 m, side ${st.lastStrike?.side}: +${added} wounds; lastStrike ${JSON.stringify(st.lastStrike)}`);
-  if (added === 0 && !st.lastStrike?.hits?.includes(z.id)) pass('too far (2.2 m): no hit');
-  else fail(`too far (2.2 m): +${added} wounds`);
+  console.log(`too far: zombie ${z.id} at 2.2 m, side ${st.lastStrike?.side} (expected ${sw.side}), strike fired ${sw.control}: +${added} wounds; hits ${JSON.stringify(st.lastStrike?.hits)}`);
+  if (sw.control && added === 0 && !st.lastStrike.hits.includes(z.id)) pass(`too far (2.2 m): the ${sw.side} strike fired and missed`);
+  else fail(`too far (2.2 m): control ${sw.control}, +${added} wounds`);
 }
 
 // ---- 3. Too wide -----------------------------------------------------------------------
@@ -325,12 +372,12 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
   await place({ ...pose, yaw: pose.yaw + (70 * Math.PI) / 180 });
   await stepN(10);
   const before = (await wounds(z.id)).length;
-  await swing();
+  const sw = await swing();
   const st = await state();
   const added = (await wounds(z.id)).length - before;
-  console.log(`too wide: zombie ${z.id} at 1.2 m, turned 70°: +${added} wounds; lastStrike ${JSON.stringify(st.lastStrike)}`);
-  if (added === 0 && !st.lastStrike?.hits?.includes(z.id)) pass('too wide (70° off at 1.2 m): no hit');
-  else fail(`too wide (70° off): +${added} wounds`);
+  console.log(`too wide: zombie ${z.id} at 1.2 m, turned 70°, side ${st.lastStrike?.side} (expected ${sw.side}), strike fired ${sw.control}: +${added} wounds; hits ${JSON.stringify(st.lastStrike?.hits)}`);
+  if (sw.control && added === 0 && !st.lastStrike.hits.includes(z.id)) pass(`too wide (70° off at 1.2 m): the ${sw.side} strike fired and missed`);
+  else fail(`too wide (70° off): control ${sw.control}, +${added} wounds`);
 }
 
 // ---- 4. Beheading ----------------------------------------------------------------------
@@ -365,37 +412,58 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
     return { yaw, pitch, miss };
   })()`);
   const alive0 = await evaluate(`__sdfGame.flail.limbAlive(${z.id}, 'head')`);
-  let alive = alive0, clicks = 0, lastPose = null, lastNeck = null;
+  let alive = alive0, clicks = 0, lastPose = null, lastNeck = null, offAt = null, worstRay = 0;
   while (alive > 0 && clicks < 3) {
     const n = await neckOf(z.id);
     if (!n) break;
     const t = await torso(z.id);
     const base = standOff([n[0], t[1], n[2]], 1.4);
-    const side = (await state()).swingId % 2 === 0 ? 'R' : 'L';   // the next click's side
+    const side = (await state()).nextSide;   // the next click's side
     const eye = [base.x, EYE_H, base.z];
     const a = await aim(eye, n, side);
     lastPose = { x: base.x, z: base.z, yaw: a.yaw }; lastNeck = n;
     await place(lastPose, a.pitch);
     await stepN(5);
     const before = (await wounds(z.id)).length;
-    await swing();
+    const sw = await swing();
     clicks++;
     const st = await state();
+    // The REAL strike ray (what the game cast), its distance to the neck.
+    const e = st.lastStrike.eye, im = st.lastStrike.impact;
+    const d = [im[0] - e[0], im[1] - e[1], im[2] - e[2]], dl = Math.hypot(...d);
+    const v = [n[0] - e[0], n[1] - e[1], n[2] - e[2]], along = (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / dl;
+    const rayMiss = Math.hypot(...v.map((c, k) => c - (d[k] / dl) * along));
+    worstRay = Math.max(worstRay, rayMiss);
+    if (!sw.control) fail(`behead click ${clicks}: the strike did not fire as expected`);
     const w = (await wounds(z.id)).slice(before);
     alive = await evaluate(`__sdfGame.flail.limbAlive(${z.id}, 'head')`);
-    console.log(`behead click ${clicks} (${st.lastStrike?.side}): neck y ${n[1].toFixed(2)}, pitch ${a.pitch.toFixed(3)} (ray miss ${a.miss.toExponential(1)} m); ` +
+    if (alive === 0 && offAt === null) offAt = clicks;
+    console.log(`behead click ${clicks} (${st.lastStrike?.side}): neck y ${n[1].toFixed(2)}, pitch ${a.pitch.toFixed(3)} (solved miss ${a.miss.toExponential(1)} m, ` +
+      `real strike ray ${(rayMiss * 100).toFixed(2)} cm from the neck); ` +
       `+${w.length} wounds (y@radius/type ${w.map((q) => `${q.pos[1].toFixed(2)}@${q.radius.toFixed(3)}/${q.type}`).join(' ')}); head prims ${alive}/${alive0}`);
   }
-  await stepN(20);
+  // A FROZEN actor does not step, so it is not re-posed after the sever: its drawn
+  // body still carries the head until something re-poses it (in play it steps every
+  // frame). Thaw the crowd for a few frames so the photo shows the body the game now
+  // holds, then freeze again and let the severed head fall clear (1 s).
+  await evaluate('__sdfGame.freeze(false)');
+  await stepN(3);
+  await evaluate('__sdfGame.freeze(true)');
+  await stepN(60);
   if (lastPose && lastNeck) {
     const e = [lastPose.x, EYE_H, lastPose.z];
     await place({ ...lastPose, yaw: yawOf(lastNeck[0] - e[0], lastNeck[2] - e[2]) },
       Math.atan2(lastNeck[1] - EYE_H, Math.hypot(lastNeck[0] - e[0], lastNeck[2] - e[2])));
   }
   await capture('behead-after');
-  if (alive === 0) pass(`beheading: the head is off after ${clicks} neck-height click(s)`);
+  if (worstRay < 0.05) pass(`beheading: every strike ray passed within 5 cm of the neck (worst ${(worstRay * 100).toFixed(2)} cm)`);
+  else fail(`beheading: a strike ray missed the neck by ${(worstRay * 100).toFixed(1)} cm`);
+  if (alive === 0) pass(`beheading: the head came off on click ${offAt} (of at most 3)`);
   else fail(`beheading: ${alive}/${alive0} head prims alive after ${clicks} clicks`);
 }
+
+if (controlFails === 0) pass('positive control: every click struck exactly once, on the side nextSide promised');
+else fail(`positive control: ${controlFails} click(s) did not strike as expected`);
 
 // ---- 5. Console ------------------------------------------------------------------------
 const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception' || e.type === 'assert');

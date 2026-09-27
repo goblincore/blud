@@ -2,7 +2,7 @@
 //
 import { describe, expect, it } from 'vitest';
 import {
-  FLAIL_IMPACT, FLAIL_REST, FLAIL_SWING, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, maxBallBolt, FLAIL_SWING, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 
@@ -222,5 +222,27 @@ describe('flailPose', () => {
         }
       }
     }
+  });
+
+  /** The eye bolt: grip + R·(0, anchorY, 0), R the haft's XYZ Euler (three's
+   *  order: R = Rx·Ry·Rz, so the vector is turned by z, then y, then x). */
+  function bolt(grip: readonly number[], rot: readonly number[]): number[] {
+    let x = 0, y: number = FLAIL_CHAIN.anchorY, z = 0;
+    const [ax, ay, az] = rot as [number, number, number];
+    [x, y] = [x * Math.cos(az) - y * Math.sin(az), x * Math.sin(az) + y * Math.cos(az)];
+    [x, z] = [x * Math.cos(ay) + z * Math.sin(ay), -x * Math.sin(ay) + z * Math.cos(ay)];
+    [y, z] = [y * Math.cos(ax) - z * Math.sin(ax), y * Math.sin(ax) + z * Math.cos(ax)];
+    return [grip[0]! + x, grip[1]! + y, grip[2]! + z];
+  }
+
+  it('keeps the ball within chain reach of the eye bolt at every key (the renderer need not clamp a key)', () => {
+    expect(maxBallBolt()).toBeCloseTo(0.415, 6);
+    for (const side of ['R', 'L'] as const) {
+      for (const t of [0, 0.1, FLAIL_SWING.strikeT, 0.3, FLAIL_SWING.swingSec]) {
+        const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
+        expect(dist(p.ball, bolt(p.grip, p.rot)), `${side} t=${t}`).toBeLessThanOrEqual(maxBallBolt());
+      }
+    }
+    expect(dist(FLAIL_REST.ball, bolt(FLAIL_REST.grip, FLAIL_REST.rot))).toBeLessThanOrEqual(maxBallBolt());
   });
 });

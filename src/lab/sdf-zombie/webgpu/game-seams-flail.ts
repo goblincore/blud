@@ -21,7 +21,10 @@ export function createFlailSeams(ctx: GameContext) {
       limbAlive: (id: number, limb: string) => {
         const a = ctx.world.actors.find(q => q.id === id);
         if (!a) return -1;
-        const b = a.drawnBody();
+        // The CURRENT body, not drawnBody(): a sever's detach() swaps `current`
+        // without re-posing, and a frozen actor does not step, so the posed
+        // (drawn) body still shows the limb until the next blast re-poses it.
+        const b = a.body;
         let n = 0;
         for (const c of b.clusters) {
           if (c.limb !== limb || !c.alive) continue;

@@ -27,45 +27,68 @@ The gate runs in the sandbox (`seed=1`), in the arena (room 6, 8 zombies), with 
 frozen and hit-stop off. Each check uses a fresh zombie, and the player stands on the
 arena-centre side of it.
 
-## Gate output (2026-09-26, headless Chrome, WebGPU)
+## Gate output (2026-09-26, headless Chrome, WebGPU — after the Task 6 review fixes)
 
 ```
+flail ready; canvas {"x":107,"y":0,"w":1067,"h":800}
+room 6 (arena): 8 zombies; centre (28.00, 0.00, -4.80)
 rest: ball NDC (0.54, -0.71), bolt (0.58, -0.03), grip (0.83, -1.05), ball r 0.115; ball↔bolt 0.326 m
-rest clipping: ball {"n":7556,"clipped":0,"meanLuma":69.7}; haft {"n":56,"clipped":0,"meanLuma":58.8}
-front hit: zombie 11 +1 wounds (radii 0.140); lastStrike {"side":"R","hits":[11]}; swing ball↔bolt worst 0.494 m, clamped on 5/30 frames
+rest clipping: ball {"n":7556,"clipped":0,"meanLuma":69.7}; haft {"n":56,"clipped":0,"meanLuma":58.9}
+front hit: zombie 11 +1 wounds (radii 0.140); lastStrike {"side":"R","hits":[11],"eye":[23.990598178534697,1.62,-9.358942745935575],"impact":[23.19359382144128,1.27,-10.189475138304536]}; swing ball↔bolt worst 0.494 m, clamped on 5/30 frames
   R-G in the 40x40 crop: 79.9 before → 89.7 after
+  crater contrast (ring 1.2–1.6 r minus disc 0–0.6 r, r 91 px): -29.2 before → 21.9 after (rise 51.1); disc luma 149.7 → 102.5
   crater at px (605, 671): R-G rise 9.8
 PASS: front hit at 1.5 m: exactly one wound, radius 0.140, lastStrike holds 11
-too far: zombie 12 at 2.2 m, side L: +0 wounds; lastStrike {"side":"L","hits":[]}
-PASS: too far (2.2 m): no hit
-too wide: zombie 13 at 1.2 m, turned 70°: +0 wounds; lastStrike {"side":"R","hits":[]}
-PASS: too wide (70° off at 1.2 m): no hit
-behead click 1 (L): neck y 1.48, pitch 0.193 (ray miss 2.8e-15 m); +2 wounds (y@radius/type 1.48@0.140/blast 1.48@0.112/blast); head prims 5/5
-behead click 2 (R): neck y 1.48, pitch 0.193 (ray miss 5.9e-16 m); +1 wounds (y@radius/type 1.48@0.140/blast); head prims 0/5
-PASS: beheading: the head is off after 2 neck-height click(s)
+too far: zombie 12 at 2.2 m, side L (expected L), strike fired true: +0 wounds; hits []
+PASS: too far (2.2 m): the L strike fired and missed
+too wide: zombie 13 at 1.2 m, turned 70°, side R (expected R), strike fired true: +0 wounds; hits []
+PASS: too wide (70° off at 1.2 m): the R strike fired and missed
+behead click 1 (L): neck y 1.48, pitch 0.193 (solved miss 2.8e-15 m, real strike ray 0.00 cm from the neck); +2 wounds (y@radius/type 1.48@0.140/blast 1.48@0.112/blast); head prims 0/5
+PASS: beheading: every strike ray passed within 5 cm of the neck (worst 0.00 cm)
+PASS: beheading: the head came off on click 1 (of at most 3)
+PASS: positive control: every click struck exactly once, on the side nextSide promised
 PASS: zero console errors or exceptions
 GATE PASSED
 ```
 
-All five checks passed on the first run. **No strike tuning was needed**: `FLAIL_FEEL`,
-`FLAIL_STRIKE` and the impact keys are unchanged.
+All checks pass. **No strike tuning was needed**: `FLAIL_FEEL`, `FLAIL_STRIKE` and the
+impact keys are unchanged.
+
+What each check proves (after the review of 519d8090):
+
+- **Every click is a positive control.** It must raise `state().strikes` by exactly 1, and
+  `lastStrike.side` must be the side `state().nextSide` promised before the click. So the
+  too-far and too-wide refusals can no longer pass on a dropped click. Each asserts that its
+  strike *fired* and that `lastStrike.hits` does not hold the target.
+- **Beheading.** The gate aims the strike's own eye → impact ray through the neck capsule's
+  midpoint. It solves yaw and pitch in the page with the game's own `viewToWorld` and
+  `FLAIL_IMPACT`, re-solving before every click for that click's side (read from
+  `nextSide`). It then checks the ray the game actually cast (`lastStrike.eye` →
+  `lastStrike.impact`): it passed 0.00 cm from the neck, against a 5 cm bound.
+  - **The head comes off on click 1.** The first run's "after 2 clicks" was a stale
+    readback: `limbAlive` counted `drawnBody()`, the posed body. `detach()` swaps `current`
+    without re-posing, and a frozen actor does not step, so the posed body kept the head
+    until click 2's `blast()` re-posed it. `limbAlive` now reads the actor's CURRENT body
+    (`a.body`).
+  - The same staleness shows in the photo. A frozen, one-click-beheaded actor still DRAWS
+    its head until something re-poses it. In play it steps every frame, so this is a gate
+    artefact. The gate thaws the crowd for 3 frames before `behead-after.png`.
+- **The second neck wound is the sever stump, as expected.** The neck click stamps two
+  blast wounds: the flail's crater (r 0.140), and the stump (r 0.112 = the head cluster's
+  radius × 0.45; sever.ts:70–77, `injuryIgnored`). `detach()` stamps the stump at
+  game-actor.ts:919–922. The front hit on the torso, where nothing is severed, stamps
+  exactly one wound.
+- **First capture thrown away.** The first render-locked capture of a session came back
+  twice with neither the level nor the flail drawn. The gate now throws two captures away
+  before `rest.png`, which is also the crater's BEFORE frame.
 
 Staging notes:
 
 - **Screen coordinates.** The canvas is letterboxed: it is 4:3, 1067×800 at x 107, inside the
   1280×800 window. The screen image is also warped by the fisheye post-pass. So `state().ndc`
-  and the new `flail.toScreen()` return screen NDC *through the lens* (`reticleNdc`), and the
-  gate maps NDC onto the canvas rect. Before this, the Task 5 smoke's ball crops sat about
-  45 px off the ball.
-- **Beheading.** The gate aims the strike's own eye → impact ray through the neck capsule's
-  midpoint. It solves yaw and pitch in the page with the game's own `viewToWorld` and
-  `FLAIL_IMPACT`, and re-solves before every click for that click's side, because R and L
-  impacts differ in x.
-- **Open question.** Behead click 1 added **two** blast wounds (0.140 + 0.112, same height)
-  from one strike, while the torso front hit added exactly one. The flail hands `blast()`
-  exactly one wound. The 0.112 = 0.8 × 0.14 companion must come from somewhere downstream.
-  I did not track it down. The gate asserts "exactly one" only on the front hit, as the plan
-  specifies.
+  and `flail.toScreen()` return screen NDC *through the lens* (`reticleNdc`), and the gate
+  maps NDC onto the canvas rect. Before this, the Task 5 smoke's ball crops sat about 45 px
+  off the ball.
 
 ## Tuning log (old → new, and why)
 
@@ -128,7 +151,13 @@ hit. The haft's roll (`rot` y) is now 0 everywhere.
   R follow-through briefly overruns it. It reaches 0.49 m near t 0.23, and is clamped on 5
   of 30 gate frames, by at most about 8 cm. L peaks at 0.414 m and is not clamped. Before
   this pass, the ball was clamped by up to 0.6 m.
-- All 20 `flail-swing` tests pass unchanged: the speed-at-strike ratio (≥ 0.8), the
+- A new pure test checks that at every key of both swings, and at rest, the ball is within
+  `maxBallBolt()` (0.415 m) of the eye bolt. The bolt is computed as grip + Euler(rot)·(0,
+  `FLAIL_CHAIN.anchorY`, 0). The chain numbers now live in flail-swing.ts `FLAIL_CHAIN`, and
+  game-flail.ts reads its `chainLen`, `ringOffset` and clamp from there. As a cross-check,
+  the test's bolt maths puts the OLD rest ball at 0.474 m against 0.472 m measured in game,
+  so it would have failed.
+- The original 20 `flail-swing` tests pass unchanged: the speed-at-strike ratio (≥ 0.8), the
   overshoot bound, the pop bounds and the speed-jump bounds. No bound was loosened.
 
 ### Blow-out: the flashlight fill (game-flail.ts), ported from the censer (8c24de2a)
@@ -159,7 +188,13 @@ Photos: `look/rest-torch-before.png` and `look/rest-fill-after.png` (sandbox roo
     `onlyRooms` empty.
   - game-main calls `flail.refreshLights()` when the muzzle flash is added, as it did for the
     censer.
-  - The fill is forward-route only.
+  - The fill is forward-route only; `syncFill` returns at once in deferred mode.
+  - **Review fixes.** `FLAIL_FILL_LAYER = 30` is exported from gib-motion-blur.ts, next to
+    `GIB_BLUR_LAYER`, with a "no camera draws this layer" note, and game-flail.ts imports
+    it. `syncFill()` now runs in the render callback right after
+    `flashlight.update(camera)`, so the fill takes THIS frame's torch pose. It used to run
+    in the flail's tick, before the torch was placed. Rest clipping is identical after the
+    move: 0%, ball luma 69.7.
 
 ### Task 5 review follow-ups (game-flail.ts)
 
@@ -180,6 +215,9 @@ Photos: `look/rest-torch-before.png` and `look/rest-fill-after.png` (sandbox roo
 ### Seams / readback (for the gate)
 
 - `state().ndc` gained `grip`, and all its points are screen NDC through the lens.
+- `state()` gained `nextSide`, and `lastStrike` gained `eye` and `impact`: the world
+  points the strike's ray was cast through.
+- `flail.limbAlive` reads the actor's CURRENT body (see Beheading above).
 - New `__sdfGame.flail.toScreen(x, y, z)` returns a world point in screen NDC through the
   lens, or null if it is behind the camera. It is used for the crater crop.
 
@@ -199,11 +237,23 @@ Photos: `look/rest-torch-before.png` and `look/rest-fill-after.png` (sandbox roo
 - `swing-L-mid.png` (L, t ≈ 0.15, the too-far zombie at 2.2 m): the backhand. The ball swings
   out left on its chain from the haft's tip. This is the most "flail"-looking frame.
 - `hit-wound.png`: one big ringed crater (r 0.14) on the chest, with ribs showing and blood
-  running down. It plainly reads as a big crater. However, the 40×40 R−G rise is **9.8**,
-  just under the plan's 10. The torch already turns this skin saturated pink (R−G 79.9 before
-  the hit), so there is little headroom for the metric to rise.
-- `behead-after.png`: the head is off at the neck, with a large burst of blood and gore. The
-  flail is back at rest, lower right, and the ball is not blown out.
+  running down. It plainly reads as a big crater.
+  - **R−G metric.** The plan's 40×40 red-minus-green rise is **9.8**, just under 10. The
+    metric is saturated: the torch already makes this skin pink, and R−G is 79.9 before
+    the hit.
+  - **Crater contrast (the measure used instead).** A crater reads by its dark interior, so
+    the gate compares mean luma in a ring just outside the crater (1.2–1.6 r) with mean luma
+    inside it (0–0.6 r). r is the crater's 0.14 m projected along the camera's right: 91 px.
+    Results, before the hit → after:
+    - ring minus disc: −29.2 → **+21.9**, a **rise of 51.1**;
+    - the disc's own luma: 149.7 → **102.5**, 32% darker.
+  - **Reading the contrast.** The ring reaches past the body's edge onto the dark wall. That
+    is why the before-value is negative: the static background offsets both frames equally,
+    and it cancels in the rise. By this measure the crater reads strongly, so it was not
+    tuned.
+- `behead-after.png`: the head came off on click 1. The stump is a red burst of gore, the
+  headless body reaches forward (the crowd was thawed for 3 frames), and the severed head
+  lies at the lower right beside the flail at rest. The ball is not blown out.
 
 **Clipping the camera.** Nothing clips the camera in these frames:
 
@@ -219,7 +269,5 @@ Photos: `look/rest-torch-before.png` and `look/rest-fill-after.png` (sandbox roo
   the ball a little with it?
 - **The fill level** (0.018 of the torch) makes the iron read dark, with little specular.
   Try it a bit brighter?
-- **The crater metric** is borderline (9.8) on torch-pink skin. Is the visual enough, or
-  should the crater be bigger or deeper, or darker inside?
-- **The neck strike made two wounds** (0.140 + 0.112) from one hit. Is that expected (for
-  example, a seam or joint companion), or should it be tracked down?
+- **The crater:** the new contrast measure reads it strongly (rise 51), and it looks big in
+  the photo. Judge it in play.

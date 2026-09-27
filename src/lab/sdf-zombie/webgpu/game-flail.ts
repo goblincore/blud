@@ -20,17 +20,13 @@ import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
 import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
-  FLAIL_IMPACT, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing, type FlailSide, type FlailSwing,
+  FLAIL_CHAIN, FLAIL_IMPACT, maxBallBolt, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing, type FlailSide, type FlailSwing,
 } from './flail-swing';
 import { resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
 import { reticleNdc } from './fisheye';
+import { FLAIL_FILL_LAYER } from './gib-motion-blur';
 
 const FLAIL_GLB = '/assets/lab/flail.glb';
-/** A render layer no camera draws (three's layers are 0–31; 1–10 are taken —
- *  sdf-layer SDF_LAYER … gib-motion-blur GIB_BLUR_LAYER): the flail's torch FILL
- *  lives here so only the flail's own light list sees it (the scrapped censer's
- *  fix, commit 8c24de2a). */
-const FLAIL_FILL_LAYER = 30;
 
 /** Feel numbers (spec §6). */
 export const FLAIL_FEEL = {
@@ -47,13 +43,10 @@ export const FLAIL_FEEL = {
 
 /** The look: chain sag, rest sway, the hand. */
 export const FLAIL_LOOK = {
-  chainLen: 0.3,
-  /** How far the drawn chain may stretch past chainLen before the drawn ball
-   *  is clamped toward the eye bolt (see draw(): the swing's ball keys are
-   *  authored for the strike logic, not for a 0.3 m chain). */
-  chainStretch: 1.15,
-  /** Ball centre → its ring, metres (the chain meets the ring, not the centre). */
-  ringOffset: 0.07,
+  /** The chain's numbers live with the keys (flail-swing.ts FLAIL_CHAIN), which
+   *  are authored — and tested — to stay inside its reach. */
+  chainLen: FLAIL_CHAIN.len,
+  ringOffset: FLAIL_CHAIN.ringOffset,
   linkPitch: 0.013,
   swayAmp: 0.012,
   swayHz: 0.9,
@@ -83,7 +76,11 @@ export interface FlailDebug {
   side: FlailSide;
   swingId: number;
   strikes: number;
-  lastStrike: { side: FlailSide; hits: number[] } | null;
+  /** The last strike: its side, the actors hit, and the eye and the authored
+   *  impact point (world) its eye → impact ray was cast through. */
+  lastStrike: { side: FlailSide; hits: number[]; eye: Vec3; impact: Vec3 } | null;
+  /** The side the next swing takes. */
+  nextSide: FlailSide;
   /** This frame's eye-bolt → ball-centre distance (view metres): `keyed` is the
    *  swing's own ball pose, `drawn` the ball after the chain clamp. */
   ballBolt: { keyed: number; drawn: number };
@@ -110,6 +107,9 @@ export interface FlailWeapon {
   toScreen(x: number, y: number, z: number): [number, number] | null;
   /** Re-list the flail's own lights (OWN LIGHT LIST) after a light is added. */
   refreshLights(): void;
+  /** Copy the torch's pose/intensity onto the FILL. Called right after
+   *  flashlight.update(camera), so the fill matches THIS frame's torch. */
+  syncFill(): void;
 }
 
 const MAX_LINKS = 40;
@@ -157,6 +157,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   fill.target.layers.set(FLAIL_FILL_LAYER);
   const _fp = new THREE.Vector3();
   function syncFill(): void {
+    if (ctx.boot.deferredMode) return;
     const spot = ctx.lighting.flashlight?.spot;
     if (!spot || !spot.visible) { fill.intensity = 0; return; }   // the torch is off in this rig (outdoor)
     spot.updateMatrixWorld();
@@ -328,7 +329,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       if (c) actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed) });
     }
     const hits = resolveStrike(eye, p.yaw, impact, actors);
-    lastStrike = { side, hits: hits.map(h => h.actorId) };
+    lastStrike = { side, hits: hits.map(h => h.actorId), eye: [...eye] as Vec3, impact: [...impact] as Vec3 };
     for (const h of hits) {
       const a = ctx.world.actors.find(x => x.id === h.actorId);
       if (!a) continue;
@@ -374,7 +375,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     // slightly stretched chain of the bolt, along the bolt → ball direction.
     _tan.copy(ball.position).sub(_a);
     const keyed = _tan.length();
-    const maxCentre = FLAIL_LOOK.chainLen * FLAIL_LOOK.chainStretch + FLAIL_LOOK.ringOffset;
+    const maxCentre = maxBallBolt();
     if (keyed > maxCentre) ball.position.copy(_a).addScaledVector(_tan, maxCentre / keyed);
     ballBolt.keyed = keyed;
     ballBolt.drawn = _a.distanceTo(ball.position);
@@ -445,7 +446,6 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
         for (const side of r.strikes) strike(side);
       }
       click = false;
-      syncFill();
       draw();
     },
     updateRig() {
@@ -471,6 +471,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       return screenNdc(new THREE.Vector3(x, y, z));
     },
     refreshLights() { relist(); },
-    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, ballBolt: { ...ballBolt }, ndc: ndcNow() }),
+    syncFill,
+    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: swing.nextSide, ballBolt: { ...ballBolt }, ndc: ndcNow() }),
   };
 }

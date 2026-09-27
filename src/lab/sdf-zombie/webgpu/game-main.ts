@@ -1545,6 +1545,8 @@ async function main() {
     // — a non-zero row there means an unlabelled pass exists.
     setPassLabel('frame:other');
     ctx.lighting.flashlight.update(camera);
+    // The flail's torch FILL follows this frame's torch (game-flail.ts OWN LIGHT LIST).
+    ctx.weapon.flail?.syncFill();
     // SSCS feed: the flashlight pose and this frame's camera matrices. The
     // camera's matrixWorld is current — flashlight.update just re-ran
     // updateMatrixWorld on it; setSscsFrame rebuilds the view matrix itself.

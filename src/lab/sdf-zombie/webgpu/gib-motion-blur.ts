@@ -47,6 +47,12 @@ import { projectWorldToPixel } from './shutter-reference';
  *  are invisible to the ordinary pass (the camera enables only layer 0 by
  *  default) and are drawn into the blur layer by the capture stage alone. */
 export const GIB_BLUR_LAYER = 10;
+/** The spike flail's torch FILL layer (game-flail.ts OWN LIGHT LIST). NO CAMERA
+ *  DRAWS THIS LAYER: a light on it is skipped by three's per-camera light lists
+ *  (and, with `onlyRooms` empty, by the level's per-room lists), so only the
+ *  flail's own `lightsNode` list sees it. Registered here, beside the other
+ *  claimed layer bits, so nobody takes 30 for something drawn. */
+export const FLAIL_FILL_LAYER = 30;
 /** Most pieces that may be blurred in one frame. A full-body gib is 19–20, a
  *  point-blank bundle into a crowd can be several bodies; 64 is the marched
  *  pool's own ceiling and keeps the seed/single-layer cost bounded. */
