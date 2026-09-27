@@ -26,7 +26,9 @@ import {
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 import { flailWound, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
-import { guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts } from './flail-chain';
+import {
+  FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
+} from './flail-chain';
 import { reticleNdc } from './fisheye';
 import { FLAIL_FILL_LAYER } from './gib-motion-blur';
 
@@ -406,12 +408,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
    *  and after a non-finite step: re-made from a straight line bolt → ball on the
    *  next drawn frame. Stepped in place (no per-frame allocation). */
   let sim: ChainState | null = null;
-  /** A bolt faster than this is a teleport, not motion: re-make. A SPEED, not a
-   *  distance: the swing itself moves the bolt up to ~19 m/s (0.31 m per 60 Hz
-   *  frame, 0.56 m at 30 Hz), so a fixed 0.15 m re-made the chain mid-swing. The
-   *  known teleport — a cancelled live swing snapping to rest, up to 0.87 m — is
-   *  handled explicitly in tick(); this is the backstop. */
-  const TELEPORT_MPS = 30;
+  /** The chain AS DRAWN this frame (flail-chain.ts drawChain): the sim
+   *  extrapolated over its carried time, rooted on the true bolt. */
+  const drawn: [number, number, number][] = Array.from({ length: FLAIL_CHAIN_SIM.nodes }, () => [0, 0, 0]);
   const bolt: [number, number, number] = [0, 0, 0];
   const target: [number, number, number] = [0, 0, 0];
   const down: [number, number, number] = [0, -1, 0];
@@ -465,11 +464,15 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     rig.getWorldQuaternion(_rigQ);
     _down.set(0, -1, 0).applyQuaternion(_rigQ.invert()).normalize();
     down[0] = _down.x; down[1] = _down.y; down[2] = _down.z;
-    if (sim && dt > 0 && Math.hypot(bolt[0] - sim.anchor[0], bolt[1] - sim.anchor[1], bolt[2] - sim.anchor[2]) > TELEPORT_MPS * dt) sim = null;
+    // A bolt faster than FLAIL_CHAIN_SIM.teleportMps is a teleport (backstop: the
+    // known one, a cancelled swing snapping to rest, is handled in tick()). Over
+    // dt + the chain's carried time, which is what the jump spans.
+    if (sim && chainTeleported(sim, bolt, dt)) sim = null;
     sim = stepChainInPlace(sim ?? makeChain(bolt, target), bolt, target, guide, down, dt, stepOpts);
     const end = sim.p[sim.p.length - 1]!;
     if (!Number.isFinite(end[0]) || !Number.isFinite(end[1]) || !Number.isFinite(end[2])) sim = makeChain(bolt, target);
-    const pts = sim.p;
+    drawChain(sim, bolt, drawn);
+    const pts = drawn;
     const n = pts.length, ring = n - 2;
     const b = pts[n - 1]!;
     ball.position.set(b[0], b[1], b[2]);
