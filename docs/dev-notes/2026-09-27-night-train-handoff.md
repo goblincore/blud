@@ -27,20 +27,11 @@
 4. **Boiler Room disco ball.** [Notes](2026-09-27-disco-ball/notes.md)
    - A mirror-tile ball throwing 96 stars cast against the room box: white at the party, flashing with the strobe, red pulses as the beacons pass.
    - Cost: about 0 ms. It also draws under `?renderer=deferred`.
-5. **Flashlight step 1** (`83dcd38c`): a beam shoulder stops zombies clipping at 1.5–2.5 m, but they stay pale, and 4–6 m still reads flat white.
+5. **Flashlight** (`83dcd38c` shoulder, then `d88c7bb7` retune): see below.
 
-## In flight at hand-off
+## Flashlight retune — landed at hand-off (d88c7bb7, reviewed)
 
-**Flashlight retune.** A background agent in the old session was:
-- judging the flashlight at the **chest** instead of the feet;
-- retuning its strength on bodies;
-- making highlight compression **hue-preserving** (bright pink, not white).
-
-The targets: at 1.5–6 m, blown ≤ 3%, beam vs no-beam contrast ≥ ~2×, and the body's colour kept. The owner sheet is `2026-09-27-shared-light-list/flashlight-retune.png`.
-- **Check `git log`** for "fix(light): flashlight judged at the chest, retuned…".
-- **If it landed:** review it (spec and quality) and show the owner the sheet.
-- **If not:** its uncommitted edits to `light-pick.ts`, `light-profiles.ts` and `compose.wgsl.ts` may be in the worktree. Inspect them before redoing it.
-- **Owner's framing:** a flashlight has to "feel like a flashlight in terms of the difference vs the ambient, but not blown out". The next lever, if bodies still don't pop, is the body dark floor (BODY_DARK_FLOOR, 25% → 15% / 10%), shown as side-by-sides.
+The torch is judged at the **chest** (profile `coverAt`), `FLASHLIGHT_LIST_TRIM` 2.8 → 0.43, flashlight `distFall` 0.01, and the beam tail in `compose.wgsl.ts` is a **hue-preserving** luminance Reinhard (bodies go bright pink, not white; glints still go white). Torch-only bodies: pink and modelled at 1.5–6 m, 4.5–8× the torch-off body, 0% blown. Sheet: `2026-09-27-shared-light-list/flashlight-retune.png`. Gate 7b sweeps 1.5/2.5/4/6 m with absolute bounds. **Open owner calls:** under a lit tube the torch adds only ~5% (lever: `LAMP_LIST_TRIM`, i.e. the approved tube look); the default level reads darker from 4 m; next lever the body dark floor (25% → 15/10%) side-by-sides. Review minors: `beamTail` (light-shade.ts) is a test-only twin of compose.wgsl.ts — keep in sync; gib picks ignore `coverAt` only because chunk `feetY === pos.y`; muzzle could also move to the chest.
 
 ## Next
 

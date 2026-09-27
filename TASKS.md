@@ -12,10 +12,11 @@
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [ ] **NEXT: Boiler Room resize to 8 × 28 m** (owner-approved layout, option B + recommendations):
   [plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md), [before/after](docs/game/levels/01-night-train/boiler-resize/boiler-before-after.png).
-- [~] **Flashlight retune** (owner: "feels like a flashlight vs the ambient, but not blown out"): judged at the
-  chest, contrast ≥ ~2× vs outside the beam, hue kept (pink, not white). The close-range shoulder
-  (83dcd38c) landed; the retune was in flight at hand-off — see the hand-off note. Next lever if it
-  still doesn't pop: the body dark floor (25% → 15/10%) side-by-sides.
+- [x] **Flashlight retune** (owner: "feels like a flashlight vs the ambient, but not blown out"):
+  judged at the chest, hue-preserving tail; torch-only bodies pink and modelled at 1.5–6 m, 4.5–8×
+  the torch-off body, 0% blown ([sheet](docs/dev-notes/2026-09-27-shared-light-list/flashlight-retune.png)).
+  **Owner call open:** under a lit tube the torch adds only ~5% (lower the tube body level?); the
+  default level reads a bit dark from 4 m.
 - [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
   batching of the art (`batchArt`), the bone-exposure cull (unwounded enemies draw only their eyes)
   and instanced bone meshes took third class from ~440 to ~300 draws; bones + eyes ~3 draws; art
