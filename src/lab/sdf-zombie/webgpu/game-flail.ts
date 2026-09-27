@@ -25,7 +25,7 @@ import {
   FLAIL_IMPACT, FLAIL_SWING, cancelFlailSwing, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
-import { flailWound, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
+import { FLAIL_HEAD, flailWound, headNeck, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
 import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
@@ -36,9 +36,9 @@ const FLAIL_GLB = '/assets/lab/flail.glb';
 
 /** Feel numbers (spec §6). */
 export const FLAIL_FEEL = {
-  craterR: 0.14,
+  craterR: 0.09,
   severMul: 1.3,
-  meterCredit: 0.35,
+  meterCredit: 0.18,
   /** Reaction direction magnitude handed to blast() (it unit-normalises). */
   shove: 6,
   hitStopSec: 0.05,
@@ -56,7 +56,7 @@ export const FLAIL_LOOK = {
   /** The idle ball target's sway (the sim's light rest hold follows it). */
   swayAmp: 0.012,
   swayHz: 0.9,
-  handScale: 1.0,
+  handScale: 1.3,
   /** The arm's IK shoulder, view metres (the gun arms' SHOULDER_R_VIEW is 0.26, −0.30, 0.06). */
   handShoulder: new THREE.Vector3(0.35, -0.47, 0.08),
   /** Primitive haft tip (the GLB's ChainAnchor replaces it), haft-local. */
@@ -332,7 +332,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   let hitStop = 0, hitStopOn = true;
   let strikes = 0, clock = 0;
   let lastStrike: FlailDebug['lastStrike'] = null;
-  /** Head-region hits per actor id (spec §10.2): the face caves in, the 3rd severs. */
+  /** Head-region hits per actor id (spec §10.2): the face caves in, the 4th snaps the neck. */
   const headHits = new Map<number, number>();
   /** The side of a strike that fired THIS tick (draw pins the ball on its impact), else null. */
   let strikeNow: FlailSide | null = null;
@@ -365,12 +365,14 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const yaw = a.pose().yaw;
       const field = (q: Vec3) => sdBody(q, posed);
       // GRADUAL HEAD DAMAGE (flail-strike.ts flailWound): a head-region hit is a
-      // small face crater with no sever until the actor's 3rd, which is the
-      // full crater and severs as any other hit. The probe finds the prim the
-      // hit lands on; it is the wound itself unless the radius changes.
+      // small face crater with no sever until the actor's 4th, which is the
+      // full crater and snaps the neck (spec §11: the neck-snap wound below).
+      // The probe finds the prim the hit lands on; it is the wound itself
+      // unless the radius changes.
       const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
       const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
-      const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, null);
+      const neck = headNeck(posed.prims);
+      const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, neck?.root ?? null);
       const before = headHits.get(a.id) ?? 0;
       const spec = flailWound(region, before, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
       if (region) headHits.set(a.id, before + 1);
@@ -378,8 +380,18 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
       w.severRadius = spec.severRadius;
       clothifyWound(posed.prims, w, 'heavy');
+      const batch: Wound[] = [w];
+      if (spec.snapNeck && neck) {
+        // The killing head blow snaps the neck wherever on the head it lands: a
+        // sever-only calibre at the neck midpoint (connectivity.ts cuts the
+        // head's attachment there). The head leaves with it, so its own
+        // crater is never seen.
+        const snap = worldHitToWound(posed.prims, neck.mid, FLAIL_HEAD.neckSeverR, 'blast', yaw, field);
+        snap.severRadius = FLAIL_HEAD.neckSeverR;
+        batch.push(snap);
+      }
       a.blast({
-        wounds: [w],
+        wounds: batch,
         meterCredit: FLAIL_FEEL.meterCredit,
         impulse: { at: h.point, vel: [h.dir[0] * FLAIL_FEEL.shove, h.dir[1] * FLAIL_FEEL.shove, h.dir[2] * FLAIL_FEEL.shove] },
         reaction: 'blast',

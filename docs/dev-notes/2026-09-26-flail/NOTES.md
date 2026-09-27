@@ -437,6 +437,57 @@ Photos: `look/rest-torch-before.png` and `look/rest-fill-after.png` (sandbox roo
 - The windup ball goes off-screen right (NDC x ≈ 1.2) and never comes near the eye.
 - The follow-through leaves the frame low-left for R and low-right for L.
 
+## Task 14 gate run — section 4 stays RED (L/R asymmetry in the strike-frame ball, not a
+   connectivity issue)
+
+After the Task 14 wiring (`FLAIL_FEEL.craterR` 0.09, `meterCredit` 0.18, the `headNeck`/
+`neck.mid` snap batch, `handScale` 1.3), the gate's sections 1 and 4b went green, but
+section 4 (crosshair-aimed head hits) did not. This is NOT the connectivity-coverage
+question Task 14's step 4 anticipated ("if hit 4 does not take the head off, measure the
+connectivity disc samples' coverage before changing `neckSeverR`") — `headHits` never
+reaches 4, so the neck-snap sever is never even attempted.
+
+**What the gate measured**, aiming the crosshair dead-on the head centre from 0.9 m
+(alternating L, R, L, R over 4 clicks, deterministic — repeat clicks on the same side land
+on the identical point since the zombie is frozen and the head hasn't moved):
+
+| hit | side | wound limb/bone | toHead | toNeck | region? (regionDist 0.25 / neckDist 0.2) |
+| --- | ---- | ---------------- | ------ | ------ | ----------------------------------------- |
+| 1   | L    | torso/spine      | 0.371 m | 0.225 m | **false** (misses both thresholds) |
+| 2   | R    | torso/spine      | 0.277 m | 0.158 m | true (within neckDist) |
+| 3   | L    | torso/spine      | 0.371 m | 0.225 m | **false** (identical to hit 1) |
+| 4   | R    | torso/spine      | 0.277 m | 0.158 m | true (within neckDist) |
+
+`headHits` therefore reaches only 2 by hit 4 (misses hits 1 and 3), the head never comes
+off, and every wound is a `torso/spine` hit, never a `head` prim.
+
+**Root cause: `FLAIL_IMPACT`'s two sides are not equally close to the crosshair.**
+`flail-swing.ts`'s strike-frame ball keys (`FLAIL_SWING.strikeT`, view-space) are:
+`R: [-0.05, -0.36, -1.12]`, `L: [0.1, -0.36, -1.13]`. Both sides drop the impact point
+~18° below the boresight (`y/-z` ≈ −0.32, matching the spec §11 root-cause paragraph's
+measured 0.29–0.48 m miss from the head centre at the OLD `regionDist`-only check) — that
+part is shared and is exactly what Task 13's `neckDist` was added to tolerate. But the
+*horizontal* offset is not mirrored: R sits almost dead-centre (`x/-z` ≈ −0.045) while L
+sits nearly twice as far off-axis (`x/-z` ≈ +0.089, same sign convention). The extra
+horizontal miss on L pushes the 3-D distance to the neck root from 0.158 m (R, inside the
+0.2 m `neckDist`) to 0.225 m (L, outside it by 2.5 cm) — small in isolation, but it is the
+whole difference between "counts as a head hit" and "doesn't."
+
+This is precisely what Task 15 ("The keys — strike on the crosshair, R as a big overhand
+swipe") is scoped to fix: its own new test (`flail-swing.test.ts`) asserts
+`y/-z` in [-0.1, -0.04] and `|x/-z| <= 0.1` for BOTH sides — i.e. it requires the strike
+ball to land close to the crosshair on both axes, which the current keys clearly fail
+(`y/-z` ≈ −0.32 on both sides, 3–8× outside that band). Task 14 does not touch
+`flail-swing.ts` (out of its stated file scope), so this asymmetry is left for Task 15 to
+resolve; section 4 is expected to go green once the strike-frame keys are re-authored
+there, not by changing `FLAIL_HEAD.neckDist`/`regionDist` (flail-strike.ts, Task 13,
+already covered by its own passing unit tests) or `neckSeverR` (untested here because
+`headHits` never reaches the sever threshold).
+
+The `head-hit-1..4.png` photos bear this out: the face crater never appears (every wound
+lands on the chest/torso, out of frame low), and the head looks visually identical across
+all four shots — it never takes any face damage, let alone comes off.
+
 ## Open feel questions for the owner
 
 - **Strike reads as a mace, not a flail.** The chain is nearly straight and short at the
