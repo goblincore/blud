@@ -12,7 +12,8 @@
 //
 // Asserts:
 //   1. front hit: 1.5 m from the torso centre (horizontal, eye → centre — the strike's own
-//      measure), facing it: one click + 30 frames adds EXACTLY one wound, radius within
+//      measure), the crosshair on it (v1.2: the strike lands on the crosshair, so a level
+//      view would hit the head): one click + 30 frames adds EXACTLY one wound, radius within
 //      0.005 of 0.09, and state().lastStrike.hits holds the zombie;
 //   2. too far: at 2.2 m (reach is 1.8), a click adds no wound to that zombie;
 //   3. too wide: at 1.2 m but turned 70° away (the arc is ±50°), a click adds no wound;
@@ -324,7 +325,9 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
   const z = fresh();
   const t = await torso(z.id);
   const pose = standOff(t, 1.5);
-  await place(pose);
+  // The crosshair on the torso centre (the v1.2 strike lands on the crosshair).
+  const pitch = Math.atan2(t[1] - EYE_H, 1.5);
+  await place(pose, pitch);
   await stepN(30);
   const rest = await state();
   const img0 = await capture('rest');
@@ -344,7 +347,7 @@ function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) die('ran
     console.log(`  f${s.i} ${s.phase}/${s.side} ball (${f2(s.ball)}) grip (${f2(s.grip)}) keyed ${s.keyed.toFixed(2)} drawn ${s.drawn.toFixed(2)}`);
   }
   await stepN(20);
-  await place(pose);
+  await place(pose, pitch);
   const img1 = await capture('hit-wound');
   let rg = null;
   if (added.length) {

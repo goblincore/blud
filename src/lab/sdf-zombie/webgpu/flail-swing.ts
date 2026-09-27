@@ -95,15 +95,36 @@ export const FLAIL_REST: FlailPose = {
 // 0.31 m (R) and 0.32 m (L); flail-swing.test.ts holds it at ≥ 0.28 m. The ball
 // offsets were found by a constrained search that kept every other swing test
 // passing (overshoot, speed jump, strike speed, reach), then rounded to the cm.
+//
+// v1.2 (spec §11): the strike lands ON THE CROSSHAIR, and R is a big overhand
+// swipe. v1.1's strike balls sat ~0.35 m below the view axis (R (−0.05, −0.36,
+// −1.12)), ~18° under the crosshair, so aiming at a head hit the upper chest
+// and cut the neck. Both strike balls are now at y −0.08, z −1.09…−1.1 (4° under
+// the crosshair, x within 6 cm of it). The chain is still taut there (0.344 R,
+// 0.348 L), so the bolt had to come UP with the ball: R's haft is pitched only
+// −0.89 (was −1.76), the eye bolt above-right of the ball at (0.06, 0.12,
+// −0.83), and the chain comes DOWN onto the target; the fist stays low right
+// (0.19, −0.15, −0.5), out of the crosshair. R's wind-up (t 0.1) is now the
+// fist raised over the right shoulder (y 0.25) with the haft tipped back and
+// the ball up and behind the frame's top-right corner (0.64, 0.6, −0.22); at
+// 0.15 the haft comes over and the ball crests high in front (y 0.43), so the
+// strike's ball velocity is mostly DOWN (a diagonal, not a jab); it follows
+// through low left (−0.4, −0.65, −0.94). (The v1.1 numbers in the paragraph
+// above are history.) L keeps its v1.1 wind-up, its 0.37 key, and its 0.3 key to
+// within 2 cm; its strike (and the fist, up with it) and its 0.15 key moved. As in v1.1, a scratch constrained search (not committed) varied the
+// non-rest keys from a hand-authored overhand start and kept the sets where every
+// flailPose test predicate passed with a margin, plus flail-chain's replay gates
+// (the strike pin at every frame rate, the 60 Hz no-catapult and wind-up trail);
+// then rounded to the cm (0.01 rad) and re-polished on that grid.
 
-/** R: wind back up and right, strike across the front, follow through low left. */
+/** R: an overhand swipe — wind up high over the right shoulder, come down diagonally onto the crosshair, follow through low left. */
 const KEYS_R: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
-  { t: 0.1, grip: [0.34, -0.05, -0.35], rot: [0.1, 0, -0.41], ball: [0.68, 0.17, -0.57] },
-  { t: 0.15, grip: [0.2, -0.12, -0.36], rot: [-1.13, 0, -0.02], ball: [0.29, -0.15, -1.03] },
-  { t: 0.18, grip: [0.12, -0.18, -0.37], rot: [-1.76, 0, 0.24], ball: [-0.05, -0.36, -1.12] },
-  { t: 0.3, grip: [-0.1, -0.34, -0.61], rot: [-1.89, 0, 0.49], ball: [-0.46, -0.56, -1.3] },
-  { t: 0.37, grip: [0.13, -0.34, -0.56], rot: [-1.31, 0, 0.31], ball: [-0.11, -0.52, -1.12] },
+  { t: 0.1, grip: [0.28, 0.25, -0.3], rot: [0.34, 0, -0.08], ball: [0.64, 0.6, -0.22] },
+  { t: 0.15, grip: [0.21, 0.01, -0.4], rot: [-0.66, 0, -0.1], ball: [0.21, 0.43, -1.03] },
+  { t: 0.18, grip: [0.19, -0.15, -0.5], rot: [-0.89, 0, 0.29], ball: [-0.05, -0.08, -1.09] },
+  { t: 0.3, grip: [-0.05, -0.4, -0.55], rot: [-1.4, 0, 0.5], ball: [-0.4, -0.65, -0.94] },
+  { t: 0.37, grip: [0.2, -0.38, -0.55], rot: [-1, 0, 0.2], ball: [0, -0.47, -1] },
   { t: 0.45, ...FLAIL_REST },
 ];
 
@@ -111,9 +132,9 @@ const KEYS_R: readonly Key[] = [
 const KEYS_L: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
   { t: 0.1, grip: [-0.02, -0.08, -0.35], rot: [0.1, 0, 0.52], ball: [-0.42, 0.13, -0.56] },
-  { t: 0.15, grip: [0.12, -0.13, -0.36], rot: [-1.13, 0, 0.34], ball: [-0.17, -0.15, -1] },
-  { t: 0.18, grip: [0.22, -0.18, -0.37], rot: [-1.76, 0, 0.17], ball: [0.1, -0.36, -1.13] },
-  { t: 0.3, grip: [0.45, -0.34, -0.61], rot: [-1.89, 0, -0.43], ball: [0.77, -0.56, -1.32] },
+  { t: 0.15, grip: [0.14, -0.07, -0.38], rot: [-0.92, 0, 0.34], ball: [-0.2, 0.01, -0.96] },
+  { t: 0.18, grip: [0.25, -0.12, -0.38], rot: [-1.2, 0, 0.2], ball: [0.06, -0.08, -1.1] },
+  { t: 0.3, grip: [0.45, -0.34, -0.59], rot: [-1.89, 0, -0.43], ball: [0.77, -0.56, -1.3] },
   { t: 0.37, grip: [0.43, -0.34, -0.56], rot: [-1.31, 0, -0.19], ball: [0.38, -0.45, -1.23] },
   { t: 0.45, ...FLAIL_REST },
 ];

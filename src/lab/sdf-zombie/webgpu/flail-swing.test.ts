@@ -151,6 +151,27 @@ describe('flailPose', () => {
     expect(Math.abs(FLAIL_IMPACT.R[0] + FLAIL_IMPACT.L[0])).toBeLessThan(0.2);
   });
 
+  it('strikes on the crosshair: the impact ≤ 0.1 below the view axis per metre forward, ≤ 0.1 to the side', () => {
+    for (const side of ['R', 'L'] as const) {
+      const [x, y, z] = FLAIL_IMPACT[side];
+      expect(y / -z, side).toBeLessThanOrEqual(-0.04);
+      expect(y / -z, side).toBeGreaterThanOrEqual(-0.1);
+      expect(Math.abs(x / -z), side).toBeLessThanOrEqual(0.1);
+    }
+  });
+
+  it('R is a big overhand swipe: wound up high over the right shoulder, then down onto the crosshair', () => {
+    const at = (t: number) => flailPose({ phase: 'swing', side: 'R', t, struck: false, queued: false, nextSide: 'R', swingId: 1 });
+    const up = at(0.1);
+    expect(up.ball[1]).toBeGreaterThanOrEqual(0.3);    // above the eye
+    expect(up.ball[0]).toBeGreaterThanOrEqual(0.15);   // on the right
+    expect(up.ball[2]).toBeGreaterThanOrEqual(-0.45);  // up by the shoulder, not out in front
+    expect(up.grip[1]).toBeGreaterThanOrEqual(0.0);    // the fist raised
+    const v = flailBallVel({ ...makeFlailSwing(), phase: 'swing', side: 'R', t: FLAIL_SWING.strikeT });
+    expect(v[1]).toBeLessThan(0);                      // coming down…
+    expect(Math.abs(v[1])).toBeGreaterThanOrEqual(Math.abs(v[0]));   // …more down than across
+  });
+
   it('has no pops: ball ≤ 15 cm and grip ≤ 6 cm per 240 Hz step, through chained swings', () => {
     // The ball legitimately moves ~20 m/s into the strike (~8 cm per step); a pop is a jump far beyond that.
     let s = makeFlailSwing();
