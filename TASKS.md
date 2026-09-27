@@ -10,6 +10,8 @@
 ## In flight / next
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
+- [ ] **Scene contrast** (owner, 2026-09-27): the whole scene reads a bit medium-grey; measure histograms, then
+  side-by-sides of the grade (black point, S-curve), fog and ambient. See the hand-off.
 - [ ] **NEXT: Boiler Room resize to 8 × 28 m** (owner-approved layout, option B + recommendations):
   [plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md), [before/after](docs/game/levels/01-night-train/boiler-resize/boiler-before-after.png).
 - [x] **Flashlight retune** (owner: "feels like a flashlight vs the ambient, but not blown out"):

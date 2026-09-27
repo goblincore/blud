@@ -35,6 +35,16 @@ The torch is judged at the **chest** (profile `coverAt`), `FLASHLIGHT_LIST_TRIM`
 
 ## Next
 
+0. **Scene contrast (owner, 2026-09-27, after the flashlight retune):** "things are visible now, but the overall scene lacks a little contrast — everything a bit medium grey". Start by measuring, not tuning: luminance histograms of a few Night Train frames (third class lit, a dead carriage with the torch, the Boiler Room after the strobe), before and after the final grade, to see where the greys come from. Suspects, in order:
+   - the post grade: the black point (`STORM.grade.crush` is only 0.06, and applies during flashes), no S-curve;
+   - the VHS/dither pass lifting blacks;
+   - the distance fog colour/density flattening everything toward one grey;
+   - the ambient and probe fill on the level;
+   - the body dark floor (BODY_DARK_FLOOR 0.25);
+   - the tube light spreading evenly.
+
+   Then show the owner side-by-sides of one or two levers (e.g. a gentle S-curve plus a deeper black point in the final grade), keeping "never flat black" for zombies.
+
 1. **The Boiler Room resize to 8 × 28 m.** The owner approved the layout. [Plan](../superpowers/plans/2026-09-27-boiler-room-resize.md) · [before/after](../game/levels/01-night-train/boiler-resize/boiler-before-after.png)
 2. **Open owner items:**
    - tube shadow maps at 256² (they look identical and save nothing);
