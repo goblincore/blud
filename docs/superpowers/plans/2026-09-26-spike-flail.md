@@ -1661,3 +1661,249 @@ and the PR body.
   - Update the PR body with a v1.1 section via `gh pr edit 22 --body-file …`, keeping the ending line
     `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
   - Commit with a pathspec and `git push`.
+
+---
+
+## v1.2 — second playtest (spec §11, 2026-09-27)
+
+**Root cause of "the head comes off on the first hit" (confirmed 2026-09-27, headless probe with the
+crosshair on the head centre, frozen zombies):** `FLAIL_IMPACT` sits ~18° below the crosshair (R view
+(−0.05, −0.36, −1.12)), so aiming at the head lands the crater on the **upper chest** (a `torso/spine`
+prim, y 1.12–1.32 against a head centre at 1.58), 0.29–0.48 m from the head centre. That is never a head
+hit (`regionDist` 0.25), so it gets the full 0.14 m crater with `severRadius` 0.182. At **0.9 m** the
+crater is 0.16 m from the neck root (the head chain's first prim's `a`) and the connectivity carve cuts
+the head on **hit 1**; at 1.1 m on hit 2–3; at 1.4 m never. The same chest hits also severed `armL` at
+the shoulder. The v1.1 gate missed it because it aimed the *strike ray* at the neck, not the crosshair
+at the head. (`actorList().meter` is stale on frozen actors: it is the last stepped frame's.)
+
+Execution: **one implementer at a time**, commit with an explicit pathspec, never `git reset`/`git stash`.
+Gate runs on ports other than 5190 (the owner's server), e.g. `LAB_VITE_PORT=5241 LAB_CDP_PORT=9241`.
+
+### Task 12: Gate first — crosshair-aimed head hits and a hits-to-collapse count (red on v1.1)
+
+**Files:** modify `scripts/flail-gate.mjs` (header comment, constants, section 4, a new section 4b).
+
+- [ ] **Step 1: Replace section 4 (gradual head damage) with a CROSSHAIR-aimed version.** A fresh zombie;
+  before every click: `head = actorLimbCenter(id, 'head')`, `pose = standOff(head, 0.9)` (0.9 m, the
+  distance the probe decapitated at on hit 1), pitch `atan2(head[1] − EYE_H, 0.9)` — the crosshair on
+  the head centre, exactly as a player aims. **4 clicks.** Per hit, log: side, the impact point
+  (`lastStrike.impact`) and its distance to the head centre, each new wound's prim limb/bone, radius and
+  `severRadius` (read `__sdfGame.zombie(id).woundList()` + `posed().prims[w.primIdx]`; positions from
+  `actorWounds`), its distance to the head centre and to the **neck root** (the first live non-`sub`
+  `head` prim's `a`), `lastStrike.headHits[id]`, and `limbAlive(id, 'head')`. Asserts:
+  - after hits 1, 2, 3: the head is ON (`limbAlive > 0`), `headHits` counts 1, 2, 3, and the hit's
+    first new wound has radius `FACE_R` (0.06) ± 0.005;
+  - after hit 4: the head is OFF (`limbAlive === 0`) and `headHits` is 4.
+  Photos `head-hit-1..4.png` (the existing `photoOf`, and the existing thaw-3-frames trick before the
+  hit-4 photo). Remove the old strike-ray `aim()` solver and the "strike ray within 5 cm of the neck"
+  check (the crosshair case replaces both).
+- [ ] **Step 2: New section 4b — hits to collapse.** A fresh zombie; before every click, stand 1.2 m
+  from its torso centre with the crosshair on the torso centre (pitch `atan2(t[1] − EYE_H, 1.2)`). After
+  each click's swing: thaw one frame (`freeze(false)`, `stepOne()`, `freeze(true)`) so the actor's
+  debug readback (`actorList()` `phase`, `meter`) is fresh, then read it. Click until `phase !==
+  'standing'` or 8 clicks. Log per hit: meter, phase, new wound radii, `severed` limbs (dead clusters).
+  Asserts: the collapse comes on hit **≥ 4** (target 5; `collapse.ts` `meterThreshold` 0.8, credit
+  0.18 → hit 5), and hit 1's wound radius is `CRATER_R` ± 0.005.
+- [ ] **Step 3: Constants.** `CRATER_R = 0.09`, `FACE_R = 0.06`, add `HEAD_HITS = 4`. Update the header
+  comment's asserts list (items 1, 4 and the new 4b).
+- [ ] **Step 4: Run it on the v1.1 code and record the RED result.** Expected: section 1 fails (radius
+  0.14), section 4 fails on hit 1 (head off, `headHits` 0), section 4b fails (collapse on hit 3). Paste
+  the per-hit log lines into the commit message body. Commit:
+  `test(flail-gate): crosshair-aimed head hits + hits-to-collapse (red on v1.1)`.
+
+### Task 13: The head rule — neck-joint region, 4 hits, the neck snaps on the last (pure)
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/flail-strike.ts`, `src/lab/sdf-zombie/webgpu/flail-strike.test.ts`.
+
+- [ ] **Step 1: Failing tests** (replace the `gradual head damage` describe):
+
+```ts
+describe('gradual head damage', () => {
+  const HEAD_C: Vec3 = [0, 1.6, 0], NECK: Vec3 = [0, 1.42, 0];
+  it('a head prim, a point near the head centre, or a point near the neck root is the head region', () => {
+    expect(isHeadRegion('head', [0, 0, 0], null, null)).toBe(true);
+    expect(isHeadRegion('torso', [0, 1.4, 0], HEAD_C, null)).toBe(true);          // < regionDist of the head
+    expect(isHeadRegion('torso', [0, 1.28, 0.05], HEAD_C, NECK)).toBe(true);      // 0.15 m from the neck root
+    expect(isHeadRegion('torso', [0, 1.2, 0.1], HEAD_C, NECK)).toBe(false);       // 0.24 m from the neck root
+    expect(isHeadRegion('armL', [0, 1.0, 0], null, null)).toBe(false);
+  });
+  it('head hits 1..hitsToSever−1 are face craters with no sever and no neck snap', () => {
+    expect(FLAIL_HEAD.hitsToSever).toBe(4);
+    for (let before = 0; before < FLAIL_HEAD.hitsToSever - 1; before++) {
+      expect(flailWound(true, before, 0.09, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0, snapNeck: false });
+    }
+  });
+  it('the last head hit is the full crater, severs, and snaps the neck', () => {
+    const last = flailWound(true, FLAIL_HEAD.hitsToSever - 1, 0.09, 1.3);
+    expect(last.radius).toBe(0.09);
+    expect(last.severRadius).toBeCloseTo(0.117, 9);
+    expect(last.snapNeck).toBe(true);
+  });
+  it('body hits are the full crater with sever, never a neck snap', () => {
+    expect(flailWound(false, 0, 0.09, 1.3)).toEqual({ radius: 0.09, severRadius: expect.closeTo(0.117, 9), snapNeck: false });
+    expect(flailWound(false, 7, 0.09, 1.3).snapNeck).toBe(false);
+  });
+  it('headNeck finds the head chain root and neck midpoint on live prims, null once the head is gone', () => {
+    const prims = [
+      { limb: 'torso', op: 'union', a: [0, 1.1, 0], b: [0, 1.3, 0] },
+      { limb: 'head', op: 'union', a: [0, 1.38, 0], b: [0, 1.5, 0] },
+      { limb: 'head', op: 'union', a: [0, 1.5, 0], b: [0, 1.7, 0] },
+    ] as unknown as Primitive[];
+    expect(headNeck(prims)).toEqual({ root: [0, 1.38, 0], mid: [0, 1.44, 0] });
+    expect(headNeck(prims.map(p => ({ ...p, dead: p.limb === 'head' })) as Primitive[])).toBeNull();
+  });
+});
+```
+
+  (Use `toBeCloseTo` on `mid` components if float noise appears.) Run
+  `npm test -- flail-strike` → FAIL.
+- [ ] **Step 2: Implement.**
+
+```ts
+/** Gradual head damage (spec §10.5, §11): a head-region hit caves the face in without severing until the
+ *  actor's `hitsToSever`-th, which is the full crater and SNAPS THE NECK (game-flail.ts stamps a sever
+ *  wound at the neck midpoint, so the head comes off wherever on the head the last blow lands). */
+export const FLAIL_HEAD = {
+  regionDist: 0.25,
+  /** Also the head region: within this of the neck root. Crosshair-on-head hits used to land on the upper
+   *  chest ~0.16 m from it and sever the neck on hit 1 (spec §11). */
+  neckDist: 0.2,
+  hitsToSever: 4,
+  faceCraterR: 0.06,
+  /** The neck-snap wound's sever calibre, metres (a zombie neck is ~0.07 m in radius). */
+  neckSeverR: 0.12,
+} as const;
+
+export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null, neckRoot: Vec3 | null): boolean {
+  if (limb === 'head') return true;
+  const near = (c: Vec3 | null, r: number) => !!c && Math.hypot(point[0] - c[0], point[1] - c[1], point[2] - c[2]) < r;
+  return near(headCentre, FLAIL_HEAD.regionDist) || near(neckRoot, FLAIL_HEAD.neckDist);
+}
+
+export function flailWound(
+  headRegion: boolean, headHitsBefore: number, craterR: number, severMul: number,
+): { radius: number; severRadius: number; snapNeck: boolean } {
+  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul, snapNeck: false };
+  if (headHitsBefore + 1 >= FLAIL_HEAD.hitsToSever) return { radius: craterR, severRadius: craterR * severMul, snapNeck: true };
+  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0, snapNeck: false };
+}
+
+/** The head chain's root (it sits in the shoulders) and its first segment's midpoint (the neck), from the
+ *  first live, non-`sub` `head` prim; null when there is none (the head is off). */
+export function headNeck(prims: readonly Primitive[]): { root: Vec3; mid: Vec3 } | null {
+  const n = prims.find(p => p.limb === 'head' && p.op !== 'sub' && !p.dead);
+  if (!n) return null;
+  return { root: [n.a[0], n.a[1], n.a[2]], mid: [(n.a[0] + n.b[0]) / 2, (n.a[1] + n.b[1]) / 2, (n.a[2] + n.b[2]) / 2] };
+}
+```
+
+  (Import `Primitive` from `../types`.) Run `npm test -- flail-strike` → PASS; `npx tsc --noEmit` will
+  fail in `game-flail.ts` (the new `isHeadRegion` argument) — that is Task 14; do not commit a broken
+  type-check: make the minimal call-site change in `game-flail.ts` (`isHeadRegion(…, headC, null)`) so
+  tsc passes, and leave the real wiring to Task 14.
+- [ ] **Step 3: Commit** `feat(flail-strike): neck-root head region, 4 hits, neck snap on the last`.
+
+### Task 14: Wire it — softer hits, the neck snap, a bigger hand
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/game-flail.ts`.
+
+- [ ] **Step 1: Feel numbers.** `FLAIL_FEEL.craterR` 0.14 → **0.09**, `meterCredit` 0.35 → **0.18**
+  (`severMul` stays 1.3). Update the comments that quote 0.14 / 3 hits / "the 3rd".
+- [ ] **Step 2: `strike()`.** Per hit:
+
+```ts
+const neck = headNeck(posed.prims);
+const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, neck?.root ?? null);
+// … flailWound as now …
+const batch = [w];
+if (spec.snapNeck && neck) {
+  // The killing head blow snaps the neck wherever on the head it lands: a sever-only calibre at the neck
+  // midpoint (connectivity.ts cuts the head's attachment). The head leaves with it, so its crater is not seen.
+  const snap = worldHitToWound(posed.prims, neck.mid, FLAIL_HEAD.neckSeverR, 'blast', yaw, field);
+  snap.severRadius = FLAIL_HEAD.neckSeverR;
+  batch.push(snap);
+}
+a.blast({ wounds: batch, … });
+```
+
+  (`clothifyWound` stays on `w` only.) The bleed stays on `w`.
+- [ ] **Step 3: Hand.** `FLAIL_LOOK.handScale` 1.0 → **1.3** (Task 16 tunes it from photos).
+- [ ] **Step 4: Verify.** `npx tsc --noEmit`; `npm test -- flail game-weapon-slots game-actor`. Run the gate
+  (Task 12's): sections 1, 4 and 4b must now PASS (4b: collapse on hit 5). If hit 4 does not take the
+  head off, measure (log the connectivity disc samples' coverage) before changing `neckSeverR`; record
+  the numbers in `docs/dev-notes/2026-09-26-flail/NOTES.md`. Commit
+  `feat(flail): softer hits (0.09 crater, 5 to drop), neck snap on the 4th head hit, bigger hand`.
+
+### Task 15: The keys — strike on the crosshair, R as a big overhand swipe
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/flail-swing.ts`, `src/lab/sdf-zombie/webgpu/flail-swing.test.ts`;
+maybe `src/lab/sdf-zombie/webgpu/flail-chain.ts` (guide windows) and its test if the whip gates need it.
+
+- [ ] **Step 1: Failing tests** (add to the `flailPose` describe):
+
+```ts
+it('strikes on the crosshair: the impact ≤ 0.1 below the view axis per metre forward, ≤ 0.1 to the side', () => {
+  for (const side of ['R', 'L'] as const) {
+    const [x, y, z] = FLAIL_IMPACT[side];
+    expect(y / -z, side).toBeLessThanOrEqual(-0.04);
+    expect(y / -z, side).toBeGreaterThanOrEqual(-0.1);
+    expect(Math.abs(x / -z), side).toBeLessThanOrEqual(0.1);
+  }
+});
+it('R is a big overhand swipe: wound up high over the right shoulder, then down onto the crosshair', () => {
+  const at = (t: number) => flailPose({ phase: 'swing', side: 'R', t, struck: false, queued: false, nextSide: 'R', swingId: 1 });
+  const up = at(0.1);
+  expect(up.ball[1]).toBeGreaterThanOrEqual(0.3);    // above the eye
+  expect(up.ball[0]).toBeGreaterThanOrEqual(0.15);   // on the right
+  expect(up.ball[2]).toBeGreaterThanOrEqual(-0.45);  // up by the shoulder, not out in front
+  expect(up.grip[1]).toBeGreaterThanOrEqual(0.0);    // the fist raised
+  const v = flailBallVel({ ...makeFlailSwing(), phase: 'swing', side: 'R', t: FLAIL_SWING.strikeT });
+  expect(v[1]).toBeLessThan(0);                      // coming down…
+  expect(Math.abs(v[1])).toBeGreaterThanOrEqual(Math.abs(v[0]));   // …more down than across
+});
+```
+
+  Run `npm test -- flail-swing` → FAIL.
+- [ ] **Step 2: Author the keys.** Keep `swingSec`, `strikeT`, the key times (0, 0.1, 0.15, 0.18, 0.3,
+  0.37, 0.45) and `FLAIL_REST`. Targets:
+  - **R** (overhand): t 0.1 the fist raised above the right shoulder, the haft tipped back, the ball up and
+    behind (above/right of the frame's top-right corner); t 0.15 the haft coming over; t 0.18 the ball
+    on the crosshair (view y ≈ −0.05…−0.1 at z ≈ −1.1), the chain taut; t 0.3 follow through low and
+    left, down past the bottom of the frame; t 0.37 returning.
+  - **L** (cross-screen, unchanged in character): only the strike ball moves up onto the crosshair; move
+    the grip up with it so the chain stays taut; re-fit the 0.15 and 0.3/0.37 keys.
+  - Every existing `flailPose` test must stay green: taut 0.34–0.36 m at the strike, ≥ 0.28 m from the
+    bolt all swing, within `chainReach()` at every key, ≤ 3 cm overshoot, no > 2× speed jump, ≥ 0.8 of
+    peak speed at the strike, no pops, R/L strike x mirror (`|R.x + L.x| < 0.2`), strike z < −0.8.
+
+  Do it the way v1.1 did: a small scratch search script (in the session scratchpad, NOT committed) that
+  varies the non-strike keys' ball offsets and grips within bounds and keeps the sets where every test
+  predicate passes; round to the cm; update the long key comment block above `KEYS_R` with what changed
+  and why (overhand, crosshair strike, the search).
+- [ ] **Step 3: Chain.** `npm test -- flail-chain` stays green. In game (gate section 5/5b) the drawn ball
+  must still sit on `FLAIL_IMPACT` at the strike frame (≤ 2 cm at 60 Hz, ≤ 1 mm at 144 Hz steady and
+  jittered).
+- [ ] **Step 4: Verify and commit.** `npx tsc --noEmit`; `npm test -- flail`; the full gate passes.
+  Commit `feat(flail-swing): strike on the crosshair; R is a big overhand swipe`.
+
+### Task 16: Look pass — the overhand, the hand, the head over 4 hits
+
+**Files:** `docs/dev-notes/2026-09-26-flail/NOTES.md`, `look/`, `gate/`; tuning constants only
+(`FLAIL_LOOK.handScale`, `FLAIL_CHAIN_SIM` if the whip needs it).
+
+- [ ] **Step 1:** Capture the R swing frame by frame at 60 Hz (rest → wind-up → strike → follow-through)
+  and LOOK: it must read as a big overhand swipe coming down onto the crosshair, not a jab. Save
+  `look/overhand-R-strip.png` (6–8 frames side by side) and refresh `look/whip-L-strip.png`.
+- [ ] **Step 2:** The hand at 1.3: the rest photo shows a clearly bigger fist, rest framing unchanged
+  (ball/grip NDC within ~0.05 of v1.1's). Tune `handScale` 1.2–1.4 from photos; record the numbers.
+- [ ] **Step 3:** Look at `gate/head-hit-1..4.png`: the face visibly caves in over hits 1–3, the head is
+  off after 4. Look at the 4b chest craters: no gaping centre from one hit.
+- [ ] **Step 4:** NOTES: the v1.2 tuning log (root cause + numbers), the "For the owner" section (what
+  changed, what to test). Commit with a pathspec.
+
+### Task 17: Status, PR, owner server
+
+- [ ] `TASKS.md` flail row → "v1.2 built (crosshair strike, overhand R, 4-hit head, ~5 hits to drop);
+  owner playtest pending"; spec status line likewise; the PR body gains a v1.2 section (`gh pr edit 22
+  --body-file …`, keep the `🤖 Generated with [Claude Code](https://claude.com/claude-code)` line);
+  commit and `git push`. Start the owner's server (`preview_start` `blud-censer`, port 5190).
