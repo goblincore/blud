@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEACON, beaconAxis, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
+import { BEACON, beaconAxis, beaconPhase, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
 import { LAMP_SCRIPT, lampLevel } from './lamp-moods';
 
 describe('beaconAxis', () => {
@@ -17,6 +17,20 @@ describe('beaconAxis', () => {
   it('phase offsets the sweep', () => {
     const a = beaconAxis(0, 1, Math.PI / 2), b = beaconAxis(0.25, 1, 0);
     expect(a[0]).toBeCloseTo(b[0], 6); expect(a[2]).toBeCloseTo(b[2], 6);
+  });
+});
+
+describe('beaconPhase', () => {
+  it('two beacons in a room start opposite (0 and π)', () => {
+    expect(beaconPhase(0, 2)).toBe(0);
+    expect(beaconPhase(1, 2)).toBeCloseTo(Math.PI, 12);
+    const a = beaconAxis(0, 0.7, beaconPhase(0, 2)), b = beaconAxis(0, -0.7, beaconPhase(1, 2));
+    expect(a[0]).toBeCloseTo(-b[0], 6); expect(a[2]).toBeCloseTo(-b[2], 6);
+  });
+  it('spreads n evenly; a lone beacon starts at 0', () => {
+    expect(beaconPhase(0, 1)).toBe(0);
+    expect(beaconPhase(1, 3)).toBeCloseTo((2 * Math.PI) / 3, 12);
+    expect(beaconPhase(2, 3)).toBeCloseTo((4 * Math.PI) / 3, 12);
   });
 });
 

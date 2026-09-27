@@ -30,6 +30,13 @@ export function beaconAxis(t: number, spin: number, phase: number): Vec3 {
   return [Math.cos(a) * c, -Math.sin(BEACON.tilt), Math.sin(a) * c];
 }
 
+/** A beacon's sweep start angle (rad): a room's beacons spread evenly round the turn, so two start
+ *  opposite (0 and π). Deterministic by their order in the room, not a hash (a hashed phase once
+ *  landed the Boiler Room's two ~13° apart, one beam on top of the other). */
+export function beaconPhase(indexInRoom: number, countInRoom: number): number {
+  return countInRoom > 1 ? (indexInRoom / countInRoom) * Math.PI * 2 : 0;
+}
+
 
 /** Arming: the room's `strobe` gives a beacon the `emergency` script (dark through the strobe,
  *  then on for good); every other command applies to it as to any lamp. */

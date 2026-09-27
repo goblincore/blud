@@ -19,8 +19,8 @@ import { STORM_HASH, STORM_NOISE } from './train-window.wgsl';
 import { TUBE_BEAM_WGSL } from './tube-beam.wgsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-leaves';
-import { hash01, lampLevel, type LampMood, type LampScript } from './lamp-moods';
-import { BEACON, beaconAxis, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
+import { lampLevel, type LampMood, type LampScript } from './lamp-moods';
+import { BEACON, beaconAxis, beaconPhase, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
 import type { LightMode } from './level-events';
 import { moonShadowFrame } from './outdoor-light';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
@@ -63,7 +63,7 @@ interface Beacon {
   beamLit: { value: THREE.Vector4 };
   housing: MeshStandardNodeMaterial;
   pos: THREE.Vector3;
-  /** rev/s, sign = direction; the sweep's start angle (seeded, so two beacons are not in step). */
+  /** rev/s, sign = direction; the sweep's start angle (beaconPhase: a room's beacons start spread out). */
   spin: number;
   phase: number;
   /** Shadow re-renders requested (the gate reads it). */
@@ -126,12 +126,20 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   const dark = !!def?.pickups.some(p => p.item === 'flashlight') && !new URLSearchParams(location.search).has('torch');
   const tubeGroup = new THREE.Group();
   tubeGroup.name = 'train.tube-spots';
-  const lamps: Lamp[] = ctx.lighting.flickerLights.map(f => ({
+  // Each beacon's order in its room, for its sweep's start angle (a room's beacons start spread out).
+  const beaconsIn = new Map<number, number>();
+  const beaconIndex = ctx.lighting.flickerLights.map(f => {
+    if (f.fixture !== 'beacon') return 0;
+    const r = f.room ?? -1, i = beaconsIn.get(r) ?? 0;
+    beaconsIn.set(r, i + 1);
+    return i;
+  });
+  const lamps: Lamp[] = ctx.lighting.flickerLights.map((f, i) => ({
     light: f.light, bowl: f.bowl ?? null, base: f.base, mood: f.mood ?? 'steady', room: f.room ?? -1,
     seed: f.phase, script: null, level: 1,
     ...(f.gain !== undefined ? { gain: f.gain } : {}), ...(f.tint ? { tint: f.tint } : {}),
     tube: f.fixture === 'tube' && new URLSearchParams(location.search).get('tubes') !== '0' ? makeTube(ctx, f.light, f.bowlMesh ?? null, f.room ?? -1, tubeGroup) : null,
-    beacon: f.fixture === 'beacon' ? makeBeacon(ctx, f.light, f.room ?? -1, f.spin ?? 0, f.phase, tubeGroup) : null,
+    beacon: f.fixture === 'beacon' ? makeBeacon(ctx, f.light, f.room ?? -1, f.spin ?? 0, beaconPhase(beaconIndex[i]!, beaconsIn.get(f.room ?? -1) ?? 1), tubeGroup) : null,
   }));
   if (tubeGroup.children.length > 0) ctx.boot.handle.scene.add(tubeGroup);
   const rt: DynamicLightRuntime = {
@@ -257,9 +265,8 @@ function beamMaterial(lit: ReturnType<typeof uniform>, col: ReturnType<typeof un
 const DOWN = new THREE.Vector3(0, -1, 0);
 const scratchAxis = new THREE.Vector3();
 
-function makeBeacon(ctx: GameContext, light: THREE.PointLight, room: number, spin: number, seed: number, group: THREE.Group): Beacon {
+function makeBeacon(ctx: GameContext, light: THREE.PointLight, room: number, spin: number, phase: number, group: THREE.Group): Beacon {
   const pos = light.position.clone();
-  const phase = hash01(seed, 7) * Math.PI * 2;
   const spot = new THREE.SpotLight(light.color.clone(), 0, BEACON.reach, BEACON.angle, BEACON.penumbra, BEACON.decay);
   spot.name = `train.beacon-spot:${room}`;
   spot.position.copy(pos);
