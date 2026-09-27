@@ -235,6 +235,16 @@ describe('flailPose', () => {
     return [grip[0]! + x, grip[1]! + y, grip[2]! + z];
   }
 
+  it("this test's bolt helper is flailBolt (the module's), at several swing times", () => {
+    for (const side of ['R', 'L'] as const) {
+      for (const t of [0, 0.05, 0.1, 0.15, FLAIL_SWING.strikeT, 0.25, 0.3, 0.37, FLAIL_SWING.swingSec]) {
+        const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
+        const a = bolt(p.grip, p.rot), b = flailBolt(p);
+        for (const k of [0, 1, 2] as const) expect(b[k], `${side} t=${t}`).toBeCloseTo(a[k]!, 12);
+      }
+    }
+  });
+
   it('keeps the ball within chain reach of the eye bolt at every key (the chain sim can reach every key)', () => {
     expect(chainReach()).toBeCloseTo(FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset, 9);
     for (const side of ['R', 'L'] as const) {

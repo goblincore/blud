@@ -124,7 +124,8 @@ Decisions (owner, 2026-09-27), from the first playtest ("already feels better"):
    face and skull cave in progressively. Head hit **3**: the full 0.14 m crater with sever. Body hits
    unchanged.
 
-Testing adds: chain unit tests (link lengths hold; the ball is exactly on target at guide 1; the
-ball lags a fast anchor; it hangs straight down at rest) and a head-rule unit test; the gate's
+Testing adds: chain unit tests (link lengths hold; the ball is exactly on `FLAIL_IMPACT` when
+pinned on the strike frame, at 30–240 Hz and with jittered frames; the ball lags a fast anchor; it
+hangs straight down at rest) and a head-rule unit test; the gate's
 beheading check becomes "head still on after head hits 1 and 2, off on hit 3", with photos of the
 face damage after each hit.
