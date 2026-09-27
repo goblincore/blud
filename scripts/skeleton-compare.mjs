@@ -119,7 +119,7 @@ const settleAndLock = async () => {
   await evaluate(`(async () => {
     const g = window.__sdfGame;
     g.setRenderLock(false); g.freeze(true); g.setLoopRunning(false);
-    g.setLightClockFrozen(true); g.step(90, 1 / 60);
+    g.setLightClockFrozen(true); g.setLightTime(0); g.step(90, 1 / 60);
     g.setRenderLock(true); g.step(2, 1 / 60);
     await g.resolveGpu();
   })()`);
@@ -220,7 +220,7 @@ const assertActivePath = (mode, diag) => {
 
 const stage = async (scale) => evaluate(`(() => {
   const g = window.__sdfGame;
-  const required = ['setLoopRunning','freeze','setRenderLock','setLightClockFrozen','step','resolveGpu',
+  const required = ['setLoopRunning','freeze','setRenderLock','setLightClockFrozen','setLightTime','step','resolveGpu',
     'setPose','zombies','screenPosOf','cameraWorld','screenRayToWorld','stampWoundAt','setSdfScale'];
   const missing = required.filter((k) => typeof g[k] !== 'function');
   if (missing.length) return { deterministic: false, missing };

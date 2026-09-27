@@ -274,7 +274,7 @@ const settleAndLock = async () => {
   // renders does — freeze the narrow diagnostic lighting clock while
   // locked so two renders of the same scene are bit-comparable. Ordinary
   // gameplay never freezes it (gate-only seam; default OFF).
-  await evaluate('__sdfGame.setRenderLock(true); __sdfGame.setLightClockFrozen(true); __sdfGame.step(2);');
+  await evaluate('__sdfGame.setRenderLock(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.step(2);');
   await sleep(300);
 };
 const faceTarget = async (px, pz, tx, tz, pitch = -0.12) => {

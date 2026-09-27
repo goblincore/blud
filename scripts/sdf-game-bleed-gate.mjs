@@ -275,6 +275,7 @@ if (MODE === 'parity' || MODE === 'reel') {
       const g = window.__sdfGame;
       if (typeof g.setVhs === 'function') g.setVhs(null);
       if (typeof g.setLightClockFrozen === 'function') g.setLightClockFrozen(true);
+      if (typeof g.setLightTime === 'function') g.setLightTime(0);
       if (typeof g.setDemoHold === 'function') g.setDemoHold(true);
       return true;
     })()`);

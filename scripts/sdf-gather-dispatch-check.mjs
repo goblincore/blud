@@ -127,7 +127,7 @@ await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.
 await applyShipDefaults(evaluate);
 await evaluate(`__sdfGame.teleport(${JSON.stringify(Number(ROOM))})`);
 await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); return 1; })()');
-await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
+await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); return 1; })()');
 // The fire flicker runs off wall-clock performance.now() INSIDE the draw path,
 // which the render lock does not freeze (sdf-demo-hash.mjs:139-144). Pin it, or
 // two runs of a frozen scene differ at sub-LSB level for a reason that has

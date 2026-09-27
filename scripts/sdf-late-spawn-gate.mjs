@@ -38,7 +38,7 @@ for (const name of CAST) {
     await sleep(500);
   }
   if (bg?.crowd !== 'ready') fail(`crowd program never landed: ${JSON.stringify(bg)}`);
-  await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
+  await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); return 1; })()');
   // Room 1's spawn pose faces the soldier; 0.55 rad right is open floor.
   const p = await evaluate(`(() => { const p = __sdfGame.pose(); __sdfGame.setPose(p.pos[0], p.pos[2], p.yaw + 0.55, 0); return __sdfGame.pose(); })()`);
   await sleep(1000);
