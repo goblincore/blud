@@ -39,3 +39,95 @@ lines mark 2.60 m and 2.291 m.
 - **Palette:** kept at the minotaur's pink (henenlotter-latex). A darker,
   redder hide may contrast the chrome better; judge that once the kit is on.
 - **Gait:** the zombie shamble for now. STOMP (the ogre's) is the candidate.
+
+# Task 2 — the kit, 2026-09-27
+
+`characters/warbull-kit.wam` is the machinery, authored under one rule:
+**embedded, not worn**. Every part is small against the body, and meets the
+flesh at a collar or an insertion. The .wam header lists how far each part is
+sunk.
+
+- **Legs (both):**
+  - steel-shod **hooves** over the paws, with a brass rim where the fetlock
+    flesh enters;
+  - a chrome **knee cop**;
+  - a **hock piston**: a housing on the outer shin, and a rod diving into the
+    ankle through a brass collar.
+- **Centreline:**
+  - a **spine rack** of five iron vertebral plates down the hump, each with an
+    LED, and a chrome conduit over them;
+  - a **reactor** sunk into the upper abdomen, with a brass collar, an amber
+    core, and two cables that run up the chest and dive into the pecs.
+- **Right side (the machine's):**
+  - a **steel horn** with brass bands, collared into the flesh horn-root boss;
+  - an **optic** (a chrome barrel sunk in the right eye socket, a red lens and
+    an LED);
+  - an iron **cheek plate**;
+  - a chrome **shoulder cap** over the deltoid, with a brass collar;
+  - a cable down the back of the upper arm;
+  - a brass **elbow collar** and a chrome **gun-arm sleeve** down to the fist
+    (the launcher prop, Task 4, swallows the fist), with two LEDs.
+- **Materials:** chrome, iron, brass, cable, lens, led and core. The runtime
+  looks for chrome, cable, led and core are Task 3; until then they take
+  `LOOK_DEFAULT`.
+- **Skinning chosen for the plates** (Task 5):
+  - skull: horn, optic, cheek;
+  - chest: reactor;
+  - neck and spine2: rack;
+  - forearm.r: sleeve and collar, which go with the launcher.
+- **`warbull.blob`:** the paw's claw prims were dropped; the hoof encloses the
+  paw.
+
+## The skeleton transcription needed a fix the soldier kits never did
+
+The .blob applies a down bone's **pitch then tilt** (`blob-compile.ts`
+`dirVector`); WAM applies **tilt then pitch** (`skeleton.py` `resolve_dir`,
+rotY·rotX·rotZ). The soldier-family kits negate pitch and copy tilt, which
+is right to under a millimetre at their 2–12° angles. At the minotaur's 40°
+arm tilt it is centimetres. The .wam solves each (pitch, tilt) pair to give
+the .blob's exact direction (formula in its skeleton comment). All 20 bones
+land within 0.004 mm.
+
+## Pre-flight without WAM: `scripts/wam-shadow.ts` + `scripts/wam-preflight.ts`
+
+WAM still cannot run in this container, so I transcribed its skeleton, loft,
+attach and sweep maths into TypeScript. I read the source in a local WAM
+checkout; I did not run it.
+
+**Checked against the compiled `juggernaut-kit.gltf`:** every ring vertex
+within 1 mm, and identical per-material bounds. Sweeps are transcribed but not
+yet checked against a compiled kit.
+
+```
+npx tsx scripts/wam-preflight.ts warbull [part-prefix]
+```
+
+It prints bone agreement and, per part, the deepest sunk vertex and the
+nearest and farthest distance to the flesh. The kit was sized with it:
+
+- the deepest vertex is the shoulder cap's rim in the trap shelf, −57 mm;
+- nothing floats except the rack LEDs and conduit, which sit on the plates;
+- the soles are at y 0.004;
+- the steel horn's tip lands within ~3 cm of the mirrored flesh horn.
+
+`warbull-kit.test.ts` (13 pins) **passed against a shadow-built glTF**
+(written temporarily, then deleted). It skips until the real build exists:
+
+```
+scripts/build-wam-kit.sh warbull
+npx vitest run src/lab/sdf-zombie/characters/warbull-kit.test.ts
+```
+
+Preview: the CPU flesh raster with the shadow's kit vertices drawn as
+depth-tested dots, coloured by material. Placement only; it shows no shading
+of the kit.
+
+![kit pre-flight](kit-preflight.png)
+
+## Expect from the real build
+
+- WAM lint on the `hips`/`hand`/`foot` bones having little geometry (normal).
+- Possibly an `on=`-less "floating part" lint on the rack LEDs, which sit on
+  the plates, not on the flesh.
+- If the real mesh disagrees with the pre-flight, the sweeps (steel horn,
+  reactor cables) are the least-checked parts.

@@ -239,10 +239,12 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   },
   // The cyber-minotaur: minotaur.blob's mesh-fitted flesh at 1.28x with
   // its painted metal removed (warbull.blob's header). The hard parts
-  // (steel horn, optic, spine rack, reactor, hooves, launcher) arrive with
-  // characters/warbull-kit.wam; until then he is the flesh alone.
+  // (steel horn, optic, spine rack, reactor, hooves, pistons, cables) are
+  // characters/warbull-kit.wam. Until scripts/build-wam-kit.sh warbull has
+  // been run, the kit 404s and he renders as the flesh alone (logged).
   warbull: {
     name: 'warbull', src: warbullBlobSrc,
+    kit: '/assets/lab/warbull-kit.gltf',
     // Baked from the minotaur's reference mesh (warbull.blob, sheet block).
     // mean measured off the PNG's opaque texels, lab-main's applyMeanOf rule.
     face: { ...bakedFace('warbull-face.png'), mean: 0.32044097124272053 },

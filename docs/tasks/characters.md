@@ -8,7 +8,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   flesh horn and eye only (the right side is kit); a hump behind the neck; face decal baked from the minotaur mesh
   (`warbull-face.png`, the minotaur's own PNG never existed). `?character=warbull`. 13 pins.
   [Notes](../../docs/dev-notes/2026-09-27-warbull/NOTES.md) · [Spec](../../docs/superpowers/specs/2026-09-27-warbull-design.md) · [Plan](../../docs/superpowers/plans/2026-09-27-warbull.md)
-- [ ] Task 2 kit (`warbull-kit.wam`: steel horn, optic, jaw brace, spine rack, reactor, pistons, hooves, cables, collars).
+- [x] **Kit authored** (Task 2): `warbull-kit.wam` (hooves, knee cops, hock pistons, spine rack + conduit, reactor + cables,
+  steel horn, optic, cheek plate, shoulder cap, gun-arm sleeve; brass collars at every insertion). Pre-flighted without
+  WAM by the new `scripts/wam-preflight.ts` (a shadow of WAM's maths, checked against the juggernaut build).
+- [ ] **Owner: build the kit** `scripts/build-wam-kit.sh warbull`, then `warbull-kit.test.ts` (13 pins; skips until built).
 - [ ] Task 3 chrome/LED looks + blinking `status-lights.ts`; Task 4 launcher prop + rockets; Task 5 plates + disarm;
   Task 6 charge/gore/enrage; Task 7 arena spawn.
 

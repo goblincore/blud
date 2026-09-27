@@ -1,0 +1,305 @@
+# Warbull kit: the MACHINERY bolted into the cyber-minotaur's flesh (spec:
+# docs/superpowers/specs/2026-09-27-warbull-design.md). Read soldier-kit.wam's
+# header for the two-language argument; this file is the polygon half of a
+# flesh/cybernetic hybrid, and its rule is different from the power armour's.
+#
+# THE RULE: EMBEDDED, NOT WORN. The juggernaut's kit covers his body. This
+# kit goes INTO it: every part is small against the body, and every part
+# meets the flesh at a COLLAR (a brass-lipped ring or plate edge sunk into
+# the meat). A part that floats clear of the flesh reads as a prop; a part
+# fully swallowed is invisible. So each one below says how far it is sunk.
+#
+# UNITS: metres / 2.432 (warbull.blob's height). The comments carry metres.
+#
+# FLESH THIS BITES INTO, marched off warbull.blob with sdBody (2026-09-27,
+# .lab-tmp/sections.ts; re-measure if the .blob moves), metres:
+#   paw      ellipsoid centre (0.462, 0.205, 0.106), semi-axes (0.160,
+#            0.127, 0.172); the ankle is a sphere r 0.169 at (0.447, 0.296,
+#            -0.170) behind it
+#   shin     t0.10 side +-0.20 depth +0.15/-0.29; t0.45 side +-0.14 depth
+#            +0.15/-0.20; t0.80 side +-0.11 depth +0.09/-0.20
+#   knee     front surface (0.341, 0.727, 0.257)
+#   forearm.r t0 side +-0.15 depth +0.15/-0.16; t0.5 +-0.12 / +0.12/-0.14;
+#            t1.0 +-0.095 / +0.09/-0.12
+#   deltoid  ball r 0.173 at the clavicle tail (+-0.437, 1.979, 0.012),
+#            half-merged into the trap shelf
+#   back     centreline z at y 1.50 -0.272, 1.60 -0.338, 1.70 -0.392,
+#            1.80 -0.390, 1.90 -0.326 (the hump)
+#   chest    centreline front z at y 1.50 0.340, 1.55 0.354, 1.60 0.354
+#   head     right eye socket (-0.045, 2.216, ~0.24); right horn-root boss
+#            r 0.070 at (-0.125, 2.399, 0.038); right cheek x -0.14 at y 2.15
+#
+# ASYMMETRY: the right side is the machine's. Steel horn, optic, cheek plate,
+# shoulder cap, gun-arm sleeve. The legs are symmetric (both hooves, both
+# pistons), and the spine rack and reactor sit on the centreline.
+#
+# MATERIALS AND DAMAGE (plate-armor.ts WARBULL_ARMOR, Task 5): plates are
+# keyed by BONE, and kit-damage sheds every island on a shed plate's bones.
+# So the parts are skinned on purpose:
+#   skull        steel horn, horn collar, optic, cheek plate (the head plate)
+#   chest        reactor, its collar, core and cables (the reactor plate)
+#   neck/spine2  the spine rack (the rack plate; NOT chest, so a reactor
+#                kill does not also strip the back)
+#   forearm.r    gun-arm sleeve and elbow collar (the LAUNCHER plate; they
+#                go with the launcher prop when it is shot off)
+#   legs, clavicle.r/upperarm.r   never shed (hooves, pistons, shoulder cap)
+#
+# BUILD:  scripts/build-wam-kit.sh warbull
+#   -> public/assets/lab/warbull-kit.gltf. Then run
+#   characters/warbull-kit.test.ts (it skips until the glTF exists).
+#   Pre-flighted here with a shadow of WAM's own loft/attach/sweep maths
+#   (.lab-tmp/wam-shadow.ts, checked against the compiled juggernaut kit:
+#   every ring vertex within 1 mm) because this container cannot run WAM.
+#
+# EXPECTED LINTS (soldier-kit's): pelvis/hips/hand/foot have little or no
+# geometry near them.
+model warbull-kit
+  # warbull.blob's height: every fraction below is metres / 2.432.
+  height 2.432
+  style chunky
+
+palette
+  # Polished steel: the bolted-in machinery. kit-overlay.ts LOOK decides
+  # the real finish (WAM exports every material matte); this is the colour.
+  chrome #b4b8c0 metal=1.0 rough=0.2
+  # Dark gunmetal: the heavy frame (hooves, spine plates, cheek plate).
+  iron   #3c3c42 metal=0.8 rough=0.4
+  # Fittings: every collar where metal enters flesh has a brass lip.
+  brass  #8c6a2c metal=1.0 rough=0.3
+  # Rubber-sheathed conduit, near black with a red cast.
+  cable  #2a1614 rough=0.5
+  # The optic's glass (the juggernaut's lens look: red glow).
+  lens   #3a0806
+  # Status LEDs and the reactor core. Pulsed at runtime (status-lights.ts);
+  # emit= is WAM's own preview.
+  led    #ff3018 emit=0.9
+  core   #ffb040 emit=1.0
+
+skeleton
+  # warbull.blob's skeleton, metres / 2.432 to six places (the rest-identity
+  # pin in warbull-kit.test.ts holds every kit bone within 1 mm).
+  # `hips` is the .blob's pelvis BONE: WAM's root is a bare point.
+  root pelvis at 0.458421
+  bone hips   parent=pelvis dir=up len=0.063368
+  bone spine1 parent=hips   dir=up pitch=2 len=0.063368
+  bone chest  parent=spine1 dir=up pitch=2 len=0.063368
+  bone spine2 parent=chest  dir=up pitch=1 len=0.025474
+  bone neck   parent=spine2 dir=up pitch=0 len=0.055947
+  bone skull  parent=neck   dir=up pitch=0 len=0.442105
+  mirror
+    # dir=side: tilt verbatim (toward +y in both languages; bride-kit.wam).
+    bone clavicle parent=neck side=0.045789 dir=side tilt=32 len=0.158105
+    # DOWN BONES WITH BOTH PITCH AND TILT ARE RE-SOLVED, not sign-flipped.
+    # The .blob applies pitch THEN tilt (blob-compile.ts dirVector); WAM
+    # applies tilt THEN pitch (skeleton.py resolve_dir: rotY.rotX.rotZ). At
+    # the soldier's small angles the difference is sub-millimetre, which is
+    # why juggernaut-kit.wam could just negate pitch; at the minotaur's 40
+    # degree arms it is centimetres. Each pair below is the WAM (pitch,
+    # tilt) whose direction equals the .blob's (pitch, tilt) exactly:
+    #   blob (cos p sin t, -cos p cos t, sin p) = wam (sin t', -cos t' cos p', -cos t' sin p')
+    #   upperarm blob (8, 40)    forearm (20, 18)   hand (15, 10)
+    #   thigh    blob (13, 13.5) shin    (-22, 12)
+    bone upperarm parent=clavicle dir=down tilt=39.5337 pitch=-10.3960 len=0.161000
+    bone forearm  parent=upperarm dir=down tilt=16.8808 pitch=-20.9419 len=0.184263
+    bone hand     parent=forearm  dir=down tilt=9.6559 pitch=-15.2207 len=0.073684
+    bone thigh    parent=hips side=0.092368 dir=down tilt=13.1477 pitch=-13.3563 len=0.209684
+    bone shin     parent=thigh    dir=down tilt=11.1146 pitch=22.4432 len=0.232000
+    bone foot     parent=shin     dir=fwd len=0.110263
+  end
+
+parts
+  mirror
+    # HOOF: steel-shod, over the paw (the .blob's claws are gone; the hoof
+    # IS the foot now). A squarish shell from z 0.00 (the paw's back third,
+    # which stays out behind it as a fleshy fetlock where it meets the
+    # ankle) to z 0.31, past the paw's toe at 0.278. frame=up makes d the
+    # HEIGHT; each ring's up= drops its centre to d/2 so the sole stays flat
+    # on y ~0.01 while the top slopes down to the toe. Widths clear the paw
+    # (x half 0.160) by 2 cm after the chunky facet loss; heights clear the
+    # paw's crown by 1.5-3 cm at every ring.
+    loft hoof bone=foot at=0.362 dir=fwd len=0.1275 frame=up offset=(0.0053,-0.0387,0.0000) material=iron shape=squarish
+      ring 0.00 w=0.1480 d=0.1480 up=0.0000
+      ring 0.35 w=0.1521 d=0.1521 up=0.0021
+      ring 0.62 w=0.1439 d=0.1398 up=-0.0041
+      ring 0.85 w=0.1275 d=0.1110 up=-0.0185
+      ring 1.00 w=0.1069 d=0.0658 up=-0.0411
+      cap start=none end=flat
+
+    # SHOE BAND: a brass rim round the hoof's open back, the collar where
+    # the steel meets the fetlock flesh.
+    loft hoofband bone=foot at=0.362 dir=fwd len=0.0206 frame=up offset=(0.0053,-0.0387,-0.0049) material=brass shape=squarish
+      ring 0.00 w=0.1583 d=0.1521 up=0.0000
+      ring 1.00 w=0.1604 d=0.1542 up=0.0012
+      cap start=none end=none
+
+    # KNEE COP: a chrome dome bolted onto the knee cap (front surface z
+    # 0.257), 4 cm proud of it, its back sunk ~3 cm into the joint. An ellipsoid, not a tube: the
+    # knee bends under it, so it must not wrap.
+    attach kneecop bone=shin kind=sphere at=0.0 offset=(0.0000,-0.0206,0.0604) size=0.0822 w=0.0863 h=0.0822 d=0.0288 material=chrome
+
+    # HOCK PISTON: the hydraulic that drives the leg. A chrome housing on
+    # the shin's outer face below the knee, and a thinner rod out of it that
+    # dives into the ankle flesh (its last ring is buried: that IS the
+    # insertion). Both on the shin's own aim, offset outward in the ring
+    # frame (side = out, fwd = forward).
+    loft pistonhousing bone=shin at=0.06 dir=down tilt=11.1146 pitch=22.4432 len=0.1069 frame=fwd material=chrome
+      ring 0.00 w=0.0288 side=0.0884 fwd=-0.0123
+      ring 1.00 w=0.0288 side=0.0802 fwd=-0.0164
+      cap start=flat end=flat
+    loft pistonrod bone=shin at=0.50 dir=down tilt=11.1146 pitch=22.4432 len=0.0987 frame=fwd material=chrome
+      ring 0.00 w=0.0132 side=0.0781 fwd=-0.0164
+      ring 1.00 w=0.0132 side=0.0617 fwd=-0.0206
+      cap start=none end=flat
+    # Brass collar where the rod enters the ankle.
+    loft pistoncollar bone=shin at=0.86 dir=down tilt=11.1146 pitch=22.4432 len=0.0123 frame=fwd material=brass
+      ring 0.00 w=0.0247 side=0.0678 fwd=-0.0197
+      ring 1.00 w=0.0247 side=0.0666 fwd=-0.0201
+      cap start=none end=none
+  end
+
+  # SPINE RACK: five vertebral plates marching down the hump, each an iron
+  # box sunk ~2.5 cm into the back, 5.5 cm proud, with an LED half-set into
+  # its outer face (alternating sides of the conduit). Skinned to neck and
+  # spine2 only (see the header: the rack is its own plate, not the
+  # reactor's). The lowest two hang off spine2 with a downward offset.
+  attach rack0 bone=neck kind=box at=0.0 offset=(0.0000,0.1227,-0.1451) size=0.0535 w=0.0535 h=0.0308 d=0.0329 material=iron
+  attach rackled0 bone=neck kind=sphere at=0.0 offset=(0.0185,0.1073,-0.1616) size=0.0099 material=led
+  attach rack1 bone=neck kind=box at=0.0 offset=(0.0000,0.0816,-0.1715) size=0.0535 w=0.0535 h=0.0308 d=0.0329 material=iron
+  attach rackled1 bone=neck kind=sphere at=0.0 offset=(-0.0185,0.0662,-0.1879) size=0.0099 material=led
+  attach rack2 bone=neck kind=box at=0.0 offset=(0.0000,0.0405,-0.1723) size=0.0535 w=0.0535 h=0.0308 d=0.0329 material=iron
+  attach rackled2 bone=neck kind=sphere at=0.0 offset=(0.0185,0.0251,-0.1887) size=0.0099 material=led
+  attach rack3 bone=spine2 kind=box at=0.0 offset=(0.0000,0.0249,-0.1497) size=0.0535 w=0.0535 h=0.0308 d=0.0329 material=iron
+  attach rackled3 bone=spine2 kind=sphere at=0.0 offset=(-0.0185,0.0095,-0.1661) size=0.0099 material=led
+  attach rack4 bone=spine2 kind=box at=0.0 offset=(0.0000,-0.0162,-0.1225) size=0.0535 w=0.0535 h=0.0308 d=0.0329 material=iron
+  attach rackled4 bone=spine2 kind=sphere at=0.0 offset=(0.0185,-0.0317,-0.1390) size=0.0099 material=led
+  # SPINAL CONDUIT: a chrome pipe down the rack, lying on the plates'
+  # outer faces (the back's surface z plus 7 cm) from the top plate to the
+  # bottom one: the spinal cord the vertebrae carry.
+  loft conduit bone=neck at=0.0 dir=down len=0.1933 offset=(0.0000,0.1279,0.0000) frame=fwd material=chrome
+    ring 0.00 w=0.0144 fwd=-0.1464
+    ring 0.20 w=0.0144 fwd=-0.1826
+    ring 0.40 w=0.0144 fwd=-0.1970
+    ring 0.62 w=0.0144 fwd=-0.1883
+    ring 0.80 w=0.0144 fwd=-0.1657
+    ring 1.00 w=0.0144 fwd=-0.1439
+    cap start=flat end=flat
+
+  # REACTOR: a round housing sunk into the upper abdomen below the pecs
+  # (y 1.53, the chest front at z ~0.35), a brass collar biting the flesh
+  # round it, and a glowing core. The housing's back 5 cm is inside him.
+  loft reactor bone=chest at=0.0 dir=fwd len=0.0370 offset=(0.0000,0.0440,0.1213) material=chrome sides=12
+    ring 0.00 w=0.0822
+    ring 1.00 w=0.0740
+    cap start=none end=flat
+  loft reactorcollar bone=chest at=0.0 dir=fwd len=0.0103 offset=(0.0000,0.0440,0.1336) material=brass sides=12
+    ring 0.00 w=0.1028
+    ring 1.00 w=0.0987
+    cap start=none end=none
+  attach reactorcore bone=chest kind=sphere at=0.0 offset=(0.0000,0.0440,0.1583) size=0.0493 w=0.0493 h=0.0493 d=0.0144 material=core
+
+  # REACTOR CABLES: two conduits leave the housing's top rim, run up and
+  # out along the chest surface (~1.5 cm off it) and dive into the pecs:
+  # plugged into the meat, not laid on it.
+  sweep rcableL bone=chest at=0.0 offset=(0.0288,0.0748,0.1509) dir=up tilt=-25 material=cable
+    seg len=0.0288 r=0.0066 fwd=0
+    seg len=0.0247 r=0.0062 back=12
+    seg len=0.0206 r=0.0058 back=45
+  sweep rcableR bone=chest at=0.0 offset=(-0.0288,0.0748,0.1509) dir=up tilt=25 material=cable
+    seg len=0.0288 r=0.0066 fwd=0
+    seg len=0.0247 r=0.0062 back=12
+    seg len=0.0206 r=0.0058 back=45
+
+  # ---- THE MACHINE SIDE (right: x < 0). Authored per side, no mirror.
+
+  # GUN-ARM SLEEVE: the right forearm is the launcher's mount. A chrome
+  # sleeve from the elbow down into the launcher prop (which swallows the
+  # fist; Task 4), with a brass ELBOW COLLAR where it bites the flesh.
+  # Rings clear the forearm by 8-10% (chunky facets lose 7.6%). Skinned to
+  # forearm.r: it sheds with the launcher.
+  loft elbowcollar bones=forearm.r..forearm.r material=brass shape=squarish
+    ring 0.00 w=0.1480 d=0.1562 fwd=-0.0041
+    ring 0.07 w=0.1480 d=0.1562 fwd=-0.0041
+    cap start=none end=none
+  loft gunsleeve bones=forearm.r..forearm.r material=chrome shape=squarish
+    ring 0.07 w=0.1357 d=0.1439 fwd=-0.0041
+    ring 0.50 w=0.1192 d=0.1275 fwd=-0.0045
+    ring 0.85 w=0.1069 d=0.1151 fwd=-0.0049
+    ring 1.00 w=0.0966 d=0.1049 fwd=-0.0053
+    cap start=none end=none
+  attach sleeveled0 bone=forearm.r kind=sphere at=0.30 offset=(-0.0617,0.0000,0.0082) size=0.0090 material=led
+  attach sleeveled1 bone=forearm.r kind=sphere at=0.45 offset=(-0.0576,0.0000,0.0123) size=0.0090 material=led
+
+  # SHOULDER CAP: a chrome dome bolted over the right deltoid ball (r
+  # 0.173 at (-0.437, 1.979, 0.012)), aimed up-and-out (tilt 45 from up).
+  # A spherical cap of radius 0.195, so 2 cm proud of the ball: rings at
+  # axial distances 0.06/0.11/0.15/0.175 from the ball centre, sized
+  # sqrt(R^2 - s^2). Its inner rim (toward the neck) sinks into the trap
+  # shelf: the bolted-in edge. Skinned to clavicle.r, which carries the
+  # deltoid in the .blob.
+  loft shouldercap bone=clavicle.r at=1.0 dir=up tilt=45 len=0.0473 offset=(-0.0174,0.0174,0.0000) material=chrome
+    ring 0.00 w=0.1521 d=0.1521
+    ring 0.43 w=0.1316 d=0.1316
+    ring 0.78 w=0.1028 d=0.1028
+    ring 1.00 w=0.0699 d=0.0699
+    cap start=none end=dome
+  loft capcollar bone=clavicle.r at=1.0 dir=up tilt=45 len=0.0082 offset=(-0.0145,0.0145,0.0000) material=brass
+    ring 0.00 w=0.1624 d=0.1624
+    ring 1.00 w=0.1604 d=0.1604
+    cap start=none end=none
+
+  # ARM CONDUIT: down the back of the upper arm from under the shoulder
+  # cap to the elbow collar, 2 cm off the skin (back surface measured at
+  # t 0.1/0.3/0.5/0.7/0.9: 0.254/0.258/0.244/0.200/0.152 m behind the
+  # bone). Rigid-ish to upperarm.r; at a deep elbow bend it parts from the
+  # collar, which reads as a loose cable, not a fault.
+  loft armcable bones=upperarm.r..upperarm.r material=cable sides=6
+    ring 0.05 w=0.0164 fwd=-0.1118
+    ring 0.30 w=0.0164 fwd=-0.1143
+    ring 0.50 w=0.0164 fwd=-0.1086
+    ring 0.70 w=0.0164 fwd=-0.0905
+    ring 0.95 w=0.0164 fwd=-0.0658
+    cap start=flat end=flat
+
+  # STEEL HORN: his right horn was sawn off at the root boss and replaced.
+  # Traced to mirror the flesh horn's path (root (0.125, 2.393, 0.038) ->
+  # tip (0.333, 2.587, 0.031), out first, then hooking up): segment bends
+  # accumulate, so the tip lands within a few cm of the flesh one mirrored.
+  # Two brass bands read as a machined, segmented part.
+  sweep steelhorn bone=skull at=0.575 offset=(-0.0516,0.0000,0.0105) dir=in material=chrome
+    seg len=0.0329 r=0.0247 up=0
+    seg len=0.0288 r=0.0206 up=12 material=brass
+    seg len=0.0288 r=0.0164 up=28
+    seg len=0.0247 r=0.0115 up=35 material=brass
+    seg len=0.0206 r=0.0049 up=25 tip
+  # HORN COLLAR: a brass ring clamping the steel horn where it leaves the
+  # root boss: x -0.155..-0.185, where the boss (r 0.070, surface x
+  # -0.196) narrows to the horn's r ~0.058, so the ring bites both.
+  loft horncollar bone=skull at=0.575 offset=(-0.0637,0.0000,0.0105) dir=in len=0.0123 material=brass
+    ring 0.00 w=0.0543 d=0.0543
+    ring 1.00 w=0.0526 d=0.0526
+    cap start=none end=none
+
+  # OPTIC: the right eye is a camera. A chrome barrel sunk into the socket,
+  # a red lens proud of it, and an LED on its rim.
+  loft optic bone=skull at=0.41 offset=(-0.0185,0.0000,0.0781) dir=fwd len=0.0308 material=chrome sides=10
+    ring 0.00 w=0.0350
+    ring 1.00 w=0.0329
+    cap start=none end=none
+  attach opticlens bone=skull kind=sphere at=0.41 offset=(-0.0185,0.0000,0.1077) size=0.0255 w=0.0255 h=0.0255 d=0.0115 material=lens
+  attach opticled bone=skull kind=sphere at=0.41 offset=(-0.0350,0.0123,0.1007) size=0.0074 material=led
+
+  # CHEEK PLATE: an iron plate bolted along the right cheek from beside the
+  # optic back toward the jaw hinge, half sunk (y 2.18-2.25, where the
+  # head's right side is at x -0.154..-0.158; any lower and it runs into
+  # the trap shelf, which reaches y 2.18 at x -0.2).
+  attach cheekplate bone=skull kind=box at=0.0 offset=(-0.0617,0.1953,0.0485) size=0.0288 w=0.0144 h=0.0288 d=0.0658 material=iron
+
+textures
+  texture chrome base=#aab0b8
+    gradient axis=v from=-0.04 to=0.06
+    noise scale=0.10 amount=0.02
+  texture iron base=#3c3c42
+    noise scale=0.15 amount=0.035
+    ao amount=0.22
+  texture brass base=#8c6a2c
+    noise scale=0.12 amount=0.03
