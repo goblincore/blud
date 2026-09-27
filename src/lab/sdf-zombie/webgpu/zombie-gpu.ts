@@ -1929,6 +1929,9 @@ export interface SharedChunkGpuMaterial {
 export function createSharedChunkGpuMaterial(
   prev?: PrevSource,
   options?: SurfaceOutputOptions,
+  /** Shared light list (plan 1, Task 12): the game's list storage node. Omitted, the zero
+   *  fallback (each view's lightListCfg.x then stays 0). */
+  lightList?: unknown,
 ): SharedChunkGpuMaterial {
   // These seeds establish the binding types before any chunk exists. They are
   // never sampled by a chunk draw: every node below swaps to the current
@@ -1959,6 +1962,7 @@ export function createSharedChunkGpuMaterial(
     undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
     undefined, undefined, undefined, undefined, undefined, undefined,
     { inst: records.node, instCfg: instCfgNode },
+    lightList,
   );
 
   let disposed = false;
@@ -2929,6 +2933,10 @@ export interface ChunkGpuView {
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
   reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[], template?: MarchUniforms): void;
   update(chunk: Chunk): void;
+  /** Re-write this view's record slot from its uniforms now (update() does it too). The game
+   *  calls it after writing the view's light picks (bodyLights, shared light list Task 12),
+   *  which happens after update() in the frame. */
+  syncRecord(): void;
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
   setPackBones(on: boolean): void;
@@ -3454,6 +3462,7 @@ export function createChunkGpuView(
       u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
       syncChunkRecord();
     },
+    syncRecord: syncChunkRecord,
     dispose() {
       mesh.geometry.dispose();
       if (ownsMaterial) material.dispose();

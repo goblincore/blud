@@ -16,6 +16,7 @@ import { type Vec3 } from '../types';
 import { unpackChunkBake } from './chunk-bake-buffers';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
 import { type ChunkGpuView, type MarchUniforms } from './zombie-gpu';
+import { addToCentroid, type Centroid } from './chunk-light-pick';
 
 /** Register a material instance to be lit by the frame's beam. Every
  *  `createBakedChunkMaterial` that is DRAWN must go through this — an
@@ -24,6 +25,59 @@ import { type ChunkGpuView, type MarchUniforms } from './zombie-gpu';
 export function registerLitChunkMaterial<T extends BakedChunkMaterial>(ctx: GameContext, m: T): T {
   ctx.world.litChunkMaterials.push(m);
   return m;
+}
+
+/** Where each lit gib material's pieces are this frame (shared light list, Task 12), keyed by the
+ *  drawn THREE material: a running centroid of every visible piece drawn with it. A
+ *  BakedChunkMaterial's uniforms are shared by all its meshes, so it picks once, at this
+ *  centroid. The sources are every mesh drawn with a registered material:
+ *   - settled baked chunks (ctx.bake.mat, or a head's own face material): `centre`, world (the
+ *     bake mesh sits at identity);
+ *   - soldier corpses (ctx.bake.mat too): their world-space geometry's bounding-sphere centre;
+ *   - sprite-set pieces drawn as meshes (carved, asset and asset-head materials): the chunk
+ *     state's `pos` (billboards use their own unlit materials and match no entry);
+ *   - the gore showcase (gorePartMat): each part's world position.
+ *  The map is module scratch: its entries are zeroed and reused each frame, and an entry left at
+ *  zero (a material no longer drawn or disposed) is dropped, so it never grows. */
+const chunkCentroids = new Map<THREE.Material, Centroid>();
+const _wp = new THREE.Vector3();
+export function gatherChunkCentroids(ctx: GameContext): ReadonlyMap<THREE.Material, Centroid> {
+  const acc = chunkCentroids;
+  for (const c of acc.values()) { c[0] = 0; c[1] = 0; c[2] = 0; c[3] = 0; }
+  for (const b of ctx.bake.chunks) {
+    if (!b.mesh.visible) continue;
+    addToCentroid(acc, b.mesh.material as THREE.Material, b.centre[0], b.centre[1], b.centre[2]);
+  }
+  const corpses = ctx.world.soldierCorpseGroup;
+  if (corpses?.visible) {
+    for (const o of corpses.children) {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.visible) continue;
+      if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+      const c = m.geometry.boundingSphere!.center;
+      addToCentroid(acc, m.material as THREE.Material, c.x, c.y, c.z);
+    }
+  }
+  const sp = ctx.vfx.spritePieces;
+  if (sp) {
+    for (const list of [sp.live, sp.rest]) {
+      for (const p of list) {
+        if (p.render !== 'mesh' || !p.mesh.visible) continue;
+        addToCentroid(acc, p.mesh.material as THREE.Material, p.state.pos[0], p.state.pos[1], p.state.pos[2]);
+      }
+    }
+  }
+  const show = ctx.vfx.goreShowcase;
+  if (show?.visible) {
+    for (const o of show.children) {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) continue;
+      m.getWorldPosition(_wp);
+      addToCentroid(acc, m.material as THREE.Material, _wp.x, _wp.y, _wp.z);
+    }
+  }
+  for (const [k, c] of acc) if (c[3] === 0) acc.delete(k);
+  return acc;
 }
 
 /** WAIT FOR OUTSTANDING BAKE WORKERS (determinism, 2026-09-14). The gib
@@ -77,7 +131,7 @@ export function spawnGoreShowcase(ctx: GameContext): number {
   // every settled piece at the same time, which is a decision to take on its
   // own evidence.
   if (!ctx.vfx.gorePartMat) {
-    ctx.vfx.gorePartMat = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true }));
+    ctx.vfx.gorePartMat = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, lightList: ctx.world.light?.list?.node }));
     ctx.vfx.gorePartMat.uniforms.goreCfg.value.set(
       ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
     );
@@ -173,7 +227,7 @@ export function finishChunkBake(ctx: GameContext): void {
       // shadow — half of "way too light and dont follow the lighting".
       ctx.boot.deferredMode
         ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
-        : { bakedAo: true, fleshResponse: true },
+        : { bakedAo: true, fleshResponse: true, lightList: ctx.world.light?.list?.node },
     ));
     ctx.bake.seed?.(ctx.bake.mat);
   }
@@ -182,7 +236,7 @@ export function finishChunkBake(ctx: GameContext): void {
   // owns its projection snapshot/material; other chunks share the plain one.
   const faceMaterial = entry.view.uniforms.faceCfg.value.x > 0.5
     ? registerLitChunkMaterial(ctx, createBakedChunkMaterial({
-      bakedAo: true, fleshResponse: true, face: entry.view.uniforms,
+      bakedAo: true, fleshResponse: true, face: entry.view.uniforms, lightList: ctx.world.light?.list?.node,
       ...(ctx.boot.deferredMode ? { output: 'surface' as const, shadowReceiver: 'level-only' as const } : {}),
     })) : undefined;
   if (faceMaterial) ctx.bake.seed?.(faceMaterial);

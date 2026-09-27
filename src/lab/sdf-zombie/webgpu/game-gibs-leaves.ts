@@ -244,7 +244,7 @@ export function ensureCarvedLibrary(ctx: GameContext): boolean {
     });
     ctx.bake.carvedBuildMs = performance.now() - t0;
     if (!ctx.bake.carvedMaterial) {
-      ctx.bake.carvedMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
+      ctx.bake.carvedMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, bakedAo: true, lightList: ctx.world.light?.list?.node }));
       ctx.bake.carvedMaterial.uniforms.goreCfg.value.set(
         ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
       );

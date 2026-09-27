@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import {
-  createBakedChunkMaterial, CHUNK_SHADE_WGSL, CHUNK_SURFACE_WGSL,
+  createBakedChunkMaterial, CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL, CHUNK_SURFACE_WGSL,
 } from './baked-chunks';
 import { encodeSurfaceClass, SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
 
@@ -63,6 +63,47 @@ describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
     expect(createBakedChunkMaterial({ goreDetail: true }).uniforms.goreCfg.value.x)
       .toBe(0);   // the FLAG still needs the page to set the amp
 
+  });
+});
+
+describe('chunkShade — shared light list (plan 1, Task 12)', () => {
+  it('takes picks, the list and the switch after fresnelGain, before any face args', () => {
+    for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {
+      expect(src).toContain('fresnelGain: f32, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, listGain: f32');
+    }
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('listGain: f32, faceTex: texture_2d<f32>');
+  });
+  it('the list branch swaps only the key: bodyLights, ambient/AO kept, fresnel on the dominant colour', () => {
+    for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {
+      expect(src).toContain('if (listOn > 0.5) {');
+      expect(src).toContain('let bl = bodyLights(p, nrm, V, picks, lights, false);');
+      // every list term rides the chunk trim (lightListCfg.y, CHUNK_LIST_GAIN)
+      expect(src).toContain('let domC = bl.domC * listGain;');
+      expect(src).toContain('let rimC = select(keyColor, domC / max(peak, 1e-4), peak > 1e-4);');
+      expect(src).toContain('let diffL = a.rgb * (ambient + bl.diffuse * listGain) * ao;');
+      expect(src).toContain('let meshSpecL = wetTint * (bl.spec * listGain * look.z + rimC * fres * (0.5 + 0.5 * peak)) + bl.rim * listGain;');
+      expect(src).toContain('let fleshSpecL = (bl.spec * listGain * response.w + rimC * fres) * response.y + bl.rim * listGain;');
+      // the shoulder runs whenever the list is on, as the march's (compose.wgsl.ts)
+      expect(src).toContain('if ((spotCfg.x > 0.0 || listOn > 0.5) && spotCfg2.y > 0.0) {');
+      // the list branch lands before the shoulder and the display transform, which still apply
+      expect(src.indexOf('if (listOn > 0.5) {')).toBeLessThan(src.indexOf('if ((spotCfg.x > 0.0 || listOn > 0.5) && spotCfg2.y > 0.0) {'));
+      // the old compose is still there for listOn 0
+      expect(src).toContain('let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;');
+    }
+    expect(CHUNK_SHADE_WGSL).not.toContain('flatKey');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('var flatKey = 0.30 * lightCfg.x * keyColor;');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('flatKey = 0.30 * domC;');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('out = mix(out, a.rgb * (ambient + flatKey), faceFlat * 0.85);');
+  });
+  it('uniform defaults: no picks (-1 x 4), list off (x = 0)', () => {
+    const m = createBakedChunkMaterial();
+    expect(m.uniforms.chunkLights.value.toArray()).toEqual([-1, -1, -1, -1]);
+    expect(m.uniforms.lightListCfg.value.toArray()).toEqual([0, 0, 0, 0]);
+    m.dispose();
+  });
+  it('builds with a list node or without one (the zero fallback is bound)', () => {
+    expect(createBakedChunkMaterial({ lightList: undefined }).material).toBeTruthy();
+    expect(createBakedChunkMaterial({ fleshResponse: true, bakedAo: true }).material).toBeTruthy();
   });
 });
 

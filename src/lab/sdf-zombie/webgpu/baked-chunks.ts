@@ -38,6 +38,8 @@ import { encodeSurfaceClass, SURFACE_CLASS_MESH, type SurfaceOutputOptions } fro
 // creature's micro-detail changes, a settled piece of it changes with it.
 import type { MarchUniforms } from './zombie-gpu';
 import { HASH13, NOISE3, FBM, TEXEL, FLICKER, FACE_LAYER_WGSL } from './march.wgsl';
+import { BODY_LIGHTS } from './march/body-lights.wgsl';
+import { fallbackLightListNode } from './zombie-gpu';
 
 /**
  * Live lighting for every baked chunk. Same uniform names and semantics as
@@ -121,6 +123,13 @@ const bakedChunkUniforms = () => ({
    *  Zero by default, so every existing user of this material is unchanged
    *  until the page pushes the view's real value. */
   fleshDetail: uniform(new THREE.Vector4(0, 0, 0, 0)),
+  /** SHARED LIGHT LIST (plan 1, Task 12): this material's 4 packed picks (`index + weight`, -1
+   *  empty), picked by the game at the centroid of the pieces drawn with it. */
+  chunkLights: uniform(new THREE.Vector4(-1, -1, -1, -1)),
+  /** x = 1: the key is the 4 picks (the game sets it only while the list is on and this material
+   *  draws pieces); 0 = the old key, exactly. y: the chunk trim on every list term (the game
+   *  writes CHUNK_LIST_GAIN; see chunk-light-pick.ts). */
+  lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
 });
 export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
 
@@ -176,6 +185,22 @@ export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
  * matching the marched body is the whole point and a settled chunk sits right
  * next to one — but it is a visible change beyond the path that motivated it,
  * and it has not been through an owner view-test.
+ *
+ * SHARED LIGHT LIST (plan 1, Task 12). With listOn (lightListCfg.x) above 0.5
+ * the KEY is the material's 4 picks through bodyLights (the bones' Task 11
+ * compose): ambient, the baked AO, the wet tint, the fresnel (riding the
+ * dominant's colour, or keyColor with no picks) and the soft shoulder stay;
+ * the single key and the flashlight cone are replaced (the flashlight is a list
+ * light). The shoulder runs whenever the list is on, as the march's does
+ * (compose.wgsl.ts: spotCfg.x > 0 or lightListCfg.x > 0): a list light is a
+ * presented key at the body's level, and a gib lying face-up under a tube takes
+ * all of it. Every list term is scaled by listGain (lightListCfg.y, the game's
+ * CHUNK_LIST_GAIN: the list is calibrated on the march's compose, this one is a
+ * plain lambert). The face's flat term takes 0.30 x the scaled dominant colour,
+ * so an unlit gib face loses the old unconditional 0.30 x 2.4 key.
+ * listOn 0 is the old path exactly.
+ * The picks are per MATERIAL, not per chunk: every mesh on a material shares
+ * its uniforms, so the game picks at the centroid of its pieces.
  */
 // The same face layer as the march, with mesh-local variable names. The
 // source texture remains a texture: baking it into 1 cm vertex colours loses
@@ -185,7 +210,7 @@ const MESH_FACE_LAYER = FACE_LAYER_WGSL
   .replaceAll('gInstHeadCentre', 'headCentre').replaceAll('gInstHeadQuat', 'headQuat')
   .replaceAll('gInstMelt.x', '0.0');
 const FACE_ARGS = `faceTex: texture_2d<f32>, headCentre: vec3<f32>, headAxes: vec3<f32>, headQuat: vec4<f32>, faceCfg: vec4<f32>, faceCfg2: vec4<f32>, faceCfg3: vec4<f32>, faceProj: vec4<f32>, faceAtlas: vec4<f32>, faceGlowRedOnly: f32, faceGlowColor: vec3<f32>`;
-function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec4<f32>, fleshDetail: vec4<f32>, response: vec4<f32>, fresnelGain: f32${face ? ', ' + FACE_ARGS : ''}) -> vec3<f32> {
+function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec4<f32>, fleshDetail: vec4<f32>, response: vec4<f32>, fresnelGain: f32, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, listGain: f32${face ? ', ' + FACE_ARGS : ''}) -> vec3<f32> {
   var a = albedo;
   var nrm = n;
   var gloss2 = select(gloss, response.z, response.x > 0.5);
@@ -294,8 +319,20 @@ function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShad
   let fleshSpec = keyC * (shine * response.w + fres) * response.y;
   let specular = select(meshSpec, fleshSpec, response.x > 0.5);
   var out = diffuse + specular;
-  ${face ? 'out = mix(out, a.rgb * (ambient + 0.30 * lightCfg.x * keyColor), faceFlat * 0.85);' : ''}
-  if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
+  ${face ? 'var flatKey = 0.30 * lightCfg.x * keyColor;' : ''}
+  if (listOn > 0.5) {
+    let bl = bodyLights(p, nrm, V, picks, lights, false);
+    let domC = bl.domC * listGain;
+    let peak = max(domC.x, max(domC.y, domC.z));
+    let rimC = select(keyColor, domC / max(peak, 1e-4), peak > 1e-4);
+    let diffL = a.rgb * (ambient + bl.diffuse * listGain) * ao;
+    let meshSpecL = wetTint * (bl.spec * listGain * look.z + rimC * fres * (0.5 + 0.5 * peak)) + bl.rim * listGain;
+    let fleshSpecL = (bl.spec * listGain * response.w + rimC * fres) * response.y + bl.rim * listGain;
+    out = diffL + select(meshSpecL, fleshSpecL, response.x > 0.5);
+    ${face ? 'flatKey = 0.30 * domC;' : ''}
+  }
+  ${face ? 'out = mix(out, a.rgb * (ambient + flatKey), faceFlat * 0.85);' : ''}
+  if ((spotCfg.x > 0.0 || listOn > 0.5) && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
     let head = max(1.0 - knee, 1e-4);
     let over = max(out - vec3<f32>(knee), vec3<f32>(0.0));
@@ -422,6 +459,10 @@ export interface GoreMaterialOptions extends SurfaceOutputOptions {
   /** Source flesh response carried through the worker in bakeResponse. */
   fleshResponse?: boolean;
   /** Snapshot these uniforms at the swap; borrowed atlas remains owned by the actor. */
+  /** The game's shared light-list storage node (ctx.world.light.list.node), lit mode only.
+   *  Omitted, the zero fallback is bound (a declared storage input must be bound); lightListCfg.x
+   *  stays 0 there, so it is never read. */
+  lightList?: unknown;
   face?: Pick<MarchUniforms, 'faceTex' | 'headCentre' | 'headAxes' | 'headQuat' | 'faceCfg' | 'faceCfg2' | 'faceCfg3' | 'faceProj' | 'faceAtlas' | 'faceGlowRedOnly' | 'faceGlowColor'>;
 }
 
@@ -470,7 +511,9 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
     // MARCH'S OWN source strings, so a settled piece samples the identical
     // field the living body does — the previous attempt at this passed TSL
     // noise NODES as wgslFn arguments and measurably delivered nothing.
-    const [, , , , , shade] = [HASH13, NOISE3, FBM, TEXEL, FLICKER, face ? CHUNK_FACE_SHADE_WGSL : CHUNK_SHADE_WGSL]
+    // BODY_LIGHTS (shared light list, Task 12) sits just before chunkShade: it calls none of the
+    // others, and chunkShade calls it.
+    const [, , , , , , shade] = [HASH13, NOISE3, FBM, TEXEL, FLICKER, BODY_LIGHTS, face ? CHUNK_FACE_SHADE_WGSL : CHUNK_SHADE_WGSL]
       .reduce<ReturnType<typeof wgslFn>[]>(
         (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
       );
@@ -502,6 +545,10 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
       fleshDetail: u.fleshDetail,
       response: options?.fleshResponse ? attribute('bakeResponse', 'vec4') : vec4(0),
       fresnelGain: options?.fleshResponse ? attribute('bakeFresnel', 'float') : u.look.w,
+      picks: u.chunkLights,
+      lights: (options?.lightList ?? fallbackLightListNode()) as never,
+      listOn: u.lightListCfg.x,
+      listGain: u.lightListCfg.y,
     }) as never, float(1.0));
   }
   material.depthWrite = true;

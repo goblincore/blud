@@ -8,14 +8,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
-  defaultUniforms, blankFaceTexture, woundReachBound,
+  defaultUniforms, blankFaceTexture, woundReachBound, fallbackLightListNode,
 } from './zombie-gpu';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
 import { ROW_PRIM_A, ROW_PRIM_BEND } from './march.wgsl';
-import { REC_ANCHOR_BAND, REC_COUNTS, REC_VEC4S } from './crowd-records';
+import { REC_ANCHOR_BAND, REC_COUNTS, REC_LIGHTS, REC_VEC4S } from './crowd-records';
 import { BASE_PRIM_STRIDE, MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
@@ -100,6 +100,29 @@ describe('shared gib chunk material', () => {
     shared.dispose();
     expect(sharedDisposed).toBe(true);
     template.dispose();
+  });
+
+  it('syncRecord lands a view\'s light picks in its own record slot the same frame (Task 12)', () => {
+    // The game picks after update() (the actor light loop runs later in the frame), so the view
+    // must re-write its record then; each view owns its slot, so two gibs pick independently.
+    const shared = createSharedChunkGpuMaterial(undefined, undefined, fallbackLightListNode());
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const a = createChunkGpuView(makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]), prims, template.uniforms, undefined, undefined, shared);
+    const b = createChunkGpuView(makeChunk('armL', [-2, 1, 1], [1, 2, 0], 0.1, [0, 0, 1]), prims, template.uniforms, undefined, undefined, shared);
+    const lightsOf = (v: typeof a) => {
+      const slot = (v.instCfg.value as THREE.Vector4).z;
+      const o = slot * REC_VEC4S * 4 + REC_LIGHTS * 4;
+      return Array.from(shared.records.floats.slice(o, o + 4));
+    };
+    expect(lightsOf(a)).toEqual([-1, -1, -1, -1]);
+    a.uniforms.bodyLights.value.set(2.5, 0.25, -1, -1);
+    b.uniforms.bodyLights.value.set(7.75, -1, -1, -1);
+    a.syncRecord();
+    b.syncRecord();
+    expect(lightsOf(a)).toEqual([2.5, 0.25, -1, -1]);
+    expect(lightsOf(b)).toEqual([7.75, -1, -1, -1]);
+    a.dispose(); b.dispose(); shared.dispose(); template.dispose();
   });
 
   it('reconfigures a bounded mesh slot without allocating a new render object', () => {

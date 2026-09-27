@@ -5,6 +5,7 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { setChunkListGain } from './chunk-light-pick';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -443,6 +444,21 @@ export function createWorldSeams(ctx: GameContext) {
     chunkDetailApplied: () => ctx.world.litChunkMaterials.map(m => {
       const d = m.uniforms.fleshDetail.value;
       return { amp: d.x, freq: d.y, albedo: d.z, ambient: m.uniforms.ambient.value.getHex() };
+    }),
+    /** Shared light list, Task 12: what each gib light holds this frame. `materials`: every
+     *  registered baked material's switch (lightListCfg.x), packed picks and ambient; `views`: every
+     *  live marched chunk view's switch and picks (its bodyLights, copied into its record). */
+    /** The gib trim on every list term (chunk-light-pick CHUNK_LIST_GAIN), live. */
+    setChunkListGain: (g: number) => setChunkListGain(g),
+    chunkLights: () => ({
+      materials: ctx.world.litChunkMaterials.map(m => ({
+        listOn: m.uniforms.lightListCfg.value.x, picks: m.uniforms.chunkLights.value.toArray(),
+        ambient: m.uniforms.ambient.value.toArray(),
+      })),
+      views: ctx.bake.liveChunks.map(c => ({
+        id: c.id, pos: c.view.object.position.toArray(),
+        listOn: c.view.uniforms.lightListCfg.value.x, picks: c.view.uniforms.bodyLights.value.toArray(),
+      })),
     }),
     /** The live roster in world terms — what a blast gate needs to pick a
      *  target and to count what a detonation removed. Read-only scalars only:

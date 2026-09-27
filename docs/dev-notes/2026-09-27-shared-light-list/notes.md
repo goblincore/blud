@@ -286,3 +286,87 @@ dependency pre-bundle. Its second run is 5.45 s, level with head.
   0.069 = 1.73x. `?lightlist=0` reads 0.116 / 0.064 = 1.81x (the old path, left alone on purpose).
   The flash check still passes: crater 0.062 -> 0.539 (8.7x; it was 0.091 -> 0.550, and the
   darker start is the fix).
+
+## Task 12: gib chunks pick their lights
+
+![gibs, off | on: tube (top), tube + flashlight (bottom)](gibs-off-on.png)
+
+Left column `?lightlist=0`, right the list; each a fresh boot, clocks pinned, the train stopped, a
+zombie blown up (`__sdfGame.detonate`, gibs and all) under the z -4 third-class tube. The piles
+differ boot to boot (the pieces fly on the hand-stepped clock), so the gate judges the gib pixels
+only (the ones that change when `setChunksVisible(false)` hides the pieces in the same frame).
+
+- **Baked gibs (one pick per MATERIAL).** A `litChunkMaterials` entry's uniforms are shared by
+  every mesh drawn with it, so each entry picks once, at the **centroid of its visible pieces**.
+  **Deviation from spec §4** ("pick at the chunk's own position"). `gatherChunkCentroids`
+  (game-bake-leaves) keys the pieces by drawn material: settled bakes (`centre`), soldier corpses
+  (they share `ctx.bake.mat`; geometry bounding-sphere centre), sprite-set pieces drawn as meshes
+  (carved, asset, asset-head materials; `state.pos`), the gore showcase. Room: `roomIdAt` at the
+  centroid (-1 in a tunnel matches every light); facing `[0, 1]` (not neutral: a light on the -z
+  side takes its profile's backKey falloff). An entry with pieces is list-lit whatever it picks
+  (like an actor: no picks = fill + fresnel on keyColor, never body 0's global key); with none it
+  stays on the old path. Pure part: `chunk-light-pick.ts` (tested).
+- **Ambient, list mode.** Today's per-frame chunk ambient is `fill x key + bounce` with body 0's
+  `lightCfg.y`, which carries body 0's room factor. List mode re-bases the fill on the pieces' room
+  (`fill / f(body 0) x f(centroid)`, the Task 11b bone rule); the bounce is left as today.
+- **Shader** (`chunkShade`, both face variants): `picks`, `lights`, `listOn`, `listGain` after
+  `fresnelGain`. List on: the key is `bodyLights(p, nrm, V, picks, lights, false)`, compose as the
+  bones' (ambient, baked AO, wet tint, fresnel on the dominant's colour), the face's flat term
+  takes `0.30 x domC`, and the soft shoulder runs whenever the list is on, as the march's does.
+  Uniforms `chunkLights` (-1s) and `lightListCfg` (0s). `?lightlist=0` writes x = 0: the old path.
+- **CHUNK_LIST_GAIN 0.4 (measured; `__sdfGame.setChunkListGain`).** At the list's full level
+  (calibrated on the march, whose soft shoulder flattens a big key) a baked gib face-up under the
+  tube read 0.44 and in the beam 0.69 with 19.8% of its pixels over 0.95. Anchor: the MARCHED gib
+  under the list (`GIB_RENDER=march`), 0.316 tube / 0.482 torch. Sweep (baked): 0.3 0.255 / 0.485,
+  0.5 0.324 / 0.578. 0.4 splits the tube match (0.5) and the torch match (0.3).
+- **Marched chunk views (per view).** Each owns a record slot, so it picks at its own position like
+  an actor (`applyBodyLights`, room at the view, facing [0, 1]), `bodyFlash.w = 0`, no
+  `applyWindowKey`; new `ChunkGpuView.syncRecord()` re-writes the record after the pick (update()
+  wrote it earlier in the frame). Chunk views are list-lit whatever they pick, like actors (the
+  coordinator's draft said "x = 0 without picks"; consistency with actors won). The shared chunk
+  march material now binds the real list node (`createSharedChunkGpuMaterial(prev, opts, list)`).
+- **The ratio band was dropped.** The plan asked for on/off within ~0.8-1.25x. `?lightlist=0`
+  lights gibs by body 0's key (a direction and colour from wherever body 0 stands), and its beam
+  path barely reaches a gib either, so the old pile is near-black under a lit tube: measured
+  on/off 1.64-1.81x under the tube, 2.1-3.3x in the beam (marched views: 2.47x). Matching the band
+  would mean matching the global key. Section 9 of the light gate judges instead: list >= the old
+  key, <= 10% near-black, <= 2% blown under the tube, <= 10% blown in the beam (the marched anchor
+  itself reads 11.5%), every drawn gib material / view list-lit with a third-class tube picked.
+
+### Gate (full run, `LIGHT_GATE_SHOT` kept the frames)
+
+```
+     gibs       on  mean 0.259 (7.0% of frame, 14 sprite pieces) dark 0.1% blown 0.0% | off mean 0.158 (5.0% of frame, 14 sprite pieces) dark 4.7% blown 0.0%
+     gibs+torch on  mean 0.569 dark 0.0% blown 5.3% | off mean 0.175 dark 3.0% blown 0.0%
+ok   gibs lit by the tube: on/off gib mean tube 1.64x torch 3.26x; 2 list-lit gib material(s), 0 chunk view(s); material picks [[0.583,-1,-1,-1],[0.289,-1,-1,-1]]
+ok   shared list look: on/off mean tube 1.07x bolt 1.01x flashlight 1.00x; near-black tube 0.8% bolt 0.0% flashlight 1.8% dark-corridor 59.4%
+PASS sdf-game-light-gate (wall 64 s)
+```
+
+`LIGHT_GATE_ONLY_GIBS=1` runs section 9 alone (about 25 s). `GIB_RENDER=march`: views 1, 2, 4, 5...
+all list-lit, the tube (index 0) picked at 0.20-0.32 around the pool, plus the one settled bake.
+
+### By eye
+
+Off: the pile under the tube is near-black grey, and the beam hardly lifts it. On: the pieces read
+fleshy (pink with dark mottling) in the tube's pool, with a cool rim from the tube's colour on the
+fresnel and its back rim; in the beam they go pink-white with wet highlights, not flat white.
+
+### Cold boot (scripts/boot-time.mjs, fresh profile, alternating)
+
+```
+HEAD run 1: {"drawOnce":1505.1,"warmMs":2090}
+BASE run 1: {"drawOnce":1698.6,"warmMs":2456}
+HEAD run 2: {"drawOnce":1710.4,"warmMs":2327}
+BASE run 2: {"drawOnce":1641.7,"warmMs":2302}
+```
+
+Within noise. The boot warms the marched chunk view (same WGSL; only the bound list node changed);
+the baked-chunk shader compiles on the first gib, which this number does not cover.
+
+### Known gaps
+
+- A chunk view's BONES reach the tube instancer with no owner (game-main, `posedBones()` sources
+  carry no `lights`: -2), so they keep the old key even in list mode.
+- One pick per material: a pile spread across two pools takes the centroid's lights.
+- Facing [0, 1] biases the pick against lights on the -z side (backKey).

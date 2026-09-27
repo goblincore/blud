@@ -13,6 +13,11 @@
 //      the body-box mean is within 0.9x..1.2x of `?lightlist=0` at the same pose (a second boot);
 //      the body box is never mostly black.
 //      LIGHT_GATE_SHOT=<dir> keeps the A/B shots (list-<scene>-on|off.png).
+//   8. BONES (Task 11): the skull catches the muzzle flash and does not glow in the dark.
+//   9. GIBS (Task 12): a zombie blown up under a tube; its settled gibs read lit by the tube on both
+//      paths (gib-pixel mean on/off within 0.8x..1.25x, neither black nor blown), and in list mode
+//      every lit gib material and chunk view is switched on with the tube among its picks.
+//      LIGHT_GATE_ONLY_GIBS=1 runs section 9 alone.
 //
 // Usage: LAB_VITE_PORT=5297 LAB_CDP_PORT=9297 node scripts/sdf-game-light-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -164,7 +169,7 @@ const lights = () => evaluate('__sdfGame.lights()');
 const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire');
 
 // LIGHT_GATE_ONLY_LIST=1 runs section 7 alone (the calibration loop).
-if (!process.env.LIGHT_GATE_ONLY_LIST) {
+if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS) {
 // 1. DARK START — no flashlight until the coat check (carriage 4 of 8).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) { console.error(consoleEvents.slice(-8)); fail('night-train did not boot'); }
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
@@ -325,6 +330,7 @@ async function pinLit() {
   }
 }
 async function listBoot(query) {
+  if (process.env.GIB_RENDER) query += `&gibrender=${process.env.GIB_RENDER}`;
   if (!(await boot(query))) { console.error(consoleEvents.slice(-8)); fail(`night-train did not boot (${query})`); }
   await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
   await evaluate('__sdfGame.setFlashlight(false)');
@@ -395,7 +401,7 @@ if (!pa || !pb || pa.room !== pb.room || !pa.crowd || !pb.crowd || !(sep > 1.5))
 if (pa.picks[0].index < 0 || pb.picks[0].index < 0 || pa.picks[0].index === pb.picks[0].index) fail(`crowd pair share a dominant: ${JSON.stringify({ a: pa.picks, b: pb.picks })}`);
 const lit = picks.filter((p) => p.picks[0].index >= 0).length;
 pass(`shared list: ${LL3.length} lights in third class; crowd actors ${pa.id}/${pb.id} (room ${pa.room}, ${sep.toFixed(1)} m apart) dominants ${pa.picks[0].index} (w ${pa.picks[0].weight.toFixed(3)}) / ${pb.picks[0].index} (w ${pb.picks[0].weight.toFixed(3)}); ${lit}/${picks.length} bodies picked`);
-const listOn = await listScenes('on');
+const listOn = process.env.LIGHT_GATE_ONLY_GIBS ? null : await listScenes('on');
 
 // 8. BONES READ THE SAME LIGHTS (plan 1, Task 11): the skull catches the muzzle flash. In the dark
 // coat check (nothing picks the body), a slug crater opens the face of the nearest actor to its
@@ -475,11 +481,121 @@ async function skullScene(tag) {
   pass(`skull catches the muzzle flash: actor ${a.id}, ${withMuzzle}/${after.instances.length} bone instances pick muzzle light ${muzzleIdx} (skull picks ${JSON.stringify(after.instances[0].map((v) => +v.toFixed(3)))}); crater crop mean ${skullOff.toFixed(3)} -> ${skullOn.toFixed(3)} (${(skullOn / skullOff).toFixed(2)}x)`);
   return { skullOff, skullOn, boneOff, fleshOff };
 }
-const skullListOn = await skullScene('on');
+// 9. GIB CHUNKS PICK THEIR LIGHTS (plan 1, Task 12). The actor under the z -4 tube is blown up
+// (the real detonation, gibs and all); the pieces fly and settle on the hand-stepped clock, then
+// the camera looks down at the pile. The gib pixels are the ones that change when the pieces are
+// hidden (the same frame, setChunksVisible(false)). Then the flashlight on the same pile.
+// NOT an on/off ratio band: ?lightlist=0 lights gibs by body 0's key (a global key from wherever
+// body 0 stands), which leaves a pile under a lit tube near-black, so the list is MEANT to differ
+// (on/off 1.4-1.8x measured at Task 12; the old beam barely reaches a gib either, 3x in the beam).
+// Judged instead: the list is no darker than the global key, not black, not blown (tube and
+// torch), and every drawn gib is list-lit with a tube picked.
+// GIB_RENDER=march boots ?gibrender=march (marched chunk views, then their bakes); GIB_SWEEP=a,b,..
+// sweeps setChunkListGain in the list boot (the CHUNK_LIST_GAIN calibration).
+const GIB_MASK = 0.03, GIB_NEAR = 4;
+async function gibScene(tag) {
+  await evaluate('__sdfGame.holdWindowLight(0, -1)');
+  await evaluate('__sdfGame.setFlashlight(false)');
+  // The z -4 tube (UNDER_B): the pieces settle in its pool. Under the z -12 tube they come to
+  // rest by the stove (z -15), in the fire's light and at the tube's dim edge.
+  const at = UNDER_B;
+  await placeNearest(...at);
+  await stepN(4);
+  const a = await frameNearest(...at);
+  const boom = await evaluate(`__sdfGame.detonate(${a.pos[0]}, 0.7, ${a.pos[2]})`);
+  await stepN(150);
+  await pinLit();
+  const all = await evaluate('__sdfGame.chunkStates()');
+  const near = all.filter((c) => Math.hypot(c.pos[0] - a.pos[0], c.pos[2] - a.pos[2]) < GIB_NEAR);
+  if (near.length < 3) fail(`gibs (${tag}): ${near.length} pieces within ${GIB_NEAR} m of the blast (${all.length} in all): ${JSON.stringify(boom)}`);
+  const c = [0, 1, 2].map((k) => near.reduce((acc, q) => acc + q.pos[k], 0) / near.length);
+  const eye = (await evaluate('__sdfGame.pose()')).pos[1] + 1.62;
+  const cx = c[0], cz = c[2] + 1.8;
+  await evaluate(`__sdfGame.setPose(${cx}, ${cz}, 0, ${Math.atan2(c[1] - eye, 1.8)})`);
+  await stepN(20);
+  /** Shoot the pile, then the same frame with the pieces hidden: the gib pixels are the changed
+   *  ones. Mean, near-black and blown shares over them. */
+  const measure = async (name) => {
+    await stepN(8, 0);
+    await settle(300);
+    const img = await shoot(name);
+    const cl = await evaluate('__sdfGame.chunkLights()');
+    const LL = await evaluate('__sdfGame.lightList()');
+    await evaluate('__sdfGame.setChunksVisible(false)');
+    await stepN(2, 0);
+    await settle(300);
+    const bare = await shoot(`${name}-hidden`);
+    await evaluate('__sdfGame.setChunksVisible(true)');
+    let sum = 0, n = 0, dark = 0, blown = 0;
+    for (let i = 0; i < img.data.length; i += img.ch) {
+      const l = (img.data[i] + img.data[i + 1] + img.data[i + 2]) / 765;
+      const lb = (bare.data[i] + bare.data[i + 1] + bare.data[i + 2]) / 765;
+      if (Math.abs(l - lb) < GIB_MASK) continue;
+      sum += l; n++;
+      if (l < 0.04) dark++;
+      if (l > 0.95) blown++;
+    }
+    return { img, cl, LL, n, mean: sum / Math.max(n, 1), dark: dark / Math.max(n, 1), blown: blown / Math.max(n, 1) };
+  };
+  const m = await measure(`gibs-${tag}`);
+  const img = m.img, n = m.n;
+  const cl = m.cl, LLg = m.LL;
+  const SWEEP = process.env.GIB_SWEEP && tag === 'on' ? process.env.GIB_SWEEP.split(',').map(Number) : [];
+  for (const g of SWEEP) { await evaluate(`__sdfGame.setChunkListGain(${g})`); const q = await measure(`gibs-sweep-${g}`); console.log(`SWEEP tube  gain ${g}: mean ${q.mean.toFixed(3)} dark ${(q.dark * 100).toFixed(1)}% blown ${(q.blown * 100).toFixed(1)}%`); }
+  if (SWEEP.length) await evaluate('__sdfGame.setChunkListGain(NaN)');
+  // The flashlight on the same pile: a light BOTH paths model (the old one by its beam cone), so
+  // this is the like-for-like level check.
+  await evaluate('__sdfGame.setLightClockFrozen(false)');
+  await evaluate('__sdfGame.setFlashlight(true)');
+  await stepN(30);
+  await pinLit();
+  if ((await lights()).flashlight !== 1) fail(`gibs (${tag}): torch level ${(await lights()).flashlight}`);
+  const t = await measure(`gibs-torch-${tag}`);
+  for (const g of SWEEP) { await evaluate(`__sdfGame.setChunkListGain(${g})`); const q = await measure(`gibs-torch-sweep-${g}`); console.log(`SWEEP torch gain ${g}: mean ${q.mean.toFixed(3)} dark ${(q.dark * 100).toFixed(1)}% blown ${(q.blown * 100).toFixed(1)}%`); }
+  if (SWEEP.length) await evaluate('__sdfGame.setChunkListGain(NaN)');
+  await evaluate('__sdfGame.setFlashlight(false)');
+  const px = img.w * img.h;
+  if (process.env.LIGHT_GATE_DEBUG) console.log('DBG gibs', tag, JSON.stringify({ boom, near: near.length, render: [...new Set(near.map((q) => q.render))], c, cl, a: a.pos, LL: LLg.map((l, i) => `${i}:${l.profile}@${l.pos.map((v) => v.toFixed(1))}r${l.rooms}`) }));
+  if (!(n > px * 0.01)) fail(`gibs (${tag}): only ${n} gib pixels in frame (${near.length} pieces at ${c.map((v) => v.toFixed(2))})`);
+  const tubeIdx = LLg.map((l, i) => (l.profile === 'tube' && l.rooms.includes(1) ? i : -1)).filter((i) => i >= 0);
+  const drawn = cl.materials.filter((m) => m.listOn === 1);
+  if (tag === 'off') {
+    if (cl.materials.some((m) => m.listOn !== 0) || cl.views.some((v) => v.listOn !== 0)) fail(`gibs (?lightlist=0): a gib light switch is on: ${JSON.stringify(cl)}`);
+  } else {
+    // Every drawn gib (a material with pieces, a live view) is list-lit and picks a third-class tube.
+    const picksTube = (p) => p.some((v) => v >= 0 && tubeIdx.includes(Math.floor(v + 1e-6)));
+    if (drawn.length + cl.views.length === 0) fail(`gibs: no gib material or view is list-lit: ${JSON.stringify(cl)}`);
+    for (const m of drawn) if (!picksTube(m.picks)) fail(`gibs: a gib material does not pick a third-class tube (${tubeIdx}): ${JSON.stringify(m)}`);
+    for (const v of cl.views) {
+      if (v.listOn !== 1) fail(`gibs: a live chunk view is not list-lit: ${JSON.stringify(v)}`);
+      if (Math.hypot(v.pos[0] - UNDER_B[0], v.pos[2] - UNDER_B[1]) < 1.5 && !picksTube(v.picks)) fail(`gibs: a chunk view in the tube's pool does not pick a tube (${tubeIdx}): ${JSON.stringify(v)}`);
+    }
+  }
+  return { mean: m.mean, px: n / px, dark: m.dark, blown: m.blown, torch: t, pieces: near.length, render: [...new Set(near.map((q) => q.render))].join('+'), materials: drawn.length, views: cl.views.length, picks: drawn.map((m) => m.picks.map((v) => +v.toFixed(3))) };
+}
+const ONLY_GIBS = !!process.env.LIGHT_GATE_ONLY_GIBS;
+const skullListOn = ONLY_GIBS ? null : await skullScene('on');
+const gibsOn = await gibScene('on');
 await listBoot('level=night-train&frozen&god&lightlist=0');
 if ((await evaluate('__sdfGame.bodyPicks()')).some((p) => p.picks.some((k) => k.index >= 0))) fail('?lightlist=0 still picks');
-const listOff = await listScenes('off');
-const skullListOff = await skullScene('off');
+const listOff = ONLY_GIBS ? null : await listScenes('off');
+const skullListOff = ONLY_GIBS ? null : await skullScene('off');
+const gibsOff = await gibScene('off');
+const gibFmt = (g) => `mean ${g.mean.toFixed(3)} (${(g.px * 100).toFixed(1)}% of frame, ${g.pieces} ${g.render} pieces) dark ${(g.dark * 100).toFixed(1)}% blown ${(g.blown * 100).toFixed(1)}%`;
+const torchFmt = (g) => `mean ${g.torch.mean.toFixed(3)} dark ${(g.torch.dark * 100).toFixed(1)}% blown ${(g.torch.blown * 100).toFixed(1)}%`;
+console.log(`     gibs       on  ${gibFmt(gibsOn)} | off ${gibFmt(gibsOff)}`);
+console.log(`     gibs+torch on  ${torchFmt(gibsOn)} | off ${torchFmt(gibsOff)}`);
+{
+  const r = gibsOn.mean / gibsOff.mean, rt = gibsOn.torch.mean / gibsOff.torch.mean;
+  if (!(r >= 1.0)) fail(`gibs: the list is darker than the global key under the tube: ${gibsOn.mean.toFixed(3)} < ${gibsOff.mean.toFixed(3)}`);
+  if (!(gibsOn.dark <= 0.10)) fail(`gibs: ${(gibsOn.dark * 100).toFixed(1)}% of gib pixels near-black under the tube`);
+  if (!(gibsOn.blown <= 0.02)) fail(`gibs: ${(gibsOn.blown * 100).toFixed(1)}% of gib pixels blown to white under the tube`);
+  // In the beam: at most 10% of gib pixels over 0.95. The anchor (CHUNK_LIST_GAIN) is the MARCHED
+  // gib under the list, which itself reads 11.5% blown there; the baked pile measured 2-7%.
+  if (!(gibsOn.torch.blown <= 0.10)) fail(`gibs: ${(gibsOn.torch.blown * 100).toFixed(1)}% of gib pixels blown to white in the beam`);
+  pass(`gibs lit by the tube: on/off gib mean tube ${r.toFixed(2)}x torch ${rt.toFixed(2)}x; ${gibsOn.materials} list-lit gib material(s), ${gibsOn.views} chunk view(s); material picks ${JSON.stringify(gibsOn.picks)}`);
+}
+if (ONLY_GIBS) { console.log(`PASS sdf-game-light-gate gibs only (wall ${((Date.now() - T0) / 1000).toFixed(0)} s)`); process.exit(0); }
 console.log(`     skull      on  crater ${skullListOn.skullOff.toFixed(3)} -> flash ${skullListOn.skullOn.toFixed(3)} | off crater ${skullListOff.skullOff.toFixed(3)} -> flash ${skullListOff.skullOn.toFixed(3)}`);
 console.log(`     skull/flesh on  ${skullListOn.boneOff.toFixed(3)} / ${skullListOn.fleshOff.toFixed(3)} = ${(skullListOn.boneOff / skullListOn.fleshOff).toFixed(2)}x | off ${skullListOff.boneOff.toFixed(3)} / ${skullListOff.fleshOff.toFixed(3)} = ${(skullListOff.boneOff / skullListOff.fleshOff).toFixed(2)}x`);
 for (const sc of SCENES) console.log(`     ${sc.name.padEnd(10)} on  ${fmt(listOn[sc.name])} | off ${fmt(listOff[sc.name])}`);
