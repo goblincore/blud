@@ -6,6 +6,9 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
+- [ ] **v1.2 approved, not built (2026-09-27)** — owner's second playtest: less powerful (~5 hits), smaller craters, head
+  decap only on the 4th head hit (fix the neck-hit leak), impact on the crosshair, a big overhand first swing, a bigger hand.
+  Spec §11 · [HANDOFF](docs/dev-notes/2026-09-26-flail/HANDOFF-v1.2.md).
 - [~] **v1.1 built (whip chain, gradual head damage); owner playtest pending.** Gate passing 2026-09-27. [Plan](docs/superpowers/plans/2026-09-26-spike-flail.md) ·
   [spec](docs/superpowers/specs/2026-09-26-spike-flail-design.md) · gate: `node scripts/flail-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"`
   (with servers up via `scripts/lab-servers.sh`) · [NOTES](docs/dev-notes/2026-09-26-flail/NOTES.md) — click = preset swing

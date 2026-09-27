@@ -129,3 +129,43 @@ pinned on the strike frame, at 30–240 Hz and with jittered frames; the ball la
 hangs straight down at rest) and a head-rule unit test; the gate's
 beheading check becomes "head still on after head hits 1 and 2, off on hit 3", with photos of the
 face damage after each hit.
+
+## 11. v1.2 — second playtest (owner, 2026-09-27) — APPROVED, NOT BUILT YET
+
+Owner feedback: the whip is whippy enough; the post-swing settle is fine; the rest framing is fine.
+Problems: (a) head hits still decapitate on the first hit in play; (b) the weapon is too powerful
+(it drops zombies faster than the shotgun; it should take 4–5 hits); (c) the hand is still too
+small; (d) the first swing (R→L) reads as "a weird weak punch" and should be **a big overhand
+swipe** (the L→R cross-screen swing is fine); (e) the craters are too big (one chest hit opens a
+gaping centre).
+
+Approved changes (owner, 2026-09-27):
+
+| Change | Now | v1.2 |
+| --- | --- | --- |
+| Hits to drop a zombie (`FLAIL_FEEL.meterCredit`) | 0.35 (~3 hits) | **0.18 (~5 hits)** |
+| Body crater (`FLAIL_FEEL.craterR`) | 0.14 m | **0.09 m** (`severMul` stays 1.3) |
+| Face crater (`FLAIL_HEAD.faceCraterR`) | 0.09 m | **0.06 m** |
+| Head hits to sever (`FLAIL_HEAD.hitsToSever`) | 3 | **4** |
+| Head region (`isHeadRegion`) | head prim, or < 0.25 m from the head centre | also **< ~0.2 m from the neck joint** (the head cluster's attach point), so neck and upper-chest hits count as head hits and cannot sever early |
+| Impact point (`FLAIL_IMPACT`, the strike keys' ball) | ~0.35 m BELOW the crosshair (chest height) | **on or just below the crosshair** (view y ≈ −0.05…−0.1), so you hit what you aim at |
+| First swing R→L keys (`flail-swing.ts` KEYS_R) | forward jab | **big overhand swipe**: wind up high over the right shoulder (ball above and behind the frame's top right), then a heavy diagonal down onto the crosshair |
+| L→R keys | — | unchanged, except the strike ball moves to the crosshair |
+| Hand (`FLAIL_LOOK.handScale`) | 1.0 | **~1.3** (rest framing unchanged) |
+
+**The decapitation cause is not yet confirmed.** Hypothesis: the impact point is authored ~0.35 m
+below the crosshair, so aiming at the head puts the crater on the neck or upper chest. That is more
+than 0.25 m from the head centre, so the hit is not a "head hit" and the full crater (sever 0.18)
+cuts the neck. Confirm it FIRST with a gate case that aims the CROSSHAIR at the head (as a player
+does), not the strike ray at the neck as the current gate does. Also rule out other paths: head
+pop, collapse/death dismemberment, and a torso prim near the neck.
+
+Acceptance (gate):
+- Aiming the crosshair at the head: the head stays on after head hits 1–3 and comes off on the 4th.
+- A body zombie needs ≥ 4 hits to collapse (target ~5).
+- Chest craters are about 0.09 m.
+- All current checks still pass (positive controls, reach/arc refusals, strike-frame ball pin at
+  60 and 144 Hz, zero console errors).
+- Swing tests stay green (speed-at-strike ratio, overshoot, pops, reach ≤ 0.37 m, min ball–bolt
+  ≥ 0.28 m, whip gates).
+- Photos: an R overhand frame strip, and the head after hits 1–4.
