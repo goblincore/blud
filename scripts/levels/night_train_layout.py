@@ -114,7 +114,7 @@ CARRIAGES = [
          pickups=[("favour-dynamite", "dynamite", -1.75, 3.0), ("bar-health", "health", 1.1, 17.0), ("dj-cd", "cd", -1.7, 19.6)],
          gates=[], moods=["steady", "steady"], fires=[("party-boiler", 1.5, 0.7, 0.6, 1.0)],
          triggers=[("strobe", "light.strobe.room.5", -2.1, 2.1, 5.5, 6.5)],
-         beacons=[(0.0, 4.0, 3.3, 0.7), (0.0, 14.0, 3.3, -0.7)]),   # just under the 3.4 m ceiling
+         beacons=[(0.0, 4.0, 2.95, 0.7), (0.0, 14.0, 2.95, -0.7)]),   # under the centre pipe (its bottom at h - 0.33)
     dict(rid=7, name="tender", w=3.4, L=10.0, h=2.6,
          walls=[],
          areas=[("tender: the coal bunker (west), a walkway (east)", -1.7, 1.7, 0, 10.0)],

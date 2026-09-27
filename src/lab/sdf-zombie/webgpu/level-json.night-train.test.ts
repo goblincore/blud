@@ -103,5 +103,8 @@ describe('night-train dynamic light (dynamic light spec §3)', () => {
     expect(beacons.map(x => x.r)).toEqual(['boiler-room', 'boiler-room']);
     expect(beacons.map(x => x.a.spin).sort()).toEqual([-0.7, 0.7]);
     expect(beacons.every(x => x.a.mood === 'dead')).toBe(true);
+    // Below the carriage's centre pipe (build_train_kit ceiling_bay: radius 0.13 at h - 0.2), so
+    // the housing and the beam's apex are not buried in it.
+    expect(beacons.every(x => x.a.pos[1] <= b.height - 0.33)).toBe(true);
   });
 });
