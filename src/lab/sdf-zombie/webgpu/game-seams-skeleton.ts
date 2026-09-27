@@ -43,6 +43,15 @@ export function createSkeletonSeams(ctx: GameContext) {
       a.beginHits(); const wound = a.hitSlug(point, direction); a.endHits();
       return { actor: a.id, point, ejected, stamped: !!wound };
     },
+    /** Shared light list (plan 1, Task 11): the iLights picks of one actor's drawn bone-mesh
+     *  instances (its owner picks, `index + weight`, -1 empty, -2 no owner) and the renderer's
+     *  list switch. null without the mesh skeleton or the actor. */
+    boneLights: (bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      const r = ctx.render.segMeshRenderer;
+      if (!a || !r) return null;
+      return { listOn: r.uniforms.lightListCfg.value.x, instances: r.ownerLights(a), body: a.view.uniforms.bodyLights.value.toArray() };
+    },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
     /** Cold-start task 1: how many per-character body builds the memo actually
      *  ran (vs served from cache) and their cumulative CPU time. */

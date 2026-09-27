@@ -145,3 +145,48 @@ describe('segmentNeeded (bone exposure cull)', () => {
     expect(segmentNeeded(b, true, new Set([a]))).toBe(true);
   });
 });
+
+describe('shared light list (plan 1, Task 11): iLights carries the owner\'s picks', () => {
+  const lightsOf = (o: unknown) => {
+    const bl = (o as { bodyLights?: number[] }).bodyLights;
+    return bl ? new THREE.Vector4(...bl) : undefined;
+  };
+  const iLights = (r: ReturnType<typeof createSegmentMeshRenderer>, eye: boolean) => {
+    const m = r.object.children.find(c => (c as THREE.InstancedMesh).isInstancedMesh && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as THREE.InstancedMesh;
+    const a = m.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute;
+    return { m, a };
+  };
+  it('writes the owner actor\'s pick into iLights for its segment and its eyes', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const actor = { id: 1, bodyLights: [0.9, -1, -1, -1] };
+    renderer.update([[headSrc]], [actor]);
+    renderer.syncLights(lightsOf);
+    const seg = iLights(renderer, false);
+    expect(seg.a.isInstancedBufferAttribute).toBe(true);
+    expect(seg.a.itemSize).toBe(4);
+    expect(Array.from(seg.a.array.slice(0, 4)).map(v => +v.toFixed(4))).toEqual([0.9, -1, -1, -1]);
+    const eye = iLights(renderer, true);
+    expect(eye.m.count).toBeGreaterThan(0);
+    for (let i = 0; i < eye.m.count; i++) expect(eye.a.array[i * 4]).toBeCloseTo(0.9, 6);
+    // no owner picks: the instance keeps the old key (-2)
+    renderer.syncLights(() => undefined);
+    expect(seg.a.array[0]).toBe(-2);
+    expect(renderer.uniforms.lightListCfg.value.x).toBe(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('grows iLights in step with the batch, per-owner values intact', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owners = Array.from({ length: 40 }, (_, i) => ({ id: i, bodyLights: [i + 0.5, -1, -1, -1] }));
+    renderer.update(owners.map(() => [headSrc]), owners);
+    renderer.syncLights(lightsOf);
+    const { m, a } = iLights(renderer, false);
+    expect(m.count).toBe(40);
+    expect(a.count).toBeGreaterThanOrEqual(m.instanceMatrix.count);
+    for (let i = 0; i < 40; i++) expect(a.array[i * 4]).toBeCloseTo(i + 0.5, 5);
+    renderer.dispose();
+    cache.dispose();
+  });
+});

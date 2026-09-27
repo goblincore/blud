@@ -167,3 +167,40 @@ describe('router eligibility through the actual material (not the handle)', () =
     expect(verdict).not.toBe('adapt');
   });
 });
+
+describe('shared light list (plan 1, Task 11): each tube takes its owner\'s 4 lights', () => {
+  it('INSTANCE_FLOATS is 22 and iLights sits at float 18', async () => {
+    const m = await import('./bone-instancer');
+    expect(INSTANCE_FLOATS).toBe(22);
+    expect(m.ILIGHTS_OFFSET).toBe(18);
+    expect(m.NO_OWNER_PICKS).toBe(-2);
+  });
+  it('boneShade replaces only the key with bodyLights, behind listOn and an owned instance', () => {
+    const i = BONE_SHADE_WGSL.indexOf('if (listOn > 0.5 && picks.x > -1.5) {');
+    expect(i).toBeGreaterThan(0);
+    const call = BONE_SHADE_WGSL.indexOf('bodyLights(p, n, V, picks, lights, false)');
+    expect(call).toBeGreaterThan(i);
+    // the list branch keeps ambient, AO, the gloss (look.z) and the fresnel
+    const branch = BONE_SHADE_WGSL.slice(i, BONE_SHADE_WGSL.indexOf('var L = normalize(lightDir);'));
+    for (const t of ['ambient + bl.diffuse', 'bl.spec * look.z', 'fresL', 'bl.rim', 'aoL']) expect(branch).toContain(t);
+    // the old key path is still there, after the branch
+    expect(BONE_SHADE_WGSL.indexOf('keyI * keyC * (0.15 + 0.85 * ndl)')).toBeGreaterThan(call);
+    expect(BONE_SHADE_WGSL).toContain('lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32');
+  });
+  it('update writes each instance\'s owner picks (read again at syncLights); no owner = -2', () => {
+    const inst = createBoneInstancer(8);
+    const owner = { x: 0.9, y: 3.25, z: -1, w: -1 };
+    inst.update([{ prims: [bone({}), bone({})], alive: [true, true], lights: owner }, { prims: [bone({ cluster: 0 })] }]);
+    expect(inst.count).toBe(3);
+    const row = (k: number) => Array.from(inst.instances.subarray(k * INSTANCE_FLOATS + 18, k * INSTANCE_FLOATS + 22));
+    closeArr(row(0), [0.9, 3.25, -1, -1]);
+    closeArr(row(1), [0.9, 3.25, -1, -1]);
+    closeArr(row(2), [-2, -2, -2, -2]);
+    // the owner's picks change after update (the game's light loop): syncLights copies the new ones
+    owner.x = 5.5;
+    inst.syncLights();
+    closeArr(row(0), [5.5, 3.25, -1, -1]);
+    expect(inst.uniforms.lightListCfg.value.x).toBe(0);   // off until the game turns it on
+    inst.dispose();
+  });
+});

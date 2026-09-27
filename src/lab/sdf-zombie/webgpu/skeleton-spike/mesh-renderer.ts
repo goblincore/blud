@@ -48,9 +48,11 @@ import {
   attribute, wgslFn, mul, add, texture, vec4, positionGeometry, positionWorld, normalWorld, cameraPosition,
 } from 'three/tsl';
 import {
-  BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL,
-  boneInstancerUniforms, type BoneInstancerUniforms,
+  BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL, NO_OWNER_PICKS,
+  boneInstancerUniforms, type BoneInstancerUniforms, type PicksLike,
 } from '../bone-instancer';
+import { BODY_LIGHTS } from '../march/body-lights.wgsl';
+import { fallbackLightListNode } from '../zombie-gpu';
 import type { BoneFieldSource } from './contract';
 import type { SegmentMeshCache } from './mesh';
 import {
@@ -98,6 +100,14 @@ export interface SegmentMeshRenderer {
    *  writes (meshes stay allocated, so re-showing is one update away).
    *  Omitted = draw every entry, the pre-cull behaviour. */
   update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>, exposed?: ReadonlySet<unknown>): void;
+  /** Copy each drawn instance's OWNER picks into its batch's iLights (shared light list, Task
+   *  11): `lightsOf(owner)` is the owner actor's `bodyLights` value, read NOW, so call it after
+   *  this frame's picks are written (the game's light loop runs after update). Undefined/null =
+   *  no owner picks (the instance keeps the old key). Allocation-free. */
+  syncLights(lightsOf: (owner: unknown) => PicksLike | null | undefined): void;
+  /** Diagnostic: the iLights rows (4 packed picks each) of this owner's drawn instances, eyes
+   *  included, as last written by syncLights. */
+  ownerLights(owner: unknown): number[][];
   impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
   stepDebris(dt: number): void;
   eyeState(owner: object): { missing: number[]; debris: number };
@@ -127,7 +137,9 @@ export interface SegmentMeshRenderer {
  * buffer instead, in lockstep with the marched flesh. Default 0 = the
  * ordinary forward pass.
  */
-export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): SegmentMeshRenderer {
+/** `lightList`: the shared light-list storage node (ctx.world.light.list.node); omitted, the zero
+ *  fallback is bound and lightListCfg.x stays 0. */
+export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, lightList?: unknown): SegmentMeshRenderer {
   const group = new THREE.Group();
   group.name = 'skeleton-segment-meshes';
 
@@ -146,9 +158,13 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
   const fns: ReturnType<typeof wgslFn>[] = [];
   for (const src of [
     BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_TOOTH_ROW_WGSL, MESH_SKULL_CAVITY_WGSL,
-    MESH_SOCKET_VESSEL_WGSL, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BONE_SHADE_WGSL,
+    MESH_SOCKET_VESSEL_WGSL, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BODY_LIGHTS, BONE_SHADE_WGSL,
   ]) fns.push(wgslFn(src, fns.slice()));
-  const [surfaceFn, wetFn, shade] = [fns[5]!, fns[6]!, fns[7]!];
+  const [surfaceFn, wetFn, shade] = [fns[5]!, fns[6]!, fns[8]!];
+  // The owner's 4 list lights, per instance (iLights, an InstancedBufferAttribute on every batch
+  // geometry, sized with the batch). The eye material reads it too (it reuses `lit`).
+  const picksAttr = attribute('iLights', 'vec4');
+  const listNode = (lightList ?? fallbackLightListNode()) as never;
   const featureAttr = attribute('meshFeature', 'vec4');
   const surf = surfaceFn({
     pWorld: positionWorld, pLocal: positionGeometry,
@@ -171,6 +187,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
     surfaceIn: surface as never,
+    picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x,
   }) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
@@ -195,6 +212,10 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
   eyeMaterial.depthTest = true;
   eyeMaterial.depthWrite = true;
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
+  // Ejected eyes are plain meshes on the eye material, so they need an iLights of their own (one
+  // instance, no owner: the old key). Their own geometry, so the eye batch can grow its attribute.
+  const debrisEyeGeometry = eyeGeometry.clone();
+  debrisEyeGeometry.setAttribute('iLights', new THREE.InstancedBufferAttribute(new Float32Array(4).fill(NO_OWNER_PICKS), 4));
   let absent = new WeakMap<object, Set<number>>();
   const debris: { mesh: THREE.Mesh; velocity: THREE.Vector3; age: number; owner: object }[] = [];
   material.depthWrite = true;
@@ -207,8 +228,18 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
   // segment per actor (~250 draws on Night Train). The shaders read `positionGeometry`, not
   // `positionLocal`: an InstancedMesh folds the instance matrix into positionLocal, and the
   // segment-local appearance (patches, teeth, iris) must stay in the segment's own frame.
-  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; idle: number }
+  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; idle: number; owners: unknown[] }
   const batches = new Map<THREE.BufferGeometry, Batch>();
+  /** The geometry's iLights, at least `cap` instances (grown in step with the batch, contents kept). */
+  const ensureLights = (geometry: THREE.BufferGeometry, cap: number): THREE.InstancedBufferAttribute => {
+    const cur = geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute | undefined;
+    if (cur && cur.count >= cap) return cur;
+    const next = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4).fill(NO_OWNER_PICKS), 4);
+    next.setUsage(THREE.DynamicDrawUsage);
+    if (cur) (next.array as Float32Array).set(cur.array as Float32Array);
+    geometry.setAttribute('iLights', next);
+    return next;
+  };
   const batchFor = (geometry: THREE.BufferGeometry, eye: boolean): Batch => {
     let b = batches.get(geometry);
     if (!b) {
@@ -217,22 +248,25 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
       mesh.frustumCulled = false;
       mesh.layers.set(layer);
       mesh.count = 0;
+      ensureLights(geometry, mesh.instanceMatrix.count);
       group.add(mesh);
-      b = { mesh, count: 0, eye, idle: 0 };
+      b = { mesh, count: 0, eye, idle: 0, owners: [] };
       batches.set(geometry, b);
     }
     return b;
   };
-  const push = (b: Batch, m: THREE.Matrix4) => {
+  const push = (b: Batch, m: THREE.Matrix4, owner: unknown) => {
     if (b.count >= b.mesh.instanceMatrix.count) {
       const old = b.mesh;
       const grown = new THREE.InstancedMesh(old.geometry, old.material as THREE.Material, old.instanceMatrix.count * 2);
       grown.name = old.name; grown.frustumCulled = false; grown.layers.mask = old.layers.mask;
       (grown.instanceMatrix.array as Float32Array).set(old.instanceMatrix.array as Float32Array);
+      ensureLights(old.geometry, grown.instanceMatrix.count);
       group.remove(old); old.dispose();
       group.add(grown);
       b.mesh = grown;
     }
+    b.owners[b.count] = owner;
     b.mesh.setMatrixAt(b.count++, m);
   };
 
@@ -286,7 +320,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
         if (lost.has(i)) continue;
         lost.add(i); count++;
         const eye = eyes[i]!;
-        const mesh = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        const mesh = new THREE.Mesh(debrisEyeGeometry, eyeMaterial);
         mesh.layers.set(layer);
         mesh.name = 'skeleton-ejected-eye';
         mesh.position.set(...head.toWorld(eye.center));
@@ -352,12 +386,12 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
           pv.set(pose.origin[0], pose.origin[1], pose.origin[2]);
           qv.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
           segM.compose(pv, qv, one);
-          push(batchFor(baked.geometry, false), segM);
+          push(batchFor(baked.geometry, false), segM, owner);
           drawn.push({ owner, eye: false, matrix: segM.clone(), geometry: baked.geometry });
           for (const e of eyes) {
             eyeM.copy(segM).multiply(tmpM.makeTranslation(e.center[0], e.center[1], e.center[2]))
               .multiply(tmpM.makeScale(e.radius, e.radius, e.radius));
-            push(eyeBatch, eyeM);
+            push(eyeBatch, eyeM, owner);
             drawn.push({ owner, eye: true, matrix: eyeM.clone(), geometry: eyeGeometry });
           }
         });
@@ -365,6 +399,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
       slots.length = entries.length;
       for (const [geo, b] of batches) {
         b.mesh.count = b.count;
+        b.owners.length = b.count;
         b.mesh.visible = b.count > 0;
         if (b.count > 0) { b.mesh.instanceMatrix.needsUpdate = true; b.idle = 0; }
         // A segment geometry nobody has drawn for a while (a revision replaced it: a sever, an
@@ -372,6 +407,28 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
         else if (!b.eye && ++b.idle > BATCH_IDLE_UPDATES) { group.remove(b.mesh); b.mesh.dispose(); batches.delete(geo); }
       }
       group.visible = stats.segments > 0;
+    },
+    syncLights(lightsOf) {
+      for (const b of batches.values()) {
+        if (b.count === 0) continue;
+        const attr = b.mesh.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute;
+        const arr = attr.array as Float32Array;
+        for (let i = 0; i < b.count; i++) {
+          const l = lightsOf(b.owners[i]);
+          const o = i * 4;
+          if (l) { arr[o] = l.x; arr[o + 1] = l.y; arr[o + 2] = l.z; arr[o + 3] = l.w; }
+          else { arr[o] = NO_OWNER_PICKS; arr[o + 1] = NO_OWNER_PICKS; arr[o + 2] = NO_OWNER_PICKS; arr[o + 3] = NO_OWNER_PICKS; }
+        }
+        attr.needsUpdate = true;
+      }
+    },
+    ownerLights(owner) {
+      const out: number[][] = [];
+      for (const b of batches.values()) {
+        const arr = (b.mesh.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).array as Float32Array;
+        for (let i = 0; i < b.count; i++) if (b.owners[i] === owner) out.push(Array.from(arr.subarray(i * 4, i * 4 + 4)));
+      }
+      return out;
     },
     setWounds(wounds) {
       const n = Math.min(wounds.length, MAX_WOUNDS_TEX);
@@ -391,6 +448,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
       material.dispose();
       eyeMaterial.dispose();
       eyeGeometry.dispose();
+      debrisEyeGeometry.dispose();
       woundTex.dispose();
     },
   };

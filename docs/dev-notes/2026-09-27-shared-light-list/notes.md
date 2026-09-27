@@ -234,3 +234,28 @@ BASE run 2: {"drawOnce":3727.3,"warmMs":5451}
 drawOnce is within run-to-run noise: head 3.36 / 3.71 s against base 3.99 / 3.73 s. No cold-boot
 regression shows. Base run 1's 68.6 s warmMs is an outlier from the fresh worktree's first Vite
 dependency pre-bundle. Its second run is 5.45 s, level with head.
+
+## Task 11: bones read the same lights
+
+- **How owner picks reach an instance.** Tubes: each `update` source carries `lights` (the owner
+  view's `bodyLights` Vector4, by reference); rows remember it, and `syncLights()` copies it into
+  the row's iLights (floats 18..21, `INSTANCE_FLOATS` 22). Bone meshes: `push` records the owner
+  per batch instance; `syncLights(ownerBodyLights)` copies each owner's `bodyLights` into the
+  batch geometry's iLights `InstancedBufferAttribute` (grown with the batch). The copy runs in
+  game-main after the actor light loop, because both renderers' `update` runs earlier in the
+  frame (a direct write there would lag the flash by one frame).
+- **No owner = -2.** Chunk bones and ejected eyes (their own geometry) pack -2 and keep the old
+  key even in list mode, so the old key is still steered (`applyWindowKey`) on both uniform sets.
+  `?lightlist=0` sets `lightListCfg.x = 0`: exactly the old path.
+- **Compose.** Only the key changes: `albedo * (ambient + bl.diffuse) * ao + wetTint * (bl.spec *
+  look.z * mix(1.3, 0.7, expo) + rimC * fres * (0.5 + 0.5 * peak)) + bl.rim`, `rimC` the dominant's
+  colour (the key colour when nothing is picked), as the march's fresnel does. The plan's
+  `diffuse * deepColor` read as albedo, the march's compose.
+- **Gate.** Coat check (no picks), `hitMeshSkull` crater, `muzzleFlash()` held at dt 0: all 18
+  bone-mesh instances pick the muzzle light; crater crop 0.091 -> 0.550 (list) against 0.092 ->
+  0.683 (`?lightlist=0`). The list skull is modelled by the muzzle (sockets shaded) and a little
+  darker than its blown-out flesh; the old one is flatter and pinker. With no flash both paths show
+  the same pale skull in a near-black body (bone ambient is seeded once from the spawn fill).
+- **Draws.** Unchanged by construction: an attribute on existing meshes, no new mesh or material.
+- **Cold boot** (loaded machine, alternating): head drawOnce 1608 / 1903 / 3539 / 2239 / 3028 ms,
+  base 1400 / 1655 / 2147 / 2432 / 3973 ms; medians 2239 vs 2147, inside the noise.

@@ -380,9 +380,71 @@ if (pa.picks[0].index < 0 || pb.picks[0].index < 0 || pa.picks[0].index === pb.p
 const lit = picks.filter((p) => p.picks[0].index >= 0).length;
 pass(`shared list: ${LL3.length} lights in third class; crowd actors ${pa.id}/${pb.id} (room ${pa.room}, ${sep.toFixed(1)} m apart) dominants ${pa.picks[0].index} (w ${pa.picks[0].weight.toFixed(3)}) / ${pb.picks[0].index} (w ${pb.picks[0].weight.toFixed(3)}); ${lit}/${picks.length} bodies picked`);
 const listOn = await listScenes('on');
+
+// 8. BONES READ THE SAME LIGHTS (plan 1, Task 11): the skull catches the muzzle flash. In the dark
+// coat check (nothing picks the body), a slug crater opens the face of the nearest actor to its
+// mesh skull; the player's muzzle flash (held by hand-stepping at dt 0) must be among the skull
+// instances' own picks (iLights = the owner's bodyLights), and the crater crop brightens.
+// LIGHT_GATE_SHOT=<dir> keeps skull-noflash-<tag>.png / skull-flash-<tag>.png. The ?lightlist=0
+// boot runs the same scene for the record (the old key path: no picks, the flash rides the beam).
+async function skullScene(tag) {
+  const [sx, sz] = [-1.2, -62.4];
+  const a = await frameNearest(sx, sz);
+  const diag = await evaluate('__sdfGame.skeletonDiagnostics()');
+  if (diag.activeMode !== 'mesh') fail(`skull: skeleton mode ${JSON.stringify(diag)}`);
+  const hit = await evaluate(`__sdfGame.hitMeshSkull(${a.id})`);
+  if (!hit || !hit.stamped) fail(`skull: hitMeshSkull(${a.id}) stamped nothing: ${JSON.stringify(hit)}`);
+  // Face the crater from 0.9 m, straight on, at its height.
+  const w = (await evaluate(`__sdfGame.actorWounds(${a.id})`)).at(-1);
+  const zs = await evaluate('__sdfGame.zombies()');
+  const me = zs.find((q) => q.id === a.id);
+  const dx = w.pos[0] - me.pos[0], dz = w.pos[2] - me.pos[2], dl = Math.hypot(dx, dz) || 1;
+  const cx = w.pos[0] + (dx / dl) * 0.9, cz = w.pos[2] + (dz / dl) * 0.9;
+  const eye = (await evaluate('__sdfGame.pose()')).pos[1] + 1.62;   // PLAYER.eye
+  await evaluate(`__sdfGame.setPose(${cx}, ${cz}, ${Math.atan2(-(w.pos[0] - cx), -(w.pos[2] - cz))}, ${Math.atan2(w.pos[1] - eye, 0.9)})`);
+  await stepN(20);
+  await stepN(8, 0);
+  await settle(300);
+  const W = 800, H = 600;
+  const sp = await evaluate(`__sdfGame.worldToScreen(${w.pos[0]}, ${w.pos[1]}, ${w.pos[2]}, ${W}, ${H})`);
+  if (!sp || sp.x < 0 || sp.x > W || sp.y < 0 || sp.y > H) fail(`skull: crater off screen ${JSON.stringify(sp)}`);
+  const rPx = Math.max(12, Math.min(60, (w.radius / 0.9) * (H / 2) / Math.tan((35 * Math.PI) / 180) * 0.7));
+  const box = [(sp.x - rPx) / W, (sp.y - rPx) / H, (sp.x + rPx) / W, (sp.y + rPx) / H];
+  const before = await evaluate(`__sdfGame.boneLights(${a.id})`);
+  const skullOff = stats(await shoot(`skull-noflash-${tag}`), ...box).mean;
+  const woundsBefore = (await evaluate(`__sdfGame.actorWounds(${a.id})`)).length;
+  // The flash alone (no shot: Night Train's player owns no shotgun here), the same flash clock fire() restarts.
+  const fired = await evaluate('__sdfGame.muzzleFlash()');
+  if (!fired) fail('skull: no muzzle flash light');
+  await stepN(3, 0);
+  await settle(300);
+  const skullOn = stats(await shoot(`skull-flash-${tag}`), ...box).mean;
+  const after = await evaluate(`__sdfGame.boneLights(${a.id})`);
+  const LLf = await evaluate('__sdfGame.lightList()');
+  const woundsAfter = (await evaluate(`__sdfGame.actorWounds(${a.id})`)).length;
+  const muzzleIdx = LLf.map((l, i) => (l.profile === 'muzzle' ? i : -1)).filter((i) => i >= 0);
+  if (process.env.LIGHT_GATE_DEBUG) console.log('DBG skull', JSON.stringify({ hit, w, sp, rPx, fired, before, after, muzzleIdx, woundsBefore, woundsAfter }));
+  if (tag === 'off') {
+    if (after?.listOn !== 0) fail(`skull (?lightlist=0): bone renderer list switch on: ${JSON.stringify(after)}`);
+    return { skullOff, skullOn };
+  }
+  if (muzzleIdx.length === 0) fail(`skull: no muzzle light in the list after fire(): ${JSON.stringify(LLf.map((l) => l.profile))}`);
+  if (!after || after.listOn !== 1) fail(`skull: bone renderer list switch off: ${JSON.stringify(after)}`);
+  if (!after.instances.length) fail('skull: the actor draws no bone-mesh instances');
+  const idx = (v) => Math.floor(v + 1e-6);
+  const withMuzzle = after.instances.filter((row) => row.some((v) => v >= 0 && muzzleIdx.includes(idx(v)))).length;
+  if (withMuzzle !== after.instances.length) fail(`skull: ${withMuzzle}/${after.instances.length} bone instances pick the muzzle light (${muzzleIdx}): ${JSON.stringify(after.instances[0])} body ${JSON.stringify(after.body)}`);
+  if (before.instances.some((row) => row.some((v) => v >= 0 && muzzleIdx.includes(idx(v))))) fail(`skull: muzzle picked before the flash: ${JSON.stringify(before.instances[0])}`);
+  if (!(skullOn > skullOff * 1.15 && skullOn - skullOff > 0.02)) fail(`skull: crater crop did not brighten in the flash: ${skullOff.toFixed(3)} -> ${skullOn.toFixed(3)}`);
+  pass(`skull catches the muzzle flash: actor ${a.id}, ${withMuzzle}/${after.instances.length} bone instances pick muzzle light ${muzzleIdx} (skull picks ${JSON.stringify(after.instances[0].map((v) => +v.toFixed(3)))}); crater crop mean ${skullOff.toFixed(3)} -> ${skullOn.toFixed(3)} (${(skullOn / skullOff).toFixed(2)}x)`);
+  return { skullOff, skullOn };
+}
+const skullListOn = await skullScene('on');
 await listBoot('level=night-train&frozen&god&lightlist=0');
 if ((await evaluate('__sdfGame.bodyPicks()')).some((p) => p.picks.some((k) => k.index >= 0))) fail('?lightlist=0 still picks');
 const listOff = await listScenes('off');
+const skullListOff = await skullScene('off');
+console.log(`     skull      on  crater ${skullListOn.skullOff.toFixed(3)} -> flash ${skullListOn.skullOn.toFixed(3)} | off crater ${skullListOff.skullOff.toFixed(3)} -> flash ${skullListOff.skullOn.toFixed(3)}`);
 for (const sc of SCENES) console.log(`     ${sc.name.padEnd(10)} on  ${fmt(listOn[sc.name])} | off ${fmt(listOff[sc.name])}`);
 // Calibrated to today (Task 10): under a tube, a held bolt and the flashlight the body is neither
 // darker than ?lightlist=0 (>= 0.9x) nor blown out (<= 1.2x; the first uncalibrated cut was flat white).

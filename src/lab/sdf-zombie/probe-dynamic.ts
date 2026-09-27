@@ -113,7 +113,7 @@ export const TWO_PI = Math.PI * 2;
  * `probe-dynamic.test.ts` (test-only import) so this file stays free of the
  * webgpu tree: a-b and b-c are the two capsules of one bent bone.
  */
-export const BONE_INSTANCE_FLOATS = 18;
+export const BONE_INSTANCE_FLOATS = 22;
 
 const ZERO: Vec3 = [0, 0, 0];
 const NO_SH = new Float32Array(0);

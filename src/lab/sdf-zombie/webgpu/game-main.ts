@@ -1592,7 +1592,7 @@ async function main() {
       }
       ctx.render.boneInstancer.update([
         ...(ctx.render.boneMesh
-          ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; })
+          ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive), lights: a.view.uniforms.bodyLights.value }; })
           : []),
         ...(ctx.gibs.boneMesh ? ctx.bake.liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
       ]);
@@ -2026,6 +2026,17 @@ async function main() {
         ctx.render.segMeshRenderer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
         { const pp = ctx.player.player.pos; applyWindowKey(ctx, ctx.render.segMeshRenderer.uniforms, [pp[0], pp[1], pp[2]]); }
       }
+      // THE SHARED LIST for bones (plan 1, Task 11): each tube and each bone-mesh instance takes
+      // its OWNER actor's 4 picks (its view's bodyLights, written in the actor loop above, so the
+      // copy runs here, after it). The old key above is still steered: an instance with no owner
+      // (a chunk's bones, an ejected eye) keeps it in list mode, and `?lightlist=0` (x = 0) is
+      // exactly the old path.
+      ctx.render.boneInstancer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
+      if (listOn) ctx.render.boneInstancer.syncLights();
+      if (ctx.render.segMeshRenderer) {
+        ctx.render.segMeshRenderer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
+        if (listOn) ctx.render.segMeshRenderer.syncLights(ownerBodyLights);
+      }
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
       // the carved library build their OWN instances (they need their own
@@ -2437,7 +2448,8 @@ async function main() {
   ctx.render.boneInstancer = createBoneInstancer(1024,
     // DEFERRED MODE: the tubes are a level-only G-buffer producer (tissue —
     // a body's own hull must not swallow their light).
-    ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined);
+    ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+    ctx.world.light?.list?.node);
   ctx.gibs.boneMesh = new URLSearchParams(location.search).get('gibbonemesh') !== '0';
   ctx.render.boneInstancer.object.layers.set(0);
   // Visible when EITHER path draws through it — gib bones alone are enough.
@@ -2481,7 +2493,10 @@ async function main() {
   // skeleton out of the full-resolution polygonal pass and draw it into the
   // half-height field instead. Every other style just enables that layer in
   // pass 1, so this is a no-op for them.
-  ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER) : null;
+  ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER, ctx.world.light?.list?.node) : null;
+  /** A bone-mesh instance's owner picks (Task 11): the owner actor's bodyLights. Hoisted, so the
+   *  per-frame syncLights call allocates nothing. */
+  const ownerBodyLights = (o: unknown) => (o as ZombieActor | undefined)?.view.uniforms.bodyLights.value;
   if (ctx.render.segMeshRenderer) scene.add(ctx.render.segMeshRenderer.object);
   ctx.render.skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
   ctx.render.segVolumeCache = ctx.render.skeletonMode === 'volume' ? new SegmentVolumeCache() : null;

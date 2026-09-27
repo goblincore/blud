@@ -240,8 +240,8 @@ describe('packBoxes', () => {
 });
 
 describe('packCapsulesFromBoneInstances', () => {
-  // bone-instancer layout: a.xyz, b.xyz, c.xyz, r1, r2, scale.xyz, orient.xyzw
-  const INSTANCE_FLOATS = 18;
+  // bone-instancer layout: a.xyz, b.xyz, c.xyz, r1, r2, scale.xyz, orient.xyzw, iLights.xyzw
+  const INSTANCE_FLOATS = 22;
 
   function abOf(rows: {
     a: Vec3; b: Vec3; c: Vec3; r1: number; r2: number; scale: Vec3;
