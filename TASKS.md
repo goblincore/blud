@@ -6,8 +6,10 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [ ] **Spec approved, plan next:** [spike flail design](docs/superpowers/specs/2026-09-26-spike-flail-design.md) — click =
-  preset swing (alternating L/R), forgiving strike window, one big crater per hit. Builds on branch
+- [~] **v1 built, gate passing; owner playtest pending.** [Plan](docs/superpowers/plans/2026-09-26-spike-flail.md) ·
+  [spec](docs/superpowers/specs/2026-09-26-spike-flail-design.md) · gate: `node scripts/flail-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"`
+  (with servers up via `scripts/lab-servers.sh`) · [NOTES](docs/dev-notes/2026-09-26-flail/NOTES.md) — click = preset swing
+  (alternating L/R), forgiving strike window, one big crater per hit. On branch
   `claude/melee-weapon-design-7d1423` (PR #22) after stripping the censer.
 - [x] ~~Censer flail~~ — built and playtested 2026-09-26, **scrapped by the owner** (too hard to land a hit, too goofy).
   [Spec](docs/superpowers/specs/2026-09-26-censer-flail-design.md) · [NOTES](docs/dev-notes/2026-09-26-censer/NOTES.md), kept for the record.

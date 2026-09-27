@@ -1,5 +1,20 @@
 # Spike flail — gate and first look pass (Task 6)
 
+## For the owner
+
+- **How to try it:** key `1` equips the flail; click to swing (alternates right→left, then
+  left→right); hold to chain swings.
+- **What to judge:** timing (does a click land when you expect it to), reach, crater size, the
+  50 ms hit-stop, and the camera kick.
+- **One known limitation:** the strike ignores walls — a zombie behind a wall but inside the
+  reach/arc window still takes the hit.
+- **Open feel questions** (from the tuning log below):
+  - Should the strike show a visible whip, with the ball lagging the haft?
+  - Should more of the fist show at rest?
+  - Is the fill too dark?
+  - Is the crater visually strong enough (red-minus-green +9.8 on torch-pink skin)?
+  - Does it matter that walls don't block the strike?
+
 Spec: [2026-09-26-spike-flail-design.md](../../superpowers/specs/2026-09-26-spike-flail-design.md).
 Gate: [`scripts/flail-gate.mjs`](../../../scripts/flail-gate.mjs). Run it from bash with servers up:
 
