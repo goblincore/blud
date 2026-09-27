@@ -10,7 +10,8 @@ export const LAMP_MOODS: readonly LampMood[] = ['steady', 'flicker', 'stutter', 
 export type LampScript =
   | { mode: 'die'; at: number }
   | { mode: 'blackout'; at: number }
-  | { mode: 'strobe'; at: number };
+  | { mode: 'strobe'; at: number }
+  | { mode: 'emergency'; at: number };
 
 export const LAMP_SCRIPT = {
   /** die: sputter this long, then dark for good. */
@@ -22,6 +23,8 @@ export const LAMP_SCRIPT = {
   surgeS: 0.5,
   strobeS: 3,
   strobeHz: 8,
+  /** emergency: dark through the strobe (surgeS + strobeS), then a stutter on over emergencyOnS, then 1 for good. */
+  emergencyOnS: 0.3,
 } as const;
 
 /** 0..1 from two integers (an integer mix; stable across platforms). */
@@ -101,6 +104,12 @@ export function lampLevel(mood: LampMood, script: LampScript | null, t: number, 
       const k = age - LAMP_SCRIPT.surgeS;
       if (k >= LAMP_SCRIPT.strobeS) return 0;
       return Math.floor(k * LAMP_SCRIPT.strobeHz * 2) % 2 === 0 ? 1.3 : 0;
+    }
+    case 'emergency': {
+      const k = age - (LAMP_SCRIPT.surgeS + LAMP_SCRIPT.strobeS);
+      if (k < 0) return 0;
+      if (k >= LAMP_SCRIPT.emergencyOnS) return 1;
+      return hash01(s + 29, Math.floor(k / 0.04)) < 0.45 + 0.55 * (k / LAMP_SCRIPT.emergencyOnS) ? 1 : 0;
     }
   }
 }

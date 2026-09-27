@@ -83,3 +83,24 @@ describe('lampLevel scripts', () => {
     expect(lampLevel('fire', { mode: 'strobe', at: 50 }, 10, 3)).toBe(moodLevel('fire', 10, 3));
   });
 });
+
+describe('emergency script (Boiler Room beacons)', () => {
+  const s = { mode: 'emergency' as const, at: 10 };
+  const on = 10 + LAMP_SCRIPT.surgeS + LAMP_SCRIPT.strobeS;
+  it('is dark before it is armed, and through the strobe', () => {
+    expect(lampLevel('dead', null, 5, 1)).toBe(0);
+    expect(lampLevel('dead', s, 10.2, 1)).toBe(0);
+    expect(lampLevel('dead', s, on - 0.01, 1)).toBe(0);
+  });
+  it('stutters on over emergencyOnS, then holds at 1 for good', () => {
+    const lv: number[] = [];
+    for (let t = on; t < on + LAMP_SCRIPT.emergencyOnS; t += 0.01) lv.push(lampLevel('dead', s, t, 1));
+    expect(lv.some(v => v === 0)).toBe(true);
+    expect(lv.some(v => v > 0)).toBe(true);
+    expect(lampLevel('dead', s, on + LAMP_SCRIPT.emergencyOnS + 0.01, 1)).toBe(1);
+    expect(lampLevel('dead', s, on + 600, 1)).toBe(1);
+  });
+  it('is deterministic per seed', () => {
+    expect(lampLevel('dead', s, on + 0.05, 3)).toBe(lampLevel('dead', s, on + 0.05, 3));
+  });
+});
