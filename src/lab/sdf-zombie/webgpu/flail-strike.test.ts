@@ -1,8 +1,14 @@
 // src/lab/sdf-zombie/webgpu/flail-strike.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { FLAIL_STRIKE, inStrikeArc, resolveStrike, snapToSurface, viewToWorld, type StrikeActor } from './flail-strike';
+import { FLAIL_STRIKE, inStrikeArc, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
 import type { Vec3 } from '../types';
+
+/** Standard polynomial smooth-min (k = blend radius). */
+const smin = (a: number, b: number, k: number) => {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - (h * h * k) / 4;
+};
 
 const EYE: Vec3 = [0, 1.62, 0];
 const len = (v: readonly number[]) => Math.hypot(v[0]!, v[1]!, v[2]!);
@@ -72,5 +78,71 @@ describe('resolveStrike', () => {
   });
   it('hits nothing when nothing is in the arc (a whoosh)', () => {
     expect(resolveStrike(EYE, 0, [0, 1.2, -1.2], [ball(1, [0, 1.1, 1.5])])).toEqual([]);
+  });
+  it('returns no hit for an actor whose field goes non-finite', () => {
+    const broken: StrikeActor = { id: 9, centre: [0, 1.1, -1.5], field: () => NaN };
+    expect(resolveStrike(EYE, 0, [0, 1.2, -1.2], [broken])).toEqual([]);
+  });
+});
+
+describe('snapToSurfaceResidual on a LOOSE field (gradient magnitude != 1)', () => {
+  it('converges within 5 mm from 1 m out on a 0.4x-scaled sphere field', () => {
+    const c: Vec3 = [0, 1.1, -1.5], r = 0.3;
+    const trueField = (p: Vec3) => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) - r;
+    const loose = (p: Vec3) => 0.4 * trueField(p);
+    const start: Vec3 = [c[0], c[1] + r + 1.0, c[2]]; // 1 m out from the skin
+    const { point, residual } = snapToSurfaceResidual(loose, start);
+    expect(residual).toBeLessThan(0.01);
+    expect(Math.abs(trueField(point))).toBeLessThan(0.005);
+  });
+  it('converges on a smooth union of two spheres (smin, k = 0.1)', () => {
+    const c1: Vec3 = [0, 1.1, -1.5], c2: Vec3 = [0.3, 1.1, -1.5], r = 0.25;
+    const field = (p: Vec3) => smin(
+      Math.hypot(p[0] - c1[0], p[1] - c1[1], p[2] - c1[2]) - r,
+      Math.hypot(p[0] - c2[0], p[1] - c2[1], p[2] - c2[2]) - r,
+      0.1,
+    );
+    const { point, residual } = snapToSurfaceResidual(field, [0.15, 1.1, -1.0]);
+    expect(residual).toBeLessThan(0.005);
+    expect(Math.abs(field(point))).toBeLessThan(0.005);
+  });
+  it('reports an infinite residual (never a NaN point) when the field goes non-finite', () => {
+    const { residual } = snapToSurfaceResidual(() => NaN, [0, 1, 0]);
+    expect(residual).toBe(Infinity);
+  });
+});
+
+describe('resolveStrike placement on a two-part body (torso + forward-hanging head)', () => {
+  // A vertical torso capsule with a head sphere drooping forward (toward the
+  // player, +z) and low, its jaw jutting out near chest height — the shape
+  // that made the old nearest-Euclidean-point snap land on the face.
+  const torsoA: Vec3 = [0, 0.9, -1.5], torsoB: Vec3 = [0, 1.6, -1.5], torsoR = 0.28;
+  const headC: Vec3 = [0, 1.55, -1.05], headR = 0.22;
+  const torsoSdf = (p: Vec3) => {
+    const ab: Vec3 = [torsoB[0] - torsoA[0], torsoB[1] - torsoA[1], torsoB[2] - torsoA[2]];
+    const ap: Vec3 = [p[0] - torsoA[0], p[1] - torsoA[1], p[2] - torsoA[2]];
+    const t = Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2)));
+    return Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t) - torsoR;
+  };
+  const headSdf = (p: Vec3) => Math.hypot(p[0] - headC[0], p[1] - headC[1], p[2] - headC[2]) - headR;
+  const bodySdf = (p: Vec3) => Math.min(torsoSdf(p), headSdf(p));
+  const zombie: StrikeActor = { id: 7, centre: [0, 1.25, -1.5], field: bodySdf };
+
+  it('lands a chest-height strike on the torso, not the head', () => {
+    // 0.36 m in front of the torso's front face (z = -1.5 + 0.28 = -1.22).
+    const impact: Vec3 = [0, 1.25, -0.86];
+    const hits = resolveStrike(EYE, 0, impact, [zombie]);
+    expect(hits).toHaveLength(1);
+    expect(Math.abs(torsoSdf(hits[0]!.point))).toBeLessThan(0.02);
+    expect(headSdf(hits[0]!.point)).toBeGreaterThan(0.05);
+  });
+
+  it('lands a hit on the front of a hugging actor, not its back', () => {
+    const a: Vec3 = [0, 0.9, -0.2], b: Vec3 = [0, 1.6, -0.2], r = 0.28;
+    const hugger = capsule(8, a, b, r);
+    const impact: Vec3 = [0, 1.25, -0.36];
+    const hits = resolveStrike(EYE, 0, impact, [hugger]);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.point[2]).toBeGreaterThan(-0.2); // front half, not the -0.48 back wall
   });
 });
