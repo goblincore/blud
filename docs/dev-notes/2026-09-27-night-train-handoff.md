@@ -1,0 +1,62 @@
+# Night Train hand-off — 2026-09-27
+
+**Branch:** `claude/wake-level-pipeline-1afb01`, in the worktree `.claude/worktrees/wake-level-pipeline-1afb01`.
+- **Local `main`:** fast-forwarded to `83dcd38c` today. It is **not pushed** to GitHub, as with earlier merges.
+- **The branch on GitHub:** pushed up to `fd0c000f` (PR #25). Later commits are local only.
+- **Previous hand-off:** [2026-09-26](2026-09-26-night-train-handoff.md).
+
+## What shipped today
+
+1. **Part 3, plan 1: the shared light list.** [Notes](2026-09-27-shared-light-list/notes.md) · [spec](../superpowers/specs/2026-09-26-shared-light-list-design.md) · [plan](../superpowers/plans/2026-09-26-shared-light-list-plan-1.md)
+   - One per-frame list of 32 lights. Each SDF body, crowd member, bone mesh and gib piece picks its own 4 lights and shades them with presentation profiles.
+   - `?lightlist=0` gives the old key path.
+   - Cost is about 0 ms. The earlier "+1.6 ms" was an artefact of Apple GPU pass timing; use `attributePassSamples`.
+   - **Owner decisions:**
+     - the self-shadow was **rejected** (too subtle, +1.3 ms), and ships off;
+     - the pale body baseline is approved;
+     - gibs have **no fresnel/edge rim**.
+   - **Fixes made along the way:**
+     - the skull catches the muzzle flash and dims in dark rooms;
+     - gibs pick lights per object;
+     - the flying arm gib no longer shows its bone through the motion blur.
+2. **PR #25 merged:** march-hash is deterministic (the light-clock pin) and the pins were refreshed.
+3. **Boiler Room emergency beacons.** [Notes](2026-09-27-boiler-room-beacons/notes.md)
+   - Two red rotating ceiling spots with per-frame hard shadows, beams and domes.
+   - They are armed by the strobe (the `emergency` script) and reach bodies through the list (`beacon` profile).
+   - Cost: +0.7 ms frame.
+4. **Boiler Room disco ball.** [Notes](2026-09-27-disco-ball/notes.md)
+   - A mirror-tile ball throwing 96 stars cast against the room box: white at the party, flashing with the strobe, red pulses as the beacons pass.
+   - Cost: about 0 ms. It also draws under `?renderer=deferred`.
+5. **Flashlight step 1** (`83dcd38c`): a beam shoulder stops zombies clipping at 1.5–2.5 m, but they stay pale, and 4–6 m still reads flat white.
+
+## In flight at hand-off
+
+**Flashlight retune.** A background agent in the old session was:
+- judging the flashlight at the **chest** instead of the feet;
+- retuning its strength on bodies;
+- making highlight compression **hue-preserving** (bright pink, not white).
+
+The targets: at 1.5–6 m, blown ≤ 3%, beam vs no-beam contrast ≥ ~2×, and the body's colour kept. The owner sheet is `2026-09-27-shared-light-list/flashlight-retune.png`.
+- **Check `git log`** for "fix(light): flashlight judged at the chest, retuned…".
+- **If it landed:** review it (spec and quality) and show the owner the sheet.
+- **If not:** its uncommitted edits to `light-pick.ts`, `light-profiles.ts` and `compose.wgsl.ts` may be in the worktree. Inspect them before redoing it.
+- **Owner's framing:** a flashlight has to "feel like a flashlight in terms of the difference vs the ambient, but not blown out". The next lever, if bodies still don't pop, is the body dark floor (BODY_DARK_FLOOR, 25% → 15% / 10%), shown as side-by-sides.
+
+## Next
+
+1. **The Boiler Room resize to 8 × 28 m.** The owner approved the layout. [Plan](../superpowers/plans/2026-09-27-boiler-room-resize.md) · [before/after](../game/levels/01-night-train/boiler-resize/boiler-before-after.png)
+2. **Open owner items:**
+   - tube shadow maps at 256² (they look identical and save nothing);
+   - a body in a beacon beam blows out flat red (tone the beacon down on bodies?);
+   - the disco stars stretch into ellipses on the side walls;
+   - delete the old lighting path once the owner signs off, keeping `applyRoomFill` and `applyStormBodyKey`, which the list uses.
+3. **Part 3, plan 2:** level materials on the list, plus the shadow atlas. See [rendering](../tasks/rendering.md).
+
+## Gotchas learned today
+
+- **Pass timing on Apple GPUs.** Every pass reports the same start time, so a pass's end − start is queue wait, not its cost. Charge each pass only from the previous pass's end (`attributePassSamples`). `timeDraws` doesn't advance the pass frame counter.
+- **The march golden is a text-hash gate.** Deliberate WGSL changes must re-pin it with `-u` and say so in the commit.
+- **Beacons are excluded** from the glass colour and the room fill (`countsAsRoomLamp` / `countsForRoomFill`).
+- **The deferred router hides unlit `MeshBasicNodeMaterial` meshes under `levelGroup`.** Register them with `'forward'` (`c6c76b9f`).
+- **This session's agents can't write outside their own worktree** (a hook). Run parallel work in the same worktree, and stage your own files explicitly.
+- **The Night Train level pipeline** (layout → headless Blender 5.2 build → `export_level.py`) reproduces the committed JSON and GLB byte for byte, so any diff is real.

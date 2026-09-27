@@ -5,27 +5,32 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-off:** [2026-09-26 Night Train](docs/dev-notes/2026-09-26-night-train-handoff.md).
+> **Latest hand-off:** [2026-09-27 Night Train: light list, Boiler Room](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
 
-**Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4i)
+**Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
+- [ ] **NEXT: Boiler Room resize to 8 × 28 m** (owner-approved layout, option B + recommendations):
+  [plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md), [before/after](docs/game/levels/01-night-train/boiler-resize/boiler-before-after.png).
+- [~] **Flashlight retune** (owner: "feels like a flashlight vs the ambient, but not blown out"): judged at the
+  chest, contrast ≥ ~2× vs outside the beam, hue kept (pink, not white). The close-range shoulder
+  (83dcd38c) landed; the retune was in flight at hand-off — see the hand-off note. Next lever if it
+  still doesn't pop: the body dark floor (25% → 15/10%) side-by-sides.
 - [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
   batching of the art (`batchArt`), the bone-exposure cull (unwounded enemies draw only their eyes)
   and instanced bone meshes took third class from ~440 to ~300 draws; bones + eyes ~3 draws; art
   +61..+164 draws / +3..+6 ms (budget +200 / +12 ms). The tube cones (shadowed spots) cost ~4–9 ms
   per carriage; part 3's shared light list is where that is won back.
 - [~] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
-  shadows read by the level shaders and the SDF march. **Plan 1 is done, pending the owner's
-  sign-off** ([dev note](docs/dev-notes/2026-09-27-shared-light-list/notes.md), A/B pairs inside):
+  shadows read by the level shaders and the SDF march. **Plan 1 is done and merged to local main
+  (owner: the pale baseline is fine; gibs have no fresnel)** ([dev note](docs/dev-notes/2026-09-27-shared-light-list/notes.md), A/B pairs inside):
   bodies, crowds, bones and gibs each light from their own 4 picks (`?lightlist=0` = the old key).
-  Cost +0.0..0.4 ms against a +1.5 ms budget. The self-shadow was rejected (ships off). Owner
-  questions: the list is darker than today away from a front-lit pose (Boiler Room), and tube shadow
-  maps at 256². After sign-off: delete the old path, then plan 2 (level materials on the list) —
-  see [rendering](docs/tasks/rendering.md).
+  Cost +0.0..0.4 ms against a +1.5 ms budget. The self-shadow was rejected (ships off). Open: tube
+  shadow maps at 256² (indistinguishable, no saving — owner call), deleting the old path
+  (`?lightlist=0`), then plan 2 (level materials on the list) — see [rendering](docs/tasks/rendering.md).
 - [x] **Boiler Room emergency beacons** (4j): two red sweeping ceiling beacons with hard shadows come
   on as the strobe ends; +0.75 ms frame / +1.12 ms GPU ([dev note + sheet](docs/dev-notes/2026-09-27-boiler-room-beacons/notes.md)).
-  Owner look pending: a body in the beam blows out flat red.
+  Owner look pending: a body in the beam blows out flat red (tone the beacon down on bodies?).
 - [x] **Boiler Room disco ball** (4k): mirror tiles and 96 stars sweeping the room, white at the party,
   flashing with the strobe, red pulses as the beacons pass the ball; ~0 ms ([dev note + sheet](docs/dev-notes/2026-09-27-disco-ball/notes.md)).
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.
