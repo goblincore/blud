@@ -111,16 +111,35 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp, sleep } 
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-27, with
-// the light clock pinned — see LIGHT CLOCK in the header):
-//   shipped default (crowd, boxes, tiles on)        = fe94cbe8e4f117fb747cf60a3cefa26e0c24f4cd
-//   crowd quad (?crowddispatch=quad, tiles on)      = e911fd0453efc4c1ba22768858b48503dc39479b
-//   per-body (?crowd=0, tiles off)                  = 737713b7e0810156f52cd847af047ff29039e5ac
-// Each reproduced on THREE consecutive boots (ports 5471/9471, headless,
-// LAB_TMP=.lab-tmp) at 6b899f5d + the setLightTime seam; room1-wounded for the
-// default was 674edf62… on all three. NOT measured at 8ba660aa: that branch
-// (claude/wake-level-pipeline-1afb01) is 20 commits further on, including the
-// bodyLights WGSL loop, and will need its own re-pin when it merges.
+// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-27 on
+// claude/wake-level-pipeline-1afb01, with the light clock pinned — see LIGHT
+// CLOCK in the header):
+//   shipped default (crowd, boxes, tiles on)        = e2ce8904c1de9db4797775c47a8b4680afe6ac9d
+//   crowd quad (?crowddispatch=quad, tiles on)      = 7386cd6b6344ae9e0c4bba03e8f5c9a600c2ff34
+//   per-body (?crowd=0, tiles off)                  = 094176e655eb6575baf44f69fd960edb67efa30a
+// Each reproduced on THREE consecutive boots (ports 5473/9473, headless,
+// LAB_TMP=.lab-tmp) at e7155e40 + the setLightTime seam, and again (3/3 each,
+// all three unchanged) at 181c4a8b after rebasing; room1-wounded for the
+// default was 06eaee1b… on all runs.
+//
+// WAKE-LEVEL RE-PIN (2026-09-27). The main-line pins (fe94cbe8… / e911fd04… /
+// 737713b7…, measured at 6b899f5d) moved on this branch. The DEFAULT value was
+// bisected over 6b899f5d..e7155e40 with the pinned gate (seam injected per
+// probe) and moved TWICE, both intended:
+//   a8b6d599  fe94cbe8…   <- main-line pin reproduced
+//   9b015e75  b5ff3d2e…   <- MOVED: "the march reads the shared list behind
+//                            lightListCfg (off by default; march golden moved
+//                            on purpose)". The list is off by default, so the
+//                            move comes from the march WGSL change itself; its
+//                            size was not measured (scripts/march-raw-diff.mjs
+//                            would tell).
+//   17b7ffe4  b5ff3d2e…
+//   6540bd05  e2ce8904…   <- MOVED: "bodies and crowds lit by their own 4
+//                            lights from the shared list" — the list goes ON
+//                            by default: an owner-directed look change.
+//   e7155e40  e2ce8904…   (tip)
+// The quad and per-body values were not bisected separately; they moved over
+// the same range and are pinned from the tip.
 //
 // 2026-09-27 RE-PIN — TWO FAULTS, SEPARATED:
 //   1. STALE PIN. Bisected with the UNMODIFIED gate over 3691eb5b..23f6fcc6
@@ -203,7 +222,7 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
-const PERBODY_HASH = '737713b7e0810156f52cd847af047ff29039e5ac';
+const PERBODY_HASH = '094176e655eb6575baf44f69fd960edb67efa30a';
 // MARCH_HASH_PERBODY — the per-body opt-out gate (task 8). Boots `?crowd=0`
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
@@ -212,8 +231,8 @@ const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
 // by DEFAULT_HASH whenever neither override is set and no extra query is given.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
-const CROWD_HASH = 'e911fd0453efc4c1ba22768858b48503dc39479b';
-const DEFAULT_HASH = 'fe94cbe8e4f117fb747cf60a3cefa26e0c24f4cd';
+const CROWD_HASH = '7386cd6b6344ae9e0c4bba03e8f5c9a600c2ff34';
+const DEFAULT_HASH = 'e2ce8904c1de9db4797775c47a8b4680afe6ac9d';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.

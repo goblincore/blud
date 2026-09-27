@@ -176,6 +176,7 @@ function footprint(a, b) {
 // rAF loop and hand-step with dt 0 so off and on render the same scene state.
 await evaluate('__sdfGame.setDemoHold(true)');
 await evaluate('__sdfGame.setLightClockFrozen(true)');
+await evaluate('__sdfGame.setLightTime(0)');
 
 const scenes = [
   { name: 'tube-third', x: 0, z: -17.8, setup: '__sdfGame.holdWindowLight(0, -1)' },
