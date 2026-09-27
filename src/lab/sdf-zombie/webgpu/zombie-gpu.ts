@@ -2940,6 +2940,11 @@ export interface ChunkGpuView {
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
   setPackBones(on: boolean): void;
+  /** Whether this view's marched field currently carries its bone rows
+   *  (the setPackBones state). The bone-tube feed reads it: a chunk that packs
+   *  its own bones needs no tube while its field is drawn elsewhere (the gib
+   *  motion-blur layer). */
+  packsBones(): boolean;
   /** Bone-cluster cull (packBoneClusters). A chunk stays on the FLAT bone
    *  fold: it is one cluster whose bones re-transform every frame, so a
    *  baked bone-cluster sphere would go stale — and the chunk's own cluster
@@ -3386,6 +3391,7 @@ export function createChunkGpuView(
       // rows flip NOW, not on the next sever.
       if (lastReset) reset(lastReset.c, lastReset.prims, lastReset.tornAt, lastReset.bones);
     },
+    packsBones() { return packBones; },
     // Chunks stay on the FLAT bone fold — see ChunkGpuView.setBoneCull.
     setBoneCull() {},
     setBoneCullMode() {},

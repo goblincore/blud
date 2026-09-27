@@ -387,9 +387,11 @@ describe('bone tubes plumbing', () => {
     // a is recentred on the chunk origin then re-placed at chunk.pos: identity at spawn
     expect(pb[0]!.a.map(v => +v.toFixed(6))).toEqual([1, 2, 3]);
     expect(view.uniforms.counts2.value.x).toBe(0);   // no bone rows
+    expect(view.packsBones()).toBe(false);
     view.setPackBones(true);
     view.update(chunk);
     expect(view.uniforms.counts2.value.x).toBe(1);
+    expect(view.packsBones()).toBe(true);
     view.dispose();
   });
 });

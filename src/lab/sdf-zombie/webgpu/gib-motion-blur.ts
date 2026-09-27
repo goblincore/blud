@@ -73,6 +73,23 @@ export const GIB_BLUR_MIN_STREAK_PX = 0.5;
 // drives both layers) and add only their own on/off switch.
 // ---------------------------------------------------------------------------
 
+/**
+ * Should the bone-tube instancer draw this chunk's bones this frame?
+ *
+ * A chunk lifted onto GIB_BLUR_LAYER leaves the ordinary pass: its marched
+ * flesh (and its depth) is drawn only as the smeared, semi-transparent blur
+ * composite. Sharp tubes for the same bones stay on layer 0 with nothing
+ * occluding them, so the white bone reads straight through the flying limb
+ * (owner's arm-gib report, 2026-09-27). When the chunk packs its bone rows into
+ * its own field the blur already smears the bone with the flesh, so the tube
+ * is dropped. A chunk that does NOT pack its bones (bone-only pieces in tube
+ * mode, or every chunk under `boneMesh`) keeps its tubes: they are its only
+ * bones.
+ */
+export function chunkBoneTubesNeeded(packsBones: boolean, onBlurLayer: boolean): boolean {
+  return !(packsBones && onBlurLayer);
+}
+
 export interface GibShutterSettings {
   enabled: boolean;
   exposureSeconds: number;

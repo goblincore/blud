@@ -198,6 +198,7 @@ import {
   createGibShutterLayer, readGibShutterSettings,
   type GibShutterLayer, type GibBlurSubject,
 } from './gib-shutter-layer';
+import { GIB_BLUR_LAYER, chunkBoneTubesNeeded } from './gib-motion-blur';
 import { createShutterPanel, shutterPanelHost, type ShutterPanel } from './shutter-panel';
 import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
@@ -1600,7 +1601,15 @@ async function main() {
         ...(ctx.render.boneMesh
           ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive), lights: a.view.uniforms.bodyLights.value, owner: a }; })
           : []),
-        ...(ctx.gibs.boneMesh ? ctx.bake.liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
+        // A chunk on the gib motion-blur layer is drawn only as the smeared
+        // composite; if its field packs its bones, a sharp tube here would show
+        // through the translucent flesh (tick's shutter.select ran just before
+        // this draw, so the layer is this frame's).
+        ...(ctx.gibs.boneMesh
+          ? ctx.bake.liveChunks
+            .filter(c => chunkBoneTubesNeeded(c.view.packsBones(), c.view.object.layers.isEnabled(GIB_BLUR_LAYER)))
+            .map(c => ({ prims: c.view.posedBones() }))
+          : []),
       ]);
     }
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.

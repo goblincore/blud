@@ -456,3 +456,33 @@ white (the known gap below).
 - The storm window's side rim on chunk views (old path only, during a bolt) is untouched.
 - The bake still writes the per-vertex `bakeFresnel` attribute (from the view's surfCfg.z, now 0
   for gibs); nothing reads it. Dead data, left for a cleanup.
+
+## Arm gib bone through blur — pre-existing, fixed
+
+Owner report: an arm shot off shows its full white bone through the flesh while it flies, and
+looks fine once it lands. Not a light-list regression; it predates this branch.
+
+- **Cause.** Gib motion blur (`gibBlurSubjects` → `shutter.select`, end of `tick`) lifts only the
+  chunk's marched proxy (`c.view.object`) onto `GIB_BLUR_LAYER`, so the flesh and its depth leave
+  the ordinary pass and come back only as the smeared, semi-transparent composite. The same chunk's
+  bones were still fed to the shared bone-tube instancer (`gibBoneMesh`, default on) on layer 0,
+  drawn sharp with nothing occluding them. Ordering checked: `lab-renderer` runs the tick callback
+  (which ends with `select`) before `drawFn` (which feeds the instancer), and the layer holds until
+  the next `select`, so the draw sees this frame's selection.
+- **Fix.** `chunkBoneTubesNeeded(packsBones, onBlurLayer)` (gib-motion-blur.ts, unit-tested) drops a
+  chunk's tubes only when it is on the blur layer AND its own field packs its bone rows (new
+  `ChunkGpuView.packsBones()`), so the blur smears the bone with the flesh. Limb chunks pack their
+  bones by default (`setPackBones(!render.boneMesh)`), so nothing is lost.
+- **Bone-only chunks keep their tubes.** In tube mode they are spawned with packing OFF
+  (`boneOnly ? !gibs.boneMesh : ...`) and with their proxy hidden (empty field), so they are never
+  blur subjects (`gibBlurSubjects` skips invisible views) and `packsBones()` is false anyway: the
+  tubes stay their only bones. With `?gibbonemesh=0` no chunk feeds tubes and bone-only pieces
+  march (and blur) their packed bones. Under the dev `boneMesh` switch limb chunks stop packing and
+  keep tubes. Not exercised headless (a dynamite blast on the test zombie wounded but did not gib).
+- **Evidence** (`armgib` A/B rig: sever zombie 27's arm, per frame compare tubes shown vs
+  `material.visible = false`, blur on; pixels with |Δluma| > 24): before 173 / 657 / 416 / 339 /
+  957 / 2086 / 2563 px at F4-F40 in flight; after 0 / 0 / 1 / 0 / 1 / 5 / 13. Landed (F80, F140)
+  0 in both; tubes also contribute ~0 px with blur off (the packed bone is inside the flesh).
+  The two runs' arms take different paths (launch is not deterministic across loads).
+  Strip: [arm-gib-bone-fix.png](arm-gib-bone-fix.png) — BEFORE blur+tubes shows sharp white bone
+  lines through the smeared arm (F28-F40); AFTER blur+tubes is identical to AFTER tubes hidden.
