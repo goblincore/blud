@@ -11,7 +11,7 @@ const { send, evaluate } = await connectGame({ vite, cdp });
 await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__perfErrors=[]; const e=console.error; console.error=(...a)=>{window.__perfErrors.push(a.map(String).join(' '));e(...a)};` });
 await bootCloseupPage({ send, evaluate, url: `http://localhost:${vite}/sdf-game.html?simidle=1&seed=20260917&res=800` });
 for(let i=0;i<240;i++){if(await evaluate('!!window.__warmDone && __sdfGame.roomProbesReady()'))break;if(i===239)throw Error('Boot warm-up did not finish');await sleep(500)}
-const initial = await evaluate(`(()=>{const g=__sdfGame;g.setLoopRunning(false);g.setRenderLock(false);g.setDemoHold(true);g.setLightClockFrozen(true);g.setVhs(null);g.freeze(true);return g.upscaleInfo()})()`);
+const initial = await evaluate(`(()=>{const g=__sdfGame;g.setLoopRunning(false);g.setRenderLock(false);g.setDemoHold(true);g.setLightClockFrozen(true);g.setLightTime(0);g.setVhs(null);g.freeze(true);return g.upscaleInfo()})()`);
 if (initial.inSize.width !== 400 || initial.inSize.height !== 300 || initial.model !== 't16' || initial.sharpen !== .5) throw Error(JSON.stringify(initial));
 console.log('boot', JSON.stringify(initial));
 const bootErrors=await evaluate('window.__perfErrors');if(bootErrors.length)throw Error(JSON.stringify(bootErrors));

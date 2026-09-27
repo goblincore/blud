@@ -40,7 +40,7 @@ await bootCloseupPage({
 await evaluate('__sdfGame.setLoopRunning(false)');
 await applyShipDefaults(evaluate);
 await evaluate('__sdfGame.setFieldStyle("off")');
-await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
+await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
 const staged = await stageCloseUp(evaluate, { room: 1 }, fail);
 await evaluate('(() => { __sdfGame.setSdfScale(0.5); __sdfGame.step(6); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');

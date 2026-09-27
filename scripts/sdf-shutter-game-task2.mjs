@@ -221,6 +221,7 @@ async function applyShippedVhs() {
 async function applyHold(on) {
   await evaluate(`window.__sdfGame.setDemoHold(${on})`);
   await evaluate(`window.__sdfGame.setLightClockFrozen(${on})`);
+  if (on) await evaluate('window.__sdfGame.setLightTime(0)');
 }
 
 // ---------------------------------------------------------------------------

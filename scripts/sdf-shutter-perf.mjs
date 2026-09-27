@@ -24,7 +24,7 @@ await bootCloseupPage({ send, evaluate, url: `http://localhost:${vite}/sdf-game.
 await evaluate(`(() => {
   const g = __sdfGame;
   g.setLoopRunning(false); g.setRenderLock(false);
-  g.setDemoHold(true); g.setLightClockFrozen(true);
+  g.setDemoHold(true); g.setLightClockFrozen(true); g.setLightTime(0);
   for (const fn of ['shutterPanel','gooPanel','vhsPanel','dynamitePanel','woundPanel','gibPanel']) g[fn]?.(false);
   return g.upscaleInfo();
 })()`);
