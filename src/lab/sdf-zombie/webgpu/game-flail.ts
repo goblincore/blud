@@ -370,7 +370,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       // hit lands on; it is the wound itself unless the radius changes.
       const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
       const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
-      const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC);
+      const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, null);
       const before = headHits.get(a.id) ?? 0;
       const spec = flailWound(region, before, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
       if (region) headHits.set(a.id, before + 1);

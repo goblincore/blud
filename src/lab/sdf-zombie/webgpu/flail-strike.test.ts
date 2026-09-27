@@ -1,8 +1,8 @@
 // src/lab/sdf-zombie/webgpu/flail-strike.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { FLAIL_HEAD, FLAIL_STRIKE, flailWound, inStrikeArc, isHeadRegion, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
-import type { Vec3 } from '../types';
+import { FLAIL_HEAD, FLAIL_STRIKE, flailWound, headNeck, inStrikeArc, isHeadRegion, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
+import type { Primitive, Vec3 } from '../types';
 
 /** Standard polynomial smooth-min (k = blend radius). */
 const smin = (a: number, b: number, k: number) => {
@@ -148,22 +148,37 @@ describe('resolveStrike placement on a two-part body (torso + forward-hanging he
 });
 
 describe('gradual head damage', () => {
-  it('a head prim, or a point within regionDist of the head centre, is the head region', () => {
-    expect(isHeadRegion('head', [0, 0, 0], null)).toBe(true);
-    expect(isHeadRegion('torso', [0, 1.4, 0], [0, 1.6, 0])).toBe(true);
-    expect(isHeadRegion('torso', [0, 1.2, 0], [0, 1.6, 0])).toBe(false);
-    expect(isHeadRegion('armL', [0, 1.0, 0], null)).toBe(false);
+  const HEAD_C: Vec3 = [0, 1.6, 0], NECK: Vec3 = [0, 1.42, 0];
+  it('a head prim, a point near the head centre, or a point near the neck root is the head region', () => {
+    expect(isHeadRegion('head', [0, 0, 0], null, null)).toBe(true);
+    expect(isHeadRegion('torso', [0, 1.4, 0], HEAD_C, null)).toBe(true);          // < regionDist of the head
+    expect(isHeadRegion('torso', [0, 1.28, 0.05], HEAD_C, NECK)).toBe(true);      // 0.15 m from the neck root
+    expect(isHeadRegion('torso', [0, 1.2, 0.1], HEAD_C, NECK)).toBe(false);       // 0.24 m from the neck root
+    expect(isHeadRegion('armL', [0, 1.0, 0], null, null)).toBe(false);
   });
-  it('head hits before the last cave the face in without severing; the last one severs', () => {
+  it('head hits 1..hitsToSever−1 are face craters with no sever and no neck snap', () => {
+    expect(FLAIL_HEAD.hitsToSever).toBe(4);
     for (let before = 0; before < FLAIL_HEAD.hitsToSever - 1; before++) {
-      expect(flailWound(true, before, 0.14, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0 });
+      expect(flailWound(true, before, 0.09, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0, snapNeck: false });
     }
-    const last = flailWound(true, FLAIL_HEAD.hitsToSever - 1, 0.14, 1.3);
-    expect(last.radius).toBe(0.14);
-    expect(last.severRadius).toBeCloseTo(0.182, 9);
   });
-  it('body hits are unchanged', () => {
-    expect(flailWound(false, 0, 0.14, 1.3).radius).toBe(0.14);
-    expect(flailWound(false, 7, 0.14, 1.3).severRadius).toBeCloseTo(0.182, 9);
+  it('the last head hit is the full crater, severs, and snaps the neck', () => {
+    const last = flailWound(true, FLAIL_HEAD.hitsToSever - 1, 0.09, 1.3);
+    expect(last.radius).toBe(0.09);
+    expect(last.severRadius).toBeCloseTo(0.117, 9);
+    expect(last.snapNeck).toBe(true);
+  });
+  it('body hits are the full crater with sever, never a neck snap', () => {
+    expect(flailWound(false, 0, 0.09, 1.3)).toEqual({ radius: 0.09, severRadius: expect.closeTo(0.117, 9), snapNeck: false });
+    expect(flailWound(false, 7, 0.09, 1.3).snapNeck).toBe(false);
+  });
+  it('headNeck finds the head chain root and neck midpoint on live prims, null once the head is gone', () => {
+    const prims = [
+      { limb: 'torso', op: 'union', a: [0, 1.1, 0], b: [0, 1.3, 0] },
+      { limb: 'head', op: 'union', a: [0, 1.38, 0], b: [0, 1.5, 0] },
+      { limb: 'head', op: 'union', a: [0, 1.5, 0], b: [0, 1.7, 0] },
+    ] as unknown as Primitive[];
+    expect(headNeck(prims)).toEqual({ root: [0, 1.38, 0], mid: [0, 1.44, 0] });
+    expect(headNeck(prims.map(p => ({ ...p, dead: p.limb === 'head' })) as Primitive[])).toBeNull();
   });
 });

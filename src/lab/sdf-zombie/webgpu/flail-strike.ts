@@ -27,7 +27,7 @@
 // clamped — a runaway |∇f| near a seam must not fling the point across the
 // body — assuming the field's gradient never drops below FLAIL_STRIKE.minGrad.
 
-import type { LimbId, Vec3 } from '../types';
+import type { LimbId, Primitive, Vec3 } from '../types';
 
 export const FLAIL_STRIKE = {
   /** Horizontal eye → torso-centre distance, metres. */
@@ -203,20 +203,39 @@ export function resolveStrike(eye: Vec3, yaw: number, impactWorld: Vec3, actors:
   return hits;
 }
 
-/** Gradual head damage (spec §10.5): head-region hits before the last cave the face
- *  in (a smaller crater, no sever); the last one takes the head off. */
-export const FLAIL_HEAD = { regionDist: 0.25, hitsToSever: 3, faceCraterR: 0.09 } as const;
+/** Gradual head damage (spec §10.5, §11): a head-region hit caves the face in without severing until the
+ *  actor's `hitsToSever`-th, which is the full crater and SNAPS THE NECK (game-flail.ts stamps a sever
+ *  wound at the neck midpoint, so the head comes off wherever on the head the last blow lands). */
+export const FLAIL_HEAD = {
+  regionDist: 0.25,
+  /** Also the head region: within this of the neck root. Crosshair-on-head hits used to land on the upper
+   *  chest ~0.16 m from it and sever the neck on hit 1 (spec §11). */
+  neckDist: 0.2,
+  hitsToSever: 4,
+  faceCraterR: 0.06,
+  /** The neck-snap wound's sever calibre, metres (a zombie neck is ~0.07 m in radius). */
+  neckSeverR: 0.12,
+} as const;
 
-export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null): boolean {
+export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null, neckRoot: Vec3 | null): boolean {
   if (limb === 'head') return true;
-  if (!headCentre) return false;
-  return Math.hypot(point[0] - headCentre[0], point[1] - headCentre[1], point[2] - headCentre[2]) < FLAIL_HEAD.regionDist;
+  const near = (c: Vec3 | null, r: number) => !!c && Math.hypot(point[0] - c[0], point[1] - c[1], point[2] - c[2]) < r;
+  return near(headCentre, FLAIL_HEAD.regionDist) || near(neckRoot, FLAIL_HEAD.neckDist);
 }
 
 /** The wound for one hit. `headHitsBefore` counts this actor's earlier head-region hits. */
 export function flailWound(
   headRegion: boolean, headHitsBefore: number, craterR: number, severMul: number,
-): { radius: number; severRadius: number } {
-  if (!headRegion || headHitsBefore + 1 >= FLAIL_HEAD.hitsToSever) return { radius: craterR, severRadius: craterR * severMul };
-  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0 };
+): { radius: number; severRadius: number; snapNeck: boolean } {
+  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul, snapNeck: false };
+  if (headHitsBefore + 1 >= FLAIL_HEAD.hitsToSever) return { radius: craterR, severRadius: craterR * severMul, snapNeck: true };
+  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0, snapNeck: false };
+}
+
+/** The head chain's root (it sits in the shoulders) and its first segment's midpoint (the neck), from the
+ *  first live, non-`sub` `head` prim; null when there is none (the head is off). */
+export function headNeck(prims: readonly Primitive[]): { root: Vec3; mid: Vec3 } | null {
+  const n = prims.find(p => p.limb === 'head' && p.op !== 'sub' && !p.dead);
+  if (!n) return null;
+  return { root: [n.a[0], n.a[1], n.a[2]], mid: [(n.a[0] + n.b[0]) / 2, (n.a[1] + n.b[1]) / 2, (n.a[2] + n.b[2]) / 2] };
 }
