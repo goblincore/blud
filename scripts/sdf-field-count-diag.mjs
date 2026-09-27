@@ -54,7 +54,7 @@ await send('Page.bringToFront');
 await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1`, fail });
 await applyShipDefaults(evaluate);
 await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); return 1; })()');
-await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
+await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); return 1; })()');
 // The static probe grid bakes in a worker; recording before it lands captures a
 // different lighting state, so wait rather than assume.
 for (let i = 0; i < 240; i++) {

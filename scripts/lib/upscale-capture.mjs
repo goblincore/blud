@@ -21,7 +21,7 @@ export async function bootCapturePage({ vite, cdp, fail, query = 'frozen=1&vhs=o
   await applyShipDefaults(evaluate);
   // Pin the probe gather to its per-frame estimate: its afterglow (blend 0.6, fall 0.12) makes the
   // march converge asymptotically, so render-locked reads would never be bit-stable (g1-parity.md).
-  await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); __sdfGame.installDebugProbe(); return 1; })()');
+  await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); __sdfGame.installDebugProbe(); return 1; })()');
   await evaluate('(() => { performance.now = () => 100000; return 1; })()');
   for (let i = 0; i < 240; i++) {
     if (await evaluate('(() => __sdfGame.roomProbesReady())()') === true) return conn;

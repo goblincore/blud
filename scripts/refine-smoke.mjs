@@ -71,7 +71,7 @@ await applyShipDefaults(evaluate);
 // Same deterministic-frame pins as scripts/march-hash.mjs: the dungeon flicker
 // lights read performance.now() in the draw path, and the room probes run a
 // temporal afterglow whose state depends on the frame count.
-await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
+await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
 // Fields OFF. The ship default 'bodies' interlaces the march target — at scale
 // 0.5 on an 800x600 canvas it is 400x150, not 400x300, and its rows alternate
 // parity per frame, so an output texel's march texel is NOT (x>>1, y>>1) and the

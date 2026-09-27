@@ -132,7 +132,7 @@ async function pinDefaults(evaluate, spec) {
   // NOTE: CDP's Runtime.evaluate is an EXPRESSION context — a bare `return` is
   // a SyntaxError there, so each of these is wrapped in an IIFE.
   await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); return 1; })()');
-  if (spec.freezeClock) await evaluate('(() => { __sdfGame.setLightClockFrozen(true); return __sdfGame.lightClockFrozen; })()');
+  if (spec.freezeClock) await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); return __sdfGame.lightClockFrozen; })()');
   if (spec.prelude) await evaluate(`(() => { ${spec.prelude}; return 1; })()`);
 }
 

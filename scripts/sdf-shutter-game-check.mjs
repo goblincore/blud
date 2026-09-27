@@ -334,6 +334,7 @@ try {
   console.log('\n=== deterministic A/B (vhs=off, light clock frozen) ===');
   await evaluate('window.__sdfGame.setVhs(null)');
   await evaluate('window.__sdfGame.setLightClockFrozen(true)');
+  await evaluate('window.__sdfGame.setLightTime(0)');
   await evaluate('window.__sdfGame.step(1, 0)');
   await capture('game-40-ab-on');
   await evaluate('window.__sdfGame.setBloodBlur(false)');

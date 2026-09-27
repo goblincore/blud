@@ -155,6 +155,7 @@ const applyShippedVhs = () => evaluate(SHIPPED_VHS);
 const applyHold = async (on) => {
   await evaluate(`window.__sdfGame.setDemoHold(${on})`);
   await evaluate(`window.__sdfGame.setLightClockFrozen(${on})`);
+  if (on) await evaluate('window.__sdfGame.setLightTime(0)');
 };
 
 const shotIndex = {};
