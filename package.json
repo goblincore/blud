@@ -4,8 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite --open /sdf-game.html",
-    "dev:fps": "vite --open /sdf-game.html",
+    "dev": "vite --open /sdf-game.html?level=night-train",
+    "dev:fps": "vite --open /sdf-game.html?level=night-train",
     "dev:legacy": "vite --open /index.html",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
