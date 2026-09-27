@@ -2,7 +2,7 @@
 //
 import { describe, expect, it } from 'vitest';
 import {
-  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, maxBallBolt, FLAIL_SWING, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, chainReach, FLAIL_SWING, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 
@@ -235,14 +235,23 @@ describe('flailPose', () => {
     return [grip[0]! + x, grip[1]! + y, grip[2]! + z];
   }
 
-  it('keeps the ball within chain reach of the eye bolt at every key (the renderer need not clamp a key)', () => {
-    expect(maxBallBolt()).toBeCloseTo(0.415, 6);
+  it('keeps the ball within chain reach of the eye bolt at every key (the chain sim can reach every key)', () => {
+    expect(chainReach()).toBeCloseTo(FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset, 9);
     for (const side of ['R', 'L'] as const) {
       for (const t of [0, 0.1, FLAIL_SWING.strikeT, 0.3, FLAIL_SWING.swingSec]) {
         const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
-        expect(dist(p.ball, bolt(p.grip, p.rot)), `${side} t=${t}`).toBeLessThanOrEqual(maxBallBolt());
+        expect(dist(p.ball, bolt(p.grip, p.rot)), `${side} t=${t}`).toBeLessThanOrEqual(chainReach());
       }
     }
-    expect(dist(FLAIL_REST.ball, bolt(FLAIL_REST.grip, FLAIL_REST.rot))).toBeLessThanOrEqual(maxBallBolt());
+    expect(dist(FLAIL_REST.ball, bolt(FLAIL_REST.grip, FLAIL_REST.rot))).toBeLessThanOrEqual(chainReach());
+  });
+
+  it('holds the chain nearly taut at the strike: the ball 0.34–0.36 m from the bolt', () => {
+    for (const side of ['R', 'L'] as const) {
+      const p = flailPose({ phase: 'swing', side, t: FLAIL_SWING.strikeT, struck: false, queued: false, nextSide: side, swingId: 1 });
+      const r = dist(p.ball, bolt(p.grip, p.rot));
+      expect(r, side).toBeGreaterThanOrEqual(0.34);
+      expect(r, side).toBeLessThanOrEqual(0.36);
+    }
   });
 });
