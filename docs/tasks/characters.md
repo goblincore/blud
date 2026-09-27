@@ -2,7 +2,12 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — in the arena 2026-09-27, awaiting kit build + playtest
+## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
+
+- [x] **Second draft** (owner rejected the first as the existing bull brutes rescaled): a fresh body from
+  `docs/dev-notes/refs/warbull-reference.png` (front silhouette IoU 0.85), face decal cropped from the plate, the
+  plate's kit (red cable belt, chrome braces, one shod hoof), the plate's cannon. Gameplay unchanged.
+  [Notes](../../docs/dev-notes/2026-09-27-warbull/NOTES.md)
 
 - [x] **Body** (Task 1): `warbull.blob` = `minotaur.blob` x 1.28 (horn tip 2.60 m) minus its painted metal; left
   flesh horn and eye only (the right side is kit); a hump behind the neck; face decal baked from the minotaur mesh

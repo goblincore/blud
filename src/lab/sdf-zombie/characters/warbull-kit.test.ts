@@ -1,6 +1,7 @@
 // src/lab/sdf-zombie/characters/warbull-kit.test.ts
 //
-// Is the machinery bolted INTO the warbull? The .wam transcribes the .blob's
+// Is the reference plate's machinery bolted INTO the warbull (the cable
+// belt, the braces, the shod hoof)? The .wam transcribes the .blob's
 // skeleton by hand (with its pitch/tilt pairs re-solved, see the .wam) and
 // sizes every part against flesh in the other file, so the COMPILED mesh is
 // checked against sdBody here, no GPU (juggernaut-kit.test.ts's argument).
@@ -65,19 +66,18 @@ describe('warbull-kit.gltf fits juggernaut.blob', () => {
     return out;
   })();
   const all = () => [...groups.values()].flat();
-  const MATERIALS = ['brass', 'cable', 'chrome', 'core', 'iron', 'led', 'lens'];
+  const MATERIALS = ['chrome', 'iron', 'led', 'wire'];
 
   it('decodes the compiled kit: every material the .wam declares', () => {
     expect([...groups.keys()].sort()).toEqual(MATERIALS);
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThanOrEqual(8);
   });
 
-  // EMBEDDED means parts sink into the flesh, so vertices below the surface
-  // are expected. The bound is the deepest DESIGNED insertion, the shoulder
-  // cap's rim sinking into the trap shelf where the deltoid meets it (~6 cm
-  // in the pre-flight); what this catches is geometry that went through the
-  // body rather than into it.
-  const SINK_MAX = 0.07;
+  // EMBEDDED means parts bite into the flesh, so vertices a little below
+  // the surface are expected (the belt's bands, the cables' ends, the shoe
+  // round the hoof: ~1 cm in the pre-flight). What this catches is geometry
+  // that went through the body rather than into it.
+  const SINK_MAX = 0.03;
   it.each(MATERIALS)('no %s vertex passes through the body', name => {
     const vs = groups.get(name)!;
     let worst = Infinity, at: Vec3 = vs[0]!;
@@ -85,27 +85,35 @@ describe('warbull-kit.gltf fits juggernaut.blob', () => {
     expect(worst, `${name} deepest vertex at (${at.map(n => n.toFixed(3)).join(', ')})`).toBeGreaterThan(-SINK_MAX);
   });
 
-  // BOLTED IN, NOT FLOATING. The brass is the collars, every one of which
-  // sits where metal meets meat, and the cables dive into the flesh at
-  // their ends: both must touch it.
-  it.each(['brass', 'cable'])('the %s touches the flesh (a collar or insertion, not a prop)', name => {
+  // BOLTED IN, NOT FLOATING: the belt's iron bands bite the waist and the red
+  // cables touch the flesh they run on.
+  it.each(['iron', 'wire'])('the %s touches the flesh (a band or a cable, not a prop)', name => {
     const nearest = Math.min(...groups.get(name)!.map(v => Math.abs(sdBody(v, body))));
     expect(nearest).toBeLessThan(0.005);
   });
 
-  it('puts the machine on his RIGHT: the optic lens, and a steel horn over the right temple', () => {
-    for (const v of groups.get('lens')!) expect(v[0], 'lens x').toBeLessThan(0);
-    const top = groups.get('chrome')!.reduce((a, b) => (b[1] > a[1] ? b : a));
-    expect(top[1]).toBeGreaterThan(2.5);
-    expect(top[0]).toBeLessThan(-0.25);
+  // THE CABLE WRAP: red strands all the way round his waist, between the
+  // plate's 1.35 and 1.56.
+  it('wraps his waist in red cables, front, back and both sides', () => {
+    const belt = groups.get('wire')!.filter(v => v[1] > 1.33 && v[1] < 1.58);
+    expect(belt.length).toBeGreaterThan(100);
+    for (const q of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      expect(belt.some(v => v[0] * q[0]! + v[2] * q[1]! > 0.2), `quadrant ${q}`).toBe(true);
+    }
   });
 
-  it('stands on his hooves, sole on the ground, out at a foot', () => {
+  it('shoes ONE hoof in chrome (his left), the plate\'s asymmetry, mirrored', () => {
+    const low = groups.get('chrome')!.filter(v => v[1] < 0.05);
+    expect(low.length).toBeGreaterThan(0);
+    for (const v of low) expect(v[0], 'shoe x').toBeGreaterThan(0);
+  });
+
+  it('stands on the shod hoof: sole on the ground, out at a foot', () => {
     const vs = all();
     const lowest = vs.reduce((a, b) => (b[1] < a[1] ? b : a));
     expect(lowest[1]).toBeLessThan(0.012);
     expect(lowest[1]).toBeGreaterThan(-0.008);
-    expect(Math.abs(lowest[0])).toBeGreaterThan(0.2);
+    expect(Math.abs(lowest[0])).toBeGreaterThan(0.15);
   });
 
   it('every named kit bone sits at its blob bone head, within 1 mm', () => {

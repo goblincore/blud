@@ -237,17 +237,17 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
     profile: JUGGERNAUT_PROFILE,
   },
-  // The cyber-minotaur: minotaur.blob's mesh-fitted flesh at 1.28x with
-  // its painted metal removed (warbull.blob's header). The hard parts
-  // (steel horn, optic, spine rack, reactor, hooves, pistons, cables) are
-  // characters/warbull-kit.wam. Until scripts/build-wam-kit.sh warbull has
-  // been run, the kit 404s and he renders as the flesh alone (logged).
+  // The cyber-minotaur, authored from the owner's reference plate
+  // (warbull.blob's header; docs/dev-notes/refs/warbull-reference.png). The
+  // hard parts are characters/warbull-kit.wam. Until
+  // scripts/build-wam-kit.sh warbull has been run, the kit 404s and he
+  // renders as the flesh alone (logged).
   warbull: {
     name: 'warbull', src: warbullBlobSrc,
     kit: '/assets/lab/warbull-kit.gltf',
-    // Baked from the minotaur's reference mesh (warbull.blob, sheet block).
+    // Cropped from the reference plate's head (warbull.blob, sheet block).
     // mean measured off the PNG's opaque texels, lab-main's applyMeanOf rule.
-    face: { ...bakedFace('warbull-face.png'), mean: 0.32044097124272053 },
+    face: { ...bakedFace('warbull-face.png'), mean: 0.14481547752506288 },
     profile: WARBULL_PROFILE,
   },
   female: {

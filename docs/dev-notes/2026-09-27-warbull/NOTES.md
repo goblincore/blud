@@ -412,3 +412,95 @@ same re-fraction.
    - the charge when you close in (windup, run, wall stun);
    - shooting the launcher off (does it drop?), then the red core and the
      brawl.
+
+# Second draft — a fresh body from the reference plate, 2026-09-27
+
+**Owner:** "it seems it is based on the existing cyberdemon SDF creature? it
+looks very similar - i wanted something completely fresh". Correct, in
+substance: the first draft was `minotaur.blob` ×1.28. The owner then supplied
+a front reference plate, committed as
+`docs/dev-notes/refs/warbull-reference.png`.
+
+## Body
+
+`warbull.blob` is rewritten from nothing. No number comes from the minotaur
+or the cyberdemon.
+
+**Measuring:**
+- The flesh segments off the vignette backdrop by warmth (r − b ≥ 9). The
+  chrome drops out, being neutral like the backdrop, so kit parts were read by
+  eye.
+- **Scale:** horn tips to soles is 785 px, authored as 2.55 m, so 3.25 mm/px.
+- The header has the full width-by-height table.
+
+**Fitted against the plate's mask** with a front-silhouette overlay. IoU over
+the flesh rows went 0.780 → 0.824 → 0.844 → 0.849 across four passes:
+1. traps up to the jaw;
+2. horns thicker and sweeping out;
+3. ribs and hips narrowed;
+4. the arm's angle, and the crotch opened (a capsule end cap had filled it).
+
+The remaining differences are 1–2 cm slivers.
+
+**Skeleton:** soldier bone names, and the head pivot at 2.10 behind the jaw
+(the first draft's lesson). Head drift is 12 cm standing and 38 cm walking:
+the stomp's lean plus the capped nod on a big head, which reads as a bull
+carrying its head low.
+
+**Mirrored:** the plate's cannon is on his left arm. The game's carries hold
+props in the right hand, so the whole figure is mirrored.
+
+**Face:** `warbull-face.png` is the plate's own head, cropped to a 200 px
+square, feathered to an oval and resized to 512. The projection is solved on
+the eyes and mouth. The chin (2.19) and crown (2.51) then land where the plate
+has them, which checks the solve. Mean 0.1448. The two red eye beads glow.
+
+**Palette:** the plate's chocolate brown, lifted for the game's key (the
+minotaur's measured brown read as a flat mass). Tunable.
+
+**Tests:** `warbull-blob.test.ts` pins the plate's widths by height. It
+checks:
+- deltoids, ribs and belt, each within 10%;
+- no neck (the chin-height span is over 0.45 m);
+- a horn sweep over 0.7 m;
+- open legs and wide-set hooves;
+- two glowing eyes;
+- fused, clear, and nothing stranded.
+
+![silhouette vs plate](v2-silhouette-vs-plate.png)
+
+![body views](v2-body-views.png)
+
+## Kit
+
+`warbull-kit.wam` is rewritten to the plate's parts only:
+- a **red cable belt**: 26 strands between two iron bands that bite the
+  waist, packed on its elliptical surface;
+- **chrome braces** on both lower shins, with red calf cables diving into
+  them and an LED each;
+- a **chrome pastern and shoe** on his left hoof;
+- a **chrome cuff** over his right, natural hoof.
+
+New `wire` look: glossy red. Pre-flighted:
+- bones within 0.002 mm;
+- belt bands 1–2 mm into the waist;
+- the sole on the floor.
+
+`warbull-kit.test.ts` (11 pins) passes against a shadow-built glTF.
+
+![kit pre-flight](v2-kit-preflight.png)
+
+## Launcher and gameplay
+
+- **Launcher:** restyled to the plate's cannon. An angular chrome casing over
+  the lower forearm and fist, a long single barrel with a muzzle ring, and a
+  revolving three-chamber drum as the index node.
+- **Carries,** re-solved on the new body:
+  - `launcher`: muzzle at 1.74 m, casing 27 cm clear;
+  - `launcherLow`: muzzle 31° down at 1.0 m.
+- **Plates:** only the launcher, which is the disarm.
+- **Unchanged:**
+  - rockets;
+  - the charge and wall stun;
+  - the brawl and rage;
+  - the lights.

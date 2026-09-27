@@ -192,6 +192,9 @@ const LOOK: Record<string, {
   chrome: { metalness: 0.88, roughness: 0.10, envIntensity: 1.70 },
   // Rubber-sheathed conduit: a soft sheen, not metal.
   cable:  { metalness: 0.05, roughness: 0.34, envIntensity: 0.60 },
+  // The warbull's red cable wrap and calf cables: glossy sheathing, the
+  // plate's loudest colour, so a tight hot highlight on each strand.
+  wire:   { metalness: 0.15, roughness: 0.16, envIntensity: 1.20 },
   // Status LEDs and the reactor core glow in their own right. These are
   // the AUTHORED intensities; glow() scales them per frame from
   // status-lights.ts (heartbeat, strobe, drop-outs), and 1 is this look.

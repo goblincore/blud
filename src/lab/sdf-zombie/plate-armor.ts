@@ -74,29 +74,18 @@ export const JUGGERNAUT_ARMOR: ArmorSpec = {
   blastPlateDamage: 10,
 };
 
-/** The warbull's MACHINERY (warbull-kit.wam + the launcher prop), spec
- *  2026-09-27-warbull-design.md "Damage". Plates cover ONLY the metal; the
- *  rest of him is flesh and wounds on the first round. Region centres are
- *  measured off warbull.blob at rest (the kit's header table):
- *   - launcher: the whole right forearm and fist are sleeve and casing, so
- *     bone-only. Shedding it is the DISARM (profile armor.disarmPlate): the
- *     prop drops, the ranged mode ends. 14: a focused double volley and
- *     change, deliberately reachable.
- *   - headgear: the steel horn, the optic and the cheek plate on the right
- *     side of the head (centre over the optic/horn root, r 0.20 takes in the
- *     horn's base and the cheek, not the left eye or the muzzle).
- *   - reactor: the housing sunk below his pecs at (0, 1.53, 0.36); r 0.15 is
- *     its collar. The bones are every one whose flesh borders it.
- *   - rack: the spine plates down the hump, (0, 1.70, -0.42), r 0.30 spans
- *     y 1.45-1.95 on his back.
- *  kitBones keep each shed to its own metal (the rack is neck/spine2, the
- *  reactor chest), whatever flesh bones the region reaches. */
+/** The warbull's MACHINERY (the reference plate's: the launcher prop, the
+ *  kit's belt, braces and shod hoof), spec 2026-09-27-warbull-design.md
+ *  "Damage". Only the LAUNCHER is a plate: it is the one piece of metal that
+ *  is a target in its own right, and shooting it off is the DISARM (profile
+ *  armor.disarmPlate): the prop drops, the ranged mode ends. Bone-only (the
+ *  whole right forearm and fist are casing). 14: a focused double volley
+ *  and change, deliberately reachable. The cable belt and the braces are
+ *  thin metal round flesh: rounds wound through them. (Region plates,
+ *  PlateSpec.region, remain for metal embedded in flesh that shares a bone.) */
 export const WARBULL_ARMOR: ArmorSpec = {
   plates: [
     { id: 'launcher', bones: ['forearm.r', 'hand.r'], hp: 14 },
-    { id: 'headgear', bones: ['skull'], hp: 6, region: { center: [-0.12, 2.30, 0.10], radius: 0.20 } },
-    { id: 'reactor', bones: ['chest', 'spine1', 'spine2', 'neck'], hp: 12, region: { center: [0, 1.53, 0.36], radius: 0.15 }, kitBones: ['chest'] },
-    { id: 'rack', bones: ['neck', 'spine2', 'chest', 'spine1'], hp: 12, region: { center: [0, 1.70, -0.42], radius: 0.30 }, kitBones: ['neck', 'spine2'] },
   ],
   blastPlateDamage: 10,
 };
