@@ -13,6 +13,11 @@
 // beam is skipped (its L / keyC / keyI would be overwritten here anyway); and the dominant's wrap
 // and H use Lk (its view-biased Lb) while scatter and the wound shadow keep the raw L.
 //
+// GIBS (owner, 2026-09-27: "remove the fresnel effect that creates the pale outline around them as it
+// shimmers"). lightListCfg.y above 0.5 marks a marched gib chunk view (createChunkGpuView sets it; every
+// body, crowd and lab view leaves it 0): its list back rims are dropped. Its fresnel is off through
+// surfCfg.z = 0 (copyTemplateLook), which works on both paths.
+//
 // OFF BY DEFAULT. lightListCfg.x is 0 on every view until Task 10 turns it on in the game; at 0
 // the if is skipped, the list* vars stay zero, the compose add is + 0 and the dominant's wrap
 // keeps the old max(dot(n, L), 0) expression, so the lit output is unchanged.
@@ -45,7 +50,8 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
     keyI = peak;
     listDiff = bl.diffuse;
     listSpec = bl.spec;
-    listRim = bl.rim;
+    // lightListCfg.y above 0.5 - a gib chunk view - drops every back rim: owner 2026-09-27, no edge rim on gibs.
+    listRim = select(bl.rim, vec3<f32>(0.0), lightListCfg.y > 0.5);
     listDomFloor = bl.domFloor;
   }
   // ---- END SHARED LIGHT LIST ----------------------------------------------`;

@@ -7,7 +7,7 @@
 
 
 import { type GameContext } from './game-context';
-import { type BakedChunkMaterial, createBakedChunkMaterial } from './baked-chunks';
+import { type BakedChunkMaterial, chunkObjectLight, createBakedChunkMaterial } from './baked-chunks';
 import * as THREE from 'three/webgpu';
 import { type ChunkLook } from '../chunk-bake-field';
 import { chunkSettled } from '../gib-chunks';
@@ -16,7 +16,11 @@ import { type Vec3 } from '../types';
 import { unpackChunkBake } from './chunk-bake-buffers';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
 import { type ChunkGpuView, type MarchUniforms } from './zombie-gpu';
-import { addToCentroid, type Centroid } from './chunk-light-pick';
+import { chunkListAmbient, pickChunk } from './chunk-light-pick';
+import { type Pick, type PickBody } from './light-pick';
+import { type ListLight } from './light-list';
+import { roomIdAt } from './game-level-leaves';
+import { fillFactorOf } from './game-dynamic-light-leaves';
 
 /** Register a material instance to be lit by the frame's beam. Every
  *  `createBakedChunkMaterial` that is DRAWN must go through this — an
@@ -27,57 +31,105 @@ export function registerLitChunkMaterial<T extends BakedChunkMaterial>(ctx: Game
   return m;
 }
 
-/** Where each lit gib material's pieces are this frame (shared light list, Task 12), keyed by the
- *  drawn THREE material: a running centroid of every visible piece drawn with it. A
- *  BakedChunkMaterial's uniforms are shared by all its meshes, so it picks once, at this
- *  centroid. The sources are every mesh drawn with a registered material:
- *   - settled baked chunks (ctx.bake.mat, or a head's own face material): `centre`, world (the
- *     bake mesh sits at identity);
- *   - soldier corpses (ctx.bake.mat too): their world-space geometry's bounding-sphere centre;
- *   - sprite-set pieces drawn as meshes (carved, asset and asset-head materials): the chunk
- *     state's `pos` (billboards use their own unlit materials and match no entry);
- *   - the gore showcase (gorePartMat): each part's world position.
- *  The map is module scratch: its entries are zeroed and reused each frame, and an entry left at
- *  zero (a material no longer drawn or disposed) is dropped, so it never grows. */
-const chunkCentroids = new Map<THREE.Material, Centroid>();
+/** Where a drawn gib mesh came from (the seam reports it). */
+export type ChunkMeshSource = 'bake' | 'corpse' | 'sprite' | 'showcase';
+
+/** EVERY MESH DRAWN WITH A LIT BAKED-CHUNK MATERIAL, at its own position (shared light list,
+ *  Task 12 review). One mesh is one piece for every source, so this is the pick granularity:
+ *   - settled bakes (ctx.bake.mat, or a head's own face material): one mesh per settled chunk, at
+ *     its bake `centre` (world; the mesh sits at identity);
+ *   - soldier corpses (ctx.bake.mat too): one mesh per corpse, at its world-space geometry's
+ *     bounding-sphere centre;
+ *   - sprite-set pieces drawn as meshes (carved, asset and asset-head materials): one mesh per
+ *     piece, at the chunk state's `pos` (billboards use their own unlit materials: skipped);
+ *   - the gore showcase (gorePartMat): one mesh per part, at its world position.
+ *  `visit` gets the mesh and its position; nothing is allocated per piece. */
 const _wp = new THREE.Vector3();
-export function gatherChunkCentroids(ctx: GameContext): ReadonlyMap<THREE.Material, Centroid> {
-  const acc = chunkCentroids;
-  for (const c of acc.values()) { c[0] = 0; c[1] = 0; c[2] = 0; c[3] = 0; }
-  for (const b of ctx.bake.chunks) {
-    if (!b.mesh.visible) continue;
-    addToCentroid(acc, b.mesh.material as THREE.Material, b.centre[0], b.centre[1], b.centre[2]);
+export function forEachDrawnChunkMesh(
+  ctx: GameContext, visit: (m: THREE.Mesh, x: number, y: number, z: number, source: ChunkMeshSource) => void,
+): void {
+  const bakes = ctx.bake.chunks;
+  for (let i = 0; i < bakes.length; i++) {
+    const b = bakes[i]!;
+    if (b.mesh.visible) visit(b.mesh, b.centre[0], b.centre[1], b.centre[2], 'bake');
   }
   const corpses = ctx.world.soldierCorpseGroup;
   if (corpses?.visible) {
-    for (const o of corpses.children) {
-      const m = o as THREE.Mesh;
+    for (let i = 0; i < corpses.children.length; i++) {
+      const m = corpses.children[i] as THREE.Mesh;
       if (!m.isMesh || !m.visible) continue;
       if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
       const c = m.geometry.boundingSphere!.center;
-      addToCentroid(acc, m.material as THREE.Material, c.x, c.y, c.z);
+      visit(m, c.x, c.y, c.z, 'corpse');
     }
   }
   const sp = ctx.vfx.spritePieces;
   if (sp) {
-    for (const list of [sp.live, sp.rest]) {
-      for (const p of list) {
+    for (let k = 0; k < 2; k++) {
+      const list = k === 0 ? sp.live : sp.rest;
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i]!;
         if (p.render !== 'mesh' || !p.mesh.visible) continue;
-        addToCentroid(acc, p.mesh.material as THREE.Material, p.state.pos[0], p.state.pos[1], p.state.pos[2]);
+        visit(p.mesh, p.state.pos[0], p.state.pos[1], p.state.pos[2], 'sprite');
       }
     }
   }
   const show = ctx.vfx.goreShowcase;
   if (show?.visible) {
-    for (const o of show.children) {
-      const m = o as THREE.Mesh;
+    for (let i = 0; i < show.children.length; i++) {
+      const m = show.children[i] as THREE.Mesh;
       if (!m.isMesh) continue;
       m.getWorldPosition(_wp);
-      addToCentroid(acc, m.material as THREE.Material, _wp.x, _wp.y, _wp.z);
+      visit(m, _wp.x, _wp.y, _wp.z, 'showcase');
     }
   }
-  for (const [k, c] of acc) if (c[3] === 0) acc.delete(k);
-  return acc;
+}
+
+/** One frame's inputs to the per-piece pick, filled by the game in a reused object. `amb` off
+ *  (no live body to derive the fill from): each piece keeps its material's ambient. */
+export interface ChunkPickFrame {
+  list: readonly ListLight[];
+  gain: number;
+  amb: boolean;
+  /** body 0's fill (lightCfg.y, carrying body 0's room factor), key colour, bounce, room factor. */
+  fill: number; kr: number; kg: number; kb: number; br: number; bg: number; bb: number; bodyFactor: number;
+}
+const scratchPos: [number, number, number] = [0, 0, 0];
+const scratchBody: PickBody = { pos: [0, 0, 0], feetY: 0, room: -1, facing: [0, 0] };
+const scratchPick: Pick = { idx: [-1, -1, -1, -1], weight: [0, 0, 0, 0], packed: [-1, -1, -1, -1] };
+let pickCtx: GameContext | null = null;
+let pickFrame: ChunkPickFrame | null = null;
+let pickCount = 0;
+function pickVisit(m: THREE.Mesh, x: number, y: number, z: number): void {
+  const ctx = pickCtx!, f = pickFrame!;
+  const room = roomIdAt(ctx, x, z);
+  scratchPos[0] = x; scratchPos[1] = y; scratchPos[2] = z;
+  const pk = pickChunk(f.list, scratchPos, room, scratchBody, scratchPick).packed;
+  const r = chunkObjectLight(m);
+  r.picks.set(pk[0], pk[1], pk[2], pk[3]);
+  r.cfg.set(1, f.gain, f.amb ? 1 : 0, 0);
+  if (f.amb) {
+    const rt = ctx.world.light;
+    const cf = rt ? fillFactorOf(rt.roomLight.get(room) ?? 1) : 1;
+    r.ambient.setRGB(
+      chunkListAmbient(f.fill, f.kr, f.br, f.bodyFactor, cf),
+      chunkListAmbient(f.fill, f.kg, f.bg, f.bodyFactor, cf),
+      chunkListAmbient(f.fill, f.kb, f.bb, f.bodyFactor, cf));
+  }
+  pickCount++;
+}
+/** THE SHARED LIST for baked gibs, PER PIECE (Task 12 review): every drawn mesh picks at its own
+ *  position (room at that point, -1 in a tunnel matches every light; facing [0, 0]) and gets its
+ *  own list-mode ambient (body 0's fill re-based on the piece's room). Written into the mesh's
+ *  userData record, which its material's per-object nodes read at draw time. A piece is list-lit
+ *  whatever it picks (like an actor: no picks = fill only, never body 0's global key). Cost: one
+ *  pickLights over the list per drawn piece (bakes <= maxChunks, sprite pieces <= their caps),
+ *  scratch body / pick / position, no allocation after a mesh's first frame. Returns the count. */
+export function pickChunkObjects(ctx: GameContext, f: ChunkPickFrame): number {
+  pickCtx = ctx; pickFrame = f; pickCount = 0;
+  forEachDrawnChunkMesh(ctx, pickVisit);
+  pickCtx = null; pickFrame = null;
+  return pickCount;
 }
 
 /** WAIT FOR OUTSTANDING BAKE WORKERS (determinism, 2026-09-14). The gib

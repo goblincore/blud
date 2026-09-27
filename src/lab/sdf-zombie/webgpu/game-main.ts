@@ -94,7 +94,7 @@ import { wanderBounds, type RoomDef } from './game-level';
 import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel } from './active-level';
 import { parseLevelJson } from './level-json';
 import { levelCeilingM, roomIdAt as levelRoomIdAt, roomSpawnPoints } from './game-level-leaves';
-import { chunkListGainNow, centroidPos, chunkLightState, chunkListAmbient, chunkPickBody, type ChunkLightState } from './chunk-light-pick';
+import { chunkListGainNow, chunkPickBody } from './chunk-light-pick';
 import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor-leaves';
 import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
@@ -297,7 +297,7 @@ import { takePropForThrow } from './game-dynamite-leaves';
 import { bodiesOnScreen, traceSlugHitFrom } from './game-world-leaves';
 import { captureTelemetryScene } from './game-telemetry-leaves';
 import { demoScenarioOf } from './game-demo-leaves';
-import { awaitBakes, gatherChunkCentroids, registerLitChunkMaterial } from './game-bake-leaves';
+import { awaitBakes, pickChunkObjects, registerLitChunkMaterial, type ChunkPickFrame } from './game-bake-leaves';
 import { playerRoomId } from './game-player-leaves';
 import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDirToRig } from './game-weapon-leaves';
 import { ceilingAt } from './game-world-leaves';
@@ -414,8 +414,7 @@ function isAccumBoot(): boolean {
 // Shared light list Task 12 scratch (the gib light loops in main's frame): reused every frame,
 // never retained.
 const scratchChunkPos: [number, number, number] = [0, 0, 0];
-const scratchAmbient: [number, number, number] = [0, 0, 0];
-const scratchChunkLight: ChunkLightState = { on: 0, packed: [-1, -1, -1, -1] };
+const scratchChunkFrame: ChunkPickFrame = { list: [], gain: 0, amb: false, fill: 0, kr: 0, kg: 0, kb: 0, br: 0, bg: 0, bb: 0, bodyFactor: 1 };
 
 async function main() {
   // Every main()-scope binding below lives on this container (see
@@ -2014,19 +2013,22 @@ async function main() {
         if (listOn) {
           // THE SHARED LIST for marched gibs (plan 1, Task 12): each view owns a record slot, so it
           // picks at its own position like an actor (room -1 in a tunnel matches every light; a
-          // chunk has no front, facing [0, 1]). The list is on whatever it picks, as for actors:
-          // no picks = fill + fresnel, never the old global key. The record is re-written now
-          // because update() wrote it earlier in the frame.
+          // chunk has no front and tumbles, facing [0, 0]). The list is on whatever it picks, as
+          // for actors: no picks = fill only, never the old global key. Its fill follows its room
+          // like an actor's (applyRoomFill), re-based on the ORIGIN body's unscaled fill (the view
+          // copied an already room-scaled value at spawn). The record is re-written now because
+          // update() wrote it earlier in the frame; the `?lightlist=0` branch is the old path.
           const cp = c.view.object.position;
           releaseWindowKey(u);
           scratchChunkPos[0] = cp.x; scratchChunkPos[1] = cp.y; scratchChunkPos[2] = cp.z;
           applyBodyLights(ctx, u, chunkPickBody(scratchChunkPos, levelRoomIdAt(ctx, cp.x, cp.z), scratchPickBody));
           u.bodyFlash.value.w = 0;
+          applyRoomFill(ctx, u as never, cp.x, cp.z, c.template.uniforms);
+          c.view.syncRecord();
         } else {
           u.lightListCfg.value.x = 0;
           applyWindowKey(ctx, u);
         }
-        c.view.syncRecord();
       }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
@@ -2096,13 +2098,19 @@ async function main() {
       // hard to judge on a settled piece without sweeping it — so it sweeps.
       const detailAmp = ctx.bake.detailOverride
         ?? (liveSurf ? Math.min(1, liveSurf.y * CHUNK_DETAIL_GAIN) : null);
-      // THE SHARED LIST for baked gibs (plan 1, Task 12). A material's uniforms are shared by
-      // every mesh drawn with it, so each entry picks ONCE, at the centroid of its visible pieces
-      // (a deviation from spec §4's per-chunk pick: see the Task 12 dev-note). An entry with pieces
-      // is list-lit whatever it picks (like an actor); one with none stays on the old path.
-      const chunkCentroids = listOn ? gatherChunkCentroids(ctx) : null;
-      const chunkList = ctx.world.light?.list?.list ?? [];
-      const body0 = ctx.world.actors[0];
+      // The live room fill, once per frame (the same formula for every material).
+      let fill = 0, kr = 0, kg = 0, kb = 0, br = 0, bg = 0, bb = 0;
+      if (liveView) {
+        const w = liveView;
+        const mr = (w.wallNegX.value.r + w.wallPosX.value.r + w.wallNegY.value.r + w.wallPosY.value.r + w.wallNegZ.value.r + w.wallPosZ.value.r) / 6;
+        const mg = (w.wallNegX.value.g + w.wallPosX.value.g + w.wallNegY.value.g + w.wallPosY.value.g + w.wallNegZ.value.g + w.wallPosZ.value.g) / 6;
+        const mb = (w.wallNegX.value.b + w.wallPosX.value.b + w.wallNegY.value.b + w.wallPosY.value.b + w.wallNegZ.value.b + w.wallPosZ.value.b) / 6;
+        fill = w.lightCfg.value.y;
+        const key = w.keyColor.value;
+        kr = key.r; kg = key.g; kb = key.b;
+        const pw = w.bounceCfg.value.x;
+        br = pw * mr * 0.5; bg = pw * mg * 0.5; bb = pw * mb * 0.5;
+      }
       for (const lm of ctx.world.litChunkMaterials) {
         const bu = lm.uniforms;
         bu.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
@@ -2110,14 +2118,12 @@ async function main() {
         bu.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
         bu.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
         bu.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
-        const cen = chunkCentroids ? centroidPos(chunkCentroids.get(lm.material), scratchChunkPos) : null;
-        const cl = chunkLightState(listOn, chunkList, cen, cen ? levelRoomIdAt(ctx, cen[0], cen[2]) : -1, scratchChunkLight);
-        bu.lightListCfg.value.x = cl.on;
-        bu.lightListCfg.value.y = chunkListGainNow();
-        bu.chunkLights.value.set(cl.packed[0], cl.packed[1], cl.packed[2], cl.packed[3]);
-        // The old key steering: skipped in list mode (lightDir/keyColor are overwritten from body
-        // 0 just below either way; spotCfg2.z/w only feed the old key).
-        if (cl.on) releaseWindowKey(bu); else applyWindowKey(ctx, bu);
+        // THE SHARED LIST for baked gibs (plan 1, Task 12): the material's switch. On, each drawn
+        // mesh shades by its OWN picks (pickChunkObjects below, per-object bindings); the old key
+        // steering is skipped (lightDir/keyColor are overwritten from body 0 just below either way;
+        // spotCfg2.z/w only feed the old key). Off (`?lightlist=0`): the old path exactly.
+        bu.lightListCfg.value.x = listOn ? 1 : 0;
+        if (listOn) releaseWindowKey(bu); else applyWindowKey(ctx, bu);
         if (detailAmp !== null) {
           bu.fleshDetail.value.set(
             detailAmp, ctx.bake.detailFreq, ctx.bake.detailAlbedo, 0);
@@ -2126,27 +2132,21 @@ async function main() {
           bu.lightDir.value.copy(liveView.lightDir.value);
           bu.keyColor.value.copy(liveView.keyColor.value);
           bu.lightCfg.value.copy(liveView.lightCfg.value);
-          const w = [liveView.wallNegX, liveView.wallPosX, liveView.wallNegY,
-            liveView.wallPosY, liveView.wallNegZ, liveView.wallPosZ];
-          let mr = 0, mg = 0, mb = 0;
-          for (const c of w) { mr += c.value.r / 6; mg += c.value.g / 6; mb += c.value.b / 6; }
-          const fill = liveView.lightCfg.value.y;
-          const key = liveView.keyColor.value;
-          const pw = liveView.bounceCfg.value.x;
-          if (cl.on && cen) {
-            // body 0's fill carries body 0's room factor (applyRoomFill): re-base it on the
-            // pieces' own room, as the bones follow their owner's (Task 11b).
-            const f0 = (body0 && actorFill.get(body0)) ?? 1;
-            chunkListAmbient(fill, [key.r, key.g, key.b], [pw * mr * 0.5, pw * mg * 0.5, pw * mb * 0.5],
-              f0, roomFillFactor(ctx, cen[0], cen[2]), scratchAmbient);
-            bu.ambient.value.setRGB(scratchAmbient[0], scratchAmbient[1], scratchAmbient[2]);
-          } else {
-            bu.ambient.value.setRGB(
-              fill * key.r + pw * mr * 0.5,
-              fill * key.g + pw * mg * 0.5,
-              fill * key.b + pw * mb * 0.5);
-          }
+          bu.ambient.value.setRGB(fill * kr + br, fill * kg + bg, fill * kb + bb);
         }
+      }
+      if (listOn) {
+        // Every drawn gib mesh picks at its own position (Task 12 review; granularity and cost in
+        // game-bake-leaves.ts forEachDrawnChunkMesh / pickChunkObjects). Its list-mode ambient
+        // re-bases body 0's room fill on the piece's own room (Task 11b's bone rule).
+        const f = scratchChunkFrame;
+        f.list = ctx.world.light?.list?.list ?? f.list;
+        f.gain = chunkListGainNow();
+        f.amb = !!liveView;
+        f.fill = fill; f.kr = kr; f.kg = kg; f.kb = kb; f.br = br; f.bg = bg; f.bb = bb;
+        const body0 = ctx.world.actors[0];
+        f.bodyFactor = (body0 && actorFill.get(body0)) ?? 1;
+        pickChunkObjects(ctx, f);
       }
     }
     // Front-to-back per-body passes (perf round 2 task 5): register this

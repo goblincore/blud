@@ -2999,6 +2999,11 @@ export interface ChunkGpuBakeData {
  * copied, not the nodes: sharing the nodes would let a chunk's wound count
  * scribble over the body's.
  */
+/** A marched gib chunk view's fresnel strength (surfCfg.z): none (owner, 2026-09-27: "remove the
+ *  fresnel effect that creates the pale outline around them as it shimmers and looks
+ *  distracting"). Bodies, crowds and bones keep theirs. */
+export const CHUNK_FRESNEL = 0;
+
 export function createChunkGpuView(
   chunk: Chunk,
   prims: Primitive[],
@@ -3025,6 +3030,9 @@ export function createChunkGpuView(
   // MAX_CLUSTER_PRIMS flesh) plus that limb's bones; reset() checks it.
   const { tex: dataTex, texels, writeRow, stride } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
+  // A GIB: lightListCfg.y = 1 drops the list's back rims (light-list.wgsl.ts; owner 2026-09-27,
+  // no edge rim on gibs). The game writes only .x (the list switch) on a chunk view.
+  u.lightListCfg.value.y = 1;
   const ownsVolume = !volumeTex;
   const volTex = volumeTex ?? createFallbackHandVolumeTexture();
 
@@ -3135,6 +3143,10 @@ export function createChunkGpuView(
     u.wallNegZ.value.copy(template.wallNegZ.value);
     u.wallPosZ.value.copy(template.wallPosZ.value);
     u.surfCfg.value.copy(template.surfCfg.value);
+    // NO FRESNEL ON GIBS (owner, 2026-09-27: "remove the fresnel effect that creates the pale
+    // outline around them as it shimmers and looks distracting"). surfCfg.z is the march's fresnel
+    // strength (light.wgsl.ts fres); the origin body keeps its own.
+    u.surfCfg.value.z = CHUNK_FRESNEL;
     u.surfCfg2.value.copy(template.surfCfg2.value);
     u.surfCfg3.value.copy(template.surfCfg3.value);
     u.meatCfg.value.copy(template.meatCfg.value);

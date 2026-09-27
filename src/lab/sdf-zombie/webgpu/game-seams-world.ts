@@ -6,6 +6,9 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { setChunkListGain } from './chunk-light-pick';
+import { roomIdAt } from './game-level-leaves';
+import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
+import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-bake-leaves';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -445,21 +448,37 @@ export function createWorldSeams(ctx: GameContext) {
       const d = m.uniforms.fleshDetail.value;
       return { amp: d.x, freq: d.y, albedo: d.z, ambient: m.uniforms.ambient.value.getHex() };
     }),
-    /** Shared light list, Task 12: what each gib light holds this frame. `materials`: every
-     *  registered baked material's switch (lightListCfg.x), packed picks and ambient; `views`: every
-     *  live marched chunk view's switch and picks (its bodyLights, copied into its record). */
-    /** The gib trim on every list term (chunk-light-pick CHUNK_LIST_GAIN), live. */
+    /** The gib trim on every list term (chunk-light-pick CHUNK_LIST_GAIN), live; NaN restores it.
+     *  A tuning seam: the value is module state in chunk-light-pick.ts on purpose. */
     setChunkListGain: (g: number) => setChunkListGain(g),
-    chunkLights: () => ({
-      materials: ctx.world.litChunkMaterials.map(m => ({
-        listOn: m.uniforms.lightListCfg.value.x, picks: m.uniforms.chunkLights.value.toArray(),
-        ambient: m.uniforms.ambient.value.toArray(),
-      })),
-      views: ctx.bake.liveChunks.map(c => ({
-        id: c.id, pos: c.view.object.position.toArray(),
-        listOn: c.view.uniforms.lightListCfg.value.x, picks: c.view.uniforms.bodyLights.value.toArray(),
-      })),
-    }),
+    /** Shared light list, Task 12: what each gib light holds this frame. `materials`: every
+     *  registered baked material's list switch (lightListCfg.x) and ambient; `pieces`: every drawn
+     *  gib mesh (forEachDrawnChunkMesh) with its source, position, room and its OWN per-object
+     *  record (list switch, packed picks, trim, ambient; the values its draw binds); `views`: every
+     *  live marched chunk view's switch, picks (its bodyLights, copied into its record), fill and
+     *  fresnel strength. */
+    chunkLights: () => {
+      const pieces: { source: ChunkMeshSource; pos: number[]; room: number; listOn: number; picks: number[]; gain: number; ambient: number[] }[] = [];
+      forEachDrawnChunkMesh(ctx, (m, x, y, z, source) => {
+        const r = m.userData[CHUNK_OBJECT_LIGHT] as ChunkObjectLight | undefined;
+        pieces.push({
+          source, pos: [x, y, z], room: roomIdAt(ctx, x, z), listOn: r?.cfg.x ?? 0,
+          picks: r ? r.picks.toArray() : [-1, -1, -1, -1], gain: r?.cfg.y ?? 0, ambient: r ? r.ambient.toArray() : [],
+        });
+      });
+      return {
+        materials: ctx.world.litChunkMaterials.map(m => ({
+          listOn: m.uniforms.lightListCfg.value.x, ambient: m.uniforms.ambient.value.toArray(),
+        })),
+        pieces,
+        views: ctx.bake.liveChunks.map(c => ({
+          id: c.id, pos: c.view.object.position.toArray(),
+          listOn: c.view.uniforms.lightListCfg.value.x, noRim: c.view.uniforms.lightListCfg.value.y,
+          picks: c.view.uniforms.bodyLights.value.toArray(),
+          fill: c.view.uniforms.lightCfg.value.y, fresnel: c.view.uniforms.surfCfg.value.z,
+        })),
+      };
+    },
     /** The live roster in world terms — what a blast gate needs to pick a
      *  target and to count what a detonation removed. Read-only scalars only:
      *  id, kind, room, ground position, yaw, collapse phase. No GPU state, so

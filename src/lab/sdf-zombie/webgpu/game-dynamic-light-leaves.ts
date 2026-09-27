@@ -601,14 +601,21 @@ type FillUniforms = { lightCfg?: { value: { y: number } }; probeCfg?: { value: {
 
 /** A body's fill (the flat fill and the room-probe gain, both baked with every lamp at full
  *  power) follows its room's live lamps: dark when they die, flickering when they flicker.
- *  Re-bases whenever something else rewrites the uniforms (a room change re-binds probes). */
-export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: number): void {
+ *  Re-bases whenever something else rewrites the uniforms (a room change re-binds probes).
+ *  `seedFrom` (marched chunk views, Task 12 review): the uniforms this set's fill was COPIED from.
+ *  A chunk view copies its origin body's lightCfg.y at spawn (copyTemplateLook), and that value
+ *  already carries the body's room factor, so on a (re)base the fill is taken from the source's
+ *  own UNSCALED base (when it has one) rather than from the copied value: no double scaling. */
+export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: number, seedFrom?: object): void {
   const rt = ctx.world.light;
   if (!rt || !u.lightCfg || !u.probeCfg) return;
   const f = roomFillFactor(ctx, x, z);
   let b = fillBase.get(u);
   const lc = u.lightCfg.value, pc = u.probeCfg.value;
-  if (!b || lc.y !== b.wroteFill) { b = { fill: lc.y, gain: b?.gain ?? pc.y, wroteFill: lc.y, wroteGain: b?.wroteGain ?? pc.y }; fillBase.set(u, b); }
+  if (!b || lc.y !== b.wroteFill) {
+    const fill = (seedFrom && fillBase.get(seedFrom)?.fill) ?? lc.y;
+    b = { fill, gain: b?.gain ?? pc.y, wroteFill: lc.y, wroteGain: b?.wroteGain ?? pc.y }; fillBase.set(u, b);
+  }
   if (pc.y !== b.wroteGain) { b.gain = pc.y; }
   lc.y = b.fill * f;
   pc.y = b.gain * f;

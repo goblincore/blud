@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
-  defaultUniforms, blankFaceTexture, woundReachBound, fallbackLightListNode,
+  defaultUniforms, blankFaceTexture, woundReachBound, fallbackLightListNode, CHUNK_FRESNEL,
 } from './zombie-gpu';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
@@ -123,6 +123,24 @@ describe('shared gib chunk material', () => {
     expect(lightsOf(a)).toEqual([2.5, 0.25, -1, -1]);
     expect(lightsOf(b)).toEqual([7.75, -1, -1, -1]);
     a.dispose(); b.dispose(); shared.dispose(); template.dispose();
+  });
+
+  it('a gib chunk view has no fresnel and no list back rim; its origin body keeps both (owner, 2026-09-27)', () => {
+    const shared = createSharedChunkGpuMaterial(undefined, undefined, fallbackLightListNode());
+    const template = createZombieGpuView(body, {});
+    template.uniforms.surfCfg.value.z = 0.5;
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const v = createChunkGpuView(makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]), prims, template.uniforms, undefined, undefined, shared);
+    expect(CHUNK_FRESNEL).toBe(0);
+    expect(v.uniforms.surfCfg.value.z).toBe(0);
+    expect(v.uniforms.lightListCfg.value.y).toBe(1);
+    expect(template.uniforms.surfCfg.value.z).toBe(0.5);
+    expect(template.uniforms.lightListCfg.value.y).toBe(0);
+    // a recycled view copies the template again and stays rim-free
+    v.reset(makeChunk('armL', [0, 1, 0], [0, 1, 0], 0.1, [0, 0, 1]), prims, undefined, undefined, template.uniforms);
+    expect(v.uniforms.surfCfg.value.z).toBe(0);
+    expect(v.uniforms.lightListCfg.value.y).toBe(1);
+    v.dispose(); shared.dispose(); template.dispose();
   });
 
   it('reconfigures a bounded mesh slot without allocating a new render object', () => {

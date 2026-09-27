@@ -26,6 +26,11 @@ describe('LIGHT_LIST_BLOCK', () => {
     expect(LIGHT_LIST_BLOCK).toContain('keyI = peak;');
   });
 
+  it('a gib chunk view (lightListCfg.y > 0.5) drops the back rims; bodies (y = 0) keep them (owner, 2026-09-27)', () => {
+    expect(LIGHT_LIST_BLOCK).toContain('listRim = select(bl.rim, vec3<f32>(0.0), lightListCfg.y > 0.5);');
+    expect(LIGHT_LIST_BLOCK).not.toContain('    listRim = bl.rim;');
+  });
+
   it('declares the list terms zero OUTSIDE the gate, so the off path adds exact zeros', () => {
     const gate = LIGHT_LIST_BLOCK.indexOf('if (lightListCfg.x > 0.0) {');
     for (const d of ['var listDiff = vec3<f32>(0.0);', 'var listSpec = vec3<f32>(0.0);',

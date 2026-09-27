@@ -61,7 +61,8 @@ const bakedChunkUniforms = () => ({
    *  dark floor, and at the body's fresnel every one of them wears a bright rim
    *  — the owner's "edge glow around them". Grazing angles dominate a small
    *  convex piece, so the same number that reads as a wet sheen on a torso reads
-   *  as an outline on a gib. */
+   *  as an outline on a gib. Since 2026-09-27 fresGain is not read at all: no
+   *  fresnel on gibs (owner). The slot stays so its writers keep working. */
   look: uniform(new THREE.Vector4(0.04, 0.5, 0.9, 0.18)),
   lightDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
   keyColor: uniform(new THREE.Color(1, 0.95, 0.9)),
@@ -123,20 +124,19 @@ const bakedChunkUniforms = () => ({
    *  Zero by default, so every existing user of this material is unchanged
    *  until the page pushes the view's real value. */
   fleshDetail: uniform(new THREE.Vector4(0, 0, 0, 0)),
-  /** SHARED LIGHT LIST (plan 1, Task 12): this material's 4 packed picks (`index + weight`, -1
-   *  empty), picked by the game at the centroid of the pieces drawn with it. */
-  chunkLights: uniform(new THREE.Vector4(-1, -1, -1, -1)),
-  /** x = 1: the key is the 4 picks (the game sets it only while the list is on and this material
-   *  draws pieces); 0 = the old key, exactly. y: the chunk trim on every list term (the game
-   *  writes CHUNK_LIST_GAIN; see chunk-light-pick.ts). */
+  /** SHARED LIGHT LIST (plan 1, Task 12): the MATERIAL's list switch. x = 1 while the game lights
+   *  gibs by the list this frame: then each drawn mesh shades by its OWN record (userData, see
+   *  `chunkObjectLight`); a mesh with no record, or any mesh at x = 0, takes the old key exactly.
+   *  y spare (the chunk trim rides each record's cfg.y). */
   lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
 });
 export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
 
 /**
  * The march's own key-light + flashlight cone + wrapped diffuse + wet
- * specular/fresnel (boneShade verbatim minus the wound-texture exposure
- * loop), fed a BAKED albedo whose ALPHA is the wound mask. wm drives the
+ * specular (boneShade verbatim minus the wound-texture exposure loop and,
+ * since 2026-09-27, minus its fresnel: the notes below that describe the
+ * fresnel are its history), fed a BAKED albedo whose ALPHA is the wound mask. wm drives the
  * blood-slick terms: near a torn end the highlight tints toward deep blood
  * and the fresnel gains, exactly the "wet" read the march gives crater
  * rims. NO noise here — the mottle is baked into the albedo; the march's
@@ -186,21 +186,25 @@ export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
  * next to one — but it is a visible change beyond the path that motivated it,
  * and it has not been through an owner view-test.
  *
- * SHARED LIGHT LIST (plan 1, Task 12). With listOn (lightListCfg.x) above 0.5
- * the KEY is the material's 4 picks through bodyLights (the bones' Task 11
- * compose): ambient, the baked AO, the wet tint, the fresnel (riding the
- * dominant's colour, or keyColor with no picks) and the soft shoulder stay;
- * the single key and the flashlight cone are replaced (the flashlight is a list
- * light). The shoulder runs whenever the list is on, as the march's does
- * (compose.wgsl.ts: spotCfg.x > 0 or lightListCfg.x > 0): a list light is a
- * presented key at the body's level, and a gib lying face-up under a tube takes
- * all of it. Every list term is scaled by listGain (lightListCfg.y, the game's
- * CHUNK_LIST_GAIN: the list is calibrated on the march's compose, this one is a
- * plain lambert). The face's flat term takes 0.30 x the scaled dominant colour,
- * so an unlit gib face loses the old unconditional 0.30 x 2.4 key.
- * listOn 0 is the old path exactly.
- * The picks are per MATERIAL, not per chunk: every mesh on a material shares
- * its uniforms, so the game picks at the centroid of its pieces.
+ * SHARED LIGHT LIST (plan 1, Task 12). With listOn above 0.5 the KEY is the
+ * drawn mesh's own 4 picks through bodyLights (the bones' Task 11 compose):
+ * ambient, the baked AO, the wet tint and the soft shoulder stay; the single
+ * key and the flashlight cone are replaced (the flashlight is a list light).
+ * The old key sits in the ELSE of the list branch, so a list-lit gib pixel
+ * pays for neither. The shoulder runs whenever the list is on, as the
+ * march's does (compose.wgsl.ts: spotCfg.x > 0 or lightListCfg.x > 0). Every
+ * list term is scaled by listGain (the game's CHUNK_LIST_GAIN: the list is
+ * calibrated on the march's compose, this one is a plain lambert). The face's
+ * flat term takes 0.30 x the scaled dominant colour. listOn 0 is the old key.
+ * picks, listOn, listGain and the ambient are bound PER OBJECT (see
+ * chunkObjectLight below): every mesh on a material has its own.
+ *
+ * NO FRESNEL, NO EDGE RIM (owner, 2026-09-27: "for gibs i want to remove the
+ * fresnel effect that creates the pale outline around them as it shimmers
+ * and looks distracting"). Both paths: the old fresnel (look.w, or the
+ * baked bakeFresnel per vertex) and the list's per-light back rim (bl.rim,
+ * the same pow(1 - N.V, 4) grazing edge) are gone. The wet specular stays.
+ * This is a look change on the `?lightlist=0` path too, by owner decision.
  */
 // The same face layer as the march, with mesh-local variable names. The
 // source texture remains a texture: baking it into 1 cm vertex colours loses
@@ -210,7 +214,7 @@ const MESH_FACE_LAYER = FACE_LAYER_WGSL
   .replaceAll('gInstHeadCentre', 'headCentre').replaceAll('gInstHeadQuat', 'headQuat')
   .replaceAll('gInstMelt.x', '0.0');
 const FACE_ARGS = `faceTex: texture_2d<f32>, headCentre: vec3<f32>, headAxes: vec3<f32>, headQuat: vec4<f32>, faceCfg: vec4<f32>, faceCfg2: vec4<f32>, faceCfg3: vec4<f32>, faceProj: vec4<f32>, faceAtlas: vec4<f32>, faceGlowRedOnly: f32, faceGlowColor: vec3<f32>`;
-function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec4<f32>, fleshDetail: vec4<f32>, response: vec4<f32>, fresnelGain: f32, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, listGain: f32${face ? ', ' + FACE_ARGS : ''}) -> vec3<f32> {
+function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec4<f32>, fleshDetail: vec4<f32>, response: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, listGain: f32${face ? ', ' + FACE_ARGS : ''}) -> vec3<f32> {
   var a = albedo;
   var nrm = n;
   var gloss2 = select(gloss, response.z, response.x > 0.5);
@@ -285,51 +289,45 @@ function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShad
       a = vec4<f32>(a.rgb * clamp(1.0 + shade * fleshDetail.z, 0.35, 1.65), a.a);
     }
   }
-  var L = normalize(lightDir);
-  var keyC = keyColor;
-  var keyI = lightCfg.x;
-  if (spotCfg.x > 0.0) {
-    let toLamp = spotPos - p;
-    let dist = length(toLamp);
-    let Ls = toLamp / max(dist, 1e-4);
-    let cone = dot(-Ls, normalize(spotAxis));
-    let coneFall = clamp((cone - spotCfg.z) / max(spotCfg.y - spotCfg.z, 1e-4), 0.0, 1.0);
-    let distFall = clamp(1.0 - dist / max(spotCfg.w, 1e-4), 0.0, 1.0);
-    let beam = coneFall * coneFall * distFall * distFall * spotCfg.x;
-    L = normalize(mix(L, Ls, clamp(beam, 0.0, 1.0)));
-    keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
-    keyI = lightCfg.x * spotCfg2.z + beam * spotCfg2.x;
-  }
   ${face ? `let wm = clamp(a.a, 0.0, 1.0);
   var faceAlbedo = a.rgb;
   ${MESH_FACE_LAYER}
   a = vec4<f32>(faceAlbedo, a.a);` : ''}
   let V = normalize(camPos - p);
-  let ndl = max(dot(nrm, L), 0.0);
-  let H = normalize(L + V);
   ${face ? '' : 'let wm = clamp(a.a, 0.0, 1.0);'}
-  let shine = pow(max(dot(nrm, H), 0.0), max(gloss2, 2.0));
-  let fres = pow(1.0 - max(dot(nrm, V), 0.0), 4.0) * select(look.w, fresnelGain, response.x > 0.5) * (1.0 - wm);
   let wetTint = mix(vec3<f32>(1.0), deepColor, look.y * wm);
-  let floorK = select(clamp(look.x, 0.0, 1.0), 0.0, response.x > 0.5);
-  let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;
-  // The SDF's highlight is weighted by wetness, NOT the diffuse key gain.
-  // Multiplying it by the flashlight gain turns a broad highlight white.
-  let meshSpec = keyC * wetTint * (shine * look.z * keyI + fres * (0.5 + 0.5 * keyI));
-  let fleshSpec = keyC * (shine * response.w + fres) * response.y;
-  let specular = select(meshSpec, fleshSpec, response.x > 0.5);
-  var out = diffuse + specular;
+  var out = vec3<f32>(0.0);
   ${face ? 'var flatKey = 0.30 * lightCfg.x * keyColor;' : ''}
   if (listOn > 0.5) {
     let bl = bodyLights(p, nrm, V, picks, lights, false);
-    let domC = bl.domC * listGain;
-    let peak = max(domC.x, max(domC.y, domC.z));
-    let rimC = select(keyColor, domC / max(peak, 1e-4), peak > 1e-4);
-    let diffL = a.rgb * (ambient + bl.diffuse * listGain) * ao;
-    let meshSpecL = wetTint * (bl.spec * listGain * look.z + rimC * fres * (0.5 + 0.5 * peak)) + bl.rim * listGain;
-    let fleshSpecL = (bl.spec * listGain * response.w + rimC * fres) * response.y + bl.rim * listGain;
-    out = diffL + select(meshSpecL, fleshSpecL, response.x > 0.5);
-    ${face ? 'flatKey = 0.30 * domC;' : ''}
+    let specL = bl.spec * listGain;
+    out = a.rgb * (ambient + bl.diffuse * listGain) * ao
+        + select(wetTint * specL * look.z, specL * response.w * response.y, response.x > 0.5);
+    ${face ? 'flatKey = 0.30 * bl.domC * listGain;' : ''}
+  } else {
+    var L = normalize(lightDir);
+    var keyC = keyColor;
+    var keyI = lightCfg.x;
+    if (spotCfg.x > 0.0) {
+      let toLamp = spotPos - p;
+      let dist = length(toLamp);
+      let Ls = toLamp / max(dist, 1e-4);
+      let cone = dot(-Ls, normalize(spotAxis));
+      let coneFall = clamp((cone - spotCfg.z) / max(spotCfg.y - spotCfg.z, 1e-4), 0.0, 1.0);
+      let distFall = clamp(1.0 - dist / max(spotCfg.w, 1e-4), 0.0, 1.0);
+      let beam = coneFall * coneFall * distFall * distFall * spotCfg.x;
+      L = normalize(mix(L, Ls, clamp(beam, 0.0, 1.0)));
+      keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
+      keyI = lightCfg.x * spotCfg2.z + beam * spotCfg2.x;
+    }
+    let ndl = max(dot(nrm, L), 0.0);
+    let H = normalize(L + V);
+    let shine = pow(max(dot(nrm, H), 0.0), max(gloss2, 2.0));
+    let floorK = select(clamp(look.x, 0.0, 1.0), 0.0, response.x > 0.5);
+    let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;
+    let meshSpec = keyC * wetTint * (shine * look.z * keyI);
+    let fleshSpec = keyC * (shine * response.w) * response.y;
+    out = diffuse + select(meshSpec, fleshSpec, response.x > 0.5);
   }
   ${face ? 'out = mix(out, a.rgb * (ambient + flatKey), faceFlat * 0.85);' : ''}
   if ((spotCfg.x > 0.0 || listOn > 0.5) && spotCfg2.y > 0.0) {
@@ -466,6 +464,57 @@ export interface GoreMaterialOptions extends SurfaceOutputOptions {
   face?: Pick<MarchUniforms, 'faceTex' | 'headCentre' | 'headAxes' | 'headQuat' | 'faceCfg' | 'faceCfg2' | 'faceCfg3' | 'faceProj' | 'faceAtlas' | 'faceGlowRedOnly' | 'faceGlowColor'>;
 }
 
+/** SHARED LIGHT LIST, PER OBJECT (plan 1, Task 12 review). A baked material's uniforms are shared
+ *  by every mesh drawn with it (every settled bake and every soldier corpse share `ctx.bake.mat`),
+ *  so a per-MATERIAL pick lands between piles in different rooms. The list terms are therefore
+ *  bound PER OBJECT, the shared chunk march material's way (zombie-gpu.ts bindObjectValue): three
+ *  calls each node's onObjectUpdate with the mesh it is about to draw, and the node takes the
+ *  value from that mesh's `userData` record. The game writes the record per drawn mesh per frame
+ *  (game-bake-leaves.ts pickChunkObjects); the record is allocated once per mesh and reused. */
+export const CHUNK_OBJECT_LIGHT = '__chunkObjectLight';
+export interface ChunkObjectLight {
+  /** 4 packed picks (`index + weight`, -1 empty) at this mesh's own position. */
+  picks: THREE.Vector4;
+  /** x = 1 list-lit; y the chunk trim on every list term (CHUNK_LIST_GAIN); z = 1: `ambient` is
+   *  this mesh's own (room-based fill), else the material's. */
+  cfg: THREE.Vector4;
+  ambient: THREE.Color;
+}
+/** This object's record, created on first use (then reused every frame: no per-frame allocation). */
+export function chunkObjectLight(object: THREE.Object3D): ChunkObjectLight {
+  let r = object.userData[CHUNK_OBJECT_LIGHT] as ChunkObjectLight | undefined;
+  if (!r) {
+    r = { picks: new THREE.Vector4(-1, -1, -1, -1), cfg: new THREE.Vector4(0, 0, 0, 0), ambient: new THREE.Color() };
+    object.userData[CHUNK_OBJECT_LIGHT] = r;
+  }
+  return r;
+}
+// Returned (never mutated) for a mesh with no live record: the old path.
+const NO_PICKS = new THREE.Vector4(-1, -1, -1, -1);
+const LIST_OFF = new THREE.Vector4(0, 0, 0, 0);
+type ObjectUpdated = { onObjectUpdate(cb: (frame: { object: THREE.Object3D }) => unknown): unknown };
+
+/** The per-object list nodes of one material: `picks`, `cfg` and `ambient` read the drawn mesh's
+ *  record while the material's switch (lightListCfg.x) is on, else the old-path values. Exported
+ *  for the tests: `node.update({ object })` is exactly what a render of `object` performs. */
+export function chunkObjectLightNodes(u: BakedChunkUniforms) {
+  const live = (object: THREE.Object3D): ChunkObjectLight | undefined => {
+    if (!(u.lightListCfg.value.x > 0.5)) return undefined;
+    const r = object.userData[CHUNK_OBJECT_LIGHT] as ChunkObjectLight | undefined;
+    return r && r.cfg.x > 0.5 ? r : undefined;
+  };
+  const picks = uniform(new THREE.Vector4(-1, -1, -1, -1));
+  const cfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const ambient = uniform(new THREE.Color(0.06, 0.06, 0.06));
+  (picks as unknown as ObjectUpdated).onObjectUpdate(({ object }) => live(object)?.picks ?? NO_PICKS);
+  (cfg as unknown as ObjectUpdated).onObjectUpdate(({ object }) => live(object)?.cfg ?? LIST_OFF);
+  (ambient as unknown as ObjectUpdated).onObjectUpdate(({ object }) => {
+    const r = live(object);
+    return r && r.cfg.z > 0.5 ? r.ambient : u.ambient.value;
+  });
+  return { picks, cfg, ambient };
+}
+
 export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedChunkMaterial {
   const u = bakedChunkUniforms();
   const material = new THREE.MeshBasicNodeMaterial();
@@ -517,6 +566,7 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
       .reduce<ReturnType<typeof wgslFn>[]>(
         (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
       );
+    const obj = chunkObjectLightNodes(u);
     // ONE shader, two call sites. With `goreDetail` the procedural layer runs
     // from `goreCfg` and the part's own `goreKind`; without it `goreCfg.x` is 0
     // (its uniform default) so the layer is skipped and a baked chunk shades
@@ -528,7 +578,7 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
       p: positionWorld, n: normalWorld, camPos: cameraPosition,
       albedo: attribute('bakeColor', 'vec4'),
       ao: options?.bakedAo ? attribute('bakeAo', 'float') : float(1.0),
-      deepColor: u.deepColor, ambient: u.ambient, look: u.look,
+      deepColor: u.deepColor, ambient: obj.ambient, look: u.look,
       lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
       spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg,
       spotCfg2: u.spotCfg2, spotColor: u.spotColor,
@@ -544,11 +594,10 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
       anchor: options?.fleshResponse ? attribute('bakeAnchor', 'vec4') : vec4(positionLocal, 0),
       fleshDetail: u.fleshDetail,
       response: options?.fleshResponse ? attribute('bakeResponse', 'vec4') : vec4(0),
-      fresnelGain: options?.fleshResponse ? attribute('bakeFresnel', 'float') : u.look.w,
-      picks: u.chunkLights,
+      picks: obj.picks,
       lights: (options?.lightList ?? fallbackLightListNode()) as never,
-      listOn: u.lightListCfg.x,
-      listGain: u.lightListCfg.y,
+      listOn: obj.cfg.x,
+      listGain: obj.cfg.y,
     }) as never, float(1.0));
   }
   material.depthWrite = true;

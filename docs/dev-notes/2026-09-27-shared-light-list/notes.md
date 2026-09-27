@@ -112,6 +112,9 @@ At this pose today's path is itself a bright, pale body, and the list now matche
 **For the owner.** "Match today" means matching today's pale look at a front-lit pose. The first
 uncalibrated cut was flat white, and that is gone.
 
+**Owner, 2026-09-27: the pale baseline for bodies is approved.** The list keeps matching today's
+look on bodies; the owner tunes from here.
+
 ## Deviations from the task text (approved by the coordinator)
 
 - **`applyRoomFill` is kept in list mode.** It is the fill, not the key. It makes blackouts go
@@ -289,70 +292,136 @@ dependency pre-bundle. Its second run is 5.45 s, level with head.
 
 ## Task 12: gib chunks pick their lights
 
-![gibs, off | on: tube (top), tube + flashlight (bottom)](gibs-off-on.png)
+![gibs: ?lightlist=0 | list (baked asset gibs) | list, ?gibrender=march; tube (top), tube + flashlight (bottom)](gibs-off-on.png)
 
-Left column `?lightlist=0`, right the list; each a fresh boot, clocks pinned, the train stopped, a
-zombie blown up (`__sdfGame.detonate`, gibs and all) under the z -4 third-class tube. The piles
-differ boot to boot (the pieces fly on the hand-stepped clock), so the gate judges the gib pixels
-only (the ones that change when `setChunksVisible(false)` hides the pieces in the same frame).
+Left `?lightlist=0`, middle the list (the default asset gibs, baked-chunk materials), right the
+list with `?gibrender=march&chunkbake=0` (live marched chunk views). Each a fresh boot, clocks
+pinned, the train stopped, a zombie blown up (`__sdfGame.detonate`, gibs and all) under the z -4
+third-class tube. The piles differ boot to boot, so the gate judges the gib pixels only (the ones
+that change when `setChunksVisible(false)` hides the pieces in the same frame). Red splats on the
+floor are blood decals, not gibs.
 
-- **Baked gibs (one pick per MATERIAL).** A `litChunkMaterials` entry's uniforms are shared by
-  every mesh drawn with it, so each entry picks once, at the **centroid of its visible pieces**.
-  **Deviation from spec §4** ("pick at the chunk's own position"). `gatherChunkCentroids`
-  (game-bake-leaves) keys the pieces by drawn material: settled bakes (`centre`), soldier corpses
-  (they share `ctx.bake.mat`; geometry bounding-sphere centre), sprite-set pieces drawn as meshes
-  (carved, asset, asset-head materials; `state.pos`), the gore showcase. Room: `roomIdAt` at the
-  centroid (-1 in a tunnel matches every light); facing `[0, 1]` (not neutral: a light on the -z
-  side takes its profile's backKey falloff). An entry with pieces is list-lit whatever it picks
-  (like an actor: no picks = fill + fresnel on keyColor, never body 0's global key); with none it
-  stays on the old path. Pure part: `chunk-light-pick.ts` (tested).
-- **Ambient, list mode.** Today's per-frame chunk ambient is `fill x key + bounce` with body 0's
-  `lightCfg.y`, which carries body 0's room factor. List mode re-bases the fill on the pieces' room
-  (`fill / f(body 0) x f(centroid)`, the Task 11b bone rule); the bounce is left as today.
-- **Shader** (`chunkShade`, both face variants): `picks`, `lights`, `listOn`, `listGain` after
-  `fresnelGain`. List on: the key is `bodyLights(p, nrm, V, picks, lights, false)`, compose as the
-  bones' (ambient, baked AO, wet tint, fresnel on the dominant's colour), the face's flat term
-  takes `0.30 x domC`, and the soft shoulder runs whenever the list is on, as the march's does.
-  Uniforms `chunkLights` (-1s) and `lightListCfg` (0s). `?lightlist=0` writes x = 0: the old path.
-- **CHUNK_LIST_GAIN 0.4 (measured; `__sdfGame.setChunkListGain`).** At the list's full level
-  (calibrated on the march, whose soft shoulder flattens a big key) a baked gib face-up under the
-  tube read 0.44 and in the beam 0.69 with 19.8% of its pixels over 0.95. Anchor: the MARCHED gib
-  under the list (`GIB_RENDER=march`), 0.316 tube / 0.482 torch. Sweep (baked): 0.3 0.255 / 0.485,
-  0.5 0.324 / 0.578. 0.4 splits the tube match (0.5) and the torch match (0.3).
-- **Marched chunk views (per view).** Each owns a record slot, so it picks at its own position like
-  an actor (`applyBodyLights`, room at the view, facing [0, 1]), `bodyFlash.w = 0`, no
-  `applyWindowKey`; new `ChunkGpuView.syncRecord()` re-writes the record after the pick (update()
-  wrote it earlier in the frame). Chunk views are list-lit whatever they pick, like actors (the
-  coordinator's draft said "x = 0 without picks"; consistency with actors won). The shared chunk
-  march material now binds the real list node (`createSharedChunkGpuMaterial(prev, opts, list)`).
-- **The ratio band was dropped.** The plan asked for on/off within ~0.8-1.25x. `?lightlist=0`
-  lights gibs by body 0's key (a direction and colour from wherever body 0 stands), and its beam
-  path barely reaches a gib either, so the old pile is near-black under a lit tube: measured
-  on/off 1.64-1.81x under the tube, 2.1-3.3x in the beam (marched views: 2.47x). Matching the band
-  would mean matching the global key. Section 9 of the light gate judges instead: list >= the old
-  key, <= 10% near-black, <= 2% blown under the tube, <= 10% blown in the beam (the marched anchor
-  itself reads 11.5%), every drawn gib material / view list-lit with a third-class tube picked.
+**Owner, 2026-09-27: no fresnel / edge rim on gibs** ("for gibs i want to remove the fresnel effect
+that creates the pale outline around them as it shimmers and looks distracting"). Applied to every
+gib, on both paths (a look change on `?lightlist=0` too, by owner decision):
+- baked chunks (`chunkShade`, plain and face variants; settled bakes, corpses, carved/asset sprite
+  pieces, the showcase): the old fresnel (`look.w` or the per-vertex `bakeFresnel`) and the list's
+  per-light back rim `bl.rim` are gone; the `fresnelGain` argument is removed. Wet specular,
+  diffuse and ambient stay. `look.w` is no longer read.
+- marched chunk views: `surfCfg.z` (the march's fresnel strength, light.wgsl.ts `fres`) is set to
+  `CHUNK_FRESNEL` 0 after every template copy (zombie-gpu copyTemplateLook), and
+  `lightListCfg.y = 1` marks a view as a gib: LIGHT_LIST_BLOCK then drops `listRim`
+  (`select(bl.rim, 0, lightListCfg.y > 0.5)`). Bodies, crowds and bones keep their fresnel and
+  back rims (their `lightListCfg.y` is 0). The march golden snapshot moved (MARCH_BODY,
+  MARCH_BODY_LIGHT, REFINE_BODY) for that one line.
+- Not touched: the storm window's lightning side rim (`spotCfg2.w`, only during a bolt, only on the
+  old path for views) and the bone tubes/meshes of chunks (bones keep their rim).
 
-### Gate (full run, `LIGHT_GATE_SHOT` kept the frames)
+### Per object (Task 12 review, I1)
+
+The first cut picked once per MATERIAL at the centroid of its pieces. `ctx.bake.mat` is shared by
+every settled bake level-wide and by every soldier corpse, so piles in two rooms picked at a point
+between them (possibly in no room, which matches every light). Now every gib picks at its **own
+position**, spec §4 as written; the per-material deviation is **removed**.
+
+- **Binding.** `chunkShade`'s `picks`, `listOn`, `listGain` and `ambient` are PER-OBJECT nodes
+  (`chunkObjectLightNodes`, baked-chunks.ts), the shared chunk march material's pattern
+  (zombie-gpu `bindObjectValue`: `onObjectUpdate` sets the node from the mesh about to draw). Each
+  drawn mesh carries a `ChunkObjectLight` record in `userData` (picks, cfg = (on, gain, own
+  ambient), ambient), allocated once per mesh and reused. The node reads the record only while the
+  material's switch (`lightListCfg.x`) is on and the record says on; otherwise the old path (so a
+  stale record after `setLightListOn(false)` is ignored). A drawn mesh without a record shades by
+  the old key.
+- **Granularity: one mesh is one piece for every source** (`forEachDrawnChunkMesh`,
+  game-bake-leaves): a settled bake = one mesh per chunk, at its bake `centre`; a soldier corpse =
+  one mesh per corpse (the whole corpse), at its geometry's bounding-sphere centre; a sprite-set
+  piece drawn as a mesh (carved, asset, asset head) = one mesh per piece, at `state.pos`; the gore
+  showcase = one mesh per part, at its world position. Billboards use their own unlit materials.
+  No source draws several chunks in one mesh, so there is no (material, room) fallback.
+- **Per piece, per frame** (`pickChunkObjects`): room at the piece (`roomIdAt`, -1 in a tunnel
+  matches every light), `pickLights` into a scratch body and pick (facing [0, 0]), the list-mode
+  ambient (body 0's fill re-based on the piece's room: `fill / f(body 0) x f(piece)` + bounce,
+  scalar `chunkListAmbient`). The room fill inputs are derived once per frame. Cost: one pick
+  (<= 32 lights) per drawn gib mesh; bakes are capped at `maxChunks` (96), sprite pieces by their
+  live/rest caps, so a few hundred picks per frame at most, allocation-free after a mesh's first
+  frame. The gate's pile: 14 meshes, 13-14 distinct picks (weights 0.07-0.53 across the pool).
+- **Facing [0, 0] (I2).** A tumbling chunk has no front. facingDot 0 gives every light the side-on
+  value (`backKey + (1 - backKey) x 0.5`), whatever its direction; before, `[0, 1]` was a fixed
+  world +z bias (a light on the -z side took the backKey falloff). Chunk views use the same
+  `chunkPickBody`. Unit test: mirror-image tubes at -z/+z weigh the same.
+
+### Chunk views (M5, M7)
+
+Views pick at their own position (`applyBodyLights`), `bodyFlash.w = 0`, no `applyWindowKey`, and
+`syncRecord()` runs **only in the list branch** (`?lightlist=0` is literally the old loop body).
+Their **fill follows the room** like an actor's: `applyRoomFill(ctx, u, x, z, template)`. A view
+copies its origin body's `lightCfg.y` at spawn, which `applyRoomFill` had already scaled by that
+body's room, so the new `seedFrom` argument (re)bases the view's fill on the TEMPLATE's unscaled
+base (the fillBase WeakMap entry), not on the copied value: no double scaling. A recycled view
+(`reset()` copies a new template value) re-bases the same way.
+
+### Shader (M6)
+
+`chunkShade`: the old key (key direction, beam cone, lambert, `pow` shine, old spec) is the `else`
+of the list branch; the wet tint is shared above it. A list-lit gib pixel runs no old-key ALU. The
+off path is the old arithmetic minus the fresnel (owner). First-detonation frames (wall time of each
+of the first 6 hand steps after the blast; the first gib draws compile the chunk shader), three
+runs on a loaded machine (load average 30-70): list `87 140 36 31 29 25`, `92 117 59 63 96 106`,
+`54 42 114 132 44 32` ms; `?lightlist=0` `83 50 61 51 41 41`, `63 68 32 91 33 71`,
+`205 31 30 26 43 33`; march `48 38 42 55 40 36`, `49 31 37 31 32 26`, `167 121 165 117 66 60`.
+No first-frame spike beyond the noise on either path. Not a benchmark: both paths compile the same
+shader (the switch is a uniform).
+
+### CHUNK_LIST_GAIN 0.4 -> 0.6
+
+The 0.4 calibration was taken with per-material picks and the fresnel/back-rim terms, on a pile
+that half-landed on the bench top at the pool's edge. With per-piece picks, facing [0, 0] and no
+rim, and the gate's pile now thrown into the pool (below), the baked pile at 0.4 read 0.167-0.190
+under the tube, 9.2% dark, against the marched views' 0.327-0.368 in the same pool. Sweep (tube /
+torch mean, torch blown): 0.4 0.167 / 0.395 (2.5%), 0.5 0.194 / 0.433 (4.1%), 0.6 0.220 / 0.462
+(5.9%), 0.7 0.243 / 0.487 (7.4%), 0.8 0.264 / 0.507 (8.8%). The marched views themselves blow out in
+the beam (0.63-0.71, 16-32% over 0.95), so the torch anchor is no target now. 0.6 takes back part
+of what the rim removal and the per-piece picks cost under the tube, and keeps the beam <= 6% blown.
+
+### Gate section 9 (M1-M3)
+
+- **Blast point.** The detonation sits 0.6 m on the bench side (+x) of the actor, so the pieces fly
+  into the aisle and settle on the floor in the tube's pool. Straight up, half the pile landed on
+  the bench top at the pool's edge (pick weights ~0.1) and the mean measured where it landed.
+- **Absolute bounds (M2).** Tube mean in [0.18, 0.40] (measured 0.211-0.236 over four runs at
+  gain 0.6; the marched anchor in the same pool 0.268-0.342); torch mean <= 0.65 (measured
+  0.488-0.596; the marched views 0.548-0.685). Still: list >= the old global key (2.0-2.9x),
+  <= 10% dark, <= 2% blown (tube). Torch blown <= 15% (was 10%): a face-up pile in the beam read
+  4-13% over four runs at 0.6 (one run 12.9%), depending on where it lands.
+- **Dark mask.** A gib pixel counts as dark when it is < 0.04 in the shot AND the bare (hidden)
+  frame reads >= 0.07 there: a gib that blacked out the lit floor it lies on. On a pile in the pool:
+  0.2-5% (list), 5-25% (`?lightlist=0`).
+- **Per-object checks.** List boot: every registered material switched on; every drawn gib mesh
+  near the blast list-lit by its own record, with a third-class tube among its picks.
+  `?lightlist=0`: no material, mesh or view switch on.
+- **March sub-pass (M3), on by default.** A third boot, `?gibrender=march&chunkbake=0` (the views
+  stay live): every view near the blast list-lit, fresnel 0 and rim-free, the tube picked in its
+  pool; tube dark <= 10% and blown <= 2%, torch dark <= 10%; torch blown <= 40% is a regression
+  fence around the recorded 15-32% (known gap below), not a look target. About 35 s.
+- **Retry.** One re-measure when the pile covers < 1% of the frame: one full run read 29 gib pixels
+  for the march pass (a capture landing before the pieces drew; the same tree's gibs-only run read
+  3.2%).
+
+Final full run (`LIGHT_GATE_SHOT` kept the frames of gibs-off-on.png):
 
 ```
-     gibs       on  mean 0.259 (7.0% of frame, 14 sprite pieces) dark 0.1% blown 0.0% | off mean 0.158 (5.0% of frame, 14 sprite pieces) dark 4.7% blown 0.0%
-     gibs+torch on  mean 0.569 dark 0.0% blown 5.3% | off mean 0.175 dark 3.0% blown 0.0%
-ok   gibs lit by the tube: on/off gib mean tube 1.64x torch 3.26x; 2 list-lit gib material(s), 0 chunk view(s); material picks [[0.583,-1,-1,-1],[0.289,-1,-1,-1]]
-ok   shared list look: on/off mean tube 1.07x bolt 1.01x flashlight 1.00x; near-black tube 0.8% bolt 0.0% flashlight 1.8% dark-corridor 59.4%
-PASS sdf-game-light-gate (wall 64 s)
+     gibs       on  mean 0.211 (3.7% of frame, 14 sprite pieces) dark 0.1% blown 0.0% | off mean 0.074 (5.7% of frame, 14 sprite pieces) dark 29.3% blown 0.0%
+     gibs+torch on  mean 0.509 dark 0.0% blown 7.8% | off mean 0.257 dark 5.4% blown 0.1%
+     gibs march on  mean 0.318 (5.1% of frame, 14 march pieces) dark 0.1% blown 0.0% | torch mean 0.654 dark 0.0% blown 23.2%
+ok   gibs lit by the tube: on/off gib mean tube 2.86x torch 1.98x; tube 0.211 in 0.18,0.4, torch 0.509 <= 0.65; 14 gib mesh(es) (sprite) each list-lit by its own picks (13 distinct), e.g. [[0.497,-1,-1,-1],[0.139,-1,-1,-1],[0.07,-1,-1,-1],[0.465,-1,-1,-1]]
+ok   marched gib views: 14 live view(s) near the blast, list-lit, rim-free, tube picked in its pool; tube mean 0.318 (baked 0.211), torch 0.654 (baked 0.509)
+ok   shared list look: on/off mean tube 1.05x bolt 1.01x flashlight 1.00x; near-black tube 1.0% bolt 0.0% flashlight 1.8% dark-corridor 60.6%
+PASS sdf-game-light-gate (wall 217 s)
 ```
 
-`LIGHT_GATE_ONLY_GIBS=1` runs section 9 alone (about 25 s). `GIB_RENDER=march`: views 1, 2, 4, 5...
-all list-lit, the tube (index 0) picked at 0.20-0.32 around the pool, plus the one settled bake.
+`LIGHT_GATE_ONLY_GIBS=1` runs section 9 alone (about 100 s, three boots).
 
-### By eye
-
-Off: the pile under the tube is near-black grey, and the beam hardly lifts it. On: the pieces read
-fleshy (pink with dark mottling) in the tube's pool, with a cool rim from the tube's colour on the
-fresnel and its back rim; in the beam they go pink-white with wet highlights, not flat white.
-
-### Cold boot (scripts/boot-time.mjs, fresh profile, alternating)
+### Cold boot (Task 12 first cut; scripts/boot-time.mjs, fresh profile, alternating)
 
 ```
 HEAD run 1: {"drawOnce":1505.1,"warmMs":2090}
@@ -364,9 +433,26 @@ BASE run 2: {"drawOnce":1641.7,"warmMs":2302}
 Within noise. The boot warms the marched chunk view (same WGSL; only the bound list node changed);
 the baked-chunk shader compiles on the first gib, which this number does not cover.
 
-### Known gaps
+### By eye (gibs-off-on.png)
 
-- A chunk view's BONES reach the tube instancer with no owner (game-main, `posedBones()` sources
-  carry no `lights`: -2), so they keep the old key even in list mode.
-- One pick per material: a pile spread across two pools takes the centroid's lights.
-- Facing [0, 1] biases the pick against lights on the -z side (backKey).
+Off: under the tube the pieces are near-black silhouettes; the beam lifts a few to dull pink.
+List (baked): the pieces read as flesh (maroon-pink with the mottle and the ribcage's bone) in the
+tube's pool, with no pale outline; in the beam they go pink-white with wet highlights, not flat
+white. March: paler pink pieces under the tube, rim-free; in the beam the face-up pieces blow to
+white (the known gap below).
+
+### Deviations and gaps
+
+- Removed: the per-material centroid pick (spec §4 is now followed), facing [0, 1].
+- Remaining deviation: the list is on for every drawn gib whatever it picks (like actors: no
+  picks = fill only), not "x = 0 without picks".
+- **Marched views blow out in the beam** (15-32% of gib pixels over 0.95): they take the list at the
+  march's full level, like a body, with no chunk trim. The gate fences it at 40%.
+- **Cover at the chunk's own height.** A piece on the bench top at the pool's edge picks the tube
+  at ~0.1 (spot cover judged at y 0.9, where the cone is narrow) while the bench top around it is
+  visibly lit by the level's tube: the list's cone is narrower than the level's lit pool there.
+- A chunk view's BONES reach the tube instancer with no owner (`posedBones()` sources carry no
+  `lights`: -2), so they keep the old key in list mode (and their fresnel: bones are not gibs).
+- The storm window's side rim on chunk views (old path only, during a bolt) is untouched.
+- The bake still writes the per-vertex `bakeFresnel` attribute (from the view's surfCfg.z, now 0
+  for gibs); nothing reads it. Dead data, left for a cleanup.
