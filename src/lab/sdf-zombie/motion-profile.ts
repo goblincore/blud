@@ -8,12 +8,12 @@ import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type Gai
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
-import { JUGGERNAUT_ARMOR, type ArmorSpec } from './plate-armor';
-import { JUGGERNAUT_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
+import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
+import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
-export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun';
+export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun' | 'rocket';
 
 export interface MotionProfile {
   name: string;
@@ -56,6 +56,10 @@ export interface MotionProfile {
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
   gunner?: { weapon: GunnerWeapon };
+  /** A CHARGER: the game gives it the warbull mind (enemy-mind.ts
+   *  makeWarbullMind), the bull charge (charge.ts) over its gunner brain,
+   *  and a brawl once disarmed. Needs `gunner`. */
+  charger?: boolean;
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
@@ -73,7 +77,10 @@ export interface MotionProfile {
    *  injury thresholds for the flesh once a plate is off (soldier-damage.ts).
    *  Also makes him stagger-resistant: pellets never stagger him. Absent =
    *  the soldier's visual-only plates and thresholds. The juggernaut's. */
-  armor?: { spec: ArmorSpec; injury: SoldierInjuryTuning };
+  armor?: { spec: ArmorSpec; injury: SoldierInjuryTuning;
+    /** The plate whose shedding DISARMS him: the held prop drops and the
+     *  ranged mode ends (the warbull's launcher). Absent = never. */
+    disarmPlate?: string };
   /** The FULL flail's shape and timing (soldier-stagger fullOpen). Absent =
    *  the soldier's, exactly (SOLDIER_FLAIL). Angles in radians, body-local. */
   flail?: FlailTuning;
@@ -245,6 +252,39 @@ export const JUGGERNAUT_PROFILE: MotionProfile = {
   armor: { spec: JUGGERNAUT_ARMOR, injury: JUGGERNAUT_INJURY_TUNING },
 };
 
+/** The warbull: the cyber-minotaur (docs/superpowers/specs/2026-09-27-
+ *  warbull-design.md). A soldier-family member, so the soldier's regional
+ *  injury, collapse and footwork apply (his bones carry the soldier's names;
+ *  warbull-blob.test.ts pins it). A heavy STOMP (the ogre's gait), a slow
+ *  turn, and a one-handed gun-arm LAUNCHER on ROCKET_TUNING: the arm hangs
+ *  it forward-down while he walks (`launcherLow`) and raises it level to
+ *  fire (`launcher`), so the raise itself is part of the telegraph. */
+export const WARBULL_PROFILE: MotionProfile = {
+  ...SOLDIER_PROFILE,
+  name: 'warbull',
+  gait: { walk: STOMP, run: STOMP },
+  runBand: { from: Infinity, to: Infinity },
+  // Under the juggernaut's 0.9: at 2.4 m he covers ground by stride, and the
+  // charge (Task 6) is where his speed lives.
+  cruise: 0.85,
+  // The slowest turn in the roster: a strafing player outruns his aim, and
+  // a charge that commits to a line is the point.
+  turnRate: 1.6,
+  carries: { walk: 'launcherLow', run: 'launcherLow', fire: 'launcher' },
+  // scripts/make-warbull-launcher.ts. Scale 1.6: the casing swallows his
+  // 0.22 m fist and the lower forearm, the muzzle ~0.78 m past the grip.
+  // gripReach 0.09: his fist prim sits at the middle of a 0.18 m hand bone
+  // (warbull.blob `blob arm on hand at=0.45`), so the grip (and the casing
+  // built round it) seats at the fist, not at the wrist.
+  prop: { url: '/assets/lab/warbull-launcher.glb', scale: 1.6, gripReach: 0.09 },
+  gunner: { weapon: 'rocket' },
+  // Plates on the machinery only (plate-armor.ts WARBULL_ARMOR); shooting
+  // the launcher off disarms him (spec, "Disarm").
+  armor: { spec: WARBULL_ARMOR, injury: WARBULL_INJURY_TUNING, disarmPlate: 'launcher' },
+  // The bull charge up close, and the brawl once disarmed (spec, "Melee").
+  charger: true,
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -275,6 +315,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   ogre: OGRE_PROFILE,
   cultist: CULTIST_PROFILE,
   bride: BRIDE_PROFILE,
+  warbull: WARBULL_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

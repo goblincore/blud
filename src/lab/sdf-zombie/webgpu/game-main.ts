@@ -82,7 +82,7 @@ import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from 
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
-import { makeSoldierMind, makeSwordMind } from './enemy-mind';
+import { makeSoldierMind, makeWarbullMind, makeSwordMind } from './enemy-mind';
 import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
 import { GUNNER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
@@ -303,6 +303,7 @@ import { awaitBakes, pickChunkObjects, registerLitChunkMaterial, type ChunkPickF
 import { playerRoomId } from './game-player-leaves';
 import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDirToRig } from './game-weapon-leaves';
 import { ceilingAt } from './game-world-leaves';
+import { blastPlayerDamage, spawnRocket, stepRockets, ROCKET } from '../rockets';
 import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-leaves';
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-leaves';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-vfx-leaves';
@@ -3445,7 +3446,9 @@ async function main() {
       // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
       // gun, the juggernaut's chaingun. Was `name === 'soldier'`.
       ...(characterEntry(name).profile.gunner ? {
-        mind: makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
+        mind: characterEntry(name).profile.charger
+          ? makeWarbullMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon])
+          : makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
           ctx.world.encounter.shot(zombieId);
@@ -3462,7 +3465,7 @@ async function main() {
           // slow turn the player outruns), its vertical the player's chest.
           const weapon = characterEntry(name).profile.gunner?.weapon;
           let shotDir = dir;
-          if (weapon === 'smg' || weapon === 'chaingun') {
+          if (weapon === 'smg' || weapon === 'chaingun' || weapon === 'rocket') {
             const pp = ctx.player.player.pos;
             const hx = dir[0], hz = dir[2], hl = Math.hypot(hx, hz) || 1;
             const dist = Math.hypot(pp[0] - muz[0], pp[2] - muz[2]);
@@ -3472,7 +3475,12 @@ async function main() {
           }
           // The chaingun fires ONE round per trigger event (game-weapon.ts
           // spawnRound); the shotgun and the tommy gun keep their volley.
-          if (weapon === 'chaingun') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
+          // The warbull's launcher fires ONE slow rocket per trigger event
+          // (rockets.ts), aimed like the tommy gun: the arm's heading, the
+          // player's chest for the vertical. It detonates through the
+          // dynamite path (the rocket step in the frame loop below).
+          if (weapon === 'rocket') ctx.weapon.rockets.push(spawnRocket(muz, shotDir, zombieId));
+          else if (weapon === 'chaingun') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
           else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
@@ -3489,7 +3497,11 @@ async function main() {
       // SDF game loads no audio at all, so there is none to reuse.
       onMeleeContact: ({ variant }) => {
         ctx.player.hitFeedback = hitFeedback(ctx.player.hitFeedback, variant);
-        damagePlayer(ctx, VITALS.swordHit, 'melee');   // the game loop: a landed blade hurts
+        // A landed blade hurts; the warbull's charge (a charger's 'shove',
+        // charge.ts, one per run) hurts twice as much. Its brawl swings keep
+        // the sword's value.
+        const charged = characterEntry(name).profile.charger && variant === 'shove';
+        damagePlayer(ctx, charged ? VITALS.chargeHit : VITALS.swordHit, 'melee');
       },
       // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
       // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
@@ -3541,8 +3553,9 @@ async function main() {
 
   function spawnAll(errs: string[]): void {
     // ?spawn=<character> (playtest): every ZOMBIE slot spawns that registry
-    // character instead, e.g. ?spawn=cultist, ?spawn=juggernaut. Soldier,
-    // cultist and juggernaut slots keep their kind (level-def SpawnKind).
+    // character instead, e.g. ?spawn=cultist, ?spawn=warbull. Soldier,
+    // cultist, juggernaut and warbull slots keep their kind (level-def
+    // SpawnKind).
     for (const s of ctx.world.level.spawnList()) {
       const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
       ctx.world.actors.push(spawnEnemy(name, s.room, s.pos, errs));
@@ -4707,6 +4720,8 @@ async function main() {
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   ctx.weapon.soldierPellets = [];
   ctx.weapon.soldierPelletViews = [];
+  ctx.weapon.rockets = [];
+  ctx.weapon.rocketViews = [];
   // The gather's tracer provider (declared at the top, next to probeGather) can
   // only be wired once both lists exist — see the boot-race note there.
   ctx.lighting.liveTracers = () => [...ctx.weapon.pellets, ...ctx.weapon.soldierPellets];
@@ -7098,7 +7113,15 @@ async function main() {
         for (const a of ctx.world.actors) {
           if (!a.character) continue;
           const p = a.pose();
-          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView());
+          // THE DISARM (the warbull's launcher plate shot off, profile
+          // armor.disarmPlate): the launcher tears off his arm and falls,
+          // flung out to his right. With the prop released, onFire refuses to
+          // shoot, so the ranged mode is over for good.
+          if (a.disarmed() && a.character.prop && !a.character.prop.released) {
+            a.character.releaseProp(rotateYaw([-1.4, 1.6, 0.5], p.yaw), a.id);
+            ctx.telemetry.telemetry.event('disarm', { actor: a.id });
+          }
+          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights());
         }
       }
       // The actor animation phase: wall-clock in play, the SIM CLOCK while a
@@ -7642,10 +7665,43 @@ async function main() {
           ctx.weapon.soldierPellets.splice(i, 1);
         }
       }
+      // ROCKETS (the warbull, rockets.ts): slow warheads that detonate on the
+      // first thing they touch through the DYNAMITE path (detonateAt), so an
+      // actor caught in one takes a bundle's wounds and gibs, and the player
+      // takes the falloff share. Stepped here, after the actors, like the
+      // pellets above; actors are coarse capsules at their feet.
+      if (ctx.weapon.rockets.length) {
+        const pp = ctx.player.player.pos;
+        const stepped = stepRockets(ctx.weapon.rockets, dt, {
+          hitsWorld: (from, to) => to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2])
+            || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
+          hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius, PLAYER.height),
+          hitsActor: (from, to, owner, armed) => ctx.world.actors.some(a =>
+            (armed || a.id !== owner) && segmentHitsCapsule(from, to, a.pose().pos, 0.45, 2.0)),
+        });
+        ctx.weapon.rockets = stepped.live;
+        for (const d of stepped.detonations) {
+          ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
+          detonateAt(d.at);
+          const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
+          if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
+        }
+      }
       // The eye every tracer billboards around this frame. Declared here (not
       // reused from the block below) because that one is scoped to the hit
       // pass; the streaks need it whether or not anything was hit.
       const tracerEye = eyeOf(ctx.player.player);
+      while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
+        ctx.weapon.rocketViews.push(newTracerView(ctx));
+      }
+      for (let k = 0; k < ctx.weapon.rocketViews.length; k++) {
+        const v = ctx.weapon.rocketViews[k]!;
+        const r = ctx.weapon.rockets[k];
+        // A rocket draws as a fat tracer at its own calibre (placeTracer reads
+        // the radius); the slug kind gives it the heavy streak.
+        if (r) placeTracer(ctx, v, { pos: r.pos, vel: r.vel, ageSec: r.ageSec, radius: ROCKET.radius, kind: 'slug' }, tracerEye);
+        else hideTracer(ctx, v);
+      }
       while (ctx.weapon.soldierPelletViews.length < ctx.weapon.soldierPellets.length) {
         ctx.weapon.soldierPelletViews.push(newTracerView(ctx));
       }

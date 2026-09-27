@@ -46,6 +46,6 @@ describe('void rooms and portals', () => {
     j.spawns[0].kind = 'juggernaut';
     expect(parseLevelJson(j).spawns[0]!.kind).toBe('juggernaut');
     j.spawns[0].kind = 'imp';
-    expect(() => parseLevelJson(j)).toThrow(/kind must be zombie, soldier, cultist or juggernaut/);
+    expect(() => parseLevelJson(j)).toThrow(/kind must be zombie, soldier, cultist, juggernaut or warbull/);
   });
 });

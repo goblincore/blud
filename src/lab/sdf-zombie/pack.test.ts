@@ -497,6 +497,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  pinned at 6 + 3 in broodmother-blob.test.ts
   //   cultist     2  two ember eyes deep in the hood (2026-09-23); the
   //                  cultist-cowled variant likewise
+  //   warbull     1  the LEFT eye bead only (2026-09-27): his right eye is
+  //                  the kit's optic; pinned in warbull-blob.test.ts
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
@@ -507,6 +509,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'broodmother.blob': 9,
     'cultist.blob': 2,
     'cultist-cowled.blob': 2,
+    'warbull.blob': 1,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

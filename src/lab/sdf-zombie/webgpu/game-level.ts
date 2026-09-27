@@ -126,15 +126,20 @@ export interface RoomDef {
   /** The next N slots, after the soldiers, use juggernauts (the power-armour
    *  chaingunner). Counted inside `zombies`, like the soldiers. */
   juggernauts?: number;
+  /** The next N slots, after the juggernauts, use warbulls (the cyber-
+   *  minotaur). Counted inside `zombies`, like the others. */
+  warbulls?: number;
 }
 
 /** The spawn KIND of ring-level slot `index` in `room` (active-level.ts
- *  ringLevel): soldiers first, then juggernauts, then zombies. The ?spawn=
- *  playtest override swaps zombie slots later, in game-main. */
-export function slotCharacter(room: RoomDef, index: number): 'soldier' | 'juggernaut' | 'zombie' {
+ *  ringLevel): soldiers first, then juggernauts, then warbulls, then zombies.
+ *  The ?spawn= playtest override swaps zombie slots later, in game-main. */
+export function slotCharacter(room: RoomDef, index: number): 'soldier' | 'juggernaut' | 'warbull' | 'zombie' {
   const soldiers = room.soldiers ?? 0;
+  const juggernauts = soldiers + (room.juggernauts ?? 0);
   if (index < soldiers) return 'soldier';
-  if (index < soldiers + (room.juggernauts ?? 0)) return 'juggernaut';
+  if (index < juggernauts) return 'juggernaut';
+  if (index < juggernauts + (room.warbulls ?? 0)) return 'warbull';
   return 'zombie';
 }
 
@@ -246,8 +251,11 @@ export const ROOMS: RoomDef[] = [
     // A HORDE, not a fireteam: this room exists so a blast has bodies to spend.
     // ...and one JUGGERNAUT among them (2026-09-26): the biggest room suits his
     // 5 m preferred range and 9 m reach, and dynamite, which this room is
-    // for, is the intended answer to his plates. Slot 0; seven zombies remain.
-    zombies: 8, soldiers: 0, juggernauts: 1 },
+    // for, is the intended answer to his plates. Slot 0.
+    // ...and one WARBULL (2026-09-27): the only room with the floor for his
+    // 7 m rocket standoff and a charge's run-up, and the 6 m ceiling clears
+    // his 2.6 m horns by a long way. Slot 1; six zombies remain.
+    zombies: 8, soldiers: 0, juggernauts: 1, warbulls: 1 },
   { id: 5, name: 'room5', minX: ANNEX_MIN_X, maxX: ANNEX_MAX_X, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     accents: [

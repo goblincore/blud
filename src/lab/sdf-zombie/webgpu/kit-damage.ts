@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { BuildResult } from '../build-body';
 import type { LimbId, Vec3 } from '../types';
 import { woundWorldPos, type Wound } from '../damage';
-import { plateFor, type ArmorSpec } from '../plate-armor';
+import { kitShedFor, type ArmorSpec } from '../plate-armor';
 
 const boneKey = (s: string) => s.toLowerCase().replace(/[._]/g, '');
 function boneLimb(name: string): LimbId {
@@ -157,8 +157,7 @@ export function createKitDamage(object:THREE.Object3D) {
           // Everything skinned to a shed plate's bones goes with it (matched by
           // bone): the plate islands, and what is mounted on them, so the
           // helmet's lenses and snout never hang in front of a bare face.
-          const plate=plateFor(armor.spec,piece.bone);
-          if(!attached(piece,body) || (plate && armor.shed.has(plate.id))) {
+          if(!attached(piece,body) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
             const point=bake(piece); changed.add(piece.source);
             if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
           }

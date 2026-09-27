@@ -29,6 +29,16 @@ export const JUGGERNAUT_INJURY_TUNING: SoldierInjuryTuning = {
   armFocusRadius: .14, torsoFatal: 36, headFatal: 18, directHeadPellets: 6,
 };
 
+/** The warbull's flesh (spec 2026-09-27-warbull-design.md, "Damage"): his
+ *  plates cover only the machinery, so the flesh does the soaking, and he is
+ *  a 2.4 m brute. The soldier's thresholds x 2 (the juggernaut's x 1.5 with
+ *  armour everywhere), the focus radius x 1.3 with his limb girth. A double
+ *  volley's 16 pellets on the torso is a third of the way to torsoFatal. */
+export const WARBULL_INJURY_TUNING: SoldierInjuryTuning = {
+  legDowned: 12, limbSever: 16, armScatteredSever: 32, armFocusedSever: 16, armCutPoints: 8,
+  armFocusRadius: .16, torsoFatal: 48, headFatal: 24, directHeadPellets: 8,
+};
+
 interface ArmHit { wound: Wound; limb: 'armL' | 'armR'; point: Vec3; points: number; joint: boolean }
 /** Injury points one wound is worth: pellet 1, slug 3, a blast by radius. */
 export const injuryPoints = (wound: Wound) => wound.type === 'pellet' ? 1

@@ -2,7 +2,33 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Juggernaut (power-armour chaingunner, first soldier variant) — started 2026-09-25
+## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — in the arena 2026-09-27, awaiting kit build + playtest
+
+- [x] **Body** (Task 1): `warbull.blob` = `minotaur.blob` x 1.28 (horn tip 2.60 m) minus its painted metal; left
+  flesh horn and eye only (the right side is kit); a hump behind the neck; face decal baked from the minotaur mesh
+  (`warbull-face.png`, the minotaur's own PNG never existed). `?character=warbull`. 13 pins.
+  [Notes](../../docs/dev-notes/2026-09-27-warbull/NOTES.md) · [Spec](../../docs/superpowers/specs/2026-09-27-warbull-design.md) · [Plan](../../docs/superpowers/plans/2026-09-27-warbull.md)
+- [x] **Kit authored** (Task 2): `warbull-kit.wam` (hooves, knee cops, hock pistons, spine rack + conduit, reactor + cables,
+  steel horn, optic, cheek plate, shoulder cap, gun-arm sleeve; brass collars at every insertion). Pre-flighted without
+  WAM by the new `scripts/wam-preflight.ts` (a shadow of WAM's maths, checked against the juggernaut build).
+- [ ] **Owner: build the kit** `scripts/build-wam-kit.sh warbull`, then `warbull-kit.test.ts` (13 pins; skips until built).
+- [x] **Looks + blinking lights** (Task 3): `chrome`/`cable`/`led`/`core` looks; pure `status-lights.ts` (heartbeat idle,
+  strobe on aim, stutter stunned, LED drop-outs with plate damage, red core when enraged) driven by the mind via
+  `GameActor.statusLights()`; the lab turntable gets an idle heartbeat.
+- [x] **Launcher + rockets** (Task 4): generated `warbull-launcher.glb` (casing swallows the fist, 3-tube indexing
+  cluster), grid-solved one-handed `launcher`/`launcherLow` carries, `ROCKET_TUNING` (1 s telegraph, exactly 3 rockets),
+  pure `rockets.ts` (slow 9 m/s warheads) detonating through the dynamite path, player blast damage with falloff.
+- [x] **Plates on the machinery + the disarm** (Task 5): region plates (`PlateSpec.region`, `kitBones`) so only the metal
+  stops rounds; shooting the launcher off drops the prop, ends the ranged mode, turns the core red. Also fixed his head
+  pivot (the minotaur rig's neck ends deep in the traps, so the gaze nod swung his head 24-55 cm).
+- [ ] Minotaur has the same head-pivot problem (cranium 0.48 m above the neck pivot); fix = the warbull's re-fraction.
+- [x] **Charge + brawl + rage** (Task 6): pure `charge.ts` (telegraphed windup, locked line, 3.2 m/s run, one hit,
+  wall = 2 s stun); `makeWarbullMind` layers it over the rocket brain, and once disarmed a one-armed brawl brain;
+  `MindOutput.runSpeed` makes the legs run the charge; charge hit 30.
+- [x] **In the game** (Task 7): one warbull in the arena (slot 1, beside the juggernaut); `?spawn=warbull`.
+- [ ] **Owner playtest** (checklist in the notes): look, telegraphs, rocket dodgeability, charge/stun, disarm, brawl.
+
+## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 
 - [x] **Soldier family trait**: `MotionProfile.family` + `isSoldierFamily()` replace ~37 `name === 'soldier'` checks,
   so a renamed variant keeps injury rules, kit breakoff, casings, footwork, collapse. No behaviour change.
@@ -10,13 +36,15 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   (power armour, sealed helmet, lenses, backpack). `?character=juggernaut`. [Notes](../../docs/dev-notes/2026-09-25-juggernaut/NOTES.md)
 - [x] **Chaingun**: TS-generated `juggernaut-chaingun.glb`, `heavy` hip carry (both hands pinned), `CHAINGUN_TUNING`
   (0.9 s spin-up, 15-24 rounds at ~10/s, sweep, no strafe or back-off), single rounds, spinning barrels, brass casings.
-- [ ] **Blocked on WAM**: run `scripts/build-wam-kit.sh juggernaut` locally, then `juggernaut-kit.test.ts` (skips until then).
-  Then GPU frames for the owner look, and a first playtest (the plan's open items).
+- [x] **Kit built** (`juggernaut-kit.gltf` on main) and `juggernaut-kit.test.ts` green (9 tests: containment, sealed helmet,
+  pauldron crown, boots on the floor, rest identity). **Owner playtest 2026-09-26:** "quite decent, does what it says on the tin".
 - [x] **Plate armour works** (`plate-armor.ts`): plates absorb rounds until shot off (helmet guards the head), hips bare,
   blasts wound through, pellets never stagger him, slugs do; the kit sheds by the actor's plate state.
 - [x] **In the game**: one juggernaut in the arena (`RoomDef.juggernauts`); `?spawn=juggernaut` fills the zombie slots.
   [Spec](../../docs/superpowers/specs/2026-09-25-juggernaut-design.md) · [Plan](../../docs/superpowers/plans/2026-09-25-juggernaut.md)
-- [ ] *Next variant candidate:* Grenadier (gas mask, grenades flush last-known position, dodges dynamite).
+- [ ] **Armour aesthetic refinement** (owner, 2026-09-26): the power-armour design wants a polish pass (`juggernaut-kit.wam`).
+- [ ] Unmeasured: cold boot with the extra `juggernaut@6` crowd type; chaingun audio (spin-up whine, stream, spin-down).
+- [ ] *Deferred (owner, 2026-09-26):* the Grenadier variant (gas mask, grenades flush last-known position, dodges dynamite).
 
 ## Bride (sword melee enemy) — first pass 2026-09-24
 

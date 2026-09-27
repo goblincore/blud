@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy' | 'swordGuard' | 'swordTrail';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy' | 'swordGuard' | 'swordTrail' | 'launcher' | 'launcherLow';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -146,6 +146,27 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // the pelvis, the right elbow 2.5 cm and the swinging left elbow 0.6 cm
   // outside the torso field.
   swordTrail: { right: { pitch: -0.55, yaw: 0.10, fold: 0.30 }, gunPitch: -0.90, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.40 }, rightPole: [0.2, 0, -1] },
+  // LAUNCHER — the warbull's gun-arm raised to fire (warbull.blob +
+  // warbull-launcher.glb at prop scale 1.6, gripReach 0.09). ONE-HANDED: the
+  // launcher casing swallows his right fist, the left arm is free and swings.
+  // Grid-solved through the real motion pipeline on his rest rig
+  // (makeActorMotion, 60 Hz, scored after a 1 s settle; 2026-09-27, the
+  // search in docs/dev-notes/2026-09-27-warbull/NOTES.md) for: the muzzle
+  // level (the wrist cock gunPitch 0.244 takes the forearm's residual droop)
+  // and dead on his facing; the muzzle at 1.75 m, chest height on a 2.4 m
+  // body; the fist 0.81 m ahead of the pelvis, the arm reaching out rather
+  // than tucked; every casing corner >= 10 cm clear of his body and the
+  // elbow 8 cm outside it. The upper arm comes forward and in off his wide
+  // powerlifter hang (pitch 0.60, yaw 0.30) with the elbow nearly straight
+  // (fold 0.35): an arm pointed like a cannon, not a gun held at the hip.
+  launcher: { right: { pitch: 0.60, yaw: 0.30, fold: 0.35 }, gunPitch: 0.244, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.25 } },
+  // LAUNCHER LOW — his walk: the same arm hung forward and down, the muzzle
+  // ~31 degrees under level (gunPitch 0.165 on a near-hanging arm) at hip
+  // height (1.05 m), the fist 0.63 m forward, the casing 6.6 cm clear of the
+  // thigh and belly and the elbow 4 cm off the flank. Same search, target
+  // pitch -0.55. The swap from this to `launcher` IS the raise the player
+  // sees before a volley (the brain's weaponUp beat).
+  launcherLow: { right: { pitch: 0.25, yaw: 0.40, fold: 0.20 }, gunPitch: 0.165, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.30 } },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from

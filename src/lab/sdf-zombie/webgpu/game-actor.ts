@@ -36,7 +36,7 @@ import {
 } from '../damage';
 import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
-import { blastPlates, freshPlates, hitPlate, shedPlates, type PlateState } from '../plate-armor';
+import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
 import { sdBody } from '../validate';
@@ -54,7 +54,8 @@ import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { isSoldierFamily, type MotionProfile } from '../motion-profile';
-import { BARREL_REST, barrelsDriven, stepBarrelSpin, type BarrelSpin } from '../barrel-spin';
+import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
+import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
@@ -400,12 +401,21 @@ export interface ZombieActor {
   motionFrame: () => MotionFrame | null;
   /** Seconds since this body last fired. Feeds the held prop's muzzle rise. */
   sinceFire: () => number;
-  /** The chaingun's barrel angle (rad; barrel-spin.ts), 0 for every other
-   *  weapon. Feeds the held prop's `Barrels` node. */
+  /** The chaingun's barrel angle, or the launcher's tube index (rad;
+   *  barrel-spin.ts), 0 for every other weapon. Feeds the held prop's
+   *  `Barrels` node. */
   barrelSpin: () => number;
   /** Plate armour for the kit view (plate-armor.ts): the shed plate ids and
    *  the impact points since the last call (drained). null = no armour. */
   armorView: () => { shed: ReadonlySet<string>; hits: Vec3[] } | null;
+  /** The kit's status lights (status-lights.ts): the mind's state as a
+   *  heartbeat / strobe / stutter, LEDs dropping out as the plates take
+   *  damage. Only kits with `led`/`core` materials show it. */
+  statusLights: () => StatusLights;
+  /** True once the profile's disarm plate (armor.disarmPlate, the warbull's
+   *  launcher) has been shot off: game-main drops the held prop, the ranged
+   *  mode ends, and the status lights burn red. */
+  disarmed: () => boolean;
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
@@ -737,6 +747,7 @@ export function createZombieActor(opts: {
   // character, so every branch below is a no-op for them.
   const armor = opts.profile?.armor ?? null;
   let plates: PlateState | null = armor ? freshPlates(armor.spec) : null;
+  const disarmedNow = () => !!(armor?.disarmPlate && plates && isShed(plates, armor.disarmPlate));
   const injuryTuning = armor?.injury ?? SOLDIER_INJURY_TUNING;
   /** Plate impacts since the view last drained them (sparks). */
   const armorHits: Vec3[] = [];
@@ -786,6 +797,12 @@ export function createZombieActor(opts: {
   // The chaingun's spin follows the mind's state (barrel-spin.ts header).
   const spins = opts.profile?.gunner?.weapon === 'chaingun';
   let barrel: BarrelSpin = BARREL_REST;
+  // The warbull's launcher INDEXES a tube per rocket instead (barrel-spin.ts).
+  const indexes = opts.profile?.gunner?.weapon === 'rocket';
+  let tubes: BarrelIndex = INDEX_REST;
+  let firedSinceIndex = false;
+  /** Sim seconds, for the status lights' heartbeat (status-lights.ts). */
+  let lightsClock = 0;
   /** prop.fistOnGrip: the right hand tip, pinned along its motion target
    *  each step (pinTips `only`); the one-element list, built once. */
   const fistTips = ((): { tips: BoundRig['tips']; only: ReadonlySet<number> } | null => {
@@ -1120,6 +1137,7 @@ export function createZombieActor(opts: {
         ...(encounterOrder ? { lineOfSight: encounterOrder.visible, mayFire: encounterOrder.fireAllowed } : {}),
         hasToken: ringToken,
         drift: ringDrift,
+        ...(armor?.disarmPlate ? { disarmed: disarmedNow() } : {}),
         roll: swingRng(),
         rollDrift: swingRng(),
         missing: missingLimbs(),
@@ -1211,7 +1229,9 @@ export function createZombieActor(opts: {
       }
       // The burn override's speed multiplier rides the same signals object
       // stepMotion consumes; 1 (absent-equivalent) when not burning.
-      signals.cruiseScale = burnCruiseScale;
+      signals.cruiseScale = burnCruiseScale
+        // The warbull's charge runs at its own speed (MindOutput.runSpeed).
+        * (think.runSpeed !== undefined && opts.profile ? think.runSpeed / opts.profile.cruise : 1);
       brainAlerted = false;   // one-shot: the first sub-step consumes it
       lastEngaged = think.engaged;
       lastCommitted = think.committed;
@@ -1480,6 +1500,7 @@ export function createZombieActor(opts: {
           ? rotateYaw(normalize([fwd[0], fwd[1] + Math.tan(0.26 + deathRng() * 0.79), fwd[2]]), (deathRng() - 0.5) * 0.87)
           : rotateYaw(fwd, think.aimError);
         opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction });
+        firedSinceIndex = true;
       }
     }
     // Drain the frame's one-shot signals (values are read back by the motion
@@ -1493,6 +1514,8 @@ export function createZombieActor(opts: {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
     if (spins) barrel = stepBarrelSpin(barrel, !lastFrame?.collapsed && barrelsDriven(mind.debug().state), dt);
+    if (indexes) { tubes = stepBarrelIndex(tubes, firedSinceIndex, dt); firedSinceIndex = false; }
+    lightsClock += dt;
     posed = applyRig(current, bound, bodyYaw);
     if (headPop && swellDur > 0) {
       swellClock += dt;
@@ -1808,7 +1831,14 @@ export function createZombieActor(opts: {
   function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound | null {
     // An intact plate stops the round before anything is stamped.
     if (armor && plates && !soldierFatal && wound.type !== 'burn') {
-      const r = hitPlate(armor.spec, plates, posed.prims[wound.primIdx]?.bone, injuryPoints(wound));
+      // The hit in the REST body's frame, for plates that cover only a patch
+      // of a bone (plate-armor.ts PlateSpec.region): re-seated on the rest
+      // prim (restHitPoint), not merely de-yawed about his root. The stomp's
+      // hunch and sway carry his head and chest centimetres off their rest
+      // places, and a region is authored against the rest body.
+      const pp = posed.prims[wound.primIdx], rp = current.prims[wound.primIdx];
+      const rest = pp && rp ? restHitPoint(hitWorld, state.wander.pos, bodyYaw, pp, rp) : undefined;
+      const r = hitPlate(armor.spec, plates, posed.prims[wound.primIdx]?.bone, injuryPoints(wound), rest);
       plates = r.state;
       if (r.plate) armorHits.push([...hitWorld] as Vec3);
       if (r.absorbed) return absorbedHit(wound, hitWorld, dirWorld);
@@ -1983,7 +2013,21 @@ export function createZombieActor(opts: {
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
-    barrelSpin: () => barrel.angle,
+    barrelSpin: () => (indexes ? tubes.angle : barrel.angle),
+    statusLights: () => {
+      const d = mind.debug();
+      let damage = 0;
+      if (armor && plates) {
+        const max = armor.spec.plates.reduce((a, p) => a + p.hp, 0);
+        const left = armor.spec.plates.reduce((a, p) => a + Math.max(0, plates![p.id] ?? 0), 0);
+        damage = max > 0 ? 1 - left / max : 0;
+      }
+      return statusLights({
+        mode: lightsModeFor(d.state, { alert: d.alert, collapsed: !!lastFrame?.collapsed }),
+        t: lightsClock, damage, phase: opts.id * 0.37, enraged: disarmedNow(),
+      });
+    },
+    disarmed: () => disarmedNow(),
     armorView: () => {
       if (!plates) return null;
       const hits = armorHits.splice(0);

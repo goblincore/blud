@@ -25,6 +25,7 @@
 // them INSIDE main() and does not export them, and the codemod needs the fields
 // to stay structurally usable after the rewrite.
 
+import type { Rocket } from '../rockets';
 import type { FlareHarness } from './game-flare';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
@@ -154,6 +155,10 @@ export interface WeaponState {
   soldierPellets: Projectile[];
   /** Tracer views for the soldier pellets, pooled. */
   soldierPelletViews: TracerView[];
+  /** The warbull's rockets in flight (rockets.ts). */
+  rockets: Rocket[];
+  /** Tracer views for the rockets, pooled (drawn at the rocket's calibre). */
+  rocketViews: TracerView[];
   /** The one shared plane geometry every tracer quad reuses. */
   pelletGeo: THREE.PlaneGeometry;
   /** Tracer views for the player pellets, pooled. */
@@ -232,6 +237,8 @@ export function makeWeaponState(): WeaponState {
     pellets: [],
     soldierPellets: [],
     soldierPelletViews: [],
+    rockets: [],
+    rocketViews: [],
     pelletGeo: unbuilt<THREE.PlaneGeometry>(),
     pelletViews: [],
     cooldown: 0,
@@ -294,6 +301,8 @@ export const WEAPON_BINDINGS = {
   pellets: 'weapon.pellets',
   soldierPellets: 'weapon.soldierPellets',
   soldierPelletViews: 'weapon.soldierPelletViews',
+  rockets: 'weapon.rockets',
+  rocketViews: 'weapon.rocketViews',
   pelletGeo: 'weapon.pelletGeo',
   pelletViews: 'weapon.pelletViews',
   cooldown: 'weapon.cooldown',

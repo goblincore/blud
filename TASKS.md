@@ -41,8 +41,9 @@
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
 **Elsewhere** (see the area pages for the full lists)
-- [ ] Characters: the **Juggernaut** (power-armour chaingunner, first soldier variant) — build his
-  WAM kit and its test, then the owner look; cultist perf pass and cloth feel (paused), bride polish —
+- [ ] Characters: the **Warbull** (cyber-minotaur: rockets, charge, disarm) is in the arena, awaiting a local WAM kit build and playtest; the **Juggernaut** is playable
+  (arena; owner playtest: works), armour aesthetic pass next;
+  Grenadier variant deferred; cultist perf pass and cloth feel (paused), bride polish —
   [characters](docs/tasks/characters.md).
 - [ ] Rendering: merged crowd march, baked mesh LOD, corpse bake for every character —
   [rendering](docs/tasks/rendering.md); the 0.25 march + checker work and telemetry v3 live in
@@ -55,7 +56,7 @@
 | Page | What it covers | Open |
 | --- | --- | --- |
 | [Levels and game flow](docs/tasks/levels.md) | Night Train, the Wake, the Void and menu, level format, game design. | 8 open, 2 in progress |
-| [Characters](docs/tasks/characters.md) | SDF characters: authoring, prims, the roster, blends. | 17 open, 0 in progress |
+| [Characters](docs/tasks/characters.md) | SDF characters: authoring, prims, the roster, blends. | 19 open, 1 in progress |
 | [Combat, weapons and gore](docs/tasks/combat-and-gore.md) | Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. | 24 open, 6 in progress |
 | [Rendering and performance](docs/tasks/rendering.md) | The march, temporal work, the upscaler, post, perf sessions. | 11 open, 1 in progress |
 | [Gather dispatch R1 (history)](docs/tasks/rendering-gather-r1.md) | The probe-gather dispatch work of 2026-09-10 and its measurements. | 3 open, 0 in progress |
