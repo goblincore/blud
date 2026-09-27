@@ -47,3 +47,29 @@ export function stepBarrelSpin(s: BarrelSpin, driven: boolean, dt: number): Barr
   const angle = (((s.angle + 0.5 * (s.rate + rate) * dt) % tau) + tau) % tau;
   return { rate, angle };
 }
+
+// THE WARBULL'S LAUNCHER INDEXES instead of spinning: three tubes on one
+// spindle, a third of a turn per rocket, so the next loaded tube comes round
+// to the muzzle between shots (make-warbull-launcher.ts `Barrels`). The
+// cluster chases its target at a fixed rate, snapping round in ~0.2 s: slower
+// than the volley's 0.4 s spacing would allow a misfire read, fast enough to
+// be seen as a mechanism rather than a drift.
+export const LAUNCHER_INDEX = {
+  /** rad per rocket: one tube of three. */
+  step: (Math.PI * 2) / 3,
+  /** rad/s the cluster turns while catching up. */
+  rate: 10,
+} as const;
+
+export interface BarrelIndex { angle: number; target: number }
+export const INDEX_REST: BarrelIndex = { angle: 0, target: 0 };
+
+/** One frame: `fired` advances the target a tube; the angle chases it. The
+ *  angle is NOT wrapped (so the chase never takes the long way round); the
+ *  renderer only ever reads it through a rotation. */
+export function stepBarrelIndex(s: BarrelIndex, fired: boolean, dt: number): BarrelIndex {
+  const target = s.target + (fired ? LAUNCHER_INDEX.step : 0);
+  const gap = target - s.angle;
+  const move = Math.sign(gap) * Math.min(Math.abs(gap), LAUNCHER_INDEX.rate * dt);
+  return { angle: s.angle + move, target };
+}

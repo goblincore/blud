@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/barrel-spin.test.ts
 import { describe, it, expect } from 'vitest';
-import { BARREL_REST, BARREL_SPIN, barrelsDriven, stepBarrelSpin } from './barrel-spin';
+import { BARREL_REST, BARREL_SPIN, INDEX_REST, LAUNCHER_INDEX, barrelsDriven, stepBarrelIndex, stepBarrelSpin } from './barrel-spin';
 import { CHAINGUN_TUNING } from './soldier-brain';
 
 const run = (driven: boolean, sec: number, from = BARREL_REST) => {
@@ -31,5 +31,27 @@ describe('barrel spin', () => {
   it('is driven by the aim telegraph and the stream, not by idling or settling', () => {
     for (const s of ['aim', 'fire', 'recover']) expect(barrelsDriven(s)).toBe(true);
     for (const s of ['idle', 'engage', 'settle', 'stagger', 'pursue']) expect(barrelsDriven(s)).toBe(false);
+  });
+});
+
+describe('launcher barrel index', () => {
+  it('turns one tube (a third of a turn) per rocket and settles on it', () => {
+    let s = stepBarrelIndex(INDEX_REST, true, 1 / 60);
+    for (let i = 0; i < 30; i++) s = stepBarrelIndex(s, false, 1 / 60);
+    expect(s.angle).toBeCloseTo(LAUNCHER_INDEX.step, 6);
+    // Three rockets: a full turn, always forward.
+    let prev = s.angle;
+    for (let k = 0; k < 2; k++) {
+      s = stepBarrelIndex(s, true, 1 / 60);
+      for (let i = 0; i < 30; i++) { s = stepBarrelIndex(s, false, 1 / 60); expect(s.angle).toBeGreaterThanOrEqual(prev); prev = s.angle; }
+    }
+    expect(s.angle).toBeCloseTo(Math.PI * 2, 6);
+  });
+
+  it('comes round in about a fifth of a second, inside the volley spacing', () => {
+    let s = stepBarrelIndex(INDEX_REST, true, 1 / 60), t = 1 / 60;
+    while (s.angle < s.target - 1e-9) { s = stepBarrelIndex(s, false, 1 / 60); t += 1 / 60; }
+    expect(t).toBeCloseTo(LAUNCHER_INDEX.step / LAUNCHER_INDEX.rate, 1);
+    expect(t).toBeLessThan(0.4);
   });
 });

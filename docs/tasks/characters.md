@@ -15,7 +15,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Looks + blinking lights** (Task 3): `chrome`/`cable`/`led`/`core` looks; pure `status-lights.ts` (heartbeat idle,
   strobe on aim, stutter stunned, LED drop-outs with plate damage, red core when enraged) driven by the mind via
   `GameActor.statusLights()`; the lab turntable gets an idle heartbeat.
-- [ ] Task 4 launcher prop + rockets; Task 5 plates + disarm; Task 6 charge/gore/enrage; Task 7 arena spawn.
+- [x] **Launcher + rockets** (Task 4): generated `warbull-launcher.glb` (casing swallows the fist, 3-tube indexing
+  cluster), grid-solved one-handed `launcher`/`launcherLow` carries, `ROCKET_TUNING` (1 s telegraph, exactly 3 rockets),
+  pure `rockets.ts` (slow 9 m/s warheads) detonating through the dynamite path, player blast damage with falloff.
+- [ ] Task 5 plates + disarm; Task 6 charge/gore/enrage; Task 7 arena spawn.
 
 ## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 

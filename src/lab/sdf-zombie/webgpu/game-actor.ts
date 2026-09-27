@@ -54,7 +54,7 @@ import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { isSoldierFamily, type MotionProfile } from '../motion-profile';
-import { BARREL_REST, barrelsDriven, stepBarrelSpin, type BarrelSpin } from '../barrel-spin';
+import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
@@ -401,8 +401,9 @@ export interface ZombieActor {
   motionFrame: () => MotionFrame | null;
   /** Seconds since this body last fired. Feeds the held prop's muzzle rise. */
   sinceFire: () => number;
-  /** The chaingun's barrel angle (rad; barrel-spin.ts), 0 for every other
-   *  weapon. Feeds the held prop's `Barrels` node. */
+  /** The chaingun's barrel angle, or the launcher's tube index (rad;
+   *  barrel-spin.ts), 0 for every other weapon. Feeds the held prop's
+   *  `Barrels` node. */
   barrelSpin: () => number;
   /** Plate armour for the kit view (plate-armor.ts): the shed plate ids and
    *  the impact points since the last call (drained). null = no armour. */
@@ -791,6 +792,10 @@ export function createZombieActor(opts: {
   // The chaingun's spin follows the mind's state (barrel-spin.ts header).
   const spins = opts.profile?.gunner?.weapon === 'chaingun';
   let barrel: BarrelSpin = BARREL_REST;
+  // The warbull's launcher INDEXES a tube per rocket instead (barrel-spin.ts).
+  const indexes = opts.profile?.gunner?.weapon === 'rocket';
+  let tubes: BarrelIndex = INDEX_REST;
+  let firedSinceIndex = false;
   /** Sim seconds, for the status lights' heartbeat (status-lights.ts). */
   let lightsClock = 0;
   /** prop.fistOnGrip: the right hand tip, pinned along its motion target
@@ -1487,6 +1492,7 @@ export function createZombieActor(opts: {
           ? rotateYaw(normalize([fwd[0], fwd[1] + Math.tan(0.26 + deathRng() * 0.79), fwd[2]]), (deathRng() - 0.5) * 0.87)
           : rotateYaw(fwd, think.aimError);
         opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction });
+        firedSinceIndex = true;
       }
     }
     // Drain the frame's one-shot signals (values are read back by the motion
@@ -1500,6 +1506,7 @@ export function createZombieActor(opts: {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
     if (spins) barrel = stepBarrelSpin(barrel, !lastFrame?.collapsed && barrelsDriven(mind.debug().state), dt);
+    if (indexes) { tubes = stepBarrelIndex(tubes, firedSinceIndex, dt); firedSinceIndex = false; }
     lightsClock += dt;
     posed = applyRig(current, bound, bodyYaw);
     if (headPop && swellDur > 0) {
@@ -1991,7 +1998,7 @@ export function createZombieActor(opts: {
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
-    barrelSpin: () => barrel.angle,
+    barrelSpin: () => (indexes ? tubes.angle : barrel.angle),
     statusLights: () => {
       const d = mind.debug();
       let damage = 0;

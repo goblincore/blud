@@ -46,7 +46,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -248,7 +248,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // Baked from the minotaur's reference mesh (warbull.blob, sheet block).
     // mean measured off the PNG's opaque texels, lab-main's applyMeanOf rule.
     face: { ...bakedFace('warbull-face.png'), mean: 0.32044097124272053 },
-    profile: motionProfileFor('warbull'),
+    profile: WARBULL_PROFILE,
   },
   female: {
     name: 'female', src: femaleBlobSrc,

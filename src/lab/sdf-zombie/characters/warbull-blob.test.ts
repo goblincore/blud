@@ -15,6 +15,12 @@ import { buildBody } from '../build-body';
 import { checkStance, clearOf, daylightOf, fusedOf, strandedOf } from '../blob-checks';
 import { sdBody } from '../validate';
 import { WALL_H } from '../webgpu/game-level';
+// @ts-expect-error — node:fs available in vitest (silhouette.test.ts's pattern)
+import { readFileSync } from 'node:fs';
+import { WARBULL_PROFILE } from '../motion-profile';
+import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
+import { makeRng } from '../wander';
+import { GUN_GRIP, gunPoint } from '../carry';
 
 const doc = parseBlob(src);
 const minoDoc = parseBlob(minotaurSrc);
@@ -125,5 +131,78 @@ describe('warbull.blob', () => {
       const gap = strandedOf(bull, c);
       if (gap !== null) expect(gap, `${c.limb} has a stranded prim`).toBeLessThan(0.005);
     }
+  });
+});
+
+// THE LAUNCHER HOLDS (carry.ts `launcher`, `launcherLow`), through the real
+// motion pipeline. The launcher casing swallows the fist, so the checks are:
+// the grip seats in the fist, the muzzle points where he faces (the rockets
+// fly along it), level when raised and down-forward when lowered, and the
+// casing clears his body (everything but the gun arm itself).
+describe('warbull launcher holds', () => {
+  const noArmR = { ...bull, prims: bull.prims.map((p, i) => {
+    const c = bull.clusters.find(c => i >= c.start && i < c.start + c.count)!;
+    return c.limb === 'armR' ? { ...p, dead: true } : p;
+  }) };
+  const casing: [number, number, number][] = [];
+  for (const x of [-0.095, 0.095]) for (const y of [-0.167, 0.023]) for (const z of [-0.34, -0.12, 0.03]) casing.push([x, y, z]);
+  for (const z of [0.2, 0.41]) for (let i = 0; i < 6; i++) casing.push([Math.cos(i * Math.PI / 3) * 0.066, Math.sin(i * Math.PI / 3) * 0.066, z]);
+
+  it.each([
+    ['launcher', 'standing', 0, 0.0], ['launcher', 'walking', WARBULL_PROFILE.cruise, 0.0],
+    ['launcherLow', 'standing', 0, -0.55], ['launcherLow', 'walking', WARBULL_PROFILE.cruise, -0.55],
+  ] as const)('%s %s: fist in the casing, muzzle on his facing, casing clear', (carry, _, speed, wantPitch) => {
+    const m = makeActorMotion(bull, { seed: 7 });
+    const rng = makeRng(7);
+    const J = m.motionJoints!.index;
+    let grip = 0, yawErr = 0, pitchErr = 0, clear = Infinity, n = 0;
+    for (let i = 0; i < 200; i++) {
+      const f = stepActorMotion(m, {
+        current: bull, dt: 1 / 60, wander: speed > 0, armStyle: undefined, headingFollow: 1, gazeFollow: 1,
+        bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }, rng, signals: emptyActorSignals(),
+        profile: WARBULL_PROFILE, forceSpeed: speed, carryOverride: carry,
+      })!;
+      expect(f.carry).toBe(carry);
+      if (i < 60) continue;
+      const pts = m.bound.rig.points;
+      const hand = pts[J.handR!]!.pos, elbow = pts[J.elbowR!]!.pos;
+      const dl = Math.hypot(hand[0] - elbow[0], hand[1] - elbow[1], hand[2] - elbow[2]);
+      const fist = [0, 1, 2].map(k => hand[k]! + (hand[k]! - elbow[k]!) / dl * WARBULL_PROFILE.prop!.gripReach!);
+      const g = gunPoint(f.gun!, GUN_GRIP.gripHand);
+      grip += Math.hypot(fist[0]! - g[0], fist[1]! - g[1], fist[2]! - g[2]);
+      const a = gunPoint(f.gun!, [0, 0, 0]), b = gunPoint(f.gun!, [0, 0, 1]);
+      const dir = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(dir[0]!, dir[1]!, dir[2]!);
+      const wrap = (x: number) => Math.atan2(Math.sin(x), Math.cos(x));
+      yawErr = Math.max(yawErr, Math.abs(wrap(Math.atan2(dir[0]!, dir[2]!) - f.bodyYaw)));
+      pitchErr = Math.max(pitchErr, Math.abs(Math.asin(dir[1]! / l) - wantPitch));
+      // The rest-pose field is compared in body-local space (the rig walks).
+      const pel = pts[J.pelvis!]!.pos, c = Math.cos(-f.bodyYaw), s = Math.sin(-f.bodyYaw);
+      const home = bull.bones.get('pelvis')!.head;
+      for (const q of casing) {
+        const w = gunPoint(f.gun!, q), x = w[0] - pel[0], z = w[2] - pel[2];
+        clear = Math.min(clear, sdBody([x * c + z * s + home[0], w[1], -x * s + z * c + home[2]], noArmR));
+      }
+      n++;
+    }
+    // NOT the soldier family's 2 cm: that rule keeps a VISIBLE grip in a
+    // visible fist. Here the fist is hidden inside the casing, built 0.02
+    // prop-local (3.2 cm at scale 1.6) clear of it all round, so the bound
+    // is that clearance. Measured: 0.2 cm standing, 2.1 cm walking (the
+    // verlet wrist lags the stomp).
+    expect(grip / n).toBeLessThan(0.03);
+    expect(yawErr).toBeLessThan(0.12);
+    expect(pitchErr).toBeLessThan(0.1);
+    expect(clear).toBeGreaterThan(0.03);
+  });
+
+  it('ships the launcher prop with its locators where GUN_GRIP says, and a Barrels node', () => {
+    const bytes = readFileSync('public/assets/lab/warbull-launcher.glb') as Uint8Array;
+    const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + new DataView(bytes.buffer, bytes.byteOffset).getUint32(12, true)))) as { nodes: { name: string; translation?: number[] }[] };
+    const at = (n: string) => json.nodes.find(x => x.name === n)!.translation!;
+    for (let k = 0; k < 3; k++) {
+      expect(at('Grip_Hand')[k]).toBeCloseTo(GUN_GRIP.gripHand[k]!, 5);
+      expect(at('Muzzle')[k]).toBeCloseTo(GUN_GRIP.muzzle[k]!, 5);
+    }
+    expect(json.nodes.some(n => n.name === 'Barrels')).toBe(true);
   });
 });

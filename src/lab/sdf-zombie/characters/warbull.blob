@@ -178,6 +178,10 @@ face
 # is the first time that bake exists in the repo. Projection: the
 # minotaur's solve verbatim (eye row at hs.y -0.176, fang row at -0.510),
 # valid because the head is scaled uniformly.
+# Red-pixel EYE GLOW on, with the soldier family's values (soldier.blob): he
+# is a soldier-family member (WARBULL_PROFILE), and the family's baked faces
+# light their red eyes. The bake's eyes are red; its maw is darker red, so
+# at cut 0.55 it may catch a little of the gums too, which on a demon reads.
 sheet
   image       warbull-face.png
   decal       1
@@ -185,6 +189,9 @@ sheet
   projScaleY  0.314
   projCentreX 0.5
   projCentreY 0.555
+  eyeGlowAmp  2.2
+  eyeGlowCut  0.55
+  eyeGlowRedOnly 1
 
 # Palette: the minotaur's (its round 4 retarget onto the zombie's
 # henenlotter-latex pink, which read under the lab key where the mesh's

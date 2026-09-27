@@ -166,3 +166,76 @@ of the kit.
     heartbeat on its own clock, so `?character=warbull` blinks in the lab.
 - Unverified on a GPU here: the actual brightness of the emissives against the
   lab key. It is the owner's call once the kit is built.
+
+# Task 4 — the launcher and the rockets, 2026-09-27
+
+- **Prop.** `scripts/make-warbull-launcher.ts` writes `warbull-launcher.glb`
+  (29 KB). It is a chrome-and-iron casing that swallows the fist and lower
+  forearm, with iron ribs, a brass cuff where the kit's sleeve enters, and
+  LED strips. On top is a three-tube rotary cluster (`Barrels`) with glowing
+  tube floors.
+  - The locators are GUN_GRIP's.
+  - `gripReach` 0.09 seats Grip_Hand at the middle of his 0.18 m hand bone, so
+    the casing is built round the fist, 2 cm prop-local (3.2 cm world) clear
+    of it.
+- **Two one-handed carries** (`carry.ts`). Each was grid-searched through the
+  real motion pipeline, then refined with the wrist corrections
+  (`.lab-tmp/solve-launcher.ts`; 61 ms per evaluation):
+
+  | Carry | Used for | Carry angles | Wrist | Result |
+  | --- | --- | --- | --- | --- |
+  | `launcher` | fire (raised) | pitch 0.60, yaw 0.30, fold 0.35 | gunPitch 0.244 | muzzle level at 1.75 m and on his facing; fist 0.81 m ahead; casing ≥ 10 cm clear |
+  | `launcherLow` | walk | pitch 0.25, yaw 0.40, fold 0.20 | gunPitch 0.165 | muzzle 31° down at 1.05 m; casing 6.6 cm clear |
+
+  The swap from the walk carry to the raised one (the brain's `weaponUp`) is
+  the visible raise before a volley. `warbull-blob.test.ts` pins both carries,
+  standing and walking, through the pipeline:
+  - **Grip in the fist: within 3 cm.** Not the soldier family's 2 cm, because
+    the fist is hidden in a casing 3.2 cm clear. Measured 2.1 cm walking.
+  - **Muzzle yaw:** within 7°.
+  - **Muzzle pitch:** within 0.1 rad of target.
+  - **Casing clearance:** at least 3 cm.
+- **`WARBULL_PROFILE`:**
+  - soldier family, so regional injury, collapse and footwork apply;
+  - STOMP gait, cruise 0.85, turn 1.6 rad/s (the slowest in the roster);
+  - `gunner.weapon: 'rocket'`.
+
+  The registry now uses it, so the lab walks him with the launcher.
+- **`ROCKET_TUNING`** (soldier brain):
+  - notice 12 m, fire range 11 m, preferred range 7 m;
+  - aim 1.0 s (the telegraph);
+  - **exactly 3 rockets** about 0.4 s apart, with follow-ups sweeping;
+  - settle 0.9 s, cooldown 2.6 s;
+  - no strafing or retreating.
+
+  Pinned in `soldier-brain.test.ts`.
+- **`rockets.ts` (pure, 7 tests):**
+  - slow (9 m/s) so the player can step out of the line;
+  - detonates at the last free point on world, player or actor contact, or at
+    20 m;
+  - never hits its firer inside 0.15 s;
+  - player damage 45 at the epicentre, quadratic falloff to 0 at 3.2 m, so two
+    of the three must land to kill from full health.
+- **Game wiring:**
+  - `onFire` spawns a rocket, aimed like the SMG: the arm's heading, the
+    player's chest for the vertical.
+  - The frame loop steps rockets after the actors, with world, player and
+    actor-capsule tests.
+  - Each detonation goes through **`detonateAt`**, the dynamite path: wounds,
+    gibs, light, fireball, camera kick. The player takes `blastPlayerDamage`
+    (a new `'blast'` damage kind).
+  - Rockets draw as fat slug tracers.
+  - `ctx.weapon.rockets` and `rocketViews` are in the weapon slice.
+- **Tube index:** `stepBarrelIndex` turns the cluster a third of a turn per
+  rocket, in about 0.2 s (`barrel-spin.ts`, 2 tests). The actor drives
+  `barrelSpin` with it for the rocket weapon.
+- **The face decal's red eyes glow now,** using the soldier family's
+  `eyeGlowRedOnly` values, since he is family.
+- **No casings** from the launcher.
+- **Not verified here (no GPU):**
+  - the rocket tracer's look;
+  - how big the dynamite burst reads as a rocket hit;
+  - whether the warbull's own rockets wound him at point blank (they can:
+    detonateAt wounds every body in range, firer included).
+
+  All three are for the owner's playtest.

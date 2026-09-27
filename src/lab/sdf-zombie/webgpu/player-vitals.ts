@@ -26,7 +26,7 @@ export const VITALS = {
   meleeInvulnSec: 0.8,
 } as const;
 
-export type DamageKind = 'melee' | 'pellet';
+export type DamageKind = 'melee' | 'pellet' | 'blast';
 
 export interface Vitals {
   health: number;

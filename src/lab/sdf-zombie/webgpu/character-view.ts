@@ -591,7 +591,8 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   if (armorSparks) opts.effectsScene!.add(armorSparks.object);
   const chaingun = entry.profile.gunner?.weapon === 'chaingun';
-  const casings = isSoldierFamily(entry.profile)
+  // The warbull's launcher throws no brass: its rockets leave nothing behind.
+  const casings = isSoldierFamily(entry.profile) && entry.profile.gunner?.weapon !== 'rocket'
     ? (chaingun ? createShotgunCasings(256, 0xc8963c) : createShotgunCasings()) : null;
   const ejection = createEjectionCycle();
   const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();

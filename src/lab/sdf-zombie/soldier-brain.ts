@@ -276,11 +276,41 @@ export const CHAINGUN_TUNING: SoldierTuning = {
   sweepFire: true,
 };
 
+/** The warbull's gun-arm LAUNCHER on the soldier's brain (spec
+ *  2026-09-27-warbull-design.md, "Behaviour"): plant and fire a VOLLEY.
+ *   - a long telegraph (the arm raising, the LEDs strobing: status-lights);
+ *   - exactly three rockets, ~0.4 s apart, follow-ups where the arm points
+ *     (sweepFire), so a strafing player outruns the second and third;
+ *   - a long settle and cooldown after it: the rockets are slow and deadly,
+ *     so the window between volleys is the player's;
+ *   - no strafing or backing off; he stands well off and shells.
+ *  The charge and gore up close are Task 6 (warbull-mind.ts). */
+export const ROCKET_TUNING: SoldierTuning = {
+  ...SOLDIER_TUNING,
+  noticeRange: 12,
+  fireRange: 11.0,
+  preferredRange: 7.0,
+  rangeSlack: 1.5,
+  burstMin: 3,
+  burstMax: 2,
+  burstChance: 0,
+  aimSec: 1.0,
+  followAimSec: 0.25,
+  recoverSec: 0.15,
+  settleSec: 0.9,
+  minCooldownSec: 2.6,
+  refireRoll: 0.8,
+  strafe: false,
+  retreat: false,
+  sweepFire: true,
+};
+
 /** Brain tuning per gunner weapon (MotionProfile.gunner). */
 export const GUNNER_TUNING: Record<import('./motion-profile').GunnerWeapon, SoldierTuning> = {
   shotgun: SOLDIER_TUNING,
   smg: SMG_TUNING,
   chaingun: CHAINGUN_TUNING,
+  rocket: ROCKET_TUNING,
 };
 
 export function makeSoldierBrain(): SoldierBrain {
