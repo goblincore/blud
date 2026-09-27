@@ -85,7 +85,8 @@
 // the same value the idle machine always produced.
 //
 // LIGHT CLOCK PINNED TO 0, DELIBERATELY (2026-09-27). The gate went
-// non-deterministic ACROSS BOOTS again on unchanged code (base 8ba660aa):
+// non-deterministic ACROSS BOOTS again on unchanged code (first seen at
+// 8ba660aa, reproduced at 6b899f5d):
 // room1 differed every boot, always within-boot deterministic. MARCH_HASH_DUMP
 // named the inputs — the body key and fill uniforms (spotCfg2.zw, lightCfg.y,
 // probeCfg.y) — and the clock behind them: the dynamic-light runtime
@@ -116,8 +117,10 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 //   crowd quad (?crowddispatch=quad, tiles on)      = e911fd0453efc4c1ba22768858b48503dc39479b
 //   per-body (?crowd=0, tiles off)                  = 737713b7e0810156f52cd847af047ff29039e5ac
 // Each reproduced on THREE consecutive boots (ports 5471/9471, headless,
-// LAB_TMP=.lab-tmp) at 8ba660aa + the setLightTime seam; room1-wounded for the
-// default was 674edf62… on all three.
+// LAB_TMP=.lab-tmp) at 6b899f5d + the setLightTime seam; room1-wounded for the
+// default was 674edf62… on all three. NOT measured at 8ba660aa: that branch
+// (claude/wake-level-pipeline-1afb01) is 20 commits further on, including the
+// bodyLights WGSL loop, and will need its own re-pin when it merges.
 //
 // 2026-09-27 RE-PIN — TWO FAULTS, SEPARATED:
 //   1. STALE PIN. Bisected with the UNMODIFIED gate over 3691eb5b..23f6fcc6
