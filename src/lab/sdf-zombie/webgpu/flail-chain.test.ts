@@ -1,7 +1,9 @@
 // src/lab/sdf-zombie/webgpu/flail-chain.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { FLAIL_CHAIN_SIM, guideWeight, linkRest, makeChain, stepChain, stepChainInPlace, type ChainState } from './flail-chain';
+import {
+  FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChain, stepChainInPlace, type ChainState,
+} from './flail-chain';
 import {
   FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_SWING, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
@@ -143,30 +145,52 @@ describe('guideWeight', () => {
   });
 });
 
-/** The game's 60 Hz loop (game-flail.ts draw), minus the renderer: one click, the
- *  chain driven by flailPose, pinned on FLAIL_IMPACT with the key's own velocity
- *  on the strike frame. One row per swing frame. */
-function replay(side: FlailSide, dt = 1 / 60) {
+/** A frame-time source: `hz`, optionally jittered ±`jitter` (seeded, repeatable). */
+function frames(hz: number, jitter = 0, seed = 1): () => number {
+  let x = seed;
+  return () => {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    return (1 + jitter * (2 * (x / 2147483648) - 1)) / hz;
+  };
+}
+
+/** The game's loop (game-flail.ts draw), minus the renderer: one click, the chain
+ *  driven by flailPose, pinned on FLAIL_IMPACT with the key's own velocity on the
+ *  strike frame, and DRAWN through drawChain (what the player sees). One row per
+ *  swing frame. `keyIn` is the key's move from the last frame up to the impact
+ *  point (what the strike frame's drawn move is compared with: the drawn ball
+ *  stops ON the impact, not on the frame's overrun key). */
+function replay(side: FlailSide, dt: () => number = () => 1 / 60) {
   let swing: FlailSwing = { ...makeFlailSwing(), nextSide: side };
   let s: ChainState | null = null;
   let prevBall: Vec3 | null = null, prevKey: Vec3 | null = null;
-  const rows: { t: number; key: number; drawn: number; lag: number; strike: boolean; err: number; link: number }[] = [];
-  for (let f = 0; f < 60; f++) {
-    const r = stepFlailSwing(swing, { click: f === 20, held: false }, dt);
+  const out: [number, number, number][] = Array.from({ length: FLAIL_CHAIN_SIM.nodes }, () => [0, 0, 0]);
+  const rows: {
+    t: number; key: number; keyIn: number; drawn: number; lag: number; strike: boolean; err: number;
+    link: number; gap: number; teleport: boolean;
+  }[] = [];
+  let t = 0;
+  for (let f = 0; t < 1.2; f++) {
+    const h = dt();
+    t += h;
+    const r = stepFlailSwing(swing, { click: f === 20, held: false }, h);
     swing = r.state;
     const strike = r.strikes[0] ?? null;
     const pose = flailPose(swing);
     const bolt = flailBolt(pose);
     const target = strike ? FLAIL_IMPACT[strike] : pose.ball;
     const vel = flailBallVel(strike ? { ...swing, t: FLAIL_SWING.strikeT } : swing);
-    s = stepChain(s ?? makeChain(bolt, target), bolt, target, strike ? 1 : guideWeight(swing), DOWN, dt, { pin: !!strike, targetVel: vel });
-    const b = ball(s);
+    const teleport = s !== null && chainTeleported(s, bolt, h);
+    s = stepChain(s ?? makeChain(bolt, target), bolt, target, strike ? 1 : guideWeight(swing), DOWN, h, { pin: !!strike, targetVel: vel });
+    drawChain(s, bolt, out);
+    const b: Vec3 = [out[out.length - 1]![0], out[out.length - 1]![1], out[out.length - 1]![2]];
     let link = 0;
-    for (let k = 0; k < s.p.length - 1; k++) link = Math.max(link, Math.abs(dist(s.p[k]!, s.p[k + 1]!) - linkRest(k)) / linkRest(k));
+    for (let k = 0; k < out.length - 1; k++) link = Math.max(link, Math.abs(dist(out[k]!, out[k + 1]!) - linkRest(k)) / linkRest(k));
     if (swing.phase === 'swing' && prevBall && prevKey) {
       rows.push({
-        t: swing.t, key: dist(pose.ball, prevKey), drawn: dist(b, prevBall), lag: dist(b, pose.ball), strike: !!strike,
-        err: strike ? dist(b, FLAIL_IMPACT[strike]) : 0, link,
+        t: swing.t, key: dist(pose.ball, prevKey), keyIn: strike ? dist(FLAIL_IMPACT[strike], prevKey) : dist(pose.ball, prevKey),
+        drawn: dist(b, prevBall), lag: dist(b, pose.ball), strike: !!strike,
+        err: strike ? dist(b, FLAIL_IMPACT[strike]) : 0, link, gap: dist(out[0]!, bolt), teleport,
       });
     }
     prevBall = b; prevKey = pose.ball;
@@ -174,25 +198,92 @@ function replay(side: FlailSide, dt = 1 / 60) {
   return rows;
 }
 
-describe('the chain through a real swing (60 Hz replay, both sides)', () => {
+/** Frame rates the gates run at: steady and jittered (several seeds each). */
+const RATES: { name: string; dt: () => () => number; seeds: number }[] = [
+  { name: '30 Hz', dt: () => frames(30), seeds: 1 },
+  { name: '60 Hz', dt: () => frames(60), seeds: 1 },
+  { name: '144 Hz', dt: () => frames(144), seeds: 1 },
+  { name: '165 Hz', dt: () => frames(165), seeds: 1 },
+  { name: '240 Hz', dt: () => frames(240), seeds: 1 },
+];
+const JITTERED: { name: string; hz: number; jitter: number }[] = [
+  { name: '60 Hz ±5%', hz: 60, jitter: 0.05 },
+  { name: '60 Hz ±15%', hz: 60, jitter: 0.15 },
+  { name: '144 Hz ±15%', hz: 144, jitter: 0.15 },
+  { name: '240 Hz ±15%', hz: 240, jitter: 0.15 },
+];
+const ALL: { name: string; make: () => () => number }[] = [
+  ...RATES.map(r => ({ name: r.name, make: r.dt })),
+  ...JITTERED.flatMap(j => [1, 2, 3, 4, 5, 6].map(seed => ({ name: `${j.name} seed ${seed}`, make: () => frames(j.hz, j.jitter, seed) }))),
+];
+
+describe('the chain through a real swing, at every frame rate (both sides)', () => {
+  for (const { name, make } of ALL) {
+    for (const side of ['R', 'L'] as const) {
+      it(`${name} ${side}: one strike; the drawn ball ON FLAIL_IMPACT (< 1e-6) and arriving MOVING`, () => {
+        const hit = replay(side, make()).filter(r => r.strike);
+        expect(hit).toHaveLength(1);
+        expect(hit[0]!.err).toBeLessThan(1e-6);
+        expect(hit[0]!.drawn).toBeGreaterThanOrEqual(0.5 * hit[0]!.keyIn);
+      });
+      it(`${name} ${side}: the drawn chain starts ON the bolt with exact links, and no teleport fires mid-swing`, () => {
+        for (const r of replay(side, make())) {
+          expect(r.gap, `t=${r.t.toFixed(3)}`).toBeLessThan(1e-9);
+          expect(r.link, `t=${r.t.toFixed(3)}`).toBeLessThan(0.001);
+          expect(r.teleport, `t=${r.t.toFixed(3)}`).toBe(false);
+        }
+      });
+    }
+  }
   for (const side of ['R', 'L'] as const) {
-    it(`${side}: the ball arrives at the strike MOVING, on FLAIL_IMPACT`, () => {
-      const rows = replay(side);
-      const hit = rows.filter(r => r.strike);
-      expect(hit).toHaveLength(1);
-      expect(hit[0]!.err).toBeLessThan(0.02);
-      expect(hit[0]!.drawn).toBeGreaterThanOrEqual(0.5 * hit[0]!.key);
-    });
-    it(`${side}: no frame's drawn move exceeds 1.6x the key's (no catapult)`, () => {
+    // NO CATAPULT, at 60 Hz only. At >= 144 Hz or with jittered frames the ball
+    // beats this by 2–6 cm at the WIND-UP APEX (swing t ~0.10, the key reversing,
+    // the ball carrying on): the sim sees a per-frame linear anchor, and at 60 Hz
+    // that cuts the apex's corner; at 240 Hz (one substep a frame, the true path)
+    // it does not. That is the whip's own motion, not the old guide-ramp
+    // catapult (0.63 m in a frame) — a tuning/gate decision, not a timing bug.
+    it(`60 Hz ${side}: no frame's drawn move exceeds 1.6x the key's + 2 cm (no catapult)`, () => {
       for (const r of replay(side)) expect(r.drawn, `t=${r.t.toFixed(3)} key=${r.key.toFixed(3)}`).toBeLessThanOrEqual(1.6 * r.key + REST_SLOP);
     });
-    it(`${side}: every link stays at its rest length on every frame, the pinned strike frame included`, () => {
-      for (const r of replay(side)) expect(r.link, `t=${r.t.toFixed(3)}`).toBeLessThan(0.001);
-    });
-    it(`${side}: the wind-up trails the key visibly but modestly (5 cm .. 20 cm)`, () => {
+    it(`60 Hz ${side}: the wind-up trails the key visibly but modestly (5 cm .. 20 cm)`, () => {
       const lag = Math.max(...replay(side).filter(r => r.t < FLAIL_SWING.strikeT).map(r => r.lag));
       expect(lag).toBeGreaterThan(0.05);
       expect(lag).toBeLessThanOrEqual(0.2);
     });
   }
+});
+
+describe('drawChain', () => {
+  it('extrapolates by the carried time, roots node 0 on the bolt, and keeps every link exact', () => {
+    const a: Vec3 = [0, 0, 0];
+    let s = makeChain(a, [0.3, 0, 0]);
+    s = stepChain(s, a, [0.3, 0, 0], 0, DOWN, 1 / 144);   // leaves acc > 0
+    expect(s.acc).toBeGreaterThan(0);
+    const out: [number, number, number][] = Array.from({ length: s.p.length }, () => [0, 0, 0]);
+    const bolt: Vec3 = [0.01, 0.002, 0];
+    const snap = JSON.stringify(s);
+    drawChain(s, bolt, out);
+    expect(JSON.stringify(s)).toBe(snap);                  // the sim state is untouched
+    expect(out[0]).toEqual([0.01, 0.002, 0]);
+    for (let k = 0; k < out.length - 1; k++) expect(dist(out[k]!, out[k + 1]!)).toBeCloseTo(linkRest(k), 9);
+    // The falling ball is drawn ahead of the sim (further down), by about acc of its velocity.
+    expect(out[out.length - 1]![1]).toBeLessThan(ball(s)[1]);
+  });
+  it('is the sim state itself when no time is carried and node 0 is on the bolt', () => {
+    const a: Vec3 = [0, 0, 0];
+    const s = stepChain(makeChain(a, [0.3, 0, 0]), a, [0.3, 0, 0], 0, DOWN, 1 / 60);
+    expect(s.acc).toBe(0);
+    const out: [number, number, number][] = Array.from({ length: s.p.length }, () => [0, 0, 0]);
+    drawChain(s, a, out);
+    for (let n = 0; n < out.length; n++) for (let k = 0; k < 3; k++) expect(out[n]![k]).toBeCloseTo(s.p[n]![k]!, 12);
+  });
+});
+
+describe('chainTeleported', () => {
+  it('fires on the cancel snap (0.87 m in a frame) and not on the swing at any rate', () => {
+    const s = makeChain([0, 0, 0], [0, -reach, 0]);
+    expect(chainTeleported(s, [0.87, 0, 0], 1 / 60)).toBe(true);
+    expect(chainTeleported(s, [0.3, 0, 0], 1 / 60)).toBe(false);          // 18 m/s: a fast swing
+    expect(chainTeleported({ ...s, acc: 0.004 }, [0.2, 0, 0], 1 / 240)).toBe(false); // over dt + acc
+  });
 });

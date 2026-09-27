@@ -44,6 +44,10 @@ export const FLAIL_CHAIN_SIM = {
   releaseWindow: 0.1,
   /** Seconds before the swing ends over which it returns to the rest hold. */
   settleWindow: 0.12,
+  /** An anchor faster than this, m/s, is a teleport (re-make the chain), not
+   *  motion: the swing moves the bolt up to ~19 m/s; a cancelled swing snaps it
+   *  up to 0.87 m in one frame. */
+  teleportMps: 30,
 } as const;
 
 type M3 = [number, number, number];
@@ -162,9 +166,14 @@ export function stepChainInPlace(
   const pull = 1 - Math.exp(-C.guideRate * clamp01(guide) * h);
   const b = p[last]!, bp = prev[last]!;
   let ax = a0x, ay = a0y, az = a0z;
+  // WHOLE-MOVE calls spread the full anchor/target move over the substeps they
+  // take, so the last one ends ON both, and carry no time: a capped call, a
+  // forced single substep, and a PIN call — whose last substep must land the
+  // ball on the FULL target (FLAIL_IMPACT), not on the fraction a carried
+  // `acc` would leave it (3–5 cm short at 144 Hz or with jittered frames).
+  const whole = capped || pinCall || steps * h > span;
   for (let step = 0; step < steps; step++) {
-    // Capped: spread the whole move over the substeps taken, so node 0 ends on the anchor.
-    const f = capped || steps * h > span ? (step + 1) / steps : Math.min(1, ((step + 1) * h) / span);
+    const f = whole ? (step + 1) / steps : Math.min(1, ((step + 1) * h) / span);
     ax = a0x + (anchor[0] - a0x) * f; ay = a0y + (anchor[1] - a0y) * f; az = a0z + (anchor[2] - a0z) * f;
     const tx = t0x + (target[0] - t0x) * f, ty = t0y + (target[1] - t0y) * f, tz = t0z + (target[2] - t0z) * f;
     const pinHere = pinCall && step === steps - 1;
@@ -221,11 +230,41 @@ export function stepChainInPlace(
       for (let i = 0; i < last; i++) place(p[i]!, p[i + 1]!, REST[i]!);
     }
   }
-  s.anchor[0] = ax; s.anchor[1] = ay; s.anchor[2] = az;
-  if (capped) { s.anchor[0] = anchor[0]; s.anchor[1] = anchor[1]; s.anchor[2] = anchor[2]; }
-  // The target the last substep used, likewise.
-  const fEnd = capped || steps * h > span ? 1 : Math.min(1, (steps * h) / span);
+  // The anchor and target the last substep used (the full ones on a whole-move call).
+  if (whole) { s.anchor[0] = anchor[0]; s.anchor[1] = anchor[1]; s.anchor[2] = anchor[2]; } else { s.anchor[0] = ax; s.anchor[1] = ay; s.anchor[2] = az; }
+  const fEnd = whole ? 1 : Math.min(1, (steps * h) / span);
   s.target[0] = t0x + (target[0] - t0x) * fEnd; s.target[1] = t0y + (target[1] - t0y) * fEnd; s.target[2] = t0z + (target[2] - t0z) * fEnd;
-  s.acc = steps * h > span ? 0 : acc;
+  s.acc = whole ? 0 : acc;
   return s;
+}
+
+/** True when `anchor` has jumped from where the chain's last substep put it
+ *  faster than FLAIL_CHAIN_SIM.teleportMps. The chain's anchor lags the caller's
+ *  by the carried time `acc`, so the jump spans dt + acc, not dt. */
+export function chainTeleported(s: ChainState, anchor: Vec3, dt: number): boolean {
+  const dx = anchor[0] - s.anchor[0], dy = anchor[1] - s.anchor[1], dz = anchor[2] - s.anchor[2];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) > FLAIL_CHAIN_SIM.teleportMps * (Math.max(0, dt) + s.acc);
+}
+
+/**
+ * The chain AS DRAWN this frame, into `out` (n nodes; the sim state is not
+ * touched, so the sim stays frame-rate independent). The sim ends up to one
+ * substep behind the frame (it carries `acc` of unsimulated time): each free
+ * node is extrapolated by its Verlet velocity over `acc`, node 0 is put ON the
+ * true bolt, and a follow-the-leader pass from it makes every drawn link exact.
+ */
+export function drawChain(s: ChainState, bolt: Vec3, out: [number, number, number][]): void {
+  const k = s.acc * FLAIL_CHAIN_SIM.stepHz;
+  const p = s.p, prev = s.prev, last = N - 1;
+  const o0 = out[0]!;
+  o0[0] = bolt[0]; o0[1] = bolt[1]; o0[2] = bolt[2];
+  for (let i = 1; i < N; i++) {
+    const q = p[i]!, o = prev[i]!, d = out[i]!;
+    d[0] = q[0] + (q[0] - o[0]) * k; d[1] = q[1] + (q[1] - o[1]) * k; d[2] = q[2] + (q[2] - o[2]) * k;
+  }
+  // Nothing carried and node 0 already on the bolt (a pin frame, an exact step):
+  // the sim IS the frame — keep it exactly (the pinned ball stays ON the target).
+  const q0 = p[0]!;
+  if (k === 0 && q0[0] === bolt[0] && q0[1] === bolt[1] && q0[2] === bolt[2]) return;
+  for (let i = 0; i < last; i++) place(out[i]!, out[i + 1]!, REST[i]!);
 }
