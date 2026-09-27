@@ -26,6 +26,8 @@
 - [x] **Boiler Room emergency beacons** (4j): two red sweeping ceiling beacons with hard shadows come
   on as the strobe ends; +0.75 ms frame / +1.12 ms GPU ([dev note + sheet](docs/dev-notes/2026-09-27-boiler-room-beacons/notes.md)).
   Owner look pending: a body in the beam blows out flat red.
+- [x] **Boiler Room disco ball** (4k): mirror tiles and 96 stars sweeping the room, white at the party,
+  flashing with the strobe, red pulses as the beacons pass the ball; ~0 ms ([dev note + sheet](docs/dev-notes/2026-09-27-disco-ball/notes.md)).
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
