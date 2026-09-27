@@ -380,3 +380,35 @@ same re-fraction.
     through the run. Whether that reads as a bull charge or wants a
     head-down pose is for the owner's playtest.
   - **The run's legs:** whether STOMP at 3.2 m/s reads as a run.
+
+# Task 7 — in the game, 2026-09-27
+
+- `SpawnKind` gains `'warbull'`, and `level-json.ts` accepts it.
+- `RoomDef.warbulls` and `slotCharacter` now order slots soldiers, then
+  juggernauts, then warbulls, then zombies.
+- **The arena gets one Warbull in slot 1,** beside the Juggernaut (slot 0)
+  and six zombies. It is the only room with the floor for his 7 m rocket
+  standoff and a charge's run-up, and its 6 m ceiling clears his horns easily.
+- `?spawn=warbull` fills the zombie slots with him for a playtest.
+- The full suite is green: 504 files, 6684 tests.
+
+## For the owner's playtest (nothing here was seen on a GPU)
+
+1. **Build the kit first:**
+   ```
+   scripts/build-wam-kit.sh warbull
+   npx vitest run src/lab/sdf-zombie/characters/warbull-kit.test.ts
+   ```
+   The shadow pre-flight predicts it passes. The sweeps (steel horn, reactor
+   cables) are the least-checked parts.
+2. **Lab, `?character=warbull`:**
+   - the silhouette;
+   - the chrome against the pink hide (the palette is still the minotaur's);
+   - the LED heartbeat and core breathing;
+   - the launcher on the lowered walk carry.
+3. **Game, the arena:**
+   - the raise-and-strobe telegraph, then three slow rockets (can you dodge
+     them?);
+   - the charge when you close in (windup, run, wall stun);
+   - shooting the launcher off (does it drop?), then the red core and the
+     brawl.

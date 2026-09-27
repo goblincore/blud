@@ -3422,8 +3422,9 @@ async function main() {
 
   function spawnAll(errs: string[]): void {
     // ?spawn=<character> (playtest): every ZOMBIE slot spawns that registry
-    // character instead, e.g. ?spawn=cultist, ?spawn=juggernaut. Soldier,
-    // cultist and juggernaut slots keep their kind (level-def SpawnKind).
+    // character instead, e.g. ?spawn=cultist, ?spawn=warbull. Soldier,
+    // cultist, juggernaut and warbull slots keep their kind (level-def
+    // SpawnKind).
     for (const s of ctx.world.level.spawnList()) {
       const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
       ctx.world.actors.push(spawnEnemy(name, s.room, s.pos, errs));

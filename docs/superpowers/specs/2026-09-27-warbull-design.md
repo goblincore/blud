@@ -1,7 +1,7 @@
 # Warbull (cyber-minotaur) — design
 
 **Date:** 2026-09-27 · **Status:** approved direction (owner, 2026-09-27: "hybrid
-is good, i like the general description"); step 1 landed.
+is good, i like the general description"); all seven steps landed, awaiting the kit build and owner playtest.
 
 ## Why
 

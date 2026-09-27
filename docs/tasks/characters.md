@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — in progress 2026-09-27
+## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — in the arena 2026-09-27, awaiting kit build + playtest
 
 - [x] **Body** (Task 1): `warbull.blob` = `minotaur.blob` x 1.28 (horn tip 2.60 m) minus its painted metal; left
   flesh horn and eye only (the right side is kit); a hump behind the neck; face decal baked from the minotaur mesh
@@ -25,7 +25,8 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [x] **Charge + brawl + rage** (Task 6): pure `charge.ts` (telegraphed windup, locked line, 3.2 m/s run, one hit,
   wall = 2 s stun); `makeWarbullMind` layers it over the rocket brain, and once disarmed a one-armed brawl brain;
   `MindOutput.runSpeed` makes the legs run the charge; charge hit 30.
-- [ ] Task 7 arena spawn.
+- [x] **In the game** (Task 7): one warbull in the arena (slot 1, beside the juggernaut); `?spawn=warbull`.
+- [ ] **Owner playtest** (checklist in the notes): look, telegraphs, rocket dodgeability, charge/stun, disarm, brawl.
 
 ## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 

@@ -21,7 +21,7 @@
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
 **Elsewhere** (see the area pages for the full lists)
-- [ ] Characters: the **Warbull** (cyber-minotaur) is in progress: body and kit authored (kit needs a local WAM build); the **Juggernaut** is playable
+- [ ] Characters: the **Warbull** (cyber-minotaur: rockets, charge, disarm) is in the arena, awaiting a local WAM kit build and playtest; the **Juggernaut** is playable
   (arena; owner playtest: works), armour aesthetic pass next;
   Grenadier variant deferred; cultist perf pass and cloth feel (paused), bride polish —
   [characters](docs/tasks/characters.md).
