@@ -34,6 +34,7 @@ import thinFixtureBlobSrc from './characters/thin-fixture.blob?raw';
 import minotaurBlobSrc from './characters/minotaur.blob?raw';
 import soldierBlobSrc from './characters/soldier.blob?raw';
 import juggernautBlobSrc from './characters/juggernaut.blob?raw';
+import warbullBlobSrc from './characters/warbull.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
@@ -235,6 +236,17 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // The soldier's baked face and its measured mean: same PNG, same crop.
     face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
     profile: JUGGERNAUT_PROFILE,
+  },
+  // The cyber-minotaur: minotaur.blob's mesh-fitted flesh at 1.28x with
+  // its painted metal removed (warbull.blob's header). The hard parts
+  // (steel horn, optic, spine rack, reactor, hooves, launcher) arrive with
+  // characters/warbull-kit.wam; until then he is the flesh alone.
+  warbull: {
+    name: 'warbull', src: warbullBlobSrc,
+    // Baked from the minotaur's reference mesh (warbull.blob, sheet block).
+    // mean measured off the PNG's opaque texels, lab-main's applyMeanOf rule.
+    face: { ...bakedFace('warbull-face.png'), mean: 0.32044097124272053 },
+    profile: motionProfileFor('warbull'),
   },
   female: {
     name: 'female', src: femaleBlobSrc,

@@ -1,0 +1,206 @@
+# Warbull — a cyber-minotaur: a bull-headed brute of flesh with machinery
+# bolted INTO it (spec: docs/superpowers/specs/2026-09-27-warbull-design.md).
+#
+# THIS IS MINOTAUR.BLOB, SCALED 1.28, MINUS ITS PAINTED METAL. The minotaur
+# was fitted to a reference mesh (docs/dev-notes/refs/minotaur-mesh/
+# minotaur.glb) over six rounds, so its flesh (the V-taper, the trap shelf,
+# the bull head, the horns) has a source for every number. Its weak point was
+# the hard surface: the prosthetic leg was SDF `box` plates PAINTED metal, and
+# the owner's verdict was that they never read as metal (TASKS X2). So this
+# file keeps the flesh and throws the paint away: every hard part now lives
+# in characters/warbull-kit.wam as real polygons with real metal materials.
+#
+# THE ONE FACTOR:
+#   S  1.28  everything with a length: root height, bone len, clavicle and
+#            hip side, r, r2, blend, offset/tip/bend, groove depth/width and
+#            the face block's lengths. Angles and bone fractions verbatim.
+#            1.90 m authored -> 2.432 m; horn tips 2.033 -> 2.60 m, which
+#            keeps 0.4 m of headroom under the rooms' 3.0 m ceilings
+#            (game-level.ts WALL_H) for his stride bob. 1.30 would put the
+#            tips at 2.64 m; 1.28 is the round number under that.
+#            He stands a head over the 2.29 m juggernaut.
+#
+# THE INLINE COMMENTS QUOTE THE MINOTAUR'S NUMBERS where they explain a
+# measurement ("mesh x 1.5612", "tail 1.386"): multiply by 1.28 to get the
+# values below. The measurement history itself is in minotaur.blob; if its
+# flesh is ever refitted, re-derive this file from it rather than letting
+# the two drift.
+#
+# WHAT CHANGED BEYOND THE SCALE (each marked WARBULL below):
+#   - DROPPED: the right-leg prosthetic (five painted `box` plates, a painted
+#     cable and two seam grooves) and the painted shoulder cables. Both legs
+#     are flesh now; the kit puts hooves, knee cops and pistons on them.
+#   - The horn SWEEP is LEFT-ONLY. His right horn is sawn off at the root
+#     and replaced by a steel one in the kit; the flesh root boss stays on
+#     both sides so the steel horn has a socket to sit in.
+#   - The glowing eye bead is LEFT-ONLY. His right eye is the kit's optic.
+#   - A HUMP: a bull's muscle mound behind the neck, which is also the mount
+#     for the kit's spine rack. The minotaur's traps sit either side of the
+#     neck; nothing filled the back of it.
+model warbull
+  height 2.432
+  # Checked, not decorative: the minotaur's wide semi-crouch, knees forward.
+  stance humanoid
+
+skeleton
+  # Minotaur rig x 1.28 (see minotaur.blob for why the root sits high in
+  # the belly and the clavicles rise at tilt 32).
+  root pelvis at 1.11488 len=0.154112
+  bone spine1 parent=pelvis dir=up pitch=2 len=0.154112
+  bone chest  parent=spine1 dir=up pitch=2 len=0.154112
+  bone spine2 parent=chest  dir=up pitch=1 len=0.061952
+  bone neck   parent=spine2 dir=up pitch=0 len=0.136064
+  # LONG ON PURPOSE (minotaur.blob, "bonewalker's pattern"): the face block
+  # rides skull at=0.45, so the length places the cranium, not a joint.
+  bone skull  parent=neck   dir=up pitch=0 len=1.0752
+
+  mirror
+    bone clavicle parent=neck    side=0.11136 dir=side tilt=32 len=0.384512
+    # Arms rest down-and-out: a heavy powerlifter spread.
+    bone upperarm parent=clavicle dir=down tilt=40 pitch=8  len=0.391552
+    bone forearm  parent=upperarm dir=down tilt=18 pitch=20 len=0.448128
+    bone hand     parent=forearm  dir=down tilt=10 pitch=15 len=0.1792
+    # The minotaur's wide semi-crouch: hip->knee out and forward, shin
+    # swinging back.
+    bone thigh    parent=pelvis side=0.22464 dir=down tilt=13.5 pitch=13  len=0.509952
+    bone shin     parent=thigh  dir=down tilt=12 pitch=-22                 len=0.564224
+    bone foot     parent=shin   dir=fwd                                    len=0.26816
+  end
+
+body
+  # ============================================================
+  # TORSO — the minotaur's V-taper brawler x 1.28. Its rounds 3-6 fitted
+  # these against the mesh's rings, silhouette and a front-wall relief map;
+  # the numbers and the reasons are in minotaur.blob.
+  # ============================================================
+  # Pelvis / hip bowl.
+  blob torso on pelvis  at=0.50 r=0.17882 wide=1.392 tall=1.30 deep=1.470 blend=0.01536 offset=(-0.023,0,-0.1459) core
+  # Waist -> belly: depth pulled in against the chest (the V-taper).
+  bar  torso on spine1  from=0.00 to=1.50 r=0.1984 wide=1.490 deep=1.210 blend=0.01536 offset=(0,0,0.0384)
+  # Ribcage: a broad flat-fronted slab, width pinned at the judged ceiling
+  # (wider rendered as a mushroom).
+  bar  torso on chest   from=0.30 to=2.50 r=0.192 wide=1.700 deep=1.430 blend=0.01664 offset=(0,0.0064,0.0128)
+  # Trap shelf either side of the neck.
+  blob torso on neck    at=0.90 r=0.2432 wide=1.90 tall=1.50 deep=1.30 blend=0.01408 both offset=(0.2074,0.0512,-0.0128)
+  # WARBULL: THE HUMP. A bull's muscle mound behind the neck, on the
+  # centreline, BETWEEN and behind the trap pair. Sized to rise above the
+  # trap shelf's back surface so it reads in profile, and set behind the neck
+  # so it never swells the throat (the minotaur's worst relief-map cell was
+  # a throat filled by the traps). It is the base the kit's spine rack is
+  # bolted to, so it must be flesh: the rack's flange bites into it.
+  blob torso on neck    at=0.55 r=0.2000 wide=1.35 tall=1.10 deep=1.20 blend=0.02000 offset=(0,0.030,-0.1700)
+
+  # MUSCLE RELIEF (the minotaur's round 6): pec pair, lower-pec shelf,
+  # sternum, upper-ab mass, linea alba, ab cross-lines, obliques. Engine
+  # limited today (the AO term cannot see relief this shallow, TASKS X4);
+  # kept because the masses improved the form and the grooves are free.
+  blob torso on neck   at=0.72 offset=(0.1254,0,0.1638) r=0.13824 wide=1.30 tall=1.15 deep=0.62 blend=0.00768 both
+  groove torso on neck at=0.30 offset=(0.1152,0,0.192) r=0.1472 wide=1.39 tall=0.05 depth=0.0192 width=0.00045 both
+  groove torso on neck at=0.60 offset=(0,0,0.2176) r=0.128 wide=0.05 tall=1.50 depth=0.02816 width=0.00038
+  bar  torso on chest  from=0.85 to=1.75 r=0.192 wide=1.79 deep=1.66 blend=0.0128 offset=(0,0,0.0256)
+  groove torso on spine1 at=1.10 offset=(0,0,0.2432) r=0.1152 wide=0.05 tall=1.60 depth=0.01536 width=0.00032
+  groove torso on spine1 at=1.35 offset=(0,0,0.2368) r=0.1664 wide=1.25 tall=0.05 depth=0.01664 width=0.00038
+  groove torso on spine1 at=0.95 offset=(0,0,0.2368) r=0.1664 wide=1.25 tall=0.05 depth=0.01664 width=0.00038
+  blob torso on spine1 at=0.10 offset=(0.2061,0,0.0896) r=0.12928 wide=0.95 tall=1.39 deep=1.10 blend=0.01024 both
+
+  # Neck: a short bar swallowed by the traps, fusing head -> torso.
+  bar  head on neck from=-0.30 to=1.20 r=0.0768 deep=1.20 blend=0.00768
+
+  # ============================================================
+  # HORNS. Root bosses at the temple/crown corner, both sides: the left one
+  # grows the flesh horn, the right one is the socket the kit's steel horn
+  # is collared into.
+  # ============================================================
+  blob head on skull at=0.58 offset=(0.1254,0,0.0256) r=0.0704 wide=1.0 tall=0.85 deep=1.0 blend=0.0064 both color=6e4426
+  # WARBULL: the wrapped sweep on the LEFT only (+x; a head prim without
+  # `both` is placed exactly where its offset says). Leaves the skull
+  # sideways and hooks up at the tip (the bend pulls the curve out and down
+  # of the chord); tip at ~2.60 m.
+  bar  head on skull from=0.575 to=0.70 offset=(0.1254,0,0.0256) tip=(0.2074,0.0589,-0.0064) bend=(0.0614,-0.0538,0) r=0.064 r2=0.01664 blend=0.00512 chamfer color=221a1a gloss=0.45
+
+  # WARBULL: the glowing eye bead on the LEFT only. The right eye socket is
+  # the kit's optic housing. Placement: the minotaur's decal-solve eye row,
+  # sunk to ~60% depth (minotaur.blob, EYES).
+  blob head on skull at=0.41 offset=(0.0448,0,0.2342) r=0.01536 blend=0.00512 color=ff2200 glow=0.9
+
+  # ============================================================
+  # ARMS — huge. Deltoid ball is the arm's core (the fuse probe must not
+  # pick an accessory). The RIGHT forearm is flesh on purpose: the
+  # launcher (a held prop, like the juggernaut's chaingun) swallows the fist
+  # and the lower forearm, and the kit bolts a socket collar at the elbow.
+  # ============================================================
+  blob arm on clavicle at=1.00 r=0.1728 blend=0.01024 mirror core
+  bar  arm on upperarm from=0.00 to=0.95 r=0.13952 r2=0.14336 wide=1.000 blend=0.00768 mirror offset=(0,0.0013,0.0051)
+  bar  arm on forearm  from=0.00 to=0.90 r=0.1408 r2=0.1015 deep=1.078 tall=1.131 blend=0.00768 mirror offset=(0,-0.0013,-0.0102)
+  blob arm on hand     at=0.45 r=0.1088 wide=0.95 tall=1.10 deep=1.25 blend=0.0064 mirror
+
+  # ============================================================
+  # LEGS — both flesh now (WARBULL: the painted prosthetic is gone). The
+  # minotaur's left-leg fit, mirrored: muscled thigh, calf bulge behind,
+  # thick ankle, splayed beast paw. The kit's hoof shells go over the paws.
+  # ============================================================
+  blob leg on thigh at=0.02 r=0.2048 blend=0.01024 mirror core
+  bar  leg on thigh from=0.05 to=0.92 r=0.14989 r2=0.21363 wide=1.02 blend=0.00896 mirror offset=(0,-0.0269,-0.0666)
+  blob leg on shin  at=0.02 r=0.16 deep=0.95 blend=0.00896 mirror
+  bar  leg on shin  from=0.08 to=0.60 r=0.1385 r2=0.14784 deep=1.216 tall=1.0 blend=0.00896 mirror offset=(0,-0.0026,-0.0282)
+  bar  leg on shin  from=0.60 to=0.98 r=0.03891 r2=0.16858 blend=0.00768 mirror offset=(0,0.0115,-0.0768)
+  blob leg on foot  at=0.30 offset=(0.0128,-0.0691,0.1216) r=0.11853 wide=1.35 tall=1.07 deep=1.45 blend=0.00768 mirror
+  blob leg on foot  at=0.30 offset=(0.1088,-0.1728,0.1664) tip=(0.0256,-0.0512,0.0704) r=0.0384 r2=0.01024 blend=0.00384 mirror color=3a2417
+  blob leg on foot  at=0.30 offset=(-0.0896,-0.1664,0.16) tip=(-0.0192,-0.0512,0.0704) r=0.0384 r2=0.01024 blend=0.00384 mirror color=3a2417
+
+# ============================================================
+# FACE — the minotaur's head block x 1.28 (lengths only; the ratios are
+# verbatim, so the decal projection below lands on the same head-space
+# features it was solved for).
+# ============================================================
+face
+  headRadius 0.16
+  headWidth  1.00
+  headHeight 1.55
+  headDepth  1.50
+  jawWidth   0.95
+  jawHeight  1.00
+  jawDrop    0.1664
+  jawJut     0.1408
+  noseLength 0.0384
+  noseWidth  0.80
+  noseDrop   0.0384
+  browHeavy  0.0205
+  browRise   0.0512
+  headBlend  0.0064
+
+# Face decal: baked from the minotaur's reference mesh with
+#   npm run blob:face-bake -- minotaur --head-frac 0.165
+# then cropped with a soft edge to uv.x 0.385..0.615, uv.y 0.28..0.60 (a
+# little narrower than the minotaur's recipe, 0.34..0.66, which let the horn
+# wraps in at the sides). The minotaur's own PNG was never committed; this
+# is the first time that bake exists in the repo. Projection: the
+# minotaur's solve verbatim (eye row at hs.y -0.176, fang row at -0.510),
+# valid because the head is scaled uniformly.
+sheet
+  image       warbull-face.png
+  decal       1
+  projScaleX  0.130
+  projScaleY  0.314
+  projCentreX 0.5
+  projCentreY 0.555
+
+# Palette: the minotaur's (its round 4 retarget onto the zombie's
+# henenlotter-latex pink, which read under the lab key where the mesh's
+# measured brown was a chocolate mass). Unchanged on purpose for the first
+# frames: the chrome kit is new, and flesh-vs-metal contrast is judged with
+# both in the picture.
+palette
+  baseColor     0.86 0.47 0.48
+  deepColor     0.74 0.06 0.10
+  charColor     0.10 0.07 0.08
+  specIntensity 0.95
+  specRoughness 0.16
+  fresnelBoost  0.75
+  translucency  0.45
+  surfaceNoiseAmp    0.09
+  silhouetteNoiseAmp 0.014
+  wetness       0.85
+  mottleAmp     0.11
+  mottleScale   1.6
+  mottleColor   0.62 0.28 0.30

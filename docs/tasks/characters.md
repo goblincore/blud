@@ -2,6 +2,16 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — in progress 2026-09-27
+
+- [x] **Body** (Task 1): `warbull.blob` = `minotaur.blob` x 1.28 (horn tip 2.60 m) minus its painted metal; left
+  flesh horn and eye only (the right side is kit); a hump behind the neck; face decal baked from the minotaur mesh
+  (`warbull-face.png`, the minotaur's own PNG never existed). `?character=warbull`. 13 pins.
+  [Notes](../../docs/dev-notes/2026-09-27-warbull/NOTES.md) · [Spec](../../docs/superpowers/specs/2026-09-27-warbull-design.md) · [Plan](../../docs/superpowers/plans/2026-09-27-warbull.md)
+- [ ] Task 2 kit (`warbull-kit.wam`: steel horn, optic, jaw brace, spine rack, reactor, pistons, hooves, cables, collars).
+- [ ] Task 3 chrome/LED looks + blinking `status-lights.ts`; Task 4 launcher prop + rockets; Task 5 plates + disarm;
+  Task 6 charge/gore/enrage; Task 7 arena spawn.
+
 ## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 
 - [x] **Soldier family trait**: `MotionProfile.family` + `isSoldierFamily()` replace ~37 `name === 'soldier'` checks,
