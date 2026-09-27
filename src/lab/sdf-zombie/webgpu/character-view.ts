@@ -51,6 +51,7 @@ import {
   type Wound, type WoundType,
 } from '../damage';
 import { isSoldierFamily } from '../motion-profile';
+import { statusLights, type StatusLights } from '../status-lights';
 
 // ---------------------------------------------------------------------------
 // The build step
@@ -492,6 +493,10 @@ export interface CharacterView {
     barrelSpin?: number,
     /** Plate armour state (game-actor armorView): the kit sheds by it. */
     armor?: { shed: ReadonlySet<string>; hits: readonly Vec3[] } | null,
+    /** The kit's status lights (status-lights.ts; game-actor statusLights).
+     *  Absent = an idle heartbeat on this view's own clock, so the lab's
+     *  turntable blinks too. Only kits with `led`/`core` materials react. */
+    lights?: StatusLights | null,
   ): void;
   /** World muzzle of the held prop, or null when this character carries
    *  nothing or the glTF has not loaded yet. The soldier's shot reads it. */
@@ -578,6 +583,8 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   let heldProp: HeldProp | null = null;
   let disposed = false;
   let equipmentRetired = false;
+  /** Sim seconds this view has posed, for the default idle heartbeat. */
+  let lightsClock = 0;
   const wounds = createWoundRing();
   const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
   const armorSparks = entry.armoured === true && opts.effectsScene ? createArmorSparks() : null;
@@ -629,8 +636,10 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
-    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null) {
+    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody, barrelSpin = 0, armor = null, lights = null) {
       if (equipmentRetired) return;
+      lightsClock += dt;
+      kit?.glow(lights ?? statusLights({ mode: 'idle', t: lightsClock, phase: releaseSeed * 0.37 }));
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
       // the gun; the kit simply keeps following the (fallen) rig.

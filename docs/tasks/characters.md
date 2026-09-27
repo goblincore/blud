@@ -12,8 +12,10 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   steel horn, optic, cheek plate, shoulder cap, gun-arm sleeve; brass collars at every insertion). Pre-flighted without
   WAM by the new `scripts/wam-preflight.ts` (a shadow of WAM's maths, checked against the juggernaut build).
 - [ ] **Owner: build the kit** `scripts/build-wam-kit.sh warbull`, then `warbull-kit.test.ts` (13 pins; skips until built).
-- [ ] Task 3 chrome/LED looks + blinking `status-lights.ts`; Task 4 launcher prop + rockets; Task 5 plates + disarm;
-  Task 6 charge/gore/enrage; Task 7 arena spawn.
+- [x] **Looks + blinking lights** (Task 3): `chrome`/`cable`/`led`/`core` looks; pure `status-lights.ts` (heartbeat idle,
+  strobe on aim, stutter stunned, LED drop-outs with plate damage, red core when enraged) driven by the mind via
+  `GameActor.statusLights()`; the lab turntable gets an idle heartbeat.
+- [ ] Task 4 launcher prop + rockets; Task 5 plates + disarm; Task 6 charge/gore/enrage; Task 7 arena spawn.
 
 ## Juggernaut (power-armour chaingunner, first soldier variant) — playable 2026-09-26
 

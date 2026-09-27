@@ -131,3 +131,38 @@ of the kit.
   the plates, not on the flesh.
 - If the real mesh disagrees with the pre-flight, the sweeps (steel horn,
   reactor cables) are the least-checked parts.
+
+# Task 3 — looks and blinking lights, 2026-09-27
+
+- **`status-lights.ts` (pure, 9 tests).** It maps mind state, sim time, plate
+  damage and rage to LED and core levels:
+
+  | Mode | LEDs | Core |
+  | --- | --- | --- |
+  | idle | double-thump heartbeat, 1.2 s | breathes |
+  | alert | heartbeat, 0.7 s | breathes |
+  | aim (the rocket telegraph) | 8 Hz strobe | flares |
+  | fire | bright and ragged | flares |
+  | stunned | stutter | stutter |
+  | dead | dark | dark |
+
+  Plate damage drops LEDs out deterministically (up to 55% of the time at full
+  damage). When he is enraged the core turns from amber to red. Each body gets
+  its own phase, so a crowd doesn't blink in unison.
+- **New looks in `kit-overlay.ts` LOOK:**
+  - `chrome`: metalness 0.88, roughness 0.10, env 1.7. It is the one material
+    that must read as polished metal against wet flesh.
+  - `cable`: soft rubber sheen.
+  - `led`: red emissive, 1.4.
+  - `core`: amber emissive, 1.6.
+
+  `KitOverlay.glow()` scales the pulsed materials (`led`, `core`) from those
+  authored intensities. The juggernaut's `lens` is deliberately not pulsed.
+- **Wiring:**
+  - `GameActor.statusLights()` reports the actor's mind state and its plate
+    damage fraction.
+  - game-main passes it to `character-view.pose`.
+  - With no lights passed, as in the lab turntable, the view runs an idle
+    heartbeat on its own clock, so `?character=warbull` blinks in the lab.
+- Unverified on a GPU here: the actual brightness of the emissives against the
+  lab key. It is the owner's call once the kit is built.

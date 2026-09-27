@@ -55,6 +55,7 @@ import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { isSoldierFamily, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, barrelsDriven, stepBarrelSpin, type BarrelSpin } from '../barrel-spin';
+import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
@@ -406,6 +407,10 @@ export interface ZombieActor {
   /** Plate armour for the kit view (plate-armor.ts): the shed plate ids and
    *  the impact points since the last call (drained). null = no armour. */
   armorView: () => { shed: ReadonlySet<string>; hits: Vec3[] } | null;
+  /** The kit's status lights (status-lights.ts): the mind's state as a
+   *  heartbeat / strobe / stutter, LEDs dropping out as the plates take
+   *  damage. Only kits with `led`/`core` materials show it. */
+  statusLights: () => StatusLights;
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
@@ -786,6 +791,8 @@ export function createZombieActor(opts: {
   // The chaingun's spin follows the mind's state (barrel-spin.ts header).
   const spins = opts.profile?.gunner?.weapon === 'chaingun';
   let barrel: BarrelSpin = BARREL_REST;
+  /** Sim seconds, for the status lights' heartbeat (status-lights.ts). */
+  let lightsClock = 0;
   /** prop.fistOnGrip: the right hand tip, pinned along its motion target
    *  each step (pinTips `only`); the one-element list, built once. */
   const fistTips = ((): { tips: BoundRig['tips']; only: ReadonlySet<number> } | null => {
@@ -1493,6 +1500,7 @@ export function createZombieActor(opts: {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
     if (spins) barrel = stepBarrelSpin(barrel, !lastFrame?.collapsed && barrelsDriven(mind.debug().state), dt);
+    lightsClock += dt;
     posed = applyRig(current, bound, bodyYaw);
     if (headPop && swellDur > 0) {
       swellClock += dt;
@@ -1984,6 +1992,19 @@ export function createZombieActor(opts: {
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
     barrelSpin: () => barrel.angle,
+    statusLights: () => {
+      const d = mind.debug();
+      let damage = 0;
+      if (armor && plates) {
+        const max = armor.spec.plates.reduce((a, p) => a + p.hp, 0);
+        const left = armor.spec.plates.reduce((a, p) => a + Math.max(0, plates![p.id] ?? 0), 0);
+        damage = max > 0 ? 1 - left / max : 0;
+      }
+      return statusLights({
+        mode: lightsModeFor(d.state, { alert: d.alert, collapsed: !!lastFrame?.collapsed }),
+        t: lightsClock, damage, phase: opts.id * 0.37,
+      });
+    },
     armorView: () => {
       if (!plates) return null;
       const hits = armorHits.splice(0);

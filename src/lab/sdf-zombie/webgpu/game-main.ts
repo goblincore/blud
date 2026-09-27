@@ -6965,7 +6965,7 @@ async function main() {
         for (const a of ctx.world.actors) {
           if (!a.character) continue;
           const p = a.pose();
-          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView());
+          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights());
         }
       }
       // The actor animation phase: wall-clock in play, the SIM CLOCK while a
