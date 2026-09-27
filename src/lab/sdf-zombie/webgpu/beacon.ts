@@ -4,6 +4,9 @@
 // direction at a time on the sim clock. A beacon hangs from the ceiling, its spot tilted BEACON.tilt
 // below horizontal, turning `spin` revolutions a second about the vertical (sign = direction).
 
+import type { LampMood, LampScript } from './lamp-moods';
+import type { LightMode } from './level-events';
+
 export const BEACON = {
   /** Below horizontal, rad (~35 deg). */
   tilt: 0.61,
@@ -25,4 +28,32 @@ export function beaconAxis(t: number, spin: number, phase: number): Vec3 {
   const a = phase + t * spin * Math.PI * 2;
   const c = Math.cos(BEACON.tilt);
   return [Math.cos(a) * c, -Math.sin(BEACON.tilt), Math.sin(a) * c];
+}
+
+
+/** Arming: the room's `strobe` gives a beacon the `emergency` script (dark through the strobe,
+ *  then on for good); every other command applies to it as to any lamp. */
+export function scriptFor(mode: LightMode, isBeacon: boolean): LampScript['mode'] {
+  return isBeacon && mode === 'strobe' ? 'emergency' : mode;
+}
+
+/** What a lamp is to its room: a lamp (its glass colour and glow, the room's fill), a fire (the
+ *  firebox glass; the fill too), or a beacon (neither: it lights bodies through the shared list,
+ *  so after the strobe the Boiler Room's fill still falls to its dark floor). */
+export type LampKind = 'lamp' | 'fire' | 'beacon';
+export function lampKind(l: { mood: LampMood; beacon?: unknown }): LampKind {
+  return l.beacon ? 'beacon' : l.mood === 'fire' ? 'fire' : 'lamp';
+}
+/** The room's lamp glass follows this lamp (not a fire, not a beacon). */
+export function countsAsRoomLamp(l: { mood: LampMood; beacon?: unknown }): boolean {
+  return lampKind(l) === 'lamp';
+}
+/** The room fill (rt.roomLight) weighs this lamp: its lamps and fires, never a beacon. */
+export function countsForRoomFill(l: { mood: LampMood; beacon?: unknown }): boolean {
+  return lampKind(l) !== 'beacon';
+}
+
+/** A beacon's spot intensity: the lamp's power × BEACON.spotGain × its level (the omni stays 0). */
+export function beaconSpotIntensity(base: number, level: number): number {
+  return base * BEACON.spotGain * level;
 }

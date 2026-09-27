@@ -810,9 +810,10 @@ async function main() {
       pl.userData.accentRoom = r.id;
       ctx.world.accentGroup.add(pl);
       // A visible source. Without it the light has no cause and reads as a bug.
-      // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl.
+      // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl. A beacon
+      // has no bowl: the dynamic-light leaf builds its housing (makeBeacon).
       const tubeGeo = a.fixture === 'tube' ? new THREE.CylinderGeometry(0.035, 0.035, 1.3, 10).rotateX(Math.PI / 2) : null;
-      const bowl = new THREE.Mesh(
+      const bowl = a.fixture === 'beacon' ? null : new THREE.Mesh(
         tubeGeo ?? new THREE.IcosahedronGeometry(0.16, 1),
         new THREE.MeshStandardMaterial({
           color: new THREE.Color(a.color[0], a.color[1], a.color[2]),
@@ -820,13 +821,16 @@ async function main() {
           emissiveIntensity: 2.2,
           roughness: 0.7,
         }));
-      bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
-      ctx.world.accentGroup.add(bowl);
+      if (bowl) {
+        bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
+        ctx.world.accentGroup.add(bowl);
+      }
       // The dynamic-light leaf drives each lamp (and its bowl) by its mood and scripts.
       ctx.lighting.flickerLights.push({
         light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7,
-        bowl: bowl.material as THREE.MeshStandardMaterial, mood: a.mood ?? 'steady', room: r.id,
-        bowlMesh: bowl, fixture: a.fixture ?? 'bulb', ...(a.spin !== undefined ? { spin: a.spin } : {}),
+        ...(bowl ? { bowl: bowl.material as THREE.MeshStandardMaterial, bowlMesh: bowl } : {}),
+        mood: a.mood ?? 'steady', room: r.id,
+        fixture: a.fixture ?? 'bulb', ...(a.spin !== undefined ? { spin: a.spin } : {}),
         ...(a.gain !== undefined ? { gain: a.gain } : {}), ...(a.tint ? { tint: a.tint } : {}),
       });
     }

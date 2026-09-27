@@ -175,7 +175,8 @@ const SKULL_FLESH_MAX = 1.5;
 const settle = (ms = 700) => sleep(ms);
 
 const lights = () => evaluate('__sdfGame.lights()');
-const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire');
+/** A room's lamps: not its fires, not its beacons (the Boiler Room's emergency beacons run their own script). */
+const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire' && !x.beacon);
 
 // LIGHT_GATE_ONLY_LIST=1 runs section 7 alone (the calibration loop).
 if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS && !process.env.LIGHT_GATE_ONLY_COST) {
@@ -276,7 +277,23 @@ L = await lights();
 if (!roomLamps(L, 5).every((x) => x.script === 'strobe')) fail(`boiler room lamps not strobing: ${JSON.stringify(roomLamps(L, 5))}`);
 const tr = await evaluate('__sdfGame.train()');
 if (!(tr.steam > 0)) fail(`no steam plumes: ${JSON.stringify(tr)}`);
-pass(`boiler room: the threshold starts the strobe; ${tr.steam} steam plumes, ${tr.swaying} moving piece sets`);
+// The emergency beacons (spec 2026-09-27-boiler-room-beacons-design.md): two in the Boiler Room,
+// armed by the strobe, dark through it, then on for good. The lamps' glass keeps the lamps' colour
+// (the beacons are not the room's lamp) and does not glow red.
+if (L.beacons.length !== 2 || !L.beacons.every((b) => b.room === 5)) fail(`expected 2 beacons in room 5: ${JSON.stringify(L.beacons)}`);
+if (!L.beacons.every((b) => b.script === 'emergency')) fail(`beacons not armed by the strobe: ${JSON.stringify(L.beacons)}`);
+let beaconsOn = false;
+for (let i = 0; i < 40 && !beaconsOn; i++) {
+  await sleep(500);
+  L = await lights();
+  beaconsOn = L.beacons.every((b) => b.level === 1) && roomLamps(L, 5).every((x) => x.level === 0);
+}
+if (!beaconsOn) fail(`beacons never came on after the strobe: ${JSON.stringify(L.beacons)} lamps ${JSON.stringify(roomLamps(L, 5))}`);
+const boilerGlass = (L.glassInfo ?? []).filter((g) => g.room === 5 && g.kind === 'lamp');
+const redGlass = boilerGlass.filter((g) => g.emissive && g.emissive[0] > 0.5 && g.emissive[1] < 0.2 && g.emissive[2] < 0.2);
+if (redGlass.length) fail(`boiler room lamp glass glows beacon red: ${JSON.stringify(redGlass)}`);
+await shoot('light-boiler-beacons');
+pass(`boiler room: the threshold starts the strobe; ${tr.steam} steam plumes, ${tr.swaying} moving piece sets; ${L.beacons.length} beacons in room 5 levels ${L.beacons.map((b) => b.level).join('/')} (spot ${L.beacons.map((b) => b.intensity.toFixed(1)).join('/')}), room fill ${(L.roomLight[5] ?? 1).toFixed(2)}, lamp glass ${boilerGlass.length ? boilerGlass.map((g) => f3(g.emissive)).join(' ') : 'none'}`);
 }
 
 // 7. THE SHARED LIST (plan 1, Task 10). Fresh boots WITH the cast, clocks pinned so the two boots

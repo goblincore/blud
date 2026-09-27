@@ -12,14 +12,15 @@
 // lights); all of it exists before the per-room light lists are built.
 
 import * as THREE from 'three/webgpu';
-import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { cameraPosition, normalWorld, positionLocal, positionWorld, uniform, vec3, vec4, wgslFn } from 'three/tsl';
 import { lampSwing } from './train-motion';
 import { STORM_HASH, STORM_NOISE } from './train-window.wgsl';
 import { TUBE_BEAM_WGSL } from './tube-beam.wgsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-leaves';
-import { lampLevel, type LampMood, type LampScript } from './lamp-moods';
+import { hash01, lampLevel, type LampMood, type LampScript } from './lamp-moods';
+import { BEACON, beaconAxis, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
 import type { LightMode } from './level-events';
 import { moonShadowFrame } from './outdoor-light';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
@@ -53,9 +54,26 @@ interface Tube {
   drop: number;
 }
 
+/** A Boiler Room emergency beacon (spec 2026-09-27-boiler-room-beacons-design.md): a red spot
+ *  turning about the vertical with a hard shadow, a beam that turns with it, and a small housing
+ *  on the ceiling. The lamp's own omni stays at 0: the spot is the light. */
+interface Beacon {
+  spot: THREE.SpotLight;
+  beam: THREE.Mesh;
+  beamLit: { value: THREE.Vector4 };
+  housing: MeshStandardNodeMaterial;
+  pos: THREE.Vector3;
+  /** rev/s, sign = direction; the sweep's start angle (seeded, so two beacons are not in step). */
+  spin: number;
+  phase: number;
+  /** Shadow re-renders requested (the gate reads it). */
+  shadowFrames: number;
+}
+
 interface Lamp {
   light: THREE.PointLight;
   tube: Tube | null;
+  beacon: Beacon | null;
   bowl: THREE.MeshStandardMaterial | null;
   base: number;
   mood: LampMood;
@@ -113,6 +131,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     seed: f.phase, script: null, level: 1,
     ...(f.gain !== undefined ? { gain: f.gain } : {}), ...(f.tint ? { tint: f.tint } : {}),
     tube: f.fixture === 'tube' && new URLSearchParams(location.search).get('tubes') !== '0' ? makeTube(ctx, f.light, f.bowlMesh ?? null, f.room ?? -1, tubeGroup) : null,
+    beacon: f.fixture === 'beacon' ? makeBeacon(ctx, f.light, f.room ?? -1, f.spin ?? 0, f.phase, tubeGroup) : null,
   }));
   if (tubeGroup.children.length > 0) ctx.boot.handle.scene.add(tubeGroup);
   const rt: DynamicLightRuntime = {
@@ -209,16 +228,7 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
   const geo = new THREE.ConeGeometry(r, drop, 24, 1, true).translate(0, -drop / 2, 0);
   const lit = uniform(new THREE.Vector4(1, drop, TUBE.beam, 0));
   const col = uniform(new THREE.Color(light.color));
-  if (!beamFn) {
-    type Include = NonNullable<Parameters<typeof wgslFn>[1]>[number];
-    const hashFn = wgslFn(STORM_HASH) as unknown as Include;
-    beamFn = wgslFn(TUBE_BEAM_WGSL, [hashFn, wgslFn(STORM_NOISE, [hashFn]) as unknown as Include]);
-  }
-  const mat = new MeshBasicNodeMaterial();
-  mat.colorNode = vec4(beamFn({ local: positionLocal, wpos: positionWorld, n: normalWorld, eye: cameraPosition, t: rtTime, cfg: lit, color: col }) as unknown as ReturnType<typeof vec3>, 1);
-  mat.transparent = true; mat.blending = THREE.AdditiveBlending; mat.depthWrite = false; mat.side = THREE.DoubleSide; mat.fog = false;
-  mat.name = 'train.tube-beam';
-  const beam = new THREE.Mesh(geo, mat);
+  const beam = new THREE.Mesh(geo, beamMaterial(lit, col, 'train.tube-beam'));
   beam.name = `train.tube-beam:${room}`;
   beam.position.copy(pos);
   beam.frustumCulled = true;   // its bounds cover the small swing; off-screen carriages skip it
@@ -230,11 +240,80 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
 /** Shared clock for the beams' drifting dust (sim seconds). */
 const rtTime = uniform(0);
 
+function beamMaterial(lit: ReturnType<typeof uniform>, col: ReturnType<typeof uniform>, name: string): MeshBasicNodeMaterial {
+  if (!beamFn) {
+    type Include = NonNullable<Parameters<typeof wgslFn>[1]>[number];
+    const hashFn = wgslFn(STORM_HASH) as unknown as Include;
+    beamFn = wgslFn(TUBE_BEAM_WGSL, [hashFn, wgslFn(STORM_NOISE, [hashFn]) as unknown as Include]);
+  }
+  const mat = new MeshBasicNodeMaterial();
+  mat.colorNode = vec4(beamFn({ local: positionLocal, wpos: positionWorld, n: normalWorld, eye: cameraPosition, t: rtTime, cfg: lit, color: col }) as unknown as ReturnType<typeof vec3>, 1);
+  mat.transparent = true; mat.blending = THREE.AdditiveBlending; mat.depthWrite = false; mat.side = THREE.DoubleSide; mat.fog = false;
+  mat.name = name;
+  return mat;
+}
+
+/** Beacons point their beam (built along -Y) along the sweep axis; module scratch, no per-frame allocation. */
+const DOWN = new THREE.Vector3(0, -1, 0);
+const scratchAxis = new THREE.Vector3();
+
+function makeBeacon(ctx: GameContext, light: THREE.PointLight, room: number, spin: number, seed: number, group: THREE.Group): Beacon {
+  const pos = light.position.clone();
+  const phase = hash01(seed, 7) * Math.PI * 2;
+  const spot = new THREE.SpotLight(light.color.clone(), 0, BEACON.reach, BEACON.angle, BEACON.penumbra, BEACON.decay);
+  spot.name = `train.beacon-spot:${room}`;
+  spot.position.copy(pos);
+  const ax = beaconAxis(0, spin, phase);
+  spot.target.position.set(pos.x + ax[0] * 3, pos.y + ax[1] * 3, pos.z + ax[2] * 3);
+  spot.castShadow = true;                         // decided at boot, never toggled
+  spot.shadow.mapSize.set(BEACON.shadowSize, BEACON.shadowSize);
+  spot.shadow.bias = -0.001;
+  spot.shadow.radius = 1;
+  spot.shadow.autoUpdate = false;
+  spot.shadow.needsUpdate = true;                 // one render at boot
+  spot.shadow.camera.near = 0.15;
+  spot.shadow.camera.far = BEACON.reach;
+  spot.shadow.camera.layers.enable(SHADOW_HULL_LAYER);
+  spot.userData.onlyRooms = new Set([room]);
+  group.add(spot, spot.target);
+  // The beam: an open cone, apex at the beacon, built along -Y and turned onto the sweep axis.
+  const len = BEACON.reach * 0.6;
+  const geo = new THREE.ConeGeometry(Math.tan(BEACON.angle) * len, len, 24, 1, true).translate(0, -len / 2, 0);
+  const lit = uniform(new THREE.Vector4(0, len, BEACON.beam, 0));
+  const col = uniform(new THREE.Color(BEACON.color[0], BEACON.color[1], BEACON.color[2]));
+  const beam = new THREE.Mesh(geo, beamMaterial(lit, col, 'train.beacon-beam'));
+  beam.name = `train.beacon-beam:${room}`;
+  beam.position.copy(pos);
+  beam.quaternion.setFromUnitVectors(DOWN, scratchAxis.set(ax[0], ax[1], ax[2]));
+  beam.frustumCulled = true;
+  beam.userData.skipLevelLights = true;
+  ctx.boot.handle.scene.add(beam);                // moved to the late-effects scene by adoptLightFx
+  // The housing: a small red dome hanging from the ceiling, lit and glowing with the beacon's level.
+  // A standard node material (a MeshBasicNodeMaterial in the level group is hidden by the deferred
+  // router); it casts no shadow, so it never occludes its own spot.
+  const housing = new MeshStandardNodeMaterial();
+  housing.color.setRGB(0.5, 0.04, 0.03);
+  housing.emissive.setRGB(BEACON.color[0], BEACON.color[1], BEACON.color[2]);
+  housing.emissiveIntensity = 0;
+  housing.roughness = 0.4;
+  housing.name = 'train.beacon-housing';
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI), housing);
+  dome.name = `train.beacon-housing:${room}`;
+  dome.position.copy(pos);
+  dome.castShadow = false;
+  dome.receiveShadow = false;
+  group.add(dome);
+  return { spot, beam, beamLit: lit as unknown as { value: THREE.Vector4 }, housing, pos, spin, phase, shadowFrames: 0 };
+}
+
 /** Once the SDF layer exists: the beams draw after the bodies (sdf-layer lateScene). */
 export function adoptLightFx(ctx: GameContext): void {
   const late = ctx.render.sdfLayer?.lateScene;
   if (!late) return;
-  for (const l of ctx.world.light?.lamps ?? []) if (l.tube) late.add(l.tube.beam);
+  for (const l of ctx.world.light?.lamps ?? []) {
+    if (l.tube) late.add(l.tube.beam);
+    if (l.beacon) late.add(l.beacon.beam);
+  }
 }
 
 type RoomBox = { id: number; minX: number; maxX: number; minZ: number; maxZ: number; height: number };
@@ -271,7 +350,8 @@ export function switchOnFlashlight(ctx: GameContext): void {
 export function runLightCommand(ctx: GameContext, mode: LightMode, room: number): void {
   const rt = ctx.world.light;
   if (!rt) return;
-  for (const l of rt.lamps) if (l.room === room && l.mood !== 'fire') l.script = { mode, at: rt.time };
+  // A beacon is armed by the strobe (it comes on as the strobe ends); other commands apply as usual.
+  for (const l of rt.lamps) if (l.room === room && l.mood !== 'fire') l.script = { mode: scriptFor(mode, !!l.beacon), at: rt.time };
   ctx.telemetry.telemetry.event('light-command', { mode, room });
 }
 
@@ -305,7 +385,8 @@ function findGlass(ctx: GameContext): Glass[] {
     if (!out.some(g => g.mat === mat)) {
       out.push({ room, mat, base: mat.emissiveIntensity, kind });
       // The glass glows the colour of its room's lamps (the cold tubes on Night Train).
-      const lamp = kind === 'lamp' ? ctx.world.light?.lamps.find(l => l.room === room && l.mood !== 'fire') : null;
+      // Not a beacon: the Boiler Room's glass is its lamps', not the emergency red.
+      const lamp = kind === 'lamp' ? ctx.world.light?.lamps.find(l => l.room === room && countsAsRoomLamp(l)) : null;
       if (lamp && mat.emissive) mat.emissive.copy(lamp.light.color);
     }
   }
@@ -333,7 +414,19 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
   const speed = ctx.world.train?.speed ?? 0;
   for (const l of rt.lamps) {
     l.level = lampLevel(l.mood, l.script, t, l.seed);
-    l.light.intensity = l.base * l.level * (l.tube ? TUBE.spill : 1);
+    l.light.intensity = l.beacon ? 0 : l.base * l.level * (l.tube ? TUBE.spill : 1);
+    if (l.beacon) {
+      const bc = l.beacon;
+      bc.spot.intensity = beaconSpotIntensity(l.base, l.level);
+      const ax = beaconAxis(t, bc.spin, bc.phase);
+      bc.spot.target.position.set(bc.pos.x + ax[0] * 3, bc.pos.y + ax[1] * 3, bc.pos.z + ax[2] * 3);
+      bc.spot.target.updateMatrixWorld();
+      bc.beam.quaternion.setFromUnitVectors(DOWN, scratchAxis.set(ax[0], ax[1], ax[2]));
+      bc.beamLit.value.x = l.level;
+      bc.housing.emissiveIntensity = BOWL_EMISSIVE * l.level;
+      // Rotating: re-render its shadow every frame, but only while it is on and the player is in its room.
+      if (l.room === here && l.level > 0) { bc.spot.shadow.needsUpdate = true; bc.shadowFrames++; }
+    }
     if (l.tube) {
       const tb = l.tube;
       tb.spot.intensity = l.base * TUBE.spotGain * l.level;
@@ -349,13 +442,15 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
       if (l.room === here && l.level > 0 && (rt.shadowTick & 1) === 0) tb.spot.shadow.needsUpdate = true;
     }
     if (l.bowl) l.bowl.emissiveIntensity = BOWL_EMISSIVE * l.level;
-    const key = `${l.room}:${l.mood === 'fire' ? 'fire' : 'lamp'}`;
+    const key = `${l.room}:${lampKind(l)}`;   // beacons key their own sum, which no glass reads
     const s = sum.get(key) ?? { n: 0, v: 0 };
     s.n++; s.v += l.level;
     sum.set(key, s);
   }
   const acc = new Map<number, { w: number; v: number }>();
   for (const l of rt.lamps) {
+    // The room fill tracks its lamps and fires, not the beacons (they light bodies through the list).
+    if (!countsForRoomFill(l)) continue;
     const a = acc.get(l.room) ?? { w: 0, v: 0 };
     a.w += l.base; a.v += l.base * Math.min(1, l.level);
     acc.set(l.room, a);
@@ -639,7 +734,12 @@ export function createDynamicLightSeams(ctx: GameContext) {
         time: rt.time,
         flashlight: rt.flashlight.level,
         spotIntensity: ctx.lighting.flashlight.spot.intensity,
-        lamps: rt.lamps.map(l => ({ room: l.room, mood: l.mood, level: l.level, script: l.script?.mode ?? null, scriptAt: l.script?.at ?? null, intensity: l.light.intensity })),
+        lamps: rt.lamps.map(l => ({ room: l.room, mood: l.mood, level: l.level, script: l.script?.mode ?? null, scriptAt: l.script?.at ?? null, intensity: l.light.intensity, beacon: !!l.beacon })),
+        beacons: rt.lamps.filter(l => l.beacon).map(l => {
+          const s = l.beacon!.spot;
+          const ax = s.target.position.clone().sub(s.position).normalize();
+          return { room: l.room, level: l.level, script: l.script?.mode ?? null, intensity: s.intensity, axis: [ax.x, ax.y, ax.z], shadowFrames: l.beacon!.shadowFrames };
+        }),
         windowLights: [...rt.windowLights.keys()],
         windowIntensity: rt.storm?.intensity ?? 0,
         flash: rt.storm?.flash ?? 0,
@@ -647,6 +747,8 @@ export function createDynamicLightSeams(ctx: GameContext) {
         shadowRoom: rt.shadowRoom,
         roomLight: Object.fromEntries(rt.roomLight),
         glass: rt.glass?.length ?? null,
+        /** Each glass: its room, kind, emissive colour and intensity (the Boiler Room glass must not glow beacon red). */
+        glassInfo: rt.glass?.map(g => ({ room: g.room, kind: g.kind, emissive: g.mat.emissive ? [g.mat.emissive.r, g.mat.emissive.g, g.mat.emissive.b] : null, intensity: g.mat.emissiveIntensity })) ?? null,
         nextBolt: rt.storm ? next(rt.storm.schedule.bolts) : null,
         nextSweep: rt.storm ? next(rt.storm.schedule.sweeps) : null,
       };
