@@ -1,6 +1,6 @@
 # The spike flail (first player melee weapon, simplified) — Design
 
-**Date:** 2026-09-26 · **Status:** v1 built (plan 2026-09-26-spike-flail); owner playtest pending
+**Date:** 2026-09-26 · **Status:** v1 built and playtested; v1.1 (§10, whip chain + gradual head damage) in progress
 **Supersedes:** [the censer flail](2026-09-26-censer-flail-design.md). The owner playtested the censer
 (physics head on a rope, dead-zone-driven strokes, tap/hold charge) and scrapped it: "too complicated
 for what it is… very hard to land a good hit… looks way too goofy." This design replaces it with a
@@ -100,3 +100,31 @@ file only reads their output.
 
 Swing motion blur (if not in v1), embers or other flourishes, a line-of-sight check, severed limbs as
 physical debris (its own TASKS row), demo recording of melee input.
+
+## 10. v1.1 — owner playtest feedback (2026-09-27)
+
+Decisions (owner, 2026-09-27), from the first playtest ("already feels better"):
+
+1. **The ball and chain must move like a ball and chain: a whip.** Chosen: a *visual-only* chain
+   simulation, **animation-guided**. A pure module `flail-chain.ts` simulates ~8 rope nodes in view
+   space (position-based: gravity, damping, fixed link lengths, 240 Hz fixed step), pinned at the
+   haft's eye bolt. The ball node is pulled toward the swing's authored ball position by a **guide
+   weight**: loose through the wind-up (the ball lags the haft), ramping to exactly **1.0 at
+   `strikeT`** (the drawn ball sits on `FLAIL_IMPACT`, so hits stay exactly where the strike window
+   puts them), loose again through the follow-through (it whips past and wraps), and a light hold at
+   rest (it hangs and sways). The strike logic is unchanged (`FLAIL_IMPACT`). Walking/turning does
+   not jostle the chain in v1.1 (view-space sim).
+2. **The hand is too small.** `FLAIL_LOOK.handScale` 0.8 → about 1.0, tuned from photos so more of
+   the fist shows at rest.
+3. **Iron look: keep.**
+4. **Weapons clip walls** (all weapons): lower priority, its own TASKS row; not in v1.1.
+5. **Decapitation is too instant: damage the head gradually.** Head-region hits are counted per
+   zombie (a hit whose wound rides a `head` prim, or lands within 0.25 m of the head cluster's
+   centre). Head hits **1–2**: a smaller **0.09 m** crater and **no sever** (`severRadius` 0), so the
+   face and skull cave in progressively. Head hit **3**: the full 0.14 m crater with sever. Body hits
+   unchanged.
+
+Testing adds: chain unit tests (link lengths hold; the ball is exactly on target at guide 1; the
+ball lags a fast anchor; it hangs straight down at rest) and a head-rule unit test; the gate's
+beheading check becomes "head still on after head hits 1 and 2, off on hit 3", with photos of the
+face damage after each hit.

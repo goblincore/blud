@@ -1252,3 +1252,412 @@ git add TASKS.md docs/game/levels/00-the-wake/tasks.md docs/superpowers/specs/20
 git commit -m "docs: spike flail v1 — status, W-B4, playtest hand-off"
 git push
 ```
+
+---
+
+## v1.1 — owner playtest feedback (spec §10, 2026-09-27)
+
+Tasks 8–11. Run them **sequentially**, one implementer at a time: concurrent commits in one
+worktree share one git index. Always commit with an explicit pathspec, and never `git reset`.
+
+### Task 8: The guided chain sim (`flail-chain.ts`, pure)
+
+**Files:**
+- Create: `src/lab/sdf-zombie/webgpu/flail-chain.ts`, `src/lab/sdf-zombie/webgpu/flail-chain.test.ts`
+
+Nodes `0 … n−1` in view space (metres). Node 0 is pinned to the eye bolt. Nodes `1 … n−2` are
+chain; node `n−2` is the ball's ring. Node `n−1` is the ball's centre, one `FLAIL_CHAIN.ringOffset`
+link past the ring. The chain links share `FLAIL_CHAIN.len` evenly.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// src/lab/sdf-zombie/webgpu/flail-chain.test.ts
+import { describe, expect, it } from 'vitest';
+import { FLAIL_CHAIN_SIM, guideWeight, linkRest, makeChain, stepChain, type ChainState } from './flail-chain';
+import { FLAIL_CHAIN, FLAIL_SWING, makeFlailSwing, type FlailSwing } from './flail-swing';
+import type { Vec3 } from '../types';
+
+const DOWN: Vec3 = [0, -1, 0];
+const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const ball = (s: ChainState) => s.p[s.p.length - 1]!;
+const reach = FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset;
+const swingAt = (t: number): FlailSwing => ({ ...makeFlailSwing(), phase: 'swing', t });
+
+describe('stepChain', () => {
+  it('hangs straight down at rest', () => {
+    const a: Vec3 = [0, 0, 0];
+    let s = makeChain(a, [0.2, -0.2, 0]);
+    for (let i = 0; i < 240; i++) s = stepChain(s, a, [0, -reach, 0], FLAIL_CHAIN_SIM.restGuide, DOWN, 1 / 120);
+    expect(ball(s)[1]).toBeCloseTo(-reach, 1);
+    expect(Math.hypot(ball(s)[0], ball(s)[2])).toBeLessThan(0.02);
+  });
+
+  it('keeps every link near its rest length while the anchor moves', () => {
+    let s = makeChain([0, 0, 0], [0, -reach, 0]);
+    let worst = 0;
+    for (let i = 0; i < 240; i++) {
+      const t = i / 120;
+      const a: Vec3 = [0.3 * Math.sin(t * 9), 0.2 * Math.cos(t * 7), 0];
+      s = stepChain(s, a, [a[0], a[1] - reach, a[2]], FLAIL_CHAIN_SIM.swingFloor, DOWN, 1 / 120);
+      for (let k = 0; k < s.p.length - 1; k++) {
+        worst = Math.max(worst, Math.abs(dist(s.p[k]!, s.p[k + 1]!) - linkRest(k)) / linkRest(k));
+      }
+    }
+    expect(worst).toBeLessThan(0.05);
+  });
+
+  it('puts the ball exactly on its target at guide 1 (within reach)', () => {
+    const a: Vec3 = [0, 0, 0];
+    let s = makeChain(a, [0, -reach, 0]);
+    const target: Vec3 = [0.2, -0.1, -0.25];
+    s = stepChain(s, a, target, 1, DOWN, 1 / 60);
+    expect(dist(ball(s), target)).toBeLessThan(1e-9);
+  });
+
+  it('lags a fast-moving anchor, then keeps moving after it stops (the whip)', () => {
+    let s = makeChain([0, 0, 0], [0, -reach, 0]);
+    for (let i = 0; i < 12; i++) {
+      const a: Vec3 = [(0.4 * (i + 1)) / 12, 0, 0];   // 0.4 m in 0.1 s
+      s = stepChain(s, a, [a[0], -reach, 0], FLAIL_CHAIN_SIM.swingFloor, DOWN, 1 / 120);
+    }
+    expect(ball(s)[0]).toBeLessThan(0.4 - 0.05);          // lagging behind
+    const before = ball(s);
+    s = stepChain(s, [0.4, 0, 0], [0.4, -reach, 0], FLAIL_CHAIN_SIM.swingFloor, DOWN, 1 / 120);
+    expect(dist(ball(s), before) * 120).toBeGreaterThan(0.5);   // still moving after the anchor stopped
+  });
+
+  it('is the same whatever the frame split (fixed step)', () => {
+    const a: Vec3 = [0, 0, 0];
+    let s1 = makeChain(a, [0.3, 0, 0]), s2 = makeChain(a, [0.3, 0, 0]);
+    for (let i = 0; i < 60; i++) s1 = stepChain(s1, a, [0, -reach, 0], 0.1, DOWN, 1 / 60);
+    for (let i = 0; i < 120; i++) s2 = stepChain(s2, a, [0, -reach, 0], 0.1, DOWN, 1 / 120);
+    for (let k = 0; k < 3; k++) expect(ball(s2)[k]).toBeCloseTo(ball(s1)[k]!, 9);
+  });
+
+  it('dt <= 0 or NaN leaves the state unchanged', () => {
+    const s = makeChain([0, 0, 0], [0, -reach, 0]);
+    expect(stepChain(s, [0, 0, 0], [0, -reach, 0], 0.1, DOWN, 0)).toBe(s);
+    expect(stepChain(s, [0, 0, 0], [0, -reach, 0], 0.1, DOWN, Number.NaN)).toBe(s);
+  });
+});
+
+describe('guideWeight', () => {
+  it('holds lightly at rest, is exactly 1 at the strike, and loose either side of it', () => {
+    expect(guideWeight(makeFlailSwing())).toBe(FLAIL_CHAIN_SIM.restGuide);
+    expect(guideWeight(swingAt(FLAIL_SWING.strikeT))).toBe(1);
+    expect(guideWeight(swingAt(FLAIL_SWING.strikeT - 0.1))).toBeLessThan(0.1);
+    expect(guideWeight(swingAt(FLAIL_SWING.strikeT + 0.1))).toBeLessThan(0.2);
+  });
+  it('never jumps by more than 0.2 between 240 Hz samples within a swing', () => {
+    let prev = guideWeight(swingAt(0));
+    for (let t = 1 / 240; t < FLAIL_SWING.swingSec; t += 1 / 240) {
+      const g = guideWeight(swingAt(t));
+      expect(Math.abs(g - prev)).toBeLessThan(0.2);
+      prev = g;
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `npm test -- flail-chain`
+Expected: FAIL — `Failed to resolve import "./flail-chain"`.
+
+- [ ] **Step 3: Write the implementation**
+
+```ts
+// src/lab/sdf-zombie/webgpu/flail-chain.ts
+//
+// THE FLAIL'S CHAIN, SIMULATED FOR LOOKS (spec §10.1). Pure. Position-based
+// rope in VIEW space, pinned at the eye bolt; the ball is its heavy last node.
+// The swing's authored ball position is a TARGET the ball is pulled toward by
+// a guide weight: loose through the wind-up (the ball lags the haft — the
+// whip), exactly 1 at strikeT (the drawn ball sits on FLAIL_IMPACT, where the
+// strike window puts the crater), loose again through the follow-through, and
+// a light hold at rest. Hits never read this module.
+//
+// Nodes: 0 = the bolt (pinned) … n−2 = the ball's ring … n−1 = the ball centre.
+
+import type { Vec3 } from '../types';
+import { FLAIL_CHAIN, FLAIL_SWING, type FlailSwing } from './flail-swing';
+
+export const FLAIL_CHAIN_SIM = {
+  nodes: 9,
+  stepHz: 240,
+  maxSubsteps: 24,
+  iterations: 12,
+  /** Air drag, 1/s. */
+  damping: 2.5,
+  gravity: 9.81,
+  /** Inverse mass of the ball node (the links are 1): a heavy ball the chain barely drags. */
+  ballInvMass: 0.2,
+  /** Pull toward the target at guide 1, 1/s (below `pinAt`). */
+  guideRate: 80,
+  /** At or above this guide the ball is pinned exactly on the target. */
+  pinAt: 0.98,
+  restGuide: 0.12,
+  swingFloor: 0.03,
+  /** Seconds before strikeT over which the guide ramps up to 1. */
+  guideWindow: 0.07,
+  /** Seconds after strikeT over which it lets go. */
+  releaseWindow: 0.05,
+  /** Seconds before the swing ends over which it returns to the rest hold. */
+  settleWindow: 0.12,
+} as const;
+
+type M3 = [number, number, number];
+
+export interface ChainState {
+  p: Vec3[];
+  prev: Vec3[];
+  /** The anchor the last substep used. */
+  anchor: Vec3;
+  /** Unsimulated time carried to the next call, seconds. */
+  acc: number;
+}
+
+const N = FLAIL_CHAIN_SIM.nodes;
+
+/** Rest length of link k (node k → k+1). */
+export function linkRest(k: number): number {
+  return k === N - 2 ? FLAIL_CHAIN.ringOffset : FLAIL_CHAIN.len / (N - 2);
+}
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const smooth = (e0: number, e1: number, x: number) => { const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+
+export function guideWeight(s: FlailSwing): number {
+  const C = FLAIL_CHAIN_SIM, S = FLAIL_SWING;
+  if (s.phase === 'idle') return C.restGuide;
+  const t = s.t;
+  if (t <= S.strikeT) return t >= S.strikeT ? 1 : Math.max(C.swingFloor, smooth(S.strikeT - C.guideWindow, S.strikeT, t));
+  const letGo = 1 - smooth(S.strikeT, S.strikeT + C.releaseWindow, t);
+  const settle = smooth(S.swingSec - C.settleWindow, S.swingSec, t) * C.restGuide;
+  return Math.max(C.swingFloor, letGo, settle);
+}
+
+export function makeChain(anchor: Vec3, toward: Vec3): ChainState {
+  const d: M3 = [toward[0] - anchor[0], toward[1] - anchor[1], toward[2] - anchor[2]];
+  const l = Math.hypot(d[0], d[1], d[2]);
+  const u: M3 = l > 1e-9 ? [d[0] / l, d[1] / l, d[2] / l] : [0, -1, 0];
+  const p: Vec3[] = [];
+  let r = 0;
+  for (let i = 0; i < N; i++) {
+    p.push([anchor[0] + u[0] * r, anchor[1] + u[1] * r, anchor[2] + u[2] * r]);
+    if (i < N - 1) r += linkRest(i);
+  }
+  return { p, prev: p.map(q => [q[0], q[1], q[2]] as Vec3), anchor: [anchor[0], anchor[1], anchor[2]], acc: 0 };
+}
+
+export function stepChain(
+  s: ChainState, anchor: Vec3, target: Vec3, guide: number, down: Vec3, dt: number,
+): ChainState {
+  if (!(dt > 0)) return s;
+  const C = FLAIL_CHAIN_SIM;
+  const h = 1 / C.stepHz;
+  const span = s.acc + dt;
+  let steps = Math.floor(span / h + 1e-9);
+  let acc = Math.max(0, span - steps * h);
+  let capped = false;
+  if (steps > C.maxSubsteps) { steps = C.maxSubsteps; acc = 0; capped = true; }
+  if (steps === 0) return { ...s, acc };
+  const p: M3[] = s.p.map(q => [q[0], q[1], q[2]]);
+  const prev: M3[] = s.prev.map(q => [q[0], q[1], q[2]]);
+  const a0 = s.anchor;
+  const decay = Math.exp(-C.damping * h);
+  const g: M3 = [down[0] * C.gravity * h * h, down[1] * C.gravity * h * h, down[2] * C.gravity * h * h];
+  const pin = guide >= C.pinAt;
+  const pull = pin ? 1 : 1 - Math.exp(-C.guideRate * clamp01(guide) * h);
+  const last = N - 1;
+  let lastA: M3 = [a0[0], a0[1], a0[2]];
+  for (let step = 0; step < steps; step++) {
+    const f = Math.min(1, ((step + 1) * h) / span);
+    const a: M3 = [a0[0] + (anchor[0] - a0[0]) * f, a0[1] + (anchor[1] - a0[1]) * f, a0[2] + (anchor[2] - a0[2]) * f];
+    lastA = a;
+    // Verlet for the free nodes.
+    for (let i = 1; i < N; i++) {
+      const q = p[i]!, o = prev[i]!;
+      for (let k = 0; k < 3; k++) {
+        const v = (q[k]! - o[k]!) * decay;
+        o[k] = q[k]!;
+        q[k] = q[k]! + v + g[k]!;
+      }
+    }
+    p[0] = [a[0], a[1], a[2]];
+    // The guide: pull (or pin) the ball toward its authored place.
+    const b = p[last]!;
+    for (let k = 0; k < 3; k++) b[k] = b[k]! + (target[k]! - b[k]!) * pull;
+    // Link constraints.
+    for (let it = 0; it < C.iterations; it++) {
+      for (let i = 0; i < last; i++) {
+        const q0 = p[i]!, q1 = p[i + 1]!;
+        const w0 = i === 0 ? 0 : 1;
+        const w1 = i + 1 === last ? (pin ? 0 : C.ballInvMass) : 1;
+        const wsum = w0 + w1;
+        if (wsum === 0) continue;
+        const dx = q1[0] - q0[0], dy = q1[1] - q0[1], dz = q1[2] - q0[2];
+        const d = Math.hypot(dx, dy, dz) || 1e-9;
+        const c = (d - linkRest(i)) / d / wsum;
+        q0[0] += dx * c * w0; q0[1] += dy * c * w0; q0[2] += dz * c * w0;
+        q1[0] -= dx * c * w1; q1[1] -= dy * c * w1; q1[2] -= dz * c * w1;
+      }
+    }
+    if (pin) { b[0] = target[0]; b[1] = target[1]; b[2] = target[2]; }
+  }
+  const anchorOut: Vec3 = capped ? [anchor[0], anchor[1], anchor[2]] : lastA;
+  return { p, prev, anchor: anchorOut, acc };
+}
+```
+
+- [ ] **Step 4: Run the tests.** Run `npm test -- flail-chain`; all must pass. If "hangs straight down" or
+  "whip" fails, tune `FLAIL_CHAIN_SIM` (`damping`, `iterations`, `ballInvMass`), not the test bounds, and
+  report the measured numbers.
+- [ ] **Step 5: Commit.** Run `npx tsc --noEmit`, then
+  `git commit -m "feat(flail): guided chain sim (visual whip; ball pinned on the impact at the strike)" -- src/lab/sdf-zombie/webgpu/flail-chain.ts src/lab/sdf-zombie/webgpu/flail-chain.test.ts`
+  (add both files first).
+
+---
+
+### Task 9: The gradual head-damage rule (`flail-strike.ts`, pure)
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/flail-strike.ts` and `flail-strike.test.ts`.
+
+- [ ] **Step 1: Write the failing test.** Append:
+
+```ts
+import { FLAIL_HEAD, flailWound, isHeadRegion } from './flail-strike';
+
+describe('gradual head damage', () => {
+  it('a head prim, or a point within regionDist of the head centre, is the head region', () => {
+    expect(isHeadRegion('head', [0, 0, 0], null)).toBe(true);
+    expect(isHeadRegion('torso', [0, 1.4, 0], [0, 1.6, 0])).toBe(true);
+    expect(isHeadRegion('torso', [0, 1.2, 0], [0, 1.6, 0])).toBe(false);
+    expect(isHeadRegion('armL', [0, 1.0, 0], null)).toBe(false);
+  });
+  it('head hits before the last cave the face in without severing; the last one severs', () => {
+    for (let before = 0; before < FLAIL_HEAD.hitsToSever - 1; before++) {
+      expect(flailWound(true, before, 0.14, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0 });
+    }
+    const last = flailWound(true, FLAIL_HEAD.hitsToSever - 1, 0.14, 1.3);
+    expect(last.radius).toBe(0.14);
+    expect(last.severRadius).toBeCloseTo(0.182, 9);
+  });
+  it('body hits are unchanged', () => {
+    expect(flailWound(false, 0, 0.14, 1.3).radius).toBe(0.14);
+    expect(flailWound(false, 7, 0.14, 1.3).severRadius).toBeCloseTo(0.182, 9);
+  });
+});
+```
+
+- [ ] **Step 2: Run it to verify it fails.** Run `npm test -- flail-strike`. It should FAIL on the missing exports.
+- [ ] **Step 3: Implement.** Append to `flail-strike.ts`:
+
+```ts
+/** Gradual head damage (spec §10.5): head-region hits before the last cave the face
+ *  in (a smaller crater, no sever); the last one takes the head off. */
+export const FLAIL_HEAD = { regionDist: 0.25, hitsToSever: 3, faceCraterR: 0.09 } as const;
+
+export function isHeadRegion(limb: string | undefined, point: Vec3, headCentre: Vec3 | null): boolean {
+  if (limb === 'head') return true;
+  if (!headCentre) return false;
+  return Math.hypot(point[0] - headCentre[0], point[1] - headCentre[1], point[2] - headCentre[2]) < FLAIL_HEAD.regionDist;
+}
+
+/** The wound for one hit. `headHitsBefore` counts this actor's earlier head-region hits. */
+export function flailWound(
+  headRegion: boolean, headHitsBefore: number, craterR: number, severMul: number,
+): { radius: number; severRadius: number } {
+  if (!headRegion || headHitsBefore + 1 >= FLAIL_HEAD.hitsToSever) return { radius: craterR, severRadius: craterR * severMul };
+  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0 };
+}
+```
+
+  (`severRadius: 0` blocks the sever; the sever test reads `severRadius ?? radius`, so 0 is not
+  nullish, and the soft-target code already relies on this.)
+- [ ] **Step 4: Run the tests and commit.** Run `npm test -- flail-strike` and `npx tsc --noEmit`, then commit
+  `"feat(flail-strike): gradual head damage rule (face caves in, 3rd head hit severs)"` with a pathspec.
+
+---
+
+### Task 10: Wire it: chain sim rendering, head counter, bigger hand
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/game-flail.ts` (and `game-seams-flail.ts` for the debug readback).
+
+- [ ] **Step 1: Chain rendering.** In `game-flail.ts`, replace the quadratic-curve chain and the drawn-ball
+  clamp with the sim:
+  - keep a `ChainState | null` (made with `makeChain(bolt, pose.ball)` on the first visible frame, and
+    whenever the rig was hidden);
+  - each tick: `bolt` = the eye bolt in rig space (as now);
+    `chain = stepChain(chain, bolt, pose.ball, guideWeight(swing), downInRig, dt)`, where `downInRig` is
+    world down converted into rig space (the same conversion as the current world-down sag), normalised;
+  - draw links along nodes `0 … n−2` (one instanced link per short segment, several per sim link so the
+    chain stays dense: about `FLAIL_LOOK.linkPitch` spacing, oriented along the local tangent and
+    alternating the roll as now);
+  - place the ball at node `n−1`, with its ring facing node `n−2`;
+  - remove the now-unused clamp code and the sag constants.
+
+  Hit logic is unchanged (`FLAIL_IMPACT`).
+- [ ] **Step 2: Head counter.** In `strike()`, for each hit:
+
+```ts
+const posed = a.posed();
+const yaw = a.pose().yaw;
+const field = (q: Vec3) => sdBody(q, posed);
+const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
+const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
+const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC);
+const before = headHits.get(a.id) ?? 0;
+const spec = flailWound(region, before, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
+if (region) headHits.set(a.id, before + 1);
+const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
+w.severRadius = spec.severRadius;
+```
+
+  (`headHits` is a `Map<number, number>` inside `createFlail`.) Keep `clothifyWound`, `blast()`, bleed,
+  hit-stop and kick as now. Add `headHits` for the struck actors to `lastStrike` in `debug()` (e.g.
+  `lastStrike.headHits: Record<id, n>`).
+- [ ] **Step 3: Hand.** Set `FLAIL_LOOK.handScale` 0.8 → 1.0 (tune from photos in Task 11; the shoulder
+  divide-back already handles the scale).
+- [ ] **Step 4: Type-check, test, smoke, commit.** Run `npx tsc --noEmit` and `npm test -- flail game-weapon-slots game-actor`.
+  Boot smoke on Night Train (the .lab-tmp harness): zero console errors. One click must go through swing
+  → idle with 1 strike, and the drawn ball at the strike frame must be within 2 cm of the rig-space
+  `FLAIL_IMPACT` (add a `ballDrawn` rig-space readback to `state()` if needed). Then commit with a pathspec:
+  `"feat(flail): whip chain sim, gradual head damage, bigger hand"`.
+
+---
+
+### Task 11: Gate, look pass, TASKS row, docs and PR
+
+**Files:** `scripts/flail-gate.mjs`, `docs/dev-notes/2026-09-26-flail/NOTES.md`, `TASKS.md`, the spec status,
+and the PR body.
+
+- [ ] **Step 1: Gate.** Replace the beheading check with a **gradual** one, on a fresh zombie at neck
+  height:
+  - after head hit 1 and hit 2: the head is still on (`limbAlive(id,'head') > 0`), and a new wound of
+    radius ≈ 0.09 lands on or near the head;
+  - after hit 3: the head is off.
+
+  Photos: `gate/head-hit-1.png`, `head-hit-2.png`, `head-hit-3.png`. Keep all other checks and the
+  positive controls. Add a **strike-frame ball check**: at the strike frame, the drawn ball is within
+  2 cm of the impact.
+- [ ] **Step 2: Look pass.** Capture the R and L swings frame by frame at 60 Hz (wind-up, strike and
+  follow-through) and LOOK at them:
+  - the ball should visibly trail the haft on the wind-up, then snap through, then whip past and wrap on
+    the follow-through;
+  - at rest it hangs and sways;
+  - the hand shows more fist at rest.
+
+  Tune `FLAIL_CHAIN_SIM` (damping, iterations, guide windows) and `handScale`, recording every change in
+  NOTES. Save a strip `look/whip-R-strip.png` (6–8 frames side by side) and `look/whip-L-strip.png`.
+- [ ] **Step 3: TASKS.md.** Add a row: "**View-model wall clipping** (all weapons): weapons poke through
+  walls when the player stands close; e.g. a view-model depth range / separate pass, or pulling the
+  weapon back near walls. Lower priority (owner, 2026-09-27)." Update the flail row to "v1.1 built
+  (whip chain, gradual head damage); owner playtest pending".
+- [ ] **Step 4: Docs, PR, push.**
+  - Update the NOTES "For the owner" section: what changed in v1.1, and new feel questions.
+  - Set the spec status line: "v1.1 built (§10); owner playtest pending".
+  - Update the PR body with a v1.1 section via `gh pr edit 22 --body-file …`, keeping the ending line
+    `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+  - Commit with a pathspec and `git push`.
