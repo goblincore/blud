@@ -576,7 +576,22 @@ export function applyStormBodyKey(ctx: GameContext, u: { keyColor: { value: THRE
 }
 
 /** How much of a body's baked fill survives when its room's lamps are all out (Doom 3 dark). */
-const BODY_DARK_FLOOR = 0.25;
+export const BODY_DARK_FLOOR = 0.25;
+
+/** The fill factor for a room whose live lamps deliver `lit` (0 dead .. 1 full; rt.roomLight):
+ *  the dark floor plus the rest scaled by the room. Pure. */
+export function fillFactorOf(lit: number): number {
+  return BODY_DARK_FLOOR + (1 - BODY_DARK_FLOOR) * lit;
+}
+
+/** The factor applyRoomFill scales a body's fill by at world (x, z): its room's live lamps through
+ *  fillFactorOf. No light runtime = 1. Bones (Task 11b) scale their ambient by the same factor,
+ *  read at their owner's root. */
+export function roomFillFactor(ctx: GameContext, x: number, z: number): number {
+  const rt = ctx.world.light;
+  if (!rt) return 1;
+  return fillFactorOf(rt.roomLight.get(roomIdAt(ctx, x, z)) ?? 1);
+}
 /** On a storm level the room probes (baked with the stoves and fires) weigh this much against the
  *  cold flat fill, so the dark reads cold, not orange. */
 const STORM_PROBE_WEIGHT = 0.35;
@@ -590,9 +605,7 @@ type FillUniforms = { lightCfg?: { value: { y: number } }; probeCfg?: { value: {
 export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: number): void {
   const rt = ctx.world.light;
   if (!rt || !u.lightCfg || !u.probeCfg) return;
-  const room = roomIdAt(ctx, x, z);
-  const lit = rt.roomLight.get(room) ?? 1;
-  const f = BODY_DARK_FLOOR + (1 - BODY_DARK_FLOOR) * lit;
+  const f = roomFillFactor(ctx, x, z);
   let b = fillBase.get(u);
   const lc = u.lightCfg.value, pc = u.probeCfg.value;
   if (!b || lc.y !== b.wroteFill) { b = { fill: lc.y, gain: b?.gain ?? pc.y, wroteFill: lc.y, wroteGain: b?.wroteGain ?? pc.y }; fillBase.set(u, b); }

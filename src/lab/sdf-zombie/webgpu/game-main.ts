@@ -100,7 +100,7 @@ import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
 import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, writeLightList } from './game-light-list-leaves';
-import { adoptLightFx, applyRoomFill, applySelfShadow, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
+import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -1592,7 +1592,7 @@ async function main() {
       }
       ctx.render.boneInstancer.update([
         ...(ctx.render.boneMesh
-          ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive), lights: a.view.uniforms.bodyLights.value }; })
+          ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive), lights: a.view.uniforms.bodyLights.value, owner: a }; })
           : []),
         ...(ctx.gibs.boneMesh ? ctx.bake.liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
       ]);
@@ -1981,6 +1981,8 @@ async function main() {
           applyBodyLights(ctx, a.view.uniforms, pickBodyFor(bp, a.room, camPos, scratchPickBody));
           a.view.uniforms.bodyFlash.value.w = 0;
           applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]);
+          // Task 11b: the same factor for this actor's bones (their ambient is seeded once).
+          actorFill.set(a, roomFillFactor(ctx, bp[0], bp[2]));
           applySelfShadow(a.view.uniforms);
         } else { a.view.uniforms.lightListCfg.value.x = 0; const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); applySelfShadow(a.view.uniforms); }
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
@@ -2032,10 +2034,10 @@ async function main() {
       // (a chunk's bones, an ejected eye) keeps it in list mode, and `?lightlist=0` (x = 0) is
       // exactly the old path.
       ctx.render.boneInstancer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
-      if (listOn) ctx.render.boneInstancer.syncLights();
+      if (listOn) ctx.render.boneInstancer.syncLights(ownerFill);
       if (ctx.render.segMeshRenderer) {
         ctx.render.segMeshRenderer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
-        if (listOn) ctx.render.segMeshRenderer.syncLights(ownerBodyLights);
+        if (listOn) ctx.render.segMeshRenderer.syncLights(ownerBodyLights, ownerFill);
       }
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
@@ -2496,7 +2498,13 @@ async function main() {
   ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER, ctx.world.light?.list?.node) : null;
   /** A bone-mesh instance's owner picks (Task 11): the owner actor's bodyLights. Hoisted, so the
    *  per-frame syncLights call allocates nothing. */
-  const ownerBodyLights = (o: unknown) => (o as ZombieActor | undefined)?.view.uniforms.bodyLights.value;
+  // `?.view?.`: an owner-less mesh slot (the renderer's fallback slot object) has no view.
+  const ownerBodyLights = (o: unknown) => (o as ZombieActor | undefined)?.view?.uniforms.bodyLights.value;
+  /** Task 11b: each actor's room fill factor this frame (roomFillFactor at its root, the factor
+   *  applyRoomFill scales its body fill by), written in the actor light loop; bones scale their
+   *  ambient by it in list mode. Unknown owner = 1. */
+  const actorFill = new WeakMap<object, number>();
+  const ownerFill = (o: unknown) => (typeof o === 'object' && o !== null ? actorFill.get(o) : undefined) ?? 1;
   if (ctx.render.segMeshRenderer) scene.add(ctx.render.segMeshRenderer.object);
   ctx.render.skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
   ctx.render.segVolumeCache = ctx.render.skeletonMode === 'volume' ? new SegmentVolumeCache() : null;

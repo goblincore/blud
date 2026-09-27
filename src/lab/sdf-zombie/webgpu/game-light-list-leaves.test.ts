@@ -3,7 +3,8 @@ import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type TunnelL
 import { buildLightList, roomMaskOf } from './light-list';
 import { PROFILE_ID } from './light-profiles';
 import { lightPresence } from './light-pick';
-import { BODY_LAMP_GAIN, BODY_WINDOW_GAIN, PRESENT } from './game-dynamic-light-leaves';
+import { BODY_DARK_FLOOR, BODY_LAMP_GAIN, BODY_WINDOW_GAIN, PRESENT, fillFactorOf, roomFillFactor } from './game-dynamic-light-leaves';
+import type { GameContext } from './game-context';
 import { LAMP_LIST_TRIM, OLD_BEAM_GAIN, OLD_BODY_FLASH_GAIN, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, PROFILES_BY_NAME } from './light-profiles';
 import { makeVfxState } from './game-state-vfx';
 import { makeLightingState } from './game-state-lighting';
@@ -140,5 +141,26 @@ describe('the body-key calibration mirrors the old path (Task 10)', () => {
     expect(s.map(x => x.refIntensity)).toEqual([3, 90]);
     const list = buildLightList(s);
     expect(list.map(l => l.bodyNorm).sort()).toEqual([1 / 90, 1 / 3].sort());
+  });
+});
+
+describe('the room fill factor (Task 11b: bones follow the body\'s room fill)', () => {
+  it('fillFactorOf: the dark floor when the room is dead, 1 when it is fully lit, linear between', () => {
+    expect(BODY_DARK_FLOOR).toBe(0.25);
+    expect(fillFactorOf(0)).toBe(0.25);
+    expect(fillFactorOf(1)).toBe(1);
+    expect(fillFactorOf(0.5)).toBeCloseTo(0.625, 12);
+  });
+  it('roomFillFactor reads the room at (x, z) through roomLight; no runtime or unknown room = 1', () => {
+    const ctx = (light: unknown) => ({
+      world: {
+        light,
+        level: { keyAt: (x: number) => (x < 0 ? 'dead' : 'lit'), rooms: [{ name: 'dead', id: 3 }, { name: 'lit', id: 4 }] },
+      },
+    }) as unknown as GameContext;
+    const rt = { roomLight: new Map([[3, 0]]) };
+    expect(roomFillFactor(ctx(rt), -1, 0)).toBe(0.25);
+    expect(roomFillFactor(ctx(rt), 1, 0)).toBe(1);        // room 4 has no entry: lit
+    expect(roomFillFactor(ctx(undefined), -1, 0)).toBe(1);
   });
 });

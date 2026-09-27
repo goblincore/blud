@@ -103,8 +103,12 @@ export interface SegmentMeshRenderer {
   /** Copy each drawn instance's OWNER picks into its batch's iLights (shared light list, Task
    *  11): `lightsOf(owner)` is the owner actor's `bodyLights` value, read NOW, so call it after
    *  this frame's picks are written (the game's light loop runs after update). Undefined/null =
-   *  no owner picks (the instance keeps the old key). Allocation-free. */
-  syncLights(lightsOf: (owner: unknown) => PicksLike | null | undefined): void;
+   *  no owner picks (the instance keeps the old key). `fillOf(owner)` (Task 11b) is the owner
+   *  room's fill factor, written to iFill (the list branch scales the bone ambient by it); omitted,
+   *  or an owner with no picks: 1. Allocation-free. */
+  syncLights(lightsOf: (owner: unknown) => PicksLike | null | undefined, fillOf?: (owner: unknown) => number): void;
+  /** Diagnostic: the iFill values of this owner's drawn instances, eyes included. */
+  ownerFill(owner: unknown): number[];
   /** Diagnostic: the iLights rows (4 packed picks each) of this owner's drawn instances, eyes
    *  included, as last written by syncLights. */
   ownerLights(owner: unknown): number[][];
@@ -164,6 +168,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // The owner's 4 list lights, per instance (iLights, an InstancedBufferAttribute on every batch
   // geometry, sized with the batch). The eye material reads it too (it reuses `lit`).
   const picksAttr = attribute('iLights', 'vec4');
+  // The owner room's fill factor (Task 11b), per instance beside iLights, grown in step with it.
+  const fillAttr = attribute('iFill', 'float');
   const listNode = (lightList ?? fallbackLightListNode()) as never;
   const featureAttr = attribute('meshFeature', 'vec4');
   const surf = surfaceFn({
@@ -187,7 +193,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
     surfaceIn: surface as never,
-    picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x,
+    picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x, fill: fillAttr,
   }) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
@@ -216,6 +222,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // instance, no owner: the old key). Their own geometry, so the eye batch can grow its attribute.
   const debrisEyeGeometry = eyeGeometry.clone();
   debrisEyeGeometry.setAttribute('iLights', new THREE.InstancedBufferAttribute(new Float32Array(4).fill(NO_OWNER_PICKS), 4));
+  debrisEyeGeometry.setAttribute('iFill', new THREE.InstancedBufferAttribute(new Float32Array(1).fill(1), 1));
   let absent = new WeakMap<object, Set<number>>();
   const debris: { mesh: THREE.Mesh; velocity: THREE.Vector3; age: number; owner: object }[] = [];
   material.depthWrite = true;
@@ -230,15 +237,29 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // segment-local appearance (patches, teeth, iris) must stay in the segment's own frame.
   interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; idle: number; owners: unknown[] }
   const batches = new Map<THREE.BufferGeometry, Batch>();
-  /** The geometry's iLights, at least `cap` instances (grown in step with the batch, contents kept). */
-  const ensureLights = (geometry: THREE.BufferGeometry, cap: number): THREE.InstancedBufferAttribute => {
-    const cur = geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute | undefined;
+  /** The geometry's per-instance `name` attribute (itemSize floats, `init` fill), at least `cap`
+   *  instances (grown in step with the batch, contents kept). */
+  const ensureInstanced = (geometry: THREE.BufferGeometry, name: string, itemSize: number, init: number, cap: number): THREE.InstancedBufferAttribute => {
+    const cur = geometry.getAttribute(name) as THREE.InstancedBufferAttribute | undefined;
     if (cur && cur.count >= cap) return cur;
-    const next = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4).fill(NO_OWNER_PICKS), 4);
+    const next = new THREE.InstancedBufferAttribute(new Float32Array(cap * itemSize).fill(init), itemSize);
     next.setUsage(THREE.DynamicDrawUsage);
     if (cur) (next.array as Float32Array).set(cur.array as Float32Array);
-    geometry.setAttribute('iLights', next);
+    geometry.setAttribute(name, next);
     return next;
+  };
+  /** iLights (4 packed picks) and iFill (1 float), both sized to `cap` instances. */
+  const ensureLights = (geometry: THREE.BufferGeometry, cap: number) => {
+    ensureInstanced(geometry, 'iLights', 4, NO_OWNER_PICKS, cap);
+    ensureInstanced(geometry, 'iFill', 1, 1, cap);
+  };
+  /** Upload only the live instances (M3): the attribute is DynamicDrawUsage, so three uploads it
+   *  every frame, whole, unless a range is set; r186's WebGPU backend honours BufferAttribute
+   *  updateRanges (and clears them after the write). */
+  const markLive = (attr: THREE.InstancedBufferAttribute, count: number) => {
+    attr.clearUpdateRanges();
+    attr.addUpdateRange(0, Math.max(count, 1) * attr.itemSize);
+    attr.needsUpdate = true;
   };
   const batchFor = (geometry: THREE.BufferGeometry, eye: boolean): Batch => {
     let b = batches.get(geometry);
@@ -408,18 +429,23 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       }
       group.visible = stats.segments > 0;
     },
-    syncLights(lightsOf) {
+    syncLights(lightsOf, fillOf) {
       for (const b of batches.values()) {
         if (b.count === 0) continue;
         const attr = b.mesh.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute;
+        const fAttr = b.mesh.geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute;
         const arr = attr.array as Float32Array;
+        const fArr = fAttr.array as Float32Array;
         for (let i = 0; i < b.count; i++) {
-          const l = lightsOf(b.owners[i]);
+          const owner = b.owners[i];
+          const l = lightsOf(owner);
           const o = i * 4;
           if (l) { arr[o] = l.x; arr[o + 1] = l.y; arr[o + 2] = l.z; arr[o + 3] = l.w; }
           else { arr[o] = NO_OWNER_PICKS; arr[o + 1] = NO_OWNER_PICKS; arr[o + 2] = NO_OWNER_PICKS; arr[o + 3] = NO_OWNER_PICKS; }
+          fArr[i] = l && fillOf ? fillOf(owner) : 1;
         }
-        attr.needsUpdate = true;
+        markLive(attr, b.count);
+        markLive(fAttr, b.count);
       }
     },
     ownerLights(owner) {
@@ -427,6 +453,14 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       for (const b of batches.values()) {
         const arr = (b.mesh.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).array as Float32Array;
         for (let i = 0; i < b.count; i++) if (b.owners[i] === owner) out.push(Array.from(arr.subarray(i * 4, i * 4 + 4)));
+      }
+      return out;
+    },
+    ownerFill(owner) {
+      const out: number[] = [];
+      for (const b of batches.values()) {
+        const arr = (b.mesh.geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute).array as Float32Array;
+        for (let i = 0; i < b.count; i++) if (b.owners[i] === owner) out.push(arr[i]!);
       }
       return out;
     },

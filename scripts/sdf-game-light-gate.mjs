@@ -142,6 +142,22 @@ const stats = (img, fx0, fy0, fx1, fy1) => {
   return { v, mean, std: Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / v.length) };
 };
 
+/** Mean luminance (0..1) over the ring rIn..rOut px around (cx, cy), clipped to the frame. */
+const ringMean = (img, cx, cy, rIn, rOut) => {
+  const { w, h, ch, data } = img; let sum = 0, n = 0;
+  for (let y = Math.max(0, Math.floor(cy - rOut)); y < Math.min(h, Math.ceil(cy + rOut)); y++) {
+    for (let x = Math.max(0, Math.floor(cx - rOut)); x < Math.min(w, Math.ceil(cx + rOut)); x++) {
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < rIn || d > rOut) continue;
+      const i = (y * w + x) * ch; sum += (data[i] + data[i + 1] + data[i + 2]) / 765; n++;
+    }
+  }
+  return n ? sum / n : 0;
+};
+/** Skull disc radius and hood ring radii, in units of the skull's projected half-width. */
+const SKULL_DISC = 0.7, RING_IN = 1.25, RING_OUT = 1.6;
+const SKULL_FLESH_MAX = 1.5;
+
 const settle = (ms = 700) => sleep(ms);
 
 const lights = () => evaluate('__sdfGame.lights()');
@@ -384,7 +400,9 @@ const listOn = await listScenes('on');
 // 8. BONES READ THE SAME LIGHTS (plan 1, Task 11): the skull catches the muzzle flash. In the dark
 // coat check (nothing picks the body), a slug crater opens the face of the nearest actor to its
 // mesh skull; the player's muzzle flash (held by hand-stepping at dt 0) must be among the skull
-// instances' own picks (iLights = the owner's bodyLights), and the crater crop brightens.
+// instances' own picks (iLights = the owner's bodyLights), and the crater crop brightens. Before the
+// flash (Task 11b) the skull may not glow: its bone fill is the body's dark-room factor and the skull
+// disc is at most 1.5x the hood ring around it.
 // LIGHT_GATE_SHOT=<dir> keeps skull-noflash-<tag>.png / skull-flash-<tag>.png. The ?lightlist=0
 // boot runs the same scene for the record (the old key path: no picks, the flash rides the beam).
 async function skullScene(tag) {
@@ -411,7 +429,16 @@ async function skullScene(tag) {
   const rPx = Math.max(12, Math.min(60, (w.radius / 0.9) * (H / 2) / Math.tan((35 * Math.PI) / 180) * 0.7));
   const box = [(sp.x - rPx) / W, (sp.y - rPx) / H, (sp.x + rPx) / W, (sp.y + rPx) / H];
   const before = await evaluate(`__sdfGame.boneLights(${a.id})`);
-  const skullOff = stats(await shoot(`skull-noflash-${tag}`), ...box).mean;
+  const imgOff = await shoot(`skull-noflash-${tag}`);
+  const skullOff = stats(imgOff, ...box).mean;
+  // Task 11b: the exposed skull vs the flesh around it, in the same frame, centred on the
+  // projected head bound (the crater box above sits off the skull's centre): a disc inside the
+  // skull and a ring on the hood just outside it, both in units of the skull's projected half-width.
+  const hc = await evaluate(`__sdfGame.worldToScreen(${hit.headCenter.join(', ')}, ${W}, ${H})`);
+  const he = await evaluate(`__sdfGame.worldToScreen(${hit.headEdge.join(', ')}, ${W}, ${H})`);
+  const hR = Math.hypot(he.x - hc.x, he.y - hc.y);
+  const boneOff = ringMean(imgOff, hc.x, hc.y, 0, hR * SKULL_DISC);
+  const fleshOff = ringMean(imgOff, hc.x, hc.y, hR * RING_IN, hR * RING_OUT);
   const woundsBefore = (await evaluate(`__sdfGame.actorWounds(${a.id})`)).length;
   // The flash alone (no shot: Night Train's player owns no shotgun here), the same flash clock fire() restarts.
   const fired = await evaluate('__sdfGame.muzzleFlash()');
@@ -423,10 +450,10 @@ async function skullScene(tag) {
   const LLf = await evaluate('__sdfGame.lightList()');
   const woundsAfter = (await evaluate(`__sdfGame.actorWounds(${a.id})`)).length;
   const muzzleIdx = LLf.map((l, i) => (l.profile === 'muzzle' ? i : -1)).filter((i) => i >= 0);
-  if (process.env.LIGHT_GATE_DEBUG) console.log('DBG skull', JSON.stringify({ hit, w, sp, rPx, fired, before, after, muzzleIdx, woundsBefore, woundsAfter }));
+  if (process.env.LIGHT_GATE_DEBUG) console.log('DBG skull', JSON.stringify({ hit, w, sp, rPx, hc, hR, boneOff, fleshOff, fired, before, after, muzzleIdx, woundsBefore, woundsAfter }));
   if (tag === 'off') {
     if (after?.listOn !== 0) fail(`skull (?lightlist=0): bone renderer list switch on: ${JSON.stringify(after)}`);
-    return { skullOff, skullOn };
+    return { skullOff, skullOn, boneOff, fleshOff };
   }
   if (muzzleIdx.length === 0) fail(`skull: no muzzle light in the list after fire(): ${JSON.stringify(LLf.map((l) => l.profile))}`);
   if (!after || after.listOn !== 1) fail(`skull: bone renderer list switch off: ${JSON.stringify(after)}`);
@@ -436,8 +463,17 @@ async function skullScene(tag) {
   if (withMuzzle !== after.instances.length) fail(`skull: ${withMuzzle}/${after.instances.length} bone instances pick the muzzle light (${muzzleIdx}): ${JSON.stringify(after.instances[0])} body ${JSON.stringify(after.body)}`);
   if (before.instances.some((row) => row.some((v) => v >= 0 && muzzleIdx.includes(idx(v))))) fail(`skull: muzzle picked before the flash: ${JSON.stringify(before.instances[0])}`);
   if (!(skullOn > skullOff * 1.15 && skullOn - skullOff > 0.02)) fail(`skull: crater crop did not brighten in the flash: ${skullOff.toFixed(3)} -> ${skullOn.toFixed(3)}`);
+  // Task 11b: NO GLOW in the dark. The bone ambient follows the owner's room fill (the body's
+  // applyRoomFill factor), so with nothing picking the body the skull may not sit far above the
+  // flesh around it: skull disc mean <= SKULL_FLESH_MAX x the hood ring mean. Measured at Task 11b:
+  // 1.73x before the fix (the ambient seeded once, at full), 1.18x after; ?lightlist=0 reads ~1.8x
+  // (the old path, untouched on purpose). Every bone instance carries the body's fill factor, < 1 in this dead room.
+  const fills = before.fill ?? [];
+  if (!fills.length || fills.some((f) => !(f < 0.999)) || Math.max(...fills) - Math.min(...fills) > 1e-6) fail(`skull: bone fill not the owner's dark-room factor: ${JSON.stringify(fills)}`);
+  if (!(boneOff <= fleshOff * SKULL_FLESH_MAX)) fail(`skull glows in the dark: skull ${boneOff.toFixed(3)} vs surrounding flesh ${fleshOff.toFixed(3)} (${(boneOff / fleshOff).toFixed(2)}x > ${SKULL_FLESH_MAX}x)`);
+  pass(`skull does not glow in the dark coat check: bone fill ${fills[0].toFixed(3)} x ${fills.length}; skull ${boneOff.toFixed(3)} vs surrounding flesh ${fleshOff.toFixed(3)} (${(boneOff / fleshOff).toFixed(2)}x <= ${SKULL_FLESH_MAX}x)`);
   pass(`skull catches the muzzle flash: actor ${a.id}, ${withMuzzle}/${after.instances.length} bone instances pick muzzle light ${muzzleIdx} (skull picks ${JSON.stringify(after.instances[0].map((v) => +v.toFixed(3)))}); crater crop mean ${skullOff.toFixed(3)} -> ${skullOn.toFixed(3)} (${(skullOn / skullOff).toFixed(2)}x)`);
-  return { skullOff, skullOn };
+  return { skullOff, skullOn, boneOff, fleshOff };
 }
 const skullListOn = await skullScene('on');
 await listBoot('level=night-train&frozen&god&lightlist=0');
@@ -445,6 +481,7 @@ if ((await evaluate('__sdfGame.bodyPicks()')).some((p) => p.picks.some((k) => k.
 const listOff = await listScenes('off');
 const skullListOff = await skullScene('off');
 console.log(`     skull      on  crater ${skullListOn.skullOff.toFixed(3)} -> flash ${skullListOn.skullOn.toFixed(3)} | off crater ${skullListOff.skullOff.toFixed(3)} -> flash ${skullListOff.skullOn.toFixed(3)}`);
+console.log(`     skull/flesh on  ${skullListOn.boneOff.toFixed(3)} / ${skullListOn.fleshOff.toFixed(3)} = ${(skullListOn.boneOff / skullListOn.fleshOff).toFixed(2)}x | off ${skullListOff.boneOff.toFixed(3)} / ${skullListOff.fleshOff.toFixed(3)} = ${(skullListOff.boneOff / skullListOff.fleshOff).toFixed(2)}x`);
 for (const sc of SCENES) console.log(`     ${sc.name.padEnd(10)} on  ${fmt(listOn[sc.name])} | off ${fmt(listOff[sc.name])}`);
 // Calibrated to today (Task 10): under a tube, a held bolt and the flashlight the body is neither
 // darker than ?lightlist=0 (>= 0.9x) nor blown out (<= 1.2x; the first uncalibrated cut was flat white).

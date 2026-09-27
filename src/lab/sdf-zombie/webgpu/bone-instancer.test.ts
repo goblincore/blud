@@ -36,6 +36,7 @@ describe('packBoneInstances', () => {
     closeArr(arrays.ab.subarray(o * 1 + 9, o * 1 + 11), [0.02, 0.01]);
     closeArr(arrays.ab.subarray(o * 1 + 11, o * 1 + 14), [1.2, 1, 1]);
     closeArr(arrays.ab.subarray(o * 1 + 14, o * 1 + 18), [0, 0, 0, 1]);
+    expect(arrays.ab[o * 1 + 22]).toBe(1);   // iFill: packed owner-less (1) until syncLights
   });
   it('clamps at capacity and reports overflow', () => {
     const arrays = boneInstanceArrays(2);
@@ -169,9 +170,10 @@ describe('router eligibility through the actual material (not the handle)', () =
 });
 
 describe('shared light list (plan 1, Task 11): each tube takes its owner\'s 4 lights', () => {
-  it('INSTANCE_FLOATS is 22 and iLights sits at float 18', async () => {
+  it('INSTANCE_FLOATS is 23, iLights sits at float 18 and iFill at 22', async () => {
     const m = await import('./bone-instancer');
-    expect(INSTANCE_FLOATS).toBe(22);
+    expect(INSTANCE_FLOATS).toBe(23);
+    expect(m.IFILL_OFFSET).toBe(22);
     expect(m.ILIGHTS_OFFSET).toBe(18);
     expect(m.NO_OWNER_PICKS).toBe(-2);
   });
@@ -182,10 +184,20 @@ describe('shared light list (plan 1, Task 11): each tube takes its owner\'s 4 li
     expect(call).toBeGreaterThan(i);
     // the list branch keeps ambient, AO, the gloss (look.z) and the fresnel
     const branch = BONE_SHADE_WGSL.slice(i, BONE_SHADE_WGSL.indexOf('var L = normalize(lightDir);'));
-    for (const t of ['ambient + bl.diffuse', 'bl.spec * look.z', 'fresL', 'bl.rim', 'aoL']) expect(branch).toContain(t);
+    for (const t of ['ambient * fill + bl.diffuse', 'bl.spec * look.z', 'fresL', 'bl.rim', 'aoL']) expect(branch).toContain(t);
     // the old key path is still there, after the branch
     expect(BONE_SHADE_WGSL.indexOf('keyI * keyC * (0.15 + 0.85 * ndl)')).toBeGreaterThan(call);
-    expect(BONE_SHADE_WGSL).toContain('lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32');
+    expect(BONE_SHADE_WGSL).toContain('lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, fill: f32');
+  });
+  it('Task 11b: the ambient is scaled by the room fill in the list branch only', () => {
+    const i = BONE_SHADE_WGSL.indexOf('if (listOn > 0.5 && picks.x > -1.5) {');
+    const oldAt = BONE_SHADE_WGSL.indexOf('var L = normalize(lightDir);');
+    const branch = BONE_SHADE_WGSL.slice(i, oldAt);
+    expect(branch).toContain('surfaceIn.xyz * (ambient * fill + bl.diffuse) * aoL');
+    // the old path is untouched: `?lightlist=0` stays exact
+    const old = BONE_SHADE_WGSL.slice(oldAt).replace(/\/\/.*$/gm, '');
+    expect(old).not.toMatch(/\bfill\b/);
+    expect(old).toContain('albedo * (ambient + keyI * keyC * (0.15 + 0.85 * ndl)) * ao');
   });
   it('update writes each instance\'s owner picks (read again at syncLights); no owner = -2', () => {
     const inst = createBoneInstancer(8);
@@ -201,6 +213,34 @@ describe('shared light list (plan 1, Task 11): each tube takes its owner\'s 4 li
     inst.syncLights();
     closeArr(row(0), [5.5, 3.25, -1, -1]);
     expect(inst.uniforms.lightListCfg.value.x).toBe(0);   // off until the game turns it on
+    inst.dispose();
+  });
+  it('Task 11b: syncLights writes fillOf(owner) into iFill; no owner or no fillOf = 1', () => {
+    const inst = createBoneInstancer(8);
+    const actorA = { name: 'a' }, actorB = { name: 'b' };
+    const picks = { x: 0.9, y: -1, z: -1, w: -1 };
+    inst.update([
+      { prims: [bone({}), bone({})], alive: [true, true], lights: picks, owner: actorA },
+      { prims: [bone({})], alive: [true, true], lights: picks, owner: actorB },
+      { prims: [bone({ cluster: 0 })] },
+    ]);
+    const fill = (k: number) => inst.instances[k * INSTANCE_FLOATS + 22];
+    // update alone (no fillOf): every row 1
+    for (let k = 0; k < 4; k++) expect(fill(k)).toBe(1);
+    const seen: unknown[] = [];
+    inst.syncLights(o => { seen.push(o); return o === actorA ? 0.25 : 0.6; });
+    expect(fill(0)).toBeCloseTo(0.25, 6);
+    expect(fill(1)).toBeCloseTo(0.25, 6);
+    expect(fill(2)).toBeCloseTo(0.6, 6);
+    expect(fill(3)).toBe(1);                      // the chunk bone: no owner
+    expect(seen).toEqual([actorA, actorB]);       // one lookup per owner run, never for no owner
+    // the row stride and offset are what the shader attribute reads
+    const attr = inst.object.geometry.getAttribute('iFill') as THREE.InterleavedBufferAttribute;
+    expect(attr.offset).toBe(22);
+    expect(attr.data.stride).toBe(23);
+    expect(attr.itemSize).toBe(1);
+    // M3: only the live rows upload
+    expect(attr.data.updateRanges).toEqual([{ start: 0, count: 4 * INSTANCE_FLOATS }]);
     inst.dispose();
   });
 });

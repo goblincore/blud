@@ -259,3 +259,30 @@ dependency pre-bundle. Its second run is 5.45 s, level with head.
 - **Draws.** Unchanged by construction: an attribute on existing meshes, no new mesh or material.
 - **Cold boot** (loaded machine, alternating): head drawOnce 1608 / 1903 / 3539 / 2239 / 3028 ms,
   base 1400 / 1655 / 2147 / 2432 / 3973 ms; medians 2239 vs 2147, inside the noise.
+
+## Task 11b: bone fill follows the owner's room
+
+- **The bug (review I1).** Bone `ambient` is a uniform seeded once at spawn, while the body's fill
+  is rescaled every frame by `applyRoomFill`. In a dead carriage the skull glowed pale inside a
+  near-black body.
+- **Fix, list mode only.** `roomFillFactor(ctx, x, z)` returns the factor `applyRoomFill` uses:
+  `fillFactorOf(roomLight)`, which is `BODY_DARK_FLOOR + (1 - floor) * lit` (pure, unit-tested).
+  `applyRoomFill` now calls it, so its behaviour is unchanged. game-main writes each actor's factor,
+  taken at its root, into a WeakMap during the actor light loop. `syncLights(..., ownerFill)`
+  copies it into iFill. For tubes that is float 22 (`INSTANCE_FLOATS` 23; the `probe-dynamic`
+  mirror follows, and the test now uses the imported constant). For bone meshes it is a 1-float
+  `InstancedBufferAttribute` per batch, eyes included, grown alongside iLights. Instances with no
+  owner get 1. `boneShade`'s list branch uses `ambient * fill`, and the old branch is untouched,
+  so `?lightlist=0` is exact.
+- **Minors.** `ownerBodyLights` reads `?.view?.` (M1). M3: in r186, three uploads a
+  `DynamicDrawUsage` attribute every frame, and without update ranges it uploads the whole buffer.
+  The WebGPU backend honours `updateRanges` on both `InstancedBufferAttribute` and
+  `InstancedInterleavedBuffer` (element units, cleared after each write). The tube buffer and the
+  mesh iLights/iFill now set `[0, live * itemSize)`.
+- **Gate.** Coat check, no flash, list on. Every bone instance carries fill 0.250. The regions are
+  centred on the projected head bound, because the crater box sits off the skull's centre: a skull
+  disc (0.7 x the projected half-width) and a hood ring (1.25..1.6). Skull/flesh reads 0.070 /
+  0.059 = 1.18x; the bound is 1.5x. With the fill forced to 1 (the pre-fix look) it read 0.118 /
+  0.069 = 1.73x. `?lightlist=0` reads 0.116 / 0.064 = 1.81x (the old path, left alone on purpose).
+  The flash check still passes: crater 0.062 -> 0.539 (8.7x; it was 0.091 -> 0.550, and the
+  darker start is the fix).

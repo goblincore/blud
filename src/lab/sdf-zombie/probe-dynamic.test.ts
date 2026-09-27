@@ -240,8 +240,8 @@ describe('packBoxes', () => {
 });
 
 describe('packCapsulesFromBoneInstances', () => {
-  // bone-instancer layout: a.xyz, b.xyz, c.xyz, r1, r2, scale.xyz, orient.xyzw, iLights.xyzw
-  const INSTANCE_FLOATS = 22;
+  // bone-instancer layout: a.xyz, b.xyz, c.xyz, r1, r2, scale.xyz, orient.xyzw, iLights.xyzw,
+  // iFill (INSTANCE_FLOATS, imported above: the real stride, not a copy)
 
   function abOf(rows: {
     a: Vec3; b: Vec3; c: Vec3; r1: number; r2: number; scale: Vec3;

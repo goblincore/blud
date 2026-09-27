@@ -189,4 +189,52 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
     renderer.dispose();
     cache.dispose();
   });
+  const iFill = (r: ReturnType<typeof createSegmentMeshRenderer>, eye: boolean) => {
+    const m = r.object.children.find(c => (c as THREE.InstancedMesh).isInstancedMesh && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as THREE.InstancedMesh;
+    return { m, a: m.geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute };
+  };
+  it('Task 11b: writes the owner\'s room fill into iFill, segment and eyes; no picks or no fillOf = 1', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const actor = { id: 1, bodyLights: [0.9, -1, -1, -1], fill: 0.3 };
+    const fillOf = (o: unknown) => (o as { fill: number }).fill;
+    renderer.update([[headSrc]], [actor]);
+    renderer.syncLights(lightsOf, fillOf);
+    const seg = iFill(renderer, false);
+    expect(seg.a.isInstancedBufferAttribute).toBe(true);
+    expect(seg.a.itemSize).toBe(1);
+    expect(seg.a.array[0]).toBeCloseTo(0.3, 6);
+    const eye = iFill(renderer, true);
+    expect(eye.m.count).toBeGreaterThan(0);
+    for (let i = 0; i < eye.m.count; i++) expect(eye.a.array[i]).toBeCloseTo(0.3, 6);
+    expect(renderer.ownerFill(actor).every(f => Math.abs(f - 0.3) < 1e-6)).toBe(true);
+    // M3: only the live instances upload
+    expect(seg.a.updateRanges).toEqual([{ start: 0, count: 1 }]);
+    expect(eye.a.updateRanges).toEqual([{ start: 0, count: eye.m.count }]);
+    // the owner's room lights up again: the next sync follows
+    actor.fill = 1;
+    renderer.syncLights(lightsOf, fillOf);
+    expect(seg.a.array[0]).toBeCloseTo(1, 6);
+    // no fillOf, or no owner picks (the old key): 1
+    actor.fill = 0.25;
+    renderer.syncLights(lightsOf);
+    expect(seg.a.array[0]).toBe(1);
+    renderer.syncLights(() => undefined, fillOf);
+    expect(seg.a.array[0]).toBe(1);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('Task 11b: grows iFill in step with the batch, per-owner values intact', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owners = Array.from({ length: 40 }, (_, i) => ({ id: i, bodyLights: [i + 0.5, -1, -1, -1], fill: 0.25 + i / 80 }));
+    renderer.update(owners.map(() => [headSrc]), owners);
+    renderer.syncLights(lightsOf, o => (o as { fill: number }).fill);
+    const { m, a } = iFill(renderer, false);
+    expect(m.count).toBe(40);
+    expect(a.count).toBeGreaterThanOrEqual(m.instanceMatrix.count);
+    for (let i = 0; i < 40; i++) expect(a.array[i]).toBeCloseTo(0.25 + i / 80, 5);
+    renderer.dispose();
+    cache.dispose();
+  });
 });

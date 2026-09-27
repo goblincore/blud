@@ -23,13 +23,18 @@ import { encodeSurfaceClass, SURFACE_CLASS_MESH, type SurfaceOutputOptions } fro
 import { BODY_LIGHTS } from './march/body-lights.wgsl';
 import { fallbackLightListNode } from './zombie-gpu';
 
-/** 18 geometry floats + the owner's 4 packed light picks (iLights, shared light list Task 11). */
-export const INSTANCE_FLOATS = 22;
+/** 18 geometry floats + the owner's 4 packed light picks (iLights, shared light list Task 11)
+ *  + the owner room's fill factor (iFill, Task 11b). */
+export const INSTANCE_FLOATS = 23;
 /** Float offset of iLights in an instance row: the owner actor's `bodyLights` (4 packed
  *  `index + weight`, -1 empty). NO_OWNER_PICKS marks an instance with no owning actor (a chunk's
  *  bones): it keeps the old single key even in list mode. */
 export const ILIGHTS_OFFSET = 18;
 export const NO_OWNER_PICKS = -2;
+/** Float offset of iFill: the owner's room fill factor (roomFillFactor at the owner's root, the
+ *  factor applyRoomFill scales the body's fill by). The list branch scales the bone ambient by it,
+ *  so bone darkens with its body when the room's lamps die. Owner-less = 1. */
+export const IFILL_OFFSET = 22;
 /** The x/y/z/w of a light-picks vec4 (a THREE.Vector4, the actor view's `bodyLights` value). */
 export interface PicksLike { x: number; y: number; z: number; w: number }
 
@@ -63,6 +68,7 @@ export function packBoneInstances(
     out.ab.set(s.scale, o + 11); out.ab.set(s.orient, o + 14);
     out.ab[o + 18] = NO_OWNER_PICKS; out.ab[o + 19] = NO_OWNER_PICKS;
     out.ab[o + 20] = NO_OWNER_PICKS; out.ab[o + 21] = NO_OWNER_PICKS;
+    out.ab[o + 22] = 1;
     n++;
   }
   return n;
@@ -178,12 +184,14 @@ export const BONE_NOISE_WGSL = /* wgsl */ `fn boneNoise(q: vec3<f32>) -> f32 {
   let d = mix(boneHash(i + vec3<f32>(0.0, 1.0, 1.0)), boneHash(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
   return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
 }`;
-export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, surfaceIn: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32) -> vec3<f32> {
+export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, surfaceIn: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, fill: f32) -> vec3<f32> {
   // SHARED LIGHT LIST (plan 1, Task 11). listOn > 0.5 and an owned instance (picks.x > -1.5;
   // -2 = no owner, a chunk's bones or an ejected eye): the KEY is the owner body's 4 picks. Only
   // the key changes. Ambient, AO, the wet tint, the gloss (look.z) and the fresnel stay, and the
   // compose mirrors the march's list compose (albedo x diffuse, + spec, + rim); the fresnel rides
   // the dominant's colour as the march's does, or the key colour when nothing is picked.
+  // The ambient (seeded once at spawn) is scaled by the owner room's fill factor (Task 11b, the
+  // body's applyRoomFill factor), so bone darkens with its body when the room's lamps die.
   if (listOn > 0.5 && picks.x > -1.5) {
     let V = normalize(camPos - p);
     let bl = bodyLights(p, n, V, picks, lights, false);
@@ -193,7 +201,7 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
     let fresL = pow(1.0 - max(dot(n, V), 0.0), 4.0) * look.w;
     let wetL = mix(vec3<f32>(1.0), deepColor, look.y * (1.0 - 0.6 * expoL));
     let aoL = mix(0.45, 1.0, expoL);
-    let diffL = surfaceIn.xyz * (ambient + bl.diffuse) * aoL;
+    let diffL = surfaceIn.xyz * (ambient * fill + bl.diffuse) * aoL;
     let specL = wetL * (bl.spec * look.z * mix(1.3, 0.7, expoL) + rimC * fresL * (0.5 + 0.5 * peak)) + bl.rim;
     return diffL + specL;
   }
@@ -241,11 +249,12 @@ export interface BoneInstancer {
   readonly surfaceKind: number | undefined;
   /** Replace this frame's bone set. Each entry is a posed prim list + its
    *  cluster-alive table (undefined for chunks). */
-  update(sources: ReadonlyArray<{ prims: readonly Primitive[]; alive?: readonly boolean[]; lights?: PicksLike }>): void;
+  update(sources: ReadonlyArray<{ prims: readonly Primitive[]; alive?: readonly boolean[]; lights?: PicksLike; owner?: unknown }>): void;
   /** Copy each instance's owner picks (the `lights` its source passed to update, read NOW) into
-   *  iLights. Call after this frame's picks are written (the game's light loop runs after
-   *  update); update also calls it. Allocation-free. */
-  syncLights(): void;
+   *  iLights, and `fillOf(owner)` (the source's `owner`; Task 11b) into iFill. Call after this
+   *  frame's picks are written (the game's light loop runs after update); update also calls it
+   *  (without fillOf: iFill = 1). No owner, or no fillOf: fill 1. Allocation-free. */
+  syncLights(fillOf?: (owner: unknown) => number): void;
   /** This frame's craters (world centre + radius) for the exposure gradient. */
   setWounds(wounds: ReadonlyArray<{ pos: readonly [number, number, number]; radius: number }>): void;
   readonly count: number;
@@ -307,6 +316,7 @@ export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions, l
   geo.setAttribute('iScale', new THREE.InterleavedBufferAttribute(ib, 3, 11));
   geo.setAttribute('iQ', new THREE.InterleavedBufferAttribute(ib, 4, 14));
   geo.setAttribute('iLights', new THREE.InterleavedBufferAttribute(ib, 4, ILIGHTS_OFFSET));
+  geo.setAttribute('iFill', new THREE.InterleavedBufferAttribute(ib, 1, IFILL_OFFSET));
   geo.instanceCount = 0;
 
   const u = boneInstancerUniforms();
@@ -391,6 +401,7 @@ export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions, l
       picks: attribute('iLights', 'vec4'),
       lights: (lightList ?? fallbackLightListNode()) as never,
       listOn: u.lightListCfg.x,
+      fill: attribute('iFill', 'float'),
     }) as never, 1.0);
   }
   material.depthWrite = true;
@@ -402,15 +413,32 @@ export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions, l
   let count = 0;
   /** Each live instance's owner picks (a reference, read at syncLights); undefined = no owner. */
   const owners: (PicksLike | undefined)[] = [];
-  const syncLights = () => {
+  /** Each live instance's owner key (the source's `owner`, handed to fillOf). */
+  const ownerKeys: unknown[] = [];
+  /** Upload only the live rows (M3): the buffer is DynamicDrawUsage, so three uploads it every
+   *  frame, the whole `max` rows unless a range is set; r186's WebGPU backend honours an
+   *  InterleavedBuffer's updateRanges (clears them after the write). */
+  const markLive = () => {
+    ib.clearUpdateRanges();
+    ib.addUpdateRange(0, Math.max(count, 1) * INSTANCE_FLOATS);
+    ib.needsUpdate = true;
+  };
+  const syncLights = (fillOf?: (owner: unknown) => number) => {
     const ab = arrays.ab;
+    let lastKey: unknown = undefined, lastFill = 1;
     for (let i = 0; i < count; i++) {
       const l = owners[i];
       const o = i * INSTANCE_FLOATS + ILIGHTS_OFFSET;
       if (l) { ab[o] = l.x; ab[o + 1] = l.y; ab[o + 2] = l.z; ab[o + 3] = l.w; }
       else { ab[o] = NO_OWNER_PICKS; ab[o + 1] = NO_OWNER_PICKS; ab[o + 2] = NO_OWNER_PICKS; ab[o + 3] = NO_OWNER_PICKS; }
+      // One fill per owner (an owner's rows are contiguous): the lookup runs once per run.
+      const k = ownerKeys[i];
+      if (k === undefined || !fillOf) lastFill = 1;
+      else if (k !== lastKey) lastFill = fillOf(k);
+      lastKey = k;
+      ab[i * INSTANCE_FLOATS + IFILL_OFFSET] = lastFill;
     }
-    ib.needsUpdate = true;
+    markLive();
   };
 
   return {
@@ -427,14 +455,14 @@ export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions, l
         sub.ab = arrays.ab.subarray(n * INSTANCE_FLOATS);
         const n0 = n;
         n += packBoneInstances(s.prims, s.alive, sub, room);
-        for (let i = n0; i < n; i++) owners[i] = s.lights;
+        for (let i = n0; i < n; i++) { owners[i] = s.lights; ownerKeys[i] = s.owner; }
         if (sub.overflowed) arrays.overflowed = true;
       }
       count = n;
       owners.length = n;
+      ownerKeys.length = n;
       syncLights();
       geo.instanceCount = n;
-      ib.needsUpdate = true;
       mesh.visible = n > 0;
     },
     syncLights,
