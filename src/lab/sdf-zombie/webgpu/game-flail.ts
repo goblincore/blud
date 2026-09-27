@@ -4,8 +4,10 @@
 // The renderer-facing half ONLY: flail-swing.ts owns the swing and its poses,
 // flail-strike.ts decides who a strike hits and where. Everything here is a
 // child of the aim rig (haft, hand, chain, ball), posed from the swing's
-// view-space keyframes; a strike becomes one 'blast' crater per hit through
-// ZombieActor.blast(). Not a recorded DemoFrame verb (like the flare).
+// view-space keyframes; flail-chain.ts simulates the chain and ball between
+// the eye bolt and the swing's ball key (spec §10.1). A strike becomes one
+// 'blast' crater per hit through ZombieActor.blast(), gradual on the head
+// (flail-strike.ts flailWound, spec §10.2). Not a recorded DemoFrame verb (like the flare).
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -20,9 +22,10 @@ import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
 import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
-  FLAIL_CHAIN, FLAIL_IMPACT, maxBallBolt, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing, type FlailSide, type FlailSwing,
+  FLAIL_IMPACT, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing, type FlailSide, type FlailSwing,
 } from './flail-swing';
-import { resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
+import { flailWound, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
+import { guideWeight, linkRest, makeChain, stepChain, type ChainState } from './flail-chain';
 import { reticleNdc } from './fisheye';
 import { FLAIL_FILL_LAYER } from './gib-motion-blur';
 
@@ -41,16 +44,16 @@ export const FLAIL_FEEL = {
   kickRad: 0.02,
 } as const;
 
-/** The look: chain sag, rest sway, the hand. */
+/** The look: link spacing, rest sway, the hand. (The chain's own numbers —
+ *  length, ring offset, the sim — live in flail-swing.ts FLAIL_CHAIN and
+ *  flail-chain.ts FLAIL_CHAIN_SIM.) */
 export const FLAIL_LOOK = {
-  /** The chain's numbers live with the keys (flail-swing.ts FLAIL_CHAIN), which
-   *  are authored — and tested — to stay inside its reach. */
-  chainLen: FLAIL_CHAIN.len,
-  ringOffset: FLAIL_CHAIN.ringOffset,
+  /** Drawn link spacing along the simulated chain, metres. */
   linkPitch: 0.013,
+  /** The idle ball target's sway (the sim's light rest hold follows it). */
   swayAmp: 0.012,
   swayHz: 0.9,
-  handScale: 0.8,
+  handScale: 1.0,
   /** The arm's IK shoulder, view metres (the gun arms' SHOULDER_R_VIEW is 0.26, −0.30, 0.06). */
   handShoulder: new THREE.Vector3(0.35, -0.47, 0.08),
   /** Primitive haft tip (the GLB's ChainAnchor replaces it), haft-local. */
@@ -78,12 +81,24 @@ export interface FlailDebug {
   strikes: number;
   /** The last strike: its side, the actors hit, and the eye and the authored
    *  impact point (world) its eye → impact ray was cast through. */
-  lastStrike: { side: FlailSide; hits: number[]; eye: Vec3; impact: Vec3 } | null;
+  lastStrike: {
+    side: FlailSide; hits: number[]; eye: Vec3; impact: Vec3;
+    /** Head-region hits so far per struck actor id, AFTER this strike (flail-strike.ts flailWound). */
+    headHits: Record<number, number>;
+    /** The drawn ball centre on the strike frame (rig-local) and its distance
+     *  from the rig-space FLAIL_IMPACT, metres (set by that frame's draw). */
+    ballDrawn: Vec3 | null;
+    ballErr: number | null;
+  } | null;
   /** The side the next swing takes. */
   nextSide: FlailSide;
   /** This frame's eye-bolt → ball-centre distance (view metres): `keyed` is the
-   *  swing's own ball pose, `drawn` the ball after the chain clamp. */
+   *  swing's own ball pose, `drawn` the simulated ball. */
   ballBolt: { keyed: number; drawn: number };
+  /** The drawn (simulated) ball centre, rig-local. */
+  ballDrawn: Vec3;
+  /** The worst link-length error of the drawn chain this frame, as a fraction of rest. */
+  linkErr: number;
   /** The drawn ball centre, eye bolt and grip (the haft's foot) in SCREEN NDC —
    *  through the fisheye lens, so they land on the photo's pixels — and the
    *  ball's on-screen radius in NDC-x units. */
@@ -312,6 +327,10 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   let hitStop = 0, hitStopOn = true;
   let strikes = 0, clock = 0;
   let lastStrike: FlailDebug['lastStrike'] = null;
+  /** Head-region hits per actor id (spec §10.2): the face caves in, the 3rd severs. */
+  const headHits = new Map<number, number>();
+  /** The side of a strike that fired THIS tick (draw pins the ball on its impact), else null. */
+  let strikeNow: FlailSide | null = null;
   window.addEventListener('blur', () => { held = false; });
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement !== ctx.boot.canvas) held = false;
@@ -329,13 +348,30 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       if (c) actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed) });
     }
     const hits = resolveStrike(eye, p.yaw, impact, actors);
-    lastStrike = { side, hits: hits.map(h => h.actorId), eye: [...eye] as Vec3, impact: [...impact] as Vec3 };
+    const struckHeads: Record<number, number> = {};
+    lastStrike = {
+      side, hits: hits.map(h => h.actorId), eye: [...eye] as Vec3, impact: [...impact] as Vec3,
+      headHits: struckHeads, ballDrawn: null, ballErr: null,
+    };
     for (const h of hits) {
       const a = ctx.world.actors.find(x => x.id === h.actorId);
       if (!a) continue;
       const posed = a.posed();
-      const w = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', a.pose().yaw, q => sdBody(q, posed));
-      w.severRadius = FLAIL_FEEL.craterR * FLAIL_FEEL.severMul;
+      const yaw = a.pose().yaw;
+      const field = (q: Vec3) => sdBody(q, posed);
+      // GRADUAL HEAD DAMAGE (flail-strike.ts flailWound): a head-region hit is a
+      // small face crater with no sever until the actor's 3rd, which is the
+      // full crater and severs as any other hit. The probe finds the prim the
+      // hit lands on; it is the wound itself unless the radius changes.
+      const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
+      const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
+      const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC);
+      const before = headHits.get(a.id) ?? 0;
+      const spec = flailWound(region, before, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
+      if (region) headHits.set(a.id, before + 1);
+      struckHeads[a.id] = headHits.get(a.id) ?? 0;
+      const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
+      w.severRadius = spec.severRadius;
       clothifyWound(posed.prims, w, 'heavy');
       a.blast({
         wounds: [w],
@@ -355,53 +391,97 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
 
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _roll = new THREE.Quaternion();
   const _p = new THREE.Vector3(), _tan = new THREE.Vector3(), _one = new THREE.Vector3(1, 1, 1);
-  const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+  const _a = new THREE.Vector3();
   const Y = new THREE.Vector3(0, 1, 0);
   const _rigQ = new THREE.Quaternion(), _down = new THREE.Vector3();
   const ballBolt = { keyed: 0, drawn: 0 };
-  function draw(): void {
+  let ballDrawn: Vec3 = [0, 0, 0];
+  let linkErr = 0;
+  /** The simulated chain, RIG-LOCAL (the keys' space). Null while the rig is hidden:
+   *  re-made from a straight line bolt → ball the first frame it is shown again. */
+  let sim: ChainState | null = null;
+  /** Arc length along the drawn polyline (nodes 0 … n−2), per node. */
+  const arc: number[] = [];
+
+  /** Catmull-Rom through the ring-side polyline (nodes 0 … last), segment k at u
+   *  (end points doubled): position into `out`, derivative into `d`. */
+  function spline(pts: Vec3[], last: number, k: number, u: number, out: THREE.Vector3, d: THREE.Vector3): void {
+    const P0 = pts[Math.max(0, k - 1)]!, P1 = pts[k]!, P2 = pts[k + 1]!, P3 = pts[Math.min(last, k + 2)]!;
+    const u2 = u * u, u3 = u2 * u;
+    for (let c = 0; c < 3; c++) {
+      const p0 = P0[c]!, p1 = P1[c]!, p2 = P2[c]!, p3 = P3[c]!;
+      out.setComponent(c, 0.5 * (2 * p1 + (p2 - p0) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (3 * p1 - p0 - 3 * p2 + p3) * u3));
+      d.setComponent(c, 0.5 * ((p2 - p0) + 2 * (2 * p0 - 5 * p1 + 4 * p2 - p3) * u + 3 * (3 * p1 - p0 - 3 * p2 + p3) * u2));
+    }
+  }
+
+  function draw(dt: number): void {
     const pose = flailPose(swing);
     haft.position.set(pose.grip[0], pose.grip[1], pose.grip[2]);
     haft.rotation.set(pose.rot[0], pose.rot[1], pose.rot[2]);
-    const sway = swing.phase === 'idle' ? FLAIL_LOOK.swayAmp : 0;
-    const w = 2 * Math.PI * FLAIL_LOOK.swayHz * clock;
-    ball.position.set(pose.ball[0] + sway * Math.sin(w), pose.ball[1], pose.ball[2] + sway * 0.7 * Math.sin(w * 1.3));
     haft.updateMatrix();
     _a.copy(anchorLocal).applyMatrix4(haft.matrix);          // the eye bolt, rig-local
-    // CHAIN CLAMP (visual only — the strike reads FLAIL_IMPACT, never the drawn
-    // ball). The swing's ball keys are authored for WHERE the strike lands, and
-    // its follow-through key sits ~1.6 m out: drawn raw, the chain would stretch
-    // a metre or the ball would float free of it. Keep the drawn ball within a
-    // slightly stretched chain of the bolt, along the bolt → ball direction.
-    _tan.copy(ball.position).sub(_a);
-    const keyed = _tan.length();
-    const maxCentre = maxBallBolt();
-    if (keyed > maxCentre) ball.position.copy(_a).addScaledVector(_tan, maxCentre / keyed);
-    ballBolt.keyed = keyed;
-    ballBolt.drawn = _a.distanceTo(ball.position);
-    // The ball's ring faces the bolt; the chain ends at the ring.
-    if (ballBolt.drawn > 1e-6) _tan.copy(_a).sub(ball.position).normalize(); else _tan.copy(Y);
-    ball.quaternion.setFromUnitVectors(Y, _tan);
-    _b.copy(ball.position).addScaledVector(_tan, FLAIL_LOOK.ringOffset); // the ring, rig-local
-    const span = _a.distanceTo(_b);
-    const sag = Math.max(0, FLAIL_LOOK.chainLen - span) * 0.6;
-    // The sag droops toward the FLOOR: world down in rig-local space (rig-local
+    const bolt: Vec3 = [_a.x, _a.y, _a.z];
+    // THE BALL'S TARGET: the swing's ball key (plus the rest sway at idle). On
+    // the frame a strike fires it is that side's FLAIL_IMPACT itself, pinned
+    // (guide 1): the drawn ball sits exactly where the crater lands, whatever
+    // the frame's t overran strikeT by (at 60 Hz the key is ~5 cm past it).
+    let target: Vec3, guide: number;
+    if (strikeNow) {
+      target = FLAIL_IMPACT[strikeNow];
+      guide = 1;
+    } else {
+      const sway = swing.phase === 'idle' ? FLAIL_LOOK.swayAmp : 0;
+      const w = 2 * Math.PI * FLAIL_LOOK.swayHz * clock;
+      target = [pose.ball[0] + sway * Math.sin(w), pose.ball[1], pose.ball[2] + sway * 0.7 * Math.sin(w * 1.3)];
+      guide = guideWeight(swing);
+    }
+    // Gravity pulls toward the FLOOR: world down in rig-local space (rig-local
     // −Y tilts with the aim pitch and the holster).
     rig.getWorldQuaternion(_rigQ);
-    _down.set(0, -1, 0).applyQuaternion(_rigQ.invert());
-    _c.copy(_a).add(_b).multiplyScalar(0.5).addScaledVector(_down, sag);
-    const n = Math.min(MAX_LINKS, Math.max(2, Math.round(Math.max(span, FLAIL_LOOK.chainLen * 0.8) / FLAIL_LOOK.linkPitch)));
-    for (let i = 0; i < n; i++) {
-      const t = (i + 0.5) / n, u = 1 - t;
-      _p.set(u * u * _a.x + 2 * u * t * _c.x + t * t * _b.x, u * u * _a.y + 2 * u * t * _c.y + t * t * _b.y, u * u * _a.z + 2 * u * t * _c.z + t * t * _b.z);
-      _tan.set(2 * u * (_c.x - _a.x) + 2 * t * (_b.x - _c.x), 2 * u * (_c.y - _a.y) + 2 * t * (_b.y - _c.y), 2 * u * (_c.z - _a.z) + 2 * t * (_b.z - _c.z));
+    _down.set(0, -1, 0).applyQuaternion(_rigQ.invert()).normalize();
+    sim = stepChain(sim ?? makeChain(bolt, target), bolt, target, guide, [_down.x, _down.y, _down.z], dt);
+    const pts = sim.p;
+    const n = pts.length, ring = n - 2;
+    const b = pts[n - 1]!;
+    ball.position.set(b[0], b[1], b[2]);
+    ballDrawn = [b[0], b[1], b[2]];
+    ballBolt.keyed = Math.hypot(pose.ball[0] - bolt[0], pose.ball[1] - bolt[1], pose.ball[2] - bolt[2]);
+    ballBolt.drawn = _a.distanceTo(ball.position);
+    // The ball's ring faces node n−2 (where the chain meets it).
+    const r = pts[ring]!;
+    _tan.set(r[0] - b[0], r[1] - b[1], r[2] - b[2]);
+    if (_tan.lengthSq() > 1e-12) ball.quaternion.setFromUnitVectors(Y, _tan.normalize());
+    if (strikeNow && lastStrike) {
+      lastStrike.ballDrawn = [b[0], b[1], b[2]];
+      const t = FLAIL_IMPACT[strikeNow];
+      lastStrike.ballErr = Math.hypot(b[0] - t[0], b[1] - t[1], b[2] - t[2]);
+    }
+    // THE LINKS: evenly spaced by arc length along a spline through nodes
+    // 0 … n−2, each along the local tangent, alternating the roll.
+    arc.length = 0; arc.push(0);
+    linkErr = 0;
+    for (let k = 0; k < n - 1; k++) {
+      const q0 = pts[k]!, q1 = pts[k + 1]!;
+      const d = Math.hypot(q1[0] - q0[0], q1[1] - q0[1], q1[2] - q0[2]);
+      linkErr = Math.max(linkErr, Math.abs(d - linkRest(k)) / linkRest(k));
+      if (k < ring) arc.push(arc[k]! + d);
+    }
+    const total = arc[ring]!;
+    const count = Math.min(MAX_LINKS, Math.max(2, Math.round(total / FLAIL_LOOK.linkPitch)));
+    let k = 0;
+    for (let i = 0; i < count; i++) {
+      const s = ((i + 0.5) / count) * total;
+      while (k < ring - 1 && s > arc[k + 1]!) k++;
+      const seg = arc[k + 1]! - arc[k]!;
+      spline(pts, ring, k, seg > 1e-9 ? (s - arc[k]!) / seg : 0, _p, _tan);
       if (_tan.lengthSq() < 1e-12) _tan.copy(Y); else _tan.normalize();
       _q.setFromUnitVectors(Y, _tan);
       _roll.setFromAxisAngle(_tan, i % 2 === 0 ? 0 : Math.PI / 2);
       _q.premultiply(_roll);
       chain.setMatrixAt(i, _m.compose(_p, _q, _one));
     }
-    chain.count = n;
+    chain.count = count;
     chain.instanceMatrix.needsUpdate = true;
     aimHand();
   }
@@ -435,18 +515,19 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     },
     onMouseUp(button) { if (button === 0) held = false; },
     tick(dt) {
-      if (!rig.visible) { swing = cancelFlailSwing(swing); click = false; return; }
+      if (!rig.visible) { swing = cancelFlailSwing(swing); click = false; sim = null; return; }
       clock += dt;
       const ready = ctx.weapon.slotState.live === 'flail' && slotReady(ctx.weapon.slotState) && !loopBlocksInput(ctx);
+      strikeNow = null;
       if (!ready) {
         swing = cancelFlailSwing(swing);
       } else {
         const r = stepFlailSwing(swing, { click, held }, dt);
         swing = r.state;
-        for (const side of r.strikes) strike(side);
+        for (const side of r.strikes) { strike(side); strikeNow = side; }
       }
       click = false;
-      draw();
+      draw(dt);
     },
     updateRig() {
       const lower = slotLowerAmount(ctx.weapon.slotState, 'flail');
@@ -472,6 +553,6 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     },
     refreshLights() { relist(); },
     syncFill,
-    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: swing.nextSide, ballBolt: { ...ballBolt }, ndc: ndcNow() }),
+    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: swing.nextSide, ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, linkErr, ndc: ndcNow() }),
   };
 }
