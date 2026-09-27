@@ -206,15 +206,16 @@ for i, d in enumerate(spike_dirs):
     base = Vector(BALL_LOC) + d * BALL_R
     quat = d.to_track_quat('Z', 'Y')
     # Two-part spike: an Iron base frustum and an IronWorn tip cone, so the
-    # spike tips read as worn/lighter iron per the node contract.
-    base_len, tip_len = 0.020, 0.015
-    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=0.011, radius2=0.006, depth=base_len,
+    # spike tips read as worn/lighter iron per the node contract. Chunky
+    # (base radius 0.016) so they read at first-person distance.
+    base_len, tip_len = 0.025, 0.020
+    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=0.016, radius2=0.009, depth=base_len,
                                     location=base + d * (base_len / 2))
     b = bpy.context.object
     b.rotation_euler = quat.to_euler()
     b.name = f"spike_{i}_base"
     assign(b, IRON)
-    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=0.006, radius2=0.0, depth=tip_len,
+    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=0.009, radius2=0.0, depth=tip_len,
                                     location=base + d * (base_len + tip_len / 2))
     t = bpy.context.object
     t.rotation_euler = quat.to_euler()
@@ -222,10 +223,16 @@ for i, d in enumerate(spike_dirs):
     assign(t, IRON_WORN)
     spikes += [b, t]
 
-# Top ring toward +Z (Blender) / +Y (glTF) — where a chain link hooks through.
-ring = torus("b_ring", 0.014, 0.0035, BALL_R + 0.07, m=IRON, rot=(math.pi / 2, 0, 0), loc_xy=(BALL_LOC[0], BALL_LOC[1]))
+# A short iron collar seats the ring onto the ball (instead of floating over
+# it) so the two read as one forged piece.
+collar = cone("b_collar", 0.012, 0.012, 0.013, 0.0615, verts=12, m=IRON, loc_xy=(BALL_LOC[0], BALL_LOC[1]))
 
-ball = join("Ball", [core, ring] + spikes)
+# Top ring toward +Z (Blender) / +Y (glTF) — where a chain link hooks through.
+# Standing vertical (plane containing Z); its bottom passes through the
+# collar (collar spans 0.055-0.068) and its top sits at ~0.09.
+ring = torus("b_ring", 0.014, 0.0035, 0.076, m=IRON, rot=(math.pi / 2, 0, 0), loc_xy=(BALL_LOC[0], BALL_LOC[1]))
+
+ball = join("Ball", [core, collar, ring] + spikes)
 smooth(ball)
 ball.location = BALL_LOC   # beside the haft in the file; the runtime zeroes it
 
