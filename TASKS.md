@@ -6,10 +6,12 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [ ] **v1.2 approved, not built (2026-09-27)** — owner's second playtest: less powerful (~5 hits), smaller craters, head
-  decap only on the 4th head hit (fix the neck-hit leak), impact on the crosshair, a big overhand first swing, a bigger hand.
-  Spec §11 · [HANDOFF](docs/dev-notes/2026-09-26-flail/HANDOFF-v1.2.md).
-- [~] **v1.1 built (whip chain, gradual head damage); owner playtest pending.** Gate passing 2026-09-27. [Plan](docs/superpowers/plans/2026-09-26-spike-flail.md) ·
+- [~] **v1.2 built (2026-09-27); owner playtest pending.** Gate passing. The strike lands on the crosshair; the first
+  swing is a big overhand swipe; head hits 1–3 cave the face in (0.06 m) and the 4th snaps the neck; body craters 0.09 m;
+  5 hits drop a zombie; hand ×1.3. Root cause of the first-hit decapitation: the strike sat ~18° below the crosshair, so
+  aiming at the head cut the neck from the upper chest (plan, v1.2 section). Spec §11 ·
+  [NOTES](docs/dev-notes/2026-09-26-flail/NOTES.md) · strip `look/overhand-R-strip.png`.
+- [x] **v1.1 built (whip chain, gradual head damage); playtested 2026-09-27** (feedback → v1.2). [Plan](docs/superpowers/plans/2026-09-26-spike-flail.md) ·
   [spec](docs/superpowers/specs/2026-09-26-spike-flail-design.md) · gate: `node scripts/flail-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"`
   (with servers up via `scripts/lab-servers.sh`) · [NOTES](docs/dev-notes/2026-09-26-flail/NOTES.md) — click = preset swing
   (alternating L/R), forgiving strike window, one big crater per hit. On branch

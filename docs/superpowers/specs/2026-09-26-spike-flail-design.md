@@ -1,6 +1,6 @@
 # The spike flail (first player melee weapon, simplified) — Design
 
-**Date:** 2026-09-26 · **Status:** v1.1 built (§10); owner playtest pending
+**Date:** 2026-09-26 · **Status:** v1.2 built (§11); owner playtest pending
 **Supersedes:** [the censer flail](2026-09-26-censer-flail-design.md). The owner playtested the censer
 (physics head on a rope, dead-zone-driven strokes, tap/hold charge) and scrapped it: "too complicated
 for what it is… very hard to land a good hit… looks way too goofy." This design replaces it with a
@@ -130,7 +130,7 @@ hangs straight down at rest) and a head-rule unit test; the gate's
 beheading check becomes "head still on after head hits 1 and 2, off on hit 3", with photos of the
 face damage after each hit.
 
-## 11. v1.2 — second playtest (owner, 2026-09-27) — APPROVED, NOT BUILT YET
+## 11. v1.2 — second playtest (owner, 2026-09-27) — BUILT 2026-09-27
 
 Owner feedback: the whip is whippy enough; the post-swing settle is fine; the rest framing is fine.
 Problems: (a) head hits still decapitate on the first hit in play; (b) the weapon is too powerful
@@ -153,7 +153,7 @@ Approved changes (owner, 2026-09-27):
 | L→R keys | — | unchanged, except the strike ball moves to the crosshair |
 | Hand (`FLAIL_LOOK.handScale`) | 1.0 | **~1.3** (rest framing unchanged) |
 
-**The decapitation cause is not yet confirmed.** Hypothesis: the impact point is authored ~0.35 m
+**Decapitation cause: CONFIRMED 2026-09-27** (crosshair-on-head probe: at 0.9 m the chest crater sat 0.16 m from the neck root and cut the head on hit 1). The hypothesis was: the impact point is authored ~0.35 m
 below the crosshair, so aiming at the head puts the crater on the neck or upper chest. That is more
 than 0.25 m from the head centre, so the hit is not a "head hit" and the full crater (sever 0.18)
 cuts the neck. Confirm it FIRST with a gate case that aims the CROSSHAIR at the head (as a player
@@ -169,3 +169,8 @@ Acceptance (gate):
 - Swing tests stay green (speed-at-strike ratio, overshoot, pops, reach ≤ 0.37 m, min ball–bolt
   ≥ 0.28 m, whip gates).
 - Photos: an R overhand frame strip, and the head after hits 1–4.
+
+**As built (2026-09-27):** as the table, plus: the 4th head hit also stamps a **neck-snap** wound at the
+neck midpoint (sever calibre 0.12 m, visible carve 0.02 m), so the head comes off wherever on the head the
+last blow lands; `neckDist` is 0.2 m from the neck root. Strike balls at view y −0.08 (≈4° under the
+crosshair). Gate green: head on after hits 1–3, off on 4; collapse on hit 5; no limb severed by chest hits.
