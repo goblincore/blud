@@ -1,8 +1,7 @@
 # Night Train hand-off — 2026-09-27
 
 **Branch:** `claude/wake-level-pipeline-1afb01`, in the worktree `.claude/worktrees/wake-level-pipeline-1afb01`.
-- **Local `main`:** fast-forwarded to `83dcd38c` today. It is **not pushed** to GitHub, as with earlier merges.
-- **The branch on GitHub:** pushed up to `fd0c000f` (PR #25). Later commits are local only.
+- **`main`:** fast-forwarded and **pushed to GitHub** at `02b4d8a6`. The branch is pushed to the same commit.
 - **Previous hand-off:** [2026-09-26](2026-09-26-night-train-handoff.md).
 
 ## What shipped today
@@ -44,6 +43,10 @@ The torch is judged at the **chest** (profile `coverAt`), `FLASHLIGHT_LIST_TRIM`
    - the tube light spreading evenly.
 
    Then show the owner side-by-sides of one or two levers (e.g. a gentle S-curve plus a deeper black point in the final grade), keeping "never flat black" for zombies.
+
+   **Update (owner, after a replay):** "softened a bit". The Night Train looks fine for the most part, so this is a **light touch**: still curious about a gentle S-curve, not a relight. Keep the side-by-sides small (S-curve strength off / gentle / medium).
+
+   **Also noted (low priority, the test-rooms level only):** there the torch feels really weak, because the coloured room light orbs completely overpower it. The owner thinks it's probably just the coloured lights' tuning. The rooms level is for testing, so don't retune the flashlight for it. If it's touched at all, turn the orbs down in that level's data.
 
 1. **The Boiler Room resize to 8 × 28 m.** The owner approved the layout. [Plan](../superpowers/plans/2026-09-27-boiler-room-resize.md) · [before/after](../game/levels/01-night-train/boiler-resize/boiler-before-after.png)
 2. **Open owner items:**
