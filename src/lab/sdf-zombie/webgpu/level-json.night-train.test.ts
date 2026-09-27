@@ -96,4 +96,12 @@ describe('night-train dynamic light (dynamic light spec §3)', () => {
     expect(t.triggers.map(tr => [tr.event, tr.once]).sort()).toEqual([['level.end', true], ['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
     expect(t.completeOn).toBe('level.end');
   });
+  it('two red emergency beacons in the Boiler Room (room 5), dead until the strobe ends', () => {
+    const b = room('boiler-room');
+    expect(b.id).toBe(5);
+    const beacons = t.rooms.flatMap(r => r.accents.filter(a => a.fixture === 'beacon').map(a => ({ a, r: r.name })));
+    expect(beacons.map(x => x.r)).toEqual(['boiler-room', 'boiler-room']);
+    expect(beacons.map(x => x.a.spin).sort()).toEqual([-0.7, 0.7]);
+    expect(beacons.every(x => x.a.mood === 'dead')).toBe(true);
+  });
 });

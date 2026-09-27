@@ -826,7 +826,7 @@ async function main() {
       ctx.lighting.flickerLights.push({
         light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7,
         bowl: bowl.material as THREE.MeshStandardMaterial, mood: a.mood ?? 'steady', room: r.id,
-        bowlMesh: bowl, fixture: a.fixture ?? 'bulb',
+        bowlMesh: bowl, fixture: a.fixture ?? 'bulb', ...(a.spin !== undefined ? { spin: a.spin } : {}),
         ...(a.gain !== undefined ? { gain: a.gain } : {}), ...(a.tint ? { tint: a.tint } : {}),
       });
     }

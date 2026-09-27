@@ -21,7 +21,7 @@ import sys
 import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from night_train_layout import CARRIAGES, COLD, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, VESTIBULE, lamps, placed  # noqa: E402
+from night_train_layout import BEACON_RED, CARRIAGES, COLD, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, VESTIBULE, lamps, placed  # noqa: E402
 
 ROOT = os.path.abspath("assets-source/levels")
 ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -88,7 +88,7 @@ def gempty(name, pos, yaw=0.0, **props):
     return obj
 
 
-def glight(name, pos, color, power, mood=None, fixture=None):
+def glight(name, pos, color, power, mood=None, fixture=None, spin=None):
     data = bpy.data.lights.new(name, "POINT")
     data.color = color
     data.energy = power * 10.0
@@ -99,6 +99,8 @@ def glight(name, pos, color, power, mood=None, fixture=None):
         obj["mood"] = mood
     if fixture:
         obj["fixture"] = fixture
+    if spin is not None:
+        obj["spin"] = spin
     coll("lights").objects.link(obj)
 
 
@@ -195,6 +197,8 @@ def carriage(c, zs):
         glight(f"lamp:{rid}:{i}", (x, y, g(u)), COLD, LIGHT_POWER, mood, "tube")
     for fid, x, u, y, power in c["fires"]:
         glight(f"fire:{rid}:{fid}", (x, y, g(u)), FIRE, power, "fire")
+    for i, (x, u, y, spin) in enumerate(c.get("beacons", [])):
+        glight(f"beacon:{rid}:{i}", (x, y, g(u)), BEACON_RED, LIGHT_POWER, "dead", "beacon", spin)
     if name == "cab":
         put("cab-shell", 0, 0, zs)
     else:

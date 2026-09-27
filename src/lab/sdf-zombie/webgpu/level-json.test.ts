@@ -181,3 +181,26 @@ describe('parseLevelJson: per-light gain and tint (spec §5 option A)', () => {
     expect(() => parseLevelJson(f)).toThrow('lights[0].tint');
   });
 });
+
+describe('parseLevelJson: beacon fixture (Boiler Room beacons spec)', () => {
+  it('reads a beacon with its spin', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'beacon';
+    f.lights[0].spin = 0.7;
+    const L = parseLevelJson(f);
+    expect(L.rooms[0]!.accents[0]).toMatchObject({ fixture: 'beacon', spin: 0.7 });
+  });
+
+  it('rejects a spin beyond 5 rev/s', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'beacon';
+    f.lights[0].spin = 9;
+    expect(() => parseLevelJson(f)).toThrow('lights[0].spin');
+  });
+
+  it('still rejects an unknown fixture', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'lamp';
+    expect(() => parseLevelJson(f)).toThrow('lights[0].fixture: must be bulb, tube or beacon');
+  });
+});

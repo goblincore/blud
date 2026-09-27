@@ -57,7 +57,9 @@ export interface AccentLight {
   /** Dynamic light §2.5: the lamp's ambient mood (absent: steady). */
   mood?: LampMood;
   /** The visible fixture: a bulb (absent) or a fluorescent tube (Night Train, 2026-09-26). */
-  fixture?: 'bulb' | 'tube';
+  fixture?: 'bulb' | 'tube' | 'beacon';
+  /** rev/s about the vertical, sign = direction (beacons). */
+  spin?: number;
   /** Level-authored scale on this light's presentation gain (spec §5 option A);
    *  absent means the kind's fixed profile gain is unscaled. Must be >= 0. */
   gain?: number;

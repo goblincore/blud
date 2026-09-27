@@ -32,6 +32,8 @@ T = 0.1  # internal partition thickness
 #   moods:    one per ceiling lamp, south to north (lamp-moods.ts; dynamic light spec §3)
 #   fires:    (id, x, u, y, power)       orange fire lights (stoves, boilers, the firebox)
 #   triggers: (id, event, x0, x1, u0, u1) once, floor to 2.2 m
+#   beacons:  (x, u, y, spin)            red rotating emergency beacons, dead until the strobe ends
+#             (spin: rev/s about the vertical, sign = direction; Boiler Room beacons spec). Optional.
 FIRE = (1.0, 0.42, 0.12)
 # When `on` fires, the level also fires `emit` (dynamic light spec §3).
 CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"])]
@@ -111,7 +113,8 @@ CARRIAGES = [
                  ("soldier-bar-1", "soldier", 1.0, 12.4), ("soldier-dj", "soldier", -0.8, 18.3)],
          pickups=[("favour-dynamite", "dynamite", -1.75, 3.0), ("bar-health", "health", 1.1, 17.0), ("dj-cd", "cd", -1.7, 19.6)],
          gates=[], moods=["steady", "steady"], fires=[("party-boiler", 1.5, 0.7, 0.6, 1.0)],
-         triggers=[("strobe", "light.strobe.room.5", -2.1, 2.1, 5.5, 6.5)]),
+         triggers=[("strobe", "light.strobe.room.5", -2.1, 2.1, 5.5, 6.5)],
+         beacons=[(0.0, 4.0, 3.3, 0.7), (0.0, 14.0, 3.3, -0.7)]),   # just under the 3.4 m ceiling
     dict(rid=7, name="tender", w=3.4, L=10.0, h=2.6,
          walls=[],
          areas=[("tender: the coal bunker (west), a walkway (east)", -1.7, 1.7, 0, 10.0)],
@@ -133,6 +136,8 @@ WARM = (1.0, 0.72, 0.45)
 # dramatic flicker'), bright enough to light the zombies; the flicker carries the drama.
 COLD = (0.78, 0.9, 1.0)
 LIGHT_POWER = 2.4
+# Emergency red (beacon.ts BEACON.color).
+BEACON_RED = (1.0, 0.08, 0.05)
 
 
 def lamps(c):
@@ -178,6 +183,9 @@ def to_level() -> dict:
             doc["lights"].append({"pos": [pos[0], pos[1], g(pos[2])], "color": list(COLD), "power": LIGHT_POWER, "mood": mood, "fixture": "tube"})
         for _, x, u, y, power in c["fires"]:
             doc["lights"].append({"pos": [x, y, g(u)], "color": list(FIRE), "power": power, "mood": "fire"})
+        for x, u, y, spin in c.get("beacons", []):
+            doc["lights"].append({"pos": [x, y, g(u)], "color": list(BEACON_RED), "power": LIGHT_POWER, "mood": "dead",
+                                  "fixture": "beacon", "spin": spin})
         for tid, event, x0, x1, u0, u1 in c["triggers"]:
             doc["triggers"].append({"id": tid, "event": event, "once": True, "min": [x0, 0, g(u1)], "max": [x1, 2.2, g(u0)]})
         for gid, event, x0, x1, u0, u1 in c["gates"]:
@@ -232,6 +240,9 @@ def to_svg() -> str:
                      + text(lu, lx + 0.45, mood, "#ffd080", 9, "middle"))
         for _, fx, fu, _, _ in c["fires"]:
             o.append(f'<circle cx="{X(fu):.1f}" cy="{Y(fx):.1f}" r="4" fill="#ff7020"/>')
+        for bx, bu, _, _ in c.get("beacons", []):
+            o.append(f'<text x="{X(bu):.1f}" y="{Y(bx) + 4:.1f}" fill="#ff2a1a" font-size="12" text-anchor="middle">◆</text>'
+                     + text(bu, bx - 0.3, "beacon", "#ff2a1a", 9, "middle"))
         for pid, item, x, u, *_ in c["pickups"]:
             torch = item == "flashlight"
             o.append(f'<rect x="{X(u) - 5:.1f}" y="{Y(x) - 5:.1f}" width="10" height="10" fill="{"#fff060" if torch else "#40c0e0"}" transform="rotate(45 {X(u):.1f} {Y(x):.1f})"/>'
@@ -247,7 +258,7 @@ def to_svg() -> str:
                      + text(1.0, 0.55, "start (portal)", "#60e060", 10, "middle"))
     ly = H - PAD * PX * 0.35
     o.append(f'<text x="{PAD * PX:.0f}" y="{ly:.0f}" fill="#aaa" font-size="11">north (toward the engine) →   '
-             '<tspan fill="#d03030">● Z zombie</tspan>   <tspan fill="#e0a020">● S soldier</tspan>   <tspan fill="#ffd080">○ lamp (mood)</tspan>   <tspan fill="#ff7020">● fire</tspan>   <tspan fill="#f0e040">▭ trigger</tspan>   '
+             '<tspan fill="#d03030">● Z zombie</tspan>   <tspan fill="#e0a020">● S soldier</tspan>   <tspan fill="#ffd080">○ lamp (mood)</tspan>   <tspan fill="#ff7020">● fire</tspan>   <tspan fill="#ff2a1a">◆ beacon</tspan>   <tspan fill="#f0e040">▭ trigger</tspan>   '
              '<tspan fill="#40c0e0">◆ pickup</tspan>   <tspan fill="#d8c8a8">▬ partition</tspan>   '
              '<tspan fill="#8c7456">■ furniture</tspan>   <tspan fill="#50b050">▬ door to the vestibule</tspan>   1 m grid</text>')
     o.append("</svg>")

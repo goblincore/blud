@@ -39,7 +39,7 @@ const KEYS: Record<string, readonly string[]> = {
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
-  light: ['pos', 'color', 'power', 'mood', 'fixture', 'gain', 'tint', 'states'],
+  light: ['pos', 'color', 'power', 'mood', 'fixture', 'spin', 'gain', 'tint', 'states'],
   cue: ['on', 'emit'],
   start: ['pos', 'yaw'],
   spawn: ['id', 'kind', 'pos', 'yaw', 'states'],
@@ -337,10 +337,15 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
       mood = LAMP_MOODS.find(m => m === o.mood);
       if (!mood) errors.push(`lights[${i}].mood: must be one of ${LAMP_MOODS.join(', ')}`);
     }
-    let fixture: 'bulb' | 'tube' | undefined;
+    let fixture: 'bulb' | 'tube' | 'beacon' | undefined;
     if (o.fixture !== undefined) {
-      if (o.fixture === 'bulb' || o.fixture === 'tube') fixture = o.fixture;
-      else errors.push(`lights[${i}].fixture: must be bulb or tube`);
+      if (o.fixture === 'bulb' || o.fixture === 'tube' || o.fixture === 'beacon') fixture = o.fixture;
+      else errors.push(`lights[${i}].fixture: must be bulb, tube or beacon`);
+    }
+    let spin: number | undefined;
+    if (o.spin !== undefined) {
+      if (typeof o.spin === 'number' && Number.isFinite(o.spin) && Math.abs(o.spin) <= 5) spin = o.spin;
+      else errors.push(`lights[${i}].spin: must be a number of rev/s within [-5, 5]`);
     }
     let gain: number | undefined;
     if (o.gain !== undefined) {
@@ -355,7 +360,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`lights[${i}]: outside every room`);
     else if (keep) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}),
-      ...(gain !== undefined ? { gain } : {}), ...(tint ? { tint } : {}) });
+      ...(spin !== undefined ? { spin } : {}), ...(gain !== undefined ? { gain } : {}), ...(tint ? { tint } : {}) });
   });
 
   // --- cues (dynamic light §3) --------------------------------------------------
