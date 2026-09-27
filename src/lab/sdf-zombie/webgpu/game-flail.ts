@@ -22,10 +22,11 @@ import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
 import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
-  FLAIL_IMPACT, cancelFlailSwing, flailPose, makeFlailSwing, stepFlailSwing, type FlailSide, type FlailSwing,
+  FLAIL_IMPACT, FLAIL_SWING, cancelFlailSwing, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
+  type FlailSide, type FlailSwing,
 } from './flail-swing';
 import { flailWound, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
-import { guideWeight, linkRest, makeChain, stepChain, type ChainState } from './flail-chain';
+import { guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts } from './flail-chain';
 import { reticleNdc } from './fisheye';
 import { FLAIL_FILL_LAYER } from './gib-motion-blur';
 
@@ -97,6 +98,8 @@ export interface FlailDebug {
   ballBolt: { keyed: number; drawn: number };
   /** The drawn (simulated) ball centre, rig-local. */
   ballDrawn: Vec3;
+  /** The swing's keyed ball this frame, rig-local (flailPose; no rest sway). */
+  ballKeyed: Vec3;
   /** The worst link-length error of the drawn chain this frame, as a fraction of rest. */
   linkErr: number;
   /** The drawn ball centre, eye bolt and grip (the haft's foot) in SCREEN NDC —
@@ -396,10 +399,23 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   const _rigQ = new THREE.Quaternion(), _down = new THREE.Vector3();
   const ballBolt = { keyed: 0, drawn: 0 };
   let ballDrawn: Vec3 = [0, 0, 0];
+  let ballKeyed: Vec3 = [0, 0, 0];
   let linkErr = 0;
-  /** The simulated chain, RIG-LOCAL (the keys' space). Null while the rig is hidden:
-   *  re-made from a straight line bolt → ball the first frame it is shown again. */
+  /** The simulated chain, RIG-LOCAL (the keys' space). Null while the rig is hidden,
+   *  after a live swing is cancelled (a weapon switch snaps the bolt up to 0.87 m)
+   *  and after a non-finite step: re-made from a straight line bolt → ball on the
+   *  next drawn frame. Stepped in place (no per-frame allocation). */
   let sim: ChainState | null = null;
+  /** A bolt faster than this is a teleport, not motion: re-make. A SPEED, not a
+   *  distance: the swing itself moves the bolt up to ~19 m/s (0.31 m per 60 Hz
+   *  frame, 0.56 m at 30 Hz), so a fixed 0.15 m re-made the chain mid-swing. The
+   *  known teleport — a cancelled live swing snapping to rest, up to 0.87 m — is
+   *  handled explicitly in tick(); this is the backstop. */
+  const TELEPORT_MPS = 30;
+  const bolt: [number, number, number] = [0, 0, 0];
+  const target: [number, number, number] = [0, 0, 0];
+  const down: [number, number, number] = [0, -1, 0];
+  const stepOpts: ChainStepOpts & { targetVel: [number, number, number] } = { pin: false, targetVel: [0, 0, 0] };
   /** Arc length along the drawn polyline (nodes 0 … n−2), per node. */
   const arc: number[] = [];
 
@@ -421,26 +437,38 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     haft.rotation.set(pose.rot[0], pose.rot[1], pose.rot[2]);
     haft.updateMatrix();
     _a.copy(anchorLocal).applyMatrix4(haft.matrix);          // the eye bolt, rig-local
-    const bolt: Vec3 = [_a.x, _a.y, _a.z];
-    // THE BALL'S TARGET: the swing's ball key (plus the rest sway at idle). On
-    // the frame a strike fires it is that side's FLAIL_IMPACT itself, pinned
-    // (guide 1): the drawn ball sits exactly where the crater lands, whatever
-    // the frame's t overran strikeT by (at 60 Hz the key is ~5 cm past it).
-    let target: Vec3, guide: number;
+    bolt[0] = _a.x; bolt[1] = _a.y; bolt[2] = _a.z;
+    ballKeyed = pose.ball;
+    // THE BALL'S TARGET: the swing's ball key (plus the rest sway at idle), with
+    // the key's own velocity (the guide is PD: the ball arrives MOVING with the
+    // key). On the frame a strike fires it is that side's FLAIL_IMPACT itself,
+    // pinned on the call's last substep with the strike key's velocity: the
+    // drawn ball sits exactly where the crater lands, whatever the frame's t
+    // overran strikeT by (at 60 Hz the key is ~5 cm past it), and flies on.
+    let guide: number, vel: Vec3;
     if (strikeNow) {
-      target = FLAIL_IMPACT[strikeNow];
+      const t = FLAIL_IMPACT[strikeNow];
+      target[0] = t[0]; target[1] = t[1]; target[2] = t[2];
       guide = 1;
+      vel = flailBallVel({ ...swing, phase: 'swing', side: strikeNow, t: FLAIL_SWING.strikeT });
     } else {
       const sway = swing.phase === 'idle' ? FLAIL_LOOK.swayAmp : 0;
       const w = 2 * Math.PI * FLAIL_LOOK.swayHz * clock;
-      target = [pose.ball[0] + sway * Math.sin(w), pose.ball[1], pose.ball[2] + sway * 0.7 * Math.sin(w * 1.3)];
+      target[0] = pose.ball[0] + sway * Math.sin(w); target[1] = pose.ball[1]; target[2] = pose.ball[2] + sway * 0.7 * Math.sin(w * 1.3);
       guide = guideWeight(swing);
+      vel = flailBallVel(swing);
     }
+    stepOpts.pin = strikeNow !== null;
+    stepOpts.targetVel[0] = vel[0]; stepOpts.targetVel[1] = vel[1]; stepOpts.targetVel[2] = vel[2];
     // Gravity pulls toward the FLOOR: world down in rig-local space (rig-local
     // −Y tilts with the aim pitch and the holster).
     rig.getWorldQuaternion(_rigQ);
     _down.set(0, -1, 0).applyQuaternion(_rigQ.invert()).normalize();
-    sim = stepChain(sim ?? makeChain(bolt, target), bolt, target, guide, [_down.x, _down.y, _down.z], dt);
+    down[0] = _down.x; down[1] = _down.y; down[2] = _down.z;
+    if (sim && dt > 0 && Math.hypot(bolt[0] - sim.anchor[0], bolt[1] - sim.anchor[1], bolt[2] - sim.anchor[2]) > TELEPORT_MPS * dt) sim = null;
+    sim = stepChainInPlace(sim ?? makeChain(bolt, target), bolt, target, guide, down, dt, stepOpts);
+    const end = sim.p[sim.p.length - 1]!;
+    if (!Number.isFinite(end[0]) || !Number.isFinite(end[1]) || !Number.isFinite(end[2])) sim = makeChain(bolt, target);
     const pts = sim.p;
     const n = pts.length, ring = n - 2;
     const b = pts[n - 1]!;
@@ -520,6 +548,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const ready = ctx.weapon.slotState.live === 'flail' && slotReady(ctx.weapon.slotState) && !loopBlocksInput(ctx);
       strikeNow = null;
       if (!ready) {
+        if (swing.phase === 'swing') sim = null;   // cancelled mid-swing: the bolt is about to snap
         swing = cancelFlailSwing(swing);
       } else {
         const r = stepFlailSwing(swing, { click, held }, dt);
@@ -553,6 +582,6 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     },
     refreshLights() { relist(); },
     syncFill,
-    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: swing.nextSide, ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, linkErr, ndc: ndcNow() }),
+    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: swing.nextSide, ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, ballKeyed: [...ballKeyed] as Vec3, linkErr, ndc: ndcNow() }),
   };
 }

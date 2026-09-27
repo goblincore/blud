@@ -27,7 +27,7 @@
 // clamped — a runaway |∇f| near a seam must not fling the point across the
 // body — assuming the field's gradient never drops below FLAIL_STRIKE.minGrad.
 
-import type { Vec3 } from '../types';
+import type { LimbId, Vec3 } from '../types';
 
 export const FLAIL_STRIKE = {
   /** Horizontal eye → torso-centre distance, metres. */
@@ -207,7 +207,7 @@ export function resolveStrike(eye: Vec3, yaw: number, impactWorld: Vec3, actors:
  *  in (a smaller crater, no sever); the last one takes the head off. */
 export const FLAIL_HEAD = { regionDist: 0.25, hitsToSever: 3, faceCraterR: 0.09 } as const;
 
-export function isHeadRegion(limb: string | undefined, point: Vec3, headCentre: Vec3 | null): boolean {
+export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null): boolean {
   if (limb === 'head') return true;
   if (!headCentre) return false;
   return Math.hypot(point[0] - headCentre[0], point[1] - headCentre[1], point[2] - headCentre[2]) < FLAIL_HEAD.regionDist;
