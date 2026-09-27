@@ -18,6 +18,9 @@
 //      the body-box mean is within 0.9x..1.2x of `?lightlist=0` at the same pose (a second boot);
 //      the body box is never mostly black.
 //      LIGHT_GATE_SHOT=<dir> keeps the A/B shots (list-<scene>-on|off.png).
+//  7b. THE FLASHLIGHT UP CLOSE (owner 2026-09-27): in both boots, the tube-lit body at 2 m in the
+//      beam, measured on its own pixels (march debug heatmap mask): list on at most 5% blown
+//      (> 0.95) and mean >= 0.6. `?lightlist=0` is reported.
 //   8. BONES (Task 11): the skull catches the muzzle flash and does not glow in the dark.
 //   9. GIBS (Task 12): a zombie blown up under a tube (default asset gibs, baked-chunk materials)
 //      in the list boot and a `?lightlist=0` boot, gib pixels (the pixels that change when the
@@ -426,6 +429,56 @@ async function listScenes(tag) {
   return out;
 }
 const fmt = (b) => `mean ${b.mean.toFixed(3)} std ${b.std.toFixed(3)} dark ${(b.dark * 100).toFixed(1)}%`;
+/** 7b. THE FLASHLIGHT UP CLOSE (owner 2026-09-27: "direct flashlight beam at close/mediumish ranges
+ *  causes enemies to blow out"). The UNDER_A body (in its tube's pool) framed from FLASH_NEAR_M with
+ *  the torch on and the view-model hidden; the BODY is the pixels the march debug heatmap
+ *  (setMarchDebugMode(1)) changes in the same frame, eroded once (no fringe). Measured on every
+ *  pixel of the body, not the fixed box: at 2 m the box is half wall, and the wall in the beam is
+ *  blown on both paths. Returns mean / std / blown share (> 0.95). Leaves the torch off and the
+ *  clock pinned with the tubes lit, as the scenes before it did. */
+const FLASH_NEAR_M = 2;
+async function flashNear(tag) {
+  await evaluate('__sdfGame.holdWindowLight(0, -1)');
+  await evaluate('__sdfGame.setLightClockFrozen(false)');
+  await evaluate('__sdfGame.setFlashlight(true)');
+  await evaluate('__sdfGame.setViewModelVisible(false)');
+  await stepN(30);
+  await pinLit();
+  if ((await lights()).flashlight !== 1) fail(`flashlight near (${tag}): torch level ${(await lights()).flashlight}`);
+  await frameNearest(...UNDER_A, FLASH_NEAR_M);
+  await stepN(12, 0);
+  await settle(300);
+  const img = await shoot(`list-flashnear-${tag}`);
+  await evaluate('__sdfGame.setMarchDebugMode(1)');
+  await stepN(3, 0);
+  await settle(300);
+  const dbg = await shoot(`list-flashnear-${tag}-mask`);
+  await evaluate('__sdfGame.setMarchDebugMode(0)');
+  const { w, h, ch, data } = img;
+  const mask = new Uint8Array(w * h);
+  for (let y = Math.floor(0.08 * h); y < Math.floor(0.95 * h); y++) for (let x = Math.floor(0.25 * w); x < Math.floor(0.8 * w); x++) {
+    const i = (y * w + x) * ch;
+    if (Math.abs(data[i] - dbg.data[i]) + Math.abs(data[i + 1] - dbg.data[i + 1]) + Math.abs(data[i + 2] - dbg.data[i + 2]) > 90) mask[y * w + x] = 1;
+  }
+  const v = [];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const k = y * w + x;
+    if (!(mask[k] && mask[k - 1] && mask[k + 1] && mask[k - w] && mask[k + w])) continue;
+    v.push((data[k * ch] + data[k * ch + 1] + data[k * ch + 2]) / 765);
+  }
+  if (v.length < 5000) fail(`flashlight near (${tag}): body mask only ${v.length} px (the body is not framed)`);
+  const mean = v.reduce((a, b) => a + b, 0) / v.length;
+  const std = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / v.length);
+  const blown = v.filter((x) => x > 0.95).length / v.length;
+  await evaluate('__sdfGame.setViewModelVisible(true)');
+  await evaluate('__sdfGame.setLightClockFrozen(false)');
+  await evaluate('__sdfGame.setFlashlight(false)');
+  await stepN(30);
+  await pinLit();
+  if ((await lights()).flashlight !== 0) fail(`flashlight near (${tag}): torch did not go off after the check`);
+  return { px: v.length, mean, std, blown };
+}
+const nearFmt = (b) => `mean ${b.mean.toFixed(3)} std ${b.std.toFixed(3)} blown ${(b.blown * 100).toFixed(1)}% (${b.px} px)`;
 
 // 10. COST (plan 1, Task 13; spec §7): the list may cost at most +1.5 ms a frame over
 // `?lightlist=0` in either carriage. One boot, the live switch (`setLightList(on)`: the list and
@@ -752,6 +805,7 @@ if (pa.picks[0].index < 0 || pb.picks[0].index < 0 || pa.picks[0].index === pb.p
 const lit = picks.filter((p) => p.picks[0].index >= 0).length;
 pass(`shared list: ${LL3.length} lights in third class; crowd actors ${pa.id}/${pb.id} (room ${pa.room}, ${sep.toFixed(1)} m apart) dominants ${pa.picks[0].index} (w ${pa.picks[0].weight.toFixed(3)}) / ${pb.picks[0].index} (w ${pb.picks[0].weight.toFixed(3)}); ${lit}/${picks.length} bodies picked`);
 const listOn = process.env.LIGHT_GATE_ONLY_GIBS ? null : await listScenes('on');
+const nearOn = process.env.LIGHT_GATE_ONLY_GIBS ? null : await flashNear('on');
 
 // 8. BONES READ THE SAME LIGHTS (plan 1, Task 11): the skull catches the muzzle flash. In the dark
 // coat check (nothing picks the body), a slug crater opens the face of the nearest actor to its
@@ -958,6 +1012,7 @@ const gibsOn = await gibScene('on');
 await listBoot('level=night-train&frozen&god&lightlist=0');
 if ((await evaluate('__sdfGame.bodyPicks()')).some((p) => p.picks.some((k) => k.index >= 0))) fail('?lightlist=0 still picks');
 const listOff = ONLY_GIBS ? null : await listScenes('off');
+const nearOff = ONLY_GIBS ? null : await flashNear('off');
 const skullListOff = ONLY_GIBS ? null : await skullScene('off');
 const gibsOff = await gibScene('off');
 // The march sub-pass: marched chunk views (no bake, so they stay views), list on.
@@ -1010,6 +1065,16 @@ for (const n of ['tube', 'bolt', 'flashlight']) {
 for (const n of ['tube', 'bolt', 'flashlight']) if (!(listOn[n].dark <= 0.15)) fail(`${n}: body box ${(listOn[n].dark * 100).toFixed(1)}% near-black (> 15%)`);
 // And with no picks at all (the dark coat check) the fill floor still carries the body.
 if (!(listOn.dark.dark <= Math.max(0.15, listOff.dark.dark + 0.05))) fail(`dark coat check: body box ${(listOn.dark.dark * 100).toFixed(1)}% near-black (off ${(listOff.dark.dark * 100).toFixed(1)}%)`);
+// 7b. The flashlight up close (owner 2026-09-27): the list's body at FLASH_NEAR_M in the beam under
+// its tube keeps its highlights (the march's beam shoulder): at most FLASH_NEAR_BLOWN of the body
+// above 0.95, and it still reads lit (mean >= 0.6; a fix that only darkens the body fails). Before
+// the beam shoulder: 42% blown at 2 m (?lightlist=0: 67%, reported, not bounded). Dev note
+// 2026-09-27-shared-light-list, "Flashlight up close".
+const FLASH_NEAR_BLOWN = 0.05;
+console.log(`     flash ${FLASH_NEAR_M} m  on  ${nearFmt(nearOn)} | off ${nearFmt(nearOff)}`);
+if (!(nearOn.blown <= FLASH_NEAR_BLOWN)) fail(`flashlight at ${FLASH_NEAR_M} m: ${(nearOn.blown * 100).toFixed(1)}% of the body blown (> ${FLASH_NEAR_BLOWN * 100}%)`);
+if (!(nearOn.mean >= 0.6)) fail(`flashlight at ${FLASH_NEAR_M} m: body mean ${nearOn.mean.toFixed(3)} < 0.6 (the fix darkened it)`);
+pass(`flashlight up close (${FLASH_NEAR_M} m, under a tube): body blown ${(nearOn.blown * 100).toFixed(1)}% (off ${(nearOff.blown * 100).toFixed(1)}%), mean ${nearOn.mean.toFixed(3)}, std ${nearOn.std.toFixed(3)}`);
 pass(`shared list look: on/off mean tube ${(listOn.tube.mean / listOff.tube.mean).toFixed(2)}x bolt ${(listOn.bolt.mean / listOff.bolt.mean).toFixed(2)}x flashlight ${(listOn.flashlight.mean / listOff.flashlight.mean).toFixed(2)}x; near-black tube ${(listOn.tube.dark * 100).toFixed(1)}% bolt ${(listOn.bolt.dark * 100).toFixed(1)}% flashlight ${(listOn.flashlight.dark * 100).toFixed(1)}% dark-corridor ${(listOn.dark.dark * 100).toFixed(1)}%`);
 
 await costSection();

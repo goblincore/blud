@@ -2,7 +2,7 @@
 // realism: a flattering key, a fill, a rim, visible relief, never a flat black silhouette.
 // One profile per light KIND, fixed in code; a level may scale a light's gain and tint
 // (light-list.ts), never define profiles. GPU lanes: a (gain, viewBias, floor, backKey),
-// b (backRim, spec, 0 spare, specPow), c (rimTint.rgb, 0). edge/distFall/coverFloor are CPU-only (pick).
+// b (backRim, spec, beamShoulder, specPow), c (rimTint.rgb, 0). edge/distFall/coverFloor are CPU-only (pick).
 
 import { LIGHT_PRESETS } from '../material';
 
@@ -16,6 +16,10 @@ export interface LightProfile {
   backRim: number; rimTint: [number, number, number];
   edge: number; distFall: number;
   spec: number; specPow: number;
+  /** GPU lane b.z: per unit of this light's delivered luminance, how far a body moves onto the
+   *  march's beam shoulder (compose.wgsl.ts; clamped to 1). Flashlight 2 (full from 0.5), every
+   *  other kind 0 (their bodies keep the exponential shoulder). */
+  beamShoulder: number;
 }
 
 export const PROFILE_ID = { tube: 0, lamp: 1, window: 2, flashlight: 3, muzzle: 4, fire: 5, beacon: 6 } as const;
@@ -75,7 +79,7 @@ const WARM_RIM: [number, number, number] = [1.2, 0.8, 0.5];
 const RED_RIM: [number, number, number] = [1.3, 0.2, 0.15];
 
 /** The tube's calibrated profile (the beacon starts from it). */
-const TUBE_PROFILE: LightProfile = { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * 1.3 * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.35, backRim: 2.5, rimTint: COLD_RIM, edge: 1.25, distFall: 0.06, spec: 1.0, specPow: 24 };
+const TUBE_PROFILE: LightProfile = { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * 1.3 * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.35, backRim: 2.5, rimTint: COLD_RIM, edge: 1.25, distFall: 0.06, spec: 1.0, specPow: 24, beamShoulder: 0 };
 
 // Keyed by name so table order can never drift from PROFILE_ID (review fix, Task 2):
 // a missing or misspelt key is a TypeScript error, and LIGHT_PROFILES below is derived
@@ -90,30 +94,33 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
   // lamp (warm bulbs): as the tube, normalised by its base power, keeping the lamp's own
   // LAMP_PRESENT_GAIN 1.1 (vs the tube's 1.3): 2.4 x 1.5 x 1.1 x LAMP_LIST_TRIM = 2.772 (the trim
   // is the tube's; no warm-bulb lamp was measured).
-  lamp: { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * LAMP_PRESENT_GAIN * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.4, backRim: 1.5, rimTint: WARM_RIM, edge: 1.25, distFall: 0.08, spec: 0.8, specPow: 20 },
+  lamp: { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * LAMP_PRESENT_GAIN * LAMP_LIST_TRIM, viewBias: 0.3, floor: 0.18, coverFloor: 0.18, backKey: 0.4, backRim: 1.5, rimTint: WARM_RIM, edge: 1.25, distFall: 0.08, spec: 0.8, specPow: 20, beamShoulder: 0 },
   // window / lightning: hard, cold, side rim (compose.wgsl.ts's lightning rim).
   // gain = lightCfg.x 2.4 x BODY_WINDOW_GAIN 0.035 x WINDOW_LIST_TRIM 1.3 = 0.1092 on the raw
   // intensity (bodyNorm 1): the window's intensity IS the storm's signal (a bolt peaks near 27-32).
   // Held bolt at the A/B pose: trim 1.0 0.96x today's mean, 1.3 0.99x.
-  window: { gain: OLD_KEY * OLD_BODY_WINDOW_GAIN * WINDOW_LIST_TRIM, viewBias: 0.15, floor: 0.1, coverFloor: 0.1, backKey: 0.5, backRim: 3.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0, spec: 1.2, specPow: 32 },
+  window: { gain: OLD_KEY * OLD_BODY_WINDOW_GAIN * WINDOW_LIST_TRIM, viewBias: 0.15, floor: 0.1, coverFloor: 0.1, backKey: 0.5, backRim: 3.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0, spec: 1.2, specPow: 32, beamShoulder: 0 },
   // flashlight: the beam is the key (flashlight.wgsl.ts), little bias, it is at the eye.
   // gain = the beam gain 4 x FLASHLIGHT_LIST_TRIM 2.8 = 11.2, on rgb normalised by the flashlight's
   // base intensity (bodyNorm = 1 / 90): the pick's cover x 1/(1 + 0.04 d²) stands in for the old
   // cone² x (1 - d/range)² (2.4 m: 0.81 vs 0.72); the trim is measured (see FLASHLIGHT_LIST_TRIM).
-  flashlight: { gain: OLD_BEAM_GAIN * FLASHLIGHT_LIST_TRIM, viewBias: 0.0, floor: 0.1, coverFloor: 0.1, backKey: 1.0, backRim: 0.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0.04, spec: 1.0, specPow: 24 },
+  // beamShoulder 2 (owner 2026-09-27, "the beam blows enemies out up close"): a body the torch
+  // delivers >= 0.5 to takes the march's softer beam shoulder, so the tube + beam compresses
+  // instead of clipping (1.5-2.5 m: 42-58% of the body > 0.95 before, 0% after; dev note).
+  flashlight: { gain: OLD_BEAM_GAIN * FLASHLIGHT_LIST_TRIM, viewBias: 0.0, floor: 0.1, coverFloor: 0.1, backKey: 1.0, backRim: 0.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0.04, spec: 1.0, specPow: 24, beamShoulder: 2 },
   // muzzle: compose.wgsl.ts flashDirect's warm colour lives in the light's rgb.
   // Old: I x 0.06 / d²; the list: I x gain / (1 + 0.2 d²) (the pick's distFall). Equal at a typical
   // 1.5 m (0.06 / 2.25 = gain / 1.45): gain = 0.06 x 1.45 / 2.25 = 0.039 (bodyNorm 1).
   // DERIVED ONLY, never measured: the curves cross at 1.5 m, so the list is ~3x brighter than the
   // old flash at 3 m and dimmer inside 1 m.
-  muzzle: { gain: OLD_BODY_FLASH_GAIN * 1.45 / 2.25, viewBias: 0.0, floor: 0.0, coverFloor: 0.0, backKey: 1.0, backRim: 0.5, rimTint: WARM_RIM, edge: 1.0, distFall: 0.2, spec: 0.5, specPow: 16 },
+  muzzle: { gain: OLD_BODY_FLASH_GAIN * 1.45 / 2.25, viewBias: 0.0, floor: 0.0, coverFloor: 0.0, backKey: 1.0, backRim: 0.5, rimTint: WARM_RIM, edge: 1.0, distFall: 0.2, spec: 0.5, specPow: 16, beamShoulder: 0 },
   // fire: burning bodies fed the same bodyFlash slot as the muzzle, so the same conversion, with
   // the fire profile's distFall 0.1 (0.06 x 1.225 / 2.25 = 0.033), on the RAW intensity: every
   // fire light has bodyNorm 1 (burning-body flashes carry no reference, and collectLightSources
   // drops a fire-mood lamp's base power as its reference, Task 10 review). Derived only, never
   // measured. Fire-mood lamps did not key bodies in the old path (presentingLamp skips them); at
   // their ~1-4 intensity this keeps them a faint warm touch within 3 m.
-  fire: { gain: OLD_BODY_FLASH_GAIN * 1.225 / 2.25, viewBias: 0.1, floor: 0.2, coverFloor: 0.2, backKey: 0.6, backRim: 1.2, rimTint: WARM_RIM, edge: 1.0, distFall: 0.1, spec: 0.4, specPow: 12 },
+  fire: { gain: OLD_BODY_FLASH_GAIN * 1.225 / 2.25, viewBias: 0.1, floor: 0.2, coverFloor: 0.2, backKey: 0.6, backRim: 1.2, rimTint: WARM_RIM, edge: 1.0, distFall: 0.1, spec: 0.4, specPow: 12, beamShoulder: 0 },
   // beacon (Boiler Room emergency beacons, spec 2026-09-27-boiler-room-beacons-design.md): the
   // tube's calibrated profile (a spot normalised by its base spot power, base x BEACON.spotGain),
   // with a hard red rim. Not measured on its own: the owner tunes from the contact sheet.
@@ -136,7 +143,7 @@ export const LIGHT_PROFILES: readonly LightProfile[] = Object.freeze((Object.key
 export function packProfiles(profiles: readonly LightProfile[] = LIGHT_PROFILES): Float32Array {
   const f = new Float32Array(MAX_PROFILES * PROFILE_VEC4S * 4);
   profiles.slice(0, MAX_PROFILES).forEach((p, i) => {
-    f.set([p.gain, p.viewBias, p.floor, p.backKey, p.backRim, p.spec, 0, p.specPow, ...p.rimTint, 0], i * 12);
+    f.set([p.gain, p.viewBias, p.floor, p.backKey, p.backRim, p.spec, p.beamShoulder, p.specPow, ...p.rimTint, 0], i * 12);
   });
   return f;
 }

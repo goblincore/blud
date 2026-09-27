@@ -746,3 +746,123 @@ looks fine once it lands. Not a light-list regression; it predates this branch.
   The two runs' arms take different paths (launch is not deterministic across loads).
   Strip: [arm-gib-bone-fix.png](arm-gib-bone-fix.png) — BEFORE blur+tubes shows sharp white bone
   lines through the smeared arm (F28-F40); AFTER blur+tubes is identical to AFTER tubes hidden.
+
+## Flashlight up close (owner 2026-09-27): the beam shoulder
+
+Owner report, playing Night Train: "Direct flashlight beam at close/mediumish ranges causes
+enemies to blow out a bit too much." Screenshots showed near-white zombies.
+
+![before | after](flashlight-near.png)
+
+(Rows: before / after in the body's own tube with the torch on; then before / after with the
+tubes killed. Columns: 1.5, 2.5, 4, 6 m.)
+
+### What was measured
+
+- **Rig.** Scratch sweep on the gate's plumbing: the section 7 boot (clocks pinned, train
+  stopped, window held dark). The UNDER_A crowd body is framed from 1.5, 2, 2.5, 4 and 6 m with
+  the torch on and the view-model hidden.
+- **The body is the pixels the march debug heatmap changes** (`setMarchDebugMode(1)`, same
+  frame), eroded once. The gate's fixed body box is not used here: at 2 m it is half wall, and
+  the wall in the beam is blown on both paths.
+- **The metrics.** Mean, std and "blown" (share of body pixels with luminance > 0.95), in the
+  list boot and a `?lightlist=0` boot. The tubes are on (the owner's case) or killed
+  (`lightCommand("die", 1)`).
+
+Before (f959009e), body pixels:
+
+| m | list, tube + torch: mean / std / blown | `?lightlist=0`, tube + torch | list, tube only (torch off) | list, tubes killed |
+|---|---|---|---|---|
+| 1.5 | 0.902 / 0.121 / 51.7% | 0.926 / 0.125 / 72.0% | 0.817 / 0.147 / 3.0% | 0.466 / 0.128 / 0.0% |
+| 2 | 0.888 / 0.125 / 41.5% | 0.915 / 0.131 / 66.8% | — | 0.443 / 0.117 / 0.0% |
+| 2.5 | 0.915 / 0.097 / 57.9% | 0.913 / 0.114 / 64.0% | 0.808 / 0.134 / 1.3% | 0.696 / 0.148 / 0.4% |
+| 4 | 0.884 / 0.078 / 0.5% | 0.294 / 0.173 / 0.0% | 0.750 / 0.125 / 0.0% | 0.862 / 0.102 / 0.2% |
+| 6 | 0.746 / 0.070 / 0.0% | 0.436 / 0.213 / 0.0% | 0.643 / 0.098 / 0.0% | 0.711 / 0.092 / 0.0% |
+
+**Why it blew.** The tube alone already puts this pale body at the highlight shoulder's knee
+(1.5 m: mean 0.82, 57% of pixels over 0.85). The torch adds its light on top, and the
+exponential shoulder (knee 0.65) is spent quickly: it reaches 0.95 at 2x its headroom past the
+knee. So half the body clipped to white, even with a small torch share.
+
+**The pick undercounts the torch up close.** The flashlight's pick weight is only 0.09 at 1.5 m
+and 0.17 at 2.5 m, because the pick judges spot coverage at the FEET. The torch is at the hand
+(0.65 m right, 1.48 m up), so up close the feet are outside its cone. At 4 m the weight is 0.59;
+at 6 m, 0.40.
+
+So the list's torch delivers about 1.0 at 1.5 m and 6.6 at 4 m (rgb × weight × gain 11.2 /
+90), against the tube's 2.8.
+
+### The fix: one knob, the shoulder
+
+- **`bodyLights` (WGSL and the CPU twin) sums `beamShoulder × luminance(c)`** over the body's
+  picks. `beamShoulder` is a new profile field in the spare lane b.z: flashlight 2, every other
+  kind 0.
+- **`compose` uses that sum as a weight** (clamped to 1, so it is full from 0.5 delivered). It
+  mixes the exponential shoulder toward a Reinhard tail from a knee 0.1 lower (0.55).
+  - Like the exponential shoulder, the Reinhard tail is monotonic and C1 at its knee. It reaches
+    0.95 at 8x its headroom instead of 2x, so the highlights compress instead of clipping.
+  - The lower knee keeps a beam-lit body about as bright as the same body in its tube alone.
+- **With no flashlight pick the output is bit-identical to before**, for every other light and
+  with `?lightlist=0`.
+- **Not changed:** the flashlight gain and trim (`FLASHLIGHT_LIST_TRIM` 2.8), `distFall` (0.04)
+  and the shipped shoulder (`beamTuning.shoulder` 0.35).
+
+Tried and rejected (same rig):
+- **Trim 1.4 alone.** Still 23-40% blown at 1.5-2.5 m under the tube. The tubes-killed body at
+  1.5 m fell to 0.28.
+- **Trim 2.0 plus the Reinhard tail.** The weaker torch made the weight smaller, so 1.5 m blew
+  again (4%). The dark-room body fell to 0.36.
+- **An "exposure" pre-scale in the beam.** It made a body in the beam darker than the same body
+  with the torch off (0.77 against 0.82), and the tubes-killed body fell to 0.36.
+- **The Reinhard tail from the same knee (0.65).** Blown 0.1-0.5%, but still visibly white.
+
+After (the committed code), body pixels:
+
+| m | list, tube + torch: mean / std / blown | vs before (mean) | list, tubes killed | vs before (mean) |
+|---|---|---|---|---|
+| 1.5 | 0.809 / 0.103 / 0.0% | 0.90× | 0.453 / 0.115 / 0.0% | 0.97× |
+| 2 | 0.794 / 0.105 / 0.0% | 0.89× | 0.433 / 0.108 / 0.0% | 0.98× |
+| 2.5 | 0.833 / 0.088 / 0.0% | 0.91× | 0.647 / 0.122 / 0.0% | 0.93× |
+| 4 | 0.828 / 0.080 / 0.0% | 0.94× | 0.800 / 0.092 / 0.0% | 0.93× |
+| 6 | 0.691 / 0.068 / 0.0% | 0.93× | 0.649 / 0.078 / 0.0% | 0.91× |
+
+- **Blown** is 0% at every distance (was 42-58% at 1.5-2.5 m).
+- **The std** is 15% lower up close (0.121 → 0.103 at 1.5 m), because compressing the top narrows
+  the range. It is unchanged at 4-6 m.
+- **1.5 m in the beam now matches the tube alone** (0.81 against 0.82), not brighter.
+
+### Gate
+
+- **Section 7's flashlight row** (the calibration pose, UNDER_B from 2.4 m, the fixed box) moved
+  from 1.00x to **0.93x** of `?lightlist=0` (mean 0.554 against 0.596). That is inside the
+  0.9-1.2 band, so the bounds are unchanged.
+- **Tube and bolt** are unchanged (1.03x, 0.98x): no flashlight pick, so the same arithmetic.
+- **New section 7b, `flashNear`:** in both boots, the tube-lit UNDER_A body from 2 m in the beam,
+  measured on its own pixels (the heatmap mask).
+  - Bounds, list on: blown ≤ 5% and mean ≥ 0.6, so a fix that only darkens the body fails.
+  - Run: list 0.0% blown, mean 0.796, std 0.105; `?lightlist=0` 66.6% blown, reported, not bounded.
+- `LIGHT_GATE_ONLY_LIST=1` run: PASS (224 s). Gibs in the torch: baked 4.7% blown, marched 1.9%
+  (marched chunk views take the compose shoulder too).
+
+### By eye (honest)
+
+- **1.5-2.5 m, in the tube and the beam.** Paper white before; pale grey-pink after, with the
+  chest and belly forms faintly back. It reads as a pale lit body rather than a cut-out. It is
+  still pale, the approved tube baseline plus a little.
+- **4-6 m.** About the same as before: a flat, pale grey-white body.
+  - Nothing clips there (0% blown before as well), but 57-80% of the body sits over 0.85, and the
+    relief is weak.
+  - The list's torch is at its STRONGEST there (weight 0.4-0.6, so delivered 4.5-6.6), because
+    of the feet-coverage pick above. The brief kept this range near today (0.93-0.94x).
+- **Tubes killed, up close.** Unchanged: pink with relief and wet specular glints, the look the
+  owner asked for. The torch barely counts in the pick there.
+
+### Owner questions / follow-ups (not done here)
+
+- **The mid-range flat look (4-6 m) is a gain question.** Lowering `FLASHLIGHT_LIST_TRIM` (2.8)
+  is the knob. It moves the section 7 calibration row, which was calibrated to match the old
+  beam at 2.4 m; the old beam is itself 64-67% blown on the body at 2-2.5 m.
+- **Judge the flashlight's pick coverage at the chest, not the feet.** Up close the list gives a
+  hand-held torch a weight of 0.09 while its beam is visibly on the chest. That is why the torch
+  is weak at 1.5-2 m and strongest at 4-6 m. It needs a light-pick change (a per-profile cover
+  height) and a re-calibration.

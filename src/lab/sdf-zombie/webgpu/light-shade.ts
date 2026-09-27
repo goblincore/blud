@@ -17,11 +17,13 @@
 // Slot 0 also returns domL / domLb / domC / domFloor for the march's key path (domLb = slot 0's
 // Lb, which its wrap and highlight use; domL the raw direction for scatter and the wound shadow). skipFirst leaves slot 0's
 // diffuse and spec out (the march shades the dominant through its own key); its rim and dom* stay.
+// beam sums every slot's beamShoulder (profile lane b.z) x luminance(c): the march's beam
+// shoulder weight (compose.wgsl.ts), the flashlight's delivered light.
 
 import { LIGHT_VEC4S, LIST_LIGHTS_AT, type Vec3 } from './light-list';
 import { PROFILE_VEC4S } from './light-profiles';
 
-export interface BodyLit { diffuse: Vec3; spec: Vec3; rim: Vec3; domL: Vec3; domLb: Vec3; domC: Vec3; domFloor: number }
+export interface BodyLit { diffuse: Vec3; spec: Vec3; rim: Vec3; domL: Vec3; domLb: Vec3; domC: Vec3; domFloor: number; beam: number }
 
 const dot = (a: readonly number[], b: readonly number[]) => a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
 // Zero-safe, the WGSL's exact form: v * inverseSqrt(max(dot(v, v), 1e-12)), so a zero vector
@@ -30,7 +32,7 @@ const normalize = (a: readonly number[]): Vec3 => { const k = 1 / Math.sqrt(Math
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<number>, list: Float32Array, skipFirst = false): BodyLit {
-  const o: BodyLit = { diffuse: [0, 0, 0], spec: [0, 0, 0], rim: [0, 0, 0], domL: [0, 1, 0], domLb: [0, 1, 0], domC: [0, 0, 0], domFloor: 0 };
+  const o: BodyLit = { diffuse: [0, 0, 0], spec: [0, 0, 0], rim: [0, 0, 0], domL: [0, 1, 0], domLb: [0, 1, 0], domC: [0, 0, 0], domFloor: 0, beam: 0 };
   const nv = Math.max(dot(n, V), 0);
   for (let k = 0; k < 4; k++) {
     const pv = picks[k]!;
@@ -43,7 +45,7 @@ export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<numb
     const lm = list.subarray(base + 12, base + 16);
     const pr = Math.trunc(lm[0]!) * PROFILE_VEC4S * 4;
     const pa = list.subarray(pr, pr + 4);           // gain, viewBias, floor, backKey
-    const pb = list.subarray(pr + 4, pr + 8);       // backRim, spec, 0, specPow
+    const pb = list.subarray(pr + 4, pr + 8);       // backRim, spec, beamShoulder, specPow
     const pc = list.subarray(pr + 8, pr + 12);      // rimTint.rgb, 0
     const L = a[3]! > 1.5 ? [a[0]!, a[1]!, a[2]!] as Vec3 : normalize([a[0]! - p[0], a[1]! - p[1], a[2]! - p[2]]);
     const bias = pa[1]!;
@@ -61,6 +63,7 @@ export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<numb
     };
     if (!(skipFirst && k === 0)) { acc(o.diffuse, wrap); acc(o.spec, sp); }
     acc(o.rim, rim, pc);
+    o.beam += pb[2]! * (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]);
     if (k === 0) { o.domL = L; o.domLb = Lb; o.domC = c; o.domFloor = pa[2]!; }
   }
   return o;

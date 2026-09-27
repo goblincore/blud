@@ -101,6 +101,16 @@ describe('Task 9 review: list mode keeps the rim, the shoulder and viewBias; no 
     expect(COMPOSE_BLOCK).not.toContain('if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {');
   });
 
+  it('the beam shoulder (owner 2026-09-27): listBeam from bodyLights picks a Reinhard tail; 0 keeps the exponential shoulder', () => {
+    expect(LIGHT_LIST_BLOCK).toContain('var listBeam = 0.0;');
+    expect(LIGHT_LIST_BLOCK).toContain('listBeam = bl.beam;');
+    expect(LIGHT_LIST_BLOCK.indexOf('listBeam = bl.beam;')).toBeGreaterThan(LIGHT_LIST_BLOCK.indexOf('if (lightListCfg.x > 0.0) {'));
+    expect(COMPOSE_BLOCK).toContain('if (listBeam > 0.0) {');
+    expect(COMPOSE_BLOCK).toContain('let kb = max(knee - 0.1, 0.05);');
+    expect(COMPOSE_BLOCK).toContain('fleshLit = mix(shoulder, beamTail, clamp(listBeam, 0.0, 1.0));');
+    expect(COMPOSE_BLOCK).toContain('} else {\n      fleshLit = shoulder;\n    }');
+  });
+
   it('the flashlight beam is skipped in list mode; beamAmt, its only other output, is unread', () => {
     expect(FLASHLIGHT_BLOCK).toContain('if (spotCfg.x > 0.0 && lightListCfg.x <= 0.0) {');
     for (const e of [MARCH_BODY, REFINE_BODY]) {

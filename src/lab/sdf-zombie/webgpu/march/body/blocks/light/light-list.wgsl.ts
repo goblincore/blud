@@ -36,6 +36,8 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
   var listSpec = vec3<f32>(0.0);
   var listRim = vec3<f32>(0.0);
   var listDomFloor = 0.0;
+  // The beam's delivered luminance (profile lane b.z, beamShoulder: the flashlight's 1), for compose's beam shoulder.
+  var listBeam = 0.0;
   // Lk: the dominant's VIEW-BIASED direction (its Lb), for its wrap and highlight; L stays the raw
   // direction for scatter and the wound shadow. Off, Lk == L exactly.
   var Lk = L;
@@ -53,5 +55,6 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
     // lightListCfg.y above 0.5 - a gib chunk view - drops every back rim: owner 2026-09-27, no edge rim on gibs.
     listRim = select(bl.rim, vec3<f32>(0.0), lightListCfg.y > 0.5);
     listDomFloor = bl.domFloor;
+    listBeam = bl.beam;
   }
   // ---- END SHARED LIGHT LIST ----------------------------------------------`;

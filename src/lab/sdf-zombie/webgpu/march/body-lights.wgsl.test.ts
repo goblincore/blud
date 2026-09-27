@@ -22,11 +22,11 @@ describe('BODY_LIGHTS — parse contract', () => {
     expect(parsed.outputType).toBe('BodyLit');
   });
 
-  it('declares BodyLit after the fn (trailing-declaration pattern) with the seven fields', () => {
+  it('declares BodyLit after the fn (trailing-declaration pattern) with the eight fields', () => {
     const s = BODY_LIGHTS.indexOf('struct BodyLit {');
     expect(s).toBeGreaterThan(BODY_LIGHTS.indexOf('return o;'));
     const body = BODY_LIGHTS.slice(s);
-    for (const f of ['diffuse: vec3<f32>', 'spec: vec3<f32>', 'rim: vec3<f32>', 'domL: vec3<f32>', 'domLb: vec3<f32>', 'domC: vec3<f32>', 'domFloor: f32']) {
+    for (const f of ['diffuse: vec3<f32>', 'spec: vec3<f32>', 'rim: vec3<f32>', 'domL: vec3<f32>', 'domLb: vec3<f32>', 'domC: vec3<f32>', 'domFloor: f32', 'beam: f32']) {
       expect(body).toContain(f);
     }
   });
@@ -74,6 +74,13 @@ describe('BODY_LIGHTS — offsets and guards', () => {
     expect(gated).toContain('o.spec = o.spec + c * sp;');
     expect(gated).not.toContain('o.rim');
     expect(BODY_LIGHTS).toContain('if (k == 0) { o.domL = L; o.domLb = Lb; o.domC = c; o.domFloor = pa.z; }');
+  });
+
+  it('beam sums every slot\'s beamShoulder (profile lane b.z) x luminance(c), outside the skipFirst gate', () => {
+    expect(BODY_LIGHTS).toContain('o.beam = o.beam + pb.z * dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));');
+    const gate = BODY_LIGHTS.indexOf('if (!(skipFirst && k == 0)) {');
+    const close = BODY_LIGHTS.indexOf('}', gate);
+    expect(BODY_LIGHTS.indexOf('o.beam = o.beam')).toBeGreaterThan(close);
   });
 
   it('domLb is slot 0 view-biased Lb; empty slot 0 defaults it to domL default (0, 1, 0)', () => {
@@ -130,9 +137,9 @@ describe('BODY_LIGHTS — lane parity with packProfiles and the CPU reference', 
     for (const l of LANES) expect(BODY_LIGHTS, l.param).toContain(l.wgsl);
   });
 
-  it('the WGSL reads no spare lane (pa.w backKey is CPU pick only, pb.z is spare)', () => {
+  it('the WGSL reads no spare lane (pa.w backKey is CPU pick only; pb.z is beamShoulder, read once)', () => {
     expect(BODY_LIGHTS).not.toMatch(/\bpa\.w\b/);
-    expect(BODY_LIGHTS).not.toMatch(/\bpb\.z\b/);
+    expect(BODY_LIGHTS.match(/\bpb\.z\b/g)?.length).toBe(1);
     expect(BODY_LIGHTS).not.toMatch(/\bpc\.w\b/);
   });
 });

@@ -46,6 +46,19 @@ describe('shadeBodyLights (the CPU reference of bodyLights)', () => {
     expect(tube.domFloor).toBeCloseTo(0.18, 6);
   });
 
+  it('beam sums beamShoulder x luminance(c): the flashlight counts (x2), a tube does not (owner 2026-09-27)', () => {
+    const n: Vec3 = [0, 0, 1];
+    const flash = shadeBodyLights(P, n, V, [0.5, -1, -1, -1], packed([point([0, 0, 5], 'flashlight', [1, 0.9, 0.8])]));
+    const lum = 0.2126 * flash.domC[0] + 0.7152 * flash.domC[1] + 0.0722 * flash.domC[2];
+    expect(lum).toBeGreaterThan(0);
+    expect(flash.beam).toBeCloseTo(2 * lum, 5);
+    const tube = shadeBodyLights(P, n, V, [0.5, -1, -1, -1], packed([point([0, 0, 5], 'tube')]));
+    expect(tube.beam).toBe(0);
+    // Two slots: the tube adds nothing, the flashlight its own share (skipFirst does not gate it).
+    const both = shadeBodyLights(P, n, V, [0.5, 1.5, -1, -1], packed([point([0, 0, 5], 'tube'), point([0, 0, 5], 'flashlight', [1, 0.9, 0.8])]), true);
+    expect(both.beam).toBeCloseTo(flash.beam, 5);
+  });
+
   it('bodyNorm (light v3.z) scales c: a light with refIntensity 4 gives a quarter (Task 10)', () => {
     const n: Vec3 = [0, 0, 1];
     const a = shadeBodyLights(P, n, V, [0.5, -1, -1, -1], packed([point([0, 0, 5], 'lamp')]));

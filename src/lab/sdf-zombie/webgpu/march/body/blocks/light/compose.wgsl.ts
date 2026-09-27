@@ -112,7 +112,28 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                  faceFlat * 0.85);
   if ((spotCfg.x > 0.0 || lightListCfg.x > 0.0) && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
-    fleshLit = vec3<f32>(softShoulder(fleshLit.x, knee),
-                         softShoulder(fleshLit.y, knee),
-                         softShoulder(fleshLit.z, knee));
+    let shoulder = vec3<f32>(softShoulder(fleshLit.x, knee),
+                             softShoulder(fleshLit.y, knee),
+                             softShoulder(fleshLit.z, knee));
+    // BEAM SHOULDER (owner 2026-09-27: "direct flashlight beam at close/mediumish ranges causes
+    // enemies to blow out"). The exponential shoulder above reaches 0.95 at 2x its headroom past the knee, so a
+    // list-lit body in the flashlight (its tube plus the beam) sat at 0.95-1.0 over half its
+    // pixels at 1.5-2.5 m: relief and wounds gone. Where the flashlight lights the body, the
+    // tail becomes a Reinhard curve from a knee 0.1 lower (0.55 at the shipped shoulder 0.35).
+    // Like softShoulder it is monotonic, C1 at its knee and never reaches 1, but it only reaches
+    // 0.95 at 8x its headroom instead of 2x, so the highlights compress instead of
+    // clipping; the lower knee keeps a beam-lit body about as bright as the same body in its
+    // tube alone at 1.5 m, not brighter. listBeam is bodyLights' sum of beamShoulder x delivered
+    // luminance (the flashlight's beamShoulder 2: full from 0.5); 0 (no flashlight pick, every
+    // other light, the list off) is the exponential shoulder exactly.
+    // Measured (dev note 2026-09-27-shared-light-list, "Flashlight up close").
+    if (listBeam > 0.0) {
+      let kb = max(knee - 0.1, 0.05);
+      let head = 1.0 - kb;
+      let t = max(fleshLit - vec3<f32>(kb), vec3<f32>(0.0)) / head;
+      let beamTail = select(fleshLit, vec3<f32>(kb) + head * t / (vec3<f32>(1.0) + t), fleshLit > vec3<f32>(kb));
+      fleshLit = mix(shoulder, beamTail, clamp(listBeam, 0.0, 1.0));
+    } else {
+      fleshLit = shoulder;
+    }
   }`;

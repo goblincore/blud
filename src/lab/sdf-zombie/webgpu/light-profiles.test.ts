@@ -50,6 +50,14 @@ describe('light profiles (spec §5)', () => {
     expect([...f.slice(o + 4, o + 8)]).toEqual([t.backRim, t.spec, 0, t.specPow].map(Math.fround));
     expect([...f.slice(o + 8, o + 11)]).toEqual(t.rimTint.map(Math.fround));
   });
+  it('beamShoulder (lane b.z): the flashlight moves a body onto the march beam shoulder, no other kind does (owner 2026-09-27)', () => {
+    const f = packProfiles();
+    for (const name of Object.keys(PROFILE_ID) as (keyof typeof PROFILE_ID)[]) {
+      const want = name === 'flashlight' ? 2 : 0;
+      expect(PROFILES_BY_NAME[name].beamShoulder).toBe(want);
+      expect(f[PROFILE_ID[name] * 12 + 6]).toBe(want);
+    }
+  });
   it('the table is frozen: a runtime write throws and changes nothing (review fix, Task 3)', () => {
     const t = LIGHT_PROFILES[PROFILE_ID.tube]! as { gain: number; rimTint: number[] };
     expect(() => { t.gain = 99; }).toThrow(TypeError);

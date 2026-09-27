@@ -30,8 +30,8 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "LEVEL_SHADOW": "694f49c6272d874d9226e431f1736158bb4bf6f7",
   "MAP_BODY": "a0df0c2c29630f1da7f5c2212701aac2e5416a6a",
   "MARCH_ANCHOR_READ": "57d3265e1519f7cf5f0bd4c96faba22d320548ad",
-  "MARCH_BODY": "38a2df1b8b61edf2c99f6d65d3e9f4f1b2b4ba32",
-  "MARCH_BODY_LIGHT": "0a69283d409dbf7aa9bd2da4e888a857b5172394",
+  "MARCH_BODY": "094fc5cdf39197ef8481c44653557fe2ea4c9ccf",
+  "MARCH_BODY_LIGHT": "239486f06d6c685eaf3ec23c32b9adf8a8faab07",
   "MARCH_BODY_PARAMS": "5804cde5e14372a953b3cc4f3438b8fbc2d56668",
   "MARCH_BODY_SURFACE_PREP": "9cade2bde6567ef67d189e16346b1b4496a0af9c",
   "MARCH_BODY_TRACE": "85a3ebff8ef2be386c8fb5b60877a383ce6179cf",
@@ -57,7 +57,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "Q_MUL": "6aa4cd939736ea5ef8dfb3b92ffbe16556fa0738",
   "Q_ROT": "cfcacee39275787b3e58e01e150dcf2705dfdf6c",
   "RAY_CULL_SLACK": "90257a5d689011784dc538a36879508369f4209a",
-  "REFINE_BODY": "cdcb49df564cbb5c35f7e99a6031438d8841de44",
+  "REFINE_BODY": "ba2050cd42d688f0d244c5a1555b995b4765c9b6",
   "REFINE_LOOP": "8e14a49d869c8409dca7427f40f677537c0fede4",
   "REFINE_PARAMS": "c54245ec85fe8ce2f2af9e8760cfd92a51aac4ec",
   "REST_POINT": "fd2cf0388f0f3227ce39f8fabba8b1943aceb934",
@@ -105,7 +105,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "WOUND_SHADOW": "2151c7d3774353131f1165826832053b2aa4322b",
   "WOUND_STEP_MUL": "num:0.6",
   "__HELPERS_count": "49",
-  "__HELPERS_joined": "2dc0aa11dc15c22c78c11c6a906d5174bf0ca6b9",
+  "__HELPERS_joined": "f3151ff9c20a108613e03fd2d2057d09a2858e75",
   "__export_names": "43a134a5ffbef094bef55cb90eeaac845bcd97e0",
 }
 `;
