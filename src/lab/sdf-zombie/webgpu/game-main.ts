@@ -100,6 +100,7 @@ import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
+import { adoptDiscoFx, createDisco, createDiscoSeams, stepDisco } from './game-disco-leaves';
 import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, writeLightList } from './game-light-list-leaves';
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
@@ -933,6 +934,8 @@ async function main() {
   // Dynamic light (lamp moods and scripts, the flashlight's switch, the train's storm window
   // lights): after the accents and the flashlight exist, before the per-room light lists.
   createDynamicLight(ctx);
+  // The Boiler Room disco ball (after its room's lamps and beacons, before the light lists: unlit).
+  createDisco(ctx);
 
   (globalThis as Record<string, unknown>).__dungeon = {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
@@ -1232,6 +1235,7 @@ async function main() {
   ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: isAccumBoot() && new URLSearchParams(location.search).get('accummotion') !== '0' });
   adoptLateFx(ctx);
   adoptLightFx(ctx);
+  adoptDiscoFx(ctx);
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -6849,6 +6853,7 @@ async function main() {
     stepTrain(ctx, dt);
     stepDynamicLight(ctx, dt);
     lightSteam(ctx);
+    stepDisco(ctx);
     stepLoop(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
@@ -8338,6 +8343,7 @@ async function main() {
     createTrainSeams(ctx),
     createLoopSeams(ctx),
     createDynamicLightSeams(ctx),
+    createDiscoSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),

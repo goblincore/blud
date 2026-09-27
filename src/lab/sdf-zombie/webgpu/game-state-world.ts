@@ -23,6 +23,7 @@
 import type { DynamicLightRuntime } from './game-dynamic-light-leaves';
 import type { LoopRuntime } from './game-loop-leaves';
 import type { TrainRuntime } from './game-train-leaves';
+import type { DiscoRuntime } from './game-disco-leaves';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';
@@ -70,6 +71,8 @@ export interface WorldState {
   loop: LoopRuntime | null;
   /** Dynamic light: lamp moods and scripts, the flashlight's switch, the storm's window lights. */
   light: DynamicLightRuntime | null;
+  /** The Boiler Room disco ball: mirror tiles and sweeping stars; null without a spinning ball. */
+  disco: DiscoRuntime | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -130,6 +133,7 @@ export function makeWorldState(): WorldState {
     train: null,
     loop: null,
     light: null,
+    disco: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -166,6 +170,7 @@ export const WORLD_BINDINGS = {
   train: 'world.train',
   loop: 'world.loop',
   light: 'world.light',
+  disco: 'world.disco',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

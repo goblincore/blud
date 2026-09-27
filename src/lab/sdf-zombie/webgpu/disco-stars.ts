@@ -23,12 +23,12 @@ export const DISCO = {
   /** The party lamps' white on the ball, slightly warm. */
   party: [1.0, 0.95, 0.85] as Vec3,
   /** A star's radius at the ball (m), and its growth per metre travelled. */
-  starRadius: 0.07,
-  starGrow: 0.012,
+  starRadius: 0.09,
+  starGrow: 0.015,
   /** Stars fade to nothing by this distance (m). */
   fadeDist: 9,
   /** Scale on the stars' colour (look tuning). */
-  rgbScale: 1,
+  rgbScale: 1.6,
   /** The strobe's surge (2.2) is clamped here, so the flash reads as a flash, not a blow-out. */
   cap: 1.5,
 } as const;
