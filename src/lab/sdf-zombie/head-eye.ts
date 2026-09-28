@@ -41,8 +41,9 @@ export interface StalkState { p: Vec3[]; prev: Vec3[]; acc: number }
 /** Nodes laid along `dir` at the link length; `speed` (m/s) is the kick, folded into the verlet history. */
 export function makeStalk(socket: Vec3, dir: Vec3, speed: number): StalkState {
   const n = EYE_STALK.nodes, link = EYE_STALK.len / (n - 1);
-  const l = Math.hypot(dir[0], dir[1], dir[2]) || 1;
-  const u: Vec3 = [dir[0] / l, dir[1] / l, dir[2] / l];
+  // A zero kick direction would stack every node on the socket: hang it straight down instead.
+  const l = Math.hypot(dir[0], dir[1], dir[2]);
+  const u: Vec3 = l > 1e-9 ? [dir[0] / l, dir[1] / l, dir[2] / l] : [0, -1, 0];
   const p: Vec3[] = [], prev: Vec3[] = [];
   for (let k = 0; k < n; k++) {
     const q: Vec3 = [socket[0] + u[0] * link * k, socket[1] + u[1] * link * k, socket[2] + u[2] * link * k];
@@ -58,7 +59,7 @@ export function stepStalk(s: StalkState, socket: Vec3, dt: number): StalkState {
   const h = 1 / stepHz, link = len / (nodes - 1), damp = Math.exp(-damping * h);
   const p = s.p.map(v => [...v] as [number, number, number]);
   const prev = s.prev.map(v => [...v] as [number, number, number]);
-  let acc = s.acc + dt;
+  let acc = s.acc + (Number.isFinite(dt) && dt > 0 ? dt : 0);
   while (acc >= h) {
     acc -= h;
     for (let k = 1; k < nodes; k++) {

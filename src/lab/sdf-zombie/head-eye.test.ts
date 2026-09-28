@@ -45,4 +45,11 @@ describe('the stalk rope', () => {
     expect(caps.length).toBe(EYE_STALK.nodes - 1);
     expect(prims.some(p => p.glow)).toBe(true);
   });
+  it('a zero kick direction hangs the rope straight down; a bad dt is ignored', () => {
+    const s = makeStalk(socket, [0, 0, 0], 2.5);
+    expect(s.p[EYE_STALK.nodes - 1]![1]).toBeCloseTo(socket[1] - EYE_STALK.len, 9);
+    const t = stepStalk(s, socket, Number.NaN);
+    expect(t.acc).toBe(0);
+    expect(stepStalk(t, socket, -1).acc).toBe(0);
+  });
 });
