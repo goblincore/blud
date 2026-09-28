@@ -173,9 +173,10 @@ const shown = await evaluate(`[...document.querySelectorAll('div')].some((d) => 
 if (!shown) fail('death overlay not shown');
 pass('death: health 0 shows YOU DIED');
 
-// 5. COMPLETE — reaching the firebox in the cab (the `level.end` trigger, z -126.9 .. -128.9).
+// 5. COMPLETE — reaching the firebox in the cab (the `level.end` trigger, z -134.9 .. -136.9 since the
+//    Boiler Room resize moved the cab 8 m north, 2026-09-28).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) fail('night-train (god) did not boot');
-await evaluate('__sdfGame.setPose(0, -127.9, 0, 0)');
+await evaluate('__sdfGame.setPose(0, -135.9, 0, 0)');
 await settle();
 if (!(await evaluate('__sdfGame.levelComplete()'))) fail('reaching the firebox did not complete the level');
 pass('complete: reaching the firebox ends the level');

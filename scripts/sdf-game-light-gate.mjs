@@ -753,8 +753,8 @@ async function costSection() {
 // 6b. BEACONS (spec 2026-09-27-boiler-room-beacons-design.md §4). A fresh boot with the cast, the
 // light clock frozen and set by hand (setLightTime), so every level and axis below is a function of
 // the pinned time, not of how fast the headless machine stepped.
-const BEACON_BEFORE = '0, -92.0, 0, 0';   // in the Boiler Room (z -90..-110), short of the threshold (z -95.5..-96.5)
-const BEACON_DANCER = [0.9, -97.5];      // 3.6 m past the z -94 beacon (y 2.95): its cone (35 deg down, 18 deg half-angle) spans the body
+const BEACON_BEFORE = '0, -92.0, 0, 0';   // in the Boiler Room (z -90..-118 since the 8 x 28 m resize), short of the threshold (z -95.5..-96.5)
+const BEACON_DANCER = [0.9, -100.6];     // 3.6 m past the z -97 beacon (u 7, y 2.95): its cone (35 deg down, 18 deg half-angle) spans the body
 async function beaconSection() {
   const q = 'level=night-train&frozen&god';
   if (!(await boot(q))) { console.error(consoleEvents.slice(-8)); fail(`night-train did not boot (${q})`); }

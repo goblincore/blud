@@ -183,9 +183,10 @@ const ROUTE = [
   ['coats, rack 3 gap', 1.2, -63.8], ['coats, before the counter', 1.2, -65.5], ['coats, past the counter', 1.2, -66.8], ['the counter\'s back', 0, -68.5],
   ['vestibule 4', 0, -70.2], ['sleeper south lobby', 0, -71.7], ['sleeper corridor', -1.3, -74.4], ['corridor at C3', -1.3, -79.86],
   ['inside C3', 0.4, -79.86], ['back in the corridor', -1.3, -79.86], ['sleeper north lobby', -0.2, -88.0], ['vestibule 5', 0, -89.4],
-  ['boiler room, south', 0, -91.9], ['boiler room, west of the pillars', -1.7, -96.4], ['boiler room, by the pistons', -0.9, -104.9],
-  ['boiler room, north', 0, -109.2], ['vestibule 6', 0, -110.6], ['tender, south', 0.9, -113.5], ['tender, north', 0.9, -119.5],
-  ['vestibule 7', 0, -121.8], ['cab', 0, -126.0],
+  // The Boiler Room is 8 x 28 m since 2026-09-28 (z -90..-118; z = -90 - u); the tender and cab moved 8 m north.
+  ['boiler room, south', 0, -91.9], ['boiler room, west, past the favours', -3.0, -97.0], ['boiler room, by the pistons', -2.8, -104.0],
+  ['boiler room, chill-out (east)', 3.0, -112.0], ['boiler room, DJ end', 0, -116.5], ['vestibule 6', 0, -118.6],
+  ['tender, south', 0.9, -121.5], ['tender, north', 0.9, -127.5], ['vestibule 7', 0, -129.8], ['cab', 0, -134.0],
 ];
 if (!(await boot('level=night-train&frozen&nospawn'))) { console.error(consoleEvents.slice(-8)); fail('night-train (nospawn) did not boot'); }
 await evaluate('__sdfGame.setPose(0, -1, 0, 0)');

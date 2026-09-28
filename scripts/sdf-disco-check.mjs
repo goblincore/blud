@@ -96,8 +96,8 @@ const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !
 const f3 = (v) => v.map((x) => x.toFixed(3)).join(',');
 const median = (a) => { const b = [...a].sort((x, y) => x - y); return b.length % 2 ? b[b.length >> 1] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2; };
 
-// The Boiler Room (room 5: x -2.1..2.1, z -90..-110, h 3.4); the threshold trigger is z -95.5..-96.5,
-// the ball hangs at z -100. The view: from near the vestibule door, looking down the room past the
+// The Boiler Room (room 5: x -4..4, z -90..-118, h 3.4, since the 8 x 28 m resize 2026-09-28); the
+// threshold trigger is z -95.5..-96.5, the ball hangs at z -104. The view: from near the vestibule door, looking down the room past the
 // ball (yaw 0 faces -z), tipped up a little so the ceiling and both walls are in frame.
 const VIEW_BEFORE = '0.9, -95.1, -0.12, 0.12';   // just short of the threshold
 const VIEW_AFTER = '0.9, -97.0, -0.12, 0.12';
