@@ -81,6 +81,9 @@ export interface FlailDeps {
   aimDir(): Vec3;
   /** Blood for a crater (game-world-leaves3 registerBleed). */
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
+  /** The head damage model (game-head-damage.ts): a head-region hit goes here INSTEAD of the face crater
+   *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. */
+  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number }): void;
 }
 
 export interface FlailDebug {
@@ -394,8 +397,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       // THE FLAIL NEVER DECAPITATES (flail-strike.ts flailWound, spec §12.3): a
       // head-region hit is always a small face crater with no sever. The probe
       // finds the prim the hit lands on; it is the wound itself unless the
-      // radius changes. headHits stays as a counter (the head damage model, its
-      // own spec, will read it — §12.6).
+      // radius changes. With deps.headHit (the head damage model, game-head-damage.ts)
+      // a head-region hit goes there instead and climbs its ladder (eye, cave, scalp,
+      // brain) — still never a sever. headHits stays the flail's own counter.
       const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
       const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
       const neck = headNeck(posed.prims);
@@ -403,6 +407,11 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const spec = flailWound(region, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
       if (region) headHits.set(a.id, (headHits.get(a.id) ?? 0) + 1);
       struckHeads[a.id] = headHits.get(a.id) ?? 0;
+      // The head damage model takes every head-region hit (its ladder counts the same hits as headHits).
+      if (region && deps.headHit) {
+        deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove });
+        continue;
+      }
       const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
       w.severRadius = spec.severRadius;
       clothifyWound(posed.prims, w, 'heavy');

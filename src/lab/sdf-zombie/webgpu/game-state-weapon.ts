@@ -27,6 +27,7 @@
 
 import type { FlareHarness } from './game-flare';
 import type { FlailWeapon } from './game-flail';
+import type { HeadDamageLeaf } from './game-head-damage';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { StickProp } from './fpv-view';
@@ -89,6 +90,8 @@ export interface WeaponState {
   flare: FlareHarness | null;
   /** Slot 1 (the spike flail, game-flail.ts); null until the aim rig exists. */
   flail: FlailWeapon | null;
+  /** The melee head damage leaf (game-head-damage.ts): the flail's head-region hits; null until built. */
+  headDamage: HeadDamageLeaf | null;
   /** The gun's own rig group; the codemod supplies the real group. */
   gunRig: THREE.Group;
   /** The top-lever hinge pivot, or null before it is built. */
@@ -202,6 +205,7 @@ export function makeWeaponState(): WeaponState {
     aimRig: null,
     flare: null,
     flail: null,
+    headDamage: null,
     gunRig: unbuilt<THREE.Group>(),
     hingePivot: null,
     muzzleNodes: [],

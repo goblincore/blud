@@ -266,6 +266,8 @@ import { createFxSeams } from './game-seams-fx';
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createFlail } from './game-flail';
+import { createHeadDamage } from './game-head-damage';
+import { createHeadSeams } from './game-seams-head';
 import { createMiscSeams } from './game-seams-misc';
 import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
@@ -3518,6 +3520,8 @@ async function main() {
    *  !wanderFrozen, and a FROZEN bench leg calling setWoundTuning must not
    *  march through a stale hull. */
   function rebuildCast(): void {
+    // Head damage state (and any dangling eye's piece) belongs to the old cast.
+    ctx.weapon.headDamage?.reset();
     ctx.world.soldierCorpses?.dispose();
     ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
     // DRAIN IN-FLIGHT RUPTURES FIRST. Their actors are about to be disposed and
@@ -3749,6 +3753,22 @@ async function main() {
     eye: () => eyeOf(ctx.player.player),
     aimDir: () => aimDir(ctx),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
+    headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f),
+  });
+  // The melee head damage model (game-head-damage.ts): the flail's head-region
+  // hits climb its ladder. The gore/attach hooks are read lazily — the chunk
+  // spawner that assigns them is built further down.
+  ctx.weapon.headDamage = createHeadDamage(ctx, {
+    headShape,
+    gore: (a, pieces) => ctx.boot.onGoreDispatch?.(a, pieces),
+    // The head-pop blood (onHeadPop's burst): a volumetric burst and a slug gout up and along.
+    burst: (_a, at, dir) => {
+      burstVolume(ctx.vfx.bloodSim, at, 0.12, [dir[0] * 1.5, 0.5 + dir[1], dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+      const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
+      spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+    },
+    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
+    attach: (a, prims, pos, opts) => ctx.boot.attachPiece?.(a, prims, pos, opts) ?? { update() {}, dispose() {} },
   });
   // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
@@ -6608,7 +6628,7 @@ async function main() {
    *  `liveChunks`/`chunks` and listed in `bake.attachedViews`, so
    *  spawnChunkPiece's eviction never sees it; dispose() hands it back to
    *  `spareViews` hidden, exactly as a shot-apart live piece is released. */
-  ctx.boot.attachPiece = (a, prims, pos) => {
+  ctx.boot.attachPiece = (a, prims, pos, opts) => {
     // Zero velocity, and a fixed rng: makeChunk's tumble draws must not
     // consume rngStreams.misc (every other piece's sequence stays put).
     // 'torso', not 'head': a head chunk wears the face projection.
@@ -6631,11 +6651,18 @@ async function main() {
       }
     }
     const v = view;
+    // opts.clean: no torn-meat gore mask. reset() sets lodCfg.w = 1 on every
+    // flesh chunk (and a setPackBones flip re-runs reset), so it is cleared
+    // here and again before every update() — update() syncs it into the
+    // view's record. A later reset (the view recycled as a gib) sets it back.
+    const clean = () => { if (opts?.clean) v.uniforms.lodCfg.value.w = 0; };
+    clean();
     ctx.bake.attachedViews.push(v);
     let live = true;
     return {
       update(at, localEnds) {
         if (!live) return;
+        clean();
         v.morph(localEnds);
         v.update({ ...state, pos: at, quat: [0, 0, 0, 1], squash: 0 });
       },
@@ -7158,6 +7185,9 @@ async function main() {
     stepWeaponSlots(ctx, dt);
     // The flail, after the rig AND the holster are placed (game-flail.ts).
     ctx.weapon.flail?.tick(dt);
+    // The head damage model after the flail (actors stepped earlier this frame,
+    // so the dangling eye follows this frame's pose).
+    ctx.weapon.headDamage?.tick(dt);
     stepDynamite(dt);
     if (ctx.player.reticleEl) {
       ctx.player.reticleEl.style.display = ctx.player.freeAimOn ? 'block' : 'none';
@@ -8230,6 +8260,7 @@ async function main() {
     createWeaponAimSeams(ctx),
     createFireSeams(ctx),
     createFlailSeams(ctx),
+    createHeadSeams(ctx),
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
     createMarchDebugSeams(ctx),

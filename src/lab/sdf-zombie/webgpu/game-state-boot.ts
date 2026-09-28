@@ -136,8 +136,11 @@ export interface BootState {
    *  physics, never baked or evicted, one draw. `prims` are world-space at
    *  `pos`; each frame the caller moves it (`at`) and bends it (`localEnds`,
    *  world minus `at`, the same count and order as `prims`). Assigned once the
-   *  chunk spawner exists. */
-  attachPiece?: (a: ZombieActor, prims: Primitive[], pos: Vec3) => AttachedPiece;
+   *  chunk spawner exists. `opts.clean` turns the chunk gore mask off
+   *  (lodCfg.w = 0, which every chunk reset sets to 1 = torn meat), so the
+   *  piece shades as its own prim colours: the dangling eye's white, glowing
+   *  iris and pink stalk. */
+  attachPiece?: (a: ZombieActor, prims: Primitive[], pos: Vec3, opts?: { clean?: boolean }) => AttachedPiece;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */

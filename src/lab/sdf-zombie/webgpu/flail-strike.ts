@@ -150,8 +150,9 @@ export function snapToSurface(field: (p: Vec3) => number, p: Vec3): Vec3 {
 /** Sphere-trace from `from` along unit `dir`, up to `maxDist`, for the field's
  *  first surface crossing. The field is a loose bound (§ above), so the step
  *  takes extra headroom (raySafety) rather than the usual full `f`. Returns
- *  null on a miss (out of range, or the field went non-finite). */
-function traceRaySurface(field: (p: Vec3) => number, from: Vec3, dir: Vec3, maxDist: number): Vec3 | null {
+ *  null on a miss (out of range, or the field went non-finite). Exported for the head damage leaf
+ *  (game-head-damage.ts: the eye socket and crown traces). */
+export function traceRaySurface(field: (p: Vec3) => number, from: Vec3, dir: Vec3, maxDist: number): Vec3 | null {
   let f = field(from);
   if (!Number.isFinite(f)) return null;
   if (f <= FLAIL_STRIKE.rayEps) return [from[0], from[1], from[2]];
