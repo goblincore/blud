@@ -22,6 +22,9 @@ export const HEAD_DEFORM = {
   hz: 8,
   zeta: 0.25,
   maxDent: 0.04,
+  /** Below both, the spring is at rest (snapped to exactly 0). */
+  restS: 1e-4,
+  restV: 1e-2,
 } as const;
 
 export interface HeadDeformState {
@@ -54,6 +57,8 @@ export function stepWobble(st: HeadDeformState, dt: number): HeadDeformState {
   const w = 2 * Math.PI * HEAD_DEFORM.hz, n = Math.max(1, Math.ceil(dt / (1 / 240))), h = dt / n;
   let { s, v } = st;
   for (let i = 0; i < n; i++) { v += (-w * w * s - 2 * HEAD_DEFORM.zeta * w * v) * h; s += v * h; }
+  // Settled: snap to exactly 0 so deformHead returns the body untouched (and a frozen re-pose stops).
+  if (Math.abs(s) < HEAD_DEFORM.restS && Math.abs(v) < HEAD_DEFORM.restV) { s = 0; v = 0; }
   return { ...st, s: Math.min(HEAD_DEFORM.maxSquash, Math.max(-HEAD_DEFORM.maxSquash, s)), v };
 }
 

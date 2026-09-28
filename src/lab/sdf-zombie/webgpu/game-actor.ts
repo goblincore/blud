@@ -513,6 +513,10 @@ export interface ZombieActor {
   blast(effect: ActorBlastEffect): void;
   /** Melee head damage (game-head-damage.ts): a pure map applied to the posed body after every applyRig (the per-frame step and each hit's re-pose). null removes it. */
   setHeadDeform(fn: ((posed: BuildResult) => BuildResult) | null): void;
+  /** Re-pose NOW so a changed head deform shows on a frame this actor did not step (a frozen actor:
+   *  `?frozen=1`, the gates). Without it the posed and drawn head keep whatever the deform was at the
+   *  last hit's re-pose — the wobble's peak squash, forever. The same refresh as blast()'s tail. */
+  reposeHead(): void;
 }
 
 /** The slice of explosion-aoe.ts's `BodyExplosionEffect` the actor needs. */
@@ -1896,6 +1900,12 @@ export function createZombieActor(opts: {
 
   return {
     setHeadDeform: (fn) => { headDeform = fn; },
+    reposeHead: () => {
+      posed = repose();
+      view.update(drawnPose(), current);
+      view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+      refreshWounds();
+    },
     id: opts.id,
     get room() { return actorRoom(); },
     get body() { return current; },

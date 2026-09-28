@@ -26,6 +26,14 @@ describe('head wobble', () => {
     expect(crossings).toBeGreaterThanOrEqual(4);                   // it rings (underdamped)
     expect(Math.abs(wobbleValue(s))).toBeLessThan(0.0025);   // settled: < 1% of the head's size
   });
+  it('comes to rest at exactly 0, and a rested, undented head is the body untouched', () => {
+    let s = kickWobble(makeHeadDeform(), [0, 0, 1]);
+    for (let t = 0; t < 1.5; t += 1 / 60) s = stepWobble(s, 1 / 60);
+    expect(s.s).toBe(0);
+    expect(s.v).toBe(0);
+    const body = { prims: [headPrim(), torsoPrim()] };
+    expect(deformHead(body, s, frame)).toBe(body);
+  });
   it('clamps to ±maxSquash', () => {
     let s = kickWobble(kickWobble(makeHeadDeform(), [1, 0, 0]), [1, 0, 0]);
     expect(Math.abs(wobbleValue(s))).toBeLessThanOrEqual(HEAD_DEFORM.maxSquash);
