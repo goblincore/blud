@@ -2,9 +2,12 @@
 //
 // THE SPIKE FLAIL'S SWING (spec docs/superpowers/specs/2026-09-26-spike-flail-design.md §5–6).
 // Pure: a click edge, the button state and dt in; the phase, the pose and the
-// strike events out. No Three.js, no physics — two authored swings:
+// strike events out. No Three.js, no physics — three authored swings:
 //
-//   R: right → left (the forehand)      L: left → right (the backhand)
+//   R: the overhand (high right, down onto the crosshair, low left)
+//   L: the cross (back across the chest to the left, across the front, low right)
+//   H: the sweep (wide right at shoulder height, flat through the crosshair,
+//      far left) — the combo's finisher, longer than R and L (FLAIL_TIMING)
 //
 // A click from idle starts the next side — holding the button with no click
 // edge (e.g. right after a weapon switch leaves it physically held down)
@@ -52,7 +55,14 @@ export function chainReach(): number {
   return FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset;
 }
 
-export type FlailSide = 'R' | 'L';
+export type FlailSide = 'R' | 'L' | 'H';
+
+/** Per-side swing timing. R and L are FLAIL_SWING's; H, the combo's finisher, is longer. */
+export const FLAIL_TIMING: Readonly<Record<FlailSide, { swingSec: number; strikeT: number }>> = {
+  R: { swingSec: FLAIL_SWING.swingSec, strikeT: FLAIL_SWING.strikeT },
+  L: { swingSec: FLAIL_SWING.swingSec, strikeT: FLAIL_SWING.strikeT },
+  H: { swingSec: 0.55, strikeT: 0.2 },
+};
 
 export interface FlailPose { grip: Vec3; rot: Vec3; ball: Vec3 }
 
@@ -139,12 +149,52 @@ const KEYS_L: readonly Key[] = [
   { t: 0.45, ...FLAIL_REST },
 ];
 
-const KEYS: Readonly<Record<FlailSide, readonly Key[]>> = { R: KEYS_R, L: KEYS_L };
+// v1.3 (spec §12.1): H, the combo's finisher, is a FLAT right-to-left SWEEP at
+// crosshair height, read against R's vertical overhand and L's diagonal cross.
+// It is longer (FLAIL_TIMING.H: 0.55 s, the strike at 0.2 s). The wind-up (0.12)
+// has the fist at shoulder height out right (0.43, 0.1, −0.31) with the haft
+// laid over to the right (lean −1.22), the ball wide right at eye level
+// (0.69, −0.03, −0.49). At 0.17 the haft comes round forward and the ball is out in
+// front, still right and level (0.47, −0.03, −1.04), so the strike's ball velocity is
+// almost all sideways: (−17.8, −1.8, −2.9) m/s, |vx| ≈ 10·|vy|. The strike
+// is on the crosshair (0, −0.08, −1.1), with the haft pitched nearly level
+// forward (−1.33) and the chain taut (0.344 m). The bolt stays within
+// 0.344 m of the impact for a 30 Hz frame after it: the chain sim's strike pin
+// needs that. The follow-through (0.33) is far left and a little low
+// (−0.64, −0.19, −0.8); the 0.43 key swings it back, low and a little left
+// (−0.22, −0.27, −0.88), on the way to rest. As for R and L, a scratch constrained search (not
+// committed) found the numbers. It started from a hand-authored sweep, varied
+// every non-rest key (the strike ball fixed), and kept the sets where every
+// flailPose test predicate passed with a margin: taut 0.343–0.357 at the strike,
+// ≥ 0.30 m from the bolt all swing, reach, ≤ 2.5 cm overshoot, jump < 1.8×,
+// strike ≥ 0.85 of peak, no pops, and the sweep's shape. It also kept the
+// bolt ≤ 0.35 m from the impact through the frame after the strike, which
+// holds the pin's links exact. The winner was rounded to the cm (0.01 rad) and
+// re-polished on that grid against flail-chain's replay gates at every frame
+// rate: the pin < 1e-6, exact links, no catapult, the wind-up trail. Min
+// ball–bolt 0.307 m; strike speed 0.98 of peak.
+
+/** H: a flat right-to-left sweep — wind up wide right at shoulder height, sweep through the crosshair, follow through far left. */
+const KEYS_H: readonly Key[] = [
+  { t: 0, ...FLAIL_REST },
+  { t: 0.12, grip: [0.43, 0.1, -0.31], rot: [-0.2, 0, -1.22], ball: [0.69, -0.03, -0.49] },
+  { t: 0.17, grip: [0.15, -0.19, -0.41], rot: [-0.92, 0, -0.31], ball: [0.47, -0.03, -1.04] },
+  { t: 0.2, grip: [0.13, 0.04, -0.42], rot: [-1.33, 0, 0.13], ball: [0, -0.08, -1.1] },
+  { t: 0.33, grip: [0.04, -0.04, -0.56], rot: [-1.29, 0, 1.15], ball: [-0.64, -0.19, -0.8] },
+  { t: 0.43, grip: [0.16, -0.23, -0.43], rot: [-0.81, 0, 0.67], ball: [-0.22, -0.27, -0.88] },
+  { t: 0.55, ...FLAIL_REST },
+];
+
+const KEYS: Readonly<Record<FlailSide, readonly Key[]>> = { R: KEYS_R, L: KEYS_L, H: KEYS_H };
+
+/** Each side's key times (the tests iterate these). */
+export function flailKeyTimes(side: FlailSide): number[] { return KEYS[side].map(k => k.t); }
 
 /** The ball at the strike frame, per side (view space). */
 export const FLAIL_IMPACT: Readonly<Record<FlailSide, Vec3>> = {
-  R: KEYS_R.find(k => k.t === FLAIL_SWING.strikeT)!.ball,
-  L: KEYS_L.find(k => k.t === FLAIL_SWING.strikeT)!.ball,
+  R: KEYS_R.find(k => k.t === FLAIL_TIMING.R.strikeT)!.ball,
+  L: KEYS_L.find(k => k.t === FLAIL_TIMING.L.strikeT)!.ball,
+  H: KEYS_H.find(k => k.t === FLAIL_TIMING.H.strikeT)!.ball,
 };
 
 export interface FlailSwing {
@@ -173,6 +223,7 @@ export function makeFlailSwing(): FlailSwing {
   return { phase: 'idle', side: 'R', t: 0, struck: false, queued: false, nextSide: 'R', swingId: 0 };
 }
 
+/** R ↔ L (H is not chained yet — the combo, Task 19, replaces this). */
 const other = (s: FlailSide): FlailSide => (s === 'R' ? 'L' : 'R');
 
 function start(s: FlailSwing, t: number): FlailSwing {
@@ -184,7 +235,7 @@ function start(s: FlailSwing, t: number): FlailSwing {
 
 /** Fire the strike if this swing's t has crossed strikeT and it has not yet. */
 function strikeIfDue(s: FlailSwing, strikes: FlailSide[]): FlailSwing {
-  if (s.phase !== 'swing' || s.struck || s.t < FLAIL_SWING.strikeT) return s;
+  if (s.phase !== 'swing' || s.struck || s.t < FLAIL_TIMING[s.side].strikeT) return s;
   strikes.push(s.side);
   return { ...s, struck: true };
 }
@@ -194,7 +245,7 @@ export function stepFlailSwing(
 ): { state: FlailSwing; strikes: FlailSide[] } {
   const strikes: FlailSide[] = [];
   if (!(dt > 0)) return { state: s, strikes };
-  const S = FLAIL_SWING;
+  const { bufferSec } = FLAIL_SWING;
 
   let cur: FlailSwing;
   if (s.phase === 'idle') {
@@ -204,12 +255,12 @@ export function stepFlailSwing(
   } else {
     const tNext = s.t + dt;
     // Buffer check uses the POST-step time, so a step that lands exactly on the boundary counts.
-    const queued = s.queued || (input.click && S.swingSec - tNext <= S.bufferSec);
+    const queued = s.queued || (input.click && FLAIL_TIMING[s.side].swingSec - tNext <= bufferSec);
     cur = strikeIfDue({ ...s, t: tNext, queued }, strikes);
   }
 
-  if (cur.phase === 'swing' && cur.t >= S.swingSec) {
-    const leftover = cur.t - S.swingSec;
+  if (cur.phase === 'swing' && cur.t >= FLAIL_TIMING[cur.side].swingSec) {
+    const leftover = cur.t - FLAIL_TIMING[cur.side].swingSec;
     cur = cur.queued || input.held
       ? strikeIfDue(start(cur, leftover), strikes)
       : { ...cur, phase: 'idle', t: 0, queued: false, struck: false };
@@ -255,12 +306,12 @@ const STRIKE_BIAS = 1.25;
  * momentum" the way the ball does, and biasing them the same way overshoots
  * the grip's own, much smaller, range of motion.
  */
-function hermiteTangent(keys: readonly Key[], i: number, pick: (k: Key) => Vec3, biasStrike: boolean): Vec3 {
+function hermiteTangent(keys: readonly Key[], i: number, pick: (k: Key) => Vec3, strikeT: number | null): Vec3 {
   const n = keys.length;
   if (i === 0 || i === n - 1) return [0, 0, 0];
   const prev = pick(keys[i - 1]!), cur = pick(keys[i]!), next = pick(keys[i + 1]!);
   const dtPrev = keys[i]!.t - keys[i - 1]!.t, dtNext = keys[i + 1]!.t - keys[i]!.t;
-  const isStrike = biasStrike && keys[i]!.t === FLAIL_SWING.strikeT;
+  const isStrike = strikeT !== null && keys[i]!.t === strikeT;
   const out: [number, number, number] = [0, 0, 0];
   for (const c of [0, 1, 2] as const) {
     const dPrev = (cur[c] - prev[c]) / dtPrev;
@@ -277,7 +328,9 @@ function hermiteTangent(keys: readonly Key[], i: number, pick: (k: Key) => Vec3,
   return out;
 }
 
-function sample(keys: readonly Key[], t: number, pick: (k: Key) => Vec3, biasStrike: boolean): Vec3 {
+/** `strikeT`: the side's strike key time, whose ball tangent leans on the incoming
+ *  secant (null for the grip and haft rotation, which don't lean). */
+function sample(keys: readonly Key[], t: number, pick: (k: Key) => Vec3, strikeT: number | null): Vec3 {
   const n = keys.length;
   let i = 0;
   while (i < n - 2 && t >= keys[i + 1]!.t) i++;
@@ -285,7 +338,7 @@ function sample(keys: readonly Key[], t: number, pick: (k: Key) => Vec3, biasStr
   const h = k1.t - k0.t;
   const u = Math.min(1, Math.max(0, (t - k0.t) / h));
   const p0 = pick(k0), p1 = pick(k1);
-  const m0 = hermiteTangent(keys, i, pick, biasStrike), m1 = hermiteTangent(keys, i + 1, pick, biasStrike);
+  const m0 = hermiteTangent(keys, i, pick, strikeT), m1 = hermiteTangent(keys, i + 1, pick, strikeT);
   const u2 = u * u, u3 = u2 * u;
   const h00 = 2 * u3 - 3 * u2 + 1;
   const h10 = u3 - 2 * u2 + u;
@@ -299,9 +352,9 @@ export function flailPose(s: FlailSwing): FlailPose {
   if (s.phase === 'idle') return FLAIL_REST;
   const keys = KEYS[s.side];
   return {
-    grip: sample(keys, s.t, k => k.grip, false),
-    rot: sample(keys, s.t, k => k.rot, false),
-    ball: sample(keys, s.t, k => k.ball, true),
+    grip: sample(keys, s.t, k => k.grip, null),
+    rot: sample(keys, s.t, k => k.rot, null),
+    ball: sample(keys, s.t, k => k.ball, FLAIL_TIMING[s.side].strikeT),
   };
 }
 
@@ -321,7 +374,7 @@ export function flailBolt(p: FlailPose): Vec3 {
  *  swing's ball curve at the swing's t (one-sided at the ends); zero at idle. */
 export function flailBallVel(s: FlailSwing, eps = 1e-4): Vec3 {
   if (s.phase === 'idle') return [0, 0, 0];
-  const lo = Math.max(0, s.t - eps), hi = Math.min(FLAIL_SWING.swingSec, s.t + eps);
+  const lo = Math.max(0, s.t - eps), hi = Math.min(FLAIL_TIMING[s.side].swingSec, s.t + eps);
   if (hi <= lo) return [0, 0, 0];
   const a = flailPose({ ...s, t: lo }).ball, b = flailPose({ ...s, t: hi }).ball;
   const k = 1 / (hi - lo);

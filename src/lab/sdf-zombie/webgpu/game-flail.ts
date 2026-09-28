@@ -22,7 +22,7 @@ import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
 import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
-  FLAIL_IMPACT, FLAIL_SWING, cancelFlailSwing, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 import { FLAIL_HEAD, flailWound, headNeck, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
@@ -462,7 +462,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const t = FLAIL_IMPACT[strikeNow];
       target[0] = t[0]; target[1] = t[1]; target[2] = t[2];
       guide = 1;
-      vel = flailBallVel({ ...swing, phase: 'swing', side: strikeNow, t: FLAIL_SWING.strikeT });
+      vel = flailBallVel({ ...swing, phase: 'swing', side: strikeNow, t: FLAIL_TIMING[strikeNow].strikeT });
     } else {
       const sway = swing.phase === 'idle' ? FLAIL_LOOK.swayAmp : 0;
       const w = 2 * Math.PI * FLAIL_LOOK.swayHz * clock;

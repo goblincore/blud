@@ -2,12 +2,17 @@
 //
 import { describe, expect, it } from 'vitest';
 import {
-  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, chainReach, FLAIL_SWING, cancelFlailSwing, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, FLAIL_TIMING, chainReach, FLAIL_SWING, cancelFlailSwing, flailKeyTimes, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 
 const DT = 1 / 240;
 const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+/** Every swing, each with its own timing (FLAIL_TIMING[side]) and key times. */
+const SIDES = ['R', 'L', 'H'] as const;
+/** A swing state `t` seconds into `side` (H is only reachable this way until the combo lands). */
+const swingOf = (side: FlailSide, t: number): FlailSwing =>
+  ({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
 
 /** Run `sec` of sim with the button held/released; a click is a one-step edge at the start. */
 function run(s: FlailSwing, sec: number, held: boolean, click = false, dt = DT) {
@@ -139,8 +144,8 @@ describe('flailPose', () => {
   });
 
   it('passes through the authored impact point at strikeT', () => {
-    for (const side of ['R', 'L'] as const) {
-      const s: FlailSwing = { ...makeFlailSwing(), phase: 'swing', side, t: FLAIL_SWING.strikeT };
+    for (const side of SIDES) {
+      const s: FlailSwing = { ...makeFlailSwing(), phase: 'swing', side, t: FLAIL_TIMING[side].strikeT };
       expect(dist(flailPose(s).ball, FLAIL_IMPACT[side])).toBeLessThan(1e-9);
     }
   });
@@ -148,11 +153,12 @@ describe('flailPose', () => {
   it('the strike is in front of the eye, and R and L mirror across the centre line', () => {
     expect(FLAIL_IMPACT.R[2]).toBeLessThan(-0.8);
     expect(FLAIL_IMPACT.L[2]).toBeLessThan(-0.8);
+    expect(FLAIL_IMPACT.H[2]).toBeLessThan(-0.8);
     expect(Math.abs(FLAIL_IMPACT.R[0] + FLAIL_IMPACT.L[0])).toBeLessThan(0.2);
   });
 
   it('strikes on the crosshair: the impact ≤ 0.1 below the view axis per metre forward, ≤ 0.1 to the side', () => {
-    for (const side of ['R', 'L'] as const) {
+    for (const side of SIDES) {
       const [x, y, z] = FLAIL_IMPACT[side];
       expect(y / -z, side).toBeLessThanOrEqual(-0.04);
       expect(y / -z, side).toBeGreaterThanOrEqual(-0.1);
@@ -172,6 +178,31 @@ describe('flailPose', () => {
     expect(Math.abs(v[1])).toBeGreaterThanOrEqual(Math.abs(v[0]));   // …more down than across
   });
 
+  it('H is a flat right-to-left sweep through the crosshair', () => {
+    const at = (t: number) => flailPose({ phase: 'swing', side: 'H', t, struck: false, queued: false, nextSide: 'H', swingId: 1 });
+    const wind = at(0.12);
+    expect(wind.ball[0]).toBeGreaterThanOrEqual(0.55);           // wound up wide right
+    expect(Math.abs(wind.ball[1])).toBeLessThanOrEqual(0.2);     // at shoulder height, not overhead
+    const follow = at(0.33);
+    expect(follow.ball[0]).toBeLessThanOrEqual(-0.5);            // follows through far left
+    const v = flailBallVel({ ...makeFlailSwing(), phase: 'swing', side: 'H', t: FLAIL_TIMING.H.strikeT });
+    expect(v[0]).toBeLessThan(0);                                // moving right → left
+    expect(Math.abs(v[0])).toBeGreaterThanOrEqual(2 * Math.abs(v[1]));   // flat
+  });
+
+  it('H, a longer swing, runs on its own timing: 0.55 s, the strike at 0.2 s; R and L keep FLAIL_SWING', () => {
+    expect(FLAIL_TIMING.R).toEqual({ swingSec: FLAIL_SWING.swingSec, strikeT: FLAIL_SWING.strikeT });
+    expect(FLAIL_TIMING.L).toEqual({ swingSec: FLAIL_SWING.swingSec, strikeT: FLAIL_SWING.strikeT });
+    expect(FLAIL_TIMING.H).toEqual({ swingSec: 0.55, strikeT: 0.2 });
+    for (const side of SIDES) {
+      const times = flailKeyTimes(side);
+      expect(times[0], side).toBe(0);
+      expect(times[times.length - 1], side).toBe(FLAIL_TIMING[side].swingSec);
+      expect(times, side).toContain(FLAIL_TIMING[side].strikeT);
+    }
+    expect(flailKeyTimes('H')).toEqual([0, 0.12, 0.17, 0.2, 0.33, 0.43, 0.55]);
+  });
+
   it('has no pops: ball ≤ 15 cm and grip ≤ 6 cm per 240 Hz step, through chained swings', () => {
     // The ball legitimately moves ~20 m/s into the strike (~8 cm per step); a pop is a jump far beyond that.
     let s = makeFlailSwing();
@@ -188,19 +219,37 @@ describe('flailPose', () => {
     expect(worstGrip).toBeLessThan(0.06);
   });
 
+  it('H has no pops either: ball ≤ 15 cm and grip ≤ 6 cm per 240 Hz step, from rest to rest', () => {
+    const S = FLAIL_TIMING.H;
+    let prev = flailPose(makeFlailSwing());   // idle: FLAIL_REST
+    let worstBall = 0, worstGrip = 0;
+    for (let i = 0; i <= Math.round(S.swingSec / DT); i++) {
+      const p = flailPose(swingOf('H', Math.min(i * DT, S.swingSec)));
+      worstBall = Math.max(worstBall, dist(p.ball, prev.ball));
+      worstGrip = Math.max(worstGrip, dist(p.grip, prev.grip));
+      prev = p;
+    }
+    const idle = flailPose(makeFlailSwing());
+    worstBall = Math.max(worstBall, dist(idle.ball, prev.ball));
+    worstGrip = Math.max(worstGrip, dist(idle.grip, prev.grip));
+    expect(worstBall).toBeLessThan(0.15);
+    expect(worstGrip).toBeLessThan(0.06);
+  });
+
   /** Finite-difference ball speed (m/s) at time `t` within a single swing. */
   function ballSpeed(side: FlailSide, t: number, eps = 1e-4): number {
-    const lo = Math.max(0, t - eps), hi = Math.min(FLAIL_SWING.swingSec, t + eps);
+    const lo = Math.max(0, t - eps), hi = Math.min(FLAIL_TIMING[side].swingSec, t + eps);
     const a = flailPose({ phase: 'swing', side, t: lo, struck: false, queued: false, nextSide: side, swingId: 1 });
     const b = flailPose({ phase: 'swing', side, t: hi, struck: false, queued: false, nextSide: side, swingId: 1 });
     return dist(b.ball, a.ball) / (hi - lo);
   }
 
   it('carries the ball through the strike near full speed, not slowing to a stop', () => {
-    for (const side of ['R', 'L'] as const) {
+    for (const side of SIDES) {
+      const { strikeT } = FLAIL_TIMING[side];
       let peak = 0;
-      for (let t = 0.12; t <= 0.3 + 1e-9; t += 1 / 480) peak = Math.max(peak, ballSpeed(side, t));
-      const atStrike = ballSpeed(side, FLAIL_SWING.strikeT);
+      for (let t = strikeT - 0.06; t <= strikeT + 0.12 + 1e-9; t += 1 / 480) peak = Math.max(peak, ballSpeed(side, t));
+      const atStrike = ballSpeed(side, strikeT);
       expect(atStrike, side).toBeGreaterThanOrEqual(0.8 * peak);
     }
   });
@@ -212,9 +261,9 @@ describe('flailPose', () => {
     // that zero crossing even though the curve itself is perfectly continuous.
     // REST_SPEED is well below the ~6-17 m/s the ball otherwise carries.
     const REST_SPEED = 1.0;
-    for (const side of ['R', 'L'] as const) {
+    for (const side of SIDES) {
       let prev: number | null = null;
-      for (let t = DT; t < FLAIL_SWING.swingSec - DT; t += DT) {
+      for (let t = DT; t < FLAIL_TIMING[side].swingSec - DT; t += DT) {
         const speed = ballSpeed(side, t);
         if (prev !== null && prev > REST_SPEED && speed > REST_SPEED) {
           const ratio = speed / prev;
@@ -227,16 +276,21 @@ describe('flailPose', () => {
   });
 
   it('overshoots no key by more than 3 cm, on either the ball or the grip', () => {
-    const keyTimes = [0, 0.1, 0.18, 0.3, 0.45];
-    for (const side of ['R', 'L'] as const) {
+    // flailKeyTimes(side) minus the helper keys (which only hold the chain out
+    // between the main ones): rest, wind-up, strike, follow-through, rest.
+    const mainTimes: Record<FlailSide, number[]> = { R: [0, 0.1, 0.18, 0.3, 0.45], L: [0, 0.1, 0.18, 0.3, 0.45], H: [0, 0.12, 0.2, 0.33, 0.55] };
+    for (const side of SIDES) {
+      const keyTimes = flailKeyTimes(side).filter(t => mainTimes[side].includes(t));
+      expect(keyTimes, side).toEqual(mainTimes[side]);
+      const swingSec = FLAIL_TIMING[side].swingSec;
       const at = (t: number) => flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
       const keyPoses = keyTimes.map(at);
       for (const field of ['ball', 'grip'] as const) {
         for (const axis of [0, 1, 2] as const) {
           const vals = keyPoses.map(p => p[field][axis]);
           const lo = Math.min(...vals) - 0.03, hi = Math.max(...vals) + 0.03;
-          for (let t = 0; t <= FLAIL_SWING.swingSec + 1e-9; t += 1 / 480) {
-            const v = at(Math.min(t, FLAIL_SWING.swingSec))[field][axis];
+          for (let t = 0; t <= swingSec + 1e-9; t += 1 / 480) {
+            const v = at(Math.min(t, swingSec))[field][axis];
             expect(v, `${side} ${field}[${axis}] t=${t.toFixed(4)}`).toBeGreaterThanOrEqual(lo);
             expect(v, `${side} ${field}[${axis}] t=${t.toFixed(4)}`).toBeLessThanOrEqual(hi);
           }
@@ -257,8 +311,9 @@ describe('flailPose', () => {
   }
 
   it("this test's bolt helper is flailBolt (the module's), at several swing times", () => {
-    for (const side of ['R', 'L'] as const) {
-      for (const t of [0, 0.05, 0.1, 0.15, FLAIL_SWING.strikeT, 0.25, 0.3, 0.37, FLAIL_SWING.swingSec]) {
+    for (const side of SIDES) {
+      const times = side === 'H' ? [0.05, ...flailKeyTimes('H'), 0.25] : [0, 0.05, 0.1, 0.15, FLAIL_SWING.strikeT, 0.25, 0.3, 0.37, FLAIL_SWING.swingSec];
+      for (const t of times) {
         const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
         const a = bolt(p.grip, p.rot), b = flailBolt(p);
         for (const k of [0, 1, 2] as const) expect(b[k], `${side} t=${t}`).toBeCloseTo(a[k]!, 12);
@@ -268,8 +323,9 @@ describe('flailPose', () => {
 
   it('keeps the ball within chain reach of the eye bolt at every key (the chain sim can reach every key)', () => {
     expect(chainReach()).toBeCloseTo(FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset, 9);
-    for (const side of ['R', 'L'] as const) {
-      for (const t of [0, 0.1, 0.15, FLAIL_SWING.strikeT, 0.3, 0.37, FLAIL_SWING.swingSec]) {
+    for (const side of SIDES) {
+      const times = side === 'H' ? flailKeyTimes('H') : [0, 0.1, 0.15, FLAIL_SWING.strikeT, 0.3, 0.37, FLAIL_SWING.swingSec];
+      for (const t of times) {
         const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
         expect(dist(p.ball, bolt(p.grip, p.rot)), `${side} t=${t}`).toBeLessThanOrEqual(chainReach());
       }
@@ -281,10 +337,11 @@ describe('flailPose', () => {
     // The ball's spline is a chord between keys while the bolt sweeps an arc
     // with the haft; with only wind-up → strike keys the chord cut to 0.19 m
     // of the bolt just before the strike, and the chain bunched into a loop.
-    for (const side of ['R', 'L'] as const) {
+    for (const side of SIDES) {
+      const swingSec = FLAIL_TIMING[side].swingSec;
       let min = Infinity, at = 0;
-      for (let t = 0; t <= FLAIL_SWING.swingSec + 1e-9; t += 1 / 480) {
-        const p = flailPose({ phase: 'swing', side, t: Math.min(t, FLAIL_SWING.swingSec), struck: false, queued: false, nextSide: side, swingId: 1 });
+      for (let t = 0; t <= swingSec + 1e-9; t += 1 / 480) {
+        const p = flailPose({ phase: 'swing', side, t: Math.min(t, swingSec), struck: false, queued: false, nextSide: side, swingId: 1 });
         const r = dist(p.ball, bolt(p.grip, p.rot));
         if (r < min) { min = r; at = t; }
       }
@@ -293,8 +350,8 @@ describe('flailPose', () => {
   });
 
   it('holds the chain nearly taut at the strike: the ball 0.34–0.36 m from the bolt', () => {
-    for (const side of ['R', 'L'] as const) {
-      const p = flailPose({ phase: 'swing', side, t: FLAIL_SWING.strikeT, struck: false, queued: false, nextSide: side, swingId: 1 });
+    for (const side of SIDES) {
+      const p = flailPose({ phase: 'swing', side, t: FLAIL_TIMING[side].strikeT, struck: false, queued: false, nextSide: side, swingId: 1 });
       const r = dist(p.ball, bolt(p.grip, p.rot));
       expect(r, side).toBeGreaterThanOrEqual(0.34);
       expect(r, side).toBeLessThanOrEqual(0.36);

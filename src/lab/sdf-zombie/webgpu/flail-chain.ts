@@ -15,7 +15,7 @@
 // Nodes: 0 = the bolt (pinned) … n−2 = the ball's ring … n−1 = the ball centre.
 
 import type { Vec3 } from '../types';
-import { FLAIL_CHAIN, FLAIL_SWING, type FlailSwing } from './flail-swing';
+import { FLAIL_CHAIN, FLAIL_TIMING, type FlailSwing } from './flail-swing';
 
 export const FLAIL_CHAIN_SIM = {
   nodes: 9,
@@ -82,7 +82,7 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const smooth = (e0: number, e1: number, x: number) => { const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
 
 export function guideWeight(s: FlailSwing): number {
-  const C = FLAIL_CHAIN_SIM, S = FLAIL_SWING;
+  const C = FLAIL_CHAIN_SIM, S = FLAIL_TIMING[s.side];
   if (s.phase === 'idle') return C.restGuide;
   const t = s.t;
   if (t <= S.strikeT) return Math.max(C.swingFloor, smooth(S.strikeT - C.guideWindow, S.strikeT, t));

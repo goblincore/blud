@@ -5,7 +5,7 @@ import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChain, stepChainInPlace, type ChainState,
 } from './flail-chain';
 import {
-  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_SWING, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_SWING, FLAIL_TIMING, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 import type { Vec3 } from '../types';
@@ -135,6 +135,20 @@ describe('guideWeight', () => {
     expect(guideWeight(swingAt(FLAIL_SWING.strikeT + FLAIL_CHAIN_SIM.releaseWindow))).toBe(FLAIL_CHAIN_SIM.swingFloor);
     expect(FLAIL_CHAIN_SIM.swingFloor).toBeLessThan(0.5);
   });
+  it("follows each side's own timing: H (longer, strike at 0.2 s) is 1 on its strike and loose either side", () => {
+    const h = (t: number): FlailSwing => ({ ...makeFlailSwing(), phase: 'swing', side: 'H', t });
+    const S = FLAIL_TIMING.H;
+    expect(guideWeight(h(S.strikeT))).toBe(1);
+    expect(guideWeight(h(FLAIL_SWING.strikeT))).toBeLessThan(1);   // R/L's strike time is not H's
+    expect(guideWeight(h(S.strikeT - FLAIL_CHAIN_SIM.guideWindow))).toBe(FLAIL_CHAIN_SIM.swingFloor);
+    expect(guideWeight(h(S.strikeT + FLAIL_CHAIN_SIM.releaseWindow))).toBe(FLAIL_CHAIN_SIM.swingFloor);
+    let prev = guideWeight(h(0));
+    for (let t = 1 / 240; t < S.swingSec; t += 1 / 240) {
+      const g = guideWeight(h(t));
+      expect(Math.abs(g - prev)).toBeLessThan(0.2);
+      prev = g;
+    }
+  });
   it('never jumps by more than 0.2 between 240 Hz samples within a swing', () => {
     let prev = guideWeight(swingAt(0));
     for (let t = 1 / 240; t < FLAIL_SWING.swingSec; t += 1 / 240) {
@@ -154,7 +168,8 @@ function frames(hz: number, jitter = 0, seed = 1): () => number {
   };
 }
 
-/** The game's loop (game-flail.ts draw), minus the renderer: one click, the chain
+/** The game's loop (game-flail.ts draw), minus the renderer: one click (at frame
+ *  20), then the side's whole swing (FLAIL_TIMING[side].swingSec) and a little; the chain
  *  driven by flailPose, pinned on FLAIL_IMPACT with the key's own velocity on the
  *  strike frame, and DRAWN through drawChain (what the player sees). One row per
  *  swing frame. `keyIn` is the key's move from the last frame up to the impact
@@ -170,7 +185,9 @@ function replay(side: FlailSide, dt: () => number = () => 1 / 60) {
     link: number; gap: number; teleport: boolean;
   }[] = [];
   let t = 0;
-  for (let f = 0; t < 1.2; f++) {
+  // 1.2 s for R/L (0.45 s swings) — up to 0.7 s to the click at 30 Hz, the swing, a margin.
+  const endT = 0.75 + FLAIL_TIMING[side].swingSec;
+  for (let f = 0; t < endT; f++) {
     const h = dt();
     t += h;
     const r = stepFlailSwing(swing, { click: f === 20, held: false }, h);
@@ -179,7 +196,7 @@ function replay(side: FlailSide, dt: () => number = () => 1 / 60) {
     const pose = flailPose(swing);
     const bolt = flailBolt(pose);
     const target = strike ? FLAIL_IMPACT[strike] : pose.ball;
-    const vel = flailBallVel(strike ? { ...swing, t: FLAIL_SWING.strikeT } : swing);
+    const vel = flailBallVel(strike ? { ...swing, t: FLAIL_TIMING[strike].strikeT } : swing);
     const teleport = s !== null && chainTeleported(s, bolt, h);
     s = stepChain(s ?? makeChain(bolt, target), bolt, target, strike ? 1 : guideWeight(swing), DOWN, h, { pin: !!strike, targetVel: vel });
     drawChain(s, bolt, out);
@@ -217,9 +234,9 @@ const ALL: { name: string; make: () => () => number }[] = [
   ...JITTERED.flatMap(j => [1, 2, 3, 4, 5, 6].map(seed => ({ name: `${j.name} seed ${seed}`, make: () => frames(j.hz, j.jitter, seed) }))),
 ];
 
-describe('the chain through a real swing, at every frame rate (both sides)', () => {
+describe('the chain through a real swing, at every frame rate (every side)', () => {
   for (const { name, make } of ALL) {
-    for (const side of ['R', 'L'] as const) {
+    for (const side of ['R', 'L', 'H'] as const) {
       it(`${name} ${side}: one strike; the drawn ball ON FLAIL_IMPACT (< 1e-6) and arriving MOVING`, () => {
         const hit = replay(side, make()).filter(r => r.strike);
         expect(hit).toHaveLength(1);
@@ -235,7 +252,7 @@ describe('the chain through a real swing, at every frame rate (both sides)', () 
       });
     }
   }
-  for (const side of ['R', 'L'] as const) {
+  for (const side of ['R', 'L', 'H'] as const) {
     // NO CATAPULT, at 60 Hz only. At >= 144 Hz or with jittered frames the ball
     // beats this by 2–6 cm at the WIND-UP APEX (swing t ~0.10, the key reversing,
     // the ball carrying on): the sim sees a per-frame linear anchor, and at 60 Hz
@@ -246,7 +263,7 @@ describe('the chain through a real swing, at every frame rate (both sides)', () 
       for (const r of replay(side)) expect(r.drawn, `t=${r.t.toFixed(3)} key=${r.key.toFixed(3)}`).toBeLessThanOrEqual(1.6 * r.key + REST_SLOP);
     });
     it(`60 Hz ${side}: the wind-up trails the key visibly but modestly (5 cm .. 20 cm)`, () => {
-      const lag = Math.max(...replay(side).filter(r => r.t < FLAIL_SWING.strikeT).map(r => r.lag));
+      const lag = Math.max(...replay(side).filter(r => r.t < FLAIL_TIMING[side].strikeT).map(r => r.lag));
       expect(lag).toBeGreaterThan(0.05);
       expect(lag).toBeLessThanOrEqual(0.2);
     });
