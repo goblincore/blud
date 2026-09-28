@@ -596,7 +596,15 @@ export function createZombieActor(opts: {
   // `current` is the LIVE body — severLimb/severDistal hand back a new
   // BuildResult with alive flags moved (prims are never removed/reordered).
   let current = body;
-  let posed = body;
+  // POSED FROM THE START, never the rest body (2026-09-28). An actor that has
+  // not stepped yet — `?frozen=1`, a frozen capture/gate rig, a hit on the
+  // frame it spawned — used to expose `body` here, whose rigid-head prims
+  // carry NO orient. A wound stamped on it took damage.ts's axis frame; the
+  // applyRig that every hit then runs gives those same prims `orient`, so the
+  // read-back took the orient frame and the FIRST wound landed 2-12 cm off
+  // (flail gate: 5.8-6.9 cm on the head). Every later hit stamped on applyRig
+  // output and was exact. bodyYaw is 0 until the first step.
+  let posed = applyRig(body, bound, 0);
   /**
    * THE RUPTURE WINDOW (gib-tear.ts). While this is set the march draws the
    * body with its planned regions pulled apart and the flesh leading the bones,
