@@ -16,8 +16,10 @@
 // firer inside the arming time (it leaves from inside his fist).
 //
 // The blast itself is not here: game-main hands the detonation point to the
-// dynamite path (detonateAt), so actors take the same wounds, gibs and
-// concussion a bundle gives, and adds the player's share (blastFalloff).
+// dynamite path (detonateAt) at ROCKET.blastRadiusScale of a bundle's radius,
+// with the FIRER excluded (he is not hurt by his own rockets), and adds the
+// player's share (blastFalloff). rocketLineSafe is his trigger discipline:
+// no firing into a wall at his feet.
 import type { Vec3 } from './types';
 
 export const ROCKET = {
@@ -36,7 +38,27 @@ export const ROCKET = {
    *  the centre only. */
   blastPlayerDamage: 45,
   blastPlayerRadius: 3.2,
+  /** Multiplier on the DYNAMITE blast radius (explosion-aoe.ts, 4.69 m) for
+   *  what a rocket does to BODIES: half, 2.34 m. A bundle is the player's
+   *  room-clearer; at full size every rocket that met a doorframe near him
+   *  took the warbull and his neighbours with it (owner playtest,
+   *  2026-09-28: "he shoots into a wall in front of him and kills
+   *  himself"). */
+  blastRadiusScale: 0.5,
+  /** He holds fire when the first wall along his line, or the player, is
+   *  closer than this (m): the blast radius above plus his own half-width
+   *  and a margin. Inside it the charge takes over (charge.ts). */
+  safeDistance: 3.2,
 } as const;
+
+/** May he fire a rocket down this line? `playerDist` is the distance to the
+ *  target; `obstacleDist` the distance to the first solid thing along the
+ *  line (Infinity when clear). A wall BEYOND the player does not matter: the
+ *  rocket meets the player first. */
+export function rocketLineSafe(playerDist: number, obstacleDist: number): boolean {
+  if (playerDist < ROCKET.safeDistance) return false;
+  return obstacleDist >= playerDist || obstacleDist >= ROCKET.safeDistance;
+}
 
 export interface Rocket {
   pos: Vec3;

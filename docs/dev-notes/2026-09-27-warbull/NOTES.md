@@ -504,3 +504,38 @@ New `wire` look: glossy red. Pre-flighted:
   - the charge and wall stun;
   - the brawl and rage;
   - the lights.
+
+# Playtest fix — he blew himself up, 2026-09-28
+
+**Owner (first draft, in the game):** "since he has explosive weapon he
+basically blows himself and others around him up quite easily. eg i just
+stand in doorway to trigger him n then peek and he shoots into a wall in
+front of him and kills himself."
+
+**Cause:** each rocket detonated through the full dynamite path, with a
+4.69 m blast radius that included the firer. A rocket meeting a doorframe
+2 m from his nose was certain death for him and anything beside him.
+
+**Fixes** (`rockets.ts`, `game-main.ts`, `game-actor.ts`):
+
+1. **The firer is excluded** from his own rockets' blasts. `detonateAt` takes
+   a `rocket: { owner }` option and drops that body from the resolver.
+2. **Rockets hit bodies at half a bundle's radius**
+   (`ROCKET.blastRadiusScale` 0.5, so 2.34 m). The player's own share is
+   unchanged (45 at the epicentre, falling to 0 at 3.2 m).
+3. **Trigger discipline.** He holds fire when the first wall along his line
+   to the player's chest, or the player, is closer than
+   `ROCKET.safeDistance` (3.2 m, beyond the blast radius).
+   - The check is the pure `rocketLineSafe`.
+   - game-main walks the line against the colliders and feeds the result in
+     through a new `fireSafe` actor option.
+   - It becomes the mind's `mayFire`, so he doesn't telegraph a shot he won't
+     take.
+   - A close peeker gets charged instead, once inside 4.5 m.
+
+**Tests:**
+- `rockets.test.ts`: the line rule, and that the safe distance clears the
+  blast radius.
+- `game-actor-warbull.test.ts`: no rockets while the line is unsafe, a full
+  volley when it's clear.
+- The full suite is green: 6685 tests.

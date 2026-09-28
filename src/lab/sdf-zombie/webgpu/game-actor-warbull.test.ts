@@ -180,3 +180,25 @@ describe('warbull charge (game actor, warbull mind)', () => {
     expect(c.fired.n).toBe(firedBefore);
   });
 });
+
+describe('warbull trigger discipline (game actor)', () => {
+  function gunner(safe: boolean) {
+    const fired = { n: 0 };
+    const actor = createZombieActor({
+      id: 3, room: 1, seed: 13, start: [0, 0, 0],
+      bounds: { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, furniture: [],
+      body,
+      view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any,
+      profile: WARBULL_PROFILE, mind: makeWarbullMind(ROCKET_TUNING),
+      character: { wounds: undefined, releaseProp() {} } as any,
+      onFire: () => { fired.n++; },
+      fireSafe: () => safe,
+    });
+    for (let i = 0; i < 60 * 8; i++) { actor.setBrainInput({ x: 0, z: 8, room: 1 }, true); actor.step(1 / 60); }
+    return fired.n;
+  }
+  it('holds fire while the line is unsafe (a wall at his nose), fires when it is clear', () => {
+    expect(gunner(false)).toBe(0);
+    expect(gunner(true)).toBeGreaterThanOrEqual(3);
+  });
+});
