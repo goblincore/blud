@@ -87,6 +87,33 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
     view.dispose();
     template.dispose();
   });
+
+  it('a morphed piece draws in a proxy box fitted to its bent prims, not the rotation-proof cube', () => {
+    // The dangling eye's origin is its socket: the reset() cube (extent · 2.8, centred there) straddled the
+    // whole face and cost ~4 ms a frame. The fitted box holds every prim and sits around them.
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [0, 0, 0], 0.1, [0, 0, 1], () => 0.5);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const cube = view.object.scale.x;
+    view.morph([{ a: [0, 0, 0], b: [0, -0.1, 0] }, { a: [0, -0.1, 0], b: [0, -0.2, 0] }]);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const s = view.object.scale, c = view.object.position;
+    expect(Math.max(s.x, s.y, s.z)).toBeLessThan(cube);
+    expect(c.y).toBeLessThan(2);                                   // centred on the hanging prims, not the origin
+    const half = view.uniforms.bodyHalf.value;
+    expect(half.x).toBeCloseTo(s.x / 2, 6);
+    for (const p of view.bakeData().flesh) for (const e of [p.a, p.b]) {
+      expect(Math.abs(e[1] - c.y)).toBeLessThanOrEqual(half.y);   // every endpoint inside the box
+      expect(Math.abs(e[0] - c.x)).toBeLessThanOrEqual(half.x);
+    }
+    // A reset (the view recycled as an ordinary gib) goes back to the cube.
+    view.reset(chunk, prims, undefined, [], template.uniforms);
+    expect(view.object.scale.x).toBeCloseTo(view.object.scale.y, 9);
+    view.dispose();
+    template.dispose();
+  });
 });
 
 describe('shared gib chunk material', () => {

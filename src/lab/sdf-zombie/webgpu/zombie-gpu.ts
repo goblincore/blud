@@ -3055,6 +3055,11 @@ export function createChunkGpuView(
   let faceCentreLocal: Vec3 = [0, 0, 0];
   let faceRestQuat: Quat = [0, 0, 0, 1];
   let faceRestAxes: Vec3 = [1, 1, 1];
+  /** A MORPHED piece's tight chunk-local AABB of its current prims (morph() sets it, reset() clears it).
+   *  With it, update() fits the proxy box and the cluster sphere to the bent piece instead of reset()'s
+   *  rotation-proof cube around the origin: the dangling eye's origin is its socket, so that cube was
+   *  0.57 m wide, straddled the whole face, and every pixel of it marched the (mostly empty) field. */
+  let morphBox: { min: Vec3; max: Vec3 } | null = null;
 
   function copyTemplateLook() {
     u.faceTex.value = template.faceTex.value;
@@ -3293,6 +3298,7 @@ export function createChunkGpuView(
     faceRestQuat = template.headQuat.value.toArray() as Quat;
     faceRestAxes = template.headAxes.value.toArray() as Vec3;
     proxySize = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
+    morphBox = null;
 
     const { sx, sy, sz } = apply(c);
     mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
@@ -3405,12 +3411,49 @@ export function createChunkGpuView(
       // Chunk-local endpoints; apply() (next update()) rewrites the world rows
       // from `local`, so this costs no re-pack. `extent` stays the reset() one.
       ends.forEach((e, i) => { const p = local[i]; if (p) local[i] = { ...p, a: e.a, b: e.b }; });
+      // The tight local AABB of the bent piece (flesh and bones), padded like proxySize: the blend reach
+      // plus a margin.
+      const pad = packed.maxBlendK * 2 + 0.01;
+      const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+      for (const p of [...local, ...localBones]) {
+        if (p.op === 'sub') continue;
+        // The prim's own reach (radius x scale, box/strand/shell): chunkExtent of it collapsed to a point.
+        const r = chunkExtent([{ ...p, b: p.a, bend: undefined }], p.a) + pad;
+        const ends = p.bend === undefined ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
+        for (const e of ends) for (let k = 0; k < 3; k++) {
+          min[k] = Math.min(min[k]!, e[k]! - r); max[k] = Math.max(max[k]!, e[k]! + r);
+        }
+      }
+      morphBox = Number.isFinite(min[0]) ? { min: min as unknown as Vec3, max: max as unknown as Vec3 } : null;
     },
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
-      mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
-      mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
-      u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+      if (morphBox) {
+        // The box's 8 corners through the chunk transform → the world AABB. Mesh position and bodyHalf
+        // ARE the march's box (writeViewRecord's bodyCentre/bodyHalf); the prims are world-space rows.
+        const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+        for (let i = 0; i < 8; i++) {
+          const w = chunkPoint(c, [
+            (i & 1 ? morphBox.max : morphBox.min)[0], (i & 2 ? morphBox.max : morphBox.min)[1],
+            (i & 4 ? morphBox.max : morphBox.min)[2]] as Vec3, sx, sy, sz);
+          for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k]!, w[k]!); hi[k] = Math.max(hi[k]!, w[k]!); }
+        }
+        const ctr = [(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2] as const;
+        const size = [hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!] as const;
+        mesh.position.set(ctr[0], ctr[1], ctr[2]);
+        mesh.scale.set(size[0], size[1], size[2]);
+        u.bodyHalf.value.set(size[0] / 2, size[1] / 2, size[2] / 2);
+        // The cluster (= its one group) sphere: around the box, not reset()'s straight-piece extent.
+        const rad = Math.hypot(size[0], size[1], size[2]) / 2;
+        packed.clusterBounds.set([ctr[0], ctr[1], ctr[2], rad], 0);
+        packed.groupBounds.set([ctr[0], ctr[1], ctr[2], rad], 0);
+        writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
+        writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, 1);
+      } else {
+        mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
+        mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
+        u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+      }
       syncChunkRecord();
     },
     dispose() {
