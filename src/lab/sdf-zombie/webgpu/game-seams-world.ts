@@ -491,6 +491,27 @@ export function createWorldSeams(ctx: GameContext) {
     },
     /** World-space centre of an actor's live prims on one limb (a driver's
      *  camera target — e.g. a corpse's head). Null when none are alive. */
+    /** Diagnostic (floating-zombie report 2026-09-28): the posed body's lowest point (the
+     *  capsules' lowest end minus radius x scale.y — ignores orientation, so approximate), its
+     *  feet position, and the shadow hull's lowest sphere bottom within 0.8 m of it. */
+    actorGround: (id: number) => {
+      const a = ctx.world.actors.find(q => q.id === id);
+      if (!a) return null;
+      const feet = a.pose().pos;
+      let body = Infinity;
+      for (const p of a.posed().prims) {
+        if (p.dead || p.op === 'sub' || p.op === 'groove') continue;
+        const ry = p.radius * p.scale[1], rby = (p.radiusB ?? p.radius) * p.scale[1];
+        body = Math.min(body, p.a[1] - ry, p.b[1] - rby);
+      }
+      let hull = Infinity, hullN = 0;
+      for (const s of ctx.render.occluderHull.shadowInstances()) {
+        if (Math.hypot(s.centre[0] - feet[0], s.centre[2] - feet[2]) > 0.8) continue;
+        hull = Math.min(hull, s.centre[1] - s.radius);
+        hullN++;
+      }
+      return { feet: [feet[0], feet[1], feet[2]], bodyLowest: body, hullLowest: hull, hullSpheres: hullN };
+    },
     actorLimbCentre: (id: number, limb: string) => {
       const a = ctx.world.actors.find(q => q.id === id);
       const ps = a?.drawnBody().prims.filter(p => p.limb === limb && !p.dead && p.op !== 'sub') ?? [];
