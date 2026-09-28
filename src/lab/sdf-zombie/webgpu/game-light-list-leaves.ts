@@ -323,13 +323,20 @@ export function applyBodyLights(ctx: GameContext, u: { bodyLights: Vec4U; lightL
   const p = pickLights(ctx.world.light?.list?.list ?? [], body, scratchPick).packed;
   u.bodyLights.value.set(p[0], p[1], p[2], p[3]);
   u.lightListCfg.value.x = 1;
-  u.lightListCfg.value.z = torchLane();
+  u.lightListCfg.value.z = torchLane(ctx);
   u.lightListCfg.value.w = 1 - listLook().secondary;
 }
 
 /** lightListCfg.z: 1 = the march shades the torch with its old per-pixel beam and skips the torch's
- *  list slot (LIGHT LAYERS 'torch through the list' off); 0 = the torch is a list light. */
-export const torchLane = (): number => (layerOn('listTorch') ? 0 : 1);
+ *  list slot; 0 = the plain list (the torch, if lit, is a list light). 1 only while 'torch through
+ *  the list' is OFF *and the torch is lit* (owner 2026-09-28, playtesting: "no flashlight - list
+ *  on, torch through the list on; with flashlight - list on, torch through the list off"): with the
+ *  torch off the hybrid would still swap the list's dominant key for four even lights. */
+export const torchLane = (ctx: GameContext): number => {
+  if (layerOn('listTorch')) return 0;
+  const lit = ctx.lighting.dungeonOn && (ctx.world.light?.flashlight.level ?? 1) > 0.01;
+  return lit ? 1 : 0;
+};
 
 /** The seam's plain view of each actor's picks: `{ id, room, crowd, picks: [{ index, weight }] x 4 }`
  *  (index -1 = empty; crowd = drawn by a crowd type), read back from the views' `bodyLights`. */

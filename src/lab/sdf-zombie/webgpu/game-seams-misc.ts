@@ -138,6 +138,9 @@ export function createMiscSeams(ctx: GameContext) {
      *  above, so a capture script can dismiss all three the same way. */
     /** LIGHT LAYERS (light-layers.ts): the state, and one switch (returns the new state). */
     layers: () => layerState(),
+    /** Each actor's lightListCfg: x list on, y gib no-rim, z old-beam torch (1 while the torch is lit
+     *  and 'torch through the list' is off), w 1 - the extra lights' weight. */
+    bodyListLanes: () => ctx.world.actors.map(a => a.view.uniforms.lightListCfg.value.toArray()),
     /** The list's live look scales (light-list.ts ListLook): floor, viewBias, backRim, secondary. */
     setListLook: (l: Partial<ListLook>) => ({ ...setListLook(l) }),
     setLayer: (key: LightLayerKey, on: boolean) => { setLayer(key, on); return layerState(); },

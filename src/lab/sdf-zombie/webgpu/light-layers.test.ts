@@ -5,17 +5,19 @@ import { LIGHT_LIST_BLOCK } from './march/body/blocks/light/light-list.wgsl';
 import { FLASHLIGHT_BLOCK } from './march/body/blocks/light/flashlight.wgsl';
 
 describe('light layers (owner 2026-09-28: all off = the melee branch body lighting)', () => {
-  it('parses ?layers=: absent = everything but the list (owner pick), none, all, a comma list', () => {
+  it('parses ?layers=: absent = the owner pick (list on; list torch and S-curve off), none, all, a comma list', () => {
     expect([...parseLayers(null)]).toEqual(DEFAULT_LAYERS);
-    expect(DEFAULT_LAYERS).not.toContain('list');
-    expect(DEFAULT_LAYERS.length).toBe(LIGHT_LAYERS.length - 1);
+    expect(DEFAULT_LAYERS).toContain('list');
+    expect(DEFAULT_LAYERS).not.toContain('listTorch');
+    expect(DEFAULT_LAYERS).not.toContain('sCurve');
+    expect(DEFAULT_LAYERS.length).toBe(LIGHT_LAYERS.length - 2);
     expect(parseLayers('none').size).toBe(0);
     expect(parseLayers('all').size).toBe(LIGHT_LAYERS.length);
     expect([...parseLayers('list, sCurve,bogus')]).toEqual(['list', 'sCurve']);
   });
   it('boots at the default in node, and setLayer notifies once per real change', () => {
-    expect(layerState().list).toBe(false);
-    expect(layerState().sCurve).toBe(true);
+    expect(layerState().list).toBe(true);
+    expect(layerState().sCurve).toBe(false);
     const seen: string[] = [];
     onLayerChange((k, v) => seen.push(`${k}=${v}`));
     setLayer('bodyFog', false);

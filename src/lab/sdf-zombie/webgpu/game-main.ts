@@ -2229,7 +2229,7 @@ async function main() {
         if (src) {
           // List mode: each member's picks ride its own record; the type only switches the list on
           // (a per-uniform-set value, so set it here too, not only via the copy).
-          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; t.uniforms.lightListCfg.value.z = torchLane(); t.uniforms.lightListCfg.value.w = 1 - listLook().secondary; }
+          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; t.uniforms.lightListCfg.value.z = torchLane(ctx); t.uniforms.lightListCfg.value.w = 1 - listLook().secondary; }
           else {
             t.uniforms.lightListCfg.value.x = 0;
             const near = nearestCrowdBody(t);

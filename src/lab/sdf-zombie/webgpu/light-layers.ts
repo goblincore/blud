@@ -6,9 +6,11 @@
 // way the melee branch did, over the new level lighting. The LIGHT LAYERS panel toggles them live
 // (one needs a reload), so each can be judged on its own and kept or dropped.
 //
-// DEFAULT (owner, 2026-09-28, after playing with the panel): everything on EXCEPT the shared light
-// list ("the shared light list reduces contrast"). 'torch through the list' is on but inert while
-// the list is off.
+// DEFAULT (owner, 2026-09-28, after more playtesting): the list ON ("the lighting is overall
+// better"), 'torch through the list' OFF — which now only acts while the torch is lit, so with the
+// torch off the plain list lights the bodies and with it on the old per-pixel beam does — and the
+// final S-curve OFF (best with the flashlight). Everything else on. (Earlier the same day the pick
+// was everything but the list.)
 //
 // ?layers=all turns every layer on (the look shipped before this switch set: capture gates that
 // pin that look boot with it); ?layers=list,sCurve turns on just those; ?layers=none is the melee
@@ -34,7 +36,7 @@ export const LIGHT_LAYERS: readonly LightLayer[] = [
     help: 'Each body lit by its own 4 strongest lights (lamps, window, torch, flashes) with presentation profiles. Off: the old single key.',
     since: '6540bd05 (plan 1)' },
   { key: 'listTorch', label: 'torch through the list',
-    help: 'With the list on: the torch is one of the 4 lights, judged at the chest, pink hue-preserving tail + white clip. Off: the old per-pixel beam (falloff across the body, whitening shoulder) with the list adding the other lights.',
+    help: 'With the list on and the torch lit: on = the torch is one of the 4 lights, judged at the chest, pink hue-preserving tail + white clip; off = the old per-pixel beam (falloff across the body, whitening shoulder) with the list adding the other lights. With the torch off it changes nothing.',
     since: '83dcd38c, d88c7bb7, 2742f5c8' },
   { key: 'presentKey', label: 'lamps present the bodies',
     help: 'Old path: the room\'s lamp gives each body a three-quarter key from the viewer\'s side, a back rim, and the lightning side rim during strikes.',
@@ -59,8 +61,8 @@ export const LIGHT_LAYERS: readonly LightLayer[] = [
 const KEYS = new Set<string>(LIGHT_LAYERS.map(l => l.key));
 
 /** The layers a `?layers=` value turns on: 'all', 'none' (or absent), or a comma list. */
-/** No ?layers= param: every layer but the shared light list (owner pick 2026-09-28). */
-export const DEFAULT_LAYERS: readonly LightLayerKey[] = LIGHT_LAYERS.map(l => l.key).filter(k => k !== 'list');
+/** No ?layers= param: every layer but 'torch through the list' and the final S-curve (owner pick 2026-09-28). */
+export const DEFAULT_LAYERS: readonly LightLayerKey[] = LIGHT_LAYERS.map(l => l.key).filter(k => k !== 'listTorch' && k !== 'sCurve');
 
 export function parseLayers(param: string | null): Set<LightLayerKey> {
   if (param === null || param === '') return new Set(DEFAULT_LAYERS);
