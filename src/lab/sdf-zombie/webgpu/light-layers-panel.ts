@@ -7,7 +7,7 @@
 // top-left under the HUD line.
 
 import { createPanelShell, type PanelShell } from './panel-chrome';
-import { LIGHT_LAYERS, layerState, onLayerChange, setLayer, type LightLayerKey } from './light-layers';
+import { DEFAULT_LAYERS, LIGHT_LAYERS, layerState, onLayerChange, setLayer, type LightLayerKey } from './light-layers';
 
 export interface LightLayersPanel {
   readonly shell: PanelShell;
@@ -38,7 +38,8 @@ export function createLightLayersPanel(opts: { left?: number; top?: number } = {
   const presets = document.createElement('div');
   presets.setAttribute('style', 'display:flex; gap:5px; margin-bottom:8px;');
   const setAll = (v: boolean) => { for (const l of LIGHT_LAYERS) setLayer(l.key, v); };
-  presets.append(button('all off (melee)', () => setAll(false)), button('all on (as shipped)', () => setAll(true)));
+  const setDefault = () => { for (const l of LIGHT_LAYERS) setLayer(l.key, DEFAULT_LAYERS.includes(l.key)); };
+  presets.append(button('all off (melee)', () => setAll(false)), button('default', setDefault), button('all on', () => setAll(true)));
   body.appendChild(presets);
 
   const rows: { key: LightLayerKey; box: HTMLInputElement; flag: HTMLSpanElement }[] = [];
@@ -72,7 +73,8 @@ export function createLightLayersPanel(opts: { left?: number; top?: number } = {
       r.flag.textContent = l.reload && s[r.key] !== bootState[r.key] ? 'reload' : '';
     }
     const on = LIGHT_LAYERS.filter(l => s[l.key]).map(l => l.key);
-    url.textContent = `?layers=${on.length === 0 ? 'none' : on.length === LIGHT_LAYERS.length ? 'all' : on.join(',')}`;
+    const isDefault = on.length === DEFAULT_LAYERS.length && DEFAULT_LAYERS.every(k => s[k]);
+    url.textContent = isDefault ? '(default: no ?layers= param)' : `?layers=${on.length === 0 ? 'none' : on.length === LIGHT_LAYERS.length ? 'all' : on.join(',')}`;
   }
   onLayerChange(() => refresh());
   shell.onReveal(refresh);
