@@ -271,12 +271,13 @@ export const WARBULL_PROFILE: MotionProfile = {
   // a charge that commits to a line is the point.
   turnRate: 1.6,
   carries: { walk: 'launcherLow', run: 'launcherLow', fire: 'launcher' },
-  // scripts/make-warbull-launcher.ts. Scale 1.6: the casing swallows his
-  // 0.22 m fist and the lower forearm, the muzzle ~0.78 m past the grip.
-  // gripReach 0.09: his fist prim sits at the middle of a 0.18 m hand bone
-  // (warbull.blob `blob arm on hand at=0.45`), so the grip (and the casing
-  // built round it) seats at the fist, not at the wrist.
-  prop: { url: '/assets/lab/warbull-launcher.glb', scale: 1.6, gripReach: 0.09 },
+  // scripts/make-warbull-launcher.ts (the reference plate's cannon). Scale
+  // 1.6: the casing swallows his fist and the lower forearm, the muzzle
+  // ~0.78 m past the grip.
+  // gripReach 0.05: his palm prim sits 0.3 along a 0.17 m hand bone
+  // (warbull.blob `blob arm on hand at=0.30`), so the grip (and the casing
+  // built round it) seats in the fist, not at the wrist.
+  prop: { url: '/assets/lab/warbull-launcher.glb', scale: 1.6, gripReach: 0.05 },
   gunner: { weapon: 'rocket' },
   // Plates on the machinery only (plate-armor.ts WARBULL_ARMOR); shooting
   // the launcher off disarms him (spec, "Disarm").

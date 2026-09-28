@@ -6,12 +6,11 @@
 //   npx tsx scripts/make-warbull-launcher.ts
 //     -> public/assets/lab/warbull-launcher.glb
 //
-// WHAT IT IS: not a gun he holds but a housing his right fist is locked INTO,
-// the machine end of his arm (spec 2026-09-27-warbull-design.md). A boxy
-// chrome-and-iron casing swallows the fist and the lower forearm; a
-// three-tube rotary cluster rides on top of it and indexes one tube per
-// rocket. The kit's gun-arm sleeve (warbull-kit.wam) runs down the forearm
-// INTO the back of the casing.
+// WHAT IT IS: the reference plate's chrome cannon (docs/dev-notes/refs/
+// warbull-reference.png): not a gun he holds but a housing his right fist is
+// locked INTO. An angular chrome casing swallows the fist and the lower
+// forearm, a long single barrel runs out of it, and a revolving drum at the
+// barrel's base indexes a chamber per rocket.
 //
 // FRAME: the runtime's (carry.ts GUN_GRIP): X right, Y up, Z forward, metres,
 // origin on the bore axis. WARBULL_PROFILE.prop.scale (1.6) scales the whole
@@ -22,14 +21,13 @@
 //
 // LOCATORS (empties under GunRoot, like the other guns):
 //   Grip_Hand  (0, -0.074, -0.074)  GUN_GRIP.gripHand: inside the casing.
-//   Muzzle     (0,  0,      0.410)  GUN_GRIP.muzzle: the live tube's mouth
-//              is on the bore axis, which the cluster turns about.
+//   Muzzle     (0,  0,      0.410)  GUN_GRIP.muzzle: the barrel's mouth.
 //   Fore_Hand  (0,  0.060, -0.074)  unused (the carry is one-handed); present
 //              because every held prop carries the three.
 //
-// INDEX: the three tubes, their clamps and the spindle are one node,
-// `Barrels`, origin on the bore axis; held-prop.ts rotates it about local Z
-// by the actor's barrelSpin, which for the launcher is 2pi/3 per rocket.
+// INDEX: the drum is the node `Barrels`, origin on the bore axis;
+// held-prop.ts rotates it about local Z by the actor's barrelSpin, which
+// for the launcher is 2pi/3 per rocket.
 import { writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -97,33 +95,38 @@ const body = [prim(), prim(), prim(), prim()];
 const barrels = [prim(), prim(), prim(), prim()];
 const [chrome, iron, brass, led] = body as [Prim, Prim, Prim, Prim];
 
-// CASING: swallows the fist (centre (0,-0.074,-0.074), r 0.069) and the lower
-// forearm (axis y -0.074 back from z -0.12, r 0.075), ~0.02 clear all round.
-box(chrome, [0, -0.072, -0.155], [0.19, 0.19, 0.37]);      // z -0.34..0.03, y -0.167..0.023
-// Iron armour ribs across the casing, the machined read.
-for (const z of [-0.30, -0.22, -0.14]) box(iron, [0, -0.072, z], [0.198, 0.198, 0.022]);
-// Brass cuff at the back where the kit's sleeve enters.
-box(brass, [0, -0.074, -0.335], [0.176, 0.176, 0.02]);
-// Front face plate the tubes leave through.
-box(iron, [0, -0.02, 0.035], [0.17, 0.13, 0.02]);
-// LED strip down the casing's outer (right, -X) face: the status light.
-box(led, [-0.097, -0.06, -0.19], [0.006, 0.02, 0.14]);
-box(led, [0.097, -0.06, -0.19], [0.006, 0.02, 0.14]);
+// CASING: the reference plate's angular chrome housing over the lower
+// forearm and the fist. Swallows the fist (centre (0,-0.074,-0.074), r 0.069)
+// and the forearm's last 0.32 m (axis y -0.074, r 0.075), ~0.02 clear.
+box(chrome, [0, -0.072, -0.075], [0.19, 0.19, 0.25]);     // z -0.20..0.05
+// Angled plates on top and outside (the plate's faceted chrome), iron ribs.
+box(chrome, [0, 0.030, -0.06], [0.15, 0.03, 0.20]);
+box(chrome, [-0.100, -0.06, -0.08], [0.02, 0.14, 0.20]);
+for (const z of [-0.17, -0.05]) box(iron, [0, -0.072, z], [0.198, 0.198, 0.02]);
+// Brass cuff at the back, where his forearm goes in.
+box(brass, [0, -0.074, -0.195], [0.176, 0.176, 0.02]);
+// LED strip down the outer face: the status light.
+box(led, [-0.111, -0.07, -0.08], [0.004, 0.02, 0.12]);
+box(led, [0.097, -0.07, -0.08], [0.004, 0.02, 0.12]);
 
-// BARRELS node: three tubes on a 0.034 circle round the bore axis, two
-// clamps and the spindle. Tube 0 sits at 12 o'clock: the bore axis is the
-// cluster's centre, and the muzzle is the cluster's mouth.
-const [bChrome, bIron, bBrass, bLed] = barrels as [Prim, Prim, Prim, Prim];
+// THE BARREL: one long chrome tube on the bore axis, the plate's cannon,
+// with a heavy muzzle ring. Static (body).
+cylZ(chrome, 0, 0, 0.045, 0.14, 0.40, 10);
+cylZ(brass, 0, 0, 0.056, 0.385, 0.41, 10);            // muzzle ring
+cylZ(iron, 0, 0, 0.030, 0.405, 0.411, 10, false);     // the bore's dark mouth
+cylZ(chrome, 0, 0, 0.052, 0.26, 0.28, 10);            // mid band
+
+// BARRELS node: the revolving DRUM at the barrel's base, three chambers
+// round the bore, indexing a third of a turn per rocket (barrel-spin.ts).
+// Named `Barrels` for held-prop.ts, which spins whatever that node is.
+const [bChrome, bIron, , bLed] = barrels as [Prim, Prim, Prim, Prim];
+cylZ(bChrome, 0, 0, 0.068, 0.05, 0.14, 12);
 for (let i = 0; i < 3; i++) {
   const a = Math.PI / 2 + (i / 3) * Math.PI * 2;
-  const x = Math.cos(a) * 0.034, y = Math.sin(a) * 0.034;
-  tubeZ(bIron, x, y, 0.026, 0.019, 0.02, 0.41, 8);
-  cylZ(bLed, x, y, 0.0185, 0.395, 0.398, 8);  // the glow at the bottom of the bore
+  const x = Math.cos(a) * 0.042, y = Math.sin(a) * 0.042;
+  cylZ(bIron, x, y, 0.018, 0.139, 0.142, 8, false);     // chamber mouths
+  cylZ(bLed, x, y, 0.012, 0.1415, 0.1425, 8, false);    // lit rounds
 }
-cylZ(bChrome, 0, 0, 0.012, 0.02, 0.40, 6);          // spindle
-cylZ(bBrass, 0, 0, 0.066, 0.06, 0.085, 10);         // rear clamp
-cylZ(bChrome, 0, 0, 0.064, 0.30, 0.325, 10);        // mid clamp
-cylZ(bBrass, 0, 0, 0.063, 0.385, 0.40, 10);         // front clamp
 
 // ---- glTF assembly -------------------------------------------------------
 const chunks: Buffer[] = [];

@@ -1,7 +1,7 @@
 # Warbull (cyber-minotaur) — design
 
 **Date:** 2026-09-27 · **Status:** approved direction (owner, 2026-09-27: "hybrid
-is good, i like the general description"); all seven steps landed, awaiting the kit build and owner playtest.
+is good, i like the general description"); second draft (fresh body from the owner's reference plate) landed, awaiting the kit build and owner playtest.
 
 ## Why
 
@@ -22,7 +22,48 @@ The Juggernaut worked (owner playtest, 2026-09-26) because of its recipe: a prov
 body, scaled; a WAM polygon kit for the hard parts; plates that work; a
 soldier-family brain. The Warbull uses the same recipe on the minotaur's flesh.
 
-## The read
+## Second draft (owner, 2026-09-27): a fresh body from a reference plate
+
+The owner rejected the first draft's body as the same creature as the
+existing bull brutes: it was `minotaur.blob` scaled up. They supplied a
+reference plate, `docs/dev-notes/refs/warbull-reference.png`, a front view of
+a dark-brown, heavily muscled minotaur with glowing red eyes, a bright red
+cable wrap round his waist, chrome ankle braces over hooves (one chrome-shod),
+and a chrome cannon for a forearm.
+
+The body, face decal, kit and launcher were rebuilt from it:
+
+- **Body.** A new skeleton and new prims, measured off the plate at
+  3.25 mm/px; its front silhouette matches the plate at IoU 0.85. What reads:
+  - no neck;
+  - horns out and up;
+  - a 0.96 m-to-0.51 m V-taper;
+  - long, splayed legs;
+  - a clawed hanging hand.
+- **Face.** A decal cropped from the plate's own head.
+- **Kit.** The plate's parts and nothing else:
+  - the red cable belt;
+  - chrome braces with calf cables;
+  - one chrome-shod hoof and a chrome cuff over the other.
+- **Launcher.** Restyled to the plate's cannon.
+
+Superseded by the second draft: everything in the first-draft list below
+that the plate does not show (steel horn, optic, jaw brace, spine rack,
+reactor, knee pistons, shoulder cap).
+
+**The plate's cannon is on his left arm.** Every carry holds props in the
+right hand, so the figure is authored mirrored.
+
+**Only the launcher is a plate.** The belt and braces are thin metal round
+flesh. The region-plate mechanism stays for future characters.
+
+Gameplay is unchanged:
+- the rocket volley;
+- the charge and wall stun;
+- the disarm, brawl and rage;
+- the status lights, which now pulse the braces' LEDs and the launcher's.
+
+## The read (first draft)
 
 A hunched, bull-headed brute about **2.6 m to the horn tips**, a head taller than
 the Juggernaut. Pink-red hide under hard light. Machinery is **bolted into** him:

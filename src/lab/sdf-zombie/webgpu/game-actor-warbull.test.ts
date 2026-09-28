@@ -1,7 +1,6 @@
-// The warbull's MACHINERY PLATES through the real actor (plate-armor.ts
-// WARBULL_ARMOR, spec 2026-09-27-warbull-design.md "Damage" and "Disarm"):
-// rounds on the metal stamp nothing, rounds on the flesh around it wound at
-// once (region plates), and shooting the launcher off DISARMS him.
+// The warbull through the real actor (spec 2026-09-27-warbull-design.md):
+// the launcher is his one plate and shooting it off DISARMS him; the bull
+// charge (charge.ts) through the warbull mind; the brawl once disarmed.
 import { describe, expect, it } from 'vitest';
 import { buildBody } from '../build-body';
 import { compileBlob, compileFace } from '../blob-compile';
@@ -92,28 +91,10 @@ function pelletOnBone(b: B, bone: string) {
 }
 
 describe('warbull machinery plates (game actor)', () => {
-  it('the reactor stops rounds until it breaks; a pec beside it is flesh from the first round', () => {
+  it('his chest is flesh from the first round (only the launcher is a plate)', () => {
     const b = bull();
-    for (let i = 0; i < hp('reactor'); i++) expect(pelletAtRest(b, [0, 1.53, 0.36]), `round ${i}`).toBeNull();
-    expect(b.actor.wounds()).toHaveLength(0);
-    expect(b.actor.armorView()!.shed.has('reactor')).toBe(true);
-    expect(pelletAtRest(b, [0, 1.53, 0.36])).not.toBeNull();
-    const c = bull();
-    expect(pelletAtRest(c, [0.14, 1.76, 0.3])).not.toBeNull();
-  });
-
-  it('the spine rack guards his back; the rack is not his chest', () => {
-    const b = bull();
-    expect(pelletAtRest(b, [0, 1.70, -0.38], -1)).toBeNull();
-    expect(b.actor.armorView()!.shed.size).toBe(0);
-  });
-
-  it('the left side of the head is flesh; the optic side is steel', () => {
-    const b = bull();
-    // The left eye (the glowing bead) is flesh; the optic sits at its mirror.
-    expect(pelletAtRest(b, [0.06, 2.22, 0.23])).not.toBeNull();
-    const c = bull();
-    expect(pelletAtRest(c, [-0.06, 2.22, 0.23])).toBeNull();
+    expect(pelletAtRest(b, [0, 1.55, 0.25])).not.toBeNull();
+    expect(b.actor.armorView()!.hits).toHaveLength(0);
   });
 
   it('shooting the launcher off DISARMS him and turns his core red', () => {

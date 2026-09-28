@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   JUGGERNAUT_ARMOR as A, JUGGERNAUT_ARMOR, WARBULL_ARMOR, blastPlates, freshPlates, hitPlate, isShed, kitShedFor, plateFor, restHitPoint, shedPlates,
+  type ArmorSpec,
 } from './plate-armor';
 import src from './characters/juggernaut.blob?raw';
 import { parseBlob } from './blob-parse';
@@ -56,47 +57,52 @@ describe('plate armour', () => {
   });
 });
 
-describe('region plates (the warbull: metal embedded in flesh)', () => {
-  const W = WARBULL_ARMOR;
-  const fresh = () => freshPlates(W);
+describe('region plates (metal embedded in flesh that shares a bone)', () => {
+  // A test suit shaped like the problem: a reactor sunk in the chest and a
+  // rack on the back, both on bones that also carry bare flesh.
+  const R: ArmorSpec = {
+    plates: [
+      { id: 'reactor', bones: ['chest', 'neck'], hp: 12, region: { center: [0, 1.53, 0.36], radius: 0.15 }, kitBones: ['chest'] },
+      { id: 'rack', bones: ['neck', 'chest'], hp: 12, region: { center: [0, 1.70, -0.42], radius: 0.30 }, kitBones: ['neck'] },
+      { id: 'arm', bones: ['forearm.r'], hp: 6 },
+    ],
+    blastPlateDamage: 10,
+  };
+  const fresh = () => freshPlates(R);
 
-  it('a round on the reactor is stopped; the same bone a hand-span away is flesh', () => {
-    const onReactor = hitPlate(W, fresh(), 'chest', 1, [0, 1.53, 0.36]);
-    expect(onReactor).toMatchObject({ plate: 'reactor', absorbed: true });
-    const onPec = hitPlate(W, fresh(), 'neck', 1, [0.13, 1.74, 0.30]);
-    expect(onPec).toMatchObject({ plate: null, absorbed: false });
+  it('a round on the metal is stopped; the same bone a hand-span away is flesh', () => {
+    expect(hitPlate(R, fresh(), 'chest', 1, [0, 1.53, 0.36])).toMatchObject({ plate: 'reactor', absorbed: true });
+    expect(hitPlate(R, fresh(), 'neck', 1, [0.13, 1.74, 0.30])).toMatchObject({ plate: null, absorbed: false });
+    expect(hitPlate(R, fresh(), 'neck', 1, [0, 1.72, -0.40]).plate).toBe('rack');
   });
 
-  it('the rack stops rounds on his back; the flesh side of the head and the left eye are flesh', () => {
-    expect(hitPlate(W, fresh(), 'neck', 1, [0, 1.72, -0.40]).plate).toBe('rack');
-    expect(hitPlate(W, fresh(), 'skull', 1, [-0.10, 2.25, 0.20]).plate).toBe('headgear');
-    expect(hitPlate(W, fresh(), 'skull', 1, [0.10, 2.22, 0.22]).plate).toBeNull();
-  });
-
-  it('a region plate never matches without a hit point', () => {
-    expect(plateFor(W, 'chest')).toBeNull();
-    expect(plateFor(W, 'forearm.r')?.id).toBe('launcher');
-  });
-
-  it('the launcher covers the whole right forearm and fist, bone-only, and nothing on the left', () => {
-    expect(hitPlate(W, fresh(), 'forearm.r', 1).plate).toBe('launcher');
-    expect(hitPlate(W, fresh(), 'hand.r', 1).plate).toBe('launcher');
-    expect(hitPlate(W, fresh(), 'forearm.l', 1).plate).toBeNull();
+  it('a region plate never matches without a hit point; a bone plate always does', () => {
+    expect(plateFor(R, 'chest')).toBeNull();
+    expect(plateFor(R, 'forearm.r')?.id).toBe('arm');
   });
 
   it('a shed plate strips only its own kit bones', () => {
-    const shed = new Set(['reactor']);
-    expect(kitShedFor(W, shed, 'chest')).toBe(true);
-    expect(kitShedFor(W, shed, 'neck')).toBe(false);   // the rack stays
-    expect(kitShedFor(W, new Set(['rack']), 'neck')).toBe(true);
-    expect(kitShedFor(W, new Set(['launcher']), 'forearmr')).toBe(true); // the GLTFLoader spelling
+    expect(kitShedFor(R, new Set(['reactor']), 'chest')).toBe(true);
+    expect(kitShedFor(R, new Set(['reactor']), 'neck')).toBe(false);
+    expect(kitShedFor(R, new Set(['rack']), 'neck')).toBe(true);
+    expect(kitShedFor(R, new Set(['arm']), 'forearmr')).toBe(true); // the GLTFLoader spelling
     // The juggernaut (no kitBones): everything on the plate's bones.
     expect(kitShedFor(JUGGERNAUT_ARMOR, new Set(['helmet']), 'neck')).toBe(true);
   });
 
   it('a blast cracks every plate on the bones it wounds, region plates included', () => {
-    const r = blastPlates(W, fresh(), ['chest']);
-    expect(r.hit.sort()).toEqual(['rack', 'reactor']);
+    expect(blastPlates(R, fresh(), ['chest']).hit.sort()).toEqual(['rack', 'reactor']);
+  });
+});
+
+describe('the warbull\'s plates', () => {
+  it('only the launcher (his right forearm and fist) is a plate: the disarm target', () => {
+    expect(WARBULL_ARMOR.plates.map(p => p.id)).toEqual(['launcher']);
+    const f = freshPlates(WARBULL_ARMOR);
+    expect(hitPlate(WARBULL_ARMOR, f, 'forearm.r', 1).plate).toBe('launcher');
+    expect(hitPlate(WARBULL_ARMOR, f, 'hand.r', 1).plate).toBe('launcher');
+    expect(hitPlate(WARBULL_ARMOR, f, 'forearm.l', 1).plate).toBeNull();
+    expect(hitPlate(WARBULL_ARMOR, f, 'chest', 1, [0, 1.5, 0.3]).plate).toBeNull();
   });
 });
 
