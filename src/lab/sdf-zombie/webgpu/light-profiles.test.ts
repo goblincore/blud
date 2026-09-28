@@ -63,10 +63,10 @@ describe('light profiles (spec §5)', () => {
       expect(PROFILES_BY_NAME[name].coverAt).toBe(name === 'flashlight' ? 'chest' : 'feet');
     }
   });
-  it('flashlight retune (owner 2026-09-27, judged at the chest): trim 0.43 (was 2.8), distFall 0.01 (was 0.04)', () => {
+  it('flashlight retune (owner 2026-09-27, judged at the chest): trim 0.65 (0.43, then pick C with the white clip; was 2.8), distFall 0.01 (was 0.04)', () => {
     const f = PROFILES_BY_NAME.flashlight;
-    expect(FLASHLIGHT_LIST_TRIM).toBe(0.43);
-    expect(f.gain).toBeCloseTo(4 * 0.43, 9);
+    expect(FLASHLIGHT_LIST_TRIM).toBe(0.65);
+    expect(f.gain).toBeCloseTo(4 * 0.65, 9);
     expect(f.distFall).toBe(0.01);
     // Only the flashlight moved: the tube keeps its calibration.
     expect(PROFILES_BY_NAME.tube.distFall).toBe(0.06);

@@ -76,8 +76,9 @@ export const LAMP_LIST_TRIM = 0.7;
  *  trim came down: body-pixel sweep at 1.5 / 2.5 / 4 / 6 m, Night Train third class torch-only
  *  (tubes killed), mean 0.64 / 0.63 / 0.57 / 0.44 at 0.43 (0.70-0.38 at 0.55 with distFall 0.03,
  *  0.79 at 1.2); ring level 0.46-0.26. Dev note 2026-09-27-shared-light-list, "Flashlight judged
- *  at the chest". */
-export const FLASHLIGHT_LIST_TRIM = 0.43;
+ *  at the chest". Then 0.43 -> 0.65 with the beam tail's white clip (light-shade.ts
+ *  BEAM_WHITE_CLIP): owner pick C of an A/B/C sheet, "a little white clipping is okay". */
+export const FLASHLIGHT_LIST_TRIM = 0.65;
 
 /** Measured trim for the window (the held-bolt A/B, the same body): the old bolt also added the
  *  lightning side rim and a cold front fill (compose, spotCfg2.w) that the list's window profile
@@ -111,7 +112,7 @@ export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
   // Held bolt at the A/B pose: trim 1.0 0.96x today's mean, 1.3 0.99x.
   window: { gain: OLD_KEY * OLD_BODY_WINDOW_GAIN * WINDOW_LIST_TRIM, viewBias: 0.15, floor: 0.1, coverFloor: 0.1, backKey: 0.5, backRim: 3.0, rimTint: COLD_RIM, edge: 1.0, distFall: 0, spec: 1.2, specPow: 32, beamShoulder: 0, coverAt: 'feet' },
   // flashlight: the beam is the key (flashlight.wgsl.ts), little bias, it is at the eye.
-  // gain = the beam gain 4 x FLASHLIGHT_LIST_TRIM 0.43 = 1.72, on rgb normalised by the flashlight's
+  // gain = the beam gain 4 x FLASHLIGHT_LIST_TRIM 0.65 = 2.6, on rgb normalised by the flashlight's
   // base intensity (bodyNorm = 1 / 90). Its cone is judged at the CHEST (coverAt): a hand-held
   // beam points at the body, and judged at the feet it scored 0.09 at 1.5 m and 0.59 at 4 m.
   // distFall 0.01 (was 0.04): the torch falls ~25% from 1.5 to 6 m, so a body stays pink and

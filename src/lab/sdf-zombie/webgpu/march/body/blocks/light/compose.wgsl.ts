@@ -4,6 +4,11 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
+import { BEAM_WHITE_CLIP, BEAM_WHITE_LUM } from '../../../../light-shade';
+
+/** A WGSL f32 literal (always a decimal point). */
+const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+
 export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A body standing in the beam used to run
   // past 1.0 on every channel and hard-clip, which does not just look blown —
   // it DELETES the wounds: crater, lip, char and clean skin all clamp to the
@@ -139,7 +144,11 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
       let lumOut = select(lumIn, knee + head * tl / (1.0 + tl), lumIn > knee);
       let hued = fleshLit * (lumOut / max(lumIn, 1e-4));
       let beamTail = vec3<f32>(softShoulder(hued.x, 0.9), softShoulder(hued.y, 0.9), softShoulder(hued.z, 0.9));
-      fleshLit = mix(shoulder, beamTail, clamp(listBeam, 0.0, 1.0));
+      // WHITE CLIP (owner, after the retune: "a little white clipping is okay"): where the TORCH'S
+      // OWN share of the luminance (lumIn x listTorchShare) is hot, blend back toward the whitening
+      // per-channel shoulder (light-shade.ts). A tube adding to the torch does not whiten (option 3).
+      let whiten = ${f(BEAM_WHITE_CLIP)} * smoothstep(${f(BEAM_WHITE_LUM[0])}, ${f(BEAM_WHITE_LUM[1])}, lumIn * listTorchShare);
+      fleshLit = mix(shoulder, mix(beamTail, shoulder, whiten), clamp(listBeam, 0.0, 1.0));
     } else {
       fleshLit = shoulder;
     }

@@ -38,6 +38,8 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
   var listDomFloor = 0.0;
   // The beam's delivered luminance (profile lane b.z, beamShoulder: the flashlight's 1), for compose's beam shoulder.
   var listBeam = 0.0;
+  // The torch's share of this pixel's list light (bodyLights lumBeam / lumAll), for the white clip.
+  var listTorchShare = 0.0;
   // Lk: the dominant's VIEW-BIASED direction (its Lb), for its wrap and highlight; L stays the raw
   // direction for scatter and the wound shadow. Off, Lk == L exactly.
   var Lk = L;
@@ -56,5 +58,6 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
     listRim = select(bl.rim, vec3<f32>(0.0), lightListCfg.y > 0.5);
     listDomFloor = bl.domFloor;
     listBeam = bl.beam;
+    listTorchShare = bl.lumBeam / max(bl.lumAll, 1e-4);
   }
   // ---- END SHARED LIGHT LIST ----------------------------------------------`;

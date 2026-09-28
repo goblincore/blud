@@ -78,6 +78,11 @@ export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>,
     }
     o.rim = o.rim + c * pc.rgb * rim;
     o.beam = o.beam + pb.z * dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+    // Wrap-weighted luminance, every slot (skipFirst or not) and the beam lights' share of it:
+    // compose's white clip whitens only where the TORCH ALONE is that bright (owner option 3).
+    let lw = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)) * wrap;
+    o.lumAll = o.lumAll + lw;
+    o.lumBeam = o.lumBeam + select(0.0, lw, pb.z > 0.0);
     if (k == 0) { o.domL = L; o.domLb = Lb; o.domC = c; o.domFloor = pa.z; }
   }
   return o;
@@ -91,4 +96,6 @@ struct BodyLit {
   domC: vec3<f32>,
   domFloor: f32,
   beam: f32,
+  lumAll: f32,
+  lumBeam: f32,
 }`;

@@ -137,9 +137,9 @@ describe('BODY_LIGHTS — lane parity with packProfiles and the CPU reference', 
     for (const l of LANES) expect(BODY_LIGHTS, l.param).toContain(l.wgsl);
   });
 
-  it('the WGSL reads no spare lane (pa.w backKey is CPU pick only; pb.z is beamShoulder, read once)', () => {
+  it('the WGSL reads no spare lane (pa.w backKey is CPU pick only; pb.z is beamShoulder: the beam weight and the torch share)', () => {
     expect(BODY_LIGHTS).not.toMatch(/\bpa\.w\b/);
-    expect(BODY_LIGHTS.match(/\bpb\.z\b/g)?.length).toBe(1);
+    expect(BODY_LIGHTS.match(/\bpb\.z\b/g)?.length).toBe(2);
     expect(BODY_LIGHTS).not.toMatch(/\bpc\.w\b/);
   });
 });

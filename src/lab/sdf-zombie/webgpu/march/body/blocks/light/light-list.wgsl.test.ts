@@ -112,7 +112,10 @@ describe('Task 9 review: list mode keeps the rim, the shoulder and viewBias; no 
     expect(COMPOSE_BLOCK).toContain('let hued = fleshLit * (lumOut / max(lumIn, 1e-4));');
     expect(COMPOSE_BLOCK).toContain('let beamTail = vec3<f32>(softShoulder(hued.x, 0.9), softShoulder(hued.y, 0.9), softShoulder(hued.z, 0.9));');
     expect(COMPOSE_BLOCK).not.toContain('knee - 0.1');
-    expect(COMPOSE_BLOCK).toContain('fleshLit = mix(shoulder, beamTail, clamp(listBeam, 0.0, 1.0));');
+    // White clip (owner pick C): light-shade.ts BEAM_WHITE_CLIP 1 over BEAM_WHITE_LUM 0.8..1.6.
+    expect(COMPOSE_BLOCK).toContain('let whiten = 1.0 * smoothstep(0.8, 1.6, lumIn * listTorchShare);');
+    expect(LIGHT_LIST_BLOCK).toContain('listTorchShare = bl.lumBeam / max(bl.lumAll, 1e-4);');
+    expect(COMPOSE_BLOCK).toContain('fleshLit = mix(shoulder, mix(beamTail, shoulder, whiten), clamp(listBeam, 0.0, 1.0));');
     expect(COMPOSE_BLOCK).toContain('} else {\n      fleshLit = shoulder;\n    }');
   });
 

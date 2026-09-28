@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildLightList, packLightList, type LightSource, type Vec3 } from './light-list';
 import { LIGHT_PROFILES, PROFILE_ID, PROFILE_VEC4S } from './light-profiles';
 import { pickLights } from './light-pick';
-import { beamTail, shadeBodyLights } from './light-shade';
+import { BEAM_WHITE_CLIP, BEAM_WHITE_LUM, beamTail, shadeBodyLights } from './light-shade';
 
 // Every rule is judged at the origin with the camera straight down +z (V = [0, 0, 1]).
 const P: Vec3 = [0, 0, 0];
@@ -188,7 +188,7 @@ describe('beamTail (compose.wgsl.ts beam shoulder, owner 2026-09-27: pink, not w
   it('keeps the hue: a bright pink body stays pink where the per-channel shoulder whitens it', () => {
     for (const k of [1.2, 1.6, 2.4, 4]) {
       const c: Vec3 = [pink[0] * k, pink[1] * k, pink[2] * k];
-      const out = beamTail(c, KNEE);
+      const out = beamTail(c, KNEE, 0);
       // The old per-channel exponential shoulder, for comparison.
       const exp = c.map(x => x <= KNEE ? x : KNEE + (1 - KNEE) * (1 - Math.exp(-(x - KNEE) / (1 - KNEE))));
       // 1.2x: 0.33 vs 0.23; 2.4x: 0.22 vs 0.03 (white); 4x: 0.18 vs 0.00. Red rounds off at 1
@@ -197,14 +197,30 @@ describe('beamTail (compose.wgsl.ts beam shoulder, owner 2026-09-27: pink, not w
       expect(chroma(out)).toBeGreaterThan(0.15);
     }
   });
-  it('monotonic in brightness and never reaches 1 on any channel', () => {
+  it('monotonic in brightness and never over 1 on any channel (the white clip may reach it: pick C)', () => {
     let prev = 0;
     for (let k = 0.2; k < 20; k *= 1.25) {
       const out = beamTail([pink[0] * k, pink[1] * k, pink[2] * k], KNEE);
       expect(lum(out)).toBeGreaterThan(prev);
       prev = lum(out);
-      for (const v of out) expect(v).toBeLessThan(1);
+      for (const v of out) expect(v).toBeLessThanOrEqual(1);
     }
+  });
+  it('white clip (owner pick C, 2026-09-27): the hottest luminance whitens, the midtones stay the pink tail', () => {
+    expect(BEAM_WHITE_CLIP).toBe(1);
+    const exp = (c: Vec3) => c.map(x => x <= KNEE ? x : KNEE + (1 - KNEE) * (1 - Math.exp(-(x - KNEE) / (1 - KNEE))));
+    // Below the ramp: exactly the pure tail.
+    const mid: Vec3 = [0.9, 0.558, 0.54];   // pink, luminance ~0.63
+    expect(lum(mid)).toBeLessThan(BEAM_WHITE_LUM[0]);
+    expect(beamTail(mid, KNEE)).toEqual(beamTail(mid, KNEE, 0));
+    // Past the ramp: exactly the per-channel shoulder (near-white).
+    const hot: Vec3 = [pink[0] * 3, pink[1] * 3, pink[2] * 3];
+    expect(lum(hot)).toBeGreaterThan(BEAM_WHITE_LUM[1]);
+    beamTail(hot, KNEE).forEach((v, i) => expect(v).toBeCloseTo(exp(hot)[i]!, 9));
+    expect(chroma(beamTail(hot, KNEE))).toBeLessThan(0.05);
+    // Option 3: the same brightness with the torch only a third of it (a tube doing the rest)
+    // stays the pure pink tail.
+    expect(beamTail(hot, KNEE, BEAM_WHITE_CLIP, 0.25)).toEqual(beamTail(hot, KNEE, 0));
   });
   it('a white specular glint still goes near-white (the hot-light sparkle)', () => {
     const out = beamTail([6, 6, 6], KNEE);

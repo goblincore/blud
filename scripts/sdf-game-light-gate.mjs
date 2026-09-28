@@ -21,7 +21,7 @@
 //  7b. THE FLASHLIGHT ON A BODY (owner 2026-09-27): list on, the body at 1.5 / 2.5 / 4 / 6 m in
 //      the beam, measured on its own pixels (march debug heatmap mask), in its tube's pool and
 //      (after section 9, tubes killed) torch only against the same body with the torch off:
-//      <= 3% blown, the mean never rises with distance, torch only lit, modelled and pink (mean,
+//      <= 5% blown torch only, <= 40% with a tube (the white clip), the mean never rises with distance, torch only lit, modelled and pink (mean,
 //      std, chroma bounds) and >= 2x the torch-off body (1.5x at 6 m). `?lightlist=0` at 2 m is
 //      reported.
 //   8. BONES (Task 11): the skull catches the muzzle flash and does not glow in the dark.
@@ -1116,20 +1116,26 @@ if (!(listOn.dark.dark <= Math.max(0.15, listOff.dark.dark + 0.05))) fail(`dark 
 // and 6 m. Before the chest-judged retune the list's torch was weakest up close (its pick judged
 // the cone at the feet) and white at 2-4 m. Bounds (dev note 2026-09-27-shared-light-list,
 // "Flashlight judged at the chest"):
-//  - never blown: at most FLASH_BLOWN of the body over 0.95, in the tube and torch-only;
+//  - barely blown: at most FLASH_BLOWN of the body over 0.95 torch-only, FLASH_BLOWN_TUBE in the tube;
 //  - a smooth fall-off: the mean never rises with distance by more than FLASH_BUMP;
 //  - torch only (tubes killed): lit and modelled, not white: mean in FLASH_TORCH_MEAN, std >=
 //    FLASH_TORCH_STD, chroma >= FLASH_CHROMA (the old per-channel shoulder read 0.10 at 4 m);
 //    and a flashlight: >= FLASH_CONTRAST x the same body with the torch off (1.5 x at 6 m);
 //  - in its tube (already at the shoulder's knee, 0.80 alone at 1.5 m): mean in FLASH_TUBE_MEAN.
-const FLASH_BLOWN = 0.03, FLASH_BUMP = 0.02, FLASH_CHROMA = 0.25, FLASH_TORCH_STD = 0.08;
-const FLASH_TORCH_MEAN = [0.4, 0.75], FLASH_TUBE_MEAN = [0.45, 0.9], FLASH_CONTRAST = 2;
+// Blown bounds split (owner 2026-09-27, pick C then option 3: "a little white clipping is okay"; raising
+// the bound is fine): the torch alone keeps its white hot spots small; under a tube the white clip
+// (driven by the torch's own share) measured 29.5% / 25.1% at 1.5 / 2.5 m (0% at 4 m). The white
+// hot spots also cost torch-only chroma (0.34 -> 0.22-0.30) and the hotter trim lifts its mean (0.76).
+const FLASH_BLOWN_TUBE = 0.40;
+const FLASH_BLOWN = 0.05, FLASH_BUMP = 0.02, FLASH_CHROMA = 0.20, FLASH_TORCH_STD = 0.08;
+const FLASH_TORCH_MEAN = [0.4, 0.85], FLASH_TUBE_MEAN = [0.45, 0.9], FLASH_CONTRAST = 2;
 for (const d of FLASH_SWEEP_M) console.log(`     flash ${String(d).padEnd(3)} m tube+torch ${nearFmt(nearOn[d])} | torch ${nearFmt(torchOnly.on[d])} | off ${nearFmt(torchOnly.off[d])} = ${(torchOnly.on[d].mean / torchOnly.off[d].mean).toFixed(1)}x`);
 console.log(`     flash ${FLASH_NEAR_M}   m ?lightlist=0 tube+torch ${nearFmt(nearOff)}`);
 FLASH_SWEEP_M.forEach((d, i) => {
   const tt = nearOn[d], to = torchOnly.on[d], dk = torchOnly.off[d];
   for (const [what, b] of [['tube+torch', tt], ['torch only', to]]) {
-    if (!(b.blown <= FLASH_BLOWN)) fail(`flashlight ${what} at ${d} m: ${(b.blown * 100).toFixed(1)}% of the body blown (> ${FLASH_BLOWN * 100}%)`);
+    const cap = what === 'tube+torch' ? FLASH_BLOWN_TUBE : FLASH_BLOWN;
+    if (!(b.blown <= cap)) fail(`flashlight ${what} at ${d} m: ${(b.blown * 100).toFixed(1)}% of the body blown (> ${cap * 100}%)`);
   }
   if (!(tt.mean >= FLASH_TUBE_MEAN[0] && tt.mean <= FLASH_TUBE_MEAN[1])) fail(`flashlight tube+torch at ${d} m: body mean ${tt.mean.toFixed(3)} outside ${FLASH_TUBE_MEAN}`);
   if (!(to.mean >= FLASH_TORCH_MEAN[0] && to.mean <= FLASH_TORCH_MEAN[1])) fail(`flashlight torch only at ${d} m: body mean ${to.mean.toFixed(3)} outside ${FLASH_TORCH_MEAN}`);
