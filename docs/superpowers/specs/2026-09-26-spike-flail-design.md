@@ -257,8 +257,8 @@ ball, which lands about a ball-width under the crosshair on the strike frame.
 
 **Gate (`scripts/flail-gate.mjs`):**
 - three chained clicks strike R, L, H in order;
-- H hits two zombies about ±60° off the facing, while an R click in the same setup hits only the centre
-  one;
+- H hits two zombies standing 55–65° either side of the facing, while R and L clicks from the same spot
+  hit neither;
 - **8** crosshair-aimed head hits: the head stays on, every hit is a 0.06 m crater within 0.15 m of the
   head centre;
 - a body zombie collapses on hit **≥ 7**;

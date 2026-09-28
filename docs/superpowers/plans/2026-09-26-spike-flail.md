@@ -1907,3 +1907,324 @@ it('R is a big overhand swipe: wound up high over the right shoulder, then down 
   owner playtest pending"; spec status line likewise; the PR body gains a v1.2 section (`gh pr edit 22
   --body-file …`, keep the `🤖 Generated with [Claude Code](https://claude.com/claude-code)` line);
   commit and `git push`. Start the owner's server (`preview_start` `blud-censer`, port 5190).
+
+---
+
+## v1.3 — the R → L → H combo, tougher zombies, no decapitation, the crosshair ray (spec §12, 2026-09-28)
+
+**Goal:** a third swing (H, a flat right-to-left sweep) as the finisher of a chained R → L → H combo;
+about 8 body hits drop a zombie; the flail never takes a head off; the hit lands where the crosshair points.
+
+**Shape of the change:**
+- `flail-swing.ts` gets per-side timing (`FLAIL_TIMING`) and an `'H'` key table (Task 18), then the combo
+  state machine (Task 19). `FLAIL_SWING.swingSec`/`strikeT` stay as the R/L values, so R/L code and tests keep
+  reading them; every place that must also work for H switches to `FLAIL_TIMING[side]`.
+- `flail-strike.ts` gets per-side arcs and the no-sever head rule; `game-flail.ts` gets per-side feel and the
+  crosshair ray (Task 20).
+- The gate learns the combo, the sweep's width, 8 head hits and ≥ 7 to collapse (Task 21).
+
+Rules as before: one implementer at a time, explicit pathspecs, never `git reset`/`git stash`, targeted tests,
+headless gate on ports 5241/9241 (5190 is the owner's).
+
+### Task 18: The H sweep — per-side timing and keys (pure)
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/flail-swing.ts`, `src/lab/sdf-zombie/webgpu/flail-swing.test.ts`,
+`src/lab/sdf-zombie/webgpu/flail-chain.ts`, `src/lab/sdf-zombie/webgpu/flail-chain.test.ts`,
+`src/lab/sdf-zombie/webgpu/game-flail.ts` (one line).
+
+The state machine still alternates R/L in this task; H is reachable only by constructing a swing state with
+`side: 'H'` (tests, the chain replay). Task 19 wires the combo.
+
+- [ ] **Step 1: Types and timing.** In `flail-swing.ts`:
+
+```ts
+export type FlailSide = 'R' | 'L' | 'H';
+
+/** Per-side swing timing. R and L are FLAIL_SWING's; H, the combo's finisher, is longer. */
+export const FLAIL_TIMING: Readonly<Record<FlailSide, { swingSec: number; strikeT: number }>> = {
+  R: { swingSec: FLAIL_SWING.swingSec, strikeT: FLAIL_SWING.strikeT },
+  L: { swingSec: FLAIL_SWING.swingSec, strikeT: FLAIL_SWING.strikeT },
+  H: { swingSec: 0.55, strikeT: 0.2 },
+};
+
+/** Each side's key times (the tests iterate these). */
+export function flailKeyTimes(side: FlailSide): number[] { return KEYS[side].map(k => k.t); }
+```
+
+  Update the header comment (three swings; R overhand, L cross, H sweep). Make every timing use per-side:
+  - `strikeIfDue`: `s.t < FLAIL_TIMING[s.side].strikeT`;
+  - `stepFlailSwing`: the buffer check and the end-of-swing check use `FLAIL_TIMING[cur.side].swingSec`
+    (and `s.side` for the buffer on the pre-step state);
+  - `hermiteTangent`: the strike key is `keys[i]!.t === strikeT` where `strikeT` is passed in by `sample`
+    from `flailPose` (`FLAIL_TIMING[s.side].strikeT`);
+  - `flailBallVel`: clamp to `FLAIL_TIMING[s.side].swingSec`;
+  - `FLAIL_IMPACT`: add `H: KEYS_H.find(k => k.t === FLAIL_TIMING.H.strikeT)!.ball`;
+  - `flail-chain.ts` `guideWeight`: `const S = FLAIL_TIMING[s.side]` (was `FLAIL_SWING`);
+  - `game-flail.ts` line ~465: `t: FLAIL_TIMING[strikeNow].strikeT`.
+  - `other()` stays R↔L for now (Task 19 replaces it).
+- [ ] **Step 2: Failing tests for H** (in `flail-swing.test.ts`). Generalise the pose-quality tests so they
+  run for `['R', 'L', 'H']` with each side's own timing and key times: the strike passes through
+  `FLAIL_IMPACT[side]` at its `strikeT`; no pops (drive H by constructing states, `t` from 0 to
+  `FLAIL_TIMING.H.swingSec` in 1/240 steps); speed at the strike ≥ 0.8 of the peak over `[strikeT − 0.06,
+  strikeT + 0.12]`; no > 2× speed jump away from the rest ends; the overshoot test with
+  `flailKeyTimes(side)` filtered to the non-helper keys (for R/L the existing `[0, 0.1, 0.18, 0.3, 0.45]`;
+  for H `[0, 0.12, 0.2, 0.33, 0.55]`); within chain reach at every key; ≥ 0.28 m from the bolt over the whole
+  swing; taut 0.34–0.36 m at the strike; the crosshair test (`y/−z` ∈ [−0.1, −0.04], `|x/−z|` ≤ 0.1).
+  Add the H character test:
+
+```ts
+it('H is a flat right-to-left sweep through the crosshair', () => {
+  const at = (t: number) => flailPose({ phase: 'swing', side: 'H', t, struck: false, queued: false, nextSide: 'H', swingId: 1 });
+  const wind = at(0.12);
+  expect(wind.ball[0]).toBeGreaterThanOrEqual(0.55);           // wound up wide right
+  expect(Math.abs(wind.ball[1])).toBeLessThanOrEqual(0.2);     // at shoulder height, not overhead
+  const follow = at(0.33);
+  expect(follow.ball[0]).toBeLessThanOrEqual(-0.5);            // follows through far left
+  const v = flailBallVel({ ...makeFlailSwing(), phase: 'swing', side: 'H', t: FLAIL_TIMING.H.strikeT });
+  expect(v[0]).toBeLessThan(0);                                // moving right → left
+  expect(Math.abs(v[0])).toBeGreaterThanOrEqual(2 * Math.abs(v[1]));   // flat
+});
+```
+
+  (Task 19 adds `idleT: 0` to this and every other `FlailSwing` literal.) Run `npm test -- flail-swing` → FAIL (no H keys).
+- [ ] **Step 3: Author `KEYS_H`.** Key times `0, 0.12, 0.17, 0.2, 0.33, 0.43, 0.55` (rest, wind-up, coming
+  round, strike, follow-through, returning, rest). Targets: wind-up wide right at shoulder height (ball x ≈
+  0.6–0.8, y ≈ 0, z ≈ −0.3…−0.5; fist raised to about shoulder height); strike on the crosshair (ball ≈ (0,
+  −0.08, −1.1)), the chain taut, the haft level-ish and pointing forward-left; follow-through far left and a
+  little low; return. Find the numbers the way v1.2 did: a scratch search (session scratchpad, not committed)
+  over the non-strike keys within bounds, keeping sets where every test predicate passes; round to the cm.
+  Document the table in the key comment block (why H looks like this; the search).
+- [ ] **Step 4: The chain at every frame rate.** In `flail-chain.test.ts` extend the replay's side loops to
+  `['R', 'L', 'H']` (the replay must run `FLAIL_TIMING[side].swingSec` long) — every existing chain assertion
+  (the ball on `FLAIL_IMPACT` < 1e-6 on the strike frame, arriving moving; links exact; no teleport; the 60 Hz
+  catapult and lag checks) must hold for H. If the pin misses by microns at some rate (seen in v1.2 at 30 Hz),
+  nudge the H keys, not the test.
+- [ ] **Step 5: Verify, commit.** `npx tsc --noEmit`; `npm test -- flail`. Commit
+  `feat(flail-swing): H, a flat sweep; per-side timing` (pathspec: the five files).
+
+### Task 19: The combo state machine — R → L → H, a pause resets to R (pure)
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/flail-swing.ts`, `src/lab/sdf-zombie/webgpu/flail-swing.test.ts`,
+`src/lab/sdf-zombie/webgpu/flail-chain.test.ts` (literals only), `src/lab/sdf-zombie/webgpu/game-flail.ts`
+(debug `nextSide`).
+
+- [ ] **Step 1: Failing tests.** Replace `sides alternate click to click`, and update the three tests whose
+  expectations were R/L alternation:
+
+```ts
+it('a quick combo runs R, L, H, then back to R', () => {
+  let r = run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + 0.1, false, true);
+  expect(r.strikes).toEqual(['R']);
+  r = run(r.s, FLAIL_TIMING.L.swingSec + 0.1, false, true);
+  expect(r.strikes).toEqual(['L']);
+  r = run(r.s, FLAIL_TIMING.H.swingSec + 0.1, false, true);
+  expect(r.strikes).toEqual(['H']);
+  r = run(r.s, FLAIL_TIMING.R.swingSec + 0.1, false, true);
+  expect(r.strikes).toEqual(['R']);
+});
+
+it('a pause longer than comboWindowSec resets the combo to R', () => {
+  let r = run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + 0.01, false, true);   // R, then idle 0.01 s
+  r = run(r.s, FLAIL_SWING.comboWindowSec + 0.05, false);                        // wait past the window
+  r = run(r.s, FLAIL_TIMING.R.swingSec + 0.1, false, true);
+  expect(r.strikes).toEqual(['R']);
+});
+
+it('the combo window edge: a click just inside continues, just outside resets', () => {
+  const afterR = run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + 1e-6, false, true).s;   // idle, idleT ≈ 0
+  const inside = run(afterR, FLAIL_SWING.comboWindowSec - 2 * DT, false).s;
+  expect(comboSide(inside)).toBe('L');
+  expect(run(inside, 0.3, false, true).strikes).toEqual(['L']);
+  const outside = run(afterR, FLAIL_SWING.comboWindowSec + 2 * DT, false).s;
+  expect(comboSide(outside)).toBe('R');
+  expect(run(outside, 0.3, false, true).strikes).toEqual(['R']);
+});
+```
+
+  - `holding the button chains swings`: `run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + FLAIL_TIMING.L.swingSec
+    + FLAIL_TIMING.H.strikeT + 0.01, true, true)` → `['R', 'L', 'H']`.
+  - `a click in the last bufferSec queues the next swing`: unchanged (R then L).
+  - `a chained huge dt strikes each swing exactly once, still alternating` → "…cycling R, L, H": expected
+    `allStrikes.map((_, i) => (['R', 'L', 'H'] as const)[i % 3])`, and the dt `0.55 + 0.37` so every step still
+    crosses at least one full swing of any side.
+  - `a held button with no click does not start a swing from idle`: assert `r.state.phase === 'idle'`,
+    `r.state.swingId === 0` and no strikes (the state now ages `idleT`, so `toEqual(idle)` no longer holds).
+  - Every `FlailSwing` literal in both test files gains `idleT: 0`.
+
+  Run `npm test -- flail-swing` → FAIL.
+- [ ] **Step 2: Implement.**
+
+```ts
+// FLAIL_SWING gains:
+  /** A click within this long after a swing ends continues the combo; later, it restarts at R. */
+  comboWindowSec: 0.35,
+
+export interface FlailSwing {
+  // … as now, plus:
+  /** Seconds idle since the last swing ended (0 on a fresh flail). */
+  idleT: number;
+}
+
+export function makeFlailSwing(): FlailSwing {
+  return { phase: 'idle', side: 'R', t: 0, struck: false, queued: false, nextSide: 'R', swingId: 0, idleT: 0 };
+}
+
+/** The combo: R (overhand) → L (cross) → H (sweep) → R. */
+const COMBO_NEXT: Readonly<Record<FlailSide, FlailSide>> = { R: 'L', L: 'H', H: 'R' };
+
+/** The side the next swing takes: the combo's next while chained or inside the window, else R. */
+export function comboSide(s: FlailSwing): FlailSide {
+  return s.phase === 'swing' || s.idleT <= FLAIL_SWING.comboWindowSec ? s.nextSide : 'R';
+}
+
+function start(s: FlailSwing, t: number): FlailSwing {
+  const side = comboSide(s);
+  return { phase: 'swing', side, t, struck: false, queued: false, nextSide: COMBO_NEXT[side], swingId: s.swingId + 1, idleT: 0 };
+}
+```
+
+  In `stepFlailSwing`: from idle without a click, return `{ ...s, idleT: s.idleT + dt }` (still no swing);
+  from idle with a click, start **before** aging (`comboSide` reads the pre-step `idleT`, which is what the
+  debug readback showed the player); a swing that ends without a queue or a held button becomes
+  `{ …, phase: 'idle', t: 0, queued: false, struck: false, idleT: leftover }`. A chained end (`queued ||
+  held`) calls `start(cur, leftover)` while `cur.phase === 'swing'`, so it takes `nextSide`. `cancelFlailSwing`
+  sets `idleT: Infinity` (a weapon switch or death resets the combo). Delete `other()`. Update the header
+  comment (the combo rule).
+- [ ] **Step 3: The readback.** In `game-flail.ts` `debug()`, report `nextSide: comboSide(swing)` (the side a
+  click NOW would start — the gate's positive control reads it before every click).
+- [ ] **Step 4: Verify, commit.** `npx tsc --noEmit`; `npm test -- flail game-weapon-slots`. Commit
+  `feat(flail-swing): the R → L → H combo; a pause resets to R`.
+
+### Task 20: Per-swing feel and arc, no decapitation, the crosshair ray
+
+**Files:** modify `src/lab/sdf-zombie/webgpu/flail-strike.ts`, `src/lab/sdf-zombie/webgpu/flail-strike.test.ts`,
+`src/lab/sdf-zombie/webgpu/game-flail.ts`.
+
+- [ ] **Step 1: Failing tests** (`flail-strike.test.ts`):
+
+```ts
+describe('per-swing arc', () => {
+  it('R and L reach ±50°, H ±70°', () => {
+    expect(FLAIL_ARC_DEG).toEqual({ R: 50, L: 50, H: 70 });
+    const eye: Vec3 = [0, 1.6, 0];
+    const at = (deg: number): Vec3 => [Math.sin(deg * Math.PI / 180) * 1.2, 1.2, -Math.cos(deg * Math.PI / 180) * 1.2];
+    expect(inStrikeArc(eye, 0, at(60), FLAIL_ARC_DEG.R)).toBe(false);
+    expect(inStrikeArc(eye, 0, at(60), FLAIL_ARC_DEG.H)).toBe(true);
+    expect(inStrikeArc(eye, 0, at(-60), FLAIL_ARC_DEG.H)).toBe(true);
+    expect(inStrikeArc(eye, 0, at(80), FLAIL_ARC_DEG.H)).toBe(false);
+  });
+});
+
+describe('head damage (no decapitation, spec §12.3)', () => {
+  it('a head-region hit is always a face crater with no sever, however many came before', () => {
+    for (let n = 0; n < 20; n++) expect(flailWound(true, 0.09, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0 });
+  });
+  it('a body hit is the full crater with its sever calibre', () => {
+    const w = flailWound(false, 0.09, 1.3);
+    expect(w.radius).toBe(0.09);
+    expect(w.severRadius).toBeCloseTo(0.117, 9);
+  });
+});
+```
+
+  Delete the v1.2 `hitsToSever`/`snapNeck` tests (keep the `isHeadRegion` and `headNeck` tests). Update the
+  existing `inStrikeArc`/`resolveStrike` call sites in the test file to pass an arc (`FLAIL_ARC_DEG.R`). Run
+  `npm test -- flail-strike` → FAIL.
+- [ ] **Step 2: Implement (`flail-strike.ts`).**
+  - `export const FLAIL_ARC_DEG: Readonly<Record<FlailSide, number>> = { R: 50, L: 50, H: 70 };` (import
+    `type FlailSide` from `./flail-swing`); remove `arcDeg` from `FLAIL_STRIKE`.
+  - `inStrikeArc(eye, yaw, centre, arcDeg: number)` and `resolveStrike(eye, yaw, aimWorld, actors, arcDeg:
+    number)`. Rename the `impactWorld` parameter to `aimWorld` and update its doc: the ray from the eye through
+    `aimWorld` places the hit (the game passes a point on the crosshair ray); the torso-centre ray is the
+    fallback, as now.
+  - `FLAIL_HEAD` becomes `{ regionDist: 0.25, neckDist: 0.2, faceCraterR: 0.06 }` with a doc saying the flail
+    never severs a head (spec §12.3; the head damage model is the next spec).
+  - `flailWound(headRegion: boolean, craterR: number, severMul: number): { radius: number; severRadius: number }`
+    — head region → `{ faceCraterR, 0 }`, body → `{ craterR, craterR * severMul }`.
+- [ ] **Step 3: `game-flail.ts`.**
+
+```ts
+/** Feel numbers (spec §6, §11, §12.2). */
+export const FLAIL_FEEL = {
+  craterR: 0.09,
+  severMul: 1.3,
+  /** dt multiplier while a hit-stop runs: near-frozen, never 0. */
+  hitStopScale: 0.08,
+  kickRad: 0.02,
+  /** Per swing: collapse credit (threshold 0.8 → ~8 body hits), shove (blast() unit-normalises it), hit-stop. */
+  swing: {
+    R: { meterCredit: 0.1, shove: 6, hitStopSec: 0.05 },
+    L: { meterCredit: 0.1, shove: 6, hitStopSec: 0.05 },
+    H: { meterCredit: 0.14, shove: 9, hitStopSec: 0.07 },
+  },
+} as const;
+```
+
+  In `strike(side)`:
+  - the aim: `const aim = viewToWorld(eye, p.yaw, p.pitch, [0, 0, -1]);` (1 m down the crosshair) replaces the
+    `FLAIL_IMPACT` point in `resolveStrike(eye, p.yaw, aim, actors, FLAIL_ARC_DEG[side])`; `lastStrike.impact`
+    records `aim` (rename the debug field's doc to "a point on the strike ray");
+  - `flailWound(region, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul)`; delete the neck-snap block and the
+    `batch` array (back to `wounds: [w]`); keep counting `headHits` (the head damage model will read it);
+  - `const f = FLAIL_FEEL.swing[side]` for `meterCredit`, `shove`, `hitStopSec`.
+  - Drop now-unused imports (`FLAIL_HEAD`, `FLAIL_IMPACT` if unused — the chain still uses `FLAIL_IMPACT`).
+- [ ] **Step 4: Verify, commit.** `npx tsc --noEmit`; `npm test -- flail game-weapon-slots game-actor`. Commit
+  `feat(flail): per-swing feel and arc, no decapitation, the crosshair ray`.
+
+### Task 21: The gate — combo, sweep width, 8 head hits, ≥ 7 to collapse, crosshair accuracy
+
+**Files:** modify `scripts/flail-gate.mjs`.
+
+- [ ] **Step 1: Constants and timing.** `SWING_FRAMES = 36` (0.6 s: past H's 0.55); `HEAD_HITS = 8`; the
+  too-wide check turns **80°** (outside H's ±70° as well as R/L's ±50°); add `COLLAPSE_MIN = 7`,
+  `AIM_MAX = 0.05`. Update the header's asserts list and synopsis.
+- [ ] **Step 2: Combo section (new, after "too wide").** Wait 30 frames (> `comboWindowSec`), then 3 clicks via
+  `swing()` (36 frames each, so each next click is 0.15 s after the previous swing ended, inside the window):
+  assert the strike sides are `['R', 'L', 'H']`; then wait 30 frames and assert `state().nextSide === 'R'`.
+- [ ] **Step 3: Sweep width (new).** Find two frozen pool zombies (fresh, untouched) and a standing point where
+  both torso centres are 1.0–1.6 m away (horizontal) at bearings 55–65° either side of the facing, and no
+  other zombie is within 1.8 m inside ±70°:
+
+```js
+/** Candidate stands for a pair (a, b: torso centres); the caller keeps the first inside the room
+ *  bounds with no other zombie within 1.8 m inside ±70°. */
+function sweepStands(a, b) {
+  const out = [];
+  const mx = (a[0] + b[0]) / 2, mz = (a[2] + b[2]) / 2, half = Math.hypot(b[0] - a[0], b[2] - a[2]) / 2;
+  for (const deg of [60, 57, 63, 55, 65]) {
+    const th = (deg * Math.PI) / 180, back = half / Math.tan(th), dist = half / Math.sin(th);
+    if (dist < 1.0 || dist > 1.6) continue;
+    const nx = -(b[2] - a[2]) / (2 * half), nz = (b[0] - a[0]) / (2 * half);   // unit normal to a→b
+    for (const s of [1, -1]) {
+      const x = mx + s * nx * back, z = mz + s * nz * back;
+      out.push({ x, z, yaw: yawOf(mx - x, mz - z), deg });
+    }
+  }
+  return out;
+}
+```
+
+  Try every fresh pair; take the first candidate that passes the room-bounds and other-zombie checks. If no
+  pair fits, `fail('sweep: no zombie pair fits')` — do not skip silently. At that stand: click R and L (both
+  must hit neither zombie: bearings ≥ 55° are outside ±50°), then H: both zombies hit (`lastStrike.hits`
+  includes both, each +1 wound).
+- [ ] **Step 4: Head section → 8 hits, no decapitation.** As now (crosshair on the head centre from 0.9 m,
+  re-aimed each click), 8 clicks (the sides run through the combo, H included). Every hit: head ON, the
+  first new wound radius `FACE_R` ± 0.005 and < `ON_HEAD` from the head centre, `headHits` counts 1…8. Photos
+  `head-hit-1.png`, `head-hit-4.png`, `head-hit-8.png` (drop the others).
+- [ ] **Step 5: Collapse section.** The assert becomes collapse on hit ≥ `COLLAPSE_MIN`; the loop cap becomes 12.
+- [ ] **Step 6: Crosshair accuracy.** For every hit in the head and collapse sections, the first new wound's
+  distance to the strike ray (`lastStrike.eye` → `lastStrike.impact`) must be ≤ `AIM_MAX`; print the worst.
+- [ ] **Step 7: 144 Hz.** Three clicks per label (so H is pinned too); keep ≤ 1 mm.
+- [ ] **Step 8: Run to green, look, commit.** The full gate passes. Look at `head-hit-8.png` (the face caved
+  in, the head on). Commit the gate and its refreshed photos:
+  `test(flail-gate): the combo, the sweep's width, 8 head hits, 7+ to collapse, crosshair accuracy`.
+
+### Task 22: Look pass, docs, PR
+
+- [ ] `look/sweep-H-strip.png` (8 frames: rest, wind-up, coming round, strike, follow-through, return) and a
+  refreshed `look/overhand-R-strip.png` if R changed; LOOK: H must read as a flat sweep across the screen.
+- [ ] NOTES: the v1.3 entry (numbers, what to test); "For the owner".
+- [ ] `TASKS.md` v1.3 row → built, owner playtest pending; spec §12 heading → BUILT; the PR body gains a v1.3
+  section (`gh pr edit 22 --body-file …`, keep the 🤖 footer line). Commit, push; restart the owner's server
+  (`preview_start` `blud-censer`).
