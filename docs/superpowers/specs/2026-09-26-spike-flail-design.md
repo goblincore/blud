@@ -1,6 +1,6 @@
 # The spike flail (first player melee weapon, simplified) — Design
 
-**Date:** 2026-09-26 · **Status:** v1.2 built (§11); owner playtest pending
+**Date:** 2026-09-26 · **Status:** v1.2 built (§11) and playtested; v1.3 approved (§12), not built
 **Supersedes:** [the censer flail](2026-09-26-censer-flail-design.md). The owner playtested the censer
 (physics head on a rope, dead-zone-driven strokes, tap/hold charge) and scrapped it: "too complicated
 for what it is… very hard to land a good hit… looks way too goofy." This design replaces it with a
@@ -174,3 +174,107 @@ Acceptance (gate):
 neck midpoint (sever calibre 0.12 m, visible carve 0.02 m), so the head comes off wherever on the head the
 last blow lands; `neckDist` is 0.2 m from the neck root. Strike balls at view y −0.08 (≈4° under the
 crosshair). Gate green: head on after hits 1–3, off on 4; collapse on hit 5; no limb severed by chest hits.
+
+## 12. v1.3 — third playtest (owner, 2026-09-28) — APPROVED, NOT BUILT
+
+Owner feedback on v1.2:
+1. It needs a horizontal swipe across the screen, perhaps as the 3rd click of a quick chain.
+2. It should hit where you point. It mostly does, but exact aim is sometimes hard (not a big deal).
+3. Zombies are still too easy to take down.
+4. The flail should **not decapitate at all**. The head should take more granular damage instead: an eyeball
+   popping out comically on a pink stalk, the head's flesh deforming, the scalp and forehead exposing the
+   skull (hard to reach today, so fudge the aim), and the brain destroyed, with matter or a whole brain
+   flying out.
+
+**Decisions (owner, 2026-09-28):**
+- **Split.** v1.3 is items 1–3 plus "no decapitation". The granular head damage (item 4) gets its own spec,
+  the *melee head damage model*, designed after v1.3 ships.
+- **The sweep is the 3rd hit of a combo** (chosen over always cycling or a second button).
+- **About 8 body hits drop a zombie.**
+
+### 12.1 The combo: overhand → cross → horizontal sweep
+
+- `flail-swing.ts` gets a third side, **`'H'`**: a flat **right-to-left** sweep at crosshair height.
+  - It winds up wide on the right at shoulder level, sweeps through the crosshair, follows through far
+    left, then returns to rest.
+  - Length is about **0.55 s**, with its strike at about **0.2 s**. R and L stay at 0.45 s with the strike
+    at 0.18 s.
+- **Combo rule.** Swings advance **R → L → H → R** when chained. A swing is chained if its click was
+  queued during the previous swing (the existing `bufferSec` queue, or a held button), or the click lands
+  within **`comboWindowSec` 0.35 s** after the previous swing ends. Otherwise the swing starts at **R**.
+- **Key quality.** The H keys must pass every predicate R and L pass:
+  - the chain nearly taut at the strike (the ball 0.34–0.36 m from the bolt);
+  - the ball at least 0.28 m from the bolt all swing;
+  - the ball within chain reach at every key;
+  - at most 3 cm overshoot;
+  - no speed jump over 2×;
+  - at least 0.8 of peak speed at the strike;
+  - no pops;
+  - the strike on the crosshair (`y/−z` between −0.1 and −0.04, `|x/−z|` ≤ 0.1).
+
+  The H ball at the strike must also move mostly sideways (|vx| ≥ 2·|vy|).
+- **Chain pin.** The chain sim's strike-frame pin (ball on `FLAIL_IMPACT.H`) holds at 30–240 Hz and on
+  jittered frames, like R and L.
+
+### 12.2 Per-swing feel (`FLAIL_FEEL`)
+
+| | R / L | H (sweep) |
+| --- | --- | --- |
+| Arc (`inStrikeArc`) | ±50° | **±70°** |
+| Collapse credit (`meterCredit`) | **0.10** (was 0.18) | **0.14** |
+| Shove | 6 | **9** |
+| Hit-stop | 50 ms | **70 ms** |
+| Crater | 0.09 m (`severMul` 1.3) | 0.09 m |
+
+The collapse threshold is 0.8, so a zombie drops on the **8th** body hit, or the 7th when an H is among
+the hits.
+
+### 12.3 The flail never decapitates
+
+- A head-region hit is **always** a 0.06 m face crater with `severRadius` 0. The head region is:
+  - a hit on a `head` prim;
+  - a hit within 0.25 m of the head centre;
+  - a hit within 0.2 m of the neck root.
+- Remove `hitsToSever`, `snapNeck`, the neck-snap wound, `neckSeverR` and `snapCarveR`.
+- `headHits` stays as a counter. The head damage model will use it.
+- Arms and legs can still be cut at a joint, as now.
+
+### 12.4 Aim: the hit goes where the crosshair points
+
+`resolveStrike` casts its ray along the **view forward** (the crosshair) instead of eye → `FLAIL_IMPACT`,
+keeping the fallback ray to the torso centre and the surface snap. `FLAIL_IMPACT` still drives the drawn
+ball, which lands about a ball-width under the crosshair on the strike frame.
+
+### 12.5 Testing
+
+**Unit (vitest):**
+- the combo order, the window edge (0.35 s in and out), reset after a pause, a held button chaining
+  R → L → H → R, and exactly one strike per swing at any dt;
+- the H key predicates above;
+- per-swing arc and feel lookups;
+- the head rule never severs (`severRadius` 0 on any head-region hit count);
+- the crosshair ray.
+
+**Gate (`scripts/flail-gate.mjs`):**
+- three chained clicks strike R, L, H in order;
+- H hits two zombies about ±60° off the facing, while an R click in the same setup hits only the centre
+  one;
+- **8** crosshair-aimed head hits: the head stays on, every hit is a 0.06 m crater within 0.15 m of the
+  head centre;
+- a body zombie collapses on hit **≥ 7**;
+- every crater lands within 5 cm of the crosshair ray;
+- the strike-frame ball pin holds for all three sides at 60 Hz and at 144 Hz (steady and jittered);
+- the existing reach and arc refusals and the zero-console-errors check still pass.
+
+**Photos:** an H frame strip (`look/sweep-H-strip.png`) and the face after 8 hits.
+
+### 12.6 Next: the melee head damage model (its own spec)
+
+Staged, flail-specific head destruction on the zombie:
+- the eyeball pops out on a stalk (reuse `head-pop.ts`'s eyeballs and optic nerve);
+- the head's SDF flesh dents and deforms;
+- the scalp tears to expose the skull (the zombie's hidden skull bone), with an aim fudge so the crown can
+  be reached;
+- the brain is destroyed, with matter or a whole brain flying out, as the head kill.
+
+Designed after v1.3 ships.

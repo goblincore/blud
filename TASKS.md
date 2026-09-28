@@ -6,7 +6,11 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [~] **v1.2 built (2026-09-27); owner playtest pending.** Gate passing. The strike lands on the crosshair; the first
+- [ ] **v1.3 approved, not built (2026-09-28)**: an R → L → H combo, H being a horizontal sweep; about 8 body hits
+  to drop a zombie; the flail never decapitates; the hit goes where the crosshair points. Spec §12.
+- [ ] **Melee head damage model** (next spec, after v1.3): eye pops out on a stalk, head flesh dents, scalp tears to
+  expose the skull (aim fudge for the crown), brain destroyed and flying out as the head kill. Spec §12.6.
+- [x] **v1.2 built and playtested (2026-09-27/28).** Gate passing. The strike lands on the crosshair; the first
   swing is a big overhand swipe; head hits 1–3 cave the face in (0.06 m) and the 4th snaps the neck; body craters 0.09 m;
   5 hits drop a zombie; hand ×1.3. Root cause of the first-hit decapitation: the strike sat ~18° below the crosshair, so
   aiming at the head cut the neck from the upper chest (plan, v1.2 section). Spec §11 ·
