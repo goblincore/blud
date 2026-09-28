@@ -95,6 +95,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, texture3D, storage, uv, vec2, vec4, uniform } from 'three/tsl';
 import { FLASH_GRADE_WGSL } from './post-flash-grade.wgsl';
+import { CONTRAST_DEFAULT, CONTRAST_PIVOT_DEFAULT, CONTRAST_WGSL } from './post-contrast.wgsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 import { setPassLabel } from './gpu-pass-timing';
@@ -602,6 +603,8 @@ export interface PostAa {
   setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3): void;
   /** The lightning grade at the final blit: flash (the strike), grade (with its afterglow), punch, crush. */
   setFlashGrade(flash: number, grade: number, punch: number, crush: number): void;
+  /** The final S-curve (post-contrast.wgsl.ts): strength 0 off .. 1, and optionally its display-space pivot. Returns k. */
+  setContrast(k: number, pivot?: number): number;
   /** A live term override, clamped to SSCS_TERM_RANGES. */
   setSscsTerm(name: keyof SscsTerms, value: number): void;
   /** Whether the SSCS stage runs. */
@@ -1364,7 +1367,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   }) as unknown as Swizzled;
   // The lightning grade (post-flash-grade.wgsl.ts): (flash, grade, punch, crush); 0,0 is inert.
   const uFlashGrade = uniform(new THREE.Vector4(0, 0, 0, 0));
-  const graded = wgslFn(FLASH_GRADE_WGSL)({ c: blitOut.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
+  const flashGraded = wgslFn(FLASH_GRADE_WGSL)({ c: blitOut.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
+  // The final S-curve (post-contrast.wgsl.ts), after the lightning grade; 0 is inert.
+  const uContrast = uniform(CONTRAST_DEFAULT);
+  const uContrastPivot = uniform(CONTRAST_PIVOT_DEFAULT);
+  const graded = wgslFn(CONTRAST_WGSL)({ c: flashGraded.xyz as never, k: uContrast, pivot: uContrastPivot }) as unknown as Swizzled;
   const blitMat = new MeshBasicNodeMaterial();
   blitMat.name = 'post:blit';
   blitMat.colorNode = vec4(graded.xyz as never, 1.0);
@@ -1883,6 +1890,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     /** Per-frame feed. camera.matrixWorld must be CURRENT (game-main calls
      *  this right after flashlight.update, which re-runs updateMatrixWorld);
      *  matrixWorldInverse itself is last render's, so it is rebuilt here. */
+    setContrast(k: number, pivot?: number) {
+      uContrast.value = Math.min(1, Math.max(0, k));
+      if (pivot !== undefined) uContrastPivot.value = Math.min(0.9, Math.max(0.05, pivot));
+      return uContrast.value;
+    },
     setFlashGrade(flash: number, grade: number, punch: number, crush: number) {
       uFlashGrade.value.set(flash, grade, punch, crush);
     },
