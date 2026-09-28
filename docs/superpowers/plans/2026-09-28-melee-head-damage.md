@@ -166,7 +166,7 @@ export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { headHit, makeHeadDamage, type HeadEvent } from './head-damage';
+import { headDeath, headHit, makeHeadDamage, type HeadEvent } from './head-damage';
 
 const kinds = (ev: HeadEvent[]) => ev.map(e => e.kind);
 const HIT_L = { eyeSide: 'L' as const };
@@ -209,7 +209,7 @@ describe('head damage ladder', () => {
 });
 ```
 
-  (Import `headDeath` as well.) Run `npm test -- head-damage`, expect FAIL.
+  Run `npm test -- head-damage`, expect FAIL.
 - [ ] **Step 2: Implement.**
 
 ```ts
@@ -312,7 +312,7 @@ describe('head wobble', () => {
       prev = v;
     }
     expect(crossings).toBeGreaterThanOrEqual(4);                   // it rings (underdamped)
-    expect(Math.abs(wobbleValue(s))).toBeLessThan(0.01 * HEAD_DEFORM.squash0 * 100);   // < 1% squash
+    expect(Math.abs(wobbleValue(s))).toBeLessThan(0.0025);   // settled: < 1% of the head's size
   });
   it('clamps to ±maxSquash', () => {
     let s = kickWobble(kickWobble(makeHeadDeform(), [1, 0, 0]), [1, 0, 0]);
@@ -471,9 +471,6 @@ export function deformHead<B extends { prims: Primitive[] }>(body: B, st: HeadDe
   - Check `Primitive.op`'s union in `types.ts`, and drop any op names it does not have.
   - The last test's arithmetic: the head's +x maps to world −z; the −x side is dented by 0.018, so the prims
     shift +0.009 along the head's x, which is world −z.
-  - The "< 1%" test: the settle bound is `|s| < 0.0025`. `toBeLessThan(0.01 * 0.25 * 100)` is wrong; use
-    `toBeLessThan(0.0025)`, meaning 1% of full size, i.e. 1% of the head. Settling below 1% of the head within
-    0.8 s is what the spec gates.
 - [ ] **Step 3:** `npm test -- head-deform`, `npx tsc --noEmit`, expect PASS.
 - [ ] **Step 4: Commit:** `feat(head-deform): jelly wobble and lasting dents along the head axes`.
 
@@ -571,10 +568,10 @@ export const EYE_STALK = {
   r0: 0.009, r1: 0.006,
 } as const;
 
-function rot(q: HeadFrame['quat'], v: Vec3): Vec3 { /* the same quaternion rotate as head-deform.ts — export it there and import it */ }
+import { rotate } from './head-deform';   // head-deform.ts's quaternion rotate: export it there in this task
 ```
 
-  - Export `rotate` from `head-deform.ts` and use it here (do not duplicate it).
+  - `rotate` is head-deform.ts's quaternion rotate: export it there and import it here (do not duplicate it).
   - `eyeRayStart(frame, side)`: `centre + rotate(quat, [hs.x·axes.x, hs.y·axes.y, 1.5·axes.z])`, where `hs` is
     `HEAD_EYES.zombie[side]`.
   - `nearerEye(frame, point)`: the side whose `eyeRayStart` with z set to `axes.z` is nearer `point`.

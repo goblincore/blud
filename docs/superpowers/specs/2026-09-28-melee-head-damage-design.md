@@ -1,6 +1,6 @@
 # The melee head damage model (zombie, flail) — Design
 
-**Date:** 2026-09-28 · **Status:** approved, not built
+**Date:** 2026-09-28 · **Status:** approved, not built · plan `docs/superpowers/plans/2026-09-28-melee-head-damage.md`
 **Follows:** [the spike flail](2026-09-26-spike-flail-design.md) §12.6. Branch `claude/melee-weapon-design-7d1423`
 (PR goblincore/blud#22).
 
@@ -207,3 +207,24 @@ eye swinging.
 - Drawing the dangling eye: a new attachment view, or chunk views posed by hand (§6).
 - The crater-slot mechanism (§8).
 - Measuring the zombie's face-sheet eye centres (§6).
+
+## 13. Plan decisions (2026-09-28, recorded in the plan)
+
+- **Dents (§5).** The zombie's head is a few large ellipsoid prims, so a point dent cannot be expressed by
+  moving prim endpoints: it would slide the whole head. A dent **flattens the side that was hit**, along the
+  head axis nearest the blow. That side's surface moves in by the depth and the opposite side stays put.
+  Dents accumulate per side (x±, y±, z±), capped at 0.04 m. The wobble squashes along the same axes.
+- **The stalk (§6)** is its own small verlet rope (`head-eye.ts`), not `flail-chain.ts`, whose node count and
+  link lengths are fixed to the flail.
+- **Its colour** is a new `GORE_COLORS.stalk` pink. `GORE_COLORS.nerve` already exists as a dark red.
+- **The dangling eye** is one hand-posed chunk view, made outside `liveChunks` by `ctx.boot.attachPiece` and
+  bent each frame with a new `ChunkGpuView.morph`.
+- **Head crater slots (§8).** `Wound.headSlot: 'keep' | 'face'` and `MAX_HEAD_WOUNDS` 5 in
+  `damage.ts pushWound`:
+  - the socket, scalp and brain craters are `'keep'`;
+  - the dent crater and later face craters are `'face'`;
+  - the total cap never evicts a `'keep'` crater while another wound remains.
+
+  The scalp craters are not merged into the brain cavity; the counts fit (1 + 1 + 2 + 1 = 5).
+- **The eye positions** are measured from `zombie-face.png` through the planar face projection:
+  image-left `hs = (−0.498, 0.096)`, image-right `hs = (0.451, 0.179)`.
