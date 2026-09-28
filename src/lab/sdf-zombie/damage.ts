@@ -38,6 +38,8 @@ export type ShotProvenance =
 export interface Wound {
   /** Stable render-event identity. Wound aging replaces objects each frame. */
   eventId?: number;
+  /** Head damage model (head-damage.ts): the head keeps at most MAX_HEAD_WOUNDS craters of its own; 'keep' craters (the eye socket, the scalp, the brain) outlive 'face' ones and survive the total cap. */
+  headSlot?: 'keep' | 'face';
   shot?: ShotProvenance;
   /** Exposed stump decoration, not another projectile injury. */
   injuryIgnored?: boolean;
@@ -537,8 +539,24 @@ export function clothifyWound(prims: Primitive[], wound: Wound, calibre: ClothCa
   return wound;
 }
 
-/** Ring buffer append — oldest is evicted at capacity. */
+/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts. */
+export const MAX_HEAD_WOUNDS = 5;
+
+/** Ring buffer append. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted
+ *  first), and the total cap evicts the oldest wound that is not a 'keep' head crater. A ring with no
+ *  head tags evicts oldest-first, exactly as before. */
 export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   const next = [...ring, wound];
-  return next.length > cap ? next.slice(next.length - cap) : next;
+  if (wound.headSlot) {
+    const head = next.filter(x => x.headSlot);
+    if (head.length > MAX_HEAD_WOUNDS) {
+      const victim = head.find(x => x.headSlot === 'face') ?? head[0]!;
+      next.splice(next.indexOf(victim), 1);
+    }
+  }
+  while (next.length > cap) {
+    const i = next.findIndex(x => x.headSlot !== 'keep');
+    next.splice(i < 0 ? 0 : i, 1);
+  }
+  return next;
 }

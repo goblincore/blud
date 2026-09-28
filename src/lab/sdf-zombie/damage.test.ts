@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/damage.test.ts
 import { describe, it, expect } from 'vitest';
-import { worldHitToWound, woundWorldPos, woundCarveNormal, pushWound, MAX_WOUNDS, WOUND_PROFILES, WOUND_CARVE_DEPTH_FRAC, rimScaleFor } from './damage';
+import { worldHitToWound, woundWorldPos, woundCarveNormal, pushWound, MAX_WOUNDS, MAX_HEAD_WOUNDS, type Wound, WOUND_PROFILES, WOUND_CARVE_DEPTH_FRAC, rimScaleFor } from './damage';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { sdBody } from './validate';
@@ -434,5 +434,38 @@ describe('the flesh probe cap is exact', () => {
     // A pellet-sized lip makes 2*lip tiny, so any real flesh fills the rim.
     const r = 0.03 / (0.55 * WOUND_PROFILES.pellet.rimSplayScale);
     expect(rimScaleFor(field, hit, torso, r, 'pellet')).toBe(1);
+  });
+});
+
+describe('head crater slots', () => {
+  const w = (id: number, headSlot?: 'keep' | 'face'): Wound =>
+    ({ primIdx: 0, local: [0, 0, 0], radius: 0.05, type: 'blast', ageSec: 0, eventId: id, ...(headSlot ? { headSlot } : {}) });
+
+  it('rings without head tags evict oldest-first exactly as before', () => {
+    let ring: Wound[] = [];
+    for (let i = 1; i <= MAX_WOUNDS + 3; i++) ring = pushWound(ring, w(i), MAX_WOUNDS);
+    expect(ring.map(x => x.eventId)).toEqual(Array.from({ length: MAX_WOUNDS }, (_, k) => k + 4));
+  });
+  it('a 6th head crater evicts the oldest face crater, never a body wound', () => {
+    let ring: Wound[] = [w(1), w(2)];
+    ring = pushWound(ring, w(3, 'keep'), MAX_WOUNDS);
+    ring = pushWound(ring, w(4, 'face'), MAX_WOUNDS);
+    ring = pushWound(ring, w(5, 'keep'), MAX_WOUNDS);
+    ring = pushWound(ring, w(6, 'keep'), MAX_WOUNDS);
+    ring = pushWound(ring, w(7, 'keep'), MAX_WOUNDS);
+    expect(ring.filter(x => x.headSlot).length).toBe(MAX_HEAD_WOUNDS);
+    ring = pushWound(ring, w(8, 'face'), MAX_WOUNDS);
+    expect(ring.map(x => x.eventId)).toEqual([1, 2, 3, 5, 6, 7, 8]);
+  });
+  it('with only keep craters left, the oldest head crater goes', () => {
+    let ring: Wound[] = [];
+    for (let i = 1; i <= MAX_HEAD_WOUNDS + 1; i++) ring = pushWound(ring, w(i, 'keep'), MAX_WOUNDS);
+    expect(ring.map(x => x.eventId)).toEqual([2, 3, 4, 5, 6]);
+  });
+  it('the total cap never evicts a keep crater while a non-keep wound remains', () => {
+    let ring: Wound[] = [w(100, 'keep')];
+    for (let i = 1; i <= MAX_WOUNDS; i++) ring = pushWound(ring, w(i), MAX_WOUNDS);
+    expect(ring.length).toBe(MAX_WOUNDS);
+    expect(ring.some(x => x.eventId === 100)).toBe(true);
   });
 });
