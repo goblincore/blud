@@ -575,22 +575,30 @@ CEIL_PROFILE = [(-1.5, 0.0), (-1.45, 0.15), (-1.35, 0.25), (-1.2, 0.32), (-1.0, 
                 (-0.6, 0.4), (0.6, 0.4), (0.6, 0.35), (1.0, 0.35), (1.2, 0.32), (1.35, 0.25), (1.45, 0.15), (1.5, 0.0)]
 
 
+def arch_rise(width):
+    """The ceiling arch's rise: 0.4 m up to the 4.2 m carriages (every existing shell unchanged),
+    proportional to the width above that so an 8 m ceiling does not read flat (Boiler Room resize,
+    owner 2026-09-27), capped at 0.8 m."""
+    return 0.4 if width <= 4.2 else min(0.8, 0.4 * width / 4.2)
+
+
 def ceiling_bay(width, height):
     """Steel arch, a rib at the bay's start, a big centre pipe, a caged lamp."""
     W = width / 2
     p = Piece(f"bay-ceiling-{dm(width)}-{dm(height)}")
-    base = height - 0.4
+    rise = arch_rise(width)
+    base = height - rise
     for side in (-1, 1):
         if base > WALL_TOP + 1e-3:
             p.wall_x(S, side * W, -side, -BAY, 0, WALL_TOP, base)
-    prof = [(x * W / 1.5, y) for x, y in CEIL_PROFILE]
+    prof = [(x * W / 1.5, y * rise / 0.4) for x, y in CEIL_PROFILE]
     for (xa, ya), (xb, yb) in zip(prof, prof[1:]):
         p.quad(S, [(xa, base + ya, 0), (xb, base + yb, 0), (xb, base + yb, -BAY), (xa, base + ya, -BAY)])
         for zr, facing in ((0.03, 1), (-0.03, -1)):   # the rib, both faces
             pts = [(xa, base + ya, zr), (xb, base + yb, zr), (xb, base + yb - 0.09, zr), (xa, base + ya - 0.09, zr)]
             p.quad(SX, pts if facing < 0 else pts[::-1])
     p.cyl(PIPE, (0.0, height - 0.2, -BAY), "z", BAY, 0.13, 12)
-    y = base + 0.3
+    y = height - 0.1   # the caged lamp, 0.1 m under the arch's flat crown (base + 0.3 at 4.2 m)
     lamp = p.bm("train.lamp")
     ring = [lamp.verts.new(g(0.4 + 0.1 * math.cos(2 * math.pi * i / 10), y, -BAY / 2 + 0.1 * math.sin(2 * math.pi * i / 10))) for i in range(10)]
     lamp.faces.new(ring)
