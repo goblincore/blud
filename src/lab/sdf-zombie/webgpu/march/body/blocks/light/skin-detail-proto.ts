@@ -2,7 +2,7 @@
 //
 // SKIN DETAIL (owner 2026-09-27: "bring back some detail and contrast to the zombie and soldier
 // skin ... the bumps get really washed out with the flashlight"; 2026-09-28: "set k 2 for zombie
-// and soldier and I'll take a look in game").
+// and soldier and I'll take a look in game"; then zombie off, soldier 1).
 //
 // DETAIL-PRESERVING COMPRESSION, per body: the highlight shoulder compresses the body as if it
 // were smooth (fleshLit / r, r = the dominant light's diffuse on the bumped normal over the smooth
@@ -25,8 +25,10 @@ const DETAIL_OVERRIDE = num('skinDetail');
 const SKIN_CAVITY = num('skinCavity') ?? 0;
 const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 
-/** Per-character skin detail k (owner 2026-09-28: zombie and soldier at 2); absent = 0 (off). */
-export const SKIN_DETAIL_BY_CHARACTER: Readonly<Record<string, number>> = { zombie: 2, soldier: 2 };
+/** Per-character skin detail k; absent = 0 (off). Owner 2026-09-28: tried zombie and soldier at 2,
+ *  then "looks really weird with the flashlight on at medium distances" on the zombie: zombie off,
+ *  soldier 1 (body and arms show it, subtly). To revisit. */
+export const SKIN_DETAIL_BY_CHARACTER: Readonly<Record<string, number>> = { soldier: 1 };
 export function skinDetailFor(name: string): number {
   return SKIN_DETAIL_BY_CHARACTER[name] ?? 0;
 }
