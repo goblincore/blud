@@ -2,6 +2,33 @@
 
 ## For the owner
 
+### v1.3 (2026-09-28): what changed
+
+- **A three-hit combo: R → L → H.** Chained clicks (each click landing within
+  `comboWindowSec` 0.35 s of the previous swing ending) now run R (the overhand), then L
+  (the cross), then H — a new flat right-to-left sweep at crosshair height. A pause longer
+  than 0.35 s resets the combo back to R on the next click. `flail.state().nextSide` tells
+  you which side the next click will throw.
+- **H is a finisher, not a third jab.** It's longer than R/L (0.55 s vs 0.45 s, strike at
+  t=0.2 s vs t=0.18 s), winds up wide right at shoulder height, sweeps flat through the
+  crosshair, and follows through far left — see `look/sweep-H-strip.png`. It also hits
+  harder: a bigger shove and a longer hit-stop than R/L.
+- **The flail never decapitates.** Every head hit — R, L, or H — is now always a 0.06 m
+  face crater; the old "hit 4 takes the head off" behavior (v1.1/v1.2) is gone. Head
+  damage stacking without ever removing the head is deliberate for this pass; a real head
+  damage model (when enough hits should sever, gib, or otherwise end the head) is its own
+  next task.
+- **The sweep hits wider than R/L.** H's arc is ±70° versus R/L's ±50°, so it can catch
+  both zombies flanking the crosshair — the gate's own sweep-width check (below) confirms
+  it hits two zombies that R and L, from the same spot, both miss.
+- **~8 hits drop a zombie**, 7 if an H is among them (H's collapse-meter credit is 0.14
+  per hit against R/L's 0.10, `meterThreshold` 0.8).
+- **What to test:** is 0.35 s a forgiving-enough combo window, or does it feel like it
+  drops swings if you don't chain fast enough; does H read and feel like a finisher (the
+  wide flat sweep, the harder shove/hit-stop) rather than just "a third R"; and does
+  stacking head craters without ever taking the head off feel right, now that decapitation
+  is gone — the head damage model spec is next.
+
 ### v1.2 (2026-09-27): what changed
 
 - **The strike lands on the crosshair, both sides** (Task 15). v1.1's strike balls sat
@@ -580,8 +607,89 @@ frames: f0, f4, f6, f9, f11 = STRIKE, f14, f18, f22) and `look/whip-L-strip.png`
   owner should rerun `scripts/flail-gate.mjs` to get a fresh full pass/fail readout; no
   gate-affecting constant changed in this task.
 
+## v1.3 tuning log (Tasks 18–21, gate commit 9a567532)
+
+The gate (`scripts/flail-gate.mjs`) covers the combo end to end (§12 checks 4, 5, 6, 7, 8
+above). Its results, run headless on WebGPU:
+
+- **The combo:** after a pause, three chained clicks strike R, then L, then H, in that
+  order — each swing's own positive control (strikes count +1, `lastStrike.side` matches
+  the side `nextSide` promised) confirms no click was dropped or misrouted. After another
+  pause, `nextSide` is back to R.
+- **Sweep width:** two fresh zombies flanking the crosshair at 55–65° and 1.0–1.6 m. R and
+  L, thrown from that stand, hit neither (both bearings sit outside their ±50° arc); H
+  hits both — the ±70° arc and the flat crosshair-height strike catch what the narrower
+  swings miss.
+- **Head hits, never decapitating:** 8 crosshair-aimed clicks on one head (cycling through
+  the combo, H included) leave the head ON after every one of them (`limbAlive('head') >
+  0` throughout) — `lastStrike.headHits` counts 1…8, and each hit's first wound is a
+  FACE_R (0.06 m ± 0.005) crater on the head. The flail no longer takes a head off at any
+  hit count.
+- **Hits to collapse:** a fresh zombie, crosshair re-aimed at its current torso centre
+  before every click, collapses on hit 7 — inside the ≥ 7-hit floor (`meterThreshold`
+  0.8, credit 0.10 per R/L hit, 0.14 per H hit; the combo's first H lands on click 3, so
+  three R/L hits at 0.10 plus enough H hits at 0.14 clears 0.8 by hit 7). Hit 1's wound
+  radius is CRATER_R (0.09 m ± 0.005), as before.
+- **Crosshair accuracy:** every head- and collapse-section hit's strike-time hit point
+  (the resolved surface point along the strike ray, not the wound's later position) lands
+  within `AIM_MAX` (5 cm) of the crosshair ray; the worst distance across the whole run is
+  0.77 cm, at the strike frame.
+- **First-hit wound-readback drift (flagged, not a strike-accuracy bug).** A separate,
+  unasserted measurement: a fresh actor's first hit's wound, read back afterward via
+  `actorWounds`, can land ~6–7 cm off the strike point — after its local-frame round trip
+  and any reaction settling. Frame-by-frame investigation (2026-09-28) confirmed the
+  struck prim's own centre never moves; the strike itself is accurate (see the 0.77 cm
+  figure above, measured at strike time). This is a `damage.ts` wound-readback question,
+  flagged as its own task, not a flail-gate regression.
+
+## v1.3 look pass (Task 22, 2026-09-28)
+
+Same harness shape as the v1.2 look pass (frozen crowd, 2.4 m from a zombie, out of
+reach), adapted to drive the full combo: `.lab-tmp/flail-look22.mjs` clicks R, steps its
+27 frames, clicks L, steps its 27 frames, confirms `nextSide === 'H'`, then clicks H and
+captures its frames. Strip: `look/sweep-H-strip.png`, 8 frames — f0 (rest, before the
+combo starts), f7 (wind-up), f10 (coming round), f12 (STRIKE, t≈0.2), f16 and f20 (both
+follow-through), f26 and f30 (both return) of H's 33-frame (0.55 s) swing.
+
+- **H reads as a flat sweep, clearly distinct from R's overhand and L's diagonal cross.**
+  Ball NDC x tracks a near-monotonic right-to-left sweep across the whole screen width
+  through the strike and follow-through: f7 (1.41, off-screen right — matches the
+  wind-up key's ball wide right at eye level), f10 (0.65, −0.11, coming round in
+  front), f12 strike (0.01, −0.19 — on the crosshair), f16 (−0.67, −0.22), f20 (−0.91,
+  −0.38, near the left edge). The y coordinate stays inside a much smaller band
+  (0.01 to −0.38) than x's swing (1.41 to −0.91) over that same stretch, so the motion
+  reads as flat/horizontal, not diagonal.
+- **f16 and f20 show it best.** In both frames the haft lies level across the top of the
+  zombie's head/shoulders — in f16 almost exactly at eyebrow height, dead level — with the
+  ball swung out to the left on a taut chain. This is the clearest "flat sweep" read of
+  the whole strip: nothing about it looks like a jab or an overhand.
+- **The strike frame (f12) lands the ball on the crosshair.** The reticle sits at the
+  zombie's upper neck/collarbone; the ball is just past it, chain taut back up and to the
+  right toward the wind-up — consistent with the gate's own 0.77 cm worst-case crosshair
+  accuracy figure above.
+- **The return (f26, f30) swings back through center rather than snapping.** f26's ball
+  NDC (−0.31, −0.61) sits left-and-low, f30's (0.28, −0.68) has already crossed back past
+  center, low, heading back toward the f0 rest pose — a swing-back, not a teleport.
+- **Distinct from R and L.** R's strip (`look/overhand-R-strip.png`) reads as a vertical
+  climb-then-drop (fist rises off the top-right, ball crests high, then drops diagonally
+  onto the target); L's (`look/whip-L-strip.png`) is a diagonal whip. H's near-pure
+  horizontal excursion, and the haft laid flat across the screen at f16/f20, make it read
+  as its own distinct move, not "a third R."
+- **Gate not rerun as part of this look pass** (throwaway harness
+  `.lab-tmp/flail-look22.mjs`, not committed) — the gate's own current numbers are the
+  v1.3 tuning-log entry above, from commit 9a567532.
+
 ## Open feel questions for the owner
 
+- **Is the 0.35 s combo window forgiving enough?** (v1.3, Task 22.) Click too slowly
+  between R, L, and H and the combo resets to R instead of continuing. Judge this in
+  play, not just against the gate's deterministic re-clicks.
+- **Does H read and feel like a finisher?** The look pass above confirms it *looks* like a
+  distinct flat sweep; whether the harder shove/hit-stop and the wider ±70° arc *feel*
+  like a finisher, rather than just a wider R, needs play.
+- **Head craters stack without ever taking the head off** (v1.3). Is that the right call
+  while the head damage model is still a stub, or does a flail that never decapitates feel
+  wrong even short-term? The head damage model spec is next.
 - **Strike reads as a mace, not a flail.** The chain is nearly straight and short at the
   hit. Should the strike key let the ball lag *behind* the haft line (a visible whip) rather
   than lead along it? That trades against "ball ahead of the hand".
