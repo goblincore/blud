@@ -110,6 +110,12 @@ export interface BakeState {
   spareViews: ChunkGpuView[];
   /** The live pieces plus their spawn descriptors (bone census reads `kind`). */
   liveChunks: LiveChunk[];
+  /** Kinematic pieces riding an actor (`boot.attachPiece`, head damage's
+   *  dangling eye): in `views` (they hold a material slot) but never in
+   *  `liveChunks` or `chunks`, so no physics, no bake and no eviction. */
+  attachedViews: ChunkGpuView[];
+  /** `boot.attachPiece` warned once that the shared material was full. */
+  attachWarned: boolean;
   /** The single-slot chunk bake worker job owner. */
   jobs: ChunkBakeJobs;
   /** Carved-gib library, or null before anything has been carved. */
@@ -165,6 +171,8 @@ export function makeBakeState(): BakeState {
     views: [],
     spareViews: [],
     liveChunks: [],
+    attachedViews: [],
+    attachWarned: false,
     jobs: unbuilt<ChunkBakeJobs>(),
     carvedLibrary: null,
     carvedMaterial: null,

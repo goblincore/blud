@@ -2881,6 +2881,8 @@ export interface ChunkGpuView {
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
   reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[], template?: MarchUniforms): void;
   update(chunk: Chunk): void;
+  /** Hand-posed pieces (the head damage model's dangling eye): replace the local prims' endpoints (chunk-local, the same count and order as reset()'s prims) before the next update(). Radii, colours and the bound are unchanged. */
+  morph(ends: ReadonlyArray<{ a: Vec3; b: Vec3 }>): void;
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
   setPackBones(on: boolean): void;
@@ -3398,6 +3400,11 @@ export function createChunkGpuView(
         bend: p.bend ? vsub(chunkPoint(current, bendCtrl(p.a, p.b, p.bend), sx, sy, sz),
           bendCtrl(chunkPoint(current, p.a, sx, sy, sz), chunkPoint(current, p.b, sx, sy, sz))) : undefined,
       }));
+    },
+    morph(ends) {
+      // Chunk-local endpoints; apply() (next update()) rewrites the world rows
+      // from `local`, so this costs no re-pack. `extent` stays the reset() one.
+      ends.forEach((e, i) => { const p = local[i]; if (p) local[i] = { ...p, a: e.a, b: e.b }; });
     },
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);

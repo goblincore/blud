@@ -206,7 +206,7 @@ import {
 } from './wound-panel';
 import { rngStreams, setRngSeed, seedFromUnit } from './rng';
 import { advance as advanceSimClock, simTimeMs, resetSimClock } from './sim-clock';
-import { CHUNK_TUNING, chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
+import { CHUNK_TUNING, chunkSettled, makeChunk, stepChunk, type Chunk, type ChunkBox } from '../gib-chunks';
 import { gibLaunchVelocity } from '../gib-launch';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
 import {
@@ -5128,7 +5128,8 @@ async function main() {
   /** Whether BONE pieces are drawn — see setBonePiecesVisible. */
   ctx.render.bonesVisible = true;
   // Now that the array exists, the frame draw can read it directly.
-  chunkObjects = () => (ctx.bake.reference ? [...ctx.bake.liveChunks, ...ctx.bake.chunks] : ctx.bake.liveChunks).map(c => c.view.object);
+  chunkObjects = () => (ctx.bake.reference ? [...ctx.bake.liveChunks, ...ctx.bake.chunks] : ctx.bake.liveChunks).map(c => c.view.object)
+    .concat(ctx.bake.attachedViews.map(v => v.object));
   ctx.bake.nextId = 1;
   /**
    * Spawn one detached piece. `kind` is the piece's MATERIAL AND PHYSICS, not a
@@ -5200,40 +5201,52 @@ async function main() {
     if (recycled) {
       recycled.reset(state, piece.prims,
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template.uniforms);
-      // A bone-only chunk needs its bone ROWS packed whatever the bone-tube
-      // mode is: with packBones off (the `?boneMesh` path) `reset` writes
-      // organ rows only, so a chunk whose flesh list is empty packs NOTHING and
-      // marches an empty field — an invisible skeleton, which is the exact
-      // failure this whole piece set exists to end.
-      recycled.setPackBones(boneOnly ? !ctx.gibs.boneMesh : !ctx.render.boneMesh);
-      applyChunkKindLook(ctx, recycled, kind);
-      // May be arriving from a baked retirement; and a bone piece spawned while
-      // the differential hides the skeleton must stay hidden.
-      // With `gibBoneMesh` the tubes draw this piece and its packed rows are
-      // gone, so the marched proxy has an EMPTY field: it would march and
-      // discard every pixel of its box for nothing. Hidden, not merely empty.
-      recycled.object.visible = !ctx.bake.hidden
-        && (kind !== 'bone' || (ctx.render.bonesVisible && !(boneOnly && ctx.gibs.boneMesh)));
+      dressPieceView(recycled, kind, boneOnly);
       ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view: recycled, template, kind, boneOnly });
     } else {
-      const view = createChunkGpuView(
-        state, piece.prims, template.uniforms,
-        piece.tornAt.length ? piece.tornAt : undefined,
-        template.volumeTexture, ctx.bake.material, piece.bones,
-        // Matching options with the shared material (task-2 contract: with a
-        // shared material the material's mode wins; the view must agree).
-        ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
-      );
-      view.setPackBones(boneOnly ? !ctx.gibs.boneMesh : !ctx.render.boneMesh);
-      applyChunkKindLook(ctx, view, kind);
-      view.object.visible = !ctx.bake.hidden
-        && (kind !== 'bone' || (ctx.render.bonesVisible && !(boneOnly && ctx.gibs.boneMesh)));
-      view.object.layers.set(SDF_LAYER);
-      scene.add(view.object);
-      ctx.boot.deferredApi?.router.register(view.object, 'sdf');
-      ctx.bake.views.push(view);
+      const view = createPieceView(state, piece.prims,
+        piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template, kind, boneOnly);
       ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view, template, kind, boneOnly });
     }
+  }
+  /** The per-spawn look of a piece view, fresh or recycled. */
+  function dressPieceView(view: ChunkGpuView, kind: 'limb' | 'gob' | 'bone', boneOnly: boolean): void {
+    // A bone-only chunk needs its bone ROWS packed whatever the bone-tube
+    // mode is: with packBones off (the `?boneMesh` path) `reset` writes
+    // organ rows only, so a chunk whose flesh list is empty packs NOTHING and
+    // marches an empty field — an invisible skeleton, which is the exact
+    // failure this whole piece set exists to end.
+    view.setPackBones(boneOnly ? !ctx.gibs.boneMesh : !ctx.render.boneMesh);
+    applyChunkKindLook(ctx, view, kind);
+    // May be arriving from a baked retirement; and a bone piece spawned while
+    // the differential hides the skeleton must stay hidden.
+    // With `gibBoneMesh` the tubes draw this piece and its packed rows are
+    // gone, so the marched proxy has an EMPTY field: it would march and
+    // discard every pixel of its box for nothing. Hidden, not merely empty.
+    view.object.visible = !ctx.bake.hidden
+      && (kind !== 'bone' || (ctx.render.bonesVisible && !(boneOnly && ctx.gibs.boneMesh)));
+  }
+  /** A NEW pooled piece view: created on the shared material (throws when its
+   *  slots are full), dressed, added to the scene and the deferred router, and
+   *  counted in `ctx.bake.views`. */
+  function createPieceView(
+    state: Chunk, prims: Primitive[], tornAt: Vec3[] | undefined, bones: Primitive[],
+    template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
+    kind: 'limb' | 'gob' | 'bone', boneOnly: boolean,
+  ): ChunkGpuView {
+    const view = createChunkGpuView(
+      state, prims, template.uniforms, tornAt,
+      template.volumeTexture, ctx.bake.material, bones,
+      // Matching options with the shared material (task-2 contract: with a
+      // shared material the material's mode wins; the view must agree).
+      ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+    );
+    dressPieceView(view, kind, boneOnly);
+    view.object.layers.set(SDF_LAYER);
+    scene.add(view.object);
+    ctx.boot.deferredApi?.router.register(view.object, 'sdf');
+    ctx.bake.views.push(view);
+    return view;
   }
 
   // -----------------------------------------------------------------------
@@ -6587,6 +6600,54 @@ async function main() {
       spawnChunkPiece({ ...p, spinAngVel: p.angVel },
         { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, p.vel);
     }
+  };
+  /** A kinematic SDF piece riding an actor (head-damage's dangling eye): no
+   *  physics, never baked or evicted, one draw. `prims` are world-space at
+   *  `pos`; each frame the caller moves it and bends it. Its view is a pooled
+   *  one (a spare, else a new one on the shared material) kept OUT of
+   *  `liveChunks`/`chunks` and listed in `bake.attachedViews`, so
+   *  spawnChunkPiece's eviction never sees it; dispose() hands it back to
+   *  `spareViews` hidden, exactly as a shot-apart live piece is released. */
+  ctx.boot.attachPiece = (a, prims, pos) => {
+    // Zero velocity, and a fixed rng: makeChunk's tumble draws must not
+    // consume rngStreams.misc (every other piece's sequence stays put).
+    // 'torso', not 'head': a head chunk wears the face projection.
+    const state = makeChunk('torso', pos, [0, 0, 0], chunkExtent(prims, pos),
+      primsLongAxis(ctx, prims, pos), () => 0.5, 'gob');
+    const template = { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture };
+    let view: ChunkGpuView | undefined = ctx.bake.spareViews.pop();
+    if (view) {
+      view.reset(state, prims, undefined, [], template.uniforms);
+      dressPieceView(view, 'gob', false);
+    } else {
+      try {
+        view = createPieceView(state, prims, undefined, [], template, 'gob', false);
+      } catch (err) {
+        if (!ctx.bake.attachWarned) {
+          ctx.bake.attachWarned = true;
+          console.warn('[attachPiece] shared chunk material is full; the piece is not drawn', err);
+        }
+        return { update() {}, dispose() {} };
+      }
+    }
+    const v = view;
+    ctx.bake.attachedViews.push(v);
+    let live = true;
+    return {
+      update(at, localEnds) {
+        if (!live) return;
+        v.morph(localEnds);
+        v.update({ ...state, pos: at, quat: [0, 0, 0, 1], squash: 0 });
+      },
+      dispose() {
+        if (!live) return;
+        live = false;
+        const i = ctx.bake.attachedViews.indexOf(v);
+        if (i >= 0) ctx.bake.attachedViews.splice(i, 1);
+        v.object.visible = false;
+        ctx.bake.spareViews.push(v);
+      },
+    };
   };
 
   // -----------------------------------------------------------------------

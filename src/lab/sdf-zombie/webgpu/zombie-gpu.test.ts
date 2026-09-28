@@ -68,6 +68,25 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
     view.dispose();
     template.dispose();
   });
+
+  it('morph() replaces the local endpoints; the next update() draws them, the bound stays', () => {
+    // Head damage's dangling eye: a hand-posed piece bent each frame without a re-pack.
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [0, 0, 0], 0.1, [0, 0, 1], () => 0.5);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    const extent = view.bakeData().extent;
+    view.morph([{ a: [0, 0, 0], b: [0, -0.05, 0] }, { a: [0.01, 0, 0], b: [0.01, -0.02, 0] }]);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const d = view.bakeData();
+    expect(d.flesh[0]!.a).toEqual([1, 2, 3]);
+    expect(d.flesh[0]!.b[1]).toBeCloseTo(1.95, 6);
+    expect(d.flesh[1]!.a[0]).toBeCloseTo(1.01, 6);
+    expect(d.flesh[0]!.radius).toBe(prims[0]!.radius);
+    expect(d.extent).toBe(extent);
+    view.dispose();
+    template.dispose();
+  });
 });
 
 describe('shared gib chunk material', () => {

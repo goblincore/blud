@@ -28,6 +28,12 @@ import type { RoomDef } from './game-level';
 import type { PassTiming } from './gpu-pass-timing';
 import type { LabRendererHandle } from './lab-renderer';
 import type { LoopController, WarmOutcome } from './warm-gate';
+
+/** The handle `boot.attachPiece` returns. */
+export interface AttachedPiece {
+  update(at: Vec3, localEnds: ReadonlyArray<{ a: Vec3; b: Vec3 }>): void;
+  dispose(): void;
+}
 import type { WarmBackgroundTracker } from './warm-background';
 
 /** `game-main.ts`'s local `RES_RUNGS` keys (`?res=`); not exported there. */
@@ -126,6 +132,12 @@ export interface BootState {
   /** Gore-piece dispatch (head-pop debris, head-pop.ts); assigned with the
    *  sever dispatch, once the chunk spawner exists. */
   onGoreDispatch: ((actor: ZombieActor, pieces: import('../head-pop').GorePiece[]) => void) | null;
+  /** A kinematic SDF piece riding an actor (head damage's dangling eye): no
+   *  physics, never baked or evicted, one draw. `prims` are world-space at
+   *  `pos`; each frame the caller moves it (`at`) and bends it (`localEnds`,
+   *  world minus `at`, the same count and order as `prims`). Assigned once the
+   *  chunk spawner exists. */
+  attachPiece?: (a: ZombieActor, prims: Primitive[], pos: Vec3) => AttachedPiece;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */

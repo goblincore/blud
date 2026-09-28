@@ -511,6 +511,8 @@ export interface ZombieActor {
    * `effect.reaction` narrows the reaction for melee: 'flinch' or 'none'.
    */
   blast(effect: ActorBlastEffect): void;
+  /** Melee head damage (game-head-damage.ts): a pure map applied to the posed body after every applyRig (the per-frame step and each hit's re-pose). null removes it. */
+  setHeadDeform(fn: ((posed: BuildResult) => BuildResult) | null): void;
 }
 
 /** The slice of explosion-aoe.ts's `BodyExplosionEffect` the actor needs. */
@@ -525,6 +527,8 @@ export interface ActorBlastEffect {
    *  'flinch' for a tap — a pellet-class signal, no stagger, no knock — and
    *  'none' for a gouge-only batch, whose crater already raised the reaction. */
   reaction?: 'blast' | 'flinch' | 'none';
+  /** Melee head damage: the brain is out; collapse and die now (collapse.ts sig.forced, motion's fallFatal). */
+  forceCollapse?: boolean;
 }
 
 export function createZombieActor(opts: {
@@ -605,6 +609,18 @@ export function createZombieActor(opts: {
   // (flail gate: 5.8-6.9 cm on the head). Every later hit stamped on applyRig
   // output and was exact. bodyYaw is 0 until the first step.
   let posed = applyRig(body, bound, 0);
+  /** Melee head damage's per-actor head map (setHeadDeform), applied after
+   *  every applyRig below. Null = the body exactly as the rig poses it. */
+  let headDeform: ((p: BuildResult) => BuildResult) | null = null;
+  /** ActorBlastEffect.forceCollapse, latched until the next step() feeds it
+   *  to the motion signals (collapse.ts latches the fall from there). */
+  let forceCollapseNext = false;
+  /** The one re-pose: applyRig, then the head deform (if any). Every pose
+   *  site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
+  const repose = (): BuildResult => {
+    const p = applyRig(current, bound, bodyYaw);
+    return headDeform ? headDeform(p) : p;
+  };
   /**
    * THE RUPTURE WINDOW (gib-tear.ts). While this is set the march draws the
    * body with its planned regions pulled apart and the flesh leading the bones,
@@ -1038,6 +1054,7 @@ export function createZombieActor(opts: {
     }
     reactionTime += Math.max(0, dt);
     let firstSub = true;
+    let forceCollapseFed = false;
     // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
     // sub-step of THIS step() carries the forced pose, and the brain's own
     // swing config resumes on the next step(). (Read-then-clear, not clear
@@ -1238,6 +1255,8 @@ export function createZombieActor(opts: {
           signals.forcedCollapse = true; signals.fire = false;
         }
       }
+      // Melee head damage (ActorBlastEffect.forceCollapse): the brain is out.
+      if (forceCollapseNext) { signals.forcedCollapse = true; forceCollapseFed = true; }
       // A dying soft target keeps no agenda (the same override as `doomed`).
       if (softKilled) think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
       if (think.halt && (soldierDamage || !mind.meleeCapable)) {
@@ -1469,12 +1488,13 @@ export function createZombieActor(opts: {
     pendingShot = null;
     pendingWounds.length = 0;
     pendingSevered.length = 0;
+    if (forceCollapseFed) forceCollapseNext = false;
     // Wound wobble decays — the spike chain's known gap (never advanced
     // ageSec), closed here so craters settle instead of bulging forever.
     if (woundRing.all().length) {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
-    posed = applyRig(current, bound, bodyYaw);
+    posed = repose();
     if (headPop && swellDur > 0) {
       swellClock += dt;
       const u = 1 - dyingT / swellDur;
@@ -1483,7 +1503,7 @@ export function createZombieActor(opts: {
         posed = inflateHead(posed, 1, swellClock);
         headPop = false;
         popHead();
-        posed = applyRig(current, bound, bodyYaw);
+        posed = repose();
       } else {
         posed = inflateHead(posed, u, swellClock);
       }
@@ -1565,7 +1585,7 @@ export function createZombieActor(opts: {
     if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
     for (const w of blastWounds) pendingWounds.push(w);
     if (blastWounds.length === 0) return;
-    posed = applyRig(current, bound, bodyYaw);
+    posed = repose();
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
@@ -1605,6 +1625,7 @@ export function createZombieActor(opts: {
     damageRevision++; bakePaused = false;
     const { wounds: blastWounds, meterCredit, impulse } = effect;
     const reaction = effect.reaction ?? 'blast';
+    if (effect.forceCollapse) forceCollapseNext = true;
     // Soft-target death only starts from a charged, blast-class hit: a melee
     // tap ('flinch') or a gouge-only follow-up ('none') must not insta-kill a
     // cultist. Tap-COUNTING toward a soft-target kill is a later tuning
@@ -1667,7 +1688,7 @@ export function createZombieActor(opts: {
     //     and the pinned one holds, so the body tears. The root moves every joint
     //     together, including the pinned foot. The pose/upload refresh below is
     //     still wanted because the sever tail must see a current pose.
-    posed = applyRig(current, bound, bodyYaw);
+    posed = repose();
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
@@ -1776,7 +1797,7 @@ export function createZombieActor(opts: {
     pendingPelletHits = 0;
     pendingPelletShot = null;
     runSeverChecks();
-    posed = applyRig(current, bound, bodyYaw);
+    posed = repose();
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
@@ -1874,6 +1895,7 @@ export function createZombieActor(opts: {
   }
 
   return {
+    setHeadDeform: (fn) => { headDeform = fn; },
     id: opts.id,
     get room() { return actorRoom(); },
     get body() { return current; },
