@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/flail-strike.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { FLAIL_HEAD, FLAIL_STRIKE, flailWound, headNeck, inStrikeArc, isHeadRegion, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
+import { FLAIL_ARC_DEG, FLAIL_HEAD, FLAIL_STRIKE, flailWound, headNeck, inStrikeArc, isHeadRegion, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
 import type { Primitive, Vec3 } from '../types';
 
 /** Standard polynomial smooth-min (k = blend radius). */
@@ -43,15 +43,27 @@ describe('viewToWorld', () => {
 
 describe('inStrikeArc', () => {
   it('takes a zombie in front within reach, and one hugging the player', () => {
-    expect(inStrikeArc(EYE, 0, [0, 1.1, -1.5])).toBe(true);
-    expect(inStrikeArc(EYE, 0, [0, 1.1, -0.03])).toBe(true);
+    expect(inStrikeArc(EYE, 0, [0, 1.1, -1.5], FLAIL_ARC_DEG.R)).toBe(true);
+    expect(inStrikeArc(EYE, 0, [0, 1.1, -0.03], FLAIL_ARC_DEG.R)).toBe(true);
   });
   it('refuses one too far or too wide', () => {
-    expect(inStrikeArc(EYE, 0, [0, 1.1, -2.2])).toBe(false);
+    expect(inStrikeArc(EYE, 0, [0, 1.1, -2.2], FLAIL_ARC_DEG.R)).toBe(false);
     const a = (70 * Math.PI) / 180;
-    expect(inStrikeArc(EYE, 0, [Math.sin(a) * 1.2, 1.1, -Math.cos(a) * 1.2])).toBe(false);
-    const b = ((FLAIL_STRIKE.arcDeg - 5) * Math.PI) / 180;
-    expect(inStrikeArc(EYE, 0, [Math.sin(b) * 1.2, 1.1, -Math.cos(b) * 1.2])).toBe(true);
+    expect(inStrikeArc(EYE, 0, [Math.sin(a) * 1.2, 1.1, -Math.cos(a) * 1.2], FLAIL_ARC_DEG.R)).toBe(false);
+    const b = ((FLAIL_ARC_DEG.R - 5) * Math.PI) / 180;
+    expect(inStrikeArc(EYE, 0, [Math.sin(b) * 1.2, 1.1, -Math.cos(b) * 1.2], FLAIL_ARC_DEG.R)).toBe(true);
+  });
+});
+
+describe('per-swing arc', () => {
+  it('R and L reach ±50°, H ±70°', () => {
+    expect(FLAIL_ARC_DEG).toEqual({ R: 50, L: 50, H: 70 });
+    const eye: Vec3 = [0, 1.6, 0];
+    const at = (deg: number): Vec3 => [Math.sin(deg * Math.PI / 180) * 1.2, 1.2, -Math.cos(deg * Math.PI / 180) * 1.2];
+    expect(inStrikeArc(eye, 0, at(60), FLAIL_ARC_DEG.R)).toBe(false);
+    expect(inStrikeArc(eye, 0, at(60), FLAIL_ARC_DEG.H)).toBe(true);
+    expect(inStrikeArc(eye, 0, at(-60), FLAIL_ARC_DEG.H)).toBe(true);
+    expect(inStrikeArc(eye, 0, at(80), FLAIL_ARC_DEG.H)).toBe(false);
   });
 });
 
@@ -71,17 +83,17 @@ describe('resolveStrike', () => {
     const impact: Vec3 = [0, 1.2, -1.2];
     const hits = resolveStrike(EYE, 0, impact, [
       ball(1, [0, 1.1, -1.5]), ball(2, [0.6, 1.1, -1.4]), ball(3, [0, 1.1, -3]),
-    ]);
+    ], FLAIL_ARC_DEG.R);
     expect(hits.map(h => h.actorId)).toEqual([1, 2]);
     for (const h of hits) expect(len(h.dir)).toBeCloseTo(1, 9);
     expect(Math.abs(Math.hypot(hits[0]!.point[0], hits[0]!.point[1] - 1.1, hits[0]!.point[2] + 1.5) - 0.3)).toBeLessThan(0.005);
   });
   it('hits nothing when nothing is in the arc (a whoosh)', () => {
-    expect(resolveStrike(EYE, 0, [0, 1.2, -1.2], [ball(1, [0, 1.1, 1.5])])).toEqual([]);
+    expect(resolveStrike(EYE, 0, [0, 1.2, -1.2], [ball(1, [0, 1.1, 1.5])], FLAIL_ARC_DEG.R)).toEqual([]);
   });
   it('returns no hit for an actor whose field goes non-finite', () => {
     const broken: StrikeActor = { id: 9, centre: [0, 1.1, -1.5], field: () => NaN };
-    expect(resolveStrike(EYE, 0, [0, 1.2, -1.2], [broken])).toEqual([]);
+    expect(resolveStrike(EYE, 0, [0, 1.2, -1.2], [broken], FLAIL_ARC_DEG.R)).toEqual([]);
   });
 });
 
@@ -131,7 +143,7 @@ describe('resolveStrike placement on a two-part body (torso + forward-hanging he
   it('lands a chest-height strike on the torso, not the head', () => {
     // 0.36 m in front of the torso's front face (z = -1.5 + 0.28 = -1.22).
     const impact: Vec3 = [0, 1.25, -0.86];
-    const hits = resolveStrike(EYE, 0, impact, [zombie]);
+    const hits = resolveStrike(EYE, 0, impact, [zombie], FLAIL_ARC_DEG.R);
     expect(hits).toHaveLength(1);
     expect(Math.abs(torsoSdf(hits[0]!.point))).toBeLessThan(0.02);
     expect(headSdf(hits[0]!.point)).toBeGreaterThan(0.05);
@@ -141,13 +153,13 @@ describe('resolveStrike placement on a two-part body (torso + forward-hanging he
     const a: Vec3 = [0, 0.9, -0.2], b: Vec3 = [0, 1.6, -0.2], r = 0.28;
     const hugger = capsule(8, a, b, r);
     const impact: Vec3 = [0, 1.25, -0.36];
-    const hits = resolveStrike(EYE, 0, impact, [hugger]);
+    const hits = resolveStrike(EYE, 0, impact, [hugger], FLAIL_ARC_DEG.R);
     expect(hits).toHaveLength(1);
     expect(hits[0]!.point[2]).toBeGreaterThan(-0.2); // front half, not the -0.48 back wall
   });
 });
 
-describe('gradual head damage', () => {
+describe('head damage (no decapitation, spec §12.3)', () => {
   const HEAD_C: Vec3 = [0, 1.6, 0], NECK: Vec3 = [0, 1.42, 0];
   it('a head prim, a point near the head centre, or a point near the neck root is the head region', () => {
     expect(isHeadRegion('head', [0, 0, 0], null, null)).toBe(true);
@@ -156,21 +168,13 @@ describe('gradual head damage', () => {
     expect(isHeadRegion('torso', [0, 1.2, 0.1], HEAD_C, NECK)).toBe(false);       // 0.24 m from the neck root
     expect(isHeadRegion('armL', [0, 1.0, 0], null, null)).toBe(false);
   });
-  it('head hits 1..hitsToSever−1 are face craters with no sever and no neck snap', () => {
-    expect(FLAIL_HEAD.hitsToSever).toBe(4);
-    for (let before = 0; before < FLAIL_HEAD.hitsToSever - 1; before++) {
-      expect(flailWound(true, before, 0.09, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0, snapNeck: false });
-    }
+  it('a head-region hit is always a face crater with no sever, however many came before', () => {
+    for (let n = 0; n < 20; n++) expect(flailWound(true, 0.09, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0 });
   });
-  it('the last head hit is the full crater, severs, and snaps the neck', () => {
-    const last = flailWound(true, FLAIL_HEAD.hitsToSever - 1, 0.09, 1.3);
-    expect(last.radius).toBe(0.09);
-    expect(last.severRadius).toBeCloseTo(0.117, 9);
-    expect(last.snapNeck).toBe(true);
-  });
-  it('body hits are the full crater with sever, never a neck snap', () => {
-    expect(flailWound(false, 0, 0.09, 1.3)).toEqual({ radius: 0.09, severRadius: expect.closeTo(0.117, 9), snapNeck: false });
-    expect(flailWound(false, 7, 0.09, 1.3).snapNeck).toBe(false);
+  it('a body hit is the full crater with its sever calibre', () => {
+    const w = flailWound(false, 0.09, 1.3);
+    expect(w.radius).toBe(0.09);
+    expect(w.severRadius).toBeCloseTo(0.117, 9);
   });
   it('headNeck finds the head chain root and neck midpoint on live prims, null once the head is gone', () => {
     const prims = [

@@ -28,12 +28,11 @@
 // body — assuming the field's gradient never drops below FLAIL_STRIKE.minGrad.
 
 import type { LimbId, Primitive, Vec3 } from '../types';
+import type { FlailSide } from './flail-swing';
 
 export const FLAIL_STRIKE = {
   /** Horizontal eye → torso-centre distance, metres. */
   reach: 1.8,
-  /** Half-angle of the arc about the facing, degrees. */
-  arcDeg: 50,
   /** Closer than this, an actor is in the arc whatever its bearing (hugging). */
   hugDist: 0.25,
   /** Newton iterations for the surface snap. */
@@ -55,6 +54,10 @@ export const FLAIL_STRIKE = {
   rayMinStep: 0.005,
   rayMaxSteps: 200,
 } as const;
+
+/** Half-angle of the strike arc about the facing, degrees, per side (spec §12.2):
+ *  R/L are the narrow swings, H is the wide sweep. */
+export const FLAIL_ARC_DEG: Readonly<Record<FlailSide, number>> = { R: 50, L: 50, H: 70 };
 
 export interface StrikeActor {
   id: number;
@@ -86,13 +89,13 @@ export function viewToWorld(eye: Vec3, yaw: number, pitch: number, v: Vec3): Vec
   ];
 }
 
-export function inStrikeArc(eye: Vec3, yaw: number, centre: Vec3): boolean {
+export function inStrikeArc(eye: Vec3, yaw: number, centre: Vec3, arcDeg: number): boolean {
   const dx = centre[0] - eye[0], dz = centre[2] - eye[2];
   const d = Math.hypot(dx, dz);
   if (d > FLAIL_STRIKE.reach) return false;
   if (d < FLAIL_STRIKE.hugDist) return true;
   const cosA = (dx * Math.sin(yaw) - dz * Math.cos(yaw)) / d;
-  return cosA >= Math.cos((FLAIL_STRIKE.arcDeg * Math.PI) / 180);
+  return cosA >= Math.cos((arcDeg * Math.PI) / 180);
 }
 
 export interface SnapResult {
@@ -174,18 +177,20 @@ function unitTowards(from: Vec3, to: Vec3): Vec3 | null {
   return [d[0] / l, d[1] / l, d[2] / l];
 }
 
-export function resolveStrike(eye: Vec3, yaw: number, impactWorld: Vec3, actors: readonly StrikeActor[]): StrikeHit[] {
+/** `aimWorld` is a point on the crosshair ray (spec §12.4): the game passes a
+ *  point 1 m down the player's view forward, not the drawn ball's position. */
+export function resolveStrike(eye: Vec3, yaw: number, aimWorld: Vec3, actors: readonly StrikeActor[], arcDeg: number): StrikeHit[] {
   const hits: StrikeHit[] = [];
   const maxDist = FLAIL_STRIKE.reach + 0.5;
   for (const a of actors) {
-    if (!inStrikeArc(eye, yaw, a.centre)) continue;
+    if (!inStrikeArc(eye, yaw, a.centre, arcDeg)) continue;
 
-    // Placement: ray from the eye through the AUTHORED impact point first —
-    // that's the ball's actual line of sight, so it lands on whichever part
-    // of the body the ball would really reach first (the near torso, not a
+    // Placement: ray from the eye through the AIM point first — that's the
+    // crosshair's line of sight, so it lands on whichever part of the body
+    // that ray would really reach first (the near torso, not a
     // Euclidean-nearer stray head or the far wall behind a hugging actor).
     let contact: Vec3 | null = null;
-    const dirImpact = unitTowards(eye, impactWorld);
+    const dirImpact = unitTowards(eye, aimWorld);
     if (dirImpact) contact = traceRaySurface(a.field, eye, dirImpact, maxDist);
     if (!contact) {
       const dirCentre = unitTowards(eye, a.centre);
@@ -203,20 +208,15 @@ export function resolveStrike(eye: Vec3, yaw: number, impactWorld: Vec3, actors:
   return hits;
 }
 
-/** Gradual head damage (spec §10.5, §11): a head-region hit caves the face in without severing until the
- *  actor's `hitsToSever`-th, which is the full crater and SNAPS THE NECK (game-flail.ts stamps a sever
- *  wound at the neck midpoint, so the head comes off wherever on the head the last blow lands). */
+/** The flail never decapitates (spec §12.3): a head-region hit is always a small face crater with no
+ *  sever, however many head hits came before. The head damage model (staged destruction: eyeball,
+ *  scalp, skull, brain) is its own spec, to be designed after v1.3 ships (§12.6). */
 export const FLAIL_HEAD = {
   regionDist: 0.25,
   /** Also the head region: within this of the neck root. Crosshair-on-head hits used to land on the upper
-   *  chest ~0.16 m from it and sever the neck on hit 1 (spec §11). */
+   *  chest ~0.16 m from it and sever the neck on hit 1 (spec §11, now moot — the flail never severs). */
   neckDist: 0.2,
-  hitsToSever: 4,
   faceCraterR: 0.06,
-  /** The neck-snap wound's sever calibre, metres (a zombie neck is ~0.07 m in radius). */
-  neckSeverR: 0.12,
-  /** The neck-snap wound's visible carve, metres: a token; the sever calibre does the work. */
-  snapCarveR: 0.02,
 } as const;
 
 export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null, neckRoot: Vec3 | null): boolean {
@@ -225,13 +225,13 @@ export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: 
   return near(headCentre, FLAIL_HEAD.regionDist) || near(neckRoot, FLAIL_HEAD.neckDist);
 }
 
-/** The wound for one hit. `headHitsBefore` counts this actor's earlier head-region hits. */
+/** The wound for one hit (spec §12.3): a head-region hit is always the face crater with no sever; a body
+ *  hit is the full crater at its sever calibre. */
 export function flailWound(
-  headRegion: boolean, headHitsBefore: number, craterR: number, severMul: number,
-): { radius: number; severRadius: number; snapNeck: boolean } {
-  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul, snapNeck: false };
-  if (headHitsBefore + 1 >= FLAIL_HEAD.hitsToSever) return { radius: craterR, severRadius: craterR * severMul, snapNeck: true };
-  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0, snapNeck: false };
+  headRegion: boolean, craterR: number, severMul: number,
+): { radius: number; severRadius: number } {
+  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul };
+  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0 };
 }
 
 /** The head chain's root (it sits in the shoulders) and its first segment's midpoint (the neck), from the

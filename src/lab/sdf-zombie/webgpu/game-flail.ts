@@ -6,8 +6,9 @@
 // child of the aim rig (haft, hand, chain, ball), posed from the swing's
 // view-space keyframes; flail-chain.ts simulates the chain and ball between
 // the eye bolt and the swing's ball key (spec §10.1). A strike becomes one
-// 'blast' crater per hit through ZombieActor.blast(), gradual on the head
-// (flail-strike.ts flailWound, spec §10.2). Not a recorded DemoFrame verb (like the flare).
+// 'blast' crater per hit through ZombieActor.blast(); the flail never
+// decapitates (flail-strike.ts flailWound, spec §12.3). Not a recorded
+// DemoFrame verb (like the flare).
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -25,7 +26,7 @@ import {
   FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, comboSide, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
-import { FLAIL_HEAD, flailWound, headNeck, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
+import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
 import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
@@ -34,17 +35,19 @@ import { FLAIL_FILL_LAYER } from './gib-motion-blur';
 
 const FLAIL_GLB = '/assets/lab/flail.glb';
 
-/** Feel numbers (spec §6). */
+/** Feel numbers (spec §6, §11, §12.2). */
 export const FLAIL_FEEL = {
   craterR: 0.09,
   severMul: 1.3,
-  meterCredit: 0.18,
-  /** Reaction direction magnitude handed to blast() (it unit-normalises). */
-  shove: 6,
-  hitStopSec: 0.05,
   /** dt multiplier while a hit-stop runs: near-frozen, never 0. */
   hitStopScale: 0.08,
   kickRad: 0.02,
+  /** Per swing: collapse credit (threshold 0.8 → ~8 body hits), shove (blast() unit-normalises it), hit-stop. */
+  swing: {
+    R: { meterCredit: 0.1, shove: 6, hitStopSec: 0.05 },
+    L: { meterCredit: 0.1, shove: 6, hitStopSec: 0.05 },
+    H: { meterCredit: 0.14, shove: 9, hitStopSec: 0.07 },
+  },
 } as const;
 
 /** The look: link spacing, rest sway, the hand. (The chain's own numbers —
@@ -82,8 +85,9 @@ export interface FlailDebug {
   side: FlailSide;
   swingId: number;
   strikes: number;
-  /** The last strike: its side, the actors hit, and the eye and the authored
-   *  impact point (world) its eye → impact ray was cast through. */
+  /** The last strike: its side, the actors hit, and the eye and a point on the
+   *  strike ray (world, the crosshair's forward, spec §12.4) its eye → aim ray
+   *  was cast through. */
   lastStrike: {
     side: FlailSide; hits: number[]; eye: Vec3; impact: Vec3;
     /** Head-region hits so far per struck actor id, AFTER this strike (flail-strike.ts flailWound). */
@@ -332,7 +336,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   let hitStop = 0, hitStopOn = true;
   let strikes = 0, clock = 0;
   let lastStrike: FlailDebug['lastStrike'] = null;
-  /** Head-region hits per actor id (spec §10.2): the face caves in, the 4th snaps the neck. */
+  /** Head-region hits per actor id (spec §12.3): the face always craters, never severs; the counter is
+   *  kept for the head damage model (its own spec, §12.6). */
   const headHits = new Map<number, number>();
   /** The side of a strike that fired THIS tick (draw pins the ball on its impact), else null. */
   let strikeNow: FlailSide | null = null;
@@ -345,62 +350,55 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     strikes++;
     const p = ctx.player.player;
     const eye = deps.eye();
-    const impact = viewToWorld(eye, p.yaw, p.pitch, FLAIL_IMPACT[side]);
+    // THE CROSSHAIR RAY (spec §12.4): a point 1 m down the player's view
+    // forward, not the drawn ball's position — FLAIL_IMPACT still drives the
+    // ball itself (draw(), below), landing about a ball-width under the
+    // crosshair on the strike frame.
+    const aim = viewToWorld(eye, p.yaw, p.pitch, [0, 0, -1]);
     const actors: StrikeActor[] = [];
     for (const a of ctx.world.actors) {
       const posed = a.posed();
       const c = posed.clusters.find(cc => cc.limb === 'torso')?.center;
       if (c) actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed) });
     }
-    const hits = resolveStrike(eye, p.yaw, impact, actors);
+    const hits = resolveStrike(eye, p.yaw, aim, actors, FLAIL_ARC_DEG[side]);
     const struckHeads: Record<number, number> = {};
     lastStrike = {
-      side, hits: hits.map(h => h.actorId), eye: [...eye] as Vec3, impact: [...impact] as Vec3,
+      side, hits: hits.map(h => h.actorId), eye: [...eye] as Vec3, impact: [...aim] as Vec3,
       headHits: struckHeads, ballDrawn: null, ballErr: null,
     };
+    const f = FLAIL_FEEL.swing[side];
     for (const h of hits) {
       const a = ctx.world.actors.find(x => x.id === h.actorId);
       if (!a) continue;
       const posed = a.posed();
       const yaw = a.pose().yaw;
       const field = (q: Vec3) => sdBody(q, posed);
-      // GRADUAL HEAD DAMAGE (flail-strike.ts flailWound): a head-region hit is a
-      // small face crater with no sever until the actor's 4th, which is the
-      // full crater and snaps the neck (spec §11: the neck-snap wound below).
-      // The probe finds the prim the hit lands on; it is the wound itself
-      // unless the radius changes.
+      // THE FLAIL NEVER DECAPITATES (flail-strike.ts flailWound, spec §12.3): a
+      // head-region hit is always a small face crater with no sever. The probe
+      // finds the prim the hit lands on; it is the wound itself unless the
+      // radius changes. headHits stays as a counter (the head damage model, its
+      // own spec, will read it — §12.6).
       const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
       const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
       const neck = headNeck(posed.prims);
       const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, neck?.root ?? null);
-      const before = headHits.get(a.id) ?? 0;
-      const spec = flailWound(region, before, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
-      if (region) headHits.set(a.id, before + 1);
+      const spec = flailWound(region, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
+      if (region) headHits.set(a.id, (headHits.get(a.id) ?? 0) + 1);
       struckHeads[a.id] = headHits.get(a.id) ?? 0;
       const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
       w.severRadius = spec.severRadius;
       clothifyWound(posed.prims, w, 'heavy');
-      const batch: Wound[] = [w];
-      if (spec.snapNeck && neck) {
-        // The killing head blow snaps the neck wherever on the head it lands: a
-        // sever calibre at the neck midpoint (connectivity.ts cuts the head's
-        // attachment there). Its visible carve is a token 2 cm: the point is on
-        // the neck's axis, so a full-size crater would have no depth cap and,
-        // were it ever bound to the torso, would open the stump.
-        const snap = worldHitToWound(posed.prims, neck.mid, FLAIL_HEAD.snapCarveR, 'blast', yaw, field);
-        snap.severRadius = FLAIL_HEAD.neckSeverR;
-        batch.push(snap);
-      }
       a.blast({
-        wounds: batch,
-        meterCredit: FLAIL_FEEL.meterCredit,
-        impulse: { at: h.point, vel: [h.dir[0] * FLAIL_FEEL.shove, h.dir[1] * FLAIL_FEEL.shove, h.dir[2] * FLAIL_FEEL.shove] },
+        wounds: [w],
+        meterCredit: f.meterCredit,
+        impulse: { at: h.point, vel: [h.dir[0] * f.shove, h.dir[1] * f.shove, h.dir[2] * f.shove] },
         reaction: 'blast',
       });
       deps.bleed(a, w, h.point, h.dir);
     }
     if (hits.length > 0) {
-      if (hitStopOn) hitStop = FLAIL_FEEL.hitStopSec;
+      if (hitStopOn) hitStop = f.hitStopSec;
       ctx.weapon.recoilPitch += FLAIL_FEEL.kickRad;
       ctx.weapon.shotAlert = true;
     }
