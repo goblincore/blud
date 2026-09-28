@@ -22,7 +22,7 @@ describe('night-train.level.json', () => {
     expect(rs.map(r => r.name)).toEqual(ORDER);
     expect(t.rooms.every(r => r.shell === 'art')).toBe(true);
     for (let i = 1; i < rs.length; i++) expect(rs[i]!.maxZ).toBeLessThan(rs[i - 1]!.minZ);
-    expect(rs.map(r => +(r.maxX - r.minX).toFixed(2))).toEqual([3.6, 3.8, 4.2, 3.8, 4.0, 4.2, 3.4, 3.0]);
+    expect(rs.map(r => +(r.maxX - r.minX).toFixed(2))).toEqual([3.6, 3.8, 4.2, 3.8, 4.0, 8.0, 3.4, 3.0]);   // the Boiler Room at 8 m (resize 2026-09-28)
     expect(rs.map(r => r.height)).toEqual([2.8, 2.8, 3.0, 2.8, 2.8, 3.4, 2.6, 2.6]);
     expect(t.art).toBe('night-train.art.glb');
     expect(missingCapabilities(t, ENGINE_CAPABILITIES)).toEqual([]);
@@ -69,7 +69,7 @@ describe('night-train.level.json', () => {
       'C1': [0.8, 0, z('sleeper', 3.1)], 'C3': [0.8, 0, z('sleeper', 9)], 'C4': [0.8, 0, z('sleeper', 12)],
       'third class': [0, 0, z('third-class', 9)], 'third, between benches': [-1.3, 0, z('third-class', 2.4)],
       'coats, west lane': [-1.2, 0, z('coat-check', 6.8)], 'behind the counter': [-1.2, 0, z('coat-check', 12.4)],
-      'boiler room': [0, 0, z('boiler-room', 10)], 'DJ deck': [-0.8, 0, z('boiler-room', 18.3)],
+      'boiler room': [0, 0, z('boiler-room', 14)], 'chill-out': [3.0, 0, z('boiler-room', 22)], 'DJ end': [-2.0, 0, z('boiler-room', 27.2)],
       'tender walkway': [0.9, 0, z('tender', 7)], 'cab': [0, 0, z('cab', 5)],
     };
     for (const [name, p] of Object.entries(points)) expect(nav.route(start, p).length, name).toBeGreaterThan(0);
