@@ -5,7 +5,8 @@
 // level completion. The rules are pure (player-vitals.ts, pickups.ts, level-events.ts); this
 // leaf holds the runtime on ctx.world.loop, draws the status bar and overlays, and applies
 // the rules each tick. Authored levels get pickups and events; the ring owns every weapon
-// with unlimited ammo, as before, but can still be hurt. `?god` turns damage off.
+// with unlimited ammo, as before, in god mode (`?god=0` lets it hurt); `?god` turns damage
+// off anywhere (player-vitals godMode).
 
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
@@ -16,7 +17,7 @@ import { requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { switchOnFlashlight, runLightCommand } from './game-dynamic-light-leaves';
 import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
 import { collectPickups, makeInventory, reloadFromReserve, type Inventory } from './pickups';
-import { VITALS, applyDamage, bitesInReach, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
+import { VITALS, applyDamage, bitesInReach, godMode, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
 
 export interface LoopRuntime {
   god: boolean;
@@ -73,7 +74,7 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     + ' background:radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.55) 100%);');
   document.body.appendChild(hurt);
   const rt: LoopRuntime = {
-    god: q.has('god'),
+    god: godMode(authored, q.get('god')),
     authored,
     finite,
     vitals: makeVitals(),

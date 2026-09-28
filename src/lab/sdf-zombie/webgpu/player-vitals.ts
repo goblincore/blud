@@ -39,6 +39,14 @@ export interface Vitals {
   hurtAge: number;
 }
 
+/** God mode (no damage). The ring testbed defaults to it (owner 2026-09-27: "you die
+ *  really fast when it loads"); authored levels default to mortal. `?god` forces it on,
+ *  `?god=0` forces it off (the ring with damage). */
+export function godMode(authored: boolean, god: string | null): boolean {
+  if (god === null) return !authored;
+  return god !== '0' && god !== 'false';
+}
+
 export function makeVitals(): Vitals {
   return { health: VITALS.maxHealth, meleeInvulnSec: 0, dead: false, hurtAge: Infinity };
 }
