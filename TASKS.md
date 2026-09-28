@@ -5,21 +5,21 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-off:** [2026-09-27 Night Train: light list, Boiler Room](docs/dev-notes/2026-09-27-night-train-handoff.md).
+> **Latest hand-off:** [2026-09-28 light layers and the owner's look](docs/dev-notes/2026-09-28-light-layers/notes.md)
+> (previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md)).
 
 ## In flight / next
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
-- [ ] **Scene contrast, light touch** (owner, 2026-09-27; softened after a replay, the train looks mostly fine):
-  try a gentle S-curve in the grade (off / gentle / medium side-by-sides). Low priority: in the test-rooms level
-  the coloured orbs swamp the torch (tune the orbs, not the torch). See the hand-off.
-- [ ] **NEXT: Boiler Room resize to 8 × 28 m** (owner-approved layout, option B + recommendations):
-  [plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md), [before/after](docs/game/levels/01-night-train/boiler-resize/boiler-before-after.png).
-- [x] **Flashlight retune** (owner: "feels like a flashlight vs the ambient, but not blown out"):
-  judged at the chest, hue-preserving tail; torch-only bodies pink and modelled at 1.5–6 m, 4.5–8×
-  the torch-off body, 0% blown ([sheet](docs/dev-notes/2026-09-27-shared-light-list/flashlight-retune.png)).
-  **Owner call open:** under a lit tube the torch adds only ~5% (lower the tube body level?); the
-  default level reads a bit dark from 4 m.
+- [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
+  change since the melee branch behind a live switch. Default = the owner's pick: the list on; with the torch lit,
+  the old per-pixel beam under the list; S-curve off. `?layers=none` is the melee look. [Hand-off](docs/dev-notes/2026-09-28-light-layers/notes.md).
+- [ ] **NEXT: optimisation now the look is chosen** (owner): measure, then simplify passes / move work to the GPU;
+  retire paths the default no longer uses.
+- [~] **Boiler Room resize to 8 × 28 m**: built (kit, level, JSON, level test). **Left:** the disco/train/light gates'
+  hard-coded room-5 poses, then the look/cost check ([plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md) Tasks 3–4).
+- [ ] Check the beacon sweeps read on bodies under the owner's default; explain the light gate's `?lightlist=0` gib
+  reading (0.296 vs 0.163 earlier, passes).
 - [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
   batching of the art (`batchArt`), the bone-exposure cull (unwounded enemies draw only their eyes)
   and instanced bone meshes took third class from ~440 to ~300 draws; bones + eyes ~3 draws; art
