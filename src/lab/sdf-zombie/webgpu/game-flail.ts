@@ -22,7 +22,7 @@ import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
 import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
-  FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, comboSide, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 import { FLAIL_HEAD, flailWound, headNeck, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
@@ -598,6 +598,6 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     },
     refreshLights() { relist(); },
     syncFill,
-    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: swing.nextSide, ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, ballKeyed: [...ballKeyed] as Vec3, linkErr, ndc: ndcNow() }),
+    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: comboSide(swing), ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, ballKeyed: [...ballKeyed] as Vec3, linkErr, ndc: ndcNow() }),
   };
 }

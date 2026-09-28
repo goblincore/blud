@@ -2,7 +2,7 @@
 //
 import { describe, expect, it } from 'vitest';
 import {
-  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, FLAIL_TIMING, chainReach, FLAIL_SWING, cancelFlailSwing, flailKeyTimes, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
+  FLAIL_CHAIN, FLAIL_IMPACT, FLAIL_REST, FLAIL_TIMING, chainReach, FLAIL_SWING, cancelFlailSwing, comboSide, flailKeyTimes, flailBallVel, flailBolt, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
 
@@ -12,7 +12,7 @@ const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - 
 const SIDES = ['R', 'L', 'H'] as const;
 /** A swing state `t` seconds into `side` (H is only reachable this way until the combo lands). */
 const swingOf = (side: FlailSide, t: number): FlailSwing =>
-  ({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
+  ({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
 
 /** Run `sec` of sim with the button held/released; a click is a one-step edge at the start. */
 function run(s: FlailSwing, sec: number, held: boolean, click = false, dt = DT) {
@@ -52,13 +52,32 @@ describe('stepFlailSwing', () => {
     }
   });
 
-  it('sides alternate click to click', () => {
-    let r = run(makeFlailSwing(), FLAIL_SWING.swingSec + 0.1, false, true);
+  it('a quick combo runs R, L, H, then back to R', () => {
+    let r = run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + 0.1, false, true);
     expect(r.strikes).toEqual(['R']);
-    r = run(r.s, FLAIL_SWING.swingSec + 0.1, false, true);
+    r = run(r.s, FLAIL_TIMING.L.swingSec + 0.1, false, true);
     expect(r.strikes).toEqual(['L']);
-    r = run(r.s, FLAIL_SWING.swingSec + 0.1, false, true);
+    r = run(r.s, FLAIL_TIMING.H.swingSec + 0.1, false, true);
+    expect(r.strikes).toEqual(['H']);
+    r = run(r.s, FLAIL_TIMING.R.swingSec + 0.1, false, true);
     expect(r.strikes).toEqual(['R']);
+  });
+
+  it('a pause longer than comboWindowSec resets the combo to R', () => {
+    let r = run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + 0.01, false, true);   // R, then idle 0.01 s
+    r = run(r.s, FLAIL_SWING.comboWindowSec + 0.05, false);                        // wait past the window
+    r = run(r.s, FLAIL_TIMING.R.swingSec + 0.1, false, true);
+    expect(r.strikes).toEqual(['R']);
+  });
+
+  it('the combo window edge: a click just inside continues, just outside resets', () => {
+    const afterR = run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + 1e-6, false, true).s;   // idle, idleT ≈ 0
+    const inside = run(afterR, FLAIL_SWING.comboWindowSec - 2 * DT, false).s;
+    expect(comboSide(inside)).toBe('L');
+    expect(run(inside, 0.3, false, true).strikes).toEqual(['L']);
+    const outside = run(afterR, FLAIL_SWING.comboWindowSec + 2 * DT, false).s;
+    expect(comboSide(outside)).toBe('R');
+    expect(run(outside, 0.3, false, true).strikes).toEqual(['R']);
   });
 
   it('a click in the last bufferSec queues the next swing', () => {
@@ -77,8 +96,8 @@ describe('stepFlailSwing', () => {
   });
 
   it('holding the button chains swings', () => {
-    const r = run(makeFlailSwing(), 3 * FLAIL_SWING.swingSec + 0.01, true, true);
-    expect(r.strikes).toEqual(['R', 'L', 'R']);
+    const r = run(makeFlailSwing(), FLAIL_TIMING.R.swingSec + FLAIL_TIMING.L.swingSec + FLAIL_TIMING.H.strikeT + 0.01, true, true);
+    expect(r.strikes).toEqual(['R', 'L', 'H']);
   });
 
   it('cancel returns to idle with no strike after it', () => {
@@ -98,14 +117,15 @@ describe('stepFlailSwing', () => {
   it('a held button with no click does not start a swing from idle (e.g. right after a weapon switch)', () => {
     const idle = makeFlailSwing();
     const r = stepFlailSwing(idle, { click: false, held: true }, DT);
-    expect(r.state).toEqual(idle);
+    expect(r.state.phase).toBe('idle');
+    expect(r.state.swingId).toBe(0);
     expect(r.strikes).toEqual([]);
   });
 
   it('the buffer check uses the post-step time: a step landing exactly on the boundary counts', () => {
     const dt = DT;
     const t0 = FLAIL_SWING.swingSec - FLAIL_SWING.bufferSec - dt; // t0 + dt lands exactly on the boundary
-    const s: FlailSwing = { phase: 'swing', side: 'R', t: t0, struck: true, queued: false, nextSide: 'L', swingId: 1 };
+    const s: FlailSwing = { phase: 'swing', side: 'R', t: t0, struck: true, queued: false, nextSide: 'L', swingId: 1, idleT: 0 };
     const onBoundary = stepFlailSwing(s, { click: true, held: false }, dt).state;
     expect(onBoundary.queued).toBe(true);
 
@@ -120,16 +140,16 @@ describe('stepFlailSwing', () => {
     expect(r.state.phase).toBe('idle');
   });
 
-  it('a chained huge dt strikes each swing exactly once, still alternating', () => {
+  it('a chained huge dt strikes each swing exactly once, still cycling R, L, H', () => {
     let s = makeFlailSwing();
     const allStrikes: FlailSide[] = [];
     for (let i = 0; i < 6; i++) {
-      const r = stepFlailSwing(s, { click: i === 0, held: true }, FLAIL_SWING.swingSec + 0.37);
+      const r = stepFlailSwing(s, { click: i === 0, held: true }, 0.55 + 0.37);
       s = r.state;
       allStrikes.push(...r.strikes);
     }
     expect(allStrikes.length).toBe(s.swingId);
-    expect(allStrikes).toEqual(allStrikes.map((_, i) => (i % 2 === 0 ? 'R' : 'L')));
+    expect(allStrikes).toEqual(allStrikes.map((_, i) => (['R', 'L', 'H'] as const)[i % 3]));
   });
 });
 
@@ -167,7 +187,7 @@ describe('flailPose', () => {
   });
 
   it('R is a big overhand swipe: wound up high over the right shoulder, then down onto the crosshair', () => {
-    const at = (t: number) => flailPose({ phase: 'swing', side: 'R', t, struck: false, queued: false, nextSide: 'R', swingId: 1 });
+    const at = (t: number) => flailPose({ phase: 'swing', side: 'R', t, struck: false, queued: false, nextSide: 'R', swingId: 1, idleT: 0 });
     const up = at(0.1);
     expect(up.ball[1]).toBeGreaterThanOrEqual(0.3);    // above the eye
     expect(up.ball[0]).toBeGreaterThanOrEqual(0.15);   // on the right
@@ -179,7 +199,7 @@ describe('flailPose', () => {
   });
 
   it('H is a flat right-to-left sweep through the crosshair', () => {
-    const at = (t: number) => flailPose({ phase: 'swing', side: 'H', t, struck: false, queued: false, nextSide: 'H', swingId: 1 });
+    const at = (t: number) => flailPose({ phase: 'swing', side: 'H', t, struck: false, queued: false, nextSide: 'H', swingId: 1, idleT: 0 });
     const wind = at(0.12);
     expect(wind.ball[0]).toBeGreaterThanOrEqual(0.55);           // wound up wide right
     expect(Math.abs(wind.ball[1])).toBeLessThanOrEqual(0.2);     // at shoulder height, not overhead
@@ -239,8 +259,8 @@ describe('flailPose', () => {
   /** Finite-difference ball speed (m/s) at time `t` within a single swing. */
   function ballSpeed(side: FlailSide, t: number, eps = 1e-4): number {
     const lo = Math.max(0, t - eps), hi = Math.min(FLAIL_TIMING[side].swingSec, t + eps);
-    const a = flailPose({ phase: 'swing', side, t: lo, struck: false, queued: false, nextSide: side, swingId: 1 });
-    const b = flailPose({ phase: 'swing', side, t: hi, struck: false, queued: false, nextSide: side, swingId: 1 });
+    const a = flailPose({ phase: 'swing', side, t: lo, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
+    const b = flailPose({ phase: 'swing', side, t: hi, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
     return dist(b.ball, a.ball) / (hi - lo);
   }
 
@@ -283,7 +303,7 @@ describe('flailPose', () => {
       const keyTimes = flailKeyTimes(side).filter(t => mainTimes[side].includes(t));
       expect(keyTimes, side).toEqual(mainTimes[side]);
       const swingSec = FLAIL_TIMING[side].swingSec;
-      const at = (t: number) => flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
+      const at = (t: number) => flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
       const keyPoses = keyTimes.map(at);
       for (const field of ['ball', 'grip'] as const) {
         for (const axis of [0, 1, 2] as const) {
@@ -314,7 +334,7 @@ describe('flailPose', () => {
     for (const side of SIDES) {
       const times = side === 'H' ? [0.05, ...flailKeyTimes('H'), 0.25] : [0, 0.05, 0.1, 0.15, FLAIL_SWING.strikeT, 0.25, 0.3, 0.37, FLAIL_SWING.swingSec];
       for (const t of times) {
-        const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
+        const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
         const a = bolt(p.grip, p.rot), b = flailBolt(p);
         for (const k of [0, 1, 2] as const) expect(b[k], `${side} t=${t}`).toBeCloseTo(a[k]!, 12);
       }
@@ -326,7 +346,7 @@ describe('flailPose', () => {
     for (const side of SIDES) {
       const times = side === 'H' ? flailKeyTimes('H') : [0, 0.1, 0.15, FLAIL_SWING.strikeT, 0.3, 0.37, FLAIL_SWING.swingSec];
       for (const t of times) {
-        const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1 });
+        const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
         expect(dist(p.ball, bolt(p.grip, p.rot)), `${side} t=${t}`).toBeLessThanOrEqual(chainReach());
       }
     }
@@ -341,7 +361,7 @@ describe('flailPose', () => {
       const swingSec = FLAIL_TIMING[side].swingSec;
       let min = Infinity, at = 0;
       for (let t = 0; t <= swingSec + 1e-9; t += 1 / 480) {
-        const p = flailPose({ phase: 'swing', side, t: Math.min(t, swingSec), struck: false, queued: false, nextSide: side, swingId: 1 });
+        const p = flailPose({ phase: 'swing', side, t: Math.min(t, swingSec), struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
         const r = dist(p.ball, bolt(p.grip, p.rot));
         if (r < min) { min = r; at = t; }
       }
@@ -351,7 +371,7 @@ describe('flailPose', () => {
 
   it('holds the chain nearly taut at the strike: the ball 0.34–0.36 m from the bolt', () => {
     for (const side of SIDES) {
-      const p = flailPose({ phase: 'swing', side, t: FLAIL_TIMING[side].strikeT, struck: false, queued: false, nextSide: side, swingId: 1 });
+      const p = flailPose({ phase: 'swing', side, t: FLAIL_TIMING[side].strikeT, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
       const r = dist(p.ball, bolt(p.grip, p.rot));
       expect(r, side).toBeGreaterThanOrEqual(0.34);
       expect(r, side).toBeLessThanOrEqual(0.36);

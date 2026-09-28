@@ -9,9 +9,14 @@
 //   H: the sweep (wide right at shoulder height, flat through the crosshair,
 //      far left) — the combo's finisher, longer than R and L (FLAIL_TIMING)
 //
-// A click from idle starts the next side — holding the button with no click
-// edge (e.g. right after a weapon switch leaves it physically held down)
+// A click from idle starts the combo's next side — holding the button with no
+// click edge (e.g. right after a weapon switch leaves it physically held down)
 // never starts a swing on its own; idle always waits for an explicit click.
+//
+// THE COMBO (spec §12.1): chained clicks advance R → L → H → R; an
+// unchained click always starts R. A click is chained if it lands in the
+// last bufferSec of the previous swing (queued, or a held button), or within
+// comboWindowSec after the previous swing ends; otherwise the combo resets.
 // A click in the last bufferSec of a swing queues the next one, checked
 // against the POST-STEP time (t + dt) so a step that lands exactly on the
 // boundary still counts; holding the button chains swings. The STRIKE fires
@@ -35,6 +40,8 @@ export const FLAIL_SWING = {
   strikeT: 0.18,
   /** A click this close to the end of a swing queues the next one. */
   bufferSec: 0.15,
+  /** A click within this long after a swing ends continues the combo; later, it restarts at R. */
+  comboWindowSec: 0.35,
 } as const;
 
 /** The chain (flail-chain.ts simulates it, game-flail.ts draws it). The keys
@@ -210,6 +217,8 @@ export interface FlailSwing {
   nextSide: FlailSide;
   /** Increments at every swing start. */
   swingId: number;
+  /** Seconds idle since the last swing ended (0 on a fresh flail). */
+  idleT: number;
 }
 
 export interface FlailInput {
@@ -220,16 +229,22 @@ export interface FlailInput {
 }
 
 export function makeFlailSwing(): FlailSwing {
-  return { phase: 'idle', side: 'R', t: 0, struck: false, queued: false, nextSide: 'R', swingId: 0 };
+  return { phase: 'idle', side: 'R', t: 0, struck: false, queued: false, nextSide: 'R', swingId: 0, idleT: 0 };
 }
 
-/** R ↔ L (H is not chained yet — the combo, Task 19, replaces this). */
-const other = (s: FlailSide): FlailSide => (s === 'R' ? 'L' : 'R');
+/** The combo: R (overhand) → L (cross) → H (sweep) → R. */
+const COMBO_NEXT: Readonly<Record<FlailSide, FlailSide>> = { R: 'L', L: 'H', H: 'R' };
+
+/** The side the next swing takes: the combo's next while chained or inside the window, else R. */
+export function comboSide(s: FlailSwing): FlailSide {
+  return s.phase === 'swing' || s.idleT <= FLAIL_SWING.comboWindowSec ? s.nextSide : 'R';
+}
 
 function start(s: FlailSwing, t: number): FlailSwing {
+  const side = comboSide(s);
   return {
-    phase: 'swing', side: s.nextSide, t, struck: false, queued: false,
-    nextSide: other(s.nextSide), swingId: s.swingId + 1,
+    phase: 'swing', side, t, struck: false, queued: false,
+    nextSide: COMBO_NEXT[side], swingId: s.swingId + 1, idleT: 0,
   };
 }
 
@@ -250,7 +265,8 @@ export function stepFlailSwing(
   let cur: FlailSwing;
   if (s.phase === 'idle') {
     // Idle never advances on a held button alone — only an explicit click starts a swing.
-    if (!input.click) return { state: s, strikes };
+    // comboSide (inside start()) reads the PRE-step idleT, before it ages below.
+    if (!input.click) return { state: { ...s, idleT: s.idleT + dt }, strikes };
     cur = strikeIfDue(start(s, dt), strikes);
   } else {
     const tNext = s.t + dt;
@@ -263,14 +279,14 @@ export function stepFlailSwing(
     const leftover = cur.t - FLAIL_TIMING[cur.side].swingSec;
     cur = cur.queued || input.held
       ? strikeIfDue(start(cur, leftover), strikes)
-      : { ...cur, phase: 'idle', t: 0, queued: false, struck: false };
+      : { ...cur, phase: 'idle', t: 0, queued: false, struck: false, idleT: leftover };
   }
   return { state: cur, strikes };
 }
 
 /** Weapon switch or death: back to idle; no strike fires after this. */
 export function cancelFlailSwing(s: FlailSwing): FlailSwing {
-  return { ...s, phase: 'idle', t: 0, struck: false, queued: false };
+  return { ...s, phase: 'idle', t: 0, struck: false, queued: false, idleT: Infinity };
 }
 
 /** How far the strike key's tangent leans past the plain incoming secant (see below). */
