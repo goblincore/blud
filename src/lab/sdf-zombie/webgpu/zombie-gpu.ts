@@ -183,6 +183,9 @@ export interface ZombieGpuView {
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
    *  melting body (and its released bone chunks) ever set this non-zero. */
   setMelt(progress: number): void;
+  /** Skin detail k → meltCfg.z (skin-detail-proto.ts): 0 off, 2 = the bumps' light ratio
+   *  squared back on after the highlight shoulder. Per instance (crowd records copy meltCfg). */
+  setSkinDetail(k: number): void;
   /** Motion vectors step 2 (MOTION-VECTORS-PLAN.md): meltCfg.y (gInstMelt.y) on = the march writes
    *  the object-motion MRT attachment. The layer turns it on only while temporal accumulation runs. */
   setMotionOut(on: boolean): void;
@@ -367,7 +370,8 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     // counts2.z = owner re-fold mode; SHIP_REFOLD_MODE (2, the raiser gate) since
     // 2026-09-21 — melee bench: -2.7 ms wounded, -3.6 ms wounded+fire; march-hash equal.
     counts2: uniform(new THREE.Vector4(0, 0, SHIP_COUNTS2_Z, 0)),
-    /** x melt progress 0..1 (zombie melt task 6), yzw spare. Drives the
+    /** x melt progress 0..1 (zombie melt task 6), y motion-out switch, z skin detail k
+     *  (skin-detail-proto.ts, setSkinDetail), w spare. x drives the
      *  flesh-only wet-red albedo/gloss ramp in MARCH_BODY — the body goes red
      *  while still standing, before it visibly sags. 0 everywhere except a
      *  melting body (and the bone chunks it releases), so every other view
@@ -2795,6 +2799,7 @@ export function createZombieGpuView(
       if (depthSegMetaNode) (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
     },
     setMelt(progress) { u.meltCfg.value.x = progress; syncRecord(); },
+    setSkinDetail(k) { u.meltCfg.value.z = k; syncRecord(); },
     setMotionOut(on) { u.meltCfg.value.y = on ? 1 : 0; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {

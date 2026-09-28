@@ -5,6 +5,7 @@
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
 import { BEAM_WHITE_CLIP, BEAM_WHITE_LUM } from '../../../../light-shade';
+import { SKIN_POST, SKIN_PRE } from './skin-detail-proto';
 
 /** A WGSL f32 literal (always a decimal point). */
 const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
@@ -114,7 +115,7 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // regressions -- the zombie sits at 1.18x face/torso, contrast sd 41.4.
   fleshLit = mix(fleshLit,
                  albedo * (amb + 0.30 * lightCfg.x * keyColor),
-                 faceFlat * 0.85);
+                 faceFlat * 0.85);${SKIN_PRE}
   if ((spotCfg.x > 0.0 || lightListCfg.x > 0.0) && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
     let shoulder = vec3<f32>(softShoulder(fleshLit.x, knee),
@@ -152,4 +153,4 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
     } else {
       fleshLit = shoulder;
     }
-  }`;
+  }${SKIN_POST}`;

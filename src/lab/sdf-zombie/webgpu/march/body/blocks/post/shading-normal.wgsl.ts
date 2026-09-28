@@ -4,6 +4,8 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
+import { SKIN_NORMAL } from '../light/skin-detail-proto';
+
 export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
   // the point of application: a polished or machined prim has no pits. The
   // AO and scatter probes below keep the FULL marchCfg.z — they probe the
@@ -29,6 +31,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // below is byte-for-byte the pre-task-2 call.
   let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift), gBand);
   var n = vec3<f32>(0.0);
+  var ng0 = vec3<f32>(0.0, 1.0, 0.0);
   var ngValid = false;
   var ngReason = 7;
   var ngScalar = 0.0;
@@ -49,6 +52,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
     ngScalar = ng.x;
     if (ngReason == 0) {
       var candidate = ng.yzw;
+      ng0 = ng.yzw;
       if ((gNgDebugMask & 8u) == 0u) { candidate = candidate + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude); }
       let magnitude2 = dot(candidate, candidate);
       // Comparisons reject NaN and infinity as well as a collapsed gradient.
@@ -70,7 +74,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   }
   if (!ngValid) {
     n = nFD;
-  }
+  }${SKIN_NORMAL}
   // DEBUG MODE 12 (crowd diagnostics 2026-09-14): slot, analytic reason, dot(analytic n, finite-difference n).
   if (debugNormal12) {
     return vec4<f32>(f32(gHitSlot), f32(ngReason), dot(n, nFD), t);

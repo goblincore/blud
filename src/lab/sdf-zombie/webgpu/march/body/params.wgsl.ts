@@ -27,7 +27,8 @@
 //              counts was already full and woundCfg2.w is the volume hitEps
 //              override, not spare)
 //   meltCfg    x melt progress 0..1 (zombie melt task 6) — drives the
-//              flesh-only wet-red albedo/gloss ramp below; yzw spare.
+//              flesh-only wet-red albedo/gloss ramp below; y motion-out, z skin
+//              detail k (skin-detail-proto.ts), w spare.
 //              0 everywhere except a melting body and its released bone
 //              chunks, so every other view shades bit-identical
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp

@@ -67,6 +67,7 @@ import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
 import { add, normalize, qMul, qRotate, sub } from '../vec';
+import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import {
   BURN_BEHAVIOUR, createBurnPanic, stepBurnPanic, type BurnPanicState,
 } from '../burn-behaviour';
@@ -589,6 +590,9 @@ export function createZombieActor(opts: {
   onHeadPop?: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => void;
 }): ZombieActor {
   const { body, view } = opts;
+  // Skin detail under the highlight shoulder, per character (skin-detail-proto.ts). Optional call:
+  // test fakes build actors from a lightweight view without it.
+  view.setSkinDetail?.(skinDetailFor(opts.profile?.name ?? 'zombie'));
   let bound = bindRig(body);
   // Walking releases the static anchor bindRig pins — rest pull + stance
   // plants carry the body (lab-main's unpinnedRigPoints).
