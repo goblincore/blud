@@ -6,7 +6,9 @@
 
 **Status:** layout approved by the owner on 2026-09-27 ("go with your recommendations"). Written as a **hand-off for a new session**.
 
-## ▶ Next session starts here (updated 2026-09-28)
+## ✅ DONE 2026-09-28 — all four tasks ([verification notes](../../dev-notes/2026-09-28-boiler-resize/notes.md))
+
+## (was) Next session starts here (updated 2026-09-28)
 
 **Tasks 1 and 2 are DONE and on `main`** (pushed, `d401dddf`): `a2ea591f` kit, `92a088c1` level, `b4488086` the
 level test. As built:
@@ -157,27 +159,27 @@ Everything north of the Boiler Room (the tender and cab) shifts **+8 m** along t
 - Anything else: `grep -rn "\-9[0-9]\.\|\-1[0-2][0-9]\." scripts src/lab/sdf-zombie/webgpu/*.test.ts` for Night Train z coordinates past the Boiler Room start, the tender and the cab (`level.end` at the firebox).
 - The level's `COMPLETE_ON` / firebox trigger positions move with the cab; check the loop gate (`scripts/sdf-game-loop-gate.sh`).
 
-- [ ] Update each file. Prefer deriving positions from the level JSON (room bounds) over new hard-coded numbers.
-- [ ] Commit: `test(level): gates and tests follow the resized Boiler Room`.
+- [x] Update each file. Prefer deriving positions from the level JSON (room bounds) over new hard-coded numbers.
+- [x] Commit: `test(level): gates and tests follow the resized Boiler Room`.
 
 ## Task 4: Verify, look, cost
 
-- [ ] Run the targeted vitest (`level-json*`, `game-context`, the disco, beacon and light tests) and `npx tsc --noEmit`.
-- [ ] Run the headless gates with `LAB_TMP=.lab-tmp`. Each script owns its servers; never touch port 5180, the owner's dev server. All must PASS:
+- [x] Run the targeted vitest (`level-json*`, `game-context`, the disco, beacon and light tests) and `npx tsc --noEmit`.
+- [x] Run the headless gates with `LAB_TMP=.lab-tmp`. Each script owns its servers; never touch port 5180, the owner's dev server. All must PASS:
   - `bash scripts/sdf-game-light-gate.sh`
   - `bash scripts/sdf-disco-check.sh`
   - `bash scripts/sdf-game-train-gate.sh`
   - `bash scripts/sdf-game-loop-gate.sh`
-- [ ] **Look check for the owner**, at `docs/dev-notes/2026-09-27-boiler-room-beacons/` or a new `boiler-resize/` notes folder. Capture from the south door and from the dance floor:
+- [x] **Look check for the owner**, at `docs/dev-notes/2026-09-27-boiler-room-beacons/` or a new `boiler-resize/` notes folder. Capture from the south door and from the dance floor:
   - the party before the strobe (tubes, disco stars);
   - after the strobe, with the beacons sweeping and the red stars pulsing;
   - one shot of the windows on both walls.
 
   **Look at the images.** Report whether the wall strips are too dark with one row of tubes (decision 5), and how the disco stars read at 4 m walls. They get sparser and bigger there, so `DISCO.count` might need raising.
-- [ ] **Cost:** the Boiler Room frame time (the light gate's cost section plus beacons on/off) against the +1.5 ms budget. There are about 4 more bays of kit pieces, so re-measure the train gate's frame-time budget too. Measure at a 1-minute load average under 4.
-- [ ] **march-hash:** `node scripts/march-hash.mjs`. The pins probably don't move (it captures room 1), but confirm.
-- [ ] **Docs:** the notes, `TASKS.md` (one line), and `docs/tasks/levels.md`.
-- [ ] Commit: `docs(level): Boiler Room resize — sheet, cost, notes`.
+- [x] **Cost:** the Boiler Room frame time (the light gate's cost section plus beacons on/off) against the +1.5 ms budget. There are about 4 more bays of kit pieces, so re-measure the train gate's frame-time budget too. Measure at a 1-minute load average under 4.
+- [x] **march-hash:** `node scripts/march-hash.mjs`. The pins probably don't move (it captures room 1), but confirm.
+- [x] **Docs:** the notes, `TASKS.md` (one line), and `docs/tasks/levels.md`.
+- [x] Commit: `docs(level): Boiler Room resize — sheet, cost, notes`.
 
 ## Rules
 

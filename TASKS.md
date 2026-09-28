@@ -14,9 +14,10 @@
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
   change since the melee branch behind a live switch. Default = the owner's pick: the list on; with the torch lit,
   the old per-pixel beam under the list; S-curve off. `?layers=none` is the melee look. [Hand-off](docs/dev-notes/2026-09-28-light-layers/notes.md).
-- [~] **NEXT: Boiler Room resize to 8 × 28 m** — Tasks 1–2 done (kit, level, JSON, level test, on `main`).
-  **Left:** Task 3 (the disco/train/light gates' hard-coded room-5 poses), Task 4 (gates, look sheet, cost,
-  march-hash). The plan has a "Next session starts here" block: [plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md).
+- [x] **Boiler Room resize to 8 × 28 m** (2026-09-28): kit, level, gates, look sheet, cost — all PASS; +60 draws /
+  +6.7 ms art, beacons +1.05 ms. [Notes + sheets](docs/dev-notes/2026-09-28-boiler-resize/notes.md). **Owner calls:**
+  one tube row reads dark at the side walls (add a second row?); stars sparse on the 4 m walls (raise `DISCO.count`?);
+  under the torch the beacons barely tint bodies (more weight?); without it they blow out flat red.
 - [ ] **Optimisation (parked, owner 2026-09-28):** tube shadow maps to **256²** (owner-approved), then bake the static
   art into the tube/beacon shadows so live updates draw only hulls; retire paths the chosen look leaves unused;
   level materials on the list. Menu and order: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).

@@ -7,7 +7,7 @@ landed earlier the same day; this note covers Tasks 3–4. Captures use the owne
 
 | gate | result |
 | --- | --- |
-| `sdf-game-train-gate` | walk: 41 waypoints, every room to the cab (new Boiler Room probes: favours, pistons, chill-out, DJ end); **cost: over budget at load 7–25** (third class +15.4 ms, Boiler Room +12.7 ms vs +12) — see Cost |
+| `sdf-game-train-gate` | PASS: walk 41 waypoints, every room to the cab (new Boiler Room probes: favours, pistons, chill-out, DJ end); cost inside budget on a quiet machine — see Cost |
 | `sdf-game-loop-gate` | PASS (the firebox now at z −135.9) |
 | `sdf-disco-check` | PASS: the ball at z −104, all 96 stars on the resized room's faces; red pulses after the strobe |
 | `sdf-game-light-gate` | PASS, including the beacons (both lit and turning, the moved dancer picks a beacon) |
@@ -30,12 +30,14 @@ A dancer 3.6 m past the south beacon, a quarter turn in four steps, torch off (t
 - **Torch lit:** the torch dominates (the old per-pixel beam); the beacon shows as a red floor pool and only a faint
   tinge on the body. Owner call: fine, or give the beacon more weight on torch-lit bodies.
 
-## Cost
+## Cost (quiet machine, load 3.5–3.9, the owner's game tabs closed)
 
-The train gate's +12 ms art budget failed at a 1-minute load of 7–25 (the owner's own Chrome game tabs were running;
-this measurement has swung to +33 ms at load 6.5 before). The light gate's Boiler Room cost was report-only at load 12
-(+0.15 ms list vs off; beacons on − off −2.65 ms, GPU +0.99 ms). **Re-measure on a quiet machine** (load < 4, game tabs
-closed): `LAB_TMP=.lab-tmp bash scripts/sdf-game-train-gate.sh` and `LIGHT_GATE_ONLY_COST=1 bash scripts/sdf-game-light-gate.sh`.
+- **Train gate, art on vs off:** the Boiler Room +60 draws / +6.7 ms (108 → 168; 10.7 → 19.0 ms); every carriage
+  +4.1..+6.7 ms, inside +200 draws / +12 ms. PASS. (The first run, at load 7–25 with the game tabs open, read
+  +12.7 ms here and +15.4 ms in unchanged third class: load, not the resize.)
+- **Light gate cost (enforced):** the list costs 0.00 ms in third class and −0.05 ms in the Boiler Room (budget
+  +1.5 ms); the beacons on − off **+1.05 ms frame, +0.74 ms GPU** (was +0.75 / +1.12 at 4.2 m wide), 144 shadow
+  renders over 72 frames. PASS.
 
 ## Gotcha
 
