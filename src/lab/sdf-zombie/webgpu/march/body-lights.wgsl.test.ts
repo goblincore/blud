@@ -14,11 +14,11 @@ import { LIGHT_VEC4S, LIST_LIGHTS_AT } from '../light-list';
 import { LIGHT_PROFILES, PROFILE_VEC4S, packProfiles } from '../light-profiles';
 
 describe('BODY_LIGHTS — parse contract', () => {
-  it('begins with fn bodyLights and the real wgslFn parser sees the six inputs in order', () => {
+  it('begins with fn bodyLights and the real wgslFn parser sees the seven inputs in order', () => {
     expect(BODY_LIGHTS.startsWith('fn bodyLights(')).toBe(true);
     const parsed = new WGSLNodeFunction(BODY_LIGHTS);
     expect(parsed.name).toBe('bodyLights');
-    expect(parsed.inputs.map((i: { name: string }) => i.name)).toEqual(['p', 'n', 'V', 'picks', 'lights', 'skipFirst']);
+    expect(parsed.inputs.map((i: { name: string }) => i.name)).toEqual(['p', 'n', 'V', 'picks', 'lights', 'skipFirst', 'skipBeam']);
     expect(parsed.outputType).toBe('BodyLit');
   });
 
@@ -139,7 +139,7 @@ describe('BODY_LIGHTS — lane parity with packProfiles and the CPU reference', 
 
   it('the WGSL reads no spare lane (pa.w backKey is CPU pick only; pb.z is beamShoulder: the beam weight and the torch share)', () => {
     expect(BODY_LIGHTS).not.toMatch(/\bpa\.w\b/);
-    expect(BODY_LIGHTS.match(/\bpb\.z\b/g)?.length).toBe(2);
+    expect(BODY_LIGHTS.match(/\bpb\.z\b/g)?.length).toBe(3);
     expect(BODY_LIGHTS).not.toMatch(/\bpc\.w\b/);
   });
 });

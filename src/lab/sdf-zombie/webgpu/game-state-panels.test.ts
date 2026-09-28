@@ -34,7 +34,7 @@ describe('PANELS_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(PANELS_BINDINGS)).toHaveLength(9);
+    expect(Object.keys(PANELS_BINDINGS)).toHaveLength(10);
   });
 
   it('renames panelsHidden to the de-prefixed hidden field', () => {

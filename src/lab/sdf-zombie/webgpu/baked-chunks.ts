@@ -299,7 +299,7 @@ function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShad
   var out = vec3<f32>(0.0);
   ${face ? 'var flatKey = 0.30 * lightCfg.x * keyColor;' : ''}
   if (listOn > 0.5) {
-    let bl = bodyLights(p, nrm, V, picks, lights, false);
+    let bl = bodyLights(p, nrm, V, picks, lights, false, false);
     let specL = bl.spec * listGain;
     out = a.rgb * (ambient + bl.diffuse * listGain) * ao
         + select(wetTint * specL * look.z, specL * response.w * response.y, response.x > 0.5);

@@ -60,7 +60,7 @@ const evaluate = async (expression, ms = 30000) => {
 };
 async function boot(query) {
   consoleEvents = [];
-  await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html?${query}` });
+  await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html?${query}&layers=${process.env.LIGHT_LAYERS ?? 'all'}` });
   for (let i = 0; i < 360; i++) {
     await sleep(500);
     const phase = await evaluate('window.__warmGate ? window.__warmGate.phase : null').catch(() => null);

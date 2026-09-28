@@ -6,6 +6,7 @@ import { BEACON } from './beacon';
 import { lightPresence } from './light-pick';
 import { BODY_DARK_FLOOR, BODY_LAMP_GAIN, BODY_WINDOW_GAIN, PRESENT, fillFactorOf, roomFillFactor } from './game-dynamic-light-leaves';
 import type { GameContext } from './game-context';
+import { setLayer } from './light-layers';
 import { LAMP_LIST_TRIM, OLD_BEAM_GAIN, OLD_BODY_FLASH_GAIN, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, PROFILES_BY_NAME } from './light-profiles';
 import { makeVfxState } from './game-state-vfx';
 import { makeLightingState } from './game-state-lighting';
@@ -169,8 +170,12 @@ describe('the room fill factor (Task 11b: bones follow the body\'s room fill)', 
       },
     }) as unknown as GameContext;
     const rt = { roomLight: new Map([[3, 0]]) };
+    setLayer('roomFill', true);
     expect(roomFillFactor(ctx(rt), -1, 0)).toBe(0.25);
     expect(roomFillFactor(ctx(rt), 1, 0)).toBe(1);        // room 4 has no entry: lit
     expect(roomFillFactor(ctx(undefined), -1, 0)).toBe(1);
+    // LIGHT LAYERS 'fill follows the lamps' off (the default): always full fill.
+    setLayer('roomFill', false);
+    expect(roomFillFactor(ctx(rt), -1, 0)).toBe(1);
   });
 });

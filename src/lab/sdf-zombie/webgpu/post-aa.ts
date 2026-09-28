@@ -96,6 +96,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, texture3D, storage, uv, vec2, vec4, uniform } from 'three/tsl';
 import { FLASH_GRADE_WGSL } from './post-flash-grade.wgsl';
 import { CONTRAST_DEFAULT, CONTRAST_PIVOT_DEFAULT, CONTRAST_WGSL } from './post-contrast.wgsl';
+import { layerOn } from './light-layers';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 import { setPassLabel } from './gpu-pass-timing';
@@ -1369,7 +1370,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const uFlashGrade = uniform(new THREE.Vector4(0, 0, 0, 0));
   const flashGraded = wgslFn(FLASH_GRADE_WGSL)({ c: blitOut.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
   // The final S-curve (post-contrast.wgsl.ts), after the lightning grade; 0 is inert.
-  const uContrast = uniform(CONTRAST_DEFAULT);
+  const uContrast = uniform(layerOn('sCurve') ? CONTRAST_DEFAULT : 0);   // LIGHT LAYERS 'final S-curve'
   const uContrastPivot = uniform(CONTRAST_PIVOT_DEFAULT);
   const graded = wgslFn(CONTRAST_WGSL)({ c: flashGraded.xyz as never, k: uContrast, pivot: uContrastPivot }) as unknown as Swizzled;
   const blitMat = new MeshBasicNodeMaterial();

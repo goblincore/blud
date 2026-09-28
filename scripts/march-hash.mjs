@@ -277,7 +277,7 @@ setTimeout(() => { console.error('FAIL: watchdog 14 min'); process.exit(3); }, 1
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
 await bootCloseupPage({
   send, evaluate, fail,
-  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0${EXTRA_QUERY}`,
+  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA_QUERY}`,
 });
 // WAIT FOR THE BACKGROUND COMPILES (2026-09-21). The gib and crowd programs
 // compile AFTER the loader (defer-compile, 2026-09-19); until the crowd job is

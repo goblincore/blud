@@ -95,6 +95,7 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     ctx.panels.woundPanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.gooPanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.vhsPanel?.setVisible(!ctx.panels.hidden);
+    ctx.panels.lightLayersPanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.dynamitePanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.shutterPanel?.setVisible(!ctx.panels.hidden);
   }

@@ -46,6 +46,7 @@ import { execFileSync } from 'node:child_process';
 import { inflateSync } from 'node:zlib';
 
 const T0 = Date.now();
+const GATE_LAYERS = 'list,listTorch,presentKey,roomFill,stormKey,bodyFog,skinDetail';
 const VITE = Number(process.argv[2] ?? 5297);
 const CDP = Number(process.argv[3] ?? 9297);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -85,7 +86,10 @@ const evaluate = async (expression, ms = 30000) => {
 };
 async function boot(query) {
   consoleEvents = [];
-  await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html?${query}` });
+  // LIGHT LAYERS (light-layers.ts, 2026-09-28): layers default OFF now. The bounds here were
+  // calibrated on the look shipped before the switches, WITHOUT the final S-curve (it lifts
+  // highlights: 41-47% blown at 1.5 m under a tube with it), so every layer but sCurve is on.
+  await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html?${query}&layers=${process.env.LIGHT_LAYERS ?? GATE_LAYERS}` });
   for (let i = 0; i < 360; i++) {
     await sleep(500);
     const phase = await evaluate('window.__warmGate ? window.__warmGate.phase : null').catch(() => null);

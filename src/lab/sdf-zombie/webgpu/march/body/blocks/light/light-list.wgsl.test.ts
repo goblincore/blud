@@ -15,7 +15,7 @@ import { MARCH_BODY, REFINE_BODY } from '../../entry.wgsl';
 describe('LIGHT_LIST_BLOCK', () => {
   it('is gated on lightListCfg.x and calls bodyLights with skipFirst = true', () => {
     expect(LIGHT_LIST_BLOCK).toContain('if (lightListCfg.x > 0.0) {');
-    expect(LIGHT_LIST_BLOCK).toContain('bodyLights(p, n, -rd, gInstLights, lightList, true)');
+    expect(LIGHT_LIST_BLOCK).toContain('bodyLights(p, n, -rd, gInstLights, lightList, true, false)');
   });
 
   it('replaces the key with the dominant: L, keyC normalised to peak 1, keyI the peak', () => {
@@ -63,7 +63,7 @@ describe('MARCH_BODY_LIGHT splice', () => {
 
   it('both lit entries carry the block exactly once', () => {
     for (const e of [MARCH_BODY, REFINE_BODY]) {
-      expect(e.split('bodyLights(p, n, -rd, gInstLights, lightList, true)').length).toBe(2);
+      expect(e.split('bodyLights(p, n, -rd, gInstLights, lightList, true, false)').length).toBe(2);
     }
   });
 });
@@ -92,7 +92,7 @@ describe('Task 9 review: list mode keeps the rim, the shoulder and viewBias; no 
 
   it('the level shadow is 1.0 in list mode, computed only when the list is off', () => {
     expect(OCCLUSION_BLOCK).toContain('var lvl = 1.0;');
-    expect(OCCLUSION_BLOCK).toContain('if (lightListCfg.x <= 0.0) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }');
+    expect(OCCLUSION_BLOCK).toContain('if (lightListCfg.x <= 0.0 || lightListCfg.z > 0.5) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }');
     expect(OCCLUSION_BLOCK).not.toContain('let lvl = ');
   });
 
@@ -120,7 +120,7 @@ describe('Task 9 review: list mode keeps the rim, the shoulder and viewBias; no 
   });
 
   it('the flashlight beam is skipped in list mode; beamAmt, its only other output, is unread', () => {
-    expect(FLASHLIGHT_BLOCK).toContain('if (spotCfg.x > 0.0 && lightListCfg.x <= 0.0) {');
+    expect(FLASHLIGHT_BLOCK).toContain('if (spotCfg.x > 0.0 && (lightListCfg.x <= 0.0 || lightListCfg.z > 0.5)) {');
     for (const e of [MARCH_BODY, REFINE_BODY]) {
       const code = e.replace(/\/\/.*$/gm, '');
       expect(code.match(/\bbeamAmt\b/g)?.length).toBe(2);   // the var and the one write

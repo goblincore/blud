@@ -11,6 +11,7 @@
 // window lights live under a group, not at the scene root (applyRig zeroes root directional
 // lights); all of it exists before the per-room light lists are built.
 
+import { layerOn } from './light-layers';
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { cameraPosition, normalWorld, positionLocal, positionWorld, uniform, vec3, vec4, wgslFn } from 'three/tsl';
@@ -656,6 +657,8 @@ type KeyUniforms = { lightDir?: { value: THREE.Vector3 }; keyColor?: { value: TH
  *  sweep, turn their key toward it and raise its floor; restore the preset key after. Call
  *  after spotCfg2 is written for the frame. */
 export function applyWindowKey(ctx: GameContext, u: KeyUniforms, at?: readonly [number, number, number]): void {
+  // LIGHT LAYERS 'lamps present the bodies' off: the base key, as before the dynamic light.
+  if (!layerOn('presentKey')) { releaseWindowKey(u); return; }
   const s = ctx.world.light?.storm;
   if (!u.lightDir || !u.keyColor) return;
   const kw = s ? s.intensity * BODY_WINDOW_GAIN : 0;
@@ -699,7 +702,7 @@ export function releaseWindowKey(u: KeyUniforms): void {
 
 /** At spawn on a storm level: the body's base key colour is the cold fill. */
 export function applyStormBodyKey(ctx: GameContext, u: { keyColor: { value: THREE.Color } }): void {
-  if (!ctx.world.light?.storm) return;
+  if (!ctx.world.light?.storm || !layerOn('stormKey')) return;
   u.keyColor.value.setRGB(COLD_FILL[0], COLD_FILL[1], COLD_FILL[2]);
 }
 
@@ -717,7 +720,8 @@ export function fillFactorOf(lit: number): number {
  *  read at their owner's root. */
 export function roomFillFactor(ctx: GameContext, x: number, z: number): number {
   const rt = ctx.world.light;
-  if (!rt) return 1;
+  // LIGHT LAYERS 'fill follows the lamps' off: full fill (applyRoomFill then writes the base back).
+  if (!rt || !layerOn('roomFill')) return 1;
   return fillFactorOf(rt.roomLight.get(roomIdAt(ctx, x, z)) ?? 1);
 }
 /** On a storm level the room probes (baked with the stoves and fires) weigh this much against the
@@ -747,7 +751,7 @@ export function applyRoomFill(ctx: GameContext, u: FillUniforms, x: number, z: n
   if (pc.y !== b.wroteGain) { b.gain = pc.y; }
   lc.y = b.fill * f;
   pc.y = b.gain * f;
-  if (rt.storm) pc.x = Math.min(pc.x, STORM_PROBE_WEIGHT);
+  if (rt.storm && layerOn('roomFill')) pc.x = Math.min(pc.x, STORM_PROBE_WEIGHT);
   b.wroteFill = lc.y;
   b.wroteGain = pc.y;
 }

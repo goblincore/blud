@@ -77,7 +77,7 @@ describe('chunkShade — shared light list (plan 1, Task 12)', () => {
   it('the list branch swaps only the key: bodyLights, ambient/AO kept, no rim', () => {
     for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {
       expect(src).toContain('if (listOn > 0.5) {');
-      expect(src).toContain('let bl = bodyLights(p, nrm, V, picks, lights, false);');
+      expect(src).toContain('let bl = bodyLights(p, nrm, V, picks, lights, false, false);');
       // every list term rides the chunk trim (the record's cfg.y, CHUNK_LIST_GAIN)
       expect(src).toContain('let specL = bl.spec * listGain;');
       expect(src).toContain('out = a.rgb * (ambient + bl.diffuse * listGain) * ao');

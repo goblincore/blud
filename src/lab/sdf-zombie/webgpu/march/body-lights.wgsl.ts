@@ -37,7 +37,7 @@
 import { LIGHT_VEC4S, LIST_LIGHTS_AT } from '../light-list';
 import { PROFILE_VEC4S } from '../light-profiles';
 
-export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>, V: vec3<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, skipFirst: bool) -> BodyLit {
+export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>, V: vec3<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, skipFirst: bool, skipBeam: bool) -> BodyLit {
   // skipFirst leaves slot 0's diffuse and spec out of the sums (the march shades the dominant
   // through its own key path); its rim and its dom fields are still returned.
   var o: BodyLit;
@@ -57,6 +57,9 @@ export const BODY_LIGHTS = /* wgsl */ `fn bodyLights(p: vec3<f32>, n: vec3<f32>,
     let pa = (*lights)[pr];
     let pb = (*lights)[pr + 1];
     let pc = (*lights)[pr + 2];
+    // skipBeam (light layers, 'torch through the list' off): the beam light (the torch) is shaded
+    // by the march's own per-pixel flashlight instead, so its slot adds nothing here.
+    if (skipBeam && pb.z > 0.0) { continue; }
     // Zero-safe normalizes: v * inverseSqrt(max(dot(v, v), 1e-12)) is vec3(0) for a zero vector,
     // where normalize(0) is NaN and 0 x NaN poisons the pixel. That happens for a light exactly
     // at p, and for Lb == -V (flashlight and muzzle have viewBias 0). The CPU twin matches.

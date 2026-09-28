@@ -33,7 +33,7 @@ const dot = (a: readonly number[], b: readonly number[]) => a[0]! * b[0]! + a[1]
 const normalize = (a: readonly number[]): Vec3 => { const k = 1 / Math.sqrt(Math.max(dot(a, a), 1e-12)); return [a[0]! * k, a[1]! * k, a[2]! * k]; };
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<number>, list: Float32Array, skipFirst = false): BodyLit {
+export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<number>, list: Float32Array, skipFirst = false, skipBeam = false): BodyLit {
   const o: BodyLit = { diffuse: [0, 0, 0], spec: [0, 0, 0], rim: [0, 0, 0], domL: [0, 1, 0], domLb: [0, 1, 0], domC: [0, 0, 0], domFloor: 0, beam: 0, lumAll: 0, lumBeam: 0 };
   const nv = Math.max(dot(n, V), 0);
   for (let k = 0; k < 4; k++) {
@@ -49,6 +49,7 @@ export function shadeBodyLights(p: Vec3, n: Vec3, V: Vec3, picks: ArrayLike<numb
     const pa = list.subarray(pr, pr + 4);           // gain, viewBias, floor, backKey
     const pb = list.subarray(pr + 4, pr + 8);       // backRim, spec, beamShoulder, specPow
     const pc = list.subarray(pr + 8, pr + 12);      // rimTint.rgb, 0
+    if (skipBeam && pb[2]! > 0) continue;
     const L = a[3]! > 1.5 ? [a[0]!, a[1]!, a[2]!] as Vec3 : normalize([a[0]! - p[0], a[1]! - p[1], a[2]! - p[2]]);
     const bias = pa[1]!;
     const Lb = normalize([L[0] + (V[0] - L[0]) * bias, L[1] + (V[1] - L[1]) * bias, L[2] + (V[2] - L[2]) * bias]);

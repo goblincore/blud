@@ -68,6 +68,7 @@ import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
 import { add, normalize, qMul, qRotate, sub } from '../vec';
 import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
+import { layerOn } from './light-layers';
 import {
   BURN_BEHAVIOUR, createBurnPanic, stepBurnPanic, type BurnPanicState,
 } from '../burn-behaviour';
@@ -592,7 +593,7 @@ export function createZombieActor(opts: {
   const { body, view } = opts;
   // Skin detail under the highlight shoulder, per character (skin-detail-proto.ts). Optional call:
   // test fakes build actors from a lightweight view without it.
-  view.setSkinDetail?.(skinDetailFor(opts.profile?.name ?? 'zombie'));
+  view.setSkinDetail?.(layerOn('skinDetail') ? skinDetailFor(opts.profile?.name ?? 'zombie') : 0);
   let bound = bindRig(body);
   // Walking releases the static anchor bindRig pins — rest pull + stance
   // plants carry the body (lab-main's unpinnedRigPoints).

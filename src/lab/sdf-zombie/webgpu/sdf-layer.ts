@@ -39,6 +39,7 @@ import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickM
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
+import { layerOn } from './light-layers';
 import { createUpscaleStage, upscaleInfoOf, type UpscaleInfo, type UpscaleStage } from './upscale/upscale-stage';
 import { inputsUseNormals, type UpscaleConfig, type UpscaleModel } from './upscale/upscale-model';
 
@@ -2904,7 +2905,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         const pc = camera as THREE.PerspectiveCamera;
         if (fog && (fog as THREE.Fog).isFog) {
           uFogColor.value.set(fog.color.r, fog.color.g, fog.color.b);
-          uFogCfg.value.set(1, fog.near, fog.far, 0);
+          uFogCfg.value.set(layerOn('bodyFog') ? 1 : 0, fog.near, fog.far, 0);   // LIGHT LAYERS 'bodies take the fog'
         } else uFogCfg.value.x = 0;
         uCamClip.value.set(pc.near ?? 0.1, pc.far ?? 100);
       }

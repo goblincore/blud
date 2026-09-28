@@ -72,4 +72,4 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // In list mode the flashlight's map does not gate the dominant (plan 1: no level-to-body
   // shadows): lvl stays 1.0, shader-side, since the game rewrites levelShadowCfg.x at runtime.
   var lvl = 1.0;
-  if (lightListCfg.x <= 0.0) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }`;
+  if (lightListCfg.x <= 0.0 || lightListCfg.z > 0.5) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }`;

@@ -20,6 +20,7 @@ import { roomIdAt } from './game-level-leaves';
 import type { LampMood } from './lamp-moods';
 import { buildLightList, LIST_VEC4S, packLightList, ROOM_MASK_BITS, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
 import { PROFILE_ID, type ProfileName } from './light-profiles';
+import { layerOn } from './light-layers';
 import { BEACON } from './beacon';
 import { pickLights, unpackPick, type Pick, type PickBody } from './light-pick';
 
@@ -282,10 +283,11 @@ export function lightListView(g: LightListGpu | undefined | null) {
 // 4. Each body's 4 lights (Task 10: the game turns the list on for bodies and crowds)
 // ---------------------------------------------------------------------------------------------
 
-/** `?lightlist=0` keeps the old key path (applyWindowKey / presentingLamp); anything else, or no
- *  param, lights every SDF body and crowd member by its own 4 picks from the shared list. */
-export const LIGHT_LIST_ON = typeof location === 'undefined'
-  || new URLSearchParams(location.search).get('lightlist') !== '0';
+/** `?lightlist=0|1` forces the old key path / the list; without it the LIGHT LAYERS 'list' switch
+ *  decides (light-layers.ts, default off since 2026-09-28; `?layers=all` turns it on). Node (tests):
+ *  on. */
+const LIGHT_LIST_PARAM = typeof location === 'undefined' ? '1' : new URLSearchParams(location.search).get('lightlist');
+export const LIGHT_LIST_ON = LIGHT_LIST_PARAM === null ? layerOn('list') : LIGHT_LIST_PARAM !== '0';
 /** The live switch, booted from LIGHT_LIST_ON. `__sdfGame.setLightList(on)` flips it for the cost
  *  A/B (interleaved rounds in one boot); look A/Bs use fresh `?lightlist=0|1` boots. */
 let listOn = LIGHT_LIST_ON;
@@ -321,7 +323,12 @@ export function applyBodyLights(ctx: GameContext, u: { bodyLights: Vec4U; lightL
   const p = pickLights(ctx.world.light?.list?.list ?? [], body, scratchPick).packed;
   u.bodyLights.value.set(p[0], p[1], p[2], p[3]);
   u.lightListCfg.value.x = 1;
+  u.lightListCfg.value.z = torchLane();
 }
+
+/** lightListCfg.z: 1 = the march shades the torch with its old per-pixel beam and skips the torch's
+ *  list slot (LIGHT LAYERS 'torch through the list' off); 0 = the torch is a list light. */
+export const torchLane = (): number => (layerOn('listTorch') ? 0 : 1);
 
 /** The seam's plain view of each actor's picks: `{ id, room, crowd, picks: [{ index, weight }] x 4 }`
  *  (index -1 = empty; crowd = drawn by a crowd type), read back from the views' `bodyLights`. */

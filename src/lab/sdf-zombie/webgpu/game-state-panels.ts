@@ -14,6 +14,7 @@ import type { GooPanel } from './goo-panel';
 import type { WoundPanel } from './wound-panel';
 import type { DynamitePanel } from './dynamite-panel';
 import type { VhsPanel } from './vhs-panel';
+import type { LightLayersPanel } from './light-layers-panel';
 import type { ImpactSplashLayer } from './impact-splash';
 import type { ShutterGameLayer } from './shutter-game-layer';
 import type { ShutterPanel } from './shutter-panel';
@@ -27,6 +28,8 @@ export interface PanelsState {
   dynamitePanel: DynamitePanel | null;
   /** The VHS tuning panel (vhs-panel.ts). */
   vhsPanel: VhsPanel | null;
+  /** LIGHT LAYERS (light-layers-panel.ts): the body-lighting switches since the melee branch. */
+  lightLayersPanel: LightLayersPanel | null;
   /** True while every dev panel is hidden by the visibility hotkey. */
   hidden: boolean;
   /** Supplementary procedural impact crown; off unless `?impactsplash=1`. */
@@ -48,6 +51,7 @@ export function makePanelsState(): PanelsState {
     woundPanel: null,
     dynamitePanel: null,
     vhsPanel: null,
+    lightLayersPanel: null,
     hidden: false,
     impactSplashEnabled: false,
     impactSplashLayer: null,
@@ -63,6 +67,7 @@ export const PANELS_BINDINGS = {
   woundPanel: 'panels.woundPanel',
   dynamitePanel: 'panels.dynamitePanel',
   vhsPanel: 'panels.vhsPanel',
+  lightLayersPanel: 'panels.lightLayersPanel',
   panelsHidden: 'panels.hidden',
   impactSplashEnabled: 'panels.impactSplashEnabled',
   impactSplashLayer: 'panels.impactSplashLayer',

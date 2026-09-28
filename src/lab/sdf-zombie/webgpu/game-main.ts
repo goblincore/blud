@@ -101,7 +101,7 @@ import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
 import { adoptDiscoFx, createDisco, createDiscoSeams, stepDisco } from './game-disco-leaves';
-import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, writeLightList } from './game-light-list-leaves';
+import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightListOn, torchLane, writeLightList } from './game-light-list-leaves';
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop-leaves';
@@ -205,6 +205,10 @@ import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
+import { createLightLayersPanel } from './light-layers-panel';
+import { layerOn, onLayerChange } from './light-layers';
+import { CONTRAST_DEFAULT } from './post-contrast.wgsl';
+import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import {
   createWoundPanel, defaultsFrom, WOUND_KEYS,
   type WoundPanel, type WoundTuningValues,
@@ -2224,7 +2228,7 @@ async function main() {
         if (src) {
           // List mode: each member's picks ride its own record; the type only switches the list on
           // (a per-uniform-set value, so set it here too, not only via the copy).
-          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; }
+          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; t.uniforms.lightListCfg.value.z = torchLane(); }
           else {
             t.uniforms.lightListCfg.value.x = 0;
             const near = nearestCrowdBody(t);
@@ -6676,6 +6680,15 @@ async function main() {
     get vhsTerms() { return ctx.render.postAa.vhsTerms; },
   });
   ctx.panels.vhsPanel.setVisible(true);
+  // LIGHT LAYERS (light-layers.ts): the body-lighting switches since the melee branch, all off by
+  // default. Most are read where they apply each frame; these three hold state and are pushed here.
+  onLayerChange((key) => {
+    if (key === 'list') setLightListOn(layerOn('list'));
+    if (key === 'sCurve') ctx.render.postAa.setContrast(layerOn('sCurve') ? CONTRAST_DEFAULT : 0);
+    if (key === 'skinDetail') for (const a of ctx.world.actors) a.view.setSkinDetail?.(layerOn('skinDetail') ? skinDetailFor(a.profileName()) : 0);
+  });
+  ctx.panels.lightLayersPanel = createLightLayersPanel();
+  ctx.panels.lightLayersPanel.setVisible(true);
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-

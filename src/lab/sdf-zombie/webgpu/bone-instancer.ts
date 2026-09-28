@@ -194,7 +194,7 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
   // body's applyRoomFill factor), so bone darkens with its body when the room's lamps die.
   if (listOn > 0.5 && picks.x > -1.5) {
     let V = normalize(camPos - p);
-    let bl = bodyLights(p, n, V, picks, lights, false);
+    let bl = bodyLights(p, n, V, picks, lights, false, false);
     let peak = max(bl.domC.x, max(bl.domC.y, bl.domC.z));
     let rimC = select(keyColor, bl.domC / max(peak, 1e-4), peak > 1e-4);
     let expoL = surfaceIn.w;

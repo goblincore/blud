@@ -43,8 +43,17 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
   // Lk: the dominant's VIEW-BIASED direction (its Lb), for its wrap and highlight; L stays the raw
   // direction for scatter and the wound shadow. Off, Lk == L exactly.
   var Lk = L;
-  if (lightListCfg.x > 0.0) {
-    let bl = bodyLights(p, n, -rd, gInstLights, lightList, true);
+  // lightListCfg.z above 0.5 (light layers: 'torch through the list' OFF): the old per-pixel
+  // flashlight above keeps the key (L, keyC, keyI), the torch's slot is skipped, and all four
+  // picks (the dominant included) add as diffuse/spec/rim; listBeam stays 0, so compose's old
+  // whitening shoulder applies. At z 0 this block is exactly what it was.
+  if (lightListCfg.x > 0.0 && lightListCfg.z > 0.5) {
+    let bl = bodyLights(p, n, -rd, gInstLights, lightList, false, true);
+    listDiff = bl.diffuse;
+    listSpec = bl.spec;
+    listRim = select(bl.rim, vec3<f32>(0.0), lightListCfg.y > 0.5);
+  } else if (lightListCfg.x > 0.0) {
+    let bl = bodyLights(p, n, -rd, gInstLights, lightList, true, false);
     let peak = max(bl.domC.x, max(bl.domC.y, bl.domC.z));
     L = bl.domL;
     Lk = bl.domLb;

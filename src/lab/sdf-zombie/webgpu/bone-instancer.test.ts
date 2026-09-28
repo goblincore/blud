@@ -180,7 +180,7 @@ describe('shared light list (plan 1, Task 11): each tube takes its owner\'s 4 li
   it('boneShade replaces only the key with bodyLights, behind listOn and an owned instance', () => {
     const i = BONE_SHADE_WGSL.indexOf('if (listOn > 0.5 && picks.x > -1.5) {');
     expect(i).toBeGreaterThan(0);
-    const call = BONE_SHADE_WGSL.indexOf('bodyLights(p, n, V, picks, lights, false)');
+    const call = BONE_SHADE_WGSL.indexOf('bodyLights(p, n, V, picks, lights, false, false)');
     expect(call).toBeGreaterThan(i);
     // the list branch keeps ambient, AO, the gloss (look.z) and the fresnel
     const branch = BONE_SHADE_WGSL.slice(i, BONE_SHADE_WGSL.indexOf('var L = normalize(lightDir);'));
