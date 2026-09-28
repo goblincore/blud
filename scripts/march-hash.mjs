@@ -111,12 +111,32 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp, sleep } 
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-27 on
-// claude/wake-level-pipeline-1afb01, with the light clock pinned — see LIGHT
-// CLOCK in the header):
-//   shipped default (crowd, boxes, tiles on)        = e2ce8904c1de9db4797775c47a8b4680afe6ac9d
-//   crowd quad (?crowddispatch=quad, tiles on)      = 7386cd6b6344ae9e0c4bba03e8f5c9a600c2ff34
-//   per-body (?crowd=0, tiles off)                  = 094176e655eb6575baf44f69fd960edb67efa30a
+// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-28 on
+// claude/night-train-9-27-handoff-d270c3, light clock pinned — see LIGHT CLOCK):
+//   shipped default (crowd, boxes, tiles on)        = 2daf514e3e19733e4f5118d46314fad0275b05af
+//   crowd quad (?crowddispatch=quad, tiles on)      = 55ed3dfc434b73edb4d4051ebb7ddc8c907e9af5
+//   per-body (?crowd=0, tiles off)                  = ee9ae35932542d532fb3dd359ea5ee6a4e907e05
+// Each reproduced on TWO boots (ports 5288/9288, headless) at e8aae521.
+//
+// 2026-09-28 RE-PIN. The 2026-09-27 pins below were already stale on main
+// (70f6dd37 gave 1737993e…). DEFAULT bisected, one boot per probe, four moves,
+// every one a deliberate, owner-directed look change to the body shading:
+//   c6c76b9f  e2ce8904…   <- 2026-09-27 pin reproduced
+//   83dcd38c  2e64d920…   <- MOVED: flashlight beam shoulder (Reinhard tail)
+//   11eebf83  2e64d920…
+//   d88c7bb7  1737993e…   <- MOVED: flashlight judged at the chest, retuned
+//   70f6dd37  1737993e…   (main tip, session base)
+//   aef1f269  1737993e…   (Warbull merge: no move)
+//   2742f5c8  88da3c9b…   <- MOVED: torch white clip, trim 0.43 -> 0.65
+//   61929e26  88da3c9b…   (Warbull second draft: no move)
+//   8aeb57a7  2daf514e…   <- MOVED: skin detail (032f3878; the room-1 close-up
+//                            is a soldier, k 1 after 8aeb57a7)
+//   e8aae521  2daf514e…   (ring orbs at 0.5: no move; 2 boots)
+// The quad and per-body values were not bisected separately; they moved over
+// the same range and are pinned from the tip.
+//
+// Superseded 2026-09-27 pins (claude/wake-level-pipeline-1afb01):
+//   shipped default e2ce8904… / crowd quad 7386cd6b… / per-body 094176e6…
 // Each reproduced on THREE consecutive boots (ports 5473/9473, headless,
 // LAB_TMP=.lab-tmp) at e7155e40 + the setLightTime seam, and again (3/3 each,
 // all three unchanged) at 181c4a8b after rebasing; room1-wounded for the
@@ -228,7 +248,7 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
-const PERBODY_HASH = '094176e655eb6575baf44f69fd960edb67efa30a';
+const PERBODY_HASH = 'ee9ae35932542d532fb3dd359ea5ee6a4e907e05';
 // MARCH_HASH_PERBODY — the per-body opt-out gate (task 8). Boots `?crowd=0`
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
@@ -237,8 +257,8 @@ const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
 // by DEFAULT_HASH whenever neither override is set and no extra query is given.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
-const CROWD_HASH = '7386cd6b6344ae9e0c4bba03e8f5c9a600c2ff34';
-const DEFAULT_HASH = 'e2ce8904c1de9db4797775c47a8b4680afe6ac9d';
+const CROWD_HASH = '55ed3dfc434b73edb4d4051ebb7ddc8c907e9af5';
+const DEFAULT_HASH = '2daf514e3e19733e4f5118d46314fad0275b05af';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
