@@ -26,7 +26,7 @@ import {
   FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, comboSide, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
-import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, viewToWorld, type StrikeActor } from './flail-strike';
+import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, type StrikeActor } from './flail-strike';
 import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
@@ -76,6 +76,9 @@ export const FLAIL_LOOK = {
 
 export interface FlailDeps {
   eye(): Vec3;
+  /** The aim ray's direction (world, unit): through the free-aim reticle when free aim is on, else the
+   *  view forward — the shotgun's own (game-weapon-leaves.ts aimDir). */
+  aimDir(): Vec3;
   /** Blood for a crater (game-world-leaves3 registerBleed). */
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
 }
@@ -357,20 +360,23 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
 
   function strike(side: FlailSide): void {
     strikes++;
-    const p = ctx.player.player;
     const eye = deps.eye();
-    // THE CROSSHAIR RAY (spec §12.4): a point 1 m down the player's view
-    // forward, not the drawn ball's position — FLAIL_IMPACT still drives the
-    // ball itself (draw(), below), landing about a ball-width under the
-    // crosshair on the strike frame.
-    const aim = viewToWorld(eye, p.yaw, p.pitch, [0, 0, -1]);
+    // THE CROSSHAIR RAY (spec §12.4): a point 1 m down the AIM ray — through
+    // the free-aim reticle, like the shotgun's shot, not the screen centre
+    // (owner, v1.3 playtest: the reticle on the head hit the torso). Not the
+    // drawn ball's position: FLAIL_IMPACT still drives the ball itself
+    // (draw(), below), landing about a ball-width under the view centre on
+    // the strike frame. The arc is centred on the aim's bearing too.
+    const d = deps.aimDir();
+    const aim: Vec3 = [eye[0] + d[0], eye[1] + d[1], eye[2] + d[2]];
+    const aimYaw = Math.atan2(d[0], -d[2]);
     const actors: StrikeActor[] = [];
     for (const a of ctx.world.actors) {
       const posed = a.posed();
       const c = posed.clusters.find(cc => cc.limb === 'torso')?.center;
       if (c) actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed) });
     }
-    const hits = resolveStrike(eye, p.yaw, aim, actors, FLAIL_ARC_DEG[side]);
+    const hits = resolveStrike(eye, aimYaw, aim, actors, FLAIL_ARC_DEG[side]);
     const struckHeads: Record<number, number> = {};
     const struckPoints: Record<number, Vec3> = {};
     for (const h of hits) struckPoints[h.actorId] = [...h.point] as Vec3;

@@ -285,7 +285,7 @@ for (const z of zombies) byRoom.set(z.room, [...(byRoom.get(z.room) ?? []), z]);
 const ROOM = process.env.ROOM ? Number(process.env.ROOM)
   : [...byRoom.entries()].sort((a, b) => b[1].length - a[1].length)[0][0];
 const pool = byRoom.get(ROOM) ?? [];
-if (pool.length < 7) die(`room ${ROOM} has ${pool.length} zombies; the gate needs 7`);
+if (pool.length < 8) die(`room ${ROOM} has ${pool.length} zombies; the gate needs 8`);
 const room = (await evaluate('__sdfGame.rooms')).find((r) => r.id === ROOM);
 const centre = [(room.bounds.minX + room.bounds.maxX) / 2, 0, (room.bounds.minZ + room.bounds.maxZ) / 2];
 console.log(`room ${ROOM} (${room.name}): ${pool.length} zombies; centre (${f2(centre)})`);
@@ -703,6 +703,51 @@ let sweepChoice = null;
   if (ok) pass(`collapse: came on hit ${hitsTaken} (target ≥ ${COLLAPSE_MIN})`);
   else if (finalPhase !== 'standing') fail(`collapse: came too early, on hit ${hitsTaken} (target ≥ ${COLLAPSE_MIN})`);
   else fail(`collapse: never left 'standing' within ${hitsTaken} clicks`);
+}
+
+// ---- 8b. Free aim: the hit follows the free-aim reticle, not the screen centre ------------
+// Owner, v1.3 playtest (2026-09-28): with free aim the reticle drifts inside a dead zone, and
+// the flail used to strike down the camera's forward (the screen centre) — the reticle on the
+// head hit the torso, the screen centre on the head hit the face. The shotgun fires through
+// the reticle (game-weapon-leaves.ts aimDir); the flail must too. The view looks at the torso;
+// CONTROL: reticle centred → a torso hit. Then the reticle moved onto the head → a head hit.
+{
+  const z = fresh();
+  const t = await torso(z.id);
+  const pose = standOff(t, 1.2);
+  const pitch = Math.atan2(t[1] - EYE_H, 1.2);
+  await evaluate('__sdfGame.setFreeAim(true)');
+  const hitLimbs = async (before) => evaluate(`(() => { const a = __sdfGame.zombie(${z.id}); const p = a.posed();
+    return a.woundList().slice(${before}).filter(w => !w.injuryIgnored).map(w => p.prims[w.primIdx]?.limb ?? '?'); })()`);
+  const aimed = async (label, aimXY) => {
+    await place(pose, pitch);
+    await evaluate(`__sdfGame.setAimPoint(${aimXY[0]}, ${aimXY[1]})`);
+    await stepN(5);
+    const before = await evaluate(`__sdfGame.zombie(${z.id}).woundCount()`);
+    const heads0 = (await state()).lastStrike?.headHits?.[z.id] ?? 0;
+    const sw = await swing();
+    const st = await state();
+    const limbs = await hitLimbs(before);
+    const struck = !!sw.control && st.lastStrike.hits.includes(z.id);
+    const headHit = (st.lastStrike.headHits?.[z.id] ?? 0) > heads0 || limbs.includes('head');
+    console.log(`free aim ${label}: aim (${aimXY.map((v) => v.toFixed(2)).join(', ')}), side ${st.lastStrike?.side}, struck ${struck}, ` +
+      `new wounds on ${JSON.stringify(limbs)}, head hit ${headHit}`);
+    return { struck, headHit };
+  };
+  const centre = await aimed('reticle centred (control)', [0, 0]);
+  await place(pose, pitch);
+  await stepN(2);
+  const head = await evaluate(`__sdfGame.actorLimbCenter(${z.id}, 'head')`);
+  const n = head ? await evaluate(`__sdfGame.flail.toScreen(${head[0]}, ${head[1]}, ${head[2]})`) : null;
+  if (!n) fail('free aim: the head is not on screen from the torso stand');
+  else {
+    const onHead = await aimed('reticle on the head', [n[0], n[1]]);
+    if (centre.struck && !centre.headHit) pass('free aim control: the reticle centred on the torso hits the torso');
+    else fail(`free aim control: struck ${centre.struck}, head hit ${centre.headHit} (expected a torso hit)`);
+    if (onHead.struck && onHead.headHit) pass('free aim: the reticle moved onto the head hits the head');
+    else fail(`free aim: the reticle on the head — struck ${onHead.struck}, head hit ${onHead.headHit} (expected a head hit)`);
+  }
+  await evaluate('__sdfGame.setAimPoint(0, 0)');
 }
 
 // ---- 8. Crosshair accuracy over the head and collapse hits ------------------------------

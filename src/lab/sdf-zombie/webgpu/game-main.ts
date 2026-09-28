@@ -3747,6 +3747,7 @@ async function main() {
   // WEAPON SLOT 1 (the spike flail, game-flail.ts): its own rig on aimRig.
   ctx.weapon.flail = createFlail(ctx, {
     eye: () => eyeOf(ctx.player.player),
+    aimDir: () => aimDir(ctx),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
