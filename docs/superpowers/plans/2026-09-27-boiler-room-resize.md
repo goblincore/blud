@@ -6,6 +6,35 @@
 
 **Status:** layout approved by the owner on 2026-09-27 ("go with your recommendations"). Written as a **hand-off for a new session**.
 
+## ▶ Next session starts here (updated 2026-09-28)
+
+**Tasks 1 and 2 are DONE and on `main`** (pushed, `d401dddf`): `a2ea591f` kit, `92a088c1` level, `b4488086` the
+level test. As built:
+- The arch rise is 0.4 m up to 4.2 m and `min(0.8, 0.4 × w / 4.2)` above (0.76 m at 8 m). All 211 existing kit
+  meshes were compared vertex for vertex and are identical. The centre pipe (h − 0.2) and the beacons (y 2.95)
+  clear the new arch. The floor grate stays the fixed 1.2 m strip (noted, not widened).
+- **Build `kit.blend` in place** (default `--out`). A kit saved elsewhere keeps texture paths relative to that
+  folder and the exported GLB loses its 42 textures.
+- A fresh kit rebuild does not reproduce the committed GLB byte for byte even with no change (the level JSON
+  does); build from the committed kit to reproduce.
+- JSON checked: room 5 is −4..4 × −90..−118, the tender and cab moved 8 m north, every entry south of the Boiler
+  Room is unchanged; lights 21 → 23, furniture 58 → 62. Layout drawing: `docs/game/levels/01-night-train/layout-draft3.png`.
+- `level-json.night-train.test.ts` is updated (width 8; nav probes at the dance floor, chill-out and DJ end).
+
+**Remaining: Task 3 (the gate scripts), then Task 4.** Things that changed since this plan was written:
+- **Light layers** (`src/lab/sdf-zombie/webgpu/light-layers.ts`, [notes](../../dev-notes/2026-09-28-light-layers/notes.md)):
+  body lighting now has switches with an owner-chosen default (the list on; the old per-pixel torch while it is
+  lit; S-curve off). The gates boot explicit `?layers=`: the disco and train gates `all`, the light gate
+  `GATE_LAYERS` (all but `sCurve`). Keep that when editing their boot URLs.
+- The **look check** (Task 4) should use the owner's default (no `?layers=` param), and should answer an open
+  question: **do the red beacon sweeps still read on bodies under the default?** (They were built to reach bodies
+  through the list; with the torch lit, bodies use the hybrid path.)
+- Tube shadow maps: the owner approved **256²** (optimisation parked; see
+  [optimisation-strategies.md](../../dev-notes/2026-09-28-light-layers/optimisation-strategies.md)). Don't fold that into
+  the resize; measure the resize's cost at 512² first, as the plan says.
+- Headless capture gotcha: treat a missing `window.__warmGate` as NOT ready; step once more before shooting (the
+  torch's wall pool lags one placement).
+
 **Architecture:**
 - **Layout.** The table in `scripts/levels/night_train_layout.py` changes.
 - **Build.** A few values written straight into `scripts/levels/build_night_train.py` move with it.
@@ -93,12 +122,12 @@ Everything north of the Boiler Room (the tender and cab) shifts **+8 m** along t
 
 **Files:** `scripts/levels/build_train_kit.py`. The ceiling bay uses `CEIL_PROFILE`, stretched sideways by w/3, with a fixed 0.4 m rise.
 
-- [ ] Make the rise proportional to the width, with the 4.2 m carriages staying exactly as they are: rise = 0.4 × (w / 4.2), capped at about 0.8 m for 8 m. Also check the centre ceiling pipe (`ceiling_bay`, radius 0.13 at h − 0.2), because the beacons hang at y 2.95 to clear it. At 8 m the pipe may need to follow the arch.
-- [ ] Also check:
+- [x] Make the rise proportional to the width, with the 4.2 m carriages staying exactly as they are: rise = 0.4 × (w / 4.2), capped at about 0.8 m for 8 m. Also check the centre ceiling pipe (`ceiling_bay`, radius 0.13 at h − 0.2), because the beacons hang at y 2.95 to clear it. At 8 m the pipe may need to follow the arch.
+- [x] Also check:
   - the floor grate: a fixed 1.2 m centre strip. Widen it for w 8, or accept it and note it.
   - the caged lamp in each ceiling bay: fixed at x 0.4. Fine to keep.
-- [ ] Rebuild the kit. Confirm that the 4.2 m pieces are unchanged (byte-identical or visually identical) and that the new `-80-34` / `-80` pieces exist.
-- [ ] Commit: `feat(kit): ceiling arch rise scales with carriage width (8 m Boiler Room)`.
+- [x] Rebuild the kit. Confirm that the 4.2 m pieces are unchanged (byte-identical or visually identical) and that the new `-80-34` / `-80` pieces exist.
+- [x] Commit: `feat(kit): ceiling arch rise scales with carriage width (8 m Boiler Room)`.
 
 ## Task 2: Layout, build and export
 
@@ -108,11 +137,11 @@ Everything north of the Boiler Room (the tender and cab) shifts **+8 m** along t
 - The regenerated `assets-source/levels/night-train.blend`, `public/assets/levels/night-train.level.json` and `public/assets/levels/night-train.art.glb`.
 - `docs/game/levels/01-night-train/layout.md`: the carriage-5 row and the layout drawing, `layout-draft2.png` or its successor.
 
-- [ ] Put in the table and the build values above.
-- [ ] Run the real pipeline: headless Blender builds the level, and `export_level.py` writes the JSON and GLB.
-- [ ] Check the JSON diff: room 5 is bigger, and everything north of it shifts by +8 m. Nothing else in the south carriages changes.
-- [ ] Re-render the layout SVG and PNG, and update `layout.md`.
-- [ ] Commit: `feat(level): Boiler Room 8 x 28 m (bigger on the inside)`.
+- [x] Put in the table and the build values above.
+- [x] Run the real pipeline: headless Blender builds the level, and `export_level.py` writes the JSON and GLB.
+- [x] Check the JSON diff: room 5 is bigger, and everything north of it shifts by +8 m. Nothing else in the south carriages changes.
+- [x] Re-render the layout SVG and PNG, and update `layout.md`.
+- [x] Commit: `feat(level): Boiler Room 8 x 28 m (bigger on the inside)`.
 
 ## Task 3: Fix everything that hard-codes room-5 or north-of-room-5 coordinates
 

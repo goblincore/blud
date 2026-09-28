@@ -14,10 +14,12 @@
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
   change since the melee branch behind a live switch. Default = the owner's pick: the list on; with the torch lit,
   the old per-pixel beam under the list; S-curve off. `?layers=none` is the melee look. [Hand-off](docs/dev-notes/2026-09-28-light-layers/notes.md).
-- [ ] **NEXT: optimisation now the look is chosen** (owner): measure, then simplify passes / move work to the GPU;
-  retire paths the default no longer uses.
-- [~] **Boiler Room resize to 8 × 28 m**: built (kit, level, JSON, level test). **Left:** the disco/train/light gates'
-  hard-coded room-5 poses, then the look/cost check ([plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md) Tasks 3–4).
+- [~] **NEXT: Boiler Room resize to 8 × 28 m** — Tasks 1–2 done (kit, level, JSON, level test, on `main`).
+  **Left:** Task 3 (the disco/train/light gates' hard-coded room-5 poses), Task 4 (gates, look sheet, cost,
+  march-hash). The plan has a "Next session starts here" block: [plan](docs/superpowers/plans/2026-09-27-boiler-room-resize.md).
+- [ ] **Optimisation (parked, owner 2026-09-28):** tube shadow maps to **256²** (owner-approved), then bake the static
+  art into the tube/beacon shadows so live updates draw only hulls; retire paths the chosen look leaves unused;
+  level materials on the list. Menu and order: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
 - [ ] Check the beacon sweeps read on bodies under the owner's default; explain the light gate's `?lightlist=0` gib
   reading (0.296 vs 0.163 earlier, passes).
 - [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static

@@ -1,7 +1,7 @@
 # Light layers and the owner's look — hand-off, 2026-09-28
 
 **Branch:** `claude/night-train-9-27-handoff-d270c3` (worktree `system-resources-cleanup-078e59`), merged to local
-`main` at the end of the session. **Previous hand-off:** [2026-09-27](../2026-09-27-night-train-handoff.md).
+`main` at the end of the session and pushed (`d401dddf`). **Previous hand-off:** [2026-09-27](../2026-09-27-night-train-handoff.md).
 
 ## The decision
 
@@ -63,9 +63,10 @@ under the HUD; H hides it) toggles them live; its bottom line reproduces the sta
 2. **Beacons with the owner's default:** check the red beacon sweeps read on bodies after the strobe.
 3. **Light gate, unexplained:** the `?lightlist=0` comparison boot's gibs under the torch read 0.296 (0.163 on an earlier
    run); the check passes.
-4. **Optimisation** now that the look is chosen: the owner asked about simplifying passes / moving work to the GPU.
-   Measure first (`attributePassSamples`, the light gate's cost section); candidates include retiring code paths the
-   default no longer uses.
+4. **Optimisation — parked** (owner: the resize first). 256² tube shadow maps are approved; baking the static art
+   into the shadows is the favoured bigger win. Full menu: [optimisation-strategies.md](optimisation-strategies.md).
+
+**Next session: the Boiler Room resize, Tasks 3–4** — start at the plan's "Next session starts here" block.
 
 ## Gotchas
 
