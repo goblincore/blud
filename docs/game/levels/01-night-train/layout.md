@@ -1,5 +1,20 @@
 # Night Train: layout
 
+## Draft 3 (2026-09-28): the Boiler Room at 8 × 28 m (built)
+
+![Plan, draft 3](layout-draft3.png)
+
+Draft 2 with one change, approved by the owner on 2026-09-27
+([plan](../../../superpowers/plans/2026-09-27-boiler-room-resize.md) ·
+[before/after](boiler-resize/boiler-before-after.png)): the Boiler Room grows from 4.2 × 20 m to
+**8.0 × 28 m** ("bigger on the inside"), same 3.4 m ceiling.
+- 14 window bays a side; the ceiling arch rises 0.76 m (it scales with width above 4.2 m).
+- One centre row of 4 steady tubes (the strobe owns the beat); two beacons at u 7 and u 21.
+- Favours and the boiler at the entrance, a 6 × 10 m dance floor under the disco ball (u 14),
+  a chill-out, then the DJ end: floor, no riser, the deck across the carriage facing south.
+- A third favour table (east), three pistons on the west bay ribs, five steam vents.
+- The tender and cab move 8 m north; the train is about 138 m.
+
 ## Draft 2 (2026-09-26, approved by the owner; built)
 
 ![Plan, draft 2](layout-draft2.png)

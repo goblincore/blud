@@ -170,7 +170,10 @@ def prop(label, x0, x1, u0, u1, h, g, rid, n, w2):
     elif label == "piston":
         put("piston", -w2, 0, zc)
     elif label == "dj deck":
-        put("dj-deck", -w2, 0, zc)
+        if (x1 - x0) > (u1 - u0):   # across the carriage (Boiler Room 8 m): back to the north, front south
+            put("dj-deck", xc, 0, g(u1), -PI / 2)
+        else:                       # against the west wall, front to the room (+x)
+            put("dj-deck", -w2, 0, zc)
     elif label == "coal":
         put("coal-heap", -w2, 0, zc)
     elif label == "table":   # art v2: a booth against its wall, with party hats on the table
@@ -252,8 +255,8 @@ def carriage(c, zs):
         gbox("furniture", f"boiler:{rid}", (w2 - 0.8, 0, g(u + 0.4)), (w2, 2.0, g(u - 0.4)))
     # Boiler Room: the disco ball over the dance floor, steam vents; shovels in the tender and cab.
     if name == "boiler-room":
-        put("disco-ball", 0, h - 0.33, g(10.0))
-        for vx, vu in ((1.6, 6.8), (-1.6, 12.6), (1.6, 18.6)):
+        put("disco-ball", 0, h - 0.33, g(14.0))   # the centre of the 6 x 10 m dance floor
+        for vx, vu in ((-2.9, 10.8), (-2.9, 13.05), (-2.9, 14.95), (-2.9, 17.0), (2.8, 21.5)):
             put("steam-vent", vx, 0, g(vu))
     if name in ("tender", "cab"):
         put("shovel", w2, 0, g(1.2 if name == "tender" else 3.0), PI)
