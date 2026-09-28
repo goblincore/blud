@@ -1,6 +1,6 @@
 # The spike flail (first player melee weapon, simplified) — Design
 
-**Date:** 2026-09-26 · **Status:** v1.2 built (§11) and playtested; v1.3 approved (§12), not built
+**Date:** 2026-09-26 · **Status:** v1.2 built (§11) and playtested; v1.3 built (§12); owner playtest pending
 **Supersedes:** [the censer flail](2026-09-26-censer-flail-design.md). The owner playtested the censer
 (physics head on a rope, dead-zone-driven strokes, tap/hold charge) and scrapped it: "too complicated
 for what it is… very hard to land a good hit… looks way too goofy." This design replaces it with a
@@ -175,7 +175,7 @@ neck midpoint (sever calibre 0.12 m, visible carve 0.02 m), so the head comes of
 last blow lands; `neckDist` is 0.2 m from the neck root. Strike balls at view y −0.08 (≈4° under the
 crosshair). Gate green: head on after hits 1–3, off on 4; collapse on hit 5; no limb severed by chest hits.
 
-## 12. v1.3 — third playtest (owner, 2026-09-28) — APPROVED, NOT BUILT
+## 12. v1.3 — third playtest (owner, 2026-09-28) — BUILT 2026-09-28
 
 Owner feedback on v1.2:
 1. It needs a horizontal swipe across the screen, perhaps as the 3rd click of a quick chain.

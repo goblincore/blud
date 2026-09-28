@@ -6,8 +6,10 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [ ] **v1.3 approved, not built (2026-09-28)**: an R → L → H combo, H being a horizontal sweep; about 8 body hits
-  to drop a zombie; the flail never decapitates; the hit goes where the crosshair points. Spec §12.
+- [~] **v1.3 built (2026-09-28); owner playtest pending.** Gate passing. Chained clicks run R (overhand) → L (cross) →
+  H (a flat sweep, ±70°, the finisher); a pause of more than 0.35 s resets to R. About 8 body hits drop a zombie (7 with a
+  sweep among them). The flail never decapitates. The hit follows the crosshair (worst 0.77 cm off at the strike).
+  Spec §12 · strip `look/sweep-H-strip.png`.
 - [ ] **Melee head damage model** (next spec, after v1.3): eye pops out on a stalk, head flesh dents, scalp tears to
   expose the skull (aim fudge for the crown), brain destroyed and flying out as the head kill. Spec §12.6.
 - [x] **v1.2 built and playtested (2026-09-27/28).** Gate passing. The strike lands on the crosshair; the first
