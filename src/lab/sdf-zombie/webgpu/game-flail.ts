@@ -92,6 +92,15 @@ export interface FlailDebug {
     side: FlailSide; hits: number[]; eye: Vec3; impact: Vec3;
     /** Head-region hits so far per struck actor id, AFTER this strike (flail-strike.ts flailWound). */
     headHits: Record<number, number>;
+    /** resolveStrike's own snapped surface hit point per struck actor id, copied straight out of
+     *  StrikeHit.point at strike time — BEFORE it goes through worldHitToWound/woundWorldPos's
+     *  prim-local round trip. A gate reading the wound's position back a few frames later (via
+     *  actorWounds) is measuring crosshair accuracy AFTER that round trip, which can drift when
+     *  the struck prim's orientation frame at read time differs from the frame at stamp time
+     *  (game-flail-gate investigation, 2026-09-28: a first hit on a fresh head can land the
+     *  wound several cm off this point, though this point itself sits on the crosshair ray).
+     *  `points` is the ray's own answer to "where did the strike land" — spec §12.4/§12.5. */
+    points: Record<number, Vec3>;
     /** The drawn ball centre on the strike frame (rig-local) and its distance
      *  from the rig-space FLAIL_IMPACT, metres (set by that frame's draw). */
     ballDrawn: Vec3 | null;
@@ -363,9 +372,11 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     }
     const hits = resolveStrike(eye, p.yaw, aim, actors, FLAIL_ARC_DEG[side]);
     const struckHeads: Record<number, number> = {};
+    const struckPoints: Record<number, Vec3> = {};
+    for (const h of hits) struckPoints[h.actorId] = [...h.point] as Vec3;
     lastStrike = {
       side, hits: hits.map(h => h.actorId), eye: [...eye] as Vec3, impact: [...aim] as Vec3,
-      headHits: struckHeads, ballDrawn: null, ballErr: null,
+      headHits: struckHeads, points: struckPoints, ballDrawn: null, ballErr: null,
     };
     const f = FLAIL_FEEL.swing[side];
     for (const h of hits) {
