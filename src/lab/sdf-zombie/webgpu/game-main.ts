@@ -206,6 +206,7 @@ import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import { createLightLayersPanel } from './light-layers-panel';
+import { listLook } from './light-list';
 import { layerOn, onLayerChange } from './light-layers';
 import { CONTRAST_DEFAULT } from './post-contrast.wgsl';
 import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
@@ -2228,7 +2229,7 @@ async function main() {
         if (src) {
           // List mode: each member's picks ride its own record; the type only switches the list on
           // (a per-uniform-set value, so set it here too, not only via the copy).
-          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; t.uniforms.lightListCfg.value.z = torchLane(); }
+          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; t.uniforms.lightListCfg.value.z = torchLane(); t.uniforms.lightListCfg.value.w = 1 - listLook().secondary; }
           else {
             t.uniforms.lightListCfg.value.x = 0;
             const near = nearestCrowdBody(t);

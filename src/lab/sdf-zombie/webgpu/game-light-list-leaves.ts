@@ -18,7 +18,7 @@ import { storage } from 'three/tsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-leaves';
 import type { LampMood } from './lamp-moods';
-import { buildLightList, LIST_VEC4S, packLightList, ROOM_MASK_BITS, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
+import { buildLightList, LIST_VEC4S, listLook, packLightList, ROOM_MASK_BITS, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
 import { PROFILE_ID, type ProfileName } from './light-profiles';
 import { layerOn } from './light-layers';
 import { BEACON } from './beacon';
@@ -324,6 +324,7 @@ export function applyBodyLights(ctx: GameContext, u: { bodyLights: Vec4U; lightL
   u.bodyLights.value.set(p[0], p[1], p[2], p[3]);
   u.lightListCfg.value.x = 1;
   u.lightListCfg.value.z = torchLane();
+  u.lightListCfg.value.w = 1 - listLook().secondary;
 }
 
 /** lightListCfg.z: 1 = the march shades the torch with its old per-pixel beam and skips the torch's

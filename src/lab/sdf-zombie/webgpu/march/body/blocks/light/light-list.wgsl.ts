@@ -49,8 +49,8 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
   // whitening shoulder applies. At z 0 this block is exactly what it was.
   if (lightListCfg.x > 0.0 && lightListCfg.z > 0.5) {
     let bl = bodyLights(p, n, -rd, gInstLights, lightList, false, true);
-    listDiff = bl.diffuse;
-    listSpec = bl.spec;
+    listDiff = bl.diffuse * (1.0 - lightListCfg.w);
+    listSpec = bl.spec * (1.0 - lightListCfg.w);
     listRim = select(bl.rim, vec3<f32>(0.0), lightListCfg.y > 0.5);
   } else if (lightListCfg.x > 0.0) {
     let bl = bodyLights(p, n, -rd, gInstLights, lightList, true, false);
@@ -61,8 +61,9 @@ export const LIGHT_LIST_BLOCK = /* wgsl */ `  // ---- SHARED LIGHT LIST (spec §
     // on; keyI = 0 still gives no key diffuse.
     keyC = select(keyC, bl.domC / max(peak, 1e-4), peak > 1e-4);
     keyI = peak;
-    listDiff = bl.diffuse;
-    listSpec = bl.spec;
+    // lightListCfg.w: 1 - the weight of the non-dominant picks (light-list.ts ListLook.secondary; 0 = full).
+    listDiff = bl.diffuse * (1.0 - lightListCfg.w);
+    listSpec = bl.spec * (1.0 - lightListCfg.w);
     // lightListCfg.y above 0.5 - a gib chunk view - drops every back rim: owner 2026-09-27, no edge rim on gibs.
     listRim = select(bl.rim, vec3<f32>(0.0), lightListCfg.y > 0.5);
     listDomFloor = bl.domFloor;

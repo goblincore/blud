@@ -6,6 +6,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { layerState, setLayer, type LightLayerKey } from './light-layers';
+import { setListLook, type ListLook } from './light-list';
 import type { GameContext } from './game-context';
 import { impactSplashProfiles } from './impact-splash-profiles';
 import { DATA_ROWS as CROWD_DATA_ROWS } from './march.wgsl';
@@ -137,6 +138,8 @@ export function createMiscSeams(ctx: GameContext) {
      *  above, so a capture script can dismiss all three the same way. */
     /** LIGHT LAYERS (light-layers.ts): the state, and one switch (returns the new state). */
     layers: () => layerState(),
+    /** The list's live look scales (light-list.ts ListLook): floor, viewBias, backRim, secondary. */
+    setListLook: (l: Partial<ListLook>) => ({ ...setListLook(l) }),
     setLayer: (key: LightLayerKey, on: boolean) => { setLayer(key, on); return layerState(); },
     lightLayersPanel(on: boolean) {
       ctx.panels.lightLayersPanel?.setVisible(on);

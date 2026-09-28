@@ -88,7 +88,25 @@ export const LIST_VEC4S = LIST_LIGHTS_AT + LIST_CAP * LIGHT_VEC4S;   // 153
 
 // Packed once at module load: the profile table is fixed in code (light-profiles.ts), so
 // packLightList copies this cached block instead of re-packing 96 floats every frame.
-const PACKED_PROFILES = packProfiles();
+const BASE_PROFILES = packProfiles();
+const PACKED_PROFILES = BASE_PROFILES.slice();
+
+/** LIST LOOK (owner 2026-09-28, 'the list reduces contrast'): live scales on the shading lanes of
+ *  every profile — the wrap floor (pa.z), the view bias (pa.y), the back rim (pb.x) — plus
+ *  `secondary`, the weight of the non-dominant picks (the game writes 1 - secondary to
+ *  lightListCfg.w). All 1 is the calibrated table. The CPU pick (coverFloor) is untouched. */
+export interface ListLook { floor: number; viewBias: number; backRim: number; secondary: number }
+const look: ListLook = { floor: 1, viewBias: 1, backRim: 1, secondary: 1 };
+export const listLook = (): Readonly<ListLook> => look;
+export function setListLook(l: Partial<ListLook>): Readonly<ListLook> {
+  Object.assign(look, l);
+  for (let i = 0; i < BASE_PROFILES.length; i += 12) {
+    PACKED_PROFILES[i + 1] = BASE_PROFILES[i + 1]! * look.viewBias;
+    PACKED_PROFILES[i + 2] = BASE_PROFILES[i + 2]! * look.floor;
+    PACKED_PROFILES[i + 4] = BASE_PROFILES[i + 4]! * look.backRim;
+  }
+  return look;
+}
 
 const norm = (v: Vec3): Vec3 => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 
