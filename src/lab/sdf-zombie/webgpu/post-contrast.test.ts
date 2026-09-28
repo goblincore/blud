@@ -5,8 +5,8 @@ import { CONTRAST_DEFAULT, CONTRAST_PIVOT_DEFAULT, CONTRAST_WGSL, sCurve } from 
 const enc = (c: number) => Math.pow(c, 1 / 2.2);
 
 describe('final S-curve (post-contrast.wgsl.ts)', () => {
-  it('k 0 is the identity, and ships inert until the owner picks', () => {
-    expect(CONTRAST_DEFAULT).toBe(0);
+  it('k 0 is the identity; ships at the owner pick, gentle 0.25', () => {
+    expect(CONTRAST_DEFAULT).toBe(0.25);
     for (const c of [0, 0.01, 0.2, 0.7, 1]) expect(sCurve(c, 0, CONTRAST_PIVOT_DEFAULT)).toBe(c);
   });
   it('black, white and the pivot are fixed; below sinks, above lifts', () => {

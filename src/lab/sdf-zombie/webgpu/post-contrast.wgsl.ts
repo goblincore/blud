@@ -28,8 +28,8 @@ export function sCurve(c: number, k: number, pivot: number): number {
   return Math.pow(y, 2.2);
 }
 
-/** Shipped strength: off until the owner picks from the side-by-sides. */
-export const CONTRAST_DEFAULT = 0;
+/** Shipped strength: owner pick 2026-09-28, gentle 0.25 (of off / 0.25 / 0.5 side-by-sides). */
+export const CONTRAST_DEFAULT = 0.25;
 /** The pivot in DISPLAY space: tones below sink, tones above lift. Night Train frames sit low
  *  (median display ~0.08, p95 ~0.3 lit), so a mid-grey 0.5 pivot only darkened the frame. */
 export const CONTRAST_PIVOT_DEFAULT = 0.18;
