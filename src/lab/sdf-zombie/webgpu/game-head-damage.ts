@@ -15,6 +15,15 @@
 // disposed on every way out: the stalk snaps (hit 2), the zombie leaves 'standing' or loses its head
 // (headDeath → the eye flies off as a gib), the actor is gone from ctx.world.actors (gibbed, retired, a
 // cast rebuild — tick() notices on the next frame) and reset() (rebuildCast calls it first).
+//
+// INTERIM v2 ADAPTER (plan Task 14; Task 17 replaces it). head-damage.ts is now the v2 region model (spec
+// §15); this leaf still speaks v1's objects. The mapping, as close to v1 as the new events allow:
+//   strip (any, once per hit) → v1's lasting dent + a 'face' crater at the hit point (not per-region craters);
+//   orbit-exposed, skull-exposed → nothing yet (no glow mask, no in-orbit eyeball, no bone-deep carve);
+//   eye-pop → v1's socket crater + dangling eye on that side (no dark socket plug);
+//   eye-snap → v1's snap; brain → v1's crown brain (always the crown, whatever region cracked); kill → collapse.
+// hs is the hit in head-local ÷ half-extents, strip is a flat 0.25 (no H = 0.35) and rand is rngStreams.misc
+// (not a per-actor seeded stream). debug's `stage`/`eye` are derived from the v2 state for the v1 gate.
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { AttachedPiece } from './game-state-boot';
@@ -29,8 +38,8 @@ import {
   addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, rotate, stepWobble,
   type HeadDeformState, type HeadFrame, type Quat,
 } from '../head-deform';
-import { EYE_STALK, eyeRayStart, makeStalk, nearerEye, stalkPrims, stepStalk, type StalkState } from '../head-eye';
-import { CROWN, brainLaunch, brainLumps, brainPiece, crownRayStart, scalpCraterPoints, skullChips } from '../head-crown';
+import { EYE_STALK, eyeRayStart, makeStalk, stalkPrims, stepStalk, type StalkState } from '../head-eye';
+import { CROWN, brainLaunch, brainLumps, brainPiece, crownRayStart, skullChips } from '../head-crown';
 import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
 import { rngStreams } from './rng';
@@ -123,6 +132,15 @@ function normalAt(field: (p: Vec3) => number, p: Vec3): Vec3 {
     field([p[0], p[1] + e, p[2]]) - field([p[0], p[1] - e, p[2]]),
     field([p[0], p[1], p[2] + e]) - field([p[0], p[1], p[2] - e]),
   ]);
+}
+
+/** Interim (v1 debug shape): the first eye that has left its orbit, if any. */
+function eyeDebug(s: HeadDamageState): HeadDamageDebug['eye'] {
+  for (const side of ['L', 'R'] as const) {
+    const e = s.eyes[side];
+    if (e === 'dangling' || e === 'gone') return { side, state: e };
+  }
+  return null;
 }
 
 const headAlive = (b: BuildResult): boolean => b.clusters.some(c => c.limb === 'head' && c.alive);
@@ -222,12 +240,16 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       });
     }
     const dirLocal = rotate(conj(frame.quat), dir);
-    const r = headHit(h.ladder, { eyeSide: nearerEye(frame, point) });
+    // Interim (Task 17 reworks): a flat R/L strip, the shared misc stream as the jitter source.
+    const local = rotate(conj(frame.quat), sub(point, frame.centre));
+    const hs: Vec3 = [local[0] / frame.axes[0], local[1] / frame.axes[1], local[2] / frame.axes[2]];
+    const r = headHit(h.ladder, { hs, strip: 0.25 }, rngStreams.misc);
     h.ladder = r.state;
     const wounds: Wound[] = [];
     let forceCollapse = false;
     let crown: Vec3 | null = null;
     let brainStage = false;
+    let stripped = false;
     const crownOf = (): Vec3 => (crown ??= surfaceToward(field, crownRayStart(frame), frame));
     for (const ev of r.events as HeadEvent[]) {
       switch (ev.kind) {
@@ -247,20 +269,18 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           h.eye = { side: ev.side, socket: { ...sw }, stalk, piece };
           break;
         }
-        case 'dent':
+        case 'strip':
+          // Interim: v1's dent + one face crater at the hit point, once per hit (Task 17: per-region craters).
+          if (stripped) break;
+          stripped = true;
           h.deform = addDent(h.deform, dirLocal, HEAD_LEAF.dentDepth, frame.axes);
-          break;
-        case 'face-crater':
           wounds.push(tag(worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field), 'face'));
           break;
+        case 'orbit-exposed':
+        case 'skull-exposed':
+          break;   // Interim: nothing yet (Task 16/17: glow mask, in-orbit eyeball, bone-deep carve).
         case 'eye-snap':
           snapEye(a, h, dir);
-          break;
-        case 'scalp':
-          for (const p of scalpCraterPoints(crownOf(), frame)) {
-            const s = surfaceToward(field, [p[0] + (p[0] - frame.centre[0]) * 0.5, p[1] + (p[1] - frame.centre[1]) * 0.5, p[2] + (p[2] - frame.centre[2]) * 0.5], frame);
-            wounds.push(tag(worldHitToWound(posed.prims, s, CROWN.scalpR, 'blast', yaw, field), 'keep'));
-          }
           break;
         case 'brain': {
           const c = crownOf();
@@ -330,7 +350,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           hits: h.ladder.hits,
           stage: Math.min(4, h.ladder.hits),
           dead: h.ladder.dead,
-          eye: h.ladder.eye ? { ...h.ladder.eye } : null,
+          eye: eyeDebug(h.ladder),
           squash: h.deform.s,
           flat: [...h.deform.flat],
           eyeball: e ? [...e.stalk.p[e.stalk.p.length - 1]!] as Vec3 : null,
