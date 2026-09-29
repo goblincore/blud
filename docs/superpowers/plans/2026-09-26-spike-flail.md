@@ -2228,3 +2228,68 @@ function sweepStands(a, b) {
 - [ ] `TASKS.md` v1.3 row → built, owner playtest pending; spec §12 heading → BUILT; the PR body gains a v1.3
   section (`gh pr edit 22 --body-file …`, keep the 🤖 footer line). Commit, push; restart the owner's server
   (`preview_start` `blud-censer`).
+
+---
+
+## v1.4 (spec §13, 2026-09-29)
+
+Rules as before: one implementer at a time, explicit pathspecs, never `git reset`/`git stash`, targeted tests,
+gates on ports 5241/9241 (5190 is the owner's). Free aim is on by default, and every gate case must also run
+with an unfrozen, moving zombie where the task says so.
+
+### Task 23: The head magnet and the toughness retune
+
+**Files:** `src/lab/sdf-zombie/webgpu/flail-strike.ts` (+ test), `game-flail.ts`, `game-head-damage.ts` (strip
+amounts), `src/lab/sdf-zombie/head-damage.ts` (+ test), `scripts/flail-gate.mjs`, `scripts/head-damage-gate.mjs`.
+
+- [ ] **Magnet, pure and tested first.** `StrikeActor` gains optional `head?: { centre: Vec3; field: (p) => number }`
+  (the head prims' own field). In `resolveStrike`, after the normal trace: if `head` is present and the ray
+  (eye → aim) passes within `FLAIL_STRIKE.headMagnetR` (0.18) of `head.centre` in front of the eye, and the
+  normal hit is not already on the head (its distance to `head.centre` > 0.16), replace the hit with the
+  head-surface point nearest the ray's closest approach to the head centre (Newton snap on `head.field`,
+  residual-checked), with `dir` from the eye. Tests:
+  - a synthetic body with an occluding capsule in front of a sphere head: the ray through the head centre
+    hits the head, not the capsule;
+  - a ray 15 cm off the head centre hits the head; 25 cm off does not;
+  - a ray already hitting the head is unchanged; no `head` gives the old behaviour.
+- [ ] **Wire it.** In `game-flail.ts strike()`, build `head` per actor from `posed.clusters` (the live head
+  cluster centre) and `sdBody` over the head-limb prims only (a `Body` with just those prims). Add
+  `lastStrike.magnet: Record<id, boolean>` for gates.
+- [ ] **Toughness.**
+  - `FLAIL_FEEL.swing`: R and L `meterCredit` 0.065, H 0.09.
+  - Head-region hits: `meterCredit` 0.02 (the leaf passes `feel.meterCredit × 0.3`).
+  - Strips 0.20 (R, L) and 0.28 (H); `skullPerHit` 0.34. Update `head-damage.test.ts` (the kill window becomes
+    7–10 hits for a single region; the jitter extremes stay inside it).
+- [ ] **Gates.**
+  - Flail gate: body collapse needs ≥ 10 body hits (`COLLAPSE_MIN`); the head section asserts the kill in 7–12
+    hits.
+  - Add a LIVE section (unfrozen zombie walking up, as in the scratchpad `live-probe3.mjs`: player 1.3 m out,
+    reticle centred, crosshair on the head centre, the zombie's arms up): of 8 swings, ≥ 6 must be head hits
+    (`headHits` counts), print the ray→head distances and where each hit landed.
+  - Head gate: the counts move with the retune; keep its assertions state-based.
+- [ ] **Commit(s):** `feat(flail): the head magnet — a strike aimed at the head hits the head`; `feat(flail): tougher zombies; head hits kill through the head model`.
+
+### Task 24: The ball drags behind the swing
+
+**Files:** `src/lab/sdf-zombie/webgpu/flail-chain.ts` (+ test), `flail-swing.ts` (the wind-up keys; + test),
+`scripts/flail-gate.mjs` (the ball checks), `docs/dev-notes/2026-09-26-flail/look/`.
+
+- [ ] **Intent (owner):** the ball swings back with the wind-up, then drags behind the swing and whips through
+  the hit; today it stays in front.
+- [ ] **Chain.** `FLAIL_CHAIN_SIM.swingFloor` 0.3 → 0.05; `guideWindow` 0.1 → 0.06 (the pin ramp shortens); keep
+  the strike-frame pin exact (≤ 1 mm at 30–240 Hz and jittered), the release and the settle. The existing
+  chain tests (`no catapult`: no frame's drawn move over 1.6× the key's + 2 cm; `wind-up trail 5–20 cm`)
+  encode the OLD look: re-derive them for the new one with the owner's intent (trail up to ~35 cm behind the
+  key in the swing, never a teleport). State every threshold change and why in the commit.
+- [ ] **Keys.** Give each swing (R, L, H) a visible **back beat** at the start of the wind-up: the hand draws
+  back toward the shoulder a little further and the ball swings out behind it. Re-check every `flail-swing`
+  predicate, and `chainReach()`.
+- [ ] **Look.** Capture 60 Hz frame strips of R, L and H (`look/drag-R-strip.png`, `-L-`, `-H-`), 8 frames, and
+  LOOK at them: the ball must trail behind the hand during the swing, then whip through the strike. Say
+  honestly what you see. Compare with the previous strips (`overhand-R-strip.png`, `sweep-H-strip.png`).
+- [ ] **Commit:** `feat(flail): the ball drags behind the swing and whips through the hit`.
+
+### Task 25: Status, PR, owner server
+
+- [ ] `TASKS.md` and the spec §13 status; PR body v1.4 section; NOTES entry; push; restart the owner's server
+  (`preview_start` `blud-censer`).

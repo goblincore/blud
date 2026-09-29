@@ -278,3 +278,32 @@ Staged, flail-specific head destruction on the zombie:
 - the brain is destroyed, with matter or a whole brain flying out, as the head kill.
 
 Designed after v1.3 ships.
+
+## 13. v1.4 — fourth playtest (owner, 2026-09-29)
+
+Owner feedback: (1) aiming at the head still hits the body; (2) the zombie goes down too fast; (3) "the
+animations need work": the ball should swing back, then **drag behind the swing**, but it always stays in
+front.
+
+**Findings (live, unfrozen zombies, free aim, hit-stop on):**
+- Aiming at the head, the strike ray passes 1–3 cm from the head centre, but the zombie's raised arms are in
+  front of its face and the ray meets the forearm first (a strike point 53 cm from the head centre, the
+  wound on `armL`).
+- The zombie lunges during the 0.17 s from click to strike: the head moved 13–28 cm on 3 of 7 swings.
+- The collapse meter counts every hit, head and body alike, so mixed hits drop a zombie in about 8 swings
+  (`phase falling` at head hit 3 after 5 body hits).
+- Ball: the chain's guide (`swingFloor` 0.3, `guideRate` 140: a time constant of about 24 ms) holds the
+  ball to its authored key through the whole swing, so it trails the haft by at most ~13 cm and reads as
+  always in front.
+
+**Decisions (coordinator, from the feedback; the owner can veto in play):**
+1. **Head magnet.** If the strike ray passes within `headMagnetR` (0.18 m) of a zombie's head centre at
+   the strike, the hit lands on the head (the head surface point nearest the ray), whatever is in front of
+   it. This is a forgiving strike window in the spirit of §2.3.
+2. **Toughness.** Body hits add 0.065 to the collapse meter (R and L; H 0.09), about 12 hits. Head hits add
+   0.02: the head model kills, not the meter. Head strips: 0.20 (R, L) and 0.28 (H); `skullPerHit` 0.34, so
+   a head kill takes about 7–10 hits.
+3. **Ball drag.** Through wind-up and swing the ball is nearly free (the guide floor drops from 0.3 to
+   0.05), so it swings back behind the hand and trails the haft; the guide ramps up only in the last 60 ms
+   before the strike, which stays exactly on `FLAIL_IMPACT`, and releases after it (the follow-through
+   whips). The wind-up gets a visible "back" beat: the hand draws back and the ball swings out behind it.
