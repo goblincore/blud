@@ -128,11 +128,15 @@ export function headHit(
   }
   // 3. Pop an exposed orbit's eye; that orbit keeps its flesh this hit.
   let popped: HeadRegion | null = null;
-  const nearSide = sideOf(near);
-  if (!dead && nearSide && eyes[nearSide] === 'in-orbit') {
+  // A hit aimed at the middle of the face lands nearest the BROW, not an orbit: it pops an exposed eye too
+  // (owner: "too hard to get to that point"), so aiming between the eyes is not a way to never pop them.
+  const orbitSide = sideOf(near);
+  const nearSide: EyeSide | undefined = orbitSide && eyes[orbitSide] === 'in-orbit' ? orbitSide
+    : near === 'brow' ? SIDES.find(sd => eyes[sd] === 'in-orbit') : undefined;
+  if (!dead && nearSide) {
     eyes[nearSide] = 'dangling';
     events.push({ kind: 'eye-pop', side: nearSide });
-    popped = near;
+    if (orbitSide === nearSide) popped = near;
     // BOTH EYES POP AT ONCE (flail spec §14.1 item 8): the other eye comes out in the same hit from whatever state
     // it is in. Painted, its orbit is exposed first (its flesh set to at most the threshold: the leaf's crater and
     // glow-off follow orbit-exposed); in its orbit, it just pops. Gone stays gone (dangling cannot happen here:

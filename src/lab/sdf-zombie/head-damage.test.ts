@@ -225,7 +225,7 @@ describe('head damage v2', () => {
       let s = makeHeadDamage();
       for (let i = 0; i < 3; i++) s = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter).state;
       const before = s.flesh.orbitR;
-      const r = headHit(s, { hs: at('brow'), strip: 0.25 }, noJitter);   // not the in-orbit eye's region: no pop
+      const r = headHit(s, { hs: at('cheekR'), strip: 0.25 }, noJitter);   // neither an orbit nor the brow: no pop
       expect(r.state.eyes.R).toBe('painted');
       expect(r.state.flesh.orbitR).toBeLessThan(before);
       expect(r.state.flesh.orbitR).toBeGreaterThan(REGION_TUNING.orbitExposed);
@@ -244,5 +244,16 @@ describe('head damage v2', () => {
         expect(all.filter(e => e.kind === 'eye-pop').length).toBe(2);
       }
     });
+  });
+  it('a hit at the middle of the face (nearest the brow) pops an exposed eye too', () => {
+    let s = makeHeadDamage();
+    for (let i = 0; i < 4 && s.eyes.L !== 'in-orbit'; i++) s = headHit(s, { hs: at('orbitL'), strip: 0.4 }, noJitter).state;
+    expect(s.eyes.L).toBe('in-orbit');
+    const r = headHit(s, { hs: at('brow'), strip: 0.4 }, noJitter);
+    expect(r.events).toContainEqual({ kind: 'eye-pop', side: 'L' });
+    expect(r.state.eyes.L).toBe('dangling');
+    expect(r.state.eyes.R).toBe('dangling');   // both at once
+    // and that brow hit still strips the brow normally
+    expect(r.state.flesh.brow).toBeLessThan(s.flesh.brow);
   });
 });
