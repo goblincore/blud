@@ -159,6 +159,54 @@ describe('resolveStrike placement on a two-part body (torso + forward-hanging he
   });
 });
 
+describe('the head magnet (spec §13.1)', () => {
+  // A zombie 1.3 m out with its forearm raised across its face (the live finding: the ray through the head
+  // centre met the forearm first, 53 cm from the head).
+  const H: Vec3 = [0, 1.62, -1.3], headR = 0.11;
+  const headSdf = (p: Vec3) => Math.hypot(p[0] - H[0], p[1] - H[1], p[2] - H[2]) - headR;
+  const torso = capsule(0, [0, 0.9, -1.3], [0, 1.28, -1.3], 0.22).field;   // shoulders below the head
+  const forearm = capsule(0, [-0.25, 1.6, -1.05], [0.25, 1.6, -1.05], 0.05).field;
+  const withArm: StrikeActor = { id: 3, centre: [0, 1.2, -1.3], field: p => Math.min(torso(p), forearm(p), headSdf(p)), head: { centre: H, field: headSdf } };
+  const noArm: StrikeActor = { ...withArm, field: p => Math.min(torso(p), headSdf(p)) };
+  /** The aim point 1 m down the ray from the eye towards `target`. */
+  const aimAt = (target: Vec3): Vec3 => {
+    const d: Vec3 = [target[0] - EYE[0], target[1] - EYE[1], target[2] - EYE[2]], l = len(d);
+    return [EYE[0] + d[0] / l, EYE[1] + d[1] / l, EYE[2] + d[2] / l];
+  };
+  const one = (a: StrikeActor, target: Vec3) => {
+    const hits = resolveStrike(EYE, 0, aimAt(target), [a], FLAIL_ARC_DEG.R);
+    expect(hits).toHaveLength(1);
+    return hits[0]!;
+  };
+
+  it('a ray through the head centre hits the head, not the forearm in front of it', () => {
+    const { head: _h, ...plain } = withArm;
+    expect(forearm(one(plain, H).point)).toBeLessThan(0.02);     // without the magnet: the forearm
+    const h = one(withArm, H);
+    expect(Math.abs(headSdf(h.point))).toBeLessThan(0.01);
+    expect(h.point[2]).toBeGreaterThan(H[2]);                     // the face, not the back of the head
+    expect(h.magnet).toBe(true);
+    const v: Vec3 = [h.point[0] - EYE[0], h.point[1] - EYE[1], h.point[2] - EYE[2]];   // dir: eye → the new point
+    for (let i = 0; i < 3; i++) expect(h.dir[i]!).toBeCloseTo(v[i]! / len(v), 9);
+  });
+  it('a ray 15 cm off the head centre hits the head; 25 cm off does not', () => {
+    const near = one(withArm, [H[0] + 0.15, H[1], H[2]]);
+    expect(Math.abs(headSdf(near.point))).toBeLessThan(0.01);
+    expect(near.magnet).toBe(true);
+    const far = one(withArm, [H[0] + 0.25, H[1], H[2]]);
+    expect(headSdf(far.point)).toBeGreaterThan(0.05);
+    expect(forearm(far.point)).toBeLessThan(0.02);
+    expect(far.magnet).toBeFalsy();
+  });
+  it('a ray already on the head is unchanged; no head is the old behaviour', () => {
+    const { head: _h, ...plainNoArm } = noArm;
+    const withHead = one(noArm, H), without = one(plainNoArm, H);
+    expect(withHead.point).toEqual(without.point);
+    expect(withHead.magnet).toBeFalsy();
+    expect(FLAIL_STRIKE.headMagnetR).toBe(0.18);
+  });
+});
+
 describe('head damage (no decapitation, spec §12.3)', () => {
   const HEAD_C: Vec3 = [0, 1.6, 0], NECK: Vec3 = [0, 1.42, 0];
   it('a head prim, a point near the head centre, or a point near the neck root is the head region', () => {

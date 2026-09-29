@@ -107,6 +107,10 @@ export interface FlailDebug {
      *  wound several cm off this point, though this point itself sits on the crosshair ray).
      *  `points` is the ray's own answer to "where did the strike land" — spec §12.4/§12.5. */
     points: Record<number, Vec3>;
+    /** Per struck actor id: the head magnet moved the hit onto the head (flail-strike.ts, spec §13.1). */
+    magnet: Record<number, boolean>;
+    /** Per actor id in the arc with a live head: its head centre at strike time (the magnet's centre). */
+    heads: Record<number, Vec3>;
     /** The drawn ball centre on the strike frame (rig-local) and its distance
      *  from the rig-space FLAIL_IMPACT, metres (set by that frame's draw). */
     ballDrawn: Vec3 | null;
@@ -374,18 +378,29 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     const aim: Vec3 = [eye[0] + d[0], eye[1] + d[1], eye[2] + d[2]];
     const aimYaw = Math.atan2(d[0], -d[2]);
     const actors: StrikeActor[] = [];
+    const heads: Record<number, Vec3> = {};
     for (const a of ctx.world.actors) {
       const posed = a.posed();
       const c = posed.clusters.find(cc => cc.limb === 'torso')?.center;
-      if (c) actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed) });
+      if (!c) continue;
+      // THE HEAD MAGNET (spec §13.1): the live head cluster's centre NOW (the zombie lunges between click and
+      // strike) and the head's own field — sdBody over the head cluster(s) alone, so the same smooth unions and
+      // carves as the body, without the arms in front of the face.
+      const headClusters = posed.clusters.filter(cc => cc.limb === 'head' && cc.alive);
+      const head = headClusters.length > 0
+        ? { centre: [...headClusters[0]!.center] as Vec3, field: (q: Vec3) => sdBody(q, { prims: posed.prims, clusters: headClusters }) }
+        : undefined;
+      if (head) heads[a.id] = head.centre;
+      actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed), head });
     }
     const hits = resolveStrike(eye, aimYaw, aim, actors, FLAIL_ARC_DEG[side]);
     const struckHeads: Record<number, number> = {};
     const struckPoints: Record<number, Vec3> = {};
-    for (const h of hits) struckPoints[h.actorId] = [...h.point] as Vec3;
+    const magnet: Record<number, boolean> = {};
+    for (const h of hits) { struckPoints[h.actorId] = [...h.point] as Vec3; magnet[h.actorId] = !!h.magnet; }
     lastStrike = {
       side, hits: hits.map(h => h.actorId), eye: [...eye] as Vec3, impact: [...aim] as Vec3,
-      headHits: struckHeads, points: struckPoints, ballDrawn: null, ballErr: null,
+      headHits: struckHeads, points: struckPoints, magnet, heads, ballDrawn: null, ballErr: null,
     };
     const f = FLAIL_FEEL.swing[side];
     for (const h of hits) {
@@ -403,7 +418,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
       const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
       const neck = headNeck(posed.prims);
-      const region = isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, neck?.root ?? null);
+      // A magnet hit is on the head by construction (its point is on the head's own surface).
+      const region = !!h.magnet || isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, neck?.root ?? null);
       const spec = flailWound(region, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
       if (region) headHits.set(a.id, (headHits.get(a.id) ?? 0) + 1);
       struckHeads[a.id] = headHits.get(a.id) ?? 0;

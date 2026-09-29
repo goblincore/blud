@@ -62,7 +62,14 @@
 //   9b. the same at 144 Hz: R, L and H swings stepped at 1/144 s, then again at 1/144 s ±15%
 //      (seeded jitter) — the chain carries sub-frame time at these rates (the review's C1:
 //      the pin landed 0.8–1.9 cm short here) — ball within 1 mm, one strike each;
-//   10. zero console errors or exceptions.
+//   10. zero console errors or exceptions;
+//   11. LIVE (spec §13, v1.4): the section-2 zombie (untouched) unfrozen and walking up, hit-stop on, free aim
+//      on with the reticle centred; before each of LIVE_SWINGS (8) clicks the player stands LIVE_DIST (1.3 m)
+//      out from its current torso with the crosshair on its current head centre — its arms up in front of
+//      the face. At least LIVE_MIN (6) must be head hits (lastStrike.headHits counts; a head-model kill ends
+//      the run early — the zombie is going down); printed per swing: the ray → head-centre distance at the
+//      strike, how far the head moved since the click, where the hit landed and whether the head magnet
+//      (flail-strike.ts, spec §13.1) moved it.
 // Measures (printed, not asserted): the rest pose's ball/bolt/grip screen NDC, the share of
 // clipped pixels on the ball and haft at rest, the ball ↔ eye-bolt distance through a
 // swing, the red-minus-green rise in a 40x40 crop on the front-hit crater (saturated on
@@ -103,7 +110,10 @@ const BALL_ERR_MAX = 0.02;  // the drawn ball on the strike frame vs FLAIL_IMPAC
 // At 144 Hz the pin must be EXACT: the pre-fix pin (review C1) landed 0.8–1.9 cm short in
 // this gate — inside the 2 cm above, so that bound could not catch it.
 const BALL_ERR_144_MAX = 0.001;
-const SWING_FRAMES = 36;    // 0.6 s at 60 Hz: past H's 0.55 s, back to idle
+const SWING_FRAMES = 36;
+// LIVE (section 11, spec §13): of LIVE_SWINGS swings at an unfrozen zombie's head from LIVE_DIST out, at least
+// LIVE_MIN hit the head.
+const LIVE_SWINGS = 8, LIVE_MIN = 6, LIVE_DIST = 1.3;    // 0.6 s at 60 Hz: past H's 0.55 s, back to idle
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
@@ -483,8 +493,10 @@ let sweepChoice = null;
 }
 
 // ---- 2. Too far (and the L-swing photo) ------------------------------------------------
+let tooFarZ = null;   // untouched here (the strike is refused): the LIVE section (11) reuses it
 {
   const z = fresh();
+  tooFarZ = z;
   const t = await torso(z.id);
   await place(standOff(t, 2.2));
   await stepN(10);
@@ -852,6 +864,80 @@ let sweepChoice = null;
 
 if (controlFails === 0) pass('positive control: every click struck exactly once, on the side nextSide promised');
 else fail(`positive control: ${controlFails} click(s) did not strike as expected`);
+
+// ---- 11. LIVE: an unfrozen zombie walks up, arms raised; the crosshair on its head hits the head -----
+// Spec §13 (v1.4 playtest): aiming at the head, the strike ray passed 1–3 cm from the head centre but met
+// the raised forearm first (a strike point 53 cm from the head), and the zombie lunges 13–28 cm between
+// click and strike. The head magnet (flail-strike.ts, headMagnetR 0.18) lands such a strike on the head.
+// Everything unfrozen, hit-stop on, free aim on with the reticle centred: before every click the player
+// stands LIVE_DIST out from the zombie's CURRENT torso centre with the crosshair on its CURRENT head centre.
+// Of LIVE_SWINGS swings at least LIVE_MIN must be head hits (lastStrike.headHits counts); printed per swing:
+// the ray → head-centre distance at the click and at the strike, how far the head moved, where the hit
+// landed (its distance from the head centre at the strike) and whether the magnet moved it.
+{
+  const z = tooFarZ;   // untouched by section 2's refused strike: every other zombie has been hit
+  const headOf = (id) => evaluate(`__sdfGame.actorLimbCenter(${id}, 'head')`);
+  const headState = (id) => evaluate(`__sdfGame.head.state(${id})`);
+  const distTo = (p, o) => Math.hypot(p[0] - o[0], p[1] - o[1], p[2] - o[2]);
+  await evaluate('__sdfGame.freeze(false)');
+  await evaluate('__sdfGame.flail.setHitStop(true)');
+  await evaluate('__sdfGame.setFreeAim(true)');
+  await evaluate('__sdfGame.setAimPoint(0, 0)');
+  let pose = standOff(await torso(z.id), 5);
+  await place(pose);
+  let walkD = Infinity, walkF = 0;
+  for (; walkF < 600 && walkD >= 1.6; walkF++) {
+    await stepOne();
+    const t = await torso(z.id);
+    walkD = Math.hypot(t[0] - pose.x, t[2] - pose.z);
+  }
+  console.log(`live: zombie ${z.id} walked to ${walkD.toFixed(2)} m in ${walkF} frames`);
+  let headHitsLive = 0, swings = 0, killedAt = null;
+  for (let n = 1; n <= LIVE_SWINGS; n++) {
+    const t = await torso(z.id), head = await headOf(z.id);
+    if (!t || !head) { console.error(`  live swing ${n}: no torso/head`); break; }
+    const dx = t[0] - pose.x, dz = t[2] - pose.z, l = Math.hypot(dx, dz) || 1;
+    pose = { x: t[0] - (dx / l) * LIVE_DIST, z: t[2] - (dz / l) * LIVE_DIST, yaw: yawOf(dx, dz) };
+    const hd = Math.hypot(head[0] - pose.x, head[2] - pose.z);
+    await evaluate(`__sdfGame.placePlayer({ x: ${pose.x}, z: ${pose.z}, yaw: ${yawOf(head[0] - pose.x, head[2] - pose.z)}, pitch: ${Math.atan2(head[1] - EYE_H, hd)} })`);
+    await evaluate('__sdfGame.setAimPoint(0, 0)');
+    const pre = await state();
+    if (pre.phase !== 'idle') console.error(`  live swing ${n}: the flail is ${pre.phase}, not idle, at the click`);
+    await evaluate('__sdfGame.flail.click()');
+    let headAtStrike = null;
+    for (let i = 0; i < 90 && !headAtStrike; i++) {
+      await stepOne();
+      const s = await state();
+      if (s.strikes > pre.strikes) headAtStrike = s.lastStrike?.heads?.[z.id] ?? await headOf(z.id);
+    }
+    const post = await state();
+    swings++;
+    if (post.strikes !== pre.strikes + 1) { console.error(`  live swing ${n}: no strike`); continue; }
+    const ls = post.lastStrike;
+    const struck = ls.hits.includes(z.id);
+    const isHead = struck && (ls.headHits?.[z.id] ?? 0) > (pre.lastStrike?.headHits?.[z.id] ?? 0);
+    if (isHead) headHitsLive++;
+    const pt = ls.points?.[z.id] ?? null;
+    const rayHead = headAtStrike ? distToRay(ls.eye, ls.impact, headAtStrike) : null;
+    const moved = headAtStrike ? distTo(headAtStrike, head) : null;
+    const hs = await headState(z.id);
+    if (hs?.dead) killedAt = n;
+    console.log(`live swing ${n} [${ls.side}]: ray→head centre at the strike ` +
+      `${rayHead === null ? '?' : (rayHead * 100).toFixed(1)} cm (head moved ${moved === null ? '?' : (moved * 100).toFixed(1)} cm); ` +
+      `${struck ? `hit ${pt && headAtStrike ? (distTo(pt, headAtStrike) * 100).toFixed(0) : '?'} cm from the head centre` : 'MISS'}` +
+      `${ls.magnet?.[z.id] ? ' (magnet)' : ''}; head hit ${isHead} (headHits ${ls.headHits?.[z.id] ?? 0}; model hits ${hs?.hits ?? '-'}, dead ${hs?.dead ?? '-'})`);
+    // Back to idle (hit-stop on stretches the swing), then a short beat before the next click.
+    for (let i = 0; i < 90 && (await state()).phase !== 'idle'; i++) await stepOne();
+    await stepN(10);
+    if (killedAt !== null) break;   // the head model killed: the zombie is going down, nothing left to aim at
+  }
+  // A kill (the head model's brain) ends the run early; the head hits must still reach LIVE_MIN.
+  const ok = headHitsLive >= LIVE_MIN;
+  const why = killedAt !== null ? `, the head model killed on swing ${killedAt}` : '';
+  if (ok) pass(`live: ${headHitsLive}/${swings} swings at a walking zombie's head hit the head${why} (≥ ${LIVE_MIN} of ${LIVE_SWINGS})`);
+  else fail(`live: ${headHitsLive}/${swings} swings at a walking zombie's head hit the head${why} (expected ≥ ${LIVE_MIN} of ${LIVE_SWINGS})`);
+  await evaluate('__sdfGame.freeze(true)');
+}
 
 // ---- 10. Console -------------------------------------------------------------------------
 const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception' || e.type === 'assert');

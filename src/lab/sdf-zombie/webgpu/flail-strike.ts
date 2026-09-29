@@ -53,6 +53,11 @@ export const FLAIL_STRIKE = {
   raySafety: 0.5,
   rayMinStep: 0.005,
   rayMaxSteps: 200,
+  /** THE HEAD MAGNET (spec §13.1): a strike ray passing within this of an actor's head centre, in front
+   *  of the eye, lands on the head whatever is in front of it (the raised forearms, live). */
+  headMagnetR: 0.18,
+  /** A normal hit within this of the head centre is already on the head: the magnet leaves it be. */
+  headOnDist: 0.16,
 } as const;
 
 /** Half-angle of the strike arc about the facing, degrees, per side (spec §12.2):
@@ -65,6 +70,8 @@ export interface StrikeActor {
   centre: Vec3;
   /** The posed body's signed distance (sdBody). */
   field: (p: Vec3) => number;
+  /** The live head, for the magnet (spec §13.1): its centre at strike time and the head prims' own field. */
+  head?: { centre: Vec3; field: (p: Vec3) => number };
 }
 
 export interface StrikeHit {
@@ -73,6 +80,8 @@ export interface StrikeHit {
   point: Vec3;
   /** Unit vector from the eye to `point`. */
   dir: Vec3;
+  /** The head magnet moved this hit onto the head (spec §13.1). */
+  magnet?: boolean;
 }
 
 /** A view-space point (x right, y up, −z forward) to world, from the eye's yaw and pitch
@@ -197,16 +206,46 @@ export function resolveStrike(eye: Vec3, yaw: number, aimWorld: Vec3, actors: re
       const dirCentre = unitTowards(eye, a.centre);
       if (dirCentre) contact = traceRaySurface(a.field, eye, dirCentre, maxDist);
     }
-    if (!contact) continue; // neither ray reached this actor's skin
+    let point: Vec3 | null = null;
+    if (contact) {
+      const s = snapToSurfaceResidual(a.field, contact);
+      if (Number.isFinite(s.residual) && s.residual <= FLAIL_STRIKE.residualEps) point = s.point;
+    }
 
-    const { point, residual } = snapToSurfaceResidual(a.field, contact);
-    if (!Number.isFinite(residual) || residual > FLAIL_STRIKE.residualEps) continue;
+    // THE HEAD MAGNET (spec §13.1): the aim ray passing near the head lands on it, whatever it met first.
+    let magnet = false;
+    if (a.head && dirImpact && !(point && dist3(point, a.head.centre) <= FLAIL_STRIKE.headOnDist)) {
+      const m = headMagnet(eye, dirImpact, a.head);
+      if (m) { point = m; magnet = true; }
+    }
+    if (!point) continue; // neither ray reached this actor's skin
 
     const d: Vec3 = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
     const l = Math.hypot(d[0], d[1], d[2]) || 1;
-    hits.push({ actorId: a.id, point, dir: [d[0] / l, d[1] / l, d[2] / l] });
+    const hit: StrikeHit = { actorId: a.id, point, dir: [d[0] / l, d[1] / l, d[2] / l] };
+    if (magnet) hit.magnet = true;
+    hits.push(hit);
   }
   return hits;
+}
+
+const dist3 = (p: Vec3, q: Vec3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+
+/** The head surface point the magnet snaps to, or null when the ray (eye, unit `dir`) passes farther than
+ *  headMagnetR from the head centre, or behind the eye. The ray's own first contact with the HEAD ALONE
+ *  when it crosses the head (so a crosshair on the face lands on the face, on the ray); when it passes
+ *  beside the head, the head surface nearest the ray's closest approach to the centre (a Newton snap on the
+ *  head field from that point), residual-checked. */
+function headMagnet(eye: Vec3, dir: Vec3, head: NonNullable<StrikeActor['head']>): Vec3 | null {
+  const c = head.centre;
+  const t = (c[0] - eye[0]) * dir[0] + (c[1] - eye[1]) * dir[1] + (c[2] - eye[2]) * dir[2];
+  if (!(t > 0)) return null;
+  const foot: Vec3 = [eye[0] + dir[0] * t, eye[1] + dir[1] * t, eye[2] + dir[2] * t];
+  if (!(dist3(foot, c) <= FLAIL_STRIKE.headMagnetR)) return null;
+  const onRay = traceRaySurface(head.field, eye, dir, t + FLAIL_STRIKE.headMagnetR);
+  const s = snapToSurfaceResidual(head.field, onRay ?? foot);
+  if (!Number.isFinite(s.residual) || s.residual > FLAIL_STRIKE.residualEps) return null;
+  return s.point;
 }
 
 /** The flail never decapitates (spec §12.3): a head-region hit is always a small face crater with no
