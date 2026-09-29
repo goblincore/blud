@@ -845,3 +845,127 @@ Hit-stop off.
 - [ ] Update `TASKS.md` (the head damage row → built, owner playtest pending) and the spec's status line. Add a
   head damage section to the PR body (`gh pr edit 22 --body-file …`, keeping the 🤖 footer line). Commit,
   push, and restart the owner's server (`preview_start` `blud-censer`).
+
+---
+
+## After the first build: spec §14 (owner, 2026-09-28)
+
+State at `02fae287`:
+- The frozen-actor squash fix, `reposeHead`, is in.
+- The eye's proxy box fits the eye, so it costs about 1.3 ms.
+- The head gate reports 18 checks, 2 failed:
+  - the hit-2 dent reads 0.0063 at the ring sampled 0.085 m off the blow;
+  - the cost is 0.60 ms against a 0.5 ms limit.
+- Task 8 (the look pass and docs) moves to the end, as Task 12.
+
+### Task 9: Restore bone colour on the procedural path
+
+**Files:** `src/lab/sdf-zombie/webgpu/march/body/blocks/post/organ.wgsl.ts`, and whatever commit `00194a001`
+removed. Read `git show 00194a001` first.
+
+- [ ] **Restore the bone shading.** It was deleted as dead code while bone rows stayed packed in the field.
+  Restore it so a surface hit on a bone row (`isBone`, `hitMat` 3.5–4.5) takes the bone colour, as the melt
+  and burn blocks already do.
+  - Keep the restored code as close to the deleted code as the current shader allows.
+  - Update the comment that records the deletion.
+- [ ] **Verify.**
+  - `npx tsc --noEmit`, and `npm test -- march organ zombie-gpu wgsl` (whatever covers the shader strings).
+  - Run the head gate with `?skeleton=procedural`: the crown bone share after hit 3 must rise clearly (it is
+    flat today at 0.0036 → 0.0036).
+  - A shotgun-severed limb on the procedural path shows an ivory bone end. Take a photo with any existing gib
+    capture script, and look at it.
+  - The flail gate passes. The default mesh path looks unchanged: compare the head gate's mesh-path photos
+    before and after.
+- [ ] **Commit:** `fix(bone): restore bone colour on the procedural skeleton path`.
+
+### Task 10: The skull squashes and dents with the flesh
+
+**Files:** `src/lab/sdf-zombie/head-deform.ts` (+ test), the leaf `webgpu/game-head-damage.ts`, the mesh
+skeleton path (`webgpu/skeleton-spike/*`, `game-main.ts` where segment meshes are posed), and
+`scripts/head-damage-gate.mjs`.
+
+- [ ] **Pure (test first).** `deformHead` also maps the head's bone prims, with the same affine transform as
+  the flesh: `body.bonePrims` with limb `'head'`, op `'bone'` or `'organ'`. `BuiltBody` keeps bone prims out
+  of `prims`, which is why they were missed.
+  - Export the transform as `headAffine(st, frame) → { centre, e: [Vec3, Vec3, Vec3], mul: Vec3, shift: Vec3 } | null`
+    (null when there is no deformation), so the mesh path can apply it.
+  - Tests:
+    - with `flat` and a squash, a bone prim inside the head moves by exactly the flesh's transform at the same
+      point;
+    - with no deformation, `bonePrims` comes back as the same array.
+- [ ] **Mesh path.** Find how the shipped `skeleton=mesh` path poses the skull segment mesh each frame (the bone
+  transforms per actor; `buildSkeletonSources`, `segMeshRenderer`). Apply `headAffine` to the skull segment's
+  world matrix per actor: a per-segment extra matrix `M = T(centre + Σ e·shift) · E · diag(mul) · Eᵀ · T(−centre)`.
+  - The leaf exposes the current affine per actor (`headDamage.affine(actor)`), and the skeleton posing reads it.
+  - Keep the change to that one hook.
+- [ ] **Gate.**
+  - The hit-2 dent check measures where the model promises the full depth: the dented side's pole, the head
+    frame centre ± that axis × the half-extent. Sample `surfaceAt` just outside the pole along the axis before
+    and after, and require a rise ≥ 0.01 m. Document in the gate why the pole is used, not the 0.085 m ring
+    (decision 1: a side flattening, not a point dent).
+  - Add a check that no bone shows through outside craters after hit 2 on the mesh path: the bone-pixel share
+    in a face crop, excluding a circle around each crater, must not rise past the pre-hit value + 0.005.
+    Print the before-fix and after-fix numbers.
+  - Also sample the peak-squash frame: the face-crop bone share outside craters stays within the same bound.
+- [ ] **Verify.** Tests, tsc, both gates. Look at `head-2-cave.png` and a peak-squash frame: no skull through
+  intact flesh.
+- [ ] **Commit:** `feat(head-deform): the skull squashes and dents with the flesh (both skeleton paths)`.
+
+### Task 11: The brain — a modelled mesh with a wet material
+
+**Files:** create `scripts/model_brain.py` (headless Blender, following `scripts/model_flail.py`'s pattern and
+header), `public/assets/lab/brain.glb`, and `src/lab/sdf-zombie/webgpu/game-brain-gib.ts` (the leaf). Modify
+`game-head-damage.ts`, `game-main.ts` (the mesh-gib step next to the chunk loop), and `head-crown.ts` (drop the
+SDF whole brain from the brain stage, keep the lumps and chips).
+
+- [ ] **Model.** Build a brain about 0.14 m long in Blender, at most 8k triangles:
+  - two hemispheres with a clear longitudinal fissure;
+  - gyri and sulci made by real geometry: displacement from a cellular or voronoi-ridge texture, or sculpted
+    folds, not a flat blob;
+  - a cerebellum with finer horizontal folds;
+  - a short brain stem.
+
+  Keep vertex colour or a baked AO so the sulci are darker. Export `brain.glb` with one mesh node `Brain`.
+  Render a turntable preview with the Blender MCP or headless Blender, and look at it.
+- [ ] **Material.**
+  - A wet pink-grey (base ≈ `#c98b8b` to `#b98a8f`), with the sulci darker and redder.
+  - Low roughness (0.3) plus a clearcoat or sheen.
+  - The existing `GORE_COLORS.brain` tint family.
+  - It is a Three.js WebGPU node material (MeshPhysicalNodeMaterial or MeshStandardNodeMaterial), lit by the
+    scene lights like the flail.
+- [ ] **Physics.** A mesh gib rides a `gib-chunks.ts` `Chunk` state:
+  - built with `makeChunk` at the crown, with its velocity and spin;
+  - stepped with `stepChunk(c, dt, chunkCollidersAt(ctx, c.pos))` in the same loop as the chunk step;
+  - the mesh's position and quaternion are copied from the chunk each frame.
+  - It settles on the floor and stays like other gibs, with a cap (reuse `maxChunks` or a small own cap, 8).
+  - `ctx.boot.spawnMeshGib(mesh, pos, vel, angVel, radius)` is set in `game-main.ts`.
+- [ ] **The brain stage.**
+  - The brain launches up and along the blow at about 2.5 m/s, so it hangs visibly, with a spin.
+  - The stage's blood burst is about half its current radius.
+  - The leaf no longer dispatches the SDF `brainPiece`. Keep `brainPiece` exported for now; the tests still
+    cover it.
+- [ ] **Gate.**
+  - The head gate's hit 4 asserts that a brain mesh gib exists (a seam: `__sdfGame.head.brains()` → positions)
+    and, after 1 s, that it rests near floor height.
+  - Photo `head-4-brain.png` three frames after the hit, and `brain-rest.png` with a close-up of the brain on
+    the floor. Look at both: it must read as a brain.
+- [ ] **Verify.** tsc; `npm test -- head gib-chunks`; both gates; zero console errors.
+- [ ] **Commit:** `feat(head-damage): a modelled brain mesh gib with a wet material`.
+
+### Task 12: Look pass, docs, PR (was Task 8)
+
+- [ ] **The eyeball's iris faces out, not down.** The eyeball's look direction is the head's forward, blended
+  toward the stalk's direction as it swings (e.g. 70/30), so the glowing pupil stays visible from the front.
+  Change `stalkPrims` to take a `look` argument, with a test.
+- [ ] **Blood per head stage.** The head hits bleed less (a `'pellet'`-sized gout, not `'slug'`) so stages 2–3
+  are visible. Measure the red-pixel share in a head crop per stage before and after.
+- [ ] **Readability.** Check that the dent reads and the scalp tear reads. Tune the constants (`HEAD_DEFORM`,
+  `EYE_STALK`, `CROWN`) and record each change.
+- [ ] **Cost.** If the eye's leftover cost (about 0.6–1.2 ms when overlapping the face) can be cut cheaply,
+  e.g. by drawing attached pieces in the split chunk pass only, do it. Otherwise record it in NOTES as open.
+- [ ] **Docs.**
+  - Write `docs/dev-notes/2026-09-28-head-damage/NOTES.md`: what was built, the numbers, "For the owner", and
+    the eye-centroid measurement.
+  - Set `TASKS.md` and the spec status to built, owner playtest pending.
+  - Add a head damage section to the PR body (keep the 🤖 footer line).
+  - Push, and restart the owner's server (`preview_start` `blud-censer`).

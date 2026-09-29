@@ -228,3 +228,28 @@ eye swinging.
   The scalp craters are not merged into the brain cavity; the counts fit (1 + 1 + 2 + 1 = 5).
 - **The eye positions** are measured from `zombie-face.png` through the planar face projection:
   image-left `hs = (−0.498, 0.096)`, image-right `hs = (0.451, 0.179)`.
+
+## 14. After the first build (owner, 2026-09-28)
+
+What debugging found:
+- A frozen actor kept the wobble's peak squash. That is fixed with `reposeHead`.
+- The dangling eye's proxy box was far too big. That is fixed, so the eye costs about 1.3 ms instead of 4.6 ms;
+  about 1 ms is left when the eye overlaps the face.
+- The deform moves the flesh but not the skull. So the skull and teeth show through during the squash, and
+  across the whole face after the hit-2 dent.
+- On the procedural skeleton path, bone is shaded as meat: the bone colour was deleted as dead code in
+  `00194a001`.
+
+Decisions:
+1. **The skull squashes and dents with the flesh.** The head deforms as one jelly, and bone shows only where
+   craters carve. This holds on both skeleton paths: the head's bone prims on the procedural path, and the
+   skull segment mesh on the mesh path.
+2. **Restore bone colour on the procedural path.** It applies to every weapon, so severed limbs there show
+   ivory bone ends, as the mesh path already does.
+3. **The brain is a modelled mesh with a wet material.**
+   - A Blender-modelled brain (two hemispheres with real gyri and sulci, a cerebellum and a stem) is saved as
+     `public/assets/lab/brain.glb`.
+   - Its material is wet, pink-grey, and darker in the folds, with a sheen or clearcoat.
+   - It rides the gib physics (bounce, spin, settle) as a mesh.
+   - The brain stage bleeds less, so the brain is actually seen.
+   - The SDF brain lumps and skull chips stay.
