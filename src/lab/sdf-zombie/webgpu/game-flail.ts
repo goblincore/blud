@@ -21,6 +21,8 @@ import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
 import { clothifyWound, tearWound, worldHitToWound, type Wound } from '../damage';
 import { flailTear, flailTearOn, setFlailTear } from '../torn-lips';
+import { fieldNormal, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
+import type { GorePiece } from '../head-pop';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
@@ -134,6 +136,8 @@ export interface FlailDeps {
   aimDir(): Vec3;
   /** Blood for a crater (game-world-leaves3 registerBleed). */
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
+  /** Gore pieces (ctx.boot.onGoreDispatch): the flying flesh bits (flesh-bits.ts). Absent: none thrown. */
+  gore?(a: ZombieActor, pieces: GorePiece[]): void;
   /** The head damage model (game-head-damage.ts): a head-region hit goes here INSTEAD of the face crater
    *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. */
   headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): void;
@@ -214,6 +218,8 @@ export interface FlailWeapon {
   /** Torn lips (v1.5b, torn-lips.ts) on the flail's craters — body and head. Ships ON; off = the stock
    *  crater, for A/B photos. Affects craters stamped after the call. Returns the new state. */
   setTear(on: boolean): boolean;
+  /** Seam: the flying flesh bits (flesh-bits.ts) on/off, body and head hits; returns the state. */
+  setFleshBits(on: boolean): boolean;
   /** Gate readback: the impact feel's live channels. */
   impactDebug(): FlailImpactDebug;
   debug(): FlailDebug;
@@ -563,6 +569,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   /** Head-region hits per actor id (spec §12.3): the face always craters, never severs; the counter is
    *  kept for the head damage model (its own spec, §12.6). */
   const headHits = new Map<number, number>();
+  /** Per-actor flesh-bit streams (flesh-bits.ts fleshRand): body hits. */
+  const fleshStreams = new WeakMap<ZombieActor, () => number>();
   /** The side of a strike that fired THIS tick (draw pins the ball on its impact), else null. */
   let strikeNow: FlailSide | null = null;
   window.addEventListener('blur', () => { held = false; });
@@ -659,6 +667,12 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       });
       snap();
       deps.bleed(a, w, h.point, h.dir);
+      // FLYING FLESH (v1.5b, flesh-bits.ts): wet meat bits torn off the crater, along the blow and out of it.
+      if (fleshBitsOn() && deps.gore) {
+        let fr = fleshStreams.get(a);
+        if (!fr) { fr = fleshRand(a.id * 2); fleshStreams.set(a, fr); }
+        deps.gore(a, fleshBits(h.point, swingBlow(h.dir, side), fieldNormal(field, h.point), fleshBitCount('body', side, fr), fr));
+      }
     }
     if (hits.length > 0) {
       // THE IMPACT (flail-impact.ts): the hit-stop and slow tail (setHitStop), the camera kick, judder, FOV
@@ -1027,6 +1041,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     setHitStop(on) { hitStopOn = on; if (!on) { clearTime(impact); lastScale = 1; } },
     setImpactFx(on) { impactFxOn = on; if (!on) { clearView(impact); publishImpact(); } },
     setTear(on) { setFlailTear(on); return flailTearOn(); },
+    setFleshBits(on) { setFleshBitsOn(on); return fleshBitsOn(); },
     impactDebug() {
       const o = impactOutputs(impact);
       return {

@@ -40,6 +40,9 @@
 //   5. every body wound from step 0 survives (within 1 mm; read before the thaw); at most 7 head wound slots
 //      (Wound.headSlot) are used.
 //   5b. 1.5 s after the kill the brain rests near the floor and has stopped (photo v2-brain-rest.png).
+//   5c. FLESH NEVER EVICTS AN EYE (flesh-bits.ts fleshEviction): the two snapped eye gibs still live, flesh bits on, the chunk
+//      budget (setDynamiteTuning maxchunks) cut to the views in use so every new piece must evict; 8 body hits on a fresh
+//      zombie: both eye gibs (the same chunk ids) survive every hit, views stay within the budget, live flesh <= 24.
 //   6. cost: median draw time (timeDraws, 120 frames, CPU+GPU fenced) with both eyes dangling vs the same stand before
 //      any head hit: within 0.5 ms.
 //   7. zero console errors / exceptions.
@@ -236,6 +239,9 @@ async function boot(label, query) {
   await evaluate("__sdfGame.flail.setHitStop(false)");
   // The impact feel (flail-impact.ts) moves the camera, FOV, rig and kicks the head: off for pixel measures.
   await evaluate("__sdfGame.flail.setImpactFx(false)");
+  // Flying flesh bits (flesh-bits.ts, v1.5b): extra live chunks on every hit — off, so the brain's "live SDF chunks up
+  // by >= 4" and every pixel measure are the pre-flesh ones; step 5c turns them on.
+  await evaluate("__sdfGame.flail.setFleshBits(false)");
   await evaluate("__sdfGame.setFreeAim(true)");
   await evaluate("__sdfGame.setAimPoint(0, 0)");
   const st0 = await evaluate("__sdfGame.flail.state()");
@@ -854,6 +860,37 @@ try {
     await centreOn(bB);
     await capture("v2-brain-rest");
     await evaluate(`__sdfGame.setRenderFov(${fov0})`);
+  }
+  // -------- 5c. flesh bits never evict an eye
+  {
+    const eyes0 = (await evaluate("__sdfGame.head.eyeGibs()")).map((g) => g.id).sort();
+    const tags = () => evaluate("__sdfGame.flail.chunkTags()");
+    const t0 = await tags();
+    const maxc0 = (await evaluate("__sdfGame.dynamiteTuning()")).maxchunks;
+    const budget = Math.max(1, t0.views - t0.spare);
+    await evaluate(`__sdfGame.setDynamiteTuning({ maxchunks: ${budget} })`);
+    await evaluate("__sdfGame.flail.setFleshBits(true)");
+    const z2 = fresh();
+    let eyesKept = true, maxViews = 0, maxFlesh = 0, thrown = 0, landed = 0;
+    for (let n = 0; n < 8; n++) {
+      const t = await torsoOf(z2.id);
+      await place(standOff(t, 1.3), Math.atan2(t[1] - EYE_H, 1.3));
+      await evaluate("__sdfGame.setAimPoint(0, 0)");
+      await stepN(24);
+      const a = await tags();
+      const r = await clickStrike(z2.id, 6);
+      if (r.last?.hits?.includes(z2.id)) landed++;
+      const b = await tags();
+      thrown += Math.max(0, b.flesh - a.flesh);
+      const eyes = (await evaluate("__sdfGame.head.eyeGibs()")).map((g) => g.id).sort();
+      if (JSON.stringify(eyes) !== JSON.stringify(eyes0)) eyesKept = false;
+      maxViews = Math.max(maxViews, b.views); maxFlesh = Math.max(maxFlesh, b.flesh);
+      note(`flesh hit ${n + 1} (${r.last?.side}): ${JSON.stringify(b)}; eye gibs ${JSON.stringify(eyes)}`);
+    }
+    await evaluate("__sdfGame.flail.setFleshBits(false)");
+    await evaluate(`__sdfGame.setDynamiteTuning({ maxchunks: ${maxc0} })`);
+    check(eyes0.length === 2 && eyesKept, `flesh: both snapped eye gibs (${JSON.stringify(eyes0)}) survive ${landed} flesh-throwing body hits with the chunk budget full (${budget} views)`);
+    check(maxViews <= Math.max(budget, t0.views) && maxFlesh <= 24, `flesh: views stay within the budget (max ${maxViews}, budget ${budget}, ${t0.views} before) and live flesh <= 24 (max ${maxFlesh})`);
   }
   // -------- 6. cost
   const noise = Math.abs(out.base1 - out.base2);

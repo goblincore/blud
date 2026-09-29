@@ -122,6 +122,13 @@ describe('chunkPoint / squashFactors', () => {
     expect(sy).toBeCloseTo(0.5, 5);
     expect(sz).toBeCloseTo(1.35, 5);
   });
+
+  it('shrink scales the whole piece uniformly about its origin (a flesh bit\'s closing shrink)', () => {
+    const base = makeChunk('armL', [0, 0, 0], [0, 0, 0], 0.2, [0, 1, 0], rng);
+    const f = squashFactors({ ...base, squash: 1, shrink: 0.5 });
+    expect([f.sx, f.sy, f.sz].map(v => +v.toFixed(5))).toEqual([0.675, 0.25, 0.675]);
+    expect(squashFactors({ ...base, shrink: undefined })).toEqual({ sx: 1, sy: 1, sz: 1 });
+  });
 });
 
 describe('chunkSettled (close-up task 5 bake predicate)', () => {

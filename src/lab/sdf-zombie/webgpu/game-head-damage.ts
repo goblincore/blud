@@ -74,6 +74,7 @@ import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
 import { rngStreams } from './rng';
 import { mulberry32 } from '../melt-bones';
+import { FLESH_BITS, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, swingBlow } from '../flesh-bits';
 
 /** The leaf's numbers (spec §5, §6, §15). */
 export const HEAD_LEAF = {
@@ -267,6 +268,8 @@ const headAlive = (b: BuildResult): boolean => b.clusters.some(c => c.limb === '
 
 export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDamageLeaf {
   const heads = new Map<ZombieActor, ActorHead>();
+  /** Per-actor flesh-bit streams (flesh-bits.ts fleshRand; never the head model's own jitter stream). */
+  const fleshStreams = new WeakMap<ZombieActor, () => number>();
   let traceMissWarned = false;
 
   /** The head frame of a body posed at `yaw` by `a`'s rig: headShape + the rigid head's rotation. */
@@ -393,6 +396,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       tearWound(w, flailTear('head'));   // torn lips (v1.5b, torn-lips.ts)
       a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
       deps.bleed(a, w, point, dir, 'slug');
+      throwFlesh(a, point, dir, normalAt(field, point), feel);
       return;
     }
     let h = heads.get(a);
@@ -558,6 +562,15 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     a.blast({ wounds, meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', forceCollapse, gain: feel.gain });
     // Head strips bleed a PELLET's gout (spec §15), and so does the brain stage (spec §14: so the brain is seen).
     if (bleedAt) deps.bleed(a, bleedAt, point, dir, 'pellet');
+    throwFlesh(a, point, dir, normalAt(field, point), feel);
+  }
+
+  /** FLYING FLESH (v1.5b, flesh-bits.ts): every head hit throws FLESH_BITS.head bits at headScale off the hit. */
+  function throwFlesh(a: ZombieActor, point: Vec3, dir: Vec3, normal: Vec3, feel: HeadHitFeel): void {
+    if (!fleshBitsOn()) return;
+    let fr = fleshStreams.get(a);
+    if (!fr) { fr = fleshRand(a.id * 2 + 1); fleshStreams.set(a, fr); }
+    deps.gore(a, fleshBits(point, swingBlow(dir, feel.side ?? 'R'), normal, fleshBitCount('head', feel.side ?? 'R', fr), fr, FLESH_BITS.headScale));
   }
 
   function tick(dt: number): void {

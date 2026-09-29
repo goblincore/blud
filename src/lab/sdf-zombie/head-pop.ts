@@ -36,8 +36,9 @@ export interface GorePiece {
   /** Floor / wall bounce overrides (Chunk.restitution / wallRestitution); absent: the gob's. */
   restitution?: number;
   wallRestitution?: number;
-  /** 'eye': the head damage's snapped eye — never baked, and evicted last (game-main spawnChunkPiece). */
-  tag?: 'eye';
+  /** 'eye': the head damage's snapped eye — never baked, and evicted last (game-main spawnChunkPiece).
+   *  'flesh': a flying flesh bit (flesh-bits.ts) — never baked, capped, removed after its life, evicted first. */
+  tag?: 'eye' | 'flesh';
 }
 
 /** Linear-RGB paint for the debris. Eyeballed on the game capture. */
@@ -49,6 +50,11 @@ export const GORE_COLORS = {
   stalk: [0.85, 0.45, 0.52] as Vec3,
   brain: [0.58, 0.38, 0.40] as Vec3,
   flesh: [0.30, 0.03, 0.03] as Vec3,
+  /** Raw torn meat (brighter than shatterHead's MEAT: at 0.32 the flying bits read near-black under the flail's
+   *  dim fill) and yellow subcutaneous fat (the flesh preset's fatColor, dimmed for
+   *  the chunk shading): the flying flesh bits (flesh-bits.ts). */
+  meat: [0.75, 0.09, 0.06] as Vec3,
+  fat: [0.62, 0.50, 0.26] as Vec3,
   bone: [0.72, 0.66, 0.52] as Vec3,
 };
 

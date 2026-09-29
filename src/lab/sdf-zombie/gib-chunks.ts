@@ -102,6 +102,9 @@ export interface Chunk {
   /** Wall and ceiling bounce override (absent: CHUNK_TUNING.wallRestitution). The head damage's snapped eye sets a
    *  lively one: it is a rubber-ball cartoon eye that caroms off the room. */
   wallRestitution?: number;
+  /** A uniform size factor (absent: 1) folded into squashFactors: a flying flesh bit's closing shrink
+   *  (flesh-bits.ts fleshShrink). Both renderer paths scale the whole piece about its origin by it. */
+  shrink?: number;
 }
 
 /** One sphere of a chunk's local support shape: a centre in chunk-local space
@@ -442,7 +445,8 @@ export function chunkSettled(c: Chunk): boolean {
 /** Squash factors: flatten y, bulge xz — applied in WORLD axes after rotation. */
 export function squashFactors(c: Chunk): { sx: number; sy: number; sz: number } {
   const s = Math.min(1, Math.max(0, c.squash));
-  return { sx: 1 + s * 0.35, sy: 1 - s * 0.5, sz: 1 + s * 0.35 };
+  const k = c.shrink ?? 1;
+  return { sx: (1 + s * 0.35) * k, sy: (1 - s * 0.5) * k, sz: (1 + s * 0.35) * k };
 }
 
 /**

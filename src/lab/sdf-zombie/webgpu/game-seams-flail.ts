@@ -17,6 +17,20 @@ export function createFlailSeams(ctx: GameContext) {
       setImpactFx: (on: boolean) => { ctx.weapon.flail?.setImpactFx(on); },
       /** Torn lips (v1.5b) on the flail's craters: off = stock craters, for A/B. Returns the state. */
       setTear: (on: boolean) => ctx.weapon.flail?.setTear(on) ?? null,
+      /** Flying flesh bits (v1.5b, flesh-bits.ts) on body and head hits: off keeps a gate's chunk counts the
+       *  pre-flesh ones. On by default. Returns the state. */
+      setFleshBits: (on: boolean) => ctx.weapon.flail?.setFleshBits(on) ?? null,
+      /** Live chunk census by tag (flesh bits, eyes, the rest) and the view pool. */
+      chunkTags: () => {
+        const live = ctx.bake.liveChunks;
+        return {
+          flesh: live.filter(c => c.tag === 'flesh').length, eye: live.filter(c => c.tag === 'eye').length,
+          other: live.filter(c => !c.tag).length, baked: ctx.bake.chunks.length,
+          views: ctx.bake.views.length, spare: ctx.bake.spareViews.length, max: ctx.bake.maxChunks,
+          /** The live flesh bits' positions and whether their views draw. */
+          fleshAt: live.filter(c => c.tag === 'flesh').map(c => ({ pos: [...c.state.pos], visible: c.view.object.visible })),
+        };
+      },
       /** The swing's shutter blur on the ball and chain (flail-blur.ts, spec §14.1 item 6). On by default;
        *  state().blur reads it back. */
       setBlur: (on: boolean, look?: { ball?: number; chain?: number; spin?: boolean }) => { ctx.weapon.flail?.setBlur(on, look); },

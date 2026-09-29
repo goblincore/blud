@@ -71,6 +71,11 @@
 //      slow tail monotone and exactly 1.0 within slowSec (+1 frame), the pitch kick peak ≥ 0.04 rad, the judder
 //      below 10% of its peak from 0.35 s, the FOV pinched ≥ 2° and back within 0.05° of its base by 0.3 s, the
 //      rig kick back at rest by 0.6 s; H's pitch, FOV and rig peaks above R's. Printed: every number.
+//   14. FLESH (v1.5b Task 32, flesh-bits.ts): flesh bits on, bleed on. A standing zombie: one R body hit throws
+//      3–5 live 'flesh' chunks (chunkTags), one head hit 5–7 (8–11 on an H); frame strips (8 frames, 0.1 s apart,
+//      from the strike frame) of both into docs/dev-notes/2026-09-28-head-damage/flesh/. Ten more hits: live flesh
+//      never above FLESH_CAP (24) after any hit, views never above the budget; the draw time with the bits live vs
+//      the same stand before (printed, noisy); 16 s later every flesh bit is gone (FLESH_BITS.lifeS 15).
 //   13. BLOOD (spec §14.1 item 7): a fresh flail's state().blood is 0 (the rest photo's pixel measures run
 //      clean); three R body hits from 0 raise it by ~0.12 each to 0.36 less its drying (120 s time constant)
 //      over the swings; set to 1, ten seconds of simulated time dry it to exp(−10/120) ± 0.003;
@@ -91,10 +96,12 @@
 // Usage (vite + a WebGPU Chrome already listening — from BASH, e.g.
 //   . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up):
 //   node scripts/flail-gate.mjs <vitePort> <cdpPort>
-// Env: OUT (docs/dev-notes/2026-09-26-flail/gate), ROOM (most zombies), W/H (1280x800).
+// Env: OUT (docs/dev-notes/2026-09-26-flail/gate), ROOM (most zombies), W/H (1280x800); section 14's strips:
+//   FLESH_BLEED=0 (bleed off, to pick the bits out of the gout), FLESH_SUFFIX (appended to the strip names).
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
+import { writePng } from './lib/png-write.mjs';
 
 const VITE = Number(process.argv[2] ?? 5233);
 const CDP = Number(process.argv[3] ?? 9223);
@@ -309,6 +316,9 @@ await evaluate('__sdfGame.flail.setHitStop(false)');
 // The impact feel (flail-impact.ts, spec §14.1) moves the camera, the FOV and the rig: off for every section
 // that measures pixels or positions; the "impact" section (12) turns it on.
 await evaluate('__sdfGame.flail.setImpactFx(false)');
+// Flying flesh bits (flesh-bits.ts, v1.5b): extra live chunks on every hit — off so every section's chunk counts
+// and pixels are the pre-flesh ones; section 14 turns them on.
+await evaluate('__sdfGame.flail.setFleshBits(false)');
 const st0 = await evaluate('__sdfGame.flail.state()');
 if (!st0 || st0.phase !== 'idle') die(`flail not idle after the raise: ${JSON.stringify(st0)}`);
 // A fresh flail is clean (flail-blood.ts): the rest photo's pixel measures below run at blood 0.
@@ -1127,6 +1137,139 @@ else fail(`positive control: ${controlFails} click(s) did not strike as expected
     if (Math.abs(dried - want) < 0.003) pass(`blood: dries on simulated time: 1 → ${dried.toFixed(4)} over 10 s (exp(−10/120) = ${want.toFixed(4)})`);
     else fail(`blood: 1 → ${dried.toFixed(4)} over 10 s of simulated time (expected ${want.toFixed(4)})`);
     await evaluate('__sdfGame.flail.setBlood(0)');
+  }
+}
+
+// ---- 14. FLESH: every hit throws wet flesh bits (flesh-bits.ts, v1.5b Task 32) ------------------------
+{
+  const FLESH_OUT = 'docs/dev-notes/2026-09-28-head-damage/flesh';
+  const FLESH_CAP = 24;
+  mkdirSync(FLESH_OUT, { recursive: true });
+  const tags = async () => { const t = await evaluate('__sdfGame.flail.chunkTags()'); delete t.fleshAt; return t; };
+  await evaluate('__sdfGame.freeze(true)');
+  await evaluate('__sdfGame.setFreeAim(true)');
+  await evaluate('__sdfGame.setAimPoint(0, 0)');
+  await evaluate(`__sdfGame.setBleed(${process.env.FLESH_BLEED !== '0'})`);
+  for (let i = 0; i < 90 && (await state()).phase !== 'idle'; i++) await stepOne();
+  await stepN(30);
+  const acts = await evaluate('__sdfGame.actorList()');
+  const cands = [];
+  for (const z of pool) {
+    const a = acts.find((q) => q.id === z.id);
+    const t = await torso(z.id);
+    const hs = await evaluate(`__sdfGame.head.state(${z.id})`);
+    if (!a || a.phase !== 'standing' || !t || t[1] < 0.7) continue;
+    if ((await evaluate(`__sdfGame.flail.limbAlive(${z.id}, 'head')`)) <= 0 || hs?.dead) continue;
+    cands.push({ z, hits: hs?.hits ?? 0 });
+  }
+  cands.sort((a, b) => a.hits - b.hits);
+  const target = cands[0]?.z;
+  if (!target) fail('flesh: no standing zombie with a head left');
+  else {
+    console.log(`flesh: zombie #${target.id} (${cands.length} candidates)`);
+    await evaluate('__sdfGame.flail.setFleshBits(true)');
+    /** One click at the torso or the head from `dist`, then an 8-frame strip (0.1 s apart) cropped round the hit. */
+    const strike = async (what, dist, strip) => {
+      const c = what === 'head' ? await evaluate(`__sdfGame.actorLimbCenter(${target.id}, 'head')`) : await torso(target.id);
+      const p = standOff(c, dist);
+      await place(p, Math.atan2(c[1] - EYE_H, dist));
+      await evaluate('__sdfGame.setAimPoint(0, 0)');
+      for (let i = 0; i < 40 && (await state()).phase !== 'idle'; i++) await stepOne();
+      await stepN(24);   // past the combo window: the next click is R
+      const t0 = await tags();
+      const pre = await state();
+      await evaluate('__sdfGame.flail.click()');
+      let st = pre;
+      for (let f = 0; f < 60 && st.strikes === pre.strikes; f++) { await stepOne(); st = await state(); }
+      const t1 = await tags();
+      const hit = st.lastStrike?.hits?.includes(target.id);
+      const head = (st.lastStrike?.headHits?.[target.id] ?? 0) > (pre.lastStrike?.headHits?.[target.id] ?? 0);
+      const at = st.lastStrike?.points?.[target.id] ?? c;
+      const frames = [];
+      if (strip) {
+        const cp = await toPx(at);
+        for (let k = 0; k < 8; k++) {
+          if (k > 0) await stepN(6);
+          frames.push(await capture(null));
+        }
+        // A 960x600 crop round the hit (wide: the bits fly ~0.5 m in 0.2 s), shown at 1/1.5 (640x400 tiles).
+        const CW = 960, CH = 600, DS = 1.5, TW = CW / DS, TH = CH / DS;
+        const cx = Math.round(Math.min(Math.max((cp?.[0] ?? W / 2) - CW / 2, 0), W - CW));
+        const cy = Math.round(Math.min(Math.max((cp?.[1] ?? H / 2) - CH * 0.45, 0), H - CH));
+        const SW = TW * 4, SH = TH * 2, rgba = new Uint8Array(SW * SH * 4);
+        frames.forEach((img, k) => {
+          const ox = (k % 4) * TW, oy = Math.floor(k / 4) * TH;
+          for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) {
+            const sx = cx + Math.round(x * DS), sy = cy + Math.round(y * DS);   // cp (toPx) is already in page px
+            const q = px(img, Math.min(img.w - 1, sx), Math.min(img.h - 1, sy));
+            const o = ((oy + y) * SW + ox + x) * 4;
+            rgba[o] = q[0]; rgba[o + 1] = q[1]; rgba[o + 2] = q[2]; rgba[o + 3] = 255;
+            if (x < 2 || y < 2) { rgba[o] = rgba[o + 1] = rgba[o + 2] = 0; }
+          }
+        });
+        writeFileSync(`${FLESH_OUT}/${strip}${process.env.FLESH_SUFFIX ?? ''}.png`, writePng(SW, SH, rgba));
+        console.log(`  shot ${FLESH_OUT}/${strip}.png (crop at ${cx},${cy}; hit px ${cp ? cp.map(Math.round).join(',') : 'off'})`);
+      }
+      return { side: pre.nextSide, hit, head, added: t1.flesh - t0.flesh, t0, t1 };
+    };
+    const body = await strike('body', 1.5, 'flesh-body-strip');
+    console.log(`flesh: body hit (${body.side}) hit ${body.hit} head ${body.head}: flesh ${body.t0.flesh} -> ${body.t1.flesh}; ${JSON.stringify(body.t1)}`);
+    const bodyRange = body.side === 'H' ? [5, 8] : [3, 5];
+    if (body.hit && !body.head && body.added >= bodyRange[0] && body.added <= bodyRange[1]) pass(`flesh: an ${body.side} body hit throws ${body.added} flesh bits (${bodyRange.join('–')})`);
+    else fail(`flesh: body hit (${body.side}, hit ${body.hit}, head ${body.head}) threw ${body.added} flesh bits (${bodyRange.join('–')})`);
+    await stepN(30);
+    const headR = await strike('head', 1.3, 'flesh-head-strip');
+    console.log(`flesh: head hit (${headR.side}) hit ${headR.hit} head ${headR.head}: flesh ${headR.t0.flesh} -> ${headR.t1.flesh}; ${JSON.stringify(headR.t1)}`);
+    const headRange = headR.side === 'H' ? [8, 11] : [5, 7];
+    // Over the cap the oldest bits give way: the count can rise by less than was thrown, never past the cap.
+    const headWant = Math.min(headRange[0], FLESH_CAP - headR.t0.flesh);
+    if (headR.hit && headR.head && headR.added >= headWant && headR.added <= headRange[1] && headR.t1.flesh <= FLESH_CAP) pass(`flesh: an ${headR.side} head hit throws ${headR.added} more live flesh bits (${headRange.join('–')}, cap ${FLESH_CAP})`);
+    else fail(`flesh: head hit (${headR.side}, hit ${headR.hit}, head ${headR.head}) added ${headR.added} flesh bits (${headRange.join('–')})`);
+    // Ten more hits (the cap and the budget), then the cost with the bits live.
+    await stepN(30);
+    const c0 = await torso(target.id);
+    await place(standOff(c0, 1.5), Math.atan2(c0[1] - EYE_H, 1.5));
+    await evaluate('__sdfGame.setAimPoint(0, 0)');
+    await stepN(3); await capture(null);
+    const base1 = await evaluate('__sdfGame.timeDraws(120)', 300000);
+    const base2 = await evaluate('__sdfGame.timeDraws(120)', 300000);
+    const before = await tags();
+    let maxFlesh = 0, maxViews = 0, hits10 = 0;
+    for (let n = 0; n < 10; n++) {
+      const r = await strike(n % 3 === 2 ? 'head' : 'body', 1.4, null);
+      if (r.hit) hits10++;
+      for (let k = 0; k < 12; k++) {
+        const t = await tags();
+        maxFlesh = Math.max(maxFlesh, t.flesh); maxViews = Math.max(maxViews, t.views);
+        if (k === 0) console.log(`  flesh hit ${n + 1} (${r.side}, ${r.head ? 'head' : 'body'}${r.hit ? '' : ', MISS'}): ${JSON.stringify(t)}`);
+        await stepOne();
+      }
+    }
+    const after = await tags();
+    console.log(`flesh: 10 hits (${hits10} landed): before ${JSON.stringify(before)}; after ${JSON.stringify(after)}; max live flesh ${maxFlesh}, max views ${maxViews}`);
+    if (maxFlesh <= FLESH_CAP && after.flesh === FLESH_CAP) pass(`flesh: live flesh bits capped at ${FLESH_CAP} over 10 hits (max ${maxFlesh}, ${after.flesh} after)`);
+    else fail(`flesh: live flesh max ${maxFlesh}, after ${after.flesh} (cap ${FLESH_CAP}, expected full)`);
+    if (maxViews <= after.max) pass(`flesh: chunk views stay within the budget (max ${maxViews} <= ${after.max})`);
+    else fail(`flesh: chunk views ${maxViews} over the budget ${after.max}`);
+    await place(standOff(c0, 1.5), Math.atan2(c0[1] - EYE_H, 1.5));
+    await evaluate('__sdfGame.setAimPoint(0, 0)');
+    await stepN(3); await capture(null);
+    const live = await tags();
+    const with1 = await evaluate('__sdfGame.timeDraws(120)', 300000);
+    const with2 = await evaluate('__sdfGame.timeDraws(120)', 300000);
+    console.log(`flesh cost: draw time (median of 120, fenced) before ${base1.toFixed(2)} / ${base2.toFixed(2)} ms (noise ${Math.abs(base1 - base2).toFixed(2)}); with ${live.flesh} flesh bits live ${with1.toFixed(2)} / ${with2.toFixed(2)} ms; delta ${((with1 + with2) / 2 - (base1 + base2) / 2).toFixed(2)} ms`);
+    // Life: 16 s of simulated time later every bit has shrunk away.
+    for (let i = 0; i < 10; i++) await evaluate('__sdfGame.step(96, 1 / 60)', 300000);
+    const gone = await tags();
+    await place(standOff(c0, 1.5), Math.atan2(c0[1] - EYE_H, 1.5));
+    await evaluate('__sdfGame.setAimPoint(0, 0)');
+    await stepN(3); await capture(null);
+    const after1 = await evaluate('__sdfGame.timeDraws(120)', 300000);
+    const after2 = await evaluate('__sdfGame.timeDraws(120)', 300000);
+    console.log(`flesh cost: the same stand after the bits are gone ${after1.toFixed(2)} / ${after2.toFixed(2)} ms; with vs after ${((with1 + with2) / 2 - (after1 + after2) / 2).toFixed(2)} ms`);
+    if (gone.flesh === 0) pass(`flesh: every flesh bit is gone 16 s later (FLESH_BITS.lifeS 15): ${JSON.stringify(gone)}`);
+    else fail(`flesh: ${gone.flesh} flesh bits still live 16 s later`);
+    await evaluate('__sdfGame.flail.setFleshBits(false)');
   }
 }
 

@@ -59,8 +59,12 @@ interface LiveChunk {
   template: ChunkTemplate;
   kind: 'limb' | 'gob' | 'bone';
   boneOnly: boolean;
-  /** 'eye': a snapped eye gib (head damage) — kept live (never baked) and evicted after every other live piece. */
-  tag?: 'eye';
+  /** 'eye': a snapped eye gib (head damage) — kept live (never baked) and evicted after every other live piece.
+   *  'flesh': a flying flesh bit (flesh-bits.ts) — never baked, capped, removed after its life, evicted first. */
+  tag?: 'eye' | 'flesh';
+  /** A flesh bit's age (s) and the floor height its closing shrink sinks from. */
+  age?: number;
+  shrinkY0?: number;
 }
 
 /** `game-main.ts`'s local `LiveBundle`: a dynamite stick in flight. */

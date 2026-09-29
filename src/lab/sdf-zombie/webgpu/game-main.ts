@@ -234,7 +234,8 @@ import type { ChunkBakeData } from './chunk-bake-geometry';
 import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
-import { boneChunkRadius } from '../melt-bones';
+import { boneChunkRadius, mulberry32 } from '../melt-bones';
+import { FLESH_BITS, fleshEviction, fleshOverCap, fleshShrink } from '../flesh-bits';
 import { chunkExtent, chunkSupportSpheres } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
 import {
@@ -3759,6 +3760,8 @@ async function main() {
     aimDir: () => aimDir(ctx),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
     headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f),
+    // Read lazily: the chunk spawner that assigns onGoreDispatch is built further down.
+    gore: (a, pieces) => ctx.boot.onGoreDispatch?.(a, pieces),
   });
   // The melee head damage model (game-head-damage.ts): the flail's head-region
   // hits climb its ladder. The gore/attach hooks are read lazily — the chunk
@@ -5164,6 +5167,8 @@ async function main() {
   chunkObjects = () => (ctx.bake.reference ? [...ctx.bake.liveChunks, ...ctx.bake.chunks] : ctx.bake.liveChunks).map(c => c.view.object)
     .concat(ctx.bake.attachedViews.map(v => v.object));
   ctx.bake.nextId = 1;
+  /** The flesh bits' own throwaway stream for spawnChunkPiece (see there). */
+  const fleshSpawnRng = mulberry32(0xf1e5b175);
   /**
    * Spawn one detached piece. `kind` is the piece's MATERIAL AND PHYSICS, not a
    * label: 'bone' picks the CHUNK_TUNING thud (a ribcage that bounces like meat
@@ -5177,12 +5182,14 @@ async function main() {
       /** Pre-release orientation + angular velocity (body-to-gib task 4). */
       spinQuat?: Quat; spinAngVel?: Vec3;
       /** Bounce overrides (Chunk.restitution / wallRestitution) and the snapped eye's tag (GorePiece). */
-      restitution?: number; wallRestitution?: number; tag?: 'eye';
+      restitution?: number; wallRestitution?: number; tag?: 'eye' | 'flesh';
     },
     template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
     initialVelocity?: Vec3,
   ) {
-    const rng = rngStreams.misc;
+    // A FLESH BIT (flesh-bits.ts) draws its throwaway launch and tumble from its own stream, so flesh on or
+    // off leaves rngStreams.misc — every other piece's sequence — untouched.
+    const rng = piece.tag === 'flesh' ? fleshSpawnRng : rngStreams.misc;
     const vel: Vec3 = [
       (rng() - 0.5) * 4.5,
       2.5 + rng() * 2.5,
@@ -5215,6 +5222,12 @@ async function main() {
     if (piece.restitution !== undefined) state.restitution = piece.restitution;
     if (piece.wallRestitution !== undefined) state.wallRestitution = piece.wallRestitution;
     const tag = piece.tag;
+    // FLESH CAP (flesh-bits.ts): over FLESH_BITS.cap live flesh bits, the oldest one gives up its view.
+    let recycled: ChunkGpuView | undefined;
+    if (tag === 'flesh') {
+      const at = fleshOverCap(ctx.bake.liveChunks, FLESH_BITS.cap);
+      if (at >= 0) recycled = releaseLive(at);
+    }
     // View budget. Order matters with the bake on: a BAKED piece is the
     // oldest, least-relevant gore, so its view recycles FIRST; only when
     // every view is live-and-flying does the old oldest-live rule apply.
@@ -5223,20 +5236,13 @@ async function main() {
     // because a full-body gib is 19-20 pieces, and a gate here that still
     // recycled at the old constant would leave `cap: 24` reporting a pool that
     // is actually 12 — which is what the dynamite gate's census caught.
-    let recycled: ChunkGpuView | undefined = ctx.bake.spareViews.pop();
+    recycled ??= ctx.bake.spareViews.pop();
     if (!recycled && ctx.bake.views.length >= ctx.bake.maxChunks) {
-      const oldestBaked = ctx.bake.chunks.shift();
-      if (oldestBaked) {
-        recycled = freeBaked(ctx, oldestBaked);
-      } else {
-        // A snapped EYE is evicted last (the comic flight must play out): the oldest non-eye piece goes first.
-        const at = ctx.bake.liveChunks.findIndex(q => q.tag !== 'eye');
-        const oldest = ctx.bake.liveChunks.splice(at < 0 ? 0 : at, 1)[0];
-        if (oldest) {
-          if (ctx.bake.jobs.pendingId === oldest.id) cancelChunkBake(ctx);
-          recycled = oldest.view;
-        }
-      }
+      // Live FLESH bits go first (flesh-bits.ts fleshEviction), then the oldest baked gib, then the oldest
+      // other live piece; a snapped EYE is evicted last (the comic flight must play out).
+      const ev = fleshEviction(ctx.bake.liveChunks, ctx.bake.chunks.length);
+      if (ev?.from === 'baked') recycled = freeBaked(ctx, ctx.bake.chunks.shift()!);
+      else if (ev) recycled = releaseLive(ev.index);
     }
     if (recycled) {
       recycled.reset(state, piece.prims,
@@ -5248,6 +5254,13 @@ async function main() {
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template, kind, boneOnly);
       ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view, template, kind, boneOnly, ...(tag ? { tag } : {}) });
     }
+  }
+  /** Take live piece `index` out of the physics (cancelling its bake): its view, for the caller to reuse. */
+  function releaseLive(index: number): ChunkGpuView | undefined {
+    const c = ctx.bake.liveChunks.splice(index, 1)[0];
+    if (!c) return undefined;
+    if (ctx.bake.jobs.pendingId === c.id) cancelChunkBake(ctx);
+    return c.view;
   }
   /** The per-spawn look of a piece view, fresh or recycled. */
   function dressPieceView(view: ChunkGpuView, kind: 'limb' | 'gob' | 'bone', boneOnly: boolean): void {
@@ -7642,10 +7655,31 @@ async function main() {
           c.view.update(c.state); // repair view resets (e.g. bone-mode changes) without moving the snapshot
           continue;
         }
+        if (c.tag === 'flesh') {
+          // A FLESH BIT (flesh-bits.ts) is never baked: it lives FLESH_BITS.lifeS, shrinking into the floor over
+          // the last shrinkS, then its view goes back to the spares.
+          c.age = (c.age ?? 0) + cdt;
+          const k = fleshShrink(c.age);
+          if (k <= 0) {
+            ctx.bake.liveChunks.splice(ci, 1);
+            c.view.object.visible = false;
+            ctx.bake.spareViews.push(c.view);
+            continue;
+          }
+          if (k < 1) {
+            c.shrinkY0 ??= c.state.pos[1];
+            c.state = { ...c.state, shrink: k, pos: [c.state.pos[0], c.shrinkY0 - (1 - k) * c.state.radius * 0.8, c.state.pos[2]] };
+            c.view.update(c.state);
+            continue;
+          }
+          // Settled: nothing moves until the shrink, so no step and no row rewrite (upload) per frame.
+          if (chunkSettled(c.state)) continue;
+        }
         c.state = stepChunk(c.state, cdt, chunkCollidersAt(ctx, c.state.pos));
         c.view.update(c.state);
-        // A snapped eye stays a live piece (never baked): it is tiny, and it keeps the eviction-last guarantee.
-        if (c.tag !== 'eye' && ctx.bake.enabled && ctx.bake.jobs.pendingId === null && !ctx.bake.jobs.error && chunkSettled(c.state)) {
+        // A snapped eye and a flesh bit stay live pieces (never baked): tiny, and the eye keeps the eviction-last
+        // guarantee.
+        if (!c.tag && ctx.bake.enabled && ctx.bake.jobs.pendingId === null && !ctx.bake.jobs.error && chunkSettled(c.state)) {
           const t0 = performance.now();
           const data = c.view.bakeData();
           // Bone-only pieces retain their original SDF path.
