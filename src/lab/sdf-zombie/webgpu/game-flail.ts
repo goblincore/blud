@@ -19,7 +19,8 @@ import {
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
-import { clothifyWound, worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, tearWound, worldHitToWound, type Wound } from '../damage';
+import { flailTear, flailTearOn, setFlailTear } from '../torn-lips';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
@@ -210,6 +211,9 @@ export interface FlailWeapon {
   setHitStop(on: boolean): void;
   /** Off: no camera pitch kick, judder, roll, FOV punch, rig kick, chain relax or head snap (pixel gates). */
   setImpactFx(on: boolean): void;
+  /** Torn lips (v1.5b, torn-lips.ts) on the flail's craters — body and head. Ships ON; off = the stock
+   *  crater, for A/B photos. Affects craters stamped after the call. Returns the new state. */
+  setTear(on: boolean): boolean;
   /** Gate readback: the impact feel's live channels. */
   impactDebug(): FlailImpactDebug;
   debug(): FlailDebug;
@@ -644,6 +648,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
       w.severRadius = spec.severRadius;
       clothifyWound(posed.prims, w, 'heavy');
+      // TORN LIPS (v1.5b, torn-lips.ts): the flail's craters are torn, hardest on the overhead.
+      tearWound(w, flailTear(side));
       a.blast({
         wounds: [w],
         meterCredit: f.meterCredit,
@@ -1020,6 +1026,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     hold(on) { held = on; },
     setHitStop(on) { hitStopOn = on; if (!on) { clearTime(impact); lastScale = 1; } },
     setImpactFx(on) { impactFxOn = on; if (!on) { clearView(impact); publishImpact(); } },
+    setTear(on) { setFlailTear(on); return flailTearOn(); },
     impactDebug() {
       const o = impactOutputs(impact);
       return {

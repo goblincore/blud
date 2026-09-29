@@ -56,7 +56,8 @@ import type { AttachedPiece } from './game-state-boot';
 import type { Primitive, Vec3 } from '../types';
 import type { BuildResult } from '../build-body';
 import { EYEBALL_R, eyeballPrims, prim, type GorePiece } from '../head-pop';
-import { clothifyWound, woundWorldPos, worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, tearWound, woundWorldPos, worldHitToWound, type Wound } from '../damage';
+import { flailTear } from '../torn-lips';
 import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
 import {
@@ -389,6 +390,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       const w = worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field);
       w.severRadius = 0;
       clothifyWound(posed.prims, w, 'heavy');
+      tearWound(w, flailTear('head'));   // torn lips (v1.5b, torn-lips.ts)
       a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
       deps.bleed(a, w, point, dir, 'slug');
       return;
@@ -462,7 +464,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         w.carveDepth = Math.min(radius, regionCarve(reg, h.model.flesh[reg], w.carveDepth, sd));
       }
       h.craters[reg] = { radius: w.radius, carveDepth: w.carveDepth ?? null, skull };
-      return clothifyWound(posed.prims, w, 'heavy');
+      // TORN LIPS (v1.5b, torn-lips.ts): every region crater (and the brain's) is torn at full.
+      return tearWound(clothifyWound(posed.prims, w, 'heavy'), flailTear('head'));
     };
 
     const wounds: Wound[] = [];

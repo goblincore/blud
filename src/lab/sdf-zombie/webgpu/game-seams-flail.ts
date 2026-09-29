@@ -15,6 +15,8 @@ export function createFlailSeams(ctx: GameContext) {
       /** Off for gates that measure pixels: no camera kick, judder, roll, FOV punch, rig kick, chain relax
        *  or head snap (flail-impact.ts). On by default. */
       setImpactFx: (on: boolean) => { ctx.weapon.flail?.setImpactFx(on); },
+      /** Torn lips (v1.5b) on the flail's craters: off = stock craters, for A/B. Returns the state. */
+      setTear: (on: boolean) => ctx.weapon.flail?.setTear(on) ?? null,
       /** The swing's shutter blur on the ball and chain (flail-blur.ts, spec §14.1 item 6). On by default;
        *  state().blur reads it back. */
       setBlur: (on: boolean, look?: { ball?: number; chain?: number; spin?: boolean }) => { ctx.weapon.flail?.setBlur(on, look); },
