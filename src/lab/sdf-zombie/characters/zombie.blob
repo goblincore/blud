@@ -24,7 +24,7 @@ skeleton
     # below carries a bare heel and sole down to the floor, as every foot-boned character does.
     bone thigh    parent=pelvis   dir=down side=0.10           len=0.46
     bone shin     parent=thigh    dir=down pitch=2.862405      len=0.50
-    bone foot     parent=shin     dir=fwd                      len=0.15
+    bone foot     parent=shin     dir=fwd                      len=0.16
   end
 
 body
@@ -52,12 +52,14 @@ body
   # The ankle knob. It used to BE the foot (r 0.070, flattened 0.6, stretched 1.5 forward), which
   # is why the legs read as stumps; now a round joint the foot hangs off.
   blob leg on shin  at=1.00 r=0.058 blend=0.0125 mirror
-  # Bare feet: a heel under the ankle and a sole running forward along the foot bone, both pushed
-  # down (offset, world axes) so their undersides sit on the floor (~0.004 / ~0.003 m at rest):
-  # ankle ~0.10 - 0.058 - 0.042 x 0.9; ankle - 0.070 - 0.036 x 0.75. Wide and flat, a little
-  # splayed by the taper (r2) toward the toes — crude on purpose, the zombie's hands are fists.
-  blob leg on foot  at=0.00 r=0.042 wide=1.15 tall=0.9 deep=1.2 blend=0.012 offset=(0,-0.058,-0.010) mirror
-  bar  leg on foot  from=0.00 to=1.00 r=0.036 r2=0.030 wide=1.35 tall=0.75 blend=0.014 offset=(0,-0.070,0.000) mirror
+  # Bare feet, simplified like the fists: a round heel orb under the ankle and a rounded sausage
+  # forward to the toes (owner 2026-09-29: bigger, rounder, early-Virtua-Fighter simple). Heel
+  # ~0.11 long x 0.058 radius, sole capsule r 0.052 -> 0.046, heel-to-toe ~0.27 m (was ~0.19; a
+  # 1.78 m person's foot is ~0.26). Offsets (world axes) sit the undersides on the floor:
+  # ankle ~0.10 - 0.041 - 0.058 x 0.95 = ~0.004; ankle - 0.045 - 0.052 = ~0.003 (toe end ~0.009,
+  # the taper lifts it a hair like a toe-off).
+  blob leg on foot  at=0.00 r=0.058 wide=1.05 tall=0.95 deep=1.05 blend=0.012 offset=(0,-0.041,-0.010) mirror
+  bar  leg on foot  from=0.00 to=1.00 r=0.052 r2=0.046 wide=1.15 blend=0.014 offset=(0,-0.045,0.000) mirror
 
 # Wound pass r2: hidden bone, revealed by a wound. Auto-derive (ratio 0.38)
 # is right for limbs — a femur IS a thinner capsule inside the thigh — and

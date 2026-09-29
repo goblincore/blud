@@ -2,7 +2,7 @@
   "kind": "blud-gib-assets",
   "schemaVersion": 3,
   "archetype": "zombie",
-  "fingerprint": "0a58e1cab1511d24",
+  "fingerprint": "5a7514fddd46d987",
   "recipe": {
     "schemaVersion": 3,
     "generator": "scripts/build-gib-assets.ts",
@@ -92,8 +92,8 @@
   },
   "source": {
     "blob": "src/lab/sdf-zombie/characters/zombie.blob",
-    "blobBytes": 16678,
-    "blobHash": "b7b664810062d630"
+    "blobBytes": 16807,
+    "blobHash": "a839c098ca3254b7"
   },
   "bake": {
     "cellSize": 0.012,
@@ -110,9 +110,9 @@
   },
   "totals": {
     "pieces": 24,
-    "verts": 37974,
-    "tris": 76008,
-    "binBytes": 3949656
+    "verts": 38402,
+    "tris": 76868,
+    "binBytes": 3994192
   },
   "pieces": [
     {
@@ -2048,8 +2048,8 @@
         "seams": [
           {
             "withPart": "legL.lower",
-            "gapMin": 0.0008177005654380143,
-            "gapMean": 0.02503334389225928,
+            "gapMin": 0.0011966724469202742,
+            "gapMean": 0.025071675269905887,
             "samples": 490
           }
         ]
@@ -2066,120 +2066,120 @@
       "material": "flesh",
       "offset": [
         0.09999999999999999,
-        0.13291851229048884,
-        0.03800407266417987
+        0.14341851229048883,
+        0.03925407266417987
       ],
       "origin": [
         0.09999999999999999,
-        0.13291851229048884,
-        0.03800407266417987
+        0.14341851229048883,
+        0.03925407266417987
       ],
-      "radius": 0.5471216815191038,
+      "radius": 0.5367599998624661,
       "longAxis": [
         0,
         -0.9987523390749181,
         0.04993761300242152
       ],
-      "verts": 2608,
-      "tris": 5212,
+      "verts": 2828,
+      "tris": 5652,
       "bounds": {
         "min": [
-          -0.06297243386507034,
-          -0.1348390281200409,
-          -0.09922522306442261
+          -0.0679086223244667,
+          -0.1454223245382309,
+          -0.10040508210659027
         ],
         "max": [
-          0.06297243386507034,
-          0.4846319854259491,
-          0.16510386765003204
+          0.0679086223244667,
+          0.4740588963031769,
+          0.19065073132514954
         ],
         "center": [
           0,
-          0.1748964786529541,
-          0.03293932229280472
+          0.164318285882473,
+          0.04512282460927963
         ],
-        "sphereRadius": 0.3314845722777311
+        "sphereRadius": 0.33625553210398096
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 7824,
+          "count": 8484,
           "itemSize": 3,
           "byteOffset": 1948144,
-          "byteLength": 31296
+          "byteLength": 33936
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 7824,
+          "count": 8484,
           "itemSize": 3,
-          "byteOffset": 1979440,
-          "byteLength": 31296
+          "byteOffset": 1982080,
+          "byteLength": 33936
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 15636,
+          "count": 16956,
           "itemSize": 3,
-          "byteOffset": 2010736,
-          "byteLength": 31272
+          "byteOffset": 2016016,
+          "byteLength": 33912
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 4,
-          "byteOffset": 2042008,
-          "byteLength": 41728
+          "byteOffset": 2049928,
+          "byteLength": 45248
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 4,
-          "byteOffset": 2083736,
-          "byteLength": 41728
+          "byteOffset": 2095176,
+          "byteLength": 45248
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2608,
+          "count": 2828,
           "itemSize": 1,
-          "byteOffset": 2125464,
-          "byteLength": 10432
+          "byteOffset": 2140424,
+          "byteLength": 11312
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 4,
-          "byteOffset": 2135896,
-          "byteLength": 41728
+          "byteOffset": 2151736,
+          "byteLength": 45248
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2608,
+          "count": 2828,
           "itemSize": 1,
-          "byteOffset": 2177624,
-          "byteLength": 10432
+          "byteOffset": 2196984,
+          "byteLength": 11312
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 1,
-          "byteOffset": 2188056,
-          "byteLength": 20864
+          "byteOffset": 2208296,
+          "byteLength": 22624
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 1,
-          "byteOffset": 2208920,
-          "byteLength": 10432
+          "byteOffset": 2230920,
+          "byteLength": 11312
         }
       ],
       "bind": {
@@ -2244,19 +2244,19 @@
             "cluster": 4,
             "a": [
               0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
             "b": [
               0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
-            "radius": 0.042,
+            "radius": 0.058,
             "scale": [
-              1.15,
-              0.9,
-              1.2
+              1.05,
+              0.95,
+              1.05
             ],
             "blendK": 0.006
           },
@@ -2269,19 +2269,19 @@
             "cluster": 4,
             "a": [
               0.1,
-              0.03062383046254097,
+              0.05562383046254098,
               0.02496880650121076
             ],
             "b": [
               0.1,
-              0.03062383046254097,
-              0.17496880650121074
+              0.05562383046254098,
+              0.18496880650121075
             ],
-            "radius": 0.036,
-            "radiusB": 0.03,
+            "radius": 0.052,
+            "radiusB": 0.046,
             "scale": [
-              1.35,
-              0.75,
+              1.15,
+              1,
               1
             ],
             "blendK": 0.007
@@ -2305,16 +2305,16 @@
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.001824530163511594,
-        "vertexFieldErrorMean": 0.00032068112108927805,
-        "deformedFieldErrorMax": 0.0288804921996918,
-        "deformedFieldErrorMean": 0.0009911310272208553,
+        "vertexFieldErrorMax": 0.0017684601358340778,
+        "vertexFieldErrorMean": 0.000314192455123573,
+        "deformedFieldErrorMax": 0.02747445927359819,
+        "deformedFieldErrorMean": 0.0009169758980396629,
         "seams": [
           {
             "withPart": "legL.upper",
-            "gapMin": 0.0008177005654380143,
-            "gapMean": 0.021823784895435076,
-            "samples": 372
+            "gapMin": 0.0011966724469202742,
+            "gapMean": 0.022043333203978967,
+            "samples": 374
           }
         ]
       },
@@ -2373,7 +2373,7 @@
           "dtype": "f32",
           "count": 7710,
           "itemSize": 3,
-          "byteOffset": 2219352,
+          "byteOffset": 2242232,
           "byteLength": 30840
         },
         {
@@ -2381,7 +2381,7 @@
           "dtype": "f32",
           "count": 7710,
           "itemSize": 3,
-          "byteOffset": 2250192,
+          "byteOffset": 2273072,
           "byteLength": 30840
         },
         {
@@ -2389,7 +2389,7 @@
           "dtype": "u16",
           "count": 15408,
           "itemSize": 3,
-          "byteOffset": 2281032,
+          "byteOffset": 2303912,
           "byteLength": 30816
         },
         {
@@ -2397,7 +2397,7 @@
           "dtype": "f32",
           "count": 10280,
           "itemSize": 4,
-          "byteOffset": 2311848,
+          "byteOffset": 2334728,
           "byteLength": 41120
         },
         {
@@ -2405,7 +2405,7 @@
           "dtype": "f32",
           "count": 10280,
           "itemSize": 4,
-          "byteOffset": 2352968,
+          "byteOffset": 2375848,
           "byteLength": 41120
         },
         {
@@ -2413,7 +2413,7 @@
           "dtype": "f32",
           "count": 2570,
           "itemSize": 1,
-          "byteOffset": 2394088,
+          "byteOffset": 2416968,
           "byteLength": 10280
         },
         {
@@ -2421,7 +2421,7 @@
           "dtype": "f32",
           "count": 10280,
           "itemSize": 4,
-          "byteOffset": 2404368,
+          "byteOffset": 2427248,
           "byteLength": 41120
         },
         {
@@ -2429,7 +2429,7 @@
           "dtype": "f32",
           "count": 2570,
           "itemSize": 1,
-          "byteOffset": 2445488,
+          "byteOffset": 2468368,
           "byteLength": 10280
         },
         {
@@ -2437,7 +2437,7 @@
           "dtype": "u16",
           "count": 10280,
           "itemSize": 1,
-          "byteOffset": 2455768,
+          "byteOffset": 2478648,
           "byteLength": 20560
         },
         {
@@ -2445,7 +2445,7 @@
           "dtype": "u8",
           "count": 10280,
           "itemSize": 1,
-          "byteOffset": 2476328,
+          "byteOffset": 2499208,
           "byteLength": 10280
         }
       ],
@@ -2503,8 +2503,8 @@
         "seams": [
           {
             "withPart": "legR.lower",
-            "gapMin": 0.0008177005654380143,
-            "gapMean": 0.02503334389225928,
+            "gapMin": 0.0011966724469202742,
+            "gapMean": 0.025071675269905887,
             "samples": 490
           }
         ]
@@ -2521,120 +2521,120 @@
       "material": "flesh",
       "offset": [
         -0.09999999999999999,
-        0.13291851229048884,
-        0.03800407266417987
+        0.14341851229048883,
+        0.03925407266417987
       ],
       "origin": [
         -0.09999999999999999,
-        0.13291851229048884,
-        0.03800407266417987
+        0.14341851229048883,
+        0.03925407266417987
       ],
-      "radius": 0.5471216815191038,
+      "radius": 0.5367599998624661,
       "longAxis": [
         0,
         -0.9987523390749181,
         0.04993761300242152
       ],
-      "verts": 2608,
-      "tris": 5212,
+      "verts": 2828,
+      "tris": 5652,
       "bounds": {
         "min": [
-          -0.06297243386507034,
-          -0.1348390281200409,
-          -0.09922522306442261
+          -0.0679086223244667,
+          -0.1454223245382309,
+          -0.10040508210659027
         ],
         "max": [
-          0.06297243386507034,
-          0.4846319854259491,
-          0.16510386765003204
+          0.0679086223244667,
+          0.4740588963031769,
+          0.19065073132514954
         ],
         "center": [
           0,
-          0.1748964786529541,
-          0.03293932229280472
+          0.164318285882473,
+          0.04512282460927963
         ],
-        "sphereRadius": 0.3314845722777311
+        "sphereRadius": 0.33625553210398096
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 7824,
+          "count": 8484,
           "itemSize": 3,
-          "byteOffset": 2486608,
-          "byteLength": 31296
+          "byteOffset": 2509488,
+          "byteLength": 33936
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 7824,
+          "count": 8484,
           "itemSize": 3,
-          "byteOffset": 2517904,
-          "byteLength": 31296
+          "byteOffset": 2543424,
+          "byteLength": 33936
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 15636,
+          "count": 16956,
           "itemSize": 3,
-          "byteOffset": 2549200,
-          "byteLength": 31272
+          "byteOffset": 2577360,
+          "byteLength": 33912
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 4,
-          "byteOffset": 2580472,
-          "byteLength": 41728
+          "byteOffset": 2611272,
+          "byteLength": 45248
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 4,
-          "byteOffset": 2622200,
-          "byteLength": 41728
+          "byteOffset": 2656520,
+          "byteLength": 45248
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 2608,
+          "count": 2828,
           "itemSize": 1,
-          "byteOffset": 2663928,
-          "byteLength": 10432
+          "byteOffset": 2701768,
+          "byteLength": 11312
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 4,
-          "byteOffset": 2674360,
-          "byteLength": 41728
+          "byteOffset": 2713080,
+          "byteLength": 45248
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 2608,
+          "count": 2828,
           "itemSize": 1,
-          "byteOffset": 2716088,
-          "byteLength": 10432
+          "byteOffset": 2758328,
+          "byteLength": 11312
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 1,
-          "byteOffset": 2726520,
-          "byteLength": 20864
+          "byteOffset": 2769640,
+          "byteLength": 22624
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 10432,
+          "count": 11312,
           "itemSize": 1,
-          "byteOffset": 2747384,
-          "byteLength": 10432
+          "byteOffset": 2792264,
+          "byteLength": 11312
         }
       ],
       "bind": {
@@ -2699,19 +2699,19 @@
             "cluster": 5,
             "a": [
               -0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
             "b": [
               -0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
-            "radius": 0.042,
+            "radius": 0.058,
             "scale": [
-              1.15,
-              0.9,
-              1.2
+              1.05,
+              0.95,
+              1.05
             ],
             "blendK": 0.006
           },
@@ -2724,19 +2724,19 @@
             "cluster": 5,
             "a": [
               -0.1,
-              0.03062383046254097,
+              0.05562383046254098,
               0.02496880650121076
             ],
             "b": [
               -0.1,
-              0.03062383046254097,
-              0.17496880650121074
+              0.05562383046254098,
+              0.18496880650121075
             ],
-            "radius": 0.036,
-            "radiusB": 0.03,
+            "radius": 0.052,
+            "radiusB": 0.046,
             "scale": [
-              1.35,
-              0.75,
+              1.15,
+              1,
               1
             ],
             "blendK": 0.007
@@ -2760,16 +2760,16 @@
         }
       ],
       "approximation": {
-        "vertexFieldErrorMax": 0.001824530163511594,
-        "vertexFieldErrorMean": 0.00032068112378232913,
-        "deformedFieldErrorMax": 0.02888049336551642,
-        "deformedFieldErrorMean": 0.0009911310377312863,
+        "vertexFieldErrorMax": 0.0017684601358340778,
+        "vertexFieldErrorMean": 0.0003141924547122238,
+        "deformedFieldErrorMax": 0.027474458959182414,
+        "deformedFieldErrorMean": 0.0009169759298231259,
         "seams": [
           {
             "withPart": "legR.upper",
-            "gapMin": 0.0008177005654380143,
-            "gapMean": 0.021823784895435072,
-            "samples": 372
+            "gapMin": 0.0011966724469202742,
+            "gapMean": 0.02204333320743523,
+            "samples": 374
           }
         ]
       },
@@ -2828,7 +2828,7 @@
           "dtype": "f32",
           "count": 4488,
           "itemSize": 3,
-          "byteOffset": 2757816,
+          "byteOffset": 2803576,
           "byteLength": 17952
         },
         {
@@ -2836,7 +2836,7 @@
           "dtype": "f32",
           "count": 4488,
           "itemSize": 3,
-          "byteOffset": 2775768,
+          "byteOffset": 2821528,
           "byteLength": 17952
         },
         {
@@ -2844,7 +2844,7 @@
           "dtype": "u16",
           "count": 8964,
           "itemSize": 3,
-          "byteOffset": 2793720,
+          "byteOffset": 2839480,
           "byteLength": 17928
         },
         {
@@ -2852,7 +2852,7 @@
           "dtype": "f32",
           "count": 5984,
           "itemSize": 4,
-          "byteOffset": 2811648,
+          "byteOffset": 2857408,
           "byteLength": 23936
         },
         {
@@ -2860,7 +2860,7 @@
           "dtype": "f32",
           "count": 5984,
           "itemSize": 4,
-          "byteOffset": 2835584,
+          "byteOffset": 2881344,
           "byteLength": 23936
         },
         {
@@ -2868,7 +2868,7 @@
           "dtype": "f32",
           "count": 1496,
           "itemSize": 1,
-          "byteOffset": 2859520,
+          "byteOffset": 2905280,
           "byteLength": 5984
         },
         {
@@ -2876,7 +2876,7 @@
           "dtype": "f32",
           "count": 5984,
           "itemSize": 4,
-          "byteOffset": 2865504,
+          "byteOffset": 2911264,
           "byteLength": 23936
         },
         {
@@ -2884,7 +2884,7 @@
           "dtype": "f32",
           "count": 1496,
           "itemSize": 1,
-          "byteOffset": 2889440,
+          "byteOffset": 2935200,
           "byteLength": 5984
         },
         {
@@ -2892,7 +2892,7 @@
           "dtype": "u16",
           "count": 5984,
           "itemSize": 1,
-          "byteOffset": 2895424,
+          "byteOffset": 2941184,
           "byteLength": 11968
         },
         {
@@ -2900,7 +2900,7 @@
           "dtype": "u8",
           "count": 5984,
           "itemSize": 1,
-          "byteOffset": 2907392,
+          "byteOffset": 2953152,
           "byteLength": 5984
         }
       ],
@@ -3006,13 +3006,13 @@
       "material": "bone",
       "offset": [
         0,
-        1.1250685576327333,
-        0.023000390813866244
+        1.1274685576327326,
+        0.02328610509958053
       ],
       "origin": [
         0,
-        1.1250685576327333,
-        0.023000390813866244
+        1.1274685576327326,
+        0.02328610509958053
       ],
       "radius": 0.043776,
       "longAxis": [
@@ -3020,106 +3020,106 @@
         -0.9994564616735017,
         0.032966364966194026
       ],
-      "verts": 3036,
-      "tris": 6168,
+      "verts": 3024,
+      "tris": 6148,
       "bounds": {
         "min": [
-          -0.20585167407989502,
-          -0.049374114722013474,
-          -0.11647878587245941
+          -0.20596943795681,
+          -0.050514787435531616,
+          -0.11679084599018097
         ],
         "max": [
-          0.20585167407989502,
-          0.2976706027984619,
-          0.10231222212314606
+          0.20596943795681,
+          0.29525497555732727,
+          0.1010153591632843
         ],
         "center": [
           0,
-          0.12414824403822422,
-          -0.007083281874656677
+          0.12237009406089783,
+          -0.007887743413448334
         ],
-        "sphereRadius": 0.26024569903812317
+        "sphereRadius": 0.25989489014694533
       },
       "sections": [
         {
           "name": "positions",
           "dtype": "f32",
-          "count": 9108,
+          "count": 9072,
           "itemSize": 3,
-          "byteOffset": 2913376,
-          "byteLength": 36432
+          "byteOffset": 2959136,
+          "byteLength": 36288
         },
         {
           "name": "normals",
           "dtype": "f32",
-          "count": 9108,
+          "count": 9072,
           "itemSize": 3,
-          "byteOffset": 2949808,
-          "byteLength": 36432
+          "byteOffset": 2995424,
+          "byteLength": 36288
         },
         {
           "name": "indices",
           "dtype": "u16",
-          "count": 18504,
+          "count": 18444,
           "itemSize": 3,
-          "byteOffset": 2986240,
-          "byteLength": 37008
+          "byteOffset": 3031712,
+          "byteLength": 36888
         },
         {
           "name": "bakeColor",
           "dtype": "f32",
-          "count": 12144,
+          "count": 12096,
           "itemSize": 4,
-          "byteOffset": 3023248,
-          "byteLength": 48576
+          "byteOffset": 3068600,
+          "byteLength": 48384
         },
         {
           "name": "bakeResponse",
           "dtype": "f32",
-          "count": 12144,
+          "count": 12096,
           "itemSize": 4,
-          "byteOffset": 3071824,
-          "byteLength": 48576
+          "byteOffset": 3116984,
+          "byteLength": 48384
         },
         {
           "name": "bakeFresnel",
           "dtype": "f32",
-          "count": 3036,
+          "count": 3024,
           "itemSize": 1,
-          "byteOffset": 3120400,
-          "byteLength": 12144
+          "byteOffset": 3165368,
+          "byteLength": 12096
         },
         {
           "name": "bakeAnchor",
           "dtype": "f32",
-          "count": 12144,
+          "count": 12096,
           "itemSize": 4,
-          "byteOffset": 3132544,
-          "byteLength": 48576
+          "byteOffset": 3177464,
+          "byteLength": 48384
         },
         {
           "name": "bakeAo",
           "dtype": "f32",
-          "count": 3036,
+          "count": 3024,
           "itemSize": 1,
-          "byteOffset": 3181120,
-          "byteLength": 12144
+          "byteOffset": 3225848,
+          "byteLength": 12096
         },
         {
           "name": "bindIndex",
           "dtype": "u16",
-          "count": 12144,
+          "count": 12096,
           "itemSize": 1,
-          "byteOffset": 3193264,
-          "byteLength": 24288
+          "byteOffset": 3237944,
+          "byteLength": 24192
         },
         {
           "name": "bindWeight",
           "dtype": "u8",
-          "count": 12144,
+          "count": 12096,
           "itemSize": 1,
-          "byteOffset": 3217552,
-          "byteLength": 12144
+          "byteOffset": 3262136,
+          "byteLength": 12096
         }
       ],
       "bind": {
@@ -3921,15 +3921,15 @@
             "cluster": 4,
             "a": [
               0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
             "b": [
               0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
-            "radius": 0.015960000000000002,
+            "radius": 0.02204,
             "scale": [
               1,
               1,
@@ -3946,15 +3946,15 @@
             "cluster": 5,
             "a": [
               -0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
             "b": [
               -0.1,
-              0.04262383046254097,
+              0.05962383046254097,
               0.01496880650121076
             ],
-            "radius": 0.015960000000000002,
+            "radius": 0.02204,
             "scale": [
               1,
               1,
@@ -3971,16 +3971,16 @@
             "cluster": 4,
             "a": [
               0.1,
-              0.03062383046254097,
+              0.05562383046254098,
               0.02496880650121076
             ],
             "b": [
               0.1,
-              0.03062383046254097,
-              0.17496880650121074
+              0.05562383046254098,
+              0.18496880650121075
             ],
-            "radius": 0.01368,
-            "radiusB": 0.0114,
+            "radius": 0.01976,
+            "radiusB": 0.01748,
             "scale": [
               1,
               1,
@@ -3997,16 +3997,16 @@
             "cluster": 5,
             "a": [
               -0.1,
-              0.03062383046254097,
+              0.05562383046254098,
               0.02496880650121076
             ],
             "b": [
               -0.1,
-              0.03062383046254097,
-              0.17496880650121074
+              0.05562383046254098,
+              0.18496880650121075
             ],
-            "radius": 0.01368,
-            "radiusB": 0.0114,
+            "radius": 0.01976,
+            "radiusB": 0.01748,
             "scale": [
               1,
               1,
@@ -4018,10 +4018,10 @@
       },
       "cuts": [],
       "approximation": {
-        "vertexFieldErrorMax": 0.0077209915157331515,
-        "vertexFieldErrorMean": 0.0012750163642387012,
-        "deformedFieldErrorMax": 0.010065365655855417,
-        "deformedFieldErrorMean": 0.0014383407967892784,
+        "vertexFieldErrorMax": 0.008079361976981244,
+        "vertexFieldErrorMean": 0.0012614790131564636,
+        "deformedFieldErrorMax": 0.009274668373562008,
+        "deformedFieldErrorMean": 0.001415988921421768,
         "seams": []
       },
       "srcPrims": [],
@@ -4110,7 +4110,7 @@
           "dtype": "f32",
           "count": 5646,
           "itemSize": 3,
-          "byteOffset": 3229696,
+          "byteOffset": 3274232,
           "byteLength": 22584
         },
         {
@@ -4118,7 +4118,7 @@
           "dtype": "f32",
           "count": 5646,
           "itemSize": 3,
-          "byteOffset": 3252280,
+          "byteOffset": 3296816,
           "byteLength": 22584
         },
         {
@@ -4126,7 +4126,7 @@
           "dtype": "u16",
           "count": 11436,
           "itemSize": 3,
-          "byteOffset": 3274864,
+          "byteOffset": 3319400,
           "byteLength": 22872
         },
         {
@@ -4134,7 +4134,7 @@
           "dtype": "f32",
           "count": 7528,
           "itemSize": 4,
-          "byteOffset": 3297736,
+          "byteOffset": 3342272,
           "byteLength": 30112
         },
         {
@@ -4142,7 +4142,7 @@
           "dtype": "f32",
           "count": 7528,
           "itemSize": 4,
-          "byteOffset": 3327848,
+          "byteOffset": 3372384,
           "byteLength": 30112
         },
         {
@@ -4150,7 +4150,7 @@
           "dtype": "f32",
           "count": 1882,
           "itemSize": 1,
-          "byteOffset": 3357960,
+          "byteOffset": 3402496,
           "byteLength": 7528
         },
         {
@@ -4158,7 +4158,7 @@
           "dtype": "f32",
           "count": 7528,
           "itemSize": 4,
-          "byteOffset": 3365488,
+          "byteOffset": 3410024,
           "byteLength": 30112
         },
         {
@@ -4166,7 +4166,7 @@
           "dtype": "f32",
           "count": 1882,
           "itemSize": 1,
-          "byteOffset": 3395600,
+          "byteOffset": 3440136,
           "byteLength": 7528
         },
         {
@@ -4174,7 +4174,7 @@
           "dtype": "u16",
           "count": 7528,
           "itemSize": 1,
-          "byteOffset": 3403128,
+          "byteOffset": 3447664,
           "byteLength": 15056
         },
         {
@@ -4182,7 +4182,7 @@
           "dtype": "u8",
           "count": 7528,
           "itemSize": 1,
-          "byteOffset": 3418184,
+          "byteOffset": 3462720,
           "byteLength": 7528
         }
       ],
@@ -4615,7 +4615,7 @@
           "dtype": "f32",
           "count": 1176,
           "itemSize": 3,
-          "byteOffset": 3425712,
+          "byteOffset": 3470248,
           "byteLength": 4704
         },
         {
@@ -4623,7 +4623,7 @@
           "dtype": "f32",
           "count": 1176,
           "itemSize": 3,
-          "byteOffset": 3430416,
+          "byteOffset": 3474952,
           "byteLength": 4704
         },
         {
@@ -4631,7 +4631,7 @@
           "dtype": "u16",
           "count": 2340,
           "itemSize": 3,
-          "byteOffset": 3435120,
+          "byteOffset": 3479656,
           "byteLength": 4680
         },
         {
@@ -4639,7 +4639,7 @@
           "dtype": "f32",
           "count": 1568,
           "itemSize": 4,
-          "byteOffset": 3439800,
+          "byteOffset": 3484336,
           "byteLength": 6272
         },
         {
@@ -4647,7 +4647,7 @@
           "dtype": "f32",
           "count": 1568,
           "itemSize": 4,
-          "byteOffset": 3446072,
+          "byteOffset": 3490608,
           "byteLength": 6272
         },
         {
@@ -4655,7 +4655,7 @@
           "dtype": "f32",
           "count": 392,
           "itemSize": 1,
-          "byteOffset": 3452344,
+          "byteOffset": 3496880,
           "byteLength": 1568
         },
         {
@@ -4663,7 +4663,7 @@
           "dtype": "f32",
           "count": 1568,
           "itemSize": 4,
-          "byteOffset": 3453912,
+          "byteOffset": 3498448,
           "byteLength": 6272
         },
         {
@@ -4671,7 +4671,7 @@
           "dtype": "f32",
           "count": 392,
           "itemSize": 1,
-          "byteOffset": 3460184,
+          "byteOffset": 3504720,
           "byteLength": 1568
         },
         {
@@ -4679,7 +4679,7 @@
           "dtype": "u16",
           "count": 1568,
           "itemSize": 1,
-          "byteOffset": 3461752,
+          "byteOffset": 3506288,
           "byteLength": 3136
         },
         {
@@ -4687,7 +4687,7 @@
           "dtype": "u8",
           "count": 1568,
           "itemSize": 1,
-          "byteOffset": 3464888,
+          "byteOffset": 3509424,
           "byteLength": 1568
         }
       ],
@@ -4781,7 +4781,7 @@
           "dtype": "f32",
           "count": 1176,
           "itemSize": 3,
-          "byteOffset": 3466456,
+          "byteOffset": 3510992,
           "byteLength": 4704
         },
         {
@@ -4789,7 +4789,7 @@
           "dtype": "f32",
           "count": 1176,
           "itemSize": 3,
-          "byteOffset": 3471160,
+          "byteOffset": 3515696,
           "byteLength": 4704
         },
         {
@@ -4797,7 +4797,7 @@
           "dtype": "u16",
           "count": 2340,
           "itemSize": 3,
-          "byteOffset": 3475864,
+          "byteOffset": 3520400,
           "byteLength": 4680
         },
         {
@@ -4805,7 +4805,7 @@
           "dtype": "f32",
           "count": 1568,
           "itemSize": 4,
-          "byteOffset": 3480544,
+          "byteOffset": 3525080,
           "byteLength": 6272
         },
         {
@@ -4813,7 +4813,7 @@
           "dtype": "f32",
           "count": 1568,
           "itemSize": 4,
-          "byteOffset": 3486816,
+          "byteOffset": 3531352,
           "byteLength": 6272
         },
         {
@@ -4821,7 +4821,7 @@
           "dtype": "f32",
           "count": 392,
           "itemSize": 1,
-          "byteOffset": 3493088,
+          "byteOffset": 3537624,
           "byteLength": 1568
         },
         {
@@ -4829,7 +4829,7 @@
           "dtype": "f32",
           "count": 1568,
           "itemSize": 4,
-          "byteOffset": 3494656,
+          "byteOffset": 3539192,
           "byteLength": 6272
         },
         {
@@ -4837,7 +4837,7 @@
           "dtype": "f32",
           "count": 392,
           "itemSize": 1,
-          "byteOffset": 3500928,
+          "byteOffset": 3545464,
           "byteLength": 1568
         },
         {
@@ -4845,7 +4845,7 @@
           "dtype": "u16",
           "count": 1568,
           "itemSize": 1,
-          "byteOffset": 3502496,
+          "byteOffset": 3547032,
           "byteLength": 3136
         },
         {
@@ -4853,7 +4853,7 @@
           "dtype": "u8",
           "count": 1568,
           "itemSize": 1,
-          "byteOffset": 3505632,
+          "byteOffset": 3550168,
           "byteLength": 1568
         }
       ],
@@ -4947,7 +4947,7 @@
           "dtype": "f32",
           "count": 1128,
           "itemSize": 3,
-          "byteOffset": 3507200,
+          "byteOffset": 3551736,
           "byteLength": 4512
         },
         {
@@ -4955,7 +4955,7 @@
           "dtype": "f32",
           "count": 1128,
           "itemSize": 3,
-          "byteOffset": 3511712,
+          "byteOffset": 3556248,
           "byteLength": 4512
         },
         {
@@ -4963,7 +4963,7 @@
           "dtype": "u16",
           "count": 2244,
           "itemSize": 3,
-          "byteOffset": 3516224,
+          "byteOffset": 3560760,
           "byteLength": 4488
         },
         {
@@ -4971,7 +4971,7 @@
           "dtype": "f32",
           "count": 1504,
           "itemSize": 4,
-          "byteOffset": 3520712,
+          "byteOffset": 3565248,
           "byteLength": 6016
         },
         {
@@ -4979,7 +4979,7 @@
           "dtype": "f32",
           "count": 1504,
           "itemSize": 4,
-          "byteOffset": 3526728,
+          "byteOffset": 3571264,
           "byteLength": 6016
         },
         {
@@ -4987,7 +4987,7 @@
           "dtype": "f32",
           "count": 376,
           "itemSize": 1,
-          "byteOffset": 3532744,
+          "byteOffset": 3577280,
           "byteLength": 1504
         },
         {
@@ -4995,7 +4995,7 @@
           "dtype": "f32",
           "count": 1504,
           "itemSize": 4,
-          "byteOffset": 3534248,
+          "byteOffset": 3578784,
           "byteLength": 6016
         },
         {
@@ -5003,7 +5003,7 @@
           "dtype": "f32",
           "count": 376,
           "itemSize": 1,
-          "byteOffset": 3540264,
+          "byteOffset": 3584800,
           "byteLength": 1504
         },
         {
@@ -5011,7 +5011,7 @@
           "dtype": "u16",
           "count": 1504,
           "itemSize": 1,
-          "byteOffset": 3541768,
+          "byteOffset": 3586304,
           "byteLength": 3008
         },
         {
@@ -5019,7 +5019,7 @@
           "dtype": "u8",
           "count": 1504,
           "itemSize": 1,
-          "byteOffset": 3544776,
+          "byteOffset": 3589312,
           "byteLength": 1504
         }
       ],
@@ -5139,7 +5139,7 @@
           "dtype": "f32",
           "count": 1128,
           "itemSize": 3,
-          "byteOffset": 3546280,
+          "byteOffset": 3590816,
           "byteLength": 4512
         },
         {
@@ -5147,7 +5147,7 @@
           "dtype": "f32",
           "count": 1128,
           "itemSize": 3,
-          "byteOffset": 3550792,
+          "byteOffset": 3595328,
           "byteLength": 4512
         },
         {
@@ -5155,7 +5155,7 @@
           "dtype": "u16",
           "count": 2244,
           "itemSize": 3,
-          "byteOffset": 3555304,
+          "byteOffset": 3599840,
           "byteLength": 4488
         },
         {
@@ -5163,7 +5163,7 @@
           "dtype": "f32",
           "count": 1504,
           "itemSize": 4,
-          "byteOffset": 3559792,
+          "byteOffset": 3604328,
           "byteLength": 6016
         },
         {
@@ -5171,7 +5171,7 @@
           "dtype": "f32",
           "count": 1504,
           "itemSize": 4,
-          "byteOffset": 3565808,
+          "byteOffset": 3610344,
           "byteLength": 6016
         },
         {
@@ -5179,7 +5179,7 @@
           "dtype": "f32",
           "count": 376,
           "itemSize": 1,
-          "byteOffset": 3571824,
+          "byteOffset": 3616360,
           "byteLength": 1504
         },
         {
@@ -5187,7 +5187,7 @@
           "dtype": "f32",
           "count": 1504,
           "itemSize": 4,
-          "byteOffset": 3573328,
+          "byteOffset": 3617864,
           "byteLength": 6016
         },
         {
@@ -5195,7 +5195,7 @@
           "dtype": "f32",
           "count": 376,
           "itemSize": 1,
-          "byteOffset": 3579344,
+          "byteOffset": 3623880,
           "byteLength": 1504
         },
         {
@@ -5203,7 +5203,7 @@
           "dtype": "u16",
           "count": 1504,
           "itemSize": 1,
-          "byteOffset": 3580848,
+          "byteOffset": 3625384,
           "byteLength": 3008
         },
         {
@@ -5211,7 +5211,7 @@
           "dtype": "u8",
           "count": 1504,
           "itemSize": 1,
-          "byteOffset": 3583856,
+          "byteOffset": 3628392,
           "byteLength": 1504
         }
       ],
@@ -5331,7 +5331,7 @@
           "dtype": "f32",
           "count": 2472,
           "itemSize": 3,
-          "byteOffset": 3585360,
+          "byteOffset": 3629896,
           "byteLength": 9888
         },
         {
@@ -5339,7 +5339,7 @@
           "dtype": "f32",
           "count": 2472,
           "itemSize": 3,
-          "byteOffset": 3595248,
+          "byteOffset": 3639784,
           "byteLength": 9888
         },
         {
@@ -5347,7 +5347,7 @@
           "dtype": "u16",
           "count": 4932,
           "itemSize": 3,
-          "byteOffset": 3605136,
+          "byteOffset": 3649672,
           "byteLength": 9864
         },
         {
@@ -5355,7 +5355,7 @@
           "dtype": "f32",
           "count": 3296,
           "itemSize": 4,
-          "byteOffset": 3615000,
+          "byteOffset": 3659536,
           "byteLength": 13184
         },
         {
@@ -5363,7 +5363,7 @@
           "dtype": "f32",
           "count": 3296,
           "itemSize": 4,
-          "byteOffset": 3628184,
+          "byteOffset": 3672720,
           "byteLength": 13184
         },
         {
@@ -5371,7 +5371,7 @@
           "dtype": "f32",
           "count": 824,
           "itemSize": 1,
-          "byteOffset": 3641368,
+          "byteOffset": 3685904,
           "byteLength": 3296
         },
         {
@@ -5379,7 +5379,7 @@
           "dtype": "f32",
           "count": 3296,
           "itemSize": 4,
-          "byteOffset": 3644664,
+          "byteOffset": 3689200,
           "byteLength": 13184
         },
         {
@@ -5387,7 +5387,7 @@
           "dtype": "f32",
           "count": 824,
           "itemSize": 1,
-          "byteOffset": 3657848,
+          "byteOffset": 3702384,
           "byteLength": 3296
         },
         {
@@ -5395,7 +5395,7 @@
           "dtype": "u16",
           "count": 3296,
           "itemSize": 1,
-          "byteOffset": 3661144,
+          "byteOffset": 3705680,
           "byteLength": 6592
         },
         {
@@ -5403,7 +5403,7 @@
           "dtype": "u8",
           "count": 3296,
           "itemSize": 1,
-          "byteOffset": 3667736,
+          "byteOffset": 3712272,
           "byteLength": 3296
         }
       ],
@@ -5497,7 +5497,7 @@
           "dtype": "f32",
           "count": 2472,
           "itemSize": 3,
-          "byteOffset": 3671032,
+          "byteOffset": 3715568,
           "byteLength": 9888
         },
         {
@@ -5505,7 +5505,7 @@
           "dtype": "f32",
           "count": 2472,
           "itemSize": 3,
-          "byteOffset": 3680920,
+          "byteOffset": 3725456,
           "byteLength": 9888
         },
         {
@@ -5513,7 +5513,7 @@
           "dtype": "u16",
           "count": 4932,
           "itemSize": 3,
-          "byteOffset": 3690808,
+          "byteOffset": 3735344,
           "byteLength": 9864
         },
         {
@@ -5521,7 +5521,7 @@
           "dtype": "f32",
           "count": 3296,
           "itemSize": 4,
-          "byteOffset": 3700672,
+          "byteOffset": 3745208,
           "byteLength": 13184
         },
         {
@@ -5529,7 +5529,7 @@
           "dtype": "f32",
           "count": 3296,
           "itemSize": 4,
-          "byteOffset": 3713856,
+          "byteOffset": 3758392,
           "byteLength": 13184
         },
         {
@@ -5537,7 +5537,7 @@
           "dtype": "f32",
           "count": 824,
           "itemSize": 1,
-          "byteOffset": 3727040,
+          "byteOffset": 3771576,
           "byteLength": 3296
         },
         {
@@ -5545,7 +5545,7 @@
           "dtype": "f32",
           "count": 3296,
           "itemSize": 4,
-          "byteOffset": 3730336,
+          "byteOffset": 3774872,
           "byteLength": 13184
         },
         {
@@ -5553,7 +5553,7 @@
           "dtype": "f32",
           "count": 824,
           "itemSize": 1,
-          "byteOffset": 3743520,
+          "byteOffset": 3788056,
           "byteLength": 3296
         },
         {
@@ -5561,7 +5561,7 @@
           "dtype": "u16",
           "count": 3296,
           "itemSize": 1,
-          "byteOffset": 3746816,
+          "byteOffset": 3791352,
           "byteLength": 6592
         },
         {
@@ -5569,7 +5569,7 @@
           "dtype": "u8",
           "count": 3296,
           "itemSize": 1,
-          "byteOffset": 3753408,
+          "byteOffset": 3797944,
           "byteLength": 3296
         }
       ],
@@ -5663,7 +5663,7 @@
           "dtype": "f32",
           "count": 1920,
           "itemSize": 3,
-          "byteOffset": 3756704,
+          "byteOffset": 3801240,
           "byteLength": 7680
         },
         {
@@ -5671,7 +5671,7 @@
           "dtype": "f32",
           "count": 1920,
           "itemSize": 3,
-          "byteOffset": 3764384,
+          "byteOffset": 3808920,
           "byteLength": 7680
         },
         {
@@ -5679,7 +5679,7 @@
           "dtype": "u16",
           "count": 3828,
           "itemSize": 3,
-          "byteOffset": 3772064,
+          "byteOffset": 3816600,
           "byteLength": 7656
         },
         {
@@ -5687,7 +5687,7 @@
           "dtype": "f32",
           "count": 2560,
           "itemSize": 4,
-          "byteOffset": 3779720,
+          "byteOffset": 3824256,
           "byteLength": 10240
         },
         {
@@ -5695,7 +5695,7 @@
           "dtype": "f32",
           "count": 2560,
           "itemSize": 4,
-          "byteOffset": 3789960,
+          "byteOffset": 3834496,
           "byteLength": 10240
         },
         {
@@ -5703,7 +5703,7 @@
           "dtype": "f32",
           "count": 640,
           "itemSize": 1,
-          "byteOffset": 3800200,
+          "byteOffset": 3844736,
           "byteLength": 2560
         },
         {
@@ -5711,7 +5711,7 @@
           "dtype": "f32",
           "count": 2560,
           "itemSize": 4,
-          "byteOffset": 3802760,
+          "byteOffset": 3847296,
           "byteLength": 10240
         },
         {
@@ -5719,7 +5719,7 @@
           "dtype": "f32",
           "count": 640,
           "itemSize": 1,
-          "byteOffset": 3813000,
+          "byteOffset": 3857536,
           "byteLength": 2560
         },
         {
@@ -5727,7 +5727,7 @@
           "dtype": "u16",
           "count": 2560,
           "itemSize": 1,
-          "byteOffset": 3815560,
+          "byteOffset": 3860096,
           "byteLength": 5120
         },
         {
@@ -5735,7 +5735,7 @@
           "dtype": "u8",
           "count": 2560,
           "itemSize": 1,
-          "byteOffset": 3820680,
+          "byteOffset": 3865216,
           "byteLength": 2560
         }
       ],
@@ -5855,7 +5855,7 @@
           "dtype": "f32",
           "count": 1920,
           "itemSize": 3,
-          "byteOffset": 3823240,
+          "byteOffset": 3867776,
           "byteLength": 7680
         },
         {
@@ -5863,7 +5863,7 @@
           "dtype": "f32",
           "count": 1920,
           "itemSize": 3,
-          "byteOffset": 3830920,
+          "byteOffset": 3875456,
           "byteLength": 7680
         },
         {
@@ -5871,7 +5871,7 @@
           "dtype": "u16",
           "count": 3828,
           "itemSize": 3,
-          "byteOffset": 3838600,
+          "byteOffset": 3883136,
           "byteLength": 7656
         },
         {
@@ -5879,7 +5879,7 @@
           "dtype": "f32",
           "count": 2560,
           "itemSize": 4,
-          "byteOffset": 3846256,
+          "byteOffset": 3890792,
           "byteLength": 10240
         },
         {
@@ -5887,7 +5887,7 @@
           "dtype": "f32",
           "count": 2560,
           "itemSize": 4,
-          "byteOffset": 3856496,
+          "byteOffset": 3901032,
           "byteLength": 10240
         },
         {
@@ -5895,7 +5895,7 @@
           "dtype": "f32",
           "count": 640,
           "itemSize": 1,
-          "byteOffset": 3866736,
+          "byteOffset": 3911272,
           "byteLength": 2560
         },
         {
@@ -5903,7 +5903,7 @@
           "dtype": "f32",
           "count": 2560,
           "itemSize": 4,
-          "byteOffset": 3869296,
+          "byteOffset": 3913832,
           "byteLength": 10240
         },
         {
@@ -5911,7 +5911,7 @@
           "dtype": "f32",
           "count": 640,
           "itemSize": 1,
-          "byteOffset": 3879536,
+          "byteOffset": 3924072,
           "byteLength": 2560
         },
         {
@@ -5919,7 +5919,7 @@
           "dtype": "u16",
           "count": 2560,
           "itemSize": 1,
-          "byteOffset": 3882096,
+          "byteOffset": 3926632,
           "byteLength": 5120
         },
         {
@@ -5927,7 +5927,7 @@
           "dtype": "u8",
           "count": 2560,
           "itemSize": 1,
-          "byteOffset": 3887216,
+          "byteOffset": 3931752,
           "byteLength": 2560
         }
       ],
@@ -6047,7 +6047,7 @@
           "dtype": "f32",
           "count": 1728,
           "itemSize": 3,
-          "byteOffset": 3889776,
+          "byteOffset": 3934312,
           "byteLength": 6912
         },
         {
@@ -6055,7 +6055,7 @@
           "dtype": "f32",
           "count": 1728,
           "itemSize": 3,
-          "byteOffset": 3896688,
+          "byteOffset": 3941224,
           "byteLength": 6912
         },
         {
@@ -6063,7 +6063,7 @@
           "dtype": "u16",
           "count": 3444,
           "itemSize": 3,
-          "byteOffset": 3903600,
+          "byteOffset": 3948136,
           "byteLength": 6888
         },
         {
@@ -6071,7 +6071,7 @@
           "dtype": "f32",
           "count": 2304,
           "itemSize": 4,
-          "byteOffset": 3910488,
+          "byteOffset": 3955024,
           "byteLength": 9216
         },
         {
@@ -6079,7 +6079,7 @@
           "dtype": "f32",
           "count": 2304,
           "itemSize": 4,
-          "byteOffset": 3919704,
+          "byteOffset": 3964240,
           "byteLength": 9216
         },
         {
@@ -6087,7 +6087,7 @@
           "dtype": "f32",
           "count": 576,
           "itemSize": 1,
-          "byteOffset": 3928920,
+          "byteOffset": 3973456,
           "byteLength": 2304
         },
         {
@@ -6095,7 +6095,7 @@
           "dtype": "f32",
           "count": 2304,
           "itemSize": 4,
-          "byteOffset": 3931224,
+          "byteOffset": 3975760,
           "byteLength": 9216
         },
         {
@@ -6103,7 +6103,7 @@
           "dtype": "f32",
           "count": 576,
           "itemSize": 1,
-          "byteOffset": 3940440,
+          "byteOffset": 3984976,
           "byteLength": 2304
         },
         {
@@ -6111,7 +6111,7 @@
           "dtype": "u16",
           "count": 2304,
           "itemSize": 1,
-          "byteOffset": 3942744,
+          "byteOffset": 3987280,
           "byteLength": 4608
         },
         {
@@ -6119,7 +6119,7 @@
           "dtype": "u8",
           "count": 2304,
           "itemSize": 1,
-          "byteOffset": 3947352,
+          "byteOffset": 3991888,
           "byteLength": 2304
         }
       ],

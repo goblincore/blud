@@ -41,7 +41,7 @@ const ZOMBIE_BASE: BodyDef = {
     // Feet on the floor (2026-09-29): legs +0.06 / +0.08 and a foot bone; see zombie.blob.
     { name: 'thigh',    parent: 'pelvis', dir: [0, -1, 0],      length: 0.46, side: 0.10, mirror: true },
     { name: 'shin',     parent: 'thigh',  dir: [0, -1, 0.05],   length: 0.50, side: 0,    mirror: true },
-    { name: 'foot',     parent: 'shin',   dir: [0, 0, 1],       length: 0.15, side: 0,    mirror: true },
+    { name: 'foot',     parent: 'shin',   dir: [0, 0, 1],       length: 0.16, side: 0,    mirror: true },
   ],
 
   prims: [
@@ -65,8 +65,8 @@ const ZOMBIE_BASE: BodyDef = {
     { bone: 'thigh', at: 0.04348, capTo: 0.95, radius: 0.082, scale: [1, 1, 1], blendK: 0.0175, limb: 'leg', mirror: true },
     { bone: 'shin',  at: 0.05, capTo: 0.92, radius: 0.062, scale: [1, 1, 1], blendK: 0.015, limb: 'leg', mirror: true },
     { bone: 'shin',  at: 1.00, radius: 0.058, scale: [1, 1, 1], blendK: 0.0125, limb: 'leg', mirror: true },
-    { bone: 'foot',  at: 0.00, radius: 0.042, scale: [1.15, 0.9, 1.2], blendK: 0.012, limb: 'leg', mirror: true, offset: [0, -0.058, -0.010] },
-    { bone: 'foot',  at: 0.00, capTo: 1.00, radius: 0.036, radiusB: 0.030, scale: [1.35, 0.75, 1], blendK: 0.014, limb: 'leg', mirror: true, offset: [0, -0.070, 0] },
+    { bone: 'foot',  at: 0.00, radius: 0.058, scale: [1.05, 0.95, 1.05], blendK: 0.012, limb: 'leg', mirror: true, offset: [0, -0.041, -0.010] },
+    { bone: 'foot',  at: 0.00, capTo: 1.00, radius: 0.052, radiusB: 0.046, scale: [1.15, 1, 1], blendK: 0.014, limb: 'leg', mirror: true, offset: [0, -0.045, 0] },
   ],
 };
 

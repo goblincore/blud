@@ -23,5 +23,9 @@ soldier's; earlier indices unchanged), the stepMotion checksum re-recorded (seco
 segments 20, the hull sampling test draws 300k points, two float-noise tests compare within 1e-12, and the
 committed gib assets regenerated (`npm run gib:assets`).
 
-**Open:** the feet are on the small side (~0.19 m heel to toe vs ~0.26 for a 1.78 m person) — `len` of the foot
-bone if the owner wants them bigger. The walk with the longer legs is not yet judged in play.
+**Round two (owner, same day): bigger and rounder.** Stylistic target is early Virtua Fighter without the
+polygons — simple forms, the hands are orbs. Foot bone 0.15 → 0.16; heel is now a round orb (r 0.058) and the sole
+a rounded capsule r 0.052 → 0.046, so heel-to-toe is ~0.27 m (was ~0.19). Still on the floor (undersides ~0.004).
+gait-pins checksum re-recorded again; gib assets regenerated.
+
+**Open:** the walk with the longer legs is not yet judged in play.

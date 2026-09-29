@@ -99,6 +99,8 @@ describe('zombie output pins (pre-refactor)', () => {
     // body changed on purpose — thigh 0.46 / shin 0.50 and a foot bone, so 19 rig points (+ the two
     // toes) and a longer leg chain. Not a refactor moving arithmetic. The pre-feet pin was
     // '372401.420656677|444572.567802363'.
-    expect(checksum(out)).toBe('381680.526956176|452092.787225483');
+    // Re-recorded again the same day when the foot bone went 0.15 -> 0.16 (bigger, rounder feet, owner
+    // call): only the toe rest points moved. Previous pin '381680.526956176|452092.787225483'.
+    expect(checksum(out)).toBe('381800.838386450|452197.295623947');
   });
 });
