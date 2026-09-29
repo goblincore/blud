@@ -18,6 +18,9 @@ export function createFlailSeams(ctx: GameContext) {
       /** The swing's shutter blur on the ball and chain (flail-blur.ts, spec §14.1 item 6). On by default;
        *  state().blur reads it back. */
       setBlur: (on: boolean, look?: { ball?: number; chain?: number; spin?: boolean }) => { ctx.weapon.flail?.setBlur(on, look); },
+      /** Blood on the flail (flail-blood.ts, spec §14.1 item 7): set the level 0..1 (clamped); it keeps drying
+       *  from there. A fresh flail is at 0; state().blood reads it back. Pixel gates can set 0. */
+      setBlood: (level: number) => { ctx.weapon.flail?.setBlood(level); },
       /** The impact feel's live channels (flail-impact.ts; the gate's "impact" section). */
       impactDebug: () => ctx.weapon.flail?.impactDebug() ?? null,
       state: () => ctx.weapon.flail?.debug() ?? null,

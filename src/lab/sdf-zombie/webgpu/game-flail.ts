@@ -12,7 +12,10 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { lights } from 'three/tsl';
+import {
+  clamp, dot, float, instanceIndex, length, materialColor, materialEmissive, materialMetalness, materialRoughness, max, mix,
+  mx_noise_float, normalView, normalize, positionGeometry, positionView, pow, smoothstep, uniform, varying, vec3, lights,
+} from 'three/tsl';
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
@@ -40,6 +43,7 @@ import {
   FLAIL_IMPACT_FEEL, chainRelax, clearTime, clearView, contact, impactKick, impactOutputs, makeImpactState,
   stepImpact, timeScale,
 } from './flail-impact';
+import { bloodHit, makeFlailBlood, setBloodLevel, stepBlood } from './flail-blood';
 
 const FLAIL_GLB = '/assets/lab/flail.glb';
 
@@ -80,6 +84,46 @@ export const FLAIL_LOOK = {
    *  and colour, no distance falloff — at this fraction of the torch's live
    *  intensity, so it still dims and flickers with it. */
   flashFill: 0.018,
+} as const;
+
+/** BLOOD ON THE FLAIL, the look (spec §14.1 item 7; the level is flail-blood.ts). Masks are 0..~1.2
+ *  (noise included); a texel is covered once its mask clears mix(threshold0, threshold1, √level). */
+export const FLAIL_BLOOD_LOOK = {
+  /** Wet dark red (sRGB hex; three converts to linear). */
+  color: 0x7a0d10,
+  /** The albedo scale on `color` (the flail's lights and env map read a plain #7a0d10 as red plastic),
+   *  and the darker clotted tone it varies toward (× color × albedo). */
+  albedo: 0.5,
+  darkMul: 0.3,
+  /** Covered: the roughness and metalness it mixes toward (a glossy dielectric film). */
+  roughness: 0.08,
+  metalness: 0.05,
+  /** THE WET GLINT: the flail's lights are a dim fill and the env map gives a dielectric film only 4%, so
+   *  the blood read matte. A sharp Blinn-Phong glint from a view-space light where the head torch sits
+   *  (above and just left of the eye), added as emission on covered texels: exponent, strength (linear
+   *  RGB, warm white) and the share left when the torch is off. */
+  glintDir: [-0.35, 0.85, 0.4] as const,
+  glintPow: 90,
+  glintGain: 0.3,
+  glintDark: 0.25,
+  /** Coverage threshold at level 0 (above every mask, so level 0 is spotless), at level 1 (so even a full
+   *  flail keeps bare patches on the core and upper haft), and the soft edge width. The threshold falls
+   *  with √level: the first hits already show on the spikes. */
+  threshold0: 1.25,
+  threshold1: 0.45,
+  edge: 0.3,
+  /** BALL: vertex radius from the centre where the spike mask ramps 0 → 1 (core ~0.058 m, tips 0.105). */
+  spikeR0: 0.06,
+  spikeR1: 0.08,
+  /** The core's mask (the spikes' is 1). */
+  ballCore: 0.5,
+  /** CHAIN: the eye-bolt end's mask; +0.45 toward the ball over this many links; +0.25 per-link hash. */
+  chainBase: 0.3,
+  chainLinks: 30,
+  /** HAFT: the mask falls from the lower haft (full below haftLowY) to haftTop above haftHighY (haft-local y). */
+  haftLowY: 0.05,
+  haftHighY: 0.4,
+  haftTop: 0.35,
 } as const;
 
 export interface FlailDeps {
@@ -144,6 +188,8 @@ export interface FlailDebug {
    *  blurSubjects() call offered the gib shutter layer (0 at rest); `ballSpeed` the drawn ball's
    *  rig-local speed over the unscaled step (the gate, m/s); `radius` the ball's probe radius. */
   blur: { on: boolean; ballGain: number; chainGain: number; ballSpin: boolean; warm: string; offered: number; ballSpeed: number; radius: number };
+  /** BLOOD ON THE FLAIL (flail-blood.ts): the level 0..1 the ball, chain and haft materials draw with. */
+  blood: number;
 }
 
 export interface FlailWeapon {
@@ -184,6 +230,8 @@ export interface FlailWeapon {
   /** Seam: the swing blur on/off (on by default), and optionally its look: the ball's and the chain's
    *  motion gains (FLAIL_BLUR.ballGain / chainGain) and whether the ball's spin is carried. */
   setBlur(on: boolean, look?: { ball?: number; chain?: number; spin?: boolean }): void;
+  /** Seam: set the blood level (0..1, clamped); it keeps drying from there. state().blood reads it back. */
+  setBlood(level: number): void;
 }
 
 export interface FlailImpactDebug {
@@ -246,7 +294,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   function syncFill(): void {
     if (ctx.boot.deferredMode) return;
     const spot = ctx.lighting.flashlight?.spot;
-    if (!spot || !spot.visible) { fill.intensity = 0; return; }   // the torch is off in this rig (outdoor)
+    if (!spot || !spot.visible) { fill.intensity = 0; sheenU.value = FLAIL_BLOOD_LOOK.glintDark; return; }   // the torch is off in this rig (outdoor)
+    sheenU.value = 1;
     spot.updateMatrixWorld();
     spot.target.updateMatrixWorld();
     fill.position.copy(spot.getWorldPosition(_fp));
@@ -317,6 +366,88 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     });
   }
 
+  // ---- BLOOD ON THE FLAIL (spec §14.1 item 7; flail-blood.ts holds the level) ----------------------
+  // ONE uniform drives every part. Each part (ball, chain, haft) gets its OWN clone of its lit material,
+  // because the GLB's Iron is shared by all three and each weights the blood differently (a mask per
+  // part, from the geometry's own coordinates, so the blood sticks to the metal as it swings):
+  //   ball  — the spikes: vertex distance from the ball's centre (core ~0.058 m, spike tips 0.105 m);
+  //   chain — more toward the ball end (instance index: link 0 is at the eye bolt), plus a per-link hash;
+  //   haft  — vertical streaks (noise stretched along the haft), heavier toward the lower haft, plus the
+  //           iron cap where the chain drips onto it.
+  // Coverage GROWS with the level rather than fading in: a texel is covered once its mask (+ noise)
+  // clears a threshold that falls as the level rises, so blood pools on the spikes first and only
+  // reaches the core and the upper haft near 1. Covered texels mix the albedo toward a wet dark red,
+  // drop the roughness (a sharp specular) and the metalness (blood is a dielectric film over the iron).
+  // Material nodes are set ONCE per material (the GLB settles before the blur warm starts), so the
+  // shutter layer, which draws these same meshes with these same materials, shows the blood too;
+  // only the uniform's value changes per frame (no pipeline rebuild).
+  /** The goblin hand (loaded async, parented under the haft). */
+  let hand: THREE.Group | null = null;
+  const blood = makeFlailBlood();
+  const bloodU = uniform(0);
+  /** 1 while the torch (and so the fill) is on, glintDark while it is off (syncFill). */
+  const sheenU = uniform(1);
+  const bloodRgb = new THREE.Color(FLAIL_BLOOD_LOOK.color);   // linear, from the sRGB hex
+  type BloodPart = 'ball' | 'chain' | 'haft';
+  const bloodMask = (part: BloodPart) => {
+    const p = positionGeometry;
+    if (part === 'ball') {
+      const spike = smoothstep(FLAIL_BLOOD_LOOK.spikeR0, FLAIL_BLOOD_LOOK.spikeR1, length(p));
+      return mix(float(FLAIL_BLOOD_LOOK.ballCore), float(1), spike).add(mx_noise_float(p.mul(90)).mul(0.18));
+    }
+    if (part === 'chain') {
+      const i = varying(float(instanceIndex));
+      const toBall = clamp(i.div(FLAIL_BLOOD_LOOK.chainLinks), 0, 1);
+      const hash = mx_noise_float(vec3(i.mul(1.618), 0.5, 0.25)).mul(0.5).add(0.5);
+      return float(FLAIL_BLOOD_LOOK.chainBase).add(toBall.mul(0.45)).add(hash.mul(0.25)).add(mx_noise_float(p.mul(300)).mul(0.1));
+    }
+    // HAFT: glTF +Y runs along it — the pommel at −0.14, the grip at 0, the cap and eye bolt at 0.40–0.46.
+    const streak = smoothstep(0.3, 0.75, mx_noise_float(vec3(p.x.mul(140), p.y.mul(7), p.z.mul(140))).mul(0.5).add(0.5));
+    const lower = float(1).sub(smoothstep(FLAIL_BLOOD_LOOK.haftLowY, FLAIL_BLOOD_LOOK.haftHighY, p.y));
+    const cap = smoothstep(0.37, 0.41, p.y).mul(0.35);
+    return streak.mul(mix(float(FLAIL_BLOOD_LOOK.haftTop), float(1), lower)).add(cap);
+  };
+  const bloodParts = new Map<BloodPart, Map<THREE.Material, THREE.Material>>();
+  /** Give every mesh under `root` this part's blood-aware clone of its (already lit) material. */
+  function bloodify(root: THREE.Object3D, part: BloodPart): void {
+    if (ctx.boot.deferredMode) return;
+    let cache = bloodParts.get(part);
+    if (!cache) bloodParts.set(part, cache = new Map());
+    const conv = (m: THREE.Material): THREE.Material => {
+      let nm = cache!.get(m);
+      if (nm) return nm;
+      if (!(m as THREE.NodeMaterial).isNodeMaterial) return m;
+      const node = (m as THREE.NodeMaterial).clone() as THREE.MeshStandardNodeMaterial;
+      node.lightsNode = lightList;
+      const mask = bloodMask(part);
+      const t = mix(float(FLAIL_BLOOD_LOOK.threshold0), float(FLAIL_BLOOD_LOOK.threshold1), bloodU.sqrt());
+      const w = smoothstep(t, t.add(FLAIL_BLOOD_LOOK.edge), mask).mul(smoothstep(0, 0.02, bloodU));
+      const tone = mx_noise_float(positionGeometry.mul(60)).mul(0.5).add(0.5);
+      const red = vec3(bloodRgb.r, bloodRgb.g, bloodRgb.b).mul(FLAIL_BLOOD_LOOK.albedo);
+      const wet = mix(red.mul(FLAIL_BLOOD_LOOK.darkMul), red, tone);
+      node.colorNode = mix(materialColor.rgb, wet, w);
+      node.roughnessNode = mix(materialRoughness, float(FLAIL_BLOOD_LOOK.roughness), w);
+      node.metalnessNode = mix(materialMetalness, float(FLAIL_BLOOD_LOOK.metalness), w);
+      const gd = FLAIL_BLOOD_LOOK.glintDir;
+      const half = normalize(normalize(positionView.negate()).add(normalize(vec3(gd[0], gd[1], gd[2]))));
+      const glint = pow(max(dot(normalView, half), 0), FLAIL_BLOOD_LOOK.glintPow).mul(FLAIL_BLOOD_LOOK.glintGain).mul(w).mul(sheenU);
+      node.emissiveNode = materialEmissive.add(vec3(1, 0.85, 0.8).mul(glint));
+      node.needsUpdate = true;
+      cache!.set(m, node);
+      cache!.set(node, node);
+      litMaterials.add(node);
+      return node;
+    };
+    // The goblin hand hangs under the haft: never bloodied (skip its subtree, whichever loaded first).
+    const walk = (o: THREE.Object3D): void => {
+      if (o === hand) return;
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) mesh.material = Array.isArray(mesh.material) ? mesh.material.map(conv) : conv(mesh.material);
+      for (const c of o.children) walk(c);
+    };
+    walk(root);
+  }
+
   // PRIMITIVES FIRST, GLB OVER THEM (the flare's rule).
   const haftPrim = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.42, 12), wood);
   haftPrim.position.y = 0.09;
@@ -336,6 +467,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   rig.add(chain);
   relist();
   ownLights(rig);
+  bloodify(haft, 'haft'); bloodify(ball, 'ball'); bloodify(chain, 'chain');
   if (ctx.boot.deferredApi) ctx.boot.deferredApi.router.register(rig, 'mesh', 'level-only');
 
   void (async () => {
@@ -373,6 +505,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       linkNode.traverse((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
       if (found[0]) { chain.geometry = found[0].geometry; chain.material = found[0].material; linkGeo.dispose(); }
       ownLights(haft); ownLights(ball); ownLights(chain);
+      bloodify(haft, 'haft'); bloodify(ball, 'ball'); bloodify(chain, 'chain');
     } catch (e) {
       console.warn('[sdf-game] flail.glb absent or unreadable — using the primitive flail', e);
     } finally {
@@ -380,7 +513,6 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     }
   })();
 
-  let hand: THREE.Group | null = null;
   void loadGoblinArms(GOBLIN_ARM_GLB, { env, envMapIntensity: 1.1 }).then((arms) => {
     hand = arms.right;
     hand.name = 'flail-hand';
@@ -527,6 +659,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       // punch, rig kick and chain relax (setImpactFx). Replaces the old 0.02 rad recoilPitch kick.
       contact(impact, impactKick(side, anyHead), { time: hitStopOn, view: impactFxOn });
       contacts++;
+      // BLOOD (flail-blood.ts): one contact, one dose — ×1.5 on H, ×1.3 when any hit was a head hit.
+      bloodHit(blood, side, anyHead);
+      bloodU.value = blood.level;
       ctx.weapon.shotAlert = true;
     }
     ctx.telemetry.telemetry.event('flail-strike', { side, hits: hits.length });
@@ -875,6 +1010,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       lastScale = timeScale(impact, dt);
       stepImpact(impact, dt);
       publishImpact();
+      // The blood dries on the UNSCALED step (simulated time as the player lives it).
+      stepBlood(blood, dt);
+      bloodU.value = blood.level;
       return lastScale;
     },
     phase: () => swing.phase,
@@ -908,7 +1046,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       if (look?.chain !== undefined && Number.isFinite(look.chain)) chainGain = Math.max(0, look.chain);
       if (look?.spin !== undefined) ballSpin = look.spin;
     },
+    setBlood(level) { setBloodLevel(blood, level); bloodU.value = blood.level; },
     debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: comboSide(swing), ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, ballKeyed: [...ballKeyed] as Vec3, linkErr, ndc: ndcNow(),
-      blur: { on: blurOn, ballGain, chainGain, ballSpin, warm, offered: lastOffered, ballSpeed: lastBallSpeed, radius: ballRadius } }),
+      blur: { on: blurOn, ballGain, chainGain, ballSpin, warm, offered: lastOffered, ballSpeed: lastBallSpeed, radius: ballRadius }, blood: blood.level }),
   };
 }

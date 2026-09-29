@@ -71,6 +71,9 @@
 //      slow tail monotone and exactly 1.0 within slowSec (+1 frame), the pitch kick peak ≥ 0.04 rad, the judder
 //      below 10% of its peak from 0.35 s, the FOV pinched ≥ 2° and back within 0.05° of its base by 0.3 s, the
 //      rig kick back at rest by 0.6 s; H's pitch, FOV and rig peaks above R's. Printed: every number.
+//   13. BLOOD (spec §14.1 item 7): a fresh flail's state().blood is 0 (the rest photo's pixel measures run
+//      clean); three R body hits from 0 raise it by ~0.12 each to 0.36 less its drying (120 s time constant)
+//      over the swings; set to 1, ten seconds of simulated time dry it to exp(−10/120) ± 0.003;
 //   11. LIVE (spec §13, v1.4): the section-2 zombie (untouched) unfrozen and walking up, hit-stop on, free aim
 //      on with the reticle centred; before each of LIVE_SWINGS (8) clicks the player stands LIVE_DIST (1.3 m)
 //      out from its current torso with the crosshair on its current head centre — its arms up in front of
@@ -308,6 +311,9 @@ await evaluate('__sdfGame.flail.setHitStop(false)');
 await evaluate('__sdfGame.flail.setImpactFx(false)');
 const st0 = await evaluate('__sdfGame.flail.state()');
 if (!st0 || st0.phase !== 'idle') die(`flail not idle after the raise: ${JSON.stringify(st0)}`);
+// A fresh flail is clean (flail-blood.ts): the rest photo's pixel measures below run at blood 0.
+if (st0.blood === 0) pass('blood: a fresh flail starts clean (state().blood 0)');
+else fail(`blood: a fresh flail starts at ${st0.blood} (expected 0)`);
 if ((await evaluate('__sdfGame.dynamite()'))?.live !== 'flail') die('the live slot is not the flail');
 // The FIRST render-locked capture of a session has come back with neither the level nor
 // the flail drawn (seen twice: a dark frame, the zombie alone). Throw two away first, so
@@ -1068,6 +1074,60 @@ else fail(`positive control: ${controlFails} click(s) did not strike as expected
   }
   await evaluate('__sdfGame.flail.setImpactFx(false)');
   await evaluate('__sdfGame.flail.setHitStop(false)');
+}
+
+// ---- 13. BLOOD on the flail (flail-blood.ts, spec §14.1 item 7) ---------------------------------------
+// Hit-stop and fx off (the other sections' state). From 0, three R body hits (a pause past the combo window
+// between them, so each is R): +0.12 each (a head hit would add 0.156 and fails here), drying at a 120 s time
+// constant over the ~3 s they take. Then set 1 and step 10 s of simulated time: exp(−10/120) = 0.920.
+{
+  await evaluate('__sdfGame.freeze(true)');
+  await evaluate('__sdfGame.setFreeAim(true)');
+  await evaluate('__sdfGame.setAimPoint(0, 0)');
+  for (let i = 0; i < 90 && (await state()).phase !== 'idle'; i++) await stepOne();
+  await stepN(30);
+  let target = null;
+  for (const z of pool) {
+    const t = await torso(z.id);
+    if (!t || t[1] < 0.7) continue;
+    target = z; break;
+  }
+  if (!target) fail('blood: no standing zombie left to strike');
+  else {
+    await evaluate('__sdfGame.flail.setBlood(0)');
+    const levels = [];
+    let heads = 0, frames = 0;
+    for (let n = 0; n < 3; n++) {
+      const t = await torso(target.id);
+      const p = standOff(t, 1.2);
+      await place(p, Math.atan2(t[1] - EYE_H, Math.hypot(t[0] - p.x, t[2] - p.z)));
+      await evaluate('__sdfGame.setAimPoint(0, 0)');
+      frames++;
+      const pre = await state();
+      const samples = await swing(SWING_FRAMES);
+      frames += SWING_FRAMES;
+      const post = await state();
+      if (!post.lastStrike?.hits?.includes(target.id)) console.error(`  blood: swing ${n + 1} (${samples.side}) missed #${target.id}`);
+      if ((post.lastStrike?.headHits?.[target.id] ?? 0) > (pre.lastStrike?.headHits?.[target.id] ?? 0)) heads++;
+      levels.push(post.blood);
+      await stepN(30); frames += 30;   // > comboWindowSec: the next click is R again
+    }
+    const end = (await state()).blood;
+    const secs = frames / 60;
+    const lo = 0.36 * Math.exp(-secs / 120), hi = 0.36;
+    console.log(`blood: after hits ${levels.map((v) => v.toFixed(4)).join(' → ')}; ${end.toFixed(4)} after ${secs.toFixed(2)} s (expected ${lo.toFixed(4)}–${hi.toFixed(4)}); head hits ${heads}`);
+    const steps = levels.map((v, i) => v - (i ? levels[i - 1] : 0));
+    if (heads === 0 && end >= lo - 1e-4 && end <= hi && steps.every((d) => d > 0.11 && d < 0.121))
+      pass(`blood: 3 body hits raise it to ${end.toFixed(4)} (0.36 less ${secs.toFixed(1)} s of drying; steps ${steps.map((d) => d.toFixed(4)).join(', ')})`);
+    else fail(`blood: 3 body hits → ${end.toFixed(4)} (steps ${steps.map((d) => d.toFixed(4)).join(', ')}, head hits ${heads}; expected ${lo.toFixed(4)}–${hi})`);
+    await evaluate('__sdfGame.flail.setBlood(1)');
+    for (let i = 0; i < 6; i++) await evaluate('__sdfGame.step(100, 1 / 60)', 300000);
+    const dried = (await state()).blood;
+    const want = Math.exp(-10 / 120);
+    if (Math.abs(dried - want) < 0.003) pass(`blood: dries on simulated time: 1 → ${dried.toFixed(4)} over 10 s (exp(−10/120) = ${want.toFixed(4)})`);
+    else fail(`blood: 1 → ${dried.toFixed(4)} over 10 s of simulated time (expected ${want.toFixed(4)})`);
+    await evaluate('__sdfGame.flail.setBlood(0)');
+  }
 }
 
 // ---- 10. Console -------------------------------------------------------------------------
