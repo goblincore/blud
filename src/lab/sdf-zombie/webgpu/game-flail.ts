@@ -32,22 +32,25 @@ import {
 } from './flail-chain';
 import { reticleNdc } from './fisheye';
 import { FLAIL_FILL_LAYER } from './gib-motion-blur';
+import {
+  FLAIL_IMPACT_FEEL, chainRelax, clearTime, clearView, contact, impactKick, impactOutputs, makeImpactState,
+  stepImpact, timeScale,
+} from './flail-impact';
 
 const FLAIL_GLB = '/assets/lab/flail.glb';
 
-/** Feel numbers (spec §6, §11, §12.2). */
+/** Feel numbers (spec §6, §11, §12.2). The hit-stop, slow tail, camera kick and the rest of the impact
+ *  feel moved to flail-impact.ts FLAIL_IMPACT_FEEL (spec §14.1, v1.5a). */
 export const FLAIL_FEEL = {
   craterR: 0.09,
   severMul: 1.3,
-  /** dt multiplier while a hit-stop runs: near-frozen, never 0. */
-  hitStopScale: 0.08,
-  kickRad: 0.02,
   /** Per swing: collapse credit (threshold 0.8 → ~12 body hits, spec §13.2; a head hit credits 0.3 of it,
-   *  game-head-damage.ts HEAD_LEAF.meterScale — the head model kills), shove (blast() unit-normalises it), hit-stop. */
+   *  game-head-damage.ts HEAD_LEAF.meterScale — the head model kills), shove (blast() unit-normalises it:
+   *  its SIZE reaches the zombie as FLAIL_IMPACT_FEEL.zombie.reactionGain, spec §14.1 item 5). */
   swing: {
-    R: { meterCredit: 0.065, shove: 6, hitStopSec: 0.05 },
-    L: { meterCredit: 0.065, shove: 6, hitStopSec: 0.05 },
-    H: { meterCredit: 0.09, shove: 9, hitStopSec: 0.07 },
+    R: { meterCredit: 0.065, shove: 6 },
+    L: { meterCredit: 0.065, shove: 6 },
+    H: { meterCredit: 0.09, shove: 9 },
   },
 } as const;
 
@@ -84,7 +87,7 @@ export interface FlailDeps {
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
   /** The head damage model (game-head-damage.ts): a head-region hit goes here INSTEAD of the face crater
    *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. */
-  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide }): void;
+  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): void;
 }
 
 export interface FlailDebug {
@@ -140,12 +143,20 @@ export interface FlailWeapon {
   /** Once per tick, after the aim rig and holster are placed. */
   tick(dt: number): void;
   updateRig(): void;
-  hitStopScale(dt: number): number;
+  /** The game's dt multiplier this tick (flail-impact.ts timeScale: the hit-stop, then the slow tail), given
+   *  the UNSCALED dt; it also steps the impact feel's view channels on that dt and publishes them to
+   *  ctx.weapon.impact. Called once, at the top of game-main's tick. */
+  timeScale(dt: number): number;
   phase(): string;
   /** Seams. */
   click(): void;
   hold(on: boolean): void;
+  /** Off: no hit-stop AND no slow tail (deterministic gate frame counts). */
   setHitStop(on: boolean): void;
+  /** Off: no camera pitch kick, judder, roll, FOV punch, rig kick, chain relax or head snap (pixel gates). */
+  setImpactFx(on: boolean): void;
+  /** Gate readback: the impact feel's live channels. */
+  impactDebug(): FlailImpactDebug;
   debug(): FlailDebug;
   /** Where the player SEES a world point: screen NDC through the fisheye lens (gate crops). */
   toScreen(x: number, y: number, z: number): [number, number] | null;
@@ -154,6 +165,19 @@ export interface FlailWeapon {
   /** Copy the torch's pose/intensity onto the FILL. Called right after
    *  flashlight.update(camera), so the fill matches THIS frame's torch. */
   syncFill(): void;
+}
+
+export interface FlailImpactDebug {
+  /** The last timeScale() result and the time channel's state. */
+  timeScale: number; stopLeft: number; slowOn: boolean; slowT: number;
+  /** The camera's pitch kick (rad), the judder [x m, y m, roll rad], the FOV punch (deg) and the FOV the
+   *  camera draws with right now, and the rig kick composed in updateRig. */
+  pitch: number; shake: [number, number, number]; fovDeg: number; cameraFov: number;
+  rig: { pos: Vec3; rot: Vec3 };
+  recoilPitch: number;
+  hitStopOn: boolean; fxOn: boolean;
+  /** Contacts so far (strikes with a hit). */
+  contacts: number;
 }
 
 const MAX_LINKS = 40;
@@ -353,7 +377,16 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
 
   let swing: FlailSwing = makeFlailSwing();
   let click = false, held = false;
-  let hitStop = 0, hitStopOn = true;
+  let hitStopOn = true, impactFxOn = true;
+  /** THE IMPACT FEEL (flail-impact.ts): the time channel and the view springs, stepped on UNSCALED dt. */
+  const impact = makeImpactState();
+  let lastScale = 1, contacts = 0;
+  function publishImpact(): void {
+    const o = impactOutputs(impact), w = ctx.weapon.impact;
+    w.pitch = o.cameraPitch;
+    w.shake[0] = o.shake[0]; w.shake[1] = o.shake[1]; w.shake[2] = o.shake[2];
+    w.fovDeg = o.fovDeg;
+  }
   let strikes = 0, clock = 0;
   let lastStrike: FlailDebug['lastStrike'] = null;
   /** Head-region hits per actor id (spec §12.3): the face always craters, never severs; the counter is
@@ -404,6 +437,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       headHits: struckHeads, points: struckPoints, magnet, heads, ballDrawn: null, ballErr: null,
     };
     const f = FLAIL_FEEL.swing[side];
+    const gain = FLAIL_IMPACT_FEEL.zombie.reactionGain;
+    let anyHead = false;
     for (const h of hits) {
       const a = ctx.world.actors.find(x => x.id === h.actorId);
       if (!a) continue;
@@ -424,9 +459,19 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const spec = flailWound(region, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
       if (region) headHits.set(a.id, (headHits.get(a.id) ?? 0) + 1);
       struckHeads[a.id] = headHits.get(a.id) ?? 0;
+      if (region) anyHead = true;
+      // THE HEAD SNAP (spec §14.1 item 5): a head hit also kicks the rig point nearest the hit — on the
+      // head — along the blow, so the head snaps back and springs home. A view effect (setImpactFx): on a
+      // frozen gate actor the displacement would hold until it steps.
+      const snap = (): void => {
+        if (!region || !impactFxOn) return;
+        const m = FLAIL_IMPACT_FEEL.zombie.headSnapM * FLAIL_IMPACT_FEEL.sideScale[side];
+        a.rigImpulse(h.point, [h.dir[0] * m, h.dir[1] * m, h.dir[2] * m]);
+      };
       // The head damage model takes every head-region hit (its ladder counts the same hits as headHits).
       if (region && deps.headHit) {
-        deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side });
+        deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain });
+        snap();
         continue;
       }
       const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
@@ -437,12 +482,16 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
         meterCredit: f.meterCredit,
         impulse: { at: h.point, vel: [h.dir[0] * f.shove, h.dir[1] * f.shove, h.dir[2] * f.shove] },
         reaction: 'blast',
+        gain,
       });
+      snap();
       deps.bleed(a, w, h.point, h.dir);
     }
     if (hits.length > 0) {
-      if (hitStopOn) hitStop = f.hitStopSec;
-      ctx.weapon.recoilPitch += FLAIL_FEEL.kickRad;
+      // THE IMPACT (flail-impact.ts): the hit-stop and slow tail (setHitStop), the camera kick, judder, FOV
+      // punch, rig kick and chain relax (setImpactFx). Replaces the old 0.02 rad recoilPitch kick.
+      contact(impact, impactKick(side, anyHead), { time: hitStopOn, view: impactFxOn });
+      contacts++;
       ctx.weapon.shotAlert = true;
     }
     ctx.telemetry.telemetry.event('flail-strike', { side, hits: hits.length });
@@ -508,7 +557,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const sway = swing.phase === 'idle' ? FLAIL_LOOK.swayAmp : 0;
       const w = 2 * Math.PI * FLAIL_LOOK.swayHz * clock;
       target[0] = pose.ball[0] + sway * Math.sin(w); target[1] = pose.ball[1]; target[2] = pose.ball[2] + sway * 0.7 * Math.sin(w * 1.3);
-      guide = guideWeight(swing);
+      // After a contact the guide lets go for a moment of SIM time (flail-impact.ts chainRelax): the ball
+      // flies on its own momentum, the chain snaps taut and whips, then the guide takes it back.
+      guide = guideWeight(swing) * chainRelax(impact, dt);
       vel = flailBallVel(swing);
     }
     stepOpts.pin = strikeNow !== null;
@@ -617,19 +668,32 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     },
     updateRig() {
       const lower = slotLowerAmount(ctx.weapon.slotState, 'flail');
-      rig.position.set(0, -0.42 * lower, 0.06 * lower);
-      rig.rotation.set(THREE.MathUtils.degToRad(38) * lower, 0, 0);
+      // The holster travel, plus the impact's rig kick (flail-impact.ts: back, up, pitched up, rolled —
+      // all 0 at rest and with setImpactFx(false)).
+      const k = impactOutputs(impact).rig;
+      rig.position.set(k.pos[0], -0.42 * lower + k.pos[1], 0.06 * lower + k.pos[2]);
+      rig.rotation.set(THREE.MathUtils.degToRad(38) * lower + k.rot[0], k.rot[1], k.rot[2]);
       rig.visible = lower < 0.999 && ownsSlot(ctx, 'flail');
     },
-    hitStopScale(dt) {
-      if (hitStop <= 0) return 1;
-      hitStop -= dt;
-      return FLAIL_FEEL.hitStopScale;
+    timeScale(dt) {
+      lastScale = timeScale(impact, dt);
+      stepImpact(impact, dt);
+      publishImpact();
+      return lastScale;
     },
     phase: () => swing.phase,
     click() { click = true; },
     hold(on) { held = on; },
-    setHitStop(on) { hitStopOn = on; if (!on) hitStop = 0; },
+    setHitStop(on) { hitStopOn = on; if (!on) { clearTime(impact); lastScale = 1; } },
+    setImpactFx(on) { impactFxOn = on; if (!on) { clearView(impact); publishImpact(); } },
+    impactDebug() {
+      const o = impactOutputs(impact);
+      return {
+        timeScale: lastScale, stopLeft: impact.stopLeft, slowOn: impact.slowOn, slowT: impact.slowT,
+        pitch: o.cameraPitch, shake: o.shake, fovDeg: o.fovDeg, cameraFov: ctx.boot.handle.camera.fov,
+        rig: o.rig, recoilPitch: ctx.weapon.recoilPitch, hitStopOn, fxOn: impactFxOn, contacts,
+      };
+    },
     toScreen(x, y, z) {
       const cam = ctx.boot.handle.camera;
       cam.updateMatrixWorld();

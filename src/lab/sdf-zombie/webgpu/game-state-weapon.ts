@@ -180,6 +180,14 @@ export interface WeaponState {
   reloadSpeed: number;
   /** Recoil pitch applied to the gun this shot, in radians. */
   recoilPitch: number;
+  /**
+   * THE FLAIL'S IMPACT FEEL (flail-impact.ts), published once a tick by the flail's timeScale() and read
+   * by the camera (game-main): `pitch` rad added to the view pitch next to recoilPitch; `shake` = [view
+   * right m, up m, roll rad] summed with player-hit-feedback's eye offset; `fovDeg` the FOV punch (deg,
+   * negative = pinch). `fovApplied`/`fovBase` are the camera's own bookkeeping: the punch camera.fov
+   * currently carries and the render FOV it was taken from (restored exactly when the punch ends).
+   */
+  impact: { pitch: number; shake: [number, number, number]; fovDeg: number; fovApplied: number; fovBase: number };
   /** `?slug` — true when the single-slug round is selected. */
   slugMode: boolean;
   /** The shotgun/dynamite three-phase switch machine. */
@@ -250,6 +258,7 @@ export function makeWeaponState(): WeaponState {
     pinnedReloadSeed: null,
     reloadSpeed: 1,
     recoilPitch: 0,
+    impact: { pitch: 0, shake: [0, 0, 0], fovDeg: 0, fovApplied: 0, fovBase: 0 },
     slugMode: false,
     slotState: unbuilt<WeaponSlotState>(),
     heldProp: null,

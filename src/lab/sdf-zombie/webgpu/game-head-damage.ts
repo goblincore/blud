@@ -124,6 +124,8 @@ export interface HeadHitFeel {
   meterCredit: number; shove: number;
   /** The swing that landed (FLAIL_FEEL.swing's keys): picks the strip (HEAD_LEAF.strip). Absent: R. */
   side?: 'R' | 'L' | 'H';
+  /** The blast reaction's gain (ActorBlastEffect.gain; flail-impact.ts reactionGain). Absent: 1. */
+  gain?: number;
 }
 
 export interface HeadDamageDeps {
@@ -386,7 +388,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       const w = worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field);
       w.severRadius = 0;
       clothifyWound(posed.prims, w, 'heavy');
-      a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast' });
+      a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
       deps.bleed(a, w, point, dir, 'slug');
       return;
     }
@@ -549,7 +551,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           break;
       }
     }
-    a.blast({ wounds, meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', forceCollapse });
+    a.blast({ wounds, meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', forceCollapse, gain: feel.gain });
     // Head strips bleed a PELLET's gout (spec §15), and so does the brain stage (spec §14: so the brain is seen).
     if (bleedAt) deps.bleed(a, bleedAt, point, dir, 'pellet');
   }

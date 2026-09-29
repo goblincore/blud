@@ -517,6 +517,11 @@ export interface ZombieActor {
    *  `?frozen=1`, the gates). Without it the posed and drawn head keep whatever the deform was at the
    *  last hit's re-pose — the wobble's peak squash, forever. The same refresh as blast()'s tail. */
   reposeHead(): void;
+  /** Shove ONE rig point (the nearest free one to `at`, never the jaw) by `delta` metres — rig-bind
+   *  impulseAt, the same Verlet kick hit() gives a pellet (IMPULSE); the rest pose springs it back. The
+   *  flail's head snap (flail-impact.ts FLAIL_IMPACT_FEEL.zombie.headSnapM). A frozen actor does not
+   *  step, so on one the displacement holds until it does. */
+  rigImpulse(at: Vec3, delta: Vec3): void;
 }
 
 /** The slice of explosion-aoe.ts's `BodyExplosionEffect` the actor needs. */
@@ -533,6 +538,10 @@ export interface ActorBlastEffect {
   reaction?: 'blast' | 'flinch' | 'none';
   /** Melee head damage: the brain is out; collapse and die now (collapse.ts sig.forced, motion's fallFatal). */
   forceCollapse?: boolean;
+  /** A 'blast' reaction's strength × this (default 1): the stagger gain and the root knock's speed. The
+   *  impulse's size cannot carry it — the reaction takes only its direction (unitOrZero). The flail's
+   *  bigger shove (flail-impact.ts FLAIL_IMPACT_FEEL.zombie.reactionGain). */
+  gain?: number;
 }
 
 export function createZombieActor(opts: {
@@ -1674,14 +1683,14 @@ export function createZombieActor(opts: {
         woundWorld: [...at] as Vec3,
         torso: true,
         ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
-        gain: SLUG_GAIN,
+        gain: SLUG_GAIN * (effect.gain ?? 1),
       });
       if (soldierDamage) {
         mind.stagger(soldierStaggerDuration('medium'));
       } else {
         const l = Math.hypot(dirWorld[0], dirWorld[2]);
         if (l > 1e-6) {
-          knockV = Math.max(knockV, BLAST_KNOCK_MPS);
+          knockV = Math.max(knockV, BLAST_KNOCK_MPS * (effect.gain ?? 1));
           knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
         }
       }
@@ -1989,6 +1998,7 @@ export function createZombieActor(opts: {
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
     boundRig: () => bound,
+    rigImpulse: (at: Vec3, delta: Vec3) => { bound = impulseAt(bound, at, delta); },
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
     nudge,
     setEncounterOrder: (order: EncounterOrder) => { encounterOrder = order; },

@@ -65,6 +65,12 @@
 //      (seeded jitter) — the chain carries sub-frame time at these rates (the review's C1:
 //      the pin landed 0.8–1.9 cm short here) — ball within 1 mm, one strike each;
 //   10. zero console errors or exceptions;
+//   12. IMPACT (spec §14.1, v1.5a): fx and hit-stop on, a frozen standing zombie struck on the body with R,
+//      then L and H in a chain; per frame the time scale, the camera pitch kick (+ recoilPitch), the judder
+//      and the FOV the camera draws. Asserted on R: the hit-stop at 0.08 for 70 ms (4–5 frames at 60 Hz), the
+//      slow tail monotone and exactly 1.0 within slowSec (+1 frame), the pitch kick peak ≥ 0.04 rad, the judder
+//      below 10% of its peak from 0.35 s, the FOV pinched ≥ 2° and back within 0.05° of its base by 0.3 s, the
+//      rig kick back at rest by 0.6 s; H's pitch, FOV and rig peaks above R's. Printed: every number.
 //   11. LIVE (spec §13, v1.4): the section-2 zombie (untouched) unfrozen and walking up, hit-stop on, free aim
 //      on with the reticle centred; before each of LIVE_SWINGS (8) clicks the player stands LIVE_DIST (1.3 m)
 //      out from its current torso with the crosshair on its current head centre — its arms up in front of
@@ -297,6 +303,9 @@ if (!sel?.ok) die(`selectSlot('flail') refused: ${JSON.stringify(sel)}`);
 // ONE frame per call at first: the first frames compile pipelines, and step(n) timed out there.
 for (let i = 0; i < 90; i++) await evaluate('__sdfGame.step(1, 1 / 60)');
 await evaluate('__sdfGame.flail.setHitStop(false)');
+// The impact feel (flail-impact.ts, spec §14.1) moves the camera, the FOV and the rig: off for every section
+// that measures pixels or positions; the "impact" section (12) turns it on.
+await evaluate('__sdfGame.flail.setImpactFx(false)');
 const st0 = await evaluate('__sdfGame.flail.state()');
 if (!st0 || st0.phase !== 'idle') die(`flail not idle after the raise: ${JSON.stringify(st0)}`);
 if ((await evaluate('__sdfGame.dynamite()'))?.live !== 'flail') die('the live slot is not the flail');
@@ -940,6 +949,125 @@ else fail(`positive control: ${controlFails} click(s) did not strike as expected
   if (ok) pass(`live: ${headHitsLive}/${swings} swings at a walking zombie's head hit the head${why} (≥ ${LIVE_MIN} of ${LIVE_SWINGS})`);
   else fail(`live: ${headHitsLive}/${swings} swings at a walking zombie's head hit the head${why} (expected ≥ ${LIVE_MIN} of ${LIVE_SWINGS})`);
   await evaluate('__sdfGame.freeze(true)');
+}
+
+// ---- 12. IMPACT: the feel of a landed hit (flail-impact.ts, spec §14.1) ----------------------------
+{
+  const ImpactFrames = 40;   // 0.67 s at 60 Hz after the contact
+  await evaluate('__sdfGame.freeze(true)');
+  await evaluate('__sdfGame.flail.setHitStop(true)');
+  await evaluate('__sdfGame.flail.setImpactFx(true)');
+  await evaluate('__sdfGame.setFreeAim(true)');
+  await evaluate('__sdfGame.setAimPoint(0, 0)');
+  for (let i = 0; i < 90 && (await state()).phase !== 'idle'; i++) await stepOne();
+  await stepN(40);   // past the combo window: the next click is R
+  const dbg = () => evaluate('__sdfGame.flail.impactDebug()');
+  // A standing zombie the crosshair can hit on the BODY: try the pool, 1.1 m out, aimed at the torso.
+  let target = null;
+  const traces = {};
+  for (const z of pool) {
+    const t = await torso(z.id);
+    if (!t || t[1] < 0.7) continue;           // collapsed / gone
+    const p = standOff(t, 1.1);
+    const hd = Math.hypot(t[0] - p.x, t[2] - p.z);
+    await place(p, Math.atan2(t[1] - EYE_H, hd));
+    await evaluate('__sdfGame.setAimPoint(0, 0)');
+    target = z; break;
+  }
+  if (!target) fail('impact: no standing zombie left to strike');
+  else {
+    const base = (await dbg()).cameraFov;
+    // R, then L and H chained: click the next as soon as the trace is taken (inside the combo window).
+    for (let n = 0; n < 3; n++) {
+      const pre = await state();
+      const d0 = await dbg();
+      await evaluate('__sdfGame.flail.click()');
+      let contactAt = null;
+      const rows = [];
+      for (let i = 0; i < 90; i++) {
+        await stepOne();
+        const d = await dbg();
+        if (contactAt === null && d.contacts > d0.contacts) contactAt = i;
+        if (contactAt !== null) {
+          rows.push({ k: i - contactAt, scale: d.timeScale, pitch: d.pitch + d.recoilPitch, shake: d.shake, fov: d.cameraFov,
+            rig: Math.hypot(...d.rig.pos), rigRot: Math.hypot(...d.rig.rot) });
+          if (rows.length > ImpactFrames) break;
+        }
+      }
+      const post = await state();
+      const side = pre.nextSide;
+      if (contactAt === null) { console.error(`  impact ${side}: no contact (strikes ${pre.strikes} → ${post.strikes}, hits ${JSON.stringify(post.lastStrike?.hits)})`); continue; }
+      const head = (post.lastStrike?.headHits?.[target.id] ?? 0) > (pre.lastStrike?.headHits?.[target.id] ?? 0);
+      traces[side] = { rows, head };
+    }
+    const summarise = (side) => {
+      const tr = traces[side];
+      if (!tr) return null;
+      const r = tr.rows;
+      const dtF = 1 / 60;
+      const stopIdx = r.map((x, i) => (x.scale === 0.08 ? i : -1)).filter((i) => i >= 0);
+      const firstSlow = stopIdx.length ? stopIdx[stopIdx.length - 1] + 1 : -1;
+      const firstOne = r.findIndex((x, i) => i >= firstSlow && x.scale === 1);
+      let mono = true;
+      for (let i = firstSlow + 1; i <= firstOne && i < r.length; i++) if (r[i].scale < r[i - 1].scale) mono = false;
+      const shakeMag = r.map((x) => Math.hypot(x.shake[0], x.shake[1]));
+      const rollMag = r.map((x) => Math.abs(x.shake[2]));
+      const late = (xs, sec) => Math.max(0, ...xs.filter((_, i) => r[i].k * dtF >= sec - 1e-9));
+      return {
+        side, head: tr.head,
+        stopFrames: stopIdx.length, stopMs: stopIdx.length * dtF * 1000,
+        slowStart: firstSlow >= 0 ? r[firstSlow]?.scale : null,
+        slowSec: firstOne >= 0 && firstSlow >= 0 ? (firstOne - firstSlow) * dtF : null, mono,
+        endScale: r[r.length - 1].scale,
+        pitchPeak: Math.max(...r.map((x) => x.pitch)), pitchUnder: Math.min(...r.map((x) => x.pitch)),
+        shakePeak: Math.max(...shakeMag), shakeLate: late(shakeMag, 0.35),
+        rollPeak: Math.max(...rollMag), rollLate: late(rollMag, 0.35),
+        fovMin: Math.min(...r.map((x) => x.fov)), fovLate: late(r.map((x) => Math.abs(x.fov - base)), 0.3),
+        fovMinAt: r[r.map((x) => x.fov).indexOf(Math.min(...r.map((x) => x.fov)))].k * dtF,
+        rigPeak: Math.max(...r.map((x) => x.rig)), rigRotPeak: Math.max(...r.map((x) => x.rigRot)),
+        rigEnd: r[r.length - 1].rig, rigRotEnd: r[r.length - 1].rigRot,
+        trace: r,
+      };
+    };
+    const R = summarise('R'), Hs = summarise('H'), L = summarise('L');
+    for (const m of [R, L, Hs]) {
+      if (!m) continue;
+      console.log(`impact ${m.side}${m.head ? ' (head)' : ''}: hit-stop ${m.stopFrames} frames (${m.stopMs.toFixed(1)} ms) at 0.08; ` +
+        `slow tail from ${m.slowStart?.toFixed(3)} to 1.0 in ${m.slowSec?.toFixed(3)} s (monotone ${m.mono}); ` +
+        `pitch kick peak ${m.pitchPeak.toFixed(4)} rad, overshoot ${m.pitchUnder.toFixed(4)}; ` +
+        `judder peak ${(m.shakePeak * 1000).toFixed(2)} mm → ${(m.shakeLate * 1000).toFixed(3)} mm from 0.35 s; ` +
+        `roll peak ${(m.rollPeak * 180 / Math.PI).toFixed(3)}° → ${(m.rollLate * 180 / Math.PI).toFixed(4)}°; ` +
+        `FOV ${base.toFixed(2)}° → min ${m.fovMin.toFixed(3)}° at ${(m.fovMinAt * 1000).toFixed(0)} ms, |Δ| from 0.3 s ${m.fovLate.toFixed(4)}°; ` +
+        `rig kick peak ${(m.rigPeak * 100).toFixed(2)} cm / ${(m.rigRotPeak * 180 / Math.PI).toFixed(2)}°, end ${(m.rigEnd * 1000).toFixed(3)} mm / ${(m.rigRotEnd * 180 / Math.PI).toFixed(4)}°`);
+    }
+    if (R) {
+      console.log(`impact R per frame (k: scale pitch judder-mm fov rig-cm): ${R.trace.slice(0, 30).map((x) =>
+        `${x.k}:${x.scale.toFixed(3)} ${x.pitch.toFixed(4)} ${(Math.hypot(x.shake[0], x.shake[1]) * 1000).toFixed(2)} ${x.fov.toFixed(2)} ${(x.rig * 100).toFixed(2)}`).join(' | ')}`);
+      if (R.head) console.error('  impact: the R hit landed on the head (expected a body hit)');
+      if (R.stopFrames >= 4 && R.stopFrames <= 5) pass(`impact: hit-stop at 0.08 for ${R.stopFrames} frames (${R.stopMs.toFixed(0)} ms; 70 ms asked)`);
+      else fail(`impact: hit-stop ${R.stopFrames} frames at 0.08 (expected 4–5 for 70 ms)`);
+      if (R.mono && R.endScale === 1 && R.slowSec !== null && R.slowSec <= 0.3 + 1 / 60 + 1e-9 && Math.abs(R.slowStart - 0.4) < 1e-9)
+        pass(`impact: the slow tail steps to ${R.slowStart} and eases monotonically to exactly 1.0 in ${R.slowSec.toFixed(3)} s (≤ 0.3 s + a frame)`);
+      else fail(`impact: slow tail start ${R.slowStart}, ${R.slowSec} s, monotone ${R.mono}, end ${R.endScale}`);
+      if (R.pitchPeak >= 0.04) pass(`impact: camera pitch kick peak ${R.pitchPeak.toFixed(4)} rad (≥ 0.04)`);
+      else fail(`impact: camera pitch kick peak ${R.pitchPeak.toFixed(4)} rad (< 0.04)`);
+      if (R.shakePeak > 0 && R.shakeLate < 0.1 * R.shakePeak && R.rollLate < 0.1 * R.rollPeak)
+        pass(`impact: the judder decays to ${(100 * R.shakeLate / R.shakePeak).toFixed(2)}% (roll ${(100 * R.rollLate / R.rollPeak).toFixed(2)}%) of its peak by 0.35 s (< 10%)`);
+      else fail(`impact: judder ${R.shakeLate} of ${R.shakePeak}, roll ${R.rollLate} of ${R.rollPeak} from 0.35 s`);
+      if (R.fovMin <= base - 2 && R.fovLate < 0.05) pass(`impact: FOV pinched to ${R.fovMin.toFixed(3)}° and back within ${R.fovLate.toFixed(4)}° of ${base}° by 0.3 s`);
+      else fail(`impact: FOV min ${R.fovMin}, |Δ| from 0.3 s ${R.fovLate} (base ${base})`);
+      if (R.rigPeak > 0.05 && R.rigEnd < 1e-3 && R.rigRotEnd < 0.2 * Math.PI / 180)
+        pass(`impact: the rig kick (${(R.rigPeak * 100).toFixed(1)} cm peak) returns to rest (${(R.rigEnd * 1000).toFixed(3)} mm at ${(ImpactFrames / 60).toFixed(2)} s)`);
+      else fail(`impact: rig kick peak ${R.rigPeak}, end ${R.rigEnd} m / ${R.rigRotEnd} rad`);
+    } else fail('impact: the R swing made no contact');
+    if (R && Hs) {
+      const ok = Hs.pitchPeak > R.pitchPeak && Hs.fovMin < R.fovMin && Hs.rigPeak > R.rigPeak && Hs.stopFrames >= R.stopFrames;
+      if (ok) pass(`impact: H > R (pitch ${Hs.pitchPeak.toFixed(4)} > ${R.pitchPeak.toFixed(4)}, FOV ${Hs.fovMin.toFixed(2)} < ${R.fovMin.toFixed(2)}, rig ${(Hs.rigPeak * 100).toFixed(1)} > ${(R.rigPeak * 100).toFixed(1)} cm, hit-stop ${Hs.stopFrames} ≥ ${R.stopFrames} frames)`);
+      else fail(`impact: H not above R (H ${JSON.stringify({ p: Hs.pitchPeak, f: Hs.fovMin, r: Hs.rigPeak, s: Hs.stopFrames })}, R ${JSON.stringify({ p: R.pitchPeak, f: R.fovMin, r: R.rigPeak, s: R.stopFrames })})`);
+    } else fail(`impact: no H contact to compare (sides traced: ${Object.keys(traces).join(', ')})`);
+  }
+  await evaluate('__sdfGame.flail.setImpactFx(false)');
+  await evaluate('__sdfGame.flail.setHitStop(false)');
 }
 
 // ---- 10. Console -------------------------------------------------------------------------

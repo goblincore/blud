@@ -10,8 +10,13 @@ export function createFlailSeams(ctx: GameContext) {
       /** One click (a mousedown edge; the button is released unless hold(true)). */
       click: () => { ctx.weapon.flail?.click(); },
       hold: (on: boolean) => { ctx.weapon.flail?.hold(on); },
-      /** Off for deterministic frame counts in gates. */
+      /** Off for deterministic frame counts in gates: no hit-stop AND no slow tail. */
       setHitStop: (on: boolean) => { ctx.weapon.flail?.setHitStop(on); },
+      /** Off for gates that measure pixels: no camera kick, judder, roll, FOV punch, rig kick, chain relax
+       *  or head snap (flail-impact.ts). On by default. */
+      setImpactFx: (on: boolean) => { ctx.weapon.flail?.setImpactFx(on); },
+      /** The impact feel's live channels (flail-impact.ts; the gate's "impact" section). */
+      impactDebug: () => ctx.weapon.flail?.impactDebug() ?? null,
       state: () => ctx.weapon.flail?.debug() ?? null,
       /** A world point → screen NDC through the fisheye lens (null behind the camera). */
       toScreen: (x: number, y: number, z: number) => ctx.weapon.flail?.toScreen(x, y, z) ?? null,

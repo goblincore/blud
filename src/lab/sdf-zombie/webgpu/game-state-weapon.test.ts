@@ -22,6 +22,8 @@ describe('makeWeaponState', () => {
     expect(a.burstSlots).not.toBe(b.burstSlots);
     expect(a.aim).not.toBe(b.aim);
     expect(a.gunMaterials).not.toBe(b.gunMaterials);
+    expect(a.impact).not.toBe(b.impact);
+    expect(a.impact.shake).not.toBe(b.impact.shake);
   });
 
   it('starts at the declared defaults', () => {

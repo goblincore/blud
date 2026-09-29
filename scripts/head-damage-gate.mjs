@@ -230,6 +230,8 @@ async function boot(label, query) {
   if (!sel?.ok) die(`[${label}] selectSlot("flail") refused: ${JSON.stringify(sel)}`);
   for (let i = 0; i < 90; i++) await evaluate("__sdfGame.step(1, 1 / 60)");
   await evaluate("__sdfGame.flail.setHitStop(false)");
+  // The impact feel (flail-impact.ts) moves the camera, FOV, rig and kicks the head: off for pixel measures.
+  await evaluate("__sdfGame.flail.setImpactFx(false)");
   await evaluate("__sdfGame.setFreeAim(true)");
   await evaluate("__sdfGame.setAimPoint(0, 0)");
   const st0 = await evaluate("__sdfGame.flail.state()");

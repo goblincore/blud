@@ -6781,10 +6781,12 @@ async function main() {
 
   function tick(dt: number) {
     if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
-    // FLAIL HIT-STOP: a landed strike nearly freezes the sim for 50 ms
-    // (game-flail.ts). Its timer counts down on the unscaled step. The demo
-    // recorder stores the scaled dt (a replay stays deterministic).
-    dt *= ctx.weapon.flail?.hitStopScale(dt) ?? 1;
+    // FLAIL HIT-STOP AND SLOW TAIL: a landed strike nearly freezes the sim for
+    // 70-100 ms, then steps the time scale to 0.4 and eases it back to 1
+    // (flail-impact.ts timeScale, spec §14.1). Its timers — and the impact
+    // feel's view springs — run on the unscaled step. The demo recorder stores
+    // the scaled dt (a replay stays deterministic).
+    dt *= ctx.weapon.flail?.timeScale(dt) ?? 1;
     // The sim clock advances ONLY here, from the step's own dt — never from
     // wall time. This is the single source of "how much simulated time has
     // passed", so every dwell/timer that reads it is reproducible under a
@@ -7736,15 +7738,41 @@ async function main() {
     // the flash drives the overlay.
     ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, dt);
     if (ctx.player.hitFlashEl) ctx.player.hitFlashEl.style.opacity = String(ctx.player.hitFeedback.flash * 0.55);
+    // THE FLAIL'S IMPACT (flail-impact.ts, published by flail.timeScale):
+    // its judder is SUMMED with the hit-feedback shake — x along the view's
+    // right, y up — its pitch kick rides next to recoilPitch, and its roll
+    // composes like the train's (rotateZ after the look).
     const eye0 = eyeOf(ctx.player.player), shake = ctx.player.hitFeedback.offset;
-    const eye: Vec3 = [eye0[0] + shake[0], eye0[1] + shake[1], eye0[2] + shake[2]];
+    const imp = ctx.weapon.impact, yaw = ctx.player.player.yaw;
+    const eye: Vec3 = [
+      eye0[0] + shake[0] + Math.cos(yaw) * imp.shake[0],
+      eye0[1] + shake[1] + imp.shake[1],
+      eye0[2] + shake[2] + Math.sin(yaw) * imp.shake[0],
+    ];
     camera.position.set(eye[0], eye[1], eye[2]);
-    const cp = Math.cos(ctx.player.player.pitch + ctx.weapon.recoilPitch);
+    const viewPitch = ctx.player.player.pitch + ctx.weapon.recoilPitch + imp.pitch;
+    const cp = Math.cos(viewPitch);
     camera.lookAt(
-      eye[0] + Math.sin(ctx.player.player.yaw) * cp,
-      eye[1] + Math.sin(ctx.player.player.pitch + ctx.weapon.recoilPitch),
-      eye[2] - Math.cos(ctx.player.player.yaw) * cp,
+      eye[0] + Math.sin(yaw) * cp,
+      eye[1] + Math.sin(viewPitch),
+      eye[2] - Math.cos(yaw) * cp,
     );
+    if (imp.shake[2] !== 0) camera.rotateZ(imp.shake[2]);
+    // THE FOV PUNCH. camera.fov moves, so the lens is re-synced IN THE SAME
+    // BREATH (the CO-INVARIANT at FISHEYE_DEFAULTS.renderFovDeg): the render
+    // and centre FOVs both narrow by the punch, the bend stays put. The
+    // sdfLayer's cone geometry is left at the base FOV on purpose: a wider
+    // cone than the pinched frame needs is conservative (sdf-layer.ts
+    // setConeGeometry: a too-NARROW cone is the fatal one), and re-sizing
+    // the layer every frame of a 0.27 s punch is not worth it. The render FOV
+    // is restored EXACTLY from fovBase when the punch ends.
+    if (imp.fovDeg !== imp.fovApplied) {
+      if (imp.fovApplied === 0) imp.fovBase = camera.fov;
+      camera.fov = imp.fovDeg === 0 ? imp.fovBase : imp.fovBase + imp.fovDeg;
+      camera.updateProjectionMatrix();
+      ctx.render.postAa.setLens(camera.fov, ctx.player.centerFovDeg + imp.fovDeg);
+      imp.fovApplied = imp.fovDeg;
+    }
     // The train's roll and bob ride on the view only (never the player or collision).
     applyTrainCamera(ctx, camera);
     applyDeathCamera(ctx, camera);
