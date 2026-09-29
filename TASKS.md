@@ -21,12 +21,11 @@
 - [ ] **Optimisation (parked, owner 2026-09-28):** tube shadow maps to **256²** (owner-approved), then bake the static
   art into the tube/beacon shadows so live updates draw only hulls; retire paths the chosen look leaves unused;
   level materials on the list. Menu and order: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
-- [ ] **Zombies float — root cause found** (owner report 2026-09-28): the zombie MODEL stops 0.20 m above the floor
-  in its rest pose (legs too short for the hip height: the thigh starts at y 1.04, the shin's end blob bottoms out
-  at 0.199; no `foot` bone), so the tube shadow lands 20 cm below the "feet". Every character with a `foot` bone
-  rests at ~0; shin-ended ones with kits (soldier 0.10, juggernaut 0.11, goblin 0.12, clown 0.05) are presumably
-  covered by boots (verify). Seam: `__sdfGame.actorGround(id)`. **Owner call on the fix:** give the zombie real feet
-  reaching the floor (recommended), or lower/shorten it.
+- [x] **Zombies float — fixed with real feet** (owner, 2026-09-29): the model stopped 0.199 m above the floor (legs too
+  short for the hip, no foot bone). Thigh 0.46 / shin 0.50 and a foot bone with heel + sole: lowest point 0.004 m,
+  height unchanged. [Notes + turntable](docs/dev-notes/2026-09-29-zombie-feet/notes.md). **Open:** feet a little
+  small (~0.19 m; foot `len`), the walk with longer legs not yet judged in play; kit characters (soldier 0.10,
+  juggernaut 0.11) assumed hidden by boots — verify.
 - [ ] Check the beacon sweeps read on bodies under the owner's default; explain the light gate's `?lightlist=0` gib
   reading (0.296 vs 0.163 earlier, passes).
 - [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static

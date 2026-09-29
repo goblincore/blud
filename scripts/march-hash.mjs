@@ -111,12 +111,20 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp, sleep } 
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-28 on
+// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-29 on
 // claude/night-train-9-27-handoff-d270c3, light clock pinned — see LIGHT CLOCK):
-//   shipped default (crowd, boxes, tiles on)        = 2daf514e3e19733e4f5118d46314fad0275b05af
-//   crowd quad (?crowddispatch=quad, tiles on)      = 55ed3dfc434b73edb4d4051ebb7ddc8c907e9af5
-//   per-body (?crowd=0, tiles off)                  = ee9ae35932542d532fb3dd359ea5ee6a4e907e05
-// Each reproduced on TWO boots (ports 5288/9288, headless) at e8aae521.
+//   shipped default (crowd, boxes, tiles on)        = d7392d5234c98ddc1babb3b29860abc3a02ced84
+//   crowd quad (?crowddispatch=quad, tiles on)      = 0c71e71267bad979dec5b906c461851ff5043068
+//   per-body (?crowd=0, tiles off)                  = 470ff0b375adfdb48992adecf04e8915e814b3f7
+// Each reproduced on TWO boots (ports 5288/9288, headless) at cc23eb99.
+//
+// 2026-09-29 RE-PIN — THE BROWSER, NOT THE CODE. Google Chrome auto-updated 153.0.8010.54 ->
+// 154.0.8037.58 (2026-09-28 19:41), after the last passing run. Every probe now gives the new
+// default, including commits that passed before: 248b2cee, 77ab162e (docs only since the pass),
+// 51207311 (main's wounds fix). The zombie's feet (cc23eb99) do not move it (the close-up is a
+// soldier). A Chrome update moves every pin at once; confirm the version before bisecting.
+//
+// 2026-09-28 pins (Chrome 153): default 2daf514e… / quad 55ed3dfc… / per-body ee9ae359…
 //
 // 2026-09-28 RE-PIN. The 2026-09-27 pins below were already stale on main
 // (70f6dd37 gave 1737993e…). DEFAULT bisected, one boot per probe, four moves,
@@ -248,7 +256,7 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
-const PERBODY_HASH = 'ee9ae35932542d532fb3dd359ea5ee6a4e907e05';
+const PERBODY_HASH = '470ff0b375adfdb48992adecf04e8915e814b3f7';
 // MARCH_HASH_PERBODY — the per-body opt-out gate (task 8). Boots `?crowd=0`
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
@@ -257,8 +265,8 @@ const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
 // by DEFAULT_HASH whenever neither override is set and no extra query is given.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
-const CROWD_HASH = '55ed3dfc434b73edb4d4051ebb7ddc8c907e9af5';
-const DEFAULT_HASH = '2daf514e3e19733e4f5118d46314fad0275b05af';
+const CROWD_HASH = '0c71e71267bad979dec5b906c461851ff5043068';
+const DEFAULT_HASH = 'd7392d5234c98ddc1babb3b29860abc3a02ced84';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
