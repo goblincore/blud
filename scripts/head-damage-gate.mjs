@@ -23,8 +23,11 @@
 //   3. hit 3, the scalp: two new radius-0.05 craters within 0.03 m of the crown; the bone-coloured pixel share in
 //      a crown crop, photographed from above (a photo stand, not the swing stand), rises — on the shipped
 //      skeleton path (mesh) AND on ?skeleton=procedural (a second boot; hits 1-3 only). Photo head-3-scalp.png.
-//   4. hit 4, the brain: live chunks up by >= 4 (brain piece + skull chips); thawed 3 frames the zombie is out of
-//      "standing" and limbAlive(id, "head") > 0. Photo head-4-brain.png.
+//   4. hit 4, the brain: live SDF chunks up by >= 4 (3 brain lumps + 3 skull chips); a brain MESH gib exists
+//      (__sdfGame.head.brains(), Task 11) — photo head-4-brain.png 3 frames after the strike, from the swing stand;
+//      thawed 3 frames the zombie is out of "standing" and limbAlive(id, "head") > 0; 1.5 s after the strike the
+//      brain rests near the floor (y <= BRAIN_REST_MAX_Y: its support sits it 0.03-0.06 m up) and stopped moving
+//      — photo brain-rest.png, a close-up on it; head-4-brain-apex.png (+15 frames) shows it near the top of its arc.
 //   6. every body wound from step 0 is still in actorWounds (within 1 mm) — read before the thaw.
 //   7. cost: median draw time (timeDraws, 120 frames, CPU+GPU fenced) with a dangling eye vs the same scene
 //      before any head hit: within 0.5 ms. (Baseline is measured twice to print the noise floor.)
@@ -53,6 +56,7 @@ const DENT_MIN = 0.01, CROWN_NEAR = 0.03, BRAIN_CHUNKS_MIN = 4, COST_MAX_MS = 0.
 const BONE_THRU_MAX = 0.005;  // face-crop bone share outside craters may rise at most this over the pre-hit share
 const CRATER_MARGIN = 0.02;   // the exclusion circle around a crater: its radius + this, m
 const SOCKET_R = 0.028, SCALP_R = 0.05, R_TOL = 0.005;
+const BRAIN_REST_MAX_Y = 0.1;   // the resting brain's origin height, m (floor 0)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
@@ -605,13 +609,48 @@ async function ladder(label, full) {
   ({ head, pose } = await aimHead(id)); await stepN(3);
   const chunks4 = await chunks();
   let maxChunks4 = chunks4;
-  r = await clickStrike(id, 10);
+  const brains0 = (await evaluate("__sdfGame.head.brains()")).length;
+  r = await clickStrike(id, 2);
   for (const q of r.series) maxChunks4 = Math.max(maxChunks4, q.chunks);
+  {
+    // head-4-brain.png: 3 frames after the strike, from the swing stand, the view pitched up to halfway between the
+    // head and the flying brain (the pose takes effect on the next step: re-aim at +2, step to +3, shoot).
+    const b2 = (await evaluate("__sdfGame.head.brains()")).at(-1);
+    if (b2) {
+      const pp = await evaluate("__sdfGame.pose()");
+      const mid = [(head[0] + b2[0]) / 2, (head[1] + b2[1] + 0.08) / 2, (head[2] + b2[2]) / 2];
+      const hz = Math.hypot(mid[0] - pp.pos[0], mid[2] - pp.pos[2]);
+      await evaluate(`__sdfGame.setPose(${pp.pos[0]}, ${pp.pos[2]}, ${pp.yaw}, ${Math.atan2(mid[1] - EYE_H - pp.pos[1], hz)}, ${pp.pos[1]})`);
+    }
+    await stepOne();
+    maxChunks4 = Math.max(maxChunks4, await chunks());
+  }
+  const brains3 = await evaluate("__sdfGame.head.brains()");
+  {
+    const img = await capture("head-4-brain");
+    const c = await toPx(head);
+    const bp = brains3.length ? await toPx(brains3[brains3.length - 1]) : null;
+    note(`head-4-brain (+3 frames): brain mesh at ${brains3.length ? f2(brains3[brains3.length - 1]) : "none"} (screen ${bp ? bp.map((v) => v.toFixed(0)).join(", ") : "off"}); red (blood-coloured) pixel share in a 220 px crop on the head ${c ? (100 * redShare(img, c[0], c[1])).toFixed(1) : "?"}%`);
+  }
+  for (let k = 3; k < 10; k++) { await stepOne(); maxChunks4 = Math.max(maxChunks4, await chunks()); }
+  {
+    // head-4-brain-apex.png (+15 frames, ~0.25 s): the brain near the top of its arc, clear of the lumps, chips and
+    // spray it left the skull with (at +3 it is still inside them). Re-aimed at +14 onto the brain, step, shoot.
+    await stepN(4);
+    const b14 = (await evaluate("__sdfGame.head.brains()")).at(-1);
+    if (b14) {
+      const pp = await evaluate("__sdfGame.pose()");
+      const hz = Math.hypot(b14[0] - pp.pos[0], b14[2] - pp.pos[2]);
+      await evaluate(`__sdfGame.setPose(${pp.pos[0]}, ${pp.pos[2]}, ${yawOf(b14[0] - pp.pos[0], b14[2] - pp.pos[2])}, ${Math.atan2(b14[1] - EYE_H - pp.pos[1], hz)}, ${pp.pos[1]})`);
+    }
+    await stepOne();
+    await capture("head-4-brain-apex");
+    note(`head-4-brain-apex (+15 frames): brain at ${b14 ? f2(b14) : "none"} (at +14)`);
+  }
   const brainW = (await wounds(id)).filter((w) => Math.abs(w.radius - 0.08) <= R_TOL);
   out.chunks4 = [chunks4, maxChunks4];
-  check(maxChunks4 >= chunks4 + BRAIN_CHUNKS_MIN, `hit 4: live chunks up by ${maxChunks4 - chunks4} (${chunks4} -> ${maxChunks4}; >= ${BRAIN_CHUNKS_MIN}); brain cavity wounds ${brainW.length}`);
-  await stepN(0);
-  await stagePhoto(id, "head-4-brain", "head-4-brain");
+  check(maxChunks4 >= chunks4 + BRAIN_CHUNKS_MIN, `hit 4: live SDF chunks up by ${maxChunks4 - chunks4} (${chunks4} -> ${maxChunks4}; >= ${BRAIN_CHUNKS_MIN}: lumps + skull chips); brain cavity wounds ${brainW.length}`);
+  check(brains3.length === brains0 + 1, `hit 4: a brain mesh gib exists (${brains0} -> ${brains3.length})`);
   // -------- 6. body wounds, read BEFORE the thaw (a collapsing actor moves)
   const wFinal = await wounds(id);
   const missing = bodyWounds.filter((b) => !wFinal.some((w) => distTo(w.pos, b.pos) <= 1e-3));
@@ -624,6 +663,30 @@ async function ladder(label, full) {
   const headAlive = await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`);
   check(al && al.phase !== "standing", `hit 4: the zombie collapses (phase ${al?.phase}, meter ${al?.meter?.toFixed?.(3)})`);
   check(headAlive > 0, `hit 4: the head is still on (${headAlive} live head prims)`);
+  // -------- 4b. the brain at rest, 1.5 s after the strike (15 + 3 frames so far)
+  await stepN(90 - 18);
+  const restA = await evaluate("__sdfGame.head.brains()");
+  await stepN(6);
+  const restB = await evaluate("__sdfGame.head.brains()");
+  const bA = restA[restA.length - 1], bB = restB[restB.length - 1];
+  const moved = bA && bB ? distTo(bA, bB) : null;
+  check(!!bB && bB[1] <= BRAIN_REST_MAX_Y && moved !== null && moved < 0.002,
+    `hit 4 +1.5 s: the brain rests on the floor at ${bB ? f2(bB) : "none"} (y <= ${BRAIN_REST_MAX_Y}; moved ${moved?.toFixed(4)} m over 6 frames, < 0.002)`);
+  if (bB) {
+    // brain-rest.png: a low close-up — 0.4 m off the brain on the side facing the swing stand, eye 0.3 m up.
+    const ax = pose.x - bB[0], az = pose.z - bB[2], l = Math.hypot(ax, az) || 1;
+    // The player stands on the floor (eye 1.62 m), so the close-up is a 0.45 m stand-off looking down with the
+    // render FOV narrowed to 20 degrees (restored after).
+    const x = bB[0] + (ax / l) * 0.45, z = bB[2] + (az / l) * 0.45;
+    await evaluate(`__sdfGame.setPose(${x}, ${z}, ${yawOf(bB[0] - x, bB[2] - z)}, ${Math.atan2(bB[1] - EYE_H, 0.45)}, 0)`);
+    const fov0 = (await evaluate("__sdfGame.setRenderFov(NaN)")).renderFovDeg;   // NaN: report only
+    await evaluate("__sdfGame.setRenderFov(20)");
+    await stepOne();
+    const n = await centreOn(bB);
+    await capture("brain-rest");
+    await evaluate(`__sdfGame.setRenderFov(${fov0})`);
+    note(`brain-rest: camera at (${x.toFixed(2)}, ${z.toFixed(2)}) eye 1.62, FOV 20 (restored to ${fov0}), brain NDC after centring ${n ? f2(n) : "off"}`);
+  }
   return out;
 }
 

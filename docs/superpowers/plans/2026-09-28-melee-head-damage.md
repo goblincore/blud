@@ -918,7 +918,7 @@ header), `public/assets/lab/brain.glb`, and `src/lab/sdf-zombie/webgpu/game-brai
 `game-head-damage.ts`, `game-main.ts` (the mesh-gib step next to the chunk loop), and `head-crown.ts` (drop the
 SDF whole brain from the brain stage, keep the lumps and chips).
 
-- [ ] **Model.** Build a brain about 0.14 m long in Blender, at most 8k triangles:
+- [x] **Model.** Build a brain about 0.14 m long in Blender, at most 8k triangles:
   - two hemispheres with a clear longitudinal fissure;
   - gyri and sulci made by real geometry: displacement from a cellular or voronoi-ridge texture, or sculpted
     folds, not a flat blob;
@@ -927,30 +927,42 @@ SDF whole brain from the brain stage, keep the lumps and chips).
 
   Keep vertex colour or a baked AO so the sulci are darker. Export `brain.glb` with one mesh node `Brain`.
   Render a turntable preview with the Blender MCP or headless Blender, and look at it.
-- [ ] **Material.**
+- [x] **Material.**
   - A wet pink-grey (base ≈ `#c98b8b` to `#b98a8f`), with the sulci darker and redder.
   - Low roughness (0.3) plus a clearcoat or sheen.
   - The existing `GORE_COLORS.brain` tint family.
   - It is a Three.js WebGPU node material (MeshPhysicalNodeMaterial or MeshStandardNodeMaterial), lit by the
     scene lights like the flail.
-- [ ] **Physics.** A mesh gib rides a `gib-chunks.ts` `Chunk` state:
+- [x] **Physics.** A mesh gib rides a `gib-chunks.ts` `Chunk` state:
   - built with `makeChunk` at the crown, with its velocity and spin;
   - stepped with `stepChunk(c, dt, chunkCollidersAt(ctx, c.pos))` in the same loop as the chunk step;
   - the mesh's position and quaternion are copied from the chunk each frame.
   - It settles on the floor and stays like other gibs, with a cap (reuse `maxChunks` or a small own cap, 8).
   - `ctx.boot.spawnMeshGib(mesh, pos, vel, angVel, radius)` is set in `game-main.ts`.
-- [ ] **The brain stage.**
+- [x] **The brain stage.**
   - The brain launches up and along the blow at about 2.5 m/s, so it hangs visibly, with a spin.
   - The stage's blood burst is about half its current radius.
   - The leaf no longer dispatches the SDF `brainPiece`. Keep `brainPiece` exported for now; the tests still
     cover it.
-- [ ] **Gate.**
+- [x] **Gate.**
   - The head gate's hit 4 asserts that a brain mesh gib exists (a seam: `__sdfGame.head.brains()` → positions)
     and, after 1 s, that it rests near floor height.
   - Photo `head-4-brain.png` three frames after the hit, and `brain-rest.png` with a close-up of the brain on
     the floor. Look at both: it must read as a brain.
-- [ ] **Verify.** tsc; `npm test -- head gib-chunks`; both gates; zero console errors.
-- [ ] **Commit:** `feat(head-damage): a modelled brain mesh gib with a wet material`.
+- [x] **Verify.** tsc; `npm test -- head gib-chunks`; both gates; zero console errors.
+- [x] **Commit:** `feat(head-damage): a modelled brain mesh gib with a wet material`.
+
+  **As built (Task 11):**
+  - Model: reaction-diffusion (Gray-Scott labyrinth) gyri on a 1 mm remeshed high mesh, baked (normal + albedo,
+    WebP, 1024²) onto a 7,268-tri low mesh; 0.105 x 0.122 x 0.138 m. Previews `docs/dev-notes/2026-09-28-head-damage/brain-model*.png`.
+  - Material: `MeshPhysicalNodeMaterial` on the level's per-room light list. The model albedo rendered pure white
+    under the torch, so the colour multiplies it by ~0.09 (`BRAIN_LOOK`).
+  - Physics: `game-mesh-gibs.ts` (cap 8, cleared in `rebuildCast`). A per-chunk `restitution` (0.2) keeps the brain
+    from bouncing 0.6 m.
+  - The brain lumps did not exist yet: `brainLumps` (3) was added beside the chips.
+  - Less blood at the brain stage: half the burst (`burstVolume` scale: 40% of the drops at half speed), a pellet
+    gout and a pellet crater bleed. Even so, at +3 frames the brain is still inside its own spray, so the gate adds
+    `head-4-brain-apex.png` (+15 frames).
 
 ### Task 12: Look pass, docs, PR (was Task 8)
 

@@ -19,6 +19,8 @@ export function createHeadSeams(ctx: GameContext) {
         const a = ctx.world.actors.find(q => q.id === id);
         return a ? sdBody([x, y, z], a.posed()) : null;
       },
+      /** The live brain MESH gibs' positions (world; game-mesh-gibs.ts, tag 'brain'), oldest first. */
+      brains: (): number[][] => ctx.gibs.meshGibs.filter(g => g.tag === 'brain').map(g => [...g.state.pos]),
       /** One head hit at world point (x, y, z), blow direction (dx, dy, dz) (normalised here), with the
        *  R swing's feel. False when there is no such actor or no leaf. */
       hit: (id: number, x: number, y: number, z: number, dx: number, dy: number, dz: number): boolean => {

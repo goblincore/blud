@@ -6,7 +6,8 @@
 //   * head-damage.ts  the ladder (eye → cave → scalp → brain) → events;
 //   * head-deform.ts  the wobble and the dents → the actor's setHeadDeform hook (applied at every re-pose);
 //   * head-eye.ts     the socket ray, the stalk rope, its prims → one hand-posed piece (boot.attachPiece);
-//   * head-crown.ts   the crown ray, the scalp craters, the brain and skull chips → onGoreDispatch.
+//   * head-crown.ts   the crown ray, the scalp craters, the brain lumps and skull chips → onGoreDispatch, and
+//                     the whole brain's launch → the modelled brain MESH (game-brain-gib.ts, spec §14 decision 3).
 // Wounds go through ZombieActor.blast (the kill is its forceCollapse). The per-actor state lives in this
 // module (keyed by the actor object), never on main().
 //
@@ -29,7 +30,8 @@ import {
   type HeadDeformState, type HeadFrame, type Quat,
 } from '../head-deform';
 import { EYE_STALK, eyeRayStart, makeStalk, nearerEye, stalkPrims, stepStalk, type StalkState } from '../head-eye';
-import { CROWN, brainPiece, crownRayStart, scalpCraterPoints, skullChips } from '../head-crown';
+import { CROWN, brainLaunch, brainLumps, brainPiece, crownRayStart, scalpCraterPoints, skullChips } from '../head-crown';
+import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
 import { rngStreams } from './rng';
 
@@ -57,10 +59,13 @@ export interface HeadDamageDeps {
   headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null;
   /** ctx.boot.onGoreDispatch. */
   gore(a: ZombieActor, pieces: GorePiece[]): void;
-  /** The head-pop blood (burstVolume + spawnImpactGout, game-main onHeadPop). */
+  /** The brain stage's blood (burstVolume + spawnImpactGout, game-main; half the head pop's burst radius so
+   *  the brain is seen). */
   burst(a: ZombieActor, at: Vec3, dir: Vec3): void;
-  /** Blood for a crater (registerBleed). */
-  bleed(a: ZombieActor, w: Wound, point: Vec3, dir: Vec3): void;
+  /** The modelled brain mesh (game-brain-gib.ts). Absent, or not loaded yet: the SDF brainPiece is thrown. */
+  brain?: BrainGibLeaf;
+  /** Blood for a crater (registerBleed, at `kind`'s gout). */
+  bleed(a: ZombieActor, w: Wound, point: Vec3, dir: Vec3, kind: 'pellet' | 'slug'): void;
   /** ctx.boot.attachPiece (absent before the chunk spawner exists: the eye then pops invisibly). */
   attach?: (a: ZombieActor, prims: Primitive[], pos: Vec3, opts?: { clean?: boolean }) => AttachedPiece;
 }
@@ -199,7 +204,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       w.severRadius = 0;
       clothifyWound(posed.prims, w, 'heavy');
       a.blast({ wounds: [w], meterCredit: feel.meterCredit, impulse, reaction: 'blast' });
-      deps.bleed(a, w, point, dir);
+      deps.bleed(a, w, point, dir, 'slug');
       return;
     }
     let h = heads.get(a);
@@ -222,6 +227,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const wounds: Wound[] = [];
     let forceCollapse = false;
     let crown: Vec3 | null = null;
+    let brainStage = false;
     const crownOf = (): Vec3 => (crown ??= surfaceToward(field, crownRayStart(frame), frame));
     for (const ev of r.events as HeadEvent[]) {
       switch (ev.kind) {
@@ -260,7 +266,11 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           const c = crownOf();
           wounds.push(tag(worldHitToWound(posed.prims, c, CROWN.brainR, 'blast', yaw, field), 'keep'));
           const rand = rngStreams.misc;
-          deps.gore(a, [brainPiece(c, dir, rand), ...skullChips(c, dir, rand)]);
+          // The whole brain is the modelled MESH now (spec §14); the SDF brainPiece only while the GLB loads.
+          const l = brainLaunch(c, dir, rand);
+          const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel) ?? false;
+          deps.gore(a, [...(thrown ? [] : [brainPiece(c, dir, rand)]), ...brainLumps(c, dir, rand), ...skullChips(c, dir, rand)]);
+          brainStage = true;
           deps.burst(a, c, [0, 1, 0]);
           break;
         }
@@ -270,7 +280,9 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       }
     }
     a.blast({ wounds, meterCredit: feel.meterCredit, impulse, reaction: 'blast', forceCollapse });
-    if (wounds[0]) deps.bleed(a, wounds[0], point, dir);
+    // The brain stage bleeds a PELLET's worth (spec §14: so the brain is seen): its first wound is the crown
+    // cavity, and a slug bleed there puts 85 near-stationary drops right on the brain's way out.
+    if (wounds[0]) deps.bleed(a, wounds[0], point, dir, brainStage ? 'pellet' : 'slug');
   }
 
   function tick(dt: number): void {

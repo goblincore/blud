@@ -61,6 +61,21 @@ describe('stepChunk', () => {
     expect(bounced!.vel[1]).toBeGreaterThan(0.3);
   });
 
+  it('a per-chunk restitution overrides the kind (a soft mesh gib slaps down)', () => {
+    const drop = (restitution?: number) => {
+      let c: Chunk = { ...makeChunk('head', [0, 0.3, 0], [0, -4, 0], 0.05, [0, 1, 0], rng, 'gob'), restitution };
+      for (let i = 0; i < 120; i++) {
+        const next = stepChunk(c, 1 / 60);
+        if (c.vel[1] < 0 && next.pos[1] <= 0.05 + 1e-9) return { impact: -c.vel[1], out: next.vel[1] };
+        c = next;
+      }
+      throw new Error('never landed');
+    };
+    const soft = drop(0.2), gob = drop();
+    // Out speed / the last pre-contact speed (the landing frame adds a little gravity first): ~the restitution.
+    expect(soft.out / soft.impact).toBeGreaterThan(0.18); expect(soft.out / soft.impact).toBeLessThan(0.23);
+    expect(gob.out / gob.impact).toBeGreaterThan(0.5); expect(gob.out / gob.impact).toBeLessThan(0.62);
+  });
   it('topples: a vertical limb ends lying flat', () => {
     // Long axis local y, spawned upright, at rest on the floor.
     let c = makeChunk('legL', [0, 0.2, 0], [0, 0, 0], 0.2, [0, 1, 0], rng);

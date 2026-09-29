@@ -29,6 +29,18 @@ import type { PassTiming } from './gpu-pass-timing';
 import type { LabRendererHandle } from './lab-renderer';
 import type { LoopController, WarmOutcome } from './warm-gate';
 
+/** `boot.spawnMeshGib`'s optional shape and tag. */
+export interface MeshGibOpts {
+  /** Narrow-phase floor support, object-local (gib-chunks SupportSphere). Default: one sphere of `radius`. */
+  support?: readonly { c: Vec3; r: number }[];
+  /** The object-local axis the topple lays flat. Default +y. */
+  longAxis?: Vec3;
+  /** Floor bounce (gib-chunks Chunk.restitution). Default: a gob's. */
+  restitution?: number;
+  /** For the seams (`__sdfGame.head.brains()` lists the 'brain' ones). */
+  tag?: string;
+}
+
 /** The handle `boot.attachPiece` returns. */
 export interface AttachedPiece {
   update(at: Vec3, localEnds: ReadonlyArray<{ a: Vec3; b: Vec3 }>): void;
@@ -141,6 +153,11 @@ export interface BootState {
    *  piece shades as its own prim colours: the dangling eye's white, glowing
    *  iris and pink stalk. */
   attachPiece?: (a: ZombieActor, prims: Primitive[], pos: Vec3, opts?: { clean?: boolean }) => AttachedPiece;
+  /** A MESH gib (head damage's modelled brain): `object` (a three mesh or group, not yet in the scene) rides
+   *  a gib-chunks Chunk launched at `pos` with `vel` and `angVel`, `radius` its broad-phase bound; stepped in
+   *  the chunk loop, capped (the oldest is removed), cleared on a cast rebuild (game-mesh-gibs.ts). Assigned
+   *  with the chunk spawner. */
+  spawnMeshGib?: (object: import('three/webgpu').Object3D, pos: Vec3, vel: Vec3, angVel: Vec3, radius: number, opts?: MeshGibOpts) => void;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */

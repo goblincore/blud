@@ -20,6 +20,7 @@ describe('makeGibsState', () => {
     expect(a.blurPrevKeys).not.toBe(b.blurPrevKeys);
     expect(a.pendingGibImpulses).not.toBe(b.pendingGibImpulses);
     expect(a.pendingGibs).not.toBe(b.pendingGibs);
+    expect(a.meshGibs).not.toBe(b.meshGibs);
   });
 
   it('starts at the declared defaults', () => {

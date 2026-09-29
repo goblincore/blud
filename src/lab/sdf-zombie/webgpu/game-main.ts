@@ -267,6 +267,8 @@ import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
+import { createBrainGib } from './game-brain-gib';
+import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
 import { createMiscSeams } from './game-seams-misc';
 import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
@@ -3522,8 +3524,9 @@ async function main() {
    *  !wanderFrozen, and a FROZEN bench leg calling setWoundTuning must not
    *  march through a stale hull. */
   function rebuildCast(): void {
-    // Head damage state (and any dangling eye's piece) belongs to the old cast.
+    // Head damage state (and any dangling eye's piece) belongs to the old cast; so do its brain mesh gibs.
     ctx.weapon.headDamage?.reset();
+    clearMeshGibs(ctx);
     ctx.world.soldierCorpses?.dispose();
     ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
     // DRAIN IN-FLIGHT RUPTURES FIRST. Their actors are about to be disposed and
@@ -3763,14 +3766,22 @@ async function main() {
   ctx.weapon.headDamage = createHeadDamage(ctx, {
     headShape,
     gore: (a, pieces) => ctx.boot.onGoreDispatch?.(a, pieces),
-    // The head-pop blood (onHeadPop's burst): a volumetric burst and a slug gout up and along.
+    // The brain stage's blood (spec §14: it bleeds less, so the brain is seen). onHeadPop's volumetric burst at
+    // HALF its reach: half the spawn radius (0.06, was 0.12), half the radial speed and 40% of the drops, with a
+    // gentle bias (0.4 m/s up; was 1.5). The full burst is 74 drops at 2.5-7 m/s in every direction: three
+    // frames on it was a 0.3 m red ball exactly around the brain's climb, and it hid the brain
+    // (head-4-brain.png). And a PELLET gout, not the slug one (85 near-stationary 6-14 cm drops held at the
+    // crown for up to 0.9 s).
     burst: (_a, at, dir) => {
-      burstVolume(ctx.vfx.bloodSim, at, 0.12, [dir[0] * 1.5, 0.5 + dir[1], dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+      burstVolume(ctx.vfx.bloodSim, at, 0.06, [dir[0] * 0.6, 0.4, dir[2] * 0.6], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+        { count: 0.4, speed: 0.5 });
       const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
-      spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+      spawnImpactGout(ctx.vfx.bloodSim, 'pellet', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
     },
-    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
+    bleed: (a, w, point, incoming, kind) => registerBleed(ctx, a, w, kind, { point, incoming }),
     attach: (a, prims, pos, opts) => ctx.boot.attachPiece?.(a, prims, pos, opts) ?? { update() {}, dispose() {} },
+    // The modelled brain (game-brain-gib.ts), lit by the level's light list for the room it is thrown in.
+    brain: createBrainGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null }),
   });
   // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
@@ -6630,6 +6641,8 @@ async function main() {
    *  `liveChunks`/`chunks` and listed in `bake.attachedViews`, so
    *  spawnChunkPiece's eviction never sees it; dispose() hands it back to
    *  `spareViews` hidden, exactly as a shot-apart live piece is released. */
+  /** A mesh gib (the head damage's modelled brain): game-mesh-gibs.ts. */
+  ctx.boot.spawnMeshGib = (object, pos, vel, angVel, radius, opts) => spawnMeshGib(ctx, object, pos, vel, angVel, radius, opts);
   ctx.boot.attachPiece = (a, prims, pos, opts) => {
     // Zero velocity, and a fixed rng: makeChunk's tumble draws must not
     // consume rngStreams.misc (every other piece's sequence stays put).
@@ -7634,6 +7647,8 @@ async function main() {
           ctx.bake.lastRequestMs = performance.now() - t0;
         }
       }
+      // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
+      stepMeshGibs(ctx, cdt);
       // SPRITE PIECES, on the same clock and in the same block as the marched
       // ones — deliberately, because they are the same physics: `stepSpritePieces`
       // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite

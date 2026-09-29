@@ -19,6 +19,8 @@
 // placeholder in the factory; the codemod supplies the real value at the
 // binding's original line. Every call still returns fresh containers.
 
+import type { Object3D } from 'three/webgpu';
+import type { Chunk } from '../gib-chunks';
 import type { GibBoneRelease, GibPlan } from '../gib-parts';
 import type { Vec3 } from '../types';
 import type { BakedChunkMaterial } from './baked-chunks';
@@ -103,6 +105,16 @@ export interface GibsState {
   }[];
   /** Raw `?gibparts` value; `sprite`/`sheet` lay the sprite bench instead. */
   partsMode: string | null;
+  /** MESH GIBS (game-mesh-gibs.ts): plain three meshes riding a gib-chunks `Chunk` — the head damage's
+   *  modelled brain. Stepped with the SDF chunks, capped (oldest out), cleared on a cast rebuild. */
+  meshGibs: MeshGib[];
+}
+
+/** One mesh gib: its chunk state, its object (the scene child it poses) and a tag the seams filter on. */
+export interface MeshGib {
+  state: Chunk;
+  object: Object3D;
+  tag: string;
 }
 
 /** Every call returns a fresh object, the set and arrays included. */
@@ -137,6 +149,7 @@ export function makeGibsState(): GibsState {
     pendingGibImpulses: [],
     pendingGibs: [],
     partsMode: null,
+    meshGibs: [],
   };
 }
 

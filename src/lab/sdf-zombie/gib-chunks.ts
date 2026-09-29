@@ -96,6 +96,9 @@ export interface Chunk {
    *  Defaults to one origin sphere of `radius`, which reproduces the old
    *  single-radius floor behaviour for every caller that does not supply one. */
   support: readonly SupportSphere[];
+  /** Floor bounce override (absent: the kind's — RESTITUTION, or boneRestitution for a bone). A soft
+   *  MESH gib (the head damage's brain) sets a low one: it slaps down and stays, it does not bounce. */
+  restitution?: number;
 }
 
 /** One sphere of a chunk's local support shape: a centre in chunk-local space
@@ -332,7 +335,7 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
       if (c.kind !== 'bone') {
         squash = Math.min(1, squash + Math.min(Math.abs(vy) * 0.16, 0.9));
       }
-      const rest = c.kind === 'bone' ? CHUNK_TUNING.boneRestitution : RESTITUTION;
+      const rest = c.restitution ?? (c.kind === 'bone' ? CHUNK_TUNING.boneRestitution : RESTITUTION);
       vy = -vy * rest;
       if (Math.abs(vy) < 0.35) vy = 0;
     }

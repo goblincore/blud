@@ -168,18 +168,27 @@ export const VOLUME_BURST = {
   scrapSize: [0.05, 0.09] as const,
 } as const;
 
+/**
+ * `scale` shrinks the burst (the melee brain stage's half burst, spec docs/superpowers/specs/2026-09-28-melee-
+ * head-damage-design.md §14): `count` multiplies the drops and the scraps (rounded), `speed` their radial speed,
+ * so the spray's reach after a given time scales by `speed`. Omitted: the full burst, bit-identical.
+ */
 export function burstVolume(
   sim: BloodSim, centre: Vec3, radius: number, bias: Vec3, rng: () => number, stream?: number,
+  scale?: { count?: number; speed?: number },
 ): void {
   const V = VOLUME_BURST;
-  for (let i = 0; i < V.drops + V.scraps; i++) {
-    const scrap = i >= V.drops;
+  const drops = scale?.count !== undefined ? Math.round(V.drops * scale.count) : V.drops;
+  const scraps = scale?.count !== undefined ? Math.round(V.scraps * scale.count) : V.scraps;
+  const sp = scale?.speed ?? 1;
+  for (let i = 0; i < drops + scraps; i++) {
+    const scrap = i >= drops;
     // Uniform direction, then a point at up to the sphere radius along it.
     const z = rng() * 2 - 1, th = rng() * Math.PI * 2, rr = Math.sqrt(1 - z * z);
     const dir: Vec3 = [Math.cos(th) * rr, z * 0.8 + 0.25, Math.sin(th) * rr];
     const k = radius * rng();
     const at: [number, number, number] = [centre[0] + dir[0] * k, centre[1] + dir[1] * k, centre[2] + dir[2] * k];
-    const speed = (V.speedMin + rng() * (V.speedMax - V.speedMin)) * (scrap ? 0.6 : 1);
+    const speed = (V.speedMin + rng() * (V.speedMax - V.speedMin)) * (scrap ? 0.6 : 1) * sp;
     const band = scrap ? V.scrapSize : V.dropSize;
     push(sim, {
       pos: at,
