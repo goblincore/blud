@@ -10,9 +10,13 @@
   H (a flat sweep, ±70°, the finisher); a pause of more than 0.35 s resets to R. About 8 body hits drop a zombie (7 with a
   sweep among them). The flail never decapitates. The hit follows the crosshair (worst 0.77 cm off at the strike).
   Spec §12 · strip `look/sweep-H-strip.png`.
-- [ ] **Melee head damage model: spec approved 2026-09-28, not built.** The head wobbles like jelly and keeps dents, then
-  four stages: an eye pops out and dangles, the face caves in (the eye snaps off), the scalp tears to show the skull,
-  and the brain flies out (the head kill). [Spec](docs/superpowers/specs/2026-09-28-melee-head-damage-design.md).
+- [~] **Melee head damage model v2: built 2026-09-29; owner playtest pending.** The flesh wears away region by region.
+  - An orbit stripped to bone shows a 3D eye; the next hit pops it on a stalk and leaves a dark socket.
+  - Stripping the brow, crown or a cheek to the skull, then cracking it, sends a modelled brain flying out
+    and kills the zombie.
+  - Jelly wobble; the skull deforms with the flesh.
+  [Spec §15](docs/superpowers/specs/2026-09-28-melee-head-damage-design.md) ·
+  [NOTES](docs/dev-notes/2026-09-28-head-damage/NOTES.md) · gate `scripts/head-damage-gate.mjs`.
 - [x] **v1.2 built and playtested (2026-09-27/28).** Gate passing. The strike lands on the crosshair; the first
   swing is a big overhand swipe; head hits 1–3 cave the face in (0.06 m) and the 4th snaps the neck; body craters 0.09 m;
   5 hits drop a zombie; hand ×1.3. Root cause of the first-hit decapitation: the strike sat ~18° below the crosshair, so

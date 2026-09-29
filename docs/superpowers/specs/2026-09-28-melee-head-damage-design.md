@@ -1,6 +1,6 @@
 # The melee head damage model (zombie, flail) — Design
 
-**Date:** 2026-09-28 · **Status:** approved, not built · plan `docs/superpowers/plans/2026-09-28-melee-head-damage.md`
+**Date:** 2026-09-28 · **Status:** v2 built (§15); owner playtest pending · plan `docs/superpowers/plans/2026-09-28-melee-head-damage.md`
 **Follows:** [the spike flail](2026-09-26-spike-flail-design.md) §12.6. Branch `claude/melee-weapon-design-7d1423`
 (PR goblincore/blud#22).
 
