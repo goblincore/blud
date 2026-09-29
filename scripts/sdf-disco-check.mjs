@@ -119,7 +119,7 @@ if (!D) fail('no disco() seam / no ball on night-train');
 if (D.room !== 5) fail(`ball in room ${D.room}, not the Boiler Room`);
 if (D.material !== 'train.disco-tiles') fail(`ball material ${D.material}, not the mirror tiles`);
 if (!D.inLateScene) fail('the star mesh is not in the late scene');
-if (!D.visible || D.count !== 96) fail(`party: stars not drawn: ${JSON.stringify(D)} pose ${JSON.stringify(await evaluate("__sdfGame.pose()"))} key ${await evaluate("__sdfGame.room()")}`);
+if (!D.visible || D.count !== 144) fail(`party: stars not drawn: ${JSON.stringify(D)} pose ${JSON.stringify(await evaluate("__sdfGame.pose()"))} key ${await evaluate("__sdfGame.room()")}`);
 if (D.onBox !== D.count) fail(`party: ${D.count - D.onBox} stars off room 5's box: ${JSON.stringify(D)}`);
 if (!(D.intensity > 0.5 && D.rgb[0] > 0.9 && D.rgb[1] > 0.85 && D.rgb[2] > 0.75)) fail(`party: not white: rgb ${f3(D.rgb)} intensity ${D.intensity}`);
 pass(`party: ball ${D.material} at ${D.centre}; ${D.count} stars, all ${D.onBox} on room 5's faces, late scene; light rgb ${f3(D.rgb)} x ${D.intensity.toFixed(2)}`);

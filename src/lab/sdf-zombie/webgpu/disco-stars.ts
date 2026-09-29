@@ -18,7 +18,7 @@ export interface Box { min: readonly [number, number, number]; max: readonly [nu
 
 export const DISCO = {
   /** Reflection directions (stars). */
-  count: 96,
+  count: 144,
   seed: 1977,
   /** The party lamps' white on the ball, slightly warm. */
   party: [1.0, 0.95, 0.85] as Vec3,
