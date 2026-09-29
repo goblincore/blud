@@ -59,6 +59,8 @@ interface LiveChunk {
   template: ChunkTemplate;
   kind: 'limb' | 'gob' | 'bone';
   boneOnly: boolean;
+  /** 'eye': a snapped eye gib (head damage) — kept live (never baked) and evicted after every other live piece. */
+  tag?: 'eye';
 }
 
 /** `game-main.ts`'s local `LiveBundle`: a dynamite stick in flight. */

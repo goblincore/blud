@@ -137,3 +137,53 @@ export function eyeLook(headForward: Vec3, stalkDir: Vec3): Vec3 {
   const l = Math.hypot(v[0], v[1], v[2]);
   return l > 1e-9 ? [v[0] / l, v[1] / l, v[2] / l] : headForward;
 }
+
+/** THE SNAPPED EYE'S COMIC FLIGHT (the owner: "it needs to fly like comedically outward and arch up and bounce off
+ *  walls n stuff not just fall out"). The snapped stalk-and-eye gib launches:
+ *    - horizontally at `speed` m/s along normalize(blowShare·blow + fwdShare·forward) (both flattened; see eyeFlyLaunch
+ *      for a blow straight into the face), deflected
+ *      `sideways` toward the eye's own side of the head (left eye left, right eye right) plus ±`jitter` of random
+ *      horizontal wobble — so the two eyes part company;
+ *    - UP at `up` m/s, so the arc reads from across the room: 4.6 m/s is a 1.08 m rise in vacuum (v²/2g), ~0.9 m
+ *      under the chunk stepper's per-frame air drag (airDrag 0.6 %/frame);
+ *    - spinning at `spin` rad/s about a random axis;
+ *    - with a rubber-ball `restitution` off the floor AND the walls (Chunk.restitution / wallRestitution).
+ *  `up` is 4.6-5.6, not the brief's 3.5-5: at 3.5 the rise is 0.62 m in vacuum (~0.55 m with the drag), under the
+ *  ≥ 0.8 m the brief asks the arc to clear; 4.2 measured 0.79 m in the stepper. */
+export const EYE_FLY = {
+  speed: [5, 7] as const,
+  up: [4.6, 5.6] as const,
+  blowShare: 0.55,
+  fwdShare: 0.45,
+  sideways: 0.35,
+  jitter: 0.15,
+  spin: [15, 25] as const,
+  restitution: 0.75,
+} as const;
+
+const flatUnit = (v: Vec3): Vec3 | null => {
+  const l = Math.hypot(v[0], v[2]);
+  return l > 1e-3 ? [v[0] / l, 0, v[2] / l] : null;
+};
+
+/** The snapped eye's launch (EYE_FLY). `blow` is the blow's direction (zero on a death snap: forward only),
+ *  `forward` the head's forward, `outward` the head's axis pointing out of THIS eye's side (world, any length).
+ *  Pure given `rand`. */
+export function eyeFlyLaunch(blow: Vec3, forward: Vec3, outward: Vec3, rand: () => number): { vel: Vec3; angVel: Vec3 } {
+  const F = EYE_FLY;
+  const out = flatUnit(outward) ?? [1, 0, 0];
+  const mix: Vec3 = [F.blowShare * blow[0] + F.fwdShare * forward[0], 0, F.blowShare * blow[2] + F.fwdShare * forward[2]];
+  // Normalised — unless the blow nearly cancels the forward (a blow straight into the face: 0.55·blow + 0.45·fwd is
+  // ~0.1 long and its direction is noise). Then it is only scaled up to 0.5 long, and the sideways deflection wins:
+  // the eyes fly out to either side of the head instead of both flipping to wherever the residue points.
+  const ml = Math.hypot(mix[0], mix[2]);
+  const base: Vec3 = ml > 1e-3 ? [mix[0] / Math.max(ml, 0.5), 0, mix[2] / Math.max(ml, 0.5)] : (flatUnit(forward) ?? out);
+  const jx = (rand() * 2 - 1) * F.jitter, jz = (rand() * 2 - 1) * F.jitter;
+  const d = flatUnit([base[0] + out[0] * F.sideways + jx, 0, base[2] + out[2] * F.sideways + jz]) ?? base;
+  const speed = F.speed[0] + (F.speed[1] - F.speed[0]) * rand();
+  const up = F.up[0] + (F.up[1] - F.up[0]) * rand();
+  // A random spin axis: uniform on the sphere.
+  const z = rand() * 2 - 1, t = rand() * Math.PI * 2, s = Math.sqrt(1 - z * z);
+  const w = F.spin[0] + (F.spin[1] - F.spin[0]) * rand();
+  return { vel: [d[0] * speed, up, d[2] * speed], angVel: [s * Math.cos(t) * w, s * Math.sin(t) * w, z * w] };
+}

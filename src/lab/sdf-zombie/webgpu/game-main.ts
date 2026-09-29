@@ -5176,6 +5176,8 @@ async function main() {
       bones: Primitive[]; kind?: 'limb' | 'gob' | 'bone';
       /** Pre-release orientation + angular velocity (body-to-gib task 4). */
       spinQuat?: Quat; spinAngVel?: Vec3;
+      /** Bounce overrides (Chunk.restitution / wallRestitution) and the snapped eye's tag (GorePiece). */
+      restitution?: number; wallRestitution?: number; tag?: 'eye';
     },
     template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
     initialVelocity?: Vec3,
@@ -5210,6 +5212,9 @@ async function main() {
         : undefined,
       support.length > 0 ? support : undefined,
     );
+    if (piece.restitution !== undefined) state.restitution = piece.restitution;
+    if (piece.wallRestitution !== undefined) state.wallRestitution = piece.wallRestitution;
+    const tag = piece.tag;
     // View budget. Order matters with the bake on: a BAKED piece is the
     // oldest, least-relevant gore, so its view recycles FIRST; only when
     // every view is live-and-flying does the old oldest-live rule apply.
@@ -5224,7 +5229,9 @@ async function main() {
       if (oldestBaked) {
         recycled = freeBaked(ctx, oldestBaked);
       } else {
-        const oldest = ctx.bake.liveChunks.shift();
+        // A snapped EYE is evicted last (the comic flight must play out): the oldest non-eye piece goes first.
+        const at = ctx.bake.liveChunks.findIndex(q => q.tag !== 'eye');
+        const oldest = ctx.bake.liveChunks.splice(at < 0 ? 0 : at, 1)[0];
         if (oldest) {
           if (ctx.bake.jobs.pendingId === oldest.id) cancelChunkBake(ctx);
           recycled = oldest.view;
@@ -5235,11 +5242,11 @@ async function main() {
       recycled.reset(state, piece.prims,
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template.uniforms);
       dressPieceView(recycled, kind, boneOnly);
-      ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view: recycled, template, kind, boneOnly });
+      ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view: recycled, template, kind, boneOnly, ...(tag ? { tag } : {}) });
     } else {
       const view = createPieceView(state, piece.prims,
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template, kind, boneOnly);
-      ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view, template, kind, boneOnly });
+      ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view, template, kind, boneOnly, ...(tag ? { tag } : {}) });
     }
   }
   /** The per-spawn look of a piece view, fresh or recycled. */
@@ -7637,7 +7644,8 @@ async function main() {
         }
         c.state = stepChunk(c.state, cdt, chunkCollidersAt(ctx, c.state.pos));
         c.view.update(c.state);
-        if (ctx.bake.enabled && ctx.bake.jobs.pendingId === null && !ctx.bake.jobs.error && chunkSettled(c.state)) {
+        // A snapped eye stays a live piece (never baked): it is tiny, and it keeps the eviction-last guarantee.
+        if (c.tag !== 'eye' && ctx.bake.enabled && ctx.bake.jobs.pendingId === null && !ctx.bake.jobs.error && chunkSettled(c.state)) {
           const t0 = performance.now();
           const data = c.view.bakeData();
           // Bone-only pieces retain their original SDF path.

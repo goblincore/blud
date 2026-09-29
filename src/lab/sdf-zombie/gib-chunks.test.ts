@@ -206,6 +206,16 @@ describe('chunk walls', () => {
     expect(Math.abs(r.c.vel[0])).toBeGreaterThan(2);
   });
 
+  it('a per-chunk wallRestitution overrides the wall bounce (the snapped eye caroms off)', () => {
+    const off = (wallRestitution?: number) => {
+      const c: Chunk = { ...makeChunk('armL', [-1.5, 1, 0], [9, 0, 0], 0.15, [1, 0, 0], rng), wallRestitution };
+      return -fly(c, 40, { boxes: [WALL] }).c.vel[0];
+    };
+    const lively = off(0.75), plain = off();
+    expect(lively / plain).toBeGreaterThan(0.75 / 0.55 - 0.02);
+    expect(lively / plain).toBeLessThan(0.75 / 0.55 + 0.02);
+  });
+
   it('skids along a wall rather than stopping dead on it', () => {
     // 12 frames puts it just past the wall (1.35 m at ~9 m/s is ~9 frames), so
     // this reads the state just after the bounce: friction applies on EVERY

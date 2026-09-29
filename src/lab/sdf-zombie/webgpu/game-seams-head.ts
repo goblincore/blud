@@ -66,6 +66,10 @@ export function createHeadSeams(ctx: GameContext) {
       },
       /** The live brain MESH gibs' positions (world; game-mesh-gibs.ts, tag 'brain'), oldest first. */
       brains: (): number[][] => ctx.gibs.meshGibs.filter(g => g.tag === 'brain').map(g => [...g.state.pos]),
+      /** The live snapped-EYE gibs (spawnChunkPiece tag 'eye'; head-eye EYE_FLY), oldest first: chunk id, world
+       *  position and velocity — the gate samples the comic flight's arc and bounces every frame. */
+      eyeGibs: (): { id: number; pos: number[]; vel: number[] }[] =>
+        ctx.bake.liveChunks.filter(c => c.tag === 'eye').map(c => ({ id: c.id, pos: [...c.state.pos], vel: [...c.state.vel] })),
       /** Switch actor `id`'s painted eye glow per eye (the face shader's per-eye mask, zombie-gpu setEyeGlow).
        *  'L' = the face sheet's image-left eye (hs.x < 0): the zombie's own RIGHT eye. False when no such actor. */
       eyeGlow: (id: number, side: 'L' | 'R', on: boolean): boolean => {

@@ -67,7 +67,7 @@ import {
   addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, rotate, stepWobble,
   type HeadDeformState, type HeadFrame, type Quat,
 } from '../head-deform';
-import { EYE_STALK, ORBIT_EYE_R, eyeRayStart, makeStalk, popEyeR, stalkPrims, stepStalk, type StalkState } from '../head-eye';
+import { EYE_FLY, EYE_STALK, ORBIT_EYE_R, eyeFlyLaunch, eyeRayStart, makeStalk, popEyeR, stalkPrims, stepStalk, type StalkState } from '../head-eye';
 import { CROWN, brainLaunch, brainLumps, brainPiece, skullChips } from '../head-crown';
 import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
@@ -115,9 +115,6 @@ export const HEAD_LEAF = {
    *  it is 2% / 38% / 66% on hits 1 / 2 / 3 (skull exposed at 3). Caveat: the fat band (fatColor) is tan too,
    *  and the pixel measure cannot tell the two apart. */
   carve: { shallow: 0.005, preBone: 0.012, skullGap: 0.006, minDepth: 0.002, skullBite: 0.004 },
-  /** The snapped eye's extra kick: up, and along the blow (m/s). */
-  snapUp: 1.5,
-  snapAlong: 1.5,
 } as const;
 
 export interface HeadHitFeel {
@@ -346,18 +343,20 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const caps = EYE_STALK.nodes - 1;
     // Capsules from the rope's middle on, then the eyeball (stalkPrims' order: caps, then the eye).
     const prims = [...all.slice(Math.floor(caps / 2), caps), ...all.slice(caps)];
-    const last = s.p[s.p.length - 1]!, prev = s.prev[s.p.length - 1]!;
-    const hz = EYE_STALK.stepHz;
-    const r = rngStreams.misc;
+    const last = s.p[s.p.length - 1]!;
+    // THE COMIC FLIGHT (head-eye EYE_FLY): up in an arc, out along the blow and the face, away to the eye's own
+    // side, spinning, and rubber-ball bouncy off the floor and the walls. The eye's side of the head is the head
+    // frame's local x ('L' = hs.x < 0, the face sheet's image-left eye).
+    const frame = h.frame ?? frameOf(a, posed);
+    const sgn = side === 'L' ? -1 : 1;
+    // No frame (no head prims): up × forward is the head's local +x.
+    const outward: Vec3 = frame ? rotate(frame.quat, [sgn, 0, 0]) : [n.fwd[2] * sgn, 0, -n.fwd[0] * sgn];
+    const l = eyeFlyLaunch(dir, n.fwd, outward, rngStreams.misc);
     const piece: GorePiece = {
       // 'torso', not 'head': a head chunk wears the face projection (boot.attachPiece's rule).
       limb: 'torso', origin: [last[0], last[1], last[2]], prims, kind: 'gob', tornAt: [], bones: [],
-      vel: [
-        (last[0] - prev[0]) * hz + dir[0] * HEAD_LEAF.snapAlong,
-        (last[1] - prev[1]) * hz + HEAD_LEAF.snapUp + dir[1] * HEAD_LEAF.snapAlong,
-        (last[2] - prev[2]) * hz + dir[2] * HEAD_LEAF.snapAlong,
-      ],
-      angVel: [(r() - 0.5) * 12, (r() - 0.5) * 12, (r() - 0.5) * 12],
+      vel: l.vel, angVel: l.angVel,
+      restitution: EYE_FLY.restitution, wallRestitution: EYE_FLY.restitution, tag: 'eye',
     };
     deps.gore(a, [piece]);
     // The dark hole stays: the plug alone, re-attached (the dangling piece's prim count is fixed).

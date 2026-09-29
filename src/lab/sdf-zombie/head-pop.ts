@@ -33,6 +33,11 @@ export interface GorePiece {
   kind: 'gob';
   vel: Vec3;
   angVel: Vec3;
+  /** Floor / wall bounce overrides (Chunk.restitution / wallRestitution); absent: the gob's. */
+  restitution?: number;
+  wallRestitution?: number;
+  /** 'eye': the head damage's snapped eye — never baked, and evicted last (game-main spawnChunkPiece). */
+  tag?: 'eye';
 }
 
 /** Linear-RGB paint for the debris. Eyeballed on the game capture. */

@@ -28,6 +28,9 @@
 //        painted-eye baseline, the snap's bar (the orbit circle, the traced socket point and the plug centre printed).
 //      Photos v2-eye-pop.png (blood) / -noblood. Both dangling eyes' draw cost is timed here (step 6).
 //   3. the next head hit (the first BROW hit) SNAPS BOTH: eyes.L and eyes.R 'gone' on the strike frame; 40 frames on (bleed off)
+//      THE EYES FLY OFF (head-eye EYE_FLY; eyeFlight, sampled every frame for 4 s from the strike frame): each eye gib
+//      arcs >= 0.8 m above its launch point, travels >= 2 m horizontally (or hits a wall), bounces >= 2 times, is still
+//      live at 4 s, and the two part company (>= 0.6 m apart along the head's right axis).
 //      the socket is still a dark hole (the same luma measure; photos v2-snapped.png / -noblood). Then the brow until dead:
 //      - the skull was exposed (brow or crown flesh < skullExposed) on an earlier hit than the brain;
 //      - the kill came at 8–14 total head hits (v1.4; 5–9 before); exactly one brain MESH gib (head.brains()); live SDF chunks up by
@@ -405,6 +408,63 @@ async function crownShot(id, name) {
   return { img, c, share: c ? boneShare(img, c[0], c[1], 200) : null, cs };
 }
 
+// ---- The snapped eyes' comic flight (head-eye EYE_FLY) ------------------------------------------------------
+/** From the snap's strike frame, every frame for EYE_FLY_FRAMES (4 s): both eye gibs (__sdfGame.head.eyeGibs, spawnChunkPiece
+ *  tag 'eye') must arc up >= EYE_PEAK_MIN above their launch point (the dangling eyeball before the strike, pre.eyeball),
+ *  travel >= EYE_TRAVEL_MIN horizontally (or hit a wall first), bounce >= EYE_BOUNCES_MIN times (floor: vy − → +; wall:
+ *  the horizontal velocity turns > 90° in one frame), still be live at 4 s (not evicted), and part company: the right
+ *  eye ends up >= EYE_SEP_MIN to the right (the head's right axis) of the left one at some point. */
+const EYE_FLY_FRAMES = 240, EYE_PEAK_MIN = 0.8, EYE_TRAVEL_MIN = 2, EYE_BOUNCES_MIN = 2, EYE_SEP_MIN = 0.6;
+async function eyeFlight(fr, pre) {
+  const rt = rightOf(fr);
+  const series = [];
+  for (let f = 0; f <= EYE_FLY_FRAMES; f++) {
+    if (f > 0) await stepOne();
+    series.push(await evaluate("__sdfGame.head.eyeGibs()"));
+  }
+  const ids = [...new Set(series.flatMap((s) => s.map((g) => g.id)))];
+  const first = (gid) => series.find((s) => s.some((g) => g.id === gid)).find((g) => g.id === gid);
+  const dotR = (p) => p[0] * rt[0] + p[2] * rt[2];
+  // L is the one further toward the head's −right at spawn ('L' = hs.x < 0).
+  const byside = [...ids].sort((a, b) => dotR(first(a).pos) - dotR(first(b).pos));
+  check(ids.length === 2, `eye flight: the snap throws two eye gibs (${ids.length}: ids ${JSON.stringify(ids)})`);
+  const res = {};
+  for (const [side, gid] of [["L", byside[0]], ["R", byside[1]]]) {
+    if (gid === undefined) continue;
+    const launch = pre.eyeball?.[side] ?? first(gid).pos;
+    let peak = -Infinity, travel = 0, floorB = 0, wallB = 0, prev = null;
+    let alive = 0;
+    for (let f = 0; f < series.length; f++) {
+      const g = series[f].find((q) => q.id === gid);
+      if (!g) { prev = null; continue; }
+      alive = f;
+      peak = Math.max(peak, g.pos[1] - launch[1]);
+      travel = Math.max(travel, Math.hypot(g.pos[0] - launch[0], g.pos[2] - launch[2]));
+      if (prev) {
+        if (prev.vel[1] < -0.3 && g.vel[1] > 0.3) floorB++;
+        const hp = Math.hypot(prev.vel[0], prev.vel[2]), hg = Math.hypot(g.vel[0], g.vel[2]);
+        if (hp > 0.3 && hg > 0.1 && (prev.vel[0] * g.vel[0] + prev.vel[2] * g.vel[2]) / (hp * hg) < 0) wallB++;
+      }
+      prev = g;
+    }
+    const lastG = series.at(-1).find((q) => q.id === gid);
+    res[side] = { id: gid, launch, peak, travel, floorB, wallB, aliveS: alive / 60, end: lastG?.pos ?? null };
+    note(`eye flight ${side} (chunk ${gid}): launch ${f2(launch)}; peak +${peak.toFixed(2)} m; horizontal travel ${travel.toFixed(2)} m; bounces floor ${floorB} wall ${wallB}; live to ${(alive / 60).toFixed(2)} s; at 4 s ${lastG ? f2(lastG.pos) : "gone"}`);
+    check(peak >= EYE_PEAK_MIN, `eye flight ${side}: arcs up ${peak.toFixed(2)} m above its launch point (>= ${EYE_PEAK_MIN})`);
+    check(travel >= EYE_TRAVEL_MIN || wallB > 0, `eye flight ${side}: travels ${travel.toFixed(2)} m horizontally (>= ${EYE_TRAVEL_MIN}, or a wall first: ${wallB} wall bounces)`);
+    check(floorB + wallB >= EYE_BOUNCES_MIN, `eye flight ${side}: bounces ${floorB + wallB} times (floor ${floorB}, wall ${wallB}; >= ${EYE_BOUNCES_MIN})`);
+    check(!!lastG, `eye flight ${side}: still live after ${EYE_FLY_FRAMES / 60} s (not evicted, not baked away)`);
+  }
+  let sep = -Infinity;
+  for (const s of series) {
+    const L = s.find((q) => q.id === byside[0]), R = s.find((q) => q.id === byside[1]);
+    if (L && R) sep = Math.max(sep, dotR(R.pos) - dotR(L.pos));
+  }
+  note(`eye flight: the right eye's greatest lead to the right of the left one (head right axis) ${sep.toFixed(2)} m`);
+  check(sep >= EYE_SEP_MIN, `eye flight: the eyes fly to different sides — lateral separation grows to ${sep.toFixed(2)} m (>= ${EYE_SEP_MIN})`);
+  out.eyeFlight = { ...res, sep };
+}
+
 // ---- The head frame and its regions ---------------------------------------------------------------
 let HD = null;   // { regions: HEAD_REGIONS, orbitExposed, skullExposed } from the page's head-damage.ts
 const frameOf = (id) => evaluate(`__sdfGame.head.frame(${id})`);
@@ -688,7 +748,8 @@ try {
     await stepN(2);
     const pre = await hstate(id);
     const ch0 = await chunks();
-    const r = await clickStrike(id, 2);
+    // The snap (k 0): the eyes' flight is sampled from the strike frame on (eyeFlight), so no frames are stepped past it here.
+    const r = await clickStrike(id, k === 0 ? 0 : 2);
     const sr = await struckRegion(id, fr);
     const hs = r.series[0].hs;
     lastHs = hs;
@@ -696,6 +757,7 @@ try {
     if (k === 0) {
       check(pre.eyes.L === "dangling" && hs.eyes.L === "gone", `snap: the next head hit snaps the eye (eyes.L ${pre.eyes.L} -> ${hs.eyes.L})`);
       check(pre.eyes.L === "dangling" && pre.eyes.R === "dangling" && hs.eyes.L === "gone" && hs.eyes.R === "gone", `snap: the next head hit snaps BOTH eyes (eyes ${JSON.stringify(pre.eyes)} -> ${JSON.stringify(hs.eyes)})`);
+      await eyeFlight(fr, pre);
       // The hole after the snap: the plug alone (the stalk no longer crosses it). Same measure as the pop's.
       await stepN(40);
       await faceStand(fr);
