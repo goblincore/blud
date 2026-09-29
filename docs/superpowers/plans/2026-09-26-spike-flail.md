@@ -2404,3 +2404,97 @@ rig is `updateRig` in `game-flail.ts`; there is NO audio in the game.
   the time-scale ramp, the rig kick, the head wobble) so the slow tail can be judged; LOOK.
 - [ ] NOTES v1.5a entry with the numbers and "For the owner"; `TASKS.md` (v1.5a built; v1.5b next); spec §14
   status; the PR body; push; restart the owner's server (`preview_start` `blud-censer`).
+
+---
+
+## v1.5b — flesh (spec §14.2, 2026-09-29)
+
+Rules as before. Owner: "the way flesh is removed from the face doesn't feel as visceral as it should — flesh needs
+to feel thicker somehow, or have more splayed edges with red shiny matter"; chosen: torn splayed petal lips, flying
+flesh chunks, red shiny matter strings. Facts from exploration (verify; lines drift): the crater is a sphere carve
+clipped by a depth slab plus ONE smooth Gaussian torus rim, radially symmetric (`APPLY_WOUNDS`,
+`march/fields/wounds.wgsl.ts`); `Wound.ragged` (a lobed outline via low-frequency `noise3`) is honoured by the
+shader but never set for zombie wounds; per-wound values reach the GPU through `ROW_WOUND_META` (type + ragged
+fraction ≤ 0.45, age, rimSplayScale, rimOffsetScale), `ROW_WOUND_CAP` (inward normal, carveDepth) and
+`ROW_WOUND_FLAGS` (bit 0 cavity, bit 1 cloth hole, bit 2 cloth decal; a fraction = threat mask; owner span);
+`rimScale` is `rimScaleFor(...)` in 0..1 and multiplies splay and offset; global rim uniforms are `woundCfg`/`woundCfg2`
+(no live setter; the WOUND TUNING panel exposes depth/fat/muscle/viscera/meat knobs only); crater shading is a
+tissue ramp by depth below the skin (dermis, fat, muscle `deepColor`, clot) with wetness only on the lip; the
+soldier-only red-meat block adds glint/clot noise but not for the zombie; blood: `registerBleed` → a trickle and
+`spawnImpactGout` (`'slug'`: 85 drops, 0.2–0.5 m/s, life 0.4–0.9 s); gore pieces: `GorePiece` → `onGoreDispatch`
+→ `spawnChunkPiece` (kind `'gob'`, chunk budget 64/96, eyes are evicted last).
+
+### Task 31: Torn, splayed lips (shader + wound data)
+
+**Files:** `wounds.wgsl.ts` (+ the wet/tissue blocks it needs), `damage.ts`, `character-view.ts`/`zombie-gpu.ts`
+(the wound row packing), `game-flail.ts`, `game-head-damage.ts`, tests, `scripts/head-damage-gate.mjs`/flail gate.
+
+- [ ] **Gate the look.** A new per-wound flag: `Wound.tear?: number` (0..1 intensity), packed as bit 3 of the
+  `ROW_WOUND_FLAGS` integer part (add a JS-side helper and the WGSL unpack). Only wounds with `tear` get the
+  new look; shotgun, slug, dynamite and every existing wound are pixel-identical (the march golden snapshot
+  test proves the default path unchanged; add a targeted check).
+- [ ] **The shape.** For torn wounds:
+  - Set `ragged` (0.35–0.45) so the outline is lobed instead of round; give the lobes more contrast if the
+    existing low-frequency noise is too soft (a second octave at a higher frequency, gated on `tear`).
+  - Make the rim thick, raised and splayed into flaps: modulate the rim's amplitude with the same lobe noise (so
+    the lip is a set of petals, not a torus), raise its height (`rimScale` may exceed 1 for torn wounds:
+    remove the min(1, …) clamp only for `tear`), push the rim outward (`rimOffset`) and let its width vary
+    with the lobes. Flesh should look like thick meat peeled back.
+- [ ] **The shading.** Torn wounds: the lip takes a wet red albedo and a strong specular (glossy, wet),
+  a glossy red interior, a darker clot at the floor; keep the existing tissue ramp underneath as the base. Use
+  `deepColor`/`gooRed`-family colours from the existing material, not new magic values.
+- [ ] **Data.** The flail marks its wounds `tear` (body craters 0.09 m and every head region crater); scale the
+  intensity by swing (H 1.0, R/L 0.8) and head hits 1.0. The head model's regions keep their bigger radii.
+- [ ] **Look loop (required).** Take close-up photos (0.5 m, crosshair on the wound, bleed OFF and ON) of a
+  body crater and head craters at hits 1, 2, 3, before and after; iterate the constants until it reads as torn,
+  thick, splayed flesh with a wet red shiny rim; LOOK at every photo and describe honestly. Compare with a
+  shotgun wound crop (unchanged).
+- [ ] **Verify.** tsc; `npm test -- wound march damage zombie-gpu head flail` (update the shader golden ONLY for
+  the intended text changes and explain each hash change); both gates; the flail gate's crosshair-accuracy and
+  the head gate's measurements still pass (bigger lips may shift a few pixel measurements: report, don't
+  loosen).
+- [ ] **Commit(s):** `feat(wound): torn, splayed lips with a wet red shiny rim (gated on Wound.tear)`;
+  `feat(flail): the flail's wounds are torn`.
+
+### Task 32: Flying flesh chunks
+
+**Files:** `head-crown.ts` or a new pure `flesh-bits.ts` (+ test), `game-flail.ts`, `game-head-damage.ts`,
+`game-main.ts` (eviction preference), gates.
+
+- [ ] **Pure, tests first.** `fleshBits(point, blowDir, normal, count, rand, scale) → GorePiece[]`: 3–5 small wet
+  meat bits per body hit (0.02–0.04 m, ellipsoid/capsule gobs; colours from `GORE_COLORS` meat/skin/fat mixes,
+  glossy), thrown along the blow ± a wide cone plus outward along the wound normal at 2–5 m/s with spin;
+  low restitution (0.2) so they splat and stay; head hits 5–7 (scale 1.5), H ×1.5. Tests: count ranges, the
+  velocity cone, colours, prim counts per piece, determinism from the seeded rand, every piece a valid
+  `GorePiece`.
+- [ ] **Wire.** Called from `strike()` (body hits) and the head leaf (head hits) via `onGoreDispatch`. Tag the
+  pieces `'flesh'`; cap live flesh bits at 24 (oldest removed first when over); eviction order when the chunk
+  budget is full: flesh bits first, then other gibs, eyes last. They settle and are baked like other gibs, or
+  are removed after ~15 s if simpler and cheaper.
+- [ ] **Verify.** A frame strip of a body hit and a head hit (0.15 s apart, 8 frames); LOOK; count live chunk
+  views before/after 10 hits (cap respected); frame-time delta with 24 bits live (report, noisy); gates pass;
+  the eye-fly and brain checks unaffected (eyes never evicted by flesh).
+- [ ] **Commit:** `feat(flail): each hit throws wet flesh`.
+
+### Task 33: Red matter strings (stretch; explore, then decide)
+
+**Files:** the blood sim (`blood-sim.ts` and its gout definitions), the flail's bleed hook; maybe the goo layer.
+
+- [ ] **Explore first** (report before building): what the blood sim and the GOO layer can do (sticking to surfaces,
+  sag, drip, strand shapes; the GOO TUNING panel's parameters). Decide the cheapest path that gives wet red drops
+  clinging along a wound rim that slowly sag and drip: e.g. a ring of 6–10 long-lived, slow, sticky drops seeded
+  on the crater rim (life 2–4 s, near-zero initial speed, stronger gravity, attraction to the surface), or a
+  dedicated 'matter' gout definition. If the sim cannot express it convincingly without a large new system,
+  STOP and report; do not build a big system.
+- [ ] **Build the cheap path.** New gout definition for torn wounds (`'matter'`), triggered by `registerBleed` for
+  torn wounds, scaled by head hits.
+- [ ] **Look:** close-up strip over ~1.5 s after a hit (bleed ON), LOOK; say honestly whether it reads as clinging,
+  sagging red matter.
+- [ ] **Commit:** `feat(flail): red matter clings and drips from torn wounds` (or a NOTES entry saying why it was
+  dropped).
+
+### Task 34: Look pass, docs, PR
+
+- [ ] A combined close-up sequence of a 4-hit head kill with everything on; NOTES v1.5b entry with numbers and "For
+  the owner"; TASKS; spec §14.2 status; PR body; push; restart the owner's server (`preview_start`
+  `blud-censer`).
