@@ -18,7 +18,8 @@
   +6.7 ms art, beacons +1.05 ms. [Notes + sheets](docs/dev-notes/2026-09-28-boiler-resize/notes.md). **Owner calls:**
   one tube row reads dark at the side walls (add a second row?); stars sparse on the 4 m walls (raise `DISCO.count`?);
   under the torch the beacons barely tint bodies (more weight?); without it they blow out flat red.
-- [ ] **Optimisation (parked, owner 2026-09-28):** tube shadow maps to **256²** (owner-approved), then bake the static
+- [ ] **Optimisation (parked, owner 2026-09-28):** tube shadow maps **256² — done 2026-09-29** (`TUBE.shadowSize`; train gate's correctness checks pass, its cost
+  section could not be judged at load 14), then bake the static
   art into the tube/beacon shadows so live updates draw only hulls; retire paths the chosen look leaves unused;
   level materials on the list. Menu and order: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
 - [x] **Zombies float — fixed with real feet** (owner, 2026-09-29): the model stopped 0.199 m above the floor (legs too

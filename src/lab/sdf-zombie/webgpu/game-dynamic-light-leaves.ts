@@ -205,8 +205,9 @@ const TUBE = {
   spotGain: TUBE_SPOT_GAIN, spill: 0.2,
   /** Swing: the train's lamp swing, amplified for a tube on chains. */
   swing: 2.2,
-  /** Hard, low-res shadows (owner): the zombies' hulls and the art. */
-  shadowSize: 512,
+  /** Hard, low-res shadows (owner): the zombies' hulls and the art. 256² approved 2026-09-28 ("256 would
+   *  be perfectly fine"); the 09-27 A/B found it indistinguishable from 512. */
+  shadowSize: 256,
   /** The dusty beam's strength. */
   beam: 0.035,
 } as const;
