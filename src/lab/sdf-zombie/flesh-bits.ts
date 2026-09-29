@@ -42,9 +42,9 @@ export const FLESH_BITS = {
   /** Floor and wall bounce: wet meat splats and stays. */
   restitution: 0.2,
   /** Live flesh bits at once (oldest removed first). */
-  cap: 24,
+  cap: 10,
   /** Life (s) and the closing shrink (s, part of the life). */
-  lifeS: 15,
+  lifeS: 8,
   shrinkS: 0.5,
 } as const;
 

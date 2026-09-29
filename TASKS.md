@@ -6,6 +6,12 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
+- [ ] **Flail v1.5b so far (2026-09-30), owner looking:** torn splayed wet-red lips on the flail's wounds, and flying
+  flesh bits (cap 10, 8 s life; not baked). **Queued:** gun-wound wet red lips keeping the crater shape (plan Task
+  35), red matter strings (Task 33), then an **optimization pass** (owner: after the look pass): flesh bits as flat
+  billboards/textured quads instead of marched chunks (a marched bit costs about 0.2–0.35 ms), the torn-wound
+  draw cost (+0.7 ms in the head gate), the first-swing hitch, and the gib blur layer rendering flying gibs as
+  faint grey smears.
 - [~] **v1.5a built (2026-09-29); owner playtest pending.** Impact: a slow tail after each hit, view-model recoil,
   camera judder + FOV pinch, a bigger zombie reaction, shutter blur on the ball and chain, blood that builds up on
   the flail, and both eyes popping at once. Spec §14.1. **v1.5b next:** torn splayed wound lips, flying flesh

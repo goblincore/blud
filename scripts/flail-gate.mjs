@@ -74,8 +74,8 @@
 //   14. FLESH (v1.5b Task 32, flesh-bits.ts): flesh bits on, bleed on. A standing zombie: one R body hit throws
 //      3–5 live 'flesh' chunks (chunkTags), one head hit 5–7 (8–11 on an H); frame strips (8 frames, 0.1 s apart,
 //      from the strike frame) of both into docs/dev-notes/2026-09-28-head-damage/flesh/. Ten more hits: live flesh
-//      never above FLESH_CAP (24) after any hit, views never above the budget; the draw time with the bits live vs
-//      the same stand before (printed, noisy); 16 s later every flesh bit is gone (FLESH_BITS.lifeS 15).
+//      never above FLESH_CAP (10) after any hit, views never above the budget; the draw time with the bits live vs
+//      the same stand before (printed, noisy); 16 s later every flesh bit is gone (FLESH_BITS.lifeS 8).
 //   13. BLOOD (spec §14.1 item 7): a fresh flail's state().blood is 0 (the rest photo's pixel measures run
 //      clean); three R body hits from 0 raise it by ~0.12 each to 0.36 less its drying (120 s time constant)
 //      over the swings; set to 1, ten seconds of simulated time dry it to exp(−10/120) ± 0.003;
@@ -1143,7 +1143,7 @@ else fail(`positive control: ${controlFails} click(s) did not strike as expected
 // ---- 14. FLESH: every hit throws wet flesh bits (flesh-bits.ts, v1.5b Task 32) ------------------------
 {
   const FLESH_OUT = 'docs/dev-notes/2026-09-28-head-damage/flesh';
-  const FLESH_CAP = 24;
+  const FLESH_CAP = 10;
   mkdirSync(FLESH_OUT, { recursive: true });
   const tags = async () => { const t = await evaluate('__sdfGame.flail.chunkTags()'); delete t.fleshAt; return t; };
   await evaluate('__sdfGame.freeze(true)');
@@ -1267,7 +1267,7 @@ else fail(`positive control: ${controlFails} click(s) did not strike as expected
     const after1 = await evaluate('__sdfGame.timeDraws(120)', 300000);
     const after2 = await evaluate('__sdfGame.timeDraws(120)', 300000);
     console.log(`flesh cost: the same stand after the bits are gone ${after1.toFixed(2)} / ${after2.toFixed(2)} ms; with vs after ${((with1 + with2) / 2 - (after1 + after2) / 2).toFixed(2)} ms`);
-    if (gone.flesh === 0) pass(`flesh: every flesh bit is gone 16 s later (FLESH_BITS.lifeS 15): ${JSON.stringify(gone)}`);
+    if (gone.flesh === 0) pass(`flesh: every flesh bit is gone 16 s later (FLESH_BITS.lifeS 8): ${JSON.stringify(gone)}`);
     else fail(`flesh: ${gone.flesh} flesh bits still live 16 s later`);
     await evaluate('__sdfGame.flail.setFleshBits(false)');
   }
