@@ -981,3 +981,277 @@ SDF whole brain from the brain stage, keep the lumps and chips).
   - Set `TASKS.md` and the spec status to built, owner playtest pending.
   - Add a head damage section to the PR body (keep the 🤖 footer line).
   - Push, and restart the owner's server (`preview_start` `blud-censer`).
+
+---
+
+## v2: the flesh wears away, events follow (spec §15, owner 2026-09-29)
+
+State: `67d6ec21`. The bone bake fix is merged; Tasks 1–11 are in.
+- **Superseded:** `head-damage.ts`'s fixed ladder.
+- **Moved:** Task 12's look items (iris facing out, blood per stage, cost) go into Tasks 17 and 19.
+
+### Task 13: Region craters replace their predecessor (`damage.ts`, pure)
+
+- [ ] **Tests first** (in `damage.test.ts`):
+  - a wound with `headRegion: 'brow'` pushed onto a ring that already holds a `'brow'` wound replaces it, in
+    the old one's position;
+  - wounds without `headRegion` behave exactly as before;
+  - `MAX_HEAD_WOUNDS` is 7.
+- [ ] **Implement:** add `headRegion?: string` to `Wound`. In `pushWound`, before the head-slot rule: if
+  `wound.headRegion` is set and an earlier wound has the same `headRegion`, put the new wound in that one's
+  index and drop the old one. Set `MAX_HEAD_WOUNDS` to 7.
+- [ ] **Verify and commit:** `npm test -- damage character-view game-actor head`, tsc. Commit
+  `feat(damage): a head region's crater replaces its predecessor; 7 head slots`.
+
+### Task 14: The region damage model (`head-damage.ts` v2, pure)
+
+**Files:** rewrite `src/lab/sdf-zombie/head-damage.ts` and its tests.
+
+- [ ] **Tests first.**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { HEAD_REGIONS, REGION_TUNING, headDeath, headHit, makeHeadDamage, type HeadEvent } from './head-damage';
+
+const k = (ev: HeadEvent[]) => ev.map(e => e.kind);
+const at = (r: keyof typeof HEAD_REGIONS) => HEAD_REGIONS[r];   // a hit exactly on a region centre (hs)
+const noJitter = () => 0.5;                                    // rand → jitter factor 1
+
+describe('head damage v2', () => {
+  it('a hit strips the nearest region most and spills to neighbours; upper-face hits also strip the crown', () => {
+    const r = headHit(makeHeadDamage(), { hs: at('brow'), strip: 0.25 }, noJitter);
+    expect(r.state.flesh.brow).toBeCloseTo(0.75, 6);
+    expect(r.state.flesh.crown).toBeLessThan(1);
+    expect(r.state.flesh.cheekL).toBeGreaterThan(r.state.flesh.orbitL);   // falloff
+    expect(k(r.events)).toContain('strip');
+  });
+  it('stripping an orbit below the threshold exposes it (once), then the next hit there pops the eye', () => {
+    let s = makeHeadDamage(); let all: HeadEvent[] = [];
+    for (let i = 0; i < 3; i++) { const r = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter); s = r.state; all = all.concat(r.events); }
+    expect(all.filter(e => e.kind === 'orbit-exposed')).toEqual([{ kind: 'orbit-exposed', side: 'L' }]);
+    expect(s.eyes.L).toBe('in-orbit');
+    expect(k(all)).not.toContain('eye-pop');
+    const r = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter);
+    expect(r.events).toContainEqual({ kind: 'eye-pop', side: 'L' });
+    expect(r.state.eyes.L).toBe('dangling');
+  });
+  it('a dangling eye snaps on the next head hit, or on death', () => {
+    let s = makeHeadDamage();
+    for (let i = 0; i < 4; i++) s = headHit(s, { hs: at('orbitR'), strip: 0.25 }, noJitter).state;
+    expect(s.eyes.R).toBe('dangling');
+    const r = headHit(s, { hs: at('cheekL'), strip: 0.25 }, noJitter);
+    expect(r.events).toContainEqual({ kind: 'eye-snap', side: 'R' });
+    expect(r.state.eyes.R).toBe('gone');
+    let d = makeHeadDamage();
+    for (let i = 0; i < 4; i++) d = headHit(d, { hs: at('orbitR'), strip: 0.25 }, noJitter).state;
+    expect(headDeath(d).events).toEqual([{ kind: 'eye-snap', side: 'R' }]);
+  });
+  it('skull exposed on the brow, then about two skull hits bring the brain out and kill', () => {
+    let s = makeHeadDamage(); let all: HeadEvent[] = [];
+    for (let i = 0; i < 8 && !s.dead; i++) { const r = headHit(s, { hs: at('brow'), strip: 0.25 }, noJitter); s = r.state; all = all.concat(r.events); }
+    const exposedAt = all.findIndex(e => e.kind === 'skull-exposed');
+    const brainAt = all.findIndex(e => e.kind === 'brain');
+    expect(exposedAt).toBeGreaterThanOrEqual(0);
+    expect(brainAt).toBeGreaterThan(exposedAt);
+    expect(k(all)).toContain('kill');
+    expect(s.dead).toBe(true);
+    expect(s.hits).toBeGreaterThanOrEqual(5); expect(s.hits).toBeLessThanOrEqual(7);
+  });
+  it('jitter changes when things happen (not an exact hit number)', () => {
+    const run = (rand: () => number) => { let s = makeHeadDamage(); let n = 0;
+      while (!s.dead && n < 20) { s = headHit(s, { hs: at('brow'), strip: 0.25 }, rand).state; n++; } return n; };
+    expect(run(() => 0)).not.toBe(run(() => 0.999));
+  });
+  it('crater radius grows as a region loses flesh', () => {
+    expect(REGION_TUNING.craterR('brow', 1)).toBeLessThan(REGION_TUNING.craterR('brow', 0.3));
+  });
+});
+```
+
+- [ ] **Implement.**
+
+```ts
+// src/lab/sdf-zombie/head-damage.ts
+//
+// MELEE HEAD DAMAGE v2 (spec §15). Pure. The flesh wears away region by region and events follow from
+// state, not from a hit count: an orbit stripped to bone shows a 3D eye in it, the next hit there pops it
+// (a dark empty orbit), the next head hit snaps the dangling eye; the brow or crown stripped to bone shows
+// skull, and about two more hits there crack it — the brain comes out and the zombie dies. Per-zombie
+// jitter (rand) moves every threshold crossing.
+export type EyeSide = 'L' | 'R';
+export type HeadRegion = 'orbitL' | 'orbitR' | 'brow' | 'crown' | 'cheekL' | 'cheekR';
+type HS = readonly [number, number, number];   // head-local ÷ half-extents (x right, y up, z face-forward)
+
+export const HEAD_REGIONS: Readonly<Record<HeadRegion, HS>> = {
+  orbitL: [-0.498, 0.096, 0.9], orbitR: [0.451, 0.179, 0.9],   // the face-sheet eye centroids (plan decision 6)
+  brow: [0, 0.5, 0.85], crown: [0, 1, 0], cheekL: [-0.55, -0.3, 0.75], cheekR: [0.55, -0.3, 0.75],
+};
+
+const R_MAX: Readonly<Record<HeadRegion, number>> = { orbitL: 0.035, orbitR: 0.035, brow: 0.05, crown: 0.055, cheekL: 0.045, cheekR: 0.045 };
+
+export const REGION_TUNING = {
+  spillSigma: 0.5,
+  crownSpill: 0.5,
+  orbitExposed: 0.35,
+  skullExposed: 0.3,
+  skullPerHit: 0.5,
+  jitter: 0.2,
+  /** The region's crater radius at a given flesh (1 = untouched). */
+  craterR: (r: HeadRegion, flesh: number) => 0.025 + (R_MAX[r] - 0.025) * Math.min(1, (1 - flesh) / 0.7),
+} as const;
+
+export type EyeState = 'painted' | 'in-orbit' | 'dangling' | 'gone';
+export interface HeadDamageState {
+  hits: number;
+  flesh: Record<HeadRegion, number>;
+  skull: { brow: number; crown: number };
+  eyes: Record<EyeSide, EyeState>;
+  dead: boolean;
+}
+
+export type HeadEvent =
+  | { kind: 'wobble' }
+  | { kind: 'strip'; region: HeadRegion; flesh: number }        // one per region whose flesh changed
+  | { kind: 'orbit-exposed'; side: EyeSide }
+  | { kind: 'eye-pop'; side: EyeSide }
+  | { kind: 'eye-snap'; side: EyeSide }
+  | { kind: 'skull-exposed'; region: 'brow' | 'crown' }
+  | { kind: 'brain'; region: 'brow' | 'crown' }
+  | { kind: 'kill' };
+```
+
+  Implement `makeHeadDamage()`, `nearestRegion(hs)`, `headHit(s, { hs, strip }, rand)` and `headDeath(s)`
+  so the tests pass, with these rules, in this order within one hit:
+  1. `wobble`.
+  2. Snap any **dangling** eye (from before this hit).
+  3. Pop: if the nearest region is an orbit whose eye is `'in-orbit'`, pop it (`'dangling'`), and skip
+     stripping that orbit this hit.
+  4. Strip every region by `strip · jitter · exp(−d²/σ²)`, where `d` is the `hs` distance and
+     `jitter = 1 + REGION_TUNING.jitter · (2·rand() − 1)`, drawn once per hit. The upper face (the nearest
+     region is the brow or an orbit) adds `crownSpill ×` that to the crown. Clamp at 0. Emit `strip` events
+     for the regions whose change is at least 0.02.
+  5. Thresholds, crossed once:
+     - an orbit whose eye is `'painted'` with flesh below `orbitExposed` gives `orbit-exposed` and sets
+       `'in-orbit'`;
+     - the brow or crown with flesh below `skullExposed` gives `skull-exposed`.
+  6. Skull: if the nearest region (the crown counts for brow hits too) is an exposed-skull region, add
+     `skullPerHit · jitter`. At 1 or more, emit `brain` for it and `kill`, and set `dead`.
+
+  `headDeath` snaps a dangling eye. A dead head ignores further hits except wobble and strip. Check the
+  brow test's arithmetic under these rules, and tune `skullPerHit` or `skullExposed` only if 5–7 hits cannot
+  be met. Report any change.
+- [ ] **Verify and commit:** `npm test -- head-damage`, tsc. Commit
+  `feat(head-damage): v2 — flesh wears away per region, events follow`.
+
+### Task 15: An exaggerated wobble (`head-deform.ts`)
+
+- [ ] **Tests first.**
+  - kicks to 0.40 and clamps at 0.45;
+  - at 4 Hz, over 1.2 s the spring rings with 4–7 zero crossings, and its peak |s| after the first rebound is
+    ≥ 0.15;
+  - settled below 0.0025 by 1.4 s;
+  - the new shear moves a point on the struck side along the blow by `shear · s · r` (`shear` about 0.15).
+- [ ] **Implement:** set `HEAD_DEFORM` to `squash0 0.40`, `maxSquash 0.45`, `hz 4`, `zeta 0.18`, and add
+  `shear 0.15`. The shear lives in `HeadDeformState` as the blow's head-local direction. In the affine, a point
+  `v` gains `blowDir · shear · s · dot(v, −blowDir)/r`. Put it inside `headAffine` so the skull mesh follows
+  it too. Update the existing tests' numbers.
+- [ ] **Verify and commit:** `npm test -- head-deform`, tsc; commit `feat(head-deform): an exaggerated jelly
+  wobble with a knock shear`.
+
+### Task 16: A per-eye glow mask in the face shader
+
+**Files:** `src/lab/sdf-zombie/webgpu/march/body/face.wgsl.ts`, the view uniforms in `zombie-gpu.ts`, and
+their tests.
+
+- [ ] **Uniform.** Add `faceEyeMask: vec4` holding `(onL, onR, radiusUV, 0)`, default `(1, 1, 0.07, 0)`, plus
+  the two eye UV centres as a constant or a second vec4, `faceEyeUV = (0.276, 0.616, 0.703, 0.664)`.
+  - `faceGlow` is multiplied by `1 − (1 − onL)·disc(uv, L) − (1 − onR)·disc(uv, R)`, where `disc` is a
+    smoothstep over the radius.
+  - Add `view.setEyeGlow(side, on)`.
+- [ ] **Test** (the shader-string/uniform tests the repo has for face): the mask is present and the default is
+  on. Measure in the head gate later.
+- [ ] **Commit:** `feat(face): a per-eye glow switch (a popped eye stops glowing)`.
+
+### Task 17: The leaf, v2
+
+**Files:** `webgpu/game-head-damage.ts` (rework), `head-eye.ts` (small additions), `game-seams-head.ts`.
+
+- [ ] **Hit mapping.**
+  - `hs = conj(quat)·(point − centre) ÷ axes`.
+  - `strip = 0.25` for R and L, `0.35` for H: pass the swing's side in `feel`.
+  - `rand` is a per-actor seeded stream (seed = actor id).
+- [ ] **Events → world:**
+  - **`strip`:** stamp or replace that region's crater: `worldHitToWound` at the region's surface point,
+    radius `craterR(region, flesh)`, `headRegion` = the region name, `headSlot = 'keep'`, `severRadius` 0.
+    - The surface point is traced from the region's `hs` direction toward the head centre, like `eyeRayStart`.
+    - The crater at the hit point itself is the hit region's crater. Keep one crater per region, not per hit.
+  - **`orbit-exposed`:**
+    - call `view.setEyeGlow(side, false)`;
+    - attach the in-orbit eyeball piece: `eyeballPrims` at the orbit's surface point pulled 0.01 m inward,
+      looking along the head forward, with no nerve, using `attachPiece(..., { clean: true })`.
+  - **`eye-pop`:**
+    - dispose the in-orbit piece;
+    - attach the dangling piece, whose prims are `stalkPrims(stalk, iris, look)` followed by **the socket
+      plug**: a matte near-black sphere (colour `[0.03, 0.01, 0.01]`, radius 0.024) fixed at the socket, whose
+      local end stays at 0;
+    - `stalkPrims` gains a `look` argument: the eyeball faces `normalize(0.7·headForward + 0.3·stalkDir)`, so
+      the iris faces out.
+  - **`eye-snap`:** as now, with the plug staying. Re-attach a plug-only piece, or keep one plug piece per
+    popped orbit from the pop on. Pick the one with fewer draws: each pooled view is one draw.
+  - **`skull-exposed`:** nothing extra. The region crater at low flesh reaches bone. Check the carve depth
+    reaches the cranium at flesh ≤ 0.3, and raise the carve for head-region craters if needed.
+  - **`brain`:** as now: the brain mesh plus lumps plus chips from that region's surface point; the reduced
+    blood; a `CROWN.brainR` cavity with `headRegion 'brain'`.
+  - **`kill`:** `forceCollapse`.
+- [ ] **Blood.** Head strips bleed a pellet-sized gout, not a slug-sized one.
+- [ ] **Debug and seams:** `debug` reports `{ hits, flesh, skull, eyes, dead, squash, eyeball, socket }`.
+- [ ] **Verify:** tsc and `npm test -- head flail game-actor damage`. Smoke headless:
+  - 4 hits on one orbit: exposed, then popped (dark hole, no glow), then the next hit snaps it;
+  - 5–7 brow hits: skull, then brain, then dead.
+
+  Look at the screenshots.
+- [ ] **Commit:** `feat(head-damage): the v2 leaf — region craters, the eye in its orbit, a dark socket`.
+
+### Task 18: The gate, v2
+
+- [ ] Rework `scripts/head-damage-gate.mjs` to states, not hit numbers. Hit the left orbit with the crosshair
+  (its `hs` point projected) until `eyes.L` is `'in-orbit'`. Assert:
+  - that took 2–5 hits;
+  - the painted glow at that eye is gone: the red-glow pixel share in an eye crop drops by 80% or more, and
+    the other eye still glows;
+  - a 3D eyeball is present.
+- [ ] One more orbit hit pops the eye:
+  - it dangles, with the iris facing the camera (a red-pixel share on the eyeball crop);
+  - the orbit crop is dark (mean luma in a small circle under a threshold measured on a painted-eye baseline).
+- [ ] The next head hit snaps the eye. Then hit the brow until dead. Assert:
+  - the skull was exposed before the brain;
+  - the kill came at 5–9 total head hits;
+  - there is one brain mesh gib;
+  - the head is still on;
+  - body wounds survive;
+  - at most 7 head wound slots are used.
+- [ ] **Wobble:** peak |squash| ≥ 0.35 on the strike frame, a rebound of 0.12 or more within 10 frames, and
+  settled (below 0.0025) by 1.4 s. There must be no bone showing through intact flesh at the peak-squash
+  frame (the existing check).
+- [ ] Keep the cost and console checks. Photos:
+  - `v2-orbit-exposed.png`
+  - `v2-eye-pop.png` (the dark hole plus the dangling eye)
+  - `v2-skull.png`
+  - `v2-brain.png`
+  - `v2-wobble-strip.png` (8 frames of one hit)
+
+  Look at each one.
+- [ ] **Commit:** `test(head-damage): the v2 gate — flesh wears away, the eye, the skull, the brain`.
+
+### Task 19: Look pass, docs, PR (was Task 12)
+
+- [ ] **Tune from the photos** (`REGION_TUNING`, `HEAD_DEFORM`, the plug, the eyeball), and record each change.
+- [ ] **Procedural-path craters:** bone inside them renders dark brown (Task 10 note). Check it and fix it if
+  it is simple.
+- [ ] **The eye's residual cost:** if drawing attached pieces in the split chunk pass is cheap, do it.
+  Otherwise record it as open.
+- [ ] **NOTES.md** (`docs/dev-notes/2026-09-28-head-damage/`): what was built, the numbers, "For the owner",
+  and the eye-centroid measurement.
+- [ ] **Status and PR:** set `TASKS.md` and the spec status to built, owner playtest pending. Add a head damage
+  section to the PR body (keep the 🤖 footer line). Push, and restart the owner's server (`preview_start`
+  `blud-censer`).

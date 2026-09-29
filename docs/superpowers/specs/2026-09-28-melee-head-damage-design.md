@@ -253,3 +253,51 @@ Decisions:
    - It rides the gib physics (bounce, spin, settle) as a mesh.
    - The brain stage bleeds less, so the brain is actually seen.
    - The SDF brain lumps and skull chips stay.
+
+## 15. v2: the flesh wears away, events follow (owner playtest, 2026-09-29) — APPROVED
+
+Owner feedback on v1 in play:
+- "the eye pops out but the glowing red eye is still there so it doesn't make sense". The popped eye's
+  painted glow survived the socket crater.
+- "the eye shouldn't pop until skull and orbital are revealed, and once it pops it's just a dark hole
+  orbital".
+- "there should be a number of hits to remove flesh on the head/face area — that is important to feel good;
+  then the other stuff can happen. It shouldn't be an exact hit number."
+- "I don't notice the wobble much; it should be a bit exaggerated."
+
+**This replaces the fixed ladder (§4).** Everything else in v1 is kept: the skull deforming with the flesh,
+the stalk rope, the brain mesh, the gore pieces, the attached pieces and the crater slots.
+
+**Regions.** The head has six regions, each with a centre in head-normalised coordinates (`hs` = head-local
+÷ half-extents): `orbitL`, `orbitR` (the face-sheet eye centroids), `brow`, `crown`, `cheekL` and `cheekR`.
+- Each region has **flesh** that goes from 1 to 0.
+- Each region has **one crater** that **grows and deepens** as its flesh goes: radius from 0.025 m to the
+  region's maximum, and the carve deepens with it.
+- A region's new crater replaces its old one, so the head needs at most 7 wound slots (6 regions and the
+  brain cavity).
+
+**A hit:**
+- It strips flesh from the region nearest the hit, spilling to neighbours with a Gaussian falloff in `hs`.
+- Hits on the upper face (the brow and the orbits) also strip the crown at half weight. This is the fudge
+  that makes the top of the skull reachable.
+- A strip is 0.25 for the R and L swings and 0.35 for H, times a per-zombie seeded jitter of ±20%.
+- Each hit also wobbles and adds a dent (§5).
+
+**Events, driven by state:**
+- **Orbit exposed.** An orbit's flesh falls below 0.35:
+  - that eye's **painted glow switches off** through a per-eye mask in the face shader;
+  - a **3D eyeball sits in the orbit**, looking out with a glowing red iris.
+- **Eye pops.** The next hit whose nearest region is that exposed orbit, with the eye still in:
+  - the eye dangles on its stalk;
+  - the orbit becomes a **dark empty hole**: a dark, matte socket plug.
+- **Stalk snaps.** The next head hit, or the zombie's death: the eye flies off.
+- **Skull exposed.** The brow or crown flesh falls below 0.3: that crater reaches bone.
+- **Skull cracks.** A hit on an exposed-skull region adds 0.5 ± 20% skull damage there. When it reaches 1:
+  **the brain comes out** of that region, and the zombie **dies**.
+
+Targets: 3–4 hits to one spot strip it to the bone, and 5–7 head hits kill.
+
+**Wobble, exaggerated:**
+- squash 0.40 along the blow, with the head bulging across it (max 0.45);
+- about **4 Hz**, damping about 0.18, so 2–3 visible bounces over about 1 s;
+- a slight shear toward the blow, so the head reads as knocked.
