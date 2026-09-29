@@ -26,6 +26,9 @@ export interface LightSource {
   rooms?: readonly number[];
   /** Level JSON per-light overrides (spec §5, option A). */
   levelGain?: number; levelTint?: Vec3;
+  /** The cheap level tier takes this light: the level's materials shade it through the list node (diffuse
+   *  only, level-tier.ts) instead of a three.js light. Set for fire lamps and shadowless tubes. */
+  levelCheap?: boolean;
   /** The light's own reference (base, full-level) intensity, where it differs light to light
    *  (lamps, tubes, the flashlight): the body key reads intensity / refIntensity, i.e. the
    *  light's live level (Task 10 calibration, light-profiles.ts). Absent: 1 (the profile gain
@@ -38,6 +41,8 @@ export interface ListLight {
   axis: Vec3; cosOuter: number; cosInner: number;
   /** The rooms it lights as a bitmask (bit r = room r; 0 = any room). See roomMaskOf. */
   roomMask: number;
+  /** LightSource.levelCheap, carried to the list (CPU only, never packed). */
+  levelCheap?: boolean;
   /** 1 / refIntensity (1 when absent): the body shader's per-light normaliser, packed in light
    *  v3.z. rgb stays physical (plan 2's level materials read it and ignore this lane). */
   bodyNorm: number;
@@ -160,6 +165,7 @@ export function buildLightList(src: readonly LightSource[], rel?: ListRelevance)
         intensity: e, range: s.range,
         axis: norm(s.axis ?? [0, -1, 0]), cosOuter, cosInner, roomMask: mask,
         bodyNorm: s.refIntensity && s.refIntensity > 0 ? 1 / s.refIntensity : 1,
+        ...(s.levelCheap ? { levelCheap: true } : {}),
         coverZero,
       };
     });
