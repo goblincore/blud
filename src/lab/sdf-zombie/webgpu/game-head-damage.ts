@@ -18,9 +18,10 @@
 //                  centre's while it has none (only spilled on; the orbits always) — radius
 //                  REGION_TUNING.craterR(region, flesh), 'keep', no sever. One lasting dent per hit.
 //   orbit-exposed  that eye's painted glow off (view.setEyeGlow) + the IN-ORBIT eyeball: one piece of
-//                  eyeballPrims (no nerve) inside the orbit's surface point along −forward, looking along the head forward.
+//                  eyeballPrims (no nerve, life-size ORBIT_EYE_R) inside the orbit's surface point along −forward,
+//                  looking along the head forward.
 //   eye-pop        the in-orbit piece is disposed; the DANGLING piece is attached: stalkPrims(stalk, iris,
-//                  headForward) followed by the SOCKET PLUG (a matte near-black sphere, r 0.024) at the socket.
+//                  headForward, eyeR — growing ORBIT_EYE_R → EYEBALL_R over POP_GROW_S) followed by the SOCKET PLUG (a matte near-black sphere, r 0.024) at the socket.
 //   eye-snap       the stalk's free half and the eyeball fly off as a gib; the dangling piece is disposed and a
 //                  PLUG-ONLY piece is attached in its place.
 //   skull-exposed  nothing extra: from the threshold on the region's crater carves past the measured skull depth;
@@ -49,7 +50,7 @@ import type { ZombieActor } from './game-actor';
 import type { AttachedPiece } from './game-state-boot';
 import type { Primitive, Vec3 } from '../types';
 import type { BuildResult } from '../build-body';
-import { eyeballPrims, prim, type GorePiece } from '../head-pop';
+import { EYEBALL_R, eyeballPrims, prim, type GorePiece } from '../head-pop';
 import { clothifyWound, woundWorldPos, worldHitToWound, type Wound } from '../damage';
 import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
@@ -61,7 +62,7 @@ import {
   addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, rotate, stepWobble,
   type HeadDeformState, type HeadFrame, type Quat,
 } from '../head-deform';
-import { EYE_STALK, eyeRayStart, makeStalk, stalkPrims, stepStalk, type StalkState } from '../head-eye';
+import { EYE_STALK, ORBIT_EYE_R, eyeRayStart, makeStalk, popEyeR, stalkPrims, stepStalk, type StalkState } from '../head-eye';
 import { CROWN, brainLaunch, brainLumps, brainPiece, skullChips } from '../head-crown';
 import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
@@ -79,8 +80,9 @@ export const HEAD_LEAF = {
   /** The eyeballs' iris: the face sheet's glow colour (faceGlowColor, march/body/face.wgsl.ts). */
   iris: [1.9, 0.012, 0.005] as Vec3,
   /** The in-orbit eyeball's centre sits this far inside the orbit's surface point, straight back along the head's
-   *  −forward (plan Task 17). */
-  eyeInset: 0.01,
+   *  −forward (plan Task 17). With the life-size ball (head-eye ORBIT_EYE_R 0.018) 0.02, not 0.01: the traced point
+   *  is up to 1 cm outside the skin (rayEps), so the ball's front sits a few mm proud of the old skin, in the bowl. */
+  eyeInset: 0.02,
   /** THE SOCKET PLUG: matte, near black, filling the popped orbit's crater. Its centre is `inset` inside the
    *  orbit's surface point, straight back along the head's −forward (toward the head centre it sat ~2 cm toward
    *  the nose from the painted eye). Centred ON the surface point (the plan's local end 0) it bulged a 2.4 cm
@@ -146,6 +148,8 @@ export interface HeadDamageDebug {
   flat: number[];
   /** Each eye's eyeball centre (world): in its orbit, or at the end of its stalk; null painted / gone. */
   eyeball: Record<EyeSide, Vec3 | null>;
+  /** That eyeball's drawn radius (ORBIT_EYE_R in the orbit; popEyeR(age) dangling); null painted / gone. */
+  eyeR: Record<EyeSide, number | null>;
   /** Each orbit's socket point (world) once it is exposed; null while painted. */
   socket: Record<EyeSide, Vec3 | null>;
   /** Each dangling eye's stalk rope nodes (world, socket first); null when not dangling. */
@@ -182,6 +186,10 @@ interface Orbit {
   inOrbit: AttachedPiece | null;
   stalk: StalkState | null;
   dangling: AttachedPiece | null;
+  /** Seconds since the pop: the dangling eyeball grows ORBIT_EYE_R → EYEBALL_R (head-eye popEyeR). */
+  popAge: number;
+  /** The dangling piece's prims' radii as attached (the eyeball at EYEBALL_R): update() can only re-scale them. */
+  danglingR0: number[];
   plug: AttachedPiece | null;
 }
 interface ActorHead {
@@ -294,10 +302,17 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     return prim(c, c, HEAD_LEAF.plug.r, HEAD_LEAF.plug.color, { gloss: 0, blendK: 0.0005 });
   };
   const inOrbitPrims = (n: { at: Vec3; inward: Vec3; fwd: Vec3 }): Primitive[] =>
-    eyeballPrims(add(n.at, scale(n.inward, HEAD_LEAF.eyeInset)), n.fwd, HEAD_LEAF.iris, false);
-  const danglingPrims = (s: StalkState, n: { at: Vec3; inward: Vec3; fwd: Vec3 }): Primitive[] =>
-    [...stalkPrims(s, HEAD_LEAF.iris, n.fwd), plugPrim(n.at, n.inward)];
-  const localEnds = (prims: Primitive[], at: Vec3) => prims.map(p => ({ a: sub(p.a, at), b: sub(p.b, at) }));
+    eyeballPrims(add(n.at, scale(n.inward, HEAD_LEAF.eyeInset)), n.fwd, HEAD_LEAF.iris, false, ORBIT_EYE_R);
+  const danglingPrims = (s: StalkState, n: { at: Vec3; inward: Vec3; fwd: Vec3 }, eyeR: number): Primitive[] =>
+    [...stalkPrims(s, HEAD_LEAF.iris, n.fwd, eyeR), plugPrim(n.at, n.inward)];
+  /** The prims' ends relative to `at`; with `r0` (the radii the piece was attached with) every prim also carries the
+   *  uniform scale that draws it at its current radius (morph re-writes scale rows, never radii; a morph entry without
+   *  a scale keeps the last one, so it is always sent — 1 once the eye is full size). */
+  const localEnds = (prims: Primitive[], at: Vec3, r0?: readonly number[]) => prims.map((p, i) => {
+    if (!r0) return { a: sub(p.a, at), b: sub(p.b, at) };
+    const k = r0[i] ? p.radius / r0[i]! : 1;
+    return { a: sub(p.a, at), b: sub(p.b, at), scale: [k, k, k] as Vec3 };
+  });
   const attach = (a: ZombieActor, prims: Primitive[], at: Vec3): AttachedPiece | null =>
     deps.attach ? deps.attach(a, prims, at, { clean: true }) : null;
 
@@ -317,7 +332,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     o.dangling?.dispose();
     o.dangling = null;
     o.stalk = null;
-    const all = stalkPrims(s, HEAD_LEAF.iris, n.fwd);
+    const all = stalkPrims(s, HEAD_LEAF.iris, n.fwd, popEyeR(o.popAge));
     const caps = EYE_STALK.nodes - 1;
     // Capsules from the rope's middle on, then the eyeball (stalkPrims' order: caps, then the eye).
     const prims = [...all.slice(Math.floor(caps / 2), caps), ...all.slice(caps)];
@@ -466,7 +481,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
             // line ran ~2 cm toward the nose and the plug's dark hole (and the in-orbit eye) sat off the painted eye.
             inner: tracker(posed.prims, pi, add(at, scale(fwd, -0.01)), yaw),
             front: tracker(posed.prims, pi, add(at, scale(fwd, 0.02)), yaw),
-            inOrbit: null, stalk: null, dangling: null, plug: null,
+            inOrbit: null, stalk: null, dangling: null, plug: null, popAge: 0, danglingR0: [],
           };
           h.orbits[ev.side] = o;
           o.inOrbit = attach(a, inOrbitPrims(orbitNow(posed.prims, o, yaw)), at);
@@ -483,7 +498,14 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           const out = unit([dir[0] - 2 * k * nrm[0], dir[1] - 2 * k * nrm[1], dir[2] - 2 * k * nrm[2]]);
           // makeStalk lays the rope STRAIGHT at full length: the piece's bound is fixed from these prims.
           o.stalk = makeStalk(n.at, out, HEAD_LEAF.popSpeed);
-          o.dangling = attach(a, danglingPrims(o.stalk, n), n.at);
+          // THE COMIC POP: the eye leaves the orbit life-size and swells to the cartoon EYEBALL_R over POP_GROW_S.
+          // The piece's radius rows are packed once (attach), so it is attached at the FULL size — its bound and radii
+          // — and every update re-scales the eyeball's prims (morph's per-prim scale) down to popEyeR(age).
+          o.popAge = 0;
+          const full = danglingPrims(o.stalk, n, EYEBALL_R);
+          o.danglingR0 = full.map(p => p.radius);
+          o.dangling = attach(a, full, n.at);
+          o.dangling?.update(n.at, localEnds(danglingPrims(o.stalk, n, popEyeR(0)), n.at, o.danglingR0));
           break;
         }
         case 'eye-snap':
@@ -548,7 +570,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         if (o.stalk) {
           // The socket rides the posed (wobbling, dented) head.
           o.stalk = stepStalk(o.stalk, n.at, dt);
-          o.dangling?.update(n.at, localEnds(danglingPrims(o.stalk, n), n.at));
+          o.popAge += Number.isFinite(dt) && dt > 0 ? dt : 0;
+          o.dangling?.update(n.at, localEnds(danglingPrims(o.stalk, n, popEyeR(o.popAge)), n.at, o.danglingR0));
         }
         if (o.plug) o.plug.update(n.at, localEnds([plugPrim(n.at, n.inward)], n.at));
       }
@@ -572,16 +595,18 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         const eyeball: Record<EyeSide, Vec3 | null> = { L: null, R: null };
         const socket: Record<EyeSide, Vec3 | null> = { L: null, R: null };
         const stalk: Record<EyeSide, Vec3[] | null> = { L: null, R: null };
+        const eyeR: Record<EyeSide, number | null> = { L: null, R: null };
         let draws = 0;
         for (const side of SIDES) {
           const o = h.orbits[side];
           if (!o) continue;
           const n = orbitNow(posed.prims, o, yaw);
           socket[side] = n.at;
-          if (o.inOrbit) eyeball[side] = add(n.at, scale(n.inward, HEAD_LEAF.eyeInset));
+          if (o.inOrbit) { eyeball[side] = add(n.at, scale(n.inward, HEAD_LEAF.eyeInset)); eyeR[side] = ORBIT_EYE_R; }
           if (o.stalk) {
             eyeball[side] = [...o.stalk.p[o.stalk.p.length - 1]!] as Vec3;
             stalk[side] = o.stalk.p.map(q => [...q] as Vec3);
+            eyeR[side] = popEyeR(o.popAge);
           }
           draws += (o.inOrbit ? 1 : 0) + (o.dangling ? 1 : 0) + (o.plug ? 1 : 0);
         }
@@ -596,6 +621,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           squash: h.deform.s,
           flat: [...h.deform.flat],
           eyeball,
+          eyeR,
           socket,
           stalk,
           draws,

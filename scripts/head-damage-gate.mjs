@@ -62,7 +62,7 @@ const BONE_THRU_MAX = 0.005, CRATER_MARGIN = 0.02;
 const DENT_MIN = 0.01, BRAIN_CHUNKS_MIN = 4, COST_MAX_MS = 0.5, BRAIN_REST_MAX_Y = 0.1;
 // This gate's own measures (the plan names the measure, not the number).
 const OTHER_GLOW_KEEP = 0.5;   // the other eye keeps >= this share of its baseline glow ("still glows")
-const EYEBALL_R = 0.03;        // head-pop.ts EYEBALL_R
+const EYEBALL_R = 0.03;        // head-pop.ts EYEBALL_R (the popped eye's full, cartoon size); state().eyeR is the drawn one
 const EYE_PRESENT_MIN = 0.25;  // share of an eyeball-radius circle the attached pieces change
 const IRIS_RED_MIN = 0.08;     // red-glow share of the eyeball circle: a straight-on iris (r 0.5R, pupil 0.24R) is ~0.19
 const SOCKET_DARK = 0.5;       // socket mean luma < this × the painted-eye baseline's
@@ -589,10 +589,11 @@ try {
     const gL = glowShare(imgH, eL, 0.03 * ppm), gR = glowShare(imgH, eR, 0.03 * ppm);
     const drop = base.gL > 0 ? 1 - gL / base.gL : null;
     const ebPx = hs.eyeball.L ? await toPx(hs.eyeball.L) : null;
-    const present = ebPx ? diffShare(imgV, imgH, ebPx, EYEBALL_R * ppm) : 0;
-    const iris = ebPx ? glowShare(imgV, ebPx, EYEBALL_R * ppm) : 0;
-    note(`orbit exposed (settled, bleed off): painted glow (pieces hidden) L ${base.gL.toFixed(3)} -> ${gL.toFixed(3)} (drop ${drop === null ? "?" : (100 * drop).toFixed(0)}%), R ${base.gR.toFixed(3)} -> ${gR.toFixed(3)}; in-orbit eyeball: ${(100 * present).toFixed(0)}% of its circle changes with the pieces, iris red share ${iris.toFixed(3)}; draws ${hs.draws}`);
-    out.glow = { L: [base.gL, gL], R: [base.gR, gR], present, irisInOrbit: iris };
+    const inR = hs.eyeR?.L ?? EYEBALL_R;   // the in-orbit ball is life-size (head-eye ORBIT_EYE_R)
+    const present = ebPx ? diffShare(imgV, imgH, ebPx, inR * ppm) : 0;
+    const iris = ebPx ? glowShare(imgV, ebPx, inR * ppm) : 0;
+    note(`orbit exposed (settled, bleed off): painted glow (pieces hidden) L ${base.gL.toFixed(3)} -> ${gL.toFixed(3)} (drop ${drop === null ? "?" : (100 * drop).toFixed(0)}%), R ${base.gR.toFixed(3)} -> ${gR.toFixed(3)}; in-orbit eyeball (r ${inR.toFixed(3)}; orbit crater r ${hs.craters?.orbitL?.radius?.toFixed(3) ?? "?"}): ${(100 * present).toFixed(0)}% of its circle changes with the pieces, iris red share ${iris.toFixed(3)}; draws ${hs.draws}`);
+    out.glow = { L: [base.gL, gL], R: [base.gR, gR], present, irisInOrbit: iris, inR };
     check(base.gL > 0.02 && drop !== null && drop >= GLOW_DROP_MIN, `orbit exposed: the painted glow at that eye is gone — red share ${base.gL.toFixed(3)} -> ${gL.toFixed(3)} (drop >= ${100 * GLOW_DROP_MIN}%)`);
     check(base.gR > 0.02 && gR >= OTHER_GLOW_KEEP * base.gR, `orbit exposed: the other eye still glows — red share ${base.gR.toFixed(3)} -> ${gR.toFixed(3)} (>= ${OTHER_GLOW_KEEP} × baseline)`);
     check(!!hs.eyeball.L && hs.draws >= 1 && present >= EYE_PRESENT_MIN, `orbit exposed: a 3D eyeball is present (eyeball ${hs.eyeball.L ? f2(hs.eyeball.L) : "null"}, draws ${hs.draws}, ${(100 * present).toFixed(0)}% of its circle drawn by the pieces >= ${100 * EYE_PRESENT_MIN}%)`);
@@ -607,6 +608,7 @@ try {
     const r = await clickStrike(id, 0);
     const sr = await struckRegion(id, fr);
     const hs = r.series[0].hs;
+    const hsPop = hs;
     note(`pop hit (${r.last?.side}): struck nearest ${sr.region}; eyes ${JSON.stringify(hs.eyes)}; flesh ${fmtFlesh(hs)}`);
     check(hs.eyes.L === "dangling", `pop: one more orbit hit pops the eye (eyes.L ${hs.eyes.L}, struck nearest ${sr.region})`);
     await stepN(3);
@@ -620,7 +622,8 @@ try {
     const h2 = await hstate(id);
     const ebPx = h2.eyeball.L ? await toPx(h2.eyeball.L) : null;
     const skPx = h2.socket.L ? await toPx(h2.socket.L) : null;
-    const iris = ebPx ? glowShare(img, ebPx, EYEBALL_R * ppm) : 0;
+    const popR = h2.eyeR?.L ?? EYEBALL_R;   // grown to the cartoon EYEBALL_R by now (POP_GROW_S 0.15 s)
+    const iris = ebPx ? glowShare(img, ebPx, popR * ppm) : 0;
     // The orbit circle: the SAME circle the painted-eye baseline was measured in (the orbit region's hs point, the
     // painted eye); the traced socket point and the plug's centre (1 cm / 2.4 cm in toward the head centre) printed.
     const sockL = meanLuma(img, base.eL, SOCKET_LUMA_R * ppm);
@@ -630,7 +633,7 @@ try {
     // its luma with them hidden (the carved crater alone).
     const sockPieces = diffShare(img, imgH, base.eL, SOCKET_LUMA_R * ppm);
     const sockBare = meanLuma(imgH, base.eL, SOCKET_LUMA_R * ppm);
-    note(`eye pop (+40 frames, bleed off): eyeball ${h2.eyeball.L ? f2(h2.eyeball.L) : "null"} (screen ${ebPx ? ebPx.map(Math.round).join(",") : "off"}), ${h2.socket.L && h2.eyeball.L ? distTo(h2.socket.L, h2.eyeball.L).toFixed(3) : "?"} m from the socket; iris red share ${iris.toFixed(3)}; orbit-circle luma ${sockL.toFixed(1)} vs painted baseline ${base.lumaL.toFixed(1)} — the pieces draw ${sockPieces === null ? "?" : (100 * sockPieces).toFixed(0)}% of that circle, and with them hidden it is ${sockBare?.toFixed(1)}; draws ${h2.draws}`);
+    note(`eye pop (+40 frames, bleed off): eyeball r ${popR.toFixed(3)} (in the orbit ${out.glow?.inR?.toFixed(3) ?? "?"}); eyeball ${h2.eyeball.L ? f2(h2.eyeball.L) : "null"} (screen ${ebPx ? ebPx.map(Math.round).join(",") : "off"}), ${h2.socket.L && h2.eyeball.L ? distTo(h2.socket.L, h2.eyeball.L).toFixed(3) : "?"} m from the socket; iris red share ${iris.toFixed(3)}; orbit-circle luma ${sockL.toFixed(1)} vs painted baseline ${base.lumaL.toFixed(1)} — the pieces draw ${sockPieces === null ? "?" : (100 * sockPieces).toFixed(0)}% of that circle, and with them hidden it is ${sockBare?.toFixed(1)}; draws ${h2.draws}`);
     // The orbit circle with the stalk's screen footprint cut out (STALK_PAD): each rope capsule projected, its
     // radius in px measured at its own depth (a node and the node + r along the head's right).
     const caps = [];
@@ -647,6 +650,8 @@ try {
     const cutBase = discPx ? lumaOutside(base.img0, discPx, POP_DISC_R * ppm, caps) : { luma: NaN, n: 0, total: 0 };
     note(`pop: the plug's ${POP_DISC_R * 100} cm disc (${discPx ? discPx.map(Math.round).join(",") : "off"}) with the stalk cut out (${caps.length} capsules × ${STALK_DRAWN} + ${STALK_PAD} px): ${cut.n}/${cut.total} px left (${(100 * cut.n / (cut.total || 1)).toFixed(0)}%), luma ${cut.luma.toFixed(1)} vs the painted face's same pixels ${cutBase.luma.toFixed(1)} (the whole circle, stalk included: ${sockL.toFixed(1)})`);
     out.pop = { iris, sockL, cut: cut.luma, cutBase: cutBase.luma, cutShare: cut.n / (cut.total || 1), baseL: base.lumaL };
+    const r0 = hsPop.eyeR?.L ?? null;
+    check(r0 !== null && r0 < 0.022 && Math.abs(popR - EYEBALL_R) < 1e-4, `pop: the eye leaves the orbit life-size and swells to the cartoon size — r ${r0?.toFixed(4) ?? "?"} on the strike frame (< 0.022), ${popR.toFixed(4)} at +40 frames (= EYEBALL_R ${EYEBALL_R})`);
     check(!!ebPx && iris >= IRIS_RED_MIN, `pop: the dangling eye's iris faces the camera — red share ${iris.toFixed(3)} on the eyeball circle (>= ${IRIS_RED_MIN})`);
     check(cut.n >= POP_MIN_SHARE * cut.total && cut.luma < SOCKET_DARK * base.lumaL, `pop: the socket round the stalk is a dark hole — the plug's disc less the stalk's footprint (${(100 * cut.n / (cut.total || 1)).toFixed(0)}% of it, >= ${100 * POP_MIN_SHARE}%) has luma ${cut.luma.toFixed(1)} (< ${SOCKET_DARK} × painted baseline ${base.lumaL.toFixed(1)} = ${(SOCKET_DARK * base.lumaL).toFixed(1)}, the snap's bar)`);
     await setBleed(true);

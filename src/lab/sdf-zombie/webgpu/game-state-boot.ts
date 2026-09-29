@@ -43,7 +43,8 @@ export interface MeshGibOpts {
 
 /** The handle `boot.attachPiece` returns. */
 export interface AttachedPiece {
-  update(at: Vec3, localEnds: ReadonlyArray<{ a: Vec3; b: Vec3 }>): void;
+  /** `scale` (optional per prim): that prim's scale from now on (ChunkGpuView.morph). */
+  update(at: Vec3, localEnds: ReadonlyArray<{ a: Vec3; b: Vec3; scale?: Vec3 }>): void;
   dispose(): void;
 }
 import type { WarmBackgroundTracker } from './warm-background';

@@ -2893,8 +2893,8 @@ export interface ChunkGpuView {
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
   reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[], template?: MarchUniforms): void;
   update(chunk: Chunk): void;
-  /** Hand-posed pieces (the head damage model's dangling eye): replace the local prims' endpoints (chunk-local, the same count and order as reset()'s prims) before the next update(). Radii, colours and the bound are unchanged. */
-  morph(ends: ReadonlyArray<{ a: Vec3; b: Vec3 }>): void;
+  /** Hand-posed pieces (the head damage model's dangling eye): replace the local prims' endpoints (chunk-local, the same count and order as reset()'s prims) before the next update(). An entry's optional `scale` replaces that prim's scale (the radius row is packed once, at reset(); the scale row is rewritten every update(), so a uniform scale is how a piece's prim grows). Radii, colours and the reset() extent are unchanged. */
+  morph(ends: ReadonlyArray<{ a: Vec3; b: Vec3; scale?: Vec3 }>): void;
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
   setPackBones(on: boolean): void;
@@ -3424,7 +3424,7 @@ export function createChunkGpuView(
     morph(ends) {
       // Chunk-local endpoints; apply() (next update()) rewrites the world rows
       // from `local`, so this costs no re-pack. `extent` stays the reset() one.
-      ends.forEach((e, i) => { const p = local[i]; if (p) local[i] = { ...p, a: e.a, b: e.b }; });
+      ends.forEach((e, i) => { const p = local[i]; if (p) local[i] = e.scale ? { ...p, a: e.a, b: e.b, scale: e.scale } : { ...p, a: e.a, b: e.b }; });
       // The tight local AABB of the bent piece (flesh and bones), padded like proxySize: the blend reach
       // plus a margin.
       const pad = packed.maxBlendK * 2 + 0.01;

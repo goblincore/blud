@@ -88,6 +88,20 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
     template.dispose();
   });
 
+  it('morph() with a scale re-scales that prim (the popped eye grows); without one the scale stays', () => {
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [0, 0, 0], 0.1, [0, 0, 1], () => 0.5);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    view.morph([{ a: [0, 0, 0], b: [0, -0.05, 0], scale: [0.5, 0.5, 0.5] }, { a: [0.01, 0, 0], b: [0.01, -0.02, 0] }]);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const d = view.bakeData();
+    expect(d.flesh[0]!.scale).toEqual([0.5, 0.5, 0.5]);
+    expect(d.flesh[1]!.scale).toEqual(prims[1]!.scale);
+    view.dispose();
+    template.dispose();
+  });
+
   it('a morphed piece draws in a proxy box fitted to its bent prims, not the rotation-proof cube', () => {
     // The dangling eye's origin is its socket: the reset() cube (extent · 2.8, centred there) straddled the
     // whole face and cost ~4 ms a frame. The fitted box holds every prim and sits around them.

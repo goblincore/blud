@@ -6,7 +6,7 @@
 // hs = head-rest position / headAxes. The leaf traces from eyeRayStart toward the head centre to find
 // the surface point. The dangling eye hangs on its own small verlet rope (not flail-chain.ts, which is
 // hard-wired to the flail): node 0 pinned to the socket, the last node the eyeball.
-import { GORE_COLORS, eyeballPrims, prim } from './head-pop';
+import { EYEBALL_R, GORE_COLORS, eyeballPrims, prim } from './head-pop';
 import { rotate } from './head-deform';
 import type { HeadFrame } from './head-deform';
 import type { EyeSide } from './head-damage';
@@ -19,6 +19,22 @@ export const EYE_STALK = {
   /** The stalk's radius at the socket and at the eye, metres. */
   r0: 0.009, r1: 0.006,
 } as const;
+
+/** THE IN-ORBIT EYEBALL'S RADIUS (spec §15 as built). The popped-eye debris' EYEBALL_R (0.030) is 2.5x life, and in
+ *  the orbit it swallowed the socket. MEASURED: the painted eyes (zombie-face.png, luma >= 0.9) are 5-6 texels wide
+ *  x 3 tall — through faceProj (0.45, 0.58) and the zombie's head axes (0.090, 0.137, 0.105) about 1.6-1.9 cm x 1.1 cm
+ *  — and the orbit crater is 0.035 m in radius when the orbit is exposed (REGION_TUNING.craterR at flesh < 0.35). A
+ *  0.018 m ball (3.6 cm across) sits inside the 7 cm bowl, about twice the painted eye's width: still read as an eye
+ *  at play distance, and it fits. */
+export const ORBIT_EYE_R = 0.018;
+/** The popped eye's comic grow: ORBIT_EYE_R → EYEBALL_R over this long after the pop (smoothstep). */
+export const POP_GROW_S = 0.15;
+
+/** The dangling eyeball's radius `age` seconds after the pop. */
+export function popEyeR(age: number): number {
+  const t = Math.min(1, Math.max(0, age / POP_GROW_S));
+  return ORBIT_EYE_R + (EYEBALL_R - ORBIT_EYE_R) * t * t * (3 - 2 * t);
+}
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const dist = (a: Vec3, b: Vec3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -95,10 +111,10 @@ export function stepStalk(s: StalkState, socket: Vec3, dt: number): StalkState {
   return { p, prev, acc };
 }
 
-/** Tapered pink capsules along the rope, and the eyeball at its end (the rope is its nerve). With
+/** Tapered pink capsules along the rope, and the eyeball (radius `eyeR`) at its end (the rope is its nerve). With
  *  `headForward` (world, unit) the eyeball faces normalize(0.7·headForward + 0.3·stalkDir), so the iris
  *  keeps looking out of the face while it dangles (spec §15); without it, straight along the rope. */
-export function stalkPrims(s: StalkState, irisColor: Vec3, headForward?: Vec3): Primitive[] {
+export function stalkPrims(s: StalkState, irisColor: Vec3, headForward?: Vec3, eyeR = EYEBALL_R): Primitive[] {
   const n = s.p.length, out: Primitive[] = [];
   for (let k = 0; k < n - 1; k++) {
     const t0 = k / (n - 1), t1 = (k + 1) / (n - 1);
@@ -108,7 +124,7 @@ export function stalkPrims(s: StalkState, irisColor: Vec3, headForward?: Vec3): 
   const last = s.p[n - 1]!, before = s.p[n - 2]!;
   const l = dist(last, before) || 1;
   const along: Vec3 = [(last[0] - before[0]) / l, (last[1] - before[1]) / l, (last[2] - before[2]) / l];
-  out.push(...eyeballPrims(last, headForward ? eyeLook(headForward, along) : along, irisColor, false));
+  out.push(...eyeballPrims(last, headForward ? eyeLook(headForward, along) : along, irisColor, false, eyeR));
   return out;
 }
 

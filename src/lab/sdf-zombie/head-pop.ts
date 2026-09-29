@@ -58,17 +58,18 @@ export function prim(a: Vec3, b: Vec3, radius: number, color: Vec3, o: Partial<P
   return { a, b, radius, scale: [1, 1, 1], blendK: 0.003, limb: 'head', cluster: 0, color, ...o };
 }
 
-/** One cartoon eyeball (2.5x life): white, glowing iris, pupil, and a short nerve stub behind it. */
-export function eyeballPrims(centre: Vec3, look: Vec3, iris: Vec3, withNerve = true): Primitive[] {
+/** One cartoon eyeball (2.5x life at the default `r` = EYEBALL_R): white, glowing iris, pupil, and a short nerve
+ *  stub behind it. Every size and offset scales with `r` (the head damage's in-orbit eye is life-size). */
+export function eyeballPrims(centre: Vec3, look: Vec3, iris: Vec3, withNerve = true, r = EYEBALL_R): Primitive[] {
   const o = centre;
   const out: Primitive[] = [
-    prim(o, o, EYEBALL_R, GORE_COLORS.eyeWhite, { gloss: 0.6 }),
-    prim(add(o, scale(look, EYEBALL_R * 0.72)), add(o, scale(look, EYEBALL_R * 0.72)), EYEBALL_R * 0.50, iris, { glow: 1.0, blendK: 0.001 }),
-    prim(add(o, scale(look, EYEBALL_R * 1.05)), add(o, scale(look, EYEBALL_R * 1.05)), EYEBALL_R * 0.24, GORE_COLORS.pupil, { blendK: 0.001 }),
+    prim(o, o, r, GORE_COLORS.eyeWhite, { gloss: 0.6 }),
+    prim(add(o, scale(look, r * 0.72)), add(o, scale(look, r * 0.72)), r * 0.50, iris, { glow: 1.0, blendK: 0.001 }),
+    prim(add(o, scale(look, r * 1.05)), add(o, scale(look, r * 1.05)), r * 0.24, GORE_COLORS.pupil, { blendK: 0.001 }),
   ];
   if (withNerve) {
-    out.push(prim(add(o, scale(look, -EYEBALL_R * 0.8)), add(o, scale(look, -EYEBALL_R * 3.2)), EYEBALL_R * 0.24, GORE_COLORS.nerve,
-      { radiusB: EYEBALL_R * 0.10, bend: [0, -0.015, 0] }));
+    out.push(prim(add(o, scale(look, -r * 0.8)), add(o, scale(look, -r * 3.2)), r * 0.24, GORE_COLORS.nerve,
+      { radiusB: r * 0.10, bend: [0, -0.015, 0] }));
   }
   return out;
 }
