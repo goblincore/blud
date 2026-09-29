@@ -37,9 +37,12 @@ describe('head damage v2', () => {
     const r = headHit(s, { hs: at('cheekL'), strip: 0.25 }, noJitter);
     expect(r.events).toContainEqual({ kind: 'eye-snap', side: 'R' });
     expect(r.state.eyes.R).toBe('gone');
+    expect(r.events).toContainEqual({ kind: 'eye-snap', side: 'L' });   // both went together (v1.5a)
     let d = makeHeadDamage();
     for (let i = 0; i < 4; i++) d = headHit(d, { hs: at('orbitR'), strip: 0.25 }, noJitter).state;
-    expect(headDeath(d).events).toEqual([{ kind: 'eye-snap', side: 'R' }]);
+    // Both eyes dangle since the pop (v1.5a): death snaps both.
+    expect(headDeath(d).events).toEqual([{ kind: 'eye-snap', side: 'L' }, { kind: 'eye-snap', side: 'R' }]);
+    expect(headDeath(d).state.eyes).toEqual({ L: 'gone', R: 'gone' });
   });
   it('skull exposed on the brow, then a few skull hits bring the brain out and kill', () => {
     let s = makeHeadDamage(); let all: HeadEvent[] = [];
@@ -145,5 +148,73 @@ describe('head damage v2', () => {
     expect(nearestRegion([0, 0.2, -1])).toBe('crown');
     expect(r.state.flesh.crown).toBeCloseTo(0.75, 6);
     expect(r.events).toContainEqual({ kind: 'strip', region: 'crown', flesh: r.state.flesh.crown });
+  });
+
+  // v1.5a (flail spec §14.1 item 8): both eyes pop out of their sockets at once.
+  describe('both eyes pop at once', () => {
+    const popOnL = () => {   // three hits expose the left orbit; the fourth pops it
+      let s = makeHeadDamage();
+      for (let i = 0; i < 3; i++) s = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter).state;
+      expect(s.eyes).toEqual({ L: 'in-orbit', R: 'painted' });
+      return s;
+    };
+    it('one orbit stripped: its pop also pops the painted other eye in the same hit (orbit-exposed first)', () => {
+      const s = popOnL();
+      const r = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter);
+      expect(r.state.eyes).toEqual({ L: 'dangling', R: 'dangling' });
+      const ev = r.events.filter(e => e.kind === 'eye-pop' || e.kind === 'orbit-exposed');
+      expect(ev).toEqual([{ kind: 'eye-pop', side: 'L' }, { kind: 'orbit-exposed', side: 'R' }, { kind: 'eye-pop', side: 'R' }]);
+      expect(r.state.flesh.orbitR).toBeLessThanOrEqual(REGION_TUNING.orbitExposed);
+    });
+    it('an other eye already in its orbit pops without a second orbit-exposed', () => {
+      let s = popOnL();
+      s = { ...s, eyes: { ...s.eyes, R: 'in-orbit' }, flesh: { ...s.flesh, orbitR: 0.3 } };
+      const r = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter);
+      expect(r.state.eyes).toEqual({ L: 'dangling', R: 'dangling' });
+      expect(k(r.events).filter(x => x === 'orbit-exposed')).toEqual([]);
+      expect(r.events.filter(e => e.kind === 'eye-pop')).toEqual([{ kind: 'eye-pop', side: 'L' }, { kind: 'eye-pop', side: 'R' }]);
+      expect(r.state.flesh.orbitR).toBeLessThanOrEqual(0.3);   // "at most": never raised
+    });
+    it('both snap on the next head hit (one eye-snap each), wherever it lands', () => {
+      const s = headHit(popOnL(), { hs: at('orbitL'), strip: 0.25 }, noJitter).state;
+      const r = headHit(s, { hs: at('crown'), strip: 0.25 }, noJitter);
+      expect(r.events.filter(e => e.kind === 'eye-snap')).toEqual([{ kind: 'eye-snap', side: 'L' }, { kind: 'eye-snap', side: 'R' }]);
+      expect(r.state.eyes).toEqual({ L: 'gone', R: 'gone' });
+      // Nothing pops again.
+      const r2 = headHit(r.state, { hs: at('orbitR'), strip: 0.25 }, noJitter);
+      expect(k(r2.events)).not.toContain('eye-pop');
+      expect(k(r2.events)).not.toContain('orbit-exposed');
+    });
+    it('a side already gone is left alone', () => {
+      let s = popOnL();
+      s = { ...s, eyes: { ...s.eyes, R: 'gone' } };
+      const r = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter);
+      expect(r.state.eyes).toEqual({ L: 'dangling', R: 'gone' });
+      expect(r.events.filter(e => e.kind === 'eye-pop')).toEqual([{ kind: 'eye-pop', side: 'L' }]);
+      expect(k(r.events)).not.toContain('orbit-exposed');
+    });
+    it('the strip and threshold rules elsewhere are unchanged: no pop, no other-eye change', () => {
+      let s = makeHeadDamage();
+      for (let i = 0; i < 3; i++) s = headHit(s, { hs: at('orbitL'), strip: 0.25 }, noJitter).state;
+      const before = s.flesh.orbitR;
+      const r = headHit(s, { hs: at('brow'), strip: 0.25 }, noJitter);   // not the in-orbit eye's region: no pop
+      expect(r.state.eyes.R).toBe('painted');
+      expect(r.state.flesh.orbitR).toBeLessThan(before);
+      expect(r.state.flesh.orbitR).toBeGreaterThan(REGION_TUNING.orbitExposed);
+    });
+    it('jitter extremes still finish the ladder: exposed → pop (both) → snap (both) → a kill', () => {
+      for (const v of [0, 0.999]) {
+        let s = makeHeadDamage(); const all: HeadEvent[] = []; let n = 0;
+        const push = (hs: readonly [number, number, number]) => { const r = headHit(s, { hs, strip: STRIP }, () => v); s = r.state; all.push(...r.events); n++; };
+        while (s.eyes.L !== 'dangling' && n < 20) push(at('orbitL'));
+        expect(s.eyes).toEqual({ L: 'dangling', R: 'dangling' });
+        push(at('brow'));
+        expect(s.eyes).toEqual({ L: 'gone', R: 'gone' });
+        while (!s.dead && n < 40) push(at('brow'));
+        expect(s.dead).toBe(true);
+        expect(all.filter(e => e.kind === 'eye-snap').length).toBe(2);
+        expect(all.filter(e => e.kind === 'eye-pop').length).toBe(2);
+      }
+    });
   });
 });

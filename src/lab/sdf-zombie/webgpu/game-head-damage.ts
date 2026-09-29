@@ -20,10 +20,15 @@
 //   orbit-exposed  that eye's painted glow off (view.setEyeGlow) + the IN-ORBIT eyeball: one piece of
 //                  eyeballPrims (no nerve, life-size ORBIT_EYE_R) inside the orbit's surface point along −forward,
 //                  looking along the head forward.
+//                  If this hit carries no strip event for that orbit (v1.5a: the OTHER eye, exposed by the first
+//                  one's pop — the model set its flesh to the threshold), its crater is stamped here as a strip
+//                  would; if the same hit pops that eye, no in-orbit piece is attached.
 //   eye-pop        the in-orbit piece is disposed; the DANGLING piece is attached: stalkPrims(stalk, iris,
 //                  headForward, eyeR — growing ORBIT_EYE_R → EYEBALL_R over POP_GROW_S) followed by the SOCKET PLUG (a matte near-black sphere, r 0.024) at the socket.
+//                  v1.5a: BOTH eyes pop in the same hit (head-damage.ts), each with its own orbit, trackers, stalk and
+//                  piece — 2 draws while both dangle.
 //   eye-snap       the stalk's free half and the eyeball fly off as a gib; the dangling piece is disposed and a
-//                  PLUG-ONLY piece is attached in its place.
+//                  PLUG-ONLY piece is attached in its place. One per dangling eye: the next head hit (or death) snaps both.
 //   skull-exposed  nothing extra: from the threshold on the region's crater carves past the measured skull depth;
 //                  above it the carve stays in the flesh (HEAD_LEAF.carve, regionCarve).
 //   brain          the brain mesh + lumps + chips from the CRACKED region's (anchored) surface point, the reduced blood,
@@ -487,7 +492,16 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
             inOrbit: null, stalk: null, dangling: null, plug: null, popAge: 0, danglingR0: [],
           };
           h.orbits[ev.side] = o;
-          o.inOrbit = attach(a, inOrbitPrims(orbitNow(posed.prims, o, yaw)), at);
+          // BOTH EYES POP AT ONCE (v1.5a): the other eye is exposed and popped in the same hit. Its orbit then has
+          // no strip event of its own (the model only set its flesh to the threshold): stamp its crater here, as a
+          // strip would. And its in-orbit piece would be disposed by the eye-pop a few events on: skip it.
+          const region = orbitRegion(ev.side);
+          if (!r.events.some(e => e.kind === 'strip' && e.region === region)) {
+            wounds.push(crater(region, at, REGION_TUNING.craterR(region, h.model.flesh[region])));
+          }
+          if (!r.events.some(e => e.kind === 'eye-pop' && e.side === ev.side)) {
+            o.inOrbit = attach(a, inOrbitPrims(orbitNow(posed.prims, o, yaw)), at);
+          }
           break;
         }
         case 'eye-pop': {

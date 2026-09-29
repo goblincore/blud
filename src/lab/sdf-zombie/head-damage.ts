@@ -13,8 +13,9 @@
 // spilled on has no anchor (the leaf puts its crater at the region centre); the orbits never anchor — the
 // eye lives at the orbit.
 //
-// One hit, in order: wobble; snap any eye left dangling by an earlier hit; pop an exposed orbit's eye when
-// it is the nearest region (that orbit is not stripped this hit); strip every region by a Gaussian of its
+// One hit, in order: wobble; snap every eye left dangling by an earlier hit; pop an exposed orbit's eye when
+// it is the nearest region (that orbit is not stripped this hit) — and the other eye with it (v1.5a: both eyes
+// pop at once, the next head hit or death snaps both); strip every region by a Gaussian of its
 // hs distance (the upper face also strips the crown at crownSpill); cross the orbit / skull thresholds
 // once; then crack an exposed skull that was hit (the crown counts for brow hits too).
 export type EyeSide = 'L' | 'R';
@@ -128,6 +129,20 @@ export function headHit(
     eyes[nearSide] = 'dangling';
     events.push({ kind: 'eye-pop', side: nearSide });
     popped = near;
+    // BOTH EYES POP AT ONCE (flail spec §14.1 item 8): the other eye comes out in the same hit from whatever state
+    // it is in. Painted, its orbit is exposed first (its flesh set to at most the threshold: the leaf's crater and
+    // glow-off follow orbit-exposed); in its orbit, it just pops. Gone stays gone (dangling cannot happen here:
+    // step 2 snapped it). That orbit is still stripped normally below.
+    const other: EyeSide = nearSide === 'L' ? 'R' : 'L';
+    if (eyes[other] === 'painted') {
+      flesh[orbitOf(other)] = Math.min(flesh[orbitOf(other)], T.orbitExposed);
+      eyes[other] = 'in-orbit';
+      events.push({ kind: 'orbit-exposed', side: other });
+    }
+    if (eyes[other] === 'in-orbit') {
+      eyes[other] = 'dangling';
+      events.push({ kind: 'eye-pop', side: other });
+    }
   }
   // 4. Strip.
   const base = hit.strip * jitter;
@@ -176,7 +191,7 @@ export function headHit(
   return { state: { hits: s.hits + 1, flesh, skull, eyes, dead, anchor }, events };
 }
 
-/** The zombie died some other way (collapse, dynamite): a dangling eye snaps off. */
+/** The zombie died some other way (collapse, dynamite): every dangling eye snaps off (one eye-snap each). */
 export function headDeath(s: HeadDamageState): { state: HeadDamageState; events: HeadEvent[] } {
   const events: HeadEvent[] = [];
   const eyes = { ...s.eyes };

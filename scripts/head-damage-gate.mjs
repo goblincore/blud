@@ -18,13 +18,16 @@
 //      - no bone through intact flesh at the peak-squash frame (of frames 0–2): the face-crop bone-coloured share
 //        outside every head crater's circle (radius + 2 cm) stays within the pre-hit share + 0.005 (v1's check);
 //      - the dented side's pole moved in by >= 0.01 m (v1's pole probe; the dent is a side flattening).
-//   2. one more orbit hit POPS the eye: eyes.L 'dangling' on the strike frame. 40 frames on (bleed off):
-//      - the iris faces the camera: the red-glow share in an eyeball-radius circle on the eyeball >= 0.08;
+//   2. one more orbit hit POPS the eye — and BOTH eyes (flail spec §14.1 item 8, v1.5a): eyes.L AND eyes.R 'dangling'
+//      on the strike frame (the right one straight from painted). 40 frames on (bleed off):
+//      - (pieces hidden) both painted glows are gone: each eye's red-glow share drops by >= 80% of its baseline;
+//      - two attached pieces are drawn (state().draws 2: one dangling piece per eye, the plug rides in it);
+//      - each iris faces the camera: the red-glow share in an eyeball-radius circle on each eyeball >= 0.08;
 //      - the socket is a dark hole: the stalk emerges from it and covers the orbit circle, so the measure is the
 //        plug's 1.8 cm disc with the stalk's projected footprint cut out (>= 15% of it left): its mean luma < 0.5 × the
 //        painted-eye baseline, the snap's bar (the orbit circle, the traced socket point and the plug centre printed).
-//      Photos v2-eye-pop.png (blood) / -noblood. The dangling eye's draw cost is timed here (step 6).
-//   3. the next head hit (the first BROW hit) SNAPS it: eyes.L 'gone' on the strike frame; 40 frames on (bleed off)
+//      Photos v2-eye-pop.png (blood) / -noblood. Both dangling eyes' draw cost is timed here (step 6).
+//   3. the next head hit (the first BROW hit) SNAPS BOTH: eyes.L and eyes.R 'gone' on the strike frame; 40 frames on (bleed off)
 //      the socket is still a dark hole (the same luma measure; photos v2-snapped.png / -noblood). Then the brow until dead:
 //      - the skull was exposed (brow or crown flesh < skullExposed) on an earlier hit than the brain;
 //      - the kill came at 8–14 total head hits (v1.4; 5–9 before); exactly one brain MESH gib (head.brains()); live SDF chunks up by
@@ -34,7 +37,7 @@
 //   5. every body wound from step 0 survives (within 1 mm; read before the thaw); at most 7 head wound slots
 //      (Wound.headSlot) are used.
 //   5b. 1.5 s after the kill the brain rests near the floor and has stopped (photo v2-brain-rest.png).
-//   6. cost: median draw time (timeDraws, 120 frames, CPU+GPU fenced) with the dangling eye vs the same stand before
+//   6. cost: median draw time (timeDraws, 120 frames, CPU+GPU fenced) with both eyes dangling vs the same stand before
 //      any head hit: within 0.5 ms.
 //   7. zero console errors / exceptions.
 // BLOOD: setBleed(false) CLEARS the blood sim (droplets, splats) — not the goo blobs — so a with-blood photo is
@@ -613,6 +616,7 @@ try {
     const hsPop = hs;
     note(`pop hit (${r.last?.side}): struck nearest ${sr.region}; eyes ${JSON.stringify(hs.eyes)}; flesh ${fmtFlesh(hs)}`);
     check(hs.eyes.L === "dangling", `pop: one more orbit hit pops the eye (eyes.L ${hs.eyes.L}, struck nearest ${sr.region})`);
+    check(hs.eyes.L === "dangling" && hs.eyes.R === "dangling", `pop: both eyes pop in the same hit (eyes ${JSON.stringify(hs.eyes)} on the strike frame)`);
     await stepN(3);
     out.withEye = await evaluate("__sdfGame.timeDraws(120)", 300000);
     await stepN(40);
@@ -626,6 +630,18 @@ try {
     const skPx = h2.socket.L ? await toPx(h2.socket.L) : null;
     const popR = h2.eyeR?.L ?? EYEBALL_R;   // grown to the cartoon EYEBALL_R by now (POP_GROW_S 0.15 s)
     const iris = ebPx ? glowShare(img, ebPx, popR * ppm) : 0;
+    // BOTH EYES (v1.5a): the right eye's iris, both painted glows (pieces hidden, the baseline's circles), the draws.
+    const ebPxR = h2.eyeball.R ? await toPx(h2.eyeball.R) : null;
+    const popRR = h2.eyeR?.R ?? EYEBALL_R;
+    const irisR = ebPxR ? glowShare(img, ebPxR, popRR * ppm) : 0;
+    const eLn = await eyePx("L"), eRn = await eyePx("R");
+    const pgL = glowShare(imgH, eLn, 0.03 * ppm), pgR = glowShare(imgH, eRn, 0.03 * ppm);
+    const dropL = base.gL > 0 ? 1 - pgL / base.gL : null, dropR = base.gR > 0 ? 1 - pgR / base.gR : null;
+    note(`both eyes dangling (+40 frames, bleed off): painted glow (pieces hidden) L ${base.gL.toFixed(3)} -> ${pgL.toFixed(3)} (drop ${dropL === null ? "?" : (100 * dropL).toFixed(0)}%), R ${base.gR.toFixed(3)} -> ${pgR.toFixed(3)} (drop ${dropR === null ? "?" : (100 * dropR).toFixed(0)}%); eyeballs L ${h2.eyeball.L ? f2(h2.eyeball.L) : "null"} (screen ${ebPx ? ebPx.map(Math.round).join(",") : "off"}) R ${h2.eyeball.R ? f2(h2.eyeball.R) : "null"} (screen ${ebPxR ? ebPxR.map(Math.round).join(",") : "off"}); iris red share L ${iris.toFixed(3)} R ${irisR.toFixed(3)}; eyes ${JSON.stringify(h2.eyes)}; draws ${h2.draws}; craters ${fmtCraters(h2)}`);
+    check(dropL !== null && dropL >= GLOW_DROP_MIN && dropR !== null && dropR >= GLOW_DROP_MIN, `both eyes dangling: both painted glows are gone — L ${base.gL.toFixed(3)} -> ${pgL.toFixed(3)}, R ${base.gR.toFixed(3)} -> ${pgR.toFixed(3)} (each drop >= ${100 * GLOW_DROP_MIN}%)`);
+    check(h2.draws === 2 && !!h2.stalk?.L && !!h2.stalk?.R, `both eyes dangling: two attached pieces, each on its own stalk (draws ${h2.draws}; stalks L ${h2.stalk?.L ? "yes" : "no"} R ${h2.stalk?.R ? "yes" : "no"})`);
+    check(!!ebPxR && irisR >= IRIS_RED_MIN, `both eyes dangling: the right eye's iris faces the camera too — red share ${irisR.toFixed(3)} on its eyeball circle (>= ${IRIS_RED_MIN})`);
+    out.both = { glowL: [base.gL, pgL], glowR: [base.gR, pgR], irisL: iris, irisR, draws: h2.draws };
     // The orbit circle: the SAME circle the painted-eye baseline was measured in (the orbit region's hs point, the
     // painted eye); the traced socket point and the plug's centre (1 cm / 2.4 cm in toward the head centre) printed.
     const sockL = meanLuma(img, base.eL, SOCKET_LUMA_R * ppm);
@@ -677,6 +693,7 @@ try {
     note(`brow hit ${k + 1} = head hit ${hs.hits} (${r.last?.side}): struck nearest ${sr.region}; flesh ${fmtFlesh(hs)}; skull brow ${hs.skull.brow.toFixed(2)} crown ${hs.skull.crown.toFixed(2)}; eyes ${JSON.stringify(hs.eyes)}; dead ${hs.dead}; craters ${fmtCraters(hs)}`);
     if (k === 0) {
       check(pre.eyes.L === "dangling" && hs.eyes.L === "gone", `snap: the next head hit snaps the eye (eyes.L ${pre.eyes.L} -> ${hs.eyes.L})`);
+      check(pre.eyes.L === "dangling" && pre.eyes.R === "dangling" && hs.eyes.L === "gone" && hs.eyes.R === "gone", `snap: the next head hit snaps BOTH eyes (eyes ${JSON.stringify(pre.eyes)} -> ${JSON.stringify(hs.eyes)})`);
       // The hole after the snap: the plug alone (the stalk no longer crosses it). Same measure as the pop's.
       await stepN(40);
       await faceStand(fr);
@@ -687,7 +704,8 @@ try {
       const skPx = h3.socket.L ? await toPx(h3.socket.L) : null;
       const sockL = meanLuma(img, base.eL, SOCKET_LUMA_R * ppm);
       const plugPx = h3.socket.L ? await toPx(plugCentre(fr, h3.socket.L)) : null;
-      note(`snapped (+40 frames, bleed off): orbit-circle luma ${sockL.toFixed(1)} vs painted baseline ${base.lumaL.toFixed(1)}; at the traced socket point ${skPx ? meanLuma(img, skPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}; at the plug centre (${plugPx ? plugPx.map(Math.round).join(",") : "off"}) ${plugPx ? meanLuma(img, plugPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}; draws ${h3.draws} (the plug)`);
+      note(`snapped (+40 frames, bleed off): orbit-circle luma ${sockL.toFixed(1)} vs painted baseline ${base.lumaL.toFixed(1)}; at the traced socket point ${skPx ? meanLuma(img, skPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}; at the plug centre (${plugPx ? plugPx.map(Math.round).join(",") : "off"}) ${plugPx ? meanLuma(img, plugPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}; draws ${h3.draws} (the two plugs)`);
+      check(h3.draws === 2, `snap: both sockets keep their plug (draws ${h3.draws}, 2)`);
       out.snapSocket = sockL;
       check(sockL < SOCKET_DARK * base.lumaL, `snap: the orbit stays a dark hole — orbit-circle luma ${sockL?.toFixed(1)} (< ${SOCKET_DARK} × painted baseline = ${(SOCKET_DARK * base.lumaL).toFixed(1)})`);
       await setBleed(true);
@@ -775,8 +793,8 @@ try {
   // -------- 6. cost
   const noise = Math.abs(out.base1 - out.base2);
   const delta = out.withEye - (out.base1 + out.base2) / 2;
-  note(`draw time (median of 120, fenced): baseline ${out.base1.toFixed(2)} / ${out.base2.toFixed(2)} ms (noise ${noise.toFixed(2)}), dangling eye ${out.withEye.toFixed(2)} ms; delta ${delta.toFixed(2)} ms`);
-  check(delta <= COST_MAX_MS, `cost: frame time with a dangling eye ${delta.toFixed(2)} ms over the same stand before any head hit (<= ${COST_MAX_MS})`);
+  note(`draw time (median of 120, fenced): baseline ${out.base1.toFixed(2)} / ${out.base2.toFixed(2)} ms (noise ${noise.toFixed(2)}), both eyes dangling ${out.withEye.toFixed(2)} ms; delta ${delta.toFixed(2)} ms`);
+  check(delta <= COST_MAX_MS, `cost: frame time with both eyes dangling ${delta.toFixed(2)} ms over the same stand before any head hit (<= ${COST_MAX_MS})`);
 } finally { closeSession(S); }
 
 // ---- 7. console
