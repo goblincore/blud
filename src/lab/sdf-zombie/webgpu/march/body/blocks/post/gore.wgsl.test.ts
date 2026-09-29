@@ -23,7 +23,9 @@ describe('ported features reach the entry point', () => {
     // TASK 2 (2026-09-16 follow-ups): the mask is attenuated by face coverage,
     // and the pass now runs AFTER the face layer, so a detached head keeps its
     // painted face instead of being mottled into a meat blob.
-    expect(MARCH_BODY).toContain('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);');
+    // Spec §14 (2026-09-28): bone is exempt, so a severed limb's bone end
+    // keeps the restored bone albedo instead of going to clot.
+    expect(MARCH_BODY).toContain('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover) * select(1.0, 0.0, isBone);');
     expect(MARCH_BODY).toContain('faceCover = faceCover * tex.a;');
     // The head's non-face exterior keeps a bounded share of the gore, so the
     // head is not a meat blob from the back either, while the neck cut still
@@ -31,7 +33,7 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain(`faceRegion * ${HEAD_EXTERIOR_GORE_KEEP}`);
     expect(MARCH_BODY).toContain('let faceRegion = 1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs));');
     expect(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'))
-      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);'));
+      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover) * select(1.0, 0.0, isBone);'));
     expect(INSTANCE_STATE).toContain('gInstGore = (*inst)[base + ');
   });
 });

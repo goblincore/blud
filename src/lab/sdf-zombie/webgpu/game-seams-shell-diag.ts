@@ -137,8 +137,9 @@ export function createShellDiagSeams(ctx: GameContext, d: ShellDiagDeps) {
       //
       //   * a bone piece renders pale only while its view carries
       //     `meltCfg.x = 1` — the pale matte branch in the melt ramp is the
-      //     ONLY thing in the shader that paints bone as bone (`isBone` alone
-      //     shades it as meat);
+      //     only thing that paints a wound-free bone piece as bone (the
+      //     restored `isBone` albedo needs the material read, which is gated
+      //     on wm > 0, a melt, or a bare-bone rupture);
       //   * and it only has bone to paint if its rows are PACKED
       //     (`counts2.x` = packed bone count), which `packBones = true` is what
       //     guarantees: with the bone-tube path's packBones off, a bone-only

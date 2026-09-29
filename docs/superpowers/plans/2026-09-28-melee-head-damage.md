@@ -863,12 +863,12 @@ State at `02fae287`:
 **Files:** `src/lab/sdf-zombie/webgpu/march/body/blocks/post/organ.wgsl.ts`, and whatever commit `00194a001`
 removed. Read `git show 00194a001` first.
 
-- [ ] **Restore the bone shading.** It was deleted as dead code while bone rows stayed packed in the field.
+- [x] **Restore the bone shading.** It was deleted as dead code while bone rows stayed packed in the field.
   Restore it so a surface hit on a bone row (`isBone`, `hitMat` 3.5–4.5) takes the bone colour, as the melt
   and burn blocks already do.
   - Keep the restored code as close to the deleted code as the current shader allows.
   - Update the comment that records the deletion.
-- [ ] **Verify.**
+- [x] **Verify.**
   - `npx tsc --noEmit`, and `npm test -- march organ zombie-gpu wgsl` (whatever covers the shader strings).
   - Run the head gate with `?skeleton=procedural`: the crown bone share after hit 3 must rise clearly (it is
     flat today at 0.0036 → 0.0036).
@@ -876,7 +876,7 @@ removed. Read `git show 00194a001` first.
     capture script, and look at it.
   - The flail gate passes. The default mesh path looks unchanged: compare the head gate's mesh-path photos
     before and after.
-- [ ] **Commit:** `fix(bone): restore bone colour on the procedural skeleton path`.
+- [x] **Commit:** `fix(bone): restore bone colour on the procedural skeleton path`.
 
 ### Task 10: The skull squashes and dents with the flesh
 

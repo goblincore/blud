@@ -21,13 +21,13 @@
 //                            drops — noted in the task report).
 //   bones/organs ........... hard min, ONLY where some wound's r < depth*2 —
 //                            the applyBones nearWound gate verbatim. A bone
-//                            that won the min shades AS PLAIN MEAT in the
-//                            march (the bone albedo branch was deleted when
-//                            bone tubes landed; isBone only feeds the melt
-//                            ramp), so the bake paints it as meat too — the
-//                            bone matters here for the crater's SILHOUETTE
-//                            and crease, not its colour. Organs DO tint
-//                            (the isOrgan branch is alive) and are handled.
+//                            that won the min shades as BONE in the march
+//                            again (the bone albedo was restored 2026-09-28,
+//                            head damage spec §14), but the bake still paints
+//                            it as meat — the bone matters here for the
+//                            crater's SILHOUETTE and crease; its colour is
+//                            NOT mirrored yet. Organs DO tint (the isOrgan
+//                            branch) and are handled.
 //
 // The march's silhouette noise and the melt's volume displacement are NOT
 // mirrored — the baked surface is the clean field. On the game page the melt
@@ -184,9 +184,9 @@ export function chunkBakeField(parts: ChunkBakeParts): ChunkFieldEvals {
       // AFTER the carve, and a prim claims the surface when its own distance
       // at the hit is BELOW the field it joined — i.e. its iso was crossed
       // first. At a zero of the full field that is exactly "the point is
-      // INSIDE the bone/organ". Bone shades as plain meat in the march (the
-      // isBone branch only feeds the melt ramp), so the bake only ACTS on
-      // 'organ' — but the attribution itself is kept honest for tests.
+      // INSIDE the bone/organ". The bake only ACTS on 'organ' (the march's
+      // bone albedo, restored 2026-09-28, is not mirrored here yet) — but
+      // the attribution itself is kept honest for tests.
       if (!nearWound(p)) return 'flesh';
       const b = boneMin(p);
       if (b && b.d < 0) return b.organ ? 'organ' : 'bone';
