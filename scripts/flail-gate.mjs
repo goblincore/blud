@@ -1,8 +1,8 @@
 // scripts/flail-gate.mjs — the spike flail lands one big crater, refuses out-of-reach and
 // out-of-arc targets, chains R → L → H on quick clicks, sweeps H wide enough to catch two
-// zombies flanking the crosshair, caves a head in over eight crosshair-aimed hits without
-// ever taking it off, and needs at least seven body hits to drop a zombie (Tasks 6, 11, 12
-// and 18–21 of the spike-flail plan; spec docs/superpowers/specs/2026-09-26-spike-flail-design.md
+// zombies flanking the crosshair, wears a head's flesh away over crosshair-aimed hits until the
+// brain kills (head damage v2) without ever taking it off, and needs at least seven body
+// hits to drop a zombie (Tasks 6, 11, 12 and 18–21 of the spike-flail plan; spec docs/superpowers/specs/2026-09-26-spike-flail-design.md
 // §12; notes and photos in docs/dev-notes/2026-09-26-flail/NOTES.md).
 //
 // Headless gate on /sdf-game.html?seed=1&vhs=off&loader=0 (the sandbox; its arena — the
@@ -27,19 +27,21 @@
 //   5. sweep width: two fresh zombies flanking the facing at 55–65° and 1.0–1.6 m (the
 //      sweepStands helper below); R and L from that stand hit neither (bearings ≥ 55° sit
 //      outside their ±50° arc), H hits both;
-//   6. CROSSHAIR-aimed head hits, never decapitating (spec §12.3): a fresh zombie; before
+//   6. CROSSHAIR-aimed head hits, never decapitating (spec §12.3), the head damage v2 contract
+//      (docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15): a fresh zombie; before
 //      EVERY click the crosshair is put on actorLimbCenter(id, 'head') from 0.9 m
 //      (standOff(head, 0.9), pitch atan2(head.y − EYE_H, 0.9)) — exactly as a player aims,
-//      not the old strike-ray solver. 8 clicks running through the combo (H included): every
-//      hit leaves the head ON (limbAlive(id, 'head') > 0), lastStrike.headHits counts 1…8,
-//      and each hit's NEWEST non-stump wound has the head damage ladder's radius for that hit
-//      (LADDER_R: the eye socket 0.028, the cave's face crater 0.06, a scalp crater 0.05, the
-//      brain cavity 0.08, then face craters 0.06; ± 0.005) on a head prim, within ON_HEAD of the
-//      head centre (CROWN_ON_HEAD for the crown's hits 3 and 4)
-//      (the newest, not the first new one: head craters past MAX_HEAD_WOUNDS evict older face
-//      craters, so the ring stops growing). Head hit 4 KILLS: one thawed frame's readback
-//      after it shows the phase out of 'standing'. The ladder's own look and numbers are
-//      scripts/head-damage-gate.mjs's. Photos head-hit-1/4/8.png;
+//      not the old strike-ray solver (the stand is on the arena-centre side, so the blow lands
+//      wherever the zombie's facing puts it — face, side or back of the head). Clicks run through
+//      the combo (H included) until the head damage model kills (head.state(id).dead) or
+//      HEAD_HITS_MAX clicks. EVERY hit: the head stays ON (limbAlive(id, 'head') > 0),
+//      lastStrike.headHits counts 1, 2, …, and the hit STRIPS FLESH — the model's total flesh
+//      (head.state(id).flesh, six regions) goes down, and a head-region wound (Wound.headRegion)
+//      appears or grows, on a head prim within ON_HEAD of the head centre. The kill (the brain)
+//      comes from head hits alone within KILL_MIN–KILL_MAX hits; one thawed-frames readback after
+//      it shows the phase out of 'standing'. The damage model's own look and numbers are
+//      scripts/head-damage-gate.mjs's. Photos head-hit-1.png and head-hit-kill.png (head-hit-last.png
+//      when no kill came);
 //   7. hits to collapse: a fresh zombie; before every click the crosshair is put on its
 //      CURRENT torso centre from 1.2 m. Click until collapse.ts's phase leaves 'standing' or
 //      12 clicks. The collapse must come on hit ≥ COLLAPSE_MIN (7: meterThreshold 0.8, 0.10
@@ -79,22 +81,15 @@ const CDP = Number(process.argv[3] ?? 9223);
 const OUT = process.env.OUT ?? 'docs/dev-notes/2026-09-26-flail/gate';
 const W = Number(process.env.W ?? 1280), H = Number(process.env.H ?? 800);
 const CRATER_R = 0.09;      // FLAIL_FEEL.craterR (game-flail.ts)
-// The head damage ladder's newest crater per head hit (game-head-damage.ts; spec
-// docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §4): hit 1 the eye socket
-// (HEAD_LEAF.socketR), hit 2 the cave's face crater (FLAIL_HEAD.faceCraterR), hit 3 the second
-// scalp crater (CROWN.scalpR), hit 4 the brain cavity (CROWN.brainR), then face craters. All
-// with severRadius 0 — the flail never decapitates (flail spec §12.3).
-const LADDER_R = [0.028, 0.06, 0.05, 0.08, 0.06, 0.06, 0.06, 0.06];
-const KILL_HIT = 4;          // head hit 4 (the brain) forces the collapse
-// Hits 3 and 4 crater the CROWN wherever the blow lands (spec §2.4): the top of the head sits
-// ~0.21 m from actorLimbCenter('head') (the head cluster's centre), outside ON_HEAD, so those two
-// are held to CROWN_ON_HEAD instead — and every newest crater must sit on a `head` prim.
-const CROWN_HITS = new Set([3, 4]);
-const CROWN_ON_HEAD = 0.26;
-const HEAD_HITS = 8;        // crosshair-aimed clicks the gate takes on one head; it stays on throughout
-// A crosshair-aimed head hit's crater must land ON the head, not merely inside the neck-root
-// zone (FLAIL_HEAD.neckDist also counts upper-chest hits).
-const ON_HEAD = 0.15;
+// Head damage v2 (game-head-damage.ts; spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md
+// §15): every head hit strips flesh region by region; the brain comes out and kills at 5–7 hits in the
+// model's own tests, 5–9 in play (the head-damage gate's bound: jitter, where the blows land). All head
+// craters have severRadius 0 — the flail never decapitates (flail spec §12.3).
+const KILL_MIN = 5, KILL_MAX = 9;
+const HEAD_HITS_MAX = 10;   // crosshair-aimed clicks the gate allows before calling the kill missing
+// A region crater sits at its region's surface point — the crown's ~0.2 m from actorLimbCenter('head')
+// (the head cluster's centre) — so a head-region wound must sit on a `head` prim within this of it.
+const ON_HEAD = 0.26;
 const COLLAPSE_MIN = 7;     // meterThreshold 0.8; 0.10 credit/R-or-L hit, 0.14/H hit (spec §12.2)
 const AIM_MAX = 0.05;       // every head/collapse crater must land within this of the crosshair's
                              // own ray (lastStrike.eye → lastStrike.impact, spec §12.4)
@@ -571,26 +566,42 @@ let sweepChoice = null;
   }
 }
 
-// ---- 6. Crosshair-aimed head hits: 8 clicks, the head never comes off -------------------
+// ---- 6. Crosshair-aimed head hits: the flesh wears away, the head never comes off ---------
 {
   const z = fresh();
   const woundList = (id) => evaluate(`__sdfGame.zombie(${id}).woundList()`);
   const posedOf = (id) => evaluate(`__sdfGame.zombie(${id}).posed()`);
   const headOf = (id) => evaluate(`__sdfGame.actorLimbCenter(${id}, 'head')`);
   const aliveOf = (id) => evaluate(`__sdfGame.flail.limbAlive(${id}, 'head')`);
-  /** The first live non-sub head prim's `a` — the neck root, for logging only. */
-  const neckRootOf = (posed) => {
-    const n = posed.prims.find((q) => q.limb === 'head' && q.op !== 'sub' && !q.dead);
-    return n ? n.a : null;
-  };
+  const headState = (id) => evaluate(`__sdfGame.head.state(${id})`);
+  const distTo = (p, o) => Math.hypot(p[0] - o[0], p[1] - o[1], p[2] - o[2]);
+  const fleshSum = (hs) => (hs ? Object.values(hs.flesh).reduce((a, b) => a + b, 0) : 6);
   /** Stand at `pose`, turn the view straight onto `p` (the crosshair aim looks off to one side), shoot. */
   async function photoOf(pose, p, name) {
     const e = [pose.x, EYE_H, pose.z];
     await place({ ...pose, yaw: yawOf(p[0] - e[0], p[2] - e[2]) }, Math.atan2(p[1] - EYE_H, Math.hypot(p[0] - e[0], p[2] - e[2])));
     await capture(name);
   }
+  // The page's own region centres (head-damage.ts) — the struck point's region is logged per hit.
+  const REGIONS = await evaluate(`import('/src/lab/sdf-zombie/head-damage.ts').then((m) => m.HEAD_REGIONS)`);
+  const qRot = (q, v) => {
+    const [x, y, zq, w] = q;
+    const tx = 2 * (y * v[2] - zq * v[1]), ty = 2 * (zq * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]);
+    return [v[0] + w * tx + (y * tz - zq * ty), v[1] + w * ty + (zq * tx - x * tz), v[2] + w * tz + (x * ty - y * tx)];
+  };
+  /** The strike point in head-normalised coordinates (the leaf's frame) and its nearest region. */
+  const struckHs = (fr, p) => {
+    if (!fr || !p) return null;
+    const l = qRot([-fr.quat[0], -fr.quat[1], -fr.quat[2], fr.quat[3]], p.map((v, i) => v - fr.centre[i]));
+    const hs = [l[0] / fr.axes[0], l[1] / fr.axes[1], l[2] / fr.axes[2]];
+    let near = null, bd = Infinity;
+    for (const [r, c] of Object.entries(REGIONS)) { const d = (hs[0] - c[0]) ** 2 + (hs[1] - c[1]) ** 2 + (hs[2] - c[2]) ** 2; if (d < bd) { bd = d; near = r; } }
+    return { hs, near };
+  };
   const alive0 = await aliveOf(z.id);
-  for (let hit = 1; hit <= HEAD_HITS; hit++) {
+  let killHit = null;
+  let lastPose = null, lastHead = null;
+  for (let hit = 1; hit <= HEAD_HITS_MAX; hit++) {
     const aliveBefore = await aliveOf(z.id);
     if (aliveBefore === 0) { fail(`head hit ${hit}: no head to aim at (already off — the flail is not meant to decapitate)`); break; }
     const head = await headOf(z.id);
@@ -601,42 +612,34 @@ let sweepChoice = null;
     const pitch = Math.atan2(head[1] - EYE_H, 0.9);
     await place(pose, pitch);
     await stepN(5);
-    const beforeWL = await woundList(z.id);
+    const hsBefore = await headState(z.id);
+    const regionR = (wl) => new Map(wl.filter((w) => w.headRegion).map((w) => [w.headRegion, w.radius]));
+    const rBefore = regionR(await woundList(z.id));
     const sw = await swing();
     if (!sw.control) fail(`head hit ${hit}: the strike did not fire as expected`);
     const st = await state();
+    const hsAfter = await headState(z.id);
     const afterWL = await woundList(z.id);
     const afterWorld = await wounds(z.id);   // actorWounds() — world positions, same order as woundList
-    const newWL = afterWL.slice(beforeWL.length);
-    const newWorld = afterWorld.slice(beforeWL.length);
     const posed = await posedOf(z.id);
-    const neckRoot = neckRootOf(posed);
-    const distTo = (p, o) => (o ? Math.hypot(p[0] - o[0], p[1] - o[1], p[2] - o[2]) : null);
-    const rows = newWL.map((w, i) => {
-      const prim = posed.prims[w.primIdx];
-      const pos = newWorld[i]?.pos;
-      return {
-        limb: prim?.limb, bone: prim?.bone, radius: w.radius, severRadius: w.severRadius ?? null,
-        stump: !!w.injuryIgnored, pos, toHead: pos ? distTo(pos, head) : null, toNeck: pos ? distTo(pos, neckRoot) : null,
-      };
-    });
+    // The head-region wounds this hit stamped: new regions, or regions whose crater grew.
+    const grown = afterWL.map((w, i) => ({ w, i })).filter(({ w }) => w.headRegion && (!rBefore.has(w.headRegion) || w.radius > rBefore.get(w.headRegion) + 1e-6))
+      .map(({ w, i }) => {
+        const pos = afterWorld[i]?.pos ?? null;
+        return { region: w.headRegion, radius: w.radius, was: rBefore.get(w.headRegion) ?? null, pos, toHead: pos ? distTo(pos, head) : null, limb: posed.prims[w.primIdx]?.limb, sever: w.severRadius ?? 0 };
+      });
     const alive = await aliveOf(z.id);
     const counted = st.lastStrike?.headHits?.[z.id] ?? null;
     const impactToHead = distTo(st.lastStrike?.impact ?? [0, 0, 0], head);
+    const f0 = fleshSum(hsBefore), f1 = fleshSum(hsAfter);
+    const sh = struckHs(hsAfter?.frame, st.lastStrike?.points?.[z.id]);
+    lastPose = pose; lastHead = head;
     console.log(`head hit ${hit} (${st.lastStrike?.side}): impact (${f2(st.lastStrike.impact)}), ${impactToHead.toFixed(3)} m from head centre; ` +
-      `+${rows.length} wounds: ${rows.map((r) => `${r.limb}/${r.bone} r${r.radius.toFixed(3)} sev${r.severRadius === null ? '?' : r.severRadius.toFixed(3)}` +
-        `${r.stump ? ' [stump]' : ''} ${r.toHead === null ? '?' : r.toHead.toFixed(3)}m/head ${r.toNeck === null ? '?' : r.toNeck.toFixed(3)}m/neck`).join('; ')}; ` +
+      `struck hs ${sh ? f2(sh.hs) : '?'} (nearest region ${sh?.near ?? '?'}); ` +
+      `flesh ${f0.toFixed(2)} -> ${f1.toFixed(2)} (${hsAfter ? Object.entries(hsAfter.flesh).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(' ') : 'no head state'}); ` +
+      `skull ${hsAfter ? JSON.stringify(hsAfter.skull) : '?'}; eyes ${hsAfter ? JSON.stringify(hsAfter.eyes) : '?'}; dead ${hsAfter?.dead}; ` +
+      `region craters new/grown: ${grown.map((g) => `${g.region} ${g.was === null ? 'new' : g.was.toFixed(3) + '->'}${g.radius.toFixed(3)} ${g.limb} ${g.toHead === null ? '?' : g.toHead.toFixed(3)}m/head sev${g.sever}`).join('; ') || 'none'}; ` +
       `headHits ${counted}; head prims ${alive}/${alive0}`);
-    // The NEWEST non-stump wound in the ring (see the header: head craters evict older face
-    // craters past MAX_HEAD_WOUNDS, so "the wounds after beforeWL.length" can be empty).
-    const newestIdx = afterWL.map((w, i) => (w.injuryIgnored ? -1 : i)).filter((i) => i >= 0).pop();
-    const newestPos = newestIdx === undefined ? null : afterWorld[newestIdx]?.pos ?? null;
-    const firstReal = newestIdx === undefined ? null : {
-      radius: afterWL[newestIdx].radius, pos: newestPos, toHead: newestPos ? distTo(newestPos, head) : null,
-      limb: posed.prims[afterWL[newestIdx].primIdx]?.limb,
-    };
-    const FACE_R = LADDER_R[hit - 1];
-    const onHead = CROWN_HITS.has(hit) ? CROWN_ON_HEAD : ON_HEAD;
     // ASSERTED: resolveStrike's own snapped hit point (lastStrike.points[id]) at strike time —
     // before the wound's local-frame round trip (worldHitToWound/woundWorldPos) can drift it.
     // Investigation 2026-09-28: a first hit on a fresh head reconstructs several cm off this
@@ -646,35 +649,38 @@ let sweepChoice = null;
     // of the swing, for both the first and second hit on two separate fresh zombies). The ray's
     // own hit point sidesteps that round trip entirely, so it is what "lands within 5 cm of the
     // crosshair ray" (spec §12.4/§12.5) actually means.
-    let aim = null;
     const strikePoint = st.lastStrike?.points?.[z.id];
     if (strikePoint && st.lastStrike?.eye && st.lastStrike?.impact) {
-      aim = distToRay(st.lastStrike.eye, st.lastStrike.impact, strikePoint);
+      const aim = distToRay(st.lastStrike.eye, st.lastStrike.impact, strikePoint);
       aimErrs.push(aim);
       console.log(`  crosshair distance (at the strike): ${(aim * 100).toFixed(2)} cm`);
     }
-    // NOT asserted: the same distance measured on the wound's position as later read back
-    // (post the local-frame round trip, and any reaction settling) — logged for visibility only.
-    if (firstReal?.pos && st.lastStrike?.eye && st.lastStrike?.impact) {
-      const post = distToRay(st.lastStrike.eye, st.lastStrike.impact, firstReal.pos);
-      console.log(`  crosshair distance (wound readback, post-reaction, not asserted): ${(post * 100).toFixed(2)} cm`);
-    }
-    const ok = alive > 0 && !!firstReal && Math.abs(firstReal.radius - FACE_R) <= 0.005 && counted === hit
-      && firstReal.toHead !== null && firstReal.toHead < onHead && firstReal.limb === 'head';
-    if (ok) pass(`head hit ${hit}: the head is still on (${alive}/${alive0} prims), crater radius ${firstReal.radius.toFixed(3)} ${firstReal.toHead.toFixed(3)} m from the head centre, headHits ${counted}`);
-    else fail(`head hit ${hit}: alive ${alive}/${alive0}, newest non-stump wound radius ${firstReal ? firstReal.radius.toFixed(3) : 'none'} (expected ${FACE_R}) on limb ${firstReal?.limb ?? '?'}, ${firstReal?.toHead?.toFixed(3) ?? '?'} m from the head centre (< ${onHead}), headHits ${counted}`);
-    if (hit === KILL_HIT) {
+    if (alive > 0 && counted === hit) pass(`head hit ${hit}: the head is still on (${alive}/${alive0} prims), headHits ${counted}`);
+    else fail(`head hit ${hit}: alive ${alive}/${alive0}, headHits ${counted} (expected ${hit}) — the flail must never take the head off`);
+    const onHead = grown.filter((g) => g.limb === 'head' && g.toHead !== null && g.toHead < ON_HEAD && g.sever === 0);
+    if (hsAfter && f1 < f0 - 1e-6 && onHead.length > 0) pass(`head hit ${hit}: strips flesh (${f0.toFixed(2)} -> ${f1.toFixed(2)}) and ${onHead.length} head-region crater(s) appeared or grew (${onHead.map((g) => g.region).join(', ')}) on the head`);
+    else fail(`head hit ${hit}: no strip — flesh ${f0.toFixed(2)} -> ${f1.toFixed(2)}, head-region craters new/grown on a head prim within ${ON_HEAD} m: ${onHead.length} (of ${grown.length})`);
+    if (hit === 1) await photoOf(pose, head, 'head-hit-1');
+    if (hsAfter?.dead) {
+      killHit = hit;
+      await photoOf(pose, head, 'head-hit-kill');
       // Thaw a few frames so the actor's debug readback (actorList's phase) is fresh — the forced
       // collapse is fed to the motion signals on the next step.
       await evaluate('__sdfGame.freeze(false)');
       await stepN(3);
       await evaluate('__sdfGame.freeze(true)');
       const al = (await evaluate('__sdfGame.actorList()')).find((a) => a.id === z.id);
-      if (al && al.phase !== 'standing') pass(`head hit ${hit} kills: phase ${al.phase}, meter ${al.meter?.toFixed(3) ?? '?'}`);
-      else fail(`head hit ${hit} should kill (the brain): phase ${al?.phase ?? 'unknown'}`);
+      if (al && al.phase !== 'standing') pass(`head hit ${hit} kills (the brain): phase ${al.phase}, meter ${al.meter?.toFixed(3) ?? '?'}`);
+      else fail(`head hit ${hit}: the head model is dead (the brain) but the phase is ${al?.phase ?? 'unknown'}`);
+      const aliveK = await aliveOf(z.id);
+      if (aliveK > 0) pass(`head hit ${hit}: the head is still on after the kill (${aliveK}/${alive0} prims)`);
+      else fail(`head hit ${hit}: the head came off with the kill`);
+      break;
     }
-    if (hit === 1 || hit === 4 || hit === HEAD_HITS) await photoOf(pose, head, `head-hit-${hit}`);
   }
+  if (killHit === null && lastPose) await photoOf(lastPose, lastHead, 'head-hit-last');
+  if (killHit !== null && killHit >= KILL_MIN && killHit <= KILL_MAX) pass(`head hits alone kill on hit ${killHit} (${KILL_MIN}–${KILL_MAX})`);
+  else fail(`head hits alone: ${killHit === null ? `no kill within ${HEAD_HITS_MAX} hits` : `the kill came on hit ${killHit}`} (expected ${KILL_MIN}–${KILL_MAX})`);
 }
 
 // ---- 7. Hits to collapse ----------------------------------------------------------------
