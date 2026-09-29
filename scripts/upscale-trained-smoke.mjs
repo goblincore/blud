@@ -53,7 +53,7 @@ if (!listed.some((m) => m.name === NAME && m.weightHash === expected.weightHash)
 
 // 2. G1 parity on the trained weights (thresholds and staging from scripts/upscale-parity.mjs)
 await applyShipDefaults(evaluate);
-await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
+await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
 await evaluate('(() => { performance.now = () => 100000; return 1; })()');
 let baked = false;
 for (let i = 0; i < 240 && !baked; i++) {

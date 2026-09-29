@@ -23,6 +23,7 @@ import {
   GIB_BLUR_MIN_ANGVEL_RADPS, GIB_BLUR_MAX_PROBES, GIB_SHUTTER_DEFAULT_ENABLED,
   gibLinearSpeed, gibAngularSpeed, isGibSelectedForBlur, gibPriorState,
   gibExposureSampleStates, gibProbeLocals, planGibMotionStamps, readGibShutterEnabled,
+  chunkBoneTubesNeeded,
 } from './gib-motion-blur';
 import type { ShutterProjection } from './shutter-blur';
 
@@ -242,5 +243,18 @@ describe('gib motion — pure spin blur at the edges', () => {
     const far = planGibMotionStamps(chunk({ pos: [0, 0, -8], vel: [2, 0, 0] }), 2, proj(), 0.04, { maxStreakPx: 120 });
     expect(near[0]!.ownerClipZ).toBeLessThan(far[0]!.ownerClipZ);
     expect(near[0]!.ownerViewDepth).toBeLessThan(far[0]!.ownerViewDepth);
+  });
+});
+
+describe('chunkBoneTubesNeeded (arm gib bone showing through the blur)', () => {
+  it('drops the sharp tube only for a blurred chunk whose field packs its own bones', () => {
+    expect(chunkBoneTubesNeeded(true, true)).toBe(false);
+  });
+  it('keeps tubes for a sharp chunk, packed or not', () => {
+    expect(chunkBoneTubesNeeded(true, false)).toBe(true);
+    expect(chunkBoneTubesNeeded(false, false)).toBe(true);
+  });
+  it('keeps tubes for a blurred chunk that does not pack its bones (tubes are its only bones)', () => {
+    expect(chunkBoneTubesNeeded(false, true)).toBe(true);
   });
 });

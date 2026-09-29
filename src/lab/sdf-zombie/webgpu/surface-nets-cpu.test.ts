@@ -111,7 +111,9 @@ describe('extractHullSoup on the zombie', () => {
     let seed = 1234;
     const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
     let outside = 0, samples = 0;
-    for (let n = 0; n < 200000; n++) {
+    // 300k draws (was 200k): the zombie's feet (2026-09-29) grew the bounding box, so fewer
+    // random points converge onto the surface; this keeps the >20000 surface samples below.
+    for (let n = 0; n < 300000; n++) {
       let p: Vec3 = [
         centre[0] + (rnd() * 2 - 1) * half[0],
         centre[1] + (rnd() * 2 - 1) * half[1],

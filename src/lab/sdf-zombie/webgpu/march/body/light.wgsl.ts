@@ -4,6 +4,7 @@
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { FLASHLIGHT_BLOCK } from './blocks/light/flashlight.wgsl';
+import { LIGHT_LIST_BLOCK } from './blocks/light/light-list.wgsl';
 import { OCCLUSION_BLOCK } from './blocks/light/occlusion.wgsl';
 import { AMBIENT_BLOCK } from './blocks/light/ambient.wgsl';
 import { COMPOSE_BLOCK } from './blocks/light/compose.wgsl';
@@ -44,9 +45,13 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
     return vec4<f32>(clamp(vec3<f32>(0.5) + (prev.xyz - p) * 40.0, vec3<f32>(0.0), vec3<f32>(1.0)), t);
   }
 ${FLASHLIGHT_BLOCK}
+${LIGHT_LIST_BLOCK}
   let V = -rd;
-  let H = normalize(L + V);
-  let diff = max(dot(n, L), 0.0);
+  // Lk == L when the list is off, so H is the old normalize(L + V); on, the dominant's Lb.
+  let H = normalize(Lk + V);
+  // The dominant list light wraps its view-biased Lk by its profile floor; off, the old expression.
+  var diff = max(dot(n, L), 0.0);
+  if (lightListCfg.x > 0.0) { diff = max((dot(n, Lk) + listDomFloor) / (1.0 + listDomFloor), 0.0); }
 
   // wet, specPow and glow now live ABOVE the flashlight in
   // MARCH_BODY_SURFACE_PREP (the task-2 section split — see its header).

@@ -20,6 +20,7 @@ import {
   type SoldierBrain, type SoldierTuning,
 } from '../soldier-brain';
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
+import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
 import type { BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
@@ -47,6 +48,9 @@ export interface MindInput {
   bounds?: WanderBounds;
   canMoveTo?: (point: Vec3) => boolean;
   missing?: { armL: boolean; armR: boolean; legL: boolean; legR: boolean };
+  /** The profile's disarm plate is gone (game-actor disarmed(); the
+   *  warbull's launcher). Only the warbull mind reads it. */
+  disarmed?: boolean;
 }
 
 export interface MindOutput {
@@ -74,6 +78,10 @@ export interface MindOutput {
   /** World XZ root delta to apply THIS frame (the sword lunge), or null.
    *  The actor applies it only where canMoveTo allows. */
   advance?: Vec3 | null;
+  /** Locomotion speed override, m/s (the warbull's charge): the actor
+   *  scales the gait's cruise so the legs RUN the run rather than the root
+   *  sliding under a walk. Absent = the profile's cruise. */
+  runSpeed?: number;
 }
 
 /** Fields every mind reports, merged into ZombieActor.debug() by the actor. */
@@ -277,5 +285,94 @@ export function makeSwordMind(tuning: BrainTuning = SWORD_TUNING.brain): EnemyMi
       state: brain.state, alert: brain.alert, side: brain.swing.side, variant: brain.swing.variant,
       swingT: brain.swingT, holdSecs: brain.holdSecs, hasToken: lastToken, aimT: 0, cooldown: brain.cooldown,
     }),
+  };
+}
+
+/** The warbull's BRAWL once the launcher is gone: the soldier's one-armed
+ *  melee path (soldier-brain.ts, entered on a missing right arm) at his
+ *  size and in his rage. A longer reach and engage range (a 2.4 m body), a
+ *  slower heavier swing, a shorter gap between swings. */
+export const WARBULL_BRAWL_TUNING: SoldierTuning = {
+  ...SOLDIER_TUNING,
+  noticeRange: 12,
+  meleeRadius: 1.9,
+  meleeEngageRange: 3.6,
+  meleeSwingSec: 0.8,
+  meleeCooldownSec: 0.9,
+};
+
+/**
+ * The WARBULL (spec 2026-09-27-warbull-design.md, "Behaviour: hybrid"): the
+ * bull charge (charge.ts) layered over the soldier brain.
+ *   ARMED: the brain shoots rocket volleys on `tuning` (ROCKET_TUNING); a
+ *   player who closes inside CHARGE.armedMaxDist gets charged instead, never
+ *   mid-volley.
+ *   DISARMED (input.disarmed: the launcher plate shot off): a second soldier
+ *   brain on WARBULL_BRAWL_TUNING, told its right arm is gone, pursues and
+ *   swings (and claims melee-ring tokens); the charge comes from the whole
+ *   band, sooner and more often. That is the rage.
+ * While a charge runs it owns the body and the brains are not stepped.
+ */
+export function makeWarbullMind(tuning: SoldierTuning): EnemyMind {
+  const gun = makeSoldierMind(tuning);
+  let brawl: EnemyMind | null = null;
+  let charge: ChargeState = CHARGE_REST;
+  let disarmed = false;
+  let lastBrain: EnemyMind = gun;
+  const BUSY = new Set(['aim', 'fire', 'recover', 'settle']);
+  return {
+    kind: 'soldier',
+    get meleeCapable() { return disarmed && charge.phase === 'none'; },
+    step(input) {
+      if (input.disarmed && !disarmed) {
+        disarmed = true;
+        brawl = makeSoldierMind(WARBULL_BRAWL_TUNING);
+      }
+      const brain = disarmed ? brawl! : gun;
+      const inner = brain.debug();
+      const b = input.bounds;
+      const c = stepCharge(charge, {
+        dt: input.dt,
+        self: { x: input.self.x, z: input.self.z },
+        player: input.player && input.player.room === input.self.room ? { x: input.player.x, z: input.player.z } : null,
+        visible: (inner.alert || disarmed) && input.lineOfSight !== false,
+        enraged: disarmed,
+        busy: !disarmed && BUSY.has(inner.state),
+        roll: input.rollDrift,
+        canStand: (x, z) => (!b || (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ))
+          && (input.canMoveTo?.([x, 0, z]) ?? true),
+      });
+      charge = c.state;
+      if (c.active) {
+        const running = charge.phase === 'charge' || (c.contact && charge.phase === 'recover');
+        return {
+          target: c.target, halt: c.halt, fire: false, weaponUp: false,
+          // Arms thrown forward through the run: the shove's reach, driven by
+          // the run's progress. Also what carries the contact's variant.
+          attack: running ? { phase: 0.25 + 0.35 * c.progress, side: 'L', variant: 'shove' } : null,
+          faceHeading: c.faceHeading, engaged: true, committed: true,
+          contact: c.contact, aimError: 0,
+          ...(c.speed > 0 ? { runSpeed: c.speed } : {}),
+        };
+      }
+      lastBrain = brain;
+      return brain.step(disarmed
+        ? { ...input, alerted: true, mayFire: false,
+          missing: { ...(input.missing ?? { armL: false, armR: false, legL: false, legR: false }), armR: true } }
+        : input);
+    },
+    // A bull in full charge does not flinch; anything else staggers the brain
+    // (and a stagger in the windup calls the charge off).
+    stagger(holdSec) {
+      if (charge.phase === 'charge') return;
+      if (charge.phase === 'windup') charge = { ...charge, phase: 'none', t: 0 };
+      (disarmed ? brawl! : gun).stagger(holdSec);
+    },
+    debug: () => {
+      const d = lastBrain.debug();
+      // 'recover' is also a soldier-brain state (the shot's recoil hold);
+      // the charge's is reported apart so status-lights does not flash it.
+      return charge.phase === 'none' ? d : { ...d, state: charge.phase === 'recover' ? 'chargeRecover' : charge.phase };
+    },
   };
 }

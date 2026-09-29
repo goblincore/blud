@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseLevelJson } from './level-json';
+import { BEACON } from './beacon';
 
 const fixture = (name: string): any =>
   JSON.parse(readFileSync(`public/assets/levels/fixtures/${name}.level.json`, 'utf8'));
@@ -122,5 +123,102 @@ describe('parseLevelJson: outdoor keys (Outdoor v1 spec §4)', () => {
     expect(bad(j => { j.rooms[0].paths[0].max = [5, 10]; })).toMatch(/rooms\[0\]\.paths\[0\]: empty path/);
     expect(bad(j => { j.rooms[0].paths[0].width = 2; })).toMatch(/rooms\[0\]\.paths\[0\]: unknown key width/);
     expect(bad(j => { j.rooms[0].edge.colour = 'red'; })).toMatch(/rooms\[0\]\.edge: unknown key colour/);
+  });
+});
+
+describe('parseLevelJson: dynamic light keys (dynamic light spec §3)', () => {
+  it('reads a light mood, cues and the flashlight pickup', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].mood = 'dying';
+    f.cues = [{ on: 'pickup.flashlight', emit: ['light.die.room.1'] }];
+    f.pickups.push({ id: 'torch', item: 'flashlight', pos: [2, 1.4, 2] });
+    const L = parseLevelJson(f);
+    expect(L.rooms.flatMap(r => r.accents).some(a => a.mood === 'dying')).toBe(true);
+    expect(L.cues).toEqual([{ on: 'pickup.flashlight', emit: ['light.die.room.1'] }]);
+    expect(L.pickups.find(p => p.id === 'torch')?.item).toBe('flashlight');
+  });
+
+  it('defaults to no cues and no mood', () => {
+    const L = parseLevelJson(fixture('two-rooms'));
+    expect(L.cues).toEqual([]);
+    expect(L.rooms.flatMap(r => r.accents).every(a => a.mood === undefined)).toBe(true);
+  });
+
+  it.each([
+    ['an unknown mood', (f: any) => { f.lights[0].mood = 'sad'; }, 'mood'],
+    ['a cue without emit', (f: any) => { f.cues = [{ on: 'x' }]; }, 'cues[0].emit'],
+    ['a cue without on', (f: any) => { f.cues = [{ emit: ['x'] }]; }, 'cues[0].on'],
+  ])('rejects %s', (_label, mutate, needle) => {
+    const f = fixture('two-rooms');
+    mutate(f);
+    expect(() => parseLevelJson(f)).toThrow(needle);
+  });
+});
+
+describe('parseLevelJson: per-light gain and tint (spec §5 option A)', () => {
+  it('reads a light gain and tint', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].gain = 1.5;
+    f.lights[0].tint = [1, 0.6, 0.6];
+    const L = parseLevelJson(f);
+    expect(L.rooms[0]!.accents[0]).toMatchObject({ gain: 1.5, tint: [1, 0.6, 0.6] });
+  });
+
+  it('defaults to no gain and no tint', () => {
+    const L = parseLevelJson(fixture('two-rooms'));
+    expect(L.rooms[0]!.accents[0]!.gain).toBeUndefined();
+    expect(L.rooms[0]!.accents[0]!.tint).toBeUndefined();
+  });
+
+  it('rejects a negative gain', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].gain = -1;
+    expect(() => parseLevelJson(f)).toThrow('lights[0].gain');
+  });
+
+  it('rejects a negative tint component', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].tint = [1, -0.2, 0.6];
+    expect(() => parseLevelJson(f)).toThrow('lights[0].tint');
+  });
+});
+
+describe('parseLevelJson: beacon fixture (Boiler Room beacons spec)', () => {
+  it('reads a beacon with its spin', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'beacon';
+    f.lights[0].spin = 0.7;
+    const L = parseLevelJson(f);
+    expect(L.rooms[0]!.accents[0]).toMatchObject({ fixture: 'beacon', spin: 0.7 });
+  });
+
+  it('a beacon with no spin turns at the default BEACON.spin', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'beacon';
+    const L = parseLevelJson(f);
+    expect(L.rooms[0]!.accents[0]).toMatchObject({ fixture: 'beacon', spin: BEACON.spin });
+  });
+
+  it('rejects a spin on a light that is not a beacon', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'tube';
+    f.lights[0].spin = 0.7;
+    expect(() => parseLevelJson(f)).toThrow('lights[0].spin: only a beacon fixture turns');
+    const g = fixture('two-rooms');
+    g.lights[0].spin = 0.7;   // no fixture at all (a bulb)
+    expect(() => parseLevelJson(g)).toThrow('lights[0].spin');
+  });
+
+  it('rejects a spin beyond 5 rev/s', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'beacon';
+    f.lights[0].spin = 9;
+    expect(() => parseLevelJson(f)).toThrow('lights[0].spin');
+  });
+
+  it('still rejects an unknown fixture', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'lamp';
+    expect(() => parseLevelJson(f)).toThrow('lights[0].fixture: must be bulb, tube or beacon');
   });
 });

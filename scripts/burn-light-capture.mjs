@@ -388,6 +388,7 @@ try {
   await evaluate(`window.__sdfGame.igniteActor(${burnerId})`);
   await evaluate('window.__sdfGame.step(120)');          // ~2 s of fire (sim dt)
   await evaluate('window.__sdfGame.setLightClockFrozen(true)');
+  await evaluate('window.__sdfGame.setLightTime(0)');
   await evaluate('window.__sdfGame.setLoopRunning(false)');
   await evaluate('window.__sdfGame.step(12, 0)');         // settle at the frozen phase
   const pipeAfter = await evaluate('window.__sdfGame.pipelineLog()');
@@ -525,7 +526,7 @@ try {
   const recScan = await evaluate(`(() => {
     window.__sdfGame.installDebugProbe();
     const d = window.__sdfGameDebug.normalCaptureState();
-    const STRIDE = 64, BURN = 15 * 4;
+    const STRIDE = 68, BURN = 15 * 4; // REC_VEC4S (17) * 4 floats; REC_BURN = 15
     const out = [];
     for (const p of d.pieces) {
       if (!p.records || p.records.length < STRIDE) continue;
@@ -545,6 +546,7 @@ try {
   // =======================================================================
   console.log('\n=== C. gather cost ===');
   await evaluate('window.__sdfGame.setLightClockFrozen(true)');
+  await evaluate('window.__sdfGame.setLightTime(0)');
   const benchPasses = async (label, ignite) => {
     if (ignite) await evaluate('window.__sdfGame.igniteAll()');
     else { await evaluate('window.__sdfGame.extinguishAll()'); await evaluate('window.__sdfGame.step(60)'); }

@@ -5,7 +5,8 @@
 // level completion. The rules are pure (player-vitals.ts, pickups.ts, level-events.ts); this
 // leaf holds the runtime on ctx.world.loop, draws the status bar and overlays, and applies
 // the rules each tick. Authored levels get pickups and events; the ring owns every weapon
-// with unlimited ammo, as before, but can still be hurt. `?god` turns damage off.
+// with unlimited ammo, as before, in god mode (`?god=0` lets it hurt); `?god` turns damage
+// off anywhere (player-vitals godMode).
 
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
@@ -13,9 +14,10 @@ import { openGate } from './game-level-leaves';
 import { PLAYER } from './game-player';
 import { MAGAZINE_CAPACITY } from './game-viewmodel';
 import { requestSlot, type WeaponSlot } from './game-weapon-slots';
-import { commandsFor, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
+import { switchOnFlashlight, runLightCommand } from './game-dynamic-light-leaves';
+import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
 import { collectPickups, makeInventory, reloadFromReserve, type Inventory } from './pickups';
-import { VITALS, applyDamage, bitesInReach, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
+import { VITALS, applyDamage, bitesInReach, godMode, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
 
 export interface LoopRuntime {
   god: boolean;
@@ -52,7 +54,10 @@ const LOOK: Record<string, { geo: () => THREE.BufferGeometry; color: number }> =
   cd: { geo: () => new THREE.CylinderGeometry(0.12, 0.12, 0.012, 32), color: 0xd8e4ff },
   melee: { geo: () => new THREE.BoxGeometry(0.08, 0.8, 0.08), color: 0x6b5a45 },
   dynamite: { geo: () => new THREE.CylinderGeometry(0.03, 0.03, 0.22, 10), color: 0xb0302a },
+  flashlight: { geo: () => new THREE.CylinderGeometry(0.035, 0.05, 0.24, 12), color: 0xd8d0b0 },
 };
+/** Pickups that hang still (the flashlight on its hook) instead of spinning. */
+const STILL = new Set(['flashlight']);
 
 export function createLoop(ctx: GameContext): LoopRuntime {
   const q = new URLSearchParams(location.search);
@@ -69,7 +74,7 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     + ' background:radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.55) 100%);');
   document.body.appendChild(hurt);
   const rt: LoopRuntime = {
-    god: q.has('god'),
+    god: godMode(authored, q.get('god')),
     authored,
     finite,
     vitals: makeVitals(),
@@ -91,6 +96,7 @@ export function createLoop(ctx: GameContext): LoopRuntime {
       }));
       mesh.position.set(p.pos[0], Math.max(0.25, p.pos[1]), p.pos[2]);
       if (p.item === 'cd') mesh.rotation.x = Math.PI / 2;
+      if (STILL.has(p.item)) mesh.userData.still = true;
       mesh.name = `pickup:${p.id}`;
       ctx.boot.handle.scene.add(mesh);
       rt.meshes.set(p.id, mesh);
@@ -166,6 +172,7 @@ function runLevelCommand(ctx: GameContext, cmd: LevelCommand): void {
     rt.el.complete.style.display = 'grid';
     document.exitPointerLock?.();
   }
+  if (cmd.kind === 'light') runLightCommand(ctx, cmd.mode, cmd.room);
   // 'wave' and 'alert-room' come with the encounter work (Wake Plan 3 Task 5).
 }
 
@@ -177,7 +184,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   rt.el.hurt.style.opacity = String(Math.max(0, 0.9 - rt.vitals.hurtAge * 2.5));
   // The gun hides while the live slot is a weapon the player doesn't own yet.
   if (ctx.weapon.gunGroup) ctx.weapon.gunGroup.visible = ownsSlot(ctx, ctx.weapon.slotState.live);
-  for (const m of rt.meshes.values()) m.rotation.y += dt * 1.6;
+  for (const m of rt.meshes.values()) if (!m.userData.still) m.rotation.y += dt * 1.6;
   if (rt.vitals.dead || rt.done) return;
   const feet = ctx.player.player.pos;
   // ZOMBIE BITES. The zombie mind never reports melee contact; a live zombie in reach
@@ -200,6 +207,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
       rt.meshes.get(p.id)?.removeFromParent();
       emitLevelEvent(ctx, `pickup.${p.item}`);
       ctx.telemetry.telemetry.event('pickup', { id: p.id, item: p.item });
+      if (p.item === 'flashlight') switchOnFlashlight(ctx);
       if (p.item === 'shotgun' && !hadShotgun) {
         ctx.weapon.shells = MAGAZINE_CAPACITY;   // it comes loaded
         ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, 'shotgun');
@@ -215,7 +223,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   rt.triggers = t.state;
   for (const ev of t.events) emitLevelEvent(ctx, ev);
   if (rt.pending.length > 0) {
-    const events = rt.pending.splice(0);
+    const events = expandCues(rt.pending.splice(0), def.cues);
     const open = gatesOpenedBy(def.gates, ctx.world.openGates, events);
     for (const id of open) if (!ctx.world.openGates.has(id)) openGate(ctx, id);
     for (const ev of events) {

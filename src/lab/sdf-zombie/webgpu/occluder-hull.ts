@@ -422,6 +422,8 @@ export interface OccluderHull {
    * call the owner's refreshHull() instead.
    */
   setShadowBridges(on: boolean): void;
+  /** Diagnostic: the shadow twin's last built instances (world space). */
+  shadowInstances(): readonly HullInstance[];
   readonly instanceCount: number;
   /** DIAGNOSTIC (2026-09-04): the uDebugWorld uniform node — set .value 1
    *  to make the hull write its world position instead of the camera
@@ -500,6 +502,8 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
   let shadowSpan = true;
   let shadowInflate = SHADOW_HULL_INFLATE;
   let shadowBridges = true;
+  /** The shadow twin's last built instances (diagnostics: actorGround). */
+  let lastShadow: HullInstance[] = [];
 
   function fillInstances(target: THREE.InstancedMesh, inst: HullInstance[]): number {
     // The mesh's OWN capacity, not maxInstances — the shadow twin is allocated
@@ -542,7 +546,8 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
     // reprojected, so the shadow map must render that same pose rather than
     // lead it by one sub-frame (2026-09-09 shadow-continuity fix).
     if (opts.shadow !== false) {
-      fillInstances(shadowMesh, buildHullInstances(bodies, shadowInflate, [], 0, shadowSpan, shadowBridges));
+      lastShadow = buildHullInstances(bodies, shadowInflate, [], 0, shadowSpan, shadowBridges);
+      fillInstances(shadowMesh, lastShadow);
     }
   }
 
@@ -572,6 +577,7 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
     setShadowBridges(on: boolean) {
       shadowBridges = on;
     },
+    shadowInstances: () => lastShadow,
     get instanceCount() { return count; },
     dispose() {
       geo.dispose();

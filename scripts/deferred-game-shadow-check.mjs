@@ -176,7 +176,7 @@ const enterSimPhase = async (label) => {
 };
 const settleAndLock = async () => {
   await evaluate(`__sdfGame.freeze(true); __sdfGame.step(${SETTLE_STEPS});`);
-  await evaluate('__sdfGame.setRenderLock(true); __sdfGame.setLightClockFrozen(true); __sdfGame.step(2);');
+  await evaluate('__sdfGame.setRenderLock(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.step(2);');
   await sleep(300);
 };
 const aimYawAt = (px, pz, tx, tz) => Math.atan2(tx - px, -(tz - pz));

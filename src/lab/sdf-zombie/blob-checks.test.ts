@@ -348,7 +348,9 @@ describe('clusterCore and the `core` mark', () => {
       (members[thin]!.a[1] + members[thin]!.b[1]) / 2,
       (members[thin]!.a[2] + members[thin]!.b[2]) / 2,
     ];
-    expect(clusterCore({ ...b, prims }, leg)).toEqual(want);
+    // Within 1e-12, not bit-exact: clusterCore takes lerp(a, b, 0.5), which differs from (a + b) / 2
+    // in the last bit for some endpoints (the zombie's foot sole since its feet landed, 2026-09-29).
+    clusterCore({ ...b, prims }, leg)!.forEach((v, i) => expect(v).toBeCloseTo(want[i]!, 12));
   });
 
   it('falls back to the fattest prim when nothing is marked', () => {

@@ -11,8 +11,10 @@ import {
   DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type PortalDef, type GateDef,
   type EdgeDef, type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
   type PathDef, type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
-  type WallSide, type WindowDef,
+  type WallSide, type WindowDef, type CueDef,
 } from './level-def';
+import { LAMP_MOODS, type LampMood } from './lamp-moods';
+import { BEACON } from './beacon';
 import {
   EDGE_STYLES, GROUND_NAMES, SKYLINE_NAMES, SKY_NAMES,
   type EdgeStyle, type GroundName, type SkyName, type SkylineName,
@@ -27,7 +29,7 @@ const MAX_STAIR_RISE = 3;
 const KEYS: Record<string, readonly string[]> = {
   top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
     'stairs', 'furniture', 'solids', 'gates', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
-    'pickups', 'bells', 'portals', 'art'],
+    'pickups', 'bells', 'portals', 'art', 'cues'],
   palette: ['wall', 'floor', 'ceil', 'tunnel', 'solid'],
   room: ['id', 'name', 'min', 'max', 'floor', 'height', 'sky', 'ground', 'paths', 'edge', 'void', 'shell', 'states'],
   path: ['ground', 'min', 'max'],
@@ -38,7 +40,8 @@ const KEYS: Record<string, readonly string[]> = {
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
-  light: ['pos', 'color', 'power', 'states'],
+  light: ['pos', 'color', 'power', 'mood', 'fixture', 'spin', 'shadow', 'gain', 'tint', 'states'],
+  cue: ['on', 'emit'],
   start: ['pos', 'yaw'],
   spawn: ['id', 'kind', 'pos', 'yaw', 'states'],
   grave: ['id', 'wave', 'pos', 'yaw', 'states'],
@@ -330,9 +333,55 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     const pos = vec(o.pos, 3, `lights[${i}].pos`) as unknown as Vec3;
     const color = vec(o.color, 3, `lights[${i}].color`) as unknown as Vec3;
     const power = num(o.power, `lights[${i}].power`, 9);
+    let mood: LampMood | undefined;
+    if (o.mood !== undefined) {
+      mood = LAMP_MOODS.find(m => m === o.mood);
+      if (!mood) errors.push(`lights[${i}].mood: must be one of ${LAMP_MOODS.join(', ')}`);
+    }
+    let fixture: 'bulb' | 'tube' | 'beacon' | undefined;
+    if (o.fixture !== undefined) {
+      if (o.fixture === 'bulb' || o.fixture === 'tube' || o.fixture === 'beacon') fixture = o.fixture;
+      else errors.push(`lights[${i}].fixture: must be bulb, tube or beacon`);
+    }
+    let spin: number | undefined;
+    if (o.spin !== undefined) {
+      if (typeof o.spin === 'number' && Number.isFinite(o.spin) && Math.abs(o.spin) <= 5) spin = o.spin;
+      else errors.push(`lights[${i}].spin: must be a number of rev/s within [-5, 5]`);
+      if (fixture !== 'beacon') errors.push(`lights[${i}].spin: only a beacon fixture turns`);
+    }
+    let shadow: boolean | undefined;
+    if (o.shadow !== undefined) {
+      if (typeof o.shadow === 'boolean') shadow = o.shadow;
+      else errors.push(`lights[${i}].shadow: must be true or false`);
+      if (fixture !== 'tube') errors.push(`lights[${i}].shadow: only a tube fixture takes it`);
+    }
+    // A beacon always turns: no spin means the default (BEACON.spin rev/s).
+    if (fixture === 'beacon' && o.spin === undefined) spin = BEACON.spin;
+    let gain: number | undefined;
+    if (o.gain !== undefined) {
+      gain = num(o.gain, `lights[${i}].gain`, 1);
+      if (gain < 0) errors.push(`lights[${i}].gain: must be >= 0`);
+    }
+    let tint: Vec3 | undefined;
+    if (o.tint !== undefined) {
+      tint = vec(o.tint, 3, `lights[${i}].tint`) as unknown as Vec3;
+      if (tint.some(c => c < 0)) errors.push(`lights[${i}].tint: every component must be >= 0`);
+    }
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`lights[${i}]: outside every room`);
-    else if (keep) room.accents.push({ pos, color, power });
+    else if (keep) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}),
+      ...(spin !== undefined ? { spin } : {}), ...(shadow === false ? { shadow } : {}), ...(gain !== undefined ? { gain } : {}), ...(tint ? { tint } : {}) });
+  });
+
+  // --- cues (dynamic light §3) --------------------------------------------------
+  const cues: CueDef[] = [];
+  list(j.cues, 'cues').forEach((o, i) => {
+    keys(o, 'cue', `cues[${i}]`);
+    const on = typeof o.on === 'string' && o.on ? o.on : null;
+    if (!on) errors.push(`cues[${i}].on: must be an event name`);
+    const emit = Array.isArray(o.emit) && o.emit.length > 0 && o.emit.every(e => typeof e === 'string' && e) ? o.emit as string[] : null;
+    if (!emit) errors.push(`cues[${i}].emit: must be a non-empty list of event names`);
+    if (on && emit) cues.push({ on, emit: [...emit] });
   });
 
   // --- markers -----------------------------------------------------------------
@@ -348,8 +397,8 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     keys(o, 'spawn', `spawn ${sid}`);
     const keep = present(o, `spawn ${sid}`);
     claim(sid);
-    const kind = o.kind === 'soldier' || o.kind === 'zombie' || o.kind === 'cultist' ? o.kind : null;
-    if (!kind) errors.push(`spawn ${sid}: kind must be zombie, soldier or cultist`);
+    const kind = o.kind === 'soldier' || o.kind === 'zombie' || o.kind === 'cultist' || o.kind === 'juggernaut' || o.kind === 'warbull' ? o.kind : null;
+    if (!kind) errors.push(`spawn ${sid}: kind must be zombie, soldier, cultist, juggernaut or warbull`);
     const pos = vec(o.pos, 3, `spawn ${sid}.pos`) as unknown as Vec3;
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`spawn ${sid}: must be inside a room (not a corridor)`);
@@ -428,7 +477,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
 
   return {
     id, name, ammo, palette, loadout, completeOn, state, states, requires, skyline,
-    rooms, tunnels, stairs, furniture, solids, gates, triggers, windows,
+    rooms, tunnels, stairs, furniture, solids, gates, triggers, cues, windows,
     playerStart, spawns, graves, pickups, bells, portals, art,
   };
 }

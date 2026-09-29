@@ -32,6 +32,12 @@ describe('crowd instance state', () => {
     expect(INSTANCE_STATE).toContain(`fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32)`);
     expect(INSTANCE_STATE).toContain(`${REC_VEC4S}`);
     expect(INSTANCE_STATE).toContain(`+ ${REC_ANCHOR_BAND}]`);
+    // The WGSL record stride IS REC_VEC4S (17 since REC_LIGHTS): a hard-coded
+    // stride would misread every body after slot 0.
+    expect(INSTANCE_STATE).toContain(`let base = slot * ${REC_VEC4S};`);
+    expect(INSTANCE_STATE).toContain('let base = slot * 17;');
+    expect(globals).toContain('var<private> gInstLights: vec4<f32>');
+    expect(INSTANCE_STATE).toContain('gInstLights = (*inst)[base + 16];');
   });
   it('removes every per-instance parameter from the signature and adds inst/instCfg/instCentre/instHalf last', () => {
     for (const p of ['counts:', 'counts2:', 'woundBound:', 'bodyCentre:', 'bodyHalf:', 'bodyAnchor:',
@@ -41,7 +47,7 @@ describe('crowd instance state', () => {
     // Strip comments first: the crowd proxy-box comment sits between instCfg
     // and instCentre, and the wgslFn parser sees it as ordinary text.
     const sig = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
-    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>, burnCfg: vec4<f32>, burnNoiseScale: f32, burnRiseSpeed: f32, burnCharPatch: f32, burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32, burnSkeletonDepth: f32\s*\)/);
+    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>, burnCfg: vec4<f32>, burnNoiseScale: f32, burnRiseSpeed: f32, burnCharPatch: f32, burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32, burnSkeletonDepth: f32, lightListCfg: vec4<f32>, lightList: ptr<storage, array<vec4<f32>>, read>\s*\)/);
   });
   it('bands the damage folds', () => {
     expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');

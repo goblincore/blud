@@ -11,7 +11,7 @@ import { ZOMBIE } from '../body';
 import { sdBody, sdPrimitive } from '../validate';
 import {
   GRAPESHOT, SLUG, applyRigidYaw, expired, fitRestToPose, mulberry32,
-  spawnPellets, spawnSlug, spreadDirections, stepProjectiles, traceProjectile,
+  spawnPellets, spawnRound, CHAINGUN_ROUND, spawnSlug, spreadDirections, stepProjectiles, traceProjectile,
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import type { Vec3 } from '../types';
@@ -341,5 +341,22 @@ describe('fitRestToPose / applyRigidYaw', () => {
     const t = fitRestToPose([[1, 1, 1]], [[2, 1, 4]]);
     const back = applyRigidYaw(t, [1, 1, 1]);
     expect(back).toEqual([2, 1, 4]);
+  });
+});
+
+describe('spawnRound (the chaingun)', () => {
+  it('is ONE pellet-kind round inside its tight cone, at pellet speed', () => {
+    for (let seed = 1; seed < 50; seed++) {
+      const r = spawnRound([0, 1, 0], FWD, seed);
+      const v = Math.hypot(...r.vel);
+      expect(v).toBeCloseTo(CHAINGUN_ROUND.speed, 6);
+      expect(Math.acos(-r.vel[2] / v)).toBeLessThanOrEqual(CHAINGUN_ROUND.spreadRad + 1e-9);
+      expect(r.kind).toBe('pellet');
+      expect(r.radius).toBeLessThan(GRAPESHOT.radius);
+    }
+  });
+  it('is deterministic per seed and differs across seeds', () => {
+    expect(spawnRound([0, 0, 0], FWD, 7).vel).toEqual(spawnRound([0, 0, 0], FWD, 7).vel);
+    expect(spawnRound([0, 0, 0], FWD, 7).vel).not.toEqual(spawnRound([0, 0, 0], FWD, 8).vel);
   });
 });

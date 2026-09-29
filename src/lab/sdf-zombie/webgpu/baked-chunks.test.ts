@@ -7,7 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import {
-  createBakedChunkMaterial, CHUNK_SHADE_WGSL, CHUNK_SURFACE_WGSL,
+  createBakedChunkMaterial, CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL, CHUNK_SURFACE_WGSL,
+  chunkObjectLight, chunkObjectLightNodes,
 } from './baked-chunks';
 import { encodeSurfaceClass, SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
 
@@ -63,6 +64,110 @@ describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
     expect(createBakedChunkMaterial({ goreDetail: true }).uniforms.goreCfg.value.x)
       .toBe(0);   // the FLAG still needs the page to set the amp
 
+  });
+});
+
+describe('chunkShade — shared light list (plan 1, Task 12)', () => {
+  it('takes picks, the list and the switch after response, before any face args', () => {
+    for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {
+      expect(src).toContain('response: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, listGain: f32');
+    }
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('listGain: f32, faceTex: texture_2d<f32>');
+  });
+  it('the list branch swaps only the key: bodyLights, ambient/AO kept, no rim', () => {
+    for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {
+      expect(src).toContain('if (listOn > 0.5) {');
+      expect(src).toContain('let bl = bodyLights(p, nrm, V, picks, lights, false, false);');
+      // every list term rides the chunk trim (the record's cfg.y, CHUNK_LIST_GAIN)
+      expect(src).toContain('let specL = bl.spec * listGain;');
+      expect(src).toContain('out = a.rgb * (ambient + bl.diffuse * listGain) * ao');
+      expect(src).toContain('+ select(wetTint * specL * look.z, specL * response.w * response.y, response.x > 0.5);');
+      // the shoulder runs whenever the list is on, as the march's (compose.wgsl.ts)
+      expect(src).toContain('if ((spotCfg.x > 0.0 || listOn > 0.5) && spotCfg2.y > 0.0) {');
+      expect(src.indexOf('if (listOn > 0.5) {')).toBeLessThan(src.indexOf('if ((spotCfg.x > 0.0 || listOn > 0.5) && spotCfg2.y > 0.0) {'));
+    }
+    expect(CHUNK_SHADE_WGSL).not.toContain('flatKey');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('var flatKey = 0.30 * lightCfg.x * keyColor;');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('flatKey = 0.30 * bl.domC * listGain;');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('out = mix(out, a.rgb * (ambient + flatKey), faceFlat * 0.85);');
+  });
+  it('the old key is the ELSE of the list branch: no dead ALU per gib pixel in list mode', () => {
+    for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {
+      const listAt = src.indexOf('if (listOn > 0.5) {');
+      const elseAt = src.indexOf('} else {', listAt);
+      expect(elseAt).toBeGreaterThan(listAt);
+      // key direction, beam cone, lambert, the pow shine and the old spec all live in the else
+      for (const k of ['var L = normalize(lightDir);', 'if (spotCfg.x > 0.0) {', 'let ndl = max(dot(nrm, L), 0.0);',
+        'let shine = pow(max(dot(nrm, H), 0.0), max(gloss2, 2.0));',
+        'let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;',
+        'let meshSpec = keyC * wetTint * (shine * look.z * keyI);',
+        'let fleshSpec = keyC * (shine * response.w) * response.y;']) {
+        expect(src.indexOf(k)).toBeGreaterThan(elseAt);
+      }
+      // the wet tint is shared, above the branch
+      expect(src.indexOf('let wetTint = mix(vec3<f32>(1.0), deepColor, look.y * wm);')).toBeLessThan(listAt);
+    }
+  });
+  it('NO FRESNEL / EDGE RIM ON GIBS (owner, 2026-09-27), on both paths', () => {
+    for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {
+      expect(src).not.toMatch(/\bfres\b/);
+      expect(src).not.toContain('fresnelGain');
+      expect(src).not.toContain('bl.rim');
+      expect(src).not.toContain('pow(1.0 - max(dot(nrm, V), 0.0)');
+    }
+  });
+  it('material switch defaults off (x = 0)', () => {
+    const m = createBakedChunkMaterial();
+    expect(m.uniforms.lightListCfg.value.toArray()).toEqual([0, 0, 0, 0]);
+    m.dispose();
+  });
+  it('builds with a list node or without one (the zero fallback is bound)', () => {
+    expect(createBakedChunkMaterial({ lightList: undefined }).material).toBeTruthy();
+    expect(createBakedChunkMaterial({ fleshResponse: true, bakedAo: true }).material).toBeTruthy();
+  });
+});
+
+describe('baked gibs light PER OBJECT (Task 12 review)', () => {
+  type Bound<T> = { value: T; update: (frame: { object: THREE.Object3D }) => void };
+  const nodes = (m: ReturnType<typeof createBakedChunkMaterial>) =>
+    chunkObjectLightNodes(m.uniforms) as unknown as { picks: Bound<THREE.Vector4>; cfg: Bound<THREE.Vector4>; ambient: Bound<THREE.Color> };
+  it('two meshes on ONE material bind their own picks, switch and ambient per draw', () => {
+    const m = createBakedChunkMaterial();
+    const n = nodes(m);
+    const a = new THREE.Mesh(new THREE.BufferGeometry(), m.material);
+    const b = new THREE.Mesh(new THREE.BufferGeometry(), m.material);
+    const ra = chunkObjectLight(a), rb = chunkObjectLight(b);
+    expect(chunkObjectLight(a)).toBe(ra); // created once, reused
+    ra.picks.set(2.5, -1, -1, -1); ra.cfg.set(1, 0.4, 1, 0); ra.ambient.setRGB(0.1, 0.2, 0.3);
+    rb.picks.set(7.25, 1.5, -1, -1); rb.cfg.set(1, 0.4, 0, 0);
+    m.uniforms.lightListCfg.value.x = 1;
+    m.uniforms.ambient.value.setRGB(0.5, 0.5, 0.5);
+    for (const k of ['picks', 'cfg', 'ambient'] as const) n[k].update({ object: a });
+    expect(n.picks.value.toArray()).toEqual([2.5, -1, -1, -1]);
+    expect(n.cfg.value.toArray()).toEqual([1, 0.4, 1, 0]);
+    expect(n.ambient.value.toArray()).toEqual([0.1, 0.2, 0.3]);
+    for (const k of ['picks', 'cfg', 'ambient'] as const) n[k].update({ object: b });
+    expect(n.picks.value.toArray()).toEqual([7.25, 1.5, -1, -1]);
+    // cfg.z = 0: the material's ambient
+    expect(n.ambient.value.toArray()).toEqual([0.5, 0.5, 0.5]);
+    m.dispose();
+  });
+  it('the old path wherever the material switch is off or the mesh has no live record', () => {
+    const m = createBakedChunkMaterial();
+    const n = nodes(m);
+    const a = new THREE.Mesh(new THREE.BufferGeometry(), m.material);
+    const bare = new THREE.Mesh(new THREE.BufferGeometry(), m.material);
+    chunkObjectLight(a).picks.set(3.5, -1, -1, -1);
+    chunkObjectLight(a).cfg.set(1, 0.4, 1, 0);
+    m.uniforms.lightListCfg.value.x = 0; // `?lightlist=0` (a stale record is ignored)
+    n.picks.update({ object: a }); n.cfg.update({ object: a });
+    expect(n.picks.value.toArray()).toEqual([-1, -1, -1, -1]);
+    expect(n.cfg.value.x).toBe(0);
+    m.uniforms.lightListCfg.value.x = 1;
+    n.picks.update({ object: bare }); n.cfg.update({ object: bare });
+    expect(n.picks.value.toArray()).toEqual([-1, -1, -1, -1]);
+    expect(n.cfg.value.x).toBe(0);
+    m.dispose();
   });
 });
 

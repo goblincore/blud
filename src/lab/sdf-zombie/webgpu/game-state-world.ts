@@ -20,8 +20,10 @@
 // type-correct placeholder in the factory; the codemod supplies the real value
 // at the binding's original line. Every call still hands out fresh containers.
 
+import type { DynamicLightRuntime } from './game-dynamic-light-leaves';
 import type { LoopRuntime } from './game-loop-leaves';
 import type { TrainRuntime } from './game-train-leaves';
+import type { DiscoRuntime } from './game-disco-leaves';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';
@@ -59,11 +61,18 @@ export interface WorldState {
   /** Gate meshes by gate id, hidden when the gate opens. */
   gateMeshes: Map<string, THREE.Object3D>;
   /** Mesh key: what the level's art file placed, or null (no art / `?art=0`). */
-  art: { file: string; meshes: number; instanced: number; instances: number; objects: THREE.Object3D[] } | null;
+  art: { file: string; meshes: number; instanced: number; instances: number; objects: THREE.Object3D[]; sourceMeshes?: number } | null;
+  /** Mesh key: the level's art scene, loaded at boot and placed with the level
+   *  group; null for the ring or a level without art. */
+  artScene: THREE.Group | null;
   /** Carriage kit: window scenery, sway, camera motion; null without windows/sway art. */
   train: TrainRuntime | null;
   /** The game loop: vitals, inventory, pickups, triggers, events, completion. */
   loop: LoopRuntime | null;
+  /** Dynamic light: lamp moods and scripts, the flashlight's switch, the storm's window lights. */
+  light: DynamicLightRuntime | null;
+  /** The Boiler Room disco ball: mirror tiles and sweeping stars; null without a spinning ball. */
+  disco: DiscoRuntime | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -120,8 +129,11 @@ export function makeWorldState(): WorldState {
     openGates: new Set<string>(),
     gateMeshes: new Map<string, THREE.Object3D>(),
     art: null,
+    artScene: null,
     train: null,
     loop: null,
+    light: null,
+    disco: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -154,8 +166,11 @@ export const WORLD_BINDINGS = {
   openGates: 'world.openGates',
   gateMeshes: 'world.gateMeshes',
   art: 'world.art',
+  artScene: 'world.artScene',
   train: 'world.train',
   loop: 'world.loop',
+  light: 'world.light',
+  disco: 'world.disco',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

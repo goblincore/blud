@@ -11,6 +11,7 @@
 // separately so the owner test cannot drift from the live/sever rule.
 
 import { describe, it, expect } from 'vitest';
+import * as THREE from 'three/webgpu';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -53,76 +54,186 @@ describe('segmentDrawn — the pure owner/live decision', () => {
   });
 });
 
-describe('SegmentMeshRenderer update(…, shown)', () => {
-  it('hides a non-shown owner without pose writes, then re-shows it at the CURRENT pose in one update', () => {
+describe('SegmentMeshRenderer update(…, shown) — instanced draws', () => {
+  const segs = (r: ReturnType<typeof createSegmentMeshRenderer>, owner: unknown) =>
+    r.drawn.filter(d => d.owner === owner && !d.eye);
+  const eyes = (r: ReturnType<typeof createSegmentMeshRenderer>, owner: unknown) =>
+    r.drawn.filter(d => d.owner === owner && d.eye);
+  const quatOf = (m: THREE.Matrix4) => { const q = new THREE.Quaternion(); m.decompose(new THREE.Vector3(), q, new THREE.Vector3()); return q; };
+
+  it('a non-shown owner draws nothing, and re-showing draws it at the CURRENT pose in one update', () => {
     const cache = new SegmentMeshCache();
     const renderer = createSegmentMeshRenderer(cache);
     const ownerA = { id: 1 };
     const ownerB = { id: 2 };
     const entries = [[headSrc], [headSrc]] as const;
 
-    // Both visible: both meshes exist, posed, counted as drawn.
+    bodyYaw = 0;
     applyRig(body, bound, 0);
     renderer.update([...entries], [ownerA, ownerB]);
-    const meshA = renderer.object.children[0]!;
-    const meshB = renderer.object.children[1]!;
-    expect(meshA.visible).toBe(true);
-    expect(meshB.visible).toBe(true);
+    expect(segs(renderer, ownerA)).toHaveLength(1);
+    expect(segs(renderer, ownerB)).toHaveLength(1);
     expect(renderer.stats.hidden).toBe(0);
-    const posB0 = meshB.position.clone();
-    const quatB0 = meshB.quaternion.clone();
+    const q0 = quatOf(segs(renderer, ownerB)[0]!.matrix);
 
-    // Turn the head (a real re-pose — body yaw rotates the head FRAME; its
-    // origin rides the yaw axis, so orientation is the signal here), then
-    // update with only A shown.
     bodyYaw = 0.9;
     applyRig(body, bound, bodyYaw);
     renderer.update([...entries], [ownerA, ownerB], new Set([ownerA]));
-    expect(meshA.visible).toBe(true);
-    expect(meshB.visible).toBe(false);
+    expect(segs(renderer, ownerA)).toHaveLength(1);
+    expect(segs(renderer, ownerB)).toHaveLength(0);
     expect(renderer.stats.hidden).toBe(1);
-    // B received NO pose write: it still sits at the first update's pose.
-    expect(meshB.position.distanceTo(posB0)).toBeLessThan(1e-6);
-    expect(meshB.quaternion.angleTo(quatB0)).toBeLessThan(1e-6);
-    // A keeps following the live pose — visibly rotated away from B's.
-    expect(meshA.quaternion.angleTo(quatB0)).toBeGreaterThan(0.05);
+    expect(quatOf(segs(renderer, ownerA)[0]!.matrix).angleTo(q0)).toBeGreaterThan(0.05);
 
-    // Re-show BOTH: one update restores B's visibility and writes the
-    // CURRENT (yaw-0.9) pose — the same numbers A's mesh just got.
     renderer.update([...entries], [ownerA, ownerB], new Set([ownerA, ownerB]));
-    expect(meshB.visible).toBe(true);
     expect(renderer.stats.hidden).toBe(0);
-    expect(meshB.position.distanceTo(meshA.position)).toBeLessThan(1e-6);
-    expect(meshB.quaternion.angleTo(meshA.quaternion)).toBeLessThan(1e-6);
+    const a = segs(renderer, ownerA)[0]!.matrix, b = segs(renderer, ownerB)[0]!.matrix;
+    expect(quatOf(b).angleTo(quatOf(a))).toBeLessThan(1e-6);
+    expect(new THREE.Vector3().setFromMatrixPosition(b).distanceTo(new THREE.Vector3().setFromMatrixPosition(a))).toBeLessThan(1e-6);
 
+    // Instancing: two actors' heads are ONE draw (plus one for their eyes).
+    expect(renderer.draws).toBe(2);
     renderer.dispose();
     cache.dispose();
   });
 
-  it('the head segment mesh carries the eyes as children, hidden with it', () => {
+  it('the head carries its seated eyes, drawn and hidden with it', () => {
     const cache = new SegmentMeshCache();
     const renderer = createSegmentMeshRenderer(cache);
     const owner = { id: 7 };
     renderer.update([[headSrc]], [owner]);
-    const mesh = renderer.object.children[0]!;
-    expect(mesh.children.length).toBeGreaterThan(0); // the seated eyes
-    for (const eye of mesh.children) expect(eye.visible).toBe(true);
+    expect(eyes(renderer, owner).length).toBeGreaterThan(0);
+    // Each eye sits inside the head: near the head's origin, scaled to its radius.
+    const head = new THREE.Vector3().setFromMatrixPosition(segs(renderer, owner)[0]!.matrix);
+    for (const e of eyes(renderer, owner)) expect(new THREE.Vector3().setFromMatrixPosition(e.matrix).distanceTo(head)).toBeLessThan(0.4);
     renderer.update([[headSrc]], [owner], new Set<unknown>());
-    expect(mesh.visible).toBe(false); // the eyes hide WITH the parent
-    for (const eye of mesh.children) expect(eye.visible).toBe(true);
+    expect(eyes(renderer, owner)).toHaveLength(0);
     renderer.dispose();
     cache.dispose();
   });
 
-  it('omitting shown draws every owner (the pre-cull path byte-for-byte)', () => {
+  it('omitting shown draws every owner (the pre-cull path)', () => {
     const cache = new SegmentMeshCache();
     const renderer = createSegmentMeshRenderer(cache);
     const ownerA = { id: 1 };
     const ownerB = { id: 2 };
     renderer.update([[headSrc], [headSrc]], [ownerA, ownerB]);
-    expect(renderer.object.children[0]!.visible).toBe(true);
-    expect(renderer.object.children[1]!.visible).toBe(true);
+    expect(segs(renderer, ownerA)).toHaveLength(1);
+    expect(segs(renderer, ownerB)).toHaveLength(1);
     expect(renderer.stats.hidden).toBe(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('grows an instanced batch past its first capacity', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owners = Array.from({ length: 40 }, (_, i) => ({ id: i }));
+    renderer.update(owners.map(() => [headSrc]), owners);
+    expect(renderer.drawn.filter(d => !d.eye)).toHaveLength(40);
+    renderer.dispose();
+    cache.dispose();
+  });
+});
+
+describe('segmentNeeded (bone exposure cull)', () => {
+  it('draws everything without an exposed set; else only exposed owners, plus eye-carrying segments', async () => {
+    const { segmentNeeded } = await import('./mesh-renderer');
+    const a = {}, b = {};
+    expect(segmentNeeded(a, false)).toBe(true);
+    expect(segmentNeeded(a, false, new Set([a]))).toBe(true);
+    expect(segmentNeeded(b, false, new Set([a]))).toBe(false);
+    expect(segmentNeeded(b, true, new Set([a]))).toBe(true);
+  });
+});
+
+describe('shared light list (plan 1, Task 11): iLights carries the owner\'s picks', () => {
+  const lightsOf = (o: unknown) => {
+    const bl = (o as { bodyLights?: number[] }).bodyLights;
+    return bl ? new THREE.Vector4(...bl) : undefined;
+  };
+  const iLights = (r: ReturnType<typeof createSegmentMeshRenderer>, eye: boolean) => {
+    const m = r.object.children.find(c => (c as THREE.InstancedMesh).isInstancedMesh && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as THREE.InstancedMesh;
+    const a = m.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute;
+    return { m, a };
+  };
+  it('writes the owner actor\'s pick into iLights for its segment and its eyes', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const actor = { id: 1, bodyLights: [0.9, -1, -1, -1] };
+    renderer.update([[headSrc]], [actor]);
+    renderer.syncLights(lightsOf);
+    const seg = iLights(renderer, false);
+    expect(seg.a.isInstancedBufferAttribute).toBe(true);
+    expect(seg.a.itemSize).toBe(4);
+    expect(Array.from(seg.a.array.slice(0, 4)).map(v => +v.toFixed(4))).toEqual([0.9, -1, -1, -1]);
+    const eye = iLights(renderer, true);
+    expect(eye.m.count).toBeGreaterThan(0);
+    for (let i = 0; i < eye.m.count; i++) expect(eye.a.array[i * 4]).toBeCloseTo(0.9, 6);
+    // no owner picks: the instance keeps the old key (-2)
+    renderer.syncLights(() => undefined);
+    expect(seg.a.array[0]).toBe(-2);
+    expect(renderer.uniforms.lightListCfg.value.x).toBe(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('grows iLights in step with the batch, per-owner values intact', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owners = Array.from({ length: 40 }, (_, i) => ({ id: i, bodyLights: [i + 0.5, -1, -1, -1] }));
+    renderer.update(owners.map(() => [headSrc]), owners);
+    renderer.syncLights(lightsOf);
+    const { m, a } = iLights(renderer, false);
+    expect(m.count).toBe(40);
+    expect(a.count).toBeGreaterThanOrEqual(m.instanceMatrix.count);
+    for (let i = 0; i < 40; i++) expect(a.array[i * 4]).toBeCloseTo(i + 0.5, 5);
+    renderer.dispose();
+    cache.dispose();
+  });
+  const iFill = (r: ReturnType<typeof createSegmentMeshRenderer>, eye: boolean) => {
+    const m = r.object.children.find(c => (c as THREE.InstancedMesh).isInstancedMesh && c.name === (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments')) as THREE.InstancedMesh;
+    return { m, a: m.geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute };
+  };
+  it('Task 11b: writes the owner\'s room fill into iFill, segment and eyes; no picks or no fillOf = 1', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const actor = { id: 1, bodyLights: [0.9, -1, -1, -1], fill: 0.3 };
+    const fillOf = (o: unknown) => (o as { fill: number }).fill;
+    renderer.update([[headSrc]], [actor]);
+    renderer.syncLights(lightsOf, fillOf);
+    const seg = iFill(renderer, false);
+    expect(seg.a.isInstancedBufferAttribute).toBe(true);
+    expect(seg.a.itemSize).toBe(1);
+    expect(seg.a.array[0]).toBeCloseTo(0.3, 6);
+    const eye = iFill(renderer, true);
+    expect(eye.m.count).toBeGreaterThan(0);
+    for (let i = 0; i < eye.m.count; i++) expect(eye.a.array[i]).toBeCloseTo(0.3, 6);
+    expect(renderer.ownerFill(actor).every(f => Math.abs(f - 0.3) < 1e-6)).toBe(true);
+    // M3: only the live instances upload
+    expect(seg.a.updateRanges).toEqual([{ start: 0, count: 1 }]);
+    expect(eye.a.updateRanges).toEqual([{ start: 0, count: eye.m.count }]);
+    // the owner's room lights up again: the next sync follows
+    actor.fill = 1;
+    renderer.syncLights(lightsOf, fillOf);
+    expect(seg.a.array[0]).toBeCloseTo(1, 6);
+    // no fillOf, or no owner picks (the old key): 1
+    actor.fill = 0.25;
+    renderer.syncLights(lightsOf);
+    expect(seg.a.array[0]).toBe(1);
+    renderer.syncLights(() => undefined, fillOf);
+    expect(seg.a.array[0]).toBe(1);
+    renderer.dispose();
+    cache.dispose();
+  });
+  it('Task 11b: grows iFill in step with the batch, per-owner values intact', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owners = Array.from({ length: 40 }, (_, i) => ({ id: i, bodyLights: [i + 0.5, -1, -1, -1], fill: 0.25 + i / 80 }));
+    renderer.update(owners.map(() => [headSrc]), owners);
+    renderer.syncLights(lightsOf, o => (o as { fill: number }).fill);
+    const { m, a } = iFill(renderer, false);
+    expect(m.count).toBe(40);
+    expect(a.count).toBeGreaterThanOrEqual(m.instanceMatrix.count);
+    for (let i = 0; i < 40; i++) expect(a.array[i]).toBeCloseTo(0.25 + i / 80, 5);
     renderer.dispose();
     cache.dispose();
   });

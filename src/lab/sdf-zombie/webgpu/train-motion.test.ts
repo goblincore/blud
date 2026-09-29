@@ -31,3 +31,21 @@ describe('train motion', () => {
     }
   });
 });
+
+describe('Boiler Room machinery', () => {
+  it('the piston lifts slowly and slams fast, within 0..1', async () => {
+    const { pistonStroke, PISTON_PERIOD_S } = await import('./train-motion');
+    for (let t = 0; t < 5; t += 0.013) {
+      const v = pistonStroke(t, 0.3);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+    expect(pistonStroke(0, 0)).toBeCloseTo(1, 6);
+    expect(pistonStroke(PISTON_PERIOD_S * 0.8 - 1e-6, 0)).toBeCloseTo(0, 3);
+    expect(pistonStroke(PISTON_PERIOD_S * 0.99, 0)).toBeGreaterThan(0.9);
+  });
+  it('the disco ball turns steadily', async () => {
+    const { discoSpin } = await import('./train-motion');
+    expect(discoSpin(2) - discoSpin(1)).toBeCloseTo(discoSpin(1) - discoSpin(0), 9);
+  });
+});

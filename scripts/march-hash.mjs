@@ -83,17 +83,119 @@
 // hash the frame it actually staged, never whichever frame happened to land
 // first. No pin was moved and no comparison loosened — the canonical below is
 // the same value the idle machine always produced.
+//
+// LIGHT CLOCK PINNED TO 0, DELIBERATELY (2026-09-27). The gate went
+// non-deterministic ACROSS BOOTS again on unchanged code (first seen at
+// 8ba660aa, reproduced at 6b899f5d):
+// room1 differed every boot, always within-boot deterministic. MARCH_HASH_DUMP
+// named the inputs — the body key and fill uniforms (spotCfg2.zw, lightCfg.y,
+// probeCfg.y) — and the clock behind them: the dynamic-light runtime
+// (game-dynamic-light-leaves.ts, bb1355b4 and follow-ups) keeps its OWN light
+// clock, `rt.time`, advanced by every sim step. Lamp moods (lampLevel), the
+// room light that applyRoomFill scales the fill by, the lamp presentingLamp
+// keys a body with (applyWindowKey), the tube swing and the storm schedule all
+// read it. setLightClockFrozen(true) stops it but leaves it wherever it got to,
+// and it got there during boot and the background-compile wait — a
+// wall-clock-length stretch. Measured, three boots with the freeze alone: the
+// clock stopped at 6.90 / 1.44 / 1.24 s, room 1's lamp level at 0.974 / 1 / 1,
+// three different room1 hashes. The new __sdfGame.setLightTime(t) seam sets
+// the clock; this script freezes it and sets it to 0, so the lamps, fill and
+// key are a function of the level alone. Measured after: three boots, one
+// hash, and the dumps agree on every uniform (only object uuids, frame
+// counters and boot timings differ). The lamps stay ON — t = 0 is an ordinary
+// lit moment, not a blackout — so the march is still hashed under the lighting
+// it ships with, not a stripped-down rig.
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp, sleep } from './lib/sdf-closeup-stage.mjs';
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-21, after
-// merging the cold-compile branch with main):
-//   shipped default (crowd, boxes, tiles on)        = 409be6c9ebb385ef7ae815b65cc6a611f3aa6ef8
-//   crowd quad (?crowddispatch=quad, tiles on)      = ed8c062f37f205c5b90421fd264caab5cec29051
-//   per-body (?crowd=0, tiles off)                  = d8ba49e1e9041af94d9e6054866e6157f362c3db
+// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-29 on
+// claude/night-train-9-27-handoff-d270c3, light clock pinned — see LIGHT CLOCK):
+//   shipped default (crowd, boxes, tiles on)        = d7392d5234c98ddc1babb3b29860abc3a02ced84
+//   crowd quad (?crowddispatch=quad, tiles on)      = 0c71e71267bad979dec5b906c461851ff5043068
+//   per-body (?crowd=0, tiles off)                  = 470ff0b375adfdb48992adecf04e8915e814b3f7
+// Each reproduced on TWO boots (ports 5288/9288, headless) at cc23eb99.
+//
+// 2026-09-29 RE-PIN — THE BROWSER, NOT THE CODE. Google Chrome auto-updated 153.0.8010.54 ->
+// 154.0.8037.58 (2026-09-28 19:41), after the last passing run. Every probe now gives the new
+// default, including commits that passed before: 248b2cee, 77ab162e (docs only since the pass),
+// 51207311 (main's wounds fix). The zombie's feet (cc23eb99) do not move it (the close-up is a
+// soldier). A Chrome update moves every pin at once; confirm the version before bisecting.
+//
+// 2026-09-28 pins (Chrome 153): default 2daf514e… / quad 55ed3dfc… / per-body ee9ae359…
+//
+// 2026-09-28 RE-PIN. The 2026-09-27 pins below were already stale on main
+// (70f6dd37 gave 1737993e…). DEFAULT bisected, one boot per probe, four moves,
+// every one a deliberate, owner-directed look change to the body shading:
+//   c6c76b9f  e2ce8904…   <- 2026-09-27 pin reproduced
+//   83dcd38c  2e64d920…   <- MOVED: flashlight beam shoulder (Reinhard tail)
+//   11eebf83  2e64d920…
+//   d88c7bb7  1737993e…   <- MOVED: flashlight judged at the chest, retuned
+//   70f6dd37  1737993e…   (main tip, session base)
+//   aef1f269  1737993e…   (Warbull merge: no move)
+//   2742f5c8  88da3c9b…   <- MOVED: torch white clip, trim 0.43 -> 0.65
+//   61929e26  88da3c9b…   (Warbull second draft: no move)
+//   8aeb57a7  2daf514e…   <- MOVED: skin detail (032f3878; the room-1 close-up
+//                            is a soldier, k 1 after 8aeb57a7)
+//   e8aae521  2daf514e…   (ring orbs at 0.5: no move; 2 boots)
+// The quad and per-body values were not bisected separately; they moved over
+// the same range and are pinned from the tip.
+//
+// Superseded 2026-09-27 pins (claude/wake-level-pipeline-1afb01):
+//   shipped default e2ce8904… / crowd quad 7386cd6b… / per-body 094176e6…
+// Each reproduced on THREE consecutive boots (ports 5473/9473, headless,
+// LAB_TMP=.lab-tmp) at e7155e40 + the setLightTime seam, and again (3/3 each,
+// all three unchanged) at 181c4a8b after rebasing; room1-wounded for the
+// default was 06eaee1b… on all runs.
+//
+// WAKE-LEVEL RE-PIN (2026-09-27). The main-line pins (fe94cbe8… / e911fd04… /
+// 737713b7…, measured at 6b899f5d) moved on this branch. The DEFAULT value was
+// bisected over 6b899f5d..e7155e40 with the pinned gate (seam injected per
+// probe) and moved TWICE, both intended:
+//   a8b6d599  fe94cbe8…   <- main-line pin reproduced
+//   9b015e75  b5ff3d2e…   <- MOVED: "the march reads the shared list behind
+//                            lightListCfg (off by default; march golden moved
+//                            on purpose)". The list is off by default, so the
+//                            move comes from the march WGSL change itself; its
+//                            size was not measured (scripts/march-raw-diff.mjs
+//                            would tell).
+//   17b7ffe4  b5ff3d2e…
+//   6540bd05  e2ce8904…   <- MOVED: "bodies and crowds lit by their own 4
+//                            lights from the shared list" — the list goes ON
+//                            by default: an owner-directed look change.
+//   e7155e40  e2ce8904…   (tip)
+// The quad and per-body values were not bisected separately; they moved over
+// the same range and are pinned from the tip.
+// BOILER ROOM BEACONS (2026-09-27, 94fc3935..the Task 5 commit): the level
+// changed (two beacon lights in room 5, moved to y 2.95) and NO pin moved —
+// all three held on 3/3 boots each (ports 5473/9473, LAB_TMP=.lab-tmp), the
+// wounded variants too (06eaee1b… / 5773171f… / 0e1331a0…). Expected: the
+// close-up is room 1 at light time 0; the beacons' spots are onlyRooms 5,
+// their list records room-5 only, their omni 0 and list-only.
+//
+// 2026-09-27 RE-PIN — TWO FAULTS, SEPARATED:
+//   1. STALE PIN. Bisected with the UNMODIFIED gate over 3691eb5b..23f6fcc6
+//      (the range before the dynamic light, where the gate was still
+//      deterministic: 23f6fcc6 gave 27595496… on 3/3 boots). Probes:
+//        cae67e59  409be6c9…   <- 2026-09-21 pin reproduced
+//        333540f7  409be6c9…
+//        dc3e8917  27595496…   <- MOVED HERE
+//        8fc40431  27595496…
+//        23f6fcc6  27595496…
+//      dc3e8917 "march: ship distance-based hit accept (near 6, fade 3 m; owner
+//      A/B: invisible)" loosens the march's hit epsilon with distance — a
+//      deliberate march-output change, owner-accepted. Intended, not a regression.
+//   2. NON-DETERMINISM. bb1355b4 (dynamic light runtime) put the lamps, body key
+//      and body fill on a sim-step light clock that the gate froze but never
+//      reset (LIGHT CLOCK, header). From there no single value existed to pin;
+//      the values above are with the clock at 0. Not bisected further: the
+//      lighting commits between bb1355b4 and HEAD (lamp presenting key, tube
+//      cones, cold fill; owner-directed look work) change what a lit body looks
+//      like by design, and without the pin their hashes cannot be compared.
+//
+// 2026-09-21 pins, superseded: 409be6c9… / ed8c062f… / d8ba49e1…
 //
 // TWO MOVERS, both intended, each bisected:
 //   1ba2db30 "fov: narrow the frame to 58/46" (main) moved the 2026-09-18 pins
@@ -154,7 +256,7 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
-const PERBODY_HASH = 'd8ba49e1e9041af94d9e6054866e6157f362c3db';
+const PERBODY_HASH = '470ff0b375adfdb48992adecf04e8915e814b3f7';
 // MARCH_HASH_PERBODY — the per-body opt-out gate (task 8). Boots `?crowd=0`
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
@@ -163,8 +265,8 @@ const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
 // by DEFAULT_HASH whenever neither override is set and no extra query is given.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
-const CROWD_HASH = 'ed8c062f37f205c5b90421fd264caab5cec29051';
-const DEFAULT_HASH = '409be6c9ebb385ef7ae815b65cc6a611f3aa6ef8';
+const CROWD_HASH = '0c71e71267bad979dec5b906c461851ff5043068';
+const DEFAULT_HASH = 'd7392d5234c98ddc1babb3b29860abc3a02ced84';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
@@ -183,7 +285,7 @@ setTimeout(() => { console.error('FAIL: watchdog 14 min'); process.exit(3); }, 1
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
 await bootCloseupPage({
   send, evaluate, fail,
-  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0${EXTRA_QUERY}`,
+  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&layers=${process.env.LIGHT_LAYERS ?? 'all'}${EXTRA_QUERY}`,
 });
 // WAIT FOR THE BACKGROUND COMPILES (2026-09-21). The gib and crowd programs
 // compile AFTER the loader (defer-compile, 2026-09-19); until the crowd job is
@@ -237,7 +339,9 @@ await evaluate('__sdfGame.setFieldStyle("off")');
 // depends on how many frames have been dispatched, same reasoning as
 // scripts/upscale-parity.mjs — blend/fall = 1 makes it a pure per-frame
 // estimate so the march target is a function of the frozen scene alone.
-await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
+// And pin the dynamic-light clock to 0 (see LIGHT CLOCK in the header):
+// freezing alone keeps whatever boot timing advanced it to.
+await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
 await stageCloseUp(evaluate, { room: ROOM }, fail);
 await evaluate('(() => { __sdfGame.setSdfScale(0.5); __sdfGame.step(6); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');
@@ -348,6 +452,7 @@ if (process.env.MARCH_HASH_DUMP) {
       probeDynamic: __sdfGame.probeDynamic,
       probeDynHash: fnv(dyn), probeDynNonZero: dyn.reduce((n, v) => n + (v !== 0 ? 1 : 0), 0),
       levelProbes: __sdfGame.levelProbes,
+      lights: __sdfGame.lights(),
       sdfScale: __sdfGame.sdfScale,
       warmDone: __sdfGame.warmDone(),
       chunkCount: __sdfGame.chunkCount, bodiesOnScreen: __sdfGame.bodiesOnScreen,

@@ -151,6 +151,7 @@ async function stageSequence(plan) {
     performance.now = () => ${plan.lightPhase};
     g.setLightClockFrozen(false);
     g.setLightClockFrozen(true);
+    g.setLightTime(${plan.lightPhase} / 1000);   // the dynamic-light clock follows the same planned phase
     return { actorId: sp.id };
   })()`);
   if (r?.error) {

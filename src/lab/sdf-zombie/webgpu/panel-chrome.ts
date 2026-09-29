@@ -23,9 +23,10 @@
 // stacked on the same spot — that's what makes every title bar stay visible
 // and clickable at once while collapsed. `right` lets each caller keep its
 // own slot; only the offset varies, so it stays a parameter, not a second copy.
-function panelCss(right: number): string {
+function panelCss(right: number, left?: number, top = 8): string {
+  const side = left === undefined ? `right:${right}px;` : `left:${left}px;`;
   return `
-    position:fixed; top:8px; right:${right}px; width:250px; z-index:40;
+    position:fixed; top:${top}px; ${side} width:250px; z-index:40;
     background:rgba(20,16,15,0.93); color:#e8ddd8; border:1px solid #3a2f2d;
     border-radius:3px; padding:9px 10px 10px;
     font:11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -48,10 +49,10 @@ export interface PanelShell {
 
 export function createPanelShell(
   titleLabel: string,
-  opts: { right?: number } = {},
+  opts: { right?: number; left?: number; top?: number } = {},
 ): PanelShell {
   const el = document.createElement('div');
-  el.setAttribute('style', panelCss(opts.right ?? 8));
+  el.setAttribute('style', panelCss(opts.right ?? 8, opts.left, opts.top));
   el.style.display = 'none';
   // Stable hook for capture scripts. textContent now leads with the caret
   // glyph, so matching panels by their visible text is no longer reliable.

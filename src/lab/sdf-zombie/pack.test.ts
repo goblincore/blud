@@ -400,8 +400,9 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4]);
     expect(packedProf('schoolgirl.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,4,4,4,4]);
+    // 27: + ankle-reshaped, heel and sole per side since the zombie's feet (2026-09-29), all flesh.
     expect(packedProf('zombie.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
   });
 });
 
@@ -497,6 +498,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  pinned at 6 + 3 in broodmother-blob.test.ts
   //   cultist     2  two ember eyes deep in the hood (2026-09-23); the
   //                  cultist-cowled variant likewise
+  //   warbull     2  two red eyes under the brow (2026-09-27, the
+  //                  reference plate's); pinned in warbull-blob.test.ts
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
@@ -507,6 +510,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'broodmother.blob': 9,
     'cultist.blob': 2,
     'cultist-cowled.blob': 2,
+    'warbull.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

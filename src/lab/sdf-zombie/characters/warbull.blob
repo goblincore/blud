@@ -1,0 +1,234 @@
+# Warbull — the cyber-minotaur, SECOND DRAFT: a fresh body authored against
+# the owner's reference plate, docs/dev-notes/refs/warbull-reference.png
+# (2026-09-27). The first draft was minotaur.blob scaled up, and the owner
+# rejected it as the same creature as the existing bull brutes ("i wanted
+# something like completely fresh take on it"). Nothing below comes from
+# minotaur.blob or cyberdemon.blob: every number is measured off the plate or
+# says why not.
+#
+# MEASURING THE PLATE. A front view, 696 x 936 px, a dark vignette backdrop.
+# The flesh segments cleanly by warmth (r - b >= 9); the chrome drops out
+# (neutral grey like the backdrop), so kit parts were read by eye. Scale: the
+# horn tips (y 95) to the hoof soles (y 880) is 785 px, authored as 2.55 m,
+# so ONE PIXEL IS 3.25 mm, and height = (880 - y_px) x 0.003248. The
+# centreline is x 331 px. Measurements by row (full widths, metres):
+#   y  138  horns, tip to tip   0.82   (2.41 m: the horns' outer sweep)
+#   y  102  horn tips           x +-0.31, the top of the figure (2.53 m)
+#   y  140  eyes                x +-0.123 (2.40 m)
+#   y  174  muzzle              0.28   (2.29 m)
+#   y  205  chin / trap line    (2.19 m): no visible neck at all
+#   y  222  traps               0.74   (2.14 m)
+#   y  258  deltoids, outer     0.96   (2.02 m)
+#   y  330  armpits             (1.79 m); torso 0.55 below them
+#   y  390  ribs                0.51   (1.59 m)
+#   y  400-465  the RED CABLE BELT round the waist (1.56-1.35 m): kit
+#   y  498  hips                0.63   (1.24 m)
+#   y  516  crotch              (1.18 m)
+#   y  534  thighs              0.32 each, centres x +-0.18
+#   y  630  knees               0.24 each, centres x +-0.25 (0.81 m)
+#   y  680  calves              0.21 each
+#   y  720  ankle / brace top   0.13 each (0.52 m): chrome braces below
+#   y  760-880  chrome pasterns and hooves, centres x +-0.27: kit + hoof
+# The arm he HANGS (plate left, his right) runs deltoid (x -0.48, 2.02) ->
+# elbow (-0.65, 1.62) -> wrist (-0.82, 1.40) -> claw tips (-0.90, 1.23),
+# foreshortened: the forearm reaches forward. His other forearm is inside
+# the chrome cannon (the launcher prop).
+#
+# ONE DEPARTURE FROM THE PLATE: the plate's cannon is on his LEFT arm. Every
+# carry in the game (carry.ts) holds the prop in the RIGHT hand, so the gun
+# arm is mirrored onto his right, and the hanging clawed arm is his left.
+#
+# WHAT READS AS HIM, from the plate, in order:
+#   1. NO NECK. The traps rise to the jaw; the head sits down between them.
+#   2. The HORNS: out sideways from the temples, then up, tips turning in.
+#   3. A heavy V: 0.96 m deltoids over a 0.51 m waist, on LONG legs (the
+#      crotch at 46% of his height) that splay out to wide-set hooves.
+#   4. Long arms with a clawed hand hanging to the hip.
+model warbull
+  # To the horn tips (the plate's own scale choice above); the crown of the
+  # skull is ~2.52, a hand under the 3 m room ceiling.
+  height 2.55
+  # Knees forward of the hip-ankle line (checked).
+  stance humanoid
+
+skeleton
+  # The hip line at 1.21 (plate: hips 1.24, crotch 1.18): pelvis tail.
+  root pelvis at 1.06 len=0.15
+  # The torso stands UPRIGHT in the plate (no hunch): pitch 0-2.
+  bone spine1 parent=pelvis dir=up pitch=1 len=0.22
+  bone chest  parent=spine1 dir=up pitch=1 len=0.30
+  bone spine2 parent=chest  dir=up pitch=0 len=0.12
+  # The head PIVOTS at the neck tail (motion.ts's gaze nod turns the skull
+  # about it). 2.09 is behind the jaw, the height his chin meets his traps
+  # (2.19) less a jaw: a pivot deep in the traps swings the head like a
+  # pendulum (the first draft's lesson, NOTES.md Task 5).
+  bone neck   parent=spine2 dir=up pitch=0 len=0.25
+  bone skull  parent=neck   dir=up pitch=0 len=0.40
+
+  mirror
+    # Shoulder joint at (0.36, 2.00): the deltoid ball (r 0.15) then reaches
+    # the plate's 0.48 outer edge. From spine2's tail (1.84) that is 0.30 out
+    # and 0.16 up.
+    bone clavicle parent=spine2  side=0.06 dir=side tilt=30 len=0.32
+    # Upper arm to the plate's elbow (0.65, 1.62): out 0.29, down 0.38.
+    bone upperarm parent=clavicle dir=down tilt=40 pitch=6 len=0.48
+    # The forearm reaches FORWARD (the plate foreshortens it): pitch 35 puts
+    # the wrist at z ~0.27, 1.32 m up, near the plate's 1.40.
+    bone forearm  parent=upperarm dir=down tilt=28 pitch=30 len=0.40
+    # A long clawed hand (plate: wrist 1.40 to claw tips 1.23).
+    bone hand     parent=forearm  dir=down tilt=15 pitch=15 len=0.17
+    # Hip joint x 0.18 (the plate's thigh centres), knee (0.25, 0.83).
+    bone thigh    parent=pelvis side=0.19 dir=down tilt=9 pitch=8 len=0.38
+    # The shin runs knee -> pastern: the braces and hooves hang off its
+    # lower end, so it is LONG (0.66: knee 0.83 to the hoof top 0.17), and
+    # the plate's hooves sit out at x 0.27.
+    bone shin     parent=thigh  dir=down tilt=2 pitch=-6 len=0.66
+    # Positions the hoof only (house pattern: horizontal, +z forward).
+    bone foot     parent=shin   dir=fwd len=0.20
+  end
+
+body
+  # ============================================================
+  # TORSO — the V. Widths are the plate's, depths are judgement (a front
+  # plate has none): ~0.80 of width at the chest, a bodybuilder's barrel,
+  # less at the waist.
+  # ============================================================
+  # Hip bowl: plate hips 0.63 at 1.24 (the thigh roots add the rest), its
+  # bottom at 1.15 so the crotch opens near the plate's 1.18.
+  blob torso on pelvis  at=1.00 r=0.18 wide=1.55 tall=0.50 deep=1.15 blend=0.020 offset=(0,0.03,0) core
+  # Waist: the belt's 0.50-0.51 (1.35-1.56) plus the cables' ~1 cm. From
+  # 0.45, not 0: a capsule's end cap hangs a radius past its end, and from
+  # the hip line it filled the crotch down to 1.02 (the plate's is 1.18).
+  bar  torso on spine1  from=0.45 to=1.00 r=0.19 wide=1.28 deep=1.10 blend=0.020 offset=(0,0,0.01)
+  # Ribcage: 0.51 at the ribs, 0.55 under the armpits.
+  bar  torso on chest   from=0.00 to=1.00 r=0.21 wide=1.22 deep=1.12 blend=0.020 offset=(0,0,0.02)
+  # Lats: the wide back that makes the V, behind the ribcage (a front plate
+  # cannot see them; they carry the width up to the armpit).
+  bar  torso on chest   from=0.35 to=1.15 r=0.20 wide=1.25 deep=0.85 blend=0.030 offset=(0,0,-0.07)
+  # Pecs: a pair of broad FLAT slabs high on the chest, right under the
+  # traps and deltoids (the plate's; a rounder, lower pair read as a belly).
+  blob torso on chest   at=1.08 offset=(0.12,0,0.15) r=0.15 wide=1.25 tall=0.72 deep=0.52 blend=0.020 both
+  # Abs: a raised slab down the front (the plate's ribbed six-pack; the
+  # renderer cannot carry the grooves, the mass it can).
+  bar  torso on spine1  from=0.20 to=1.30 offset=(0,0,0.12) r=0.10 wide=1.55 deep=0.42 blend=0.035
+  # TRAPS: the no-neck beat. A pair of great mounds from the deltoids up to
+  # the jaw: centre 0.17 out on the neck bone, top ~2.13 (the plate's 2.14).
+  blob torso on neck    at=0.55 offset=(0.16,0,-0.03) r=0.21 wide=1.35 tall=1.20 deep=1.00 blend=0.025 both
+  # Upper back behind them, so the traps read as one yoke from behind.
+  blob torso on spine2  at=0.60 offset=(0,0.02,-0.10) r=0.22 wide=1.35 tall=0.80 deep=0.80 blend=0.030
+
+  # Neck: short and thick, buried in the traps; fuses head to torso.
+  bar  head on neck from=0.00 to=1.05 r=0.10 deep=1.10 blend=0.010
+
+  # ============================================================
+  # HEAD — the face block (below) is the skull; these add the bull.
+  # ============================================================
+  # MUZZLE: the plate's 0.28-wide snout at 2.29, forward of the face.
+  blob head on skull at=0.52 offset=(0,0,0.19) r=0.10 wide=1.30 tall=0.85 deep=0.95 blend=0.012
+  # HORNS: root at the temples (x 0.17, 2.45), out to the plate's widest
+  # sweep (0.41 at 2.41) and up to the tips (0.31, 2.53), which turn back
+  # IN. One bent tapered bar each: the chord runs root -> tip, and `bend`
+  # (the control point's offset from the chord's midpoint) pulls it out and
+  # down, so the horn leaves the skull sideways and hooks up at the end.
+  # Endpoints: skull at t is y 2.09 + 0.40 t; t 0.90 -> 2.45.
+  bar  head on skull from=0.90 to=0.90 offset=(0.16,0,0.02) tip=(0.15,0.06,0.05) bend=(0.22,-0.12,0.01) r=0.065 r2=0.014 blend=0.006 chamfer both color=2a1c14 gloss=0.4
+  # Horn roots: a bony boss where each horn leaves the skull.
+  blob head on skull at=0.88 offset=(0.15,0,0.02) r=0.06 blend=0.008 both color=3a2a20
+  # EYES: glowing red beads under the brow (the plate's eyes are lit red),
+  # spaced x +-0.12 at 2.41 (skull t 0.775). The face there curves back to
+  # z 0.156 (sdBody probe with the beads removed), so a bead centred at
+  # 0.152 (r 0.018) stands 1.4 cm proud: an eye in a socket, lit.
+  blob head on skull at=0.775 offset=(0.12,0,0.143) r=0.018 blend=0.004 both color=ff2010 glow=0.9
+
+  # ============================================================
+  # ARMS — the deltoid ball is the arm's core. Girths off the plate: upper
+  # arm ~0.26, forearm 0.22 at the elbow tapering to 0.14.
+  # ============================================================
+  blob arm on clavicle at=1.00 r=0.15 wide=1.00 blend=0.020 mirror core
+  bar  arm on upperarm from=0.00 to=0.95 r=0.13 r2=0.11 blend=0.012 mirror
+  bar  arm on forearm  from=0.00 to=0.95 r=0.11 r2=0.075 blend=0.010 mirror
+  # The hand: a long palm and three claws (the plate's hanging hand).
+  blob arm on hand at=0.30 r=0.06 wide=1.15 tall=1.40 deep=0.65 blend=0.008 mirror
+  bar  arm on hand from=0.45 to=1.25 offset=(0.035,0,0.015) r=0.022 r2=0.008 blend=0.004 mirror color=2a1c14
+  bar  arm on hand from=0.45 to=1.30 offset=(0,0,0.025) r=0.024 r2=0.008 blend=0.004 mirror color=2a1c14
+  bar  arm on hand from=0.45 to=1.20 offset=(-0.035,0,0.015) r=0.022 r2=0.008 blend=0.004 mirror color=2a1c14
+
+  # ============================================================
+  # LEGS — long, heavy thighs, big calves, a slim lower shin that goes into
+  # the chrome braces (kit), and a hoof.
+  # ============================================================
+  blob leg on thigh at=0.03 r=0.145 blend=0.020 mirror core
+  bar  leg on thigh from=0.05 to=0.92 r=0.148 r2=0.12 blend=0.014 mirror
+  blob leg on shin  at=0.00 r=0.12 blend=0.012 mirror
+  # Calf: the plate's 0.21-0.24 bulge, carried behind the bone.
+  bar  leg on shin  from=0.05 to=0.45 r=0.115 r2=0.10 deep=1.15 blend=0.012 mirror offset=(0,0,-0.02)
+  # Lower shin down to the pastern: 0.13 at the brace top.
+  bar  leg on shin  from=0.45 to=1.00 r=0.075 r2=0.065 blend=0.010 mirror
+  # The hoof (dark keratin): the plate's natural hoof, a cloven block. The
+  # kit shoes one of them in chrome.
+  blob leg on foot at=0.35 offset=(0,-0.08,0) r=0.09 wide=1.20 tall=1.05 deep=1.30 blend=0.010 mirror color=2a1c14 gloss=0.5
+
+# ============================================================
+# FACE — the skull. A broad, deep bull cranium set forward on the pivot
+# (headLead) and up to the eye line (headRise): the cranium centre sits at
+# 2.09 + 0.45 x 0.40 + 0.09 = 2.36, between the brow (2.45) and the muzzle.
+# ============================================================
+face
+  headRadius 0.15
+  headWidth  1.05
+  headHeight 1.18
+  headDepth  1.40
+  jawWidth   0.95
+  jawHeight  0.90
+  jawDrop    0.13
+  jawJut     0.09
+  noseLength 0.04
+  noseWidth  1.20
+  noseDrop   0.02
+  browHeavy  0.03
+  browRise   0.05
+  headBlend  0.008
+  headRise   0.07
+  headLead   0.03
+
+# Face decal: the plate's own head, cropped to a 200 px square (x 230-430,
+# y 60-260), feathered to an oval round the face, resized to 512 (NOTES.md,
+# "Face"): eyes, snout and snarl painted, the mass is the prims. Projection
+# solved in head space of the fattest head prim (the cranium, centre
+# (0, 2.350, 0.039), semi-axes 0.1575 x 0.177 x 0.210) on two features:
+#   the eyes: image uv (0.31 / 0.69, 0.60) onto hs (+-0.762, 0.282), the
+#     beads below at x +-0.12, y 2.40: scaleX 0.19 / 0.762 = 0.2493;
+#   the mouth: image uv.y 0.325 onto y 2.225 (the plate's), hs.y -0.706:
+#     scaleY 0.275 / 0.988 = 0.2783, centreY 0.60 - 0.282 x 0.2783 = 0.5215.
+# Checks that fall out of it: the plate's chin lands at 2.19 and its crown at
+# 2.51, both where the plate has them.
+sheet
+  image       warbull-face.png
+  decal       1
+  projScaleX  0.2493
+  projScaleY  0.2783
+  projCentreX 0.5
+  projCentreY 0.5215
+  eyeGlowAmp  2.2
+  eyeGlowCut  0.55
+  eyeGlowRedOnly 1
+
+# Palette: the plate's hide is a dark chocolate brown (flesh sRGB ~48/36/25
+# under its dim light, p90 59/47/37). Lifted for the game's hard key: the
+# minotaur's measured brown rendered as a featureless dark mass (TASKS, its
+# round 4), so the albedo sits well above the plate's lit value while
+# keeping its hue, and the spec carries the wet muscle read.
+palette
+  baseColor     0.50 0.33 0.23
+  deepColor     0.34 0.08 0.05
+  charColor     0.08 0.05 0.04
+  specIntensity 0.90
+  specRoughness 0.20
+  fresnelBoost  0.70
+  translucency  0.30
+  surfaceNoiseAmp    0.08
+  silhouetteNoiseAmp 0.012
+  wetness       0.70
+  mottleAmp     0.10
+  mottleScale   1.8
+  mottleColor   0.32 0.20 0.13

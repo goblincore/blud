@@ -82,9 +82,9 @@ import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from 
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
-import { makeSoldierMind, makeSwordMind } from './enemy-mind';
+import { makeSoldierMind, makeWarbullMind, makeSwordMind } from './enemy-mind';
 import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
-import { SMG_TUNING, SOLDIER_TUNING } from '../soldier-brain';
+import { GUNNER_TUNING } from '../soldier-brain';
 import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import type { Vec3 } from '../types';
@@ -93,12 +93,16 @@ import zombieBlobSrc from '../characters/zombie.blob?raw';
 import { wanderBounds, type RoomDef } from './game-level';
 import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel } from './active-level';
 import { parseLevelJson } from './level-json';
-import { levelCeilingM, roomSpawnPoints } from './game-level-leaves';
+import { levelCeilingM, roomIdAt as levelRoomIdAt, roomSpawnPoints } from './game-level-leaves';
+import { chunkListGainNow, chunkPickBody } from './chunk-light-pick';
 import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor-leaves';
 import { mountGameMenu } from './game-menu-dom';
 import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
-import { applyTrainCamera, createTrain, createTrainSeams, stepTrain } from './game-train-leaves';
+import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
+import { adoptDiscoFx, createDisco, createDiscoSeams, stepDisco } from './game-disco-leaves';
+import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightListOn, torchLane, writeLightList } from './game-light-list-leaves';
+import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, ownsSlot, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
@@ -149,7 +153,7 @@ import { createComputeTileBinding } from './tile-bin-compute';
 import { sdBody, smax, bodyPrimStride } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
-  GRAPESHOT, SLUG, expired, spawnPellets, spawnSlug,
+  GRAPESHOT, SLUG, expired, spawnPellets, spawnRound, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
 } from './game-weapon';
 import {
@@ -195,11 +199,17 @@ import {
   createGibShutterLayer, readGibShutterSettings,
   type GibShutterLayer, type GibBlurSubject,
 } from './gib-shutter-layer';
+import { GIB_BLUR_LAYER, chunkBoneTubesNeeded } from './gib-motion-blur';
 import { createShutterPanel, shutterPanelHost, type ShutterPanel } from './shutter-panel';
 import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
+import { createLightLayersPanel } from './light-layers-panel';
+import { listLook } from './light-list';
+import { layerOn, onLayerChange } from './light-layers';
+import { CONTRAST_DEFAULT } from './post-contrast.wgsl';
+import { skinDetailFor } from './march/body/blocks/light/skin-detail-proto';
 import {
   createWoundPanel, defaultsFrom, WOUND_KEYS,
   type WoundPanel, type WoundTuningValues,
@@ -301,10 +311,11 @@ import { takePropForThrow } from './game-dynamite-leaves';
 import { bodiesOnScreen, traceSlugHitFrom } from './game-world-leaves';
 import { captureTelemetryScene } from './game-telemetry-leaves';
 import { demoScenarioOf } from './game-demo-leaves';
-import { awaitBakes, registerLitChunkMaterial } from './game-bake-leaves';
+import { awaitBakes, pickChunkObjects, registerLitChunkMaterial, type ChunkPickFrame } from './game-bake-leaves';
 import { playerRoomId } from './game-player-leaves';
 import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDirToRig } from './game-weapon-leaves';
 import { ceilingAt } from './game-world-leaves';
+import { blastPlayerDamage, spawnRocket, stepRockets, ROCKET } from '../rockets';
 import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-leaves';
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-leaves';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-vfx-leaves';
@@ -414,6 +425,11 @@ function isAccumBoot(): boolean {
   const a = new URLSearchParams(location.search).get('accum');
   return a !== null && a !== '0';
 }
+
+// Shared light list Task 12 scratch (the gib light loops in main's frame): reused every frame,
+// never retained.
+const scratchChunkPos: [number, number, number] = [0, 0, 0];
+const scratchChunkFrame: ChunkPickFrame = { list: [], gain: 0, amb: false, fill: 0, kr: 0, kg: 0, kb: 0, br: 0, bg: 0, bb: 0, bodyFactor: 1 };
 
 async function main() {
   // Every main()-scope binding below lives on this container (see
@@ -540,8 +556,6 @@ async function main() {
   // --- ACTIVE LEVEL (Level Format v1 — spec 2026-09-23). ?level=<id> loads
   // public/assets/levels/<id>.level.json (&state=<name> picks a state); no
   // param is the ring testbed, bit-identical to before.
-  // Mesh key: the level's art, parsed here and placed with the level group below.
-  let artScene: THREE.Group | null = null;
   {
     const q = new URLSearchParams(location.search);
     const levelParam = q.get('level');
@@ -552,7 +566,7 @@ async function main() {
       const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
       if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
       ctx.world.level = authoredLevel(def);
-      artScene = await loadLevelArt(levelParam, def.art);
+      ctx.world.artScene = await loadLevelArt(levelParam, def.art);
     } else {
       ctx.world.level = ringLevel();
     }
@@ -721,7 +735,7 @@ async function main() {
   }
   // Mesh key §5: the art joins the group BEFORE the per-room light lists are
   // assigned (below), so it is lit exactly like the walls.
-  if (artScene && ctx.world.level.def?.art) placeLevelArt(ctx, artScene, ctx.world.level.def.art);
+  if (ctx.world.artScene && ctx.world.level.def?.art) placeLevelArt(ctx, ctx.world.artScene, ctx.world.level.def.art);
   scene.add(ctx.world.levelGroup);
   // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
   // (null for the ring). Before the per-room light lists are built, so the moon
@@ -808,20 +822,41 @@ async function main() {
       // Tagged with its room so the level's per-room light lists can drop
       // the OTHER rooms' accents (see levelSceneLights below).
       pl.userData.accentRoom = r.id;
+      // A beacon's omni stays at 0 (its swept spot is the light): list-only, it carries the
+      // lamp's position and colour for the shared list, never a level material's light or a
+      // deferred practical (levelSceneLights and the deferred candidates skip it).
+      if (a.fixture === 'beacon') pl.userData.listOnly = true;
+      // A tube's omni is only its spill (0.2 of the spot): it lights bodies through the shared list and
+      // the level through the probe bounce, never as a level-material light. Every real light in a room
+      // costs its level materials ~1 ms a frame (measured 2026-09-29): list-only spill saves ~3 ms in the
+      // Boiler Room and the A/B frames were indistinguishable. The Boiler Room's second row (`shadow: false`)
+      // also drops its spot from the level materials (makeTube): full second row +10 ms, list-only +2.
+      if (a.fixture === 'tube') pl.userData.listOnly = true;
       ctx.world.accentGroup.add(pl);
-      ctx.lighting.flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
-
       // A visible source. Without it the light has no cause and reads as a bug.
-      const bowl = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.16, 1),
+      // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl. A beacon
+      // has no bowl: the dynamic-light leaf builds its housing (makeBeacon).
+      const tubeGeo = a.fixture === 'tube' ? new THREE.CylinderGeometry(0.035, 0.035, 1.3, 10).rotateX(Math.PI / 2) : null;
+      const bowl = a.fixture === 'beacon' ? null : new THREE.Mesh(
+        tubeGeo ?? new THREE.IcosahedronGeometry(0.16, 1),
         new THREE.MeshStandardMaterial({
           color: new THREE.Color(a.color[0], a.color[1], a.color[2]),
           emissive: new THREE.Color(a.color[0], a.color[1], a.color[2]),
           emissiveIntensity: 2.2,
           roughness: 0.7,
         }));
-      bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
-      ctx.world.accentGroup.add(bowl);
+      if (bowl) {
+        bowl.position.set(a.pos[0], a.pos[1], a.pos[2]);
+        ctx.world.accentGroup.add(bowl);
+      }
+      // The dynamic-light leaf drives each lamp (and its bowl) by its mood and scripts.
+      ctx.lighting.flickerLights.push({
+        light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7,
+        ...(bowl ? { bowl: bowl.material as THREE.MeshStandardMaterial, bowlMesh: bowl } : {}),
+        mood: a.mood ?? 'steady', room: r.id,
+        fixture: a.fixture ?? 'bulb', ...(a.spin !== undefined ? { spin: a.spin } : {}), ...(a.shadow === false ? { shadow: false } : {}),
+        ...(a.gain !== undefined ? { gain: a.gain } : {}), ...(a.tint ? { tint: a.tint } : {}),
+      });
     }
   }
   scene.add(ctx.world.accentGroup);
@@ -915,6 +950,11 @@ async function main() {
     ctx.lighting.flashlight.levelShadow.visible = rig === DUNGEON_RIG;
   }
   applyRig(DUNGEON_RIG);
+  // Dynamic light (lamp moods and scripts, the flashlight's switch, the train's storm window
+  // lights): after the accents and the flashlight exist, before the per-room light lists.
+  createDynamicLight(ctx);
+  // The Boiler Room disco ball (after its room's lamps and beacons, before the light lists: unlit).
+  createDisco(ctx);
 
   (globalThis as Record<string, unknown>).__dungeon = {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
@@ -1212,6 +1252,9 @@ async function main() {
   // Motion vectors step 2: `?accum=1` also allocates the object-motion attachment accumulation v2
   // reprojects with (boot-time: the attachment count is fixed with the march target).
   ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: isAccumBoot() && new URLSearchParams(location.search).get('accummotion') !== '0' });
+  adoptLateFx(ctx);
+  adoptLightFx(ctx);
+  adoptDiscoFx(ctx);
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -1266,8 +1309,9 @@ async function main() {
           { id: 'flashlight', role: 'flashlight', light: ctx.lighting.flashlight.spot },
         ];
         if (ctx.weapon.muzzleLight) candidates.push({ id: 'muzzle', role: 'muzzle', light: ctx.weapon.muzzleLight });
-        ctx.lighting.flickerLights.forEach((f, i) =>
-          candidates.push({ id: `fire-${String(i).padStart(2, '0')}`, role: 'practical', light: f.light }));
+        ctx.lighting.flickerLights.forEach((f, i) => {
+          if (!f.light.userData.listOnly) candidates.push({ id: `fire-${String(i).padStart(2, '0')}`, role: 'practical', light: f.light });
+        });
         return candidates;
       },
       environment: () => deferredEnvironmentFromRig(ctx.lighting.dungeonOn ? DUNGEON_RIG : GALLERY_RIG),
@@ -1304,6 +1348,17 @@ async function main() {
     // meshes, bone tubes) registers at its own creation site below.
     ctx.boot.deferredApi.router.register(ctx.world.levelGroup, 'mesh', 'full');
     ctx.boot.deferredApi.router.register(ctx.world.accentGroup, 'mesh', 'full');
+    // Both are unlit MeshBasicNodeMaterial under levelGroup (created before
+    // deferredApi exists, so they cannot self-register at their own creation
+    // site): the level-wide 'mesh' registration above claims them first, and
+    // materialEligibility rejects an unlit material for the opaque MRT pass,
+    // hiding them in both the mesh and forward passes. Route them forward
+    // explicitly — the nearest (most specific) registration wins. The disco
+    // star mesh is added straight to the scene, outside levelGroup, so it
+    // stays unregistered and the router already leaves unregistered
+    // renderables alone in the forward pass.
+    if (ctx.world.disco) ctx.boot.deferredApi.router.register(ctx.world.disco.ball, 'forward');
+    if (ctx.world.train) for (const w of ctx.world.train.windows) ctx.boot.deferredApi.router.register(w, 'forward');
   }
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
@@ -1568,13 +1623,9 @@ async function main() {
     // (setLightClockFrozen), ft pins to the freeze instant so two renders of
     // a locked scene have identical practical intensity; gameplay never
     // freezes it.
-    {
-      const ft = ctx.lighting.clockFrozen ? ctx.lighting.flickerClockFrozenAt : performance.now() * 0.001;
-      for (const f of ctx.lighting.flickerLights) {
-        const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
-        f.light.intensity = f.base * (1 + w * 0.14);
-      }
-    }
+    // Lamp levels now come from the dynamic-light leaf (stepDynamicLight, on the sim clock:
+    // moods, scripted blackouts, fires); the flashlight's brightness is its switch.
+    ctx.lighting.flashlight.spot.intensity = (ctx.world.light?.flashlight.base ?? ctx.lighting.flashlight.spot.intensity) * flashlightGate(ctx);
     // Bone tubes: feed this frame's posed bones (actors stepped in tick
     // ahead of this draw; chunks repacked world-space there too — posed()
     // and posedBones() are always current). Both modes: in deferred mode the
@@ -1593,9 +1644,17 @@ async function main() {
       }
       ctx.render.boneInstancer.update([
         ...(ctx.render.boneMesh
-          ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; })
+          ? ctx.world.actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive), lights: a.view.uniforms.bodyLights.value, owner: a }; })
           : []),
-        ...(ctx.gibs.boneMesh ? ctx.bake.liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
+        // A chunk on the gib motion-blur layer is drawn only as the smeared
+        // composite; if its field packs its bones, a sharp tube here would show
+        // through the translucent flesh (tick's shutter.select ran just before
+        // this draw, so the layer is this frame's).
+        ...(ctx.gibs.boneMesh
+          ? ctx.bake.liveChunks
+            .filter(c => chunkBoneTubesNeeded(c.view.packsBones(), c.view.object.layers.isEnabled(GIB_BLUR_LAYER)))
+            .map(c => ({ prims: c.view.posedBones() }))
+          : []),
       ]);
     }
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
@@ -1631,9 +1690,9 @@ async function main() {
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
         let e = ctx.render.skeletonSources.get(a);
         if (!e) { e = buildSkeletonSources(a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); }
-        else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); ctx.render.skeletonSources.set(a, e); }
+        else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); (e as { severed?: boolean }).severed = true; ctx.render.skeletonSources.set(a, e); }
         return e.sources;
-      }), ctx.world.actors, ctx.render.visualActors,
+      }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx),
       // Melee head damage: the skull segment squashes and dents with the flesh (game-head-damage affine).
       (owner, segment) => (segment === 'head' && ctx.weapon.headDamage ? ctx.weapon.headDamage.affine(owner as ZombieActor) : null));
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
@@ -1679,7 +1738,11 @@ async function main() {
       ctx.lighting.flashlight.spot.target.getWorldPosition(sAxis).sub(ctx.lighting.flashlight.spot.position).normalize();
       // x intensity gate, y cosInner, z cosOuter, w range — the cone edge
       // comes straight off the light so the two systems cannot drift.
-      const spotOn = ctx.lighting.dungeonOn ? 1 : 0;
+      // The flashlight's switch scales the beam, but never to 0 in the dungeon: spotCfg.x = 0
+      // is also the march's "no dungeon" flag, which falls back to the gallery key and lights
+      // every body brightly from nowhere (the dark-start bug, 2026-09-26). A hair above 0 keeps
+      // the dungeon's key floor with no beam.
+      const spotOn = ctx.lighting.dungeonOn ? Math.max(1e-4, flashlightGate(ctx)) : 0;
       const cosInner = Math.cos(ctx.lighting.flashlight.spot.angle * (1 - ctx.lighting.flashlight.spot.penumbra));
       const cosOuter = Math.cos(ctx.lighting.flashlight.spot.angle);
       // LEVEL SHADOW twin (perf round 2 task 7): exact flashlight pose, then
@@ -1699,7 +1762,10 @@ async function main() {
       // setFaceTexture) and the gate tracks the seam AND the beam: no beam,
       // no directional key, nothing for a level shadow to modulate.
       const map = twin.shadow.map?.depthTexture ?? null;
-      const lvlOn = spotOn > 0 && twin.castShadow && map !== null && ctx.lighting.levelShadowEnabled ? 1 : 0;
+      // Only while the flashlight is actually lit: spotOn keeps a hair above 0 in the dark (the
+      // dungeon flag), and a dark flashlight's stale twin map shadowed the lamps' key on the bodies
+      // by the camera's heading (owner, 2026-09-26: lit obliquely, dark head-on).
+      const lvlOn = flashlightGate(ctx) > 0.01 && twin.castShadow && map !== null && ctx.lighting.levelShadowEnabled ? 1 : 0;
       // MUZZLE FLASH -- the marched bodies. They cannot see the PointLight
       // above, so the flash rides the beam that is already replayed here.
       // Nothing is saved or restored: these uniforms are rewritten from the
@@ -1904,7 +1970,7 @@ async function main() {
       // DIRECT FLASH SOURCES for the bodyFlash slot: every burning muzzle in
       // play (the player's and the soldiers'), unboosted; each body takes the
       // strongest by I/d^2 from its own position.
-      const directFlashes: { pos: Vec3; intensity: number }[] = [];
+      const directFlashes: { pos: Vec3; intensity: number; fire?: boolean }[] = [];
       const playerFlashI = playerFlashLightIntensity();
       if (ctx.weapon.flashLight && playerFlashI > 0) {
         ctx.weapon.flashLight.getWorldPosition(_flashWorld);
@@ -1921,6 +1987,11 @@ async function main() {
       }
       // BURNING BODIES feed the SAME bodyFlash slot (flare test harness).
       ctx.vfx.burning.pushFlashes(directFlashes);
+      // The shared light list: every light that can touch a body, one buffer, once a frame.
+      writeLightList(ctx, directFlashes);
+      // `?lightlist=0`, or no list on this level: the old key path.
+      const listOn = lightListOn() && !!ctx.world.light?.list;
+      const camPos = ctx.boot.handle.camera.position.toArray();
       // The level's rooms take the same dynamic cfg as the bodies: the room
       // the gather serves reads it, every other room reads 0 — and with the
       // level probes off the level never reads the buffer at all.
@@ -1932,7 +2003,8 @@ async function main() {
         const inDyn = dynOn && dynRoom !== null && nearRoom(a, dynRoom);
         a.view.uniforms.probeDynCfg.value.set(inDyn ? ctx.probes.dynGain : 0, inDyn ? ctx.probes.visStrength : 0, 0, 0);
         let best: { pos: Vec3; intensity: number } | null = null, bestScore = 0;
-        if (ctx.lighting.bodyFlashGain > 0 && directFlashes.length > 0) {
+        // List mode zeroes bodyFlash below (the flashes are list lights): skip the scan.
+        if (!listOn && ctx.lighting.bodyFlashGain > 0 && directFlashes.length > 0) {
           const q = a.pose().pos;
           for (const f of directFlashes) {
             const dx = f.pos[0] - q[0], dy = f.pos[1] - (q[1] + 1.0), dz = f.pos[2] - q[2];
@@ -1960,6 +2032,21 @@ async function main() {
           c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
         }
         a.view.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        if (listOn) {
+          // THE SHARED LIST (plan 1, Task 10): the body is lit by its own 4 picks. The old key
+          // steering (applyWindowKey) is skipped, so keyColor stays the spawn fill colour
+          // (COLD_FILL on storm levels) and spotCfg2.w (the old lamp rim) stays 0; the muzzle is a
+          // list light now, so bodyFlash would count it twice. The room fill still follows the
+          // room's live lamps (applyRoomFill): it is the body's only floor where no light picks it.
+          const bp = a.pose().pos;
+          releaseWindowKey(a.view.uniforms);
+          applyBodyLights(ctx, a.view.uniforms, pickBodyFor(bp, a.room, camPos, scratchPickBody));
+          a.view.uniforms.bodyFlash.value.w = 0;
+          applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]);
+          // Task 11b: the same factor for this actor's bones (their ambient is seeded once).
+          actorFill.set(a, roomFillFactor(ctx, bp[0], bp[2]));
+          applySelfShadow(a.view.uniforms);
+        } else { a.view.uniforms.lightListCfg.value.x = 0; const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); applySelfShadow(a.view.uniforms); }
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
@@ -1979,22 +2066,58 @@ async function main() {
         u.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
         u.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
         u.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        if (listOn) {
+          // THE SHARED LIST for marched gibs (plan 1, Task 12): each view owns a record slot, so it
+          // picks at its own position like an actor (room -1 in a tunnel matches every light; a
+          // chunk has no front and tumbles, facing [0, 0]). The list is on whatever it picks, as
+          // for actors: no picks = fill only, never the old global key. Its fill follows its room
+          // like an actor's (applyRoomFill), re-based on the ORIGIN body's unscaled fill (the view
+          // copied an already room-scaled value at spawn). The record is re-written now because
+          // update() wrote it earlier in the frame; the `?lightlist=0` branch is the old path.
+          const cp = c.view.object.position;
+          releaseWindowKey(u);
+          scratchChunkPos[0] = cp.x; scratchChunkPos[1] = cp.y; scratchChunkPos[2] = cp.z;
+          applyBodyLights(ctx, u, chunkPickBody(scratchChunkPos, levelRoomIdAt(ctx, cp.x, cp.z), scratchPickBody));
+          u.bodyFlash.value.w = 0;
+          applyRoomFill(ctx, u as never, cp.x, cp.z, c.template.uniforms);
+          c.view.syncRecord();
+        } else {
+          u.lightListCfg.value.x = 0;
+          applyWindowKey(ctx, u);
+        }
       }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
       ctx.render.boneInstancer.uniforms.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
       ctx.render.boneInstancer.uniforms.spotAxis.value.copy(sAxis);
-      ctx.render.boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+      // The muzzle flash rides the beam here too (owner, 2026-09-26: a flash lit the flesh but left
+      // the mesh skull dark): the same gate, widened cone and warm push as the bodies above.
+      ctx.render.boneInstancer.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, ctx.lighting.flashlight.spot.distance);
       ctx.render.boneInstancer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+      if (fv > 0) { const c = ctx.render.boneInstancer.uniforms.spotColor.value; c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b); }
       ctx.render.boneInstancer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+      { const pp = ctx.player.player.pos; applyWindowKey(ctx, ctx.render.boneInstancer.uniforms, [pp[0], pp[1], pp[2]]); }
       if (ctx.render.segMeshRenderer) {
         // skeleton=mesh: the SAME beam — segment boneShade is the march's
         // formula on the same uniform values, like the tubes.
         ctx.render.segMeshRenderer.uniforms.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
         ctx.render.segMeshRenderer.uniforms.spotAxis.value.copy(sAxis);
-        ctx.render.segMeshRenderer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
+        ctx.render.segMeshRenderer.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, ctx.lighting.flashlight.spot.distance);
         ctx.render.segMeshRenderer.uniforms.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
+        if (fv > 0) { const c = ctx.render.segMeshRenderer.uniforms.spotColor.value; c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b); }
         ctx.render.segMeshRenderer.uniforms.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        { const pp = ctx.player.player.pos; applyWindowKey(ctx, ctx.render.segMeshRenderer.uniforms, [pp[0], pp[1], pp[2]]); }
+      }
+      // THE SHARED LIST for bones (plan 1, Task 11): each tube and each bone-mesh instance takes
+      // its OWNER actor's 4 picks (its view's bodyLights, written in the actor loop above, so the
+      // copy runs here, after it). The old key above is still steered: an instance with no owner
+      // (a chunk's bones, an ejected eye) keeps it in list mode, and `?lightlist=0` (x = 0) is
+      // exactly the old path.
+      ctx.render.boneInstancer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
+      if (listOn) ctx.render.boneInstancer.syncLights(ownerFill);
+      if (ctx.render.segMeshRenderer) {
+        ctx.render.segMeshRenderer.uniforms.lightListCfg.value.x = listOn ? 1 : 0;
+        if (listOn) ctx.render.segMeshRenderer.syncLights(ownerBodyLights, ownerFill);
       }
       // Baked chunks ride the same beam — same values, same formula. EVERY
       // registered instance, not just the shared one: the gore-parts bench and
@@ -2031,6 +2154,19 @@ async function main() {
       // hard to judge on a settled piece without sweeping it — so it sweeps.
       const detailAmp = ctx.bake.detailOverride
         ?? (liveSurf ? Math.min(1, liveSurf.y * CHUNK_DETAIL_GAIN) : null);
+      // The live room fill, once per frame (the same formula for every material).
+      let fill = 0, kr = 0, kg = 0, kb = 0, br = 0, bg = 0, bb = 0;
+      if (liveView) {
+        const w = liveView;
+        const mr = (w.wallNegX.value.r + w.wallPosX.value.r + w.wallNegY.value.r + w.wallPosY.value.r + w.wallNegZ.value.r + w.wallPosZ.value.r) / 6;
+        const mg = (w.wallNegX.value.g + w.wallPosX.value.g + w.wallNegY.value.g + w.wallPosY.value.g + w.wallNegZ.value.g + w.wallPosZ.value.g) / 6;
+        const mb = (w.wallNegX.value.b + w.wallPosX.value.b + w.wallNegY.value.b + w.wallPosY.value.b + w.wallNegZ.value.b + w.wallPosZ.value.b) / 6;
+        fill = w.lightCfg.value.y;
+        const key = w.keyColor.value;
+        kr = key.r; kg = key.g; kb = key.b;
+        const pw = w.bounceCfg.value.x;
+        br = pw * mr * 0.5; bg = pw * mg * 0.5; bb = pw * mb * 0.5;
+      }
       for (const lm of ctx.world.litChunkMaterials) {
         const bu = lm.uniforms;
         bu.spotPos.value.copy(ctx.lighting.flashlight.spot.position);
@@ -2038,6 +2174,12 @@ async function main() {
         bu.spotCfg.value.set(spotOn, cosInner, cosOuter, ctx.lighting.flashlight.spot.distance);
         bu.spotColor.value.copy(ctx.lighting.flashlight.spot.color);
         bu.spotCfg2.value.set(ctx.vfx.beamTuning.gain, ctx.vfx.beamTuning.shoulder, ctx.vfx.beamTuning.keyFloor, 0);
+        // THE SHARED LIST for baked gibs (plan 1, Task 12): the material's switch. On, each drawn
+        // mesh shades by its OWN picks (pickChunkObjects below, per-object bindings); the old key
+        // steering is skipped (lightDir/keyColor are overwritten from body 0 just below either way;
+        // spotCfg2.z/w only feed the old key). Off (`?lightlist=0`): the old path exactly.
+        bu.lightListCfg.value.x = listOn ? 1 : 0;
+        if (listOn) releaseWindowKey(bu); else applyWindowKey(ctx, bu);
         if (detailAmp !== null) {
           bu.fleshDetail.value.set(
             detailAmp, ctx.bake.detailFreq, ctx.bake.detailAlbedo, 0);
@@ -2046,18 +2188,21 @@ async function main() {
           bu.lightDir.value.copy(liveView.lightDir.value);
           bu.keyColor.value.copy(liveView.keyColor.value);
           bu.lightCfg.value.copy(liveView.lightCfg.value);
-          const w = [liveView.wallNegX, liveView.wallPosX, liveView.wallNegY,
-            liveView.wallPosY, liveView.wallNegZ, liveView.wallPosZ];
-          let mr = 0, mg = 0, mb = 0;
-          for (const c of w) { mr += c.value.r / 6; mg += c.value.g / 6; mb += c.value.b / 6; }
-          const fill = liveView.lightCfg.value.y;
-          const key = liveView.keyColor.value;
-          const pw = liveView.bounceCfg.value.x;
-          bu.ambient.value.setRGB(
-            fill * key.r + pw * mr * 0.5,
-            fill * key.g + pw * mg * 0.5,
-            fill * key.b + pw * mb * 0.5);
+          bu.ambient.value.setRGB(fill * kr + br, fill * kg + bg, fill * kb + bb);
         }
+      }
+      if (listOn) {
+        // Every drawn gib mesh picks at its own position (Task 12 review; granularity and cost in
+        // game-bake-leaves.ts forEachDrawnChunkMesh / pickChunkObjects). Its list-mode ambient
+        // re-bases body 0's room fill on the piece's own room (Task 11b's bone rule).
+        const f = scratchChunkFrame;
+        f.list = ctx.world.light?.list?.list ?? f.list;
+        f.gain = chunkListGainNow();
+        f.amb = !!liveView;
+        f.fill = fill; f.kr = kr; f.kg = kg; f.kb = kb; f.br = br; f.bg = bg; f.bb = bb;
+        const body0 = ctx.world.actors[0];
+        f.bodyFactor = (body0 && actorFill.get(body0)) ?? 1;
+        pickChunkObjects(ctx, f);
       }
     }
     // Front-to-back per-body passes (perf round 2 task 5): register this
@@ -2095,6 +2240,20 @@ async function main() {
         const src = ctx.crowd.sourceView.get(t);
         const copyTiming = ctx.telemetry.telemetry.begin();
         if (src) copyUniformValues(ctx, t.uniforms, src.uniforms);
+        // The crowd shares one key per type (character, room): key it for the type's body nearest the
+        // player (the one you are looking at), not whichever body seeded the type (owner, 2026-09-26).
+        // With the shared list on (task 10) every member carries its own picks in its record.
+        if (src) {
+          // List mode: each member's picks ride its own record; the type only switches the list on
+          // (a per-uniform-set value, so set it here too, not only via the copy).
+          if (lightListOn() && ctx.world.light?.list) { releaseWindowKey(t.uniforms as never); t.uniforms.lightListCfg.value.x = 1; t.uniforms.lightListCfg.value.z = torchLane(ctx); t.uniforms.lightListCfg.value.w = 1 - listLook().secondary; }
+          else {
+            t.uniforms.lightListCfg.value.x = 0;
+            const near = nearestCrowdBody(t);
+            if (near) applyWindowKey(ctx, t.uniforms as never, near);
+          }
+          applySelfShadow(t.uniforms);
+        }
         ctx.telemetry.telemetry.end('crowd-uniform-copy', copyTiming);
         // CROWD REQUIRES ITS TILE LIST (task 8). The per-body tile playtest
         // (`gameTiles`) gates only the per-body path; the crowd type owns its
@@ -2392,7 +2551,8 @@ async function main() {
   ctx.render.boneInstancer = createBoneInstancer(1024,
     // DEFERRED MODE: the tubes are a level-only G-buffer producer (tissue —
     // a body's own hull must not swallow their light).
-    ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined);
+    ctx.boot.deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+    ctx.world.light?.list?.node);
   ctx.gibs.boneMesh = new URLSearchParams(location.search).get('gibbonemesh') !== '0';
   ctx.render.boneInstancer.object.layers.set(0);
   // Visible when EITHER path draws through it — gib bones alone are enough.
@@ -2436,7 +2596,16 @@ async function main() {
   // skeleton out of the full-resolution polygonal pass and draw it into the
   // half-height field instead. Every other style just enables that layer in
   // pass 1, so this is a no-op for them.
-  ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER) : null;
+  ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER, ctx.world.light?.list?.node) : null;
+  /** A bone-mesh instance's owner picks (Task 11): the owner actor's bodyLights. Hoisted, so the
+   *  per-frame syncLights call allocates nothing. */
+  // `?.view?.`: an owner-less mesh slot (the renderer's fallback slot object) has no view.
+  const ownerBodyLights = (o: unknown) => (o as ZombieActor | undefined)?.view?.uniforms.bodyLights.value;
+  /** Task 11b: each actor's room fill factor this frame (roomFillFactor at its root, the factor
+   *  applyRoomFill scales its body fill by), written in the actor light loop; bones scale their
+   *  ambient by it in list mode. Unknown owner = 1. */
+  const actorFill = new WeakMap<object, number>();
+  const ownerFill = (o: unknown) => (typeof o === 'object' && o !== null ? actorFill.get(o) : undefined) ?? 1;
   if (ctx.render.segMeshRenderer) scene.add(ctx.render.segMeshRenderer.object);
   ctx.render.skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
   ctx.render.segVolumeCache = ctx.render.skeletonMode === 'volume' ? new SegmentVolumeCache() : null;
@@ -3078,6 +3247,9 @@ async function main() {
       // The dynamic probe layer's storage node (P3/P4). Bound at material
       // creation like the tile binding — a storage node cannot be rebound.
       ...(ctx.probes.gather ? { probeDyn: { node: ctx.probes.gather.probeDynNode } } : {}),
+      // The shared light list's storage node (plan 1 task 9), bound at material
+      // creation like probeDyn. The per-actor loop turns lightListCfg.x on (task 10).
+      ...(ctx.world.light?.list ? { lightList: { node: ctx.world.light.list.node } } : {}),
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU
       // lazy-init submit conflict that rejects the WHOLE producer pass
@@ -3153,6 +3325,9 @@ async function main() {
       LIGHT_PRESETS['practical-hard-key']);
     // Outdoor v1 §7: a body in an open room takes the moon as its key light.
     if ((room as Partial<LevelRoom>).sky) applyMoonKey(ctx, view.uniforms);
+    // Storm levels (Night Train): the body's base key is cold, not the practical's orange — the
+    // crowd draw shares these uniforms, so this is what every crowd body is lit with.
+    applyStormBodyKey(ctx, view.uniforms);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
     // or a rebuild would silently reset the ramp (the silent-reset class
@@ -3228,6 +3403,7 @@ async function main() {
       const t = crowdAttach.type;
       t.attachAt(view, crowdAttach.slot);
       if (!ctx.crowd.sourceView.has(t)) ctx.crowd.sourceView.set(t, view);
+      ctx.crowd.typeOfView.set(view, t);
       // attach/detach is the crowd's visibility gate, so the per-body proxy
       // and its depth-pre twin stay in the scene but hidden. They ARE drawn
       // while the crowd program is not ready: the draw fn re-shows them each
@@ -3290,9 +3466,11 @@ async function main() {
       } : {}),
       // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
       // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
-      // gun. Was `name === 'soldier'`.
+      // gun, the juggernaut's chaingun. Was `name === 'soldier'`.
       ...(characterEntry(name).profile.gunner ? {
-        mind: makeSoldierMind(characterEntry(name).profile.gunner!.weapon === 'smg' ? SMG_TUNING : SOLDIER_TUNING),
+        mind: characterEntry(name).profile.charger
+          ? makeWarbullMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon])
+          : makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
           ctx.world.encounter.shot(zombieId);
@@ -3304,9 +3482,12 @@ async function main() {
           // (2026-09-23 capture). The barrel still climbs on screen; the ROUNDS
           // keep the gun's heading (the brain's aim error, so bursts can miss
           // sideways) but take their vertical from the player's chest. The
-          // soldier's single shotgun round is unchanged.
+          // soldier's single shotgun round is unchanged. The juggernaut's
+          // chaingun gets the same treatment: its heading is the SWEEP (the
+          // slow turn the player outruns), its vertical the player's chest.
+          const weapon = characterEntry(name).profile.gunner?.weapon;
           let shotDir = dir;
-          if (characterEntry(name).profile.gunner?.weapon === 'smg') {
+          if (weapon === 'smg' || weapon === 'chaingun' || weapon === 'rocket') {
             const pp = ctx.player.player.pos;
             const hx = dir[0], hz = dir[2], hl = Math.hypot(hx, hz) || 1;
             const dist = Math.hypot(pp[0] - muz[0], pp[2] - muz[2]);
@@ -3314,7 +3495,15 @@ async function main() {
             const l = Math.hypot(dist, rise) || 1;
             shotDir = [hx / hl * dist / l, rise / l, hz / hl * dist / l];
           }
-          ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
+          // The chaingun fires ONE round per trigger event (game-weapon.ts
+          // spawnRound); the shotgun and the tommy gun keep their volley.
+          // The warbull's launcher fires ONE slow rocket per trigger event
+          // (rockets.ts), aimed like the tommy gun: the arm's heading, the
+          // player's chest for the vertical. It detonates through the
+          // dynamite path (the rocket step in the frame loop below).
+          if (weapon === 'rocket') ctx.weapon.rockets.push(spawnRocket(muz, shotDir, zombieId));
+          else if (weapon === 'chaingun') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
+          else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
       profile: characterEntry(name).profile,
@@ -3330,7 +3519,11 @@ async function main() {
       // SDF game loads no audio at all, so there is none to reuse.
       onMeleeContact: ({ variant }) => {
         ctx.player.hitFeedback = hitFeedback(ctx.player.hitFeedback, variant);
-        damagePlayer(ctx, VITALS.swordHit, 'melee');   // the game loop: a landed blade hurts
+        // A landed blade hurts; the warbull's charge (a charger's 'shove',
+        // charge.ts, one per run) hurts twice as much. Its brawl swings keep
+        // the sword's value.
+        const charged = characterEntry(name).profile.charger && variant === 'shove';
+        damagePlayer(ctx, charged ? VITALS.chargeHit : VITALS.swordHit, 'melee');
       },
       // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
       // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
@@ -3373,18 +3566,20 @@ async function main() {
     return actor;
   }
 
-  /** Height above the player's feet an enemy SMG round is aimed at (m). */
+  /** Height above the player's feet an enemy SMG or chaingun round is aimed at (m). */
   const SMG_TARGET_CHEST_Y = 1.25;
-  const spawnOverride = ((): string | null => {
+  ctx.boot.spawnOverride = ((): string | null => {
     const v = new URLSearchParams(location.search).get('spawn');
     return v && characterNames().includes(v) ? v : null;
   })();
 
   function spawnAll(errs: string[]): void {
-    // ?spawn=<character> (playtest): every non-soldier slot spawns that
-    // registry character instead of the zombie, e.g. ?spawn=cultist.
+    // ?spawn=<character> (playtest): every ZOMBIE slot spawns that registry
+    // character instead, e.g. ?spawn=cultist, ?spawn=warbull. Soldier,
+    // cultist, juggernaut and warbull slots keep their kind (level-def
+    // SpawnKind).
     for (const s of ctx.world.level.spawnList()) {
-      const name = s.kind === 'zombie' ? spawnOverride ?? 'zombie' : s.kind;
+      const name = s.kind === 'zombie' ? ctx.boot.spawnOverride ?? 'zombie' : s.kind;
       ctx.world.actors.push(spawnEnemy(name, s.room, s.pos, errs));
     }
   }
@@ -4587,6 +4782,8 @@ async function main() {
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   ctx.weapon.soldierPellets = [];
   ctx.weapon.soldierPelletViews = [];
+  ctx.weapon.rockets = [];
+  ctx.weapon.rocketViews = [];
   // The gather's tracer provider (declared at the top, next to probeGather) can
   // only be wired once both lists exist — see the boot-race note there.
   ctx.lighting.liveTracers = () => [...ctx.weapon.pellets, ...ctx.weapon.soldierPellets];
@@ -4910,6 +5107,7 @@ async function main() {
     ctx.boot.deferredMode
       ? { output: 'surface', shadowReceiver: 'level-only', maxChunks: MAX_CHUNK_BUDGET }
       : { maxChunks: MAX_CHUNK_BUDGET },
+    ctx.world.light?.list?.node,
   );
   ctx.bake.views = [];
   ctx.bake.spareViews = [];
@@ -4931,7 +5129,7 @@ async function main() {
       ctx.bake.mat = registerLitChunkMaterial(ctx, createBakedChunkMaterial(
         ctx.boot.deferredMode
           ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
-          : { bakedAo: true, fleshResponse: true },
+          : { bakedAo: true, fleshResponse: true, lightList: ctx.world.light?.list?.node },
       ));
       ctx.bake.seed?.(ctx.bake.mat);
     }
@@ -5057,7 +5255,7 @@ async function main() {
     create: (source: unknown): { material: THREE.Material; setFrame: (f: { centre: Vec3; quat: Quat; axes: Vec3 }) => void; dispose: () => void } => {
       const u = source as import('./zombie-gpu').MarchUniforms;
       const built = registerLitChunkMaterial(ctx, createBakedChunkMaterial({
-        goreDetail: true, bakedAo: true, fleshResponse: true, face: u,
+        goreDetail: true, bakedAo: true, fleshResponse: true, face: u, lightList: ctx.world.light?.list?.node,
       }));
       built.uniforms.goreCfg.value.set(
         ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
@@ -5090,7 +5288,7 @@ async function main() {
         // response (this set carries `bakeResponse`/`bakeFresnel`/`bakeAnchor`,
         // so the per-pixel detail rides the asset's own rest-frame anchor).
         ctx.gibs.assetMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({
-          goreDetail: true, bakedAo: true, fleshResponse: true,
+          goreDetail: true, bakedAo: true, fleshResponse: true, lightList: ctx.world.light?.list?.node,
         }));
         ctx.gibs.assetMaterial.uniforms.goreCfg.value.set(
           ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
@@ -6573,6 +6771,15 @@ async function main() {
     get vhsTerms() { return ctx.render.postAa.vhsTerms; },
   });
   ctx.panels.vhsPanel.setVisible(true);
+  // LIGHT LAYERS (light-layers.ts): the body-lighting switches since the melee branch, all off by
+  // default. Most are read where they apply each frame; these three hold state and are pushed here.
+  onLayerChange((key) => {
+    if (key === 'list') setLightListOn(layerOn('list'));
+    if (key === 'sCurve') ctx.render.postAa.setContrast(layerOn('sCurve') ? CONTRAST_DEFAULT : 0);
+    if (key === 'skinDetail') for (const a of ctx.world.actors) a.view.setSkinDetail?.(layerOn('skinDetail') ? skinDetailFor(a.profileName()) : 0);
+  });
+  ctx.panels.lightLayersPanel = createLightLayersPanel();
+  ctx.panels.lightLayersPanel.setVisible(true);
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
@@ -6799,6 +7006,27 @@ async function main() {
   ctx.player.strafeDir = 1;
   ctx.player.lastWalkPos = null;
 
+  /** Owners whose bone can show (segmentNeeded): any carving wound, or a sever re-derive. */
+  /** The position of a crowd type's live body nearest the player, or null. */
+  function nearestCrowdBody(t: unknown): [number, number, number] | null {
+    const pp = ctx.player.player.pos;
+    let best: [number, number, number] | null = null, bd = Infinity;
+    for (const a of ctx.render.visualActors) {
+      if (ctx.crowd.typeOfView.get(a.view) !== t) continue;
+      const p = a.pose().pos, d = (p[0] - pp[0]) ** 2 + (p[2] - pp[2]) ** 2;
+      if (d < bd) { bd = d; best = [p[0], p[1], p[2]]; }
+    }
+    return best;
+  }
+
+  function boneExposedActors(c: typeof ctx): Set<unknown> {
+    const out = new Set<unknown>();
+    for (const a of c.render.visualActors) {
+      if ((c.render.skeletonSources.get(a) as { severed?: boolean } | undefined)?.severed || a.visualWounds().some(w => !w.decal)) out.add(a);
+    }
+    return out;
+  }
+
   function tick(dt: number) {
     if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
     // FLAIL HIT-STOP AND SLOW TAIL: a landed strike nearly freezes the sim for
@@ -6816,6 +7044,9 @@ async function main() {
     stepOutdoor(ctx, dt);
     stepVoid(ctx, dt);
     stepTrain(ctx, dt);
+    stepDynamicLight(ctx, dt);
+    lightSteam(ctx);
+    stepDisco(ctx);
     stepLoop(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
@@ -7049,7 +7280,15 @@ async function main() {
         for (const a of ctx.world.actors) {
           if (!a.character) continue;
           const p = a.pose();
-          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
+          // THE DISARM (the warbull's launcher plate shot off, profile
+          // armor.disarmPlate): the launcher tears off his arm and falls,
+          // flung out to his right. With the prop released, onFire refuses to
+          // shoot, so the ranged mode is over for good.
+          if (a.disarmed() && a.character.prop && !a.character.prop.released) {
+            a.character.releaseProp(rotateYaw([-1.4, 1.6, 0.5], p.yaw), a.id);
+            ctx.telemetry.telemetry.event('disarm', { actor: a.id });
+          }
+          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed(), a.barrelSpin(), a.armorView(), a.statusLights());
         }
       }
       // The actor animation phase: wall-clock in play, the SIM CLOCK while a
@@ -7598,10 +7837,43 @@ async function main() {
           ctx.weapon.soldierPellets.splice(i, 1);
         }
       }
+      // ROCKETS (the warbull, rockets.ts): slow warheads that detonate on the
+      // first thing they touch through the DYNAMITE path (detonateAt), so an
+      // actor caught in one takes a bundle's wounds and gibs, and the player
+      // takes the falloff share. Stepped here, after the actors, like the
+      // pellets above; actors are coarse capsules at their feet.
+      if (ctx.weapon.rockets.length) {
+        const pp = ctx.player.player.pos;
+        const stepped = stepRockets(ctx.weapon.rockets, dt, {
+          hitsWorld: (from, to) => to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2])
+            || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
+          hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius, PLAYER.height),
+          hitsActor: (from, to, owner, armed) => ctx.world.actors.some(a =>
+            (armed || a.id !== owner) && segmentHitsCapsule(from, to, a.pose().pos, 0.45, 2.0)),
+        });
+        ctx.weapon.rockets = stepped.live;
+        for (const d of stepped.detonations) {
+          ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
+          detonateAt(d.at);
+          const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
+          if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
+        }
+      }
       // The eye every tracer billboards around this frame. Declared here (not
       // reused from the block below) because that one is scoped to the hit
       // pass; the streaks need it whether or not anything was hit.
       const tracerEye = eyeOf(ctx.player.player);
+      while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
+        ctx.weapon.rocketViews.push(newTracerView(ctx));
+      }
+      for (let k = 0; k < ctx.weapon.rocketViews.length; k++) {
+        const v = ctx.weapon.rocketViews[k]!;
+        const r = ctx.weapon.rockets[k];
+        // A rocket draws as a fat tracer at its own calibre (placeTracer reads
+        // the radius); the slug kind gives it the heavy streak.
+        if (r) placeTracer(ctx, v, { pos: r.pos, vel: r.vel, ageSec: r.ageSec, radius: ROCKET.radius, kind: 'slug' }, tracerEye);
+        else hideTracer(ctx, v);
+      }
       while (ctx.weapon.soldierPelletViews.length < ctx.weapon.soldierPellets.length) {
         ctx.weapon.soldierPelletViews.push(newTracerView(ctx));
       }
@@ -8366,6 +8638,8 @@ async function main() {
     createVoidSeams(ctx),
     createTrainSeams(ctx),
     createLoopSeams(ctx),
+    createDynamicLightSeams(ctx),
+    createDiscoSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),

@@ -13,6 +13,7 @@ plan of record: change them and rebuild.
 
 Game space (x, y, z), y up, the train runs toward -z; Blender gets (x, -z, y).
 """
+import json
 import math
 import os
 import sys
@@ -20,7 +21,7 @@ import sys
 import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from night_train_layout import CARRIAGES, VESTIBULE, placed  # noqa: E402
+from night_train_layout import BEACON_RED, CARRIAGES, COLD, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, VESTIBULE, lamps, placed  # noqa: E402
 
 ROOT = os.path.abspath("assets-source/levels")
 ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -34,8 +35,8 @@ KIT = os.path.abspath(arg("--kit", os.path.join(ROOT, "kit.blend")))
 OUT = os.path.abspath(arg("--out", os.path.join(ROOT, "night-train.blend")))
 BAY = 1.9
 PI = math.pi
-WARM = (1.0, 0.72, 0.45)
-LIGHT_POWER = 1.5  # art v2: dark carriages; the flashlight carries the view
+# Small dressing casts no shadow (dynamic light spec §3: the window light's shadow pass).
+NO_SHADOW = ("valve", "gauges", "grille", "gear-housing", "streamers", "bunting", "party-hats", "lamp-hanging")
 
 
 def dm(v):
@@ -48,6 +49,8 @@ SC["level_id"] = "night-train"
 SC["level_name"] = "Night Train"
 SC["ammo"] = "finite"
 SC["loadout"] = "melee"
+SC["cues"] = json.dumps(CUES)
+SC["complete_on"] = COMPLETE_ON
 
 COLLS = {}
 
@@ -85,13 +88,21 @@ def gempty(name, pos, yaw=0.0, **props):
     return obj
 
 
-def glight(name, pos, color, power):
+def glight(name, pos, color, power, mood=None, fixture=None, spin=None, shadow=True):
     data = bpy.data.lights.new(name, "POINT")
     data.color = color
     data.energy = power * 10.0
     obj = bpy.data.objects.new(name, data)
     obj.location = (pos[0], -pos[2], pos[1])
     obj["power"] = power
+    if mood:
+        obj["mood"] = mood
+    if fixture:
+        obj["fixture"] = fixture
+    if spin is not None:
+        obj["spin"] = spin
+    if not shadow:
+        obj["shadow"] = False
     coll("lights").objects.link(obj)
 
 
@@ -111,6 +122,8 @@ def put(piece, x, y, z, yaw=0.0, zscale=1.0):
     e.location = (x, -z, y)
     e.rotation_euler = (0.0, 0.0, yaw)
     e.scale = (1.0, zscale, 1.0)
+    if piece.startswith(NO_SHADOW):
+        e["shadow"] = False
     coll("dressing").objects.link(e)
     return e
 
@@ -148,6 +161,23 @@ def prop(label, x0, x1, u0, u1, h, g, rid, n, w2):
         put("trunk", xc, 0.5, zc)
     elif label == "big trunk":
         put("trunk-big", xc, 0, zc)
+    # Layout draft 2 (2026-09-26). Kit conventions: build_train_kit.py (floor pieces centred on
+    # their footprint; wall pieces at the wall plane, west wall yaw 0).
+    elif label == "bench":   # rows face each other in pairs
+        put("third-bench", xc, 0, zc, 0.0 if (n // 2) % 2 == 0 else PI)
+    elif label == "coat rack":
+        put("coat-rack", xc, 0, zc, PI / 2)
+    elif label == "attendant counter":   # its front faces south, toward the player
+        put("counter", xc, 0, zc, -PI / 2)
+    elif label == "piston":
+        put("piston", -w2, 0, zc)
+    elif label == "dj deck":
+        if (x1 - x0) > (u1 - u0):   # across the carriage (Boiler Room 8 m): back to the north, front south
+            put("dj-deck", xc, 0, g(u1), -PI / 2)
+        else:                       # against the west wall, front to the room (+x)
+            put("dj-deck", -w2, 0, zc)
+    elif label == "coal":
+        put("coal-heap", -w2, 0, zc)
     elif label == "table":   # art v2: a booth against its wall, with party hats on the table
         west = xc < 0
         put("booth", -w2 if west else w2, 0, zc, 0.0 if west else PI)
@@ -168,12 +198,14 @@ def carriage(c, zs):
     g = lambda u: zs - u  # noqa: E731  (carriage frame u -> game z)
     room = gbox("rooms", f"room:{rid}:{name}", (-w2, 0, g(L)), (w2, h, zs), wire=True)
     room["shell"] = "art"
-    lamps = max(1, round(L / 8))
-    for i in range(lamps):
-        glight(f"lamp:{rid}:{i}", (0, h - 0.4, g(L * (i + 0.5) / lamps)), WARM, LIGHT_POWER)
+    for i, ((x, y, u), mood, shadow) in enumerate(lamps(c)):
+        glight(f"lamp:{rid}:{i}", (x, y, g(u)), COLD, LIGHT_POWER, mood, "tube", shadow=shadow)
+    for fid, x, u, y, power in c["fires"]:
+        glight(f"fire:{rid}:{fid}", (x, y, g(u)), FIRE, power, "fire")
+    for i, (x, u, y, spin) in enumerate(c.get("beacons", [])):
+        glight(f"beacon:{rid}:{i}", (x, y, g(u)), BEACON_RED, LIGHT_POWER, "dead", "beacon", spin)
     if name == "cab":
         put("cab-shell", 0, 0, zs)
-        glight(f"firebox:{rid}", (0, 1.0, g(L - 1.0)), (1.0, 0.42, 0.12), 4)
     else:
         bays = int(L // BAY)
         pad = (L - bays * BAY) / 2
@@ -185,20 +217,20 @@ def carriage(c, zs):
             put(floor_piece, 0, 0, z0, 0.0, pad / BAY)
         for b in range(bays):
             z0 = g(pad + b * BAY)
-            windowed = name != "guards-van" or b in (1, 4)
+            windowed = name not in ("guards-van", "tender") or (name == "guards-van" and b in (1, 4))
             kind = "window" if windowed else "plain"
             walls(kind, kind, w2, z0, BAY)
             put(ceil_piece, 0, 0, z0)
             put(floor_piece, 0, 0, z0)
             put("bay-pillar", -w2, 0, z0)
             put("bay-pillar", w2, 0, z0, PI)
-            if windowed and name in ("dining-car", "party-carriage", "sleeper"):
+            if windowed and name in ("dining-car", "boiler-room", "sleeper", "third-class"):
                 put("curtain", -w2, 1.9, z0 - 0.4)
                 put("curtain", w2, 1.9, z0 - 1.5, PI)
             if name == "guards-van" and b % 2 == 0:
                 put("luggage-rack", -w2, 0, z0)
                 put("luggage-rack", w2, 0, z0 - BAY, PI)
-            if name == "party-carriage" and b % 2 == 0:
+            if name == "boiler-room" and b % 2 == 0:
                 put("lamp-hanging", 0, h, z0)
             # Industrial dressing: a valve or gauges on alternate bays, both sides; grilles in the van.
             if b % 2 == 0:
@@ -208,9 +240,9 @@ def carriage(c, zs):
             if name == "guards-van" and not windowed:
                 put("grille", -w2, 1.3, z0 - BAY / 2)
             # Party remnants: streamers from the ceiling pipe, bunting across the party carriage.
-            if name == "party-carriage" or (name == "dining-car" and b % 2 == 1):
+            if name == "boiler-room" or (name == "dining-car" and b % 2 == 1):
                 put("streamers", 0, h - 0.33, z0)
-            if name == "party-carriage" and b % 2 == 1:
+            if name == "boiler-room" and b % 2 == 1:
                 put(f"bunting-{dm(w)}", 0, h - 0.45, z0 - BAY / 2)
         put(end_piece, 0, 0, zs)
         put(end_piece, 0, 0, g(L), PI)
@@ -218,11 +250,18 @@ def carriage(c, zs):
             put("gear-housing", -(w2 - 0.6), 1.5, zs - 0.01, PI / 2)
             put("gear-housing", -(w2 - 0.6), 1.5, g(L) + 0.01, -PI / 2)
     # Wall boilers, with their collision (clear of the spawns and the corridor entrance).
-    boilers = {"sleeper": 0.6, "party-carriage": 0.7}
+    boilers = {"sleeper": 0.6, "boiler-room": 0.7}
     if name in boilers:
         u = boilers[name]
         put("boiler", w2, 0, g(u), PI)
         gbox("furniture", f"boiler:{rid}", (w2 - 0.8, 0, g(u + 0.4)), (w2, 2.0, g(u - 0.4)))
+    # Boiler Room: the disco ball over the dance floor, steam vents; shovels in the tender and cab.
+    if name == "boiler-room":
+        put("disco-ball", 0, h - 0.33, g(14.0))   # the centre of the 6 x 10 m dance floor
+        for vx, vu in ((-2.9, 10.8), (-2.9, 13.05), (-2.9, 14.95), (-2.9, 17.0), (2.8, 21.5)):
+            put("steam-vent", vx, 0, g(vu))
+    if name in ("tender", "cab"):
+        put("shovel", w2, 0, g(1.2 if name == "tender" else 3.0), PI)
     for x0, x1, u0, u1 in c["walls"]:
         # Cages (art v2): the van's partitions and the sleeper's corridor wall (compartment fronts).
         cage = name == "guards-van" or (name == "sleeper" and (x1 - x0) < (u1 - u0))
@@ -231,8 +270,11 @@ def carriage(c, zs):
         prop(label, x0, x1, u0, u1, ph, g, rid, n, w2)
     for sid, kind, x, u in c["spawns"]:
         gempty(f"spawn:{kind}:{sid}", (x, 0, g(u)), PI)   # facing south, toward the player
-    for pid, item, x, u in c["pickups"]:
-        gempty(f"pickup:{item}:{pid}", (x, 0.3, g(u)))
+    for pid, item, x, u, *y in c["pickups"]:
+        gempty(f"pickup:{item}:{pid}", (x, y[0] if y else 0.3, g(u)))
+    for tid, event, x0, x1, u0, u1 in c["triggers"]:
+        t = gbox("triggers", f"trigger:{event}:{tid}", (x0, 0, g(u1)), (x1, 2.2, g(u0)), wire=True)
+        t["once"] = True
     for gid, event, x0, x1, u0, u1 in c["gates"]:
         gbox("gates", f"gate:{event}:{gid}", (x0, 0, g(u1)), (x1, 2.2, g(u0)))
 

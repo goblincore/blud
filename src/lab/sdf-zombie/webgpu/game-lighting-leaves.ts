@@ -31,6 +31,8 @@ export function levelSceneLights(ctx: GameContext, roomId: number): THREE.Light[
   ctx.boot.handle.scene.traverse(o => {
     const l = o as THREE.Light;
     if (!l.isLight) return;
+    // A beacon's zero omni (its spot is the light): the shared list reads it, no material does.
+    if (l.userData.listOnly) return;
     const accentRoom = l.userData.accentRoom as number | undefined;
     if (accentRoom !== undefined && !allowed.has(accentRoom)) return;
     // Outdoor v1: the moon lights only the open-sky rooms' surfaces.

@@ -54,7 +54,7 @@ import { add, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from '
 import type { RigPoint } from './rig';
 import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
-import { runWeight, SOLDIER_FLAIL, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
+import { isSoldierFamily, runWeight, SOLDIER_FLAIL, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
 import {
   alignElbow, armPivot, CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint, type CarryName, type CarrySpec, type GunPose,
 } from './carry';
@@ -564,10 +564,10 @@ export function stepMotion(
 
   // --- collapse owns the mode: meter accumulation + trigger matrix ---------
   const collapse = stepCollapse(state.collapse, {
-    wounds: profile.name === 'soldier' ? [] : sig.freshWounds,
-    severed: profile.name === 'soldier' ? [] : sig.severed,
+    wounds: isSoldierFamily(profile) ? [] : sig.freshWounds,
+    severed: isSoldierFamily(profile) ? [] : sig.severed,
     missing: sig.missing,
-    forced: sig.forcedCollapse || (profile.name === 'soldier'
+    forced: sig.forcedCollapse || (isSoldierFamily(profile)
       && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR)),
     ropes: joints.ropes,
   }, dt);
@@ -575,7 +575,7 @@ export function stepMotion(
 
   // SOLDIER-STYLE HIT REACTIONS (the arm open / flail / hunch): the soldier,
   // and any profile that opts in (the cultist, staggerStyle 'soldier').
-  const soldierReact = profile.name === 'soldier' || profile.staggerStyle === 'soldier';
+  const soldierReact = isSoldierFamily(profile) || profile.staggerStyle === 'soldier';
   const soldierHit = soldierReact && sig.shot && !collapsed ? {
     dirWorld: sig.shot.dirWorld,
     level: sig.shot.soldierLevel ?? (sig.shot.type === 'pellet' ? 'small' : 'medium'),
@@ -610,16 +610,16 @@ export function stepMotion(
   // requested speed separate so every footfall does not restart acceleration.
   if (state.footwork && !collapsed)
     wander = { ...wander, speed: state.footwork.driveSpeed };
-  const mobilityTarget = profile.name === 'soldier' ? clamp(sig.mobilityInjury?.severity ?? 0, 0, 1) : 0;
+  const mobilityTarget = isSoldierFamily(profile) ? clamp(sig.mobilityInjury?.severity ?? 0, 0, 1) : 0;
   const mobilityPosture = clamp((state.mobilityPosture ?? 0)
     + clamp(mobilityTarget - (state.mobilityPosture ?? 0), -1.4 * dt, 2.8 * dt), 0, 1);
-  const protectiveCrouchSec = profile.name !== 'soldier' || collapsed || sig.fatal ? 0
+  const protectiveCrouchSec = !isSoldierFamily(profile) || collapsed || sig.fatal ? 0
     : soldierHit ? 2 : Math.max(0, (state.protectiveCrouchSec ?? 0) - dt);
   const protectiveTarget = protectiveCrouchSec > 0 ? 1 : 0;
   const protectiveCrouchPosture = clamp((state.protectiveCrouchPosture ?? 0)
     + clamp(protectiveTarget - (state.protectiveCrouchPosture ?? 0), -1.4 * dt, 2.8 * dt), 0, 1);
   const crouchPosture = Math.max(mobilityPosture, protectiveCrouchPosture);
-  const travelCruise = (profile.name === 'soldier'
+  const travelCruise = (isSoldierFamily(profile)
     ? profile.cruise * (sig.wounded.legL || sig.wounded.legR ? 0.55 : 1) * (1 - .65 * mobilityPosture)
     : profile.cruise) * (sig.cruiseScale ?? 1);
   if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, travelCruise,
@@ -650,10 +650,10 @@ export function stepMotion(
     lean = clamp(yawRate * MOTION_TUNING.turnLean, -MOTION_TUNING.turnLeanMax, MOTION_TUNING.turnLeanMax);
   }
 
-  const aimedSoldier = profile.name === 'soldier' && cfg.faceHeading !== undefined;
+  const aimedSoldier = isSoldierFamily(profile) && cfg.faceHeading !== undefined;
   // Real locomotion shares fixed supports in patrol and combat. Forced-speed
   // authoring previews keep their existing treadmill clip.
-  const groundedSoldier = profile.name === 'soldier' && (aimedSoldier || cfg.forceSpeed === undefined)
+  const groundedSoldier = isSoldierFamily(profile) && (aimedSoldier || cfg.forceSpeed === undefined)
     && !collapsed && !sig.missing.legL && !sig.missing.legR;
   const stanceBlend = clamp((state.stanceBlend ?? 0) + (groundedSoldier ? 1 : -1) * SOLDIER_STANCE.blendRate * dt, 0, 1);
   const stanceDrop = SOLDIER_STANCE.hipDrop * stanceBlend + .16 * crouchPosture;
@@ -707,7 +707,7 @@ export function stepMotion(
   // cultist would have kept firing a tommy gun from a stump). Nor can a MELEE
   // prop's owner hold her sword: the bride drops it (game-actor releases the
   // prop) and the carry, the fist seat and the arm pins all switch off.
-  const canHold = (profile.name !== 'soldier' && !profile.gunner && !profile.melee) || !sig.missing.armR;
+  const canHold = (!isSoldierFamily(profile) && !profile.gunner && !profile.melee) || !sig.missing.armR;
   const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;
@@ -784,7 +784,7 @@ export function stepMotion(
     const gaitLocal = walkPosture === 0 ? rawGaitLocal : scale(rawGaitLocal, 1 - .75 * walkPosture);
     const movingLeg = name === 'kneeL' || name === 'kneeR' || name === 'footL' || name === 'footR' || name === 'toeL' || name === 'toeR';
     let gaitOff = movingLeg && travelYaw !== bodyYaw ? rotateYaw(gaitLocal, travelYaw - bodyYaw) : gaitLocal;
-    if (profile.name === 'soldier' && movingLeg) {
+    if (isSoldierFamily(profile) && movingLeg) {
       const side = name.endsWith('L') ? -1 : 1;
       const authoredSide = Math.sign(base[0] - pivot[0]) || side;
       // A shuffle keeps each foot in its own lane, even when the body aims
@@ -887,7 +887,7 @@ export function stepMotion(
   // Composition: the pivot is about the FINAL shoulder target (sway, stagger
   // and lean already ride it), and the elbow/hand's own stagger offsets
   // re-add after the rotation — reactions still move the arms.
-  if ((armStyle === 'reach' && gait.pose.reach) || (profile.name === 'soldier' && attack)) {
+  if ((armStyle === 'reach' && gait.pose.reach) || (isSoldierFamily(profile) && attack)) {
     const r = gait.pose.reach ?? { pitchL: 0, pitchR: 0, drop: 0, shift: Z };
     const right = rotateYaw([1, 0, 0], bodyYaw); // the body's right axis, world
     const applyArm = (side: 'L' | 'R') => {
@@ -989,6 +989,7 @@ export function stepMotion(
     carryTargetPose = swordSwing ?? {
       right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
+      gunYaw: mix(previous.gunYaw ?? 0, wanted.gunYaw ?? 0),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
       // A hand is on the prop or it is not — snap to the wanted carry's flag.
       ...(wanted.oneHanded ? { oneHanded: wanted.oneHanded } : {}),
@@ -1015,6 +1016,7 @@ export function stepMotion(
     const carry: CarrySpec = {
       right: { ...carryTargetPose.right },
       gunPitch: carryTargetPose.gunPitch,
+      gunYaw: carryTargetPose.gunYaw ?? 0,
       leftPole: [...carryTargetPose.leftPole],
       ...(carryTargetPose.oneHanded ? { oneHanded: carryTargetPose.oneHanded } : {}),
       ...(carryTargetPose.rightPole ? { rightPole: carryTargetPose.rightPole } : {}),
@@ -1057,7 +1059,9 @@ export function stepMotion(
       const fist = reachPast > 0
         ? add(targets[iH]!, scale(normalize(sub(targets[iH]!, targets[iE]!)), reachPast))
         : targets[iH]!;
-      gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale);
+      // gunYaw is OUTWARD-positive (carry.ts); world +y rotation toward +x is
+      // inward for this arm when inward = +1, hence the sign.
+      gun = gunPoseFromArm(targets[iE]!, fist, pitchAxis, carry.gunPitch, profile.prop?.scale, -inward * (carry.gunYaw ?? 0) * armPresence);
       // The FIST CLOSES ON THE GRIP (prop.fistOnGrip): the hand bone lies
       // along the forearm, the line the grip was just seated on, instead of
       // keeping its rest hang. The tip follow pass only TRANSLATES the hand
@@ -1088,7 +1092,9 @@ export function stepMotion(
     // Left arm: FABRIK onto the fore-end, elbow poled outward.
     if (gun && !sig.missing.armL && !carry.oneHanded) {
       const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
-      const grip = gunPoint(gun, GUN_GRIP.foreHand);
+      // The prop's own support-hand locator when it has one (the chaingun's
+      // top carry handle), else the shared fore-end.
+      const grip = gunPoint(gun, profile.prop?.foreHand ?? GUN_GRIP.foreHand);
       let target = grip;
       if (soldierStagger.active && soldierStaggerSupport) {
         const base = add(targets[iS]!, rotateYaw(soldierStaggerSupport, bodyYaw));
@@ -1212,7 +1218,7 @@ export function stepMotion(
   }
   const plantLeg = (st: PlantState, hip: GaitJointName, knee: GaitJointName, foot: GaitJointName, lens: readonly [number, number]) => {
     if (st.phase !== 'stance') return;
-    if (profile.name === 'soldier') {
+    if (isSoldierFamily(profile)) {
       const local = rotateYaw(sub(st.plantPoint, targets[idx.pelvis!]!), -bodyYaw);
       const side = Math.sign(joints.base[idx[foot]!]![0] - pivot[0]);
       if (side * local[0] < .10) st = { ...st, plantPoint: add(targets[idx.pelvis!]!, rotateYaw([side * .10, local[1], local[2]], bodyYaw)) };
@@ -1364,7 +1370,7 @@ export function stepMotion(
     }
   }
 
-  const structural = profile.name === 'soldier' && collapsed;
+  const structural = isSoldierFamily(profile) && collapsed;
   // Soldier foot joints sit 13 cm above the authored boot sole. The normal
   // ankle-height plant plane would suspend a side-lying torso in the air.
   const floorY = joints.groundY - (structural ? .13 : MOTION_TUNING.floorPad);

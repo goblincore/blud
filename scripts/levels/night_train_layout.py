@@ -28,6 +28,17 @@ T = 0.1  # internal partition thickness
 #   spawns:  (id, kind, x, u)
 #   pickups: (id, item, x, u)
 #   gates:   (id, event, x0, x1, u0, u1)
+#   pickups may add a height: (id, item, x, u, y)
+#   moods:    one per ceiling lamp, south to north (lamp-moods.ts; dynamic light spec §3)
+#   fires:    (id, x, u, y, power)       orange fire lights (stoves, boilers, the firebox)
+#   triggers: (id, event, x0, x1, u0, u1) once, floor to 2.2 m
+#   beacons:  (x, u, y, spin)            red rotating emergency beacons, dead until the strobe ends
+#             (spin: rev/s about the vertical, sign = direction; Boiler Room beacons spec). Optional.
+FIRE = (1.0, 0.42, 0.12)
+# When `on` fires, the level also fires `emit` (dynamic light spec §3).
+CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"])]
+# The level ends at the firebox (the Stoker comes later); the CD is a collectible.
+COMPLETE_ON = "level.end"
 CARRIAGES = [
     dict(rid=1, name="guards-van", w=3.6, L=16.0, h=2.8,
          walls=[(-1.8, -1.7, 5.5, 5.5 + T), (-0.3, 1.8, 5.5, 5.5 + T),        # hold | cage, door west
@@ -42,7 +53,17 @@ CARRIAGES = [
                  ("van-coffin-e", "zombie", 1.25, 7.0), ("van-guard", "zombie", 0.6, 13.8)],
          pickups=[("sawn-off", "shotgun", 1.4, 2.9), ("van-shells", "shells", -1.4, 12.8),
                   ("van-health", "health", -1.4, 13.3)],
-         gates=[]),
+         gates=[], moods=["flicker", "stutter"], fires=[("office-stove", 1.1, 15.2, 0.5, 0.8)], triggers=[]),
+    dict(rid=2, name="third-class", w=3.8, L=18.0, h=2.8,
+         walls=[],
+         areas=[("third class: benches both sides of a 1.5 m aisle", -1.9, 1.9, 0, 18.0)],
+         props=[*[("bench", x0, x1, u - 0.225, u + 0.225, 0.95) for u in (1.5, 3.3, 5.1, 6.9, 8.7, 10.5, 12.3, 14.1, 15.9)
+                  for x0, x1 in ((-1.9, -0.75), (0.75, 1.9))]],
+         spawns=[("third-slumped-1", "zombie", -1.3, 2.4), ("third-slumped-2", "zombie", 1.3, 7.8),
+                 ("third-aisle", "zombie", 0.0, 11.4), ("third-slumped-3", "zombie", -1.3, 13.2),
+                 ("third-soldier", "soldier", 0.0, 17.0)],
+         pickups=[("third-shells", "shells", 1.3, 9.6), ("third-health", "health", -1.3, 15.0)],
+         gates=[], moods=["stutter", "flicker"], fires=[], triggers=[]),
     dict(rid=3, name="dining-car", w=4.2, L=18.0, h=3.0,
          walls=[(-2.1, -2.0, 15.4, 15.4 + T), (-0.6, 2.1, 15.4, 15.4 + T)],   # saloon | galley, door west
          areas=[("saloon (tables)", -2.1, 2.1, 0, 9.6), ("buffet lounge", -2.1, 2.1, 9.6, 15.4),
@@ -52,10 +73,18 @@ CARRIAGES = [
                 ("buffet island", -0.6, 0.6, 11.0, 14.2, 1.0),
                 ("stoves", 1.3, 2.1, 15.7, 17.6, 1.0), ("counter", -2.1, -1.6, 16.6, 17.8, 1.0)],
          spawns=[("waiter-1", "zombie", -1.1, 3.4), ("waiter-2", "zombie", 1.1, 7.2),
-                 ("cultist-island", "cultist", 0.0, 15.0), ("cultist-lounge", "cultist", -1.4, 13.0),
+                 ("soldier-island", "soldier", 0.0, 15.0), ("soldier-lounge", "soldier", -1.4, 13.0),
                  ("cook", "zombie", 0.3, 16.8)],
          pickups=[("galley-health", "health", -1.85, 17.2), ("galley-shells", "shells", 1.7, 17.2)],
-         gates=[]),
+         gates=[], moods=["flicker", "dead"], fires=[("galley-stoves", 1.2, 16.6, 0.6, 0.8)], triggers=[]),
+    dict(rid=6, name="coat-check", w=3.8, L=14.0, h=2.8,
+         walls=[],
+         areas=[("coat racks: a serpentine", -1.9, 1.9, 0, 9.0), ("attendant's counter", -1.9, 1.9, 9.0, 14.0)],
+         props=[("coat rack", -1.9, 0.5, 2.8, 3.2, 1.8), ("coat rack", -0.5, 1.9, 5.3, 5.7, 1.8),
+                ("coat rack", -1.9, 0.5, 7.8, 8.2, 1.8), ("attendant counter", -1.9, 0.5, 10.4, 10.9, 1.0)],
+         spawns=[("coats-1", "zombie", 1.2, 4.2), ("coats-2", "zombie", -1.2, 6.8), ("coats-3", "zombie", 1.2, 9.3)],
+         pickups=[("torch", "flashlight", -1.2, 12.4, 1.4), ("coat-shells", "shells", 1.4, 12.8)],
+         gates=[], moods=["dead", "dying"], fires=[], triggers=[]),
     dict(rid=4, name="sleeper", w=4.0, L=18.0, h=2.8,
          walls=[(-0.6, 2.0, 1.6, 1.6 + T), (-0.6, 2.0, 16.3, 16.3 + T),       # lobbies | compartments
                 *[(-0.5, 2.0, u, u + T) for u in (4.56, 7.52, 10.48, 13.44)],  # between compartments
@@ -66,26 +95,76 @@ CARRIAGES = [
                 ("C4", -0.5, 2.0, 10.58, 13.44), ("C5", -0.5, 2.0, 13.54, 16.3), ("north lobby", -2.0, 2.0, 16.4, 18.0)],
          props=[*[("bunk", 1.2, 2.0, a + 0.1, b - 0.1, 0.6) for a, b in ((1.7, 4.56), (4.66, 7.52), (7.62, 10.48), (10.58, 13.44))]],
          spawns=[("c1-sleeper", "zombie", 0.6, 3.1), ("c3-sleeper", "zombie", 0.6, 9.0),
-                 ("cultist-c4", "cultist", 0.2, 12.0), ("lobby-1", "zombie", -1.0, 17.2), ("lobby-2", "zombie", 1.0, 17.2)],
+                 ("soldier-c4", "soldier", 0.2, 12.0), ("lobby-1", "zombie", -1.0, 17.2), ("lobby-2", "zombie", 1.0, 17.2)],
          pickups=[("c2-shells", "shells", 1.5, 6.0), ("new-weapon", "dynamite", 1.5, 9.0)],
-         gates=[("c5-door", "never", -0.6, -0.5, 14.28, 15.68)]),
-    dict(rid=5, name="party-carriage", w=4.2, L=20.0, h=3.4,
+         gates=[("c5-door", "never", -0.6, -0.5, 14.28, 15.68)],
+         moods=["dying", "stutter"], fires=[("sleeper-boiler", 1.4, 0.6, 0.6, 1.0)],
+         triggers=[("blackout", "light.blackout.room.4", -2.0, -0.6, 8.6, 9.4)]),
+    # Resized 2026-09-28 to 8.0 x 28 m (owner-approved plan, docs/superpowers/plans/2026-09-27-boiler-room-resize.md):
+    # "bigger on the inside"; 14 window bays a side, no raised stage (the DJ end is floor), one centre
+    # row of 4 steady tubes (the strobe owns the beat), two beacons, a third favour table.
+    dict(rid=5, name="boiler-room", w=8.0, L=28.0, h=3.4,
          walls=[],
-         areas=[("dance floor", -2.1, 2.1, 0, 20.0)],
-         props=[("favours", -2.1, -1.4, 2.0, 3.6, 0.76), ("favours", -2.1, -1.4, 4.5, 6.1, 0.76),
-                ("pillar", -0.15, 0.15, 7.0, 7.3, 3.4), ("pillar", -0.15, 0.15, 12.7, 13.0, 3.4),
-                ("bar", 1.5, 2.1, 11.5, 17.5, 1.1), ("jukebox", -2.1, -1.3, 18.9, 19.5, 1.5)],
-         spawns=[*[(f"dancer-{i}", "zombie", x, u) for i, (x, u) in enumerate(
-                     ((-1.0, 8.5), (0.8, 8.8), (-0.6, 10.0), (1.0, 10.4), (-1.2, 11.4), (0.4, 11.8), (-0.3, 14.5), (0.9, 15.2)), 1)],
-                 ("cultist-bar-1", "cultist", 1.1, 13.0), ("cultist-bar-2", "cultist", 1.1, 16.5)],
-         pickups=[("favour-dynamite", "dynamite", -1.75, 3.0), ("bar-health", "health", 1.8, 17.8), ("jukebox-cd", "cd", -1.7, 19.2)],
-         gates=[]),
+         areas=[("favours + boiler (entrance)", -4.0, 4.0, 0, 8.3),
+                ("dance floor (6 x 10 m) under the disco ball", -3.0, 3.0, 9.0, 19.0),
+                ("chill-out", -4.0, 4.0, 19.7, 24.8),
+                ("DJ end", -4.0, 4.0, 24.8, 28.0)],
+         props=[("favours", -4.0, -3.3, 2.0, 3.6, 0.76), ("favours", -4.0, -3.3, 4.5, 6.1, 0.76),
+                ("favours", 3.3, 4.0, 3.0, 4.6, 0.76),
+                ("pillar", -2.55, -2.25, 8.4, 8.7, 3.4), ("pillar", 2.25, 2.55, 8.4, 8.7, 3.4),
+                ("pillar", -2.55, -2.25, 19.3, 19.6, 3.4), ("pillar", 2.25, 2.55, 19.3, 19.6, 3.4),
+                ("bar", 3.4, 4.0, 10.0, 16.0, 1.1),
+                ("piston", -4.0, -3.3, 11.7, 12.5, 3.4), ("piston", -4.0, -3.3, 13.6, 14.4, 3.4),
+                ("piston", -4.0, -3.3, 15.5, 16.3, 3.4),
+                ("dj deck", -2.9, -1.1, 25.8, 26.6, 1.1)],
+         spawns=[*[(f"dancer-{i}", "zombie", x, u) for i, (x, u) in
+                   enumerate(((-1.6, 11.0), (1.4, 12.4), (-0.8, 15.6), (1.8, 17.2)), 1)],
+                 ("soldier-bar-1", "soldier", 2.9, 12.8), ("soldier-dj", "soldier", -2.0, 27.2)],
+         pickups=[("favour-dynamite", "dynamite", -3.65, 3.0), ("bar-health", "health", 3.4, 16.8),
+                  ("dj-cd", "cd", -3.5, 27.4)],
+         gates=[], moods=["steady"] * 8, rows=[-2.0, 2.0],   # two rows: the side walls read dark (owner call, 2026-09-29)
+         fires=[("party-boiler", 3.4, 0.7, 0.6, 1.0)],
+         triggers=[("strobe", "light.strobe.room.5", -4.0, 4.0, 5.5, 6.5)],
+         beacons=[(0.0, 7.0, 2.95, 0.7), (0.0, 21.0, 2.95, -0.7)]),   # under the centre pipe (its bottom at h - 0.33)
+    dict(rid=7, name="tender", w=3.4, L=10.0, h=2.6,
+         walls=[],
+         areas=[("tender: the coal bunker (west), a walkway (east)", -1.7, 1.7, 0, 10.0)],
+         props=[("coal", -1.7, -0.2, 1.6, 8.4, 1.2)],
+         spawns=[("coal-1", "zombie", 0.9, 3.5), ("tender-juggernaut", "juggernaut", 0.9, 7.2)],   # guards the way to the cab
+         pickups=[("tender-health", "health", 1.2, 9.2)],
+         gates=[], moods=["dying"], fires=[], triggers=[]),
     dict(rid=8, name="cab", w=3.0, L=8.0, h=2.6,
          walls=[],
          areas=[("cab: the Stoker at the firebox", -1.5, 1.5, 0, 8.0)],
          props=[("backhead", -1.5, 1.5, 7.6, 8.0, 2.4)],
-         spawns=[], pickups=[], gates=[]),
+         spawns=[], pickups=[], gates=[], moods=["steady"], fires=[("firebox", 0.0, 7.0, 1.0, 4.0)],
+         triggers=[("end", COMPLETE_ON, -1.5, 1.5, 4.5, 6.5)]),
 ]
+
+
+WARM = (1.0, 0.72, 0.45)
+# Harsh cold fluorescent tubes (owner, 2026-09-26: 'cold lighting similar to the lightning ... very
+# dramatic flicker'), bright enough to light the zombies; the flicker carries the drama.
+COLD = (0.78, 0.9, 1.0)
+LIGHT_POWER = 2.4
+# Emergency red (beacon.ts BEACON.color).
+BEACON_RED = (1.0, 0.08, 0.05)
+
+
+def lamps(c):
+    """The ceiling lamps of a carriage, in its frame: ((x, y, u), mood, casts_shadow), south to north.
+
+    `rows` (optional, x offsets, default one centre row) puts a row of tubes at each x; moods run row by
+    row, south to north within a row."""
+    rows = c.get("rows", [0.0])
+    n = max(1, round(c["L"] / 8))
+    if len(c["moods"]) != n * len(rows):
+        raise SystemExit(f"{c['name']}: {n * len(rows)} lamps but {len(c['moods'])} moods")
+    # WebGPU's default is 16 sampled textures per fragment stage and every shadow-casting tube spends one
+    # (8 shadowed tubes in the Boiler Room measured 18 and no pipeline compiled). With more than one row
+    # the shadows go on a checkerboard, so the shadowed count stays at n; the rest only light.
+    return [((x, c["h"] - 0.4, c["L"] * (i + 0.5) / n), c["moods"][r * n + i], len(rows) == 1 or (r + i) % 2 == 0)
+            for r, x in enumerate(rows) for i in range(n)]
 
 
 def placed():
@@ -99,8 +178,9 @@ def placed():
 
 
 def to_level() -> dict:
-    doc = {"version": 1, "id": "night-train", "name": "Night Train", "ammo": "finite", "loadout": ["melee"],
-           "rooms": [], "tunnels": [], "furniture": [], "solids": [], "gates": [], "spawns": [], "pickups": []}
+    doc = {"version": 1, "id": "night-train", "name": "Night Train", "ammo": "finite", "loadout": ["melee"], "completeOn": COMPLETE_ON,
+           "rooms": [], "tunnels": [], "furniture": [], "solids": [], "gates": [], "triggers": [], "lights": [],
+           "spawns": [], "pickups": [], "cues": [{"on": on, "emit": list(emit)} for on, emit in CUES]}
     prev = None
     for c, zs in placed():
         w2 = c["w"] / 2
@@ -116,8 +196,18 @@ def to_level() -> dict:
             doc["furniture"].append({"min": [x0, 0, g(u1)], "max": [x1, h, g(u0)]})
         for sid, kind, x, u in c["spawns"]:
             doc["spawns"].append({"id": sid, "kind": kind, "pos": [x, 0, g(u)], "yaw": 3.1416})
-        for pid, item, x, u in c["pickups"]:
-            doc["pickups"].append({"id": pid, "item": item, "pos": [x, 0.3, g(u)]})
+        for pid, item, x, u, *y in c["pickups"]:
+            doc["pickups"].append({"id": pid, "item": item, "pos": [x, y[0] if y else 0.3, g(u)]})
+        for i, (pos, mood, shadow) in enumerate(lamps(c)):
+            doc["lights"].append({"pos": [pos[0], pos[1], g(pos[2])], "color": list(COLD), "power": LIGHT_POWER, "mood": mood, "fixture": "tube",
+                                  **({} if shadow else {"shadow": False})})
+        for _, x, u, y, power in c["fires"]:
+            doc["lights"].append({"pos": [x, y, g(u)], "color": list(FIRE), "power": power, "mood": "fire"})
+        for x, u, y, spin in c.get("beacons", []):
+            doc["lights"].append({"pos": [x, y, g(u)], "color": list(BEACON_RED), "power": LIGHT_POWER, "mood": "dead",
+                                  "fixture": "beacon", "spin": spin})
+        for tid, event, x0, x1, u0, u1 in c["triggers"]:
+            doc["triggers"].append({"id": tid, "event": event, "once": True, "min": [x0, 0, g(u1)], "max": [x1, 2.2, g(u0)]})
         for gid, event, x0, x1, u0, u1 in c["gates"]:
             doc["gates"].append({"id": gid, "opensOn": event, "min": [x0, 0, g(u1)], "max": [x1, 2.2, g(u0)]})
     doc["start"] = {"pos": [0, 0, -1.0], "yaw": 0.0}
@@ -158,13 +248,25 @@ def to_svg() -> str:
         for gid, _, x0, x1, u0, u1 in c["gates"]:
             o.append(box(x0 - 0.05, x1 + 0.05, u0, u1, "#e08030") + text((u0 + u1) / 2, x1 + 0.45, "locked", "#e08030", 10, "middle"))
         for sid, kind, x, u in c["spawns"]:
-            cult = kind == "cultist"
-            col = "#e0a020" if cult else "#d03030"
+            sol = kind == "soldier"
+            col = "#e0a020" if sol else "#d03030"
             o.append(f'<circle cx="{X(u):.1f}" cy="{Y(x):.1f}" r="7" fill="{col}"/>'
-                     + text(u, x + 0.1, "C" if cult else "Z", "#fff", 10, "middle", "bold"))
-        for pid, item, x, u in c["pickups"]:
-            o.append(f'<rect x="{X(u) - 5:.1f}" y="{Y(x) - 5:.1f}" width="10" height="10" fill="#40c0e0" transform="rotate(45 {X(u):.1f} {Y(x):.1f})"/>'
-                     + text(u + 0.2, x - 0.2, item, "#7fd8ee", 9))
+                     + text(u, x + 0.1, "S" if sol else "Z", "#fff", 10, "middle", "bold"))
+        for tid, event, x0, x1, u0, u1 in c["triggers"]:
+            o.append(box(x0, x1, u0, u1, "none", "#f0e040", 1.5, 'stroke-dasharray="4 3"')
+                     + text((u0 + u1) / 2, x1 - 0.15, event, "#f0e040", 9, "middle"))
+        for (lx, _, lu), mood in lamps(c):
+            o.append(f'<circle cx="{X(lu):.1f}" cy="{Y(lx):.1f}" r="4" fill="none" stroke="#ffd080" stroke-width="1.5"/>'
+                     + text(lu, lx + 0.45, mood, "#ffd080", 9, "middle"))
+        for _, fx, fu, _, _ in c["fires"]:
+            o.append(f'<circle cx="{X(fu):.1f}" cy="{Y(fx):.1f}" r="4" fill="#ff7020"/>')
+        for bx, bu, _, _ in c.get("beacons", []):
+            o.append(f'<text x="{X(bu):.1f}" y="{Y(bx) + 4:.1f}" fill="#ff2a1a" font-size="12" text-anchor="middle">◆</text>'
+                     + text(bu, bx - 0.3, "beacon", "#ff2a1a", 9, "middle"))
+        for pid, item, x, u, *_ in c["pickups"]:
+            torch = item == "flashlight"
+            o.append(f'<rect x="{X(u) - 5:.1f}" y="{Y(x) - 5:.1f}" width="10" height="10" fill="{"#fff060" if torch else "#40c0e0"}" transform="rotate(45 {X(u):.1f} {Y(x):.1f})"/>'
+                     + text(u + 0.2, x - 0.2, "FLASHLIGHT" if torch else item, "#fff060" if torch else "#7fd8ee", 11 if torch else 9, weight="bold" if torch else "normal"))
         for label, x0, x1, u0, u1 in c["areas"]:  # last, so furniture never hides them
             o.append(f'<text x="{X(u0 + 0.15):.1f}" y="{Y(x0 + 0.35):.1f}" fill="#e8d8b8" font-size="11" '
                      f'stroke="#16161a" stroke-width="3" paint-order="stroke">{label}</text>')
@@ -176,7 +278,7 @@ def to_svg() -> str:
                      + text(1.0, 0.55, "start (portal)", "#60e060", 10, "middle"))
     ly = H - PAD * PX * 0.35
     o.append(f'<text x="{PAD * PX:.0f}" y="{ly:.0f}" fill="#aaa" font-size="11">north (toward the engine) →   '
-             '<tspan fill="#d03030">● Z zombie</tspan>   <tspan fill="#e0a020">● C cultist</tspan>   '
+             '<tspan fill="#d03030">● Z zombie</tspan>   <tspan fill="#e0a020">● S soldier</tspan>   <tspan fill="#ffd080">○ lamp (mood)</tspan>   <tspan fill="#ff7020">● fire</tspan>   <tspan fill="#ff2a1a">◆ beacon</tspan>   <tspan fill="#f0e040">▭ trigger</tspan>   '
              '<tspan fill="#40c0e0">◆ pickup</tspan>   <tspan fill="#d8c8a8">▬ partition</tspan>   '
              '<tspan fill="#8c7456">■ furniture</tspan>   <tspan fill="#50b050">▬ door to the vestibule</tspan>   1 m grid</text>')
     o.append("</svg>")

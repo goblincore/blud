@@ -44,7 +44,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
-import { createKitDamage, type KitDamageEvent } from './kit-damage';
+import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -139,6 +139,15 @@ const LOOK: Record<string, {
   plate:   { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
   webbing: { metalness: 0.05, roughness: 0.70, envIntensity: 0.25 },
 
+  // ---- juggernaut (juggernaut-kit.wam) ----
+  // The power-armour helmet's two round eye lenses: `glass`'s sheen plus a
+  // DIM red self-glow (spec: "a dim glow behind them"). The goblin's glass
+  // rejected an emissive because a lit visor was the wrong note for HIM; a
+  // sealed helmet with lit eyes is exactly the note for a tank. The body under
+  // it has no light to show through (see the emissive docstring), so the
+  // lens carries it. Plate, iron and brass reuse the entries above.
+  lens: { metalness: 0.35, roughness: 0.05, envIntensity: 1.6, emissive: [0.9, 0.06, 0.03], emissiveIntensity: 0.9 },
+
   // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
   // entries exist mostly for the ENV MAP — without one, a rough dielectric's
   // shadow side falls to near-black under the lab's single key, and the
@@ -175,7 +184,27 @@ const LOOK: Record<string, {
   // reused by two kits gets one look. Worth remembering before adding a
   // generic name like "red" or "white" to a third kit.
   white:  { metalness: 0.03, roughness: 0.38, envIntensity: 0.80 },
+
+  // The warbull's machinery (warbull-kit.wam). CHROME is the one material
+  // meant to read as polished metal against wet flesh, so it goes further
+  // than iron/plate: more metallic, tighter, a brighter reflection. Still
+  // under 1 for the reason above (the form must survive in shadow).
+  chrome: { metalness: 0.88, roughness: 0.10, envIntensity: 1.70 },
+  // Rubber-sheathed conduit: a soft sheen, not metal.
+  cable:  { metalness: 0.05, roughness: 0.34, envIntensity: 0.60 },
+  // The warbull's red cable wrap and calf cables: glossy sheathing, the
+  // plate's loudest colour, so a tight hot highlight on each strand.
+  wire:   { metalness: 0.15, roughness: 0.16, envIntensity: 1.20 },
+  // Status LEDs and the reactor core glow in their own right. These are
+  // the AUTHORED intensities; glow() scales them per frame from
+  // status-lights.ts (heartbeat, strobe, drop-outs), and 1 is this look.
+  led:  { metalness: 0.10, roughness: 0.20, envIntensity: 0.80, emissive: [1.0, 0.12, 0.05], emissiveIntensity: 1.4 },
+  core: { metalness: 0.10, roughness: 0.15, envIntensity: 1.00, emissive: [1.0, 0.62, 0.18], emissiveIntensity: 1.6 },
 };
+
+/** Materials glow() drives, by WAM material name. The juggernaut's `lens`
+ *  is deliberately not one of them: it stays the steady look it shipped with. */
+const PULSED = ['led', 'core'] as const;
 
 /**
  * Anything not named above still gets an environment and a modest sheen.
@@ -207,8 +236,12 @@ export interface KitOverlay {
    * At rest every frame is (bind head, identity) and the result is exactly
    * the static placement this overlay had before it could move.
    */
-  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number }): KitDamageEvent[];
+  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number; armor?: KitArmorInput | null }): KitDamageEvent[];
   resetDamage(): void;
+  /** Scale the PULSED materials' emissive intensity from their authored
+   *  look (status-lights.ts output; 1 = authored). coreRgb recolours the
+   *  core (amber, red when enraged). No-op on a kit without them. */
+  glow(levels: { led: number; core: number; coreRgb?: readonly [number, number, number] }): void;
   dispose(): void;
 }
 
@@ -254,6 +287,8 @@ export async function loadKit(
 
   const bones = new Map<string, THREE.Bone>();
   const skinned: THREE.SkinnedMesh[] = [];
+  /** PULSED materials and their authored emissive intensity, for glow(). */
+  const pulsed: { name: string; mat: THREE.MeshStandardMaterial; base: number }[] = [];
   gltf.scene.traverse(o => {
     if ((o as THREE.Bone).isBone) bones.set(o.name, o as THREE.Bone);
     if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned.push(o as THREE.SkinnedMesh);
@@ -278,6 +313,7 @@ export async function loadKit(
           std.emissiveIntensity =
             (look as { emissiveIntensity?: number }).emissiveIntensity ?? 1;
         }
+        if ((PULSED as readonly string[]).includes(mat.name)) pulsed.push({ name: mat.name, mat: std, base: std.emissiveIntensity });
         std.needsUpdate = true;
       }
     }
@@ -329,7 +365,7 @@ export async function loadKit(
     // stayed behind as the soldier walked away. Camera turns then culled his
     // entire kit. Refresh after posing to keep ordinary frustum culling valid.
     for (const mesh of skinned) mesh.computeBoundingSphere();
-    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt) ?? [] : [];
+    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor) ?? [] : [];
   };
 
   return {
@@ -338,6 +374,12 @@ export async function loadKit(
     bones,
     pose,
     resetDamage() { damageView?.reset(); object.visible = true; },
+    glow(levels) {
+      for (const p of pulsed) {
+        p.mat.emissiveIntensity = p.base * (p.name === 'led' ? levels.led : levels.core);
+        if (p.name === 'core' && levels.coreRgb) p.mat.emissive.setRGB(...levels.coreRgb);
+      }
+    },
     dispose() {
       damageView?.dispose();
       debris.removeFromParent();

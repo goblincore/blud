@@ -20,13 +20,16 @@ export const VITALS = {
   biteReach: 0.9,
   /** One landed swing of the bride's sword (its mind reports contact). */
   swordHit: 15,
+  /** The warbull's bull charge landing (its one hit per charge, charge.ts):
+   *  twice a sword hit, the price of not sidestepping a telegraphed run. */
+  chargeHit: 30,
   /** One soldier pellet or cultist SMG round (they share a projectile list). */
   soldierPellet: 3,
   /** After a melee hit, further melee is ignored for this long. */
   meleeInvulnSec: 0.8,
 } as const;
 
-export type DamageKind = 'melee' | 'pellet';
+export type DamageKind = 'melee' | 'pellet' | 'blast';
 
 export interface Vitals {
   health: number;
@@ -34,6 +37,14 @@ export interface Vitals {
   dead: boolean;
   /** Seconds since the last damage; drives the hurt flash. */
   hurtAge: number;
+}
+
+/** God mode (no damage). The ring testbed defaults to it (owner 2026-09-27: "you die
+ *  really fast when it loads"); authored levels default to mortal. `?god` forces it on,
+ *  `?god=0` forces it off (the ring with damage). */
+export function godMode(authored: boolean, god: string | null): boolean {
+  if (god === null) return !authored;
+  return god !== '0' && god !== 'false';
 }
 
 export function makeVitals(): Vitals {

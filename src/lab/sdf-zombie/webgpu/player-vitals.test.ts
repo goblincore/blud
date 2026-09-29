@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/player-vitals.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  VITALS, applyDamage, bitesInReach, heal, makeVitals, segmentHitsCapsule, stepVitals,
+  VITALS, applyDamage, bitesInReach, godMode, heal, makeVitals, segmentHitsCapsule, stepVitals,
 } from './player-vitals';
 
 describe('vitals', () => {
@@ -73,5 +73,18 @@ describe('bitesInReach', () => {
       { id: 3, pos: [0.2, 0, 0.2] as [number, number, number], down: true },
     ];
     expect(bitesInReach([0, 0, 0], z, VITALS.biteReach)).toEqual([1]);
+  });
+});
+
+describe('godMode', () => {
+  it('the ring defaults to god, authored levels to mortal', () => {
+    expect(godMode(false, null)).toBe(true);
+    expect(godMode(true, null)).toBe(false);
+  });
+  it('?god forces it on and ?god=0 forces it off, on either', () => {
+    expect(godMode(true, '')).toBe(true);
+    expect(godMode(true, '1')).toBe(true);
+    expect(godMode(false, '0')).toBe(false);
+    expect(godMode(false, 'false')).toBe(false);
   });
 });

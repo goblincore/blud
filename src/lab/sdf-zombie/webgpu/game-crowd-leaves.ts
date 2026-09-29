@@ -44,6 +44,8 @@ export function crowdTypeFor(ctx: GameContext, name: string, roomId: number, str
       depthPre: ctx.render.sdfLayer.depthPre,
       lastFrame: ctx.render.sdfLayer.lastFrame,
       probeDyn: ctx.probes.gather ? { node: ctx.probes.gather.probeDynNode } : undefined,
+      // The shared light list (plan 1 task 9); game-main turns lightListCfg.x on (task 10).
+      lightList: ctx.world.light?.list ? { node: ctx.world.light.list.node } : undefined,
     },
     // `stride` (validate.ts primStride of the first body) fixes the atlas
     // width for the type's life; the caller checks later bodies fit.

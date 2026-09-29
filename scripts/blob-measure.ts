@@ -3,7 +3,7 @@
 //   npm run blob:measure -- mouse
 //   npm run blob:measure -- mouse --json           # machine-readable, for agents
 //   npm run blob:measure -- mouse --side
-//   npm run blob:measure -- mouse --range 0.75:1   # legs + shoes only
+//   npm run blob:measure -- mouse --range 0.8:1   # legs + shoes only
 //   npm run blob:measure -- mouse --bands 24
 //   npm run blob:measure -- goblin --plate docs/dev-notes/refs/goblin-reference.png
 //   npm run blob:measure -- mouse --glb path/to/mesh.glb
@@ -31,7 +31,7 @@
 // dominated by that difference and says almost nothing about the sculpt —
 // exactly the trap the plate sets (see the caveat in silhouette.ts).
 //
-// SO: score a `--range` window where the poses agree (`--range 0.75:1` is legs
+// SO: score a `--range` window where the poses agree (`--range 0.8:1` is legs
 // and shoes, where nothing is posed) and act on THOSE bands. Read a
 // whole-figure IoU only as a before/after gradient for one character against
 // one reference, never as a target to optimise and never across characters.

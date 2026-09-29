@@ -53,6 +53,6 @@ describe('WEAPON_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(WEAPON_BINDINGS)).toHaveLength(57);
+    expect(Object.keys(WEAPON_BINDINGS)).toHaveLength(59);
   });
 });

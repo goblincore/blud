@@ -38,6 +38,10 @@ describe('settled flesh look through the worker boundary', () => {
     const prim: Primitive = { limb: 'armL', cluster: 0, op: 'add', a: [1, .2, 2], b: [1, .2, 2], radius: .07, scale: [1, 1, 1], blendK: 0 };
     const chunk = makeChunk('armL', [1, .2, 2], [0, 0, 0], .08, [0, 1, 0]);
     const view = createChunkGpuView(chunk, [prim], u);
+    // A gib view carries no fresnel (owner, 2026-09-27: CHUNK_FRESNEL 0, whatever its body's).
+    expect(view.bakeData().surface.fresnel).toBe(0);
+    // The worker boundary still carries the lane: pin it with a non-zero value on the view.
+    view.uniforms.surfCfg.value.z = .85;
     const data = view.bakeData();
     expect(data.surface).toEqual({ legacyGamma: legacy, wetness: .8, roughness: .12, specIntensity: .95, noiseAmp: .016, fresnel: .85 });
     const baked = bakeChunkGeometry(data);

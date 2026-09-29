@@ -4,6 +4,12 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
+import { BEAM_WHITE_CLIP, BEAM_WHITE_LUM } from '../../../../light-shade';
+import { SKIN_POST, SKIN_PRE } from './skin-detail-proto';
+
+/** A WGSL f32 literal (always a decimal point). */
+const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+
 export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A body standing in the beam used to run
   // past 1.0 on every channel and hard-clip, which does not just look blown —
   // it DELETES the wounds: crater, lip, char and clean skin all clamp to the
@@ -12,7 +18,8 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // [knee, 1) monotonically, so those differences survive as differences.
   //
   // Gated on the beam existing at all, so the lab and every stock preset keep
-  // their old arithmetic bit-for-bit.
+  // their old arithmetic bit-for-bit. The shared light list (lightListCfg.x)
+  // counts as a beam: list-lit bodies get the shoulder too.
   //
   // METAL (hard-surface task 2), at metal 1:
   //  - the whole diffuse FAMILY (ambient bounce + key diffuse) scales to a
@@ -76,6 +83,22 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                // soldier and torn (flail) wounds only; applied at the consumer so the hoisted wet statement stays pinned.
                + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, max(soldierWound, tornWound))
                + scatter;
+  // SHARED LIGHT LIST: the other 3 lights and every light's back rim (spec §5). Through AO, not
+  // the wound/level shadow (those belong to the dominant). Zero when the list is off.
+  fleshLit = fleshLit + (listDiff * albedo + listSpec) * ao + listRim;
+  // LIGHTNING SIDE RIM (owner, 2026-09-26: "a strong rim light on one side, like a coldish powerful
+  // light from the side"). spotCfg2.w is the rim's strength, set by the game only while a window
+  // light is live (lightDir then points at the window): a hard grazing edge on the side facing the
+  // flash, in the key colour. 0 (everything else, the lab) adds nothing.
+  // Harder and colder than the key (owner, 2026-09-26), plus a soft cold fill on the side facing
+  // the camera, through the albedo, so the wounds on a zombie's front still read in the flash.
+  if (spotCfg2.w > 0.0) {
+    let sideLit = max(dot(n, normalize(lightDir)), 0.0);
+    let edge = pow(1.0 - max(dot(n, V), 0.0), 4.0);
+    let rimC = mix(keyC, vec3<f32>(0.55, 0.75, 1.3), 0.6);
+    fleshLit = fleshLit + rimC * (spotCfg2.w * edge * sideLit)
+                        + albedo * vec3<f32>(0.7, 0.82, 1.0) * (spotCfg2.w * 0.025 * max(dot(n, V), 0.0));
+  }
   // FLAT-LIT decal: where the baked face covers the surface, relight it with
   // a fixed favourable diffuse and no AO/spec/fresnel — the image carries its
   // own shading, and real shading on top drew hard shadow lines from the
@@ -92,10 +115,42 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // regressions -- the zombie sits at 1.18x face/torso, contrast sd 41.4.
   fleshLit = mix(fleshLit,
                  albedo * (amb + 0.30 * lightCfg.x * keyColor),
-                 faceFlat * 0.85);
-  if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
+                 faceFlat * 0.85);${SKIN_PRE}
+  if ((spotCfg.x > 0.0 || lightListCfg.x > 0.0) && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
-    fleshLit = vec3<f32>(softShoulder(fleshLit.x, knee),
-                         softShoulder(fleshLit.y, knee),
-                         softShoulder(fleshLit.z, knee));
-  }`;
+    let shoulder = vec3<f32>(softShoulder(fleshLit.x, knee),
+                             softShoulder(fleshLit.y, knee),
+                             softShoulder(fleshLit.z, knee));
+    // BEAM SHOULDER (owner 2026-09-27: "direct flashlight beam at close/mediumish ranges causes
+    // enemies to blow out"; then "it must feel like a flashlight vs the ambient, but not
+    // completely blown out"). The exponential shoulder above works PER CHANNEL: as a pink body
+    // brightens, green and blue climb the shoulder after red has flattened, so the three
+    // converge and the pink drains to white long before anything clips (a torch-lit body at
+    // 4 m read 0.10 chroma, (max - min) / max, against ~0.33 at midtones under the same white
+    // light). Where the flashlight lights the body the tail is instead HUE-PRESERVING: a
+    // Reinhard on LUMINANCE from the same knee (monotonic, C1 there, 0.95 only at 8x its
+    // headroom instead of the exponential's 2x), with rgb scaled by lumOut / lumIn, so the skin
+    // keeps its colour and goes bright PINK, not white. A saturated channel can then pass 1 (a
+    // pink body's red is ~1.3x its luminance), so a last per-channel softShoulder from 0.9
+    // rounds that one channel off (a touch of desaturation in the very top only; a white
+    // specular glint, all channels equal, still goes near-white: the hot-light sparkle).
+    // listBeam is bodyLights' sum of beamShoulder x delivered luminance (the flashlight's
+    // beamShoulder 2: full from 0.5); 0 (no flashlight pick, every other light, the list off)
+    // is the exponential shoulder exactly.
+    // Measured (dev note 2026-09-27-shared-light-list, "Flashlight judged at the chest").
+    if (listBeam > 0.0) {
+      let head = 1.0 - knee;
+      let lumIn = dot(fleshLit, vec3<f32>(0.2126, 0.7152, 0.0722));
+      let tl = max(lumIn - knee, 0.0) / head;
+      let lumOut = select(lumIn, knee + head * tl / (1.0 + tl), lumIn > knee);
+      let hued = fleshLit * (lumOut / max(lumIn, 1e-4));
+      let beamTail = vec3<f32>(softShoulder(hued.x, 0.9), softShoulder(hued.y, 0.9), softShoulder(hued.z, 0.9));
+      // WHITE CLIP (owner, after the retune: "a little white clipping is okay"): where the TORCH'S
+      // OWN share of the luminance (lumIn x listTorchShare) is hot, blend back toward the whitening
+      // per-channel shoulder (light-shade.ts). A tube adding to the torch does not whiten (option 3).
+      let whiten = ${f(BEAM_WHITE_CLIP)} * smoothstep(${f(BEAM_WHITE_LUM[0])}, ${f(BEAM_WHITE_LUM[1])}, lumIn * listTorchShare);
+      fleshLit = mix(shoulder, mix(beamTail, shoulder, whiten), clamp(listBeam, 0.0, 1.0));
+    } else {
+      fleshLit = shoulder;
+    }
+  }${SKIN_POST}`;

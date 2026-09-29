@@ -20,6 +20,7 @@
 // tunnel length, which is what makes a doorway a passage rather than a hole.
 
 import type { Box, EnclosureWalls, Vec3 } from '../ambient';
+import type { LampMood } from './lamp-moods';
 
 export const ROOM_HALF = 4;          // room interior half-size
 export const BAND_HALF = 0.8;        // divider half-thickness = tunnel half-length
@@ -53,6 +54,21 @@ export interface AccentLight {
   pos: Vec3;
   color: Vec3;
   power: number;
+  /** Dynamic light §2.5: the lamp's ambient mood (absent: steady). */
+  mood?: LampMood;
+  /** The visible fixture: a bulb (absent) or a fluorescent tube (Night Train, 2026-09-26). */
+  fixture?: 'bulb' | 'tube' | 'beacon';
+  /** rev/s about the vertical, sign = direction (beacons). */
+  spin?: number;
+  /** A tube's spot casts a shadow unless this is false (each shadow map costs a sampled texture, and a
+   *  fragment stage has 16 by default). */
+  shadow?: boolean;
+  /** Level-authored scale on this light's presentation gain (spec §5 option A);
+   *  absent means the kind's fixed profile gain is unscaled. Must be >= 0. */
+  gain?: number;
+  /** Level-authored tint multiplied into this light's colour (spec §5 option A);
+   *  absent means the kind's fixed profile tint is unscaled. Each component >= 0. */
+  tint?: Vec3;
 }
 
 /** Distance at which an accent's albedo contribution has fallen to half. */
@@ -110,6 +126,24 @@ export interface RoomDef {
   zombies: number;
   /** First N spawn slots use soldiers; remaining slots use zombies. */
   soldiers?: number;
+  /** The next N slots, after the soldiers, use juggernauts (the power-armour
+   *  chaingunner). Counted inside `zombies`, like the soldiers. */
+  juggernauts?: number;
+  /** The next N slots, after the juggernauts, use warbulls (the cyber-
+   *  minotaur). Counted inside `zombies`, like the others. */
+  warbulls?: number;
+}
+
+/** The spawn KIND of ring-level slot `index` in `room` (active-level.ts
+ *  ringLevel): soldiers first, then juggernauts, then warbulls, then zombies.
+ *  The ?spawn= playtest override swaps zombie slots later, in game-main. */
+export function slotCharacter(room: RoomDef, index: number): 'soldier' | 'juggernaut' | 'warbull' | 'zombie' {
+  const soldiers = room.soldiers ?? 0;
+  const juggernauts = soldiers + (room.juggernauts ?? 0);
+  if (index < soldiers) return 'soldier';
+  if (index < juggernauts) return 'juggernaut';
+  if (index < juggernauts + (room.warbulls ?? 0)) return 'warbull';
+  return 'zombie';
 }
 
 export interface TunnelDef {
@@ -177,6 +211,9 @@ const ARENA_WALL: Vec3 = [0.185, 0.19, 0.20];
 const ARENA_FLOOR: Vec3 = [0.112, 0.115, 0.122];
 const ARENA_CEIL: Vec3 = [0.15, 0.155, 0.165];
 
+/** The ring testbed's coloured room lights, scaled as one (owner 2026-09-27: the orbs swamp the
+ *  torch in the test rooms; tune the orbs in this level's data, not the torch). */
+export const RING_ACCENT_SCALE = 0.5;
 export const ROOMS: RoomDef[] = [
   { id: 1, name: 'room1', minX: -O, maxX: -B, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
@@ -184,27 +221,27 @@ export const ROOMS: RoomDef[] = [
     // RED. Owner call 2026-09-09: the rooms all read the same orange, which
     // hid what the per-room probe grids do. One red room and one green room
     // make the bounce on a body say which room it is in.
-    accents: [{ pos: [-7.5, 1.15, -2.8], color: [1.0, 0.12, 0.08], power: 9 }],
+    accents: [{ pos: [-7.5, 1.15, -2.8], color: [1.0, 0.12, 0.08], power: 9 * RING_ACCENT_SCALE }],
     zombies: 1, soldiers: 1 },
   { id: 2, name: 'room2', minX: B, maxX: O, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // FIRE brazier on the east wall by the tall crate.
     // GREEN — see room 1.
-    accents: [{ pos: [7.6, 1.15, -6.3], color: [0.18, 1.0, 0.22], power: 9 }],
+    accents: [{ pos: [7.6, 1.15, -6.3], color: [0.18, 1.0, 0.22], power: 9 * RING_ACCENT_SCALE }],
     zombies: 2 },
   { id: 3, name: 'room3', minX: B, maxX: O, minZ: B, maxZ: O, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // Two fires, one cooler and further off, for depth. The accent-pair
     // capture stands a zombie beside the near one.
     accents: [
-      { pos: [2.0, 1.15, 2.2], color: [1.0, 0.50, 0.16], power: 10 },
-      { pos: [7.8, 1.15, 7.8], color: [0.95, 0.38, 0.10], power: 7 },
+      { pos: [2.0, 1.15, 2.2], color: [1.0, 0.50, 0.16], power: 10 * RING_ACCENT_SCALE },
+      { pos: [7.8, 1.15, 7.8], color: [0.95, 0.38, 0.10], power: 7 * RING_ACCENT_SCALE },
     ],
     zombies: 3 },
   { id: 4, name: 'room4', minX: -O, maxX: -B, minZ: B, maxZ: O, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // FIRE brazier along the north wall.
-    accents: [{ pos: [-3.5, 1.15, 7.9], color: [1.0, 0.44, 0.12], power: 9 }],
+    accents: [{ pos: [-3.5, 1.15, 7.9], color: [1.0, 0.44, 0.12], power: 9 * RING_ACCENT_SCALE }],
     zombies: 4 },
   // THE ARENA. Same cold stone family as the rest, a shade darker and taller
   // so it reads as somewhere else. Braziers on two walls (the palette tests
@@ -214,16 +251,22 @@ export const ROOMS: RoomDef[] = [
     minZ: ARENA_MIN_Z, maxZ: ARENA_MAX_Z, height: ARENA_H,
     wallColor: ARENA_WALL, floorColor: ARENA_FLOOR, ceilColor: ARENA_CEIL,
     accents: [
-      { pos: [ARENA_MIN_X + 1.6, 1.15, ARENA_MAX_Z - 1.6], color: [1.0, 0.34, 0.11], power: 13 },
-      { pos: [ARENA_MAX_X - 1.8, 1.15, ARENA_MIN_Z + 1.8], color: [0.98, 0.46, 0.14], power: 13 },
+      { pos: [ARENA_MIN_X + 1.6, 1.15, ARENA_MAX_Z - 1.6], color: [1.0, 0.34, 0.11], power: 13 * RING_ACCENT_SCALE },
+      { pos: [ARENA_MAX_X - 1.8, 1.15, ARENA_MIN_Z + 1.8], color: [0.98, 0.46, 0.14], power: 13 * RING_ACCENT_SCALE },
     ],
     // A HORDE, not a fireteam: this room exists so a blast has bodies to spend.
-    zombies: 8, soldiers: 0 },
+    // ...and one JUGGERNAUT among them (2026-09-26): the biggest room suits his
+    // 5 m preferred range and 9 m reach, and dynamite, which this room is
+    // for, is the intended answer to his plates. Slot 0.
+    // ...and one WARBULL (2026-09-27): the only room with the floor for his
+    // 7 m rocket standoff and a charge's run-up, and the 6 m ceiling clears
+    // his 2.6 m horns by a long way. Slot 1; six zombies remain.
+    zombies: 8, soldiers: 0, juggernauts: 1, warbulls: 1 },
   { id: 5, name: 'room5', minX: ANNEX_MIN_X, maxX: ANNEX_MAX_X, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     accents: [
-      { pos: [17.5, 1.15, -7.8], color: [1.0, 0.46, 0.13], power: 9 },
-      { pos: [11.2, 1.15, -1.6], color: [0.95, 0.38, 0.10], power: 7 },
+      { pos: [17.5, 1.15, -7.8], color: [1.0, 0.46, 0.13], power: 9 * RING_ACCENT_SCALE },
+      { pos: [11.2, 1.15, -1.6], color: [0.95, 0.38, 0.10], power: 7 * RING_ACCENT_SCALE },
     ],
     zombies: 5, soldiers: 3 },
 ];

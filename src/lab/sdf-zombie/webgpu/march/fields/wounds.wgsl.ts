@@ -381,7 +381,9 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
   segVolumeMeta: texture_2d<f32>,
   perfCfg: vec4<f32>,
   inst: ptr<storage, array<vec4<f32>>, read>,
-  instCfg: vec4<f32>
+  instCfg: vec4<f32>,
+  reach: f32,
+  steps: i32
 ) -> f32 {
   var res = 1.0;
   var t = 0.02;
@@ -401,7 +403,7 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
     let dd = sqrt(max(h * h - y * y, 0.0));
     res = min(res, k * dd / max(t - y, 1e-4));
     ph = h;
-    if (res < 0.02 || t > 0.4) { break; }
+    if (i >= steps || res < 0.02 || t > reach) { break; }
     t = t + clamp(h, 0.01, 0.06);
   }
   return clamp(res, 0.0, 1.0);

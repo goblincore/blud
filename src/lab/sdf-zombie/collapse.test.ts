@@ -336,7 +336,8 @@ describe('collapseRopes — the real body', () => {
 
   it('max distances are rest distance × the documented slack factors', () => {
     expect(byPair('hipL', 'hips')!.max).toBeCloseTo(0.100 * T.anchorSlack, 3);
-    expect(byPair('hipL', 'footL')!.max).toBeCloseTo(0.820 * T.legSlack, 3);
+    // thigh 0.46 + shin 0.50 (was 0.40 + 0.42 before the zombie's feet landed, 2026-09-29).
+    expect(byPair('hipL', 'footL')!.max).toBeCloseTo(0.960 * T.legSlack, 3);
     expect(byPair('shoulderL', 'handL')!.max).toBeCloseTo(0.595 * T.armSlack, 3);
     expect(byPair('hipL', 'hipR')!.max).toBeCloseTo(0.200 * T.splay, 3);
     expect(byPair('shoulderL', 'shoulderR')!.max).toBeCloseTo(0.400 * T.splay, 3);

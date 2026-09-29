@@ -1,0 +1,292 @@
+# Warbull kit, SECOND DRAFT: the machinery on the reference plate
+# (docs/dev-notes/refs/warbull-reference.png; spec
+# docs/superpowers/specs/2026-09-27-warbull-design.md). The first draft's kit
+# (steel horn, optic, spine rack, reactor...) belonged to the first draft's
+# minotaur body, which the owner rejected; this kit is what the PLATE shows,
+# and no more:
+#   - a WRAP OF RED CABLES round his waist (the plate's most striking colour
+#     note: bright red strands packed between two iron bands);
+#   - CHROME BRACES on both lower shins, red cables running down the calves
+#     into them;
+#   - one hoof SHOD IN CHROME with a chrome pastern above it, the other a
+#     natural hoof under a chrome cuff (the plate is asymmetric here);
+#   - the gun arm is the LAUNCHER PROP, not kit (make-warbull-launcher.ts).
+# The plate's cannon is on his left arm; the game's carries hold props in
+# the right hand, so the whole figure is authored MIRRORED (gun right, so
+# the chrome-shod hoof is his LEFT, the plate's right-hand side of the image
+# flipped). warbull.blob's header has the same note.
+#
+# THE RULE (the first draft's, kept): EMBEDDED, NOT WORN. Every part meets
+# the flesh at an edge sunk into it: the belt's bands bite the waist, the
+# calf cables dive into the braces, the braces grip the shin.
+#
+# UNITS: metres / 2.55 (warbull.blob's height). Comments carry metres.
+#
+# FLESH THIS BITES INTO, marched off warbull.blob with sdBody (2026-09-27):
+#   waist   y 1.35-1.56: half-width x 0.254-0.266, half-depth z +0.236-0.252
+#           front / -0.220-0.252 back (an ellipse, not a circle)
+#   shin    y 0.50 (t 0.52): x +-0.09, z +0.09/-0.12 (the calf's end);
+#           y 0.26-0.45 (t 0.59-0.88): r 0.068-0.074, round
+#   hoof    (flesh) x 0.166-0.378, y 0.008-0.256, z -0.080-0.168
+#
+# ASYMMETRY: none but the feet. Materials:
+#   chrome  braces, pastern, hoof shoe, cuff
+#   iron    the belt's bands, brace lips
+#   wire    the red cable sheathing (kit-overlay.ts LOOK: glossy red)
+#   led     status LEDs on the braces (status-lights.ts pulses them)
+#
+# BUILD: scripts/build-wam-kit.sh warbull, then
+#   characters/warbull-kit.test.ts (skips until the glTF exists).
+#   Pre-flighted with scripts/wam-preflight.ts (a shadow of WAM's maths).
+model warbull-kit
+  # warbull.blob's height: every fraction below is metres / 2.55.
+  height 2.55
+  style chunky
+
+palette
+  # WAM's palette takes only <name> #rrggbb (no metal=/rough=/emit=): the finish is
+  # kit-overlay.ts LOOK and the LED glow is status-lights.ts, both at runtime.
+  chrome #b4b8c0
+  iron   #3c3c42
+  # The plate's cable red (sRGB ~125/22/16 under its light), lifted.
+  wire   #c8261a
+  led    #ff3018
+
+skeleton
+  # warbull.blob's skeleton, metres / 2.55 to six places (the rest-identity
+  # pin in warbull-kit.test.ts holds every kit bone within 1 mm). `hips` is
+  # the .blob's pelvis BONE (WAM's root is a bare point).
+  root pelvis at 0.415686
+  bone hips   parent=pelvis dir=up len=0.058824
+  bone spine1 parent=hips   dir=up pitch=1 len=0.086275
+  bone chest  parent=spine1 dir=up pitch=1 len=0.117647
+  bone spine2 parent=chest  dir=up pitch=0 len=0.047059
+  bone neck   parent=spine2 dir=up pitch=0 len=0.098039
+  bone skull  parent=neck   dir=up pitch=0 len=0.156863
+  mirror
+    # dir=side: tilt verbatim (both languages swing it toward +y).
+    bone clavicle parent=spine2 side=0.023529 dir=side tilt=30 len=0.125490
+    # DOWN BONES WITH PITCH AND TILT ARE RE-SOLVED: the .blob applies pitch
+    # then tilt (blob-compile.ts dirVector), WAM tilt then pitch
+    # (skeleton.py resolve_dir). Each pair is the WAM (pitch, tilt) with the
+    # .blob's exact direction:
+    #   blob (cos p sin t, -cos p cos t, sin p) = wam (sin t', -cos t' cos p', -cos t' sin p')
+    #   upperarm blob (6, 40)  forearm (30, 28)  hand (15, 15)
+    #   thigh    blob (8, 9)   shin    (-6, 2)
+    bone upperarm parent=clavicle dir=down tilt=39.7371 pitch=-7.8124 len=0.188235
+    bone forearm  parent=upperarm dir=down tilt=23.9898 pitch=-33.1803 len=0.156863
+    bone hand     parent=forearm  dir=down tilt=14.4775 pitch=-15.5041 len=0.066667
+    bone thigh    parent=hips side=0.074510 dir=down tilt=8.9117 pitch=-8.0984 len=0.149020
+    bone shin     parent=thigh    dir=down tilt=1.9890 pitch=6.0036 len=0.258824
+    bone foot     parent=shin     dir=fwd len=0.078431
+  end
+
+parts
+  # THE CABLE BELT. Two iron bands bite the waist at the top and bottom of
+  # the plate's red wrap (y 1.35 and 1.56), and 26 red cables run between
+  # them round the whole waist, packed on its surface. The waist is an
+  # ellipse (half 0.26 x, ~0.245 z), so each cable is placed on that ellipse
+  # grown by its own radius. Skinned to spine1 (the belt's lower half) and
+  # chest via the bone each band rides; spine1 and chest barely bend.
+  loft beltlow bone=spine1 at=0.0 dir=up len=0.0118 offset=(0.0000,0.0490,0.0020) material=iron sides=12
+    ring 0.00 w=0.2059 d=0.1922
+    ring 1.00 w=0.2078 d=0.1941
+    cap start=none end=none
+  loft belthigh bone=chest at=0.0 dir=up len=0.0118 offset=(0.0000,0.0451,0.0000) material=iron sides=12
+    ring 0.00 w=0.2137 d=0.2020
+    ring 1.00 w=0.2137 d=0.2020
+    cap start=none end=none
+  loft wire00 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.1063,0.0588,0.0140) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0016 fwd=0.0002
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire01 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.1001,0.0588,0.0374) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0015 fwd=0.0006
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire02 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0881,0.0588,0.0588) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0013 fwd=0.0009
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire03 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0710,0.0588,0.0768) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0010 fwd=0.0012
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire04 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0498,0.0588,0.0905) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0007 fwd=0.0014
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire05 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0256,0.0588,0.0991) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0004 fwd=0.0015
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire06 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0000,0.0588,0.1020) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0000 fwd=0.0016
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire07 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0256,0.0588,0.0991) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0004 fwd=0.0015
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire08 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0498,0.0588,0.0905) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0007 fwd=0.0014
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire09 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0710,0.0588,0.0768) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0010 fwd=0.0012
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire10 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0881,0.0588,0.0588) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0013 fwd=0.0009
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire11 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.1001,0.0588,0.0374) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0015 fwd=0.0006
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire12 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.1063,0.0588,0.0140) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0016 fwd=0.0002
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire13 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.1063,0.0588,-0.0101) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0016 fwd=-0.0002
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire14 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.1001,0.0588,-0.0335) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0015 fwd=-0.0006
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire15 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0881,0.0588,-0.0548) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0013 fwd=-0.0009
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire16 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0710,0.0588,-0.0729) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0010 fwd=-0.0012
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire17 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0498,0.0588,-0.0866) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0007 fwd=-0.0014
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire18 bone=spine1 at=0.0 dir=up len=0.0745 offset=(-0.0256,0.0588,-0.0951) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=-0.0004 fwd=-0.0015
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire19 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0000,0.0588,-0.0980) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0000 fwd=-0.0016
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire20 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0256,0.0588,-0.0951) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0004 fwd=-0.0015
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire21 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0498,0.0588,-0.0866) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0007 fwd=-0.0014
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire22 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0710,0.0588,-0.0729) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0010 fwd=-0.0012
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire23 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.0881,0.0588,-0.0548) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0013 fwd=-0.0009
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire24 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.1001,0.0588,-0.0335) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0015 fwd=-0.0006
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+  loft wire25 bone=spine1 at=0.0 dir=up len=0.0745 offset=(0.1063,0.0588,-0.0101) material=wire sides=6
+    ring 0.00 w=0.0086
+    ring 0.50 w=0.0094 side=0.0016 fwd=-0.0002
+    ring 1.00 w=0.0086
+    cap start=flat end=flat
+
+  mirror
+    # BRACE: a chrome clamp on the lower shin, the plate's y 0.39-0.52: much
+    # wider than the 0.14 shin it grips (0.24-0.26), so it reads as a
+    # machine bolted round the leg, narrowing at the bottom to grip it. Squarish, on the shin's own aim, with an
+    # iron lip at the top where the calf cables enter.
+    loft brace bone=shin at=0.49 dir=down tilt=1.9890 pitch=6.0036 len=0.0549 frame=fwd material=chrome shape=squarish
+      ring 0.00 w=0.0980 d=0.1059 fwd=-0.0047
+      ring 0.30 w=0.0941 d=0.0980 fwd=-0.0031
+      ring 0.75 w=0.0784 d=0.0824
+      ring 1.00 w=0.0596 d=0.0596
+      cap start=none end=none
+    loft bracelip bone=shin at=0.475 dir=down tilt=1.9890 pitch=6.0036 len=0.0059 frame=fwd material=iron shape=squarish
+      ring 0.00 w=0.1027 d=0.1118 fwd=-0.0047
+      ring 1.00 w=0.1027 d=0.1118 fwd=-0.0047
+      cap start=none end=none
+    # Status LED on the brace's front face.
+    attach braceled bone=shin kind=sphere at=0.56 offset=(0.0000,0.0000,0.0510) size=0.0094 material=led
+    # CALF CABLES: three red cables down the calf into the brace (front,
+    # outer, inner): 1.2 cm off the calf's surface, diving into the lip.
+    loft calfwireF bone=shin at=0.28 dir=down tilt=1.9890 pitch=6.0036 len=0.0627 frame=fwd material=wire sides=6
+      ring 0.00 w=0.0086 fwd=0.0451
+      ring 1.00 w=0.0086 fwd=0.0373
+      cap start=flat end=flat
+    loft calfwireO bone=shin at=0.28 dir=down tilt=1.9890 pitch=6.0036 len=0.0627 frame=fwd material=wire sides=6
+      ring 0.00 w=0.0086 side=0.0463
+      ring 1.00 w=0.0086 side=0.0384
+      cap start=flat end=flat
+    loft calfwireI bone=shin at=0.28 dir=down tilt=1.9890 pitch=6.0036 len=0.0627 frame=fwd material=wire sides=6
+      ring 0.00 w=0.0086 side=-0.0463
+      ring 1.00 w=0.0086 side=-0.0384
+      cap start=flat end=flat
+  end
+
+  # HIS LEFT FOOT (+x): SHOD. A chrome pastern tube from the brace down to
+  # the hoof (the plate's y 0.26-0.39, 0.17 wide over a 0.14 shin), and a
+  # chrome shoe over the whole hoof (flesh x 0.166-0.378, y 0.01-0.26,
+  # z -0.08-0.17), sole on the floor. frame=up makes d the HEIGHT, and each
+  # ring's up= drops its centre to d/2 so the sole stays flat while the top
+  # slopes to the toe.
+  loft pastern bone=shin.l at=0.66 dir=down tilt=1.9890 pitch=6.0036 len=0.0745 frame=fwd material=chrome
+    ring 0.00 w=0.0627 d=0.0627
+    ring 1.00 w=0.0620 d=0.0620
+    cap start=none end=none
+  loft shoe bone=foot.l at=0.0 dir=fwd len=0.1137 frame=up offset=(0.0000,-0.0184,-0.0349) material=chrome shape=squarish
+    ring 0.00 w=0.0980 d=0.1059 up=0.0000
+    ring 0.35 w=0.1020 d=0.1098 up=0.0020
+    ring 0.70 w=0.0980 d=0.0980 up=-0.0039
+    ring 1.00 w=0.0824 d=0.0588 up=-0.0235
+    cap start=none end=flat
+  # HIS RIGHT FOOT (-x): the natural hoof (flesh), under a chrome cuff at
+  # the pastern (the plate's ring at y ~0.26).
+  loft cuff bone=shin.r at=0.84 dir=down tilt=-1.9890 pitch=6.0036 len=0.0196 frame=fwd material=chrome
+    ring 0.00 w=0.0596 d=0.0596
+    ring 1.00 w=0.0596 d=0.0596
+    cap start=none end=none
+
+textures
+  texture chrome base=#aab0b8
+    gradient axis=v from=-0.04 to=0.06
+    noise scale=0.10 amount=0.02
+  texture iron base=#3c3c42
+    noise scale=0.15 amount=0.035
+    ao amount=0.22

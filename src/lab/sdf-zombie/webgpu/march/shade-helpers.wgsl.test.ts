@@ -20,7 +20,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
   it('applies the level shadow map to the key term only, and only when enabled', () => {
     expect(LEVEL_SHADOW).toContain('fn levelShadow(p: vec3<f32>, n: vec3<f32>, shadowTex: texture_depth_2d, shadowMat: mat4x4<f32>, cfg: vec4<f32>) -> f32');
     expect(LEVEL_SHADOW).toContain('if (cfg.x < 0.5) { return 1.0; }');
-    expect(MARCH_BODY).toContain('let lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg);');
+    expect(MARCH_BODY).toContain('if (lightListCfg.x <= 0.0 || lightListCfg.z > 0.5) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }');
     expect(MARCH_BODY).toContain('diff * wShadow * lvl * keyI * keyC');
   });
   it('darkens the key specular with the same factor; the signature ends with the three new slots', () => {
@@ -78,9 +78,11 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // show-through strength, last so the tail keeps growing in commit order.
     // +1 skeletonDepth (flame-polish task 4) after burnSkeleton — the reveal
     // depth, same positional rule.
-    expect(names.length).toBe(99);
+    // +2 shared light list (lightListCfg, lightList storage) after burnSkeletonDepth
+    // — light list plan 1 task 9, same positional rule.
+    expect(names.length).toBe(101);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-29)).toEqual([
+    expect(names.slice(-31)).toEqual([
       'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
@@ -88,6 +90,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
       'lastTex', 'lastInvVp', 'temporalCfg', 'inst', 'instCfg', 'instCentre', 'instHalf',
       'burnCfg', 'burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain',
       'burnFireCoverage', 'burnSkeleton', 'burnSkeletonDepth',
+      'lightListCfg', 'lightList',
     ]);
     // The temporal start folds in AFTER preStart, with bodyEntry as the
     // sixth lower-bound term (see the other pin above for the argument).
@@ -115,14 +118,17 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // crowd stage a task 5: instCentre/instHalf follow them (the proxy box).
     // flame lab task 5: the burn tail (5 slots) follows THEM — burn is per-view,
     // so the per-instance params stay directly ahead of it.
-    expect(names.indexOf('instCfg')).toBe(names.length - 11);
-    expect(names.indexOf('inst')).toBe(names.length - 12);
-    expect(names.indexOf('instCentre')).toBe(names.length - 10);
-    expect(names.indexOf('instHalf')).toBe(names.length - 9);
-    expect(names.indexOf('burnCfg')).toBe(names.length - 8);
-    expect(names.indexOf('burnFireGain')).toBe(names.length - 4);
-    expect(names.indexOf('burnFireCoverage')).toBe(names.length - 3);
-    expect(names.indexOf('burnSkeleton')).toBe(names.length - 2);
-    expect(names.indexOf('burnSkeletonDepth')).toBe(names.length - 1);
+    // light list task 9: lightListCfg and the lightList storage follow the burn tail.
+    expect(names.indexOf('instCfg')).toBe(names.length - 13);
+    expect(names.indexOf('inst')).toBe(names.length - 14);
+    expect(names.indexOf('instCentre')).toBe(names.length - 12);
+    expect(names.indexOf('instHalf')).toBe(names.length - 11);
+    expect(names.indexOf('burnCfg')).toBe(names.length - 10);
+    expect(names.indexOf('burnFireGain')).toBe(names.length - 6);
+    expect(names.indexOf('burnFireCoverage')).toBe(names.length - 5);
+    expect(names.indexOf('burnSkeleton')).toBe(names.length - 4);
+    expect(names.indexOf('burnSkeletonDepth')).toBe(names.length - 3);
+    expect(names.indexOf('lightListCfg')).toBe(names.length - 2);
+    expect(names.indexOf('lightList')).toBe(names.length - 1);
   });
 });

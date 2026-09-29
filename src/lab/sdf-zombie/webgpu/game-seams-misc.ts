@@ -5,6 +5,8 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { layerState, setLayer, type LightLayerKey } from './light-layers';
+import { setListLook, type ListLook } from './light-list';
 import type { GameContext } from './game-context';
 import { impactSplashProfiles } from './impact-splash-profiles';
 import { DATA_ROWS as CROWD_DATA_ROWS } from './march.wgsl';
@@ -134,6 +136,18 @@ export function createMiscSeams(ctx: GameContext) {
     },
     /** Show/hide the VHS tuning panel (vhs-panel.ts). Same shape as the two
      *  above, so a capture script can dismiss all three the same way. */
+    /** LIGHT LAYERS (light-layers.ts): the state, and one switch (returns the new state). */
+    layers: () => layerState(),
+    /** Each actor's lightListCfg: x list on, y gib no-rim, z old-beam torch (1 while the torch is lit
+     *  and 'torch through the list' is off), w 1 - the extra lights' weight. */
+    bodyListLanes: () => ctx.world.actors.map(a => a.view.uniforms.lightListCfg.value.toArray()),
+    /** The list's live look scales (light-list.ts ListLook): floor, viewBias, backRim, secondary. */
+    setListLook: (l: Partial<ListLook>) => ({ ...setListLook(l) }),
+    setLayer: (key: LightLayerKey, on: boolean) => { setLayer(key, on); return layerState(); },
+    lightLayersPanel(on: boolean) {
+      ctx.panels.lightLayersPanel?.setVisible(on);
+      return ctx.panels.lightLayersPanel?.shell.visible ?? false;
+    },
     vhsPanel(on: boolean) {
       ctx.panels.vhsPanel?.setVisible(on);
       return ctx.panels.vhsPanel?.visible ?? false;

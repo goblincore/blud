@@ -227,6 +227,8 @@ export function createRenderSeams(ctx: GameContext) {
       ctx.panels.vhsPanel?.refresh();
       return ctx.render.postAa.vhs;
     },
+    /** The final S-curve (post-contrast.wgsl.ts): strength 0 off .. 1, optional display-space pivot. */
+    setContrast: (k: number, pivot?: number) => ctx.render.postAa.setContrast(k, pivot),
     setVhsTerm: (name: keyof VhsTerms, value: number) => {
       ctx.render.postAa.setVhsTerm(name, value);
       ctx.panels.vhsPanel?.refresh();

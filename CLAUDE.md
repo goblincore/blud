@@ -10,7 +10,9 @@ reference-only for behavior comparison (dynamite, gibbing).
 
 ## Start here
 
-- **Status board:** [`TASKS.md`](TASKS.md) — in-flight, blocked, done, next action.
+- **Status board:** [`TASKS.md`](TASKS.md) — the task wiki's front page: in flight, next, and an index
+  of area pages under [`docs/tasks/`](docs/tasks/) (levels, characters, combat and gore, rendering,
+  engineering, backlog). Keep the front page short; detail goes on the area pages.
 - **Source map (current vs. proposed):** [`docs/architecture/repository-map.md`](docs/architecture/repository-map.md)
 - **Legacy dynamite/gibbing reference:** [`docs/reference/legacy-dynamite-gibbing.md`](docs/reference/legacy-dynamite-gibbing.md)
 - **Cross-harness agent context:** [`AGENTS.md`](AGENTS.md)
@@ -19,7 +21,7 @@ reference-only for behavior comparison (dynamite, gibbing).
 
 | Command | Opens | Target |
 | --- | --- | --- |
-| `npm run dev` / `npm run dev:fps` | `/sdf-game.html` | Active SDF FPS |
+| `npm run dev` / `npm run dev:fps` | `/sdf-game.html?level=night-train` | Active SDF FPS (Night Train; bare `/sdf-game.html` is the ring testbed, god mode on) |
 | `npm run dev:legacy` | `/index.html` | Retired legacy game |
 | `npx vite` | *(no browser)* | Plain server for automation |
 

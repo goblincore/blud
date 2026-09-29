@@ -136,7 +136,7 @@ async function bootAndCapture({ room, crowd }) {
   // pure per-frame estimate.
   const SKIP = (process.env.MARCH_PARITY_SKIP_PINS ?? '').split(',');
   if (!SKIP.includes('field')) await evaluate('__sdfGame.setFieldStyle("off")');
-  if (!SKIP.includes('light')) await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
+  if (!SKIP.includes('light')) await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); return 1; })()');
   if (!SKIP.includes('probe')) await evaluate('(() => { __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
   await stageCloseUp(evaluate, { room }, fail);
   await evaluate('(() => { __sdfGame.setSdfScale(0.5); __sdfGame.step(6); return 1; })()');

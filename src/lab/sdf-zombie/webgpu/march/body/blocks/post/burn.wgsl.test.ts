@@ -24,7 +24,7 @@ describe('ported features reach the entry point', () => {
     expect(moduleSrc.split('var<private> gBurnEmit: vec3<f32>').length).toBe(2);
     const params = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
     expect(params).toContain('burnCfg: vec4<f32>,');
-    expect(params).toMatch(/burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32, burnSkeletonDepth: f32\s*\)/);
+    expect(params).toMatch(/burnFireGain: f32, burnFireCoverage: f32, burnSkeleton: f32, burnSkeletonDepth: f32,/);
   });
 
   it('paints fire and char on a burning body from the rest-space anchor', () => {

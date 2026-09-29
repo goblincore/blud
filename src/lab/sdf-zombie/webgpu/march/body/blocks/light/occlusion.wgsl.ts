@@ -46,9 +46,20 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // costs nothing. Strength mixes toward 1 so the slider scales the effect,
   // never inverts it. Applied to the KEY diffuse and key specular ONLY —
   // fill, ambient and scatter stay untouched or craters go pitch black.
+  //
+  // SELF-SHADOW (shared light list spec §6, self-shadow.ts): the same walk over the SMOOTH
+  // field (wound count 0, so no crater-lip rings), toward the key, hard edged, capped. The
+  // wound shadow wins inside wound zones when both are on. woundShadowCfg z strength,
+  // w reach; z = 0 (the default everywhere; ?selfshadow=1 opts in) skips it.
   var wShadow = 1.0;
-  if (woundShadowCfg.x > 0.0 && hitNearWound) {
-    wShadow = mix(1.0, woundShadow(p, L, abs(woundShadowCfg.y), data, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg), woundShadowCfg.x);
+  let wsOn = woundShadowCfg.x > 0.0 && hitNearWound;
+  let ssOn = woundShadowCfg.z > 0.0 && t < 12.0;
+  if (wsOn || ssOn) {
+    let wsK = select(24.0, abs(woundShadowCfg.y), wsOn);
+    let wsCfg = select(vec4<f32>(0.0, woundCfg.yzw), woundCfg, wsOn);
+    let wsReach = select(woundShadowCfg.w, 0.4, wsOn);
+    let wsSteps = select(8, 14, wsOn);
+    wShadow = mix(1.0, woundShadow(p, L, wsK, data, wsCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg, wsReach, wsSteps), select(woundShadowCfg.z, woundShadowCfg.x, wsOn));
   }
 
   // LEVEL SHADOW (perf round 2 task 7). One texture load per hit pixel, ZERO
@@ -58,4 +69,7 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
   // until the game page's seam turns it on. Applied to the KEY diffuse and
   // key specular ONLY — the same discipline as wShadow above: ambient, fill
   // and scatter stay untouched or a shadowed body goes pitch black.
-  let lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg);`;
+  // In list mode the flashlight's map does not gate the dominant (plan 1: no level-to-body
+  // shadows): lvl stays 1.0, shader-side, since the game rewrites levelShadowCfg.x at runtime.
+  var lvl = 1.0;
+  if (lightListCfg.x <= 0.0 || lightListCfg.z > 0.5) { lvl = levelShadow(p, n, levelShadowTex, levelShadowMatrix, levelShadowCfg); }`;

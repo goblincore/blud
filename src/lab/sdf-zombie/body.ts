@@ -38,8 +38,10 @@ const ZOMBIE_BASE: BodyDef = {
     { name: 'clavicle', parent: 'spine',  dir: [1, 0, 0],       length: 0.20, side: 0,    mirror: true },
     { name: 'upperArm', parent: 'clavicle', dir: [0.30, -1, 0], length: 0.30, side: 0,    mirror: true },
     { name: 'foreArm',  parent: 'upperArm', dir: [0.05, -1, 0.1], length: 0.30, side: 0,  mirror: true },
-    { name: 'thigh',    parent: 'pelvis', dir: [0, -1, 0],      length: 0.40, side: 0.10, mirror: true },
-    { name: 'shin',     parent: 'thigh',  dir: [0, -1, 0.05],   length: 0.42, side: 0,    mirror: true },
+    // Feet on the floor (2026-09-29): legs +0.06 / +0.08 and a foot bone; see zombie.blob.
+    { name: 'thigh',    parent: 'pelvis', dir: [0, -1, 0],      length: 0.46, side: 0.10, mirror: true },
+    { name: 'shin',     parent: 'thigh',  dir: [0, -1, 0.05],   length: 0.50, side: 0,    mirror: true },
+    { name: 'foot',     parent: 'shin',   dir: [0, 0, 1],       length: 0.16, side: 0,    mirror: true },
   ],
 
   prims: [
@@ -59,10 +61,12 @@ const ZOMBIE_BASE: BodyDef = {
     { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.048, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
     { bone: 'foreArm',  at: 1.00, radius: 0.062, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true },
 
-    // Legs — thigh, shin, foot.
-    { bone: 'thigh', at: 0.05, capTo: 0.95, radius: 0.082, scale: [1, 1, 1], blendK: 0.0175, limb: 'leg', mirror: true },
+    // Legs — thigh, shin, ankle, foot (heel + sole down to the floor; see zombie.blob).
+    { bone: 'thigh', at: 0.04348, capTo: 0.95, radius: 0.082, scale: [1, 1, 1], blendK: 0.0175, limb: 'leg', mirror: true },
     { bone: 'shin',  at: 0.05, capTo: 0.92, radius: 0.062, scale: [1, 1, 1], blendK: 0.015, limb: 'leg', mirror: true },
-    { bone: 'shin',  at: 1.00, radius: 0.070, scale: [0.85, 0.6, 1.5], blendK: 0.0125, limb: 'leg', mirror: true },
+    { bone: 'shin',  at: 1.00, radius: 0.058, scale: [1, 1, 1], blendK: 0.0125, limb: 'leg', mirror: true },
+    { bone: 'foot',  at: 0.00, radius: 0.058, scale: [1.05, 0.95, 1.05], blendK: 0.012, limb: 'leg', mirror: true, offset: [0, -0.041, -0.010] },
+    { bone: 'foot',  at: 0.00, capTo: 1.00, radius: 0.052, radiusB: 0.046, scale: [1.15, 1, 1], blendK: 0.014, limb: 'leg', mirror: true, offset: [0, -0.045, 0] },
   ],
 };
 

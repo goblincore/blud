@@ -21,6 +21,11 @@ export function createWeaponAimSeams(ctx: GameContext) {
     // the headless driver can shoot; aim with setPose(yaw, pitch).
     // ---------------------------------------------------------------
     fire: (barrels: 1 | 2 = 1) => fire(ctx, barrels),
+    /** The muzzle flash alone (shared light list gate, Task 11): restarts the flash clock that
+     *  fire() restarts, so the flash light joins this frame's directFlashes and the light list,
+     *  with no shot, no ammo and no weapon ownership (Night Train's player has no shotgun at the
+     *  coat check). Hand-step at dt 0 to hold it. */
+    muzzleFlash: () => { ctx.weapon.flashAge = 0; return !!ctx.weapon.flashLight; },
     setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(ctx); return ctx.player.freeAimOn; },
     setInfiniteAmmo: (on: boolean) => {
       ctx.weapon.infiniteAmmo = on;

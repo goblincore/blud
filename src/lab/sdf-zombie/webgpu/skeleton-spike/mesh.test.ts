@@ -161,7 +161,7 @@ function nearestVertDist(m: SegmentMesh, p: Vec3): number {
 describe('extractSegmentMesh — real zombie segments', () => {
   it('extracts every segment non-empty, complete and unclamped', () => {
     expect(headSrc).toBeDefined();
-    expect(sources.length).toBe(18); // task-1 census
+    expect(sources.length).toBe(20); // task-1 census, + the two feet (2026-09-29)
     for (const s of sources) {
       const m = extractSegmentMesh(s);
       expect(m.verts, s.segment).toBeGreaterThan(0);
@@ -250,14 +250,16 @@ describe('SegmentMeshRenderer lifecycle', () => {
   it('clear releases actor slots before cache disposal and permits reuse', () => {
     const cache = new SegmentMeshCache();
     const renderer = createSegmentMeshRenderer(cache);
+    const segs = () => renderer.drawn.filter(d => !d.eye).length;
     renderer.update([[headSrc]]);
-    expect(renderer.object.children.length).toBe(1);
+    expect(segs()).toBe(1);
     renderer.clear();
+    expect(segs()).toBe(0);
     expect(renderer.object.children.length).toBe(0);
     expect(renderer.stats.segments).toBe(0);
     cache.dispose();
     renderer.update([[headSrc]]);
-    expect(renderer.object.children.length).toBe(1);
+    expect(segs()).toBe(1);
     renderer.dispose();
     cache.dispose();
   });

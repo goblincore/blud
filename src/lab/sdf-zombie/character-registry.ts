@@ -33,6 +33,8 @@ import thinFixtureBlobSrc from './characters/thin-fixture.blob?raw';
 // and may come and go with the comparison).
 import minotaurBlobSrc from './characters/minotaur.blob?raw';
 import soldierBlobSrc from './characters/soldier.blob?raw';
+import juggernautBlobSrc from './characters/juggernaut.blob?raw';
+import warbullBlobSrc from './characters/warbull.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
@@ -44,7 +46,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -222,6 +224,31 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // the lab's applyMeanOf. The fallback 1 halved its level in the game.
     face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
     profile: SOLDIER_PROFILE,
+  },
+  // The soldier's power-armoured chaingunner variant: soldier.blob scaled
+  // (see juggernaut.blob's header) under his own WAM kit. Until
+  // scripts/build-wam-kit.sh juggernaut has been run, the kit 404s and
+  // character-view renders him undressed (it logs, it does not throw).
+  juggernaut: {
+    name: 'juggernaut', src: juggernautBlobSrc,
+    kit: '/assets/lab/juggernaut-kit.gltf',
+    armoured: true,
+    // The soldier's baked face and its measured mean: same PNG, same crop.
+    face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
+    profile: JUGGERNAUT_PROFILE,
+  },
+  // The cyber-minotaur, authored from the owner's reference plate
+  // (warbull.blob's header; docs/dev-notes/refs/warbull-reference.png). The
+  // hard parts are characters/warbull-kit.wam. Until
+  // scripts/build-wam-kit.sh warbull has been run, the kit 404s and he
+  // renders as the flesh alone (logged).
+  warbull: {
+    name: 'warbull', src: warbullBlobSrc,
+    kit: '/assets/lab/warbull-kit.gltf',
+    // Cropped from the reference plate's head (warbull.blob, sheet block).
+    // mean measured off the PNG's opaque texels, lab-main's applyMeanOf rule.
+    face: { ...bakedFace('warbull-face.png'), mean: 0.14481547752506288 },
+    profile: WARBULL_PROFILE,
   },
   female: {
     name: 'female', src: femaleBlobSrc,

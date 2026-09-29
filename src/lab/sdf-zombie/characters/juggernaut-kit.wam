@@ -1,0 +1,293 @@
+# Juggernaut kit — classic Fallout-style POWER ARMOUR over juggernaut.blob
+# (spec: docs/superpowers/specs/2026-09-25-juggernaut-design.md).
+#
+# Read soldier-kit.wam's header first: the two-language argument, the unit
+# and pitch-sign conversions, why every limb-wrapping loft is an open shell
+# and the +6-10% facet margin all apply here verbatim.
+#
+# UNITS. juggernaut.blob is soldier.blob x 1.15 (plus extra girth factors),
+# and soldier-kit.wam's unit is metres / 2.04. So `height 2.346` (2.04 x 1.15)
+# makes every soldier-kit fraction mean the same place on this body. The
+# skeleton below is soldier-kit's with three changes, each mirroring the .blob:
+# clavicle side + len x 1.13 (SH), thigh side x 1.10 (HIP), upperarm tilt 12.
+#
+# FLESH THIS WRAPS, in kit units (m / 2.346), measured off juggernaut.blob
+# with sdPrimitive over the torso cluster and sdBody above the shoulders
+# (2026-09-25; re-measure if the .blob moves):
+#
+#   torso  y0.48 w=0.179 d=0.134   y0.50 w=0.194 d=0.146   y0.52 w=0.197 d=0.147
+#          y0.56 w=0.161 d=0.128   y0.60 w=0.174 d=0.138   y0.64 w=0.179 d=0.142
+#          y0.68 w=0.182 d=0.142   y0.72 w=0.189 d=0.148   y0.74 w=0.192 d=0.151
+#          y0.76 w=0.184 d=0.145   y0.78 w=0.164 d=0.129   y0.80 w=0.125 d=0.100
+#          torso z-centre ~ -0.003
+#   neck   w=0.060 d=0.066 (bar r 0.0698 m, deep 1.10), y0.78-0.83
+#   head   y0.84 w=0.055   y0.85 w=0.068   y0.87 w=0.078   y0.88 w=0.085
+#          y0.89 w=0.082   y0.90 w=0.075   y0.92 w=0.061   y0.93 w=0.027
+#          z back -0.047, front +0.050 (nose tip +0.062 at y0.88)
+#   limbs  soldier-kit's table x the .blob girth factors: arms x 1.12,
+#          legs x 1.10 (the limb prims are the soldier's, scaled).
+#
+# THE READ, in three beats (classic power armour): a HEAD SUNK BETWEEN HUGE
+# DOMED SHOULDERS, a BARREL CHEST with a raised centre plate, and STOMPING
+# ARMOURED LIMBS on big boots. The backpack power unit with twin exhaust
+# stacks rising beside the helmet is the silhouette from behind.
+#
+# MATERIALS AND DAMAGE. `plate` is the armour: kit-overlay.ts breaks plate off
+# under clustered hits (kit-damage.ts), and Task 4 of the plan makes it absorb
+# damage. The HELMET is plate on purpose: it has to come off before head hits
+# count. `iron` is the frame (waist girdle, gorget, gloves, backpack, snout):
+# it never breaks off. `lens` glows a faint red (kit-overlay.ts LOOK).
+# `brass` is the ammo drum (a cook-off candidate, spec, "Optional").
+#
+# BUILD:  scripts/build-wam-kit.sh juggernaut
+#   -> public/assets/lab/juggernaut-kit.gltf, loaded via the registry entry.
+#   Then run characters/juggernaut-kit.test.ts (it skips until the glTF exists).
+#
+# EXPECTED LINTS, correct to ignore (soldier-kit's): pelvis/clavicle/hand/
+# neck/foot have little or no geometry near them.
+model juggernaut-kit
+  # soldier-kit's 2.04 x 1.15 (juggernaut.blob's H).
+  height 2.346
+  style chunky
+
+palette
+  # Worn olive-grey steel, warmer and lighter than the soldier's #536044 so
+  # the two read as different kit at a glance in the same room.
+  plate  #6b6552
+  # Dark frame metal: joints, girdle, backpack. Reads as the machine under
+  # the plates.
+  iron   #34322e
+  brass  #7a5a2a
+  lens   #3a0806
+
+skeleton
+  # juggernaut.blob's metres / 2.346 to six places (the rest-identity test
+  # in juggernaut-kit.test.ts holds every kit bone within 1 mm of its .blob
+  # bone, and rounding to soldier-kit's four places drifts ~0.1 mm a bone).
+  root pelvis at 0.488249
+  bone hips   parent=pelvis dir=up len=0.058824
+  bone spine1 parent=hips   dir=up pitch=-1 len=0.094118
+  bone chest  parent=spine1 dir=up pitch=-1 len=0.1000
+  bone spine2 parent=chest  dir=up pitch=0  len=0.035294
+  bone neck   parent=spine2 dir=up pitch=0  len=0.047059
+  bone skull  parent=neck   dir=up pitch=2  len=0.129412
+  mirror
+    # the .blob's SH-widened clavicle.
+    bone clavicle parent=spine2  side=0.026598 dir=side len=0.066454
+    # tilt 12, the .blob's (never flips). down-bone pitches NEGATED.
+    bone upperarm parent=clavicle dir=down tilt=12 pitch=-2 len=0.152941
+    bone forearm  parent=upperarm dir=down tilt=4 pitch=-8  len=0.141176
+    bone hand     parent=forearm  dir=down pitch=-6         len=0.055882
+    # the .blob's HIP-widened thigh spacing.
+    bone thigh    parent=hips     side=0.043990 dir=down tilt=2 len=0.223529
+    bone shin     parent=thigh    dir=down tilt=2 len=0.247059
+    bone foot     parent=shin     dir=fwd len=0.076471
+  end
+
+parts
+  mirror
+    # PAULDRON: the first beat. A huge DOME over the deltoid, the classic
+    # power-armour shoulder. Soldier-kit's ray (at 0, dir down, pitch -2,
+    # tilt 3), raised 6 mm so the dome clears the bigger deltoid's crown
+    # (deltoid r 0.0646 x tall 1.05 -> crown y 0.835; the dome starts 0.838).
+    #
+    # side 0.035, not the soldier's 0.016: the widest ring (0.200) centred on
+    # the socket would cross the centreline and the two domes would meet over
+    # the neck. 0.035 puts the inner rim at x ~0.02 (beside the neck, over the
+    # gorget) and the outer at ~0.22 (0.52 m): a ~1.0 m shoulder span on a
+    # 2.3 m figure, the power-armour proportion. The deltoid (x 0.03-0.16,
+    # w 0.13, d 0.13) sits inside every ring below the dome.
+    loft pauldron bone=upperarm at=0.0 offset=(-0.0080,0.0620,-0.0020) dir=down pitch=-2 tilt=3 len=0.1400 material=plate
+      ring 0.00 w=0.110 d=0.110 side=0.0350
+      ring 0.18 w=0.176 d=0.172 side=0.0350
+      ring 0.36 w=0.200 d=0.194 side=0.0350
+      ring 0.58 w=0.194 d=0.188 side=0.0350
+      ring 0.80 w=0.172 d=0.166 side=0.0350
+      ring 1.00 w=0.146 d=0.140 side=0.0350
+      cap start=dome end=none
+
+    # UPPER-ARM SLEEVE: a plate tube from under the pauldron's skirt (which
+    # ends near t 0.5) to just above the elbow, so the bicep never shows.
+    # Flesh (bar r 0.0566 -> 0.0382 over t 0.12-0.95, deltoid tail to t 0.5):
+    # w 0.097 at 0.50, 0.089 at 0.70, 0.081 at 0.88. Rings ~30% over: bulky,
+    # and the chunky facet margin.
+    loft sleeve bones=upperarm..upperarm material=plate
+      ring 0.50 w=0.128 d=0.126
+      ring 0.70 w=0.120 d=0.118
+      ring 0.88 w=0.110 d=0.108
+      cap start=none end=none
+
+    # GAUNTLET: the big boxy forearm of power armour. squarish, flaring toward
+    # the elbow. Flesh (cap r 0.0422 at t 0, bar 0.0474 -> 0.0316): w 0.094 at
+    # 0.12, 0.083 at 0.45, 0.069 at 0.80, 0.064 at 0.96. The cuff stops short
+    # of the wrist so the fist (orb r 0.034, 0.031 past the wrist) and the
+    # glove over it stay free to grip the gun.
+    loft gauntlet bones=forearm..forearm material=plate shape=squarish
+      ring 0.12 w=0.124 d=0.122
+      ring 0.45 w=0.118 d=0.116
+      ring 0.80 w=0.104 d=0.102
+      ring 0.96 w=0.096 d=0.094
+      cap start=none end=none
+
+    # GLOVE: an iron mitt over the orb fist (r 0.034 at hand t 0.55). A sphere
+    # for the same reason the fist is one: it reads as a fist and grips.
+    attach glove bone=hand kind=sphere at=0.55 offset=(0,0,0.0047) size=0.040 material=iron
+
+    # THIGH PLATE: a front plate strapped to the thigh, NOT a tube. The two
+    # thighs overlap at the crotch (axes 0.088 apart, flesh 0.096 wide), so
+    # two thigh tubes would grind through each other every stride; and the
+    # hanging fist sits 6 mm off the outer thigh, so there is no room for a
+    # side plate either. Thigh flesh at t 0.30: r ~0.048, front z ~0.050;
+    # the plate's back face sits at z 0.055.
+    attach thighplate bone=thigh kind=box at=0.30 offset=(0.0060,0,0.0660) size=0.1000 w=0.0850 h=0.1000 d=0.0220 material=plate
+
+    # KNEE: soldier-kit's knee cop x 1.23 (leg girth 1.10 x a 1.12 power-armour
+    # bulk). Same chain positions (t 0.385-0.555 on thigh..shin).
+    loft knee bones=thigh..shin material=plate shape=squarish
+      ring 0.385 w=0.093 dtop=0.112 dbot=0.087
+      ring 0.415 w=0.116 dtop=0.133 dbot=0.098
+      ring 0.505 w=0.118 dtop=0.138 dbot=0.098
+      ring 0.555 w=0.096 dtop=0.116 dbot=0.090
+      cap start=none end=none
+
+    # GREAVE: soldier-kit's boot shaft x 1.23 (same bulk argument), offset
+    # x 0.009 x 1.10. The cuff tucks under the knee cop as on the soldier.
+    loft shaft bone=shin at=0.045 dir=down tilt=2 len=0.277785 offset=(0.0100,0,0) material=plate
+      ring 0.00 w=0.141 d=0.135
+      ring 0.12 w=0.148 d=0.141
+      ring 0.36 w=0.141 d=0.135
+      ring 0.60 w=0.129 d=0.123
+      ring 0.80 w=0.125 d=0.118
+      ring 1.00 w=0.138 d=0.127
+      cap start=none end=flat
+
+    # BOOT: soldier-kit's boot, widths x 1.21 (leg 1.10 x 1.10 bigger boot),
+    # length x 1.10, heel 9% taller. frame=up makes d HEIGHT, so the sole
+    # stays on y=0: heel centre y = d/2 = 0.048, the foot bone at 0.0768, so
+    # offset y = -0.0288. The toe rings shrink about the axis, so the sole
+    # rocks up toward the toe exactly as the soldier's does.
+    loft foot bone=foot at=0.0 dir=fwd len=0.2040 frame=up offset=(0.0100,-0.0288,-0.0367) material=plate
+      ring 0.00 w=0.151 d=0.096
+      ring 0.20 w=0.151 d=0.096
+      ring 0.40 w=0.148 d=0.096
+      ring 0.55 w=0.145 d=0.083
+      ring 0.75 w=0.136 d=0.068
+      ring 0.90 w=0.106 d=0.057
+      ring 1.00 w=0.085 d=0.048
+      cap start=flat end=flat
+  end
+
+  # CUIRASS: the second beat, a BARREL CHEST. From the waist girdle's top to
+  # the collar line, t 0.40-1.00 of hips..spine2 (y 0.603-0.777). Width is
+  # soldier-kit's x 1.13 (the .blob's WT) and no more: a wider plate would
+  # swallow the upper arms, which hang from sockets at x 0.093 (the soldier's
+  # armpit argument). The power-armour bulk goes into DEPTH instead (x 1.06
+  # x 1.12), and into the pauldrons. Margins over the flesh table: ~0.029 at
+  # t 0.40, ~0.037/0.040 at the chest, ~0.008/0.017 at the collar.
+  # Round, not squarish: classic power armour is bulbous, not machined.
+  loft cuirass bones=hips..spine2 material=plate frame=fwd
+    ring 0.40 w=0.232 d=0.200
+    ring 0.50 w=0.246 d=0.212
+    ring 0.68 w=0.256 d=0.222
+    ring 0.82 w=0.240 d=0.215
+    ring 0.94 w=0.214 d=0.196
+    ring 1.00 w=0.200 d=0.178
+    cap start=none end=none
+
+  # CHEST PLATE: the raised centre plate on the cuirass face, soldier-kit's
+  # front plate x 1.13 wide, set on the deeper cuirass (front at z ~0.111).
+  loft frontplate bone=chest at=0.10 dir=up len=0.128 frame=fwd offset=(0,0,0.1180) material=plate shape=squarish
+    ring 0.00 w=0.142 d=0.014
+    ring 0.08 w=0.170 d=0.028
+    ring 0.84 w=0.194 d=0.028
+    ring 1.00 w=0.160 d=0.014
+    cap start=flat end=flat
+
+  # WAIST GIRDLE: iron, the machine's waist. soldier-kit's belt chain
+  # positions (t 0.34-0.82 of hips..spine1, y 0.540-0.613), widths x 1.13 and
+  # depths x 1.06. Iron, so it never breaks off: the abdomen stays armoured
+  # until dynamite says otherwise.
+  loft girdle bones=hips..spine1 material=iron frame=fwd shape=squarish
+    ring 0.34 w=0.2150 d=0.1650
+    ring 0.39 w=0.2300 d=0.1740
+    ring 0.67 w=0.2300 d=0.1740
+    ring 0.82 w=0.2150 d=0.1650
+    cap start=none end=none
+
+  # GORGET: an iron collar ring around the neck (w 0.060, d 0.066), rising
+  # out of the cuirass's top ring (w 0.200) to under the helmet's rim. The
+  # helmet sits INTO it: that is the "head sunk between the shoulders" beat.
+  loft gorget bone=spine2 at=0.20 dir=up len=0.0750 frame=fwd material=iron shape=squarish
+    ring 0.00 w=0.140 d=0.130
+    ring 0.50 w=0.118 d=0.114
+    ring 1.00 w=0.100 d=0.098
+    cap start=none end=none
+
+  # HELMET: a sealed, rounded bucket over the whole head. On the skull bone
+  # from its base (y 0.8235, overlapping the gorget's top) up to 0.958, domed.
+  # Flesh (see the table): w 0.085 / d ~0.10 at y 0.88, nose tip z +0.062.
+  # offset z +0.008 centres the rings on the head (back -0.047, front +0.050)
+  # rather than on the bone, so the ring at 0.45 runs from z -0.065 to +0.081:
+  # 18 mm behind the skull, 19 mm ahead of the nose tip. Plate, so it breaks
+  # off: head hits count only once it has gone (spec, Task 4).
+  loft helmet bone=skull at=0.0 dir=up len=0.1350 frame=fwd offset=(0,0,0.0080) material=plate
+    ring 0.00 w=0.110 d=0.128
+    ring 0.25 w=0.118 d=0.140
+    ring 0.45 w=0.122 d=0.146
+    ring 0.65 w=0.116 d=0.140
+    ring 0.82 w=0.100 d=0.122
+    ring 0.94 w=0.070 d=0.086
+    cap start=none end=dome
+
+  # SNOUT: the respirator grille jutting from the helmet's face below the
+  # lenses (mouth level, y ~0.862). Starts inside the shell (z 0.06, the shell
+  # face is at ~0.078 there) and juts 5 cm (0.021 u) past it. frame=up: d is
+  # height. Plate, not iron: it is part of the helmet, so it must come off
+  # with it rather than float in front of a bare face (kit-damage sheds per
+  # connected island, and this overlaps the helmet shell).
+  loft snout bone=skull at=0.30 dir=fwd len=0.0500 frame=up offset=(0,-0.0050,0.0600) material=plate
+    ring 0.00 w=0.070 d=0.060
+    ring 0.60 w=0.060 d=0.050
+    ring 1.00 w=0.048 d=0.040
+    cap start=none end=flat
+
+  # LENSES: two round eye lenses on the helmet's face at eye level (skull
+  # t 0.48, y 0.886), standing 4 mm proud of the shell (front z ~0.081 there).
+  # Authored per side, not mirrored: they hang off a CENTRAL bone (the
+  # soldier-kit pouch argument).
+  attach lensL bone=skull kind=sphere at=0.48 offset=(0.0280,0,0.0770) size=0.020 w=0.034 h=0.030 d=0.016 material=lens
+  attach lensR bone=skull kind=sphere at=0.48 offset=(-0.0280,0,0.0770) size=0.020 w=0.034 h=0.030 d=0.016 material=lens
+
+  # BACKPACK POWER UNIT: an iron box on the back of the cuirass (back face
+  # z ~-0.114 at chest t 0.40); its front face sits 1 mm into the plate.
+  attach backpack bone=chest kind=box at=0.40 offset=(0,0,-0.1450) size=0.1300 w=0.1700 h=0.1300 d=0.0700 material=iron
+
+  # EXHAUST STACKS: two vertical pipes rising out of the backpack to shoulder
+  # height (top y ~0.81), beside the helmet in the rear silhouette.
+  loft stackL bone=chest at=0.30 dir=up len=0.1400 frame=fwd offset=(0.0500,0,-0.1750) material=iron
+    ring 0.00 w=0.026 d=0.026
+    ring 1.00 w=0.026 d=0.026
+    cap start=flat end=flat
+  loft stackR bone=chest at=0.30 dir=up len=0.1400 frame=fwd offset=(-0.0500,0,-0.1750) material=iron
+    ring 0.00 w=0.026 d=0.026
+    ring 1.00 w=0.026 d=0.026
+    cap start=flat end=flat
+
+  # AMMO DRUM: a horizontal cylinder under the backpack (spine1 t 0.5,
+  # y 0.594), its top overlapping the box's bottom. The chaingun's feed belt
+  # (Task 3) runs from here to the gun.
+  loft drum bone=spine1 at=0.50 dir=side len=0.1200 offset=(-0.0600,0,-0.1500) material=brass
+    ring 0.00 w=0.075 d=0.075
+    ring 1.00 w=0.075 d=0.075
+    cap start=flat end=flat
+
+textures
+  # Worn power-armour steel: soldier-kit's plate recipe, a touch more noise
+  # and ao (older, heavier kit).
+  texture plate base=#5f5a48
+    gradient axis=v from=-0.06 to=0.08
+    noise scale=0.12 amount=0.035
+    ao amount=0.20
+  texture iron base=#34322e
+    noise scale=0.15 amount=0.03
+    ao amount=0.22

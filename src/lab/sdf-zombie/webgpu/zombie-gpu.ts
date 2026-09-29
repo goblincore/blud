@@ -27,6 +27,7 @@ import { bendCtrl, qRotate, qMul, type Quat, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { TORN } from '../torn-lips';
 import { createFallbackHandVolumeTexture } from './hand-volume';
+import { LIST_VEC4S } from './light-list';
 import {
   TILE_SIZE_PX,
 } from './tile-cull';
@@ -190,6 +191,9 @@ export interface ZombieGpuView {
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
    *  melting body (and its released bone chunks) ever set this non-zero. */
   setMelt(progress: number): void;
+  /** Skin detail k → meltCfg.z (skin-detail-proto.ts): 0 off, 2 = the bumps' light ratio
+   *  squared back on after the highlight shoulder. Per instance (crowd records copy meltCfg). */
+  setSkinDetail(k: number): void;
   /** Motion vectors step 2 (MOTION-VECTORS-PLAN.md): meltCfg.y (gInstMelt.y) on = the march writes
    *  the object-motion MRT attachment. The layer turns it on only while temporal accumulation runs. */
   setMotionOut(on: boolean): void;
@@ -374,7 +378,8 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     // counts2.z = owner re-fold mode; SHIP_REFOLD_MODE (2, the raiser gate) since
     // 2026-09-21 — melee bench: -2.7 ms wounded, -3.6 ms wounded+fire; march-hash equal.
     counts2: uniform(new THREE.Vector4(0, 0, SHIP_COUNTS2_Z, 0)),
-    /** x melt progress 0..1 (zombie melt task 6), yzw spare. Drives the
+    /** x melt progress 0..1 (zombie melt task 6), y motion-out switch, z skin detail k
+     *  (skin-detail-proto.ts, setSkinDetail), w spare. x drives the
      *  flesh-only wet-red albedo/gloss ramp in MARCH_BODY — the body goes red
      *  while still standing, before it visibly sags. 0 everywhere except a
      *  melting body (and the bone chunks it releases), so every other view
@@ -552,8 +557,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * rather than a packed spare: every channel of woundCfg/woundCfg2/
      * surfCfg/lodCfg is already consumed (woundCfg2.w overrides hitEps in
      * volume mode — NOT spare), so nothing here could be reused safely.
+     * Widened to a vec4 for the SDF self-shadow (shared light list spec §6,
+     * self-shadow.ts): z self-shadow strength (0 = off, the lab default; the
+     * game writes it via applySelfShadow), w self-shadow reach in metres.
      */
-    woundShadowCfg: uniform(new THREE.Vector2(0.0, 12.0)),
+    woundShadowCfg: uniform(new THREE.Vector4(0.0, 12.0, 0.0, 0.4)),
     /**
      * ENVIRONMENT BOUNCE (lighting P1). The enclosure's bounds and its six
      * wall colours, from which `ambientAt` derives an analytic chromatic
@@ -702,6 +710,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  world space, w its intensity (0 = none, bit-identical). Stamped per
      *  frame by the game from the player's and the soldiers' flashes. */
     bodyFlash: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** SHARED LIGHT LIST: this body's four packed light picks (`index +
+     *  weight`, -1 empty; slot 0 the dominant light). NOT bound to the march:
+     *  it is a per-view holding slot that writeViewRecord copies into the
+     *  body's record (REC_LIGHTS), like bodyFlash. */
+    bodyLights: uniform(new THREE.Vector4(-1, -1, -1, -1)),
     /** BURNING BODY (flame lab): x = burn 0..1, y = seconds alight, z = char
      *  0..1, w spare. Per VIEW, so a single body burns through this; crowd
      *  instances burn through REC_BURN. */
@@ -725,6 +738,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  (flame-polish task 4). The old shader constant was 0.08; exposed so the
      *  panel and capture can trade limb clutter for rib coverage. */
     burnSkeletonDepth: uniform(0.08),
+    /** SHARED LIGHT LIST (plan 1 task 9): x > 0 lights this body by its four
+     *  REC_LIGHTS picks from the list buffer (the march's `lightList` storage
+     *  param); 0 (the default everywhere until task 10) takes the old key path,
+     *  unchanged. yzw spare. */
+    lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
   };
 }
 
@@ -745,6 +763,18 @@ function fallbackProbeDyn() {
     fallbackProbeDynNode = storage(a, 'vec4', 4).toReadOnly();
   }
   return fallbackProbeDynNode;
+}
+let fallbackLightListNodeRef: unknown;
+/** The shared light list's zero fallback (LIST_VEC4S zeros): the header's light count reads 0,
+ *  so a view without the game's list still binds a well-formed storage buffer, never null.
+ *  createMarchMaterial binds it wherever no real list is passed (an unbound declared storage
+ *  input kills the pipeline); lightListCfg.x = 0 there, so it is never read. */
+export function fallbackLightListNode() {
+  if (!fallbackLightListNodeRef) {
+    const a = new THREE.StorageBufferAttribute(LIST_VEC4S, 4);
+    fallbackLightListNodeRef = storage(a, 'vec4', LIST_VEC4S).toReadOnly();
+  }
+  return fallbackLightListNodeRef;
 }
 let fallbackInstCfgNode: ReturnType<typeof uniform> | null = null;
 /** One-instance config for materials built without a crowd (tests, hands view). */
@@ -848,7 +878,7 @@ export type RefineTail = 'full' | 'slim';
  * Run 5b: the refine twin's lighting tail. 'slim' (the default) is a SHALLOW COPY of the
  * body's uniforms in which the terms the refine head does not need are twin-owned zeros —
  * the shader already skips each one at 0 (pinned in zombie-gpu.test.ts): scatter
- * (surfCfg.w), the wound soft shadow (woundShadowCfg.x), the ambient bounce
+ * (surfCfg.w), the wound soft shadow (woundShadowCfg.x) and self-shadow (.z), the ambient bounce
  * (bounceCfg.x = 0 is the flat fill "exactly as before"), and the probe gather
  * (probeCfg.x, probeDynCfg.x/.y). Key light, flashlight beam, level shadow and bodyFlash
  * stay. 'full' binds the body's own uniforms (run 5's behaviour), kept for the A/B bench.
@@ -862,7 +892,7 @@ export function refineTailUniforms(u: MarchUniforms, tail: RefineTail):
   if (tail === 'full') return { uniforms: u, sync: () => {} };
   const s = u.surfCfg.value;
   const surfCfg = uniform(new THREE.Vector4(s.x, s.y, s.z, 0));
-  const woundShadowCfg = uniform(new THREE.Vector2(0, u.woundShadowCfg.value.y));
+  const woundShadowCfg = uniform(new THREE.Vector4(0, u.woundShadowCfg.value.y, 0, 0));
   const bounceCfg = uniform(new THREE.Vector4(0, 1, 1, 1));
   const probeCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
   const probeDynCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
@@ -1265,6 +1295,10 @@ export function createMarchMaterial(
     inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform>;
     instCentre?: unknown; instHalf?: unknown;
   },
+  // Shared light list (plan 1 task 9), POSITIONALLY LAST: the read-only storage
+  // node of the game's one list buffer (ctx.world.light.list.node). Omitted,
+  // the zero fallback is bound; u.lightListCfg.x gates every read.
+  lightList?: unknown,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1473,6 +1507,12 @@ export function createMarchMaterial(
     burnFireCoverage: u.burnFireCoverage,
     burnSkeleton: u.burnSkeleton,
     burnSkeletonDepth: u.burnSkeletonDepth,
+    // SHARED LIGHT LIST (plan 1 task 9) — POSITIONALLY LAST after
+    // burnSkeletonDepth, bound in the same commit as the WGSL inputs. The
+    // storage node is ALWAYS bound (the zero fallback when this view has no
+    // list); lightListCfg.x = 0 keeps the old key path.
+    lightListCfg: u.lightListCfg,
+    lightList: (lightList ?? fallbackLightListNode()) as never,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 
@@ -1621,6 +1661,8 @@ export interface CrowdMaterialSources {
   depthPre?: DepthPreSource;
   lastFrame?: LastFrameSource;
   probeDyn?: { node: unknown };
+  /** The shared light list's storage node (plan 1 task 9). Undefined = fallback. */
+  lightList?: { node: unknown };
 }
 
 /**
@@ -1656,6 +1698,9 @@ export function writeViewRecord(
     // The per-instance half of the burn ramp, for the same reason as `gore`:
     // burnCfg is per VIEW and the crowd shares one material.
     burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z,
+    // The body's light picks ride its record (REC_LIGHTS): every SDF view is a
+    // crowd slot, so this is the one path to the march for single actors too.
+    lights: u.bodyLights.value.toArray(),
   }, band);
 }
 
@@ -1761,6 +1806,7 @@ export function createCrowdMaterial(
     sharedLevelShadowTex,
     undefined, undefined,
     { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
+    sources?.lightList?.node,
   );
   if (quad) {
     // Full-screen quad: the raw clip-space vertex; the ray override above
@@ -1899,6 +1945,9 @@ export interface SharedChunkGpuMaterial {
 export function createSharedChunkGpuMaterial(
   prev?: PrevSource,
   options?: SurfaceOutputOptions,
+  /** Shared light list (plan 1, Task 12): the game's list storage node. Omitted, the zero
+   *  fallback (each view's lightListCfg.x then stays 0). */
+  lightList?: unknown,
 ): SharedChunkGpuMaterial {
   // These seeds establish the binding types before any chunk exists. They are
   // never sampled by a chunk draw: every node below swaps to the current
@@ -1929,6 +1978,7 @@ export function createSharedChunkGpuMaterial(
     undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
     undefined, undefined, undefined, undefined, undefined, undefined,
     { inst: records.node, instCfg: instCfgNode },
+    lightList,
   );
 
   let disposed = false;
@@ -2196,6 +2246,9 @@ export interface GpuViewOpts {
   /** GPU probe gather (P3/P4 dynamic layer): the read-only storage node of
    *  the dynamic probe buffer this view's march reads. Undefined = fallback. */
   probeDyn?: { node: unknown };
+  /** The shared light list's read-only storage node (plan 1 task 9), bound at
+   *  material creation like probeDyn. Undefined = the zero fallback. */
+  lightList?: { node: unknown };
   /**
    * Pack bone rows (op 'bone') into the inside-flesh array. Default TRUE —
    * the shipped layout. The bone-tubes renderer sets it FALSE via
@@ -2509,6 +2562,7 @@ export function createZombieGpuView(
     opts.lastFrame,
     undefined, undefined, undefined, undefined,
     { inst: records.node, instCfg },
+    opts.lightList?.node,
   );
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
@@ -2715,6 +2769,8 @@ export function createZombieGpuView(
         .segVolumeMeta as unknown as ReturnType<typeof texture>,
       // Crowd stage a: the refine twin marches the SAME record band.
       { inst: records.node, instCfg },
+      // It shares MARCH_BODY_LIGHT, so it reads the SAME light list as the main material.
+      opts.lightList?.node,
     );
   };
   if (opts.refine) {
@@ -2780,6 +2836,7 @@ export function createZombieGpuView(
       if (depthSegMetaNode) (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
     },
     setMelt(progress) { u.meltCfg.value.x = progress; syncRecord(); },
+    setSkinDetail(k) { u.meltCfg.value.z = k; syncRecord(); },
     setMotionOut(on) { u.meltCfg.value.y = on ? 1 : 0; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {
@@ -2925,9 +2982,18 @@ export interface ChunkGpuView {
   update(chunk: Chunk): void;
   /** Hand-posed pieces (the head damage model's dangling eye): replace the local prims' endpoints (chunk-local, the same count and order as reset()'s prims) before the next update(). An entry's optional `scale` replaces that prim's scale (the radius row is packed once, at reset(); the scale row is rewritten every update(), so a uniform scale is how a piece's prim grows). Radii, colours and the reset() extent are unchanged. */
   morph(ends: ReadonlyArray<{ a: Vec3; b: Vec3; scale?: Vec3 }>): void;
+  /** Re-write this view's record slot from its uniforms now (update() does it too). The game
+   *  calls it after writing the view's light picks (bodyLights, shared light list Task 12),
+   *  which happens after update() in the frame. */
+  syncRecord(): void;
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
   setPackBones(on: boolean): void;
+  /** Whether this view's marched field currently carries its bone rows
+   *  (the setPackBones state). The bone-tube feed reads it: a chunk that packs
+   *  its own bones needs no tube while its field is drawn elsewhere (the gib
+   *  motion-blur layer). */
+  packsBones(): boolean;
   /** Bone-cluster cull (packBoneClusters). A chunk stays on the FLAT bone
    *  fold: it is one cluster whose bones re-transform every frame, so a
    *  baked bone-cluster sphere would go stale — and the chunk's own cluster
@@ -2987,6 +3053,11 @@ export interface ChunkGpuBakeData {
  * copied, not the nodes: sharing the nodes would let a chunk's wound count
  * scribble over the body's.
  */
+/** A marched gib chunk view's fresnel strength (surfCfg.z): none (owner, 2026-09-27: "remove the
+ *  fresnel effect that creates the pale outline around them as it shimmers and looks
+ *  distracting"). Bodies, crowds and bones keep theirs. */
+export const CHUNK_FRESNEL = 0;
+
 export function createChunkGpuView(
   chunk: Chunk,
   prims: Primitive[],
@@ -3013,6 +3084,9 @@ export function createChunkGpuView(
   // MAX_CLUSTER_PRIMS flesh) plus that limb's bones; reset() checks it.
   const { tex: dataTex, texels, writeRow, stride } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
+  // A GIB: lightListCfg.y = 1 drops the list's back rims (light-list.wgsl.ts; owner 2026-09-27,
+  // no edge rim on gibs). The game writes only .x (the list switch) on a chunk view.
+  u.lightListCfg.value.y = 1;
   const ownsVolume = !volumeTex;
   const volTex = volumeTex ?? createFallbackHandVolumeTexture();
 
@@ -3128,6 +3202,10 @@ export function createChunkGpuView(
     u.wallNegZ.value.copy(template.wallNegZ.value);
     u.wallPosZ.value.copy(template.wallPosZ.value);
     u.surfCfg.value.copy(template.surfCfg.value);
+    // NO FRESNEL ON GIBS (owner, 2026-09-27: "remove the fresnel effect that creates the pale
+    // outline around them as it shimmers and looks distracting"). surfCfg.z is the march's fresnel
+    // strength (light.wgsl.ts fres); the origin body keeps its own.
+    u.surfCfg.value.z = CHUNK_FRESNEL;
     u.surfCfg2.value.copy(template.surfCfg2.value);
     u.surfCfg3.value.copy(template.surfCfg3.value);
     u.meatCfg.value.copy(template.meatCfg.value);
@@ -3369,6 +3447,7 @@ export function createChunkGpuView(
       // rows flip NOW, not on the next sever.
       if (lastReset) reset(lastReset.c, lastReset.prims, lastReset.tornAt, lastReset.bones);
     },
+    packsBones() { return packBones; },
     // Chunks stay on the FLAT bone fold — see ChunkGpuView.setBoneCull.
     setBoneCull() {},
     setBoneCullMode() {},
@@ -3500,6 +3579,7 @@ export function createChunkGpuView(
       }
       syncChunkRecord();
     },
+    syncRecord: syncChunkRecord,
     dispose() {
       mesh.geometry.dispose();
       if (ownsMaterial) material.dispose();

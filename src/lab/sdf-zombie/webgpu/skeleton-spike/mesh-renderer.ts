@@ -7,8 +7,8 @@ import { meshBoneSource } from './mesh-skull';
 // (same revision → same BufferGeometry), posed per frame from the contract
 // source's pose() (origin + quat — rigid, no scale, so normalWorld is
 // exact; the one exception, the head deform's extra affine on the skull
-// segment, is non-uniform, and normalWorld's inverse-transpose normal matrix
-// keeps it right), hidden the same frame isLive() goes false (the contract sever
+// segment, is non-uniform: the instance normal transform is exact for its
+// axis scales and only approximate for its small dent shear), hidden the same frame isLive() goes false (the contract sever
 // rule: pack.ts drops the bone rows, we drop the segment).
 //
 // WOUND/FLESH EXPOSURE RULE — smax-then-min, NOT depth-only hiding: the
@@ -47,12 +47,14 @@ import { meshBoneSource } from './mesh-skull';
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, type Node } from 'three/webgpu';
 import {
-  attribute, wgslFn, mul, add, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
+  attribute, wgslFn, mul, add, texture, vec4, positionGeometry, positionWorld, normalWorld, cameraPosition,
 } from 'three/tsl';
 import {
-  BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL,
-  boneInstancerUniforms, type BoneInstancerUniforms,
+  BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL, NO_OWNER_PICKS,
+  boneInstancerUniforms, type BoneInstancerUniforms, type PicksLike,
 } from '../bone-instancer';
+import { BODY_LIGHTS } from '../march/body-lights.wgsl';
+import { fallbackLightListNode } from '../zombie-gpu';
 import type { BoneFieldSource } from './contract';
 import type { SegmentMeshCache } from './mesh';
 import {
@@ -65,6 +67,8 @@ import {
 } from './mesh-eyes';
 
 const MAX_WOUNDS_TEX = 64;
+/** Updates a segment batch may sit unused before it is dropped (a stale revision's geometry). */
+const BATCH_IDLE_UPDATES = 120;
 
 /** The per-segment draw decision of the visual-actor cull (pure, exported
  *  for vitest — see mesh-renderer.test.ts). A segment is drawn when its
@@ -79,6 +83,15 @@ export function segmentDrawn(live: boolean, owner: unknown, shown?: ReadonlySet<
   return live;
 }
 
+/** BONE EXPOSURE CULL (optimisation pass, 2026-09-26): bone shows only where a wound carve
+ *  reached it (the header's smax-then-min rule), so an owner with nothing exposed draws only the
+ *  segments that carry something visible through intact flesh: the eyes. `exposed` omitted =
+ *  every owner is exposed (the pre-cull behaviour). Night Train: ~250 draws a frame were whole
+ *  skeletons hidden inside unwounded bodies. */
+export function segmentNeeded(owner: unknown, hasEyes: boolean, exposed?: ReadonlySet<unknown>): boolean {
+  return !exposed || exposed.has(owner) || hasEyes;
+}
+
 export interface SegmentMeshRenderer {
   object: THREE.Group;
   uniforms: BoneInstancerUniforms;
@@ -91,11 +104,24 @@ export interface SegmentMeshRenderer {
    *  `extra` (melee head damage, Task 10): an optional WORLD-space affine
    *  (column-major 4x4) applied after a segment's rigid pose, per owner and
    *  segment key — the head deform's squash and dents on the 'head' skull
-   *  segment, so the skull deforms with the flesh. Null = the rigid pose. */
+   *  segment, so the skull deforms with the flesh (its seated eyes ride the
+   *  same matrix). Null = the rigid pose. */
   update(
     entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>,
-    extra?: (owner: object, segment: string) => ArrayLike<number> | null,
+    exposed?: ReadonlySet<unknown>, extra?: (owner: object, segment: string) => ArrayLike<number> | null,
   ): void;
+  /** Copy each drawn instance's OWNER picks into its batch's iLights (shared light list, Task
+   *  11): `lightsOf(owner)` is the owner actor's `bodyLights` value, read NOW, so call it after
+   *  this frame's picks are written (the game's light loop runs after update). Undefined/null =
+   *  no owner picks (the instance keeps the old key). `fillOf(owner)` (Task 11b) is the owner
+   *  room's fill factor, written to iFill (the list branch scales the bone ambient by it); omitted,
+   *  or an owner with no picks: 1. Allocation-free. */
+  syncLights(lightsOf: (owner: unknown) => PicksLike | null | undefined, fillOf?: (owner: unknown) => number): void;
+  /** Diagnostic: the iFill values of this owner's drawn instances, eyes included. */
+  ownerFill(owner: unknown): number[];
+  /** Diagnostic: the iLights rows (4 packed picks each) of this owner's drawn instances, eyes
+   *  included, as last written by syncLights. */
+  ownerLights(owner: unknown): number[][];
   impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
   stepDebris(dt: number): void;
   eyeState(owner: object): { missing: number[]; debris: number };
@@ -108,17 +134,15 @@ export interface SegmentMeshRenderer {
     hidden: number; verts: number; tris: number;
     overflow: number; clamped: number; droppedQuads: number;
   };
+  /** This update's instanced draws (tests, diagnostics): owner, eye or segment, world matrix. */
+  readonly drawn: ReadonlyArray<{ owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry }>;
+  /** How many instanced draws this update issued (one per segment geometry in use, plus eyes). */
+  readonly draws: number;
   /** Remove every actor slot while keeping material/uniforms reusable. */
   clear(): void;
   dispose(): void;
 }
 
-interface ActorSlot {
-  meshes: THREE.Mesh[];
-  /** Revisions the slot's meshes were built for — a changed revision swaps
-   *  the geometry (anatomy/sever re-derive), never edits it in place. */
-  keys: string[];
-}
 
 /**
  * `layer` puts every segment mesh (and its eyes) on a THREE layer other than
@@ -127,7 +151,9 @@ interface ActorSlot {
  * buffer instead, in lockstep with the marched flesh. Default 0 = the
  * ordinary forward pass.
  */
-export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): SegmentMeshRenderer {
+/** `lightList`: the shared light-list storage node (ctx.world.light.list.node); omitted, the zero
+ *  fallback is bound and lightListCfg.x stays 0. */
+export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, lightList?: unknown): SegmentMeshRenderer {
   const group = new THREE.Group();
   group.name = 'skeleton-segment-meshes';
   const extraM = new THREE.Matrix4();
@@ -147,12 +173,18 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
   const fns: ReturnType<typeof wgslFn>[] = [];
   for (const src of [
     BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_TOOTH_ROW_WGSL, MESH_SKULL_CAVITY_WGSL,
-    MESH_SOCKET_VESSEL_WGSL, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BONE_SHADE_WGSL,
+    MESH_SOCKET_VESSEL_WGSL, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BODY_LIGHTS, BONE_SHADE_WGSL,
   ]) fns.push(wgslFn(src, fns.slice()));
-  const [surfaceFn, wetFn, shade] = [fns[5]!, fns[6]!, fns[7]!];
+  const [surfaceFn, wetFn, shade] = [fns[5]!, fns[6]!, fns[8]!];
+  // The owner's 4 list lights, per instance (iLights, an InstancedBufferAttribute on every batch
+  // geometry, sized with the batch). The eye material reads it too (it reuses `lit`).
+  const picksAttr = attribute('iLights', 'vec4');
+  // The owner room's fill factor (Task 11b), per instance beside iLights, grown in step with it.
+  const fillAttr = attribute('iFill', 'float');
+  const listNode = (lightList ?? fallbackLightListNode()) as never;
   const featureAttr = attribute('meshFeature', 'vec4');
   const surf = surfaceFn({
-    pWorld: positionWorld, pLocal: positionLocal,
+    pWorld: positionWorld, pLocal: positionGeometry,
     feature: featureAttr,
     boneColor: u.boneColor, deepColor: u.deepColor, look: u.look,
     woundTex: texture(woundTex), woundCount: u.woundCount,
@@ -160,7 +192,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
   // Per-fragment gloss from an INDEPENDENT wetness field: dry tissue stays
   // matte, wet patches keep a tight highlight, skull cavities get none. This
   // replaces the old blanket `max(look.z, 0.85)` gloss floor.
-  const gloss = wetFn({ pLocal: positionLocal, feature: featureAttr, expo: surf.w }) as never;
+  const gloss = wetFn({ pLocal: positionGeometry, feature: featureAttr, expo: surf.w }) as never;
   const meshLook = vec4(
     u.look.x, u.look.y,
     mul(mul(u.look.z, gloss), MESH_SPEC_SCALE),
@@ -172,6 +204,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
     surfaceIn: surface as never,
+    picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x, fill: fillAttr,
   }) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
@@ -184,8 +217,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
   ]) eyeFns.push(wgslFn(src, eyeFns.slice()));
   const [eyeSurfaceFn, eyeEmissionFn] = [eyeFns[3]!, eyeFns[4]!];
   const eyeMaterial = new MeshBasicNodeMaterial();
-  const eyeSurface = eyeSurfaceFn({ p: positionLocal });
-  const eyeEmission = eyeEmissionFn({ p: positionLocal }) as unknown as { xyz: Node<'vec3'> };
+  const eyeSurface = eyeSurfaceFn({ p: positionGeometry });
+  const eyeEmission = eyeEmissionFn({ p: positionGeometry }) as unknown as { xyz: Node<'vec3'> };
   // Eyes keep the previous uniform look path exactly (u.look === the old
   // wetLook under defaults); the eye material never reads meshFeature. The
   // restrained red pupil/iris glow is added AFTER the light compose: a
@@ -196,31 +229,81 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
   eyeMaterial.depthTest = true;
   eyeMaterial.depthWrite = true;
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
+  // Ejected eyes are plain meshes on the eye material, so they need an iLights of their own (one
+  // instance, no owner: the old key). Their own geometry, so the eye batch can grow its attribute.
+  const debrisEyeGeometry = eyeGeometry.clone();
+  debrisEyeGeometry.setAttribute('iLights', new THREE.InstancedBufferAttribute(new Float32Array(4).fill(NO_OWNER_PICKS), 4));
+  debrisEyeGeometry.setAttribute('iFill', new THREE.InstancedBufferAttribute(new Float32Array(1).fill(1), 1));
   let absent = new WeakMap<object, Set<number>>();
   const debris: { mesh: THREE.Mesh; velocity: THREE.Vector3; age: number; owner: object }[] = [];
-  const syncEyes = (mesh: THREE.Mesh, source: BoneFieldSource, owner: object) => {
-    // Called only on creation/revision swap; removing children leaves shared
-    // geometry/material alive until renderer disposal.
-    mesh.clear();
-    for (const [index, { center, radius }] of meshEyePlacements(meshBoneSource(source)).entries()) {
-      if (absent.get(owner)?.has(index)) continue;
-      const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-      // Layers are NOT inherited from the parent in three — a child left on
-      // layer 0 simply does not render when the camera only enables the field
-      // layer, so the skull would come through eyeless.
-      eye.layers.set(layer);
-      eye.name = 'skeleton-fleshy-eye';
-      eye.userData.eyeIndex = index;
-      eye.position.set(...center);
-      eye.scale.setScalar(radius);
-      mesh.add(eye);
-    }
-  };
   material.depthWrite = true;
   material.depthTest = true;
   material.side = THREE.FrontSide;
 
-  const slots: ActorSlot[] = [];
+  // INSTANCED DRAWS (optimisation pass, 2026-09-26; owner: "instance the skeleton bones"). One
+  // InstancedMesh per segment geometry (shared across actors through the cache) and one for every
+  // seated eye, filled per update with this frame's drawn segments. It was one THREE.Mesh per live
+  // segment per actor (~250 draws on Night Train). The shaders read `positionGeometry`, not
+  // `positionLocal`: an InstancedMesh folds the instance matrix into positionLocal, and the
+  // segment-local appearance (patches, teeth, iris) must stay in the segment's own frame.
+  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; idle: number; owners: unknown[] }
+  const batches = new Map<THREE.BufferGeometry, Batch>();
+  /** The geometry's per-instance `name` attribute (itemSize floats, `init` fill), at least `cap`
+   *  instances (grown in step with the batch, contents kept). */
+  const ensureInstanced = (geometry: THREE.BufferGeometry, name: string, itemSize: number, init: number, cap: number): THREE.InstancedBufferAttribute => {
+    const cur = geometry.getAttribute(name) as THREE.InstancedBufferAttribute | undefined;
+    if (cur && cur.count >= cap) return cur;
+    const next = new THREE.InstancedBufferAttribute(new Float32Array(cap * itemSize).fill(init), itemSize);
+    next.setUsage(THREE.DynamicDrawUsage);
+    if (cur) (next.array as Float32Array).set(cur.array as Float32Array);
+    geometry.setAttribute(name, next);
+    return next;
+  };
+  /** iLights (4 packed picks) and iFill (1 float), both sized to `cap` instances. */
+  const ensureLights = (geometry: THREE.BufferGeometry, cap: number) => {
+    ensureInstanced(geometry, 'iLights', 4, NO_OWNER_PICKS, cap);
+    ensureInstanced(geometry, 'iFill', 1, 1, cap);
+  };
+  /** Upload only the live instances (M3): the attribute is DynamicDrawUsage, so three uploads it
+   *  every frame, whole, unless a range is set; r186's WebGPU backend honours BufferAttribute
+   *  updateRanges (and clears them after the write). */
+  const markLive = (attr: THREE.InstancedBufferAttribute, count: number) => {
+    attr.clearUpdateRanges();
+    attr.addUpdateRange(0, Math.max(count, 1) * attr.itemSize);
+    attr.needsUpdate = true;
+  };
+  const batchFor = (geometry: THREE.BufferGeometry, eye: boolean): Batch => {
+    let b = batches.get(geometry);
+    if (!b) {
+      const mesh = new THREE.InstancedMesh(geometry, eye ? eyeMaterial : material, 16);
+      mesh.name = eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments';
+      mesh.frustumCulled = false;
+      mesh.layers.set(layer);
+      mesh.count = 0;
+      ensureLights(geometry, mesh.instanceMatrix.count);
+      group.add(mesh);
+      b = { mesh, count: 0, eye, idle: 0, owners: [] };
+      batches.set(geometry, b);
+    }
+    return b;
+  };
+  const push = (b: Batch, m: THREE.Matrix4, owner: unknown) => {
+    if (b.count >= b.mesh.instanceMatrix.count) {
+      const old = b.mesh;
+      const grown = new THREE.InstancedMesh(old.geometry, old.material as THREE.Material, old.instanceMatrix.count * 2);
+      grown.name = old.name; grown.frustumCulled = false; grown.layers.mask = old.layers.mask;
+      (grown.instanceMatrix.array as Float32Array).set(old.instanceMatrix.array as Float32Array);
+      ensureLights(old.geometry, grown.instanceMatrix.count);
+      group.remove(old); old.dispose();
+      group.add(grown);
+      b.mesh = grown;
+    }
+    b.owners[b.count] = owner;
+    b.mesh.setMatrixAt(b.count++, m);
+  };
+
+  interface Slot { keys: string[]; eyes: { index: number; center: readonly [number, number, number]; radius: number }[][] }
+  const slots: Slot[] = [];
   const preparedGeometry = new WeakSet<THREE.BufferGeometry>();
   const prepareGeometry = (geometry: THREE.BufferGeometry, source: BoneFieldSource) => {
     if (preparedGeometry.has(geometry)) return;
@@ -239,7 +322,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
     overflow: 0, clamped: 0, droppedQuads: 0,
   };
   const clear = () => {
-    for (const slot of slots) for (const mesh of slot.meshes) group.remove(mesh);
+    for (const b of batches.values()) { group.remove(b.mesh); b.mesh.dispose(); }
+    batches.clear();
+    drawn.length = 0;
     slots.length = 0;
     absent = new WeakMap();
     for (const d of debris) group.remove(d.mesh);
@@ -248,6 +333,10 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
     stats.verts = stats.tris = stats.overflow = stats.clamped = stats.droppedQuads = 0;
     group.visible = false;
   };
+  const segM = new THREE.Matrix4(), eyeM = new THREE.Matrix4(), tmpM = new THREE.Matrix4();
+  const one = new THREE.Vector3(1, 1, 1), pv = new THREE.Vector3(), qv = new THREE.Quaternion();
+  /** Test/diagnostic view of this update's instanced draws. */
+  const drawn: { owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry }[] = [];
 
   return {
     object: group,
@@ -263,7 +352,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
         if (lost.has(i)) continue;
         lost.add(i); count++;
         const eye = eyes[i]!;
-        const mesh = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        const mesh = new THREE.Mesh(debrisEyeGeometry, eyeMaterial);
         mesh.layers.set(layer);
         mesh.name = 'skeleton-ejected-eye';
         mesh.position.set(...head.toWorld(eye.center));
@@ -288,79 +377,107 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
         if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
       }
     },
-    update(entries, owners, shown, extra) {
+    update(entries, owners, shown, exposed, extra) {
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
       stats.verts = stats.tris = 0;
       stats.overflow = stats.clamped = stats.droppedQuads = 0;
+      drawn.length = 0;
+      for (const b of batches.values()) b.count = 0;
       const liveOwners = new Set(owners ?? entries);
       for (let i = debris.length - 1; i >= 0; i--) if (owners && !liveOwners.has(debris[i]!.owner)) { group.remove(debris[i]!.mesh); debris.splice(i, 1); }
+      const eyeBatch = batchFor(eyeGeometry, true);
       entries.forEach((srcs, ai) => {
         let slot = slots[ai];
-        if (!slot) { slot = { meshes: [], keys: [] }; slots[ai] = slot; }
+        if (!slot) { slot = { keys: [], eyes: [] }; slots[ai] = slot; }
         const owner = owners?.[ai] ?? slot;
-        // Shrink/grow the slot to the source set (sever re-derive changes it).
-        while (slot.meshes.length > srcs.length) {
-          const m = slot.meshes.pop()!;
-          group.remove(m);
-          slot.keys.pop();
-        }
+        slot.keys.length = Math.min(slot.keys.length, srcs.length);
+        slot.eyes.length = Math.min(slot.eyes.length, srcs.length);
+        const lost = absent.get(owner);
         srcs.forEach((s, si) => {
           const baked = cache.get(s);
           prepareGeometry(baked.geometry, s);
-          let mesh = slot!.meshes[si];
-          if (!mesh) {
-            mesh = new THREE.Mesh(baked.geometry, material);
-            mesh.frustumCulled = true; // per-segment bounds are tight and real
-            mesh.layers.set(layer);
-            syncEyes(mesh, s, owner);
-            group.add(mesh);
-            slot!.meshes[si] = mesh;
+          if (slot!.keys[si] !== baked.key) {
+            // Revision swap (anatomy/sever re-derive): the eye seats come from the new source.
             slot!.keys[si] = baked.key;
-          } else if (slot!.keys[si] !== baked.key) {
-            mesh.geometry = baked.geometry; // revision swap; cache owns disposal
-            syncEyes(mesh, s, owner);
-            slot!.keys[si] = baked.key;
+            slot!.eyes[si] = [...meshEyePlacements(meshBoneSource(s)).entries()].map(([index, e]) => ({ index, center: e.center, radius: e.radius }));
           }
-          for (const eye of mesh.children) eye.visible = !absent.get(owner)?.has(eye.userData.eyeIndex);
-          // Actor ordering may change when a neighbour is removed.
-          if (mesh.userData.eyeOwner !== owner) { syncEyes(mesh, s, owner); mesh.userData.eyeOwner = owner; }
+          const eyes = (slot!.eyes[si] ?? []).filter(e => !lost?.has(e.index));
           stats.segments++;
           if (s.rigidity === 'rigid') stats.rigid++; else stats.limb++;
           if (baked.overflow) stats.overflow++;
           if (baked.clamped) stats.clamped++;
           if (baked.droppedQuads) stats.droppedQuads += baked.droppedQuads;
-          // Visual-actor cull: `segmentDrawn` folds the owner test into the
-          // same live check, so a culled owner takes EXACTLY the non-live
-          // path — mesh.visible = false, stats.hidden++, return BEFORE the
-          // pose writes. Eyes are children of the segment mesh and hide
-          // with it; the mesh stays in its slot, so re-showing the owner
-          // restores visibility and the current pose in one update.
-          const live = segmentDrawn(s.isLive(), owner, shown);
-          mesh.visible = live;
+          // Visual-actor cull + bone exposure cull: a culled segment is simply not an instance
+          // this frame (no pose read, no write).
+          const live = segmentDrawn(s.isLive(), owner, shown) && segmentNeeded(owner, eyes.length > 0, exposed);
           if (!live) { stats.hidden++; return; }
           stats.verts += baked.verts;
           stats.tris += baked.tris;
           const pose = s.pose();
-          mesh.position.set(pose.origin[0], pose.origin[1], pose.origin[2]);
-          mesh.quaternion.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
-          // The group sits at the scene origin, so the mesh's local matrix IS
-          // its world matrix and a world-space affine premultiplies it.
-          const x = extra?.(owner, s.segment) ?? null;
-          if (x) {
-            mesh.matrixAutoUpdate = false;
-            mesh.updateMatrix();
-            mesh.matrix.premultiply(extraM.fromArray(x));
-            mesh.matrixWorldNeedsUpdate = true;
-          } else if (!mesh.matrixAutoUpdate) mesh.matrixAutoUpdate = true;
+          pv.set(pose.origin[0], pose.origin[1], pose.origin[2]);
+          qv.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
+          segM.compose(pv, qv, one);
+          // The group sits at the scene origin, so the instance matrix IS the
+          // world matrix and a world-space affine premultiplies it.
+          const x = extra?.(owner as object, s.segment) ?? null;
+          if (x) segM.premultiply(extraM.fromArray(x));
+          push(batchFor(baked.geometry, false), segM, owner);
+          drawn.push({ owner, eye: false, matrix: segM.clone(), geometry: baked.geometry });
+          for (const e of eyes) {
+            eyeM.copy(segM).multiply(tmpM.makeTranslation(e.center[0], e.center[1], e.center[2]))
+              .multiply(tmpM.makeScale(e.radius, e.radius, e.radius));
+            push(eyeBatch, eyeM, owner);
+            drawn.push({ owner, eye: true, matrix: eyeM.clone(), geometry: eyeGeometry });
+          }
         });
       });
-      // Release removed slots so they cannot retain actor ownership.
-      for (let ai = entries.length; ai < slots.length; ai++) {
-        for (const m of slots[ai]!.meshes) { m.visible = false; group.remove(m); }
-      }
       slots.length = entries.length;
+      for (const [geo, b] of batches) {
+        b.mesh.count = b.count;
+        b.owners.length = b.count;
+        b.mesh.visible = b.count > 0;
+        if (b.count > 0) { b.mesh.instanceMatrix.needsUpdate = true; b.idle = 0; }
+        // A segment geometry nobody has drawn for a while (a revision replaced it: a sever, an
+        // anatomy change) drops its batch; the cache owns the geometry itself.
+        else if (!b.eye && ++b.idle > BATCH_IDLE_UPDATES) { group.remove(b.mesh); b.mesh.dispose(); batches.delete(geo); }
+      }
       group.visible = stats.segments > 0;
+    },
+    syncLights(lightsOf, fillOf) {
+      for (const b of batches.values()) {
+        if (b.count === 0) continue;
+        const attr = b.mesh.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute;
+        const fAttr = b.mesh.geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute;
+        const arr = attr.array as Float32Array;
+        const fArr = fAttr.array as Float32Array;
+        for (let i = 0; i < b.count; i++) {
+          const owner = b.owners[i];
+          const l = lightsOf(owner);
+          const o = i * 4;
+          if (l) { arr[o] = l.x; arr[o + 1] = l.y; arr[o + 2] = l.z; arr[o + 3] = l.w; }
+          else { arr[o] = NO_OWNER_PICKS; arr[o + 1] = NO_OWNER_PICKS; arr[o + 2] = NO_OWNER_PICKS; arr[o + 3] = NO_OWNER_PICKS; }
+          fArr[i] = l && fillOf ? fillOf(owner) : 1;
+        }
+        markLive(attr, b.count);
+        markLive(fAttr, b.count);
+      }
+    },
+    ownerLights(owner) {
+      const out: number[][] = [];
+      for (const b of batches.values()) {
+        const arr = (b.mesh.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).array as Float32Array;
+        for (let i = 0; i < b.count; i++) if (b.owners[i] === owner) out.push(Array.from(arr.subarray(i * 4, i * 4 + 4)));
+      }
+      return out;
+    },
+    ownerFill(owner) {
+      const out: number[] = [];
+      for (const b of batches.values()) {
+        const arr = (b.mesh.geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute).array as Float32Array;
+        for (let i = 0; i < b.count; i++) if (b.owners[i] === owner) out.push(arr[i]!);
+      }
+      return out;
     },
     setWounds(wounds) {
       const n = Math.min(wounds.length, MAX_WOUNDS_TEX);
@@ -372,12 +489,15 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
       woundTex.needsUpdate = true;
     },
     get stats() { return stats; },
+    get drawn() { return drawn; },
+    get draws() { let n = 0; for (const b of batches.values()) if (b.count > 0) n++; return n; },
     clear,
     dispose() {
       clear();
       material.dispose();
       eyeMaterial.dispose();
       eyeGeometry.dispose();
+      debrisEyeGeometry.dispose();
       woundTex.dispose();
     },
   };

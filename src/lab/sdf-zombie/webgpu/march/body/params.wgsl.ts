@@ -27,7 +27,8 @@
 //              counts was already full and woundCfg2.w is the volume hitEps
 //              override, not spare)
 //   meltCfg    x melt progress 0..1 (zombie melt task 6) — drives the
-//              flesh-only wet-red albedo/gloss ramp below; yzw spare.
+//              flesh-only wet-red albedo/gloss ramp below; y motion-out, z skin
+//              detail k (skin-detail-proto.ts), w spare.
 //              0 everywhere except a melting body and its released bone
 //              chunks, so every other view shades bit-identical
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp
@@ -68,6 +69,7 @@
 //              (0 = off, the shipping default)
 //   woundShadowCfg  x strength (0 = off — the whole march is skipped),
 //                   y softness k (iq's penumbra factor; ~8 hard, ~16 very soft)
+//                   z self-shadow strength (0 = off), w self-shadow reach m
 //   bounceCfg  x probeWeight (0 = flat fill, bit-identical to pre-bounce),
 //              y ambientGain, z ceilingEnabled, w chromaGain
 //   tileHdr/tileEnt/tileCfg/screenUV  per-tile fold lists (perf task 5,
@@ -159,7 +161,7 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   headAxes: vec3<f32>,
   faceGlowColor: vec3<f32>,
   lodCfg: vec4<f32>,
-  woundShadowCfg: vec2<f32>,
+  woundShadowCfg: vec4<f32>,
   bounceCfg: vec4<f32>,
   boxMin: vec3<f32>,
   boxMax: vec3<f32>,
@@ -273,6 +275,15 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // BurnTuning.skeletonDepth so the panel can trade limb clutter for rib
   // coverage. Bound in the same slot order in zombie-gpu.ts. NO COLONS and NO
   // PARENS in this comment either.
-  burnSkeletonDepth: f32
+  burnSkeletonDepth: f32,
+  // Shared light list - light list plan 1 task 9 - POSITIONALLY LAST after
+  // burnSkeletonDepth. lightListCfg x above 0 lights this body by its four
+  // picked lights from gInstLights, and 0 keeps the old key path untouched.
+  // lightList is the one list buffer of profiles, header and lights; every
+  // view that does not light by the list binds the shared fallback. Bound in
+  // the same slot order in zombie-gpu.ts. NO COLONS and NO PARENS in this
+  // comment either.
+  lightListCfg: vec4<f32>,
+  lightList: ptr<storage, array<vec4<f32>>, read>
 ) -> vec4<f32> {
 `;

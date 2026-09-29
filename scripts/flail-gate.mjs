@@ -333,11 +333,35 @@ console.log(`flail ready; canvas ${JSON.stringify(rect)}`);
 
 // ---- The arena --------------------------------------------------------------------
 const f2 = (v) => v.map((c) => c.toFixed(2)).join(', ');
-const zombies = (await evaluate('__sdfGame.actorList()')).filter((a) => a.kind === 'zombie');
-const byRoom = new Map();
+let zombies = (await evaluate('__sdfGame.actorList()')).filter((a) => a.kind === 'zombie');
+let byRoom = new Map();
 for (const z of zombies) byRoom.set(z.room, [...(byRoom.get(z.room) ?? []), z]);
 const ROOM = process.env.ROOM ? Number(process.env.ROOM)
   : [...byRoom.entries()].sort((a, b) => b[1].length - a[1].length)[0][0];
+// TOP-UP (merge of main, 2026-09-29): the arena's first two slots became the juggernaut and the
+// warbull (game-level.ts slotCharacter), leaving 6 zombies. Spawn the missing ones as debug
+// zombies on free floor inside the arena (>= 2.4 m from every actor, 1 m off the walls), then
+// re-read the pool. spawnDebugCharacter spawns into the player's room, so stand there first.
+if ((byRoom.get(ROOM) ?? []).length < 8) {
+  const r = (await evaluate('__sdfGame.rooms')).find((q) => q.id === ROOM);
+  const b = r.bounds;
+  await evaluate(`__sdfGame.placePlayer({ x: ${(b.minX + b.maxX) / 2}, z: ${(b.minZ + b.maxZ) / 2}, yaw: 0, pitch: 0 })`);
+  await evaluate('__sdfGame.step(1, 1 / 60)');
+  const taken = (await evaluate('__sdfGame.actorList()')).map((a) => a.pos);
+  let need = 8 - (byRoom.get(ROOM) ?? []).length;
+  for (let x = b.minX + 1; x <= b.maxX - 1 && need > 0; x += 0.8) {
+    for (let z = b.minZ + 1; z <= b.maxZ - 1 && need > 0; z += 0.8) {
+      if (taken.some((p) => Math.hypot(p[0] - x, p[2] - z) < 2.4)) continue;
+      await evaluate(`__sdfGame.spawnDebugCharacter('zombie', [${x}, 0, ${z}])`);
+      taken.push([x, 0, z]); need--;
+    }
+  }
+  for (let i = 0; i < 4; i++) await evaluate('__sdfGame.step(1, 1 / 60)');
+  zombies = (await evaluate('__sdfGame.actorList()')).filter((a) => a.kind === 'zombie');
+  byRoom = new Map();
+  for (const z of zombies) byRoom.set(z.room, [...(byRoom.get(z.room) ?? []), z]);
+  console.log(`room ${ROOM}: topped up to ${(byRoom.get(ROOM) ?? []).length} zombies (arena slots 0-1 are the juggernaut and warbull)`);
+}
 const pool = byRoom.get(ROOM) ?? [];
 if (pool.length < 8) die(`room ${ROOM} has ${pool.length} zombies; the gate needs 8`);
 const room = (await evaluate('__sdfGame.rooms')).find((r) => r.id === ROOM);
@@ -903,7 +927,15 @@ else fail(`positive control: ${controlFails} click(s) did not strike as expected
 // the ray → head-centre distance at the click and at the strike, how far the head moved, where the hit
 // landed (its distance from the head centre at the strike) and whether the magnet moved it.
 {
-  const z = tooFarZ;   // untouched by section 2's refused strike: every other zombie has been hit
+  // untouched by section 2's refused strike: every other zombie has been hit. BUT (merge of main,
+  // 2026-09-29) the arena now holds soldier-family enemies (the juggernaut and warbull, and room 5's
+  // soldiers wander in): unfrozen, they shoot, and the chaingun/rockets gib the walking zombie. When
+  // the arena has any, take an untouched zombie from a room with no soldier-family enemy instead.
+  const all = await evaluate('__sdfGame.actorList()');
+  const soldierRooms = new Set(all.filter((a) => a.kind !== 'zombie').map((a) => a.room));
+  const quiet = all.find((a) => a.kind === 'zombie' && a.phase === 'standing' && !soldierRooms.has(a.room) && !used.has(a.id));
+  const z = soldierRooms.has(ROOM) && quiet ? quiet : tooFarZ;
+  if (z !== tooFarZ) console.log(`live: the arena has soldier-family enemies; zombie ${z.id} in quiet room ${z.room} walks up instead`);
   const headOf = (id) => evaluate(`__sdfGame.actorLimbCenter(${id}, 'head')`);
   const headState = (id) => evaluate(`__sdfGame.head.state(${id})`);
   const distTo = (p, o) => Math.hypot(p[0] - o[0], p[1] - o[1], p[2] - o[2]);
@@ -912,11 +944,21 @@ else fail(`positive control: ${controlFails} click(s) did not strike as expected
   await evaluate('__sdfGame.setFreeAim(true)');
   await evaluate('__sdfGame.setAimPoint(0, 0)');
   let pose = standOff(await torso(z.id), 5);
+  if (z !== tooFarZ) {
+    // The quiet room's own centre side, clamped 0.5 m inside its walls (standOff uses the arena's centre).
+    const qb = (await evaluate('__sdfGame.rooms')).find((r) => r.id === z.room).bounds;
+    const t0 = await torso(z.id), qc = [(qb.minX + qb.maxX) / 2, (qb.minZ + qb.maxZ) / 2];
+    const ax = qc[0] - t0[0], az = qc[1] - t0[2], l = Math.hypot(ax, az) || 1;
+    const x = Math.min(Math.max(t0[0] + (ax / l) * 5, qb.minX + 0.5), qb.maxX - 0.5);
+    const zz = Math.min(Math.max(t0[2] + (az / l) * 5, qb.minZ + 0.5), qb.maxZ - 0.5);
+    pose = { x, z: zz, yaw: yawOf(t0[0] - x, t0[2] - zz) };
+  }
   await place(pose);
   let walkD = Infinity, walkF = 0;
   for (; walkF < 600 && walkD >= 1.6; walkF++) {
     await stepOne();
     const t = await torso(z.id);
+    if (!t) die(`live: zombie ${z.id} is gone while walking up (frame ${walkF})`);
     walkD = Math.hypot(t[0] - pose.x, t[2] - pose.z);
   }
   console.log(`live: zombie ${z.id} walked to ${walkD.toFixed(2)} m in ${walkF} frames`);

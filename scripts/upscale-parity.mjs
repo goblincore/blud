@@ -37,7 +37,7 @@ await applyShipDefaults(evaluate);
 // filter whose state depends on how many frames the run has dispatched; pin it
 // to the pure per-frame estimate (the R1 dispatch configuration) so the march
 // target is a function of the frozen scene alone and two reads are comparable.
-await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
+await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
 await evaluate('(() => { performance.now = () => 100000; return 1; })()');
 let baked = false;
 for (let i = 0; i < 240; i++) {

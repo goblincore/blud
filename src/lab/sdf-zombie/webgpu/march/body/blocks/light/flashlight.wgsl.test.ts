@@ -41,7 +41,7 @@ describe('analytic flashlight (dungeon relighting task 7)', () => {
     expect(block()).toContain('var L = normalize(lightDir);');
     expect(block()).toContain('var keyC = keyColor;');
     expect(block()).toContain('var keyI = lightCfg.x;');
-    expect(block()).toContain('if (spotCfg.x > 0.0) {');
+    expect(block()).toContain('if (spotCfg.x > 0.0 && (lightListCfg.x <= 0.0 || lightListCfg.z > 0.5)) {');
   });
 
   it('feeds the blended key into the lit expressions, ambient hue untouched', () => {

@@ -3,7 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): group fold and crowd instance state.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_MELT, REC_NOISE_YAW, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
+import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NOISE_YAW, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
 import { TILE_MAX_ENTRIES } from '../../tile-cull';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
 import { ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
@@ -296,6 +296,10 @@ var<private> gInstEyeMask: vec4<f32> = vec4<f32>(1.0, 1.0, 0.07, 0.0);
 // a crowd draw, where the per-view burnCfg is authoritative -- same split as
 // gInstGore above.
 var<private> gInstBurn: vec4<f32> = vec4<f32>(0.0);
+// SHARED LIGHT LIST: the record's four packed light picks (index + weight,
+// -1 empty; slot 0 the dominant light). Every SDF view is a crowd slot, so the
+// record is authoritative for single actors too.
+var<private> gInstLights: vec4<f32> = vec4<f32>(-1.0);
 // The surface fire's emissive contribution, written in the surface prep and
 // read by the lighting tail, which is a separate WGSL export.
 var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);
@@ -367,5 +371,6 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   gInstGore = gore.x;
   gInstEyeMask = vec4<f32>(1.0 - gore.y, 1.0 - gore.z, gore.w, 0.0);
   gInstBurn = (*inst)[base + ${REC_BURN}];
+  gInstLights = (*inst)[base + ${REC_LIGHTS}];
 }
 `;

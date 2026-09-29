@@ -285,6 +285,41 @@ describe('scoped draws on the ORIGINAL objects', () => {
     s.dispose();
   });
 
+  it('review fix: an unlit MeshBasicNodeMaterial mesh under a full-level "mesh" group (the disco ball / train window glass shape) is hidden by the level registration alone, and drawn only once explicitly re-registered forward', () => {
+    // levelGroup gets one blanket 'mesh' 'full' registration (game-main boot).
+    // An unlit prop (no surfaceKind, not transparent — like the disco ball's
+    // mirror-tile material or the train window glass) inherits that route,
+    // fails materialEligibility in the mesh pass, and — because it is an
+    // explicit non-forward member — is ALSO hidden in the forward pass. It
+    // must be re-registered 'forward' individually to draw at all.
+    const scene = new THREE.Scene();
+    const levelGroup = new THREE.Group();
+    const unlitProp = stdMesh('train.disco-tiles', new THREE.MeshBasicNodeMaterial());
+    levelGroup.add(unlitProp);
+    scene.add(levelGroup);
+    const { renderer, submitted } = mockRenderer();
+    const s = createGameDeferredScene(scene);
+    s.register(levelGroup, 'mesh', 'full');
+    s.sync();
+    s.draw('mesh', renderer, camera());
+    expect(new Set(submitted[0]!.hidden).has(unlitProp)).toBe(true);
+    submitted.length = 0;
+    s.draw('forward', renderer, camera());
+    expect(new Set(submitted[0]!.hidden).has(unlitProp)).toBe(true); // still hidden: not a forward member
+    submitted.length = 0;
+
+    // The fix: register the prop itself 'forward' (nearest registration wins).
+    s.register(unlitProp, 'forward');
+    s.sync();
+    s.draw('mesh', renderer, camera());
+    expect(new Set(submitted[0]!.hidden).has(unlitProp)).toBe(true); // opaque MRT pass never sees it
+    submitted.length = 0;
+    s.draw('forward', renderer, camera());
+    expect(new Set(submitted[0]!.hidden).has(unlitProp)).toBe(false); // now it draws
+    expect(unlitProp.visible).toBe(true); // restored after the scoped draw
+    s.dispose();
+  });
+
   it('FPV composition (review fix): camera-anchored opaque gear routes mesh/level-only; the blended sprite stays forward; castShadow untouched', () => {
     // The exact shape of the game's viewmodel wiring: gear parented to the
     // CAMERA (which sits in the scene), registered individually so the rig

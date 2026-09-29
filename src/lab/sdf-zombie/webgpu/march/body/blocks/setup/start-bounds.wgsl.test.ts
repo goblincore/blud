@@ -51,7 +51,9 @@ describe('ported features reach the entry point', () => {
     // ordering guarantee).
     const names = HELPERS.map(declaredName);
     expect(names).toContain('depthPreFetch');
-    expect(names.indexOf('depthPreFetch')).toBe(names.length - 1);
+    // Last but for bodyLights (light list task 9), which calls no helper and rides after it.
+    expect(names.indexOf('depthPreFetch')).toBe(names.length - 2);
+    expect(names.at(-1)).toBe('bodyLights');
     // Miss cull (2026-09-22): its fetch rides the chain too, and START_BOUNDS discards on it.
     expect(names).toContain('depthPreMiss');
     expect(DEPTH_PREPASS_MARCH).toContain('if (t > tFar) { return -2.0; }');

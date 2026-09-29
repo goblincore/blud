@@ -139,7 +139,7 @@ target to optimise and never a grade across characters, and exit 2 means "did
 not run", never a score of zero. It prints POSE MISMATCH when the
 reference's pose dominates: the mouse mesh holds its arms straight out while
 the `.blob` rests them at ~47 degrees, so score a `--range` window where the
-poses agree (`--range 0.75:1` is legs and shoes, where nothing is posed) and
+poses agree (`--range 0.8:1` is legs and shoes, where nothing is posed) and
 act on those bands.
 
 **When the reference is a SKINNED mesh, `npm run blob:rings -- <name>` is the

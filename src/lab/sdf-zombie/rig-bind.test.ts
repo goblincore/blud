@@ -61,8 +61,11 @@ describe('applyRig', () => {
   });
 
   it('moves primitives when their bound rig point moves', () => {
+    // The right ankle, by name: it was the LAST point until the zombie grew feet (2026-09-29); the
+    // last is now a toe, a rigid tip pinned to its ankle, which moves no prims on its own.
+    const iFoot = jointNamesForBody(body).indexOf('footR');
     const moved = { ...bound, rig: { ...bound.rig,
-      points: bound.rig.points.map((p, i) => i === bound.rig.points.length - 1
+      points: bound.rig.points.map((p, i) => i === iFoot
         ? { ...p, pos: [p.pos[0] + 0.5, p.pos[1], p.pos[2]] as const } : p) } };
     const out = applyRig(body, moved);
     const anyMoved = out.prims.some((p, i) => len(sub(p.a, body.prims[i]!.a)) > 0.4);
@@ -524,10 +527,10 @@ describe('rigid tips (hand tips and toes)', () => {
     expect(len(sub(sub(pinned[a!.point]!.pos, pinned[a!.anchor]!.pos), [0, len(a!.rest), 0]))).toBeLessThan(1e-9);
     expect(len(sub(sub(pinned[b!.point]!.pos, pinned[b!.anchor]!.pos), b!.rest))).toBeLessThan(1e-9);
   });
-  it('the zombie has no tips and pinTips is a no-op for it', () => {
+  it('the zombie\'s tips are its two toes (since its feet, 2026-09-29)', () => {
     const z = bindRig(buildBody(compileBlob(parseBlob(zombieSrc))));
-    expect(z.tips).toEqual([]);
-    expect(pinTips(z.rig.points, z.tips, 1)).toBe(z.rig.points);
+    expect(z.tips.length).toBe(2);
+    for (const t of z.tips) expect(t.rest[2]).toBeGreaterThan(0.05); // the foot bone runs +z
   });
 });
 

@@ -1,0 +1,181 @@
+import { describe, expect, it } from 'vitest';
+import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type TunnelLink } from './game-light-list-leaves';
+import { buildLightList, roomMaskOf } from './light-list';
+import { PROFILE_ID } from './light-profiles';
+import { BEACON } from './beacon';
+import { lightPresence } from './light-pick';
+import { BODY_DARK_FLOOR, BODY_LAMP_GAIN, BODY_WINDOW_GAIN, PRESENT, fillFactorOf, roomFillFactor } from './game-dynamic-light-leaves';
+import type { GameContext } from './game-context';
+import { setLayer } from './light-layers';
+import { LAMP_LIST_TRIM, OLD_BEAM_GAIN, OLD_BODY_FLASH_GAIN, OLD_BODY_LAMP_GAIN, OLD_BODY_WINDOW_GAIN, PROFILES_BY_NAME } from './light-profiles';
+import { makeVfxState } from './game-state-vfx';
+import { makeLightingState } from './game-state-lighting';
+
+describe('collectLightSources', () => {
+  it('maps lamps, tubes, window light, flashlight and flashes to typed sources', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 2, 0], color: [1, 0.8, 0.6], intensity: 3, range: 8, room: 2, tube: null, gain: undefined, tint: undefined, mood: 'steady' },
+              { pos: [1, 2.2, 0], color: [0.8, 0.9, 1], intensity: 7, range: 6, room: 2, tube: { axis: [0, -1, 0], cosOuter: 0.82, cosInner: 0.9 }, gain: 1.5, tint: undefined, mood: 'flicker' }],
+      window: { dir: [0.9, 0.3, 0.15], color: [0.72, 0.82, 1], intensity: 20, rooms: [1, 2, 3, 4, 5, 6, 8] },
+      flashlight: { pos: [0, 1.6, 0], axis: [0, 0, -1], color: [1, 1, 1], intensity: 90, range: 16, cosOuter: 0.8, cosInner: 0.93 },
+      flashes: [{ pos: [0, 1.4, -1], intensity: 35, fire: false }, { pos: [3, 1, 0], intensity: 5, fire: true }],
+    });
+    expect(s.map(x => `${x.kind}:${x.profile}`)).toEqual(['point:lamp', 'spot:tube', 'directional:window', 'spot:flashlight', 'point:muzzle', 'point:fire']);
+    expect(s[1]!.levelGain).toBe(1.5);
+    expect(s[0]!.rooms).toEqual([2]);
+    expect(s[2]!.rooms).toEqual([1, 2, 3, 4, 5, 6, 8]);
+    expect(s[3]!.rooms).toBeUndefined();   // the flashlight: any room
+    expect(s[4]!.rooms).toBeUndefined();
+  });
+  it('a lamp with mood fire gets the fire profile; zero-intensity sources are kept (the list drops them)', () => {
+    const s = collectLightSources({ lamps: [{ pos: [0, 1, 0], color: [1, 0.6, 0.3], intensity: 0, range: 5, room: 1, tube: null, mood: 'fire' }], window: null, flashlight: null, flashes: [] });
+    expect(s[0]!.profile).toBe('fire');
+  });
+  it('fire sources (fire-mood lamps and burning-body flashes) reach only 3 m', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 1, 0], color: [1, 0.6, 0.3], intensity: 4, range: 12, room: 1, tube: null, mood: 'fire' }],
+      window: null, flashlight: null,
+      flashes: [{ pos: [3, 1, 0], intensity: 5, fire: true }],
+    });
+    expect(s.map(x => x.range)).toEqual([3, 3]);
+  });
+  it('a beacon lamp becomes one spot:beacon source with its sweep axis, its room and its reference', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 3.3, -94], color: [1, 0.08, 0.05], intensity: 16.8, range: 9, room: 5, ref: 2.4 * BEACON.spotGain,
+        tube: { axis: [0.8, -0.57, 0.17], cosOuter: Math.cos(BEACON.angle), cosInner: Math.cos(BEACON.angle * (1 - BEACON.penumbra)) }, beacon: true, mood: 'dead' }],
+      window: null, flashlight: null, flashes: [],
+    });
+    expect(s.map(x => `${x.kind}:${x.profile}`)).toEqual(['spot:beacon']);
+    expect(s[0]).toMatchObject({ axis: [0.8, -0.57, 0.17], rooms: [5], range: 9, refIntensity: 2.4 * BEACON.spotGain, intensity: 16.8 });
+  });
+  it('the tube cone, the flashlight cone and the level tint pass through', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [1, 2.2, 0], color: [1, 1, 1], intensity: 7, range: 6, room: 2, tube: { axis: [0, -1, 0], cosOuter: 0.82, cosInner: 0.9 }, tint: [1, 0.5, 0.5], mood: 'steady' }],
+      window: null,
+      flashlight: { pos: [0, 1.6, 0], axis: [0, 0, -1], color: [1, 1, 1], intensity: 90, range: 16, cosOuter: 0.8, cosInner: 0.93 },
+      flashes: [],
+    });
+    expect(s[0]).toMatchObject({ axis: [0, -1, 0], cosOuter: 0.82, cosInner: 0.9, levelTint: [1, 0.5, 0.5], rooms: [2], range: 6 });
+    expect(s[1]).toMatchObject({ axis: [0, 0, -1], cosOuter: 0.8, cosInner: 0.93, range: 16 });
+  });
+});
+
+// Night Train's tunnels (public/assets/levels/night-train.level.json): 1-2-3-6-4-5-7-8 along z.
+const link = (a: number, b: number, z: number): TunnelLink => ({ a, b, minX: -1, maxX: 1, minZ: z - 0.5, maxZ: z + 0.5 });
+const TRAIN: TunnelLink[] = [link(1, 2, -10), link(2, 3, -20), link(3, 6, -30), link(4, 5, -50), link(5, 7, -60), link(6, 4, -40), link(7, 8, -70)];
+
+describe('nearRoomMask (Task 6 review: the cap prefers the player\'s surroundings)', () => {
+  it('the player\'s room plus every room a tunnel joins to it', () => {
+    expect(maskRooms(nearRoomMask(TRAIN, 3, 0, -25))).toEqual([2, 3, 6]);
+    expect(maskRooms(nearRoomMask(TRAIN, 4, 0, -45))).toEqual([4, 5, 6]);
+    expect(maskRooms(nearRoomMask(TRAIN, 8, 0, -75))).toEqual([7, 8]);
+  });
+  it('in a tunnel (room -1): the rooms of the tunnel the player stands in; nowhere: 0 (distance only)', () => {
+    expect(maskRooms(nearRoomMask(TRAIN, -1, 0, -60.2))).toEqual([5, 7]);
+    expect(nearRoomMask(TRAIN, -1, 5, -60)).toBe(0);
+  });
+  it('a room id past the mask gives 0 (no tier), never a wrong tier', () => {
+    expect(nearRoomMask([link(2, 40, 0)], 2, 0, 5)).toBe(0);
+  });
+});
+
+describe('the storm window light through the list (Task 6 review: room mask)', () => {
+  it('lights bodies in carriages 2 and 4, not the windowless tender (7)', () => {
+    const list = buildLightList(collectLightSources({
+      lamps: [], flashlight: null, flashes: [],
+      window: { dir: [0.9, 0.3, 0.15], color: [0.72, 0.82, 1], intensity: 20, rooms: [1, 2, 3, 4, 5, 6, 8] },
+    }), { pos: [0, 1.6, -25], nearMask: roomMaskOf([2, 3, 6]) });
+    expect(list).toHaveLength(1);
+    const b = (room: number) => ({ pos: [0, 0.9, 0] as [number, number, number], room, facing: [1, 0] as [number, number] });
+    expect(lightPresence(list[0]!, b(2))).toBeGreaterThan(0);
+    expect(lightPresence(list[0]!, b(4))).toBeGreaterThan(0);
+    expect(lightPresence(list[0]!, b(7))).toBe(0);
+  });
+  it('an empty room set (a storm with no window lights) is any room', () => {
+    const [l] = buildLightList(collectLightSources({ lamps: [], flashlight: null, flashes: [], window: { dir: [0, 1, 0], color: [1, 1, 1], intensity: 5, rooms: [] } }));
+    expect(l!.roomMask).toBe(0);
+  });
+});
+
+describe('pickBodyFor (Task 10: the pick body of an actor)', () => {
+  it('chest at root + 1.2, feet at root + 0.2, the actor\'s room', () => {
+    const b = pickBodyFor([2, 0.5, -3], 4, [2, 1.6, 7]);
+    expect(b.pos).toEqual([2, 1.7, -3]);
+    expect(b.feetY).toBeCloseTo(0.7);
+    expect(b.room).toBe(4);
+  });
+  it('facing is the unit xz direction toward the CAMERA (presentingLamp\'s rule), not the heading', () => {
+    const b = pickBodyFor([0, 0, 0], 1, [3, 1.6, 4]);
+    expect(b.facing[0]).toBeCloseTo(0.6);
+    expect(b.facing[1]).toBeCloseTo(0.8);
+  });
+  it('a camera straight overhead (xz length < 1e-4) falls back to [0, 1]', () => {
+    expect(pickBodyFor([1, 0, 1], 2, [1 + 1e-6, 5, 1]).facing).toEqual([0, 1]);
+  });
+});
+
+describe('the body-key calibration mirrors the old path (Task 10)', () => {
+  it('light-profiles\' OLD_* constants equal their homes in game-dynamic-light-leaves', () => {
+    expect(OLD_BODY_LAMP_GAIN).toBe(BODY_LAMP_GAIN);
+    expect(OLD_BODY_WINDOW_GAIN).toBe(BODY_WINDOW_GAIN);
+    expect(PROFILES_BY_NAME.tube.gain / (2.4 * OLD_BODY_LAMP_GAIN * LAMP_LIST_TRIM)).toBeCloseTo(PRESENT.gain, 9);
+  });
+  it('OLD_BEAM_GAIN and OLD_BODY_FLASH_GAIN equal the state factories\' defaults (Task 10 review)', () => {
+    expect(OLD_BEAM_GAIN).toBe(makeVfxState().beamTuning.gain);
+    expect(OLD_BODY_FLASH_GAIN).toBe(makeLightingState().bodyFlashGain);
+  });
+  it('fire-mood lamps carry no refIntensity (bodyNorm 1): the fire gain is on raw intensity (Task 10 review)', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 1, 0], color: [1, 0.6, 0.3], intensity: 2, ref: 3, range: 12, room: 1, tube: null, mood: 'fire' },
+              { pos: [0, 2, 0], color: [1, 1, 1], intensity: 1.5, ref: 3, range: 8, room: 1, tube: null, mood: 'steady' }],
+      window: null, flashlight: null,
+      flashes: [{ pos: [3, 1, 0], intensity: 5, fire: true }],
+    });
+    expect(s.map(x => x.refIntensity)).toEqual([undefined, 3, undefined]);
+    const list = buildLightList(s);
+    for (const l of list) if (l.profile === PROFILE_ID.fire) expect(l.bodyNorm).toBe(1);
+  });
+  it('pickBodyFor with `out` rewrites and returns it, equal to a fresh call', () => {
+    const out = pickBodyFor([9, 9, 9], 7, [9, 9, 10]);
+    const r = pickBodyFor([2, 0.5, -3], 4, [5, 1.6, 1], out);
+    expect(r).toBe(out);
+    expect(r).toEqual(pickBodyFor([2, 0.5, -3], 4, [5, 1.6, 1]));
+    expect(pickBodyFor([1, 0, 1], 2, [1, 5, 1], out).facing).toEqual([0, 1]);
+  });
+  it('lamps and the flashlight carry their base intensity as refIntensity', () => {
+    const s = collectLightSources({
+      lamps: [{ pos: [0, 2, 0], color: [1, 1, 1], intensity: 1.5, range: 8, room: 1, tube: null, mood: 'steady', ref: 3 }],
+      window: null,
+      flashlight: { pos: [0, 1.6, 0], axis: [0, 0, -1], color: [1, 1, 1], intensity: 45, range: 16, cosOuter: 0.8, cosInner: 0.93, ref: 90 },
+      flashes: [],
+    });
+    expect(s.map(x => x.refIntensity)).toEqual([3, 90]);
+    const list = buildLightList(s);
+    expect(list.map(l => l.bodyNorm).sort()).toEqual([1 / 90, 1 / 3].sort());
+  });
+});
+
+describe('the room fill factor (Task 11b: bones follow the body\'s room fill)', () => {
+  it('fillFactorOf: the dark floor when the room is dead, 1 when it is fully lit, linear between', () => {
+    expect(BODY_DARK_FLOOR).toBe(0.25);
+    expect(fillFactorOf(0)).toBe(0.25);
+    expect(fillFactorOf(1)).toBe(1);
+    expect(fillFactorOf(0.5)).toBeCloseTo(0.625, 12);
+  });
+  it('roomFillFactor reads the room at (x, z) through roomLight; no runtime or unknown room = 1', () => {
+    const ctx = (light: unknown) => ({
+      world: {
+        light,
+        level: { keyAt: (x: number) => (x < 0 ? 'dead' : 'lit'), rooms: [{ name: 'dead', id: 3 }, { name: 'lit', id: 4 }] },
+      },
+    }) as unknown as GameContext;
+    const rt = { roomLight: new Map([[3, 0]]) };
+    setLayer('roomFill', true);
+    expect(roomFillFactor(ctx(rt), -1, 0)).toBe(0.25);
+    expect(roomFillFactor(ctx(rt), 1, 0)).toBe(1);        // room 4 has no entry: lit
+    expect(roomFillFactor(ctx(undefined), -1, 0)).toBe(1);
+    // LIGHT LAYERS 'fill follows the lamps' off (the default): always full fill.
+    setLayer('roomFill', false);
+    expect(roomFillFactor(ctx(rt), -1, 0)).toBe(1);
+  });
+});

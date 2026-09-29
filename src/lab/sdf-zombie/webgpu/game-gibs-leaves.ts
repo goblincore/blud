@@ -23,12 +23,13 @@ import { makeChunk } from '../gib-chunks';
 import { spawnSpritePiece } from './gib-sprite-pieces';
 import { rngStreams } from './rng';
 import { loadGibSheet, loadGibSpriteAtlas } from './gib-sprites';
+import { isSoldierFamily } from '../motion-profile';
 
 /** The archetype whose committed set an actor uses. */
 export function gibAssetArchetypeOf(ctx: GameContext, a: ZombieActor): string {
   // By CHARACTER, not mind: the cultist runs the soldier's shooting brain
   // but must not throw the soldier's gib set.
-  return a.character?.entry.name === 'soldier' ? 'soldier' : 'zombie';
+  return isSoldierFamily(a.character?.entry.profile) ? 'soldier' : 'zombie';
 }
 
 /** Kick off (or join) the load for the archetypes the assets path can use. */
@@ -243,7 +244,7 @@ export function ensureCarvedLibrary(ctx: GameContext): boolean {
     });
     ctx.bake.carvedBuildMs = performance.now() - t0;
     if (!ctx.bake.carvedMaterial) {
-      ctx.bake.carvedMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
+      ctx.bake.carvedMaterial = registerLitChunkMaterial(ctx, createBakedChunkMaterial({ goreDetail: true, bakedAo: true, lightList: ctx.world.light?.list?.node }));
       ctx.bake.carvedMaterial.uniforms.goreCfg.value.set(
         ctx.vfx.gorePartDetail.x, ctx.vfx.gorePartDetail.y, ctx.vfx.gorePartDetail.z, ctx.vfx.gorePartDetail.w,
       );

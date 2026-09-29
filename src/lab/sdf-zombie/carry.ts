@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'swordGuard' | 'swordTrail';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy' | 'swordGuard' | 'swordTrail' | 'launcher' | 'launcherLow';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -35,6 +35,11 @@ export interface CarrySpec {
   right: CarryArm;
   /** Muzzle pitch off the forearm direction (rad, positive = up). */
   gunPitch: number;
+  /** Muzzle yaw off the forearm direction (rad, positive = OUTWARD, away
+   *  from the midline): a cocked wrist. Lets the forearm angle in across the
+   *  body, so the support hand can reach the fore-end, while the gun still
+   *  points ahead (the juggernaut's hip-fire `heavy` carry). Absent = 0. */
+  gunYaw?: number;
   /** Body-local pole for the left elbow's IK (outward and down). */
   leftPole: Vec3;
   /** ONE-HANDED: the left hand is NOT solved onto the prop's fore locator; it
@@ -99,6 +104,18 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // showed as a 7 cm gap between fist and handle. ogre-blob.test.ts pins the
   // trail and the grip. The left arm is free and swings.
   drag:  { right: { pitch: -1.05, yaw: 0.20, fold: 0.65 }, gunPitch: -0.85, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.35 }, rightPole: [0.2, 0, -1] },
+  // HEAVY — the juggernaut's hip-fired chaingun (juggernaut.blob +
+  // juggernaut-chaingun.glb at prop scale 1.45), in every state: he walks
+  // and fires from the same hold. Grid-solved on his rest rig (2026-09-25,
+  // docs/dev-notes/2026-09-25-juggernaut/NOTES.md) for: the rear grip at his
+  // right hip (fist ~(-0.17, 1.37, 0.36)), the muzzle pointing where he faces
+  // (0.5 deg off, 3 deg up; the rounds fly along it, so a skewed hold would
+  // miss by design), the barrel clear of his torso, and the left hand on the
+  // TOP CARRY HANDLE (the prop's foreHand override) at 91% of arm reach.
+  // `hip` could not do it: its forearm points across the body, and a forearm
+  // pointed ahead leaves the handle out of reach. The fix is the cocked wrist:
+  // the forearm angles in (yaw 0.40) and the gun yaws back out (gunYaw 0.30).
+  heavy: { right: { pitch: 0.10, yaw: 0.40, fold: 1.00 }, gunPitch: 0.40, gunYaw: 0.30, leftPole: [0.6, -0.5, 0.1] },
   // SWORD GUARD — the bride's walk/stand/fire hold (bride.blob +
   // bride-sword.glb at scale 1, profile gripReach 0.04 + fistOnGrip): the
   // HIGH GUARD (vom Tag) of the reference, both hands on the grip at her right
@@ -129,6 +146,25 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // the pelvis, the right elbow 2.5 cm and the swinging left elbow 0.6 cm
   // outside the torso field.
   swordTrail: { right: { pitch: -0.55, yaw: 0.10, fold: 0.30 }, gunPitch: -0.90, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.40 }, rightPole: [0.2, 0, -1] },
+  // LAUNCHER — the warbull's gun-arm raised to fire (warbull.blob, the
+  // reference-plate body, + warbull-launcher.glb at prop scale 1.6,
+  // gripReach 0.05). ONE-HANDED: the casing swallows his right fist, the
+  // left arm is free and swings. Grid-solved through the real motion
+  // pipeline on his rest rig (makeActorMotion, 60 Hz, scored after a 1 s
+  // settle; NOTES.md "second draft") for: the muzzle level (the wrist cock
+  // gunPitch 0.084) and on his facing; the muzzle at 1.74 m, chest height;
+  // the fist 0.69 m ahead of the pelvis; every casing corner >= 27 cm clear
+  // of his body and the elbow 14 cm outside it. His arm hangs wide off the
+  // shoulder (the plate's), so the carry swings it IN (yaw 0.40) and bends
+  // the elbow (fold 0.70) to bring the cannon onto his centre line.
+  launcher: { right: { pitch: 0.20, yaw: 0.40, fold: 0.70 }, gunPitch: 0.084, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.25 } },
+  // LAUNCHER LOW — his walk: the arm hung nearly straight and swung in
+  // (yaw 0.65), the muzzle ~31 degrees under level (gunPitch 0.281) at hip
+  // height (1.0 m), the fist 0.52 m forward, the casing 12 cm clear of the
+  // thigh and the elbow 12 cm off the flank. Same search, target pitch
+  // -0.55. The swap from this to `launcher` IS the raise the player sees
+  // before a volley (the brain's weaponUp beat).
+  launcherLow: { right: { pitch: -0.05, yaw: 0.65, fold: 0.10 }, gunPitch: 0.281, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.30 } },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from
@@ -166,10 +202,13 @@ export function lookQuat(fwd: Vec3, up: Vec3): Quat {
 }
 
 /** The gun's world pose from the right forearm: Grip_Hand on `hand`, muzzle
- *  along elbow→hand pitched by `gunPitch` about `bodyRight`. */
-export function gunPoseFromArm(elbow: Vec3, hand: Vec3, bodyRight: Vec3, gunPitch: number, size = 1): GunPose {
+ *  along elbow→hand pitched by `gunPitch` about `bodyRight`, then yawed by
+ *  `gunYaw` about world up (+ swings the muzzle toward +x; motion.ts passes
+ *  the carry's outward yaw with the arm's side sign). */
+export function gunPoseFromArm(elbow: Vec3, hand: Vec3, bodyRight: Vec3, gunPitch: number, size = 1, gunYaw = 0): GunPose {
   const fwd0 = normalize(sub(hand, elbow));
-  const fwd = gunPitch === 0 ? fwd0 : qRotate(qFromAxisAngle(bodyRight, -gunPitch), fwd0);
+  const pitched = gunPitch === 0 ? fwd0 : qRotate(qFromAxisAngle(bodyRight, -gunPitch), fwd0);
+  const fwd = gunYaw === 0 ? pitched : qRotate(qFromAxisAngle([0, 1, 0], gunYaw), pitched);
   const quat = lookQuat(fwd, [0, 1, 0]);
   const root = sub(hand, qRotate(quat, scale(GUN_GRIP.gripHand, size)));
   return { root, quat, scale: size };

@@ -5,7 +5,7 @@ import * as THREE from 'three/webgpu';
 import { storage } from 'three/tsl';
 import { DATA_ROWS } from './march.wgsl';
 
-export const REC_VEC4S = 16;
+export const REC_VEC4S = 17;
 export const MAX_CROWD_INSTANCES = 64;
 
 export const REC_COUNTS = 0;        // primCount, clusterCount, carveCount, maxBlendK
@@ -31,6 +31,13 @@ export const REC_GORE = 14;         // x = goreStrength, y/z = eye L/R glow OFF,
  *  Per-body and not per-view for the same reason as REC_GORE above: the crowd
  *  shares one material, so a single burning body needs its own ramp. */
 export const REC_BURN = 15;        // burn, burnSec, char, spare
+/** SHARED LIGHT LIST (spec §4): slot 16 is the body's light picks -- four
+ *  packed floats, `index + weight` (weight in [0, 0.999], the CPU's absolute
+ *  per-body strength for that light), -1 = empty, slot 0 the dominant light.
+ *  Per-body for the same reason as REC_GORE: every SDF view is a crowd slot,
+ *  and the record is the one place a body's own picks can ride. The WGSL
+ *  decodes with i32(floor(v)) and fract(v). */
+export const REC_LIGHTS = 16;      // 4 packed picks, -1 empty
 
 function createRecordNode(attribute: THREE.StorageBufferAttribute, count: number) {
   return storage(attribute, 'vec4', count).toReadOnly();
@@ -53,6 +60,8 @@ export interface RecordSource {
   burn: number;
   burnSec: number;
   charAmount: number;
+  /** Four packed light picks (`index + weight`, -1 empty). Omitted = none. */
+  lights?: readonly number[];
 }
 
 export interface CrowdRecords {
@@ -98,6 +107,10 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
       const em = s.eyeMask;
       put4(b + REC_GORE * 4, [s.gore, em ? 1 - (em[0] ?? 1) : 0, em ? 1 - (em[1] ?? 1) : 0, em ? (em[2] ?? 0) : 0]);
       put4(b + REC_BURN * 4, [s.burn, s.burnSec, s.charAmount, 0]);
+      const l = s.lights;
+      const lo = b + REC_LIGHTS * 4;
+      floats[lo] = l?.[0] ?? -1; floats[lo + 1] = l?.[1] ?? -1;
+      floats[lo + 2] = l?.[2] ?? -1; floats[lo + 3] = l?.[3] ?? -1;
       rec.dirty = true;
     },
     alive(slot, on) {

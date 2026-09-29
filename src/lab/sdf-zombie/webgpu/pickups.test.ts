@@ -68,3 +68,15 @@ describe('reloadFromReserve', () => {
     expect(reloadFromReserve(0, 2, { ...makeInventory(), shellsReserve: 1 }).shells).toBe(1);
   });
 });
+
+describe('the flashlight pickup (dynamic light §2.1)', () => {
+  const torch: PickupDef = { id: 'torch', item: 'flashlight', pos: [0, 1.4, 0] };
+  it('is taken once and marks the inventory', () => {
+    const r = collectPickups([torch], new Set(), [0.3, 0, 0], makeInventory(), makeVitals());
+    expect(r.inventory.flashlight).toBe(true);
+    expect(r.collected.map(p => p.id)).toEqual(['torch']);
+    const again = collectPickups([{ ...torch, id: 'torch-2' }], r.taken, [0, 0, 0], r.inventory, r.vitals);
+    expect(again.collected).toEqual([]);
+  });
+  it('starts false', () => { expect(makeInventory().flashlight).toBe(false); });
+});

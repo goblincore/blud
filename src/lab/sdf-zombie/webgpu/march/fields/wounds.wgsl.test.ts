@@ -84,7 +84,7 @@ describe('ported features reach the entry point', () => {
     for (const src of [MAP_BODY, CALC_NORMAL, CONE_MARCH, WOUND_SHADOW, MARCH_BODY]) {
       expect(src).toContain('inst: ptr<storage, array<vec4<f32>>, read>');
     }
-    expect(MARCH_BODY).toContain('woundShadow(p, L, abs(woundShadowCfg.y), data, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
+    expect(MARCH_BODY).toContain('woundShadow(p, L, wsK, data, wsCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg, wsReach, wsSteps)');
     // inst and instCfg are bound POSITIONALLY LAST (the parser-count test
     // above pins the full order).
     const tail = MARCH_BODY.slice(MARCH_BODY.indexOf('levelShadowCfg: vec4<f32>'));
@@ -102,6 +102,10 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(WOUND_SHADOW).toContain('fn woundShadow(');
     expect(WOUND_SHADOW).toContain('mapBody(p + L * t');
   });
+  it('WOUND_SHADOW takes reach and steps, so one call site serves the wound and self shadow', () => {
+    expect(WOUND_SHADOW).toContain('reach: f32,');
+    expect(WOUND_SHADOW).toContain('if (i >= steps || res < 0.02 || t > reach) { break; }');
+  });
   it('fires only in the wound zone, and skips outright at strength 0', () => {
     // The gate is mapBody's nearWound zone (z component), captured from the
     // ACCEPTED hit sample in the march loop — NOT a radial distance-to-centre
@@ -109,8 +113,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     // woundMask m.y). Cost then scales with crater screen area, not screensize.
     expect(MARCH_BODY).toContain('var hitNearWound = false;');
     expect(MARCH_BODY).toContain('hitNearWound = nearWound;');
-    expect(MARCH_BODY).toContain(
-      'if (woundShadowCfg.x > 0.0 && hitNearWound) {');
+    expect(MARCH_BODY).toContain('if (wsOn || ssOn) {');
   });
   it('keeps the secondary-ray budget: 14 steps, clamped steps, tMax 0.4', () => {
     // Fill-bound renderer: 12-16 steps max, start t=0.02 (the field right at
@@ -124,7 +127,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     // Same budget — the estimator changes the per-sample maths, not the count.
     expect(WOUND_SHADOW).toContain('let y = h * h / (2.0 * ph);');
     expect(WOUND_SHADOW).toContain('res = min(res, k * dd / max(t - y, 1e-4));');
-    expect(WOUND_SHADOW).toContain('if (res < 0.02 || t > 0.4) { break; }');
+    expect(WOUND_SHADOW).toContain('if (i >= steps || res < 0.02 || t > reach) { break; }');
     expect(WOUND_SHADOW).toContain('t = t + clamp(h, 0.01, 0.06);');
     // Smooth field: no fbm in the shadow march (noiseAmp 0, like the cone).
     expect(WOUND_SHADOW).toContain('data, vec4<f32>(0.0), woundCfg, woundCfg2');
@@ -141,7 +144,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
     // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
     expect(MARCH_BODY).toContain(
-      'woundShadow(p, L, abs(woundShadowCfg.y), data, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg), woundShadowCfg.x');
+      'woundShadow(p, L, wsK, data, wsCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg, wsReach, wsSteps)');
   });
 });
 

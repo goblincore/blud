@@ -5,6 +5,10 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { setChunkListGain } from './chunk-light-pick';
+import { roomIdAt } from './game-level-leaves';
+import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
+import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-bake-leaves';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -444,6 +448,37 @@ export function createWorldSeams(ctx: GameContext) {
       const d = m.uniforms.fleshDetail.value;
       return { amp: d.x, freq: d.y, albedo: d.z, ambient: m.uniforms.ambient.value.getHex() };
     }),
+    /** The gib trim on every list term (chunk-light-pick CHUNK_LIST_GAIN), live; NaN restores it.
+     *  A tuning seam: the value is module state in chunk-light-pick.ts on purpose. */
+    setChunkListGain: (g: number) => setChunkListGain(g),
+    /** Shared light list, Task 12: what each gib light holds this frame. `materials`: every
+     *  registered baked material's list switch (lightListCfg.x) and ambient; `pieces`: every drawn
+     *  gib mesh (forEachDrawnChunkMesh) with its source, position, room and its OWN per-object
+     *  record (list switch, packed picks, trim, ambient; the values its draw binds); `views`: every
+     *  live marched chunk view's switch, picks (its bodyLights, copied into its record), fill and
+     *  fresnel strength. */
+    chunkLights: () => {
+      const pieces: { source: ChunkMeshSource; pos: number[]; room: number; listOn: number; picks: number[]; gain: number; ambient: number[] }[] = [];
+      forEachDrawnChunkMesh(ctx, (m, x, y, z, source) => {
+        const r = m.userData[CHUNK_OBJECT_LIGHT] as ChunkObjectLight | undefined;
+        pieces.push({
+          source, pos: [x, y, z], room: roomIdAt(ctx, x, z), listOn: r?.cfg.x ?? 0,
+          picks: r ? r.picks.toArray() : [-1, -1, -1, -1], gain: r?.cfg.y ?? 0, ambient: r ? r.ambient.toArray() : [],
+        });
+      });
+      return {
+        materials: ctx.world.litChunkMaterials.map(m => ({
+          listOn: m.uniforms.lightListCfg.value.x, ambient: m.uniforms.ambient.value.toArray(),
+        })),
+        pieces,
+        views: ctx.bake.liveChunks.map(c => ({
+          id: c.id, pos: c.view.object.position.toArray(),
+          listOn: c.view.uniforms.lightListCfg.value.x, noRim: c.view.uniforms.lightListCfg.value.y,
+          picks: c.view.uniforms.bodyLights.value.toArray(),
+          fill: c.view.uniforms.lightCfg.value.y, fresnel: c.view.uniforms.surfCfg.value.z,
+        })),
+      };
+    },
     /** The live roster in world terms — what a blast gate needs to pick a
      *  target and to count what a detonation removed. Read-only scalars only:
      *  id, kind, room, ground position, yaw, collapse phase. No GPU state, so
@@ -456,6 +491,27 @@ export function createWorldSeams(ctx: GameContext) {
     },
     /** World-space centre of an actor's live prims on one limb (a driver's
      *  camera target — e.g. a corpse's head). Null when none are alive. */
+    /** Diagnostic (floating-zombie report 2026-09-28): the posed body's lowest point (the
+     *  capsules' lowest end minus radius x scale.y — ignores orientation, so approximate), its
+     *  feet position, and the shadow hull's lowest sphere bottom within 0.8 m of it. */
+    actorGround: (id: number) => {
+      const a = ctx.world.actors.find(q => q.id === id);
+      if (!a) return null;
+      const feet = a.pose().pos;
+      let body = Infinity;
+      for (const p of a.posed().prims) {
+        if (p.dead || p.op === 'sub' || p.op === 'groove') continue;
+        const ry = p.radius * p.scale[1], rby = (p.radiusB ?? p.radius) * p.scale[1];
+        body = Math.min(body, p.a[1] - ry, p.b[1] - rby);
+      }
+      let hull = Infinity, hullN = 0;
+      for (const s of ctx.render.occluderHull.shadowInstances()) {
+        if (Math.hypot(s.centre[0] - feet[0], s.centre[2] - feet[2]) > 0.8) continue;
+        hull = Math.min(hull, s.centre[1] - s.radius);
+        hullN++;
+      }
+      return { feet: [feet[0], feet[1], feet[2]], bodyLowest: body, hullLowest: hull, hullSpheres: hullN };
+    },
     actorLimbCentre: (id: number, limb: string) => {
       const a = ctx.world.actors.find(q => q.id === id);
       const ps = a?.drawnBody().prims.filter(p => p.limb === limb && !p.dead && p.op !== 'sub') ?? [];
@@ -600,7 +656,7 @@ export function createWorldSeams(ctx: GameContext) {
     /** Mesh key: what the level's art placed (null without art). */
     artInfo: () => {
       const a = ctx.world.art;
-      return a ? { file: a.file, meshes: a.meshes, instanced: a.instanced, instances: a.instances } : null;
+      return a ? { file: a.file, meshes: a.meshes, sourceMeshes: a.sourceMeshes ?? a.meshes, instanced: a.instanced, instances: a.instances } : null;
     },
     /** Show or hide the level art (the gate's same-page A/B; visibility, never castShadow). */
     setArtVisible: (on: boolean) => {

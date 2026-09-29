@@ -9,8 +9,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ROOMS, TUNNELS, FURNITURE, levelColliders, levelSurfaces,
   enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
-  OUTER, BAND_HALF,
+  OUTER, BAND_HALF, slotCharacter,
 } from './game-level';
+import { ringLevel } from './active-level';
 import { PLAYER, resolveCapsule, stepPlayer, eyeOf, type PlayerState } from './game-player';
 
 function makePlayer(x: number, z: number, yaw: number): PlayerState {
@@ -435,5 +436,22 @@ describe('mixed encounter annex', () => {
       walk(s, { x: 0, z: 1, jump: false }, 180);
       expect(enclosureKeyAt(s.pos[0], s.pos[2])).toBe('room5');
     }
+  });
+});
+
+describe('spawn slots: soldiers, then juggernauts, then warbulls, then zombies', () => {
+  it('puts one juggernaut (slot 0) and one warbull (slot 1) in the arena among six zombies (the ring level\'s spawn list)', () => {
+    const arena = ROOMS.find(r => r.name === 'arena')!;
+    const kinds = ringLevel().spawnList().filter(s => s.room === arena).map(s => s.kind);
+    expect(kinds.filter(k => k === 'juggernaut')).toEqual(['juggernaut']);
+    expect(kinds.filter(k => k === 'warbull')).toEqual(['warbull']);
+    expect(kinds.slice(0, 2)).toEqual(['juggernaut', 'warbull']);
+    expect(kinds.filter(k => k === 'zombie')).toHaveLength(kinds.length - 2);
+    // No other room gained one.
+    for (const r of ROOMS) if (r !== arena) { expect(r.juggernauts ?? 0).toBe(0); expect(r.warbulls ?? 0).toBe(0); }
+  });
+  it('orders soldiers first, then juggernauts, then warbulls, then zombies', () => {
+    const room = { ...ROOMS[0]!, zombies: 6, soldiers: 2, juggernauts: 1, warbulls: 1 };
+    expect([0, 1, 2, 3, 4, 5].map(i => slotCharacter(room, i))).toEqual(['soldier', 'soldier', 'juggernaut', 'warbull', 'zombie', 'zombie']);
   });
 });
