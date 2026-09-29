@@ -18,7 +18,7 @@
 //                  centre's while it has none (only spilled on; the orbits always) — radius
 //                  REGION_TUNING.craterR(region, flesh), 'keep', no sever. One lasting dent per hit.
 //   orbit-exposed  that eye's painted glow off (view.setEyeGlow) + the IN-ORBIT eyeball: one piece of
-//                  eyeballPrims (no nerve) 1 cm inside the orbit's surface point, looking along the head forward.
+//                  eyeballPrims (no nerve) inside the orbit's surface point along −forward, looking along the head forward.
 //   eye-pop        the in-orbit piece is disposed; the DANGLING piece is attached: stalkPrims(stalk, iris,
 //                  headForward) followed by the SOCKET PLUG (a matte near-black sphere, r 0.024) at the socket.
 //   eye-snap       the stalk's free half and the eyeball fly off as a gib; the dangling piece is disposed and a
@@ -35,7 +35,7 @@
 // alone at the snap (the piece's prim count must stay constant, which is why the snap re-attaches).
 //
 // THE PIECES RIDE THE HEAD through trackers: Wound records (never pushed on the ring) stamped on the orbit
-// crater's prim at the orbit surface point, 1 cm inside it and 2 cm in front of it; woundWorldPos re-reads
+// crater's prim at the orbit surface point, 1 cm behind it (−forward) and 2 cm in front of it; woundWorldPos re-reads
 // them every frame, so the eye and the plug follow the posed, wobbling, dented, collapsing head, and the
 // head's forward is read from the same prim.
 //
@@ -78,12 +78,17 @@ export const HEAD_LEAF = {
   popSpeed: 2.5,
   /** The eyeballs' iris: the face sheet's glow colour (faceGlowColor, march/body/face.wgsl.ts). */
   iris: [1.9, 0.012, 0.005] as Vec3,
-  /** The in-orbit eyeball's centre sits this far inside the orbit's surface point (plan Task 17). */
+  /** The in-orbit eyeball's centre sits this far inside the orbit's surface point, straight back along the head's
+   *  −forward (plan Task 17). */
   eyeInset: 0.01,
   /** THE SOCKET PLUG: matte, near black, filling the popped orbit's crater. Its centre is `inset` inside the
-   *  orbit's surface point, so its top sits flush with the old skin and it lines the bottom of the bowl; centred
-   *  ON the surface point (the plan's local end 0) it bulged a 2.4 cm grey-rimmed dome out of the face. */
-  plug: { r: 0.024, color: [0.03, 0.01, 0.01] as Vec3, inset: 0.024 },
+   *  orbit's surface point, straight back along the head's −forward (toward the head centre it sat ~2 cm toward
+   *  the nose from the painted eye). Centred ON the surface point (the plan's local end 0) it bulged a 2.4 cm
+   *  grey-rimmed dome out of the face; at inset 0.024 its top touched the traced point — which is up to 1 cm OUTSIDE
+   *  the skin (traceRaySurface's rayEps) — and it still read as a black ball with a lit rim; 0.034 sinks it into the
+   *  bowl. blendK 0.0005, not 0.004: in the dangling piece it smooth-unions with the stalk's root, and the 4 mm fillet
+   *  shaded as a light grey halo round the stalk, right where the hole should read dark (v2-eye-pop). */
+  plug: { r: 0.024, color: [0.03, 0.01, 0.01] as Vec3, inset: 0.034 },
   /** THE CARVE DEEPENS WITH THE WEAR, AND THE SKULL WAITS FOR THE THRESHOLD (spec §15). A region crater's carve
    *  depth below its anchor plane (regionCarve):
    *    - while the region's flesh is at or above its bone threshold (orbits REGION_TUNING.orbitExposed, the rest
@@ -143,6 +148,8 @@ export interface HeadDamageDebug {
   eyeball: Record<EyeSide, Vec3 | null>;
   /** Each orbit's socket point (world) once it is exposed; null while painted. */
   socket: Record<EyeSide, Vec3 | null>;
+  /** Each dangling eye's stalk rope nodes (world, socket first); null when not dangling. */
+  stalk: Record<EyeSide, Vec3[] | null>;
   /** Attached pieces this actor draws (one draw each). */
   draws: number;
   /** Each region's (and the brain cavity's) last stamped crater: its radius, its carve depth below the anchor
@@ -170,7 +177,7 @@ export interface HeadDamageLeaf {
 
 /** An exposed orbit: its trackers and whichever piece shows it now. */
 interface Orbit {
-  /** The orbit's surface point, 1 cm inside it (toward the head centre), 2 cm in front of it (head forward). */
+  /** The orbit's surface point, 1 cm straight back from it (the head's −forward), 2 cm in front of it (forward). */
   at: Wound; inner: Wound; front: Wound;
   inOrbit: AttachedPiece | null;
   stalk: StalkState | null;
@@ -284,7 +291,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
 
   const plugPrim = (at: Vec3, inward: Vec3): Primitive => {
     const c = add(at, scale(inward, HEAD_LEAF.plug.inset));
-    return prim(c, c, HEAD_LEAF.plug.r, HEAD_LEAF.plug.color, { gloss: 0, blendK: 0.004 });
+    return prim(c, c, HEAD_LEAF.plug.r, HEAD_LEAF.plug.color, { gloss: 0, blendK: 0.0005 });
   };
   const inOrbitPrims = (n: { at: Vec3; inward: Vec3; fwd: Vec3 }): Primitive[] =>
     eyeballPrims(add(n.at, scale(n.inward, HEAD_LEAF.eyeInset)), n.fwd, HEAD_LEAF.iris, false);
@@ -455,7 +462,9 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           const fwd = rotate(frame.quat, [0, 0, 1]);
           const o: Orbit = {
             at: tracker(posed.prims, pi, at, yaw),
-            inner: tracker(posed.prims, pi, add(at, scale(unit(sub(frame.centre, at)), 0.01)), yaw),
+            // Straight back along −forward, NOT toward the head centre: the orbit is off-centre, so the centre
+            // line ran ~2 cm toward the nose and the plug's dark hole (and the in-orbit eye) sat off the painted eye.
+            inner: tracker(posed.prims, pi, add(at, scale(fwd, -0.01)), yaw),
             front: tracker(posed.prims, pi, add(at, scale(fwd, 0.02)), yaw),
             inOrbit: null, stalk: null, dangling: null, plug: null,
           };
@@ -562,6 +571,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         const posed = a.posed(), yaw = a.pose().yaw;
         const eyeball: Record<EyeSide, Vec3 | null> = { L: null, R: null };
         const socket: Record<EyeSide, Vec3 | null> = { L: null, R: null };
+        const stalk: Record<EyeSide, Vec3[] | null> = { L: null, R: null };
         let draws = 0;
         for (const side of SIDES) {
           const o = h.orbits[side];
@@ -569,7 +579,10 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           const n = orbitNow(posed.prims, o, yaw);
           socket[side] = n.at;
           if (o.inOrbit) eyeball[side] = add(n.at, scale(n.inward, HEAD_LEAF.eyeInset));
-          if (o.stalk) eyeball[side] = [...o.stalk.p[o.stalk.p.length - 1]!] as Vec3;
+          if (o.stalk) {
+            eyeball[side] = [...o.stalk.p[o.stalk.p.length - 1]!] as Vec3;
+            stalk[side] = o.stalk.p.map(q => [...q] as Vec3);
+          }
           draws += (o.inOrbit ? 1 : 0) + (o.dangling ? 1 : 0) + (o.plug ? 1 : 0);
         }
         const m = h.model;
@@ -584,6 +597,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           flat: [...h.deform.flat],
           eyeball,
           socket,
+          stalk,
           draws,
           craters: Object.fromEntries(Object.entries(h.craters).map(([k, v]) => [k, { ...v }])),
           frame: h.frame ? { centre: [...h.frame.centre] as Vec3, quat: [...h.frame.quat] as Quat, axes: [...h.frame.axes] as Vec3 } : null,

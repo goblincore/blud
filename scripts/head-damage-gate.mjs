@@ -20,8 +20,9 @@
 //      - the dented side's pole moved in by >= 0.01 m (v1's pole probe; the dent is a side flattening).
 //   2. one more orbit hit POPS the eye: eyes.L 'dangling' on the strike frame. 40 frames on (bleed off):
 //      - the iris faces the camera: the red-glow share in an eyeball-radius circle on the eyeball >= 0.08;
-//      - the orbit is a dark hole: mean luma in a 1.5 cm circle at the orbit — the SAME circle the painted-eye
-//        baseline was measured in — < 0.5 × the baseline's (the traced socket point and the plug centre printed).
+//      - the socket is a dark hole: the stalk emerges from it and covers the orbit circle, so the measure is the
+//        plug's 1.8 cm disc with the stalk's projected footprint cut out (>= 15% of it left): its mean luma < 0.5 × the
+//        painted-eye baseline, the snap's bar (the orbit circle, the traced socket point and the plug centre printed).
 //      Photos v2-eye-pop.png (blood) / -noblood. The dangling eye's draw cost is timed here (step 6).
 //   3. the next head hit (the first BROW hit) SNAPS it: eyes.L 'gone' on the strike frame; 40 frames on (bleed off)
 //      the socket is still a dark hole (the same luma measure; photos v2-snapped.png / -noblood). Then the brow until dead:
@@ -66,6 +67,23 @@ const EYE_PRESENT_MIN = 0.25;  // share of an eyeball-radius circle the attached
 const IRIS_RED_MIN = 0.08;     // red-glow share of the eyeball circle: a straight-on iris (r 0.5R, pupil 0.24R) is ~0.19
 const SOCKET_DARK = 0.5;       // socket mean luma < this × the painted-eye baseline's
 const SOCKET_LUMA_R = 0.015;   // m
+// THE POP'S SOCKET MEASURE. While the eye dangles the stalk EMERGES FROM THE HOLE: its root (r 0.009, head-eye
+// EYE_STALK.r0) sits on the socket point, and it hangs out and down across the orbit, so the pieces drew ~91-100% of
+// the 1.5 cm orbit circle and its luma read the pink stalk, not the socket (105.7 vs baseline 38.5; with the pieces
+// hidden — the bare crater — 21.0). A thin annulus round the stalk root is NOT a fair measure here: as drawn the stalk
+// is wider than the orbit circle (cutting its projected footprint out of the 1.5 cm circle left 0-32% of it, and that
+// remainder was still stalk flank). What the player sees of the hole is the PLUG's disc round the stalk: so the
+// measure is a POP_DISC_R circle on the plug's projected centre with the stalk's screen footprint cut out (every pixel
+// within STALK_DRAWN × its radius + STALK_PAD px of a projected stalk capsule — state().stalk, the rope nodes); at
+// least POP_MIN_SHARE of the disc must remain, and its mean luma must pass the SNAP's bar: < SOCKET_DARK × the
+// painted-eye baseline (the same pixels on the painted face are the eye's shadowed surround, luma ~9 — not a bar).
+// STALK_DRAWN is MEASURED: the drawn stalk is fatter than its prims (the root's drawn half-width ~20 px where r0
+// projects to ~16 px — the round cap plus the march's soft surface); POP_DISC_R stays inside the crater's lit lip.
+const POP_DISC_R = 0.018;     // m
+const STALK_DRAWN = 1.3;
+const STALK_PAD = 3;          // px
+const POP_MIN_SHARE = 0.15;
+const STALK_R = [0.009, 0.006];   // head-eye EYE_STALK r0, r1
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const results = [];
@@ -388,9 +406,10 @@ const hsOf = (fr, p) => { const l = qRot([-fr.quat[0], -fr.quat[1], -fr.quat[2],
 const nearestRegion = (hs) => { let best = null, bd = Infinity; for (const [r, c] of Object.entries(HD.regions)) { const d = (hs[0] - c[0]) ** 2 + (hs[1] - c[1]) ** 2 + (hs[2] - c[2]) ** 2; if (d < bd) { bd = d; best = r; } } return best; };
 const fwdOf = (fr) => qRot(fr.quat, [0, 0, 1]);
 const rightOf = (fr) => qRot(fr.quat, [1, 0, 0]);
-/** The socket plug's centre (game-head-damage HEAD_LEAF.plug.inset 0.024 in from the socket point, toward the
- *  head centre — the leaf's `inward` is 1 cm toward the centre, the same direction). */
-const plugCentre = (fr, sock) => { const d = fr.centre.map((c, i) => c - sock[i]); const l = Math.hypot(...d) || 1; return sock.map((v, i) => v + (d[i] / l) * 0.024); };
+/** The socket plug's centre (game-head-damage HEAD_LEAF.plug.inset in from the socket point, straight back
+ *  along the head's −forward — the leaf's `inward`). */
+const plugCentre = (fr, sock) => { const f = fwdOf(fr); return sock.map((v, i) => v - f[i] * PLUG_INSET); };
+const PLUG_INSET = 0.034;   // game-head-damage HEAD_LEAF.plug.inset
 const brains = () => evaluate("__sdfGame.head.brains()");
 const setBleed = (on) => evaluate(`__sdfGame.setBleed(${on})`);
 
@@ -413,6 +432,10 @@ async function faceStand(fr) {
 }
 /** Red-glow share (the painted eye / iris colour: r > 150, r > 2.2 g, r > 2.2 b) in a circle. */
 const glowShare = (img, c, r) => { let n = 0, g = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= img.w || y >= img.h || Math.hypot(x - c[0], y - c[1]) > r) continue; n++; const p = px(img, x, y); if (p[0] > 150 && p[0] > 2.2 * p[1] && p[0] > 2.2 * p[2]) g++; } return n ? g / n : 0; };
+/** Mean luma in a circle, leaving out every pixel inside one of `caps` ({ a, b, r } screen capsules). Returns
+ *  { luma, n, total }. */
+const lumaOutside = (img, c, r, caps) => { let n = 0, s = 0, total = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= img.w || y >= img.h || Math.hypot(x - c[0], y - c[1]) > r) continue; total++; if (caps.some((k) => segDist([x, y], k.a, k.b) <= k.r)) continue; n++; s += luma(px(img, x, y)); } return { luma: n ? s / n : 0, n, total }; };
+const segDist = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy; const t = l2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0; return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
 const meanLuma = (img, c, r) => { let n = 0, s = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= img.w || y >= img.h || Math.hypot(x - c[0], y - c[1]) > r) continue; n++; s += luma(px(img, x, y)); } return n ? s / n : 0; };
 const boneIn = (img, c, r) => { let n = 0, b = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= img.w || y >= img.h || Math.hypot(x - c[0], y - c[1]) > r) continue; n++; if (isBone(px(img, x, y))) b++; } return n ? b / n : 0; };
 /** Share of a circle's pixels that differ (colour distance > 30) between two images. */
@@ -474,6 +497,7 @@ try {
   const base = { eL: await eyePx("L"), eR: await eyePx("R") };
   base.gL = glowShare(img0, base.eL, 0.03 * ppm); base.gR = glowShare(img0, base.eR, 0.03 * ppm);
   base.lumaL = meanLuma(img0, base.eL, SOCKET_LUMA_R * ppm);
+  base.img0 = img0;   // the pop measure's baseline (the painted face at the same stand)
   note(`painted-eye baseline (face stand ${PHOTO_D} m, ${ppm.toFixed(0)} px/m, bleed off): glow share L ${base.gL.toFixed(3)} R ${base.gR.toFixed(3)} (3 cm circles); left-orbit luma ${base.lumaL.toFixed(1)} (1.5 cm circle)`);
   await setBleed(true);
 
@@ -607,9 +631,24 @@ try {
     const sockPieces = diffShare(img, imgH, base.eL, SOCKET_LUMA_R * ppm);
     const sockBare = meanLuma(imgH, base.eL, SOCKET_LUMA_R * ppm);
     note(`eye pop (+40 frames, bleed off): eyeball ${h2.eyeball.L ? f2(h2.eyeball.L) : "null"} (screen ${ebPx ? ebPx.map(Math.round).join(",") : "off"}), ${h2.socket.L && h2.eyeball.L ? distTo(h2.socket.L, h2.eyeball.L).toFixed(3) : "?"} m from the socket; iris red share ${iris.toFixed(3)}; orbit-circle luma ${sockL.toFixed(1)} vs painted baseline ${base.lumaL.toFixed(1)} — the pieces draw ${sockPieces === null ? "?" : (100 * sockPieces).toFixed(0)}% of that circle, and with them hidden it is ${sockBare?.toFixed(1)}; draws ${h2.draws}`);
-    out.pop = { iris, sockL, baseL: base.lumaL };
+    // The orbit circle with the stalk's screen footprint cut out (STALK_PAD): each rope capsule projected, its
+    // radius in px measured at its own depth (a node and the node + r along the head's right).
+    const caps = [];
+    const nodes = h2.stalk?.L ?? [];
+    const rt = rightOf(fr);
+    for (let k = 0; k + 1 < nodes.length; k++) {
+      const t = k / (nodes.length - 2 || 1), rr = STALK_R[0] + (STALK_R[1] - STALK_R[0]) * t;
+      const a = await toPx(nodes[k]), b = await toPx(nodes[k + 1]);
+      const e = await toPx(nodes[k].map((v, i) => v + rt[i] * rr));
+      if (a && b && e) caps.push({ a, b, r: STALK_DRAWN * Math.hypot(e[0] - a[0], e[1] - a[1]) + STALK_PAD });
+    }
+    const discPx = h2.socket.L ? await toPx(plugCentre(fr, h2.socket.L)) : null;
+    const cut = discPx ? lumaOutside(img, discPx, POP_DISC_R * ppm, caps) : { luma: NaN, n: 0, total: 0 };
+    const cutBase = discPx ? lumaOutside(base.img0, discPx, POP_DISC_R * ppm, caps) : { luma: NaN, n: 0, total: 0 };
+    note(`pop: the plug's ${POP_DISC_R * 100} cm disc (${discPx ? discPx.map(Math.round).join(",") : "off"}) with the stalk cut out (${caps.length} capsules × ${STALK_DRAWN} + ${STALK_PAD} px): ${cut.n}/${cut.total} px left (${(100 * cut.n / (cut.total || 1)).toFixed(0)}%), luma ${cut.luma.toFixed(1)} vs the painted face's same pixels ${cutBase.luma.toFixed(1)} (the whole circle, stalk included: ${sockL.toFixed(1)})`);
+    out.pop = { iris, sockL, cut: cut.luma, cutBase: cutBase.luma, cutShare: cut.n / (cut.total || 1), baseL: base.lumaL };
     check(!!ebPx && iris >= IRIS_RED_MIN, `pop: the dangling eye's iris faces the camera — red share ${iris.toFixed(3)} on the eyeball circle (>= ${IRIS_RED_MIN})`);
-    check(sockL < SOCKET_DARK * base.lumaL, `pop: the orbit is a dark hole — orbit-circle luma ${sockL?.toFixed(1)} (< ${SOCKET_DARK} × painted baseline ${base.lumaL.toFixed(1)} = ${(SOCKET_DARK * base.lumaL).toFixed(1)})`);
+    check(cut.n >= POP_MIN_SHARE * cut.total && cut.luma < SOCKET_DARK * base.lumaL, `pop: the socket round the stalk is a dark hole — the plug's disc less the stalk's footprint (${(100 * cut.n / (cut.total || 1)).toFixed(0)}% of it, >= ${100 * POP_MIN_SHARE}%) has luma ${cut.luma.toFixed(1)} (< ${SOCKET_DARK} × painted baseline ${base.lumaL.toFixed(1)} = ${(SOCKET_DARK * base.lumaL).toFixed(1)}, the snap's bar)`);
     await setBleed(true);
   }
 
@@ -647,7 +686,7 @@ try {
       await setBleed(true);
     }
     if (exposedAt === null) {
-      const reg = hs.flesh.brow < HD.skullExposed ? "brow" : hs.flesh.crown < HD.skullExposed ? "crown" : null;
+      const reg = ["brow", "crown", "cheekL", "cheekR"].find((q) => hs.flesh[q] < HD.skullExposed) ?? null;
       if (reg) { exposedAt = hs.hits; exposedRegion = reg; }
     }
     if (hs.dead) {
