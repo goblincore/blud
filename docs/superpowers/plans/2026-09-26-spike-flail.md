@@ -2498,3 +2498,21 @@ soldier-only red-meat block adds glint/clot noise but not for the zombie; blood:
 - [ ] A combined close-up sequence of a 4-hit head kill with everything on; NOTES v1.5b entry with numbers and "For
   the owner"; TASKS; spec §14.2 status; PR body; push; restart the owner's server (`preview_start`
   `blud-censer`).
+
+### Task 35: Wet red lips on gun wounds (keep the crater shape)
+
+Owner (2026-09-30), after seeing the flail's torn lips: "the gun wounds also need a little bit of work, mostly adding
+the red lips part… they are more craterlike but if possible combine the crater look with edges that have more of the
+wet red".
+
+- [ ] Keep the shotgun's crater SHAPE (round bowl, smooth raised lip, no ragged outline, no petals) and add only the
+  wet red lip shading and glossy interior from the torn look (torn-lips.ts `TORN` shading constants, the tear
+  albedo/wet/glint blocks). Decouple the flag: a second flag bit (bit 4, "wet lip": shading only) beside bit 3
+  ("tear": shape + shading); `Wound.wetLip` (0..1) on gun wounds (grapeshot pellets, slugs, and dynamite/explosion
+  blast wounds if they read fine); default OFF for everything else. Pellet wounds are small (r ≈ 0.055): check the
+  red lip reads at that size without swamping the skin; slugs (r ≈ 0.16) get the full look.
+- [ ] Look loop: close-ups (0.5 m, bleed off/on) of a slug wound, a pellet cluster and a double-barrel volley, before
+  vs after; iterate; LOOK at every photo and describe honestly; also confirm the flail's torn wounds are unchanged
+  and other characters' wounds (soldier, cultist robe, cloth) are unchanged.
+- [ ] Verify: tsc; `npm test -- wound march damage zombie-gpu head flail deferred torn`; golden hash changes explained;
+  both gates; commit `feat(wound): gun wounds get the wet red lip (crater shape kept)`.
