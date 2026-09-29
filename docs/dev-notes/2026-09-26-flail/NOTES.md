@@ -703,3 +703,32 @@ follow-through), f26 and f30 (both return) of H's 33-frame (0.55 s) swing.
   Task 16): ball, haft, chain and hand are all off-frame from about f13 through f18 of
   27. Worth a shallower follow-through key, or is a brief "the weapon left the frame"
   beat fine for a big overhand swing?
+
+## v1.4 (2026-09-29): head magnet, tougher zombies, the ball drags
+
+Owner: aiming at the head hits the body; zombies go down too fast; the ball always stays in front.
+
+- **Head magnet.** Live probe: the ray passed 1–3 cm from the head centre, but the zombie's raised forearms
+  were in front of its face, and the zombie also lunges during the 0.17 s click-to-strike (head moved 13–28 cm
+  on 3 of 7 swings). A strike whose ray passes within 0.18 m of the head centre now lands on the head
+  (`resolveStrike` `head` field; `lastStrike.magnet`). Live gate: 7 of 8 swings at the head are head hits
+  (the old code: 5 of 7, with forearm hits 34 cm from the head).
+- **Tougher.** Body hits credit 0.065 (H 0.09), so a zombie drops on about hit 11. Head hits credit 0.02; the
+  head model kills, on about hit 8 (single region: 7 at `skullPerHit` 0.25, 6–11 with jitter). Strips are
+  0.20 (R, L) and 0.28 (H).
+- **Ball drag.** New back-beat key on each swing (t 0.06 R/L, 0.07 H). `swingFloor` 0.05, `guideWindow` 0.06, a
+  wind-up hold (`windUpGuide` 0.5, released at `holdLead` 0.09 s before the strike, fading over 0.02 s), and
+  64 pin sweeps. A fully free ball has no time to swing back in a 0.1 s wind-up (it just hangs), which is why
+  the hold exists. Drawn-ball lag behind its key before the strike: R 17 → 56 cm, L 14 → 38 cm, H 13 → 36 cm;
+  the ball trails the eye bolt along the swing by 17–27 cm in the downswing. Test thresholds changed (no-catapult
+  slop 2 → 10 cm and "≤ 1.6× the fastest key move"; wind-up trail 5–20 cm → drag 20–60 cm) are listed in the
+  commit message. Strips: `look/drag-{R,L,H}-strip.png`.
+- **Honest read.** L shows it best (the ball swings out wide behind, then trails the haft into the hit). On R
+  the drag happens mostly above the frame, so it reads for only about two frames before the hit. The change is
+  modest in still frames; it needs a play-feel check.
+
+### Open
+- Head-damage gate: `orbit exposed: painted glow gone` and `snap: orbit stays a dark hole` fail because a
+  red blood blob (not cleared by `setBleed(false)`) now overlaps the measuring circle; the model states are
+  right. Plus the known pop-socket darkness check.
+- Head hits still miss when the zombie lunges more than 18 cm during the swing.

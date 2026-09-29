@@ -279,7 +279,7 @@ Staged, flail-specific head destruction on the zombie:
 
 Designed after v1.3 ships.
 
-## 13. v1.4 — fourth playtest (owner, 2026-09-29)
+## 13. v1.4 — fourth playtest (owner, 2026-09-29) — BUILT 2026-09-29
 
 Owner feedback: (1) aiming at the head still hits the body; (2) the zombie goes down too fast; (3) "the
 animations need work": the ball should swing back, then **drag behind the swing**, but it always stays in
@@ -307,3 +307,7 @@ front.
    0.05), so it swings back behind the hand and trails the haft; the guide ramps up only in the last 60 ms
    before the strike, which stays exactly on `FLAIL_IMPACT`, and releases after it (the follow-through
    whips). The wind-up gets a visible "back" beat: the hand draws back and the ball swings out behind it.
+
+**As built:** the head-only field is `sdBody` over the live head clusters; `skullPerHit` is 0.25 (not 0.34: at
+0.20 strips, 0.34 killed a single region on hit 6); body collapse on about hit 11, head kill on about hit 8; the
+ball drag needed a wind-up hold and a back-beat key per swing as well as the lower guide floor. See NOTES.

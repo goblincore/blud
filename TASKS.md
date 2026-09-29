@@ -6,7 +6,10 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [~] **v1.3 built (2026-09-28); owner playtest pending.** Gate passing. Chained clicks run R (overhand) → L (cross) →
+- [~] **v1.4 built (2026-09-29); owner playtest pending.** A head magnet (a strike within 18 cm of the head hits the
+  head, through raised arms), tougher zombies (~11 body hits; head kills ~8), and the ball trails behind the swing.
+  Spec §13.
+- [x] **v1.3 built (2026-09-28); playtested 2026-09-29** (feedback → v1.4). Gate passing. Chained clicks run R (overhand) → L (cross) →
   H (a flat sweep, ±70°, the finisher); a pause of more than 0.35 s resets to R. About 8 body hits drop a zombie (7 with a
   sweep among them). The flail never decapitates. The hit follows the crosshair (worst 0.77 cm off at the strike).
   Spec §12 · strip `look/sweep-H-strip.png`.
