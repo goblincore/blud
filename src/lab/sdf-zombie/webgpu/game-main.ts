@@ -7821,8 +7821,13 @@ async function main() {
     // layer BEFORE the base scene renders (the draw callback follows this tick),
     // so the capture's clean background has no selected gib in it. When the
     // switch is off the list is empty and every mesh is put back where it was.
+    // THE FLAIL rides the same layer (spike-flail Task 28): its ball and chain segments while a swing is
+    // live and fast. Its subjects come from this tick's drawn chain and the camera placed above, so it runs
+    // here, after the camera is final and before select(). Flail pieces go FIRST (the layer keeps the first
+    // GIB_BLUR_MAX_PIECES). Called even with the switch off, so its prior stays one frame old.
+    const flailBlur = ctx.weapon.flail?.blurSubjects() ?? [];
     if (ctx.gibs.shutter) {
-      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? gibBlurSubjects(ctx) : []);
+      ctx.gibs.shutter.select(ctx.gibs.shutter.enabled ? [...flailBlur, ...gibBlurSubjects(ctx)] : []);
       if (!ctx.gibs.shutter.enabled) ctx.gibs.blurPrevKeys = new Set();
     }
     ctx.telemetry.telemetry.end('goo-sync', gooTiming);

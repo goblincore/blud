@@ -15,6 +15,9 @@ export function createFlailSeams(ctx: GameContext) {
       /** Off for gates that measure pixels: no camera kick, judder, roll, FOV punch, rig kick, chain relax
        *  or head snap (flail-impact.ts). On by default. */
       setImpactFx: (on: boolean) => { ctx.weapon.flail?.setImpactFx(on); },
+      /** The swing's shutter blur on the ball and chain (flail-blur.ts, spec §14.1 item 6). On by default;
+       *  state().blur reads it back. */
+      setBlur: (on: boolean, look?: { ball?: number; chain?: number; spin?: boolean }) => { ctx.weapon.flail?.setBlur(on, look); },
       /** The impact feel's live channels (flail-impact.ts; the gate's "impact" section). */
       impactDebug: () => ctx.weapon.flail?.impactDebug() ?? null,
       state: () => ctx.weapon.flail?.debug() ?? null,

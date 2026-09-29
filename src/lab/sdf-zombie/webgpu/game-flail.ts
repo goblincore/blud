@@ -31,7 +31,11 @@ import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
 import { reticleNdc } from './fisheye';
-import { FLAIL_FILL_LAYER } from './gib-motion-blur';
+import { FLAIL_FILL_LAYER, GIB_BLUR_LAYER } from './gib-motion-blur';
+import type { GibBlurSubject } from './gib-shutter-layer';
+import {
+  FLAIL_BLUR, FLAIL_BLUR_IDS, ballMotionState, chainSegmentStates, flailBlurActive, makeMotionState,
+} from './flail-blur';
 import {
   FLAIL_IMPACT_FEEL, chainRelax, clearTime, clearView, contact, impactKick, impactOutputs, makeImpactState,
   stepImpact, timeScale,
@@ -135,6 +139,11 @@ export interface FlailDebug {
    *  through the fisheye lens, so they land on the photo's pixels — and the
    *  ball's on-screen radius in NDC-x units. */
   ndc: { ball: [number, number]; bolt: [number, number]; grip: [number, number]; ballR: number };
+  /** THE SWING BLUR (flail-blur.ts): `on` is the setBlur seam; `warm` the layer pipelines' warm
+   *  ('pending' | 'running' | 'done' — nothing is offered before 'done'); `offered` the subjects the last
+   *  blurSubjects() call offered the gib shutter layer (0 at rest); `ballSpeed` the drawn ball's
+   *  rig-local speed over the unscaled step (the gate, m/s); `radius` the ball's probe radius. */
+  blur: { on: boolean; ballGain: number; chainGain: number; ballSpin: boolean; warm: string; offered: number; ballSpeed: number; radius: number };
 }
 
 export interface FlailWeapon {
@@ -165,6 +174,16 @@ export interface FlailWeapon {
   /** Copy the torch's pose/intensity onto the FILL. Called right after
    *  flashlight.update(camera), so the fill matches THIS frame's torch. */
   syncFill(): void;
+  /**
+   * THE SWING BLUR (spec §14.1 item 6): the ball and the chain's segments as gib-shutter subjects while a
+   * swing is live and the ball moves faster than FLAIL_BLUR.minBallSpeedMps; [] at rest, hidden, or before
+   * the layer's pipelines are warm. Called once per tick, AFTER the camera is final and BEFORE the shutter's
+   * select(). Records this frame's pose as the next frame's prior either way.
+   */
+  blurSubjects(): GibBlurSubject[];
+  /** Seam: the swing blur on/off (on by default), and optionally its look: the ball's and the chain's
+   *  motion gains (FLAIL_BLUR.ballGain / chainGain) and whether the ball's spin is carried. */
+  setBlur(on: boolean, look?: { ball?: number; chain?: number; spin?: boolean }): void;
 }
 
 export interface FlailImpactDebug {
@@ -305,6 +324,10 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   const ballPrim = new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 1), iron);
   ball.add(ballPrim);
 
+  /** The ball's blur probe radius (the primitive's; the GLB's bounds replace it). */
+  let ballRadius = 0.06;
+  /** The GLB has loaded or failed: the blur warm waits for the final meshes and materials. */
+  let glbSettled = false;
   const linkGeo = new THREE.TorusGeometry(0.007, 0.002, 5, 8);
   const chain = new THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>(linkGeo, iron, MAX_LINKS);
   chain.name = 'flail-chain';
@@ -338,6 +361,13 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       haft.updateMatrixWorld(true);
       anchorLocal.copy(haft.worldToLocal(anchorNode.getWorldPosition(new THREE.Vector3())));
       ballNode.removeFromParent(); ballNode.position.set(0, 0, 0); ballNode.quaternion.identity();
+      ballNode.updateMatrixWorld(true);
+      {
+        // The blur's probe radius: the ball's largest half-extent, spikes included.
+        const size = new THREE.Box3().setFromObject(ballNode).getSize(new THREE.Vector3());
+        const r = Math.max(size.x, size.y, size.z) / 2;
+        if (Number.isFinite(r) && r > 0.01) ballRadius = r;
+      }
       ball.add(ballNode); ballPrim.visible = false;
       const found: THREE.Mesh[] = [];
       linkNode.traverse((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
@@ -345,6 +375,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       ownLights(haft); ownLights(ball); ownLights(chain);
     } catch (e) {
       console.warn('[sdf-game] flail.glb absent or unreadable — using the primitive flail', e);
+    } finally {
+      glbSettled = true;
     }
   })();
 
@@ -381,6 +413,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   /** THE IMPACT FEEL (flail-impact.ts): the time channel and the view springs, stepped on UNSCALED dt. */
   const impact = makeImpactState();
   let lastScale = 1, contacts = 0;
+  /** The UNSCALED step timeScale() was given this tick: the blur's velocities are the drawn motion over the
+   *  time the viewer saw pass, so the hit-stop's near-frozen frames read as near-still (no smear). */
+  let rawDt = 0;
   function publishImpact(): void {
     const o = impactOutputs(impact), w = ctx.weapon.impact;
     w.pitch = o.cameraPitch;
@@ -643,6 +678,166 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     return { ball: bn, bolt: screenNdc(k), grip: screenNdc(g), ballR: Math.hypot(rn[0] - bn[0], rn[1] - bn[1]) };
   }
 
+  // ---- THE SWING BLUR (Task 28, spec §14.1 item 6): drawn chain → gib-shutter subjects ----------------
+  // The ball and the chain ride the gib shutter layer (gib-shutter-layer.ts) exactly as the scrapped
+  // censer's head and chain did: while a swing is live and the ball is fast, their meshes are lifted onto
+  // GIB_BLUR_LAYER (off the clean base pass) and smeared along per-subject motion (flail-blur.ts). The
+  // flail's own light list is a material lightsNode, so the layer draw (camera on GIB_BLUR_LAYER, no scene
+  // lights) lights them exactly as the base pass does.
+  //
+  // PRIORS ARE CAMERA-RELATIVE: last frame's drawn nodes are kept in camera space and re-placed through
+  // THIS frame's camera, so turning the view does not streak a weapon held in it; the rig kick and the
+  // aim lean (rig → camera) are real on-screen motion and are carried. The GATE is the ball's RIG-LOCAL
+  // speed (the chain sim's own motion) over the UNSCALED step: in the hit-stop freeze the sim barely
+  // moves, so the gate closes and nothing smears; in the slow tail the motion is slowed as seen.
+  let blurOn = true;
+  let ballGain: number = FLAIL_BLUR.ballGain, chainGain: number = FLAIL_BLUR.chainGain, ballSpin: boolean = FLAIL_BLUR.ballSpin;
+  let blurHavePrev = false;
+  /** Seconds the blur has been continuously active: the subjects' ageSeconds, so the first blurred frame
+   *  exposes one frame of motion, never a streak back into the pose before it. */
+  let blurAge = 0;
+  let lastOffered = 0, lastBallSpeed = 0;
+  const NODES = FLAIL_CHAIN_SIM.nodes, SEGMENTS = NODES - 2;   // nodes 0 … n−2 are the chain; n−1 the ball
+  type M3 = [number, number, number];
+  const prevCam: M3[] = Array.from({ length: NODES }, (): M3 => [0, 0, 0]);
+  const prevW: M3[] = Array.from({ length: NODES }, (): M3 => [0, 0, 0]);
+  const curW: M3[] = Array.from({ length: NODES }, (): M3 => [0, 0, 0]);
+  const prevBallRig: M3 = [0, 0, 0];
+  const ballState = makeMotionState();
+  const chainPool = Array.from({ length: SEGMENTS }, () => makeMotionState());
+  const subjectPool: GibBlurSubject[] = [];
+  const offered: GibBlurSubject[] = [];
+  const ballMeshes: THREE.Mesh[] = [];
+  const _camInv = new THREE.Matrix4(), _rigToCam = new THREE.Matrix4(), _v = new THREE.Vector3();
+  const axPrev: M3 = [0, 0, 0], axCur: M3 = [0, 0, 0];
+  function offer(id: number, state: GibBlurSubject['state'], mesh: THREE.Mesh, age: number): void {
+    const i = offered.length;
+    const rec = subjectPool[i] ?? (subjectPool[i] = { id, state, mesh, baseLayer: 0, ageSeconds: age });
+    rec.id = id; rec.state = state; rec.mesh = mesh; rec.baseLayer = 0; rec.ageSeconds = age;
+    offered.push(rec);
+  }
+
+  // ---- The layer's pipelines, warmed on CLONES (the censer's fix, review I2) ---------------------------
+  // A cold first blurred swing builds the ball's and chain's layer-pass render objects mid-swing (the
+  // censer measured ~100 + 66 ms: the layer target is rgba16float and sees no scene lights, a different
+  // program from the base pass). compileAsync compiles under the DEFAULT pass id, so warming the LIVE
+  // meshes would make a default-map render object the base pass flips and disposes. So: CLONES (same
+  // geometry + materials), every node on GIB_BLUR_LAYER, never added to the scene and never drawn,
+  // compiled in the layer context and KEPT, so the warmed node-builder state and pipelines stay cached for
+  // the live meshes' own GIB_SHUTTER_PASS_ID render objects. Started as soon as the GLB (the final meshes
+  // and materials) has settled and the gib draw is warm; nothing is offered until it is done. A changed
+  // light list re-keys the materials, so refreshLights() re-arms it.
+  let warm: 'pending' | 'running' | 'done' = 'pending';
+  let warmGen = 0;
+  let warmClones: THREE.Object3D[] = [];
+  function startWarm(): void {
+    if (warm !== 'pending') return;
+    const shutter = ctx.gibs.shutter;
+    if (ctx.boot.deferredMode || (shutter && !shutter.diagnostics().supported)) { warm = 'done'; return; }
+    if (!shutter || !glbSettled) return;
+    if (ctx.boot.warmBackground.gibDraw() !== 'draw') return;
+    const cap = ctx.render.postAa?.captureTarget;
+    if (!cap) return;
+    warm = 'running';
+    const gen = warmGen;
+    const scene = ctx.boot.handle.scene;
+    const camera = ctx.boot.handle.camera as THREE.PerspectiveCamera;
+    const clones = [ball, chain].map((root) => {
+      const c = root.clone(true);
+      c.traverse((o) => {
+        o.layers.set(GIB_BLUR_LAYER);
+        // compileAsync frustum-culls like a draw: a parentless clone near the world origin would be
+        // outside the camera and silently skipped.
+        o.frustumCulled = false;
+        const im = o as THREE.InstancedMesh;
+        if (im.isInstancedMesh) {
+          im.count = Math.max(1, im.count);
+          // three keys an INSTANCED mesh's material cache by object.uuid (RenderObject.getMaterialCacheKey),
+          // so a clone with its own uuid would warm a program the live chain never looks up. Render objects
+          // are looked up by object IDENTITY; the uuid only enters this string key.
+          im.uuid = chain.uuid;
+          // …but the node-builder state that key finds is SHARED, and its instance node binds the buffer
+          // it was built with: warmed on the clone's own copy of the matrices, the live chain's layer draw
+          // read the clone's frozen matrices and the chain VANISHED whenever it was lifted (measured:
+          // chain-only blur, gain 0.04 and 1 alike). Share the live attribute, so the state binds it.
+          im.instanceMatrix = chain.instanceMatrix;
+          im.instanceColor = chain.instanceColor;
+        }
+      });
+      c.updateMatrixWorld(true);
+      return c;
+    });
+    void (async () => {
+      let ok = true;
+      for (const c of clones) ok = (await shutter.precompileSubjectInBackground(c, cap, scene, camera, 20_000)) && ok;
+      if (!ok) console.warn('[sdf-game] flail blur warm did not fully compile — the first swing may hitch');
+      if (gen !== warmGen) { warm = 'pending'; return; }   // re-armed meanwhile: go again
+      warmClones = clones;
+      warm = 'done';
+    })();
+  }
+  void warmClones;
+
+  function blurSubjects(): GibBlurSubject[] {
+    offered.length = 0;
+    startWarm();
+    if (!rig.visible || !sim) {
+      blurHavePrev = false; blurAge = 0; lastOffered = 0; lastBallSpeed = 0;
+      return offered;
+    }
+    const dt = rawDt;
+    const n = NODES, bi = n - 1, ring = n - 2;
+    const b = drawn[bi]!;
+    lastBallSpeed = blurHavePrev && dt > 0
+      ? Math.hypot(b[0] - prevBallRig[0], b[1] - prevBallRig[1], b[2] - prevBallRig[2]) / dt : 0;
+    const cam = ctx.boot.handle.camera;
+    cam.updateMatrixWorld();
+    rig.updateWorldMatrix(true, false);
+    _camInv.copy(cam.matrixWorld).invert();
+    _rigToCam.multiplyMatrices(_camInv, rig.matrixWorld);
+    const active = blurOn && blurHavePrev && warm === 'done'
+      && ctx.boot.warmBackground.gibDraw() === 'draw'
+      && flailBlurActive(swing.phase, lastBallSpeed);
+    if (active) {
+      blurAge += dt;
+      const age = blurAge;
+      for (let k = 0; k < n; k++) {
+        const p = drawn[k]!;
+        _v.set(p[0], p[1], p[2]).applyMatrix4(rig.matrixWorld);
+        const c = curW[k]!; c[0] = _v.x; c[1] = _v.y; c[2] = _v.z;
+        const q = prevCam[k]!;
+        _v.set(q[0], q[1], q[2]).applyMatrix4(cam.matrixWorld);
+        const w = prevW[k]!; w[0] = _v.x; w[1] = _v.y; w[2] = _v.z;
+      }
+      // BALL: every visible mesh under the group shares ONE state, id and age.
+      const bp = prevW[bi]!, bc = curW[bi]!, rp = prevW[ring]!, rc = curW[ring]!;
+      axPrev[0] = rp[0] - bp[0]; axPrev[1] = rp[1] - bp[1]; axPrev[2] = rp[2] - bp[2];
+      axCur[0] = rc[0] - bc[0]; axCur[1] = rc[1] - bc[1]; axCur[2] = rc[2] - bc[2];
+      if (!ballSpin) { axPrev[0] = axCur[0]; axPrev[1] = axCur[1]; axPrev[2] = axCur[2]; }
+      ballMotionState(ballState, bp, bc, axPrev, axCur, dt, ballRadius, ballGain);
+      ballMeshes.length = 0;
+      ball.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh) ballMeshes.push(o as THREE.Mesh); });
+      for (const mesh of ballMeshes) offer(FLAIL_BLUR_IDS.ball, ballState, mesh, age);
+      // CHAIN: ONE InstancedMesh offered once per sim segment (nodes 0 … ring), each with its own motion.
+      if (chain.count > 0) {
+        const segs = chainSegmentStates(prevW, curW, SEGMENTS, dt, chainGain, chainPool);
+        for (let i = 0; i < segs.length; i++) offer(FLAIL_BLUR_IDS.chain + i, segs[i]!, chain, age);
+      }
+    } else {
+      blurAge = 0;
+    }
+    // Remember this frame: camera space for the stamps, rig-local for the gate.
+    for (let k = 0; k < n; k++) {
+      const p = drawn[k]!;
+      _v.set(p[0], p[1], p[2]).applyMatrix4(_rigToCam);
+      const q = prevCam[k]!; q[0] = _v.x; q[1] = _v.y; q[2] = _v.z;
+    }
+    prevBallRig[0] = b[0]; prevBallRig[1] = b[1]; prevBallRig[2] = b[2];
+    blurHavePrev = true;
+    lastOffered = offered.length;
+    return offered;
+  }
+
   return {
     onMouseDown(button) {
       if (ctx.weapon.slotState.live !== 'flail') return false;
@@ -676,6 +871,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       rig.visible = lower < 0.999 && ownsSlot(ctx, 'flail');
     },
     timeScale(dt) {
+      rawDt = dt;
       lastScale = timeScale(impact, dt);
       stepImpact(impact, dt);
       publishImpact();
@@ -701,8 +897,18 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       if (v.z > 1) return null;
       return screenNdc(new THREE.Vector3(x, y, z));
     },
-    refreshLights() { relist(); },
+    refreshLights() {
+      if (relist() && warm !== 'pending') { warmGen++; if (warm === 'done') warm = 'pending'; }
+    },
     syncFill,
-    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: comboSide(swing), ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, ballKeyed: [...ballKeyed] as Vec3, linkErr, ndc: ndcNow() }),
+    blurSubjects,
+    setBlur(on, look) {
+      blurOn = on;
+      if (look?.ball !== undefined && Number.isFinite(look.ball)) ballGain = Math.max(0, look.ball);
+      if (look?.chain !== undefined && Number.isFinite(look.chain)) chainGain = Math.max(0, look.chain);
+      if (look?.spin !== undefined) ballSpin = look.spin;
+    },
+    debug: () => ({ phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, lastStrike, nextSide: comboSide(swing), ballBolt: { ...ballBolt }, ballDrawn: [...ballDrawn] as Vec3, ballKeyed: [...ballKeyed] as Vec3, linkErr, ndc: ndcNow(),
+      blur: { on: blurOn, ballGain, chainGain, ballSpin, warm, offered: lastOffered, ballSpeed: lastBallSpeed, radius: ballRadius } }),
   };
 }
