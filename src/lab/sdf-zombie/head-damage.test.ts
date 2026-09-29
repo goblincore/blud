@@ -93,6 +93,41 @@ describe('head damage v2', () => {
     expect(nearestRegion([-0.5, 0.1, 0.9])).toBe('orbitL');
     expect(nearestRegion([0.6, -0.35, 0.7])).toBe('cheekR');
   });
+  // Head damage v2, as built (spec §15): the skull is per region, and a region's crater is anchored where it was struck.
+  it('the side of the head (cheekL) exposes skull and cracks: the brain comes out of the cheek and kills in 5–7', () => {
+    const side: [number, number, number] = [-0.96, -0.23, -0.19];   // the flail gate's side stand (nearest cheekL)
+    expect(nearestRegion(side)).toBe('cheekL');
+    for (const v of [0, 0.5, 0.999]) {
+      let s = makeHeadDamage(); let all: HeadEvent[] = []; let n = 0;
+      while (!s.dead && n < 20) { const r = headHit(s, { hs: side, strip: 0.25 }, () => v); s = r.state; all = all.concat(r.events); n++; }
+      expect(n).toBeGreaterThanOrEqual(5); expect(n).toBeLessThanOrEqual(7);
+      expect(all).toContainEqual({ kind: 'skull-exposed', region: 'cheekL' });
+      expect(all).toContainEqual({ kind: 'brain', region: 'cheekL' });
+      expect(all.findIndex(e => e.kind === 'skull-exposed')).toBeLessThan(all.findIndex(e => e.kind === 'brain'));
+    }
+  });
+  it('hits concentrated on the crown or a cheek kill in 5–7 at both jitter extremes; orbit hits never crack', () => {
+    for (const reg of ['crown', 'cheekR'] as const) for (const v of [0, 0.999]) {
+      let s = makeHeadDamage(); let n = 0;
+      while (!s.dead && n < 20) { s = headHit(s, { hs: at(reg), strip: 0.25 }, () => v).state; n++; }
+      expect(n).toBeGreaterThanOrEqual(5); expect(n).toBeLessThanOrEqual(7);
+    }
+    let s = makeHeadDamage();
+    for (let i = 0; i < 12; i++) s = headHit(s, { hs: at('orbitL'), strip: 0.35 }, noJitter).state;
+    expect('orbitL' in s.skull).toBe(false);                  // an orbit has no skull of its own
+    expect(s.skull.cheekL).toBe(0);
+    expect(s.dead).toBe(false);
+  });
+  it('a region crater is anchored where the first blow that struck it landed; orbits and spill-only regions have no anchor', () => {
+    const first: [number, number, number] = [-0.96, -0.23, -0.19];
+    let s = headHit(makeHeadDamage(), { hs: first, strip: 0.25 }, noJitter).state;
+    expect(s.anchor.cheekL).toEqual(first);
+    expect('orbitL' in s.anchor).toBe(false);                 // spilled on, never struck
+    s = headHit(s, { hs: [-0.7, -0.3, 0.2], strip: 0.25 }, noJitter).state;
+    expect(s.anchor.cheekL).toEqual(first);                    // later strips grow it there
+    for (let i = 0; i < 3; i++) s = headHit(s, { hs: at('orbitR'), strip: 0.25 }, noJitter).state;
+    expect('orbitR' in s.anchor).toBe(false);                 // the eye lives at the orbit
+  });
   it('a hit on the back of the head strips its nearest region in full (the crown), not nothing', () => {
     const r = headHit(makeHeadDamage(), { hs: [0, 0.2, -1], strip: 0.25 }, noJitter);
     expect(nearestRegion([0, 0.2, -1])).toBe('crown');

@@ -13,7 +13,9 @@
 //
 // EVENTS → WORLD.
 //   strip          the region's ONE crater, stamped or replaced (Wound.headRegion) at the region's surface
-//                  point — traced from the region's hs direction toward the head centre — radius
+//                  point — traced toward the head centre from its ANCHOR's hs direction (the model's
+//                  state.anchor: where the first blow that struck the region landed), or from the region
+//                  centre's while it has none (only spilled on; the orbits always) — radius
 //                  REGION_TUNING.craterR(region, flesh), 'keep', no sever. One lasting dent per hit.
 //   orbit-exposed  that eye's painted glow off (view.setEyeGlow) + the IN-ORBIT eyeball: one piece of
 //                  eyeballPrims (no nerve) 1 cm inside the orbit's surface point, looking along the head forward.
@@ -23,7 +25,7 @@
 //                  PLUG-ONLY piece is attached in its place.
 //   skull-exposed  nothing extra: from the threshold on the region's crater carves past the measured skull depth;
 //                  above it the carve stays in the flesh (HEAD_LEAF.carve, regionCarve).
-//   brain          the brain mesh + lumps + chips from the CRACKED region's surface point, the reduced blood,
+//   brain          the brain mesh + lumps + chips from the CRACKED region's (anchored) surface point, the reduced blood,
 //                  and a CROWN.brainR cavity there (headRegion 'brain').
 //   kill           forceCollapse.
 //
@@ -52,8 +54,8 @@ import { clothifyWound, woundWorldPos, worldHitToWound, type Wound } from '../da
 import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
 import {
-  HEAD_REGIONS, REGION_TUNING, headDeath, headHit, makeHeadDamage,
-  type EyeSide, type EyeState, type HeadDamageState, type HeadEvent, type HeadRegion,
+  HEAD_REGIONS, REGION_TUNING, headDeath, headHit, isSkullRegion, makeHeadDamage,
+  type EyeSide, type EyeState, type HeadDamageState, type HeadEvent, type HeadRegion, type SkullRegion,
 } from '../head-damage';
 import {
   addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, rotate, stepWobble,
@@ -130,9 +132,11 @@ export interface HeadDamageDeps {
 export interface HeadDamageDebug {
   hits: number;
   flesh: Record<HeadRegion, number>;
-  skull: { brow: number; crown: number };
+  skull: Record<SkullRegion, number>;
   eyes: Record<EyeSide, EyeState>;
   dead: boolean;
+  /** The anchored regions' hs (the model's state.anchor). */
+  anchor: Partial<Record<SkullRegion, readonly [number, number, number]>>;
   squash: number;
   flat: number[];
   /** Each eye's eyeball centre (world): in its orbit, or at the end of its stalk; null painted / gone. */
@@ -207,11 +211,11 @@ function normalAt(field: (p: Vec3) => number, p: Vec3): Vec3 {
 
 /** Outside the head on a region's hs line: the leaf traces from here toward the head centre. The orbits use
  *  eyeRayStart (in front of the face on the eye's line, as v1's socket did); the rest start 1.5 head radii
- *  out along their hs direction. */
-export function regionRayStart(frame: HeadFrame, r: HeadRegion): Vec3 {
+ *  out along their hs direction — `anchor`'s when the region has one (state.anchor), else the centre's. */
+export function regionRayStart(frame: HeadFrame, r: HeadRegion, anchor?: readonly [number, number, number]): Vec3 {
   if (r === 'orbitL') return eyeRayStart(frame, 'L');
   if (r === 'orbitR') return eyeRayStart(frame, 'R');
-  const hs = HEAD_REGIONS[r];
+  const hs = anchor && Math.hypot(anchor[0], anchor[1], anchor[2]) > 0.2 ? anchor : HEAD_REGIONS[r];
   const k = 1.5 / (Math.hypot(hs[0], hs[1], hs[2]) || 1);
   return add(frame.centre, rotate(frame.quat, [hs[0] * frame.axes[0] * k, hs[1] * frame.axes[1] * k, hs[2] * frame.axes[2] * k]));
 }
@@ -384,7 +388,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       // An orbit is traced straight back along the head's forward (on the painted eye's line: toward the centre
       // it would land ~2 cm nearer the nose); the other regions toward the head centre.
       const back = reg === 'orbitL' || reg === 'orbitR' ? rotate(frame.quat, [0, 0, -1]) : undefined;
-      if (!p) { p = surfaceToward(field, regionRayStart(frame, reg), frame, back); surf.set(reg, p); }
+      const anchor = isSkullRegion(reg) ? h.model.anchor[reg] : undefined;
+      if (!p) { p = surfaceToward(field, regionRayStart(frame, reg, anchor), frame, back); surf.set(reg, p); }
       return p;
     };
     // The shallowest depth below the anchor plane at which the carve (a sphere of `radius` round the anchor, clipped
@@ -574,6 +579,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           skull: { ...m.skull },
           eyes: { ...m.eyes },
           dead: m.dead,
+          anchor: { ...m.anchor },
           squash: h.deform.s,
           flat: [...h.deform.flat],
           eyeball,

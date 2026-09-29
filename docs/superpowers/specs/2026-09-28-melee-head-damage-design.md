@@ -301,3 +301,16 @@ Targets: 3–4 hits to one spot strip it to the bone, and 5–7 head hits kill.
 - squash 0.40 along the blow, with the head bulging across it (max 0.45);
 - about **4 Hz**, damping about 0.18, so 2–3 visible bounces over about 1 s;
 - a slight shear toward the blow, so the head reads as knocked.
+
+**As built (v2 fixes, 2026-09-29; found by the v2 gates — the flail gate's side stand took 10 hits without a kill,
+and the struck side showed no wound):**
+- **The skull is per region.** Any non-orbit region — `brow`, `crown`, `cheekL`, `cheekR` — exposes skull when
+  its flesh falls below 0.3 and cracks there (0.4 ± 20% per hit on the exposed region, `REGION_TUNING.skullPerHit`),
+  so the brain comes out of *that* region and the zombie dies. Hits on the side of the head land nearest a cheek,
+  so they kill too. A brow hit still cracks a bare crown when the brow is covered; an orbit hit cracks nothing.
+  Hits concentrated on one non-orbit region kill in 5–7.
+- **A region's crater is anchored where it was struck.** The first blow whose nearest region is a non-orbit
+  region (and strips it) stores its `hs` as that region's anchor; the crater is traced onto the surface along the
+  anchor's direction, and later strips grow it there. A region only spilled on has no anchor, so its crater sits at
+  the region centre; the orbit craters always sit at the orbit, because the eye lives there. The brain, lumps and
+  skull chips launch from the cracked region's anchored point.

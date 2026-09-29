@@ -39,7 +39,9 @@
 //      (head.state(id).flesh, six regions) goes down, and a head-region wound (Wound.headRegion)
 //      appears or grows, on a head prim within ON_HEAD of the head centre. The kill (the brain)
 //      comes from head hits alone within KILL_MIN–KILL_MAX hits; one thawed-frames readback after
-//      it shows the phase out of 'standing'. The damage model's own look and numbers are
+//      it shows the phase out of 'standing'. From hit 2 on, the STRUCK region's crater (anchored where the
+//      region was first struck, spec §15 as built) sits within ANCHOR_MAX of the strike point — the side
+//      stand's hits land nearest cheekL, whose fixed centre is on the front of the face. The damage model's own look and numbers are
 //      scripts/head-damage-gate.mjs's. Photos head-hit-1.png and head-hit-kill.png (head-hit-last.png
 //      when no kill came);
 //   7. hits to collapse: a fresh zombie; before every click the crosshair is put on its
@@ -86,6 +88,9 @@ const CRATER_R = 0.09;      // FLAIL_FEEL.craterR (game-flail.ts)
 // model's own tests, 5–9 in play (the head-damage gate's bound: jitter, where the blows land). All head
 // craters have severRadius 0 — the flail never decapitates (flail spec §12.3).
 const KILL_MIN = 5, KILL_MAX = 9;
+// The struck region's crater (anchored at its first strike) within this of the strike point (hits 2+). The
+// fixed cheekL centre the side stand used to crater sits ~10 cm from where the side hits land.
+const ANCHOR_MAX = 0.05;
 const HEAD_HITS_MAX = 10;   // crosshair-aimed clicks the gate allows before calling the kill missing
 // A region crater sits at its region's surface point — the crown's ~0.2 m from actorLimbCenter('head')
 // (the head cluster's centre) — so a head-region wound must sit on a `head` prim within this of it.
@@ -601,6 +606,7 @@ let sweepChoice = null;
   const alive0 = await aliveOf(z.id);
   let killHit = null;
   let lastPose = null, lastHead = null;
+  const anchorErrs = [];
   for (let hit = 1; hit <= HEAD_HITS_MAX; hit++) {
     const aliveBefore = await aliveOf(z.id);
     if (aliveBefore === 0) { fail(`head hit ${hit}: no head to aim at (already off — the flail is not meant to decapitate)`); break; }
@@ -660,6 +666,16 @@ let sweepChoice = null;
     const onHead = grown.filter((g) => g.limb === 'head' && g.toHead !== null && g.toHead < ON_HEAD && g.sever === 0);
     if (hsAfter && f1 < f0 - 1e-6 && onHead.length > 0) pass(`head hit ${hit}: strips flesh (${f0.toFixed(2)} -> ${f1.toFixed(2)}) and ${onHead.length} head-region crater(s) appeared or grew (${onHead.map((g) => g.region).join(', ')}) on the head`);
     else fail(`head hit ${hit}: no strip — flesh ${f0.toFixed(2)} -> ${f1.toFixed(2)}, head-region craters new/grown on a head prim within ${ON_HEAD} m: ${onHead.length} (of ${grown.length})`);
+    // The struck region's crater is ANCHORED where it was first struck (spec §15 as built): on the side stand it
+    // sits on the side of the head, by the strike, not at the region's fixed (front-of-face) centre ~10 cm away.
+    // Hit 1 is printed only (a fresh head's first wound reconstructs cm off at read time — see above).
+    const struckI = sh ? afterWL.findIndex((w) => w.headRegion === sh.near) : -1;
+    const struckPos = struckI >= 0 ? afterWorld[struckI]?.pos ?? null : null;
+    if (struckPos && strikePoint) {
+      const d = distTo(struckPos, strikePoint);
+      console.log(`  struck region ${sh.near}: its crater ${(d * 100).toFixed(1)} cm from the strike point`);
+      if (hit >= 2) anchorErrs.push(d);
+    }
     if (hit === 1) await photoOf(pose, head, 'head-hit-1');
     if (hsAfter?.dead) {
       killHit = hit;
@@ -679,6 +695,9 @@ let sweepChoice = null;
     }
   }
   if (killHit === null && lastPose) await photoOf(lastPose, lastHead, 'head-hit-last');
+  const anchorWorst = anchorErrs.length ? Math.max(...anchorErrs) : null;
+  if (anchorWorst !== null && anchorWorst <= ANCHOR_MAX) pass(`the struck region's crater sits by the strike: worst ${(anchorWorst * 100).toFixed(1)} cm over head hits 2+ (<= ${ANCHOR_MAX * 100} cm)`);
+  else fail(`the struck region's crater is not by the strike: worst ${anchorWorst === null ? '?' : (anchorWorst * 100).toFixed(1)} cm over head hits 2+ (<= ${ANCHOR_MAX * 100} cm)`);
   if (killHit !== null && killHit >= KILL_MIN && killHit <= KILL_MAX) pass(`head hits alone kill on hit ${killHit} (${KILL_MIN}–${KILL_MAX})`);
   else fail(`head hits alone: ${killHit === null ? `no kill within ${HEAD_HITS_MAX} hits` : `the kill came on hit ${killHit}`} (expected ${KILL_MIN}–${KILL_MAX})`);
 }
