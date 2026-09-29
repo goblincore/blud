@@ -357,7 +357,7 @@ Every effect scales by swing: R and L 1.0, H 1.4; head-region hits add 20%.
    - Both sockets are dark plugs. The eye cost roughly doubles while both dangle: accepted, and cut if
      the profile says otherwise.
 
-### 14.2 v1.5b — flesh (after v1.5a is felt)
+### 14.2 v1.5b — flesh (BUILT 2026-09-30, flesh bits off by default; owner playtest pending)
 
 - **Torn, splayed lips.** Flail wounds get the existing `ragged` option (a lobed outline) and a thicker,
   higher, splayed rim shaded wet-red and glossy over a glossy-red interior and a darker clot floor. Head
