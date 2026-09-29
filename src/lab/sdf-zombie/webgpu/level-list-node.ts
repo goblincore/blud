@@ -15,12 +15,13 @@ import { LEVEL_POINT_DECAY, LEVEL_SPOT_DECAY } from './level-tier';
 
 /** The layout of one light record (light-list.ts packLightList): a = pos.xyz + kind (0 point, 1 spot, 2 directional),
  *  a1 = colour.rgb (physical: colour x intensity) + range, a2 = axis.xyz + packed cone. */
-export const LEVEL_LIST_WGSL = /* wgsl */ `fn levelListIrradiance(p: vec3<f32>, n: vec3<f32>, picksA: vec4<f32>, picksB: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>) -> vec3<f32> {
-  var picks = array<f32, 8>(picksA.x, picksA.y, picksA.z, picksA.w, picksB.x, picksB.y, picksB.z, picksB.w);
+export const LEVEL_LIST_WGSL = /* wgsl */ `fn levelListIrradiance(p: vec3<f32>, n: vec3<f32>, picksA: vec4<f32>, picksB: vec4<f32>, count: f32, lights: ptr<storage, array<vec4<f32>>, read>) -> vec3<f32> {
   var e = vec3<f32>(0.0, 0.0, 0.0);
-  for (var k = 0; k < 8; k = k + 1) {
-    let iv = picks[k];
-    if (iv < 0.0) { continue; }
+  // The picks are packed at the front (cheapLevelIndices), so a uniform count bounds the loop: a room with one
+  // cheap light runs one iteration, and a room with none skips the loop.
+  let n_picks = i32(count);
+  for (var k = 0; k < n_picks; k = k + 1) {
+    let iv = select(picksB[k & 3], picksA[k & 3], k < 4);
     let base = ${LIST_LIGHTS_AT} + i32(iv) * ${LIGHT_VEC4S};
     let a0 = (*lights)[base];
     let a1 = (*lights)[base + 1];
@@ -53,6 +54,8 @@ export class LevelListLightingNode extends THREE.LightingNode {
   readonly isLevelListLightingNode = true;
   readonly picksA = uniform(new THREE.Vector4(-1, -1, -1, -1));
   readonly picksB = uniform(new THREE.Vector4(-1, -1, -1, -1));
+  /** How many leading picks are live (the loop bound). */
+  readonly count = uniform(0);
   private readonly evalNode = wgslFn(LEVEL_LIST_WGSL);
   private readonly listNode: unknown;
 
@@ -66,10 +69,13 @@ export class LevelListLightingNode extends THREE.LightingNode {
   setPicks(idx: ArrayLike<number>): void {
     this.picksA.value.set(idx[0]!, idx[1]!, idx[2]!, idx[3]!);
     this.picksB.value.set(idx[4]!, idx[5]!, idx[6]!, idx[7]!);
+    let n = 0;
+    while (n < 8 && idx[n]! >= 0) n++;
+    this.count.value = n;
   }
 
   override setup(builder: THREE.NodeBuilder): undefined {
-    const e = this.evalNode(positionWorld, normalWorld, this.picksA, this.picksB, this.listNode as never);
+    const e = this.evalNode(positionWorld, normalWorld, this.picksA, this.picksB, this.count, this.listNode as never);
     const ctx = (builder as unknown as { context: { reflectedLight: { directDiffuse: { addAssign(n: unknown): void } } } }).context;
     // three's BRDF_Lambert: irradiance x diffuseColor / PI.
     ctx.reflectedLight.directDiffuse.addAssign((e as unknown as ReturnType<typeof vec3>).mul(diffuseColor.rgb).mul(1 / Math.PI));

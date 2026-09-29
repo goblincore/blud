@@ -12,10 +12,10 @@ import { levelLightsNode } from './probe-lighting-node';
 const listNode = () => storage(new THREE.StorageBufferAttribute(LIST_VEC4S * 4, 4), 'vec4', LIST_VEC4S).toReadOnly();
 
 describe('LEVEL_LIST_WGSL — the node\'s evaluator', () => {
-  it('starts with fn levelListIrradiance and parses to its five inputs, in order', () => {
+  it('starts with fn levelListIrradiance and parses to its six inputs, in order', () => {
     expect(LEVEL_LIST_WGSL.startsWith('fn levelListIrradiance(')).toBe(true);
     const parsed = new WGSLNodeFunction(LEVEL_LIST_WGSL);
-    expect(parsed.inputs.map((i: { name: string }) => i.name)).toEqual(['p', 'n', 'picksA', 'picksB', 'lights']);
+    expect(parsed.inputs.map((i: { name: string }) => i.name)).toEqual(['p', 'n', 'picksA', 'picksB', 'count', 'lights']);
   });
   it('takes its layout constants from light-list.ts and its decays from level-tier.ts', () => {
     expect(LEVEL_LIST_WGSL).toContain(`let base = ${LIST_LIGHTS_AT} + i32(iv) * ${LIGHT_VEC4S};`);
@@ -36,7 +36,9 @@ describe('LevelListLightingNode', () => {
     expect(node.isLightingNode).toBe(true);
     expect(node.picksA.value.toArray()).toEqual([-1, -1, -1, -1]);
     expect(node.picksB.value.toArray()).toEqual([-1, -1, -1, -1]);
+    expect(node.count.value).toBe(0);
     node.setPicks([3, 7, -1, -1, 9, -1, -1, -1]);
+    expect(node.count.value).toBe(2);   // the loop bound: leading live picks (the packer fills from the front)
     expect(node.picksA.value.toArray()).toEqual([3, 7, -1, -1]);
     expect(node.picksB.value.toArray()).toEqual([9, -1, -1, -1]);
     node.dispose();
