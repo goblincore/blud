@@ -6,7 +6,7 @@
 // nearWound gate says, and the paint must follow the shipped albedo order.
 import { describe, it, expect } from 'vitest';
 import {
-  chunkBakeField, bakeChunkAlbedo, bakeFaceCover, hash13, noise3, fbm,
+  chunkBakeField, bakeChunkAlbedo, BONE_MATTE, bakeFaceCover, hash13, noise3, fbm,
   type ChunkLook, type BakeFaceFrame,
 } from './chunk-bake-field';
 import { sdBody, type Body } from './validate';
@@ -102,6 +102,7 @@ const LOOK: ChunkLook = {
   fatColor: [0.82, 0.7, 0.55],
   mottleColor: [0.55, 0.42, 0.38],
   organColor: [0.72, 0.35, 0.3],
+  boneColor: [0.71, 0.53, 0.35],
   visceraColor: [0.6, 0.2, 0.16],
   woundDepthAmp: 1, fatDepth: 0.004, muscleDepth: 0.012, visceraAmp: 0.7, visceraDepth: 0.03,
   mottleAmp: 0.5, mottleScale: 1.5,
@@ -125,8 +126,10 @@ describe('bakeChunkAlbedo', () => {
 
   it('inside the crater the albedo is pulled toward deep/clot red with wm high', () => {
     const ev = chunkBakeField(PARTS);
-    // On the carved crater wall: near the tear, pre-wound depth > 0.
-    const p: Vec3 = [0.095, 0, 0];
+    // On the carved crater wall: near the tear, pre-wound depth > 0. Off the
+    // axis — the bone runs down it and is painted as bone, not meat.
+    const p: Vec3 = [0.095, 0.02, 0];
+    expect(ev.materialAt(p)).toBe('flesh');
     const [, gFar, bFar] = bakeChunkAlbedo([-0.1, 0, 0], [-0.1, 0, 0], ev, LOOK);
     const [r, g, b, wm] = bakeChunkAlbedo(p, p, ev, LOOK);
     expect(wm).toBeGreaterThan(0.3);
@@ -148,6 +151,35 @@ describe('bakeChunkAlbedo', () => {
     const noOrgan = bakeChunkAlbedo(p, p, chunkBakeField({ ...PARTS, bones: [...BONE] }), LOOK);
     // Organ tint moved the colour.
     expect(Math.abs(r - noOrgan[0]) + Math.abs(g - noOrgan[1]) + Math.abs(b - noOrgan[2])).toBeGreaterThan(0.01);
+  });
+
+  it('a bone that owns the surface keeps boneColor: stain 0.22, gore-exempt, matte', () => {
+    // A bone stub standing proud of the carved flesh at the tear: at its tip
+    // the flesh field is carved away and the bone is the surface owner.
+    const stub = [cap([-0.09, 0, 0], [0.13, 0, 0], 0.012, { op: 'bone' as never })];
+    const ev = chunkBakeField({ ...PARTS, bones: stub });
+    let p: Vec3 | null = null;
+    for (let x = 0.09; x < 0.14 && !p; x += 0.001) {
+      const q: Vec3 = [x, 0.011, 0];
+      if (ev.materialAt(q) === 'bone') p = q;
+    }
+    expect(p).not.toBeNull();
+    const look: ChunkLook = { ...LOOK, mottleAmp: 0, goreStrength: 1 };
+    const [r, g, b, wm] = bakeChunkAlbedo(p!, p!, ev, look);
+    // Tan, not clot: red channel leads but green/blue stay near boneColor
+    // (stain toward deepColor*0.8 is at most 22%).
+    for (const [c, i] of [[r, 0], [g, 1], [b, 2]] as const) {
+      const lo = Math.min(look.boneColor[i], look.deepColor[i] * 0.8);
+      const hi = Math.max(look.boneColor[i], look.deepColor[i] * 0.8);
+      expect(c).toBeGreaterThanOrEqual(lo - 1e-9);
+      expect(c).toBeLessThanOrEqual(hi + 1e-9);
+      expect(Math.abs(c - look.boneColor[i])).toBeLessThanOrEqual(Math.abs(look.boneColor[i] - look.deepColor[i] * 0.8) * 0.22 + 1e-9);
+    }
+    // Gore mask off for bone: identical with and without goreStrength.
+    const dry = bakeChunkAlbedo(p!, p!, ev, { ...look, goreStrength: 0 });
+    expect([r, g, b]).toEqual([dry[0], dry[1], dry[2]]);
+    // Matte: the wetness channel carries the march's 0.25 factor.
+    expect(wm).toBeCloseTo(ev.woundMask(p!) * BONE_MATTE, 12);
   });
 
   it('adds dark patches to capped gibs without inventing torn-end geometry', () => {

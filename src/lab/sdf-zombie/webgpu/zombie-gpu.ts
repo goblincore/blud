@@ -3367,6 +3367,7 @@ export function createChunkGpuView(
           fatColor: col(u.fatColor),
           mottleColor: col(u.mottleColor),
           organColor: col(u.organColor),
+          boneColor: col(u.boneColor),
           visceraColor: col(u.visceraColor),
           woundDepthAmp: u.surfCfg3.value.x,
           fatDepth: u.surfCfg3.value.y,

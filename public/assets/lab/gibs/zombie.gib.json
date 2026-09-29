@@ -2,7 +2,7 @@
   "kind": "blud-gib-assets",
   "schemaVersion": 3,
   "archetype": "zombie",
-  "fingerprint": "cf6ab091955607b5",
+  "fingerprint": "09159e208720c2fe",
   "recipe": {
     "schemaVersion": 3,
     "generator": "scripts/build-gib-assets.ts",
@@ -57,6 +57,11 @@
         0.72,
         0.32,
         0.3
+      ],
+      "boneColor": [
+        0.71,
+        0.53,
+        0.35
       ],
       "visceraColor": [
         0.28,

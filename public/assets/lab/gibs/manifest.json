@@ -6,7 +6,7 @@
   "assets": [
     {
       "archetype": "soldier",
-      "fingerprint": "d38780e8c03d0967",
+      "fingerprint": "4a99d9b054c95bf8",
       "recipe": {
         "schemaVersion": 3,
         "generator": "scripts/build-gib-assets.ts",
@@ -62,6 +62,11 @@
             0.32,
             0.3
           ],
+          "boneColor": [
+            0.71,
+            0.53,
+            0.35
+          ],
           "visceraColor": [
             0.28,
             0.06,
@@ -97,7 +102,7 @@
       "json": "soldier.gib.json",
       "bin": "soldier.gib.bin",
       "bytes": {
-        "json": 107802,
+        "json": 107873,
         "bin": 4331504
       },
       "totals": {
@@ -107,8 +112,8 @@
         "binBytes": 4331504
       },
       "timing": {
-        "bakeMs": 2596.74,
-        "buildMs": 2931
+        "bakeMs": 2413.97,
+        "buildMs": 2718
       },
       "source": {
         "blob": "src/lab/sdf-zombie/characters/soldier.blob",
@@ -118,7 +123,7 @@
     },
     {
       "archetype": "zombie",
-      "fingerprint": "cf6ab091955607b5",
+      "fingerprint": "09159e208720c2fe",
       "recipe": {
         "schemaVersion": 3,
         "generator": "scripts/build-gib-assets.ts",
@@ -174,6 +179,11 @@
             0.32,
             0.3
           ],
+          "boneColor": [
+            0.71,
+            0.53,
+            0.35
+          ],
           "visceraColor": [
             0.28,
             0.06,
@@ -209,7 +219,7 @@
       "json": "zombie.gib.json",
       "bin": "zombie.gib.bin",
       "bytes": {
-        "json": 141142,
+        "json": 141213,
         "bin": 3752448
       },
       "totals": {
@@ -219,8 +229,8 @@
         "binBytes": 3752448
       },
       "timing": {
-        "bakeMs": 4644.1,
-        "buildMs": 5281
+        "bakeMs": 3118.93,
+        "buildMs": 3537
       },
       "source": {
         "blob": "src/lab/sdf-zombie/characters/zombie.blob",
