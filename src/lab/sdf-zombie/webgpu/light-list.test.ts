@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIST_CAP, LIST_HEADER, LIST_LIGHTS_AT, LIST_VEC4S, ROOM_MASK_BITS, buildLightList, maskHasRoom, packLightList, roomMaskOf, type LightSource } from './light-list';
+import { LIST_CAP, LIST_HEADER, LIST_LIGHTS_AT, LIST_VEC4S, ROOM_MASK_BITS, buildLightList, maskHasRoom, packLightList, roomMaskOf, setListLook, setTorchLit, type LightSource } from './light-list';
 import { PROFILE_ID } from './light-profiles';
 
 const tube = (x: number, i: number): LightSource => ({ kind: 'spot', profile: 'tube', pos: [x, 2.2, 0], color: [0.8, 0.9, 1], intensity: i, range: 6, axis: [0, -1, 0], cosOuter: Math.cos(0.6), cosInner: Math.cos(0.45), rooms: [3] });
@@ -114,5 +114,27 @@ describe('room mask (Task 6 review)', () => {
   it('the list carries the mask', () => {
     const [l] = buildLightList([{ kind: 'directional', profile: 'window', pos: [1, 0.3, 0], color: [1, 1, 1], intensity: 4, range: 0, rooms: [1, 2] }]);
     expect(l!.roomMask).toBe(0b110);
+  });
+});
+
+describe('beaconTorch (Boiler Room beacon weight with the torch lit, 2026-09-29)', () => {
+  const at = PROFILE_ID.beacon * 12;
+  const pack = () => packLightList([]);
+  it('default 1 leaves the packed table untouched, torch lit or not', () => {
+    setTorchLit(false); const off = pack();
+    setTorchLit(true); const on = pack();
+    expect(Array.from(on)).toEqual(Array.from(off));
+  });
+  it('scales only the beacon profile gain and back rim, and only while the torch is lit', () => {
+    setTorchLit(false); const base = pack();
+    setListLook({ beaconTorch: 3 });
+    try {
+      expect(Array.from(pack())).toEqual(Array.from(base));            // torch off: inert
+      setTorchLit(true);
+      const lit = pack();
+      expect(lit[at]).toBeCloseTo(base[at]! * 3, 6);
+      expect(lit[at + 4]).toBeCloseTo(base[at + 4]! * 3, 6);
+      for (let i = 0; i < base.length; i++) if (i !== at && i !== at + 4) expect(lit[i]).toBe(base[i]);
+    } finally { setListLook({ beaconTorch: 1 }); setTorchLit(false); }
   });
 });

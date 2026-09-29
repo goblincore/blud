@@ -18,7 +18,7 @@ import { storage } from 'three/tsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-leaves';
 import type { LampMood } from './lamp-moods';
-import { buildLightList, LIST_VEC4S, listLook, packLightList, ROOM_MASK_BITS, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
+import { buildLightList, LIST_VEC4S, listLook, packLightList, ROOM_MASK_BITS, setTorchLit, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
 import { PROFILE_ID, type ProfileName } from './light-profiles';
 import { layerOn } from './light-layers';
 import { BEACON } from './beacon';
@@ -260,6 +260,7 @@ export function writeLightList(ctx: GameContext, directFlashes: readonly FlashIn
   const [px, py, pz] = ctx.player.player.pos;
   g.rel.pos[0] = px; g.rel.pos[1] = py; g.rel.pos[2] = pz;
   g.rel.nearMask = nearRoomMask(ctx.world.level.tunnels, roomIdAt(ctx, px, pz), px, pz);
+  setTorchLit(torchIsLit(ctx));
   g.list = buildLightList(collectLightSources(readSourceInput(ctx, directFlashes, g.input)), g.rel);
   packLightList(g.list, g.floats);
   g.attr.needsUpdate = true;
@@ -332,10 +333,10 @@ export function applyBodyLights(ctx: GameContext, u: { bodyLights: Vec4U; lightL
  *  the list' is OFF *and the torch is lit* (owner 2026-09-28, playtesting: "no flashlight - list
  *  on, torch through the list on; with flashlight - list on, torch through the list off"): with the
  *  torch off the hybrid would still swap the list's dominant key for four even lights. */
+export const torchIsLit = (ctx: GameContext): boolean => ctx.lighting.dungeonOn && (ctx.world.light?.flashlight.level ?? 1) > 0.01;
 export const torchLane = (ctx: GameContext): number => {
   if (layerOn('listTorch')) return 0;
-  const lit = ctx.lighting.dungeonOn && (ctx.world.light?.flashlight.level ?? 1) > 0.01;
-  return lit ? 1 : 0;
+  return torchIsLit(ctx) ? 1 : 0;
 };
 
 /** The seam's plain view of each actor's picks: `{ id, room, crowd, picks: [{ index, weight }] x 4 }`

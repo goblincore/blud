@@ -95,8 +95,14 @@ const PACKED_PROFILES = BASE_PROFILES.slice();
  *  every profile — the wrap floor (pa.z), the view bias (pa.y), the back rim (pb.x) — plus
  *  `secondary`, the weight of the non-dominant picks (the game writes 1 - secondary to
  *  lightListCfg.w). All 1 is the calibrated table. The CPU pick (coverFloor) is untouched. */
-export interface ListLook { floor: number; viewBias: number; backRim: number; secondary: number }
-const look: ListLook = { floor: 1, viewBias: 1, backRim: 1, secondary: 1 };
+export interface ListLook { floor: number; viewBias: number; backRim: number; secondary: number; beaconTorch: number }
+const look: ListLook = { floor: 1, viewBias: 1, backRim: 1, secondary: 1, beaconTorch: 1 };
+/** BEACON WEIGHT WITH THE TORCH LIT (owner call, Boiler Room 2026-09-29): with the torch lit the old
+ *  per-pixel beam keys the body and a beacon's red barely tints it. `look.beaconTorch` scales the beacon
+ *  profile's gain and back rim while the torch is lit; 1 is the calibrated table. Set once a frame. */
+let torchLit = false;
+export const setTorchLit = (on: boolean): void => { torchLit = on; };
+const BEACON_AT = PROFILE_ID.beacon * PROFILE_VEC4S * 4;
 export const listLook = (): Readonly<ListLook> => look;
 export function setListLook(l: Partial<ListLook>): Readonly<ListLook> {
   Object.assign(look, l);
@@ -160,6 +166,7 @@ export function buildLightList(src: readonly LightSource[], rel?: ListRelevance)
 
 export function packLightList(list: readonly ListLight[], out = new Float32Array(LIST_VEC4S * 4)): Float32Array {
   out.set(PACKED_PROFILES, 0);
+  if (torchLit && look.beaconTorch !== 1) { out[BEACON_AT] = PACKED_PROFILES[BEACON_AT]! * look.beaconTorch; out[BEACON_AT + 4] = PACKED_PROFILES[BEACON_AT + 4]! * look.beaconTorch; }
   out.fill(0, LIST_HEADER * 4);
   out[LIST_HEADER * 4] = list.length;
   list.forEach((l, i) => {
