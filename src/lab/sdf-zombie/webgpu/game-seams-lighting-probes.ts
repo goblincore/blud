@@ -23,6 +23,13 @@ export function createLightingProbeSeams(ctx: GameContext) {
       applyHemi(ctx); restampLevelProbes(ctx);
       return { weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain };
     },
+    /** The cheap level tier: on/off, and per room the list indices its node shades (-1 = empty). */
+    get levelListInfo() {
+      return {
+        on: ctx.lighting.levelListOn,
+        rooms: [...ctx.lighting.levelListNodes].map(([id, n]) => [id, [...n.picksA.value.toArray(), ...n.picksB.value.toArray()]]),
+      };
+    },
     get levelProbes() {
       return {
         weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain, hemi: ctx.lighting.hemi.intensity, hemiBase: ctx.lighting.hemiBase,

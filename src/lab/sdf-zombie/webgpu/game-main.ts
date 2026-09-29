@@ -38,6 +38,8 @@ import { WOUND_STEP_MUL, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAP
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, REFINE_LAYER, PRECOMPILE_COLD_PASS_TIMEOUT_MS } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { ProbeLightingNode, createProbeLevelSlots, levelLightsNode, levelMatchedGain } from './probe-lighting-node';
+import { isLevelCheap } from './level-tier';
+import { LevelListLightingNode } from './level-list-node';
 import { GOBLIN_SKIN } from './goblin-skin';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
 import { flashPixels, smokePixels } from './flash-sprite';
@@ -758,6 +760,8 @@ async function main() {
   // otherwise the level double-lights on the flip. ?levelprobes=0 pins the
   // hemisphere at the rig's full intensity and the nodes at zero: the
   // pre-probe look. Gain -1 = each room's matched level (levelMatchedGain).
+  // The cheap level tier: on with ?levellist=1 and the list on (spec 2026-09-29-level-list-lighting-design.md).
+  ctx.lighting.levelListOn = new URLSearchParams(location.search).get('levellist') === '1' && new URLSearchParams(location.search).get('lightlist') !== '0';
   ctx.lighting.levelProbesParam = new URLSearchParams(location.search).get('levelprobes');
   ctx.lighting.levelProbeWeight = ctx.lighting.levelProbesParam === '0' || ctx.lighting.levelProbesParam === 'off' ? 0 : 1;
   ctx.lighting.levelProbeGain = -1;
@@ -825,6 +829,8 @@ async function main() {
       // Boiler Room and the A/B frames were indistinguishable. The Boiler Room's second row (`shadow: false`)
       // also drops its spot from the level materials (makeTube): full second row +10 ms, list-only +2.
       if (a.fixture === 'tube') pl.userData.listOnly = true;
+      // The cheap level tier (level-tier.ts isLevelCheap): with ?levellist=1 the list node shades this light for the level.
+      if (isLevelCheap({ fixture: a.fixture, mood: a.mood, shadow: a.shadow })) pl.userData.levelCheap = true;
       ctx.world.accentGroup.add(pl);
       // A visible source. Without it the light has no cause and reads as a bug.
       // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl. A beacon
@@ -3142,6 +3148,8 @@ async function main() {
       const slots = createProbeLevelSlots(gatherNode);
       const node = new ProbeLightingNode(slots);
       ctx.lighting.levelProbeNodes.set(r.id, node);
+      // The cheap level tier: one node per room, fed by writeLightList. The list exists already (createDynamicLight ran).
+      if (ctx.lighting.levelListOn && ctx.world.light?.list) ctx.lighting.levelListNodes.set(r.id, new LevelListLightingNode(ctx.world.light.list.node));
       // The room's grid lands on these four slots when its bake arrives;
       // the cfg is the LEVEL's (stampLevelProbeRoom), not the bodies' —
       // bind() would write the body weight and the 4x-fill gain there.
@@ -3151,7 +3159,10 @@ async function main() {
       }, r.id);
       stampLevelProbeRoom(ctx, r.id);
     }
-    for (const [roomId, node] of ctx.lighting.levelProbeNodes) ctx.world.levelLightLists.set(roomId, levelLightsNode(levelSceneLights(ctx, roomId), node));
+    for (const [roomId, node] of ctx.lighting.levelProbeNodes) {
+      const cheap = ctx.lighting.levelListNodes.get(roomId);
+      ctx.world.levelLightLists.set(roomId, levelLightsNode(levelSceneLights(ctx, roomId), node, cheap ? [cheap] : []));
+    }
     // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
     // it is what the builder calls per pipeline, just not in the typings.
     const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };

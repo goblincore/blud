@@ -25,6 +25,7 @@ import type { OutdoorRuntime } from './game-outdoor-leaves';
 import type { VoidRuntime } from './game-void-leaves';
 import type { Projectile } from './game-weapon';
 import type { ProbeLightingNode } from './probe-lighting-node';
+import type { LevelListLightingNode } from './level-list-node';
 
 // ASSIGNED-ONCE HANDLES. The fields below are `const` in game-main.ts: created
 // once at their declaration and never reassigned. The original code therefore
@@ -46,6 +47,10 @@ export interface LightingState {
   hemiBase: number;
   /** Room-probe lighting nodes, keyed by room id. */
   levelProbeNodes: Map<number, ProbeLightingNode>;
+  /** The cheap level tier (spec 2026-09-29-level-list-lighting-design.md): `?levellist=1` with the list on. Set at boot. */
+  levelListOn: boolean;
+  /** One node per room while it is on; writeLightList feeds each its picks. */
+  levelListNodes: Map<number, LevelListLightingNode>;
   /** Accent lights that pulse, each with its base power and phase. */
   flickerLights: { light: THREE.PointLight; base: number; phase: number; bowl?: THREE.MeshStandardMaterial; mood?: LampMood; room?: number; bowlMesh?: THREE.Mesh; fixture?: 'bulb' | 'tube' | 'beacon'; spin?: number; shadow?: boolean; gain?: number; tint?: Vec3 }[];
   /** Dungeon rig on/off; the gallery must render unchanged when false. */
@@ -91,6 +96,8 @@ export function makeLightingState(): LightingState {
     levelProbeGain: -1,
     hemiBase: 0,
     levelProbeNodes: new Map<number, ProbeLightingNode>(),
+    levelListOn: false,
+    levelListNodes: new Map<number, LevelListLightingNode>(),
     flickerLights: [],
     dungeonOn: true,
     flashlight: null as unknown as Flashlight,
@@ -118,6 +125,8 @@ export const LIGHTING_BINDINGS = {
   levelProbeGain: 'lighting.levelProbeGain',
   hemiBase: 'lighting.hemiBase',
   levelProbeNodes: 'lighting.levelProbeNodes',
+  levelListOn: 'lighting.levelListOn',
+  levelListNodes: 'lighting.levelListNodes',
   flickerLights: 'lighting.flickerLights',
   dungeonOn: 'lighting.dungeonOn',
   flashlight: 'lighting.flashlight',

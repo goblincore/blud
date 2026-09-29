@@ -33,6 +33,8 @@ export function levelSceneLights(ctx: GameContext, roomId: number): THREE.Light[
     if (!l.isLight) return;
     // A beacon's zero omni (its spot is the light): the shared list reads it, no material does.
     if (l.userData.listOnly) return;
+    // The cheap level tier (?levellist=1) shades this light through the list node instead.
+    if (ctx.lighting.levelListOn && l.userData.levelCheap) return;
     const accentRoom = l.userData.accentRoom as number | undefined;
     if (accentRoom !== undefined && !allowed.has(accentRoom)) return;
     // Outdoor v1: the moon lights only the open-sky rooms' surfaces.
@@ -48,7 +50,8 @@ export function levelSceneLights(ctx: GameContext, roomId: number): THREE.Light[
 export function refreshLevelLights(ctx: GameContext) {
   if (ctx.world.levelLightLists.size === 0) return;
   for (const [roomId, node] of ctx.lighting.levelProbeNodes) {
-    ctx.world.levelLightLists.get(roomId)?.setLights([...levelSceneLights(ctx, roomId), node as unknown as THREE.Light]);
+    const extra = ctx.lighting.levelListNodes.get(roomId);
+    ctx.world.levelLightLists.get(roomId)?.setLights([...levelSceneLights(ctx, roomId), node as unknown as THREE.Light, ...(extra ? [extra as unknown as THREE.Light] : [])]);
   }
   for (const nm of ctx.world.levelNodeMaterials) nm.needsUpdate = true;
 }

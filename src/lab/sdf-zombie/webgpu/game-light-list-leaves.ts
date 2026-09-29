@@ -18,6 +18,7 @@ import { storage } from 'three/tsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-leaves';
 import type { LampMood } from './lamp-moods';
+import { cheapLevelIndices, LEVEL_PICKS } from './level-tier';
 import { buildLightList, LIST_VEC4S, listLook, packLightList, ROOM_MASK_BITS, setTorchLit, type LightSource, type ListLight, type ListRelevance, type Vec3 } from './light-list';
 import { PROFILE_ID, type ProfileName } from './light-profiles';
 import { layerOn } from './light-layers';
@@ -258,6 +259,7 @@ export function createLightListGpu(): LightListGpu {
  *  cap preferring the player's room and the rooms joined to it. Per-frame allocation is bounded
  *  by the source count: collectLightSources' records and buildLightList's map/filter/sort
  *  chain (the reader and the relevance context are reused). */
+const levelPicks = new Array<number>(LEVEL_PICKS).fill(-1);
 export function writeLightList(ctx: GameContext, directFlashes: readonly FlashInput[]): void {
   const g = ctx.world.light?.list;
   if (!g) return;
@@ -268,6 +270,11 @@ export function writeLightList(ctx: GameContext, directFlashes: readonly FlashIn
   g.list = buildLightList(collectLightSources(readSourceInput(ctx, directFlashes, g.input)), g.rel);
   packLightList(g.list, g.floats);
   g.attr.needsUpdate = true;
+  // The cheap level tier: each room's node shades the cheap lights that reach it.
+  for (const [room, node] of ctx.lighting.levelListNodes) {
+    cheapLevelIndices(g.list, room, levelPicks);
+    node.setPicks(levelPicks);
+  }
 }
 
 const PROFILE_NAME = Object.fromEntries(Object.entries(PROFILE_ID).map(([k, v]) => [v, k])) as Record<number, ProfileName>;

@@ -46,6 +46,7 @@ describe('LIGHTING_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(LIGHTING_BINDINGS)).toHaveLength(22);
+    // 22 + levelListOn and levelListNodes (the cheap level tier, 2026-09-29).
+    expect(Object.keys(LIGHTING_BINDINGS)).toHaveLength(24);
   });
 });
