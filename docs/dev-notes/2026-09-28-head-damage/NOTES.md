@@ -81,3 +81,18 @@ Feel questions:
 - The eye's leftover cost when it overlaps the face: splitting the chunk pass halves it, but that is shared
   `sdf-layer` code.
 - Deferred-renderer mode is not exercised by the gates.
+
+## Update 2026-09-29: pace, the eye fly-off, and aiming between the eyes
+
+- **Bigger bites** (owner: "it takes too long… bigger chunks, too gradual"): strips are 0.40 (R, L) and 0.55 (H)
+  (were 0.20 and 0.28); craters start at 0.04 m and grow to about 0.05 (orbit), 0.065 (cheek), 0.07 (brow) and
+  0.075 (crown); `skullPerHit` 0.32. An orbit is exposed on hit 2, both eyes pop on hit 3 and snap on hit 4; a
+  single region kills in about 5 (4–7 with jitter). The head-gate sequence (orbit, pop, snap, brow, kill) is
+  6–9 head hits. From the side, the flail gate kills on hit 5.
+- **The eyes fly off** (owner: "comedically outward, arch up and bounce off walls"): a snapped eye launches at
+  5–7 m/s outward (0.55 blow + 0.45 head forward, pushed 0.35 to its own side), +4.6–5.6 m/s up, spinning
+  15–25 rad/s, restitution 0.75 on floor, walls and ceiling. Measured: 1.0–1.1 m above the launch point, 7 m of
+  travel, 7 floor bounces, alive at 4 s. A frontal blow sends them out to opposite sides. Strips:
+  `gate/eye-fly-strip.png`, `eye-fly-wall-strip.png`. At a wide framing each eyeball is only a few pixels.
+- **Aiming between the eyes:** that lands nearest the brow, not an orbit, so both eyes used to stay in their
+  sockets to the kill. A brow hit now pops an exposed eye too.
