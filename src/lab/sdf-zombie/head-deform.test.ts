@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/head-deform.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { HEAD_DEFORM, addDent, deformHead, kickWobble, makeHeadDeform, stepWobble, wobbleValue, type HeadFrame } from './head-deform';
+import { HEAD_DEFORM, addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, stepWobble, wobbleValue, type HeadFrame } from './head-deform';
 import type { Primitive } from './types';
 
 const frame: HeadFrame = { centre: [0, 1.6, 0], quat: [0, 0, 0, 1], axes: [0.09, 0.11, 0.1] };
@@ -72,5 +72,47 @@ describe('deformHead', () => {
     const s = addDent(makeHeadDeform(), [1, 0, 0], 0.018, turned.axes);   // blow along the HEAD's +x
     const out = deformHead(body, s, turned).prims[0]!;
     expect(out.a[2]).toBeCloseTo(body.prims[0]!.a[2] - 0.009, 4);   // centre shifts half the depth along head +x = world −z
+  });
+});
+
+describe('the skull deforms with the flesh (Task 10)', () => {
+  const bonePrim = (op: 'bone' | 'organ' = 'bone', limb = 'head'): Primitive => ({ limb, op, a: [0.02, 1.62, 0.03],
+    b: [-0.01, 1.58, 0.05], radius: 0.06, scale: [0.9, 1.1, 1.0], blendK: 0 } as unknown as Primitive);
+  const turned: HeadFrame = { ...frame, quat: [0, Math.SQRT1_2, 0, Math.SQRT1_2] };
+  const squashedAndDented = () => kickWobble(addDent(addDent(makeHeadDeform(), [0, 0, 1], 0.018, frame.axes), [1, 0, 0], 0.012, frame.axes), [0, 0, 1]);
+
+  it('a head bone prim moves by exactly the flesh transform at the same point (flat + squash, turned head)', () => {
+    const flesh = { ...bonePrim(), op: 'union' } as unknown as Primitive;
+    const body = { prims: [flesh], bonePrims: [bonePrim('bone'), bonePrim('organ')] };
+    const out = deformHead(body, squashedAndDented(), turned);
+    for (const b of out.bonePrims) {
+      expect(b.a).toEqual(out.prims[0]!.a);
+      expect(b.b).toEqual(out.prims[0]!.b);
+      expect(b.scale).toEqual(out.prims[0]!.scale);
+    }
+    expect(out.bonePrims[0]!.a).not.toEqual(body.bonePrims[0]!.a);
+  });
+  it('leaves non-head bone prims as the same objects', () => {
+    const body = { prims: [headPrim()], bonePrims: [bonePrim('bone', 'torso'), bonePrim()] };
+    const out = deformHead(body, squashedAndDented(), frame);
+    expect(out.bonePrims[0]).toBe(body.bonePrims[0]);
+    expect(out.bonePrims[1]).not.toBe(body.bonePrims[1]);
+  });
+  it('with no deformation, bonePrims comes back as the same array and headAffine is null', () => {
+    const body = { prims: [headPrim()], bonePrims: [bonePrim()] };
+    expect(deformHead(body, makeHeadDeform(), frame).bonePrims).toBe(body.bonePrims);
+    expect(headAffine(makeHeadDeform(), frame)).toBeNull();
+  });
+  it('headAffineMatrix (column-major 4x4) maps a point exactly as deformHead maps an endpoint', () => {
+    const st = squashedAndDented();
+    const body = { prims: [headPrim(), { ...headPrim(), a: [0.05, 1.7, -0.04], b: [-0.03, 1.5, 0.08] } as Primitive] };
+    const out = deformHead(body, st, turned);
+    const m = headAffineMatrix(headAffine(st, turned)!);
+    const apply = (p: readonly number[]) => [0, 1, 2].map(r => m[r]! * p[0]! + m[4 + r]! * p[1]! + m[8 + r]! * p[2]! + m[12 + r]!);
+    for (const [i, end] of [[1, 'a'], [1, 'b'], [0, 'a']] as const) {
+      const got = apply(body.prims[i]![end]), want = out.prims[i]![end];
+      for (let k = 0; k < 3; k++) expect(got[k]).toBeCloseTo(want[k]!, 12);
+    }
+    expect([m[3], m[7], m[11], m[15]]).toEqual([0, 0, 0, 1]);
   });
 });

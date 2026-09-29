@@ -7,7 +7,9 @@
 //   * DENTS — a lasting flattening of the HIT side along the head axis nearest the blow: that side's
 //     surface moves in by the dent depth and the opposite side stays put (the prims shift half the depth
 //     inward and shrink half the depth along the axis). Per side (x+, x−, y+, y−, z+, z−), capped.
-// Applied to the posed head prims each frame by the leaf (after applyRig, like head-pop.ts inflateHead).
+// Applied to the posed head prims each frame by the leaf (after applyRig, like head-pop.ts inflateHead) — the
+// flesh AND the head's bone/organ prims (BuiltBody.bonePrims: the procedural skeleton path), by one affine map;
+// headAffine exports that map so the skeleton-mesh path moves the skull segment mesh identically (Task 10).
 // Approximation: a prim's per-axis `scale` is taken to lie along the head axes (true for the zombie's
 // skull-bound head prims).
 import type { Primitive, Vec3 } from './types';
@@ -81,9 +83,20 @@ export function rotate(q: Quat, v: Vec3): Vec3 {
 
 const isHeadFlesh = (p: Primitive) => p.limb === 'head' && !p.dead && p.op !== 'sub' && p.op !== 'groove'
   && p.op !== 'bone' && p.op !== 'organ';
+/** The head's skull and organs (BuiltBody.bonePrims): they squash and dent WITH the flesh (spec §14 decision 1 —
+ *  the head is one jelly, and bone shows only where craters carve). */
+const isHeadBone = (p: Primitive) => p.limb === 'head' && !p.dead && (p.op === 'bone' || p.op === 'organ');
 
-/** The posed body with its head wobbled and dented. Non-head prims are returned as the same objects. */
-export function deformHead<B extends { prims: Primitive[] }>(body: B, st: HeadDeformState, f: HeadFrame): B {
+/**
+ * The head deform as one affine map of world space (plain data, for the skeleton-mesh path):
+ *   x ↦ centre + Σ_k e[k] · (mul[k] · ((x − centre) · e[k]) + shift[k])
+ * i.e. M = T(centre + Σ e·shift) · E · diag(mul) · Eᵀ · T(−centre), E = [e0 e1 e2] the head axes in world.
+ * Null when there is no deformation (no squash, no dent).
+ */
+export interface HeadAffine { centre: Vec3; e: [Vec3, Vec3, Vec3]; mul: Vec3; shift: Vec3 }
+
+export function headAffine(st: HeadDeformState, f: HeadFrame): HeadAffine | null {
+  if (st.s === 0 && st.flat.every(x => x === 0)) return null;
   const e: [Vec3, Vec3, Vec3] = [rotate(f.quat, [1, 0, 0]), rotate(f.quat, [0, 1, 0]), rotate(f.quat, [0, 0, 1])];
   const mul: M3 = [1, 1, 1], shift: M3 = [0, 0, 0];
   for (const k of [0, 1, 2] as const) {
@@ -93,20 +106,50 @@ export function deformHead<B extends { prims: Primitive[] }>(body: B, st: HeadDe
   }
   const s = st.s;
   for (const k of [0, 1, 2] as const) mul[k] *= k === st.axis ? 1 - s : 1 + s / 2;
-  if (s === 0 && st.flat.every(x => x === 0)) return body;
-  const map = (p: Vec3): Vec3 => {
-    const v: Vec3 = [p[0] - f.centre[0], p[1] - f.centre[1], p[2] - f.centre[2]];
-    const out: M3 = [f.centre[0], f.centre[1], f.centre[2]];
-    for (const k of [0, 1, 2] as const) {
-      const c = (v[0] * e[k][0] + v[1] * e[k][1] + v[2] * e[k][2]) * mul[k] + shift[k];
-      out[0] += e[k][0] * c; out[1] += e[k][1] * c; out[2] += e[k][2] * c;
-    }
-    return out;
-  };
-  return {
-    ...body,
-    prims: body.prims.map(p => (isHeadFlesh(p)
-      ? { ...p, a: map(p.a), b: map(p.b), scale: [p.scale[0] * mul[0], p.scale[1] * mul[1], p.scale[2] * mul[2]] as Vec3 }
-      : p)),
-  };
+  return { centre: [f.centre[0], f.centre[1], f.centre[2]], e, mul, shift };
+}
+
+/** Apply the affine to a point (the same arithmetic deformHead uses for every endpoint). */
+export function applyHeadAffine(m: HeadAffine, p: Vec3): Vec3 {
+  const { centre: c, e, mul, shift } = m;
+  const v: Vec3 = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+  const out: M3 = [c[0], c[1], c[2]];
+  for (const k of [0, 1, 2] as const) {
+    const t = (v[0] * e[k][0] + v[1] * e[k][1] + v[2] * e[k][2]) * mul[k] + shift[k];
+    out[0] += e[k][0] * t; out[1] += e[k][1] * t; out[2] += e[k][2] * t;
+  }
+  return out;
+}
+
+/** The affine as a column-major 4x4 (three.js Matrix4.fromArray / WGSL mat4x4 order). */
+export function headAffineMatrix(m: HeadAffine): number[] {
+  const { centre: c, e, mul, shift } = m;
+  // L = Σ_k mul[k] e[k] e[k]ᵀ ; t = c + Σ_k shift[k] e[k] − L c.
+  const L: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0];   // row-major 3x3
+  const t: number[] = [c[0], c[1], c[2]];
+  for (const k of [0, 1, 2] as const) {
+    for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) L[r * 3 + q]! += mul[k] * e[k][r]! * e[k][q]!;
+    for (let r = 0; r < 3; r++) t[r]! += shift[k] * e[k][r]!;
+  }
+  for (let r = 0; r < 3; r++) t[r]! -= L[r * 3]! * c[0] + L[r * 3 + 1]! * c[1] + L[r * 3 + 2]! * c[2];
+  return [
+    L[0]!, L[3]!, L[6]!, 0,
+    L[1]!, L[4]!, L[7]!, 0,
+    L[2]!, L[5]!, L[8]!, 0,
+    t[0]!, t[1]!, t[2]!, 1,
+  ];
+}
+
+/** The posed body with its head (flesh AND the head's bone/organ prims) wobbled and dented. Every other prim is
+ *  returned as the same object; with no deformation the body itself comes back (bonePrims the same array). */
+export function deformHead<B extends { prims: Primitive[]; bonePrims?: Primitive[] }>(body: B, st: HeadDeformState, f: HeadFrame): B {
+  const m = headAffine(st, f);
+  if (!m) return body;
+  const map = (p: Vec3): Vec3 => applyHeadAffine(m, p);
+  const mul = m.mul;
+  const deform = (p: Primitive): Primitive =>
+    ({ ...p, a: map(p.a), b: map(p.b), scale: [p.scale[0] * mul[0], p.scale[1] * mul[1], p.scale[2] * mul[2]] as Vec3 });
+  const out = { ...body, prims: body.prims.map(p => (isHeadFlesh(p) ? deform(p) : p)) };
+  if (body.bonePrims) out.bonePrims = body.bonePrims.map(p => (isHeadBone(p) ? deform(p) : p));
+  return out;
 }
