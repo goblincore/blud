@@ -5,9 +5,21 @@
 //   1. hit 1, the eye: an eye dangles; the wobble's peak |squash| over the 10 frames from the strike is >= 0.15;
 //      30 frames on the eyeball hangs >= 0.08 m below the socket; 48 frames on |squash| < 0.0025; a new
 //      radius-0.028 crater exists. Photo head-1-eye.png and an 8-shot strip of the swinging eye.
-//   2. hit 2, cave and snap: eye.state is gone; live chunks went up; the head surface on the dented side
-//      (median of ring samples 0.085 m off the blow, outside the face crater) moved in by >= 0.01 (sdBody rise
-//      at the same world point). Photo head-2-cave.png.
+//   1b. (Task 10) hit 1's peak-squash frame (the strike frame or the next two, whichever squashes most; photo
+//      head-1-squash[-procedural].png): the bone-coloured pixel share in a face crop, OUTSIDE a circle around each
+//      crater, stays within the pre-hit share + 0.005 — the skull squashes WITH the flesh, so no bone shows through
+//      intact flesh (mesh path asserted; procedural printed).
+//   2. hit 2, cave and snap: eye.state is gone; live chunks went up; the dented side's POLE moved in by >= 0.01.
+//      WHY THE POLE (plan decision 1; spec §13): a dent is a SIDE FLATTENING along the head axis nearest the
+//      blow — that side's surface moves in by the full depth at its pole (the head frame centre ± that axis ×
+//      the half-extent) and by less toward the rim, and the opposite side stays put. It is not a point dent,
+//      so a ring sampled 0.085 m off the blow reads a fraction of the depth (0.006 at Task 7) and tests the
+//      model where it promises nothing. The probe: trace the surface inward along the axis through the (un-
+//      deformed) frame centre, all six poles before the hit, and again after on the side whose `flat` grew; the
+//      surface must move in by >= 0.01. (sdBody 2 mm outside the old surface is printed too, not asserted: the
+//      face pole is the nose, an anisotropic ellipsoid whose SDF under-reads off-axis — 0.005 for a 0.019 move.) And (Task 10) the face-crop bone share
+//      outside the craters after the hit stays within the pre-hit-2 share + 0.005 (mesh asserted). Photo
+//      head-2-cave[-procedural].png.
 //   3. hit 3, the scalp: two new radius-0.05 craters within 0.03 m of the crown; the bone-coloured pixel share in
 //      a crown crop, photographed from above (a photo stand, not the swing stand), rises — on the shipped
 //      skeleton path (mesh) AND on ?skeleton=procedural (a second boot; hits 1-3 only). Photo head-3-scalp.png.
@@ -38,6 +50,8 @@ const STAND = 0.9;           // head stand-off, m
 // The plan's thresholds (do not loosen).
 const SQUASH_PEAK_MIN = 0.15, EYE_DROP_MIN = 0.08, SQUASH_SETTLE_MAX = 0.0025;
 const DENT_MIN = 0.01, CROWN_NEAR = 0.03, BRAIN_CHUNKS_MIN = 4, COST_MAX_MS = 0.5;
+const BONE_THRU_MAX = 0.005;  // face-crop bone share outside craters may rise at most this over the pre-hit share
+const CRATER_MARGIN = 0.02;   // the exclusion circle around a crater: its radius + this, m
 const SOCKET_R = 0.028, SCALP_R = 0.05, R_TOL = 0.005;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -156,7 +170,7 @@ async function capture(name) {
   await evaluate("__sdfGame.setRenderLock(false)");
   const buf = Buffer.from(s.result.data, "base64");
   if (name) { writeFileSync(`${OUT}/${name}.png`, buf); console.log(`  shot ${OUT}/${name}.png`); }
-  return decodePng(buf);
+  return Object.assign(decodePng(buf), { buf });
 }
 
 // ---- Boot a page and pick a frozen zombie pool ---------------------------------------------
@@ -266,6 +280,57 @@ const boneShare = (img, cx, cy, size = 200) => {
   for (let y = Math.max(0, (cy - size / 2) | 0); y < Math.min(img.h, cy + size / 2); y++) for (let x = Math.max(0, (cx - size / 2) | 0); x < Math.min(img.w, cx + size / 2); x++) { n++; if (isBone(px(img, x, y))) b++; }
   return n ? b / n : 0;
 };
+/** Bone-coloured share of a square face crop (centre `c` px, half-side `half` px), skipping pixels inside any
+ *  exclusion circle `ex` ({ x, y, r } px). */
+const boneShareOutside = (img, c, half, ex) => {
+  let n = 0, b = 0;
+  for (let y = Math.max(0, Math.round(c[1] - half)); y < Math.min(img.h, c[1] + half); y++) for (let x = Math.max(0, Math.round(c[0] - half)); x < Math.min(img.w, c[0] + half); x++) {
+    if (ex.some((e) => Math.hypot(x - e.x, y - e.y) < e.r)) continue;
+    n++; if (isBone(px(img, x, y))) b++;
+  }
+  return n ? b / n : 0;
+};
+/** Pixels per metre at the head (screen distance of a 0.1 m sideways step), for crop and circle sizes. */
+async function pxPerMAt(head, right) {
+  const a = await toPx(head), b = await toPx([head[0] - right[0] * 0.1, head[1], head[2] - right[2] * 0.1]);
+  return a && b ? Math.hypot(a[0] - b[0], a[1] - b[1]) / 0.1 : 400;
+}
+/** Exclusion circles (px) around every wound within 0.3 m of the head: radius + CRATER_MARGIN. */
+async function craterCircles(id, head, pxPerM) {
+  const out = [];
+  for (const w of await wounds(id)) {
+    if (distTo(w.pos, head) > 0.3) continue;
+    const c = await toPx(w.pos);
+    if (c) out.push({ x: c[0], y: c[1], r: (w.radius + CRATER_MARGIN) * pxPerM });
+  }
+  return out;
+}
+const qRot = (q, v) => {
+  const [x, y, z, w] = q;
+  const tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]);
+  return [v[0] + w * tx + (y * tz - z * ty), v[1] + w * ty + (z * tx - x * tz), v[2] + w * tz + (x * ty - y * tx)];
+};
+/** The surface's distance from `pole.c` along `pole.d` (the outermost crossing: sphere-trace inward from
+ *  `pole.ext` + 0.15 m out, then bisect the last step to 0.1 mm). Null when the line misses the head. */
+const poleRadius = (id, pole) => evaluate(`(() => { const c = ${JSON.stringify(pole.c)}, d = ${JSON.stringify(pole.d)}, R = ${pole.ext + 0.15};
+  const at = (r) => __sdfGame.head.surfaceAt(${id}, c[0] + d[0] * r, c[1] + d[1] * r, c[2] + d[2] * r);
+  let r = R, prev = R;
+  for (let i = 0; i < 400 && r > 0; i++) { const s = at(r); if (s < 0) { let lo = r, hi = prev; while (hi - lo > 1e-4) { const m = (lo + hi) / 2; if (at(m) < 0) lo = m; else hi = m; } return lo; } prev = r; r -= Math.max(s, 0.001); }
+  return null; })()`);
+/** The six head poles (index = the `flat` side: x+, x−, y+, y−, z+, z−) of the leaf's UN-deformed head frame: the
+ *  line from the frame centre along ±that axis, the surface's radius on it, and a probe point 2 mm outside it. */
+async function polesOf(id, frame) {
+  const out = [];
+  for (let k = 0; k < 3; k++) for (const sg of [1, -1]) {
+    const u = [0, 0, 0]; u[k] = sg;
+    const pole = { c: frame.centre, d: qRot(frame.quat, u), ext: frame.axes[k] };
+    const r = await poleRadius(id, pole);
+    if (r === null) { out.push(null); continue; }
+    const p = pole.c.map((v, i) => v + pole.d[i] * (r + 0.002));
+    out.push({ ...pole, r, p, s: await evaluate(`__sdfGame.head.surfaceAt(${id}, ${p[0]}, ${p[1]}, ${p[2]})`) });
+  }
+  return out;
+}
 const toPx = async (p) => { const n = await evaluate(`__sdfGame.flail.toScreen(${p[0]}, ${p[1]}, ${p[2]})`); return n ? ndcPx(n) : null; };
 
 // ---- In-page face grid: march rays at the head face, before vs after ------------------------------
@@ -387,8 +452,25 @@ async function ladder(label, full) {
   const headPxB = await toPx(head);
   const stripFrames = [];
   const peakSeries = [];
-  let r = await clickStrike(id, 10, async (k, hs) => { peakSeries.push(hs.squash); });
+  const squashShots = [];
+  let r = await clickStrike(id, 10, async (k, hs) => {
+    peakSeries.push(hs.squash);
+    if (k <= 2) squashShots.push({ k, s: Math.abs(hs.squash), img: await capture(null) });
+  });
   const peak = Math.max(...peakSeries.map(Math.abs));
+  {
+    // 1b. the peak-squash frame: no bone through intact flesh (craters excluded; the same mask on both images).
+    const sq = squashShots.reduce((m, q) => (q.s > m.s ? q : m));
+    const name = `head-1-squash${full ? "" : "-procedural"}`;
+    writeFileSync(`${OUT}/${name}.png`, sq.img.buf); console.log(`  shot ${OUT}/${name}.png (frame +${sq.k}, |squash| ${sq.s.toFixed(3)})`);
+    const ppm = await pxPerMAt(head, gridB.right);
+    const ex = await craterCircles(id, head, ppm);
+    const half = Math.round(0.14 * ppm);
+    const b0 = headPxB ? boneShareOutside(imgB, headPxB, half, ex) : null, b1 = headPxB ? boneShareOutside(sq.img, headPxB, half, ex) : null;
+    note(`[${label}] hit 1 peak squash (frame +${sq.k}): face-crop bone share outside ${ex.length} crater circles ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (rise ${b0 !== null ? (b1 - b0).toFixed(4) : "?"}; ${2 * half}px crop)`);
+    out.boneSquash = { before: b0, after: b1 };
+    if (full) check(b0 !== null && b1 <= b0 + BONE_THRU_MAX, `hit 1 peak squash: no bone through intact flesh — face-crop bone share outside craters ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (<= pre-hit + ${BONE_THRU_MAX})`);
+  }
   note(`[${label}] hit 1 (strike after ${r.strikeFrame + 1} frames): squash frames 0..10 = ${peakSeries.map((s) => s.toFixed(3)).join(" ")}; peak |squash| ${peak.toFixed(3)}`);
   const s1 = r.series[0].hs;
   const eyeOk = s1?.eye?.state === "dangling";
@@ -458,13 +540,11 @@ async function ladder(label, full) {
   await stepN(3);
   const bd = [head[0] - pose.x, 0, head[2] - pose.z]; { const l = Math.hypot(bd[0], bd[2]); bd[0] /= l; bd[2] /= l; }
   const right = [-bd[2], 0, bd[0]];
-  // ring of 4 samples 0.085 m off the blow (outside the 0.06 face crater), surface found along the blow direction
-  const ringOff = [[0.085, 0], [-0.085, 0], [0, 0.085], [0, -0.085]];
-  const ringB = await evaluate(`(() => { const c = ${JSON.stringify(head)}, d = ${JSON.stringify(bd)}, r = ${JSON.stringify(right)};
-    return ${JSON.stringify(ringOff)}.map(([u, v]) => { const o = [c[0] - d[0] * 0.5 + r[0] * u, c[1] + v, c[2] - d[2] * 0.5 + r[2] * u]; let t = 0;
-      for (let i = 0; i < 80 && t < 0.9; i++) { const p = [o[0] + d[0] * t, o[1], o[2] + d[2] * t]; const s = __sdfGame.head.surfaceAt(${id}, p[0], p[1], p[2]); if (s < 0.001) return { p, hit: true }; t += Math.max(s, 0.002); }
-      return { p: [o[0] + d[0] * 0.5, o[1], o[2] + d[2] * 0.5], hit: false }; }); })()`);
-  const flatB = (await hstate(id)).flat;
+  const hsPre2 = await hstate(id);
+  const flatB = hsPre2.flat;
+  const polesB = hsPre2.frame ? await polesOf(id, hsPre2.frame) : [];
+  const img2B = await capture(null);
+  const head2Px = await toPx(head);
   const chunks2 = await chunks();
   let maxChunks2 = chunks2;
   r = await clickStrike(id, 10);
@@ -472,18 +552,36 @@ async function ladder(label, full) {
   const hs2 = r.series[r.series.length - 1].hs;
   await stepN(60);   // let the wobble die
   const hs2b = await hstate(id);
-  const rise = [];
-  for (const q of ringB) { if (!q.hit) continue; rise.push(await evaluate(`__sdfGame.head.surfaceAt(${id}, ${q.p[0]}, ${q.p[1]}, ${q.p[2]})`)); }
-  const dentMed = rise.length ? median(rise) : null;
-  note(`[${label}] hit 2: dent flat before ${JSON.stringify(flatB.map((x) => +x.toFixed(3)))} after ${JSON.stringify(hs2b.flat.map((x) => +x.toFixed(3)))}; sdBody at the ring samples' old surface points (was 0) ${JSON.stringify(rise.map((x) => +x.toFixed(4)))}, median ${dentMed?.toFixed(4)}; chunks ${chunks2} -> max ${maxChunks2}`);
+  // The dented side: the `flat` entry that grew (x+, x−, y+, y−, z+, z−).
+  const grew = hs2b.flat.map((x, i) => x - (flatB[i] ?? 0));
+  const side = grew.reduce((m, g, i) => (g > grew[m] ? i : m), 0);
+  const poleB = polesB[side];
+  const poleA = poleB ? await evaluate(`__sdfGame.head.surfaceAt(${id}, ${poleB.p[0]}, ${poleB.p[1]}, ${poleB.p[2]})`) : null;
+  const rA = poleB ? await poleRadius(id, poleB) : null;
+  // The asserted number is the surface's own move along the pole line (radius before − after). The sdBody rise at
+  // the probe is PRINTED only: the zombie's face pole is its nose, a strongly anisotropic ellipsoid whose SDF is a
+  // lower bound off its axes, so the rise reads ~1/3 of a real 19 mm move (head-deform probe, Task 10).
+  const dentRise = poleB && rA !== null ? poleB.r - rA : null;
+  const sideName = ["x+", "x-", "y+", "y-", "z+", "z-"][side];
+  note(`[${label}] hit 2: dent flat before ${JSON.stringify(flatB.map((x) => +x.toFixed(3)))} after ${JSON.stringify(hs2b.flat.map((x) => +x.toFixed(3)))}; dented side ${sideName}; pole line surface radius ${poleB?.r.toFixed(4)} -> ${rA?.toFixed(4)} m (moved in ${dentRise?.toFixed(4)}); sdBody 2 mm outside (${poleB ? f2(poleB.p) : "none"}) ${poleB?.s.toFixed(4)} -> ${poleA?.toFixed(4)} (rise ${poleB && poleA !== null ? (poleA - poleB.s).toFixed(4) : "?"}); chunks ${chunks2} -> max ${maxChunks2}`);
   if (full) {
     check(hs2.eye?.state === "gone", `hit 2: eye.state ${JSON.stringify(hs2.eye)} (expected gone)`);
     check(maxChunks2 > chunks2, `hit 2: live chunk count went up (${chunks2} -> ${maxChunks2})`);
-    check(dentMed !== null && dentMed >= DENT_MIN, `hit 2: dented-side surface moved in by median ${dentMed?.toFixed(4)} m (>= ${DENT_MIN}) over ${rise.length} ring samples`);
-    out.dent = dentMed; out.chunks2 = [chunks2, maxChunks2];
+    check(dentRise !== null && grew[side] > 0 && dentRise >= DENT_MIN, `hit 2: the dented side's pole (${sideName}) moved in by ${dentRise?.toFixed(4)} m (>= ${DENT_MIN})`);
+    out.dent = dentRise; out.chunks2 = [chunks2, maxChunks2];
     await aimHead(id);
     out.afterSnap = await evaluate("__sdfGame.timeDraws(120)", 300000);
-    await stagePhoto(id, "head-2-cave", "head-2-cave");
+  }
+  {
+    // 2b. no bone through intact flesh after the dent (craters excluded; the same mask on both images).
+    const img2A = await stagePhoto(id, `head-2-cave${full ? "" : "-procedural"}`, "head-2-cave");
+    const ppm = await pxPerMAt(head, right);
+    const ex = await craterCircles(id, head, ppm);
+    const half = Math.round(0.14 * ppm);
+    const b0 = head2Px ? boneShareOutside(img2B, head2Px, half, ex) : null, b1 = head2Px ? boneShareOutside(img2A, head2Px, half, ex) : null;
+    note(`[${label}] hit 2 settled: face-crop bone share outside ${ex.length} crater circles ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (rise ${b0 !== null ? (b1 - b0).toFixed(4) : "?"}; ${2 * half}px crop)`);
+    out.boneDent = { before: b0, after: b1 };
+    if (full) check(b0 !== null && b1 <= b0 + BONE_THRU_MAX, `hit 2: no bone through intact flesh — face-crop bone share outside craters ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (<= pre-hit + ${BONE_THRU_MAX})`);
   }
   // -------- 3. hit 3, the scalp
   head = await headOf(id);

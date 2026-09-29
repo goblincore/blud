@@ -1630,7 +1630,9 @@ async function main() {
         if (!e) { e = buildSkeletonSources(a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); }
         else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); ctx.render.skeletonSources.set(a, e); }
         return e.sources;
-      }), ctx.world.actors, ctx.render.visualActors);
+      }), ctx.world.actors, ctx.render.visualActors,
+      // Melee head damage: the skull segment squashes and dents with the flesh (game-head-damage affine).
+      (owner, segment) => (segment === 'head' && ctx.weapon.headDamage ? ctx.weapon.headDamage.affine(owner as ZombieActor) : null));
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }

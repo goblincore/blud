@@ -6,7 +6,9 @@ import { meshBoneSource } from './mesh-skull';
 // per actor, geometry SHARED across actors through the SegmentMeshCache
 // (same revision → same BufferGeometry), posed per frame from the contract
 // source's pose() (origin + quat — rigid, no scale, so normalWorld is
-// exact), hidden the same frame isLive() goes false (the contract sever
+// exact; the one exception, the head deform's extra affine on the skull
+// segment, is non-uniform, and normalWorld's inverse-transpose normal matrix
+// keeps it right), hidden the same frame isLive() goes false (the contract sever
 // rule: pack.ts drops the bone rows, we drop the segment).
 //
 // WOUND/FLESH EXPOSURE RULE — smax-then-min, NOT depth-only hiding: the
@@ -85,8 +87,15 @@ export interface SegmentMeshRenderer {
    *  `shown` (visual-actor-cull task 2) is the set of owners to draw: an
    *  owner outside it has its meshes set invisible and receives NO pose
    *  writes (meshes stay allocated, so re-showing is one update away).
-   *  Omitted = draw every entry, the pre-cull behaviour. */
-  update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>): void;
+   *  Omitted = draw every entry, the pre-cull behaviour.
+   *  `extra` (melee head damage, Task 10): an optional WORLD-space affine
+   *  (column-major 4x4) applied after a segment's rigid pose, per owner and
+   *  segment key — the head deform's squash and dents on the 'head' skull
+   *  segment, so the skull deforms with the flesh. Null = the rigid pose. */
+  update(
+    entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>,
+    extra?: (owner: object, segment: string) => ArrayLike<number> | null,
+  ): void;
   impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
   stepDebris(dt: number): void;
   eyeState(owner: object): { missing: number[]; debris: number };
@@ -121,6 +130,7 @@ interface ActorSlot {
 export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): SegmentMeshRenderer {
   const group = new THREE.Group();
   group.name = 'skeleton-segment-meshes';
+  const extraM = new THREE.Matrix4();
 
   const u = boneInstancerUniforms();
   const woundData = new Float32Array(MAX_WOUNDS_TEX * 4);
@@ -278,7 +288,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
         if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
       }
     },
-    update(entries, owners, shown) {
+    update(entries, owners, shown, extra) {
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
       stats.verts = stats.tris = 0;
@@ -334,6 +344,15 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): S
           const pose = s.pose();
           mesh.position.set(pose.origin[0], pose.origin[1], pose.origin[2]);
           mesh.quaternion.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
+          // The group sits at the scene origin, so the mesh's local matrix IS
+          // its world matrix and a world-space affine premultiplies it.
+          const x = extra?.(owner, s.segment) ?? null;
+          if (x) {
+            mesh.matrixAutoUpdate = false;
+            mesh.updateMatrix();
+            mesh.matrix.premultiply(extraM.fromArray(x));
+            mesh.matrixWorldNeedsUpdate = true;
+          } else if (!mesh.matrixAutoUpdate) mesh.matrixAutoUpdate = true;
         });
       });
       // Release removed slots so they cannot retain actor ownership.

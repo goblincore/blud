@@ -25,7 +25,7 @@ import { sdBody } from '../validate';
 import { headQuatOf } from '../rig-bind';
 import { headDeath, headHit, makeHeadDamage, type HeadDamageState, type HeadEvent } from '../head-damage';
 import {
-  addDent, deformHead, kickWobble, makeHeadDeform, rotate, stepWobble,
+  addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, rotate, stepWobble,
   type HeadDeformState, type HeadFrame, type Quat,
 } from '../head-deform';
 import { EYE_STALK, eyeRayStart, makeStalk, nearerEye, stalkPrims, stepStalk, type StalkState } from '../head-eye';
@@ -75,6 +75,8 @@ export interface HeadDamageDebug {
   flat: number[];
   eyeball: Vec3 | null;
   socket: Vec3 | null;
+  /** The head frame the deform hook last measured (the UN-deformed pose; null before the first re-pose). */
+  frame: HeadFrame | null;
 }
 
 export interface HeadDamageLeaf {
@@ -86,10 +88,21 @@ export interface HeadDamageLeaf {
   /** Drop every actor's state (a cast rebuild / level reset). */
   reset(): void;
   debug(id: number): HeadDamageDebug | null;
+  /** The head deform the actor's LAST re-pose applied to its flesh, as a world-space column-major 4x4 (null: none).
+   *  The skeleton-mesh path premultiplies the skull segment's pose by it, so the skull squashes and dents with the
+   *  flesh (spec §14 decision 1). Captured inside the deform hook — the same state, frame and instant the flesh
+   *  used — so the mesh never runs a wobble step ahead of the skin it sits in. */
+  affine(a: ZombieActor): readonly number[] | null;
 }
 
 interface Dangling { side: 'L' | 'R'; socket: Wound; stalk: StalkState; piece: AttachedPiece | null }
-interface ActorHead { ladder: HeadDamageState; deform: HeadDeformState; eye: Dangling | null }
+interface ActorHead {
+  ladder: HeadDamageState; deform: HeadDeformState; eye: Dangling | null;
+  /** The frame the deform hook measured at the last re-pose (the un-deformed head). */
+  frame: HeadFrame | null;
+  /** That re-pose's deform as a world 4x4 (headAffineMatrix), null at rest. */
+  affine: number[] | null;
+}
 
 const IDENTITY: Quat = [0, 0, 0, 1];
 const conj = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
@@ -191,12 +204,15 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     }
     let h = heads.get(a);
     if (!h) {
-      h = { ladder: makeHeadDamage(), deform: makeHeadDeform(), eye: null };
+      h = { ladder: makeHeadDamage(), deform: makeHeadDeform(), eye: null, frame: null, affine: null };
       heads.set(a, h);
       const st = h;
       // Measured on the pose it is handed (fresh from applyRig), so the frame is the un-deformed head's.
       a.setHeadDeform(p => {
         const f = frameOf(a, p);
+        st.frame = f;
+        const m = f ? headAffine(st.deform, f) : null;
+        st.affine = m ? headAffineMatrix(m) : null;
         return f ? deformHead(p, st.deform, f) : p;
       });
     }
@@ -293,6 +309,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     reset() {
       for (const [a, h] of heads) drop(a, h);
     },
+    affine: a => heads.get(a)?.affine ?? null,
     debug(id) {
       for (const [a, h] of heads) {
         if (a.id !== id) continue;
@@ -306,6 +323,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           flat: [...h.deform.flat],
           eyeball: e ? [...e.stalk.p[e.stalk.p.length - 1]!] as Vec3 : null,
           socket: e ? [...e.stalk.p[0]!] as Vec3 : null,
+          frame: h.frame ? { centre: [...h.frame.centre] as Vec3, quat: [...h.frame.quat] as Quat, axes: [...h.frame.axes] as Vec3 } : null,
         };
       }
       return null;
