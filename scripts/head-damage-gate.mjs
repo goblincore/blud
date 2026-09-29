@@ -7,7 +7,7 @@
 //   0. a body hit first (torso, 1.2 m); its wounds must all survive (step 5). The draw-time baseline (twice).
 //      The painted-eye baseline photo (v2-before.png, bleed off): each eye's red-glow share, the left orbit's luma.
 //   1. the LEFT ORBIT ('L' = image-left = hs.x < 0, the zombie's own right eye) until eyes.L is 'in-orbit':
-//      - that took 2–5 hits; every one of them struck nearest the left orbit (the aim's control);
+//      - that took 1–3 hits (v1.5b bigger bites; 2–5 before); every one of them struck nearest the left orbit (the aim's control);
 //      - (bleed off, the attached pieces hidden) the painted red-glow share at that eye dropped by >= 80%, and the
 //        other eye keeps >= 50% of its baseline share (it still glows);
 //      - a 3D eyeball is present: state().eyeball.L set, and showing the pieces changes >= 25% of the pixels in an
@@ -33,7 +33,7 @@
 //      live at 4 s, and the two part company (>= 0.6 m apart along the head's right axis).
 //      the socket is still a dark hole (the same luma measure; photos v2-snapped.png / -noblood). Then the brow until dead:
 //      - the skull was exposed (brow or crown flesh < skullExposed) on an earlier hit than the brain;
-//      - the kill came at 8–14 total head hits (v1.4; 5–9 before); exactly one brain MESH gib (head.brains()); live SDF chunks up by
+//      - the kill came at 5–10 total head hits (v1.5b bigger bites; v1.4 8–14; 5–9 before); exactly one brain MESH gib (head.brains()); live SDF chunks up by
 //        >= 4 over the killing hit (lumps + chips);
 //      - photos v2-skull.png (blood) / -noblood (settled, the hit that exposed it) and v2-brain.png (+3 frames).
 //   4. thawed 3 frames: the zombie is out of 'standing'; the head is still on (limbAlive > 0).
@@ -61,9 +61,10 @@ const EYE_H = 1.62;          // PLAYER.eye
 const STAND = 0.9;           // swing stand: horizontal distance from the head centre, m
 const PHOTO_D = 0.55;        // face photo stand, m (camera lifted to the head centre's height)
 // The plan's thresholds (do not loosen).
-// v1.4 (flail spec §13.2, tougher: strips 0.20 R/L, 0.28 H; skullPerHit 0.25): this gate's sequence (orbitL until
-// exposed, the pop, then the brow) kills at 9–14 total head hits in the model across the jitter (it was 5–9).
-const ORBIT_HITS_MIN = 2, ORBIT_HITS_MAX = 5, KILL_HITS_MIN = 8, KILL_HITS_MAX = 14, MAX_HEAD_SLOTS = 7;
+// v1.5b BIGGER BITES (owner: "too gradual"; strips 0.40 R/L, 0.55 H; skullPerHit 0.32): this gate's sequence (orbitL
+// until exposed, the pop, then the brow) exposes the orbit on hit 1–3 and kills at 5–9 total head hits in the model
+// across the jitter (v1.4, strips 0.20/0.28, skullPerHit 0.25: exposed 3–5, kill 9–14; v2: 5–9).
+const ORBIT_HITS_MIN = 1, ORBIT_HITS_MAX = 3, KILL_HITS_MIN = 5, KILL_HITS_MAX = 10, MAX_HEAD_SLOTS = 7;
 const GLOW_DROP_MIN = 0.8;
 const SQUASH_PEAK_MIN = 0.35, REBOUND_MIN = 0.12, REBOUND_FRAMES = 10, SETTLE_FRAMES = 84, SQUASH_SETTLE_MAX = 0.0025;
 const BONE_THRU_MAX = 0.005, CRATER_MARGIN = 0.02;

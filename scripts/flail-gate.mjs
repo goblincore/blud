@@ -102,10 +102,10 @@ const OUT = process.env.OUT ?? 'docs/dev-notes/2026-09-26-flail/gate';
 const W = Number(process.env.W ?? 1280), H = Number(process.env.H ?? 800);
 const CRATER_R = 0.09;      // FLAIL_FEEL.craterR (game-flail.ts)
 // Head damage v2 (game-head-damage.ts; spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md
-// §15): every head hit strips flesh region by region; the brain comes out and kills. v1.4 (flail spec §13.2,
-// tougher): 7–10 hits on a single region in the model's own tests, 7–12 in play here (jitter, where the blows
-// land). All head craters have severRadius 0 — the flail never decapitates (flail spec §12.3).
-const KILL_MIN = 7, KILL_MAX = 12;
+// §15): every head hit strips flesh region by region; the brain comes out and kills. v1.5b BIGGER BITES (owner:
+// "too gradual"): 4–7 hits on a single region in the model's own tests, 4–9 in play here (jitter, where the blows
+// land; v1.4 was 7–10 / 7–12). All head craters have severRadius 0 — the flail never decapitates (flail spec §12.3).
+const KILL_MIN = 4, KILL_MAX = 9;
 // The struck region's crater (anchored at its first strike) within this of the strike point (hits 2+). The
 // fixed cheekL centre the side stand used to crater sits ~10 cm from where the side hits land.
 const ANCHOR_MAX = 0.05;

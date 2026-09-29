@@ -23,8 +23,8 @@ export const EYE_STALK = {
 /** THE IN-ORBIT EYEBALL'S RADIUS (spec §15 as built). The popped-eye debris' EYEBALL_R (0.030) is 2.5x life, and in
  *  the orbit it swallowed the socket. MEASURED: the painted eyes (zombie-face.png, luma >= 0.9) are 5-6 texels wide
  *  x 3 tall — through faceProj (0.45, 0.58) and the zombie's head axes (0.090, 0.137, 0.105) about 1.6-1.9 cm x 1.1 cm
- *  — and the orbit crater is 0.035 m in radius when the orbit is exposed (REGION_TUNING.craterR at flesh < 0.35). A
- *  0.018 m ball (3.6 cm across) sits inside the 7 cm bowl, about twice the painted eye's width: still read as an eye
+ *  — and the orbit crater is ~0.05 m in radius when the orbit is exposed (REGION_TUNING.craterR at flesh < 0.35; 0.035 before v1.5b). A
+ *  0.018 m ball (3.6 cm across) sits inside the ~10 cm bowl (7 cm before v1.5b), about twice the painted eye's width: still read as an eye
  *  at play distance, and it fits. */
 export const ORBIT_EYE_R = 0.018;
 /** The popped eye's comic grow: ORBIT_EYE_R → EYEBALL_R over this long after the pop (smoothstep). */

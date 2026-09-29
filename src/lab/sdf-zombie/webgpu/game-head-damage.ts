@@ -78,8 +78,10 @@ import { mulberry32 } from '../melt-bones';
 export const HEAD_LEAF = {
   /** A hit's lasting dent depth (spec §5). */
   dentDepth: 0.018,
-  /** The flesh strip per swing (flail spec §13.2, v1.4: tougher; head spec §15 had R and L 0.25, H 0.35). */
-  strip: { R: 0.2, L: 0.2, H: 0.28 } as Record<'R' | 'L' | 'H', number>,
+  /** The flesh strip per swing. v1.5b BIGGER BITES (owner: "too gradual"): doubled, so the face comes off in big
+   *  chunks — an orbit is bone on hit 2, both eyes pop on hit 3 (v1.4, flail spec §13.2, was R/L 0.20, H 0.28;
+   *  head spec §15 had R and L 0.25, H 0.35). */
+  strip: { R: 0.4, L: 0.4, H: 0.55 } as Record<'R' | 'L' | 'H', number>,
   /** A head hit's share of the swing's collapse credit (flail spec §13.2): the head model kills, not the meter
    *  (R/L 0.065 × 0.3 ≈ 0.02 per head hit). */
   meterScale: 0.3,

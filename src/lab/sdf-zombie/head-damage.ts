@@ -32,23 +32,27 @@ export const HEAD_REGIONS: Readonly<Record<HeadRegion, HS>> = {
 
 const REGION_NAMES = Object.keys(HEAD_REGIONS) as HeadRegion[];
 
-const R_MAX: Readonly<Record<HeadRegion, number>> = { orbitL: 0.035, orbitR: 0.035, brow: 0.05, crown: 0.055, cheekL: 0.045, cheekR: 0.045 };
+/** v1.5b BIGGER BITES (owner: "hits to the face should take off more bigger chunks"): every R_MAX ~40% up (was
+ *  orbits 0.035, cheeks 0.045, brow 0.05, crown 0.055) and the first crater starts at CRATER_R0 0.04 (was 0.025). */
+const R_MAX: Readonly<Record<HeadRegion, number>> = { orbitL: 0.05, orbitR: 0.05, brow: 0.07, crown: 0.075, cheekL: 0.065, cheekR: 0.065 };
+const CRATER_R0 = 0.04;
 
 export const REGION_TUNING = {
   spillSigma: 0.5,
   crownSpill: 0.5,
   orbitExposed: 0.35,
   skullExposed: 0.3,
-  /** v1.4 (flail spec §13.2: tougher zombies, a head kill in about 7–10 hits). The spec's 0.34 with the R/L strip
-   *  0.20 kills a single region on hit 6 (jitter 1; 8 at −20%, 5 at +20%): the hit that exposes the skull (hit 4,
-   *  flesh 0.2) also cracks it (rule order), so 0.34 × 3 ≥ 1 on hit 6. At 0.25 it is 7 (jitter 1), 9 (−20%),
-   *  6 (+20%); with the H strip 0.28, 6. (v2 was 0.4 with strips 0.25/0.35: 5–7.) */
-  skullPerHit: 0.25,
+  /** v1.5b BIGGER BITES (owner: too gradual, the eyes took too long): the strips doubled (R/L 0.40, H 0.55;
+   *  game-head-damage.ts HEAD_LEAF.strip), so a region is bone on hit 2 (3 at jitter −20%) and the hit that exposes
+   *  the skull also cracks it (rule order). 0.32 cracks it in 4 hits at jitter 1 (0.96 after 3) and at −20%
+   *  (0.256 × 4 = 1.02), 3 at +20%: a single region dies on hit 5 (jitter 1), 6 (−20%), 4 (+20%); with H, 5 / 5 / 4.
+   *  (v1.4 was 0.25 with strips 0.20/0.28: 7 / 9 / 6. v2 was 0.4 with 0.25/0.35.) */
+  skullPerHit: 0.32,
   jitter: 0.2,
   /** Strip changes below this are applied but not reported as events. */
   stripEventMin: 0.02,
   /** The region's crater radius at a given flesh (1 = untouched). */
-  craterR: (r: HeadRegion, flesh: number) => 0.025 + (R_MAX[r] - 0.025) * Math.min(1, (1 - flesh) / 0.7),
+  craterR: (r: HeadRegion, flesh: number) => CRATER_R0 + (R_MAX[r] - CRATER_R0) * Math.min(1, (1 - flesh) / 0.7),
 } as const;
 
 export type EyeState = 'painted' | 'in-orbit' | 'dangling' | 'gone';
@@ -102,7 +106,7 @@ export function nearestRegion(hs: HS): HeadRegion {
 const skullBare = (flesh: Record<HeadRegion, number>, r: SkullRegion): boolean => flesh[r] < REGION_TUNING.skullExposed;
 
 /** One head-region hit. `hs`: the hit point, head-local ÷ half-extents. `strip`: the swing's flesh strip
- *  (0.20 R/L, 0.28 H; game-head-damage.ts HEAD_LEAF.strip). `rand`: the zombie's seeded stream in [0, 1); one draw per hit (the jitter). */
+ *  (0.40 R/L, 0.55 H; game-head-damage.ts HEAD_LEAF.strip). `rand`: the zombie's seeded stream in [0, 1); one draw per hit (the jitter). */
 export function headHit(
   s: HeadDamageState, hit: { hs: HS; strip: number }, rand: () => number,
 ): { state: HeadDamageState; events: HeadEvent[] } {
