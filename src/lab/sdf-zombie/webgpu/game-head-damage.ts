@@ -311,7 +311,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       const s0 = h.deform.s;
       h.deform = stepWobble(h.deform, dt);
       // A FROZEN actor (?frozen=1, the gates) never steps, and the step is where the deform is re-applied:
-      // its posed/drawn head would keep the hit's re-pose — the wobble's PEAK squash (0.25 along the blow),
+      // its posed/drawn head would keep the hit's re-pose — the wobble's PEAK squash (0.40 along the blow),
       // which pulls the face flesh ~2-3 cm back behind the undeformed skull and teeth — for good.
       if (ctx.demo.wanderFrozen && h.deform.s !== s0) a.reposeHead();
       if (!h.eye) continue;

@@ -3,7 +3,11 @@
 // HEAD WOBBLE AND DENTS (spec §5; the plan's decision 1). Pure. The zombie's head is a few large ellipsoid
 // prims, so deformation works along the HEAD's own axes (x right, y up, z face-forward):
 //   * WOBBLE — a damped spring s(t) along the head axis nearest the blow: that axis scales by (1 − s),
-//     the other two by (1 + s/2). Kicked to squash0 on a hit, rings at hz, settles in ~0.5 s.
+//     the other two by (1 + s/2). Kicked to squash0 on a hit, rings at hz, settles in ~1 s (v2, spec §15:
+//     exaggerated — 2–3 visible bounces).
+//   * KNOCK SHEAR (v2) — the same spring leans the head along the blow's across-the-neck part, pivoting at the
+//     head's base (the neck stays attached): a point at head-local height y moves along the blow by
+//     shear · s · (y + axes.y). So the head reads as knocked, and rocks back as s rings negative.
 //   * DENTS — a lasting flattening of the HIT side along the head axis nearest the blow: that side's
 //     surface moves in by the dent depth and the opposite side stays put (the prims shift half the depth
 //     inward and shrink half the depth along the axis). Per side (x+, x−, y+, y−, z+, z−), capped.
@@ -19,10 +23,12 @@ export type Quat = [number, number, number, number];
 export interface HeadFrame { centre: Vec3; quat: Quat; axes: Vec3 }
 
 export const HEAD_DEFORM = {
-  squash0: 0.25,
-  maxSquash: 0.3,
-  hz: 8,
-  zeta: 0.25,
+  squash0: 0.4,
+  maxSquash: 0.45,
+  hz: 4,
+  zeta: 0.18,
+  /** The knock shear's lean per unit squash (see the header). */
+  shear: 0.15,
   maxDent: 0.04,
   /** Below both, the spring is at rest (snapped to exactly 0). */
   restS: 1e-4,
@@ -35,12 +41,14 @@ export interface HeadDeformState {
   v: number;
   /** The wobble's head axis (0 x, 1 y, 2 z). */
   axis: 0 | 1 | 2;
+  /** The last blow's direction, head-local, unit (zero before any blow): the knock shear leans along it. */
+  dir: Vec3;
   /** Dent depth per side, metres: [x+, x−, y+, y−, z+, z−]. */
   flat: [number, number, number, number, number, number];
 }
 
 export function makeHeadDeform(): HeadDeformState {
-  return { s: 0, v: 0, axis: 0, flat: [0, 0, 0, 0, 0, 0] };
+  return { s: 0, v: 0, axis: 0, dir: [0, 0, 0], flat: [0, 0, 0, 0, 0, 0] };
 }
 
 const argmaxAbs = (d: Vec3): 0 | 1 | 2 => {
@@ -51,7 +59,9 @@ const argmaxAbs = (d: Vec3): 0 | 1 | 2 => {
 /** A hit's wobble. `dirLocal`: the blow's direction in head coordinates. */
 export function kickWobble(st: HeadDeformState, dirLocal: Vec3): HeadDeformState {
   const s = Math.min(HEAD_DEFORM.maxSquash, Math.max(-HEAD_DEFORM.maxSquash, st.s + HEAD_DEFORM.squash0));
-  return { ...st, s, v: 0, axis: argmaxAbs(dirLocal) };
+  const n = Math.hypot(dirLocal[0], dirLocal[1], dirLocal[2]);
+  const dir: Vec3 = n > 0 ? [dirLocal[0] / n, dirLocal[1] / n, dirLocal[2] / n] : [0, 0, 0];
+  return { ...st, s, v: 0, axis: argmaxAbs(dirLocal), dir };
 }
 
 /** Advance the spring (semi-implicit Euler; call with dt ≤ 1/60, sub-stepped inside). */
@@ -89,11 +99,12 @@ const isHeadBone = (p: Primitive) => p.limb === 'head' && !p.dead && (p.op === '
 
 /**
  * The head deform as one affine map of world space (plain data, for the skeleton-mesh path):
- *   x ↦ centre + Σ_k e[k] · (mul[k] · ((x − centre) · e[k]) + shift[k])
- * i.e. M = T(centre + Σ e·shift) · E · diag(mul) · Eᵀ · T(−centre), E = [e0 e1 e2] the head axes in world.
- * Null when there is no deformation (no squash, no dent).
+ *   x ↦ centre + Σ_k e[k] · (mul[k] · u[k] + shift[k] + lean[k] · (u[1] + pivot)),   u[k] = (x − centre) · e[k]
+ * i.e. the squash/dent M = T(centre + Σ e·shift) · E · diag(mul) · Eᵀ · T(−centre) (E = [e0 e1 e2] the head
+ * axes in world) plus the knock shear: head-local `lean` (lean[1] = 0) times the height above the head's
+ * base (pivot = axes.y). Null when there is no deformation (no squash, no dent).
  */
-export interface HeadAffine { centre: Vec3; e: [Vec3, Vec3, Vec3]; mul: Vec3; shift: Vec3 }
+export interface HeadAffine { centre: Vec3; e: [Vec3, Vec3, Vec3]; mul: Vec3; shift: Vec3; lean: Vec3; pivot: number }
 
 export function headAffine(st: HeadDeformState, f: HeadFrame): HeadAffine | null {
   if (st.s === 0 && st.flat.every(x => x === 0)) return null;
@@ -106,16 +117,20 @@ export function headAffine(st: HeadDeformState, f: HeadFrame): HeadAffine | null
   }
   const s = st.s;
   for (const k of [0, 1, 2] as const) mul[k] *= k === st.axis ? 1 - s : 1 + s / 2;
-  return { centre: [f.centre[0], f.centre[1], f.centre[2]], e, mul, shift };
+  // The shear leans along the blow's across-the-neck (head x/z) part only: a blow from above does not lean.
+  const k = HEAD_DEFORM.shear * s;
+  const lean: M3 = [st.dir[0] * k, 0, st.dir[2] * k];
+  return { centre: [f.centre[0], f.centre[1], f.centre[2]], e, mul, shift, lean, pivot: f.axes[1] };
 }
 
 /** Apply the affine to a point (the same arithmetic deformHead uses for every endpoint). */
 export function applyHeadAffine(m: HeadAffine, p: Vec3): Vec3 {
-  const { centre: c, e, mul, shift } = m;
+  const { centre: c, e, mul, shift, lean, pivot } = m;
   const v: Vec3 = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
   const out: M3 = [c[0], c[1], c[2]];
+  const up = v[0] * e[1][0] + v[1] * e[1][1] + v[2] * e[1][2] + pivot;   // height above the head's base
   for (const k of [0, 1, 2] as const) {
-    const t = (v[0] * e[k][0] + v[1] * e[k][1] + v[2] * e[k][2]) * mul[k] + shift[k];
+    const t = (v[0] * e[k][0] + v[1] * e[k][1] + v[2] * e[k][2]) * mul[k] + shift[k] + lean[k] * up;
     out[0] += e[k][0] * t; out[1] += e[k][1] * t; out[2] += e[k][2] * t;
   }
   return out;
@@ -123,13 +138,13 @@ export function applyHeadAffine(m: HeadAffine, p: Vec3): Vec3 {
 
 /** The affine as a column-major 4x4 (three.js Matrix4.fromArray / WGSL mat4x4 order). */
 export function headAffineMatrix(m: HeadAffine): number[] {
-  const { centre: c, e, mul, shift } = m;
-  // L = Σ_k mul[k] e[k] e[k]ᵀ ; t = c + Σ_k shift[k] e[k] − L c.
+  const { centre: c, e, mul, shift, lean, pivot } = m;
+  // L = Σ_k (mul[k] e[k] e[k]ᵀ + lean[k] e[k] e[1]ᵀ) ; t = c + Σ_k (shift[k] + lean[k]·pivot) e[k] − L c.
   const L: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0];   // row-major 3x3
   const t: number[] = [c[0], c[1], c[2]];
   for (const k of [0, 1, 2] as const) {
-    for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) L[r * 3 + q]! += mul[k] * e[k][r]! * e[k][q]!;
-    for (let r = 0; r < 3; r++) t[r]! += shift[k] * e[k][r]!;
+    for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) L[r * 3 + q]! += mul[k] * e[k][r]! * e[k][q]! + lean[k] * e[k][r]! * e[1][q]!;
+    for (let r = 0; r < 3; r++) t[r]! += (shift[k] + lean[k] * pivot) * e[k][r]!;
   }
   for (let r = 0; r < 3; r++) t[r]! -= L[r * 3]! * c[0] + L[r * 3 + 1]! * c[1] + L[r * 3 + 2]! * c[2];
   return [

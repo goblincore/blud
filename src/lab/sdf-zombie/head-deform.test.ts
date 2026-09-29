@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/head-deform.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { HEAD_DEFORM, addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, stepWobble, wobbleValue, type HeadFrame } from './head-deform';
+import { HEAD_DEFORM, addDent, applyHeadAffine, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, stepWobble, wobbleValue, type HeadFrame } from './head-deform';
 import type { Primitive } from './types';
 
 const frame: HeadFrame = { centre: [0, 1.6, 0], quat: [0, 0, 0, 1], axes: [0.09, 0.11, 0.1] };
@@ -12,31 +12,75 @@ const torsoPrim = (): Primitive => ({ limb: 'torso', op: 'union', a: [0, 1.2, 0]
 /** Extent of an ellipsoid prim (a === b) along world x. */
 const xExtent = (p: Primitive): [number, number] => [p.a[0] - p.radius * p.scale[0], p.a[0] + p.radius * p.scale[0]];
 
-describe('head wobble', () => {
-  it('kicks to squash0, rings at ~8 Hz and settles below 1% within 0.8 s', () => {
+describe('head wobble (v2: exaggerated, spec §15)', () => {
+  const ring = (secs: number, dt = 1 / 240) => {
     let s = kickWobble(makeHeadDeform(), [1, 0, 0]);
-    expect(wobbleValue(s)).toBeCloseTo(HEAD_DEFORM.squash0, 9);
-    let crossings = 0, prev = wobbleValue(s);
-    for (let t = 0; t < 0.8; t += 1 / 240) {
-      s = stepWobble(s, 1 / 240);
-      const v = wobbleValue(s);
-      if (Math.sign(v) !== Math.sign(prev) && prev !== 0) crossings++;
-      prev = v;
+    const series = [wobbleValue(s)];
+    for (let t = 0; t < secs - 1e-9; t += dt) { s = stepWobble(s, dt); series.push(wobbleValue(s)); }
+    return { s, series };
+  };
+  it('kicks to 0.40 and clamps at 0.45', () => {
+    expect(HEAD_DEFORM.squash0).toBe(0.4);
+    expect(HEAD_DEFORM.maxSquash).toBe(0.45);
+    expect(wobbleValue(kickWobble(makeHeadDeform(), [1, 0, 0]))).toBeCloseTo(0.4, 9);
+    const twice = kickWobble(kickWobble(makeHeadDeform(), [1, 0, 0]), [1, 0, 0]);
+    expect(wobbleValue(twice)).toBeCloseTo(0.45, 9);
+  });
+  it('rings at ~4 Hz: 4–7 VISIBLE zero crossings over 1.2 s, and the first rebound peaks at |s| ≥ 0.15', () => {
+    // A crossing counts when the lobe it starts peaks at |s| ≥ 0.01 (~1 mm on the head): at 4 Hz the spring
+    // crosses ~9 times in 1.2 s, but the tail's crossings are sub-millimetre and do not read.
+    const { series } = ring(1.2);
+    const cross: number[] = [];
+    for (let i = 1; i < series.length; i++) {
+      if (series[i - 1]! !== 0 && Math.sign(series[i]!) !== Math.sign(series[i - 1]!)) cross.push(i);
     }
-    expect(crossings).toBeGreaterThanOrEqual(4);                   // it rings (underdamped)
-    expect(Math.abs(wobbleValue(s))).toBeLessThan(0.0025);   // settled: < 1% of the head's size
+    const lobePeak = (j: number) => Math.max(...series.slice(cross[j], cross[j + 1] ?? series.length).map(Math.abs));
+    const visible = cross.filter((_, j) => lobePeak(j) >= 0.01).length;
+    expect(visible).toBeGreaterThanOrEqual(4);
+    expect(visible).toBeLessThanOrEqual(7);
+    expect(lobePeak(0)).toBeGreaterThanOrEqual(0.15);
+  });
+  it('settles below 1% of the head (0.0025) by 1.4 s', () => {
+    expect(Math.abs(wobbleValue(ring(1.4).s))).toBeLessThan(0.0025);
   });
   it('comes to rest at exactly 0, and a rested, undented head is the body untouched', () => {
     let s = kickWobble(makeHeadDeform(), [0, 0, 1]);
-    for (let t = 0; t < 1.5; t += 1 / 60) s = stepWobble(s, 1 / 60);
+    for (let t = 0; t < 3; t += 1 / 60) s = stepWobble(s, 1 / 60);
     expect(s.s).toBe(0);
     expect(s.v).toBe(0);
     const body = { prims: [headPrim(), torsoPrim()] };
     expect(deformHead(body, s, frame)).toBe(body);
   });
   it('clamps to ±maxSquash', () => {
-    let s = kickWobble(kickWobble(makeHeadDeform(), [1, 0, 0]), [1, 0, 0]);
+    const s = kickWobble(kickWobble(makeHeadDeform(), [1, 0, 0]), [1, 0, 0]);
     expect(Math.abs(wobbleValue(s))).toBeLessThanOrEqual(HEAD_DEFORM.maxSquash);
+  });
+});
+
+describe('the knock shear (v2)', () => {
+  const at = (st: ReturnType<typeof makeHeadDeform>, p: [number, number, number]) => applyHeadAffine(headAffine(st, frame)!, p);
+  it('a point on the struck side moves along the blow by shear · s · r (r = the head half-height: the neck pivots)', () => {
+    expect(HEAD_DEFORM.shear).toBeCloseTo(0.15, 9);
+    // A blow along head +z (into the face): the struck side is the face, at head-centre height.
+    const st = { ...kickWobble(makeHeadDeform(), [0, 0, 1]), s: 0.2 };
+    const noShear = { ...st, dir: [0, 0, 0] as [number, number, number] };
+    const face: [number, number, number] = [0, 1.6, -0.1];   // the −z side is struck by a +z blow
+    const d = at(st, face)[2] - at(noShear, face)[2];
+    expect(d).toBeCloseTo(HEAD_DEFORM.shear * 0.2 * frame.axes[1], 9);
+    // The neck (the head's base) stays put; the crown leans twice as far.
+    const neck: [number, number, number] = [0, 1.6 - frame.axes[1], 0];
+    const crown: [number, number, number] = [0, 1.6 + frame.axes[1], 0];
+    expect(at(st, neck)[2] - at(noShear, neck)[2]).toBeCloseTo(0, 12);
+    expect(at(st, crown)[2] - at(noShear, crown)[2]).toBeCloseTo(2 * HEAD_DEFORM.shear * 0.2 * frame.axes[1], 9);
+    // Only along the blow.
+    expect(at(st, crown)[0]).toBeCloseTo(at(noShear, crown)[0], 12);
+  });
+  it('a blow from straight above adds no shear (only the blow\'s across-the-neck part leans the head)', () => {
+    const st = kickWobble(makeHeadDeform(), [0, -1, 0]);
+    const noShear = { ...st, dir: [0, 0, 0] as [number, number, number] };
+    const crown: [number, number, number] = [0.03, 1.6 + frame.axes[1], 0.02];
+    const a = at(st, crown), b = at(noShear, crown);
+    for (let k = 0; k < 3; k++) expect(a[k]).toBeCloseTo(b[k]!, 12);
   });
 });
 
