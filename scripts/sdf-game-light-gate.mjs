@@ -642,6 +642,7 @@ async function costCarriage(c) {
     }
   }
   await evaluate('__sdfGame.setLightList(true)');
+  const tubeShadow = process.env.LIGHT_GATE_TUBE_SHADOW ? await costTubeShadow(c) : null;
   const beacons = c.beacons ? await costBeacons(c) : null;
   const byMed = (k) => Object.fromEntries(Object.entries(s.by[k]).map(([l, v]) => [l, median(v)]));
   const r = {
@@ -649,9 +650,27 @@ async function costCarriage(c) {
     spreadOff: [Math.min(...s.off), Math.max(...s.off)], spreadOn: [Math.min(...s.on), Math.max(...s.on)],
     // Per-round deltas (a round's on minus its own off): their spread is the bench's noise.
     deltas: s.on.map((v, i) => v - s.off[i]), gpuDeltas: s.gpuOn.map((v, i) => v - s.gpuOff[i]),
-    passOff: byMed('off'), passOn: byMed('on'), samples: s, beacons,
+    passOff: byMed('off'), passOn: byMed('on'), samples: s, beacons, tubeShadow,
   };
   return r;
+}
+/** LIGHT_GATE_TUBE_SHADOW=1: the tubes' live shadow re-renders on - off in this carriage (lamps pinned lit, the
+ *  player here), rounds interleaved. Frames are sim steps + draws (costStepFrames), so every shadow pass is in the
+ *  "on" number; the plain cost frames above never re-render them (they only draw). */
+async function costTubeShadow(c) {
+  const t = { off: [], on: [], gpuOff: [], gpuOn: [] };
+  for (let round = 0; round < COST_ROUNDS; round++) {
+    for (const on of round % 2 ? [true, false] : [false, true]) {
+      await evaluate(`__sdfGame.setTubeShadowUpdates(${on})`);
+      await stepN(3, 0);
+      const fr = await costStepFrames();
+      t[on ? 'on' : 'off'].push(median(fr.map((f) => f.ms)));
+      const ex = fr.filter((f) => f.s.length).map((f) => exclusivePasses(f.s));
+      if (ex.length) t[on ? 'gpuOn' : 'gpuOff'].push(median(ex.map((e) => e.span)));
+    }
+  }
+  await evaluate('__sdfGame.setTubeShadowUpdates(true)');
+  return { off: median(t.off), on: median(t.on), gpuOff: median(t.gpuOff), gpuOn: median(t.gpuOn), deltas: t.on.map((v, i) => v - t.off[i]) };
 }
 /** Beacons on - off (list on), in the real post-strobe Boiler Room: the light clock pinned 6 s
  *  past the strobe (its lamps dead for good), the beacons forced on/off by script (setBeaconsOn;
@@ -720,6 +739,10 @@ async function costSection() {
       .map((l) => [l, (r.passOn[l] ?? 0) - (r.passOff[l] ?? 0), r.passOn[l] ?? 0])
       .filter(([, , v]) => v > 0.05).sort((a, b) => b[2] - a[2]).slice(0, 8);
     console.log(`          passes (exclusive GPU ms: median on, on-off): ${labels.map(([l, d, v]) => `${l} ${f2(v)} (${d >= 0 ? '+' : ''}${f2(d)})`).join(', ')}`);
+  }
+  for (const r of out) {
+    const ts = r.tubeShadow;
+    if (ts) console.log(`     cost ${r.name} tube shadows (live re-renders) frame off ${f2(ts.off)} on ${f2(ts.on)} -> median on-off ${f2(ts.on - ts.off)} ms, per-round deltas ${spread(ts.deltas)} | GPU span off ${f2(ts.gpuOff)} on ${f2(ts.gpuOn)} -> ${f2(ts.gpuOn - ts.gpuOff)} ms`);
   }
   for (const r of out) {
     const b = r.beacons;

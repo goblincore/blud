@@ -212,6 +212,9 @@ const TUBE = {
   beam: 0.035,
 } as const;
 
+/** Measurement only (`setTubeShadowUpdates`): false stops the live tube shadow re-renders, so a cost run can
+ *  A/B them. The maps still render once at boot. */
+let tubeShadowUpdates = true;
 let beamFn: ReturnType<typeof wgslFn> | null = null;
 
 function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | null, room: number, group: THREE.Group, shadow: boolean): Tube {
@@ -475,7 +478,7 @@ export function stepDynamicLight(ctx: GameContext, dt: number): void {
       if (tb.mesh) tb.mesh.rotation.x = a;
       // Hard shadows, live only in the player's carriage (the zombies move, the tube swings).
       // Every other step (half-rate: the zombies move slowly enough; the cost is ~2 shadow passes).
-      if (l.room === here && l.level > 0 && (rt.shadowTick & 1) === 0) tb.spot.shadow.needsUpdate = true;
+      if (l.room === here && l.level > 0 && (rt.shadowTick & 1) === 0 && tubeShadowUpdates) tb.spot.shadow.needsUpdate = true;
     }
     if (l.bowl) l.bowl.emissiveIntensity = BOWL_EMISSIVE * l.level;
     const key = `${l.room}:${lampKind(l)}`;   // beacons key their own sum, which no glass reads
@@ -831,6 +834,8 @@ export function createDynamicLightSeams(ctx: GameContext) {
      *  already past its stutter) or off (no script: its `dead` mood). A script override, so the
      *  level, spot, beam, housing and shadow all follow as in play; `.visible` is never touched.
      *  Takes effect on the next sim step. */
+    /** Measurement only: false stops the tubes' live shadow re-renders (see `tubeShadowUpdates`). */
+    setTubeShadowUpdates: (on: boolean) => { tubeShadowUpdates = on; },
     setBeaconsOn: (on: boolean) => {
       const rt = ctx.world.light;
       if (!rt) return null;

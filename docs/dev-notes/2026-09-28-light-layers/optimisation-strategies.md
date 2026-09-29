@@ -6,7 +6,22 @@ measure before and after (`attributePassSamples` for GPU passes — on Apple GPU
 residency, not cost; the light gate's cost section `LIGHT_GATE_ONLY_COST=1` for frame medians; quiet machine, load
 average under 4).
 
-## 1. Tube shadow maps (largest known cost: ~4–9 ms per carriage)
+## MEASURED 2026-09-29 (quiet machine, load ~4) — read this before the sections below
+
+The "tube shadows are ~4–9 ms per carriage" figure below was wrong: the cost harness runs with the sim frozen, so it
+never re-rendered a shadow map, and the number was really the tubes' lights in the level materials. Measured properly
+(`LIGHT_GATE_TUBE_SHADOW=1 LIGHT_GATE_ONLY_COST=1 scripts/sdf-game-light-gate.sh`, sim steps + draws):
+
+- **Live tube shadow re-renders: 0.0 ms (third class), +0.3..1.0 ms (Boiler Room).** So the static/dynamic bake in §1
+  would save under 1 ms: **not worth building.** 256² maps done (`TUBE.shadowSize`), cost neutral.
+- **A real three.js light costs its level materials ~1 ms a frame per room** (`sdf:shell-hull` pass). The wins:
+  every tube's omni spill made list-only (**−3 ms Boiler Room**, −0.5 third class, frames indistinguishable), and the
+  Boiler Room's second tube row built list-only (**+2 ms instead of +10**).
+- What the tube system costs now (`?tubes=0` vs default): about **+4 ms per carriage**, of which beams 0, shadow-map
+  sampling ~0.7 (Boiler Room), live shadow renders ~0–1, the rest (~3 ms) the tube spots themselves in the level
+  materials. The only structural fix left is §2 below (level materials on the shared list).
+
+## 1. Tube shadow maps (largest known cost: ~4–9 ms per carriage) — SUPERSEDED, see above
 
 Today (`game-dynamic-light-leaves.ts`, `TUBE`): every tube is a `SpotLight` with a **512²** hard shadow map. Maps
 render once at boot, then **every other sim step for every lit tube in the player's carriage** (`rt.shadowTick & 1`).
