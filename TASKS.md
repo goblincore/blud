@@ -17,7 +17,7 @@
 - [x] **Boiler Room resize to 8 × 28 m** (2026-09-28): kit, level, gates, look sheet, cost — all PASS; +60 draws /
   +6.7 ms art, beacons +1.05 ms. [Notes + sheets](docs/dev-notes/2026-09-28-boiler-resize/notes.md). **Owner calls, done 2026-09-29** ([notes + sheets](docs/dev-notes/2026-09-29-boiler-calls/notes.md)): second tube row (8 tubes;
   only 4 cast shadows — WebGPU's 16-texture limit), `DISCO.count` 144, and a `beaconTorch` look switch for beacon
-  weight on torch-lit bodies (default 1 = unchanged; **owner to pick a value** from the sheet). Frame cost of the extra
+  weight on torch-lit bodies (**2.5, owner's pick**). Frame cost of the extra
   spots not yet measured (needs a quiet machine).
 - [ ] **Optimisation (parked, owner 2026-09-28):** tube shadow maps **256² — done 2026-09-29** (`TUBE.shadowSize`; train gate's correctness checks pass, its cost
   section could not be judged at load 14), then bake the static

@@ -23,11 +23,11 @@ Not measured: the frame cost of four more (shadowless) spots — needs a quiet m
 
 Denser, still reads as sparkle rather than noise ([stars144.png](stars144.png)). The disco check pins 144.
 
-## 3. Beacon weight on torch-lit bodies — a switch, default OFF (owner to pick)
+## 3. Beacon weight on torch-lit bodies — `beaconTorch` 2.5 (owner's pick)
 
 With the torch lit the old per-pixel beam keys the body; the beacon's red barely tints it. `setListLook({ beaconTorch: k })`
 scales the beacon profile's gain and back rim by k **only while the torch is lit** (`setTorchLit`, written each frame by
-`writeLightList`); default 1 leaves the packed table byte-identical (unit-tested), so march-hash pins are unaffected.
+`writeLightList`); 1 leaves the packed table byte-identical (unit-tested); the shipped default is now **2.5**, which changes only torch-lit bodies near a beacon, so the march-hash pins (torch off) should hold — not re-run (needs a quiet machine).
 [beacon-torch.png](beacon-torch.png): torch off (flat saturated red, the blow-out), then torch on at x1 / x2.5 / x4. x4
 is a visible but modest move (redder rims and shoulders, still pink overall). Torch-off is untouched by this knob.
-To ship a value: set `look.beaconTorch` in `light-list.ts`.
+Owner chose x2.5 (2026-09-29); the value lives in `look.beaconTorch` in `light-list.ts`.
