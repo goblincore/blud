@@ -38,9 +38,11 @@ export const REGION_TUNING = {
   crownSpill: 0.5,
   orbitExposed: 0.35,
   skullExposed: 0.3,
-  /** Spec §15 says 0.5; 0.4 because the hit that exposes the skull also cracks it (rule order), and at 0.5
-   *  a brow-centred kill came on hit 4 (below the 5–7 target). At 0.4 it is 5 (jitter 1), 7 (−20%), 5 (+20%). */
-  skullPerHit: 0.4,
+  /** v1.4 (flail spec §13.2: tougher zombies, a head kill in about 7–10 hits). The spec's 0.34 with the R/L strip
+   *  0.20 kills a single region on hit 6 (jitter 1; 8 at −20%, 5 at +20%): the hit that exposes the skull (hit 4,
+   *  flesh 0.2) also cracks it (rule order), so 0.34 × 3 ≥ 1 on hit 6. At 0.25 it is 7 (jitter 1), 9 (−20%),
+   *  6 (+20%); with the H strip 0.28, 6. (v2 was 0.4 with strips 0.25/0.35: 5–7.) */
+  skullPerHit: 0.25,
   jitter: 0.2,
   /** Strip changes below this are applied but not reported as events. */
   stripEventMin: 0.02,
@@ -99,7 +101,7 @@ export function nearestRegion(hs: HS): HeadRegion {
 const skullBare = (flesh: Record<HeadRegion, number>, r: SkullRegion): boolean => flesh[r] < REGION_TUNING.skullExposed;
 
 /** One head-region hit. `hs`: the hit point, head-local ÷ half-extents. `strip`: the swing's flesh strip
- *  (0.25 R/L, 0.35 H). `rand`: the zombie's seeded stream in [0, 1); one draw per hit (the jitter). */
+ *  (0.20 R/L, 0.28 H; game-head-damage.ts HEAD_LEAF.strip). `rand`: the zombie's seeded stream in [0, 1); one draw per hit (the jitter). */
 export function headHit(
   s: HeadDamageState, hit: { hs: HS; strip: number }, rand: () => number,
 ): { state: HeadDamageState; events: HeadEvent[] } {

@@ -27,7 +27,7 @@
 //   3. the next head hit (the first BROW hit) SNAPS it: eyes.L 'gone' on the strike frame; 40 frames on (bleed off)
 //      the socket is still a dark hole (the same luma measure; photos v2-snapped.png / -noblood). Then the brow until dead:
 //      - the skull was exposed (brow or crown flesh < skullExposed) on an earlier hit than the brain;
-//      - the kill came at 5–9 total head hits; exactly one brain MESH gib (head.brains()); live SDF chunks up by
+//      - the kill came at 8–14 total head hits (v1.4; 5–9 before); exactly one brain MESH gib (head.brains()); live SDF chunks up by
 //        >= 4 over the killing hit (lumps + chips);
 //      - photos v2-skull.png (blood) / -noblood (settled, the hit that exposed it) and v2-brain.png (+3 frames).
 //   4. thawed 3 frames: the zombie is out of 'standing'; the head is still on (limbAlive > 0).
@@ -55,7 +55,9 @@ const EYE_H = 1.62;          // PLAYER.eye
 const STAND = 0.9;           // swing stand: horizontal distance from the head centre, m
 const PHOTO_D = 0.55;        // face photo stand, m (camera lifted to the head centre's height)
 // The plan's thresholds (do not loosen).
-const ORBIT_HITS_MIN = 2, ORBIT_HITS_MAX = 5, KILL_HITS_MIN = 5, KILL_HITS_MAX = 9, MAX_HEAD_SLOTS = 7;
+// v1.4 (flail spec §13.2, tougher: strips 0.20 R/L, 0.28 H; skullPerHit 0.25): this gate's sequence (orbitL until
+// exposed, the pop, then the brow) kills at 9–14 total head hits in the model across the jitter (it was 5–9).
+const ORBIT_HITS_MIN = 2, ORBIT_HITS_MAX = 5, KILL_HITS_MIN = 8, KILL_HITS_MAX = 14, MAX_HEAD_SLOTS = 7;
 const GLOW_DROP_MIN = 0.8;
 const SQUASH_PEAK_MIN = 0.35, REBOUND_MIN = 0.12, REBOUND_FRAMES = 10, SETTLE_FRAMES = 84, SQUASH_SETTLE_MAX = 0.0025;
 const BONE_THRU_MAX = 0.005, CRATER_MARGIN = 0.02;

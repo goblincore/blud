@@ -6,6 +6,11 @@ import { HEAD_REGIONS, REGION_TUNING, headDeath, headHit, makeHeadDamage, neares
 const k = (ev: HeadEvent[]) => ev.map(e => e.kind);
 const at = (r: keyof typeof HEAD_REGIONS) => HEAD_REGIONS[r];   // a hit exactly on a region centre (hs)
 const noJitter = () => 0.5;                                    // rand → jitter factor 1
+// v1.4 toughness (flail spec §13.2): the R/L strip, and the kill windows — a single region in 7–10 hits with no
+// jitter, the jitter extremes (rand 0 and 0.999: ×0.8 and ×1.2) inside 6–11.
+const STRIP = 0.2;
+const KILL = [7, 10] as const, KILL_JITTER = [6, 11] as const;
+const inWindow = (n: number, w: readonly [number, number]) => { expect(n).toBeGreaterThanOrEqual(w[0]); expect(n).toBeLessThanOrEqual(w[1]); };
 
 describe('head damage v2', () => {
   it('a hit strips the nearest region most and spills to neighbours; upper-face hits also strip the crown', () => {
@@ -36,16 +41,16 @@ describe('head damage v2', () => {
     for (let i = 0; i < 4; i++) d = headHit(d, { hs: at('orbitR'), strip: 0.25 }, noJitter).state;
     expect(headDeath(d).events).toEqual([{ kind: 'eye-snap', side: 'R' }]);
   });
-  it('skull exposed on the brow, then about two skull hits bring the brain out and kill', () => {
+  it('skull exposed on the brow, then a few skull hits bring the brain out and kill', () => {
     let s = makeHeadDamage(); let all: HeadEvent[] = [];
-    for (let i = 0; i < 8 && !s.dead; i++) { const r = headHit(s, { hs: at('brow'), strip: 0.25 }, noJitter); s = r.state; all = all.concat(r.events); }
+    for (let i = 0; i < 12 && !s.dead; i++) { const r = headHit(s, { hs: at('brow'), strip: STRIP }, noJitter); s = r.state; all = all.concat(r.events); }
     const exposedAt = all.findIndex(e => e.kind === 'skull-exposed');
     const brainAt = all.findIndex(e => e.kind === 'brain');
     expect(exposedAt).toBeGreaterThanOrEqual(0);
     expect(brainAt).toBeGreaterThan(exposedAt);
     expect(k(all)).toContain('kill');
     expect(s.dead).toBe(true);
-    expect(s.hits).toBeGreaterThanOrEqual(5); expect(s.hits).toBeLessThanOrEqual(7);
+    inWindow(s.hits, KILL);
   });
   it('jitter changes when things happen (not an exact hit number)', () => {
     const run = (rand: () => number) => { let s = makeHeadDamage(); let n = 0;
@@ -57,11 +62,18 @@ describe('head damage v2', () => {
   });
 
   // Beyond the plan's list: the edges the rules name.
-  it('brow hits kill in 5–7 at both jitter extremes', () => {
+  it('brow hits kill in 6–11 at both jitter extremes', () => {
     for (const v of [0, 0.999]) {
       let s = makeHeadDamage(); let n = 0;
-      while (!s.dead && n < 20) { s = headHit(s, { hs: at('brow'), strip: 0.25 }, () => v).state; n++; }
-      expect(n).toBeGreaterThanOrEqual(5); expect(n).toBeLessThanOrEqual(7);
+      while (!s.dead && n < 20) { s = headHit(s, { hs: at('brow'), strip: STRIP }, () => v).state; n++; }
+      inWindow(n, KILL_JITTER);
+    }
+  });
+  it('the H swing\'s strip (0.28) still takes several hits: brow kill in 5–9 across the jitter', () => {
+    for (const v of [0, 0.5, 0.999]) {
+      let s = makeHeadDamage(); let n = 0;
+      while (!s.dead && n < 20) { s = headHit(s, { hs: at('brow'), strip: 0.28 }, () => v).state; n++; }
+      inWindow(n, [5, 9]);
     }
   });
   it('the popping hit does not strip that orbit; the skull and eye events fire once', () => {
@@ -94,23 +106,23 @@ describe('head damage v2', () => {
     expect(nearestRegion([0.6, -0.35, 0.7])).toBe('cheekR');
   });
   // Head damage v2, as built (spec §15): the skull is per region, and a region's crater is anchored where it was struck.
-  it('the side of the head (cheekL) exposes skull and cracks: the brain comes out of the cheek and kills in 5–7', () => {
+  it('the side of the head (cheekL) exposes skull and cracks: the brain comes out of the cheek and kills in 7–10', () => {
     const side: [number, number, number] = [-0.96, -0.23, -0.19];   // the flail gate's side stand (nearest cheekL)
     expect(nearestRegion(side)).toBe('cheekL');
     for (const v of [0, 0.5, 0.999]) {
       let s = makeHeadDamage(); let all: HeadEvent[] = []; let n = 0;
-      while (!s.dead && n < 20) { const r = headHit(s, { hs: side, strip: 0.25 }, () => v); s = r.state; all = all.concat(r.events); n++; }
-      expect(n).toBeGreaterThanOrEqual(5); expect(n).toBeLessThanOrEqual(7);
+      while (!s.dead && n < 20) { const r = headHit(s, { hs: side, strip: STRIP }, () => v); s = r.state; all = all.concat(r.events); n++; }
+      inWindow(n, v === 0.5 ? KILL : KILL_JITTER);
       expect(all).toContainEqual({ kind: 'skull-exposed', region: 'cheekL' });
       expect(all).toContainEqual({ kind: 'brain', region: 'cheekL' });
       expect(all.findIndex(e => e.kind === 'skull-exposed')).toBeLessThan(all.findIndex(e => e.kind === 'brain'));
     }
   });
-  it('hits concentrated on the crown or a cheek kill in 5–7 at both jitter extremes; orbit hits never crack', () => {
-    for (const reg of ['crown', 'cheekR'] as const) for (const v of [0, 0.999]) {
+  it('hits concentrated on the crown or a cheek kill in 7–10 (6–11 at the jitter extremes); orbit hits never crack', () => {
+    for (const reg of ['crown', 'cheekR'] as const) for (const v of [0, 0.5, 0.999]) {
       let s = makeHeadDamage(); let n = 0;
-      while (!s.dead && n < 20) { s = headHit(s, { hs: at(reg), strip: 0.25 }, () => v).state; n++; }
-      expect(n).toBeGreaterThanOrEqual(5); expect(n).toBeLessThanOrEqual(7);
+      while (!s.dead && n < 20) { s = headHit(s, { hs: at(reg), strip: STRIP }, () => v).state; n++; }
+      inWindow(n, v === 0.5 ? KILL : KILL_JITTER);
     }
     let s = makeHeadDamage();
     for (let i = 0; i < 12; i++) s = headHit(s, { hs: at('orbitL'), strip: 0.35 }, noJitter).state;

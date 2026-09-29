@@ -42,11 +42,12 @@ export const FLAIL_FEEL = {
   /** dt multiplier while a hit-stop runs: near-frozen, never 0. */
   hitStopScale: 0.08,
   kickRad: 0.02,
-  /** Per swing: collapse credit (threshold 0.8 → ~8 body hits), shove (blast() unit-normalises it), hit-stop. */
+  /** Per swing: collapse credit (threshold 0.8 → ~12 body hits, spec §13.2; a head hit credits 0.3 of it,
+   *  game-head-damage.ts HEAD_LEAF.meterScale — the head model kills), shove (blast() unit-normalises it), hit-stop. */
   swing: {
-    R: { meterCredit: 0.1, shove: 6, hitStopSec: 0.05 },
-    L: { meterCredit: 0.1, shove: 6, hitStopSec: 0.05 },
-    H: { meterCredit: 0.14, shove: 9, hitStopSec: 0.07 },
+    R: { meterCredit: 0.065, shove: 6, hitStopSec: 0.05 },
+    L: { meterCredit: 0.065, shove: 6, hitStopSec: 0.05 },
+    H: { meterCredit: 0.09, shove: 9, hitStopSec: 0.07 },
   },
 } as const;
 

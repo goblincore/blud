@@ -73,8 +73,11 @@ import { mulberry32 } from '../melt-bones';
 export const HEAD_LEAF = {
   /** A hit's lasting dent depth (spec §5). */
   dentDepth: 0.018,
-  /** The flesh strip per swing (spec §15): R and L 0.25, the overhead H 0.35. */
-  strip: { R: 0.25, L: 0.25, H: 0.35 } as Record<'R' | 'L' | 'H', number>,
+  /** The flesh strip per swing (flail spec §13.2, v1.4: tougher; head spec §15 had R and L 0.25, H 0.35). */
+  strip: { R: 0.2, L: 0.2, H: 0.28 } as Record<'R' | 'L' | 'H', number>,
+  /** A head hit's share of the swing's collapse credit (flail spec §13.2): the head model kills, not the meter
+   *  (R/L 0.065 × 0.3 ≈ 0.02 per head hit). */
+  meterScale: 0.3,
   /** The eye's spring-out speed along the reflected blow (spec §6). */
   popSpeed: 2.5,
   /** The eyeballs' iris: the face sheet's glow colour (faceGlowColor, march/body/face.wgsl.ts). */
@@ -378,7 +381,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       const w = worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field);
       w.severRadius = 0;
       clothifyWound(posed.prims, w, 'heavy');
-      a.blast({ wounds: [w], meterCredit: feel.meterCredit, impulse, reaction: 'blast' });
+      a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast' });
       deps.bleed(a, w, point, dir, 'slug');
       return;
     }
@@ -532,7 +535,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           break;
       }
     }
-    a.blast({ wounds, meterCredit: feel.meterCredit, impulse, reaction: 'blast', forceCollapse });
+    a.blast({ wounds, meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', forceCollapse });
     // Head strips bleed a PELLET's gout (spec §15), and so does the brain stage (spec §14: so the brain is seen).
     if (bleedAt) deps.bleed(a, bleedAt, point, dir, 'pellet');
   }

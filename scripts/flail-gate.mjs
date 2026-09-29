@@ -1,8 +1,9 @@
 // scripts/flail-gate.mjs — the spike flail lands one big crater, refuses out-of-reach and
 // out-of-arc targets, chains R → L → H on quick clicks, sweeps H wide enough to catch two
 // zombies flanking the crosshair, wears a head's flesh away over crosshair-aimed hits until the
-// brain kills (head damage v2) without ever taking it off, and needs at least seven body
-// hits to drop a zombie (Tasks 6, 11, 12 and 18–21 of the spike-flail plan; spec docs/superpowers/specs/2026-09-26-spike-flail-design.md
+// brain kills (head damage v2) without ever taking it off, needs at least ten body hits to
+// drop a zombie, and lands a head-aimed strike at a walking zombie on its head (Tasks 6, 11,
+// 12, 18–21 and 23 of the spike-flail plan; spec docs/superpowers/specs/2026-09-26-spike-flail-design.md
 // §12; notes and photos in docs/dev-notes/2026-09-26-flail/NOTES.md).
 //
 // Headless gate on /sdf-game.html?seed=1&vhs=off&loader=0 (the sandbox; its arena — the
@@ -46,8 +47,9 @@
 //      when no kill came);
 //   7. hits to collapse: a fresh zombie; before every click the crosshair is put on its
 //      CURRENT torso centre from 1.2 m. Click until collapse.ts's phase leaves 'standing' or
-//      12 clicks. The collapse must come on hit ≥ COLLAPSE_MIN (7: meterThreshold 0.8, 0.10
-//      credit/R-or-L hit, 0.14/H hit), and hit 1's wound radius is CRATER_R (0.09) ± 0.005;
+//      COLLAPSE_CLICKS (16) clicks. The collapse must come on hit ≥ COLLAPSE_MIN (10: meterThreshold
+//      0.8, 0.065 credit/R-or-L hit, 0.09/H hit — spec §13.2), and hit 1's wound radius is
+//      CRATER_R (0.09) ± 0.005;
 //   8. crosshair accuracy: every head- and collapse-section hit's STRIKE-TIME hit point
 //      (lastStrike.points[id], resolveStrike's own snapped surface point) lands within
 //      AIM_MAX (5 cm) of the strike ray (lastStrike.eye → lastStrike.impact, the crosshair's
@@ -91,18 +93,19 @@ const OUT = process.env.OUT ?? 'docs/dev-notes/2026-09-26-flail/gate';
 const W = Number(process.env.W ?? 1280), H = Number(process.env.H ?? 800);
 const CRATER_R = 0.09;      // FLAIL_FEEL.craterR (game-flail.ts)
 // Head damage v2 (game-head-damage.ts; spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md
-// §15): every head hit strips flesh region by region; the brain comes out and kills at 5–7 hits in the
-// model's own tests, 5–9 in play (the head-damage gate's bound: jitter, where the blows land). All head
-// craters have severRadius 0 — the flail never decapitates (flail spec §12.3).
-const KILL_MIN = 5, KILL_MAX = 9;
+// §15): every head hit strips flesh region by region; the brain comes out and kills. v1.4 (flail spec §13.2,
+// tougher): 7–10 hits on a single region in the model's own tests, 7–12 in play here (jitter, where the blows
+// land). All head craters have severRadius 0 — the flail never decapitates (flail spec §12.3).
+const KILL_MIN = 7, KILL_MAX = 12;
 // The struck region's crater (anchored at its first strike) within this of the strike point (hits 2+). The
 // fixed cheekL centre the side stand used to crater sits ~10 cm from where the side hits land.
 const ANCHOR_MAX = 0.05;
-const HEAD_HITS_MAX = 10;   // crosshair-aimed clicks the gate allows before calling the kill missing
+const HEAD_HITS_MAX = 12;   // crosshair-aimed clicks the gate allows before calling the kill missing
 // A region crater sits at its region's surface point — the crown's ~0.2 m from actorLimbCenter('head')
 // (the head cluster's centre) — so a head-region wound must sit on a `head` prim within this of it.
 const ON_HEAD = 0.26;
-const COLLAPSE_MIN = 7;     // meterThreshold 0.8; 0.10 credit/R-or-L hit, 0.14/H hit (spec §12.2)
+const COLLAPSE_MIN = 10;    // meterThreshold 0.8; 0.065 credit/R-or-L hit, 0.09/H hit (spec §13.2: ~12 body hits)
+const COLLAPSE_CLICKS = 16; // clicks the collapse section allows before calling the collapse missing
 const AIM_MAX = 0.05;       // every head/collapse crater must land within this of the crosshair's
                              // own ray (lastStrike.eye → lastStrike.impact, spec §12.4)
 const TOO_WIDE_DEG = 80;    // outside H's ±70° arc as well as R/L's ±50°
@@ -720,7 +723,7 @@ let tooFarZ = null;   // untouched here (the strike is refused): the LIVE sectio
   const woundList = (id) => evaluate(`__sdfGame.zombie(${id}).woundList()`);
   const posedOf = (id) => evaluate(`__sdfGame.zombie(${id}).posed()`);
   let hitsTaken = 0, finalPhase = 'standing';
-  for (let clickNum = 1; clickNum <= 12; clickNum++) {
+  for (let clickNum = 1; clickNum <= COLLAPSE_CLICKS; clickNum++) {
     // Re-place from the CURRENT torso centre every click: the thaw below lets the
     // zombie take one step, so a stale pose could drift off-arc.
     const t = await torso(z.id);
