@@ -732,3 +732,40 @@ Owner: aiming at the head hits the body; zombies go down too fast; the ball alwa
   red blood blob (not cleared by `setBleed(false)`) now overlaps the measuring circle; the model states are
   right. Plus the known pop-socket darkness check.
 - Head hits still miss when the zombie lunges more than 18 cm during the swing.
+
+## v1.5a (2026-09-29): impact
+
+Owner: hits lack impact ("recoil or judder"); the recording showed the head wobble etc. but "at game speed
+it was easy to miss — a little slower, just slightly"; shutter blur on the ball and chain; "accumulate shiny
+blood"; "both eyes should pop out at once".
+
+- **Impact module** (`flail-impact.ts`, pure; scale R/L 1.0, H 1.4, head ×1.2):
+  - Time: hit-stop 70 ms (H 100 ms) at scale 0.08, then a slow tail stepping to 0.4 and easing back to exactly
+    1.0 over 0.3 s (H 0.35 over 0.4 s), on unscaled dt.
+  - Camera: a pitch kick 0.045 rad (4 Hz, ζ 0.55, about 12% overshoot); judder 12 mm eye offset + 0.7° roll,
+    decaying below 1% by 0.3 s; an FOV pinch of −3° (50 ms in, 20 ms hold, 200 ms out).
+  - View model: the rig kicks 10 cm back, 4 cm up, 12° pitch, 5° roll on a 7 Hz, ζ 0.45 spring (two
+    overshoots, settled by 0.3 s). The chain guide relaxes for 50 ms so it snaps taut and whips.
+  - Zombie: reaction gain 1.3 (a new `ActorBlastEffect.gain`, since `blast()` normalises the impulse) and a
+    head snap (`ZombieActor.rigImpulse`, 0.10 m) on head hits.
+  - Gate section 12 measures all of it. `setHitStop(false)` also disables the slow tail (deterministic gate
+    frames); `setImpactFx(false)` disables the camera and rig effects.
+- **Shutter blur** (`flail-blur.ts`): the ball and the chain's 7 segments feed the gib shutter layer while a swing
+  is above 4 m/s. Gains ball 0.06, chain 0.08, spin off (at full strength the ball dissolved into a band).
+  Found and fixed a bug in the warm-up clone trick (the chain vanished when blurred; the deleted censer blur
+  probably had it). `look/blur-off-vs-on.png`.
+- **Blood** (`flail-blood.ts`): +0.12 per striking swing (×1.5 H, ×1.3 head), dries with a 120 s time constant.
+  Spikes, the lower chain, the haft's lower streaks and its cap take dark red with a wet glint; each part has its
+  own material clone. `look/blood-ball-0-03-1.png` (levels 0, 0.3, 1.0).
+- **Both eyes pop at once:** when one eye pops, the other pops in the same hit and both snap together. Two draws
+  while both dangle; the measured cost was +1.25 to +1.85 ms over baseline in two runs (the gate's A/B is noisy).
+
+**For the owner (v1.5a):** does the hit now land with weight? Is the slow tail "slightly slower" or too
+much? Is the camera judder and FOV pinch too strong or too weak? Does the blur help the swing read? Is the
+blood level right (0.12 per hit)? Do both eyes popping at once read?
+
+**Open:**
+- The first swing after load has one slow frame (31–39 ms against ~25 ms), the same with blur off; not chased.
+- Head-gate measurements spoiled by blood blobs (see v1.4), and the known dark-socket check.
+- FOV punch: the sdf layer's cone stays at the base FOV (safe direction), and the view model magnifies ~6%
+  during the pinch.

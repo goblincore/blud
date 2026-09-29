@@ -326,7 +326,7 @@ Decisions (owner, 2026-09-29): build **v1.5a (impact)** first, then **v1.5b (fle
 All four impact options were chosen (view-model recoil, camera judder, stronger hit-stop with an FOV punch,
 a zombie reaction) and the three flesh options (torn lips, flying flesh chunks, red matter strings).
 
-### 14.1 v1.5a — impact
+### 14.1 v1.5a — impact (BUILT 2026-09-29; owner playtest pending)
 
 Every effect scales by swing: R and L 1.0, H 1.4; head-region hits add 20%.
 

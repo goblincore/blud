@@ -6,7 +6,11 @@
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
-- [~] **v1.4 built (2026-09-29); owner playtest pending.** A head magnet (a strike within 18 cm of the head hits the
+- [~] **v1.5a built (2026-09-29); owner playtest pending.** Impact: a slow tail after each hit, view-model recoil,
+  camera judder + FOV pinch, a bigger zombie reaction, shutter blur on the ball and chain, blood that builds up on
+  the flail, and both eyes popping at once. Spec §14.1. **v1.5b next:** torn splayed wound lips, flying flesh
+  chunks, red matter strings (spec §14.2).
+- [x] **v1.4 built (2026-09-29); playtested.** A head magnet (a strike within 18 cm of the head hits the
   head, through raised arms), tougher zombies (~11 body hits; head kills ~8), and the ball trails behind the swing.
   Spec §13.
 - [x] **v1.3 built (2026-09-28); playtested 2026-09-29** (feedback → v1.4). Gate passing. Chained clicks run R (overhand) → L (cross) →
