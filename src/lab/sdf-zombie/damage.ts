@@ -40,6 +40,9 @@ export interface Wound {
   eventId?: number;
   /** Head damage model (head-damage.ts): the head keeps at most MAX_HEAD_WOUNDS craters of its own; 'keep' craters (the eye socket, the scalp, the brain) outlive 'face' ones and survive the total cap. */
   headSlot?: 'keep' | 'face';
+  /** Head damage v2 (head-damage.ts, spec §15): the head region this crater belongs to. A region keeps one
+   *  crater: a new one with the same headRegion replaces its predecessor in place. */
+  headRegion?: string;
   shot?: ShotProvenance;
   /** Exposed stump decoration, not another projectile injury. */
   injuryIgnored?: boolean;
@@ -539,13 +542,23 @@ export function clothifyWound(prims: Primitive[], wound: Wound, calibre: ClothCa
   return wound;
 }
 
-/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts. */
-export const MAX_HEAD_WOUNDS = 5;
+/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts: six regions
+ *  and the brain cavity. */
+export const MAX_HEAD_WOUNDS = 7;
 
-/** Ring buffer append. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted
- *  first), and the total cap evicts the oldest wound that is not a 'keep' head crater. A ring with no
- *  head tags evicts oldest-first, exactly as before. */
+/** Ring buffer append. A wound with a headRegion replaces an earlier wound of the same region, in that
+ *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
+ *  and the total cap evicts the oldest wound that is not a 'keep' head crater. A ring with no head tags
+ *  evicts oldest-first, exactly as before. */
 export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
+  if (wound.headRegion !== undefined) {
+    const prev = ring.findIndex(x => x.headRegion === wound.headRegion);
+    if (prev >= 0) {
+      const replaced = [...ring];
+      replaced[prev] = wound;
+      return replaced;
+    }
+  }
   const next = [...ring, wound];
   if (wound.headSlot) {
     const head = next.filter(x => x.headSlot);
