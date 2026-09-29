@@ -73,6 +73,11 @@ export interface Wound {
   /** Render-only: a single crater with a noise-ragged edge (0..0.45, the fraction of
    *  radius its edge can grow by). Absent = a round crater. See soldier-wounds.ts. */
   ragged?: number;
+  /** Render-only: TORN, SPLAYED LIPS (flail v1.5b, torn-lips.ts), 0..1 intensity. The wound
+   *  uploads with ROW_WOUND_FLAGS.x bit 3: a two-octave ragged edge, petal-shaped taller rim
+   *  pushed outward, a wet red lip over a glossy red interior and a clotted floor. Absent or 0
+   *  = the stock look, pixel for pixel. Set with `tearWound`. */
+  tear?: number;
   /**
    * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
    * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses
@@ -539,6 +544,15 @@ export function clothifyWound(prims: Primitive[], wound: Wound, calibre: ClothCa
   if (wound.carveDepth !== undefined) wound.carveDepth = Math.min(wound.carveDepth, wound.radius);
   delete wound.cavity;
   delete wound.spillCalibre;
+  return wound;
+}
+
+/** Marks `wound` torn (Wound.tear, clamped to 0..1): the flail's wounds (game-flail.ts,
+ *  game-head-damage.ts). A cloth DECAL carves nothing, so it has no lip to tear and is left
+ *  alone. Returns the wound. */
+export function tearWound(wound: Wound, tear: number): Wound {
+  if (wound.decal || !(tear > 0)) return wound;
+  wound.tear = Math.min(1, tear);
   return wound;
 }
 

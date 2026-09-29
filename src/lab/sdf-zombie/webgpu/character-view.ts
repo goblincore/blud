@@ -40,6 +40,7 @@ import { DEFAULT_FACE, type FaceParams } from '../face';
 import type { FleshMaterial } from '../material';
 import type { BodyDef, Vec3 } from '../types';
 import type { VisualWound } from '../shared-wounds/torso';
+import { tearUpload } from '../torn-lips';
 import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
@@ -419,13 +420,16 @@ export function createWoundRing(): WoundRing {
       // translation.
       const map = (v: Vec3, w: Wound, dir: boolean): Vec3 =>
         xf ? xf(v, w.primIdx, dir) : v;
+      // Torn wounds (Wound.tear, torn-lips.ts): a raised ragged fraction, a taller lip pushed
+      // outward, and flags bit 3. tear absent/0 = the stock values exactly.
+      const torn = rows.map(w => tearUpload(w.tear, w.ragged));
       gpu.setWounds(
         rows.map(w => map(woundWorldPos(posed.prims, w, bodyYaw), w, false)),
         rows.map(w => w.radius),
-        rows.map(w => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type] + Math.min(0.45, Math.max(0, w.ragged ?? 0))),
+        rows.map((w, i) => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type] + Math.min(0.45, Math.max(0, torn[i]!.torn ? torn[i]!.ragged : w.ragged ?? 0))),
         rows.map(w => w.ageSec),
-        rows.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
-        rows.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+        rows.map((w, i) => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1) * torn[i]!.splayMul),
+        rows.map((w, i) => WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul),
         rows.map(w => {
           const n = woundCarveNormal(posed.prims, w, bodyYaw);
           // The preview repacks slots as its second cutter appears. Clear
@@ -445,6 +449,8 @@ export function createWoundRing(): WoundRing {
         rows.map(w => w.cloth === 'hole'),
         // Soft-target cloth decals are painted on, never carved (damage.ts).
         rows.map(w => !!w.decal),
+        // Torn lips (flags bit 3); a decal never tears (it carves nothing).
+        rows.map((w, i) => torn[i]!.torn && !w.decal),
       );
     },
   };

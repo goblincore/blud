@@ -4,6 +4,10 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
+import { TORN } from '../../../../../torn-lips';
+
+const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+
 export const WET_BLOCK = /* wgsl */ `  // Wounds are wetter than the surrounding skin; char is dead matte. Gore
   // rides the same boost: bloody chunk regions glisten like open wounds.
   // gloss pulls a painted surface toward a tight, fully wet highlight
@@ -20,6 +24,14 @@ export const WET_BLOCK = /* wgsl */ `  // Wounds are wetter than the surrounding
   let wetWound = max(wm * lip, gore);
   let woundWetBoost = mix(1.6, 2.15, faceGlowRedOnly);
   var wet = mix(surfCfg2.x * mix(1.0, woundWetBoost, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone) * select(1.0, 1.8, isOrgan), 1.0, gloss);
+  // TORN LIPS (SOLDIER_MEAT's tornWound, 0 off tear-flagged wounds, so this is skipped
+  // there): the whole tear is wet, not just the lip — the everted lip and the walls
+  // glisten, the clotted floor less. Only ever raises wet; bone/organ are excluded
+  // upstream (tornWound), and a DEFERRED frame folds this wet into roughness the same way.
+  if (tornWound > 0.0) {
+    let tornWet = surfCfg2.x * woundWetBoost * mix(${f(TORN.WET_LIP)}, ${f(TORN.WET_FLOOR)}, smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth));
+    wet = max(wet, mix(wet, tornWet, tornWound * (1.0 - cm)));
+  }
   // Melt wetness (task 6): liquefying flesh goes FULLY wet — the puddle
   // glistens. FLESH ONLY: bone stays matte (the anchor comment above — wet
   // skin reflects, wet bone just looks polished), and that matte-vs-wet

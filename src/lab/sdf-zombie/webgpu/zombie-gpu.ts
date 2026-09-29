@@ -25,6 +25,7 @@ import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
 import { bendCtrl, qRotate, qMul, type Quat, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
+import { TORN } from '../torn-lips';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
   TILE_SIZE_PX,
@@ -106,7 +107,9 @@ export interface ZombieGpuView {
      *  ROW_WOUND_FLAGS.x bit 1. Omitted = none. */
     holes?: readonly boolean[],
     /** Per-wound CLOTH DECAL flags (damage.ts clothDecal): bit 2. Omitted = none. */
-    decals?: readonly boolean[]): void;
+    decals?: readonly boolean[],
+    /** Per-wound TORN flags (damage.ts Wound.tear, the flail): bit 3. Omitted = none. */
+    tears?: readonly boolean[]): void;
   /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
    *  Ships ON — the cull is a value no-op (outside the bound every per-wound
    *  reach test would `continue`). false parks the bound's radius at 1e9 (the
@@ -2010,6 +2013,16 @@ export interface WriteWoundsLayout {
   stride?: number;
 }
 
+/** ROW_WOUND_FLAGS.x integer-part bits (the WGSL readers test `i32(flags.x) & bit`). */
+export const WOUND_FLAG = { cavity: 1, hole: 2, decal: 4, tear: 8 } as const;
+
+/** The integer part of ROW_WOUND_FLAGS.x for one wound. The threat mask rides the
+ *  fraction (see writeWounds), so this stays an integer <= 15. */
+export function woundFlagBits(f: { cavity?: boolean; hole?: boolean; decal?: boolean; tear?: boolean }): number {
+  return (f.cavity ? WOUND_FLAG.cavity : 0) + (f.hole ? WOUND_FLAG.hole : 0)
+    + (f.decal ? WOUND_FLAG.decal : 0) + (f.tear ? WOUND_FLAG.tear : 0);
+}
+
 export function writeWounds(
   texels: Float32Array,
   worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
@@ -2039,6 +2052,10 @@ export function writeWounds(
    *  clothDecal): bit 2 (value 4). The carve skips the wound and the paint
    *  block draws it. Omitted = none. */
   decals?: readonly boolean[],
+  /** Per-wound TORN flags (flail lips, 2026-09-29; damage.ts Wound.tear): bit 3
+   *  (value 8). The carve's edge takes a second octave and petal rims; the
+   *  mask's gWoundTear shades it wet red. Omitted = none. */
+  tears?: readonly boolean[],
 ): number {
   const stride = layout.stride ?? BASE_PRIM_STRIDE;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -2065,10 +2082,12 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
-    // Integer part is a BITFIELD: bit 0 cavity, bit 1 cloth bullet hole,
-    // bit 2 cloth decal (no carve).
-    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + (holes?.[i] ? 2 : 0) + (decals?.[i] ? 4 : 0)
-      + ((threats?.[i] ?? 0) & 511) / 1024;
+    // Integer part is a BITFIELD (woundFlagBits): bit 0 cavity, bit 1 cloth
+    // bullet hole, bit 2 cloth decal (no carve), bit 3 torn; the fraction is
+    // the threat mask / 1024 (< 0.5).
+    texels[flagBase + i * 4] = woundFlagBits({
+      cavity: cavities?.[i], hole: holes?.[i], decal: decals?.[i], tear: tears?.[i],
+    }) + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
     texels[flagBase + i * 4 + 2] = owner?.start ?? 0;
@@ -2330,6 +2349,8 @@ export function createZombieGpuView(
   // the ceiling over every owner keeps this one number.
   let lastWoundThreatIn: {
     worldPositions: Vec3[]; radii: number[]; splayScales?: number[];
+    /** Torn wounds (flags bit 3): their rim peaks at TORN.PETAL_HI x the splay. */
+    tears?: readonly boolean[];
     caps?: readonly ({ n: Vec3; depth: number } | null)[];
     owners?: readonly ({ cluster: number; start: number; count: number } | null)[];
   } | null = null;
@@ -2346,7 +2367,8 @@ export function createZombieGpuView(
     const ampByOwner = new Map<number, number>();
     for (let i = 0; i < n; i++) {
       const o = w.owners?.[i]?.cluster ?? -1;
-      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1));
+      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1)
+        * (w.tears?.[i] ? TORN.PETAL_HI : 1));
     }
     const unowned = ampByOwner.get(-1) ?? 0;
     const margin0 = 4 * kw + kw * Math.min(n, 3) + 2 * p.maxBlendK + unowned;
@@ -2774,9 +2796,9 @@ export function createZombieGpuView(
       u.meltCfg.value.y = edgeOutAll ? 2 : motionOutAll ? 1 : 0;
       syncRecord();
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals) {
-      lastWoundThreatIn = { worldPositions, radii, splayScales, caps, owners };
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals);
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals, tears) {
+      lastWoundThreatIn = { worldPositions, radii, splayScales, tears, caps, owners };
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals, tears);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a
