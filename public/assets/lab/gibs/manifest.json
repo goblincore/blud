@@ -118,7 +118,7 @@
     },
     {
       "archetype": "zombie",
-      "fingerprint": "cf6ab091955607b5",
+      "fingerprint": "0a58e1cab1511d24",
       "recipe": {
         "schemaVersion": 3,
         "generator": "scripts/build-gib-assets.ts",
@@ -209,23 +209,23 @@
       "json": "zombie.gib.json",
       "bin": "zombie.gib.bin",
       "bytes": {
-        "json": 141142,
-        "bin": 3752448
+        "json": 146060,
+        "bin": 3949656
       },
       "totals": {
         "pieces": 24,
-        "verts": 36078,
-        "tris": 72212,
-        "binBytes": 3752448
+        "verts": 37974,
+        "tris": 76008,
+        "binBytes": 3949656
       },
       "timing": {
-        "bakeMs": 4644.1,
-        "buildMs": 5281
+        "bakeMs": 4973.09,
+        "buildMs": 5418
       },
       "source": {
         "blob": "src/lab/sdf-zombie/characters/zombie.blob",
-        "blobBytes": 15173,
-        "blobHash": "fdcf43b5853edec3"
+        "blobBytes": 16678,
+        "blobHash": "b7b664810062d630"
       }
     }
   ]

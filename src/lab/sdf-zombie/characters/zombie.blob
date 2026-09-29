@@ -17,8 +17,14 @@ skeleton
     bone clavicle parent=spine    dir=side                     len=0.20
     bone upperArm parent=clavicle dir=down tilt=16.699244      len=0.30
     bone foreArm  parent=upperArm dir=down tilt=2.862405 pitch=5.703515 len=0.30
-    bone thigh    parent=pelvis   dir=down side=0.10           len=0.40
-    bone shin     parent=thigh    dir=down pitch=2.862405      len=0.42
+    # FEET ON THE FLOOR (owner 2026-09-29: "the zombies appear to be floating"). The legs hang
+    # from the pelvis TAIL (y 1.06), and at 0.40 + 0.42 the ankle landed at y 0.24 with no foot,
+    # so the body's lowest point was 0.199 m up and every tube shadow fell 20 cm below it.
+    # +0.06 / +0.08 puts the ankle at ~0.10 (hips, torso and height unchanged); the foot bone
+    # below carries a bare heel and sole down to the floor, as every foot-boned character does.
+    bone thigh    parent=pelvis   dir=down side=0.10           len=0.46
+    bone shin     parent=thigh    dir=down pitch=2.862405      len=0.50
+    bone foot     parent=shin     dir=fwd                      len=0.15
   end
 
 body
@@ -38,10 +44,20 @@ body
   bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
   blob arm on foreArm  at=1.00 r=0.062 blend=0.0125 mirror
 
-  # Legs — thigh, shin, foot.
-  bar  leg on thigh from=0.05 to=0.95 r=0.082 blend=0.0175 mirror
+  # Legs — thigh, shin, ankle, foot.
+  # from=0.04348: 0.02 m down the (now 0.46) thigh, where 0.05 of 0.40 put it — the hip's flesh must not
+  # move: the iliac crest bone below sits 4 mm inside it (validateBody's breach check).
+  bar  leg on thigh from=0.04348 to=0.95 r=0.082 blend=0.0175 mirror
   bar  leg on shin  from=0.05 to=0.92 r=0.062 blend=0.015 mirror
-  blob leg on shin  at=1.00 r=0.070 wide=0.85 tall=0.6 deep=1.5 blend=0.0125 mirror
+  # The ankle knob. It used to BE the foot (r 0.070, flattened 0.6, stretched 1.5 forward), which
+  # is why the legs read as stumps; now a round joint the foot hangs off.
+  blob leg on shin  at=1.00 r=0.058 blend=0.0125 mirror
+  # Bare feet: a heel under the ankle and a sole running forward along the foot bone, both pushed
+  # down (offset, world axes) so their undersides sit on the floor (~0.004 / ~0.003 m at rest):
+  # ankle ~0.10 - 0.058 - 0.042 x 0.9; ankle - 0.070 - 0.036 x 0.75. Wide and flat, a little
+  # splayed by the taper (r2) toward the toes — crude on purpose, the zombie's hands are fists.
+  blob leg on foot  at=0.00 r=0.042 wide=1.15 tall=0.9 deep=1.2 blend=0.012 offset=(0,-0.058,-0.010) mirror
+  bar  leg on foot  from=0.00 to=1.00 r=0.036 r2=0.030 wide=1.35 tall=0.75 blend=0.014 offset=(0,-0.070,0.000) mirror
 
 # Wound pass r2: hidden bone, revealed by a wound. Auto-derive (ratio 0.38)
 # is right for limbs — a femur IS a thinner capsule inside the thigh — and

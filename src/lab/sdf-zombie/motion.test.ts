@@ -115,9 +115,10 @@ function soldierJoints(): MotionJoints {
 }
 
 describe('makeMotionJoints', () => {
-  it('maps the stock zombie: 17 joints matching bindRig, in order', () => {
+  it('maps the stock zombie: 19 joints matching bindRig, in order', () => {
     const joints = realJoints();
-    expect(joints.names).toHaveLength(17);
+    // 17 + the two toes since the zombie's feet (2026-09-29); every earlier index is unchanged.
+    expect(joints.names).toHaveLength(19);
     const body = buildBody(makeZombie({ ...DEFAULT_FACE }), undefined!, undefined!);
     expect(joints.names.length).toBe(bindRig(body).rig.points.length);
     expect(joints.index.pelvis).toBe(0);
@@ -147,7 +148,10 @@ describe('stepMotion — standing', () => {
     const cfg: MotionConfig = { enabled: true, wander: false, armStyle: 'swing' };
     const { frame } = run(j, makeMotionState(1, [0, 0, 0]), cfg, 3,
       () => ({ ...NO_SIGNALS(), headAlive: false }));
-    expect(frame.restPose).toEqual(j.base.map(v => [...v] as Vec3));
+    // Within 1e-12 per component: since the zombie's longer legs and feet (2026-09-29) two leg
+    // points come back at z -3.5e-18 instead of 0 — rounding, not an offset path.
+    expect(frame.restPose.length).toBe(j.base.length);
+    frame.restPose.forEach((v, i) => v.forEach((c, k) => expect(c).toBeCloseTo(j.base[i]![k]!, 12)));
     expect(frame.restPull).toBe(1);
     expect(frame.gravity).toEqual([0, STANDING_RIG.gravityY, 0]);
     expect(frame.ropes).toEqual([]);

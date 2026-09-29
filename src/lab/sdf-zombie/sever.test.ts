@@ -191,7 +191,8 @@ describe('severDistal', () => {
   it('chunks exactly the distal prims as live copies, torn at the joint', () => {
     const { chunk } = severDistal(body, cut);
     expect(chunk.limb).toBe('legL');
-    expect(chunk.prims).toHaveLength(2);
+    // shin, ankle, heel, sole (2 before the zombie grew feet, 2026-09-29).
+    expect(chunk.prims).toHaveLength(4);
     expect(chunk.prims.every(p => !p.dead)).toBe(true);
     expect(chunk.tornAt).toHaveLength(1);
     expect(dist3(chunk.tornAt[0]!, knee)).toBeLessThan(0.03);

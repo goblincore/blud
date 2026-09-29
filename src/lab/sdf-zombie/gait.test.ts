@@ -300,15 +300,17 @@ describe('body ↔ joint wiring contract', () => {
     const body = buildBody(def);
     const bound = bindRig(body);
     const names = jointNamesForBody(body);
-    expect(names).toHaveLength(17);
-    // The zombie's 17 primary names, in rig-point order (mirrored bones emit
+    // 17 + the toes since the zombie's feet (2026-09-29); every earlier index is unchanged.
+    expect(names).toHaveLength(19);
+    // The zombie's 19 primary names, in rig-point order (mirrored bones emit
     // as adjacent .l/.r pairs, so the sides interleave bone-by-bone).
     expect(names).toEqual([
       'pelvis', 'hips', 'chest', 'neck', 'head',
       'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
       'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+      'toeL', 'toeR',
     ]);
-    expect(bound.rig.points).toHaveLength(17);
+    expect(bound.rig.points).toHaveLength(19);
     // every resolved bone joint lands on the named rig point at the right spot
     for (const [boneName, bone] of body.bones.entries()) {
       for (const end of ['head', 'tail'] as const) {
@@ -352,7 +354,7 @@ describe('joint naming — every rig point of every character gets a name', () =
     const body = buildBody(compileBlob(parseBlob(src)));
     return { body, bound: bindRig(body), names: jointNamesForBody(body) };
   };
-  it('zombie: the 17 primary names in rig-point order', () => {
+  it('zombie: the 19 primary names in rig-point order (toes since its feet, 2026-09-29)', () => {
     const { names } = load(zombieSrc);
     // compileBlob emits each mirrored bone as an adjacent .l/.r pair, so the
     // rig points (and their names) interleave the sides bone-by-bone — this
@@ -361,6 +363,7 @@ describe('joint naming — every rig point of every character gets a name', () =
       'pelvis', 'hips', 'chest', 'neck', 'head',
       'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
       'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+      'toeL', 'toeR',
     ]);
   });
   it.each([['soldier', soldierSrc], ['goblin', goblinSrc]])('%s: names == rig points, makeMotionJoints is live', (_n, src) => {

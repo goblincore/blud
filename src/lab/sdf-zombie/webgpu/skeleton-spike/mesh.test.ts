@@ -161,7 +161,7 @@ function nearestVertDist(m: SegmentMesh, p: Vec3): number {
 describe('extractSegmentMesh — real zombie segments', () => {
   it('extracts every segment non-empty, complete and unclamped', () => {
     expect(headSrc).toBeDefined();
-    expect(sources.length).toBe(18); // task-1 census
+    expect(sources.length).toBe(20); // task-1 census, + the two feet (2026-09-29)
     for (const s of sources) {
       const m = extractSegmentMesh(s);
       expect(m.verts, s.segment).toBeGreaterThan(0);

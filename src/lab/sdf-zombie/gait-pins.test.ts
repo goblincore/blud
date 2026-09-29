@@ -12,6 +12,10 @@
 // position — the dislocated-shoulder pop the owner flagged. The stepMotion
 // checksum below was re-recorded with the clamp active; stepGait's own
 // arithmetic is untouched and its pin still holds.
+//
+// SECOND DELIBERATE EXCEPTION (2026-09-29, owner: "the zombies appear to be floating"): the zombie's
+// BODY changed — longer legs and a foot bone (zombie.blob / body.ts), so the stepMotion checksum
+// covers 19 rig points and a longer leg chain. Re-recorded; stepGait's pin again still holds.
 import { describe, it, expect } from 'vitest';
 import { makeGaitState, stepGait, type GaitSkew } from './gait';
 import {
@@ -91,6 +95,10 @@ describe('zombie output pins (pre-refactor)', () => {
     }
     // Re-recorded 2026-09-09 for the shoulder socket clamp — see the header.
     // The pre-clamp pin was '372385.134607288|444610.404551562'.
-    expect(checksum(out)).toBe('372401.420656677|444572.567802363');
+    // Re-recorded 2026-09-29 for the zombie's FEET (owner: "the zombies appear to be floating"): the
+    // body changed on purpose — thigh 0.46 / shin 0.50 and a foot bone, so 19 rig points (+ the two
+    // toes) and a longer leg chain. Not a refactor moving arithmetic. The pre-feet pin was
+    // '372401.420656677|444572.567802363'.
+    expect(checksum(out)).toBe('381680.526956176|452092.787225483');
   });
 });
