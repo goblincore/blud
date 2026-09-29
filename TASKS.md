@@ -5,8 +5,8 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-off:** [2026-09-28 light layers and the owner's look](docs/dev-notes/2026-09-28-light-layers/notes.md)
-> (previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md)).
+> **Latest hand-off:** [2026-09-29 — start here](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
+> resize, zombie feet, march-hash on Chrome 154). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
 
