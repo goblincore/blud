@@ -10,7 +10,7 @@ export const LAMP_MOODS: readonly LampMood[] = ['steady', 'flicker', 'stutter', 
 export type LampScript =
   | { mode: 'die'; at: number }
   | { mode: 'blackout'; at: number }
-  | { mode: 'strobe'; at: number }
+  | { mode: 'strobe'; at: number; reduced?: boolean }
   | { mode: 'emergency'; at: number };
 
 export const LAMP_SCRIPT = {
@@ -23,6 +23,20 @@ export const LAMP_SCRIPT = {
   surgeS: 0.5,
   strobeS: 3,
   strobeHz: 8,
+  /** strobe afterglow (owner, 2026-09-29: "a contrasting strobe ... cold blue-white"): after the opening strobe the tubes stay
+   *  dark for burstDelayS (the red beacons get a beat; every gate probe sits inside it), then fire cold lightning-style bursts.
+   *  One burst per burstWindowS window at a hashed offset, kept burstMinGapS clear of the next window's burst; a burst is 2 or
+   *  3 flashes of burstFlashS with burstGapS between, at burstLevel (a tube is 1). The whole room flashes together (the room's
+   *  seed is the script's start), each lamp a few ms off. Never more than 3 flashes in any second. */
+  burstDelayS: 3.5,
+  burstWindowS: 6,
+  burstMinGapS: 2.5,
+  burstMaxS: 0.4,
+  burstFlashS: 0.07,
+  burstGapS: 0.06,
+  burstLevel: 1.7,
+  /** `?flashes=reduced`: the opening strobe slows to this rate, and each burst is one smooth pulse of burstMaxS. */
+  strobeHzReduced: 2,
   /** emergency: dark through the strobe (surgeS + strobeS), then a stutter on over emergencyOnS, then 1 for good. */
   emergencyOnS: 0.3,
 } as const;
@@ -79,6 +93,24 @@ export function moodLevel(mood: LampMood, t: number, seed: number): number {
   }
 }
 
+/** The room's flash burst level at `e` seconds after the burst delay (see LAMP_SCRIPT.burstDelayS). */
+function burstAfterglow(e: number, roomSeed: number, lampSeed: number, reduced: boolean): number {
+  const W = LAMP_SCRIPT.burstWindowS;
+  const w = Math.floor(e / W);
+  const start = hash01(roomSeed, w * 3 + 1) * (W - LAMP_SCRIPT.burstMaxS - LAMP_SCRIPT.burstMinGapS);
+  // A few ms of per-lamp jitter, so the room's tubes do not fire as one lamp.
+  const local = e - w * W - start - hash01(lampSeed, 5) * 0.012;
+  if (local < 0) return 0;
+  if (reduced) {
+    return local < LAMP_SCRIPT.burstMaxS ? LAMP_SCRIPT.burstLevel * Math.sin(Math.PI * local / LAMP_SCRIPT.burstMaxS) ** 2 : 0;
+  }
+  const n = hash01(roomSeed, w * 3 + 2) < 0.45 ? 3 : 2;
+  const cycle = LAMP_SCRIPT.burstFlashS + LAMP_SCRIPT.burstGapS;
+  const i = Math.floor(local / cycle);
+  if (i >= n) return 0;
+  return local - i * cycle < LAMP_SCRIPT.burstFlashS ? LAMP_SCRIPT.burstLevel : 0;
+}
+
 /** The lamp's level with a scripted event applied (null: the mood alone). */
 export function lampLevel(mood: LampMood, script: LampScript | null, t: number, seed: number): number {
   const base = moodLevel(mood, t, seed);
@@ -102,8 +134,10 @@ export function lampLevel(mood: LampMood, script: LampScript | null, t: number, 
     case 'strobe': {
       if (age < LAMP_SCRIPT.surgeS) return 2.2 + 0.1 * Math.sin(age * 40);
       const k = age - LAMP_SCRIPT.surgeS;
-      if (k >= LAMP_SCRIPT.strobeS) return 0;
-      return Math.floor(k * LAMP_SCRIPT.strobeHz * 2) % 2 === 0 ? 1.3 : 0;
+      const hz = script.reduced ? LAMP_SCRIPT.strobeHzReduced : LAMP_SCRIPT.strobeHz;
+      if (k < LAMP_SCRIPT.strobeS) return Math.floor(k * hz * 2) % 2 === 0 ? 1.3 : 0;
+      const e = k - LAMP_SCRIPT.strobeS - LAMP_SCRIPT.burstDelayS;
+      return e < 0 ? 0 : burstAfterglow(e, iseed(script.at), s, !!script.reduced);
     }
     case 'emergency': {
       const k = age - (LAMP_SCRIPT.surgeS + LAMP_SCRIPT.strobeS);

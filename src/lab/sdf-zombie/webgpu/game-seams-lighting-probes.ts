@@ -30,6 +30,26 @@ export function createLightingProbeSeams(ctx: GameContext) {
         rooms: [...ctx.lighting.levelListNodes].map(([id, n]) => [id, [...n.picksA.value.toArray(), ...n.picksB.value.toArray()]]),
       };
     },
+    /** The polygon kit (armour, clothing) of each live actor: id, room, character name, whether its glTF has loaded. */
+    kitActors: () => ctx.world.actors.map(a => ({ id: a.id, room: a.room, name: a.character?.entry.name ?? null, kit: !!a.character?.kit })),
+    /** Measurement/tuning: scale every live kit material's environment reflection (1 = as authored). The kit is lit by a
+     *  fixed studio environment map, not by the level's light, so this is the lever the armour's brightness hangs on. */
+    setKitEnv: (scale: number) => {
+      let n = 0;
+      for (const a of ctx.world.actors) {
+        a.character?.kit?.object.traverse(o => {
+          const m = (o as { material?: unknown }).material;
+          for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
+            const std = mat as { isMeshStandardMaterial?: boolean; envMapIntensity: number; userData: Record<string, number> };
+            if (!std.isMeshStandardMaterial) continue;
+            std.userData.envBase ??= std.envMapIntensity;
+            std.envMapIntensity = std.userData.envBase! * scale;
+            n++;
+          }
+        });
+      }
+      return n;
+    },
     get levelProbes() {
       return {
         weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain, hemi: ctx.lighting.hemi.intensity, hemiBase: ctx.lighting.hemiBase,

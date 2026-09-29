@@ -219,6 +219,8 @@ const TUBE = {
 /** Measurement only (`setTubeShadowUpdates`): false stops the live tube shadow re-renders, so a cost run can
  *  A/B them. The maps still render once at boot. */
 let tubeShadowUpdates = true;
+/** `?flashes=reduced`: the Boiler Room's strobe slows and its flash bursts become slow pulses (lamp-moods.ts LAMP_SCRIPT). */
+const REDUCED_FLASHES = new URLSearchParams(location.search).get('flashes') === 'reduced';
 let beamFn: ReturnType<typeof wgslFn> | null = null;
 
 function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | null, room: number, group: THREE.Group, shadow: boolean): Tube {
@@ -390,7 +392,7 @@ export function runLightCommand(ctx: GameContext, mode: LightMode, room: number)
   for (const l of rt.lamps) {
     if (l.room !== room || l.mood === 'fire') continue;
     const m = scriptFor(mode, !!l.beacon, l.script?.mode ?? null);
-    if (m) l.script = { mode: m, at: rt.time };
+    if (m) l.script = m === 'strobe' && REDUCED_FLASHES ? { mode: m, at: rt.time, reduced: true } : { mode: m, at: rt.time };
   }
   ctx.telemetry.telemetry.event('light-command', { mode, room });
 }

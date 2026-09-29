@@ -1,8 +1,9 @@
 # Level materials on the shared list, cheap tier — dev note, 2026-09-29
 
 Spec: [level-list-lighting-design](../../superpowers/specs/2026-09-29-level-list-lighting-design.md). Plan:
-[level-list-lighting](../../superpowers/plans/2026-09-29-level-list-lighting.md). `?levellist=1` turns it on (needs the
-list on); default off, byte-identical to before.
+[level-list-lighting](../../superpowers/plans/2026-09-29-level-list-lighting.md). **On by default since 2026-09-29 (owner: no
+visible difference in play); `?levellist=0` opts out** (it needs the list on). The A/B numbers below were taken while it was
+opt-in: read B as the default and A as `?levellist=0`.
 
 ## Fidelity A/B ([ab-node-vs-three.png](ab-node-vs-three.png))
 
@@ -42,18 +43,17 @@ earlier omni measurements. Frame-ms deltas are noisy (loads 3.5–8.6); the GPU 
 - `?levellist=1` (list on): one `LevelListLightingNode` per room shades that room's **cheap-tier** lights — fire-mood lights and
   shadowless (`shadow: false`) tubes — out of the shared list's buffer: diffuse only, three's falloff, up to 8 lights.
   Those lights leave three's level-material lights (`userData.levelCheap`). Shadowed lights (4 tubes/room, beacons, window,
-  torch) stay on three. Default OFF, byte-identical when off (full test suite, light gate pass; march-hash default pin not
-  affected — nothing on its path changed).
+  torch) stay on three. With it off (`?levellist=0`) the level is byte-identical to before (full test suite and light gate pass
+  with it off; the tier shades level surfaces, never the march target, so march-hash is not affected).
 - Seam: `__sdfGame.levelListInfo` (per room, the list indices its node shades).
 - Look: [party-default-vs-levellist.png](party-default-vs-levellist.png). The node lights the side walls from the second
   row (it costs the level nothing measurable) and the fire; no specular glints from those lights.
 - The experiment flag `?row2=three` is gone.
 
-## Owner decision needed
+## Owner decision — made 2026-09-29
 
-Make `?levellist=1` the default? It changes the lighting model of fire lights and the second row (diffuse-only), and the
-second row starts lighting the level's walls (it is invisible to the level today). Cost: none measurable, slightly negative
-in the Boiler Room because the fire light comes off three.
+The owner played it in the Boiler Room and did not notice the difference: it is the default. `?levellist=0` restores the old
+level lighting (fire lights and the second row as before; the second row then lights the level not at all).
 
 ## Follow-ups (not done)
 

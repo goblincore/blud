@@ -760,8 +760,9 @@ async function main() {
   // otherwise the level double-lights on the flip. ?levelprobes=0 pins the
   // hemisphere at the rig's full intensity and the nodes at zero: the
   // pre-probe look. Gain -1 = each room's matched level (levelMatchedGain).
-  // The cheap level tier: on with ?levellist=1 and the list on (spec 2026-09-29-level-list-lighting-design.md).
-  ctx.lighting.levelListOn = new URLSearchParams(location.search).get('levellist') === '1' && new URLSearchParams(location.search).get('lightlist') !== '0';
+  // The cheap level tier: ON by default (owner, 2026-09-29: no visible difference in play, ~free); ?levellist=0 opts out,
+  // and it needs the list on (spec 2026-09-29-level-list-lighting-design.md).
+  ctx.lighting.levelListOn = new URLSearchParams(location.search).get('levellist') !== '0' && new URLSearchParams(location.search).get('lightlist') !== '0';
   ctx.lighting.levelProbesParam = new URLSearchParams(location.search).get('levelprobes');
   ctx.lighting.levelProbeWeight = ctx.lighting.levelProbesParam === '0' || ctx.lighting.levelProbesParam === 'off' ? 0 : 1;
   ctx.lighting.levelProbeGain = -1;
@@ -829,7 +830,7 @@ async function main() {
       // Boiler Room and the A/B frames were indistinguishable. The Boiler Room's second row (`shadow: false`)
       // also drops its spot from the level materials (makeTube): full second row +10 ms, list-only +2.
       if (a.fixture === 'tube') pl.userData.listOnly = true;
-      // The cheap level tier (level-tier.ts isLevelCheap): with ?levellist=1 the list node shades this light for the level.
+      // The cheap level tier (level-tier.ts isLevelCheap): when the tier is on (the default) the list node shades this light for the level.
       if (isLevelCheap({ fixture: a.fixture, mood: a.mood, shadow: a.shadow })) pl.userData.levelCheap = true;
       ctx.world.accentGroup.add(pl);
       // A visible source. Without it the light has no cause and reads as a bug.

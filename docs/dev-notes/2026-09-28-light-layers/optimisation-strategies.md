@@ -21,10 +21,10 @@ never re-rendered a shadow map, and the number was really the tubes' lights in t
   sampling ~0.7 (Boiler Room), live shadow renders ~0–1, the rest (~3 ms) the tube spots themselves in the level
   materials. The only structural fix left is §2 below (level materials on the shared list).
 
-- **Level materials on the list, cheap tier (2026-09-29, [notes](../2026-09-29-level-list/notes.md)): built behind
-  `?levellist=1`, measured ~free** (Boiler Room GPU 10.3 ms with it vs 11.75 without and 12.9 with three shading the same
+- **Level materials on the list, cheap tier (2026-09-29, [notes](../2026-09-29-level-list/notes.md)): default ON (`?levellist=0`
+  opts out), measured ~free** (Boiler Room GPU 10.3 ms with it vs 11.75 without and 12.9 with three shading the same
   spots). A first cut cost +4 ms/carriage until its shader loop was bounded by a uniform count (a fixed 8-iteration loop over a
-  dynamically indexed array is expensive on this GPU even when empty). Owner to decide whether it becomes the default.
+  dynamically indexed array is expensive on this GPU even when empty). The owner accepted it as the default.
 
 ## 1. Tube shadow maps (largest known cost: ~4–9 ms per carriage) — SUPERSEDED, see above
 

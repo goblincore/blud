@@ -47,7 +47,7 @@ export interface LightingState {
   hemiBase: number;
   /** Room-probe lighting nodes, keyed by room id. */
   levelProbeNodes: Map<number, ProbeLightingNode>;
-  /** The cheap level tier (spec 2026-09-29-level-list-lighting-design.md): `?levellist=1` with the list on. Set at boot. */
+  /** The cheap level tier (spec 2026-09-29-level-list-lighting-design.md): on by default, `?levellist=0` or `?lightlist=0` turns it off. Set at boot. */
   levelListOn: boolean;
   /** One node per room while it is on; writeLightList feeds each its picks. */
   levelListNodes: Map<number, LevelListLightingNode>;
