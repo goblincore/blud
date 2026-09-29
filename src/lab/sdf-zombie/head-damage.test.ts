@@ -93,4 +93,10 @@ describe('head damage v2', () => {
     expect(nearestRegion([-0.5, 0.1, 0.9])).toBe('orbitL');
     expect(nearestRegion([0.6, -0.35, 0.7])).toBe('cheekR');
   });
+  it('a hit on the back of the head strips its nearest region in full (the crown), not nothing', () => {
+    const r = headHit(makeHeadDamage(), { hs: [0, 0.2, -1], strip: 0.25 }, noJitter);
+    expect(nearestRegion([0, 0.2, -1])).toBe('crown');
+    expect(r.state.flesh.crown).toBeCloseTo(0.75, 6);
+    expect(r.events).toContainEqual({ kind: 'strip', region: 'crown', flesh: r.state.flesh.crown });
+  });
 });

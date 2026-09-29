@@ -116,9 +116,13 @@ export function headHit(
   const base = hit.strip * jitter;
   const upperFace = near === 'brow' || near === 'orbitL' || near === 'orbitR';
   const sig2 = T.spillSigma * T.spillSigma;
+  // The falloff is RELATIVE to the nearest region, so the nearest one always takes the full strip —
+  // a hit on the back or side of the head (far from every region centre) still strips its nearest
+  // region (the crown, from behind) instead of nothing.
+  const dNear = d2(hit.hs, HEAD_REGIONS[near]);
   for (const r of REGION_NAMES) {
     if (r === popped) continue;
-    let amt = base * Math.exp(-d2(hit.hs, HEAD_REGIONS[r]) / sig2);
+    let amt = base * Math.exp(-(d2(hit.hs, HEAD_REGIONS[r]) - dNear) / sig2);
     if (r === 'crown' && upperFace) amt += T.crownSpill * base;
     const was = flesh[r];
     flesh[r] = Math.max(0, was - amt);
