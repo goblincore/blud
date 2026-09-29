@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/head-eye.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { EYE_STALK, HEAD_EYES, eyeRayStart, makeStalk, nearerEye, stalkPrims, stepStalk } from './head-eye';
+import { EYE_STALK, HEAD_EYES, eyeLook, eyeRayStart, makeStalk, nearerEye, stalkPrims, stepStalk } from './head-eye';
 import type { HeadFrame } from './head-deform';
 
 const frame: HeadFrame = { centre: [0, 1.6, 0], quat: [0, 0, 0, 1], axes: [0.09, 0.11, 0.1] };
@@ -44,6 +44,20 @@ describe('the stalk rope', () => {
     const caps = prims.filter(p => p.color && p.color[0] === 0.85);
     expect(caps.length).toBe(EYE_STALK.nodes - 1);
     expect(prims.some(p => p.glow)).toBe(true);
+  });
+  it('with a head forward, the eyeball faces 0.7·forward + 0.3·stalk direction (the iris looks out)', () => {
+    const s = makeStalk(socket, [0, -1, 0], 0);                     // hanging straight down
+    const prims = stalkPrims(s, [1.9, 0.012, 0.005], [0, 0, 1]);
+    const eye = s.p[EYE_STALK.nodes - 1]!;
+    const iris = prims.find(p => p.glow)!;
+    const off = [iris.a[0] - eye[0], iris.a[1] - eye[1], iris.a[2] - eye[2]];
+    const l = Math.hypot(off[0]!, off[1]!, off[2]!);
+    const want = eyeLook([0, 0, 1], [0, -1, 0]);
+    expect(want[2]).toBeCloseTo(0.7 / Math.hypot(0.7, 0.3), 6);
+    expect(off[0]! / l).toBeCloseTo(want[0], 6);
+    expect(off[1]! / l).toBeCloseTo(want[1], 6);
+    expect(off[2]! / l).toBeCloseTo(want[2], 6);
+    expect(prims.length).toBe(stalkPrims(s, [1.9, 0.012, 0.005]).length);   // same prims, only the facing
   });
   it('a zero kick direction hangs the rope straight down; a bad dt is ignored', () => {
     const s = makeStalk(socket, [0, 0, 0], 2.5);

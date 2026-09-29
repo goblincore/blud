@@ -95,8 +95,10 @@ export function stepStalk(s: StalkState, socket: Vec3, dt: number): StalkState {
   return { p, prev, acc };
 }
 
-/** Tapered pink capsules along the rope, and the eyeball at its end (the rope is its nerve). */
-export function stalkPrims(s: StalkState, irisColor: Vec3): Primitive[] {
+/** Tapered pink capsules along the rope, and the eyeball at its end (the rope is its nerve). With
+ *  `headForward` (world, unit) the eyeball faces normalize(0.7·headForward + 0.3·stalkDir), so the iris
+ *  keeps looking out of the face while it dangles (spec §15); without it, straight along the rope. */
+export function stalkPrims(s: StalkState, irisColor: Vec3, headForward?: Vec3): Primitive[] {
   const n = s.p.length, out: Primitive[] = [];
   for (let k = 0; k < n - 1; k++) {
     const t0 = k / (n - 1), t1 = (k + 1) / (n - 1);
@@ -105,7 +107,17 @@ export function stalkPrims(s: StalkState, irisColor: Vec3): Primitive[] {
   }
   const last = s.p[n - 1]!, before = s.p[n - 2]!;
   const l = dist(last, before) || 1;
-  const look: Vec3 = [(last[0] - before[0]) / l, (last[1] - before[1]) / l, (last[2] - before[2]) / l];
-  out.push(...eyeballPrims(last, look, irisColor, false));
+  const along: Vec3 = [(last[0] - before[0]) / l, (last[1] - before[1]) / l, (last[2] - before[2]) / l];
+  out.push(...eyeballPrims(last, headForward ? eyeLook(headForward, along) : along, irisColor, false));
   return out;
+}
+
+/** The dangling eyeball's facing: normalize(0.7·headForward + 0.3·stalkDir); a degenerate blend (the two
+ *  opposed at the 0.7/0.3 balance — impossible for unit inputs) falls back to the head forward. */
+export function eyeLook(headForward: Vec3, stalkDir: Vec3): Vec3 {
+  const v: Vec3 = [
+    0.7 * headForward[0] + 0.3 * stalkDir[0], 0.7 * headForward[1] + 0.3 * stalkDir[1], 0.7 * headForward[2] + 0.3 * stalkDir[2],
+  ];
+  const l = Math.hypot(v[0], v[1], v[2]);
+  return l > 1e-9 ? [v[0] / l, v[1] / l, v[2] / l] : headForward;
 }

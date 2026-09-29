@@ -1,65 +1,113 @@
 // src/lab/sdf-zombie/webgpu/game-head-damage.ts
 //
-// THE MELEE HEAD DAMAGE LEAF (spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md; plan
-// Task 6). The flail hands head-region hits here (game-flail.ts strike → deps.headHit). The pure modules
-// decide everything; this leaf only turns their output into objects:
-//   * head-damage.ts  the ladder (eye → cave → scalp → brain) → events;
+// THE MELEE HEAD DAMAGE LEAF, v2 (spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15;
+// plan Task 17). The flail hands head-region hits here (game-flail.ts strike → deps.headHit). The pure
+// modules decide everything; this leaf only turns their output into objects:
+//   * head-damage.ts  the region model (flesh per region → events);
 //   * head-deform.ts  the wobble and the dents → the actor's setHeadDeform hook (applied at every re-pose);
-//   * head-eye.ts     the socket ray, the stalk rope, its prims → one hand-posed piece (boot.attachPiece);
-//   * head-crown.ts   the crown ray, the scalp craters, the brain lumps and skull chips → onGoreDispatch, and
-//                     the whole brain's launch → the modelled brain MESH (game-brain-gib.ts, spec §14 decision 3).
+//   * head-eye.ts     the orbit ray, the stalk rope, its prims → hand-posed pieces (boot.attachPiece);
+//   * head-crown.ts   the brain lumps and skull chips → onGoreDispatch, and the whole brain's launch → the
+//                     modelled brain MESH (game-brain-gib.ts, spec §14 decision 3).
 // Wounds go through ZombieActor.blast (the kill is its forceCollapse). The per-actor state lives in this
 // module (keyed by the actor object), never on main().
 //
-// LIFETIME OF THE DANGLING EYE. Its piece is a pooled chunk view drawn every frame until disposed, so it is
-// disposed on every way out: the stalk snaps (hit 2), the zombie leaves 'standing' or loses its head
-// (headDeath → the eye flies off as a gib), the actor is gone from ctx.world.actors (gibbed, retired, a
-// cast rebuild — tick() notices on the next frame) and reset() (rebuildCast calls it first).
+// EVENTS → WORLD.
+//   strip          the region's ONE crater, stamped or replaced (Wound.headRegion) at the region's surface
+//                  point — traced from the region's hs direction toward the head centre — radius
+//                  REGION_TUNING.craterR(region, flesh), 'keep', no sever. One lasting dent per hit.
+//   orbit-exposed  that eye's painted glow off (view.setEyeGlow) + the IN-ORBIT eyeball: one piece of
+//                  eyeballPrims (no nerve) 1 cm inside the orbit's surface point, looking along the head forward.
+//   eye-pop        the in-orbit piece is disposed; the DANGLING piece is attached: stalkPrims(stalk, iris,
+//                  headForward) followed by the SOCKET PLUG (a matte near-black sphere, r 0.024) at the socket.
+//   eye-snap       the stalk's free half and the eyeball fly off as a gib; the dangling piece is disposed and a
+//                  PLUG-ONLY piece is attached in its place.
+//   skull-exposed  nothing extra: from the threshold on the region's crater carves past the measured skull depth;
+//                  above it the carve stays in the flesh (HEAD_LEAF.carve, regionCarve).
+//   brain          the brain mesh + lumps + chips from the CRACKED region's surface point, the reduced blood,
+//                  and a CROWN.brainR cavity there (headRegion 'brain').
+//   kill           forceCollapse.
 //
-// INTERIM v2 ADAPTER (plan Task 14; Task 17 replaces it). head-damage.ts is now the v2 region model (spec
-// §15); this leaf still speaks v1's objects. The mapping, as close to v1 as the new events allow:
-//   strip (any, once per hit) → v1's lasting dent + a 'face' crater at the hit point (not per-region craters);
-//   orbit-exposed, skull-exposed → nothing yet (no glow mask, no in-orbit eyeball, no bone-deep carve);
-//   eye-pop → v1's socket crater + dangling eye on that side (no dark socket plug);
-//   eye-snap → v1's snap; brain → v1's crown brain (always the crown, whatever region cracked); kill → collapse.
-// hs is the hit in head-local ÷ half-extents, strip is a flat 0.25 (no H = 0.35) and rand is rngStreams.misc
-// (not a per-actor seeded stream). debug's `stage`/`eye` are derived from the v2 state for the v1 gate.
+// DRAWS PER EYE (each attached piece is one pooled chunk view = one draw): painted 0, in-orbit 1, dangling 1
+// (stalk + eyeball + plug in ONE piece), gone 1 (the plug alone). The alternative — a plug piece of its own
+// from the pop on — costs 2 while the eye dangles, so the plug rides in the dangling piece and is re-attached
+// alone at the snap (the piece's prim count must stay constant, which is why the snap re-attaches).
+//
+// THE PIECES RIDE THE HEAD through trackers: Wound records (never pushed on the ring) stamped on the orbit
+// crater's prim at the orbit surface point, 1 cm inside it and 2 cm in front of it; woundWorldPos re-reads
+// them every frame, so the eye and the plug follow the posed, wobbling, dented, collapsing head, and the
+// head's forward is read from the same prim.
+//
+// LIFETIME. Every attached piece is a pooled chunk view drawn every frame until disposed, so all of an
+// actor's pieces are disposed on every way out: the head is gone (popped, severed), the actor is gone from
+// ctx.world.actors (gibbed, retired, a cast rebuild — tick() notices on the next frame), forget() and
+// reset() (rebuildCast calls it first). The same exits switch both painted eyes' glow back ON: actor views
+// are pooled, and a recycled view must not come back blind.
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { AttachedPiece } from './game-state-boot';
 import type { Primitive, Vec3 } from '../types';
 import type { BuildResult } from '../build-body';
-import type { GorePiece } from '../head-pop';
+import { eyeballPrims, prim, type GorePiece } from '../head-pop';
 import { clothifyWound, woundWorldPos, worldHitToWound, type Wound } from '../damage';
-import { sdBody } from '../validate';
+import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
-import { headDeath, headHit, makeHeadDamage, type HeadDamageState, type HeadEvent } from '../head-damage';
+import {
+  HEAD_REGIONS, REGION_TUNING, headDeath, headHit, makeHeadDamage,
+  type EyeSide, type EyeState, type HeadDamageState, type HeadEvent, type HeadRegion,
+} from '../head-damage';
 import {
   addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, rotate, stepWobble,
   type HeadDeformState, type HeadFrame, type Quat,
 } from '../head-deform';
 import { EYE_STALK, eyeRayStart, makeStalk, stalkPrims, stepStalk, type StalkState } from '../head-eye';
-import { CROWN, brainLaunch, brainLumps, brainPiece, crownRayStart, skullChips } from '../head-crown';
+import { CROWN, brainLaunch, brainLumps, brainPiece, skullChips } from '../head-crown';
 import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
 import { rngStreams } from './rng';
+import { mulberry32 } from '../melt-bones';
 
-/** The leaf's numbers (spec §5, §6). */
+/** The leaf's numbers (spec §5, §6, §15). */
 export const HEAD_LEAF = {
-  /** The eye socket crater (spec §6). */
-  socketR: 0.028,
-  /** A CAVE / later hit's lasting dent depth (spec §5). */
+  /** A hit's lasting dent depth (spec §5). */
   dentDepth: 0.018,
+  /** The flesh strip per swing (spec §15): R and L 0.25, the overhead H 0.35. */
+  strip: { R: 0.25, L: 0.25, H: 0.35 } as Record<'R' | 'L' | 'H', number>,
   /** The eye's spring-out speed along the reflected blow (spec §6). */
   popSpeed: 2.5,
-  /** The dangling eye's iris: the face sheet's glow colour (faceGlowColor, march/body/face.wgsl.ts). */
+  /** The eyeballs' iris: the face sheet's glow colour (faceGlowColor, march/body/face.wgsl.ts). */
   iris: [1.9, 0.012, 0.005] as Vec3,
+  /** The in-orbit eyeball's centre sits this far inside the orbit's surface point (plan Task 17). */
+  eyeInset: 0.01,
+  /** THE SOCKET PLUG: matte, near black, filling the popped orbit's crater. Its centre is `inset` inside the
+   *  orbit's surface point, so its top sits flush with the old skin and it lines the bottom of the bowl; centred
+   *  ON the surface point (the plan's local end 0) it bulged a 2.4 cm grey-rimmed dome out of the face. */
+  plug: { r: 0.024, color: [0.03, 0.01, 0.01] as Vec3, inset: 0.024 },
+  /** THE CARVE DEEPENS WITH THE WEAR, AND THE SKULL WAITS FOR THE THRESHOLD (spec §15). A region crater's carve
+   *  depth below its anchor plane (regionCarve):
+   *    - while the region's flesh is at or above its bone threshold (orbits REGION_TUNING.orbitExposed, the rest
+   *      skullExposed): shallow + (preBone − shallow)·t, t = (1 − flesh)/(1 − threshold), kept `skullGap` short of
+   *      the skull (never under minDepth);
+   *    - below it: worldHitToWound's own depth (min(radius, 0.45 × the flesh behind the hit)), raised to
+   *      `skullBite` past the skull if that fell short. It never needed raising in the smoke (brow 0.05 ≥ skull
+   *      + 0.004; crown 0.055 vs skull 0.02-0.03).
+   *  The skull depth is measured per crater over the carve's footprint (hit(): skullDepth, on the head's bone
+   *  prims — the field the mesh skeleton is extracted from). MEASURED on the zombie, along each region's ray from
+   *  the skin: skull 5 mm under the brow, 6 mm under the orbit, 20 mm under the crown — the forehead is thin.
+   *  Uncapped, the first brow crater (r 0.032, carve up to 0.032) turned ~half its 3 cm circle bone-tan on hit 1.
+   *  skullGap 6 mm is EMPIRICAL: with 1.5 mm the tan share on brow hit 2 (flesh 0.48) was still 60%, with 6 mm
+   *  it is 2% / 38% / 66% on hits 1 / 2 / 3 (skull exposed at 3). Caveat: the fat band (fatColor) is tan too,
+   *  and the pixel measure cannot tell the two apart. */
+  carve: { shallow: 0.005, preBone: 0.012, skullGap: 0.006, minDepth: 0.002, skullBite: 0.004 },
   /** The snapped eye's extra kick: up, and along the blow (m/s). */
   snapUp: 1.5,
   snapAlong: 1.5,
 } as const;
 
-export interface HeadHitFeel { meterCredit: number; shove: number }
+export interface HeadHitFeel {
+  meterCredit: number; shove: number;
+  /** The swing that landed (FLAIL_FEEL.swing's keys): picks the strip (HEAD_LEAF.strip). Absent: R. */
+  side?: 'R' | 'L' | 'H';
+}
 
 export interface HeadDamageDeps {
   /** game-main's headShape: the fattest additive head prim's midpoint and radius·scale axes — the frame
@@ -75,20 +123,27 @@ export interface HeadDamageDeps {
   brain?: BrainGibLeaf;
   /** Blood for a crater (registerBleed, at `kind`'s gout). */
   bleed(a: ZombieActor, w: Wound, point: Vec3, dir: Vec3, kind: 'pellet' | 'slug'): void;
-  /** ctx.boot.attachPiece (absent before the chunk spawner exists: the eye then pops invisibly). */
+  /** ctx.boot.attachPiece (absent before the chunk spawner exists: the pieces are then not drawn). */
   attach?: (a: ZombieActor, prims: Primitive[], pos: Vec3, opts?: { clean?: boolean }) => AttachedPiece;
 }
 
 export interface HeadDamageDebug {
   hits: number;
-  /** 1 EYE … 4 BRAIN (0 before any hit; the ladder's count, capped at 4). */
-  stage: number;
+  flesh: Record<HeadRegion, number>;
+  skull: { brow: number; crown: number };
+  eyes: Record<EyeSide, EyeState>;
   dead: boolean;
-  eye: { side: 'L' | 'R'; state: 'dangling' | 'gone' } | null;
   squash: number;
   flat: number[];
-  eyeball: Vec3 | null;
-  socket: Vec3 | null;
+  /** Each eye's eyeball centre (world): in its orbit, or at the end of its stalk; null painted / gone. */
+  eyeball: Record<EyeSide, Vec3 | null>;
+  /** Each orbit's socket point (world) once it is exposed; null while painted. */
+  socket: Record<EyeSide, Vec3 | null>;
+  /** Attached pieces this actor draws (one draw each). */
+  draws: number;
+  /** Each region's (and the brain cavity's) last stamped crater: its radius, its carve depth below the anchor
+   *  plane (null: a full sphere — no flesh probe) and the measured anchor-to-skull depth (null: none found). */
+  craters: Partial<Record<HeadRegion | 'brain', { radius: number; carveDepth: number | null; skull: number | null }>>;
   /** The head frame the deform hook last measured (the UN-deformed pose; null before the first re-pose). */
   frame: HeadFrame | null;
 }
@@ -97,7 +152,7 @@ export interface HeadDamageLeaf {
   /** One head-region hit at `point` (world, on the posed surface), blow direction `dir` (world, unit). */
   hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): void;
   tick(dt: number): void;
-  /** Drop an actor's state: dispose its dangling eye, clear its deform hook. */
+  /** Drop an actor's state: dispose its pieces, clear its deform hook, its eyes glow again. */
   forget(id: number): void;
   /** Drop every actor's state (a cast rebuild / level reset). */
   reset(): void;
@@ -109,9 +164,21 @@ export interface HeadDamageLeaf {
   affine(a: ZombieActor): readonly number[] | null;
 }
 
-interface Dangling { side: 'L' | 'R'; socket: Wound; stalk: StalkState; piece: AttachedPiece | null }
+/** An exposed orbit: its trackers and whichever piece shows it now. */
+interface Orbit {
+  /** The orbit's surface point, 1 cm inside it (toward the head centre), 2 cm in front of it (head forward). */
+  at: Wound; inner: Wound; front: Wound;
+  inOrbit: AttachedPiece | null;
+  stalk: StalkState | null;
+  dangling: AttachedPiece | null;
+  plug: AttachedPiece | null;
+}
 interface ActorHead {
-  ladder: HeadDamageState; deform: HeadDeformState; eye: Dangling | null;
+  model: HeadDamageState; deform: HeadDeformState;
+  orbits: Partial<Record<EyeSide, Orbit>>;
+  /** The per-actor jitter stream (seed = actor id). */
+  rand: () => number;
+  craters: HeadDamageDebug['craters'];
   /** The frame the deform hook measured at the last re-pose (the un-deformed head). */
   frame: HeadFrame | null;
   /** That re-pose's deform as a world 4x4 (headAffineMatrix), null at rest. */
@@ -119,10 +186,14 @@ interface ActorHead {
 }
 
 const IDENTITY: Quat = [0, 0, 0, 1];
+const SIDES: readonly EyeSide[] = ['L', 'R'];
 const conj = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
+const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const scale = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
 const unit = (a: Vec3): Vec3 => { const l = Math.hypot(a[0], a[1], a[2]); return l > 1e-9 ? [a[0] / l, a[1] / l, a[2] / l] : [0, 0, 0]; };
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const orbitRegion = (side: EyeSide): HeadRegion => (side === 'L' ? 'orbitL' : 'orbitR');
 
 /** The field's outward normal at `p` (central differences). */
 function normalAt(field: (p: Vec3) => number, p: Vec3): Vec3 {
@@ -134,13 +205,33 @@ function normalAt(field: (p: Vec3) => number, p: Vec3): Vec3 {
   ]);
 }
 
-/** Interim (v1 debug shape): the first eye that has left its orbit, if any. */
-function eyeDebug(s: HeadDamageState): HeadDamageDebug['eye'] {
-  for (const side of ['L', 'R'] as const) {
-    const e = s.eyes[side];
-    if (e === 'dangling' || e === 'gone') return { side, state: e };
-  }
-  return null;
+/** Outside the head on a region's hs line: the leaf traces from here toward the head centre. The orbits use
+ *  eyeRayStart (in front of the face on the eye's line, as v1's socket did); the rest start 1.5 head radii
+ *  out along their hs direction. */
+export function regionRayStart(frame: HeadFrame, r: HeadRegion): Vec3 {
+  if (r === 'orbitL') return eyeRayStart(frame, 'L');
+  if (r === 'orbitR') return eyeRayStart(frame, 'R');
+  const hs = HEAD_REGIONS[r];
+  const k = 1.5 / (Math.hypot(hs[0], hs[1], hs[2]) || 1);
+  return add(frame.centre, rotate(frame.quat, [hs[0] * frame.axes[0] * k, hs[1] * frame.axes[1] * k, hs[2] * frame.axes[2] * k]));
+}
+
+/** A region crater's carve depth at `flesh` (HEAD_LEAF.carve): `full` is worldHitToWound's depth, `skull` the
+ *  measured anchor-to-skull depth along the inward normal (Infinity: no skull under it). */
+export function regionCarve(r: HeadRegion, flesh: number, full: number, skull = Infinity): number {
+  const C = HEAD_LEAF.carve;
+  const bone = r === 'orbitL' || r === 'orbitR' ? REGION_TUNING.orbitExposed : REGION_TUNING.skullExposed;
+  if (flesh < bone) return Number.isFinite(skull) ? Math.max(full, skull + C.skullBite) : full;
+  const t = Math.min(1, Math.max(0, (1 - flesh) / (1 - bone)));
+  const ramp = C.shallow + (C.preBone - C.shallow) * t;
+  return Math.min(full, Math.max(C.minDepth, Math.min(ramp, skull - C.skullGap)));
+}
+
+/** A per-actor seed from its id (plan Task 17: seed = actor id), mixed so ids 1, 2, 3 are unrelated streams. */
+function actorRand(id: number): () => number {
+  let h = (Math.imul(id | 0, 0x9e3779b1) ^ 0x5bd1e995) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
+  return mulberry32(h);
 }
 
 const headAlive = (b: BuildResult): boolean => b.clusters.some(c => c.limb === 'head' && c.alive);
@@ -158,8 +249,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
 
   /** Trace from `from` toward the head centre onto the posed surface; a miss falls back to the nearest
    *  point on the head (snapToSurface) and warns once. */
-  function surfaceToward(field: (p: Vec3) => number, from: Vec3, frame: HeadFrame): Vec3 {
-    const d = sub(frame.centre, from);
+  function surfaceToward(field: (p: Vec3) => number, from: Vec3, frame: HeadFrame, along?: Vec3): Vec3 {
+    const d = along ?? sub(frame.centre, from);
     const l = Math.hypot(d[0], d[1], d[2]);
     const hit = l > 1e-6 ? traceRaySurface(field, from, [d[0] / l, d[1] / l, d[2] / l], l + 0.1) : null;
     if (hit) return hit;
@@ -170,20 +261,56 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     return snapToSurface(field, from);
   }
 
-  const stalkWorldPrims = (s: StalkState) => stalkPrims(s, HEAD_LEAF.iris);
+  /** A tracker on prim `primIdx` at world `p` (never pushed on the ring: woundWorldPos re-reads it). */
+  function tracker(prims: Primitive[], primIdx: number, p: Vec3, yaw: number): Wound {
+    const w = worldHitToWound([prims[primIdx]!], p, 0.01, 'blast', yaw);
+    w.primIdx = primIdx;
+    return w;
+  }
 
-  /** The dangling eye flies off: the stalk's free half and the eyeball become one gib. */
-  function snapEye(a: ZombieActor, h: ActorHead, dir: Vec3): void {
-    const e = h.eye;
-    if (!e) return;
-    h.eye = null;
-    e.piece?.dispose();
-    const all = stalkWorldPrims(e.stalk);
+  /** The orbit's live points: the surface point, the inward unit and the head forward (world). */
+  function orbitNow(prims: Primitive[], o: Orbit, yaw: number): { at: Vec3; inward: Vec3; fwd: Vec3 } {
+    const at = woundWorldPos(prims, o.at, yaw);
+    return {
+      at,
+      inward: unit(sub(woundWorldPos(prims, o.inner, yaw), at)),
+      fwd: unit(sub(woundWorldPos(prims, o.front, yaw), at)),
+    };
+  }
+
+  const plugPrim = (at: Vec3, inward: Vec3): Primitive => {
+    const c = add(at, scale(inward, HEAD_LEAF.plug.inset));
+    return prim(c, c, HEAD_LEAF.plug.r, HEAD_LEAF.plug.color, { gloss: 0, blendK: 0.004 });
+  };
+  const inOrbitPrims = (n: { at: Vec3; inward: Vec3; fwd: Vec3 }): Primitive[] =>
+    eyeballPrims(add(n.at, scale(n.inward, HEAD_LEAF.eyeInset)), n.fwd, HEAD_LEAF.iris, false);
+  const danglingPrims = (s: StalkState, n: { at: Vec3; inward: Vec3; fwd: Vec3 }): Primitive[] =>
+    [...stalkPrims(s, HEAD_LEAF.iris, n.fwd), plugPrim(n.at, n.inward)];
+  const localEnds = (prims: Primitive[], at: Vec3) => prims.map(p => ({ a: sub(p.a, at), b: sub(p.b, at) }));
+  const attach = (a: ZombieActor, prims: Primitive[], at: Vec3): AttachedPiece | null =>
+    deps.attach ? deps.attach(a, prims, at, { clean: true }) : null;
+
+  function disposeOrbit(o: Orbit): void {
+    o.inOrbit?.dispose(); o.dangling?.dispose(); o.plug?.dispose();
+    o.inOrbit = o.dangling = o.plug = null;
+    o.stalk = null;
+  }
+
+  /** The dangling eye flies off: the stalk's free half and the eyeball become one gib; the plug stays. */
+  function snapEye(a: ZombieActor, h: ActorHead, side: EyeSide, dir: Vec3): void {
+    const o = h.orbits[side];
+    if (!o || !o.stalk) return;
+    const posed = a.posed(), yaw = a.pose().yaw;
+    const n = orbitNow(posed.prims, o, yaw);
+    const s = o.stalk;
+    o.dangling?.dispose();
+    o.dangling = null;
+    o.stalk = null;
+    const all = stalkPrims(s, HEAD_LEAF.iris, n.fwd);
     const caps = EYE_STALK.nodes - 1;
     // Capsules from the rope's middle on, then the eyeball (stalkPrims' order: caps, then the eye).
     const prims = [...all.slice(Math.floor(caps / 2), caps), ...all.slice(caps)];
-    const n = e.stalk.p.length;
-    const last = e.stalk.p[n - 1]!, prev = e.stalk.prev[n - 1]!;
+    const last = s.p[s.p.length - 1]!, prev = s.prev[s.p.length - 1]!;
     const hz = EYE_STALK.stepHz;
     const r = rngStreams.misc;
     const piece: GorePiece = {
@@ -197,11 +324,16 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       angVel: [(r() - 0.5) * 12, (r() - 0.5) * 12, (r() - 0.5) * 12],
     };
     deps.gore(a, [piece]);
+    // The dark hole stays: the plug alone, re-attached (the dangling piece's prim count is fixed).
+    o.plug = attach(a, [plugPrim(n.at, n.inward)], n.at);
   }
 
   function drop(a: ZombieActor, h: ActorHead): void {
-    h.eye?.piece?.dispose();
-    h.eye = null;
+    for (const side of SIDES) { const o = h.orbits[side]; if (o) disposeOrbit(o); }
+    h.orbits = {};
+    // Pooled views: a recycled view must not keep this zombie's switched-off eyes.
+    a.view.setEyeGlow('L', true);
+    a.view.setEyeGlow('R', true);
     a.setHeadDeform(null);
     heads.delete(a);
   }
@@ -210,11 +342,10 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const posed = a.posed();
     const yaw = a.pose().yaw;
     const field = (q: Vec3) => sdBody(q, posed);
-    const frame = headAlive(posed) ? frameOf(a, posed) : null;
-    const tag = (w: Wound, slot: 'keep' | 'face'): Wound => {
-      w.headSlot = slot; w.severRadius = 0;
-      return clothifyWound(posed.prims, w, 'heavy');
-    };
+    // The UN-deformed head frame (the deform hook's last measurement): measured on the posed body mid-wobble,
+    // headShape reads the squashed, dented head — its centre and axes move by centimetres, so hs (and the
+    // nearest region) would drift with every hit landing while the last one still rings.
+    const frame = headAlive(posed) ? (heads.get(a)?.frame ?? frameOf(a, posed)) : null;
     const impulse = { at: point, vel: [dir[0] * feel.shove, dir[1] * feel.shove, dir[2] * feel.shove] as Vec3 };
     if (!frame) {
       // No head to damage (off, or no head prims): the flail's plain face crater.
@@ -227,7 +358,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     }
     let h = heads.get(a);
     if (!h) {
-      h = { ladder: makeHeadDamage(), deform: makeHeadDeform(), eye: null, frame: null, affine: null };
+      h = { model: makeHeadDamage(), deform: makeHeadDeform(), orbits: {}, rand: actorRand(a.id), craters: {}, frame: null, affine: null };
       heads.set(a, h);
       const st = h;
       // Measured on the pose it is handed (fresh from applyRig), so the frame is the un-deformed head's.
@@ -240,58 +371,124 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       });
     }
     const dirLocal = rotate(conj(frame.quat), dir);
-    // Interim (Task 17 reworks): a flat R/L strip, the shared misc stream as the jitter source.
     const local = rotate(conj(frame.quat), sub(point, frame.centre));
     const hs: Vec3 = [local[0] / frame.axes[0], local[1] / frame.axes[1], local[2] / frame.axes[2]];
-    const r = headHit(h.ladder, { hs, strip: 0.25 }, rngStreams.misc);
-    h.ladder = r.state;
+    const strip = HEAD_LEAF.strip[feel.side ?? 'R'];
+    const r = headHit(h.model, { hs, strip }, h.rand);
+    h.model = r.state;
+
+    // Region surface points, traced once per hit on the posed (un-carved) surface.
+    const surf = new Map<HeadRegion, Vec3>();
+    const surfaceOf = (reg: HeadRegion): Vec3 => {
+      let p = surf.get(reg);
+      // An orbit is traced straight back along the head's forward (on the painted eye's line: toward the centre
+      // it would land ~2 cm nearer the nose); the other regions toward the head centre.
+      const back = reg === 'orbitL' || reg === 'orbitR' ? rotate(frame.quat, [0, 0, -1]) : undefined;
+      if (!p) { p = surfaceToward(field, regionRayStart(frame, reg), frame, back); surf.set(reg, p); }
+      return p;
+    };
+    // The shallowest depth below the anchor plane at which the carve (a sphere of `radius` round the anchor, clipped
+    // by a slab along the inward normal) first cuts the skull — the head's bone prims, the field the mesh skeleton
+    // is extracted from. Sampled over the carve's whole footprint (a centre column + rings at 1/3, 2/3 and 0.95 of
+    // the radius, 8 columns each), not just under the anchor: the brow ridge sits 9 mm shallower off-axis.
+    const skullBones = (posed.bonePrims ?? []).filter(p => p.op === 'bone' && p.limb === 'head' && !p.dead);
+    const skullDepth = (at: Vec3, radius: number): number => {
+      if (!skullBones.length) return Infinity;
+      const n = normalAt(field, at);
+      const t1 = unit(Math.abs(n[1]) < 0.9 ? [n[2], 0, -n[0]] : [0, -n[2], n[1]]);
+      const t2: Vec3 = [n[1] * t1[2] - n[2] * t1[1], n[2] * t1[0] - n[0] * t1[2], n[0] * t1[1] - n[1] * t1[0]];
+      let best = Infinity;
+      const column = (u: number, v: number): void => {
+        const lat2 = u * u + v * v;
+        for (let d = 0; d < best && d * d + lat2 < radius * radius; d += 0.0005) {
+          const q: Vec3 = [
+            at[0] + t1[0] * u + t2[0] * v - n[0] * d, at[1] + t1[1] * u + t2[1] * v - n[1] * d, at[2] + t1[2] * u + t2[2] * v - n[2] * d,
+          ];
+          if (skullBones.some(p => sdPrimitive(q, p) < 0)) { best = d; return; }
+        }
+      };
+      column(0, 0);
+      for (const f of [1 / 3, 2 / 3, 0.95]) {
+        for (let k = 0; k < 8; k++) column(Math.cos(k * Math.PI / 4) * f * radius, Math.sin(k * Math.PI / 4) * f * radius);
+      }
+      return best;
+    };
+    const crater = (reg: HeadRegion | 'brain', at: Vec3, radius: number): Wound => {
+      const w = worldHitToWound(posed.prims, at, radius, 'blast', yaw, field);
+      w.headSlot = 'keep'; w.headRegion = reg; w.severRadius = 0;
+      let skull: number | null = null;
+      if (reg !== 'brain' && w.carveDepth !== undefined) {
+        const sd = skullDepth(at, radius);
+        skull = Number.isFinite(sd) ? sd : null;
+        // The carve's depth slab clips the sphere (radius `radius`): deeper than the radius carves nothing more.
+        w.carveDepth = Math.min(radius, regionCarve(reg, h.model.flesh[reg], w.carveDepth, sd));
+      }
+      h.craters[reg] = { radius: w.radius, carveDepth: w.carveDepth ?? null, skull };
+      return clothifyWound(posed.prims, w, 'heavy');
+    };
+
     const wounds: Wound[] = [];
+    let bleedAt: Wound | null = null;
     let forceCollapse = false;
-    let crown: Vec3 | null = null;
-    let brainStage = false;
-    let stripped = false;
-    const crownOf = (): Vec3 => (crown ??= surfaceToward(field, crownRayStart(frame), frame));
+    let dented = false;
     for (const ev of r.events as HeadEvent[]) {
       switch (ev.kind) {
         case 'wobble':
           h.deform = kickWobble(h.deform, dirLocal);
           break;
-        case 'eye-pop': {
-          const socket = surfaceToward(field, eyeRayStart(frame, ev.side), frame);
-          const sw = tag(worldHitToWound(posed.prims, socket, HEAD_LEAF.socketR, 'blast', yaw, field), 'keep');
-          wounds.push(sw);
-          const n = normalAt(field, socket);
-          const k = dot(dir, n);
-          const out = unit([dir[0] - 2 * k * n[0], dir[1] - 2 * k * n[1], dir[2] - 2 * k * n[2]]);
-          // makeStalk lays the rope STRAIGHT at full length: the piece's bound is fixed from these prims.
-          const stalk = makeStalk(socket, out, HEAD_LEAF.popSpeed);
-          const piece = deps.attach ? deps.attach(a, stalkWorldPrims(stalk), socket, { clean: true }) : null;
-          h.eye = { side: ev.side, socket: { ...sw }, stalk, piece };
+        case 'strip': {
+          if (!dented) { dented = true; h.deform = addDent(h.deform, dirLocal, HEAD_LEAF.dentDepth, frame.axes); }
+          const w = crater(ev.region, surfaceOf(ev.region), REGION_TUNING.craterR(ev.region, ev.flesh));
+          wounds.push(w);
+          bleedAt ??= w;
           break;
         }
-        case 'strip':
-          // Interim: v1's dent + one face crater at the hit point, once per hit (Task 17: per-region craters).
-          if (stripped) break;
-          stripped = true;
-          h.deform = addDent(h.deform, dirLocal, HEAD_LEAF.dentDepth, frame.axes);
-          wounds.push(tag(worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field), 'face'));
+        case 'orbit-exposed': {
+          a.view.setEyeGlow(ev.side, false);
+          const at = surfaceOf(orbitRegion(ev.side));
+          const pi = worldHitToWound(posed.prims, at, 0.01, 'blast', yaw).primIdx;
+          const fwd = rotate(frame.quat, [0, 0, 1]);
+          const o: Orbit = {
+            at: tracker(posed.prims, pi, at, yaw),
+            inner: tracker(posed.prims, pi, add(at, scale(unit(sub(frame.centre, at)), 0.01)), yaw),
+            front: tracker(posed.prims, pi, add(at, scale(fwd, 0.02)), yaw),
+            inOrbit: null, stalk: null, dangling: null, plug: null,
+          };
+          h.orbits[ev.side] = o;
+          o.inOrbit = attach(a, inOrbitPrims(orbitNow(posed.prims, o, yaw)), at);
           break;
-        case 'orbit-exposed':
-        case 'skull-exposed':
-          break;   // Interim: nothing yet (Task 16/17: glow mask, in-orbit eyeball, bone-deep carve).
+        }
+        case 'eye-pop': {
+          const o = h.orbits[ev.side];
+          if (!o) break;
+          o.inOrbit?.dispose();
+          o.inOrbit = null;
+          const n = orbitNow(posed.prims, o, yaw);
+          const nrm = normalAt(field, n.at);
+          const k = dot(dir, nrm);
+          const out = unit([dir[0] - 2 * k * nrm[0], dir[1] - 2 * k * nrm[1], dir[2] - 2 * k * nrm[2]]);
+          // makeStalk lays the rope STRAIGHT at full length: the piece's bound is fixed from these prims.
+          o.stalk = makeStalk(n.at, out, HEAD_LEAF.popSpeed);
+          o.dangling = attach(a, danglingPrims(o.stalk, n), n.at);
+          break;
+        }
         case 'eye-snap':
-          snapEye(a, h, dir);
+          snapEye(a, h, ev.side, dir);
           break;
+        case 'skull-exposed':
+          break;   // the region's crater at this flesh reaches bone (regionCarve)
         case 'brain': {
-          const c = crownOf();
-          wounds.push(tag(worldHitToWound(posed.prims, c, CROWN.brainR, 'blast', yaw, field), 'keep'));
+          const c = surfaceOf(ev.region);
+          wounds.push(crater('brain', c, CROWN.brainR));
           const rand = rngStreams.misc;
-          // The whole brain is the modelled MESH now (spec §14); the SDF brainPiece only while the GLB loads.
+          // The whole brain is the modelled MESH (spec §14); the SDF brainPiece only while the GLB loads.
           const l = brainLaunch(c, dir, rand);
           const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel) ?? false;
           deps.gore(a, [...(thrown ? [] : [brainPiece(c, dir, rand)]), ...brainLumps(c, dir, rand), ...skullChips(c, dir, rand)]);
-          brainStage = true;
-          deps.burst(a, c, [0, 1, 0]);
+          // Up, leaning out of the cracked region (0.4 × its outward normal). Straight out of a brow crack the burst
+          // sprayed at the player and the brain went unseen behind streaks (smoke, b2-brain-3f).
+          const outN = normalAt(field, c);
+          deps.burst(a, c, unit([outN[0] * 0.4, outN[1] * 0.4 + 1, outN[2] * 0.4]));
           break;
         }
         case 'kill':
@@ -300,9 +497,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       }
     }
     a.blast({ wounds, meterCredit: feel.meterCredit, impulse, reaction: 'blast', forceCollapse });
-    // The brain stage bleeds a PELLET's worth (spec §14: so the brain is seen): its first wound is the crown
-    // cavity, and a slug bleed there puts 85 near-stationary drops right on the brain's way out.
-    if (wounds[0]) deps.bleed(a, wounds[0], point, dir, brainStage ? 'pellet' : 'slug');
+    // Head strips bleed a PELLET's gout (spec §15), and so does the brain stage (spec §14: so the brain is seen).
+    if (bleedAt) deps.bleed(a, bleedAt, point, dir, 'pellet');
   }
 
   function tick(dt: number): void {
@@ -314,21 +510,34 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       // its posed/drawn head would keep the hit's re-pose — the wobble's PEAK squash (0.40 along the blow),
       // which pulls the face flesh ~2-3 cm back behind the undeformed skull and teeth — for good.
       if (ctx.demo.wanderFrozen && h.deform.s !== s0) a.reposeHead();
-      if (!h.eye) continue;
+      if (!h.orbits.L && !h.orbits.R) continue;
       const posed = a.posed();
-      const standing = a.debug().phase === 'standing';
-      if (!standing || !headAlive(posed)) {
-        const d = headDeath(h.ladder);
-        h.ladder = d.state;
-        if (d.events.some(e => e.kind === 'eye-snap')) snapEye(a, h, [0, 0, 0]);
-        else { h.eye.piece?.dispose(); h.eye = null; }
+      if (!headAlive(posed)) {
+        // The head is gone (popped, severed): its eyes and plugs go with it.
+        h.model = headDeath(h.model).state;
+        for (const side of SIDES) { const o = h.orbits[side]; if (o) disposeOrbit(o); }
+        h.orbits = {};
         continue;
       }
-      // The socket rides the posed (wobbling, dented) head.
-      const socket = woundWorldPos(posed.prims, h.eye.socket, a.pose().yaw);
-      h.eye.stalk = stepStalk(h.eye.stalk, socket, dt);
-      const prims = stalkWorldPrims(h.eye.stalk);
-      h.eye.piece?.update(socket, prims.map(p => ({ a: sub(p.a, socket), b: sub(p.b, socket) })));
+      if (a.debug().phase !== 'standing') {
+        // Dead some other way (the brain's collapse, dynamite): a dangling eye snaps off; the plug stays.
+        const d = headDeath(h.model);
+        h.model = d.state;
+        for (const ev of d.events) if (ev.kind === 'eye-snap') snapEye(a, h, ev.side, [0, 0, 0]);
+      }
+      const yaw = a.pose().yaw;
+      for (const side of SIDES) {
+        const o = h.orbits[side];
+        if (!o) continue;
+        const n = orbitNow(posed.prims, o, yaw);
+        if (o.inOrbit) o.inOrbit.update(n.at, localEnds(inOrbitPrims(n), n.at));
+        if (o.stalk) {
+          // The socket rides the posed (wobbling, dented) head.
+          o.stalk = stepStalk(o.stalk, n.at, dt);
+          o.dangling?.update(n.at, localEnds(danglingPrims(o.stalk, n), n.at));
+        }
+        if (o.plug) o.plug.update(n.at, localEnds([plugPrim(n.at, n.inward)], n.at));
+      }
     }
   }
 
@@ -345,16 +554,32 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     debug(id) {
       for (const [a, h] of heads) {
         if (a.id !== id) continue;
-        const e = h.eye;
+        const posed = a.posed(), yaw = a.pose().yaw;
+        const eyeball: Record<EyeSide, Vec3 | null> = { L: null, R: null };
+        const socket: Record<EyeSide, Vec3 | null> = { L: null, R: null };
+        let draws = 0;
+        for (const side of SIDES) {
+          const o = h.orbits[side];
+          if (!o) continue;
+          const n = orbitNow(posed.prims, o, yaw);
+          socket[side] = n.at;
+          if (o.inOrbit) eyeball[side] = add(n.at, scale(n.inward, HEAD_LEAF.eyeInset));
+          if (o.stalk) eyeball[side] = [...o.stalk.p[o.stalk.p.length - 1]!] as Vec3;
+          draws += (o.inOrbit ? 1 : 0) + (o.dangling ? 1 : 0) + (o.plug ? 1 : 0);
+        }
+        const m = h.model;
         return {
-          hits: h.ladder.hits,
-          stage: Math.min(4, h.ladder.hits),
-          dead: h.ladder.dead,
-          eye: eyeDebug(h.ladder),
+          hits: m.hits,
+          flesh: { ...m.flesh },
+          skull: { ...m.skull },
+          eyes: { ...m.eyes },
+          dead: m.dead,
           squash: h.deform.s,
           flat: [...h.deform.flat],
-          eyeball: e ? [...e.stalk.p[e.stalk.p.length - 1]!] as Vec3 : null,
-          socket: e ? [...e.stalk.p[0]!] as Vec3 : null,
+          eyeball,
+          socket,
+          draws,
+          craters: Object.fromEntries(Object.entries(h.craters).map(([k, v]) => [k, { ...v }])),
           frame: h.frame ? { centre: [...h.frame.centre] as Vec3, quat: [...h.frame.quat] as Quat, axes: [...h.frame.axes] as Vec3 } : null,
         };
       }
@@ -362,3 +587,4 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     },
   };
 }
+

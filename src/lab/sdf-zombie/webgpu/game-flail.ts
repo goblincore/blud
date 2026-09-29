@@ -83,7 +83,7 @@ export interface FlailDeps {
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
   /** The head damage model (game-head-damage.ts): a head-region hit goes here INSTEAD of the face crater
    *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. */
-  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number }): void;
+  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide }): void;
 }
 
 export interface FlailDebug {
@@ -409,7 +409,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       struckHeads[a.id] = headHits.get(a.id) ?? 0;
       // The head damage model takes every head-region hit (its ladder counts the same hits as headHits).
       if (region && deps.headHit) {
-        deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove });
+        deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side });
         continue;
       }
       const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
