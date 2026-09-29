@@ -1,41 +1,43 @@
-// scripts/head-damage-gate.mjs — melee head damage (Task 7 of docs/superpowers/plans/2026-09-28-melee-head-damage.md;
-// spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §11). ONE frozen zombie takes four REAL
-// flail clicks with the crosshair on its head (0.9 m out, re-aimed before every click, hit-stop off):
-//   0. a body hit first (torso, 1.2 m); its wounds are recorded and must all survive (step 6).
-//   1. hit 1, the eye: an eye dangles; the wobble's peak |squash| over the 10 frames from the strike is >= 0.15;
-//      30 frames on the eyeball hangs >= 0.08 m below the socket; 48 frames on |squash| < 0.0025; a new
-//      radius-0.028 crater exists. Photo head-1-eye.png and an 8-shot strip of the swinging eye.
-//   1b. (Task 10) hit 1's peak-squash frame (the strike frame or the next two, whichever squashes most; photo
-//      head-1-squash[-procedural].png): the bone-coloured pixel share in a face crop, OUTSIDE a circle around each
-//      crater, stays within the pre-hit share + 0.005 — the skull squashes WITH the flesh, so no bone shows through
-//      intact flesh (mesh path asserted; procedural printed).
-//   2. hit 2, cave and snap: eye.state is gone; live chunks went up; the dented side's POLE moved in by >= 0.01.
-//      WHY THE POLE (plan decision 1; spec §13): a dent is a SIDE FLATTENING along the head axis nearest the
-//      blow — that side's surface moves in by the full depth at its pole (the head frame centre ± that axis ×
-//      the half-extent) and by less toward the rim, and the opposite side stays put. It is not a point dent,
-//      so a ring sampled 0.085 m off the blow reads a fraction of the depth (0.006 at Task 7) and tests the
-//      model where it promises nothing. The probe: trace the surface inward along the axis through the (un-
-//      deformed) frame centre, all six poles before the hit, and again after on the side whose `flat` grew; the
-//      surface must move in by >= 0.01. (sdBody 2 mm outside the old surface is printed too, not asserted: the
-//      face pole is the nose, an anisotropic ellipsoid whose SDF under-reads off-axis — 0.005 for a 0.019 move.) And (Task 10) the face-crop bone share
-//      outside the craters after the hit stays within the pre-hit-2 share + 0.005 (mesh asserted). Photo
-//      head-2-cave[-procedural].png.
-//   3. hit 3, the scalp: two new radius-0.05 craters within 0.03 m of the crown; the bone-coloured pixel share in
-//      a crown crop, photographed from above (a photo stand, not the swing stand), rises — on the shipped
-//      skeleton path (mesh) AND on ?skeleton=procedural (a second boot; hits 1-3 only). Photo head-3-scalp.png.
-//   4. hit 4, the brain: live SDF chunks up by >= 4 (3 brain lumps + 3 skull chips); a brain MESH gib exists
-//      (__sdfGame.head.brains(), Task 11) — photo head-4-brain.png 3 frames after the strike, from the swing stand;
-//      thawed 3 frames the zombie is out of "standing" and limbAlive(id, "head") > 0; 1.5 s after the strike the
-//      brain rests near the floor (y <= BRAIN_REST_MAX_Y: its support sits it 0.03-0.06 m up) and stopped moving
-//      — photo brain-rest.png, a close-up on it; head-4-brain-apex.png (+15 frames) shows it near the top of its arc.
-//   6. every body wound from step 0 is still in actorWounds (within 1 mm) — read before the thaw.
-//   7. cost: median draw time (timeDraws, 120 frames, CPU+GPU fenced) with a dangling eye vs the same scene
-//      before any head hit: within 0.5 ms. (Baseline is measured twice to print the noise floor.)
-//   8. zero console errors / exceptions.
-// Measured, PRINTED (not asserted) — the Task 6 smoke looked wrong here and this gate must not hide it:
-//   * the change in the head surface after hit 1 over a 15x15 grid of face rays (sdBody march before vs after):
-//     how many rays moved, how far from the socket, and the same as a pixel diff over the face crop outside a
-//     small circle around the socket/eye; the red-blood pixel share per stage photo (blood hiding stages 2-4).
+// scripts/head-damage-gate.mjs — melee head damage v2 (Task 18 of docs/superpowers/plans/2026-09-28-melee-head-damage.md;
+// spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15: the flesh wears away, events follow).
+// STATES, NOT HIT NUMBERS. ONE frozen zombie (the one whose face points most toward the room centre) takes REAL flail
+// clicks, hit-stop off. Before every click the player stands 0.9 m in front of the face (along the head's forward)
+// and the crosshair (free aim, reticle centred) is put on a REGION's world point — HEAD_REGIONS[region] (imported
+// from the page's own head-damage.ts) through the head frame (__sdfGame.head.frame: centre + quat·(hs × axes)).
+//   0. a body hit first (torso, 1.2 m); its wounds must all survive (step 5). The draw-time baseline (twice).
+//      The painted-eye baseline photo (v2-before.png, bleed off): each eye's red-glow share, the left orbit's luma.
+//   1. the LEFT ORBIT ('L' = image-left = hs.x < 0, the zombie's own right eye) until eyes.L is 'in-orbit':
+//      - that took 2–5 hits; every one of them struck nearest the left orbit (the aim's control);
+//      - (bleed off, the attached pieces hidden) the painted red-glow share at that eye dropped by >= 80%, and the
+//        other eye keeps >= 50% of its baseline share (it still glows);
+//      - a 3D eyeball is present: state().eyeball.L set, and showing the pieces changes >= 25% of the pixels in an
+//        eyeball-radius circle there. Photos v2-orbit-exposed.png (blood) / -noblood.
+//      THE FIRST ORBIT HIT is also the wobble and the dent (bleed off for it: its measures are geometric):
+//      - peak |squash| >= 0.35 on the strike frame; a rebound (the opposite sign) of >= 0.12 within 10 frames;
+//        |squash| < 0.0025 by 1.4 s (84 frames); photo v2-wobble-strip.png (8 frames, 2 apart, from the strike);
+//      - no bone through intact flesh at the peak-squash frame (of frames 0–2): the face-crop bone-coloured share
+//        outside every head crater's circle (radius + 2 cm) stays within the pre-hit share + 0.005 (v1's check);
+//      - the dented side's pole moved in by >= 0.01 m (v1's pole probe; the dent is a side flattening).
+//   2. one more orbit hit POPS the eye: eyes.L 'dangling' on the strike frame. 40 frames on (bleed off):
+//      - the iris faces the camera: the red-glow share in an eyeball-radius circle on the eyeball >= 0.08;
+//      - the orbit is a dark hole: mean luma in a 1.5 cm circle at the orbit — the SAME circle the painted-eye
+//        baseline was measured in — < 0.5 × the baseline's (the traced socket point and the plug centre printed).
+//      Photos v2-eye-pop.png (blood) / -noblood. The dangling eye's draw cost is timed here (step 6).
+//   3. the next head hit (the first BROW hit) SNAPS it: eyes.L 'gone' on the strike frame; 40 frames on (bleed off)
+//      the socket is still a dark hole (the same luma measure; photos v2-snapped.png / -noblood). Then the brow until dead:
+//      - the skull was exposed (brow or crown flesh < skullExposed) on an earlier hit than the brain;
+//      - the kill came at 5–9 total head hits; exactly one brain MESH gib (head.brains()); live SDF chunks up by
+//        >= 4 over the killing hit (lumps + chips);
+//      - photos v2-skull.png (blood) / -noblood (settled, the hit that exposed it) and v2-brain.png (+3 frames).
+//   4. thawed 3 frames: the zombie is out of 'standing'; the head is still on (limbAlive > 0).
+//   5. every body wound from step 0 survives (within 1 mm; read before the thaw); at most 7 head wound slots
+//      (Wound.headSlot) are used.
+//   5b. 1.5 s after the kill the brain rests near the floor and has stopped (photo v2-brain-rest.png).
+//   6. cost: median draw time (timeDraws, 120 frames, CPU+GPU fenced) with the dangling eye vs the same stand before
+//      any head hit: within 0.5 ms.
+//   7. zero console errors / exceptions.
+// BLOOD: setBleed(false) CLEARS the blood sim (droplets, splats) — not the goo blobs — so a with-blood photo is
+// always shot before the no-blood one, and bleeding is switched back on before the next hit.
 // Usage (from bash):
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   node scripts/head-damage-gate.mjs 5241 9241
@@ -49,15 +51,21 @@ const CDP = Number(process.argv[3] ?? 9241);
 const OUT = process.env.OUT ?? "docs/dev-notes/2026-09-28-head-damage/gate";
 const W = Number(process.env.W ?? 1280), H = Number(process.env.H ?? 800);
 const EYE_H = 1.62;          // PLAYER.eye
-const STAND = 0.9;           // head stand-off, m
+const STAND = 0.9;           // swing stand: horizontal distance from the head centre, m
+const PHOTO_D = 0.55;        // face photo stand, m (camera lifted to the head centre's height)
 // The plan's thresholds (do not loosen).
-const SQUASH_PEAK_MIN = 0.15, EYE_DROP_MIN = 0.08, SQUASH_SETTLE_MAX = 0.0025;
-const DENT_MIN = 0.01, CROWN_NEAR = 0.03, BRAIN_CHUNKS_MIN = 4, COST_MAX_MS = 0.5;
-const BONE_THRU_MAX = 0.005;  // face-crop bone share outside craters may rise at most this over the pre-hit share
-const CRATER_MARGIN = 0.02;   // the exclusion circle around a crater: its radius + this, m
-const SOCKET_R = 0.028, SCALP_R = 0.05, R_TOL = 0.005;
-const BRAIN_REST_MAX_Y = 0.1;   // the resting brain's origin height, m (floor 0)
-
+const ORBIT_HITS_MIN = 2, ORBIT_HITS_MAX = 5, KILL_HITS_MIN = 5, KILL_HITS_MAX = 9, MAX_HEAD_SLOTS = 7;
+const GLOW_DROP_MIN = 0.8;
+const SQUASH_PEAK_MIN = 0.35, REBOUND_MIN = 0.12, REBOUND_FRAMES = 10, SETTLE_FRAMES = 84, SQUASH_SETTLE_MAX = 0.0025;
+const BONE_THRU_MAX = 0.005, CRATER_MARGIN = 0.02;
+const DENT_MIN = 0.01, BRAIN_CHUNKS_MIN = 4, COST_MAX_MS = 0.5, BRAIN_REST_MAX_Y = 0.1;
+// This gate's own measures (the plan names the measure, not the number).
+const OTHER_GLOW_KEEP = 0.5;   // the other eye keeps >= this share of its baseline glow ("still glows")
+const EYEBALL_R = 0.03;        // head-pop.ts EYEBALL_R
+const EYE_PRESENT_MIN = 0.25;  // share of an eyeball-radius circle the attached pieces change
+const IRIS_RED_MIN = 0.08;     // red-glow share of the eyeball circle: a straight-on iris (r 0.5R, pupil 0.24R) is ~0.19
+const SOCKET_DARK = 0.5;       // socket mean luma < this × the painted-eye baseline's
+const SOCKET_LUMA_R = 0.015;   // m
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const results = [];
@@ -176,7 +184,6 @@ async function capture(name) {
   if (name) { writeFileSync(`${OUT}/${name}.png`, buf); console.log(`  shot ${OUT}/${name}.png`); }
   return Object.assign(decodePng(buf), { buf });
 }
-
 // ---- Boot a page and pick a frozen zombie pool ---------------------------------------------
 let centre = [0, 0, 0];
 let pool = [];
@@ -213,6 +220,11 @@ async function boot(label, query) {
   const room = (await evaluate("__sdfGame.rooms")).find((r) => r.id === ROOM);
   centre = [(room.bounds.minX + room.bounds.maxX) / 2, 0, (room.bounds.minZ + room.bounds.maxZ) / 2];
   usedZ = new Set();
+  // Attached pieces (the in-orbit eye, the dangling eye, the socket plug) are not drawn until the background gib
+  // warm is ready (boot.attachPiece's gibDraw skip): wait for it, stepping now and then (the loop is stopped).
+  let wb = null;
+  for (let i = 0; i < 400; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" || wb.gib === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 1 / 60)"); }
+  if (wb?.gib !== "ready") die(`[${label}] the background gib warm is ${JSON.stringify(wb)}: attached pieces would never draw`);
   const diag = await evaluate("__sdfGame.skeletonDiagnostics()");
   console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies); skeleton requested ${diag.requestedMode}, active ${diag.activeMode}`);
   return { diag };
@@ -267,7 +279,6 @@ async function clickStrike(id, after, perFrame) {
   return { strikeFrame, series, last: st.lastStrike };
 }
 const distTo = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-
 // ---- pixel helpers ------------------------------------------------------------------------------------
 const redShare = (img, cx, cy, size = 220) => {
   let n = 0, red = 0;
@@ -336,49 +347,6 @@ async function polesOf(id, frame) {
   return out;
 }
 const toPx = async (p) => { const n = await evaluate(`__sdfGame.flail.toScreen(${p[0]}, ${p[1]}, ${p[2]})`); return n ? ndcPx(n) : null; };
-
-// ---- In-page face grid: march rays at the head face, before vs after ------------------------------
-async function faceGrid(id, head, pose) {
-  const d = [head[0] - pose.x, 0, head[2] - pose.z]; const dl = Math.hypot(d[0], d[2]); d[0] /= dl; d[2] /= dl;
-  const right = [-d[2], 0, d[0]];
-  return { d, right, head, t: await evaluate(`(() => {
-    const id = ${id}, c = ${JSON.stringify(head)}, d = ${JSON.stringify(d)}, r = ${JSON.stringify(right)};
-    const out = [];
-    for (let iv = -7; iv <= 7; iv++) for (let iu = -7; iu <= 7; iu++) {
-      const u = iu * 0.02, v = iv * 0.02;
-      const o = [c[0] - d[0] * 0.5 + r[0] * u, c[1] + v, c[2] - d[2] * 0.5 + r[2] * u];
-      let t = 0, hit = null;
-      for (let i = 0; i < 80 && t < 0.9; i++) {
-        const p = [o[0] + d[0] * t, o[1], o[2] + d[2] * t];
-        const s = __sdfGame.head.surfaceAt(id, p[0], p[1], p[2]);
-        if (s < 0.001) { hit = t; break; }
-        t += Math.max(s, 0.002);
-      }
-      out.push({ u, v, t: hit });
-    }
-    return out; })()`) };
-}
-function reportFaceChange(before, after, socket) {
-  const b = before.t, a = after.t;
-  const su = (socket[0] - before.head[0]) * before.right[0] + (socket[2] - before.head[2]) * before.right[2];
-  const sv = socket[1] - before.head[1];
-  let hit0 = 0, moved = 0, thru = 0, outside = 0, maxOut = 0, maxDepth = 0;
-  for (let i = 0; i < b.length; i++) {
-    if (b[i].t === null) continue; hit0++;
-    const dt = a[i].t === null ? Infinity : a[i].t - b[i].t;
-    if (dt > 0.01) {
-      moved++; if (a[i].t === null) thru++;
-      const rs = Math.hypot(b[i].u - su, b[i].v - sv);
-      if (dt !== Infinity) maxDepth = Math.max(maxDepth, dt);
-      if (rs > 0.05) { outside++; maxOut = Math.max(maxOut, rs); }
-    }
-  }
-  note(`hit-1 face change (15x15 rays, 0.02 m spacing, ${hit0} hit the face): ${moved} rays moved in by > 1 cm (${thru} went clean through), ` +
-    `${outside} of them farther than 0.05 m from the socket (out to ${maxOut.toFixed(3)} m); deepest finite change ${maxDepth.toFixed(3)} m; socket at grid (${su.toFixed(3)}, ${sv.toFixed(3)}); ` +
-    `a 0.028 m socket alone would cover ~${Math.round(Math.PI * 0.028 * 0.028 / 0.0004)} grid rays`);
-  return { moved, outside, maxOut };
-}
-
 /** Nudge the view (yaw, pitch) until world point `t` sits at the screen centre: the camera is not at the player's
  *  pos line (lateral offset, fisheye), so the analytic yaw leaves the target off to one side. */
 async function centreOn(t, iters = 8) {
@@ -411,308 +379,366 @@ async function crownShot(id, name) {
   const c = await toPx(cs.target);
   return { img, c, share: c ? boneShare(img, c[0], c[1], 200) : null, cs };
 }
-/** The crown: the HIGHEST point of the head surface — a 0.01 m grid of downward marches within 0.12 m of the head
- *  centre (independent of the leaf's own crown trace along the head's up axis). */
-async function crownPoint(id, head) {
-  return evaluate(`(() => { const c = ${JSON.stringify(head)}; let best = null;
-    for (let dx = -0.12; dx <= 0.1201; dx += 0.01) for (let dz = -0.12; dz <= 0.1201; dz += 0.01) {
-      let y = c[1] + 0.6;
-      for (let i = 0; i < 200 && y > c[1] - 0.2; i++) { const s = __sdfGame.head.surfaceAt(${id}, c[0] + dx, y, c[2] + dz); if (s < 0.001) { if (!best || y > best[1]) best = [c[0] + dx, y, c[2] + dz]; break; } y -= Math.max(s, 0.002); }
-    }
-    return best; })()`);
-}
-const stagePhoto = async (id, name, tag) => {
-  const { head } = await aimHead(id);
-  const img = await capture(name);
-  const c = await toPx(head);
-  if (c) note(`${tag}: red (blood-coloured) pixel share in a 220 px crop on the head ${(100 * redShare(img, c[0], c[1])).toFixed(1)}%`);
-  return img;
-};
 
-async function ladder(label, full) {
-  const z = fresh(); const id = z.id;
-  const out = { label };
-  // -------- 0. body hit
+// ---- The head frame and its regions ---------------------------------------------------------------
+let HD = null;   // { regions: HEAD_REGIONS, orbitExposed, skullExposed } from the page's head-damage.ts
+const frameOf = (id) => evaluate(`__sdfGame.head.frame(${id})`);
+const regionWorld = (fr, hs, k = 1) => { const l = qRot(fr.quat, [hs[0] * fr.axes[0] * k, hs[1] * fr.axes[1] * k, hs[2] * fr.axes[2] * k]); return fr.centre.map((c, i) => c + l[i]); };
+const hsOf = (fr, p) => { const l = qRot([-fr.quat[0], -fr.quat[1], -fr.quat[2], fr.quat[3]], p.map((v, i) => v - fr.centre[i])); return [l[0] / fr.axes[0], l[1] / fr.axes[1], l[2] / fr.axes[2]]; };
+const nearestRegion = (hs) => { let best = null, bd = Infinity; for (const [r, c] of Object.entries(HD.regions)) { const d = (hs[0] - c[0]) ** 2 + (hs[1] - c[1]) ** 2 + (hs[2] - c[2]) ** 2; if (d < bd) { bd = d; best = r; } } return best; };
+const fwdOf = (fr) => qRot(fr.quat, [0, 0, 1]);
+const rightOf = (fr) => qRot(fr.quat, [1, 0, 0]);
+/** The socket plug's centre (game-head-damage HEAD_LEAF.plug.inset 0.024 in from the socket point, toward the
+ *  head centre — the leaf's `inward` is 1 cm toward the centre, the same direction). */
+const plugCentre = (fr, sock) => { const d = fr.centre.map((c, i) => c - sock[i]); const l = Math.hypot(...d) || 1; return sock.map((v, i) => v + (d[i] / l) * 0.024); };
+const brains = () => evaluate("__sdfGame.head.brains()");
+const setBleed = (on) => evaluate(`__sdfGame.setBleed(${on})`);
+
+/** The swing stand: STAND m in front of the face (horizontal, along the head forward), the crosshair (reticle centred)
+ *  nudged onto world point `p`. Returns p's NDC after centring. */
+async function aimAt(fr, p) {
+  const f = fwdOf(fr), fl = Math.hypot(f[0], f[2]) || 1;
+  const x = fr.centre[0] + (f[0] / fl) * STAND, z = fr.centre[2] + (f[2] / fl) * STAND;
+  await place({ x, z, yaw: yawOf(p[0] - x, p[2] - z) }, Math.atan2(p[1] - EYE_H, Math.hypot(p[0] - x, p[2] - z)));
+  await evaluate("__sdfGame.setAimPoint(0, 0)");
+  return centreOn(p);
+}
+/** The face photo stand: PHOTO_D m in front of the face, the camera at the head centre's height, looking at it. */
+async function faceStand(fr) {
+  const f = fwdOf(fr), fl = Math.hypot(f[0], f[2]) || 1;
+  const x = fr.centre[0] + (f[0] / fl) * PHOTO_D, z = fr.centre[2] + (f[2] / fl) * PHOTO_D;
+  await evaluate(`__sdfGame.setPose(${x}, ${z}, ${yawOf(fr.centre[0] - x, fr.centre[2] - z)}, 0, ${fr.centre[1] - EYE_H})`);
+  await stepOne();
+  await centreOn(fr.centre);
+}
+/** Red-glow share (the painted eye / iris colour: r > 150, r > 2.2 g, r > 2.2 b) in a circle. */
+const glowShare = (img, c, r) => { let n = 0, g = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= img.w || y >= img.h || Math.hypot(x - c[0], y - c[1]) > r) continue; n++; const p = px(img, x, y); if (p[0] > 150 && p[0] > 2.2 * p[1] && p[0] > 2.2 * p[2]) g++; } return n ? g / n : 0; };
+const meanLuma = (img, c, r) => { let n = 0, s = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= img.w || y >= img.h || Math.hypot(x - c[0], y - c[1]) > r) continue; n++; s += luma(px(img, x, y)); } return n ? s / n : 0; };
+const boneIn = (img, c, r) => { let n = 0, b = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= img.w || y >= img.h || Math.hypot(x - c[0], y - c[1]) > r) continue; n++; if (isBone(px(img, x, y))) b++; } return n ? b / n : 0; };
+/** Share of a circle's pixels that differ (colour distance > 30) between two images. */
+const diffShare = (a, b, c, r) => { let n = 0, d = 0; for (let y = Math.round(c[1] - r); y < c[1] + r; y++) for (let x = Math.round(c[0] - r); x < c[0] + r; x++) { if (x < 0 || y < 0 || x >= a.w || y >= a.h || Math.hypot(x - c[0], y - c[1]) > r) continue; n++; const p = px(a, x, y), q = px(b, x, y); if (Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) > 30) d++; } return n ? d / n : 0; };
+/** Shoot the pieces-hidden twin of the current view (the painted face alone). */
+async function captureNoPieces() {
+  await evaluate("__sdfGame.setChunksVisible(false)");
+  const img = await capture(null);
+  await evaluate("__sdfGame.setChunksVisible(true)");
+  return img;
+}
+/** Every head-region wound in the ring (Wound.headSlot set). */
+const headSlots = async (id) => (await evaluate(`__sdfGame.zombie(${id}).woundList()`)).filter((w) => w.headSlot);
+const fmtCraters = (st) => Object.entries(st.craters ?? {}).map(([k, v]) => `${k} r${v.radius.toFixed(3)} carve ${v.carveDepth?.toFixed(3) ?? "-"} skull ${v.skull?.toFixed(3) ?? "-"}`).join("; ");
+const fmtFlesh = (st) => Object.entries(st.flesh).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(" ");
+/** The region the strike's own snapped hit point (lastStrike.points[id]) is nearest, in frame `fr`. */
+async function struckRegion(id, fr) {
+  const p = (await flail()).lastStrike?.points?.[id];
+  return p ? { region: nearestRegion(hsOf(fr, p)), hs: hsOf(fr, p) } : { region: null, hs: null };
+}
+
+// ============================================================================================
+const main = await boot("default", "");
+const out = {};
+try {
+  if (main.diag.activeMode !== "mesh") die(`the shipped (default) skeleton path did not activate as mesh: ${JSON.stringify(main.diag)}`);
+  HD = await evaluate(`import("/src/lab/sdf-zombie/head-damage.ts").then((m) => ({ regions: m.HEAD_REGIONS, orbitExposed: m.REGION_TUNING.orbitExposed, skullExposed: m.REGION_TUNING.skullExposed }))`);
+  // The zombie whose face points most toward the room centre (the face stands must be inside the room).
+  let pick = null;
+  for (const z of pool) {
+    const fr = await frameOf(z.id); if (!fr) continue;
+    const f = fwdOf(fr), to = [centre[0] - fr.centre[0], centre[2] - fr.centre[2]];
+    const c = (f[0] * to[0] + f[2] * to[1]) / ((Math.hypot(f[0], f[2]) || 1) * (Math.hypot(to[0], to[1]) || 1));
+    if (!pick || c > pick.c) pick = { z, fr, c };
+  }
+  if (!pick) die("no zombie with a head frame");
+  const id = pick.z.id; usedZ.add(id);
+  const fr0 = pick.fr;
+  console.log(`zombie ${id}: face-to-centre cos ${pick.c.toFixed(2)}; head frame centre (${f2(fr0.centre)}) axes (${f2(fr0.axes)})`);
+
+  // -------- 0. body hit, cost baseline, painted-eye baseline
   const torso = await torsoOf(id);
   await place(standOff(torso, 1.2), Math.atan2(torso[1] - EYE_H, 1.2));
   await stepN(3);
   const w0 = await wounds(id);
   await clickStrike(id, 30);
   const bodyWounds = await wounds(id);
-  if (bodyWounds.length <= w0.length) fail(`[${label}] body hit added no wound (${w0.length} -> ${bodyWounds.length})`);
-  if (full) {
-    // baseline draw cost (twice: the noise floor), from the head stand
-    await aimHead(id);
-    await stepN(3); await capture(null);
-    out.base1 = await evaluate("__sdfGame.timeDraws(120)", 300000);
-    out.base2 = await evaluate("__sdfGame.timeDraws(120)", 300000);
+  check(bodyWounds.length > w0.length, `body hit adds a wound (${w0.length} -> ${bodyWounds.length})`);
+  check((await hstate(id)) === null, `the body hit is not a head hit (head.state null)`);
+  await aimAt(fr0, regionWorld(fr0, HD.regions.orbitL));
+  await stepN(3); await capture(null);
+  out.base1 = await evaluate("__sdfGame.timeDraws(120)", 300000);
+  out.base2 = await evaluate("__sdfGame.timeDraws(120)", 300000);
+  await setBleed(false);
+  await faceStand(fr0);
+  const img0 = await capture("v2-before");
+  const ppm = await pxPerMAt(fr0.centre, rightOf(fr0));
+  const eyePx = async (side) => toPx(regionWorld(fr0, HD.regions[side === "L" ? "orbitL" : "orbitR"]));
+  const base = { eL: await eyePx("L"), eR: await eyePx("R") };
+  base.gL = glowShare(img0, base.eL, 0.03 * ppm); base.gR = glowShare(img0, base.eR, 0.03 * ppm);
+  base.lumaL = meanLuma(img0, base.eL, SOCKET_LUMA_R * ppm);
+  note(`painted-eye baseline (face stand ${PHOTO_D} m, ${ppm.toFixed(0)} px/m, bleed off): glow share L ${base.gL.toFixed(3)} R ${base.gR.toFixed(3)} (3 cm circles); left-orbit luma ${base.lumaL.toFixed(1)} (1.5 cm circle)`);
+  await setBleed(true);
+
+  // -------- 1. the left orbit until the eye is in the orbit (the first hit is the wobble and the dent)
+  const orbitStruck = [];
+  let n = 0, st = null;
+  const strip = [];
+  while (n < 8) {
+    const fr = await frameOf(id);
+    const target = regionWorld(fr, HD.regions.orbitL);
+    await aimAt(fr, target);
+    await stepN(2);
+    let r;
+    if (n === 0) {
+      // Bleed off for the first hit: its checks are geometric (the goo blobs of the body hit stay).
+      await setBleed(false);
+      const polesB = await polesOf(id, fr);
+      const flatB = [0, 0, 0, 0, 0, 0];
+      const imgB = await capture(null);
+      const headPxB = await toPx(fr.centre);
+      const squash = [];
+      const squashShots = [];
+      r = await clickStrike(id, SETTLE_FRAMES, async (k, hs) => {
+        squash.push(hs.squash);
+        if (k <= 2 || (k % 2 === 0 && k <= 14)) {
+          const img = await capture(null);
+          if (k <= 2) squashShots.push({ k, s: Math.abs(hs.squash), img });
+          if (k % 2 === 0 && k <= 14) { const c = await toPx(fr.centre); if (c) strip.push(cropRgb(img, c[0], c[1] - 10, 220, 260)); }
+        }
+      });
+      const s0 = squash[0], sg = Math.sign(s0) || 1;
+      const rebound = Math.max(...squash.slice(1, REBOUND_FRAMES + 1).map((s) => -sg * s));
+      const settle = Math.abs(squash[SETTLE_FRAMES]);
+      note(`orbit hit 1 wobble (strike after ${r.strikeFrame + 1} frames): squash frames 0..14 = ${squash.slice(0, 15).map((s) => s.toFixed(3)).join(" ")}; |squash| at +${SETTLE_FRAMES} ${settle.toExponential(2)}`);
+      out.wobble = { peak: Math.abs(s0), rebound, settle };
+      check(Math.abs(s0) >= SQUASH_PEAK_MIN, `wobble: peak |squash| ${Math.abs(s0).toFixed(3)} on the strike frame (>= ${SQUASH_PEAK_MIN})`);
+      check(rebound >= REBOUND_MIN, `wobble: rebound ${rebound.toFixed(3)} (opposite sign) within ${REBOUND_FRAMES} frames (>= ${REBOUND_MIN})`);
+      check(settle < SQUASH_SETTLE_MAX, `wobble: |squash| ${settle.toExponential(2)} at +${SETTLE_FRAMES} frames / 1.4 s (< ${SQUASH_SETTLE_MAX})`);
+      if (strip.length === 8) {
+        const sw = 220, sh = 260, buf = Buffer.alloc(sw * 8 * sh * 3);
+        strip.forEach((f, i) => { for (let y = 0; y < sh; y++) f.copy(buf, (y * sw * 8 + i * sw) * 3, y * sw * 3, (y + 1) * sw * 3); });
+        writeFileSync(`${OUT}/v2-wobble-strip.png`, encodePng(sw * 8, sh, buf));
+        console.log(`  shot ${OUT}/v2-wobble-strip.png (frames +0,+2..+14 of orbit hit 1, bleed off, swing stand)`);
+      } else fail(`wobble strip: only ${strip.length}/8 frames projectable`);
+      // No bone through intact flesh at the peak-squash frame (craters excluded; the same mask on both images).
+      const sq = squashShots.reduce((m, q) => (q.s > m.s ? q : m));
+      const pxm = await pxPerMAt(fr.centre, rightOf(fr));
+      const ex = await craterCircles(id, fr.centre, pxm);
+      const half = Math.round(0.14 * pxm);
+      const b0 = headPxB ? boneShareOutside(imgB, headPxB, half, ex) : null, b1 = headPxB ? boneShareOutside(sq.img, headPxB, half, ex) : null;
+      note(`peak-squash frame +${sq.k} (|squash| ${sq.s.toFixed(3)}): face-crop bone share outside ${ex.length} crater circles ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (${2 * half}px crop)`);
+      check(b0 !== null && b1 <= b0 + BONE_THRU_MAX, `wobble peak: no bone through intact flesh — face-crop bone share outside craters ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (<= pre-hit + ${BONE_THRU_MAX})`);
+      // The dent: the pole on the side whose `flat` grew moved in.
+      const hsD = await hstate(id);
+      const grew = hsD.flat.map((x, i) => x - flatB[i]);
+      const side = grew.reduce((m, g, i) => (g > grew[m] ? i : m), 0);
+      const poleB = polesB[side];
+      const rA = poleB ? await poleRadius(id, poleB) : null;
+      const dent = poleB && rA !== null ? poleB.r - rA : null;
+      const sideName = ["x+", "x-", "y+", "y-", "z+", "z-"][side];
+      note(`dent: flat ${JSON.stringify(hsD.flat.map((x) => +x.toFixed(3)))}; side ${sideName}; pole radius ${poleB?.r.toFixed(4)} -> ${rA?.toFixed(4)}`);
+      check(dent !== null && grew[side] > 0 && dent >= DENT_MIN, `dent: the dented side's pole (${sideName}) moved in by ${dent?.toFixed(4)} m (>= ${DENT_MIN})`);
+      out.dent = dent;
+      await setBleed(true);
+    } else {
+      r = await clickStrike(id, 0);
+    }
+    n++;
+    const sr = await struckRegion(id, fr);
+    orbitStruck.push(sr.region);
+    st = await hstate(id);
+    note(`orbit hit ${n} (${r.last?.side}): struck nearest ${sr.region} (hs ${sr.hs ? f2(sr.hs) : "?"}); flesh ${fmtFlesh(st)}; eyes ${JSON.stringify(st.eyes)}; craters ${fmtCraters(st)}`);
+    if (st.eyes.L !== "painted") break;
+    await stepN(20);
   }
-  // -------- 1. the eye
-  let { head, pose } = await aimHead(id);
-  await stepN(3);
-  const woundsPre1 = await wounds(id);
-  const gridB = await faceGrid(id, head, pose);
-  const imgB = await capture(null);
-  const headPxB = await toPx(head);
-  const stripFrames = [];
-  const peakSeries = [];
-  const squashShots = [];
-  let r = await clickStrike(id, 10, async (k, hs) => {
-    peakSeries.push(hs.squash);
-    if (k <= 2) squashShots.push({ k, s: Math.abs(hs.squash), img: await capture(null) });
-  });
-  const peak = Math.max(...peakSeries.map(Math.abs));
+  out.orbitHits = n;
+  check(st.eyes.L === "in-orbit" && n >= ORBIT_HITS_MIN && n <= ORBIT_HITS_MAX, `orbit exposed: eyes.L ${st.eyes.L} after ${n} left-orbit hits (${ORBIT_HITS_MIN}–${ORBIT_HITS_MAX})`);
+  check(orbitStruck.every((q) => q === "orbitL"), `aim control: every left-orbit click struck nearest orbitL (${JSON.stringify(orbitStruck)})`);
   {
-    // 1b. the peak-squash frame: no bone through intact flesh (craters excluded; the same mask on both images).
-    const sq = squashShots.reduce((m, q) => (q.s > m.s ? q : m));
-    const name = `head-1-squash${full ? "" : "-procedural"}`;
-    writeFileSync(`${OUT}/${name}.png`, sq.img.buf); console.log(`  shot ${OUT}/${name}.png (frame +${sq.k}, |squash| ${sq.s.toFixed(3)})`);
-    const ppm = await pxPerMAt(head, gridB.right);
-    const ex = await craterCircles(id, head, ppm);
-    const half = Math.round(0.14 * ppm);
-    const b0 = headPxB ? boneShareOutside(imgB, headPxB, half, ex) : null, b1 = headPxB ? boneShareOutside(sq.img, headPxB, half, ex) : null;
-    note(`[${label}] hit 1 peak squash (frame +${sq.k}): face-crop bone share outside ${ex.length} crater circles ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (rise ${b0 !== null ? (b1 - b0).toFixed(4) : "?"}; ${2 * half}px crop)`);
-    out.boneSquash = { before: b0, after: b1 };
-    if (full) check(b0 !== null && b1 <= b0 + BONE_THRU_MAX, `hit 1 peak squash: no bone through intact flesh — face-crop bone share outside craters ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (<= pre-hit + ${BONE_THRU_MAX})`);
-  }
-  note(`[${label}] hit 1 (strike after ${r.strikeFrame + 1} frames): squash frames 0..10 = ${peakSeries.map((s) => s.toFixed(3)).join(" ")}; peak |squash| ${peak.toFixed(3)}`);
-  const s1 = r.series[0].hs;
-  const eyeOk = s1?.eye?.state === "dangling";
-  // frames so far past the strike: 10. The strip: 8 captures, 3 frames apart (captures do not advance the sim).
-  let past = 10;
-  for (let k = 0; k < 8; k++) {
+    await stepN(60);
+    const fr = await frameOf(id);
+    await faceStand(fr);
+    await capture("v2-orbit-exposed");
+    await setBleed(false);
+    const imgV = await capture("v2-orbit-exposed-noblood");
+    const imgH = await captureNoPieces();
     const hs = await hstate(id);
-    const img = await capture(null);
-    const c = await toPx(hs?.eyeball ?? hs?.socket ?? head);
-    if (c) stripFrames.push(cropRgb(img, c[0], c[1] + 20, 200, 240));
-    if (k < 7) { await stepN(3); past += 3; }
+    const eL = await eyePx("L"), eR = await eyePx("R");
+    const gL = glowShare(imgH, eL, 0.03 * ppm), gR = glowShare(imgH, eR, 0.03 * ppm);
+    const drop = base.gL > 0 ? 1 - gL / base.gL : null;
+    const ebPx = hs.eyeball.L ? await toPx(hs.eyeball.L) : null;
+    const present = ebPx ? diffShare(imgV, imgH, ebPx, EYEBALL_R * ppm) : 0;
+    const iris = ebPx ? glowShare(imgV, ebPx, EYEBALL_R * ppm) : 0;
+    note(`orbit exposed (settled, bleed off): painted glow (pieces hidden) L ${base.gL.toFixed(3)} -> ${gL.toFixed(3)} (drop ${drop === null ? "?" : (100 * drop).toFixed(0)}%), R ${base.gR.toFixed(3)} -> ${gR.toFixed(3)}; in-orbit eyeball: ${(100 * present).toFixed(0)}% of its circle changes with the pieces, iris red share ${iris.toFixed(3)}; draws ${hs.draws}`);
+    out.glow = { L: [base.gL, gL], R: [base.gR, gR], present, irisInOrbit: iris };
+    check(base.gL > 0.02 && drop !== null && drop >= GLOW_DROP_MIN, `orbit exposed: the painted glow at that eye is gone — red share ${base.gL.toFixed(3)} -> ${gL.toFixed(3)} (drop >= ${100 * GLOW_DROP_MIN}%)`);
+    check(base.gR > 0.02 && gR >= OTHER_GLOW_KEEP * base.gR, `orbit exposed: the other eye still glows — red share ${base.gR.toFixed(3)} -> ${gR.toFixed(3)} (>= ${OTHER_GLOW_KEEP} × baseline)`);
+    check(!!hs.eyeball.L && hs.draws >= 1 && present >= EYE_PRESENT_MIN, `orbit exposed: a 3D eyeball is present (eyeball ${hs.eyeball.L ? f2(hs.eyeball.L) : "null"}, draws ${hs.draws}, ${(100 * present).toFixed(0)}% of its circle drawn by the pieces >= ${100 * EYE_PRESENT_MIN}%)`);
+    await setBleed(true);
   }
-  await stepN(Math.max(0, 30 - past)); past = Math.max(past, 30);
-  const hs30 = await hstate(id);
-  const drop = hs30.socket && hs30.eyeball ? hs30.socket[1] - hs30.eyeball[1] : null;
-  note(`[${label}] hit 1, ${past} frames on: socket (${hs30.socket && f2(hs30.socket)}) eyeball (${hs30.eyeball && f2(hs30.eyeball)}) drop ${drop?.toFixed(3)} m (distance ${hs30.socket && hs30.eyeball ? distTo(hs30.socket, hs30.eyeball).toFixed(3) : "?"})`);
-  if (full) await stagePhoto(id, "head-1-eye", "head-1-eye");
-  await stepN(Math.max(0, 48 - past)); past = Math.max(past, 48);
-  const hs48 = await hstate(id);
-  const wAfter1 = await wounds(id);
-  const newW1 = wAfter1.filter((w) => !woundsPre1.some((o) => distTo(o.pos, w.pos) < 1e-3 && Math.abs(o.radius - w.radius) < 1e-4));
-  const socketW = newW1.find((w) => Math.abs(w.radius - SOCKET_R) <= R_TOL);
-  ({ head, pose } = await aimHead(id));
-  const gridA = await faceGrid(id, head, pose);
-  const imgA = await capture(null);
-  if (full) {
-    check(eyeOk, `hit 1: an eye dangles (state ${JSON.stringify(s1?.eye)})`);
-    check(peak >= SQUASH_PEAK_MIN, `hit 1: wobble peak |squash| ${peak.toFixed(3)} >= ${SQUASH_PEAK_MIN}`);
-    check(drop !== null && drop >= EYE_DROP_MIN, `hit 1: eyeball ${drop?.toFixed(3)} m below the socket at +30 frames (>= ${EYE_DROP_MIN})`);
-    check(Math.abs(hs48.squash) < SQUASH_SETTLE_MAX, `hit 1: |squash| ${Math.abs(hs48.squash).toExponential(2)} < ${SQUASH_SETTLE_MAX} at +48 frames (settled)`);
-    check(!!socketW, `hit 1: a socket crater exists (radius ${SOCKET_R}); new wounds ${JSON.stringify(newW1.map((w) => +w.radius.toFixed(3)))}`);
-    out.peak = peak; out.drop = drop; out.settle = Math.abs(hs48.squash);
-    if (stripFrames.length === 8) {
-      const sw = 200, sh = 240, buf = Buffer.alloc(sw * 8 * sh * 3);
-      stripFrames.forEach((f, i) => { for (let y = 0; y < sh; y++) f.copy(buf, (y * sw * 8 + i * sw) * 3, y * sw * 3, (y + 1) * sw * 3); });
-      writeFileSync(`${OUT}/eye-swing-strip.png`, encodePng(sw * 8, sh, buf));
-      console.log(`  shot ${OUT}/eye-swing-strip.png (8 crops, 3 frames apart from +10 frames past the strike, centred on the eyeball)`);
-    } else fail(`eye strip: only ${stripFrames.length}/8 frames had a projectable eyeball`);
-    out.faceChange = reportFaceChange(gridB, gridA, hs48.socket ?? head);
-    // ...and as pixels: over the head crop, outside the socket->eyeball capsule
-    if (headPxB) {
-      const sp = await toPx(hs48.socket), ep = await toPx(hs48.eyeball);
-      const a = await toPx(head), b = await toPx([head[0] - gridB.right[0] * 0.1, head[1], head[2] - gridB.right[2] * 0.1]);
-      const pxPerM = a && b ? Math.hypot(a[0] - b[0], a[1] - b[1]) / 0.1 : 400;
-      const rEx = 0.05 * pxPerM;
-      const distSeg = (x, y, p, q) => { const dx = q[0] - p[0], dy = q[1] - p[1], l2 = dx * dx + dy * dy || 1; let t = ((x - p[0]) * dx + (y - p[1]) * dy) / l2; t = Math.max(0, Math.min(1, t)); return Math.hypot(x - p[0] - t * dx, y - p[1] - t * dy); };
-      let n = 0, ch = 0, chAll = 0;
-      const half = Math.round(0.14 * pxPerM);
-      for (let y = Math.round(headPxB[1] - half); y < headPxB[1] + half; y++) for (let x = Math.round(headPxB[0] - half); x < headPxB[0] + half; x++) {
-        if (x < 0 || y < 0 || x >= imgA.w || y >= imgA.h) continue;
-        const cb = px(imgB, x, y), ca = px(imgA, x, y);
-        const diff = Math.hypot(cb[0] - ca[0], cb[1] - ca[1], cb[2] - ca[2]);
-        n++; if (diff > 40) chAll++;
-        const near = sp && ep ? distSeg(x, y, sp, ep) < rEx : (sp ? Math.hypot(x - sp[0], y - sp[1]) < rEx : false);
-        if (!near && diff > 40) ch++;
-      }
-      note(`hit-1 face crop (${2 * half}px square, ${pxPerM.toFixed(0)} px/m): ${(100 * chAll / n).toFixed(1)}% of pixels changed (colour distance > 40); ` +
-        `${(100 * ch / n).toFixed(1)}% changed OUTSIDE a 0.05 m circle/stalk capsule around the socket->eyeball`);
-    }
-    // cost with the dangling eye
+
+  // -------- 2. the pop
+  {
+    const fr = await frameOf(id);
+    await aimAt(fr, regionWorld(fr, HD.regions.orbitL));
+    await stepN(2);
+    const r = await clickStrike(id, 0);
+    const sr = await struckRegion(id, fr);
+    const hs = r.series[0].hs;
+    note(`pop hit (${r.last?.side}): struck nearest ${sr.region}; eyes ${JSON.stringify(hs.eyes)}; flesh ${fmtFlesh(hs)}`);
+    check(hs.eyes.L === "dangling", `pop: one more orbit hit pops the eye (eyes.L ${hs.eyes.L}, struck nearest ${sr.region})`);
     await stepN(3);
-    await aimHead(id);
     out.withEye = await evaluate("__sdfGame.timeDraws(120)", 300000);
+    await stepN(40);
+    await faceStand(fr);
+    await capture("v2-eye-pop");
+    await setBleed(false);
+    const img = await capture("v2-eye-pop-noblood");
+    const imgH = await captureNoPieces();
+    const h2 = await hstate(id);
+    const ebPx = h2.eyeball.L ? await toPx(h2.eyeball.L) : null;
+    const skPx = h2.socket.L ? await toPx(h2.socket.L) : null;
+    const iris = ebPx ? glowShare(img, ebPx, EYEBALL_R * ppm) : 0;
+    // The orbit circle: the SAME circle the painted-eye baseline was measured in (the orbit region's hs point, the
+    // painted eye); the traced socket point and the plug's centre (1 cm / 2.4 cm in toward the head centre) printed.
+    const sockL = meanLuma(img, base.eL, SOCKET_LUMA_R * ppm);
+    const plugPx = h2.socket.L ? await toPx(plugCentre(fr, h2.socket.L)) : null;
+    note(`pop: orbit-circle luma ${sockL.toFixed(1)} at the painted eye (${base.eL.map(Math.round).join(",")}); at the traced socket point (${skPx ? skPx.map(Math.round).join(",") : "off"}) ${skPx ? meanLuma(img, skPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}; at the plug centre (${plugPx ? plugPx.map(Math.round).join(",") : "off"}) ${plugPx ? meanLuma(img, plugPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}`);
+    // Evidence for the socket measure: how much of that circle the attached pieces (stalk, eyeball, plug) draw, and
+    // its luma with them hidden (the carved crater alone).
+    const sockPieces = diffShare(img, imgH, base.eL, SOCKET_LUMA_R * ppm);
+    const sockBare = meanLuma(imgH, base.eL, SOCKET_LUMA_R * ppm);
+    note(`eye pop (+40 frames, bleed off): eyeball ${h2.eyeball.L ? f2(h2.eyeball.L) : "null"} (screen ${ebPx ? ebPx.map(Math.round).join(",") : "off"}), ${h2.socket.L && h2.eyeball.L ? distTo(h2.socket.L, h2.eyeball.L).toFixed(3) : "?"} m from the socket; iris red share ${iris.toFixed(3)}; orbit-circle luma ${sockL.toFixed(1)} vs painted baseline ${base.lumaL.toFixed(1)} — the pieces draw ${sockPieces === null ? "?" : (100 * sockPieces).toFixed(0)}% of that circle, and with them hidden it is ${sockBare?.toFixed(1)}; draws ${h2.draws}`);
+    out.pop = { iris, sockL, baseL: base.lumaL };
+    check(!!ebPx && iris >= IRIS_RED_MIN, `pop: the dangling eye's iris faces the camera — red share ${iris.toFixed(3)} on the eyeball circle (>= ${IRIS_RED_MIN})`);
+    check(sockL < SOCKET_DARK * base.lumaL, `pop: the orbit is a dark hole — orbit-circle luma ${sockL?.toFixed(1)} (< ${SOCKET_DARK} × painted baseline ${base.lumaL.toFixed(1)} = ${(SOCKET_DARK * base.lumaL).toFixed(1)})`);
+    await setBleed(true);
   }
-  // -------- 2. hit 2, cave and snap
-  ({ head, pose } = await aimHead(id));
-  await stepN(3);
-  const bd = [head[0] - pose.x, 0, head[2] - pose.z]; { const l = Math.hypot(bd[0], bd[2]); bd[0] /= l; bd[2] /= l; }
-  const right = [-bd[2], 0, bd[0]];
-  const hsPre2 = await hstate(id);
-  const flatB = hsPre2.flat;
-  const polesB = hsPre2.frame ? await polesOf(id, hsPre2.frame) : [];
-  const img2B = await capture(null);
-  const head2Px = await toPx(head);
-  const chunks2 = await chunks();
-  let maxChunks2 = chunks2;
-  r = await clickStrike(id, 10);
-  for (const q of r.series) maxChunks2 = Math.max(maxChunks2, q.chunks);
-  const hs2 = r.series[r.series.length - 1].hs;
-  await stepN(60);   // let the wobble die
-  const hs2b = await hstate(id);
-  // The dented side: the `flat` entry that grew (x+, x−, y+, y−, z+, z−).
-  const grew = hs2b.flat.map((x, i) => x - (flatB[i] ?? 0));
-  const side = grew.reduce((m, g, i) => (g > grew[m] ? i : m), 0);
-  const poleB = polesB[side];
-  const poleA = poleB ? await evaluate(`__sdfGame.head.surfaceAt(${id}, ${poleB.p[0]}, ${poleB.p[1]}, ${poleB.p[2]})`) : null;
-  const rA = poleB ? await poleRadius(id, poleB) : null;
-  // The asserted number is the surface's own move along the pole line (radius before − after). The sdBody rise at
-  // the probe is PRINTED only: the zombie's face pole is its nose, a strongly anisotropic ellipsoid whose SDF is a
-  // lower bound off its axes, so the rise reads ~1/3 of a real 19 mm move (head-deform probe, Task 10).
-  const dentRise = poleB && rA !== null ? poleB.r - rA : null;
-  const sideName = ["x+", "x-", "y+", "y-", "z+", "z-"][side];
-  note(`[${label}] hit 2: dent flat before ${JSON.stringify(flatB.map((x) => +x.toFixed(3)))} after ${JSON.stringify(hs2b.flat.map((x) => +x.toFixed(3)))}; dented side ${sideName}; pole line surface radius ${poleB?.r.toFixed(4)} -> ${rA?.toFixed(4)} m (moved in ${dentRise?.toFixed(4)}); sdBody 2 mm outside (${poleB ? f2(poleB.p) : "none"}) ${poleB?.s.toFixed(4)} -> ${poleA?.toFixed(4)} (rise ${poleB && poleA !== null ? (poleA - poleB.s).toFixed(4) : "?"}); chunks ${chunks2} -> max ${maxChunks2}`);
-  if (full) {
-    check(hs2.eye?.state === "gone", `hit 2: eye.state ${JSON.stringify(hs2.eye)} (expected gone)`);
-    check(maxChunks2 > chunks2, `hit 2: live chunk count went up (${chunks2} -> ${maxChunks2})`);
-    check(dentRise !== null && grew[side] > 0 && dentRise >= DENT_MIN, `hit 2: the dented side's pole (${sideName}) moved in by ${dentRise?.toFixed(4)} m (>= ${DENT_MIN})`);
-    out.dent = dentRise; out.chunks2 = [chunks2, maxChunks2];
-    await aimHead(id);
-    out.afterSnap = await evaluate("__sdfGame.timeDraws(120)", 300000);
-  }
-  {
-    // 2b. no bone through intact flesh after the dent (craters excluded; the same mask on both images).
-    const img2A = await stagePhoto(id, `head-2-cave${full ? "" : "-procedural"}`, "head-2-cave");
-    const ppm = await pxPerMAt(head, right);
-    const ex = await craterCircles(id, head, ppm);
-    const half = Math.round(0.14 * ppm);
-    const b0 = head2Px ? boneShareOutside(img2B, head2Px, half, ex) : null, b1 = head2Px ? boneShareOutside(img2A, head2Px, half, ex) : null;
-    note(`[${label}] hit 2 settled: face-crop bone share outside ${ex.length} crater circles ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (rise ${b0 !== null ? (b1 - b0).toFixed(4) : "?"}; ${2 * half}px crop)`);
-    out.boneDent = { before: b0, after: b1 };
-    if (full) check(b0 !== null && b1 <= b0 + BONE_THRU_MAX, `hit 2: no bone through intact flesh — face-crop bone share outside craters ${b0?.toFixed(4)} -> ${b1?.toFixed(4)} (<= pre-hit + ${BONE_THRU_MAX})`);
-  }
-  // -------- 3. hit 3, the scalp
-  head = await headOf(id);
-  const crown = await crownPoint(id, head);
-  const before3 = await crownShot(id, `head-3-scalp-before${full ? "" : "-procedural"}`);
-  const w3pre = await wounds(id);
-  ({ head, pose } = await aimHead(id)); await stepN(3);
-  r = await clickStrike(id, 20);
-  const w3 = await wounds(id);
-  const new3 = w3.filter((w) => !w3pre.some((o) => distTo(o.pos, w.pos) < 1e-3 && Math.abs(o.radius - w.radius) < 1e-4));
-  const scalps = new3.filter((w) => Math.abs(w.radius - SCALP_R) <= R_TOL);
-  const scalpD = crown ? scalps.map((w) => distTo(w.pos, crown)) : [];
-  note(`[${label}] hit 3: head centre ${f2(head)}; craters at ${JSON.stringify(new3.map((w) => w.pos.map((v) => +v.toFixed(3))))}; crown (highest head-surface point, independent grid march) ${crown && f2(crown)}; new wounds ${JSON.stringify(new3.map((w) => ({ r: +w.radius.toFixed(3), d: crown ? +distTo(w.pos, crown).toFixed(3) : null })))}`);
-  const after3 = await crownShot(id, full ? "head-3-scalp" : `head-3-scalp-${label}`);
-  out.bone3 = { before: before3.share, after: after3.share };
-  note(`[${label}] hit 3 crown crop bone share ${before3.share?.toFixed(4)} -> ${after3.share?.toFixed(4)} (camera feet y ${after3.cs.ppos[1].toFixed(2)}, crown NDC after centring ${after3.cs.ndc && f2(after3.cs.ndc)})`);
-  check(scalps.length >= 2 && scalpD.length >= 2 && scalpD.every((d) => d <= CROWN_NEAR), `[${label}] hit 3: two new radius-${SCALP_R} craters within ${CROWN_NEAR} m of the crown (found ${scalps.length}; distances ${JSON.stringify(scalpD.map((d) => +d.toFixed(3)))})`);
-  check(before3.share !== null && after3.share !== null && after3.share > before3.share, `[${label}] hit 3: crown-crop bone-coloured pixel share rises (${before3.share?.toFixed(4)} -> ${after3.share?.toFixed(4)})`);
-  if (!full) return out;
-  // -------- 4. hit 4, the brain
-  ({ head, pose } = await aimHead(id)); await stepN(3);
-  const chunks4 = await chunks();
-  let maxChunks4 = chunks4;
-  const brains0 = (await evaluate("__sdfGame.head.brains()")).length;
-  r = await clickStrike(id, 2);
-  for (const q of r.series) maxChunks4 = Math.max(maxChunks4, q.chunks);
-  {
-    // head-4-brain.png: 3 frames after the strike, from the swing stand, the view pitched up to halfway between the
-    // head and the flying brain (the pose takes effect on the next step: re-aim at +2, step to +3, shoot).
-    const b2 = (await evaluate("__sdfGame.head.brains()")).at(-1);
-    if (b2) {
-      const pp = await evaluate("__sdfGame.pose()");
-      const mid = [(head[0] + b2[0]) / 2, (head[1] + b2[1] + 0.08) / 2, (head[2] + b2[2]) / 2];
-      const hz = Math.hypot(mid[0] - pp.pos[0], mid[2] - pp.pos[2]);
-      await evaluate(`__sdfGame.setPose(${pp.pos[0]}, ${pp.pos[2]}, ${pp.yaw}, ${Math.atan2(mid[1] - EYE_H - pp.pos[1], hz)}, ${pp.pos[1]})`);
+
+  // -------- 3. the snap (the first brow hit), then the brow until dead
+  const brains0 = (await brains()).length;
+  let exposedAt = null, exposedRegion = null, brainAt = null, killChunks = null;
+  let lastHs = null;
+  let fr = await frameOf(id);
+  for (let k = 0; k < 12; k++) {
+    fr = await frameOf(id);
+    await aimAt(fr, regionWorld(fr, HD.regions.brow));
+    await stepN(2);
+    const pre = await hstate(id);
+    const ch0 = await chunks();
+    const r = await clickStrike(id, 2);
+    const sr = await struckRegion(id, fr);
+    const hs = r.series[0].hs;
+    lastHs = hs;
+    note(`brow hit ${k + 1} = head hit ${hs.hits} (${r.last?.side}): struck nearest ${sr.region}; flesh ${fmtFlesh(hs)}; skull brow ${hs.skull.brow.toFixed(2)} crown ${hs.skull.crown.toFixed(2)}; eyes ${JSON.stringify(hs.eyes)}; dead ${hs.dead}; craters ${fmtCraters(hs)}`);
+    if (k === 0) {
+      check(pre.eyes.L === "dangling" && hs.eyes.L === "gone", `snap: the next head hit snaps the eye (eyes.L ${pre.eyes.L} -> ${hs.eyes.L})`);
+      // The hole after the snap: the plug alone (the stalk no longer crosses it). Same measure as the pop's.
+      await stepN(40);
+      await faceStand(fr);
+      await capture("v2-snapped");
+      await setBleed(false);
+      const img = await capture("v2-snapped-noblood");
+      const h3 = await hstate(id);
+      const skPx = h3.socket.L ? await toPx(h3.socket.L) : null;
+      const sockL = meanLuma(img, base.eL, SOCKET_LUMA_R * ppm);
+      const plugPx = h3.socket.L ? await toPx(plugCentre(fr, h3.socket.L)) : null;
+      note(`snapped (+40 frames, bleed off): orbit-circle luma ${sockL.toFixed(1)} vs painted baseline ${base.lumaL.toFixed(1)}; at the traced socket point ${skPx ? meanLuma(img, skPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}; at the plug centre (${plugPx ? plugPx.map(Math.round).join(",") : "off"}) ${plugPx ? meanLuma(img, plugPx, SOCKET_LUMA_R * ppm).toFixed(1) : "?"}; draws ${h3.draws} (the plug)`);
+      out.snapSocket = sockL;
+      check(sockL < SOCKET_DARK * base.lumaL, `snap: the orbit stays a dark hole — orbit-circle luma ${sockL?.toFixed(1)} (< ${SOCKET_DARK} × painted baseline = ${(SOCKET_DARK * base.lumaL).toFixed(1)})`);
+      await setBleed(true);
     }
-    await stepOne();
-    maxChunks4 = Math.max(maxChunks4, await chunks());
-  }
-  const brains3 = await evaluate("__sdfGame.head.brains()");
-  {
-    const img = await capture("head-4-brain");
-    const c = await toPx(head);
-    const bp = brains3.length ? await toPx(brains3[brains3.length - 1]) : null;
-    note(`head-4-brain (+3 frames): brain mesh at ${brains3.length ? f2(brains3[brains3.length - 1]) : "none"} (screen ${bp ? bp.map((v) => v.toFixed(0)).join(", ") : "off"}); red (blood-coloured) pixel share in a 220 px crop on the head ${c ? (100 * redShare(img, c[0], c[1])).toFixed(1) : "?"}%`);
-  }
-  for (let k = 3; k < 10; k++) { await stepOne(); maxChunks4 = Math.max(maxChunks4, await chunks()); }
-  {
-    // head-4-brain-apex.png (+15 frames, ~0.25 s): the brain near the top of its arc, clear of the lumps, chips and
-    // spray it left the skull with (at +3 it is still inside them). Re-aimed at +14 onto the brain, step, shoot.
-    await stepN(4);
-    const b14 = (await evaluate("__sdfGame.head.brains()")).at(-1);
-    if (b14) {
-      const pp = await evaluate("__sdfGame.pose()");
-      const hz = Math.hypot(b14[0] - pp.pos[0], b14[2] - pp.pos[2]);
-      await evaluate(`__sdfGame.setPose(${pp.pos[0]}, ${pp.pos[2]}, ${yawOf(b14[0] - pp.pos[0], b14[2] - pp.pos[2])}, ${Math.atan2(b14[1] - EYE_H - pp.pos[1], hz)}, ${pp.pos[1]})`);
+    if (exposedAt === null) {
+      const reg = hs.flesh.brow < HD.skullExposed ? "brow" : hs.flesh.crown < HD.skullExposed ? "crown" : null;
+      if (reg) { exposedAt = hs.hits; exposedRegion = reg; }
     }
-    await stepOne();
-    await capture("head-4-brain-apex");
-    note(`head-4-brain-apex (+15 frames): brain at ${b14 ? f2(b14) : "none"} (at +14)`);
+    if (hs.dead) {
+      brainAt = hs.hits;
+      let maxCh = Math.max(ch0, ...r.series.map((q) => q.chunks));
+      // v2-brain.png: 3 frames after the strike, the view pitched up to halfway between the head and the brain.
+      const b2 = (await brains()).at(-1);
+      if (b2) {
+        const pp = await evaluate("__sdfGame.pose()");
+        const mid = [(fr.centre[0] + b2[0]) / 2, (fr.centre[1] + b2[1] + 0.08) / 2, (fr.centre[2] + b2[2]) / 2];
+        const hz = Math.hypot(mid[0] - pp.pos[0], mid[2] - pp.pos[2]);
+        await evaluate(`__sdfGame.setPose(${pp.pos[0]}, ${pp.pos[2]}, ${pp.yaw}, ${Math.atan2(mid[1] - EYE_H - pp.pos[1], hz)}, ${pp.pos[1]})`);
+      }
+      await stepOne();
+      maxCh = Math.max(maxCh, await chunks());
+      const img = await capture("v2-brain");
+      const c = await toPx(fr.centre);
+      note(`v2-brain (+3 frames): brain mesh at ${b2 ? f2(b2) : "none"}; red (blood) share in a 220 px crop on the head ${c ? (100 * redShare(img, c[0], c[1])).toFixed(1) : "?"}%`);
+      for (let j = 3; j < 10; j++) { await stepOne(); maxCh = Math.max(maxCh, await chunks()); }
+      killChunks = [ch0, maxCh];
+      break;
+    }
+    if (exposedAt === hs.hits) {
+      // v2-skull.png: the hit that exposed the skull, settled; the face stand (brow) or the crown stand from above.
+      await stepN(60);
+      let c = null;
+      if (exposedRegion === "brow") { await faceStand(fr); c = await toPx(regionWorld(fr, HD.regions.brow)); }
+      else { const cs = await crownStand(id); c = await toPx(cs.target); }
+      await capture("v2-skull");
+      await setBleed(false);
+      const img = await capture("v2-skull-noblood");
+      const b3 = c ? boneIn(img, c, 0.03 * ppm) : null;
+      note(`skull exposed on head hit ${hs.hits} (${exposedRegion}${exposedRegion === "crown" ? ", photo from above" : ""}): bone-coloured share in a 3 cm circle on the ${exposedRegion} crater (bleed off) ${b3?.toFixed(3)} (the fat band is tan too — printed only); ${exposedRegion} crater ${JSON.stringify(hs.craters[exposedRegion])}`);
+      await setBleed(true);
+    }
+    await stepN(20);
   }
-  const brainW = (await wounds(id)).filter((w) => Math.abs(w.radius - 0.08) <= R_TOL);
-  out.chunks4 = [chunks4, maxChunks4];
-  check(maxChunks4 >= chunks4 + BRAIN_CHUNKS_MIN, `hit 4: live SDF chunks up by ${maxChunks4 - chunks4} (${chunks4} -> ${maxChunks4}; >= ${BRAIN_CHUNKS_MIN}: lumps + skull chips); brain cavity wounds ${brainW.length}`);
-  check(brains3.length === brains0 + 1, `hit 4: a brain mesh gib exists (${brains0} -> ${brains3.length})`);
-  // -------- 6. body wounds, read BEFORE the thaw (a collapsing actor moves)
+  out.kill = brainAt; out.exposedAt = exposedAt;
+  check(exposedAt !== null && brainAt !== null && exposedAt < brainAt, `skull before brain: the skull was exposed on head hit ${exposedAt} (${exposedRegion}), the brain came on head hit ${brainAt}`);
+  check(brainAt !== null && brainAt >= KILL_HITS_MIN && brainAt <= KILL_HITS_MAX, `kill: dead on head hit ${brainAt ?? "never (" + lastHs?.hits + " hits)"} (${KILL_HITS_MIN}–${KILL_HITS_MAX})`);
+  const brainsN = await brains();
+  check(brainsN.length === brains0 + 1, `brain: exactly one brain mesh gib (${brains0} -> ${brainsN.length})`);
+  check(!!killChunks && killChunks[1] >= killChunks[0] + BRAIN_CHUNKS_MIN, `brain: live SDF chunks up by ${killChunks ? killChunks[1] - killChunks[0] : "?"} over the killing hit (>= ${BRAIN_CHUNKS_MIN}: lumps + skull chips)`);
+
+  // -------- 5. body wounds and head slots, read BEFORE the thaw
   const wFinal = await wounds(id);
   const missing = bodyWounds.filter((b) => !wFinal.some((w) => distTo(w.pos, b.pos) <= 1e-3));
-  check(missing.length === 0, `body wounds survive: ${bodyWounds.length - missing.length}/${bodyWounds.length} of the pre-head wounds still present within 1 mm`);
-  // thaw 3 frames: phase / limbAlive refresh
+  check(missing.length === 0, `body wounds survive: ${bodyWounds.length - missing.length}/${bodyWounds.length} still present within 1 mm`);
+  const slots = await headSlots(id);
+  out.slots = slots.length;
+  note(`head wound slots: ${slots.length} — ${slots.map((w) => `${w.headRegion ?? "?"}/${w.headSlot} r${w.radius.toFixed(3)}`).join(", ")}`);
+  check(slots.length <= MAX_HEAD_SLOTS, `head wound slots used: ${slots.length} (<= ${MAX_HEAD_SLOTS})`);
+  // -------- 4. thaw 3 frames
   await evaluate("__sdfGame.freeze(false)");
   await stepN(3);
   const al = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === id);
   await evaluate("__sdfGame.freeze(true)");
   const headAlive = await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`);
-  check(al && al.phase !== "standing", `hit 4: the zombie collapses (phase ${al?.phase}, meter ${al?.meter?.toFixed?.(3)})`);
-  check(headAlive > 0, `hit 4: the head is still on (${headAlive} live head prims)`);
-  // -------- 4b. the brain at rest, 1.5 s after the strike (15 + 3 frames so far)
-  await stepN(90 - 18);
-  const restA = await evaluate("__sdfGame.head.brains()");
-  await stepN(6);
-  const restB = await evaluate("__sdfGame.head.brains()");
-  const bA = restA[restA.length - 1], bB = restB[restB.length - 1];
+  check(al && al.phase !== "standing", `kill: the zombie collapses (phase ${al?.phase})`);
+  check(headAlive > 0, `the head is still on (${headAlive} live head prims)`);
+  // -------- 5b. the brain at rest, 1.5 s after the strike (13 frames so far)
+  await stepN(90 - 13);
+  const restA = await brains(); await stepN(6); const restB = await brains();
+  const bA = restA.at(-1), bB = restB.at(-1);
   const moved = bA && bB ? distTo(bA, bB) : null;
-  check(!!bB && bB[1] <= BRAIN_REST_MAX_Y && moved !== null && moved < 0.002,
-    `hit 4 +1.5 s: the brain rests on the floor at ${bB ? f2(bB) : "none"} (y <= ${BRAIN_REST_MAX_Y}; moved ${moved?.toFixed(4)} m over 6 frames, < 0.002)`);
+  check(!!bB && bB[1] <= BRAIN_REST_MAX_Y && moved !== null && moved < 0.002, `brain +1.5 s: rests on the floor at ${bB ? f2(bB) : "none"} (y <= ${BRAIN_REST_MAX_Y}; moved ${moved?.toFixed(4)} m over 6 frames, < 0.002)`);
   if (bB) {
-    // brain-rest.png: a low close-up — 0.4 m off the brain on the side facing the swing stand, eye 0.3 m up.
-    const ax = pose.x - bB[0], az = pose.z - bB[2], l = Math.hypot(ax, az) || 1;
-    // The player stands on the floor (eye 1.62 m), so the close-up is a 0.45 m stand-off looking down with the
-    // render FOV narrowed to 20 degrees (restored after).
+    const pp = await evaluate("__sdfGame.pose()");
+    const ax = pp.pos[0] - bB[0], az = pp.pos[2] - bB[2], l = Math.hypot(ax, az) || 1;
     const x = bB[0] + (ax / l) * 0.45, z = bB[2] + (az / l) * 0.45;
     await evaluate(`__sdfGame.setPose(${x}, ${z}, ${yawOf(bB[0] - x, bB[2] - z)}, ${Math.atan2(bB[1] - EYE_H, 0.45)}, 0)`);
-    const fov0 = (await evaluate("__sdfGame.setRenderFov(NaN)")).renderFovDeg;   // NaN: report only
+    const fov0 = (await evaluate("__sdfGame.setRenderFov(NaN)")).renderFovDeg;
     await evaluate("__sdfGame.setRenderFov(20)");
     await stepOne();
-    const n = await centreOn(bB);
-    await capture("brain-rest");
+    await centreOn(bB);
+    await capture("v2-brain-rest");
     await evaluate(`__sdfGame.setRenderFov(${fov0})`);
-    note(`brain-rest: camera at (${x.toFixed(2)}, ${z.toFixed(2)}) eye 1.62, FOV 20 (restored to ${fov0}), brain NDC after centring ${n ? f2(n) : "off"}`);
   }
-  return out;
-}
-
-// ============================================================================================
-const main = await boot("default", "");
-let A = null;
-try {
-  if (main.diag.activeMode !== "mesh") die(`the shipped (default) skeleton path did not activate as mesh: ${JSON.stringify(main.diag)} — cannot exercise it headlessly`);
-  A = await ladder("mesh", true);
-  // ---- 7. cost
-  const noise = Math.abs(A.base1 - A.base2);
-  const delta = A.withEye - (A.base1 + A.base2) / 2;
-  note(`draw time (median of 120, fenced): baseline ${A.base1.toFixed(2)} / ${A.base2.toFixed(2)} ms (noise ${noise.toFixed(2)}), dangling eye ${A.withEye.toFixed(2)} ms; delta ${delta.toFixed(2)} ms; after the snap (no eye, hit-1 and hit-2 craters and blood remain, ${A.chunks2?.[1]} live chunks) ${A.afterSnap.toFixed(2)} ms`);
-  check(delta <= COST_MAX_MS, `cost: frame time with a dangling eye ${delta.toFixed(2)} ms over the same scene without (<= ${COST_MAX_MS})`);
+  // -------- 6. cost
+  const noise = Math.abs(out.base1 - out.base2);
+  const delta = out.withEye - (out.base1 + out.base2) / 2;
+  note(`draw time (median of 120, fenced): baseline ${out.base1.toFixed(2)} / ${out.base2.toFixed(2)} ms (noise ${noise.toFixed(2)}), dangling eye ${out.withEye.toFixed(2)} ms; delta ${delta.toFixed(2)} ms`);
+  check(delta <= COST_MAX_MS, `cost: frame time with a dangling eye ${delta.toFixed(2)} ms over the same stand before any head hit (<= ${COST_MAX_MS})`);
 } finally { closeSession(S); }
-// ---- second boot: the procedural skeleton, hits 1-3 only
-const proc = await boot("procedural", "&skeleton=procedural");
-if (proc.diag.activeMode !== "procedural") die(`?skeleton=procedural did not activate procedural bones: ${JSON.stringify(proc.diag)}`);
-await ladder("procedural", false);
-closeSession(S);
 
-// ---- 8. console
+// ---- 7. console
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");
 const warns = consoleEvents.filter((e) => e.type === "warning" && /head-damage|sdf-game/.test(e.text));
 for (const w of warns) note(`console warning [${w.label}]: ${w.text.slice(0, 200)}`);
 check(errs.length === 0, `zero console errors or exceptions (${errs.length}${errs.length ? ": " + JSON.stringify(errs.slice(0, 3)) : ""})`);
+console.log(`\nsummary: ${JSON.stringify(out)}`);
 console.log(`\n${results.length} checks, ${failures} failed`);
 for (const r of results) console.log(r);
 process.exit(failures ? 1 : 0);
