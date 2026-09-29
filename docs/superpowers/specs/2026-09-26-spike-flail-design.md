@@ -311,3 +311,57 @@ front.
 **As built:** the head-only field is `sdBody` over the live head clusters; `skullPerHit` is 0.25 (not 0.34: at
 0.20 strips, 0.34 killed a single region on hit 6); body collapse on about hit 11, head kill on about hit 8; the
 ball drag needed a wind-up hold and a back-beat key per swing as well as the lower guide floor. See NOTES.
+
+## 14. v1.5 — impact and viscera (owner, 2026-09-29)
+
+Owner feedback (fifth playtest, plus a screen recording played back):
+- Hits still lack impact: "more of a recoil or judder from the impact".
+- In the recording the head expanding and the rest are there, but "at game speed it was easy to miss";
+  "make it feel a little slower, just slightly slower".
+- "Apply some shutter blur to the chain/ball motion", and "it would be cool if it accumulated shiny blood".
+- The flesh removal on the face is not visceral: thicker flesh, "more splayed edges with red shiny matter".
+- "Both eyes should pop out of the sockets at once."
+
+Decisions (owner, 2026-09-29): build **v1.5a (impact)** first, then **v1.5b (flesh)** once it has been felt.
+All four impact options were chosen (view-model recoil, camera judder, stronger hit-stop with an FOV punch,
+a zombie reaction) and the three flesh options (torn lips, flying flesh chunks, red matter strings).
+
+### 14.1 v1.5a — impact
+
+Every effect scales by swing: R and L 1.0, H 1.4; head-region hits add 20%.
+
+1. **A slightly slower feel.** After each contact the game's time scale steps to 0.4 and eases back to 1.0
+   over 0.3 s (H: 0.35 and 0.4 s). This follows the hit-stop (R/L 70 ms, H 100 ms, was 50/70). It is the
+   same time-scale channel as the hit-stop (`hitStopScale`), so the wobble and the zombie's reaction play
+   inside it.
+2. **View-model recoil.** The flail rig kicks on contact: about 0.10 m back, 0.04 m up, 12° pitch and 5°
+   roll, sprung with an overshoot or two over about 0.3 s. The chain gets a jolt: its guide relaxes for
+   about 50 ms, so it snaps taut and whips.
+3. **Camera judder.**
+   - The pitch kick grows from 0.02 to 0.045 rad and recovers with a small overshoot instead of a pure
+     exponential.
+   - A damped shake runs for about 0.3 s on the existing eye-offset channel (`player-hit-feedback.ts`, 23 Hz),
+     plus a little roll.
+4. **FOV punch.** A 3° pinch in about 60 ms and back over about 0.2 s. The lens is re-synced with
+   `postAa.setLens` as `game-main.ts` requires.
+5. **The zombie takes it.** The shove is bigger, and a head hit adds a head-snap impulse at the head.
+6. **Shutter blur** on the ball and chain during swings, through the existing gib shutter layer
+   (`gib-motion-blur.ts`).
+7. **Blood on the flail.** Each hit adds blood to the ball, chain and haft: a red, glossy tint that pools
+   on the spikes. It dries slowly (about 2 minutes) and persists between swings.
+8. **Both eyes pop at once (head model).**
+   - When either eye pops, the other pops too, from whatever state it is in (painted or in its orbit):
+     its painted glow goes out, its orbit gets a crater (that orbit's flesh is set to the exposure
+     threshold) and it dangles on its own stalk.
+   - The next head hit, or death, snaps both together.
+   - Both sockets are dark plugs. The eye cost roughly doubles while both dangle: accepted, and cut if
+     the profile says otherwise.
+
+### 14.2 v1.5b — flesh (after v1.5a is felt)
+
+- **Torn, splayed lips.** Flail wounds get the existing `ragged` option (a lobed outline) and a thicker,
+  higher, splayed rim shaded wet-red and glossy over a glossy-red interior and a darker clot floor. Head
+  craters get bigger and deeper. Gated so the shotgun's wounds are unchanged by default.
+- **Flying flesh.** Each hit throws 3–5 wet meat bits, with a bigger, faster gout (more on head hits),
+  capped and pooled.
+- **Red matter strings** (stretch). Wet red drops that cling along the rim and slowly sag and drip.

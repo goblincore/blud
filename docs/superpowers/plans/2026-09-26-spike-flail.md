@@ -2293,3 +2293,114 @@ amounts), `src/lab/sdf-zombie/head-damage.ts` (+ test), `scripts/flail-gate.mjs`
 
 - [ ] `TASKS.md` and the spec §13 status; PR body v1.4 section; NOTES entry; push; restart the owner's server
   (`preview_start` `blud-censer`).
+
+---
+
+## v1.5a — impact (spec §14.1, 2026-09-29)
+
+Rules as before: one implementer at a time, explicit pathspecs, never `git reset`/`git stash`, targeted tests,
+gates on ports 5241/9241 (5190 is the owner's). Pure logic in renderer-free modules with tests. Facts found
+by exploration (verify the line numbers; they drift): the hit-stop is `hitStopScale(dt)` in `game-flail.ts`,
+consumed at the top of `tick` in `game-main.ts` (`dt *= flail.hitStopScale(dt)`); camera recoil is the scalar
+`ctx.weapon.recoilPitch`, decayed `exp(-9 dt)` in `game-main.ts` and applied in `camera.lookAt`; the eye-offset
+shake is `player-hit-feedback.ts` (`stepHitFeedback`, applied where `eye = eye0 + shake`), used only for the
+player being hit; the shotgun's view-model recoil is `fireRecoil` in `game-viewmodel.ts` composed onto the gun
+group; FOV is fixed at `FISHEYE_DEFAULTS.renderFovDeg` and any tween must call `postAa.setLens`; the flail's
+rig is `updateRig` in `game-flail.ts`; there is NO audio in the game.
+
+### Task 26: Both eyes pop at once
+
+**Files:** `src/lab/sdf-zombie/head-damage.ts` (+ test), `webgpu/game-head-damage.ts`, the head gate.
+
+- [ ] **Pure, tests first.** In `headHit`, when an eye pops (`eye-pop` for a side whose eye is `'in-orbit'`),
+  the other side, if not `'gone'` or already `'dangling'`, also pops in the same hit: emit `orbit-exposed` for
+  it first if it was `'painted'`, then `eye-pop`; set both `'dangling'`; set the other orbit's flesh to at most
+  `orbitExposed`. The snap event becomes one `eye-snap` per dangling eye in the same hit (or in `headDeath`).
+  Tests: one orbit stripped → both pop on the same hit; both snap on the next head hit; a side already
+  `'gone'` is left alone; the `strip`/threshold rules elsewhere are unchanged; jitter extremes still finish
+  the ladder.
+- [ ] **Leaf.** Handle two eyes independently (state per side: piece, stalk, plug, socket tracker). The second
+  eye gets its orbit crater (`headRegion` orbit, `'keep'`, `severRadius` 0), its painted glow off
+  (`setEyeGlow`), its in-orbit-to-dangling piece and dark plug, exactly as the first. Snap both together.
+  Dispose everything on death/removal/reset. Draw count is 2 while both dangle.
+- [ ] **Gate.** Update the head gate: one orbit's pop makes both eyes dangle in the same hit (both
+  `eyes.L` and `eyes.R` `'dangling'`), both painted glows are gone, two attached pieces exist; one head hit
+  later both are `'gone'`. Adapt the ordering of later checks (the skull and brain sequence is unchanged).
+  The known pop-darkness check and the two blood-blob-affected measurements may stay failing; report them.
+- [ ] **Commit:** `feat(head-damage): both eyes pop out of their sockets at once`.
+
+### Task 27: The impact module (pure) and its wiring
+
+**Files:** create `src/lab/sdf-zombie/webgpu/flail-impact.ts` and `flail-impact.test.ts`; modify
+`game-flail.ts`, `game-main.ts` (the three consumers above), `game-state-weapon.ts` (an `impact` state slice),
+`flail-swing.ts` only if needed.
+
+- [ ] **Pure module, tests first.** `FLAIL_IMPACT_FEEL` constants and a state machine, all in plain data:
+  - `hitContact(scale)` returns the kick: `{ hitStopSec, slowScale, slowSec, pitchKick, shakeAmp, rollAmp,
+    fovPunchDeg, rigKick }` for a swing side and a head flag (R/L 1.0, H 1.4, head ×1.2): hit-stop 0.07 s
+    (H 0.10), slow 0.4 for 0.3 s (H 0.35 for 0.4 s), pitch kick 0.045, FOV punch 3°.
+  - `timeScale(state, dt)` gives the scale to apply this frame (hit-stop 0.08, then the slow ramp from
+    `slowScale` easing to 1 with smoothstep) and advances the state on UNSCALED dt.
+  - Springs: a damped-spring helper `spring(state, target, hz, zeta, dt)`, used by the recoil, the judder and
+    the FOV punch, sub-stepped for stability at large dt.
+  - Outputs per frame: `cameraPitch` (added to recoilPitch, with an overshoot), `shake: [x, y, roll]`,
+    `fovDeg`, and `rig: { pos, rot }` (back 0.10, up 0.04, pitch 12°, roll 5° scaled).
+  - Tests: the time-scale curve (hit-stop, then a monotone ramp to exactly 1.0 within slowSec, on unscaled
+    dt; never below hitStopScale); each spring settles below 1% in its duration and overshoots as specified;
+    H > R > 0 monotonic scaling and the head ×1.2; a second contact during a recovery restarts cleanly with no
+    pop (continuity); no NaN at dt = 0 or 0.1.
+- [ ] **Wire it.**
+  - The time scale replaces `hitStopScale(dt)`: `game-flail.ts` calls `hitContact` on a strike with any hit
+    and exposes `timeScale(dt)`; `game-main.ts` keeps its single `dt *= …` hook. `setHitStop(false)` (the
+    gates' toggle) must disable the hit-stop AND the slow tail so gate frame counts stay deterministic.
+  - Camera: add the pitch overshoot to `recoilPitch`'s consumer, the shake to the eye offset next to
+    `player-hit-feedback`'s offset (sum, do not replace), the roll via the camera's existing roll
+    composition, and the FOV punch through the same lens path as any FOV tween (`postAa.setLens`). Read the
+    comment at the FOV definition first. Off in `setHitStop(false)` gate mode? No: keep camera effects on but
+    expose `setImpactFx(false)` so gates that measure pixels can disable shake, roll and FOV.
+  - Rig: compose `rig` onto the flail rig in `updateRig` next to the holster travel. The chain guide relaxes for
+    50 ms (a hook in the chain sim's guide weight or a temporary multiplier).
+  - Zombie: the shove is `FLAIL_FEEL.swing[side].shove × 1.3`; on a head hit also call the actor's impulse at
+    the head (`impulseAt(bound, headWorld, dir × 4)` via the existing rig impulse path) for the head snap.
+- [ ] **Verify.** tsc; `npm test -- flail head game-actor`; the flail gate with `setImpactFx(false)` in its setup
+  (it passes as before); a NEW gate section "impact": with the fx on, click on a body zombie and record per
+  frame the time scale, recoilPitch, the shake offset and the FOV: assert the hit-stop, the slow tail ending at
+  1.0, the pitch kick peak ≥ 0.04 rad, the shake amplitude decaying to < 10% by 0.35 s, the FOV returning to
+  its base within 0.3 s, and the rig kick returning to rest; print the numbers.
+- [ ] **Commit(s):** `feat(flail): the impact module — recoil, judder, FOV punch and a slow tail`,
+  `feat(flail): wire the impact feel (camera, rig, chain, zombie reaction)`.
+
+### Task 28: Shutter blur on the ball and chain
+
+**Files:** `game-flail.ts`, `gib-motion-blur.ts` (only if a hook is needed).
+
+- [ ] Read `gib-motion-blur.ts` (the gib shutter layer: its own render-object pass id, the lifted-mesh rule, the
+  per-piece cap, `FLAIL_FILL_LAYER`) and how the censer used it. Feed the flail's ball and chain link
+  instances into the shutter layer while a swing is active (speed above a threshold), with a per-frame
+  velocity from the chain sim (the ball's and the links' motion between frames), so the swing smears along its
+  path. Off at rest.
+- [ ] **Verify:** a frame comparison of a mid-swing frame with the blur on vs off (a pixel difference along
+  the ball's path, printed; and LOOK at both crops), no engage hitch (frame time around the first swing within
+  1 ms), zero console errors, the flail gate passes.
+- [ ] **Commit:** `feat(flail): shutter blur on the ball and chain`.
+
+### Task 29: Blood builds up on the flail
+
+**Files:** `game-flail.ts` (+ a small pure `flail-blood.ts` with a test), the flail's materials.
+
+- [ ] **Pure:** `bloodLevel` state: +0.12 per hit (×1.3 head, ×1.5 H), clamped 1, decays with a 120 s time constant
+  on simulated (unscaled) time. Test the accumulation, the clamp and the decay.
+- [ ] **Render:** the ball, chain links and haft materials take a `blood` uniform: mix the albedo toward a wet
+  red (≈ `#7a0d10`), lower roughness (gloss up), and weight it toward the ball's spikes (the ball's vertex
+  colour or a spike mask: the spikes are the ball's outer vertices) and the lower haft. Look at it at levels
+  0, 0.3 and 1.
+- [ ] **Verify:** a photo strip at three levels; LOOK; the fill light still keeps the ball readable; the flail
+  gate passes.
+- [ ] **Commit:** `feat(flail): blood builds up on the ball, chain and haft`.
+
+### Task 30: Look pass, docs, PR
+
+- [ ] A recording-style capture of a 4-hit sequence at 60 Hz (frame strips of the first hit's first 30 frames:
+  the time-scale ramp, the rig kick, the head wobble) so the slow tail can be judged; LOOK.
+- [ ] NOTES v1.5a entry with the numbers and "For the owner"; `TASKS.md` (v1.5a built; v1.5b next); spec §14
+  status; the PR body; push; restart the owner's server (`preview_start` `blud-censer`).
