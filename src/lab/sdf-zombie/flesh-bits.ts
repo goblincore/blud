@@ -194,6 +194,8 @@ export function fleshEviction(live: readonly Tagged[], baked: number): { from: '
 }
 
 // The flail's switch (gates set it off so their chunk counts and rng streams are the pre-flesh ones).
-let fleshOn = true;
+// OFF by default (owner, 2026-09-30: the marched bits read as giant round red blobs, not flesh). The code stays for a
+// billboard / textured-quad version (TASKS optimization pass); gates that test it turn it on with setFleshBits(true).
+let fleshOn = false;
 export function setFleshBitsOn(on: boolean): void { fleshOn = on; }
 export function fleshBitsOn(): boolean { return fleshOn; }
