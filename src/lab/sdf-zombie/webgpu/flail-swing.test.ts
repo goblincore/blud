@@ -220,7 +220,7 @@ describe('flailPose', () => {
       expect(times[times.length - 1], side).toBe(FLAIL_TIMING[side].swingSec);
       expect(times, side).toContain(FLAIL_TIMING[side].strikeT);
     }
-    expect(flailKeyTimes('H')).toEqual([0, 0.12, 0.17, 0.2, 0.33, 0.43, 0.55]);
+    expect(flailKeyTimes('H')).toEqual([0, 0.07, 0.12, 0.17, 0.2, 0.33, 0.43, 0.55]);
   });
 
   it('has no pops: ball ≤ 15 cm and grip ≤ 6 cm per 240 Hz step, through chained swings', () => {
@@ -297,8 +297,10 @@ describe('flailPose', () => {
 
   it('overshoots no key by more than 3 cm, on either the ball or the grip', () => {
     // flailKeyTimes(side) minus the helper keys (which only hold the chain out
-    // between the main ones): rest, wind-up, strike, follow-through, rest.
-    const mainTimes: Record<FlailSide, number[]> = { R: [0, 0.1, 0.18, 0.3, 0.45], L: [0, 0.1, 0.18, 0.3, 0.45], H: [0, 0.12, 0.2, 0.33, 0.55] };
+    // between the main ones): rest, the back beat (v1.4: the hand draws back,
+    // the ball out behind it — a main key, so its reach counts), wind-up,
+    // strike, follow-through, rest.
+    const mainTimes: Record<FlailSide, number[]> = { R: [0, 0.06, 0.1, 0.18, 0.3, 0.45], L: [0, 0.06, 0.1, 0.18, 0.3, 0.45], H: [0, 0.07, 0.12, 0.2, 0.33, 0.55] };
     for (const side of SIDES) {
       const keyTimes = flailKeyTimes(side).filter(t => mainTimes[side].includes(t));
       expect(keyTimes, side).toEqual(mainTimes[side]);
@@ -344,7 +346,7 @@ describe('flailPose', () => {
   it('keeps the ball within chain reach of the eye bolt at every key (the chain sim can reach every key)', () => {
     expect(chainReach()).toBeCloseTo(FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset, 9);
     for (const side of SIDES) {
-      const times = side === 'H' ? flailKeyTimes('H') : [0, 0.1, 0.15, FLAIL_SWING.strikeT, 0.3, 0.37, FLAIL_SWING.swingSec];
+      const times = flailKeyTimes(side);
       for (const t of times) {
         const p = flailPose({ phase: 'swing', side, t, struck: false, queued: false, nextSide: side, swingId: 1, idleT: 0 });
         expect(dist(p.ball, bolt(p.grip, p.rot)), `${side} t=${t}`).toBeLessThanOrEqual(chainReach());

@@ -134,9 +134,22 @@ export const FLAIL_REST: FlailPose = {
 // (the strike pin at every frame rate, the 60 Hz no-catapult and wind-up trail);
 // then rounded to the cm (0.01 rad) and re-polished on that grid.
 
+// v1.4 (spec §13): each swing opens with a BACK BEAT (R and L at 0.06 s, H at
+// 0.07 s): the hand draws back toward the shoulder and the ball goes out BEHIND
+// the eye bolt (view +z of it: R 0.21 m, H 0.24 m; L, whose wind-up crosses the
+// face, swings it out wide left instead). flail-chain.ts holds the ball to these
+// keys through the wind-up and lets go just before the apex, so it keeps going
+// back while the haft turns forward — the drag. The three keys came from a scratch
+// constrained search (not committed) over the new key alone, every other key
+// fixed: every flailPose predicate here, the chain's replay gates at every frame
+// rate, the keyed ball/bolt/grip ≥ 0.45/0.40/0.33 m from the eye through the
+// wind-up (the L back beat first found put the haft in the player's face), then
+// ranked on how far back the DRAWN ball goes and how far it trails the bolt.
+
 /** R: an overhand swipe — wind up high over the right shoulder, come down diagonally onto the crosshair, follow through low left. */
 const KEYS_R: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
+  { t: 0.06, grip: [0.42, 0.05, -0.29], rot: [0.06, 0, 0.02], ball: [0.53, 0.25, -0.05] },
   { t: 0.1, grip: [0.28, 0.25, -0.3], rot: [0.34, 0, -0.08], ball: [0.64, 0.6, -0.22] },
   { t: 0.15, grip: [0.21, 0.01, -0.4], rot: [-0.66, 0, -0.1], ball: [0.21, 0.43, -1.03] },
   { t: 0.18, grip: [0.19, -0.15, -0.5], rot: [-0.89, 0, 0.29], ball: [-0.05, -0.08, -1.09] },
@@ -148,6 +161,7 @@ const KEYS_R: readonly Key[] = [
 /** L: wind back across the chest to the left, strike across the front, follow through low right. */
 const KEYS_L: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
+  { t: 0.06, grip: [0.06, -0.19, -0.38], rot: [-0.08, 0, 0.63], ball: [-0.48, -0.04, -0.36] },
   { t: 0.1, grip: [-0.02, -0.08, -0.35], rot: [0.1, 0, 0.52], ball: [-0.42, 0.13, -0.56] },
   { t: 0.15, grip: [0.14, -0.07, -0.38], rot: [-0.92, 0, 0.34], ball: [-0.2, 0.01, -0.96] },
   { t: 0.18, grip: [0.25, -0.12, -0.38], rot: [-1.2, 0, 0.2], ball: [0.06, -0.08, -1.1] },
@@ -184,6 +198,7 @@ const KEYS_L: readonly Key[] = [
 /** H: a flat right-to-left sweep — wind up wide right at shoulder height, sweep through the crosshair, follow through far left. */
 const KEYS_H: readonly Key[] = [
   { t: 0, ...FLAIL_REST },
+  { t: 0.07, grip: [0.46, -0.13, -0.21], rot: [-0.34, 0, -0.74], ball: [0.53, 0.11, -0.08] },
   { t: 0.12, grip: [0.43, 0.1, -0.31], rot: [-0.2, 0, -1.22], ball: [0.69, -0.03, -0.49] },
   { t: 0.17, grip: [0.15, -0.19, -0.41], rot: [-0.92, 0, -0.31], ball: [0.47, -0.03, -1.04] },
   { t: 0.2, grip: [0.13, 0.04, -0.42], rot: [-1.33, 0, 0.13], ball: [0, -0.08, -1.1] },

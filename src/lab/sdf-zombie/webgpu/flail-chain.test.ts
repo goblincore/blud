@@ -15,8 +15,15 @@ const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b
 const ball = (s: ChainState) => s.p[s.p.length - 1]!;
 const reach = FLAIL_CHAIN.len + FLAIL_CHAIN.ringOffset;
 /** Absolute slack on the 1.6x rule, metres per frame, for frames where the key
- *  itself barely moves (the wind-up apex, the settle into rest). */
-const REST_SLOP = 0.02;
+ *  itself barely moves but the free ball carries its own swing (the wind-up
+ *  apex, the back beat, the settle into rest). */
+const DRAG_SLOP = 0.1;
+/** (p − bolt) along the bolt's move from `was` (0 if it did not move). */
+const along = (p: Vec3, bolt: Vec3, was: Vec3) => {
+  const v: Vec3 = [bolt[0] - was[0], bolt[1] - was[1], bolt[2] - was[2]];
+  const l = Math.hypot(v[0], v[1], v[2]);
+  return l < 1e-9 ? 0 : ((p[0] - bolt[0]) * v[0] + (p[1] - bolt[1]) * v[1] + (p[2] - bolt[2]) * v[2]) / l;
+};
 const swingAt = (t: number): FlailSwing => ({ ...makeFlailSwing(), phase: 'swing', t });
 
 describe('stepChain', () => {
@@ -178,11 +185,15 @@ function frames(hz: number, jitter = 0, seed = 1): () => number {
 function replay(side: FlailSide, dt: () => number = () => 1 / 60) {
   let swing: FlailSwing = { ...makeFlailSwing(), nextSide: side };
   let s: ChainState | null = null;
-  let prevBall: Vec3 | null = null, prevKey: Vec3 | null = null;
+  let prevBall: Vec3 | null = null, prevKey: Vec3 | null = null, prevBolt: Vec3 | null = null;
   const out: [number, number, number][] = Array.from({ length: FLAIL_CHAIN_SIM.nodes }, () => [0, 0, 0]);
   const rows: {
     t: number; key: number; keyIn: number; drawn: number; lag: number; strike: boolean; err: number;
     link: number; gap: number; teleport: boolean;
+    /** The drawn ball − the bolt, along the bolt's motion this frame: negative = trailing it. */
+    behind: number;
+    /** The drawn ball's view z (+z = back, toward and past the eye). */
+    z: number;
   }[] = [];
   let t = 0;
   // 1.2 s for R/L (0.45 s swings) — up to 0.7 s to the click at 30 Hz, the swing, a margin.
@@ -208,9 +219,10 @@ function replay(side: FlailSide, dt: () => number = () => 1 / 60) {
         t: swing.t, key: dist(pose.ball, prevKey), keyIn: strike ? dist(FLAIL_IMPACT[strike], prevKey) : dist(pose.ball, prevKey),
         drawn: dist(b, prevBall), lag: dist(b, pose.ball), strike: !!strike,
         err: strike ? dist(b, FLAIL_IMPACT[strike]) : 0, link, gap: dist(out[0]!, bolt), teleport,
+        behind: along(b, bolt, prevBolt!), z: b[2],
       });
     }
-    prevBall = b; prevKey = pose.ball;
+    prevBall = b; prevKey = pose.ball; prevBolt = bolt;
   }
   return rows;
 }
@@ -253,19 +265,48 @@ describe('the chain through a real swing, at every frame rate (every side)', () 
     }
   }
   for (const side of ['R', 'L', 'H'] as const) {
-    // NO CATAPULT, at 60 Hz only. At >= 144 Hz or with jittered frames the ball
-    // beats this by 2–6 cm at the WIND-UP APEX (swing t ~0.10, the key reversing,
-    // the ball carrying on): the sim sees a per-frame linear anchor, and at 60 Hz
-    // that cuts the apex's corner; at 240 Hz (one substep a frame, the true path)
-    // it does not. That is the whip's own motion, not the old guide-ramp
-    // catapult (0.63 m in a frame) — a tuning/gate decision, not a timing bug.
-    it(`60 Hz ${side}: no frame's drawn move exceeds 1.6x the key's + 2 cm (no catapult)`, () => {
-      for (const r of replay(side)) expect(r.drawn, `t=${r.t.toFixed(3)} key=${r.key.toFixed(3)}`).toBeLessThanOrEqual(1.6 * r.key + REST_SLOP);
+    // NO CATAPULT / NO POP, at 60 Hz only (at >= 144 Hz or jittered the free
+    // ball cuts the wind-up apex differently: the whip's own motion). v1.4
+    // (spec §13) frees the ball through the swing (swingFloor 0.1), so a frame
+    // where the key barely moves can carry the ball's own swing, and the ball
+    // released behind the haft WHIPS round to catch the strike: the slop is
+    // 10 cm (was 2 cm, when the guide pinned the ball to the key; measured
+    // worst 3.5–9.2 cm over the 1.6x rule, on the whip frame), and no frame may
+    // outrun the swing's fastest authored frame by more than 60% (measured
+    // 0.95–1.51x: R's whip, 57 cm in a 60 Hz frame, ~34 m/s) — the old
+    // guide-ramp catapult was 0.63 m in a frame out of nowhere; a free wind-up
+    // with no hold (floor 0.05, window 0.06: the plan's starting numbers) moved
+    // 1.5–1.8x and lagged 57–62 cm.
+    it(`60 Hz ${side}: no frame's drawn move exceeds 1.6x the key's + 10 cm, or 1.6x the swing's fastest key frame (no catapult, no pop)`, () => {
+      const rows = replay(side);
+      const peak = Math.max(...rows.map(r => r.key));
+      for (const r of rows) {
+        expect(r.drawn, `t=${r.t.toFixed(3)} key=${r.key.toFixed(3)}`).toBeLessThanOrEqual(1.6 * r.key + DRAG_SLOP);
+        expect(r.drawn, `t=${r.t.toFixed(3)} peak=${peak.toFixed(3)}`).toBeLessThanOrEqual(1.6 * peak);
+      }
     });
-    it(`60 Hz ${side}: the wind-up trails the key visibly but modestly (5 cm .. 20 cm)`, () => {
+    // THE DRAG (owner, spec §13): the ball swings back and trails the swing.
+    // Was "5 cm .. 20 cm" (the guide held it to its key: ~13–17 cm, read as
+    // "always in front"). Now it trails the key by 36–56 cm at its furthest
+    // (L 38, H 36: the owner's ~35 cm; R 56: its overhand key sweeps ~107° over
+    // the top while the released ball is still going back — the chain keeps it
+    // within 0.37 m of the bolt, it is the KEY that runs away), bounded so it
+    // never loses the key.
+    it(`60 Hz ${side}: the swing drags well behind the key (20 cm .. 60 cm)`, () => {
       const lag = Math.max(...replay(side).filter(r => r.t < FLAIL_TIMING[side].strikeT).map(r => r.lag));
-      expect(lag).toBeGreaterThan(0.05);
-      expect(lag).toBeLessThanOrEqual(0.2);
+      expect(lag).toBeGreaterThan(0.2);
+      expect(lag).toBeLessThanOrEqual(0.6);
+    });
+    // THE BACK BEAT: the drawn ball goes BACK (view +z) in the wind-up — from
+    // −0.75 at rest to ≥ −0.15 on R and H (measured −0.06, −0.11; was −0.22 and
+    // −0.48) and ≥ −0.40 on L, the cross, whose wind-up passes the face (−0.37; was −0.54).
+    it(`60 Hz ${side}: the wind-up takes the ball back`, () => {
+      const back = Math.max(...replay(side).filter(r => r.t < FLAIL_TIMING[side].strikeT).map(r => r.z));
+      expect(back).toBeGreaterThanOrEqual(side === 'L' ? -0.4 : -0.15);
+    });
+    it(`60 Hz ${side}: through the swing the drawn ball trails BEHIND the eye bolt (>= 15 cm along its motion; measured 17–27 cm)`, () => {
+      const rows = replay(side).filter(r => r.t > 0.08 && r.t < FLAIL_TIMING[side].strikeT);
+      expect(Math.min(...rows.map(r => r.behind))).toBeLessThanOrEqual(-0.15);
     });
   }
 });

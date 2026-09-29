@@ -5,8 +5,9 @@
 // last node. The swing's authored ball position is a TARGET the ball is guided
 // toward — PD-like: its position is pulled toward the target AND its velocity
 // toward the target's velocity, by the same weight — so it arrives MOVING with
-// the key instead of being yanked onto it. The guide is loose through the
-// wind-up (the ball trails the haft — the whip), 1 at strikeT, loose again
+// the key instead of being yanked onto it. The guide holds the ball to its
+// keys through the wind-up (the back beat takes it out behind the hand), lets
+// go at the apex (it drags behind the haft coming round — the whip), 1 at strikeT, loose again
 // through the follow-through, and a light hold at rest. On the strike frame
 // the caller pins the ball on FLAIL_IMPACT on the LAST substep only, leaving
 // it the key's velocity, so a miss flies on through the arc. Hits never read
@@ -34,12 +35,27 @@ export const FLAIL_CHAIN_SIM = {
   /** Guide rate at guide 1, 1/s: the per-substep blend is 1 − exp(−rate·guide·h). */
   guideRate: 140,
   restGuide: 0.12,
-  /** The guide's floor through a swing. With the rate, it sets the wind-up
-   *  trail (~13 cm behind the key at 60 Hz) against the no-catapult rule (no
-   *  frame moves over 1.6x the key's move + 2 cm) — swept, flail-chain.test.ts gates both. */
-  swingFloor: 0.3,
-  /** Seconds before strikeT over which the guide ramps up to 1. */
-  guideWindow: 0.1,
+  /** The guide through the WIND-UP (v1.4, spec §13): firm enough that the ball
+   *  goes back with its keys (the back beat takes it out behind the hand) —
+   *  a free ball has no time to swing back in a 0.1 s wind-up; it only hangs
+   *  under the rising bolt, which reads as "in front". */
+  windUpGuide: 0.5,
+  /** The wind-up hold lets go centred this long before strikeT: just BEFORE
+   *  the wind-up apex (0.1 s on R and L, 0.12 s on H), while the ball is still
+   *  travelling back, so it keeps going back as the haft turns forward — the
+   *  drag. (At the apex itself, 0.075, the key has stopped the ball and it
+   *  trailed the bolt by ~8–15 cm; here by ~15–27 cm.)… */
+  holdLead: 0.09,
+  /** …over ± this, seconds: gone by strikeT − 0.07, before the strike ramp starts. */
+  holdFade: 0.02,
+  /** The guide's floor through the swing: nearly free, so from the apex the
+   *  ball DRAGS behind the haft coming round (was 0.3: the ball held to its key,
+   *  ≤ 17 cm behind, "always in front"). flail-chain.test.ts gates the drag, the
+   *  no-pop rule and the strike pin. */
+  swingFloor: 0.05,
+  /** Seconds before strikeT over which the guide ramps up to 1 (was 0.1): the
+   *  ball whips through in the last 60 ms. */
+  guideWindow: 0.06,
   /** Seconds after strikeT over which it lets go. */
   releaseWindow: 0.1,
   /** Seconds before the swing ends over which it returns to the rest hold. */
@@ -85,7 +101,9 @@ export function guideWeight(s: FlailSwing): number {
   const C = FLAIL_CHAIN_SIM, S = FLAIL_TIMING[s.side];
   if (s.phase === 'idle') return C.restGuide;
   const t = s.t;
-  if (t <= S.strikeT) return Math.max(C.swingFloor, smooth(S.strikeT - C.guideWindow, S.strikeT, t));
+  const release = S.strikeT - C.holdLead;
+  const hold = C.windUpGuide * (1 - smooth(release - C.holdFade, release + C.holdFade, t));
+  if (t <= S.strikeT) return Math.max(C.swingFloor, hold, smooth(S.strikeT - C.guideWindow, S.strikeT, t));
   const letGo = 1 - smooth(S.strikeT, S.strikeT + C.releaseWindow, t);
   const settle = smooth(S.swingSec - C.settleWindow, S.swingSec, t) * C.restGuide;
   return Math.max(C.swingFloor, letGo, settle);
@@ -108,8 +126,9 @@ export function makeChain(anchor: Vec3, toward: Vec3): ChainState {
 }
 
 /** FABRIK passes on a pinned substep (16 left 0.2% on the L ring link once the
- *  0.15 s key reshaped the approach; 32 is exact to < 0.1%, once per strike). */
-const PIN_FABRIK = 32;
+ *  0.15 s key reshaped the approach; 32 left 0.1% once the v1.4 free swing
+ *  brought the chain in near-taut; 64, once per strike). */
+const PIN_FABRIK = 64;
 
 /** Move `q` to `rest` from `from`, along from → q. */
 function place(from: M3, q: M3, rest: number): void {
@@ -174,8 +193,16 @@ export function stepChainInPlace(
   const whole = capped || pinCall || steps * h > span;
   for (let step = 0; step < steps; step++) {
     const f = whole ? (step + 1) / steps : Math.min(1, ((step + 1) * h) / span);
-    ax = a0x + (anchor[0] - a0x) * f; ay = a0y + (anchor[1] - a0y) * f; az = a0z + (anchor[2] - a0z) * f;
-    const tx = t0x + (target[0] - t0x) * f, ty = t0y + (target[1] - t0y) * f, tz = t0z + (target[2] - t0z) * f;
+    // f = 1 takes the anchor and target THEMSELVES: a0 + (a − a0)·1 can miss a
+    // by an ulp, and drawChain only keeps a pin frame exact when node 0 is
+    // bit-for-bit on the bolt (else its follow-the-leader pass re-places the
+    // pinned ball by the FABRIK residual — 5e-6 m on a near-taut L strike).
+    ax = f === 1 ? anchor[0] : a0x + (anchor[0] - a0x) * f;
+    ay = f === 1 ? anchor[1] : a0y + (anchor[1] - a0y) * f;
+    az = f === 1 ? anchor[2] : a0z + (anchor[2] - a0z) * f;
+    const tx = f === 1 ? target[0] : t0x + (target[0] - t0x) * f;
+    const ty = f === 1 ? target[1] : t0y + (target[1] - t0y) * f;
+    const tz = f === 1 ? target[2] : t0z + (target[2] - t0z) * f;
     const pinHere = pinCall && step === steps - 1;
     // Verlet for the free nodes.
     for (let i = 1; i < N; i++) {
