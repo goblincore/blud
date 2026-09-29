@@ -232,6 +232,7 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
   spot.shadow.camera.far = drop * 2.2;
   spot.shadow.camera.layers.enable(SHADOW_HULL_LAYER);
   spot.userData.onlyRooms = new Set([room]);
+  if (!shadow) spot.userData.listOnly = true;   // a secondary tube: list + probe only, no level-material light (game-main)
   group.add(spot, spot.target);
   // The beam: an open cone, apex at the tube, pointing down; drawn after the bodies.
   const r = Math.tan(TUBE.angle) * drop;

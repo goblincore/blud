@@ -102,7 +102,7 @@ const median = (a) => { const b = [...a].sort((x, y) => x - y); return b.length 
 const VIEW_BEFORE = '0.9, -95.1, -0.12, 0.12';   // just short of the threshold
 const VIEW_AFTER = '0.9, -97.0, -0.12, 0.12';
 
-const q = 'level=night-train&frozen&nospawn&god';
+const q = 'level=night-train&frozen&nospawn&god' + (process.env.DISCO_QUERY ?? '');
 if (!(await boot(q))) { console.error(consoleEvents.slice(-8)); fail(`night-train did not boot (${q})`); }
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
 for (const c of ['setFlashlight(false)', 'setDemoHold(true)', 'holdWindowLight(0, -1)', 'setLightClockFrozen(true)', 'setLightTime(0)']) await evaluate(`__sdfGame.${c}`);

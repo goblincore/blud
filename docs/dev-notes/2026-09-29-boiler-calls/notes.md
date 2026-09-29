@@ -17,7 +17,13 @@ lights gained an optional `shadow: false` (tube fixtures only: layout → `build
 the same count as before, so the shadow cost is unchanged. Pinned by a test in `level-json.night-train.test.ts`.
 Any future light that casts a shadow spends one of those 16.
 
-Not measured: the frame cost of four more (shadowless) spots — needs a quiet machine.
+**Cost (measured, quiet machine, load ~4; Boiler Room frame median, list off):** one row 16.3 ms; the second row as
+full lights (spot + omni each) **26.5 ms (+10)** — the level-material pass (`sdf:shell-hull`) went 6 → 14.5 ms, about
+1 ms per real three.js light in the room; without their omni spill 22.2; **list-only 18.1 (+2)**. Shipped: the second
+row's tubes (`shadow: false`) are list-only — they light bodies through the shared list and the level through the probe
+bounce, never a level-material light (`userData.listOnly`, `game-main.ts` + `makeTube`). The walls read almost as lit
+as with full lights. Third class reads ~+0.7 ms with any of the variants (noise-level, cause not found).
+Lesson for the level-lighting plan (menu item 2): every real light in a room costs its level materials ~1 ms.
 
 ## 2. Disco stars — 96 → 144 (`DISCO.count`)
 

@@ -819,6 +819,10 @@ async function main() {
       // lamp's position and colour for the shared list, never a level material's light or a
       // deferred practical (levelSceneLights and the deferred candidates skip it).
       if (a.fixture === 'beacon') pl.userData.listOnly = true;
+      // A secondary tube (`shadow: false`, the Boiler Room's second row) lights bodies through the shared
+      // list and the level through the probe bounce only: every real light in a room costs its level
+      // materials ~1 ms a frame (measured 2026-09-29: a full second row +10 ms, list-only +2 ms).
+      if (a.fixture === 'tube' && a.shadow === false) pl.userData.listOnly = true;
       ctx.world.accentGroup.add(pl);
       // A visible source. Without it the light has no cause and reads as a bug.
       // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl. A beacon
