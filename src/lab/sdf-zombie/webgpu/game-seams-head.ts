@@ -21,6 +21,14 @@ export function createHeadSeams(ctx: GameContext) {
       },
       /** The live brain MESH gibs' positions (world; game-mesh-gibs.ts, tag 'brain'), oldest first. */
       brains: (): number[][] => ctx.gibs.meshGibs.filter(g => g.tag === 'brain').map(g => [...g.state.pos]),
+      /** Switch actor `id`'s painted eye glow per eye (the face shader's per-eye mask, zombie-gpu setEyeGlow).
+       *  'L' = the face sheet's image-left eye (hs.x < 0): the zombie's own RIGHT eye. False when no such actor. */
+      eyeGlow: (id: number, side: 'L' | 'R', on: boolean): boolean => {
+        const a = ctx.world.actors.find(q => q.id === id);
+        if (!a) return false;
+        a.view.setEyeGlow(side, on);
+        return true;
+      },
       /** One head hit at world point (x, y, z), blow direction (dx, dy, dz) (normalised here), with the
        *  R swing's feel. False when there is no such actor or no leaf. */
       hit: (id: number, x: number, y: number, z: number, dx: number, dy: number, dz: number): boolean => {

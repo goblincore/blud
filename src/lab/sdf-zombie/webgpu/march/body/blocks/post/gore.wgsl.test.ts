@@ -34,6 +34,6 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('let faceRegion = 1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs));');
     expect(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'))
       .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover) * select(1.0, 0.0, isBone);'));
-    expect(INSTANCE_STATE).toContain('gInstGore = (*inst)[base + ');
+    expect(INSTANCE_STATE).toMatch(/let gore = \(\*inst\)\[base \+ \d+\];\s*gInstGore = gore\.x;/);
   });
 });

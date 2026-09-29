@@ -139,6 +139,9 @@ export interface ZombieGpuView {
    * out from under its neighbours. The caller owns the lifecycle.
    */
   setFaceTexture(tex: THREE.Texture, atlas: THREE.Vector4, mean: number): void;
+  /** Per-eye painted glow (melee head damage v2): false switches that eye's glow off (a popped eye). 'L' is
+   *  the face sheet's IMAGE-left eye (hs.x < 0), which is the zombie's own RIGHT eye. */
+  setEyeGlow(side: 'L' | 'R', on: boolean): void;
   applyMaterial(m: FleshMaterial, light: LightPreset): void;
   /**
    * PER-TILE LISTS (perf task 5). Present only when the view was created
@@ -479,6 +482,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     // the brow. Re-measure this if the art changes.
     faceCfg2: uniform(new THREE.Vector4(0, 0.5, 0.88, 1.6)),
     faceGlowRedOnly: uniform(0),
+    /** Per-eye glow switch (onL, onR, radiusUV, 0): melee head damage v2 (march/body/face.wgsl.ts). Not a
+     *  march param — it rides the per-instance record (REC_GORE.yzw, writeViewRecord). */
+    faceEyeMask: uniform(new THREE.Vector4(1, 1, 0.07, 0)),
     /** x glowFlicker, y timeSeconds, zw = noise root shift xz (setRootShift —
      *  the only spare vec2 in this uniform set; see march.wgsl.ts). Chunks
      *  overwrite zw per frame with their own position instead. */
@@ -1641,6 +1647,7 @@ export function writeViewRecord(
     // per-VIEW uniform, and the crowd shares one material, so the only way a
     // doomed body can wear the gore the chunks wear is through its own record.
     gore: u.lodCfg.value.w,
+    eyeMask: u.faceEyeMask.value.toArray(),
     // The per-instance half of the burn ramp, for the same reason as `gore`:
     // burnCfg is per VIEW and the crowd shares one material.
     burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z,
@@ -2823,6 +2830,11 @@ export function createZombieGpuView(
       u.faceAtlas.value.copy(atlas);
       u.faceCfg2.value.y = mean;
     },
+    setEyeGlow(side, on) {
+      if (side === 'L') u.faceEyeMask.value.x = on ? 1 : 0;
+      else u.faceEyeMask.value.y = on ? 1 : 0;
+      syncRecord();
+    },
     applyMaterial(m, light) {
       u.baseColor.value.setRGB(...m.baseColor);
       u.deepColor.value.setRGB(...m.deepColor);
@@ -3106,6 +3118,7 @@ export function createChunkGpuView(
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);
     u.faceGlowRedOnly.value = template.faceGlowRedOnly.value;
+    u.faceEyeMask.value.copy(template.faceEyeMask.value);
     u.faceCfg3.value.copy(template.faceCfg3.value);
     u.lodCfg.value.copy(template.lodCfg.value);
     u.faceProj.value.copy(template.faceProj.value);

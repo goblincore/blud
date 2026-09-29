@@ -205,6 +205,7 @@ function fakeFaceSource() {
     faceAtlas: { value: new THREE.Vector4(1, 1, 0, 0) },
     faceGlowRedOnly: { value: 0 },
     faceGlowColor: { value: new THREE.Color(1, 0, 0) },
+    faceEyeMask: { value: new THREE.Vector4(1, 1, 0.07, 0) },
   } as unknown as import('./zombie-gpu').MarchUniforms;
 }
 

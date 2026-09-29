@@ -8,14 +8,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
-  defaultUniforms, blankFaceTexture, woundReachBound,
+  defaultUniforms, blankFaceTexture, woundReachBound, writeViewRecord,
 } from './zombie-gpu';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
 import { ROW_PRIM_A, ROW_PRIM_BEND } from './march.wgsl';
-import { REC_ANCHOR_BAND, REC_COUNTS, REC_VEC4S } from './crowd-records';
+import { REC_ANCHOR_BAND, REC_COUNTS, REC_GORE, REC_VEC4S, createCrowdRecords } from './crowd-records';
 import { BASE_PRIM_STRIDE, MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
@@ -756,6 +756,29 @@ describe('per-body data texture width — stride floor', () => {
   it('a view given stride: MAX_PRIMS takes any live-edited body up to the ceiling', () => {
     const view = createZombieGpuView(body, { stride: MAX_PRIMS });
     expect((view.dataTexture as THREE.DataTexture).image.width).toBe(MAX_PRIMS);
+    view.dispose();
+  });
+});
+
+describe('per-eye glow switch (melee head damage v2)', () => {
+  it('defaults to both eyes on, radius 0.07 uv', () => {
+    const view = createZombieGpuView(body, {});
+    expect(view.uniforms.faceEyeMask.value.toArray().map(v => +v.toFixed(6))).toEqual([1, 1, 0.07, 0]);
+    view.dispose();
+  });
+  it('setEyeGlow switches one eye and the view record carries it as an off flag', () => {
+    const view = createZombieGpuView(body, {});
+    view.setEyeGlow('L', false);
+    expect(view.uniforms.faceEyeMask.value.x).toBe(0);
+    expect(view.uniforms.faceEyeMask.value.y).toBe(1);
+    const r = createCrowdRecords(1);
+    writeViewRecord(r, 0, view.uniforms, new THREE.Vector3());
+    expect(r.floats[REC_GORE * 4 + 1]).toBe(1);
+    expect(r.floats[REC_GORE * 4 + 2]).toBe(0);
+    expect(r.floats[REC_GORE * 4 + 3]).toBeCloseTo(0.07, 6);
+    view.setEyeGlow('L', true);
+    view.setEyeGlow('R', false);
+    expect(view.uniforms.faceEyeMask.value.toArray().slice(0, 2)).toEqual([1, 0]);
     view.dispose();
   });
 });

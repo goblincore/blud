@@ -26,7 +26,7 @@ export const REC_HALF_REV = 13;     // bodyHalf.xyz, w = damageRevision
  *  per-VIEW uniform, so on the shared crowd draw a doomed body could not ramp
  *  its gore without ramping the whole type; the ramp has to ride the record.
  *  Slot 14 was the first free vec4. */
-export const REC_GORE = 14;         // x = goreStrength, yzw spare
+export const REC_GORE = 14;         // x = goreStrength, y/z = eye L/R glow OFF, w = eye disc radius (uv)
 /** BURNING BODY: x = burn 0..1, y = seconds alight, z = char 0..1, w spare.
  *  Per-body and not per-view for the same reason as REC_GORE above: the crowd
  *  shares one material, so a single burning body needs its own ramp. */
@@ -48,6 +48,8 @@ export interface RecordSource {
   bodyCentre: ArrayLike<number>; variantSeed: number; bodyHalf: ArrayLike<number>; damageRevision: number;
   /** Rupture gore strength 0..1 (0 on a standing body, 1 on a chunk view). */
   gore: number;
+  /** Per-eye face glow (onL, onR, radiusUV); omitted = both on. Stored as OFF flags (a zero record = on). */
+  eyeMask?: ArrayLike<number>;
   burn: number;
   burnSec: number;
   charAmount: number;
@@ -93,7 +95,8 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
       put4(b + REC_VOL_POSE1 * 4, s.volumePose1);
       put4(b + REC_CENTRE_SEED * 4, s.bodyCentre, s.variantSeed);
       put4(b + REC_HALF_REV * 4, s.bodyHalf, s.damageRevision);
-      put4(b + REC_GORE * 4, [s.gore, 0, 0, 0]);
+      const em = s.eyeMask;
+      put4(b + REC_GORE * 4, [s.gore, em ? 1 - (em[0] ?? 1) : 0, em ? 1 - (em[1] ?? 1) : 0, em ? (em[2] ?? 0) : 0]);
       put4(b + REC_BURN * 4, [s.burn, s.burnSec, s.charAmount, 0]);
       rec.dirty = true;
     },

@@ -289,6 +289,9 @@ var<private> gInstRevision: f32 = 0.0;
 // lodCfg.w remains authoritative there); the doomed body's ramp rides its own
 // record because the crowd shares one material and one lodCfg uniform.
 var<private> gInstGore: f32 = 0.0;
+// PER-EYE GLOW SWITCH (melee head damage v2): (onL, onR, radiusUV, 0), from REC_GORE.yzw (stored there as
+// OFF flags, so a zero-filled record means both eyes on). Read by the face layer.
+var<private> gInstEyeMask: vec4<f32> = vec4<f32>(1.0, 1.0, 0.07, 0.0);
 // BURNING BODY (flame lab): the record's (burn, burnSec, char, spare). 0 outside
 // a crowd draw, where the per-view burnCfg is authoritative -- same split as
 // gInstGore above.
@@ -360,7 +363,9 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   let hr = (*inst)[base + ${REC_HALF_REV}];
   gInstHalf = hr.xyz;
   gInstRevision = hr.w;
-  gInstGore = (*inst)[base + ${REC_GORE}].x;
+  let gore = (*inst)[base + ${REC_GORE}];
+  gInstGore = gore.x;
+  gInstEyeMask = vec4<f32>(1.0 - gore.y, 1.0 - gore.z, gore.w, 0.0);
   gInstBurn = (*inst)[base + ${REC_BURN}];
 }
 `;
