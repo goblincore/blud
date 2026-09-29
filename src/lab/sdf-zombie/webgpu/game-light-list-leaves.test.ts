@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type TunnelLink } from './game-light-list-leaves';
+import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type LampInput, type TunnelLink } from './game-light-list-leaves';
 import { buildLightList, roomMaskOf } from './light-list';
 import { PROFILE_ID } from './light-profiles';
 import { BEACON } from './beacon';
@@ -177,5 +177,20 @@ describe('the room fill factor (Task 11b: bones follow the body\'s room fill)', 
     // LIGHT LAYERS 'fill follows the lamps' off (the default): always full fill.
     setLayer('roomFill', false);
     expect(roomFillFactor(ctx(rt), -1, 0)).toBe(1);
+  });
+});
+
+describe('levelCheap rides the lamp to the list (cheap level tier)', () => {
+  const lamp = (over: Partial<LampInput>): LampInput => ({
+    pos: [0, 2, 0], color: [1, 1, 1], intensity: 1, range: 12, room: 5, tube: null, mood: 'steady', ...over,
+  });
+  it('a flagged lamp becomes a flagged source and a flagged list light; an unflagged one does not', () => {
+    const sources = collectLightSources({
+      lamps: [lamp({ mood: 'fire', levelCheap: true }), lamp({})], window: null, flashlight: null, flashes: [],
+    });
+    expect(sources[0]!.levelCheap).toBe(true);
+    expect(sources[1]!.levelCheap).toBeUndefined();
+    const list = buildLightList(sources);
+    expect(list.filter(l => l.levelCheap)).toHaveLength(1);
   });
 });

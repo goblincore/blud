@@ -45,6 +45,8 @@ export interface LampInput {
   /** A Boiler Room emergency beacon: its cone is a spot with the `beacon` profile (red rim). */
   beacon?: boolean;
   gain?: number; tint?: RVec3;
+  /** The cheap level tier shades this lamp's light for the level (level-tier.ts isLevelCheap). */
+  levelCheap?: boolean;
   mood: LampMood;
 }
 /** The storm's one window light. `rooms`: every carriage that has a window light (lightning
@@ -83,6 +85,7 @@ export function collectLightSources(input: SourceInput): LightSource[] {
     if (l.room >= 0) s.rooms = [l.room];
     if (l.tube) { s.axis = l.tube.axis; s.cosOuter = l.tube.cosOuter; s.cosInner = l.tube.cosInner; }
     if (l.gain !== undefined) s.levelGain = l.gain;
+    if (l.levelCheap) s.levelCheap = true;
     // Not for fire: the fire profile's gain converts RAW intensity (bodyNorm 1, as for the
     // burning-body flashes it also serves); a reference would normalise it twice (Task 10 review).
     if (l.ref !== undefined && !fire) s.refIntensity = l.ref;
@@ -162,6 +165,7 @@ export function readSourceInput(
     const rec = (into.lamps[i] ??= { pos: [0, 0, 0], color: [1, 1, 1], intensity: 0, range: DEFAULT_RANGE, room: -1, tube: null, mood: 'steady' });
     rec.room = l.room; rec.mood = l.mood;
     rec.gain = l.gain; rec.tint = l.tint;
+    rec.levelCheap = l.levelCheap;
     // Fire-mood lamps carry no reference (bodyNorm 1): see collectLightSources.
     rec.ref = l.mood === 'fire' ? undefined : l.base * (l.beacon ? BEACON.spotGain : l.tube?.spot ? TUBE_SPOT_GAIN : 1);
     rec.beacon = !!l.beacon;

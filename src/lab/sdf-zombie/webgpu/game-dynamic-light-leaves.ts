@@ -25,6 +25,7 @@ import { BEACON, beaconAxisInto, beaconPhase, beaconShadowLive, beaconSpotIntens
 import type { LightMode } from './level-events';
 import { moonShadowFrame } from './outdoor-light';
 import { SHADOW_HULL_LAYER } from './sdf-layer';
+import { isLevelCheap } from './level-tier';
 import { STORM, stormSchedule, windowLightAt, type Bolt, type StormSchedule } from './storm';
 import { selfShadowCfg, type SelfShadowCfg } from './self-shadow';
 import { TUBE_SPOT_GAIN, createLightListGpu, nearRoomMask, bodyPicksView, lightListOn, lightListView, setLightListOn, type LightListGpu } from './game-light-list-leaves';
@@ -85,6 +86,8 @@ interface Lamp {
   /** Level JSON per-light overrides (spec §5 option A), for the shared light list. */
   gain?: number;
   tint?: Vec3;
+  /** isLevelCheap: the cheap level tier shades it (level-tier.ts). */
+  levelCheap: boolean;
 }
 
 interface Glass { room: number; mat: THREE.MeshStandardMaterial; base: number; kind: 'lamp' | 'fire' }
@@ -139,6 +142,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     light: f.light, bowl: f.bowl ?? null, base: f.base, mood: f.mood ?? 'steady', room: f.room ?? -1,
     seed: f.phase, script: null, level: 1,
     ...(f.gain !== undefined ? { gain: f.gain } : {}), ...(f.tint ? { tint: f.tint } : {}),
+    levelCheap: isLevelCheap({ fixture: f.fixture, mood: f.mood ?? 'steady', shadow: f.shadow }),
     tube: f.fixture === 'tube' && new URLSearchParams(location.search).get('tubes') !== '0' ? makeTube(ctx, f.light, f.bowlMesh ?? null, f.room ?? -1, tubeGroup, f.shadow !== false) : null,
     beacon: f.fixture === 'beacon' ? makeBeacon(ctx, f.light, f.room ?? -1, f.spin ?? BEACON.spin, beaconPhase(beaconIndex[i]!, beaconsIn.get(f.room ?? -1) ?? 1), tubeGroup) : null,
   }));
