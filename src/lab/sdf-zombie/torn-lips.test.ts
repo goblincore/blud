@@ -16,7 +16,7 @@ const wound = (extra: Partial<Wound> = {}): Wound => ({ primIdx: 0, local: [0, 0
 
 describe('torn lips: the flag', () => {
   it('packs tear as bit 3 beside cavity/hole/decal, integer part only', () => {
-    expect(WOUND_FLAG).toEqual({ cavity: 1, hole: 2, decal: 4, tear: 8 });
+    expect(WOUND_FLAG).toEqual({ cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16 });
     expect(woundFlagBits({})).toBe(0);
     expect(woundFlagBits({ tear: true })).toBe(8);
     expect(woundFlagBits({ cavity: true, hole: true, decal: true, tear: true })).toBe(15);
@@ -84,7 +84,8 @@ describe('torn lips: the shaders', () => {
   });
   it('WOUND_MASK follows the same two-octave edge and fills gWoundTear from the SAME footprint', () => {
     expect(WOUND_MASK).toContain('if ((fBits & 8) != 0) { rM = rM / (1.0 + ragged * mix(n, noise3(q * 3.7');
-    expect(WOUND_MASK).toContain('if ((fBits & 8) != 0) { gWoundTear = max(gWoundTear, contribution); }');
+    // The shading footprint is torn OR wet-lip (bit 3 | bit 4) since Task 35; see gun-wet-lip.test.ts.
+    expect(WOUND_MASK).toContain('if ((fBits & 24) != 0) { gWoundTear = max(gWoundTear, contribution); }');
     expect(WOUND_MASK).toContain('gWoundTear = 0.0;');
     // Still ONE mask edge (the halo lesson): m is the only thing returned.
     expect(WOUND_MASK).toContain('return vec3<f32>(m, m, cav);');

@@ -31,9 +31,10 @@ import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan 
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal,
+  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal, wetLipWound,
   type Wound, type WoundType,
 } from '../damage';
+import { GUN_WET_LIP } from '../torn-lips';
 import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed } from '../soldier-damage';
 import { posedDetachedChunk } from '../detached-pose';
@@ -1574,6 +1575,7 @@ export function createZombieActor(opts: {
     const field = posed;
     const wound = woundFromPellet(field.prims, hitWorld, bodyYaw, p => sdBody(p, field));
     wound.shot = shot;
+    gunWetLip(wound, 'pellet');
     return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
@@ -1581,7 +1583,16 @@ export function createZombieActor(opts: {
     const field = posed;
     const wound = woundFromSlug(field.prims, hitWorld, p => sdBody(p, field), bodyYaw);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
+    gunWetLip(wound, 'slug');
     return applyProjectileHit(wound, hitWorld, dirWorld);
+  }
+
+  /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the zombie-class gore bodies only.
+   *  The soldier keeps his own soldierWound stain and the soft target (cultist robe) takes decals,
+   *  so both are left stock; wetLipWound itself refuses cloth wounds and burns. */
+  function gunWetLip(wound: Wound, kind: keyof typeof GUN_WET_LIP): void {
+    if (soldierDamage || softTarget) return;
+    wetLipWound(wound, GUN_WET_LIP[kind]);
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {

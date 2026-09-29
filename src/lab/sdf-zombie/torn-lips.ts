@@ -71,3 +71,40 @@ export function setFlailTear(on: boolean): void { tearOn = on; }
 export function flailTearOn(): boolean { return tearOn; }
 /** The flail's tear for a crater (0 with the switch off). */
 export function flailTear(kind: keyof typeof FLAIL_TEAR): number { return tearOn ? FLAIL_TEAR[kind] : 0; }
+
+// ---------------------------------------------------------------------------------------------------
+// WET RED LIPS ON GUN WOUNDS (flail v1.5b, plan Task 35). Owner: "the gun wounds also need a little
+// bit of work — mostly adding the red lips part… they are more craterlike but if it is possible to
+// combine the crater look but with edges that have more of the wet red that would be ideal".
+// A wound with `Wound.wetLip` (0..1) uploads with ROW_WOUND_FLAGS.x bit 4 (WOUND_FLAG.wetLip): the
+// torn look's SHADING only — the wet red lip, glossy walls and clotted floor of the tornWound blocks —
+// on the stock crater SHAPE (round bowl, smooth lip; no ragged edge, no petals, the analytic normal
+// path untouched). Bit 3 (tear) is shape + shading; bit 4 is shading alone.
+
+/** SHADING tweaks for wet-lip-only pixels (SOLDIER_MEAT; the weight is gWoundWetOnly / gWoundTear,
+ *  0 on every torn or stock pixel so the flail's look is untouched). A crater's walls are small and
+ *  steep beside a tear's, so the clot speckle and shattered glints that read as torn meat on the flail
+ *  read as dirt at pellet size: the walls take WALL_SMOOTH of the smooth arterial ramp (the lip's),
+ *  and the glint noise is calmed toward one wet highlight by GLINT_CALM. */
+export const WET_LIP_LOOK = {
+  WALL_SMOOTH: 0.7,
+  GLINT_CALM: 0.6,
+  /** The lip crest's brightness on the smooth arterial ramp (the torn lip's is 1.15): a crater's
+   *  smooth rim is thin, so it needs a brighter crest to read as wet red rather than a dark ring. */
+  LIP_CREST: 1.45,
+} as const;
+
+/** The gun's wet-lip intensity per round, stamped on the wound (game-actor.ts hit / hitSlug). */
+export const GUN_WET_LIP = { pellet: 1.0, slug: 1.0 } as const;
+
+/** The A/B switch (`__sdfGame.setWetLip(false)`): off, the upload drops bit 4 so the SAME craters
+ *  render stock (the wounds keep their wetLip value). Ships ON. */
+let wetLipOn = true;
+export function setGunWetLip(on: boolean): void { wetLipOn = on; }
+export function gunWetLipOn(): boolean { return wetLipOn; }
+
+/** Whether a wound uploads with bit 4: a live wetLip value, the switch on, and a carved flesh wound —
+ *  never a cloth decal, a cloth hole or tear, or a burn (those have no wet meat lip). */
+export function wetLipUpload(w: { wetLip?: number; decal?: boolean; cloth?: string; type?: string }): boolean {
+  return wetLipOn && (w.wetLip ?? 0) > 0 && !w.decal && !w.cloth && w.type !== 'burn';
+}

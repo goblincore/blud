@@ -78,6 +78,10 @@ export interface Wound {
    *  pushed outward, a wet red lip over a glossy red interior and a clotted floor. Absent or 0
    *  = the stock look, pixel for pixel. Set with `tearWound`. */
   tear?: number;
+  /** Render-only: WET RED LIP (gun wounds, torn-lips.ts GUN_WET_LIP), 0..1. The wound uploads with
+   *  ROW_WOUND_FLAGS.x bit 4: the torn look's wet red lip / glossy walls / clotted floor SHADING on
+   *  the stock crater SHAPE. Absent or 0 = the stock look. Set with `wetLipWound`. */
+  wetLip?: number;
   /**
    * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
    * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses
@@ -553,6 +557,15 @@ export function clothifyWound(prims: Primitive[], wound: Wound, calibre: ClothCa
 export function tearWound(wound: Wound, tear: number): Wound {
   if (wound.decal || !(tear > 0)) return wound;
   wound.tear = Math.min(1, tear);
+  return wound;
+}
+
+/** Marks `wound` with a wet red lip (Wound.wetLip, clamped to 0..1): the gun's craters
+ *  (game-actor.ts hit / hitSlug). Cloth wounds (decal, hole, tear) and burns never take it — a
+ *  robe has no meat lip. Returns the wound. */
+export function wetLipWound(wound: Wound, wetLip: number): Wound {
+  if (wound.decal || wound.cloth || wound.type === 'burn' || !(wetLip > 0)) return wound;
+  wound.wetLip = Math.min(1, wetLip);
   return wound;
 }
 

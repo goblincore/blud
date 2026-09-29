@@ -12,6 +12,7 @@ import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-wea
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
 import { predictSlugHitNow } from './game-world-leaves';
+import { gunWetLipOn, setGunWetLip } from '../torn-lips';
 
 export function createWeaponAimSeams(ctx: GameContext) {
   return {
@@ -46,6 +47,13 @@ export function createWeaponAimSeams(ctx: GameContext) {
     },
     setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(ctx); },
     setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(ctx); },
+    /** Gun craters' wet red lip (torn-lips.ts, plan Task 35): off = the SAME craters render stock,
+     *  for a same-boot A/B (every actor's wound upload is refreshed). Ships ON. Returns the state. */
+    setWetLip(on: boolean) {
+      setGunWetLip(on);
+      for (const a of ctx.world.actors) a.refreshWoundUpload?.();
+      return gunWetLipOn();
+    },
     fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; } },
     /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
      *  computed by exactly the code fire() uses (muzzleWorld + converged

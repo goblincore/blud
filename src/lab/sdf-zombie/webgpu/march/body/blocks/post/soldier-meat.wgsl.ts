@@ -4,7 +4,7 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
-import { TORN } from '../../../../../torn-lips';
+import { TORN, WET_LIP_LOOK } from '../../../../../torn-lips';
 
 const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
 
@@ -40,6 +40,10 @@ export const SOLDIER_MEAT_BLOCK = /* wgsl */ `  // Soldier-only wet blood stain.
   let tornLift = smoothstep(0.0, ${f(TORN.LIP_LIFT)}, hitField.w);
   let tornFlesh = max(tornLift, smoothstep(0.0, ${f(TORN.LIP_LIFT)}, -hitField.w));
   let tornWound = smoothstep(0.02, 0.62, gWoundTear) * mix(${f(TORN.SKIN_SMEAR)}, 1.0, tornFlesh) * select(1.0, 0.0, isBone || isOrgan);
+  // WET LIP (gun craters, flags bit 4 without bit 3; plan Task 35): the share of this pixel's
+  // torn-family shading owed to a wet-lip-only crater. 0 wherever no such crater reaches (every
+  // torn and stock pixel), so the mixes below are exact identities there.
+  let wetOnly = clamp(gWoundWetOnly / max(gWoundTear, 1e-4), 0.0, 1.0);
   if (max(soldierWound, tornWound) > 0.0 && meatAmp > 0.0) {
     let muscle = smoothstep(surfCfg3.y, surfCfg3.z * 2.2, tissueDepth);
     let crevice = smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
@@ -56,6 +60,8 @@ export const SOLDIER_MEAT_BLOCK = /* wgsl */ `  // Soldier-only wet blood stain.
     // overdo it), and dull on clots. (specPow itself is pinned to one shared definition, so the
     // tight-vs-broad difference is carried by wetness alone.)
     woundGlint = mix(1.0, mix(1.0 - 0.75 * meatCfg.z, 1.0 + 1.1 * meatCfg.z, smoothstep(0.35, 0.72, glintN)) * mix(1.0, 0.35, clotDark), meatAmp);
+    // A crater's wet lip keeps one wet highlight, not shattered glints (WET_LIP_LOOK).
+    woundGlint = mix(woundGlint, 1.0, wetOnly * ${f(WET_LIP_LOOK.GLINT_CALM)});
   }
   albedo = mix(albedo, gooRed, soldierWound * 0.72);
   // Torn: the lip goes wet red (gooRed's bright arterial end — tissueDepth is 0 on the everted
@@ -65,7 +71,9 @@ export const SOLDIER_MEAT_BLOCK = /* wgsl */ `  // Soldier-only wet blood stain.
     let tornFloor = smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
     let tornWall = smoothstep(0.0, surfCfg3.y, tissueDepth);
     // The lip's crest is the bright arterial end, its foot darker: the petal reads as a raised roll.
-    let tornMeat = mix(gooRedSmooth * mix(${f(TORN.LIP_FOOT)}, 1.15, tornLift), gooRed, tornWall);
+    // A crater's walls (wet lip only) take most of the smooth arterial ramp: wet red, not speckle.
+    let tornWallRed = mix(gooRed, gooRedSmooth, wetOnly * ${f(WET_LIP_LOOK.WALL_SMOOTH)});
+    let tornMeat = mix(gooRedSmooth * mix(${f(TORN.LIP_FOOT)}, mix(1.15, ${f(WET_LIP_LOOK.LIP_CREST)}, wetOnly), tornLift), tornWallRed, tornWall);
     let tornRed = mix(tornMeat, min(tornMeat, deepColor * 0.35), tornFloor * ${f(TORN.FLOOR_CLOT)});
     albedo = mix(albedo, tornRed, tornWound * ${f(TORN.RED)});
   }`;

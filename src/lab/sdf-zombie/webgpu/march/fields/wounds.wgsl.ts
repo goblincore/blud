@@ -260,6 +260,7 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
   var cav = 0.0;
   gWoundHole = 0.0;
   gWoundTear = 0.0;
+  gWoundWetOnly = 0.0;
   gClothMark = 0.0;
   gClothStain = 0.0;
   // Per-instance wound count: the slot loop's loadInstance set this before
@@ -315,14 +316,21 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     // cavity was the only thing it could hold.
     if ((fBits & 1) != 0) { cav = max(cav, contribution); }
     if ((fBits & 2) != 0) { gWoundHole = max(gWoundHole, contribution); }
-    // TORN (bit 3, flail, 2026-09-29): the SAME footprint again, over torn wounds
-    // only — the wet red lip / glossy interior / clotted floor weight the
-    // SOLDIER_MEAT and WET blocks read. Not a second edge: it is m restricted.
-    if ((fBits & 8) != 0) { gWoundTear = max(gWoundTear, contribution); }
+    // TORN (bit 3, flail, 2026-09-29) or WET LIP (bit 4, gun craters, Task 35): the
+    // SAME footprint again, over those wounds only — the wet red lip / glossy
+    // interior / clotted floor weight the SOLDIER_MEAT and WET blocks read. Not a
+    // second edge: it is m restricted. Bit 4 is SHADING only: the carve's shape
+    // (applyWounds' torn test), this mask's edge (above) and ngWounds' tap
+    // fallback all read bit 3 alone, so a wet-lip crater keeps its round bowl.
+    if ((fBits & 24) != 0) { gWoundTear = max(gWoundTear, contribution); }
+    // gWoundWetOnly: the wet-lip wounds that are NOT torn (bit 4 without bit 3) — the
+    // crater's calmer shading (SOLDIER_MEAT) rides gWoundWetOnly / gWoundTear.
+    if ((fBits & 24) == 16) { gWoundWetOnly = max(gWoundWetOnly, contribution); }
   }
   return vec3<f32>(m, m, cav);
 }
 var<private> gWoundTear: f32 = 0.0;
+var<private> gWoundWetOnly: f32 = 0.0;
 var<private> gWoundHole: f32 = 0.0;
 var<private> gClothMark: f32 = 0.0;
 var<private> gClothStain: f32 = 0.0;`

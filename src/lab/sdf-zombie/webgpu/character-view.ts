@@ -40,7 +40,7 @@ import { DEFAULT_FACE, type FaceParams } from '../face';
 import type { FleshMaterial } from '../material';
 import type { BodyDef, Vec3 } from '../types';
 import type { VisualWound } from '../shared-wounds/torso';
-import { tearUpload } from '../torn-lips';
+import { tearUpload, wetLipUpload } from '../torn-lips';
 import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
@@ -451,6 +451,8 @@ export function createWoundRing(): WoundRing {
         rows.map(w => !!w.decal),
         // Torn lips (flags bit 3); a decal never tears (it carves nothing).
         rows.map((w, i) => torn[i]!.torn && !w.decal),
+        // Gun wounds' wet red lip (flags bit 4, torn-lips.ts): shading only, never on cloth.
+        rows.map(w => wetLipUpload(w)),
       );
     },
   };

@@ -2505,14 +2505,20 @@ Owner (2026-09-30), after seeing the flail's torn lips: "the gun wounds also nee
 the red lips part… they are more craterlike but if possible combine the crater look with edges that have more of the
 wet red".
 
-- [ ] Keep the shotgun's crater SHAPE (round bowl, smooth raised lip, no ragged outline, no petals) and add only the
+- [x] Keep the shotgun's crater SHAPE (round bowl, smooth raised lip, no ragged outline, no petals) and add only the
   wet red lip shading and glossy interior from the torn look (torn-lips.ts `TORN` shading constants, the tear
   albedo/wet/glint blocks). Decouple the flag: a second flag bit (bit 4, "wet lip": shading only) beside bit 3
   ("tear": shape + shading); `Wound.wetLip` (0..1) on gun wounds (grapeshot pellets, slugs, and dynamite/explosion
   blast wounds if they read fine); default OFF for everything else. Pellet wounds are small (r ≈ 0.055): check the
   red lip reads at that size without swamping the skin; slugs (r ≈ 0.16) get the full look.
-- [ ] Look loop: close-ups (0.5 m, bleed off/on) of a slug wound, a pellet cluster and a double-barrel volley, before
+- [x] Look loop: close-ups (0.5 m, bleed off/on) of a slug wound, a pellet cluster and a double-barrel volley, before
   vs after; iterate; LOOK at every photo and describe honestly; also confirm the flail's torn wounds are unchanged
   and other characters' wounds (soldier, cultist robe, cloth) are unchanged.
-- [ ] Verify: tsc; `npm test -- wound march damage zombie-gpu head flail deferred torn`; golden hash changes explained;
+- [x] Verify: tsc; `npm test -- wound march damage zombie-gpu head flail deferred torn`; golden hash changes explained;
   both gates; commit `feat(wound): gun wounds get the wet red lip (crater shape kept)`.
+- Done 2026-09-29: bit 4 (16) = `WOUND_FLAG.wetLip`; WOUND_MASK's gWoundTear footprint takes `fBits & 24`, a new
+  gWoundWetOnly takes `(fBits & 24) == 16`; the carve, the mask edge and ngWounds still test bit 3 alone. On
+  wet-lip-only pixels SOLDIER_MEAT smooths the walls (WET_LIP_LOOK.WALL_SMOOTH 0.7), calms the glints (GLINT_CALM
+  0.6) and brightens the lip crest (LIP_CREST 1.45 vs 1.15) — the torn look's clot speckle read as dirt at crater
+  size. Pellets and slugs on zombie-class bodies (not the soldier, not soft targets, never cloth/burn);
+  `__sdfGame.setWetLip(on)` A/Bs the same craters. Blast/dynamite left stock. Crops `torn-lips/gun-*.png`.
