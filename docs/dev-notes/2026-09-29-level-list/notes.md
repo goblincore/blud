@@ -6,7 +6,7 @@ list on); default off, byte-identical to before.
 
 ## Fidelity A/B ([ab-node-vs-three.png](ab-node-vs-three.png))
 
-The Boiler Room's four second-row spots lit by three (`?row2=three`, an experiment flag) versus by the node
+The Boiler Room's four second-row spots lit by three (`?row2=three`, an experiment flag, removed afterwards) versus by the node
 (`?levellist=1`), the disco check's party frame, headless, machine loaded (the image comparison does not need quiet):
 
 - noise floor, three vs three: mean |diff| **3.76**; node vs three **4.94**. Bound: floor × 1.5 + 1 = 6.64. **PASS.**
@@ -36,3 +36,28 @@ After the fix (`lvl2-*` runs):
 partly because moving the Boiler Room's fire light off three saves a real light (so the node's own per-light cost is not
 isolated, only bounded near zero), and C − A is small (+1.2 ms) because three's four spots were not the ~1 ms/light of the
 earlier omni measurements. Frame-ms deltas are noisy (loads 3.5–8.6); the GPU span is the steadier column.
+
+## What shipped, and how to use it
+
+- `?levellist=1` (list on): one `LevelListLightingNode` per room shades that room's **cheap-tier** lights — fire-mood lights and
+  shadowless (`shadow: false`) tubes — out of the shared list's buffer: diffuse only, three's falloff, up to 8 lights.
+  Those lights leave three's level-material lights (`userData.levelCheap`). Shadowed lights (4 tubes/room, beacons, window,
+  torch) stay on three. Default OFF, byte-identical when off (full test suite, light gate pass; march-hash default pin not
+  affected — nothing on its path changed).
+- Seam: `__sdfGame.levelListInfo` (per room, the list indices its node shades).
+- Look: [party-default-vs-levellist.png](party-default-vs-levellist.png). The node lights the side walls from the second
+  row (it costs the level nothing measurable) and the fire; no specular glints from those lights.
+- The experiment flag `?row2=three` is gone.
+
+## Owner decision needed
+
+Make `?levellist=1` the default? It changes the lighting model of fire lights and the second row (diffuse-only), and the
+second row starts lighting the level's walls (it is invisible to the level today). Cost: none measurable, slightly negative
+in the Boiler Room because the fire light comes off three.
+
+## Follow-ups (not done)
+
+- Move more lights: the four shadowed tubes' *level* light could go through the node with the shadow sampled from three's
+  map — needs the atlas; the unshadowed remainder is small.
+- The tube omni spill (list-only today) could return through the node for free, if the owner wants the fill back.
+- The 32-light list cap can drop a far room's cheap light; watch `levelListInfo` if a level grows.

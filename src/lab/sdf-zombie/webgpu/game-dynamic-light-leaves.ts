@@ -239,7 +239,7 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
   spot.shadow.camera.far = drop * 2.2;
   spot.shadow.camera.layers.enable(SHADOW_HULL_LAYER);
   spot.userData.onlyRooms = new Set([room]);
-  if (!shadow && new URLSearchParams(location.search).get('row2') !== 'three') spot.userData.listOnly = true;   // TEMP EXPERIMENT (level-list plan Task 5/6): ?row2=three lights the second row as three spots
+  if (!shadow) spot.userData.listOnly = true;   // a secondary tube: list + probe only, no level-material light (game-main); ?levellist=1 shades it through the list node
   group.add(spot, spot.target);
   // The beam: an open cone, apex at the tube, pointing down; drawn after the bodies.
   const r = Math.tan(TUBE.angle) * drop;

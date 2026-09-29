@@ -22,8 +22,9 @@
 - [ ] **Optimisation (owner 2026-09-29, in progress):** DONE — tube shadow maps 256²; every tube's omni spill list-only
   (−3 ms Boiler Room); the Boiler Room's second tube row list-only (+2 ms, not +10); the cost harness can now measure
   live tube shadows (`LIGHT_GATE_TUBE_SHADOW=1`). **Finding: the static/dynamic tube-shadow bake would save <1 ms — dropped.**
-  Left: level materials on the shared list (the ~3 ms of tube spots per carriage; largest job), retire paths the chosen
-  look leaves unused (needs owner sign-off on the look). Numbers: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
+  Level materials on the shared list, cheap tier: **built behind `?levellist=1`, ~free, awaiting the owner's call on making it
+  the default** ([notes](docs/dev-notes/2026-09-29-level-list/notes.md)). Left: retire paths the chosen look leaves unused
+  (needs owner sign-off on the look). Numbers: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
 - [x] **Zombies float — fixed with real feet** (owner, 2026-09-29): the model stopped 0.199 m above the floor (legs too
   short for the hip, no foot bone). Thigh 0.46 / shin 0.50 and a foot bone with heel + sole: lowest point 0.004 m,
   height unchanged. [Notes + turntable](docs/dev-notes/2026-09-29-zombie-feet/notes.md). **Open:** feet a little
