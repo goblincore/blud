@@ -86,6 +86,14 @@ describe('night-train dynamic light (dynamic light spec §3)', () => {
     expect(moods('cab')).toEqual(expect.arrayContaining(['steady', 'fire']));
     expect(t.rooms.flatMap(r => r.accents).every(a => a.mood !== undefined)).toBe(true);
   });
+  it('the Boiler Room has two rows of tubes but no more shadow casters than one row (2026-09-29)', () => {
+    // WebGPU's default is 16 sampled textures per fragment stage; each shadow-casting tube spends one.
+    // Eight casters measured 18 and no pipeline compiled, so the second row only lights.
+    const tubes = room('boiler-room').accents.filter(a => a.fixture === 'tube');
+    expect(tubes).toHaveLength(8);
+    expect(new Set(tubes.map(a => a.pos[0]))).toEqual(new Set([-2, 2]));
+    expect(tubes.filter(a => a.shadow !== false)).toHaveLength(4);
+  });
   it('the flashlight hangs behind the coat-check counter, mid-level', () => {
     const torch = t.pickups.find(p => p.item === 'flashlight')!;
     expect(torch.id).toBe('torch');

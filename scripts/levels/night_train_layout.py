@@ -122,7 +122,7 @@ CARRIAGES = [
                  ("soldier-bar-1", "soldier", 2.9, 12.8), ("soldier-dj", "soldier", -2.0, 27.2)],
          pickups=[("favour-dynamite", "dynamite", -3.65, 3.0), ("bar-health", "health", 3.4, 16.8),
                   ("dj-cd", "cd", -3.5, 27.4)],
-         gates=[], moods=["steady", "steady", "steady", "steady"],
+         gates=[], moods=["steady"] * 8, rows=[-2.0, 2.0],   # two rows: the side walls read dark (owner call, 2026-09-29)
          fires=[("party-boiler", 3.4, 0.7, 0.6, 1.0)],
          triggers=[("strobe", "light.strobe.room.5", -4.0, 4.0, 5.5, 6.5)],
          beacons=[(0.0, 7.0, 2.95, 0.7), (0.0, 21.0, 2.95, -0.7)]),   # under the centre pipe (its bottom at h - 0.33)
@@ -152,11 +152,19 @@ BEACON_RED = (1.0, 0.08, 0.05)
 
 
 def lamps(c):
-    """The ceiling lamps of a carriage, in its frame: ((x, y, u), mood), south to north."""
+    """The ceiling lamps of a carriage, in its frame: ((x, y, u), mood, casts_shadow), south to north.
+
+    `rows` (optional, x offsets, default one centre row) puts a row of tubes at each x; moods run row by
+    row, south to north within a row."""
+    rows = c.get("rows", [0.0])
     n = max(1, round(c["L"] / 8))
-    if len(c["moods"]) != n:
-        raise SystemExit(f"{c['name']}: {n} lamps but {len(c['moods'])} moods")
-    return [((0.0, c["h"] - 0.4, c["L"] * (i + 0.5) / n), c["moods"][i]) for i in range(n)]
+    if len(c["moods"]) != n * len(rows):
+        raise SystemExit(f"{c['name']}: {n * len(rows)} lamps but {len(c['moods'])} moods")
+    # WebGPU's default is 16 sampled textures per fragment stage and every shadow-casting tube spends one
+    # (8 shadowed tubes in the Boiler Room measured 18 and no pipeline compiled). With more than one row
+    # the shadows go on a checkerboard, so the shadowed count stays at n; the rest only light.
+    return [((x, c["h"] - 0.4, c["L"] * (i + 0.5) / n), c["moods"][r * n + i], len(rows) == 1 or (r + i) % 2 == 0)
+            for r, x in enumerate(rows) for i in range(n)]
 
 
 def placed():
@@ -190,8 +198,9 @@ def to_level() -> dict:
             doc["spawns"].append({"id": sid, "kind": kind, "pos": [x, 0, g(u)], "yaw": 3.1416})
         for pid, item, x, u, *y in c["pickups"]:
             doc["pickups"].append({"id": pid, "item": item, "pos": [x, y[0] if y else 0.3, g(u)]})
-        for i, (pos, mood) in enumerate(lamps(c)):
-            doc["lights"].append({"pos": [pos[0], pos[1], g(pos[2])], "color": list(COLD), "power": LIGHT_POWER, "mood": mood, "fixture": "tube"})
+        for i, (pos, mood, shadow) in enumerate(lamps(c)):
+            doc["lights"].append({"pos": [pos[0], pos[1], g(pos[2])], "color": list(COLD), "power": LIGHT_POWER, "mood": mood, "fixture": "tube",
+                                  **({} if shadow else {"shadow": False})})
         for _, x, u, y, power in c["fires"]:
             doc["lights"].append({"pos": [x, y, g(u)], "color": list(FIRE), "power": power, "mood": "fire"})
         for x, u, y, spin in c.get("beacons", []):

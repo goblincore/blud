@@ -139,7 +139,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
     light: f.light, bowl: f.bowl ?? null, base: f.base, mood: f.mood ?? 'steady', room: f.room ?? -1,
     seed: f.phase, script: null, level: 1,
     ...(f.gain !== undefined ? { gain: f.gain } : {}), ...(f.tint ? { tint: f.tint } : {}),
-    tube: f.fixture === 'tube' && new URLSearchParams(location.search).get('tubes') !== '0' ? makeTube(ctx, f.light, f.bowlMesh ?? null, f.room ?? -1, tubeGroup) : null,
+    tube: f.fixture === 'tube' && new URLSearchParams(location.search).get('tubes') !== '0' ? makeTube(ctx, f.light, f.bowlMesh ?? null, f.room ?? -1, tubeGroup, f.shadow !== false) : null,
     beacon: f.fixture === 'beacon' ? makeBeacon(ctx, f.light, f.room ?? -1, f.spin ?? BEACON.spin, beaconPhase(beaconIndex[i]!, beaconsIn.get(f.room ?? -1) ?? 1), tubeGroup) : null,
   }));
   if (tubeGroup.children.length > 0) ctx.boot.handle.scene.add(tubeGroup);
@@ -214,7 +214,7 @@ const TUBE = {
 
 let beamFn: ReturnType<typeof wgslFn> | null = null;
 
-function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | null, room: number, group: THREE.Group): Tube {
+function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | null, room: number, group: THREE.Group, shadow: boolean): Tube {
   const pos = light.position.clone();
   const roomDef = ctx.world.level.rooms.find(r => r.id === room);
   const drop = Math.max(1.5, (roomDef ? roomDef.height : 2.8) - 0.4 + 0.2);
@@ -222,7 +222,7 @@ function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | 
   spot.name = `train.tube-spot:${room}`;
   spot.position.set(pos.x, pos.y - 0.06, pos.z);
   spot.target.position.set(pos.x, pos.y - 3, pos.z);
-  spot.castShadow = true;                         // decided at boot, never toggled
+  spot.castShadow = shadow;                       // decided at boot, never toggled (shadowless: the level's `shadow: false`)
   spot.shadow.mapSize.set(TUBE.shadowSize, TUBE.shadowSize);
   spot.shadow.bias = -0.001;
   spot.shadow.radius = 1;

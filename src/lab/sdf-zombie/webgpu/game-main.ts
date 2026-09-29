@@ -841,7 +841,7 @@ async function main() {
         light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7,
         ...(bowl ? { bowl: bowl.material as THREE.MeshStandardMaterial, bowlMesh: bowl } : {}),
         mood: a.mood ?? 'steady', room: r.id,
-        fixture: a.fixture ?? 'bulb', ...(a.spin !== undefined ? { spin: a.spin } : {}),
+        fixture: a.fixture ?? 'bulb', ...(a.spin !== undefined ? { spin: a.spin } : {}), ...(a.shadow === false ? { shadow: false } : {}),
         ...(a.gain !== undefined ? { gain: a.gain } : {}), ...(a.tint ? { tint: a.tint } : {}),
       });
     }

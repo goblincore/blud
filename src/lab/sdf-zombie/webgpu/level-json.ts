@@ -40,7 +40,7 @@ const KEYS: Record<string, readonly string[]> = {
   gate: ['id', 'opensOn', 'min', 'max', 'states'],
   trigger: ['id', 'event', 'once', 'min', 'max', 'states'],
   window: ['id', 'view', 'min', 'max', 'states'],
-  light: ['pos', 'color', 'power', 'mood', 'fixture', 'spin', 'gain', 'tint', 'states'],
+  light: ['pos', 'color', 'power', 'mood', 'fixture', 'spin', 'shadow', 'gain', 'tint', 'states'],
   cue: ['on', 'emit'],
   start: ['pos', 'yaw'],
   spawn: ['id', 'kind', 'pos', 'yaw', 'states'],
@@ -349,6 +349,12 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
       else errors.push(`lights[${i}].spin: must be a number of rev/s within [-5, 5]`);
       if (fixture !== 'beacon') errors.push(`lights[${i}].spin: only a beacon fixture turns`);
     }
+    let shadow: boolean | undefined;
+    if (o.shadow !== undefined) {
+      if (typeof o.shadow === 'boolean') shadow = o.shadow;
+      else errors.push(`lights[${i}].shadow: must be true or false`);
+      if (fixture !== 'tube') errors.push(`lights[${i}].shadow: only a tube fixture takes it`);
+    }
     // A beacon always turns: no spin means the default (BEACON.spin rev/s).
     if (fixture === 'beacon' && o.spin === undefined) spin = BEACON.spin;
     let gain: number | undefined;
@@ -364,7 +370,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`lights[${i}]: outside every room`);
     else if (keep) room.accents.push({ pos, color, power, ...(mood ? { mood } : {}), ...(fixture ? { fixture } : {}),
-      ...(spin !== undefined ? { spin } : {}), ...(gain !== undefined ? { gain } : {}), ...(tint ? { tint } : {}) });
+      ...(spin !== undefined ? { spin } : {}), ...(shadow === false ? { shadow } : {}), ...(gain !== undefined ? { gain } : {}), ...(tint ? { tint } : {}) });
   });
 
   // --- cues (dynamic light §3) --------------------------------------------------

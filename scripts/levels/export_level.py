@@ -293,6 +293,7 @@ def main():
                                              **({"mood": str(o["mood"])} if "mood" in o.keys() else {}),
                                              **({"fixture": str(o["fixture"])} if "fixture" in o.keys() else {}),
                                              **({"spin": rnd(o["spin"])} if "spin" in o.keys() else {}),
+                                             **({"shadow": bool(o["shadow"])} if "shadow" in o.keys() else {}),
                                              **({"gain": rnd(o["gain"])} if "gain" in o.keys() else {}),
                                              **({"tint": [rnd(c) for c in o["tint"]]} if "tint" in o.keys() else {})}))
 

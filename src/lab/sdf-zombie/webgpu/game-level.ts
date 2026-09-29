@@ -60,6 +60,9 @@ export interface AccentLight {
   fixture?: 'bulb' | 'tube' | 'beacon';
   /** rev/s about the vertical, sign = direction (beacons). */
   spin?: number;
+  /** A tube's spot casts a shadow unless this is false (each shadow map costs a sampled texture, and a
+   *  fragment stage has 16 by default). */
+  shadow?: boolean;
   /** Level-authored scale on this light's presentation gain (spec §5 option A);
    *  absent means the kind's fixed profile gain is unscaled. Must be >= 0. */
   gain?: number;

@@ -88,7 +88,7 @@ def gempty(name, pos, yaw=0.0, **props):
     return obj
 
 
-def glight(name, pos, color, power, mood=None, fixture=None, spin=None):
+def glight(name, pos, color, power, mood=None, fixture=None, spin=None, shadow=True):
     data = bpy.data.lights.new(name, "POINT")
     data.color = color
     data.energy = power * 10.0
@@ -101,6 +101,8 @@ def glight(name, pos, color, power, mood=None, fixture=None, spin=None):
         obj["fixture"] = fixture
     if spin is not None:
         obj["spin"] = spin
+    if not shadow:
+        obj["shadow"] = False
     coll("lights").objects.link(obj)
 
 
@@ -196,8 +198,8 @@ def carriage(c, zs):
     g = lambda u: zs - u  # noqa: E731  (carriage frame u -> game z)
     room = gbox("rooms", f"room:{rid}:{name}", (-w2, 0, g(L)), (w2, h, zs), wire=True)
     room["shell"] = "art"
-    for i, ((x, y, u), mood) in enumerate(lamps(c)):
-        glight(f"lamp:{rid}:{i}", (x, y, g(u)), COLD, LIGHT_POWER, mood, "tube")
+    for i, ((x, y, u), mood, shadow) in enumerate(lamps(c)):
+        glight(f"lamp:{rid}:{i}", (x, y, g(u)), COLD, LIGHT_POWER, mood, "tube", shadow=shadow)
     for fid, x, u, y, power in c["fires"]:
         glight(f"fire:{rid}:{fid}", (x, y, g(u)), FIRE, power, "fire")
     for i, (x, u, y, spin) in enumerate(c.get("beacons", [])):
