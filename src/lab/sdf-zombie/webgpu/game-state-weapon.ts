@@ -27,6 +27,7 @@
 
 import type { Rocket } from '../rockets';
 import type { FlareHarness } from './game-flare';
+import type { LauncherView } from './game-launcher-view';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { StickProp } from './fpv-view';
@@ -87,6 +88,8 @@ export interface WeaponState {
   aimRig: THREE.Group | null;
   /** Slot 3 (flare test harness, game-flare.ts); null until the aim rig exists. */
   flare: FlareHarness | null;
+  /** Opt-in slot 4 FPV prototype, absent unless ?launcher=1. */
+  launcher: LauncherView | null;
   /** The gun's own rig group; the codemod supplies the real group. */
   gunRig: THREE.Group;
   /** The top-lever hinge pivot, or null before it is built. */
@@ -203,6 +206,7 @@ export function makeWeaponState(): WeaponState {
     viewModelAnchor: unbuilt<THREE.Group>(),
     aimRig: null,
     flare: null,
+    launcher: null,
     gunRig: unbuilt<THREE.Group>(),
     hingePivot: null,
     muzzleNodes: [],

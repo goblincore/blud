@@ -15,6 +15,9 @@ export function createFireSeams(ctx: GameContext) {
     // FLARE TEST HARNESS (slot 3): the weapon verb plus the crowd helpers, so a
     // full room can be set alight without aiming at each body.
     fireFlare: () => ctx.weapon.flare?.fire() ?? false,
+    fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,
+    reloadLauncher: () => ctx.weapon.launcher?.reload() ?? false,
+    launcher: () => ctx.weapon.launcher?.debug() ?? null,
     /** Set EVERY live actor alight. Returns how many bodies are tracked. */
     igniteAll: () => ctx.vfx.burning.igniteAll(),
     /** Fire-cost study: false = burn visually, behave unburnt (no panic/flail). Ship true. */

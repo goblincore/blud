@@ -138,6 +138,7 @@ export function loopBlocksInput(ctx: GameContext): boolean {
 
 /** May the player select or fire this slot? (The flare is a dev harness: always.) */
 export function ownsSlot(ctx: GameContext, slot: WeaponSlot): boolean {
+  if (slot === 'launcher') return ctx.weapon.launcher !== null;
   const rt = ctx.world.loop;
   return !rt || slot === 'flare' || rt.inventory.weapons.includes(slot);
 }

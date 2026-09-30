@@ -275,6 +275,7 @@ import { createFxSeams } from './game-seams-fx';
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
+import { createLauncherView } from './game-launcher-view';
 import { createMiscSeams } from './game-seams-misc';
 import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
@@ -3886,6 +3887,7 @@ async function main() {
     }
     // SLOT 3: left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
+    if (ctx.weapon.launcher?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
     // on exactly one frame or a recording cannot replay it. The dynamite press
     // above is already a flag the tick consumes, so it is on the same seam.
@@ -4295,6 +4297,14 @@ async function main() {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
     resolveGunReady();
     mark('gun-ready');
+  }
+
+  ctx.weapon.slotState = makeWeaponSlotState('shotgun');
+  // Art pass only: asset/material compilation is opt-in and the shotgun remains the default.
+  if (new URLSearchParams(location.search).get('launcher') === '1') {
+    ctx.weapon.launcher = await createLauncherView(ctx);
+    ctx.weapon.slotState = makeWeaponSlotState('launcher');
+    ctx.weapon.launcher.updateRig();
   }
 
   // PIPELINE WARM-UP (spike program, 2026-09-10). three's WebGPU backend
@@ -5426,7 +5436,6 @@ async function main() {
    *  tuning tool, not a grenade-spam simulator. */
   const MAX_BUNDLES = 4;
 
-  ctx.weapon.slotState = makeWeaponSlotState('shotgun');
   ctx.vfx.cook = { phase: 'idle', phaseAt: 0, cookStart: 0 };
   /** The cook clock in SIM seconds, advanced by tick(dt) — not a wall clock,
    *  so a frozen/render-locked capture cannot advance the fuse behind its own
@@ -7250,6 +7259,7 @@ async function main() {
     ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
     ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
     ctx.weapon.flare?.tickCooldown(dt);
+    ctx.weapon.launcher?.tick(dt);
     ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
     // ——— FREE AIM ————————————————————————————————————————————————————
     // The reticle only turns the camera once it is shoved past the dead zone;
