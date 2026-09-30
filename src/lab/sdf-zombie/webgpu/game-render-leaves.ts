@@ -98,6 +98,10 @@ export function gibBlurSubjects(ctx: GameContext): GibBlurSubject[] {
   }
   for (const c of ctx.bake.liveChunks) {
     if (!c.view.object.visible) continue;
+    // FLESH BITS (flesh-bits.ts) render sharp: in the layer pass a 3-5 cm bit at 2-5 m/s smears into a faint
+    // grey ghost (it shades grey there; cause not traced), and up to 24 of them would crowd the layer's
+    // piece budget (look loop, docs/dev-notes/2026-09-28-head-damage/flesh/, 2026-09-29).
+    if (c.tag === 'flesh') continue;
     const key = `chunk:${c.id}`;
     nextKeys.add(key);
     out.push({

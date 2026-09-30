@@ -931,3 +931,65 @@ describe('blast reaction — the body must not tear in half', () => {
     expect(worst).toBeLessThan(0.5);
   });
 });
+
+describe('blast() reaction option (melee)', () => {
+  const chestOf = (a: ReturnType<typeof makeTestActor>): Vec3 =>
+    [...a.posed().clusters.find(c => c.limb === 'torso')!.center] as Vec3;
+  const travelAfter = (reaction: 'blast' | 'flinch' | 'none') => {
+    const hit = makeTestActor({ start: [0, 0, 0] });
+    const control = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) { hit.step(1 / 60); control.step(1 / 60); }
+    hit.blast({ wounds: [], meterCredit: 0, impulse: { at: chestOf(hit), vel: [6, 0, 0] }, reaction });
+    for (let f = 0; f < 30; f++) { hit.step(1 / 60); control.step(1 / 60); }
+    const a = hit.pose().pos, b = control.pose().pos;
+    return Math.hypot(a[0] - b[0], a[2] - b[2]);
+  };
+
+  it("'blast' still knocks the root (today's behaviour)", () => {
+    expect(travelAfter('blast')).toBeGreaterThan(0.05);
+  });
+  it("'flinch' does not knock the root", () => {
+    expect(travelAfter('flinch')).toBeLessThan(0.02);
+  });
+  it("'none' changes nothing", () => {
+    expect(travelAfter('none')).toBeLessThan(1e-6);
+  });
+});
+
+describe('head damage engine hooks (melee head damage, task 5)', () => {
+  it('forceCollapse drops a standing zombie within a couple of steps', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    const control = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) { a.step(1 / 60); control.step(1 / 60); }
+    expect(a.debug().phase).toBe('standing');
+    a.blast({ wounds: [], meterCredit: 0, impulse: null, reaction: 'none', forceCollapse: true });
+    control.blast({ wounds: [], meterCredit: 0, impulse: null, reaction: 'none' });
+    for (let f = 0; f < 2; f++) { a.step(1 / 60); control.step(1 / 60); }
+    expect(a.debug().phase).not.toBe('standing');
+    expect(control.debug().phase).toBe('standing');
+  });
+
+  it('setHeadDeform maps the posed body after every re-pose; null removes it', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 5; f++) a.step(1 / 60);
+    const lift = 0.5;
+    a.setHeadDeform(p => ({
+      ...p,
+      prims: p.prims.map(q => q.limb === 'head'
+        ? { ...q, a: [q.a[0], q.a[1] + lift, q.a[2]], b: [q.b[0], q.b[1] + lift, q.b[2]] }
+        : q),
+    }));
+    // A hit re-pose (blast's tail) already carries the deform, before any step.
+    const bare = a.posed().prims.find(q => q.limb === 'head')!;
+    a.blast({ wounds: [], meterCredit: 0, impulse: null, reaction: 'none' });
+    const deformed = a.posed().prims.find(q => q.limb === 'head')!;
+    expect(deformed.a[1] - bare.a[1]).toBeCloseTo(lift, 1);
+    a.step(1 / 60);
+    const stepped = a.posed().prims.find(q => q.limb === 'head')!;
+    expect(stepped.a[1] - bare.a[1]).toBeGreaterThan(lift * 0.8);
+    a.setHeadDeform(null);
+    a.step(1 / 60);
+    const plain = a.posed().prims.find(q => q.limb === 'head')!;
+    expect(Math.abs(plain.a[1] - bare.a[1])).toBeLessThan(lift * 0.2);
+  });
+});

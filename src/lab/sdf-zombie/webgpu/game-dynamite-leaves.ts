@@ -37,7 +37,7 @@ export function takePropForThrow(ctx: GameContext): StickProp | null {
 }
 
 export const EXPLOSION_LIGHTS = 3;
-// WEAPON SLOT 2 — DYNAMITE (2026-09-10).
+// WEAPON SLOT 3 — DYNAMITE (2026-09-10).
 //
 // The purpose is TUNING: a bundle you can throw at zombies and soldiers so
 // the blast radius, the gib decision and the cost of a full-body gib can be

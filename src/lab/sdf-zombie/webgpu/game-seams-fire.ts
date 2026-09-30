@@ -12,7 +12,7 @@ import { type Vec3 } from '../types';
 
 export function createFireSeams(ctx: GameContext) {
   return {
-    // FLARE TEST HARNESS (slot 3): the weapon verb plus the crowd helpers, so a
+    // FLARE TEST HARNESS (slot 5): the weapon verb plus the crowd helpers, so a
     // full room can be set alight without aiming at each body.
     fireFlare: () => ctx.weapon.flare?.fire() ?? false,
     fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,

@@ -19,7 +19,15 @@ export const GORE_BLOCK = /* wgsl */ `  // Gore mask (gobs-and-goo spec §2): ch
   // chunk views) and the per-instance record. The crowd shares ONE material, so
   // a doomed body in a crowd could not ramp its gore through lodCfg.w without
   // repainting the whole type; gInstGore carries its own ramp (REC_GORE).
-  let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);
+  //
+  // BONE IS EXEMPT (head damage spec §14, 2026-09-28): a severed limb shows an
+  // ivory bone end. At a torn end wm is ~1, so the mask ran to ~0.85 and
+  // painted the restored bone albedo back to dark clot (measured: a slug-
+  // severed arm's bone stub read rgb ~(125, 47, 38) with the mask, tan
+  // without). Bone carries its own junction stain (organ block), so it skips
+  // the mask, and with gore 0 it also skips the wet boost below — bone is
+  // matte.
+  let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover) * select(1.0, 0.0, isBone);
   var gore = 0.0;
   if (goreStrength > 0.0) {
     let mottle = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);

@@ -78,7 +78,7 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     authored,
     finite,
     vitals: makeVitals(),
-    inventory: authored ? makeInventory(def.loadout) : makeInventory(['shotgun', 'dynamite', 'flare']),
+    inventory: authored ? makeInventory(def.loadout) : makeInventory(['melee', 'shotgun', 'dynamite', 'flare']),
     taken: new Set(),
     triggers: makeTriggerState(),
     pending: [],
@@ -136,11 +136,14 @@ export function loopBlocksInput(ctx: GameContext): boolean {
   return !!rt && (rt.vitals.dead || rt.done);
 }
 
-/** May the player select or fire this slot? (The flare is a dev harness: always.) */
+/** May the player select or fire this slot? The flail is owned as the
+ *  'melee' inventory item (the level format's name). The flare is a dev
+ *  harness: always. */
 export function ownsSlot(ctx: GameContext, slot: WeaponSlot): boolean {
   if (slot === 'launcher') return ctx.weapon.launcher !== null;
   const rt = ctx.world.loop;
-  return !rt || slot === 'flare' || rt.inventory.weapons.includes(slot);
+  const item = slot === 'flail' ? 'melee' : slot;
+  return !rt || slot === 'flare' || rt.inventory.weapons.includes(item);
 }
 
 /** A finite level with an empty reserve cannot reload (a dry click). */
@@ -195,6 +198,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   const def = ctx.world.level.def;
   if (!def) return;
   const hadShotgun = rt.inventory.weapons.includes('shotgun');
+  const hadMelee = rt.inventory.weapons.includes('melee');
   const picked = collectPickups(def.pickups, rt.taken, feet, rt.inventory, rt.vitals);
   if (picked.collected.length > 0) {
     rt.taken = picked.taken;
@@ -208,6 +212,10 @@ export function stepLoop(ctx: GameContext, dt: number): void {
       if (p.item === 'shotgun' && !hadShotgun) {
         ctx.weapon.shells = MAGAZINE_CAPACITY;   // it comes loaded
         ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, 'shotgun');
+      }
+      if (p.item === 'melee' && !hadMelee && !ownsSlot(ctx, ctx.weapon.slotState.live)) {
+        // Empty-handed: the flail comes straight up.
+        ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, 'flail');
       }
     }
     updateStatus(ctx);

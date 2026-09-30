@@ -302,6 +302,9 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let flagsRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     // CLOTH DECAL (bit 2): never carved — mirrors applyWounds' skip.
     if ((i32(flagsRow.x) & 4) != 0) { continue; }
+    // TORN (bit 3, flail lips 2026-09-29): a two-octave ragged edge with lobe-
+    // modulated petals has no analytic counterpart here — take calcNormal's taps.
+    if ((i32(flagsRow.x) & 8) != 0) { gNgReason = 1; return d; }
     let owner = flagsRow.y;
     // OWNED WOUNDS (2026-09-22): the owner re-fold has no analytic counterpart — but
     // when no limb won the re-fold at this pixel's hit (gNgOwnedOk, set by the caller

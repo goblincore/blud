@@ -5,6 +5,13 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { FACE_MELT_FADE_LO, FACE_MELT_SAG, FACE_MELT_STRETCH, HEAD_EXTERIOR_GORE_KEEP } from '../melt';
 
+/** The zombie face sheet's painted-eye centres in the face layer's `uv` (before the atlas crop): (uL, vL,
+ *  uR, vR). Measured from zombie-face.png (luma >= 0.9 centroids). v runs UP the image: the sheet loads
+ *  with flipY = true, so texel row 0 is the image's BOTTOM row and uv.y = hs.y * faceProj.y + faceProj.w
+ *  grows toward the crown. L is the IMAGE-left eye (hs.x < 0 with forward +1: the zombie's own RIGHT eye). */
+export const FACE_EYE_UV = [0.276, 0.616, 0.703, 0.664] as const;
+const f = (x: number) => x.toFixed(3);
+
 /** Shared projection/colour/relief layer for live flesh and settled head meshes. */
 export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face sheet; added into the lit colour further down.
   var faceGlow = 0.0;
@@ -124,6 +131,15 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
         faceGlow = redMask * facing * tex.a * clamp(faceCfg.y, 0.0, 1.0)
                  * clamp(faceCfg2.w, 0.0, 1.0);
       }
+      // PER-EYE GLOW SWITCH (melee head damage v2, spec §15): a popped eye stops glowing. gInstEyeMask =
+      // (onL, onR, radiusUV, 0), per instance (REC_GORE.yzw); each switched-off eye takes out a smoothstep
+      // disc of glow around its painted centre (FACE_EYE_UV). The radius is floored so a zero-filled record
+      // (radius 0, both eyes on) never hits smoothstep's equal-edges case.
+      let eyeRad = max(gInstEyeMask.z, 1e-4);
+      let eyeDiscL = 1.0 - smoothstep(0.6 * eyeRad, eyeRad, distance(uv, vec2<f32>(${f(FACE_EYE_UV[0])}, ${f(FACE_EYE_UV[1])})));
+      let eyeDiscR = 1.0 - smoothstep(0.6 * eyeRad, eyeRad, distance(uv, vec2<f32>(${f(FACE_EYE_UV[2])}, ${f(FACE_EYE_UV[3])})));
+      let faceEyeGlow = max(1.0 - (1.0 - gInstEyeMask.x) * eyeDiscL - (1.0 - gInstEyeMask.y) * eyeDiscR, 0.0);
+      faceGlow = faceGlow * faceEyeGlow;
 
       // Otherwise a MULTIPLIER, not a replacement: the generated sheet carries
       // baked lighting, so pasting it in as albedo and lighting it again

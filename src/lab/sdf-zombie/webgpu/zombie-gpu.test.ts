@@ -8,14 +8,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
-  defaultUniforms, blankFaceTexture, woundReachBound, fallbackLightListNode, CHUNK_FRESNEL,
+  defaultUniforms, blankFaceTexture, woundReachBound, writeViewRecord, fallbackLightListNode, CHUNK_FRESNEL,
 } from './zombie-gpu';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
 import { ROW_PRIM_A, ROW_PRIM_BEND } from './march.wgsl';
-import { REC_ANCHOR_BAND, REC_COUNTS, REC_LIGHTS, REC_VEC4S } from './crowd-records';
+import { REC_ANCHOR_BAND, REC_COUNTS, REC_GORE, REC_LIGHTS, REC_VEC4S, createCrowdRecords } from './crowd-records';
 import { BASE_PRIM_STRIDE, MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
@@ -65,6 +65,66 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
     view.update({ ...chunk, pos: [1.5, 0.3, 2.5] });
     expect(view.uniforms.faceCfg3.value.z).toBeCloseTo(1.5, 6);
     expect(view.uniforms.faceCfg3.value.w).toBeCloseTo(2.5, 6);
+    view.dispose();
+    template.dispose();
+  });
+
+  it('morph() replaces the local endpoints; the next update() draws them, the bound stays', () => {
+    // Head damage's dangling eye: a hand-posed piece bent each frame without a re-pack.
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [0, 0, 0], 0.1, [0, 0, 1], () => 0.5);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    const extent = view.bakeData().extent;
+    view.morph([{ a: [0, 0, 0], b: [0, -0.05, 0] }, { a: [0.01, 0, 0], b: [0.01, -0.02, 0] }]);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const d = view.bakeData();
+    expect(d.flesh[0]!.a).toEqual([1, 2, 3]);
+    expect(d.flesh[0]!.b[1]).toBeCloseTo(1.95, 6);
+    expect(d.flesh[1]!.a[0]).toBeCloseTo(1.01, 6);
+    expect(d.flesh[0]!.radius).toBe(prims[0]!.radius);
+    expect(d.extent).toBe(extent);
+    view.dispose();
+    template.dispose();
+  });
+
+  it('morph() with a scale re-scales that prim (the popped eye grows); without one the scale stays', () => {
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [0, 0, 0], 0.1, [0, 0, 1], () => 0.5);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    view.morph([{ a: [0, 0, 0], b: [0, -0.05, 0], scale: [0.5, 0.5, 0.5] }, { a: [0.01, 0, 0], b: [0.01, -0.02, 0] }]);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const d = view.bakeData();
+    expect(d.flesh[0]!.scale).toEqual([0.5, 0.5, 0.5]);
+    expect(d.flesh[1]!.scale).toEqual(prims[1]!.scale);
+    view.dispose();
+    template.dispose();
+  });
+
+  it('a morphed piece draws in a proxy box fitted to its bent prims, not the rotation-proof cube', () => {
+    // The dangling eye's origin is its socket: the reset() cube (extent · 2.8, centred there) straddled the
+    // whole face and cost ~4 ms a frame. The fitted box holds every prim and sits around them.
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [0, 0, 0], 0.1, [0, 0, 1], () => 0.5);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const cube = view.object.scale.x;
+    view.morph([{ a: [0, 0, 0], b: [0, -0.1, 0] }, { a: [0, -0.1, 0], b: [0, -0.2, 0] }]);
+    view.update({ ...chunk, pos: [1, 2, 3], quat: [0, 0, 0, 1], squash: 0 });
+    const s = view.object.scale, c = view.object.position;
+    expect(Math.max(s.x, s.y, s.z)).toBeLessThan(cube);
+    expect(c.y).toBeLessThan(2);                                   // centred on the hanging prims, not the origin
+    const half = view.uniforms.bodyHalf.value;
+    expect(half.x).toBeCloseTo(s.x / 2, 6);
+    for (const p of view.bakeData().flesh) for (const e of [p.a, p.b]) {
+      expect(Math.abs(e[1] - c.y)).toBeLessThanOrEqual(half.y);   // every endpoint inside the box
+      expect(Math.abs(e[0] - c.x)).toBeLessThanOrEqual(half.x);
+    }
+    // A reset (the view recycled as an ordinary gib) goes back to the cube.
+    view.reset(chunk, prims, undefined, [], template.uniforms);
+    expect(view.object.scale.x).toBeCloseTo(view.object.scale.y, 9);
     view.dispose();
     template.dispose();
   });
@@ -753,6 +813,29 @@ describe('per-body data texture width — stride floor', () => {
   it('a view given stride: MAX_PRIMS takes any live-edited body up to the ceiling', () => {
     const view = createZombieGpuView(body, { stride: MAX_PRIMS });
     expect((view.dataTexture as THREE.DataTexture).image.width).toBe(MAX_PRIMS);
+    view.dispose();
+  });
+});
+
+describe('per-eye glow switch (melee head damage v2)', () => {
+  it('defaults to both eyes on, radius 0.07 uv', () => {
+    const view = createZombieGpuView(body, {});
+    expect(view.uniforms.faceEyeMask.value.toArray().map(v => +v.toFixed(6))).toEqual([1, 1, 0.07, 0]);
+    view.dispose();
+  });
+  it('setEyeGlow switches one eye and the view record carries it as an off flag', () => {
+    const view = createZombieGpuView(body, {});
+    view.setEyeGlow('L', false);
+    expect(view.uniforms.faceEyeMask.value.x).toBe(0);
+    expect(view.uniforms.faceEyeMask.value.y).toBe(1);
+    const r = createCrowdRecords(1);
+    writeViewRecord(r, 0, view.uniforms, new THREE.Vector3());
+    expect(r.floats[REC_GORE * 4 + 1]).toBe(1);
+    expect(r.floats[REC_GORE * 4 + 2]).toBe(0);
+    expect(r.floats[REC_GORE * 4 + 3]).toBeCloseTo(0.07, 6);
+    view.setEyeGlow('L', true);
+    view.setEyeGlow('R', false);
+    expect(view.uniforms.faceEyeMask.value.toArray().slice(0, 2)).toEqual([1, 0]);
     view.dispose();
   });
 });

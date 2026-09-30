@@ -6,7 +6,8 @@
 // contract and docs/dev-notes/2026-09-18-march-split/ for the split.
 
 import { describe, it, expect } from 'vitest';
-import { MARCH_BODY, FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO } from '../../march.wgsl';
+import { MARCH_BODY, FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, FACE_EYE_UV, INSTANCE_STATE, FOLD_GROUP } from '../../march.wgsl';
+import { MARCH_SURFACE } from '../../deferred-sdf';
 
 describe('ported features reach the entry point', () => {
 
@@ -55,5 +56,30 @@ describe('melt face drip (zombie melt task 8)', () => {
   it('widens the facing fade as the head flattens', () => {
     expect(FACE).toContain(
       `var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, gInstMelt.x), 0.66, dot(n, hfr));`);
+  });
+});
+
+describe('per-eye glow mask (melee head damage v2, spec §15)', () => {
+  // A popped eye's painted glow must switch off; the other eye keeps glowing.
+  const FACE = MARCH_BODY.slice(
+    MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'),
+    MARCH_BODY.indexOf('// PER-PRIMITIVE COLOUR'),
+  );
+  it('the eye centres are the painted eyes\' uv centroids (v up, the texture flipY)', () => {
+    expect([...FACE_EYE_UV]).toEqual([0.276, 0.616, 0.703, 0.664]);
+  });
+  it('masks faceGlow per eye with a smoothstep disc, AFTER both glow branches', () => {
+    expect(FACE).toContain('faceGlow = faceGlow * faceEyeGlow;');
+    expect(FACE).toMatch(/1\.0 - \(1\.0 - gInstEyeMask\.x\) \* eyeDiscL - \(1\.0 - gInstEyeMask\.y\) \* eyeDiscR, 0\.0\)/);
+    expect(FACE).toContain('smoothstep(');
+    expect(FACE.indexOf('faceGlow = faceGlow * faceEyeGlow;'))
+      .toBeGreaterThan(FACE.indexOf('if (faceGlowRedOnly > 0.5) {'));
+  });
+  it('rides the per-instance record (REC_GORE.yzw), defaulting to both eyes on', () => {
+    expect(INSTANCE_STATE).toMatch(/gInstEyeMask = vec4<f32>\(1\.0 - gore\.y, 1\.0 - gore\.z, gore\.w, 0\.0\);/);
+    expect(FOLD_GROUP).toContain('var<private> gInstEyeMask: vec4<f32> = vec4<f32>(1.0, 1.0, 0.07, 0.0);');
+  });
+  it('the deferred surface march honours the mask too', () => {
+    expect(MARCH_SURFACE).toContain('faceGlow = faceGlow * faceEyeGlow;');
   });
 });

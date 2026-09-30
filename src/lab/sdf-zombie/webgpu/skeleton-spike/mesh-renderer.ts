@@ -6,7 +6,9 @@ import { meshBoneSource } from './mesh-skull';
 // per actor, geometry SHARED across actors through the SegmentMeshCache
 // (same revision → same BufferGeometry), posed per frame from the contract
 // source's pose() (origin + quat — rigid, no scale, so normalWorld is
-// exact), hidden the same frame isLive() goes false (the contract sever
+// exact; the one exception, the head deform's extra affine on the skull
+// segment, is non-uniform: the instance normal transform is exact for its
+// axis scales and only approximate for its small dent shear), hidden the same frame isLive() goes false (the contract sever
 // rule: pack.ts drops the bone rows, we drop the segment).
 //
 // WOUND/FLESH EXPOSURE RULE — smax-then-min, NOT depth-only hiding: the
@@ -98,8 +100,16 @@ export interface SegmentMeshRenderer {
    *  `shown` (visual-actor-cull task 2) is the set of owners to draw: an
    *  owner outside it has its meshes set invisible and receives NO pose
    *  writes (meshes stay allocated, so re-showing is one update away).
-   *  Omitted = draw every entry, the pre-cull behaviour. */
-  update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>, exposed?: ReadonlySet<unknown>): void;
+   *  Omitted = draw every entry, the pre-cull behaviour.
+   *  `extra` (melee head damage, Task 10): an optional WORLD-space affine
+   *  (column-major 4x4) applied after a segment's rigid pose, per owner and
+   *  segment key — the head deform's squash and dents on the 'head' skull
+   *  segment, so the skull deforms with the flesh (its seated eyes ride the
+   *  same matrix). Null = the rigid pose. */
+  update(
+    entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>,
+    exposed?: ReadonlySet<unknown>, extra?: (owner: object, segment: string) => ArrayLike<number> | null,
+  ): void;
   /** Copy each drawn instance's OWNER picks into its batch's iLights (shared light list, Task
    *  11): `lightsOf(owner)` is the owner actor's `bodyLights` value, read NOW, so call it after
    *  this frame's picks are written (the game's light loop runs after update). Undefined/null =
@@ -146,6 +156,7 @@ export interface SegmentMeshRenderer {
 export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, lightList?: unknown): SegmentMeshRenderer {
   const group = new THREE.Group();
   group.name = 'skeleton-segment-meshes';
+  const extraM = new THREE.Matrix4();
 
   const u = boneInstancerUniforms();
   const woundData = new Float32Array(MAX_WOUNDS_TEX * 4);
@@ -366,7 +377,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
       }
     },
-    update(entries, owners, shown, exposed) {
+    update(entries, owners, shown, exposed, extra) {
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
       stats.verts = stats.tris = 0;
@@ -407,6 +418,10 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
           pv.set(pose.origin[0], pose.origin[1], pose.origin[2]);
           qv.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
           segM.compose(pv, qv, one);
+          // The group sits at the scene origin, so the instance matrix IS the
+          // world matrix and a world-space affine premultiplies it.
+          const x = extra?.(owner as object, s.segment) ?? null;
+          if (x) segM.premultiply(extraM.fromArray(x));
           push(batchFor(baked.geometry, false), segM, owner);
           drawn.push({ owner, eye: false, matrix: segM.clone(), geometry: baked.geometry });
           for (const e of eyes) {

@@ -21,19 +21,29 @@ describe('bone material (wound pass r2)', () => {
     expect(SHADE_BODY).not.toContain('woundFibre');
   });
 
-  it('no longer stains bone toward deepColor — the branch is GONE (bone tubes)', () => {
-    // Bone tubes (2026-09-02 plan task 3): op 'bone' prims leave the marched
-    // field for instanced analytic tubes, so the bone albedo branch was
-    // deleted, not orphaned. Asserted as ABSENCE so it cannot quietly return.
-    expect(SHADE_BODY).not.toContain('boneStain');
+  it('stains bone toward deepColor where it meets flesh (restored, spec §14)', () => {
+    // 00194a001 deleted this branch as dead code for bone tubes, but bone
+    // rows stayed packed on the procedural skeleton path and shaded as meat.
+    // Head damage spec §14 (owner, 2026-09-28) restores it for every weapon,
+    // at the mesh head's stain weight 0.22 (0.55 painted the shallow skull
+    // red-brown).
+    expect(SHADE_BODY).toContain('let boneStain = 1.0 - smoothstep(0.0, 0.012, tissueDepth - surfCfg3.z);');
+    expect(SHADE_BODY).toContain('albedo = mix(boneColor, deepColor * 0.8, clamp(boneStain, 0.0, 1.0) * 0.22);');
+    // Bone is matte: the wet line damps it, as before the deletion.
+    expect(SHADE_BODY).toContain('select(1.0, 0.25, isBone) * select(1.0, 1.8, isOrgan)');
+    // Before the organ tint and the melt, so organAmp and the melt's pale
+    // ramp still act on top of it.
+    const bone = SHADE_BODY.indexOf('if (isBone) {');
+    expect(bone).toBeGreaterThan(-1);
+    expect(SHADE_BODY.indexOf('if (isOrgan) {')).toBeGreaterThan(bone);
+    expect(SHADE_BODY.indexOf('if (isBone && bonePaleU > 0.0) {')).toBeGreaterThan(bone);
   });
 
   it('identifies bone by material code for the melt ramp AND a rupture', () => {
-    // Bone tubes deleted the old always-on bone albedo branch, and it stays
-    // deleted: bone is identified again, but its only consumers are the melt's
-    // pale-vs-wet-red split (zombie melt task 6) and the body-to-gib rupture's
-    // exposed skeleton. Both need the material read because the bone wins the
-    // fold with no wound to key on.
+    // Beyond the bone albedo (restored above), the melt's pale-vs-wet-red
+    // split (zombie melt task 6) and the body-to-gib rupture's exposed
+    // skeleton read isBone too. Both need the material read widened past the
+    // wm gate because the bone wins the fold with no wound to key on.
     expect(SHADE_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
     expect(SHADE_BODY).toContain('if ((wm > 0.0 || gInstMelt.x > 0.0 || gInstCounts2.y > 0.5) && hitBest >= 0)');
     // Bone paleness is gated on bonePaleU = max(bareBoneU, meltU); the FLESH

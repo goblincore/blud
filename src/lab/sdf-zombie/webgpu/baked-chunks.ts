@@ -212,8 +212,8 @@ export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
 const MESH_FACE_LAYER = FACE_LAYER_WGSL
   .replace(/\balbedo\b/g, 'faceAlbedo').replace(/\bn\b/g, 'nrm')
   .replaceAll('gInstHeadCentre', 'headCentre').replaceAll('gInstHeadQuat', 'headQuat')
-  .replaceAll('gInstMelt.x', '0.0');
-const FACE_ARGS = `faceTex: texture_2d<f32>, headCentre: vec3<f32>, headAxes: vec3<f32>, headQuat: vec4<f32>, faceCfg: vec4<f32>, faceCfg2: vec4<f32>, faceCfg3: vec4<f32>, faceProj: vec4<f32>, faceAtlas: vec4<f32>, faceGlowRedOnly: f32, faceGlowColor: vec3<f32>`;
+  .replaceAll('gInstMelt.x', '0.0').replaceAll('gInstEyeMask', 'faceEyeMask');
+const FACE_ARGS = `faceTex: texture_2d<f32>, headCentre: vec3<f32>, headAxes: vec3<f32>, headQuat: vec4<f32>, faceCfg: vec4<f32>, faceCfg2: vec4<f32>, faceCfg3: vec4<f32>, faceProj: vec4<f32>, faceAtlas: vec4<f32>, faceGlowRedOnly: f32, faceGlowColor: vec3<f32>, faceEyeMask: vec4<f32>`;
 function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec4<f32>, fleshDetail: vec4<f32>, response: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, listGain: f32${face ? ', ' + FACE_ARGS : ''}) -> vec3<f32> {
   var a = albedo;
   var nrm = n;
@@ -461,7 +461,7 @@ export interface GoreMaterialOptions extends SurfaceOutputOptions {
    *  Omitted, the zero fallback is bound (a declared storage input must be bound); lightListCfg.x
    *  stays 0 there, so it is never read. */
   lightList?: unknown;
-  face?: Pick<MarchUniforms, 'faceTex' | 'headCentre' | 'headAxes' | 'headQuat' | 'faceCfg' | 'faceCfg2' | 'faceCfg3' | 'faceProj' | 'faceAtlas' | 'faceGlowRedOnly' | 'faceGlowColor'>;
+  face?: Pick<MarchUniforms, 'faceTex' | 'headCentre' | 'headAxes' | 'headQuat' | 'faceCfg' | 'faceCfg2' | 'faceCfg3' | 'faceProj' | 'faceAtlas' | 'faceGlowRedOnly' | 'faceGlowColor' | 'faceEyeMask'>;
 }
 
 /** SHARED LIGHT LIST, PER OBJECT (plan 1, Task 12 review). A baked material's uniforms are shared
@@ -527,6 +527,8 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
     faceCfg2: uniform(face.faceCfg2.value.clone()), faceCfg3: uniform(face.faceCfg3.value.clone()), faceProj: uniform(face.faceProj.value.clone()),
     faceAtlas: uniform(face.faceAtlas.value.clone()), faceGlowRedOnly: uniform(face.faceGlowRedOnly.value),
     faceGlowColor: uniform(face.faceGlowColor.value.clone()),
+    // A settled head keeps the eye switch it had when it came off (a popped eye stays dark).
+    faceEyeMask: uniform(face.faceEyeMask.value.clone()),
   } : {};
   let surfaceKind: number | undefined;
   if (options?.output === 'surface') {

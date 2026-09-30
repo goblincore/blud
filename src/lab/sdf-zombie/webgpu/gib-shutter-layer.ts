@@ -49,6 +49,24 @@ import {
   readGibShutterEnabled,
 } from './gib-motion-blur';
 
+/**
+ * The render-object pass id the layer draw uses (see capture step 1).
+ *
+ * WHY IT EXISTS (blur-engage hitch, 2026-09-26). three r186 keys a render
+ * object by (object, material, render CONTEXT, scene lights node) inside a
+ * per-pass-id map, and the render context is keyed only by the target's
+ * attachment signature — so the half-float+depth layer target and the base
+ * pass' half-float+depth capture target share ONE context, hence ONE render
+ * object per mesh. The layer draw sees no scene lights (the camera is on
+ * GIB_BLUR_LAYER), the base pass sees all of them, and the lights are part of
+ * the render object's cache key: every time a mesh moved between the passes
+ * three disposed its render object and rebuilt it — node build, shader
+ * modules and a SYNCHRONOUS pipeline — on the engage frame AND the release
+ * frame of every melee swing (~50 + 35 ms CPU, measured). A distinct pass id
+ * gives the layer draw its own render objects, each with a stable key.
+ */
+export const GIB_SHUTTER_PASS_ID = 'gib-shutter';
+
 export interface GibShutterSettings {
   enabled: boolean;
   exposureSeconds: number;
@@ -69,7 +87,14 @@ export function readGibShutterSettings(search: string): GibShutterSettings {
 }
 
 /** A piece the layer may blur. `mesh` is the real drawn node; `baseLayer` is
- *  where it renders when it is NOT selected. */
+ *  where it renders when it is NOT selected. A piece drawn by SEVERAL meshes
+ *  (a weapon's parts) passes one subject per mesh sharing ONE
+ *  `state` object: the piece cap counts distinct states and the seed plans each
+ *  state's stamps once (from the FIRST such subject), so a many-mesh piece
+ *  costs one piece, not N. Subjects sharing a state MUST therefore share `id`
+ *  and `ageSeconds` too — the later ones' values are never read. Conversely
+ *  several states may share one mesh (the chain's rod samples); select() never
+ *  demotes a mesh an earlier subject lifted in the same call. */
 export interface GibBlurSubject {
   id: number;
   state: Chunk;
@@ -205,11 +230,24 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
   let lastStats: SweepSeedStats & { buildMs: number } = { ...EMPTY_SEED_STATS, buildMs: 0 };
 
   const selected: GibBlurSubject[] = [];
+  /** Distinct `state` objects among `selected` — the piece count the cap bounds. */
+  const selectedStates = new Set<Chunk>();
+  const plannedStates = new Set<Chunk>();
   const stamps: SweepStamp[] = [];
   const viewProj = new THREE.Matrix4();
   const clearColor = new THREE.Color();
   const warmCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   warmCam.position.z = 1;
+  /** The layer draw's render-object function: the default one, re-namespaced
+   *  onto GIB_SHUTTER_PASS_ID (a pass three already names, e.g. 'backSide',
+   *  keeps its meaning inside the namespace). */
+  type ObjectFn = NonNullable<Parameters<THREE.WebGPURenderer['setRenderObjectFunction']>[0]>;
+  const drawInLayerPass: ObjectFn = (object, scn, cam, geometry, material, group, lightsNode, clippingContext, passId) => {
+    renderer.renderObject(
+      object, scn, cam, geometry, material, group, lightsNode, clippingContext,
+      passId ? `${GIB_SHUTTER_PASS_ID}:${passId}` : GIB_SHUTTER_PASS_ID,
+    );
+  };
 
   function fail(message: string, err?: unknown): void {
     lastError = err ? `${message}: ${String((err as Error)?.message ?? err)}` : message;
@@ -223,6 +261,7 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
       if (s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
     }
     selected.length = 0;
+    selectedStates.clear();
     selectedPieces = 0;
   }
 
@@ -305,8 +344,11 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
 
   function planSelectedStamps(camera: THREE.PerspectiveCamera): number {
     stamps.length = 0;
+    plannedStates.clear();
     const proj = buildProjection(camera);
     for (const s of selected) {
+      if (plannedStates.has(s.state)) continue;   // another mesh of the same piece
+      plannedStates.add(s.state);
       const planned = planGibMotionStamps(s.state, s.id, proj, exposureSeconds, {
         maxStreakPx,
         ageSeconds: s.ageSeconds,
@@ -317,23 +359,30 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
     return stamps.length;
   }
 
+  /** Meshes lifted onto the blur layer by the CURRENT select() call. */
+  const liftedMeshes = new Set<THREE.Object3D>();
+
   function select(subjects: readonly GibBlurSubject[]): number {
     restoreLayers();
+    liftedMeshes.clear();
     const active = enabled && exposureSeconds > 0;
     if (!active) return 0;
+    // A rejected subject puts its mesh back on its base layer ONLY if no
+    // earlier subject of this call lifted that mesh: several subjects may
+    // share one mesh (e.g. several samples of one InstancedMesh), and
+    // demoting it would leave a selected piece that is not on the layer.
+    const reject = (s: GibBlurSubject): void => {
+      if (!liftedMeshes.has(s.mesh) && s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
+    };
     for (const s of subjects) {
-      if (selected.length >= GIB_BLUR_MAX_PIECES) {
-        if (s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
-        continue;
-      }
-      if (!isGibSelectedForBlur(s.state)) {
-        if (s.mesh.layers.mask !== 1 << s.baseLayer) s.mesh.layers.set(s.baseLayer);
-        continue;
-      }
+      if (!selectedStates.has(s.state) && selectedStates.size >= GIB_BLUR_MAX_PIECES) { reject(s); continue; }
+      if (!isGibSelectedForBlur(s.state)) { reject(s); continue; }
       s.mesh.layers.set(GIB_BLUR_LAYER);
+      liftedMeshes.add(s.mesh);
       selected.push(s);
+      selectedStates.add(s.state);
     }
-    selectedPieces = selected.length;
+    selectedPieces = selectedStates.size;
     return selectedPieces;
   }
 
@@ -367,9 +416,18 @@ export function createGibShutterLayer(opts: GibShutterLayerOptions): GibShutterL
       renderer.autoClear = false;
       camera.layers.set(GIB_BLUR_LAYER);
       setPassLabel('gib:selected');
-      renderer.render(scene, camera);
-      camera.layers.mask = prevMask;
-      renderer.autoClear = prevAutoClear;
+      // OWN RENDER OBJECTS (GIB_SHUTTER_PASS_ID): without them a mesh lifted
+      // here re-keys, and three rebuilds, the render object it shares with the
+      // base pass on every engage and every release.
+      const prevObjectFn = renderer.getRenderObjectFunction();
+      renderer.setRenderObjectFunction(drawInLayerPass);
+      try {
+        renderer.render(scene, camera);
+      } finally {
+        renderer.setRenderObjectFunction(prevObjectFn);
+        camera.layers.mask = prevMask;
+        renderer.autoClear = prevAutoClear;
+      }
 
       // 2. CPU motion seed — per-surface, rotation-aware (see gib-motion-blur).
       const buildStart = performance.now();

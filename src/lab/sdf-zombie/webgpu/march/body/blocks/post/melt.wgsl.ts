@@ -15,10 +15,9 @@ export const MELT_BLOCK = /* wgsl */ `  // MELT (2026-09-03, task 6) — the wet
   // A dominant BONE row does the opposite: it goes PALE (boneColor, the
   // wound pass's exposed-bone colour) and stays matte — the wetness boost
   // below skips it. Pale matte bones sitting in wet red goo is the contrast
-  // this effect lives on, and before this branch a bone row winning the fold
-  // shaded as plain meat (the old bone-albedo branch was deleted with the
-  // bone-tubes pack flag), which would have reddened the very skeleton the
-  // melt exists to reveal.
+  // this effect lives on. (This branch was written while the organ block's
+  // bone albedo was deleted; that albedo is back, 2026-09-28, and this pulls
+  // the bone the rest of the way to the unstained boneColor.)
   //
   // meltCfg.x is 0 everywhere except a melting body and its released bone
   // chunks, so every other pixel shades bit-identical to before this existed.

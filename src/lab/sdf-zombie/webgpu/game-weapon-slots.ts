@@ -25,22 +25,27 @@
 // OTHER slot is at 1 (fully holstered). No caller needs to know which phase it
 // is in.
 
-/** Which weapon the player is holding. `shotgun` is the grapeshot double.
- *  `flare` is the 2026-09-18 in-game burning-test harness: slot 3, no
- *  projectile, no damage — its only verb is igniting the actor it hits. */
-export type WeaponSlot = 'shotgun' | 'dynamite' | 'flare' | 'launcher';
+/** Which weapon the player is holding. `flail` is the melee spike flail
+ *  (game-flail.ts, 2026-09-26). `shotgun` is the grapeshot double.
+ *  `launcher` is the opt-in (?launcher=1) break-action grenade launcher FPV
+ *  prototype (game-launcher-view.ts, 2026-09-29).
+ *  `flare` is the 2026-09-18 in-game burning-test harness: no projectile, no
+ *  damage — its only verb is igniting the actor it hits. */
+export type WeaponSlot = 'flail' | 'shotgun' | 'dynamite' | 'launcher' | 'flare';
 
-/** Slot order, which is ALSO the number-key order (1 → shotgun, 2 → dynamite,
- *  3 → flare, 4 → opt-in launcher prototype). */
-export const WEAPON_SLOTS: readonly WeaponSlot[] = ['shotgun', 'dynamite', 'flare', 'launcher'];
+/** Slot order, which is ALSO the number-key order (1 → flail, 2 → shotgun,
+ *  3 → dynamite, 4 → opt-in launcher prototype, 5 → flare). Melee on 1, as in
+ *  Blood; the launcher keeps main's key 4, so the flare dev harness moved to 5. */
+export const WEAPON_SLOTS: readonly WeaponSlot[] = ['flail', 'shotgun', 'dynamite', 'launcher', 'flare'];
 
 /** `event.code` → slot. Only these keys select a weapon; every other key falls
  *  through to the existing handlers untouched. */
 export const SLOT_BY_KEY: Readonly<Record<string, WeaponSlot>> = {
-  Digit1: 'shotgun',
-  Digit2: 'dynamite',
-  Digit3: 'flare',
+  Digit1: 'flail',
+  Digit2: 'shotgun',
+  Digit3: 'dynamite',
   Digit4: 'launcher',
+  Digit5: 'flare',
 };
 
 /** Slot for a keydown code, or null when the key is not a slot key. */
