@@ -15,6 +15,7 @@ import type { Vec3 } from './types';
 import { BLOOD_TRAIL, GIB_BURST, BLOOD_SPLAT } from '../../game/gibs/tuning';
 import { add, basisFromAxis, dot, normalize, scale } from './vec';
 import { curlAccelAt, type CurlFlow } from './curl-sample';
+import type { SurfaceHit } from './blood-surface';
 
 const MAX_DROPLETS = 600;
 const MAX_SPLATS = 256;
@@ -579,12 +580,14 @@ function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap
  */
 export function stepBlood(
   sim: BloodSim, dt: number, rng: () => number, flow?: CurlFlow,
+  surfaces?: { sweep(from: Vec3, to: Vec3): SurfaceHit | null; deposit(hit: SurfaceHit, drop: Droplet): void },
 ): void {
   const curl = flow !== undefined && flow.strength !== 0 ? flow : null;
   for (let i = sim.droplets.length - 1; i >= 0; i--) {
     const d = sim.droplets[i]!;
     // Guts are chain-driven, not ballistic — see Droplet.kind.
     if (d.kind === 'gut') continue;
+    const from: Vec3 | null = surfaces ? [...d.pos] : null;
     // Scraps are chunky — they feel double the airdrag of a mist bead.
     const drag = Math.max(0, 1 - BLOOD_TRAIL.airdrag
       * (d.kind === 'scrap' ? SCRAP_TUNING.dragMul : d.kind === 'mist' ? 3 : 1) * dt);
@@ -604,7 +607,15 @@ export function stepBlood(
       (d.hist ??= []).push([d.pos[0], d.pos[1], d.pos[2]]);
       if (d.hist.length > TRAIL_HIST) d.hist.shift();
     }
-    if (d.pos[1] <= 0.01 || d.age >= d.life) {
+    // Candidate world-surface mode: only a real hit deposits blood. Airborne
+    // expiry does not invent a floor mark. No extra RNG draws when enabled.
+    if (surfaces) {
+      const hit = surfaces.sweep(from!, d.pos);
+      if (hit || d.age >= d.life || d.pos[1] < -20) {
+        if (hit && d.kind !== 'mist') surfaces.deposit(hit, d);
+        sim.droplets.splice(i, 1);
+      }
+    } else if (d.pos[1] <= 0.01 || d.age >= d.life) {
       // Mist evaporates — a splat per mist particle would carpet the floor
       // in confetti within one spurt.
       if (d.kind !== 'mist') stamp(sim, d.pos, rng, d.kind);

@@ -193,6 +193,7 @@ import {
 } from '../entrails';
 import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
+import { createSurfaceBloodView } from './surface-blood-view';
 import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-layer';
 import {
   createShutterGameLayer, readShutterGameSettings, type ShutterGameLayer,
@@ -4470,6 +4471,9 @@ async function main() {
       if (ctx.goo.layer) await ctx.goo.layer.precompile(camera);
       phases.goo = performance.now() - tp;
       mark('warm-goo-done');
+      tp = performance.now();
+      await ctx.vfx.surfaceBlood?.precompile(camera);
+      phases.surfaceBlood = performance.now() - tp;
       // ONE REAL FRAME (attribution 1 above). The previous warm-up ended here
       // with a compileAsync(scene, camera) — canvas context — and every
       // main-pass pipeline still had to be built the first time the live draw
@@ -6386,6 +6390,14 @@ async function main() {
   // gate, and OFF must be pixel-identical to the pre-feature page.
   // -----------------------------------------------------------------------
   ctx.vfx.bloodSim = createBloodSim();
+  ctx.vfx.surfaceBlood = createSurfaceBloodView({
+    scene, level: ctx.world.levelGroup, sim: ctx.vfx.bloodSim, renderer: ctx.boot.handle.renderer,
+    roomFor: mesh => typeof mesh.userData.room === 'number' ? mesh.userData.room : roomIdAt(mesh.position.x, mesh.position.z),
+    lightsFor: mesh => ctx.world.levelLightLists.get(typeof mesh.userData.room === 'number' ? mesh.userData.room : roomIdAt(mesh.position.x, mesh.position.z)) ?? null,
+  });
+  ctx.vfx.surfaceBlood.setEnabled(new URLSearchParams(location.search).get('surfaceblood') === '1');
+  ctx.boot.deferredApi?.router.register(ctx.vfx.surfaceBlood.group, 'forward');
+  import.meta.hot?.dispose(() => ctx.vfx.surfaceBlood?.dispose());
   ctx.vfx.bleed = new BleedRegistry();
 
   // -----------------------------------------------------------------------
@@ -8006,6 +8018,7 @@ async function main() {
       }
       ctx.telemetry.telemetry.end('chunks-and-guts', chunkTiming);
       const bloodTiming = ctx.telemetry.telemetry.begin();
+      ctx.vfx.surfaceBlood?.advance(cdt);
       // BLEED — emitters spray (anchors recomputed from the CURRENT posed
       // prims, so droplets ride the walking body), flying chunks trail, and
       // the sim settles into splats. Runs even with the wander frozen: it is
@@ -8059,11 +8072,13 @@ async function main() {
           ],
           cdt, rngStreams.bleed,
         );
-        stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed);
+        stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed, undefined,
+          ctx.vfx.surfaceBlood?.enabled ? ctx.vfx.surfaceBlood : undefined);
         // Re-pose every instance from sim state (billboards track the camera
         // even frozen — same contract as the lab's always-sync).
         ctx.vfx.bloodView.sync(ctx.vfx.bloodSim, camera);
       }
+      ctx.vfx.surfaceBlood?.sync();
       ctx.telemetry.telemetry.end('blood-simulation-and-sync', bloodTiming);
       ctx.telemetry.telemetry.lap('region', 'tick:post-blood');
       // The optional impact crown advances even with bleed off, so an event

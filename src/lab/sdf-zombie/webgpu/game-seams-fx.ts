@@ -15,10 +15,22 @@ import { woundFromPellet, woundFromSlug, traceProjectile } from './game-weapon';
 import { spillVerdict, woundTuningNow } from './game-vfx-leaves';
 import { clearSpritePieces, setSpritePiecesVisible, spritePieceStates } from './gib-sprite-pieces';
 import { type GooReconstruction } from './goo-layer';
+import type { StainLook } from '../blood-surface';
 
 export function createFxSeams(ctx: GameContext) {
   const { scene, camera } = ctx.boot.handle;
   return {
+    setSurfaceBlood(on: boolean) { ctx.vfx.surfaceBlood?.setEnabled(on); return ctx.vfx.surfaceBlood?.stats(); },
+    setSurfaceBloodLook(look: StainLook) {
+      if (!['auto', 'wet', 'dry', 'smear'].includes(look)) throw new Error('Unknown surface blood look');
+      ctx.vfx.surfaceBlood?.setLook(look);
+    },
+    surfaceBloodStats: () => ctx.vfx.surfaceBlood?.stats(),
+    surfaceBloodStains: () => ctx.vfx.surfaceBlood?.snapshot(),
+    surfaceBloodTrace: (from: Vec3, to: Vec3) => ctx.vfx.surfaceBlood?.sweep(from, to),
+    clearSurfaceBlood: () => ctx.vfx.surfaceBlood?.clear(),
+    surfaceBloodPanel: (on: boolean) => ctx.vfx.surfaceBlood?.panelVisible(on),
+    surfaceBloodBurst(from: Vec3, to: Vec3, count = 24) { return ctx.vfx.surfaceBlood?.burst(from, to, count) ?? false; },
     /** TASK-6 DIAGNOSTIC LIGHT CLOCK: the practical-fire flicker runs on
      *  wall-clock performance.now() INSIDE the draw path, which the render
      *  lock does not freeze — two renders of a locked scene still differ in
