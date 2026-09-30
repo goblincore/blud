@@ -22,6 +22,10 @@
 // else compiles exactly as before: nothing re-keys, no LightsNode recompile
 // (the game-glow.ts / game-burning.ts trap). The twin still has to be IN the
 // scene graph so its world matrix updates; it is posed by Flashlight.update.
+// Only the RENDERER honours that layer. Anything that finds lights by traversing
+// the scene graph must skip KIT_BEAM_LAYER itself: game-lighting-leaves
+// levelSceneLights did not, and the twin (ungated by flashlightGate) lit every
+// room's walls as a torch before the flashlight pickup (2026-09-30).
 //
 // NOT covered: the player's FPV hands are SDF (their own beam), and anything
 // not routed through applyKitBeam (level props, casings, gibs) keeps the
