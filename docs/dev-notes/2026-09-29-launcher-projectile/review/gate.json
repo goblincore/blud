@@ -1,0 +1,868 @@
+{
+  "warm": {
+    "phase": "ready",
+    "timedOut": false
+  },
+  "warmDone": {
+    "ms": 2337,
+    "bootBeforeWarmMs": 164,
+    "flipped": 165,
+    "flippedNames": [
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Group:shell-eject-0",
+      "Group:shell-load-0",
+      "Group:shell-eject-1",
+      "Group:shell-load-1",
+      "Group:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Object3D:launcher-carried-round",
+      "Object3D:launcher-ejected-case",
+      "Mesh:launcher-muzzle-flash",
+      "Group:launcher-grenade-0",
+      "Group:launcher-grenade-1",
+      "Group:launcher-grenade-2",
+      "Group:launcher-grenade-3",
+      "Group:launcher-grenade-4",
+      "Group:launcher-grenade-5",
+      "Group:launcher-grenade-6",
+      "Group:launcher-grenade-7",
+      "Mesh:launcher-fragment-0",
+      "Mesh:launcher-fragment-1",
+      "Mesh:launcher-fragment-2",
+      "Mesh:launcher-fragment-3",
+      "Mesh:launcher-fragment-4",
+      "Mesh:launcher-fragment-5",
+      "Mesh:launcher-fragment-6",
+      "Mesh:launcher-fragment-7",
+      "Mesh:launcher-fragment-8",
+      "Mesh:launcher-fragment-9",
+      "Mesh:launcher-fragment-10"
+    ],
+    "passes": 13,
+    "computes": 9,
+    "phases": {
+      "flip": 0.10000002384185791,
+      "crowdBinsPerType": [
+        2.7,
+        1.4,
+        1.4,
+        1.4,
+        1.2,
+        2.3,
+        1.7,
+        1.4,
+        1.1
+      ],
+      "crowdBins": 14.600000023841858,
+      "goo": 64.39999997615814,
+      "asyncFirst": 560.1000000238419,
+      "gibVariant": 0,
+      "drawOnce": 1608.0999999642372,
+      "precompile": 90,
+      "backgroundStart": {
+        "gib": 2338,
+        "crowd": 2666
+      },
+      "backgroundDone": {
+        "gib": 2666
+      }
+    }
+  },
+  "samples": [
+    {
+      "name": "idle",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 0,
+      "detonations": 0,
+      "embeds": 0,
+      "bounces": 0,
+      "fragmentHits": 0,
+      "fragments": 0,
+      "lastLaunch": null,
+      "lastExplosion": null,
+      "live": []
+    },
+    {
+      "name": "muzzle",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 1,
+      "detonations": 0,
+      "embeds": 0,
+      "bounces": 0,
+      "fragmentHits": 0,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          -6.900891254468836,
+          1.5249628509056306,
+          -6.861554207623444
+        ],
+        "velocity": [
+          11.355962852523199,
+          2.209246139402671,
+          11.26935329756141
+        ]
+      },
+      "lastExplosion": null,
+      "live": [
+        {
+          "id": 1,
+          "pos": [
+            -6.900891254468836,
+            1.5249628509056306,
+            -6.861554207623444
+          ],
+          "vel": [
+            11.355962852523199,
+            2.209246139402671,
+            11.26935329756141
+          ],
+          "direction": [
+            0.7031360708201324,
+            0.13679162833726496,
+            0.6977733989831264
+          ],
+          "age": 0,
+          "fuse": 1.6,
+          "remainder": 0,
+          "spin": 0,
+          "bounces": 0,
+          "embedded": null,
+          "detonated": false,
+          "visible": true,
+          "anchorErrorM": null
+        }
+      ]
+    },
+    {
+      "name": "flight",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 1,
+      "detonations": 0,
+      "embeds": 0,
+      "bounces": 0,
+      "fragmentHits": 0,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          -6.900891254468836,
+          1.5249628509056306,
+          -6.861554207623444
+        ],
+        "velocity": [
+          11.355962852523199,
+          2.209246139402671,
+          11.26935329756141
+        ]
+      },
+      "lastExplosion": null,
+      "live": [
+        {
+          "id": 1,
+          "pos": [
+            -6.049194040529594,
+            1.6469063113608309,
+            -6.016352710306336
+          ],
+          "vel": [
+            11.355962852523199,
+            1.1592461394026707,
+            11.26935329756141
+          ],
+          "direction": [
+            0.7079523260063206,
+            0.07226960949609108,
+            0.702552921597742
+          ],
+          "age": 0.075,
+          "fuse": 1.5250000000000004,
+          "remainder": 0,
+          "spin": 1.6888022437750594,
+          "bounces": 0,
+          "embedded": null,
+          "detonated": false,
+          "visible": true,
+          "anchorErrorM": null
+        }
+      ]
+    },
+    {
+      "name": "fire-resolved",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 1,
+      "detonations": 1,
+      "embeds": 0,
+      "bounces": 6,
+      "fragmentHits": 1,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          -6.900891254468836,
+          1.5249628509056306,
+          -6.861554207623444
+        ],
+        "velocity": [
+          11.355962852523199,
+          2.209246139402671,
+          11.26935329756141
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          -3.4836537219161694,
+          0.036000000000000004,
+          -3.4591983202214114
+        ],
+        "embedded": null,
+        "id": 1
+      },
+      "live": []
+    },
+    {
+      "name": "floor-bounce",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 2,
+      "detonations": 1,
+      "embeds": 0,
+      "bounces": 7,
+      "fragmentHits": 1,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          -6.75,
+          0.22,
+          -7.4
+        ],
+        "velocity": [
+          0,
+          -2,
+          2
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          -3.4836537219161694,
+          0.036000000000000004,
+          -3.4591983202214114
+        ],
+        "embedded": null,
+        "id": 1
+      },
+      "live": [
+        {
+          "id": 2,
+          "pos": [
+            -6.75,
+            0.10624999999999997,
+            -7.134262295081969
+          ],
+          "vel": [
+            0,
+            0.4139999999999997,
+            1.56
+          ],
+          "direction": [
+            0,
+            0.25650557620817827,
+            0.9665427509293681
+          ],
+          "age": 0.15,
+          "fuse": 1.4500000000000006,
+          "remainder": 0,
+          "spin": 0.5161187359920203,
+          "bounces": 1,
+          "embedded": null,
+          "detonated": false,
+          "visible": true,
+          "anchorErrorM": null
+        }
+      ]
+    },
+    {
+      "name": "holstered-explosion",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 2,
+      "detonations": 2,
+      "embeds": 0,
+      "bounces": 9,
+      "fragmentHits": 1,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          -6.75,
+          0.22,
+          -7.4
+        ],
+        "velocity": [
+          0,
+          -2,
+          2
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          -6.75,
+          0.036000000000000004,
+          -6.742729780524706
+        ],
+        "embedded": null,
+        "id": 2
+      },
+      "live": []
+    },
+    {
+      "name": "embedded",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 3,
+      "detonations": 2,
+      "embeds": 1,
+      "bounces": 9,
+      "fragmentHits": 1,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          5.453412102725956,
+          1.1416071148639784,
+          -3.737989280057783
+        ],
+        "velocity": [
+          0,
+          0,
+          -10
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          -6.75,
+          0.036000000000000004,
+          -6.742729780524706
+        ],
+        "embedded": null,
+        "id": 2
+      },
+      "live": [
+        {
+          "id": 3,
+          "pos": [
+            5.454953462068619,
+            1.1276735814814245,
+            -4.2862594569146575
+          ],
+          "vel": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0,
+            -0.06982912769991423,
+            -0.9975589671416267
+          ],
+          "age": 0.075,
+          "fuse": 1.5250000000000004,
+          "remainder": 0,
+          "spin": 0.5837697590240372,
+          "bounces": 0,
+          "embedded": 2,
+          "detonated": false,
+          "visible": true,
+          "anchorErrorM": 0
+        }
+      ]
+    },
+    {
+      "name": "embedded-moving",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 3,
+      "detonations": 2,
+      "embeds": 1,
+      "bounces": 9,
+      "fragmentHits": 1,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          5.453412102725956,
+          1.1416071148639784,
+          -3.737989280057783
+        ],
+        "velocity": [
+          0,
+          0,
+          -10
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          -6.75,
+          0.036000000000000004,
+          -6.742729780524706
+        ],
+        "embedded": null,
+        "id": 2
+      },
+      "live": [
+        {
+          "id": 3,
+          "pos": [
+            5.707639238865565,
+            1.138865660236836,
+            -4.208506289318485
+          ],
+          "vel": [
+            0,
+            0,
+            0
+          ],
+          "direction": [
+            0.11281481328186574,
+            -0.06982912769991448,
+            -0.99115927621591
+          ],
+          "age": 0.15,
+          "fuse": 1.4500000000000006,
+          "remainder": 0,
+          "spin": 0.5837697590240372,
+          "bounces": 0,
+          "embedded": 2,
+          "detonated": false,
+          "visible": true,
+          "anchorErrorM": 0
+        }
+      ]
+    },
+    {
+      "name": "embedded-blast",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 3,
+      "detonations": 3,
+      "embeds": 1,
+      "bounces": 9,
+      "fragmentHits": 1,
+      "fragments": 32,
+      "lastLaunch": {
+        "origin": [
+          5.453412102725956,
+          1.1416071148639784,
+          -3.737989280057783
+        ],
+        "velocity": [
+          0,
+          0,
+          -10
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          5.707639238865565,
+          1.138865660236836,
+          -4.208506289318485
+        ],
+        "embedded": 2,
+        "id": 3
+      },
+      "live": []
+    },
+    {
+      "name": "fragment-flight",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 3,
+      "detonations": 3,
+      "embeds": 1,
+      "bounces": 9,
+      "fragmentHits": 1,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          5.453412102725956,
+          1.1416071148639784,
+          -3.737989280057783
+        ],
+        "velocity": [
+          0,
+          0,
+          -10
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          5.707639238865565,
+          1.138865660236836,
+          -4.208506289318485
+        ],
+        "embedded": 2,
+        "id": 3
+      },
+      "live": []
+    },
+    {
+      "name": "gore-settled",
+      "tuning": {
+        "speedMps": 16,
+        "liftMps": 2,
+        "gravityMps2": 14,
+        "radiusM": 0.035,
+        "fuseSec": 1.6,
+        "restitution": 0.48,
+        "friction": 0.78,
+        "restMps": 0.55,
+        "stepSec": 0.008333333333333333,
+        "embedDepthM": 0.022,
+        "blastRadiusScale": 0.75,
+        "fragments": 32,
+        "fragmentSpeedMps": 38,
+        "fragmentRangeM": 7
+      },
+      "launched": 3,
+      "detonations": 3,
+      "embeds": 1,
+      "bounces": 9,
+      "fragmentHits": 1,
+      "fragments": 0,
+      "lastLaunch": {
+        "origin": [
+          5.453412102725956,
+          1.1416071148639784,
+          -3.737989280057783
+        ],
+        "velocity": [
+          0,
+          0,
+          -10
+        ]
+      },
+      "lastExplosion": {
+        "at": [
+          5.707639238865565,
+          1.138865660236836,
+          -4.208506289318485
+        ],
+        "embedded": 2,
+        "id": 3
+      },
+      "live": []
+    }
+  ],
+  "errors": [],
+  "target": {
+    "id": 2,
+    "point": [
+      5.453412102725956,
+      1.1416071148639784,
+      -4.437989280057783
+    ],
+    "actor": {
+      "id": 2,
+      "room": 2,
+      "pos": [
+        5.434526073068034,
+        0,
+        -4.408506233871803
+      ],
+      "yaw": 1.6646399999797337
+    }
+  },
+  "attachmentShiftM": 0.26461466228004465,
+  "blast": {
+    "live": "launcher",
+    "target": "launcher",
+    "phase": "up",
+    "ready": true,
+    "gunLower": 1,
+    "bundleLower": 1,
+    "cookPhase": "idle",
+    "charge": 0,
+    "inHand": true,
+    "inFlight": 0,
+    "flights": [],
+    "props": 4,
+    "spares": 3,
+    "heldVisible": true,
+    "heldParent": "rig",
+    "heldLocal": [
+      0,
+      0,
+      0
+    ],
+    "drawnBundles": 0,
+    "thrown": 0,
+    "detonations": 3,
+    "gibbed": 2,
+    "gibPieces": 27,
+    "lastBlastMs": 15.900000035762787,
+    "gibMode": "parts",
+    "gibBones": "core",
+    "gibStaggerFrames": 3,
+    "maxChunks": 64,
+    "dynSpeedScale": 1,
+    "gibVelScale": 0.35,
+    "gibLaunchMode": "notblood",
+    "aoeRadiusScale": 0.82,
+    "aoeLaunchFloor": 0.45,
+    "ceilM": 6,
+    "pendingPieceImpulses": 0,
+    "pendingPieceFrames": 0,
+    "pendingPieceDelays": [],
+    "fxLightScale": 1,
+    "lights": 0,
+    "meshIntensity": [
+      0,
+      0,
+      0
+    ],
+    "lightAges": [],
+    "lastBlastRadiusM": 2.8828125,
+    "lastGibDropped": 0,
+    "lastGibTier": "assets",
+    "lastGibSpawned": 14,
+    "gibWounds": false,
+    "gibTierLog": [
+      "assets:14"
+    ],
+    "gibTearSec": 0.2,
+    "tearing": 0,
+    "tearAge": 0,
+    "ruptureMaxM": 0,
+    "ruptureMaxRad": 0,
+    "pendingGibs": 0,
+    "pendingPlanPieces": 0,
+    "pendingTiers": [],
+    "scheduledGibBodies": 2,
+    "scheduledGibPieces": 27,
+    "lastGibParts": [
+      "torso.abdomen",
+      "bone.cage",
+      "organ.gut",
+      "armR.upper",
+      "torso.chest",
+      "torso.pelvis",
+      "legR.upper",
+      "legL.upper",
+      "armL.upper",
+      "head",
+      "armR.lower",
+      "armL.lower",
+      "legL.lower",
+      "legR.lower"
+    ],
+    "lastGibHeld": 0,
+    "blastProfile": {
+      "resolve": 14.199999988079071,
+      "gib": 0.3999999761581421,
+      "wound": 1,
+      "blood": 0,
+      "chunksSpawned": 0,
+      "bodies": 2,
+      "total": 15.900000035762787
+    },
+    "resolveProfile": {
+      "traceMs": 12.499999940395355,
+      "woundMs": 0.9000000357627869,
+      "cutMs": 0.3999999761581421,
+      "bodiesTraced": 3,
+      "bodiesPruned": 19,
+      "prunedPrims": 507,
+      "traces": 15
+    }
+  }
+}

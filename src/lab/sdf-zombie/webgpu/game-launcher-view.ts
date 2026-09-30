@@ -1,9 +1,12 @@
-// Opt-in FPV art prototype. Applies pure launcher timing to Blender nodes.
+// Opt-in launcher. Applies pure timing to Blender nodes and emits world grenades.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GameContext } from './game-context';
 import { aimArm } from './game-arms';
-import { SHOULDER_L_VIEW, SHOULDER_R_VIEW, BEND_L_VIEW, BEND_R_VIEW } from './game-weapon-leaves';
+import { SHOULDER_L_VIEW, SHOULDER_R_VIEW, BEND_L_VIEW, BEND_R_VIEW, convergedDir } from './game-weapon-leaves';
+import type { Vec3 } from '../types';
+import { grenadeVelocity } from '../grenade-flight';
+import { createLauncherProjectiles, type LauncherProjectileDeps } from './game-launcher-projectiles';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput } from './game-loop-leaves';
 import { flashPixels } from './flash-sprite';
@@ -17,13 +20,16 @@ export interface LauncherView {
   onMouseDown(button: number): boolean;
   consumeEdge(): void;
   tick(dt: number): void;
+  tickProjectiles(dt: number): void;
+  projectileDebug(): Record<string, unknown>;
+  launchTest(origin: Vec3, velocity: Vec3): number;
   updateRig(): void;
   fire(): boolean;
   reload(): boolean;
   debug(): Record<string, unknown>;
 }
 
-export async function createLauncherView(ctx: GameContext): Promise<LauncherView> {
+export async function createLauncherView(ctx: GameContext, deps: LauncherProjectileDeps): Promise<LauncherView> {
   const gltf = await new GLTFLoader().loadAsync('/assets/lab/grenade-launcher.glb');
   const rig = new THREE.Group(); rig.name = 'launcher-rig';
   const gun = new THREE.Group(); gun.name = 'grenade-launcher'; gun.add(gltf.scene);
@@ -46,6 +52,7 @@ export async function createLauncherView(ctx: GameContext): Promise<LauncherView
       if (std.isMeshStandardMaterial) { std.envMap = env; std.envMapIntensity = .85; std.needsUpdate = true; }
     }
   });
+  const projectiles = createLauncherProjectiles(ctx, round, deps);
   if (!ctx.weapon.arms) throw new Error('[launcher] accepted goblin arms unavailable');
   // Clone the accepted articulated arms; share geometry/textures/materials.
   const left = ctx.weapon.arms.left.clone(true), right = ctx.weapon.arms.right.clone(true);
@@ -141,10 +148,17 @@ export async function createLauncherView(ctx: GameContext): Promise<LauncherView
     if (loopBlocksInput(ctx) || ctx.weapon.slotState.live !== 'launcher' || !slotReady(ctx.weapon.slotState)) return false;
     const next = fireLauncher(state);
     if (next === state) return false;
+    // Read the posed live muzzle BEFORE recoil lifts the gun. Use the same
+    // reticle convergence as the shotgun, with the grenade's game-scale lob.
+    pose();
+    ctx.weapon.viewModelAnchor.updateWorldMatrix(true, true);
+    const worldMuzzle = muzzle.getWorldPosition(new THREE.Vector3());
+    const origin: Vec3 = [worldMuzzle.x, worldMuzzle.y, worldMuzzle.z];
+    if (projectiles.launch(origin, grenadeVelocity(convergedDir(ctx, origin))) < 0) return false;
     state = next;
     ctx.weapon.recoilPitch += 0.026;
     ctx.weapon.shotAlert = true;
-    ctx.telemetry.telemetry.event('launcher-shot', { shots: state.shots, prototype: true });
+    ctx.telemetry.telemetry.event('launcher-shot', { shots: state.shots });
     pose();
     return true;
   }
@@ -170,6 +184,9 @@ export async function createLauncherView(ctx: GameContext): Promise<LauncherView
     },
     consumeEdge() { if (pending) { pending = false; fire(); } },
     tick(dt) { state = stepLauncher(state, dt * ctx.weapon.reloadSpeed); },
+    tickProjectiles: projectiles.tick,
+    projectileDebug: projectiles.debug,
+    launchTest: projectiles.launch,
     updateRig, fire, reload,
     debug: () => ({ ...state, timing: { ...LAUNCHER }, ready: launcherReady(state), beat: launcherBeat(state), hingeRad: barrel.rotation.x,
       visible: rig.visible, flash: flash.visible, carriedRound: fresh.visible, ejectedCase: ejected.visible,

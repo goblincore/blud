@@ -18,6 +18,9 @@ export function createFireSeams(ctx: GameContext) {
     fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,
     reloadLauncher: () => ctx.weapon.launcher?.reload() ?? false,
     launcher: () => ctx.weapon.launcher?.debug() ?? null,
+    grenades: () => ctx.weapon.launcher?.projectileDebug() ?? null,
+    /** Controlled flight staging; same pool/physics/damage path as a live shot. */
+    launchGrenade: (origin: Vec3, velocity: Vec3) => ctx.weapon.launcher?.launchTest(origin, velocity) ?? -1,
     /** Set EVERY live actor alight. Returns how many bodies are tracked. */
     igniteAll: () => ctx.vfx.burning.igniteAll(),
     /** Fire-cost study: false = burn visually, behave unburnt (no panic/flail). Ship true. */
