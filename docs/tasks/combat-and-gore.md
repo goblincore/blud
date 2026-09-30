@@ -4,6 +4,8 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
+**Hand-off (2026-09-30):** [what exists, traps, and the to-do list](../dev-notes/2026-09-30-flail-handoff/HANDOFF.md). PR #22 is merged.
+
 - [~] **Flail v1.5b built (2026-09-30); owner playtest pending.** Torn, splayed, wet-red lips on the flail's wounds; gun
   wounds (pellets, slugs) keep their crater shape but get the wet red lip (spec §14.2, plan Tasks 31 and 35). Flying
   flesh bits were built and are **OFF by default** (they read as giant round red blobs; `setFleshBits(true)` turns
