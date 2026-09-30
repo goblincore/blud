@@ -264,7 +264,7 @@ def to_svg() -> str:
         for tid, event, x0, x1, u0, u1 in c["triggers"]:
             o.append(box(x0, x1, u0, u1, "none", "#f0e040", 1.5, 'stroke-dasharray="4 3"')
                      + text((u0 + u1) / 2, x1 - 0.15, event, "#f0e040", 9, "middle"))
-        for (lx, _, lu), mood in lamps(c):
+        for (lx, _, lu), mood, *_ in lamps(c):
             o.append(f'<circle cx="{X(lu):.1f}" cy="{Y(lx):.1f}" r="4" fill="none" stroke="#ffd080" stroke-width="1.5"/>'
                      + text(lu, lx + 0.45, mood, "#ffd080", 9, "middle"))
         for _, fx, fu, _, _ in c["fires"]:
