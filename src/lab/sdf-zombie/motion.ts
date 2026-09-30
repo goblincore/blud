@@ -407,6 +407,15 @@ export interface MotionConfig {
    *  attack.ts's pose is exactly zero at phase 0 and 1, so setting either is
    *  also a no-op, just a slower one. */
   attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
+  /** REACH SLIDE, as a fraction of each leg's hip→knee→foot length: a stance
+   *  plant farther than this from its hip target slides along the floor to
+   *  stay at it (ik.ts stepPlant maxReach). For the frames the WIRING surges
+   *  the root past the legs (the sword lunge's 1.2 m advance) — the locked
+   *  feet otherwise drag the hips off the pelvis and hold them there.
+   *  ABSENT on every other frame and body: ordinary gaits reach 1.3-1.4x leg
+   *  length at toe-off by design, so this is not a general rule, and absent
+   *  is bit-identical to before the key existed. */
+  plantReach?: number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -1193,11 +1202,14 @@ export function stepMotion(
   const footWorld = (i: number): Vec3 =>
     havePoints ? points[i]!.pos : targets[i]!;
   const plantStep = (
-    st: PlantState, stance: boolean, footIdx: number,
+    st: PlantState, stance: boolean, footIdx: number, hipIdx: number, lens: readonly [number, number],
   ): PlantState => stepPlant(st, {
     stance: stance && !release,
     footPos: footWorld(footIdx),
     groundY: joints.groundY,
+    ...(cfg.plantReach !== undefined
+      ? { hip: targets[hipIdx]!, maxReach: cfg.plantReach * (lens[0] + lens[1]) }
+      : {}),
   }, dt);
   // Pole bias for the leg solves: knees bow FORWARD, along the applied body
   // yaw (not wander.heading — the knee must agree with the turned body
@@ -1248,11 +1260,11 @@ export function stepMotion(
     }
   } else if (!collapsed) {
     if (!missingLegL) {
-      plantL = plantStep(plantL, gait.pose.stance.legL, idx.footL!);
+      plantL = plantStep(plantL, gait.pose.stance.legL, idx.footL!, idx.hipL!, joints.leg.L);
       plantLeg(plantL, 'hipL', 'kneeL', 'footL', joints.leg.L);
     }
     if (!missingLegR) {
-      plantR = plantStep(plantR, gait.pose.stance.legR, idx.footR!);
+      plantR = plantStep(plantR, gait.pose.stance.legR, idx.footR!, idx.hipR!, joints.leg.R);
       plantLeg(plantR, 'hipR', 'kneeR', 'footR', joints.leg.R);
     }
   }

@@ -143,3 +143,49 @@ describe('kit damage in plate-armour mode', () => {
     damage.dispose();
   });
 });
+
+// CPU pass (2026-09-25): attached() used to regex-normalise every prim's bone
+// name for every kit piece every frame (pieces x prims). The indexed version
+// must answer exactly what the old scan answered, for every support bone and
+// every pattern of dead prims / dead clusters.
+import { kitSupportIndex, kitSupportKey, kitPieceAttached } from './kit-damage';
+import brideSource from '../characters/bride.blob?raw';
+import type { BuildResult } from '../build-body';
+import type { LimbId } from '../types';
+
+const refBoneKey = (s: string) => s.toLowerCase().replace(/[._]/g, '');
+function refAttached(limb: LimbId, bone: string, body: BuildResult): boolean {
+  if (!body.clusters.some(c => c.limb === limb && c.alive)) return false;
+  const key = refBoneKey(bone).replace('foot', 'shin').replace('clavicle', 'upperarm');
+  const prims = body.prims.filter(p => p.op !== 'sub' && refBoneKey(p.bone ?? '') === key);
+  return prims.length === 0 || prims.some(p => !p.dead);
+}
+
+describe('kit piece attachment index', () => {
+  const bodies = () => {
+    const out: BuildResult[] = [];
+    for (const src of [source, brideSource]) {
+      const b = buildBody(compileBlob(parseBlob(src)));
+      out.push(b);
+      for (const limb of ['armL', 'armR', 'legL', 'legR', 'head'] as LimbId[]) out.push(severLimb(b, limb).body);
+      // Deterministic partial prim deaths (mid-limb sever shapes), incl. carves.
+      for (const stride of [2, 3, 5, 7]) out.push({ ...b, prims: b.prims.map((p, i) => i % stride === 0 ? { ...p, dead: true } : p) });
+      out.push({ ...b, prims: b.prims.map(p => ({ ...p, dead: true })) });
+      out.push({ ...b, clusters: b.clusters.map(c => ({ ...c, alive: false })) });
+    }
+    return out;
+  };
+  it('matches the per-prim scan for every bone name, limb and death pattern', () => {
+    let checked = 0;
+    for (const body of bodies()) {
+      const bones = new Set<string>(['foot.l', 'foot_r', 'clavicle.l', 'Clavicle_R', 'pelvis', 'hips', 'nosuchbone', '']);
+      for (const p of body.prims) if (p.bone) { bones.add(p.bone); bones.add(p.bone.toUpperCase()); }
+      const index = kitSupportIndex(body);
+      for (const bone of bones) for (const limb of ['armL', 'armR', 'legL', 'legR', 'head', 'torso'] as LimbId[]) {
+        expect(kitPieceAttached(limb, kitSupportKey(bone), index), `${bone}/${limb}`).toBe(refAttached(limb, bone, body));
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+  });
+});

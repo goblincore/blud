@@ -15,6 +15,9 @@ import { makeSwordMind } from './enemy-mind';
 import { createZombieActor } from './game-actor';
 import { makeMotionJoints } from '../motion';
 import type { SwingVariant } from '../attack';
+import type { Vec3 } from '../types';
+import { len, sub } from '../vec';
+import { rotateYaw } from '../gait';
 
 const body = buildBody(compileBlob(parseBlob(brideSrc)));
 function bride(onMeleeContact?: (e: { variant: SwingVariant }) => void, releaseProp?: () => void) {
@@ -84,6 +87,94 @@ describe('bride actor (game path)', () => {
   it('never runs in the game, so a swing always starts from the guard', () => {
     const fastest = BRIDE_PROFILE.cruise * Math.max(BURN_BEHAVIOUR.zombieSpeed, 1);
     expect(runWeight(BRIDE_PROFILE, fastest)).toBe(0);
+  });
+
+  // THE STOCKING TUBE (playtest 2026-09-25): an ivory tube ~1 m long from
+  // her pelvis to a knee. The stocking band and the thigh stigmata bound
+  // their upper ends to the PELVIS root point (nearest joint), not the
+  // thigh; the lunge surges her root 1.2 m over planted feet, the hips part
+  // from the pelvis, and those prims stretched pelvis->knee (0.23 -> 1.1 m).
+  // Every live prim of the bride must keep its rest length through
+  // walks, swings and lunges. Players 2.5-3 m off put her in the lunge band.
+  it.each([2.5, 3.0])('no prim stretches through her fights (player %s m off, lunges)', pz => {
+    const game = buildBody(compileBlob(parseBlob(brideSrc)));
+    const a = createZombieActor({
+      id: 1, room: 1, seed: 42, start: [0, 0, 0],
+      bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }, furniture: [], body: game,
+      view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any,
+      profile: BRIDE_PROFILE, mind: makeSwordMind(),
+    });
+    const rest = game.prims.map(p => Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]));
+    let worst = 0, worstAt = '', lunges = 0;
+    for (let f = 0; f < 900; f++) {
+      a.setRingInput(true, 0);
+      a.setBrainInput({ x: 0, z: pz, room: 1 }, true);
+      a.step(1 / 60);
+      if (a.debug().state === 'attack' && a.debug().variant === 'lunge') lunges++;
+      a.posed().prims.forEach((p, i) => {
+        const l = Math.hypot(p.a[0] - p.b[0], p.a[1] - p.b[1], p.a[2] - p.b[2]) - rest[i]!;
+        if (l > worst) { worst = l; worstAt = `prim ${i} ${game.prims[i]!.bone} line ${game.prims[i]!.src}`; }
+      });
+    }
+    expect(lunges).toBeGreaterThan(0);
+    expect(worst, worstAt).toBeLessThan(0.05);
+  });
+
+  // THE LUNGE DRAG (2026-09-25, the mechanism under the stocking tube): the
+  // lunge surges her root 1.2 m in ~0.25 s while both feet sit in stance;
+  // the plants never released, so the stranded feet dragged the hips back
+  // off the pelvis — 0.35 m off their pelvis-relative rest (radially 0.27 m)
+  // mid-lunge, and 0.22 m HELD through every later swing until she walked
+  // again, the legs stretched past full length. Now her stance plants slide
+  // within reach while she lunges (MotionConfig.plantReach).
+  // Walking levels, same metric (her pursue walk / idle wander): 0.144 /
+  // 0.142 m offset, 0.064 / 0.084 m radial. The pelvis leads the hips by
+  // design in every swing (attack.ts rootOffset; sweep 0.124), so the bound
+  // is "no worse than her walk", not zero.
+  it.each([2.5, 3.0])('her legs follow her through a lunge (player %s m off)', pz => {
+    const game = buildBody(compileBlob(parseBlob(brideSrc)));
+    const a = createZombieActor({
+      id: 1, room: 1, seed: 42, start: [0, 0, 0],
+      bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 6 }, furniture: [], body: game,
+      view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any,
+      profile: BRIDE_PROFILE, mind: makeSwordMind(),
+    });
+    const rest = a.boundRig().rig.restPose;
+    const MJ = makeMotionJoints(game, rest)!, K = MJ.index;
+    const legLen = Math.max(MJ.leg.L[0] + MJ.leg.L[1], MJ.leg.R[0] + MJ.leg.R[1]);
+    // Hip displacement off its rest offset from the pelvis, turned by the yaw;
+    // and the plain change in hip-pelvis distance (yaw-free).
+    const sep = (P: readonly Vec3[], h: number, yaw: number) =>
+      len(sub(sub(P[h]!, P[K.pelvis]!), rotateYaw(sub(rest[h]!, rest[K.pelvis]!), yaw)));
+    const radial = (P: readonly Vec3[], h: number) =>
+      Math.abs(len(sub(P[h]!, P[K.pelvis]!)) - len(sub(rest[h]!, rest[K.pelvis]!)));
+    let lunges = 0, sinceLunge = Infinity, during = 0, duringRadial = 0, after = 0, reach = 0;
+    const start = a.pose().pos;
+    let travelled = 0;
+    for (let f = 0; f < 600; f++) {
+      a.setRingInput(true, 0);
+      a.setBrainInput({ x: 0, z: pz, room: 1 }, true);
+      a.step(1 / 60);
+      const d = a.debug();
+      const lunging = d.state === 'attack' && d.variant === 'lunge';
+      if (lunging) { lunges++; sinceLunge = 0; } else sinceLunge++;
+      if (sinceLunge > 60) continue; // the lunge and the second after it
+      const P = a.boundRig().rig.points.map(p => p.pos);
+      const yaw = a.pose().yaw;
+      const s = Math.max(sep(P, K.hipL, yaw), sep(P, K.hipR, yaw));
+      if (lunging) {
+        during = Math.max(during, s);
+        duringRadial = Math.max(duringRadial, radial(P, K.hipL), radial(P, K.hipR));
+        travelled = Math.max(travelled, Math.hypot(a.pose().pos[0] - start[0], a.pose().pos[2] - start[2]));
+      } else if (sinceLunge > 15) after = Math.max(after, s); // settled
+      reach = Math.max(reach, len(sub(P[K.footL]!, P[K.hipL]!)) / legLen, len(sub(P[K.footR]!, P[K.hipR]!)) / legLen);
+    }
+    expect(lunges).toBeGreaterThan(0);
+    expect(travelled).toBeGreaterThan(1.1); // the lunge still carries her 1.2 m (reach unchanged)
+    expect(during).toBeLessThan(0.15); // was 0.35
+    expect(duringRadial).toBeLessThan(0.09); // was 0.27
+    expect(after).toBeLessThan(0.03); // was 0.22, held
+    expect(reach).toBeLessThan(1.005); // feet within reach of the hips (was 1.01: stretched)
   });
 
   // SEVERED ARMS (Task 11 review). Pins for the whole two-handed carry must

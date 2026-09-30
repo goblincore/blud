@@ -426,15 +426,21 @@ body
   # weeps 6 cm down toward where the
   # stockings (Task 3) will start. Offsets are for .l (+x out); mirror
   # reflects them for .r. The horizontal arm runs along the surface tangent.
-  blob leg on thigh at=0.34 offset=(-0.0386,0.016,0.0460) tip=(0,-0.032,0) r=0.0030 blend=0.002 mirror color=4a0e12 gloss=0.85
-  blob leg on thigh at=0.34 offset=(-0.0463,0.005,0.0396) tip=(0.0153,0.0015,0.0129) r=0.0030 blend=0.002 mirror color=4a0e12 gloss=0.85
-  blob leg on thigh at=0.34 offset=(-0.0386,-0.016,0.0460) tip=(0.0011,-0.060,-0.0011) r=0.0025 blend=0.002 mirror color=4a0e12 gloss=0.85
+  # `rigid`: they ride the thigh's frame (nearest-joint put them on the pelvis).
+  blob leg on thigh at=0.34 offset=(-0.0386,0.016,0.0460) tip=(0,-0.032,0) r=0.0030 blend=0.002 mirror rigid color=4a0e12 gloss=0.85
+  blob leg on thigh at=0.34 offset=(-0.0463,0.005,0.0396) tip=(0.0153,0.0015,0.0129) r=0.0030 blend=0.002 mirror rigid color=4a0e12 gloss=0.85
+  blob leg on thigh at=0.34 offset=(-0.0386,-0.016,0.0460) tip=(0.0011,-0.060,-0.0011) r=0.0025 blend=0.002 mirror rigid color=4a0e12 gloss=0.85
   # Calf: a long gentle swell at the back (a tapered capsule down the shin,
   # not the first pass's ball — that was a second knob under the knee).
   blob leg on shin  at=0.22 offset=(0,0,-0.010) tip=(0,-0.110,0.004) r=0.036 r2=0.025 deep=1.10 blend=0.016 mirror color=e8e0d0
   # Foot: one tapered bar, sole at y ~0.01, arch-high heel end.
   bar  leg on foot  from=0.00 to=0.90 offset=(0,-0.036,-0.010) r=0.030 r2=0.021 wide=1.10 tall=0.80 blend=0.018 mirror color=e8e0d0
   # IVORY STOCKINGS (Task 3), paint on the flesh, no shell layer (spec).
+  # RIGID, like the stigmata above (playtest 2026-09-25): these bands start
+  # nearer the PELVIS root than the hip joint, so a per-end bind hung their
+  # tops on the pelvis and bottoms on the knee; when the lunge surged her
+  # over planted feet they drew a 1 m ivory tube pelvis -> knee. `rigid`
+  # rides the thigh's own frame (game-actor-bride.test.ts pins it).
   # Everything from the knee down is painted e8e0d0 above (the Task 4 boots
   # cover most of it); the thigh gets them from y ~0.80 as an OVERLAY: the
   # thigh bar's own radius at t 0.49 -> 1.00 (0.0525 -> 0.035) plus 1 mm, so
@@ -443,9 +449,9 @@ body
   # the fatter thigh above it (probed), so the edge lands at ~0.80, just
   # under the inner-thigh drips' ends (0.81): the wounds weep into the
   # stocking tops. 3.5 cm of bare thigh between them and the skirt hem.
-  bar  leg on thigh from=0.53 to=1.00 r=0.0522 r2=0.0360 deep=1.05 blend=0.003 mirror color=e8e0d0
+  bar  leg on thigh from=0.53 to=1.00 r=0.0522 r2=0.0360 deep=1.05 blend=0.003 mirror rigid color=e8e0d0
   # The stocking's lace top: a 2 cm band a shade darker, 2 mm proud.
-  bar  leg on thigh from=0.51 to=0.55 r=0.0535 r2=0.0525 deep=1.05 blend=0.002 mirror color=c4b8a2 gloss=0.15
+  bar  leg on thigh from=0.51 to=0.55 r=0.0535 r2=0.0525 deep=1.05 blend=0.002 mirror rigid color=c4b8a2 gloss=0.15
 
   # ============================================================
   # THE CLOTH (Task 3) — shells, the cultist's road: cloth, not mass. Four

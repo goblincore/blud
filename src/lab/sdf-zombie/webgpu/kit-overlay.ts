@@ -45,6 +45,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
 import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
+import { precomputeKitBounds, updateKitBounds } from './kit-bounds';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -334,6 +335,10 @@ export async function loadKit(
     ordered.push(b); // traverse is parent-before-child
   });
   object.updateMatrixWorld(true);
+  // Bind-pose pad per skinned mesh, then an initial sphere so three never
+  // finds boundingSphere null and falls back to its per-vertex skinning.
+  const skinBounds = skinned.map(precomputeKitBounds);
+  skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
 
   const tmpPos = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
   // GLTFLoader sanitises node names (`clavicle.l` -> `claviclel`), so frames
@@ -363,8 +368,10 @@ export async function loadKit(
     // Three caches the skinned bounds on first render. Our world-space bone
     // motion leaves the mesh transform stationary, so that cached sphere
     // stayed behind as the soldier walked away. Camera turns then culled his
-    // entire kit. Refresh after posing to keep ordinary frustum culling valid.
-    for (const mesh of skinned) mesh.computeBoundingSphere();
+    // entire kit. Refresh after posing to keep ordinary frustum culling valid
+    // — from the posed bone origins (kit-bounds.ts), NOT computeBoundingSphere,
+    // which CPU-skins every vertex (~75 ms/frame for the bride under load).
+    skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
     return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor) ?? [] : [];
   };
 

@@ -20,8 +20,9 @@ import { type ZombieActor } from './game-actor';
 import { gateRefineTwin } from './game-world-leaves2';
 import { simTimeMs } from './sim-clock';
 import { scaleForRung, stepAdaptive } from '../adaptive-scale';
-import { UPSCALE_SCALE, parseUpscaleConfig, parseUpscaleModelJson } from './upscale/upscale-model';
+import { parseUpscaleConfig, parseUpscaleModelJson } from './upscale/upscale-model';
 import { type UpscaleInfo } from './upscale/upscale-stage';
+import { resolveScaleWithUpscaler, upscaleMarchScale } from './upscale/upscale-scale-guard';
 
 /** What `__sdfGame.fisheye`, `setFisheye` and `setRenderFov` all report.
  *  A shared function rather than three copies of the same object literal
@@ -326,8 +327,30 @@ export function updateVisibleActors(ctx: GameContext): void {
   ctx.world.cullCounts.visible = out.length;
 }
 
+let warnedScaleDropsUpscale = false;
+
 export function applySdfScale(ctx: GameContext, v: number) {
-  ctx.render.sdfScale = Math.min(1, Math.max(0.2, v));
+  // THE GUARD (2026-09-25, upscale-scale-guard.ts): the upscale stage only works at the
+  // scale it was built around. Any other scale with it on showed the top-left quarter of
+  // the march zoomed 2x (the 09-13..09-25 harness "skeleton, no flesh"), so drop it to
+  // native first. Setting 0.5 again does NOT re-enable it — U key / setUpscale does.
+  const layer = ctx.render.sdfLayer;
+  const stageOn = layer.upscaleStage !== null;
+  const stacked = stageOn && layer.temporalAccum.on && layer.checkerAccum;
+  const r = resolveScaleWithUpscaler(v, stageOn, stacked);
+  if (r.upscaler === 'native') {
+    if (!warnedScaleDropsUpscale) {
+      warnedScaleDropsUpscale = true;
+      console.warn(`[sdf-scale] scale ${r.scale} with the upscale stage on (it needs ${upscaleMarchScale(stacked)}): `
+        + 'switching the stage to NATIVE — a 2x stage at any other scale shows a quarter of the frame. '
+        + 'Re-enable with U or __sdfGame.setUpscale.');
+    }
+    // The A/B native path when there is an A/B config (keeps upscaleAb.mode + label consistent);
+    // it recurses here with the stage already off. A bare stage (debug probe) just goes.
+    if (ctx.render.upscaleAb?.config) applyUpscaleAbMode(ctx, 'native');
+    else layer.setUpscale(null);
+  }
+  ctx.render.sdfScale = r.scale;
   ctx.render.sdfLayer.setScale(ctx.render.sdfScale);
   ctx.boot.deferredApi?.setScale(ctx.render.sdfScale);
   sizeSdfLayer(ctx);
@@ -384,7 +407,7 @@ export function applyUpscaleAbMode(ctx: GameContext, mode: 'native' | 'nearest' 
     // rebuilt 2x-march grid, so the march runs at HALF the stage's input scale.
     const acc = ctx.render.sdfLayer.temporalAccum;
     const stacked = acc.on && ctx.render.sdfLayer.checkerAccum;
-    scaleTo(stacked ? UPSCALE_SCALE / 2 : UPSCALE_SCALE);
+    scaleTo(upscaleMarchScale(stacked));
     info = mode === 'nearest'
       ? ctx.render.sdfLayer.setUpscale({ model: 'zero', layout: c.layout, inputs: 'rgb', seed: 1 })
       : ctx.render.sdfLayer.setUpscale(c, ctx.render.upscaleAb.model ?? undefined);

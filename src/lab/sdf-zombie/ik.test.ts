@@ -184,6 +184,66 @@ describe('foot plant — stepPlant / solvePlantedLeg', () => {
   });
 });
 
+// THE LUNGE DRAG (bride, 2026-09-25): the sword lunge surges the root 1.2 m
+// in ~0.25 s while both feet sit in stance; the locked plants were never
+// released, so the out-of-reach feet dragged the hips 0.35 m off the pelvis
+// and held them there until she walked again. With a hip and a maxReach the
+// stance hold SLIDES the plant along the floor to stay within reach.
+describe('foot plant — reach slide (maxReach)', () => {
+  const G = 0;
+  const lock = (foot: Vec3) => stepPlant(makePlant(), { stance: true, footPos: foot, groundY: G }, DT);
+
+  it('within reach: bit-identical to the plain stance hold', () => {
+    const p0 = lock([0.1, 0.02, 0.3]);
+    const plain = stepPlant(p0, { stance: true, footPos: [9, 9, 9], groundY: G }, DT);
+    const reach = stepPlant(p0, { stance: true, footPos: [9, 9, 9], groundY: G, hip: [0.1, 0.9, 0.4], maxReach: 1 }, DT);
+    expect(reach).toEqual(plain);
+    expect(reach.plantPoint).toBe(p0.plantPoint); // not even re-allocated
+  });
+
+  it('beyond reach: slides the plant toward the hip to exactly maxReach, on the floor, same bearing', () => {
+    const p0 = lock([0, 0, 0]);
+    const hip: Vec3 = [0.3, 0.9, 1.2];
+    const p = stepPlant(p0, { stance: true, footPos: [0, 0, 0], groundY: G, hip, maxReach: 1 }, DT);
+    expect(p.phase).toBe('stance');
+    expect(p.age).toBeCloseTo(DT, 12); // still the same stance — no re-lock
+    expect(p.plantPoint[1]).toBe(G);
+    expect(seg(p.plantPoint, hip)).toBeCloseTo(1, 12);
+    // Same horizontal bearing from the hip as the old plant.
+    const was = [0 - hip[0], 0 - hip[2]], now = [p.plantPoint[0] - hip[0], p.plantPoint[2] - hip[2]];
+    expect(was[0]! * now[1]! - was[1]! * now[0]!).toBeCloseTo(0, 12);
+    expect(was[0]! * now[0]! + was[1]! * now[1]!).toBeGreaterThan(0);
+  });
+
+  it('a hip higher than maxReach puts the plant straight under it', () => {
+    const p = stepPlant(lock([1, 0, 0]), { stance: true, footPos: [1, 0, 0], groundY: G, hip: [0, 1.5, 0], maxReach: 1 }, DT);
+    expect(close(p.plantPoint, [0, G, 0], 1e-12)).toBe(true);
+  });
+
+  it('slides continuously — the plant never moves further than the hip did (no pop)', () => {
+    let p = lock([0, 0, 0]);
+    let hip: Vec3 = [0, 0.9, 0];
+    let prev = p.plantPoint;
+    for (let i = 0; i < 60; i++) {
+      const next: Vec3 = [hip[0], hip[1], hip[2] + 0.04];
+      p = stepPlant(p, { stance: true, footPos: [9, 9, 9], groundY: G, hip: next, maxReach: 1 }, DT);
+      expect(seg(prev, p.plantPoint)).toBeLessThanOrEqual(seg(hip, next) + 1e-12);
+      expect(seg(p.plantPoint, next)).toBeLessThanOrEqual(1 + 1e-12);
+      prev = p.plantPoint;
+      hip = next;
+    }
+    expect(p.plantPoint[2]).toBeGreaterThan(1.5); // the foot came along
+  });
+
+  it('never touches a swinging foot or the lock edge', () => {
+    const swing = stepPlant(lock([0, 0, 0]), { stance: false, footPos: [0, 0, 0], groundY: G, hip: [5, 1, 5], maxReach: 1 }, DT);
+    expect(swing.phase).toBe('swing');
+    expect(swing.plantPoint).toEqual([0, 0, 0]);
+    const edge = stepPlant(makePlant(), { stance: true, footPos: [0, 0.03, 0], groundY: G, hip: [5, 1, 5], maxReach: 1 }, DT);
+    expect(edge.plantPoint).toEqual([0, 0, 0]);
+  });
+});
+
 describe('pole bias — poleReflect (motion-polish task 5)', () => {
   const ROOT: Vec3 = [0, 0.9, 0];
   const END: Vec3 = [0, 0.1, 0.5]; // hip→ankle-ish axis, tilted forward

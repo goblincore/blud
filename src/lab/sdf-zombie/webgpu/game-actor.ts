@@ -59,6 +59,7 @@ import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
+import { SWORD_TUNING } from '../sword-swing';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
@@ -1406,6 +1407,12 @@ export function createZombieActor(opts: {
           ...(swingPin !== null
             ? { attack: swingPin }
             : think.attack !== null ? { attack: think.attack } : {}),
+          // The LUNGE surges the root (think.advance above) past planted
+          // feet: let the stance plants slide within reach while it runs.
+          // Absent on every other frame (motion.ts bit-identity contract).
+          ...(swingPin === null && think.attack?.variant === 'lunge'
+            ? { plantReach: SWORD_TUNING.lungePlantReach }
+            : {}),
         },
         signals,
         bound.rig.points, encounterOrder && encounterOrder.mode !== 'idle' && opts.navigation ? opts.navigation.bounds : opts.bounds, rng,

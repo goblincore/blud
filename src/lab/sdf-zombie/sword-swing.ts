@@ -103,6 +103,11 @@ export const SWORD_TUNING = {
   lungeDistance: 1.2,
   /** The lunge never carries her closer than this to the player (m). */
   lungeStopShort: 0.9,
+  /** While she lunges, her stance plants slide to stay within this fraction
+   *  of leg length of the hips (motion.ts MotionConfig.plantReach): the
+   *  surge carries the feet instead of the stranded feet dragging the hips
+   *  off the pelvis. 1 = the straight leg. */
+  lungePlantReach: 1.0,
   brain: {
     ...BRAIN_TUNING,
     // Reach ~2 m of blade + arm; holders stand inside it.
