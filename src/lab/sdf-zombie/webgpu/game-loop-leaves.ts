@@ -140,6 +140,7 @@ export function loopBlocksInput(ctx: GameContext): boolean {
  *  'melee' inventory item (the level format's name). The flare is a dev
  *  harness: always. */
 export function ownsSlot(ctx: GameContext, slot: WeaponSlot): boolean {
+  if (slot === 'launcher') return ctx.weapon.launcher !== null;
   const rt = ctx.world.loop;
   const item = slot === 'flail' ? 'melee' : slot;
   return !rt || slot === 'flare' || rt.inventory.weapons.includes(item);

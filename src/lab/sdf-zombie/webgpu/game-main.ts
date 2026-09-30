@@ -272,7 +272,7 @@ import { createRenderSeams } from './game-seams-render';
 import { createBootSeams } from './game-seams-boot';
 import { createWeaponPlayerSeams } from './game-seams-weapon-player';
 import { createFxSeams } from './game-seams-fx';
-// ——— IN-GAME BURNING + SLOT 4 FLARE (2026-09-18 flare test harness). Both live
+// ——— IN-GAME BURNING + SLOT 5 FLARE (2026-09-18 flare test harness). Both live
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
@@ -281,6 +281,7 @@ import { createHeadDamage } from './game-head-damage';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
+import { createLauncherView } from './game-launcher-view';
 import { createMiscSeams } from './game-seams-misc';
 import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
@@ -3900,8 +3901,10 @@ async function main() {
     }
     // SLOT 1: a click edge + the held button, read by the tick.
     if (ctx.weapon.flail?.onMouseDown(e.button)) return;
-    // SLOT 4: left click only, deferred to the tick like every other edge.
+    // SLOT 5 (flare): left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
+    // SLOT 4 (opt-in launcher prototype): acts only while it is the live slot.
+    if (ctx.weapon.launcher?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
     // on exactly one frame or a recording cannot replay it. The dynamite press
     // above is already a flag the tick consumes, so it is on the same seam.
@@ -3924,8 +3927,8 @@ async function main() {
   // player holds, and carries NOTHING but viewmodelFovScale()'s scale — so
   // the anchor's ride height below is scaled with the rest of the rig rather
   // than surviving as an unscaled camera-space offset. Every weapon slot
-  // (shotgun, dynamite, flare) is a descendant, so this is one transform for
-  // all of them and for whatever slot 4 turns out to be.
+  // (flail, shotgun, dynamite, launcher, flare) is a descendant, so this is
+  // one transform for all of them.
   ctx.weapon.fovRig = new THREE.Group();
   ctx.weapon.fovRig.name = 'view-model-fov-rig';
   ctx.weapon.viewModelAnchor = new THREE.Group();
@@ -3945,7 +3948,7 @@ async function main() {
   ctx.weapon.aimRig = new THREE.Group();
   ctx.weapon.aimRig.name = 'aim-rig';
   ctx.weapon.viewModelAnchor.add(ctx.weapon.aimRig);
-  // WEAPON SLOT 4 (flare test harness, game-flare.ts): its own rig on aimRig.
+  // WEAPON SLOT 5 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
   });
@@ -4346,6 +4349,18 @@ async function main() {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
     resolveGunReady();
     mark('gun-ready');
+  }
+
+  // Start on the shotgun when it is owned; a melee-only loadout (Night Train,
+  // the Wake) starts with the flail in hand instead of empty hands. (The loop
+  // runtime ownsSlot reads is built long before this point.)
+  ctx.weapon.slotState = makeWeaponSlotState(
+    !ownsSlot(ctx, 'shotgun') && ownsSlot(ctx, 'flail') ? 'flail' : 'shotgun');
+  // Art pass only: asset/material compilation is opt-in and the start-slot rule above remains the default.
+  if (new URLSearchParams(location.search).get('launcher') === '1') {
+    ctx.weapon.launcher = await createLauncherView(ctx);
+    ctx.weapon.slotState = makeWeaponSlotState('launcher');
+    ctx.weapon.launcher.updateRig();
   }
 
   // PIPELINE WARM-UP (spike program, 2026-09-10). three's WebGPU backend
@@ -5507,10 +5522,6 @@ async function main() {
    *  tuning tool, not a grenade-spam simulator. */
   const MAX_BUNDLES = 4;
 
-  // Start on the shotgun when it is owned; a melee-only loadout (Night Train,
-  // the Wake) starts with the flail in hand instead of empty hands.
-  ctx.weapon.slotState = makeWeaponSlotState(
-    !ownsSlot(ctx, 'shotgun') && ownsSlot(ctx, 'flail') ? 'flail' : 'shotgun');
   ctx.vfx.cook = { phase: 'idle', phaseAt: 0, cookStart: 0 };
   /** The cook clock in SIM seconds, advanced by tick(dt) — not a wall clock,
    *  so a frozen/render-locked capture cannot advance the fuse behind its own
@@ -7397,6 +7408,7 @@ async function main() {
     ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
     ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
     ctx.weapon.flare?.tickCooldown(dt);
+    ctx.weapon.launcher?.tick(dt);
     ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
     // ——— FREE AIM ————————————————————————————————————————————————————
     // The reticle only turns the camera once it is shoved past the dead zone;

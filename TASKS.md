@@ -59,6 +59,7 @@
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
 **Elsewhere** (see the area pages for the full lists)
+- [~] **Grenade launcher** (2026-09-29): owner accepted the original M79-inspired gothic FPV model, fire/recoil and break-action reload with forestock grip (`?launcher=1` / slot 4). Next pass: arcing projectile, bounces, explosive/fragment damage and embedding in fleshy actors. [Source, controls and gates](docs/dev-notes/2026-09-29-grenade-launcher/notes.md).
 - [ ] Characters: the **Warbull** (cyber-minotaur: rockets, charge, disarm; second draft from the owner's reference plate) is in the arena, awaiting a local WAM kit build and playtest; the **Juggernaut** is playable
   (arena; owner playtest: works), armour aesthetic pass next;
   Grenadier variant deferred; cultist perf pass and cloth feel (paused), bride polish —
