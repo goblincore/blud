@@ -92,9 +92,12 @@ only if an idea below earns it.
   (registry `bride` = game LOD, `bride-hd` = the full-detail file for cutscene renders), 63 prims vs 94 (-52.9%
   prim evaluations, census in `docs/dev-notes/2026-09-24-bride-perf/COST.md`), painted game face sheet with glowing
   red eyes, cloth as breakable kit mesh (lace tears off without sparks), orb hands on both kits, the bride glow
-  (surface emissive packed in `meltCfg.w` by `glow-pack.ts` + cold room light `game-glow.ts`), and the kit-beam
-  flashlight (`kit-lights.ts`, `?kitbeam=0` for main's look). **Owner has not decided on the kit beam** (kits under
-  the flashlight clip to white on main; the fitted beam fixes it but changes the soldier's look): compare and pick.
+  (surface emissive packed in `meltCfg.w` by `glow-pack.ts` + cold room light `game-glow.ts`).
+- [x] **Kit-beam flashlight merged to main** (`88512f4a`, owner approved after playtest 2026-09-30): kits and enemy
+  held props are lit by a twin of the flashlight fitted to the SDF body beam (`mesh-beam-fit.ts`, `kit-lights.ts`;
+  kits used to get 28.6x albedo at 1 m against the bodies' 3.5x and clip to white). The twin follows the flashlight
+  gate (dark until the night-train torch pickup) and is skipped by `levelSceneLights`; `?kitbeam=0` restores the
+  old kit lighting. Not covered: the player's FPV gun/hands (separate glTF, still chrome-white under the beam).
 - [ ] **Why she was slow:** not her SDF prims (she was already ~0.5x a cultist per frame) but the kit CPU stall
   above, then prim count for the GPU march (shells cost 3-5x their prim share: grouping, not count). Frozen
   (`?frozen=1`) benches never run the kit loop: time LIVE legs too (`scripts/bride-timing-check.sh`).
