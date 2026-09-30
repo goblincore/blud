@@ -33,6 +33,7 @@ import type { FleshMaterial } from '../material';
 import type { Vec3 } from '../types';
 import type { BakedChunkMaterial } from './baked-chunks';
 import type { BloodView } from './blood-view-gpu';
+import type { SurfaceBloodView } from './surface-blood-view';
 import type { ExplosionVfx } from './explosion-vfx';
 import type { BurstLayer } from './fpv-view';
 import type { ZombieActor } from './game-actor';
@@ -66,6 +67,7 @@ interface TearShape {
 // So they are typed `T`, and the factory seeds them with a definite-assignment
 // placeholder that the in-place assignment at the original line overwrites.
 export interface VfxState {
+  surfaceBlood: SurfaceBloodView | null;
   /** DEV-only `?bounded-wounds` gate for the bounded-wound preview. */
   boundedWoundPreview: boolean;
   /** Pool of blast point lights, kept permanently visible (perf contract). */
@@ -171,6 +173,7 @@ export interface VfxState {
 /** Every call returns a fresh object, nested arrays, maps and weak maps included. */
 export function makeVfxState(): VfxState {
   return {
+    surfaceBlood: null,
     boundedWoundPreview: false,
     explosionLightPool: [],
     beamTuning: { gain: 4, shoulder: 0.35, keyFloor: 0 },

@@ -2,6 +2,14 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Persistent surface blood candidate — 2026-09-30
+
+- [x] Opt-in `?surfaceblood=1` and “Surface blood · candidate” panel: airborne blood now deposits onto swept visible level triangles, including floor plates and walls. Marks survive clearing the airborne particles.
+- [x] Lit procedural wet splatter, dry stain and impact-directed smears; wet marks dry over two minutes. Receiver-local clipped geometry follows level mesh motion and avoids wrapping corners/backfaces.
+- [x] Pure BVH/ledger/projection tests plus renderer-bridge tests, existing blood/goo tests and TypeScript. Bounded 192 stains / 65,536 uploaded vertices, batched by receiver with shared room materials.
+- [x] Default-renderer Night Train captures, frozen toggle parity, fresh-profile boot comparison and fenced draw timing. [Evidence and usage](../dev-notes/2026-09-30-surface-blood/notes.md).
+- [ ] Deferred validation blocked by a pipeline error reproduced on unchanged base. Animated actors, glass, footprints and body-drag tracks remain outside this candidate.
+
 ## Decap / ragdoll bugs + debug hooks — 2026-09-22
 
 - [x] **Legless bodies stood in the air.** `missingLimbs()` (webgpu/game-actor.ts) only counted a leg gone when its
