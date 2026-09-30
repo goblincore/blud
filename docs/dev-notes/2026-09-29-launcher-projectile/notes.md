@@ -1,6 +1,6 @@
 # Launcher grenade gameplay — 2026-09-29
 
-Accepted model/animation pass: [PR #26](https://github.com/goblincore/blud/pull/26), branch `codex/grenade-launcher-fpv`, commit `947e2aff`. Gameplay is local on the separate stacked branch `codex/grenade-projectile`; it has not been pushed into that PR.
+Accepted model/animation pass: [PR #26](https://github.com/goblincore/blud/pull/26), branch `codex/grenade-launcher-fpv`, commit `947e2aff`. Gameplay is pushed on the separate stacked branch `codex/grenade-projectile`, [PR #27](https://github.com/goblincore/blud/pull/27), based on the FPV branch.
 
 ## Play and review
 
