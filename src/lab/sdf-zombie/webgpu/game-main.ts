@@ -360,6 +360,7 @@ import { mergeSeams } from './seam-merge';
 import { createDemoStepSeams } from './game-seams-demo-step';
 import { createLightingProbeSeams } from './game-seams-lighting-probes';
 import { createGibsBakeSeams } from './game-seams-gibs-bake';
+import { KitLightsNode, setKitBeam } from './kit-lights';
 
 /** Low but clearly visible — the owner's slide runs 0..1 from here. Measured
  *  on the room1 A/B (shadow-side px, mean channel shift vs probeWeight 0):
@@ -912,6 +913,14 @@ async function main() {
   ctx.lighting.flashlight.levelShadow.castShadow = ctx.lighting.flashlight.spot.castShadow;
   scene.add(ctx.lighting.flashlight.levelShadow);
   scene.add(ctx.lighting.flashlight.levelShadow.target);
+  // KIT BEAM PARITY (kit-lights.ts): kits and held props swap this spot for
+  // its fitted twin. The twin is in the graph (so its matrices update) but on
+  // KIT_BEAM_LAYER, out of every camera's light list: the level's shaders do
+  // not change. Registered before any character spawns. ?kitbeam=0 (boot-time
+  // A/B) leaves kits on the level's flashlight, as before 2026-09-25.
+  scene.add(ctx.lighting.flashlight.kitSpot);
+  setKitBeam(new URLSearchParams(location.search).get('kitbeam') === '0'
+    ? null : new KitLightsNode(ctx.lighting.flashlight.spot, ctx.lighting.flashlight.kitSpot));
 
   // DEFERRED MODE: three's own shadow traversal is OFF. The deferred shadow
   // maps (deferred-shadows.ts) are explicit raster passes that never consult
@@ -1615,6 +1624,9 @@ async function main() {
     ctx.lighting.flashlight.update(camera);
     // The flail's torch FILL follows this frame's torch (game-flail.ts OWN LIGHT LIST).
     ctx.weapon.flail?.syncFill();
+    // The kit twin follows the flashlight's SWITCH like the spot and the bodies' beam do (night-train
+    // starts dark until the coat-check pickup): ungated it lit kitted enemies at full strength first.
+    ctx.lighting.flashlight.setKitBeamGain(ctx.vfx.beamTuning.gain * flashlightGate(ctx));
     // SSCS feed: the flashlight pose and this frame's camera matrices. The
     // camera's matrixWorld is current — flashlight.update just re-ran
     // updateMatrixWorld on it; setSscsFrame rebuilds the view matrix itself.

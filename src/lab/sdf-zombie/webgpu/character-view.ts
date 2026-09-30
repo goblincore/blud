@@ -44,6 +44,7 @@ import { tearUpload, wetLipUpload } from '../torn-lips';
 import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
+import { applyKitBeam } from './kit-lights';
 import { createArmorSparks, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
@@ -610,7 +611,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true)
       .then(k => {
         if (disposed || equipmentRetired) { k.dispose(); return; }
-        kit = k; opts.scene.add(k.object, k.debris);
+        kit = k; applyKitBeam(k.object); opts.scene.add(k.object, k.debris);
       })
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }
@@ -618,7 +619,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     loadHeldProp(entry.profile.prop.url, opts.renderer)
       .then(p => {
         if (disposed || equipmentRetired) { p.dispose(); return; }
-        heldProp = p; opts.scene.add(p.object);
+        heldProp = p; applyKitBeam(p.object); opts.scene.add(p.object);
       })
       .catch(e => console.error(`[prop] ${entry.profile.prop!.url} failed to load; rendering unarmed`, e));
   }

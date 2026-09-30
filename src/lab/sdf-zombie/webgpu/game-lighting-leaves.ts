@@ -8,6 +8,7 @@
 
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
+import { KIT_BEAM_LAYER } from './kit-lights';
 
 export function applyHemi(ctx: GameContext) { ctx.lighting.hemi.intensity = ctx.lighting.hemiBase * (1 - ctx.lighting.levelProbeWeight); }
 
@@ -31,6 +32,9 @@ export function levelSceneLights(ctx: GameContext, roomId: number): THREE.Light[
   ctx.boot.handle.scene.traverse(o => {
     const l = o as THREE.Light;
     if (!l.isLight) return;
+    // The flashlight's kit twin (kit-lights.ts) is in the graph only so its matrices update: a scene traverse ignores
+    // the camera layers that keep it out of three's lists, and it lit every room's walls as an ungated torch.
+    if (l.layers.isEnabled(KIT_BEAM_LAYER)) return;
     // A beacon's zero omni (its spot is the light): the shared list reads it, no material does.
     if (l.userData.listOnly) return;
     // The cheap level tier (on by default; ?levellist=0 opts out) shades this light through the list node instead.
