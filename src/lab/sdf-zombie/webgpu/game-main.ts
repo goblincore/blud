@@ -276,6 +276,7 @@ import { createFxSeams } from './game-seams-fx';
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createLauncherView } from './game-launcher-view';
+import { GRENADE } from '../grenade-flight';
 import { createMiscSeams } from './game-seams-misc';
 import { VIEWMODEL_REFERENCE_FOV_DEG, applyBoneCullMode, applyBoneMesh, applyViewmodelFovScale, copyUniformValues, fisheyeReport, gibBlurSubjects, median, updateUpscaleAbLabel } from './game-render-leaves';
 import { applyWoundRamp, faceFor, scaleBurstVisual, spillVerdict, woundTuningNow } from './game-vfx-leaves';
@@ -4300,9 +4301,14 @@ async function main() {
   }
 
   ctx.weapon.slotState = makeWeaponSlotState('shotgun');
-  // Art pass only: asset/material compilation is opt-in and the shotgun remains the default.
+  // Launcher asset/material compilation is opt-in; the shotgun remains the default.
   if (new URLSearchParams(location.search).get('launcher') === '1') {
-    ctx.weapon.launcher = await createLauncherView(ctx);
+    ctx.weapon.launcher = await createLauncherView(ctx, { detonate: at => {
+      detonateAt(at, false, GRENADE.blastRadiusScale);
+      const p = ctx.player.player.pos;
+      const hurt = blastPlayerDamage(Math.hypot(p[0] - at[0], p[1] + PLAYER.height * .5 - at[1], p[2] - at[2]));
+      if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
+    } });
     ctx.weapon.slotState = makeWeaponSlotState('launcher');
     ctx.weapon.launcher.updateRig();
   }
@@ -5576,7 +5582,7 @@ async function main() {
   mark('detonation-start');
   ctx.dynamite.blastProfile = newBlastProfile(ctx);
 
-  function detonateAt(at: Vec3, inHand = false): void {
+  function detonateAt(at: Vec3, inHand = false, radiusScale = 1): void {
     const t0 = performance.now();
     ctx.dynamite.gibTierLog = [];
     const prof = newBlastProfile(ctx);
@@ -5601,7 +5607,7 @@ async function main() {
       // THE FOCUS KNOBS, live from the panel. Both are the resolver's own
       // options and both default to the reference (scale 1, floor 0.45), so a
       // page that never touches them resolves exactly as before.
-      radiusScale: ctx.vfx.aoeRadiusScale,
+      radiusScale: ctx.vfx.aoeRadiusScale * radiusScale,
       launchFloor: ctx.vfx.aoeLaunchFloor,
       // The hand-splash flourish only makes sense for an in-hand detonation:
       // the resolver measures the FPV hands, and this page's hands are meshes
@@ -7771,6 +7777,8 @@ async function main() {
       // actors stepped above (so the pieces take the pose the body was drawn
       // in) and before the chunk step (so their impulses are released in the
       // same frame they are born).
+      // World grenades keep flying while holstered, after actors have posed.
+      ctx.weapon.launcher?.tickProjectiles(dt);
       spawnScheduledGibs(dt);
       // The staged release's due impulses, BEFORE the chunk step, so a piece
       // that goes this frame integrates at its launch velocity for the whole

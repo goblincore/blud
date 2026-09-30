@@ -23,7 +23,7 @@ export function updateHud(ctx: GameContext) {
       : ctx.weapon.slotState.live === 'flare'
         ? '3 FLARE'
         : ctx.weapon.slotState.live === 'launcher'
-          ? '4 LAUNCHER · FPV PROTOTYPE (R reload)'
+          ? '4 LAUNCHER · R reload'
           : '1 GRAPESHOT';
   ctx.boot.hudEl.textContent =
     `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen(ctx)}/${ctx.world.actors.length}` +

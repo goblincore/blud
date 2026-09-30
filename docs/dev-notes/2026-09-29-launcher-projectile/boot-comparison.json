@@ -1,0 +1,19 @@
+{
+  "rows": [
+    {
+      "version": "FPV PR base 947e2aff",
+      "freshBrowserProfile": true,
+      "drawOnceMs": 1676.2000000476837,
+      "totalWarmMs": 2562,
+      "errors": 0
+    },
+    {
+      "version": "Grenade gameplay",
+      "freshBrowserProfile": true,
+      "drawOnceMs": 1959.4000000357628,
+      "totalWarmMs": 2938,
+      "errors": 0
+    }
+  ],
+  "note": "Sequential runs with new task-owned browser profiles; OS Metal shader cache not purged. Single samples, startup only."
+}
