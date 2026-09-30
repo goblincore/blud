@@ -5,8 +5,8 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-off:** [2026-09-29 — start here](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
-> resize, zombie feet, march-hash on Chrome 154). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
+> **Latest hand-offs:** [2026-09-29 — start here](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
+> resize, zombie feet, level-list tier, march-hash on Chrome 154) and [2026-09-30 flail / head damage / wounds](docs/dev-notes/2026-09-30-flail-handoff/HANDOFF.md). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
 
