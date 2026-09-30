@@ -22,7 +22,9 @@ export function updateHud(ctx: GameContext) {
         : `${ctx.bake.liveBundles.length} out`}`
       : ctx.weapon.slotState.live === 'flare'
         ? '3 FLARE'
-        : '1 GRAPESHOT';
+        : ctx.weapon.slotState.live === 'launcher'
+          ? '4 LAUNCHER · FPV PROTOTYPE (R reload)'
+          : '1 GRAPESHOT';
   ctx.boot.hudEl.textContent =
     `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen(ctx)}/${ctx.world.actors.length}` +
     ` · ${where} · probe ${ctx.probes.weight.toFixed(2)}` +
@@ -31,7 +33,7 @@ export function updateHud(ctx: GameContext) {
     (ctx.weapon.slotState.live === 'shotgun'
       ? ctx.weapon.infiniteAmmo ? ' · shells ∞' : ` · shells ${ctx.weapon.shells}/${MAGAZINE_CAPACITY}`
       : '') +
-    (ctx.weapon.slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
+    (ctx.weapon.slotState.live === 'shotgun' ? (ctx.weapon.slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') : '') +
     (ctx.render.sdfLayer.halfRate
       ? ` · HALF30 ${ctx.render.sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
       : '') +

@@ -106,6 +106,7 @@ export function createWeaponAimSeams(ctx: GameContext) {
       if (!WEAPON_SLOTS.includes(slot)) {
         return { ok: false, reason: `unknown-slot:${String(slot)}` };
       }
+      if (slot === 'launcher' && !ctx.weapon.launcher) return { ok: false, reason: 'launcher-disabled:use-?launcher=1' };
       ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, slot);
       updateHud(ctx);
       return { ok: true, live: ctx.weapon.slotState.live, target: ctx.weapon.slotState.target, phase: ctx.weapon.slotState.phase };

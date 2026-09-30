@@ -1,0 +1,21 @@
+{
+  "triangles": 17192,
+  "bytes": 463148,
+  "nodes": [
+    "LauncherRoot",
+    "Frame",
+    "Barrels",
+    "Hinge",
+    "Muzzle",
+    "Breech",
+    "Grip_Hand",
+    "Fore_Hand",
+    "Round",
+    "TopLever",
+    "Hammer",
+    "Trigger"
+  ],
+  "barrel_inner_diameter_m": 0.044,
+  "length_m": 0.752,
+  "moving_origin": "hinge pin; no runtime reparent required"
+}

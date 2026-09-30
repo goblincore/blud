@@ -99,10 +99,11 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     ctx.panels.dynamitePanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.shutterPanel?.setVisible(!ctx.panels.hidden);
   }
-  // Manual reload. Dead under unlimited ammo BY CONSTRUCTION (the magazine is
-  // never partial), which is why ?ammo=finite is the way to exercise it.
-  if (pressed('KeyR') && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) {
-    startReload(ctx);
+  // Launcher R demonstrates a live-round reload; its reserve is unlimited.
+  // Shotgun R still requires a partial finite magazine.
+  if (pressed('KeyR')) {
+    if (ctx.weapon.slotState.live === 'launcher') ctx.weapon.launcher?.reload();
+    else if (ctx.weapon.slotState.live === 'shotgun' && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);
   }
   if (pressed('KeyT')) {
     ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
@@ -126,8 +127,9 @@ export function applyInputFrame(ctx: GameContext, f: DemoFrame): void {
   }
   if (f.fire === 1) fire(ctx, 1);
   else if (f.fire === 2) fire(ctx, 2);
-  // Slot 3's edge, consumed on the tick like every other verb.
+  // Prototype slot edges are consumed on the tick like every other verb.
   ctx.weapon.flare?.consumeEdge();
+  ctx.weapon.launcher?.consumeEdge();
   // The KeyR edge above already covers a live press; this covers a recorded
   // frame whose reload was folded into the flag rather than the keys.
   if (f.reload && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);

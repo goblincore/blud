@@ -28,11 +28,11 @@
 /** Which weapon the player is holding. `shotgun` is the grapeshot double.
  *  `flare` is the 2026-09-18 in-game burning-test harness: slot 3, no
  *  projectile, no damage — its only verb is igniting the actor it hits. */
-export type WeaponSlot = 'shotgun' | 'dynamite' | 'flare';
+export type WeaponSlot = 'shotgun' | 'dynamite' | 'flare' | 'launcher';
 
 /** Slot order, which is ALSO the number-key order (1 → shotgun, 2 → dynamite,
- *  3 → flare). */
-export const WEAPON_SLOTS: readonly WeaponSlot[] = ['shotgun', 'dynamite', 'flare'];
+ *  3 → flare, 4 → opt-in launcher prototype). */
+export const WEAPON_SLOTS: readonly WeaponSlot[] = ['shotgun', 'dynamite', 'flare', 'launcher'];
 
 /** `event.code` → slot. Only these keys select a weapon; every other key falls
  *  through to the existing handlers untouched. */
@@ -40,6 +40,7 @@ export const SLOT_BY_KEY: Readonly<Record<string, WeaponSlot>> = {
   Digit1: 'shotgun',
   Digit2: 'dynamite',
   Digit3: 'flare',
+  Digit4: 'launcher',
 };
 
 /** Slot for a keydown code, or null when the key is not a slot key. */
