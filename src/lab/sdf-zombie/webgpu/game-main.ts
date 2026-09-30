@@ -1624,7 +1624,9 @@ async function main() {
     ctx.lighting.flashlight.update(camera);
     // The flail's torch FILL follows this frame's torch (game-flail.ts OWN LIGHT LIST).
     ctx.weapon.flail?.syncFill();
-    ctx.lighting.flashlight.setKitBeamGain(ctx.vfx.beamTuning.gain);
+    // The kit twin follows the flashlight's SWITCH like the spot and the bodies' beam do (night-train
+    // starts dark until the coat-check pickup): ungated it lit kitted enemies at full strength first.
+    ctx.lighting.flashlight.setKitBeamGain(ctx.vfx.beamTuning.gain * flashlightGate(ctx));
     // SSCS feed: the flashlight pose and this frame's camera matrices. The
     // camera's matrixWorld is current — flashlight.update just re-ran
     // updateMatrixWorld on it; setSscsFrame rebuilds the view matrix itself.

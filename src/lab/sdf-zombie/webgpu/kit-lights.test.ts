@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+// @ts-expect-error — node:fs is available under vitest (same arrangement as other source pins)
+import { readFileSync } from 'node:fs';
 import * as THREE from 'three/webgpu';
 import { KitLightsNode, KIT_BEAM_LAYER, applyKitBeam, setKitBeam, swapLight } from './kit-lights';
 import { createFlashlight } from './dungeon-lighting';
@@ -81,5 +83,16 @@ describe('createFlashlight kit twin', () => {
     expect(f.kitSpot.target).toBe(f.spot.target);
     f.setKitBeamGain(8);
     expect(f.kitSpot.intensity).toBeCloseTo(fitMeshBeam({ gain: 8, range: f.spot.distance }).intensity, 6);
+  });
+
+  it('switches fully off at gain 0 (the flashlight gate closed)', () => {
+    const f = createFlashlight();
+    f.setKitBeamGain(0);
+    expect(f.kitSpot.intensity).toBe(0);
+  });
+
+  it('is scaled by the flashlight gate in the game loop, like the spot and the body beam', () => {
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8') as string;
+    expect(src).toContain('setKitBeamGain(ctx.vfx.beamTuning.gain * flashlightGate(ctx))');
   });
 });
