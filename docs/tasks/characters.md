@@ -74,6 +74,48 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [ ] Room to grow: `MAX_PRIMS` is now 256 (landed on main, see below), so the Task 3 wish-list (third skirt
   tier, hair volume, veil hem, part sweeps) is unblocked; the next wall is 64 prims per cluster.
 
+## Bride — SHELVED 2026-09-30 (owner call; branch `claude/bride-game-lod` keeps everything)
+
+The owner's verdict after playtesting: she looks good, but the animation is janky, the two-handed sword clips
+through her own body (hard), and above all **she doesn't fit the game's fleshy, visceral identity**: after the
+game-LOD pass she is mostly mesh (lace dress, plate, boots) with a painted face, so little of her is the
+cratering, rupturing SDF flesh the game is built on. Not spawned by any level (`?spawn=bride` only). Revisit
+only if an idea below earns it.
+
+- [x] **Engine fixes split out and merged to main** (`22390b19`): `kit-bounds.ts` bone-sphere cull (kit pose was
+  ~75 ms/frame for a live armoured enemy: `SkinnedMesh.computeBoundingSphere` CPU-skins every vertex); O(1) kit
+  support index; allocation-free `pack.ts` (byte-pinned by `pack-golden`); the `setSdfScale` / upscaler mismatch
+  guard + `applyShipDefaults` pinning the shipping 0.5 scale (captures 2026-09-13..09-25 at scale 1 with the upscaler
+  on were broken: a 2x-zoomed corner); vite ignores `.lab-tmp`; the stocking band / thigh drip ride the thigh (the
+  lunge stretched them to 1.1 m); lunge foot planting (`plantReach`, inert unless set).
+- [ ] **On the branch only, not merged** (42 commits ahead of main at the merge `c3171913`): `bride-game.blob`
+  (registry `bride` = game LOD, `bride-hd` = the full-detail file for cutscene renders), 63 prims vs 94 (-52.9%
+  prim evaluations, census in `docs/dev-notes/2026-09-24-bride-perf/COST.md`), painted game face sheet with glowing
+  red eyes, cloth as breakable kit mesh (lace tears off without sparks), orb hands on both kits, the bride glow
+  (surface emissive packed in `meltCfg.w` by `glow-pack.ts` + cold room light `game-glow.ts`), and the kit-beam
+  flashlight (`kit-lights.ts`, `?kitbeam=0` for main's look). **Owner has not decided on the kit beam** (kits under
+  the flashlight clip to white on main; the fitted beam fixes it but changes the soldier's look): compare and pick.
+- [ ] **Why she was slow:** not her SDF prims (she was already ~0.5x a cultist per frame) but the kit CPU stall
+  above, then prim count for the GPU march (shells cost 3-5x their prim share: grouping, not count). Frozen
+  (`?frozen=1`) benches never run the kit loop: time LIVE legs too (`scripts/bride-timing-check.sh`).
+- [ ] **Known, unfixed:** animation jank; sword clips her body on the wind-up; the lunge glides her feet (no step);
+  one skull prim stretches ~8 cm in swings; lace still clips at melee range under the flashlight.
+- [ ] **Damage model (designed, not built):** she "comes apart at the seams" because she has no HP (zombie meter),
+  her limbs are 2-3x thinner than a zombie's against a fixed pellet sever radius (pellet-on-arm severs 47/50 vs
+  0/40), decoration prims act as fake joints (`connectivity.ts chainOrder` / `missingLimbs`), plate absorbs nothing
+  and corpses keep severing. Spec `docs/superpowers/specs/2026-09-25-bride-damage-toughness-design.md`, plan
+  `docs/superpowers/plans/2026-09-25-bride-damage-toughness.md` (both on the branch). **Main has since built much of
+  this** for the juggernaut: `plate-armor.ts` (per-plate HP, no wound while intact, shed at zero) and the soldier
+  family trait with regional injury: re-plan on those, do not build the plan's plate tasks. Owner direction for her
+  damage: blood on white (lace stains) + hit reactions that carry it (flinch on every hit, stagger on heavy hits
+  that cancels her swing, later angry recovery) + 3-4 death performances handing off to ragdoll, intact except
+  dynamite and headshots (kneeling bride as the signature).
+- [ ] **Ideas to revisit her:** (1) *the unveiling*: pristine until shot; the lace/plate tear off (built) to reveal
+  a raw, fused torso with the rib window and red seams from `bride.blob`: a one-day spike, judged in one
+  playtest; if it doesn't make her feel fleshy, leave her shelved. (2) make her a one-per-level *set piece* (chapel,
+  train car) with a scripted arrival and authored death, not a regular enemy. (3) keep her kit/face pipeline as a
+  pattern for a future mesh-heavy enemy.
+
 ## Prim ceiling 128 -> 256, per-body texture width — done 2026-09-24
 
 - [x] **`MAX_PRIMS` = 256** (flesh + bone). Each body's data texture is `primStride(total)` wide: 128 up to 128
