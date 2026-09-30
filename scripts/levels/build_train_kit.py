@@ -996,8 +996,8 @@ def crt_console(color):
     p.box(S, (0.0, 0.0, -0.6), (0.8, 0.9, 0.6))
     p.box(SX, (0.05, 0.9, -0.55), (0.6, 0.98, 0.55))
     p.box(BEIGE, (0.1, 0.98, -0.28), (0.6, 1.45, 0.28))
-    p.wall_x(f"train.crt-{color}", 0.601, 1, -0.22, 0.22, 1.06, 1.38)
-    p.box(BEIGE, (0.62, 0.98, -0.25), (0.78, 1.01, 0.25))
+    p.wall_x(f"train.crt-{color}", 0.605, 1, -0.22, 0.22, 1.06, 1.38)
+    p.box(BEIGE, (0.62, 0.90, -0.25), (0.78, 0.93, 0.25))
     return p
 
 
@@ -1026,10 +1026,10 @@ def crt_wall():
                 continue
             x, y = c * 0.72, 0.9 + r * 0.72
             p.box(BEIGE, (x - 0.33, y - 0.33, -0.5), (x + 0.33, y + 0.33, 0.0))
-            p.wall_z(screens[k % len(screens)], -0.501, -1, x - 0.26, x + 0.26, y - 0.26, y + 0.26)
+            p.wall_z(screens[k % len(screens)], -0.505, -1, x - 0.26, x + 0.26, y - 0.26, y + 0.26)
             k += 1
     p.box(BEIGE, (-1.05, 0.6, -0.7), (1.05, 1.95, 0.0))
-    p.wall_z("train.crt-dim", -0.701, -1, -0.85, 0.85, 0.78, 1.77)   # the big monitor, dimly lit
+    p.wall_z("train.crt-dim", -0.705, -1, -0.85, 0.85, 0.78, 1.77)   # the big monitor, dimly lit
     return p
 
 
@@ -1037,7 +1037,7 @@ def firebox_door():
     """The engine's firebox in the east wall: a rusted frame and an orange door. 0.4 m deep, 1.3 m long."""
     p = Piece("firebox-door")
     p.box("train.rust", (0.0, 0.0, -0.65), (0.4, 1.8, 0.65))
-    p.wall_x("train.firebox", 0.401, 1, -0.45, 0.45, 0.3, 1.3)
+    p.wall_x("train.firebox", 0.405, 1, -0.45, 0.45, 0.3, 1.3)
     p.box(BR, (0.4, 0.25, -0.5), (0.44, 0.3, 0.5))
     p.box(BR, (0.4, 1.3, -0.5), (0.44, 1.35, 0.5))
     return p
