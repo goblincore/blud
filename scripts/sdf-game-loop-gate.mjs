@@ -6,7 +6,7 @@
 //   2. PICKUPS: standing on the sawn-off collects it loaded (2 | 4); office shells add 8.
 //   3. DAMAGE: seam damage; a live zombie in reach bites.
 //   4. DEATH: health 0 shows the overlay.
-//   5. COMPLETE: reaching the firebox in the cab ends the level.
+//   5. COMPLETE: reaching the egg in the control room ends the level.
 //
 // Usage: LAB_VITE_PORT=5296 LAB_CDP_PORT=9296 node scripts/sdf-game-loop-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -173,13 +173,13 @@ const shown = await evaluate(`[...document.querySelectorAll('div')].some((d) => 
 if (!shown) fail('death overlay not shown');
 pass('death: health 0 shows YOU DIED');
 
-// 5. COMPLETE — reaching the firebox in the cab (the `level.end` trigger, z -134.9 .. -136.9 since the
-//    Boiler Room resize moved the cab 8 m north, 2026-09-28).
+// 5. COMPLETE — reaching the egg in the control room (the `level.end` trigger, a 3.2 m box around
+//    the egg: x -1.6..1.6, z -135.1 .. -138.3; ending plan 1, 2026-09-30).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) fail('night-train (god) did not boot');
-await evaluate('__sdfGame.setPose(0, -135.9, 0, 0)');
+await evaluate('__sdfGame.setPose(0, -135.3, 0, 0)');
 await settle();
-if (!(await evaluate('__sdfGame.levelComplete()'))) fail('reaching the firebox did not complete the level');
-pass('complete: reaching the firebox ends the level');
+if (!(await evaluate('__sdfGame.levelComplete()'))) fail('reaching the egg did not complete the level');
+pass('complete: reaching the egg ends the level');
 
 console.log('PASS sdf-game-loop-gate');
 process.exit(0);
