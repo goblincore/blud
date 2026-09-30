@@ -66,7 +66,7 @@ would need 0.6 m walls between them, which a carriage can't spare. Doorways are 
 | 3 | Dining car | 4.2 × 18 m | 3.0 m | **saloon** (5 tables each side) → **buffet lounge** (a central island) → door west → **galley** |
 | 4 | Sleeper | 4.0 × 18 m | 2.8 m | **south lobby** → a **side corridor** (west, 1.4 m) with **five compartments** C1–C5 (east, 2.5 m deep) → **north lobby** |
 | 5 | Party carriage | 4.2 × 20 m | 3.4 m | one open room: favour tables (west), **dance floor**, two pillars, the **bar** (east), the jukebox (NW corner) |
-| 8 | Cab | 3.0 × 8 m | 2.6 m | the Stoker at the firebox; the boiler backhead fills the north end |
+| 8 | Cab | 3.0 × 8 m | 2.6 m | the Stoker at the firebox; the boiler backhead fills the north end. **Planned (2026-09-30): becomes an 8 × 10 m control room with the egg** — see [the ending spec](../../../superpowers/specs/2026-09-30-night-train-egg-ending-design.md) |
 
 Game z: the van's south end is z = 0; carriages run toward −z (van 0…−16, dining −17.2…−35.2,
 sleeper −36.4…−54.4, party −55.6…−75.6, cab −76.8…−84.8).

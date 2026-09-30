@@ -36,6 +36,7 @@
   height unchanged. [Notes + turntable](docs/dev-notes/2026-09-29-zombie-feet/notes.md). **Open:** feet a little
   small (~0.19 m; foot `len`), the walk with longer legs not yet judged in play; kit characters (soldier 0.10,
   juggernaut 0.11) assumed hidden by boots — verify.
+- [ ] **Ending: the control room, the egg, the montage** (owner, 2026-09-30, scope B) — [spec](docs/superpowers/specs/2026-09-30-night-train-egg-ending-design.md) · [blockout](docs/dev-notes/2026-09-30-egg-ending/). The cab becomes an 8 × 10 m control room with a nested, alive egg (red veiny outer, milky spotted inner, soft silhouette); contact starts a ~30 s abstract montage (jump cuts, the train seen as a sperm), then black and a title card. The Flat and the pull-back stay later. **Next:** owner review of the spec, then plan 1 (the room).
 - [ ] Check the beacon sweeps read on bodies under the owner's default; explain the light gate's `?lightlist=0` gib
   reading (0.296 vs 0.163 earlier, passes).
 - [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
