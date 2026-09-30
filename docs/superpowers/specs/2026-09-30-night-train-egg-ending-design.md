@@ -15,7 +15,7 @@
 ## Decisions
 
 1. **The end room is a control room, not the cab.** The 3.0 × 8 m cab becomes an **8.0 × 10.0 m control room** (x −4…4, z −140.4…−130.4, ceiling 3.4 m), entered by the existing vestibule 7 from the tender. "Bigger on the inside", as the Boiler Room is. The Stoker is still later; the firebox moves to a glowing door in the east wall's north end so the room is still the engine's end.
-2. **The egg is the room's one object.** It stands in the middle (centre ≈ x 0, z −133.7 in game coordinates; Blender blockout y 6.3), on a rusted plinth held by six clamps, with roots and cables running to the consoles. It is **nested**:
+2. **The egg is the room's one object.** It stands in the middle (centre x 0, z −136.7 in game coordinates, 6.3 m in from the south door; Blender blockout y 6.3), on a rusted plinth held by six clamps, with roots and cables running to the consoles. It is **nested**:
    - **outer egg:** large (about 1.9 m wide × 2.6 m tall), transparent, red-veiny, warm-lit;
    - **inner egg:** 0.6 scale, **milky, semi-translucent, spotted** (pale-teal raised spots, varied sizes), on the viewer-facing half;
    - **the figure:** a **soft, blurry dark silhouette** inside the inner egg against a warm backlight. It is hard to make out: no defined outline, broken up by noise, diffused by the milky shell. Who it is stays undecided (it may be the goblin).
@@ -31,7 +31,7 @@ Kit and pipeline: Blender → `build_night_train.py` → `night-train.level.json
 | Part | Content |
 | --- | --- |
 | Shell | 8.0 × 10.0 m, 3.4 m ceiling, 1.4 m doorway south; steel ceiling beams every 2 m; two cable trays along z, two rusted ducts |
-| Consoles | Five per side on the east and west walls: a desk, a sloped panel, a beige CRT on top with a lit screen, a keyboard; a rack at z ≈ −133.7 each side with status LEDs |
+| Consoles | Five on the west wall and four on the east (the firebox door takes the east wall's north end): a desk, a sloped panel, a beige CRT on top with a lit screen, a keyboard; a rack at z ≈ −136.7 each side with status LEDs |
 | North wall | A grid of beige CRTs, 9 × 3, every screen a different state (static, green, amber, dead); **one big CRT at the centre**, about 2.2 × 1.45 m, dimly lit. It foreshadows the screen in the Flat |
 | Firebox | A rusted frame with an orange door on the east wall's north end; fire light as in the old cab |
 | Lights | Dim emergency reds on the ceiling line; green/amber console glow; the egg's warm light is the room's main source and shadow-casting |
