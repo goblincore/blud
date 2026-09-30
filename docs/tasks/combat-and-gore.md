@@ -10,6 +10,54 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 - [x] Default-renderer Night Train captures, frozen toggle parity, fresh-profile boot comparison and fenced draw timing. [Evidence and usage](../dev-notes/2026-09-30-surface-blood/notes.md).
 - [ ] Deferred validation blocked by a pipeline error reproduced on unchanged base. Animated actors, glass, footprints and body-drag tracks remain outside this candidate.
 
+## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
+
+- [~] **Flail v1.5b built (2026-09-30); owner playtest pending.** Torn, splayed, wet-red lips on the flail's wounds; gun
+  wounds (pellets, slugs) keep their crater shape but get the wet red lip (spec §14.2, plan Tasks 31 and 35). Flying
+  flesh bits were built and are **OFF by default** (they read as giant round red blobs; `setFleshBits(true)` turns
+  them on). **Queued:**
+  - flesh as flat billboards/textured quads (little tattered skin) instead of marched chunks;
+  - red matter strings (plan Task 33, exploratory);
+  - an **optimization pass**: the torn-wound draw cost (about +0.7 ms in the head gate), the first-swing hitch, and
+    the gib blur layer rendering flying gibs as faint grey smears (also brain lumps?);
+  - wounds through zombie clothing stay stock; dynamite/explosion wounds were not given the wet lip.
+- [~] **v1.5a built (2026-09-29); owner playtest pending.** Impact: a slow tail after each hit, view-model recoil,
+  camera judder + FOV pinch, a bigger zombie reaction, shutter blur on the ball and chain, blood that builds up on
+  the flail, and both eyes popping at once. Spec §14.1. **v1.5b next:** torn splayed wound lips, flying flesh
+  chunks, red matter strings (spec §14.2).
+- [x] **v1.4 built (2026-09-29); playtested.** A head magnet (a strike within 18 cm of the head hits the
+  head, through raised arms), tougher zombies (~11 body hits; head kills ~8), and the ball trails behind the swing.
+  Spec §13.
+- [x] **v1.3 built (2026-09-28); playtested 2026-09-29** (feedback → v1.4). Gate passing. Chained clicks run R (overhand) → L (cross) →
+  H (a flat sweep, ±70°, the finisher); a pause of more than 0.35 s resets to R. About 8 body hits drop a zombie (7 with a
+  sweep among them). The flail never decapitates. The hit follows the crosshair (worst 0.77 cm off at the strike).
+  Spec §12 · strip `look/sweep-H-strip.png`.
+- [~] **Melee head damage model v2: built 2026-09-29; owner playtest pending.** The flesh wears away region by region.
+  - An orbit stripped to bone shows a 3D eye; the next hit pops it on a stalk and leaves a dark socket.
+  - Stripping the brow, crown or a cheek to the skull, then cracking it, sends a modelled brain flying out
+    and kills the zombie.
+  - Jelly wobble; the skull deforms with the flesh.
+  [Spec §15](../../docs/superpowers/specs/2026-09-28-melee-head-damage-design.md) ·
+  [NOTES](../../docs/dev-notes/2026-09-28-head-damage/NOTES.md) · gate `scripts/head-damage-gate.mjs`.
+- [x] **v1.2 built and playtested (2026-09-27/28).** Gate passing. The strike lands on the crosshair; the first
+  swing is a big overhand swipe; head hits 1–3 cave the face in (0.06 m) and the 4th snaps the neck; body craters 0.09 m;
+  5 hits drop a zombie; hand ×1.3. Root cause of the first-hit decapitation: the strike sat ~18° below the crosshair, so
+  aiming at the head cut the neck from the upper chest (plan, v1.2 section). Spec §11 ·
+  [NOTES](../../docs/dev-notes/2026-09-26-flail/NOTES.md) · strip `look/overhand-R-strip.png`.
+- [x] **v1.1 built (whip chain, gradual head damage); playtested 2026-09-27** (feedback → v1.2). [Plan](../../docs/superpowers/plans/2026-09-26-spike-flail.md) ·
+  [spec](../../docs/superpowers/specs/2026-09-26-spike-flail-design.md) · gate: `node scripts/flail-gate.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT"`
+  (with servers up via `scripts/lab-servers.sh`) · [NOTES](../../docs/dev-notes/2026-09-26-flail/NOTES.md) — click = preset swing
+  (alternating L/R), forgiving strike window, one big crater per hit. On branch
+  `claude/melee-weapon-design-7d1423` (PR #22) after stripping the censer.
+- [x] ~~Censer flail~~ — built and playtested 2026-09-26, **scrapped by the owner** (too hard to land a hit, too goofy).
+  [Spec](../../docs/superpowers/specs/2026-09-26-censer-flail-design.md) · [NOTES](../../docs/dev-notes/2026-09-26-censer/NOTES.md), kept for the record.
+  Kept from it: the melee slot/pickup, `blast()` reaction option, gib-shutter hitch fix.
+- [ ] **Severed limbs as physical debris** (owner likes it, 2026-09-26): cut-off limbs/heads land as objects the
+  flail (and shots) can knock about. Needs its own design.
+- [ ] **View-model wall clipping** (all weapons): weapons poke through walls when the player stands close; e.g. a
+  view-model depth range / separate pass, or pulling the weapon back near walls. Lower priority (owner, 2026-09-27).
+- [ ] **Demo recording of melee input**: the swing is not a recorded DemoFrame verb yet.
+
 ## Decap / ragdoll bugs + debug hooks — 2026-09-22
 
 - [x] **Legless bodies stood in the air.** `missingLimbs()` (webgpu/game-actor.ts) only counted a leg gone when its

@@ -12,6 +12,7 @@ import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-wea
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
 import { predictSlugHitNow } from './game-world-leaves';
+import { gunWetLipOn, setGunWetLip } from '../torn-lips';
 
 export function createWeaponAimSeams(ctx: GameContext) {
   return {
@@ -51,6 +52,13 @@ export function createWeaponAimSeams(ctx: GameContext) {
     },
     setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(ctx); },
     setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(ctx); },
+    /** Gun craters' wet red lip (torn-lips.ts, plan Task 35): off = the SAME craters render stock,
+     *  for a same-boot A/B (every actor's wound upload is refreshed). Ships ON. Returns the state. */
+    setWetLip(on: boolean) {
+      setGunWetLip(on);
+      for (const a of ctx.world.actors) a.refreshWoundUpload?.();
+      return gunWetLipOn();
+    },
     fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; } },
     /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
      *  computed by exactly the code fire() uses (muzzleWorld + converged
@@ -95,10 +103,11 @@ export function createWeaponAimSeams(ctx: GameContext) {
     selectSlot: (slot: WeaponSlot) => {
       if (ctx.vfx.cook.phase === 'cooking') return { ok: false, reason: 'cooking' };
       // VALIDATED, because a bad argument here does not fail — it POISONS.
-      // `WeaponSlot` is the string union 'shotgun' | 'dynamite' and the slot
-      // machine only ever compares against those, so a caller passing the
-      // NUMBER 2 (the obvious mistake for a driving script: the key is 2, the
-      // HUD says 2) gets a state whose `live`/`target` are 2 — the switch runs,
+      // `WeaponSlot` is the string union 'flail' | 'shotgun' | 'dynamite' |
+      // 'flare' and the slot machine only ever compares against those, so a
+      // caller passing the NUMBER 2 (the obvious mistake for a driving
+      // script: the key is 2, the HUD says 2) gets a state whose
+      // `live`/`target` are 2 — the switch runs,
       // reports `phase: 'up'`, makes NOTHING live, and every later press is
       // dropped by `liveDyn` with no error anywhere. That cost a soak rig an
       // hour of "the throws never detonate". A refusal is cheap; a silently
@@ -106,6 +115,7 @@ export function createWeaponAimSeams(ctx: GameContext) {
       if (!WEAPON_SLOTS.includes(slot)) {
         return { ok: false, reason: `unknown-slot:${String(slot)}` };
       }
+      if (slot === 'launcher' && !ctx.weapon.launcher) return { ok: false, reason: 'launcher-disabled:use-?launcher=1' };
       ctx.weapon.slotState = requestSlot(ctx.weapon.slotState, slot);
       updateHud(ctx);
       return { ok: true, live: ctx.weapon.slotState.live, target: ctx.weapon.slotState.target, phase: ctx.weapon.slotState.phase };

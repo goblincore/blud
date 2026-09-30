@@ -229,7 +229,7 @@ export function ensureCarvedLibrary(ctx: GameContext): boolean {
       return {
         baseColor: col(u.baseColor.value), deepColor: col(u.deepColor.value),
         fatColor: col(u.fatColor.value), mottleColor: col(u.mottleColor.value),
-        organColor: col(u.organColor.value), visceraColor: col(u.visceraColor.value),
+        organColor: col(u.organColor.value), boneColor: col(u.boneColor.value), visceraColor: col(u.visceraColor.value),
         woundDepthAmp: u.surfCfg3.value.x, fatDepth: u.surfCfg3.value.y,
         muscleDepth: u.surfCfg3.value.z, visceraAmp: u.surfCfg3.value.w,
         visceraDepth: u.visceraDepth.value, mottleAmp: u.surfCfg2.value.z,

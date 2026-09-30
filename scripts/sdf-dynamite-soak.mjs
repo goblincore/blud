@@ -11,7 +11,7 @@
 // while it is open.
 //
 // So this rig does not call `step` and does not stop the loop. It throws real
-// bundles (select slot 2, cook, release — the same edges a mouse gives), and it
+// bundles (select slot 3, cook, release — the same edges a mouse gives), and it
 // detonates on live bodies to guarantee the tear+gib path runs repeatedly. It
 // then asserts the things that would be stuck or leaking if any of that were
 // wrong, and it samples DURING the run so a transient bad state cannot hide.

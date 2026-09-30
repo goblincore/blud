@@ -68,3 +68,9 @@ Focused tests: 206 passing across blood simulation, goo, stain logic, renderer b
 Deferred startup fails with `renderPipeline_MeshBasicNodeMaterial_416: Color target has no corresponding fragment stage output`. The same failure reproduces on unchanged **eec99cca5** with no surface blood feature: [baseline error](base-deferred/failure.json). The candidate group is registered with the forward route, but deferred visuals remain **unverified** until that baseline renderer error is repaired.
 
 Initial scope: opaque world/art receivers and level mesh motion. No actor decals, footprints, body dragging, blood flow or projection across separate material/receiver boundaries. Mirrors/glass and swaying instanced props need explicit receiver policies later. Current visual evidence is Night Train plus synthetic bridge tests; other authored levels have not been captured.
+
+## PR integration update — 2026-09-30
+
+Merged current `origin/main` (`27797f70`) into the candidate before publishing the PR. Preserved both the new melee status and surface-blood status when resolving the sole documentation conflict. Re-ran the five focused files: **207 tests pass**; TypeScript passes; the feature diff against current main passes whitespace checks. The complete merge includes an existing upstream blank line at EOF in `game-head-damage.ts`, preserved unchanged.
+
+Re-ran the forward headless gate on the integrated branch: **36 floor marks / 384 vertices**, **120 final marks / 1,800 vertices**, **0 toggle-restoration pixel differences**, **40,554 visible-layer pixels**. Inspected the new floor capture. [Integrated metrics](integration-main-metrics.json) include noisy fenced timing samples; earlier base comparisons above belong to the original feature base, not a new performance claim against current main. Deferred was not retested in this publishing step.

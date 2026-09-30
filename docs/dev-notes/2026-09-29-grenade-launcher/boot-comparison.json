@@ -1,0 +1,21 @@
+{
+  "method": "one sequential sample per version; fresh browser profiles; OS Metal cache not purged",
+  "query": "seed=20260929&god",
+  "samples": [
+    {
+      "version": "HEAD eec99cca5",
+      "drawOnce": 1512.2,
+      "warmMs": 2233
+    },
+    {
+      "version": "current default",
+      "drawOnce": 1694.8,
+      "warmMs": 2410
+    },
+    {
+      "version": "current launcher=1",
+      "drawOnce": 1988.2,
+      "warmMs": 2872
+    }
+  ]
+}

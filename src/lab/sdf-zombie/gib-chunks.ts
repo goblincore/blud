@@ -96,6 +96,15 @@ export interface Chunk {
    *  Defaults to one origin sphere of `radius`, which reproduces the old
    *  single-radius floor behaviour for every caller that does not supply one. */
   support: readonly SupportSphere[];
+  /** Floor bounce override (absent: the kind's — RESTITUTION, or boneRestitution for a bone). A soft
+   *  MESH gib (the head damage's brain) sets a low one: it slaps down and stays, it does not bounce. */
+  restitution?: number;
+  /** Wall and ceiling bounce override (absent: CHUNK_TUNING.wallRestitution). The head damage's snapped eye sets a
+   *  lively one: it is a rubber-ball cartoon eye that caroms off the room. */
+  wallRestitution?: number;
+  /** A uniform size factor (absent: 1) folded into squashFactors: a flying flesh bit's closing shrink
+   *  (flesh-bits.ts fleshShrink). Both renderer paths scale the whole piece about its origin by it. */
+  shrink?: number;
 }
 
 /** One sphere of a chunk's local support shape: a centre in chunk-local space
@@ -176,6 +185,7 @@ export interface ChunkColliders {
  */
 function resolveBoxes(
   p: Vec3, v: Vec3, radius: number, boxes: readonly ChunkBox[],
+  restitution: number = CHUNK_TUNING.wallRestitution,
 ): { pos: Vec3; vel: Vec3; hit: boolean } {
   let [x, y, z] = p;
   let [vx, vy, vz] = v;
@@ -219,7 +229,7 @@ function resolveBoxes(
       // TANGENTIAL component by the floor's friction: a gib skids along a wall
       // exactly like it skids along the floor. Decomposed rather than scaled
       // per-axis, because the normal is not axis-aligned at a corner.
-      const j = -(1 + CHUNK_TUNING.wallRestitution) * vn;
+      const j = -(1 + restitution) * vn;
       vx += j * nx; vy += j * ny; vz += j * nz;
       const vnAfter = vx * nx + vy * ny + vz * nz;
       const tx = vx - vnAfter * nx, ty = vy - vnAfter * ny, tz = vz - vnAfter * nz;
@@ -303,10 +313,11 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
   // Airborne angular damping: the tumble DECAYS in flight (helicopter fix).
   angVel = scale(angVel, Math.max(0, 1 - CHUNK_TUNING.angularAirDamp * dt));
 
+  const wallRest = c.wallRestitution ?? CHUNK_TUNING.wallRestitution;
   // WALLS AND CEILING, before the floor: the floor is a plane and should have
   // the last word on y (a wall resolve can push a chunk downward).
   if (colliders?.boxes?.length) {
-    const r = resolveBoxes([x, y, z], [vx, vy, vz], c.radius, colliders.boxes);
+    const r = resolveBoxes([x, y, z], [vx, vy, vz], c.radius, colliders.boxes, wallRest);
     x = r.pos[0]; y = r.pos[1]; z = r.pos[2];
     vx = r.vel[0]; vy = r.vel[1]; vz = r.vel[2];
   }
@@ -317,7 +328,7 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
   const topOffset = supportTop(c.support, quat, squash, c.radius);
   if (ceilingY !== undefined && y + topOffset > ceilingY) {
     y = ceilingY - topOffset;
-    if (vy > 0) vy = -vy * CHUNK_TUNING.wallRestitution;
+    if (vy > 0) vy = -vy * wallRest;
     vx *= FLOOR_FRICTION; vz *= FLOOR_FRICTION;
   }
 
@@ -332,7 +343,7 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
       if (c.kind !== 'bone') {
         squash = Math.min(1, squash + Math.min(Math.abs(vy) * 0.16, 0.9));
       }
-      const rest = c.kind === 'bone' ? CHUNK_TUNING.boneRestitution : RESTITUTION;
+      const rest = c.restitution ?? (c.kind === 'bone' ? CHUNK_TUNING.boneRestitution : RESTITUTION);
       vy = -vy * rest;
       if (Math.abs(vy) < 0.35) vy = 0;
     }
@@ -434,7 +445,8 @@ export function chunkSettled(c: Chunk): boolean {
 /** Squash factors: flatten y, bulge xz — applied in WORLD axes after rotation. */
 export function squashFactors(c: Chunk): { sx: number; sy: number; sz: number } {
   const s = Math.min(1, Math.max(0, c.squash));
-  return { sx: 1 + s * 0.35, sy: 1 - s * 0.5, sz: 1 + s * 0.35 };
+  const k = c.shrink ?? 1;
+  return { sx: (1 + s * 0.35) * k, sy: (1 - s * 0.5) * k, sz: (1 + s * 0.35) * k };
 }
 
 /**

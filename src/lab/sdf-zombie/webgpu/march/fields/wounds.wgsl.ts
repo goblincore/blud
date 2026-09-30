@@ -4,6 +4,32 @@
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { ROW_WOUND, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_META } from '../layout';
+import { TORN } from '../../../torn-lips';
+
+// TORN LIPS (flail, spec §14.2, 2026-09-29). A wound whose flags.x integer part has
+// bit 3 (value 8, zombie-gpu.ts WOUND_FLAG.tear) is TORN: its ragged outline gains
+// a higher-frequency second octave (sharper lobes), and the everted rim follows the
+// SAME lobe value `lobe` — tall, wide petals where the edge juts out, low where it
+// dips — instead of a smooth torus. Every other wound takes lobe-free constants
+// (petal 1, width 1, carveK 0.75): multiplying by an exact 1.0 leaves its field
+// bit-identical. The petal/width ranges are sized so the torn rim stays inside the
+// per-wound reach (radius x 3.56 at the shipped rim uniforms: the widest petal's
+// x = 3 sits at ~3.5 radii with ragged 0.45) and its radial slope stays at the
+// pellet lip's (~0.9), which the game's plain near-wound steps already march.
+// The constants live in torn-lips.ts (TORN); its TEAR_LOOK raises the ragged
+// fraction and the rim splay/offset scales for the same wounds on the CPU side.
+const TORN_OCTAVE_FREQ = TORN.OCTAVE_FREQ;
+const TORN_OCTAVE_MIX = TORN.OCTAVE_MIX;
+const TORN_CARVE_K = TORN.CARVE_K;
+const TORN_PETAL_LO = TORN.PETAL_LO;
+const TORN_PETAL_HI = TORN.PETAL_HI;
+const TORN_WIDTH_LO = TORN.WIDTH_LO;
+const TORN_WIDTH_HI = TORN.WIDTH_HI;
+const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+/** The torn lobe value, 0..1, from the first-octave value `n` (already 0..1) and
+ *  the body-frame direction q. Shared by the carve and the mask so the footprint
+ *  follows the carved edge. */
+const TORN_LOBE = (n: string) => `mix(${n}, noise3(q * ${f(TORN_OCTAVE_FREQ)} + vec3<f32>(w.w * 577.0, w.w * 291.0, w.w * 733.0)) * 0.5 + 0.5, ${f(TORN_OCTAVE_MIX)})`;
 
 // Carves every wound out of the field. Burns barely subtract; they char.
 //
@@ -131,16 +157,22 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // unchanged by the scale. Every reach bound stays valid: s <= 1.45 < 2.
     // A = 0 (every round wound) takes rN = r, carveK = 1 — bit-identical.
     let ragged = select(0.0, fract(wMeta.x), wMeta.x > -0.5 && !isBurn);
+    // TORN (flags.x bit 3): see TORN LIPS above. torn is false for every other wound.
+    let torn = (i32(wFlags.x) & 8) != 0;
     var rN = r;
     var carveK = 1.0;
+    var lobe = 0.5;
     if (ragged > 0.0) {
       let v = (p - w.xyz) / max(r, 1e-6);
       let cy = cos(gInstYaw);
       let sy = sin(gInstYaw);
       let q = vec3<f32>(cy * v.x - sy * v.z, v.y, sy * v.x + cy * v.z);
       let n = noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5;
-      rN = r / (1.0 + ragged * n);
-      carveK = 0.75;
+      // The second octave steepens the field again (slope ~1.9 at A = 0.45), so a
+      // torn carve takes TORN_CARVE_K in place of 0.75; the zero set is unchanged.
+      if (torn) { lobe = ${TORN_LOBE('n')}; } else { lobe = n; }
+      rN = r / (1.0 + ragged * lobe);
+      carveK = select(0.75, ${f(TORN_CARVE_K)}, torn);
     }
     let dBefore = d;
     // SIZE-SCALED FILLET (cloth bullet holes, 2026-09-23): the carve's smooth
@@ -157,8 +189,11 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // re-fold's raiser gate in MAP_BODY. Bit 0 collects unowned wounds.
     if (d > dBefore) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
     if (rN < depth * 2.0) { near = 1.0; }
-    let x = (rN - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x, 1e-4);
-    let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn);
+    // Torn petals: the rim's height and width ride the lobe (exact 1.0 otherwise).
+    let petal = select(1.0, mix(${f(TORN_PETAL_LO)}, ${f(TORN_PETAL_HI)}, lobe), torn);
+    let widthK = select(1.0, mix(${f(TORN_WIDTH_LO)}, ${f(TORN_WIDTH_HI)}, lobe), torn);
+    let x = (rN - depth * woundCfg.w * wMeta.w) / max(depth * woundCfg2.x * widthK, 1e-4);
+    let amp = depth * woundCfg.z * wMeta.z * select(1.0, 0.25, isBurn) * petal;
     // Own-amp bound for the re-fold pre-scan (MAP_BODY): the most this
     // row's bump can LOWER a field, filed under its owner (0 = unowned).
     if (gWoundCluster == 0.0) { gWoundAmp[u32(owner)] = gWoundAmp[u32(owner)] + amp; }
@@ -224,6 +259,8 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
   var m = 0.0;
   var cav = 0.0;
   gWoundHole = 0.0;
+  gWoundTear = 0.0;
+  gWoundWetOnly = 0.0;
   gClothMark = 0.0;
   gClothStain = 0.0;
   // Per-instance wound count: the slot loop's loadInstance set this before
@@ -238,16 +275,19 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     // Ragged craters (see applyWounds): the footprint follows the same edge.
     let tId = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + gBand), 0).x;
     let ragged = select(0.0, fract(tId), tId > -0.5 && tId < 1.5);
+    let fBits = i32(flags.x);
     var rM = length(p - w.xyz);
     if (ragged > 0.0) {
       let v = (p - w.xyz) / max(rM, 1e-6);
       let cy = cos(gInstYaw);
       let sy = sin(gInstYaw);
       let q = vec3<f32>(cy * v.x - sy * v.z, v.y, sy * v.x + cy * v.z);
-      rM = rM / (1.0 + ragged * (noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5));
+      let n = noise3(q * 1.8 + vec3<f32>(w.w * 917.0, w.w * 413.0, w.w * 211.0)) * 0.5 + 0.5;
+      // Torn wounds (bit 3): the carve's two-octave edge — the SAME footprint.
+      if ((fBits & 8) != 0) { rM = rM / (1.0 + ragged * ${TORN_LOBE('n')}); }
+      else { rM = rM / (1.0 + ragged * n); }
     }
     let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, rM);
-    let fBits = i32(flags.x);
     // CLOTH DECALS (bit 2): the same footprint, but kept OUT of m — a decal
     // is not a wound to the flesh passes (no tissue, no gloss, no halo). The
     // paint block draws it: bit 1 set = scorched bullet hole, else a stain.
@@ -276,9 +316,21 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     // cavity was the only thing it could hold.
     if ((fBits & 1) != 0) { cav = max(cav, contribution); }
     if ((fBits & 2) != 0) { gWoundHole = max(gWoundHole, contribution); }
+    // TORN (bit 3, flail, 2026-09-29) or WET LIP (bit 4, gun craters, Task 35): the
+    // SAME footprint again, over those wounds only — the wet red lip / glossy
+    // interior / clotted floor weight the SOLDIER_MEAT and WET blocks read. Not a
+    // second edge: it is m restricted. Bit 4 is SHADING only: the carve's shape
+    // (applyWounds' torn test), this mask's edge (above) and ngWounds' tap
+    // fallback all read bit 3 alone, so a wet-lip crater keeps its round bowl.
+    if ((fBits & 24) != 0) { gWoundTear = max(gWoundTear, contribution); }
+    // gWoundWetOnly: the wet-lip wounds that are NOT torn (bit 4 without bit 3) — the
+    // crater's calmer shading (SOLDIER_MEAT) rides gWoundWetOnly / gWoundTear.
+    if ((fBits & 24) == 16) { gWoundWetOnly = max(gWoundWetOnly, contribution); }
   }
   return vec3<f32>(m, m, cav);
 }
+var<private> gWoundTear: f32 = 0.0;
+var<private> gWoundWetOnly: f32 = 0.0;
 var<private> gWoundHole: f32 = 0.0;
 var<private> gClothMark: f32 = 0.0;
 var<private> gClothStain: f32 = 0.0;`

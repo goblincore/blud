@@ -61,6 +61,21 @@ describe('stepChunk', () => {
     expect(bounced!.vel[1]).toBeGreaterThan(0.3);
   });
 
+  it('a per-chunk restitution overrides the kind (a soft mesh gib slaps down)', () => {
+    const drop = (restitution?: number) => {
+      let c: Chunk = { ...makeChunk('head', [0, 0.3, 0], [0, -4, 0], 0.05, [0, 1, 0], rng, 'gob'), restitution };
+      for (let i = 0; i < 120; i++) {
+        const next = stepChunk(c, 1 / 60);
+        if (c.vel[1] < 0 && next.pos[1] <= 0.05 + 1e-9) return { impact: -c.vel[1], out: next.vel[1] };
+        c = next;
+      }
+      throw new Error('never landed');
+    };
+    const soft = drop(0.2), gob = drop();
+    // Out speed / the last pre-contact speed (the landing frame adds a little gravity first): ~the restitution.
+    expect(soft.out / soft.impact).toBeGreaterThan(0.18); expect(soft.out / soft.impact).toBeLessThan(0.23);
+    expect(gob.out / gob.impact).toBeGreaterThan(0.5); expect(gob.out / gob.impact).toBeLessThan(0.62);
+  });
   it('topples: a vertical limb ends lying flat', () => {
     // Long axis local y, spawned upright, at rest on the floor.
     let c = makeChunk('legL', [0, 0.2, 0], [0, 0, 0], 0.2, [0, 1, 0], rng);
@@ -106,6 +121,13 @@ describe('chunkPoint / squashFactors', () => {
     expect(sx).toBeCloseTo(1.35, 5);
     expect(sy).toBeCloseTo(0.5, 5);
     expect(sz).toBeCloseTo(1.35, 5);
+  });
+
+  it('shrink scales the whole piece uniformly about its origin (a flesh bit\'s closing shrink)', () => {
+    const base = makeChunk('armL', [0, 0, 0], [0, 0, 0], 0.2, [0, 1, 0], rng);
+    const f = squashFactors({ ...base, squash: 1, shrink: 0.5 });
+    expect([f.sx, f.sy, f.sz].map(v => +v.toFixed(5))).toEqual([0.675, 0.25, 0.675]);
+    expect(squashFactors({ ...base, shrink: undefined })).toEqual({ sx: 1, sy: 1, sz: 1 });
   });
 });
 
@@ -189,6 +211,16 @@ describe('chunk walls', () => {
     expect(r.c.pos[0]).toBeLessThan(r.maxX);
     // ...and it is not glue: it came back with a real fraction of the speed.
     expect(Math.abs(r.c.vel[0])).toBeGreaterThan(2);
+  });
+
+  it('a per-chunk wallRestitution overrides the wall bounce (the snapped eye caroms off)', () => {
+    const off = (wallRestitution?: number) => {
+      const c: Chunk = { ...makeChunk('armL', [-1.5, 1, 0], [9, 0, 0], 0.15, [1, 0, 0], rng), wallRestitution };
+      return -fly(c, 40, { boxes: [WALL] }).c.vel[0];
+    };
+    const lively = off(0.75), plain = off();
+    expect(lively / plain).toBeGreaterThan(0.75 / 0.55 - 0.02);
+    expect(lively / plain).toBeLessThan(0.75 / 0.55 + 0.02);
   });
 
   it('skids along a wall rather than stopping dead on it', () => {

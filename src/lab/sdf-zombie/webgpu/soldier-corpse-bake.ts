@@ -41,7 +41,7 @@ export function soldierCorpseSnapshot(actor: ZombieActor): ChunkBakeData | null 
         owner: owner ? { prims:body.prims, clusters:[{...owner,alive:true}] } : undefined };
     }),
     look: { baseColor:col(u.baseColor.value),deepColor:col(u.deepColor.value),fatColor:col(u.fatColor.value),
-      mottleColor:col(u.mottleColor.value),organColor:col(u.organColor.value),visceraColor:col(u.visceraColor.value),
+      mottleColor:col(u.mottleColor.value),organColor:col(u.organColor.value),boneColor:col(u.boneColor.value),visceraColor:col(u.visceraColor.value),
       woundDepthAmp:u.surfCfg3.value.x,fatDepth:u.surfCfg3.value.y,muscleDepth:u.surfCfg3.value.z,
       visceraAmp:u.surfCfg3.value.w,visceraDepth:u.visceraDepth.value,mottleAmp:u.surfCfg2.value.z,
       mottleScale:u.surfCfg2.value.w,organAmp:u.organAmp.value,goreStrength:0 },

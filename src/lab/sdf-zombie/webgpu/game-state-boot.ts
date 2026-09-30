@@ -28,6 +28,25 @@ import type { RoomDef } from './game-level';
 import type { PassTiming } from './gpu-pass-timing';
 import type { LabRendererHandle } from './lab-renderer';
 import type { LoopController, WarmOutcome } from './warm-gate';
+
+/** `boot.spawnMeshGib`'s optional shape and tag. */
+export interface MeshGibOpts {
+  /** Narrow-phase floor support, object-local (gib-chunks SupportSphere). Default: one sphere of `radius`. */
+  support?: readonly { c: Vec3; r: number }[];
+  /** The object-local axis the topple lays flat. Default +y. */
+  longAxis?: Vec3;
+  /** Floor bounce (gib-chunks Chunk.restitution). Default: a gob's. */
+  restitution?: number;
+  /** For the seams (`__sdfGame.head.brains()` lists the 'brain' ones). */
+  tag?: string;
+}
+
+/** The handle `boot.attachPiece` returns. */
+export interface AttachedPiece {
+  /** `scale` (optional per prim): that prim's scale from now on (ChunkGpuView.morph). */
+  update(at: Vec3, localEnds: ReadonlyArray<{ a: Vec3; b: Vec3; scale?: Vec3 }>): void;
+  dispose(): void;
+}
 import type { WarmBackgroundTracker } from './warm-background';
 
 /** `game-main.ts`'s local `RES_RUNGS` keys (`?res=`); not exported there. */
@@ -126,6 +145,20 @@ export interface BootState {
   /** Gore-piece dispatch (head-pop debris, head-pop.ts); assigned with the
    *  sever dispatch, once the chunk spawner exists. */
   onGoreDispatch: ((actor: ZombieActor, pieces: import('../head-pop').GorePiece[]) => void) | null;
+  /** A kinematic SDF piece riding an actor (head damage's dangling eye): no
+   *  physics, never baked or evicted, one draw. `prims` are world-space at
+   *  `pos`; each frame the caller moves it (`at`) and bends it (`localEnds`,
+   *  world minus `at`, the same count and order as `prims`). Assigned once the
+   *  chunk spawner exists. `opts.clean` turns the chunk gore mask off
+   *  (lodCfg.w = 0, which every chunk reset sets to 1 = torn meat), so the
+   *  piece shades as its own prim colours: the dangling eye's white, glowing
+   *  iris and pink stalk. */
+  attachPiece?: (a: ZombieActor, prims: Primitive[], pos: Vec3, opts?: { clean?: boolean }) => AttachedPiece;
+  /** A MESH gib (head damage's modelled brain): `object` (a three mesh or group, not yet in the scene) rides
+   *  a gib-chunks Chunk launched at `pos` with `vel` and `angVel`, `radius` its broad-phase bound; stepped in
+   *  the chunk loop, capped (the oldest is removed), cleared on a cast rebuild (game-mesh-gibs.ts). Assigned
+   *  with the chunk spawner. */
+  spawnMeshGib?: (object: import('three/webgpu').Object3D, pos: Vec3, vel: Vec3, angVel: Vec3, radius: number, opts?: MeshGibOpts) => void;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */

@@ -21,7 +21,7 @@ import { carveBodyIntoPieces } from './gib-carve';
 const LOOK: ChunkLook = {
   baseColor: [0.78, 0.42, 0.40], deepColor: [0.45, 0.06, 0.05],
   fatColor: [0.86, 0.72, 0.58], mottleColor: [0.62, 0.30, 0.30],
-  organColor: [0.55, 0.12, 0.14], visceraColor: [0.48, 0.10, 0.12],
+  organColor: [0.55, 0.12, 0.14], boneColor: [0.71, 0.53, 0.35], visceraColor: [0.48, 0.10, 0.12],
   woundDepthAmp: 0.02, fatDepth: 0.006, muscleDepth: 0.012, visceraAmp: 0.5,
   visceraDepth: 0.03, mottleAmp: 0.3, mottleScale: 6, organAmp: 0.4,
   goreStrength: 1,

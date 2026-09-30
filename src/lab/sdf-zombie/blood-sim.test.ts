@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createBloodSim, burst, emitTrails, stepBlood, addScraps, SCRAP_TUNING,
-  spawnWoundDroplets, WOUND_BLEED, TRAIL_HIST, spawnImpactGout, IMPACT_GOUT,
+  spawnWoundDroplets, WOUND_BLEED, TRAIL_HIST, spawnImpactGout, IMPACT_GOUT, burstVolume, VOLUME_BURST,
 } from './blood-sim';
 import type { Vec3 } from './types';
 import type { Droplet } from './blood-sim';
@@ -14,6 +14,18 @@ function seeded(seed = 1): () => number {
 }
 
 describe('blood-sim', () => {
+  it('burstVolume: the full burst by default; a scaled one has fewer, slower drops', () => {
+    const full = createBloodSim();
+    burstVolume(full, [0, 1.7, 0], 0.06, [0, 0.4, 0], seeded());
+    expect(full.droplets).toHaveLength(VOLUME_BURST.drops + VOLUME_BURST.scraps);
+    const half = createBloodSim();
+    burstVolume(half, [0, 1.7, 0], 0.06, [0, 0.4, 0], seeded(), undefined, { count: 0.4, speed: 0.5 });
+    expect(half.droplets).toHaveLength(Math.round(VOLUME_BURST.drops * 0.4) + Math.round(VOLUME_BURST.scraps * 0.4));
+    const maxSpeed = (sim: typeof full) => Math.max(...sim.droplets.map(d => Math.hypot(d.vel[0], d.vel[1] - 0.4, d.vel[2])));
+    expect(maxSpeed(half)).toBeLessThanOrEqual(VOLUME_BURST.speedMax * 0.5 * 1.3 + 1e-9);
+    expect(maxSpeed(full)).toBeGreaterThan(VOLUME_BURST.speedMax * 0.5);
+  });
+
   it('burst spawns GIB_BURST.count droplets inside the game speed band', () => {
     const sim = createBloodSim();
     burst(sim, [0, 1, 0], seeded());

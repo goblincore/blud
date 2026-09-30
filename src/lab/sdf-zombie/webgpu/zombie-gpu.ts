@@ -25,6 +25,7 @@ import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
 import { bendCtrl, qRotate, qMul, type Quat, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
+import { TORN } from '../torn-lips';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import { LIST_VEC4S } from './light-list';
 import {
@@ -107,7 +108,11 @@ export interface ZombieGpuView {
      *  ROW_WOUND_FLAGS.x bit 1. Omitted = none. */
     holes?: readonly boolean[],
     /** Per-wound CLOTH DECAL flags (damage.ts clothDecal): bit 2. Omitted = none. */
-    decals?: readonly boolean[]): void;
+    decals?: readonly boolean[],
+    /** Per-wound TORN flags (damage.ts Wound.tear, the flail): bit 3. Omitted = none. */
+    tears?: readonly boolean[],
+    /** Per-wound WET-LIP flags (damage.ts Wound.wetLip, the gun): bit 4, shading only. Omitted = none. */
+    wetLips?: readonly boolean[]): void;
   /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
    *  Ships ON — the cull is a value no-op (outside the bound every per-wound
    *  reach test would `continue`). false parks the bound's radius at 1e9 (the
@@ -140,6 +145,9 @@ export interface ZombieGpuView {
    * out from under its neighbours. The caller owns the lifecycle.
    */
   setFaceTexture(tex: THREE.Texture, atlas: THREE.Vector4, mean: number): void;
+  /** Per-eye painted glow (melee head damage v2): false switches that eye's glow off (a popped eye). 'L' is
+   *  the face sheet's IMAGE-left eye (hs.x < 0), which is the zombie's own RIGHT eye. */
+  setEyeGlow(side: 'L' | 'R', on: boolean): void;
   applyMaterial(m: FleshMaterial, light: LightPreset): void;
   /**
    * PER-TILE LISTS (perf task 5). Present only when the view was created
@@ -484,6 +492,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     // the brow. Re-measure this if the art changes.
     faceCfg2: uniform(new THREE.Vector4(0, 0.5, 0.88, 1.6)),
     faceGlowRedOnly: uniform(0),
+    /** Per-eye glow switch (onL, onR, radiusUV, 0): melee head damage v2 (march/body/face.wgsl.ts). Not a
+     *  march param — it rides the per-instance record (REC_GORE.yzw, writeViewRecord). */
+    faceEyeMask: uniform(new THREE.Vector4(1, 1, 0.07, 0)),
     /** x glowFlicker, y timeSeconds, zw = noise root shift xz (setRootShift —
      *  the only spare vec2 in this uniform set; see march.wgsl.ts). Chunks
      *  overwrite zw per frame with their own position instead. */
@@ -1683,6 +1694,7 @@ export function writeViewRecord(
     // per-VIEW uniform, and the crowd shares one material, so the only way a
     // doomed body can wear the gore the chunks wear is through its own record.
     gore: u.lodCfg.value.w,
+    eyeMask: u.faceEyeMask.value.toArray(),
     // The per-instance half of the burn ramp, for the same reason as `gore`:
     // burnCfg is per VIEW and the crowd shares one material.
     burn: u.burnCfg.value.x, burnSec: u.burnCfg.value.y, charAmount: u.burnCfg.value.z,
@@ -2053,6 +2065,17 @@ export interface WriteWoundsLayout {
   stride?: number;
 }
 
+/** ROW_WOUND_FLAGS.x integer-part bits (the WGSL readers test `i32(flags.x) & bit`). */
+export const WOUND_FLAG = { cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16 } as const;
+
+/** The integer part of ROW_WOUND_FLAGS.x for one wound. The threat mask rides the
+ *  fraction (see writeWounds), so this stays an integer <= 31. */
+export function woundFlagBits(f: { cavity?: boolean; hole?: boolean; decal?: boolean; tear?: boolean; wetLip?: boolean }): number {
+  return (f.cavity ? WOUND_FLAG.cavity : 0) + (f.hole ? WOUND_FLAG.hole : 0)
+    + (f.decal ? WOUND_FLAG.decal : 0) + (f.tear ? WOUND_FLAG.tear : 0)
+    + (f.wetLip ? WOUND_FLAG.wetLip : 0);
+}
+
 export function writeWounds(
   texels: Float32Array,
   worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
@@ -2082,6 +2105,15 @@ export function writeWounds(
    *  clothDecal): bit 2 (value 4). The carve skips the wound and the paint
    *  block draws it. Omitted = none. */
   decals?: readonly boolean[],
+  /** Per-wound TORN flags (flail lips, 2026-09-29; damage.ts Wound.tear): bit 3
+   *  (value 8). The carve's edge takes a second octave and petal rims; the
+   *  mask's gWoundTear shades it wet red. Omitted = none. */
+  tears?: readonly boolean[],
+  /** Per-wound WET-LIP flags (gun wounds, 2026-09-29; damage.ts Wound.wetLip): bit 4
+   *  (value 16). SHADING only — the mask's gWoundTear footprint takes the wound, so
+   *  the torn wet red lip / glossy walls / clotted floor shade it; the carve's shape
+   *  and the analytic normal ignore the bit. Omitted = none. */
+  wetLips?: readonly boolean[],
 ): number {
   const stride = layout.stride ?? BASE_PRIM_STRIDE;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -2108,10 +2140,12 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
-    // Integer part is a BITFIELD: bit 0 cavity, bit 1 cloth bullet hole,
-    // bit 2 cloth decal (no carve).
-    texels[flagBase + i * 4] = (cavities?.[i] ? 1 : 0) + (holes?.[i] ? 2 : 0) + (decals?.[i] ? 4 : 0)
-      + ((threats?.[i] ?? 0) & 511) / 1024;
+    // Integer part is a BITFIELD (woundFlagBits): bit 0 cavity, bit 1 cloth
+    // bullet hole, bit 2 cloth decal (no carve), bit 3 torn, bit 4 wet lip;
+    // the fraction is the threat mask / 1024 (< 0.5).
+    texels[flagBase + i * 4] = woundFlagBits({
+      cavity: cavities?.[i], hole: holes?.[i], decal: decals?.[i], tear: tears?.[i], wetLip: wetLips?.[i],
+    }) + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
     texels[flagBase + i * 4 + 2] = owner?.start ?? 0;
@@ -2376,6 +2410,8 @@ export function createZombieGpuView(
   // the ceiling over every owner keeps this one number.
   let lastWoundThreatIn: {
     worldPositions: Vec3[]; radii: number[]; splayScales?: number[];
+    /** Torn wounds (flags bit 3): their rim peaks at TORN.PETAL_HI x the splay. */
+    tears?: readonly boolean[];
     caps?: readonly ({ n: Vec3; depth: number } | null)[];
     owners?: readonly ({ cluster: number; start: number; count: number } | null)[];
   } | null = null;
@@ -2392,7 +2428,8 @@ export function createZombieGpuView(
     const ampByOwner = new Map<number, number>();
     for (let i = 0; i < n; i++) {
       const o = w.owners?.[i]?.cluster ?? -1;
-      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1));
+      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1)
+        * (w.tears?.[i] ? TORN.PETAL_HI : 1));
     }
     const unowned = ampByOwner.get(-1) ?? 0;
     const margin0 = 4 * kw + kw * Math.min(n, 3) + 2 * p.maxBlendK + unowned;
@@ -2824,9 +2861,9 @@ export function createZombieGpuView(
       u.meltCfg.value.y = edgeOutAll ? 2 : motionOutAll ? 1 : 0;
       syncRecord();
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals) {
-      lastWoundThreatIn = { worldPositions, radii, splayScales, caps, owners };
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals);
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals, tears, wetLips) {
+      lastWoundThreatIn = { worldPositions, radii, splayScales, tears, caps, owners };
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals, tears, wetLips);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a
@@ -2879,6 +2916,11 @@ export function createZombieGpuView(
       u.faceTex.value = tex;
       u.faceAtlas.value.copy(atlas);
       u.faceCfg2.value.y = mean;
+    },
+    setEyeGlow(side, on) {
+      if (side === 'L') u.faceEyeMask.value.x = on ? 1 : 0;
+      else u.faceEyeMask.value.y = on ? 1 : 0;
+      syncRecord();
     },
     applyMaterial(m, light) {
       u.baseColor.value.setRGB(...m.baseColor);
@@ -2938,6 +2980,8 @@ export interface ChunkGpuView {
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
   reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[], template?: MarchUniforms): void;
   update(chunk: Chunk): void;
+  /** Hand-posed pieces (the head damage model's dangling eye): replace the local prims' endpoints (chunk-local, the same count and order as reset()'s prims) before the next update(). An entry's optional `scale` replaces that prim's scale (the radius row is packed once, at reset(); the scale row is rewritten every update(), so a uniform scale is how a piece's prim grows). Radii, colours and the reset() extent are unchanged. */
+  morph(ends: ReadonlyArray<{ a: Vec3; b: Vec3; scale?: Vec3 }>): void;
   /** Re-write this view's record slot from its uniforms now (update() does it too). The game
    *  calls it after writing the view's light picks (bodyLights, shared light list Task 12),
    *  which happens after update() in the frame. */
@@ -3127,6 +3171,11 @@ export function createChunkGpuView(
   let faceCentreLocal: Vec3 = [0, 0, 0];
   let faceRestQuat: Quat = [0, 0, 0, 1];
   let faceRestAxes: Vec3 = [1, 1, 1];
+  /** A MORPHED piece's tight chunk-local AABB of its current prims (morph() sets it, reset() clears it).
+   *  With it, update() fits the proxy box and the cluster sphere to the bent piece instead of reset()'s
+   *  rotation-proof cube around the origin: the dangling eye's origin is its socket, so that cube was
+   *  0.57 m wide, straddled the whole face, and every pixel of it marched the (mostly empty) field. */
+  let morphBox: { min: Vec3; max: Vec3 } | null = null;
 
   function copyTemplateLook() {
     u.faceTex.value = template.faceTex.value;
@@ -3177,6 +3226,7 @@ export function createChunkGpuView(
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);
     u.faceGlowRedOnly.value = template.faceGlowRedOnly.value;
+    u.faceEyeMask.value.copy(template.faceEyeMask.value);
     u.faceCfg3.value.copy(template.faceCfg3.value);
     u.lodCfg.value.copy(template.lodCfg.value);
     u.faceProj.value.copy(template.faceProj.value);
@@ -3369,6 +3419,7 @@ export function createChunkGpuView(
     faceRestQuat = template.headQuat.value.toArray() as Quat;
     faceRestAxes = template.headAxes.value.toArray() as Vec3;
     proxySize = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
+    morphBox = null;
 
     const { sx, sy, sz } = apply(c);
     mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
@@ -3438,6 +3489,7 @@ export function createChunkGpuView(
           fatColor: col(u.fatColor),
           mottleColor: col(u.mottleColor),
           organColor: col(u.organColor),
+          boneColor: col(u.boneColor),
           visceraColor: col(u.visceraColor),
           woundDepthAmp: u.surfCfg3.value.x,
           fatDepth: u.surfCfg3.value.y,
@@ -3478,11 +3530,53 @@ export function createChunkGpuView(
           bendCtrl(chunkPoint(current, p.a, sx, sy, sz), chunkPoint(current, p.b, sx, sy, sz))) : undefined,
       }));
     },
+    morph(ends) {
+      // Chunk-local endpoints; apply() (next update()) rewrites the world rows
+      // from `local`, so this costs no re-pack. `extent` stays the reset() one.
+      ends.forEach((e, i) => { const p = local[i]; if (p) local[i] = e.scale ? { ...p, a: e.a, b: e.b, scale: e.scale } : { ...p, a: e.a, b: e.b }; });
+      // The tight local AABB of the bent piece (flesh and bones), padded like proxySize: the blend reach
+      // plus a margin.
+      const pad = packed.maxBlendK * 2 + 0.01;
+      const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+      for (const p of [...local, ...localBones]) {
+        if (p.op === 'sub') continue;
+        // The prim's own reach (radius x scale, box/strand/shell): chunkExtent of it collapsed to a point.
+        const r = chunkExtent([{ ...p, b: p.a, bend: undefined }], p.a) + pad;
+        const ends = p.bend === undefined ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
+        for (const e of ends) for (let k = 0; k < 3; k++) {
+          min[k] = Math.min(min[k]!, e[k]! - r); max[k] = Math.max(max[k]!, e[k]! + r);
+        }
+      }
+      morphBox = Number.isFinite(min[0]) ? { min: min as unknown as Vec3, max: max as unknown as Vec3 } : null;
+    },
     update(c: Chunk) {
       const { sx, sy, sz } = apply(c);
-      mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
-      mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
-      u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+      if (morphBox) {
+        // The box's 8 corners through the chunk transform → the world AABB. Mesh position and bodyHalf
+        // ARE the march's box (writeViewRecord's bodyCentre/bodyHalf); the prims are world-space rows.
+        const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+        for (let i = 0; i < 8; i++) {
+          const w = chunkPoint(c, [
+            (i & 1 ? morphBox.max : morphBox.min)[0], (i & 2 ? morphBox.max : morphBox.min)[1],
+            (i & 4 ? morphBox.max : morphBox.min)[2]] as Vec3, sx, sy, sz);
+          for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k]!, w[k]!); hi[k] = Math.max(hi[k]!, w[k]!); }
+        }
+        const ctr = [(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2] as const;
+        const size = [hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!] as const;
+        mesh.position.set(ctr[0], ctr[1], ctr[2]);
+        mesh.scale.set(size[0], size[1], size[2]);
+        u.bodyHalf.value.set(size[0] / 2, size[1] / 2, size[2] / 2);
+        // The cluster (= its one group) sphere: around the box, not reset()'s straight-piece extent.
+        const rad = Math.hypot(size[0], size[1], size[2]) / 2;
+        packed.clusterBounds.set([ctr[0], ctr[1], ctr[2], rad], 0);
+        packed.groupBounds.set([ctr[0], ctr[1], ctr[2], rad], 0);
+        writeRow(ROW_CLUSTER_BOUNDS, packed.clusterBounds, 1);
+        writeRow(ROW_GROUP_BOUNDS, packed.groupBounds, 1);
+      } else {
+        mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
+        mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
+        u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+      }
       syncChunkRecord();
     },
     syncRecord: syncChunkRecord,
