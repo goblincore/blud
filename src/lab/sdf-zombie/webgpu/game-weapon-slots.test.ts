@@ -25,14 +25,16 @@ function run(state: WeaponSlotState, sec: number, press?: WeaponSlot): WeaponSlo
 }
 
 describe('slot mapping', () => {
-  it('maps 1, 2 and 3 and nothing else', () => {
-    expect(slotForKey('Digit1')).toBe('shotgun');
-    expect(slotForKey('Digit2')).toBe('dynamite');
-    expect(slotForKey('Digit3')).toBe('flare');
-    expect(slotForKey('Digit4')).toBeNull();
+  it('maps 1 through 5 and nothing else', () => {
+    expect(slotForKey('Digit1')).toBe('flail');
+    expect(slotForKey('Digit2')).toBe('shotgun');
+    expect(slotForKey('Digit3')).toBe('dynamite');
+    expect(slotForKey('Digit4')).toBe('launcher');
+    expect(slotForKey('Digit5')).toBe('flare');
+    expect(slotForKey('Digit6')).toBeNull();
     expect(slotForKey('KeyE')).toBeNull();
-    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(3);
-    expect(WEAPON_SLOTS).toEqual(['shotgun', 'dynamite', 'flare']);
+    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(5);
+    expect(WEAPON_SLOTS).toEqual(['flail', 'shotgun', 'dynamite', 'launcher', 'flare']);
   });
 });
 
@@ -130,7 +132,7 @@ describe('cancel and retarget', () => {
   });
 });
 
-describe('flare (slot 3)', () => {
+describe('flare (slot 5)', () => {
   it('settles on the flare and holsters both other slots', () => {
     let s = requestSlot(makeWeaponSlotState(), 'flare');
     s = run(s, WEAPON_SWITCH.lowerSec + WEAPON_SWITCH.raiseSec + STEP);

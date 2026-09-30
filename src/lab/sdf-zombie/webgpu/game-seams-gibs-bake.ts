@@ -107,6 +107,32 @@ export function createGibsBakeSeams(ctx: GameContext) {
       ctx.boot.onGoreDispatch(a, pieces);
       return pieces.length;
     },
+    /** DEV smoke for `boot.attachPiece` (melee head damage task 5): a 3 cm
+     *  sphere-ish capsule rides the actor's head for `frames` rendered frames,
+     *  swinging and bending, then is disposed. Resolves with the view pool
+     *  counts before, during and after, or null outside DEV. */
+    debugAttachPiece: async (id?: number, frames = 30) => {
+      if (!import.meta.env.DEV) return null;
+      const a = id !== undefined ? ctx.world.actors.find(q => q.id === id) : ctx.world.actors[0];
+      if (!a || !ctx.boot.attachPiece) return null;
+      const head = a.posed().prims.filter(p => p.limb === 'head' && !p.dead);
+      if (head.length === 0) return null;
+      const c: Vec3 = [...head[0]!.a] as Vec3;
+      const pos: Vec3 = [c[0], c[1] - 0.1, c[2]];
+      const len = 0.06;
+      const prim = { ...head[0]!, a: pos, b: [pos[0], pos[1] - len, pos[2]] as Vec3, radius: 0.03, scale: [1, 1, 1] as Vec3, bend: undefined, op: 'add' as const };
+      const counts = () => ({ views: ctx.bake.views.length, spare: ctx.bake.spareViews.length, attached: ctx.bake.attachedViews.length, live: ctx.bake.liveChunks.length });
+      const before = counts();
+      const h = ctx.boot.attachPiece(a, [prim], pos);
+      const during = counts();
+      for (let f = 0; f < frames; f++) {
+        await new Promise(r => requestAnimationFrame(r));
+        const sw = Math.sin(f * 0.3) * 0.03;
+        h.update([pos[0] + sw, pos[1], pos[2]], [{ a: [0, 0, 0], b: [sw, -len, 0] }]);
+      }
+      h.dispose();
+      return { before, during, after: counts() };
+    },
     /** Live (flying) / baked (settled) gib-piece counts — a driver's check that
      *  a gore spawn (the cultist's head pop, head-pop.ts) actually landed. */
     chunkCounts: () => ({ live: ctx.bake.liveChunks.length, baked: ctx.bake.chunks.length, views: ctx.bake.views.length }),
@@ -150,6 +176,7 @@ export function createGibsBakeSeams(ctx: GameContext) {
         c.view.object.visible = !ctx.bake.hidden && (c.kind !== 'bone' || ctx.render.bonesVisible);
       }
       for (const b of ctx.bake.chunks) b.mesh.visible = !ctx.bake.hidden;
+      for (const v of ctx.bake.attachedViews) v.object.visible = !ctx.bake.hidden;
       // SPRITE PIECES COUNT AS PIECES HERE. This seam is the "pieces shown vs
       // hidden" arm every cost rig and differential uses, and a rig that had to
       // know which render mode was on would be a rig that silently measured

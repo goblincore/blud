@@ -33,6 +33,12 @@ export interface GorePiece {
   kind: 'gob';
   vel: Vec3;
   angVel: Vec3;
+  /** Floor / wall bounce overrides (Chunk.restitution / wallRestitution); absent: the gob's. */
+  restitution?: number;
+  wallRestitution?: number;
+  /** 'eye': the head damage's snapped eye — never baked, and evicted last (game-main spawnChunkPiece).
+   *  'flesh': a flying flesh bit (flesh-bits.ts) — never baked, capped, removed after its life, evicted first. */
+  tag?: 'eye' | 'flesh';
 }
 
 /** Linear-RGB paint for the debris. Eyeballed on the game capture. */
@@ -40,8 +46,15 @@ export const GORE_COLORS = {
   eyeWhite: [0.80, 0.76, 0.66] as Vec3,
   pupil: [0.02, 0.01, 0.01] as Vec3,
   nerve: [0.36, 0.04, 0.04] as Vec3,
+  /** The pink, glossy optic-nerve stalk of a dangling eye. */
+  stalk: [0.85, 0.45, 0.52] as Vec3,
   brain: [0.58, 0.38, 0.40] as Vec3,
   flesh: [0.30, 0.03, 0.03] as Vec3,
+  /** Raw torn meat (brighter than shatterHead's MEAT: at 0.32 the flying bits read near-black under the flail's
+   *  dim fill) and yellow subcutaneous fat (the flesh preset's fatColor, dimmed for
+   *  the chunk shading): the flying flesh bits (flesh-bits.ts). */
+  meat: [0.75, 0.09, 0.06] as Vec3,
+  fat: [0.62, 0.50, 0.26] as Vec3,
   bone: [0.72, 0.66, 0.52] as Vec3,
 };
 
@@ -52,8 +65,24 @@ const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const scale = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
 const norm = (a: Vec3): Vec3 => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
-function prim(a: Vec3, b: Vec3, radius: number, color: Vec3, o: Partial<Primitive> = {}): Primitive {
+export function prim(a: Vec3, b: Vec3, radius: number, color: Vec3, o: Partial<Primitive> = {}): Primitive {
   return { a, b, radius, scale: [1, 1, 1], blendK: 0.003, limb: 'head', cluster: 0, color, ...o };
+}
+
+/** One cartoon eyeball (2.5x life at the default `r` = EYEBALL_R): white, glowing iris, pupil, and a short nerve
+ *  stub behind it. Every size and offset scales with `r` (the head damage's in-orbit eye is life-size). */
+export function eyeballPrims(centre: Vec3, look: Vec3, iris: Vec3, withNerve = true, r = EYEBALL_R): Primitive[] {
+  const o = centre;
+  const out: Primitive[] = [
+    prim(o, o, r, GORE_COLORS.eyeWhite, { gloss: 0.6 }),
+    prim(add(o, scale(look, r * 0.72)), add(o, scale(look, r * 0.72)), r * 0.50, iris, { glow: 1.0, blendK: 0.001 }),
+    prim(add(o, scale(look, r * 1.05)), add(o, scale(look, r * 1.05)), r * 0.24, GORE_COLORS.pupil, { blendK: 0.001 }),
+  ];
+  if (withNerve) {
+    out.push(prim(add(o, scale(look, -r * 0.8)), add(o, scale(look, -r * 3.2)), r * 0.24, GORE_COLORS.nerve,
+      { radiusB: r * 0.10, bend: [0, -0.015, 0] }));
+  }
+  return out;
 }
 
 /** A random unit vector biased into the hemisphere around `bias`. */
@@ -82,13 +111,7 @@ export function headPopDebris(head: { origin: Vec3; prims: Primitive[] }, dir: V
     const o = e.at;
     out.push({
       limb: 'head', origin: o, kind: 'gob', tornAt: [], bones: [],
-      prims: [
-        prim(o, o, EYEBALL_R, GORE_COLORS.eyeWhite, { gloss: 0.6 }),
-        prim(add(o, scale(look, EYEBALL_R * 0.72)), add(o, scale(look, EYEBALL_R * 0.72)), EYEBALL_R * 0.50, e.iris, { glow: 1.0, blendK: 0.001 }),
-        prim(add(o, scale(look, EYEBALL_R * 1.05)), add(o, scale(look, EYEBALL_R * 1.05)), EYEBALL_R * 0.24, GORE_COLORS.pupil, { blendK: 0.001 }),
-        prim(add(o, scale(look, -EYEBALL_R * 0.8)), add(o, scale(look, -EYEBALL_R * 3.2)), EYEBALL_R * 0.24, GORE_COLORS.nerve,
-          { radiusB: EYEBALL_R * 0.10, bend: [0, -0.015, 0] }),
-      ],
+      prims: eyeballPrims(o, look, e.iris),
       // Highest and spinning hardest — the joke is the eyes, so they must be
       // SEEN: a big slow arc (apex ~0.5-0.8 m over the head, 1-2 m out), not
       // a bullet. The first cut (5-8 m/s + 3-5.5 up) left frame in 0.1 s.

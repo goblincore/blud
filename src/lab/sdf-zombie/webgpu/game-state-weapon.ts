@@ -27,6 +27,9 @@
 
 import type { Rocket } from '../rockets';
 import type { FlareHarness } from './game-flare';
+import type { FlailWeapon } from './game-flail';
+import type { HeadDamageLeaf } from './game-head-damage';
+import type { LauncherView } from './game-launcher-view';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { StickProp } from './fpv-view';
@@ -85,8 +88,14 @@ export interface WeaponState {
   viewModelAnchor: THREE.Group;
   /** The aim (yaw/pitch) pivot for the gun rig, or null before it is built. */
   aimRig: THREE.Group | null;
-  /** Slot 3 (flare test harness, game-flare.ts); null until the aim rig exists. */
+  /** Slot 5 (flare test harness, game-flare.ts); null until the aim rig exists. */
   flare: FlareHarness | null;
+  /** Slot 1 (the spike flail, game-flail.ts); null until the aim rig exists. */
+  flail: FlailWeapon | null;
+  /** The melee head damage leaf (game-head-damage.ts): the flail's head-region hits; null until built. */
+  headDamage: HeadDamageLeaf | null;
+  /** Opt-in slot 4 FPV prototype, absent unless ?launcher=1. */
+  launcher: LauncherView | null;
   /** The gun's own rig group; the codemod supplies the real group. */
   gunRig: THREE.Group;
   /** The top-lever hinge pivot, or null before it is built. */
@@ -179,6 +188,14 @@ export interface WeaponState {
   reloadSpeed: number;
   /** Recoil pitch applied to the gun this shot, in radians. */
   recoilPitch: number;
+  /**
+   * THE FLAIL'S IMPACT FEEL (flail-impact.ts), published once a tick by the flail's timeScale() and read
+   * by the camera (game-main): `pitch` rad added to the view pitch next to recoilPitch; `shake` = [view
+   * right m, up m, roll rad] summed with player-hit-feedback's eye offset; `fovDeg` the FOV punch (deg,
+   * negative = pinch). `fovApplied`/`fovBase` are the camera's own bookkeeping: the punch camera.fov
+   * currently carries and the render FOV it was taken from (restored exactly when the punch ends).
+   */
+  impact: { pitch: number; shake: [number, number, number]; fovDeg: number; fovApplied: number; fovBase: number };
   /** `?slug` — true when the single-slug round is selected. */
   slugMode: boolean;
   /** The shotgun/dynamite three-phase switch machine. */
@@ -203,6 +220,9 @@ export function makeWeaponState(): WeaponState {
     viewModelAnchor: unbuilt<THREE.Group>(),
     aimRig: null,
     flare: null,
+    flail: null,
+    headDamage: null,
+    launcher: null,
     gunRig: unbuilt<THREE.Group>(),
     hingePivot: null,
     muzzleNodes: [],
@@ -249,6 +269,7 @@ export function makeWeaponState(): WeaponState {
     pinnedReloadSeed: null,
     reloadSpeed: 1,
     recoilPitch: 0,
+    impact: { pitch: 0, shake: [0, 0, 0], fovDeg: 0, fovApplied: 0, fovBase: 0 },
     slugMode: false,
     slotState: unbuilt<WeaponSlotState>(),
     heldProp: null,

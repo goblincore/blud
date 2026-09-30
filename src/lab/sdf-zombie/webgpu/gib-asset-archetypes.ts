@@ -53,6 +53,7 @@ export function gibLookFromMaterial(m: FleshMaterial): ChunkLook {
     fatColor: [...m.fatColor] as [number, number, number],
     mottleColor: [...m.mottleColor] as [number, number, number],
     organColor: [...m.organColor] as [number, number, number],
+    boneColor: [...m.boneColor] as [number, number, number],
     visceraColor: [...m.visceraColor] as [number, number, number],
     woundDepthAmp: m.woundDepthAmp,
     fatDepth: m.fatDepth,

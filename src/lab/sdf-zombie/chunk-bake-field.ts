@@ -21,13 +21,12 @@
 //                            drops — noted in the task report).
 //   bones/organs ........... hard min, ONLY where some wound's r < depth*2 —
 //                            the applyBones nearWound gate verbatim. A bone
-//                            that won the min shades AS PLAIN MEAT in the
-//                            march (the bone albedo branch was deleted when
-//                            bone tubes landed; isBone only feeds the melt
-//                            ramp), so the bake paints it as meat too — the
-//                            bone matters here for the crater's SILHOUETTE
-//                            and crease, not its colour. Organs DO tint
-//                            (the isOrgan branch is alive) and are handled.
+//                            that won the min shades as BONE in the march
+//                            (albedo restored 2026-09-28, head damage spec
+//                            §14) and the bake mirrors it: boneColor with the
+//                            0.22 junction stain, exempt from the gore mask,
+//                            matte via the alpha channel. Organs tint too (the
+//                            isOrgan branch).
 //
 // The march's silhouette noise and the melt's volume displacement are NOT
 // mirrored — the baked surface is the clean field. On the game page the melt
@@ -35,8 +34,8 @@
 // are noted in the report rather than ported.
 //
 // The colour baker mirrors the ALBEDO chain only (march.wgsl.ts ~2640-2760):
-// tissue ramp by pre-wound depth, the wound mask mix, organ tint, mottle
-// blotch, and the chunk gore mask (lodCfg.w = 1). Spec/fresnel/AO/scatter/
+// tissue ramp by pre-wound depth, the wound mask mix, organ tint, bone
+// albedo, mottle blotch, and the chunk gore mask (lodCfg.w = 1). Spec/fresnel/AO/scatter/
 // wound-shadow are LIVE lighting, owned by the baked mesh's shader
 // (baked-chunks.ts), not baked. fbm/noise3/hash13 are transliterations of
 // the WGSL constants so the mottle pattern matches character, and with the
@@ -110,7 +109,7 @@ export interface ChunkFieldEvals {
   /** True when any torn end sits within 2x its radius — applyBones' gate. */
   nearWound(p: Vec3): boolean;
   /** Which material owns the surface: 'organ' when an organ prim wins the
-   *  near-wound min, 'bone' when a bone does (painted as meat — see the
+   *  near-wound min, 'bone' when a bone does (painted as bone — see the
    *  header), 'flesh' otherwise. */
   materialAt(p: Vec3): 'flesh' | 'bone' | 'organ';
 }
@@ -184,9 +183,7 @@ export function chunkBakeField(parts: ChunkBakeParts): ChunkFieldEvals {
       // AFTER the carve, and a prim claims the surface when its own distance
       // at the hit is BELOW the field it joined — i.e. its iso was crossed
       // first. At a zero of the full field that is exactly "the point is
-      // INSIDE the bone/organ". Bone shades as plain meat in the march (the
-      // isBone branch only feeds the melt ramp), so the bake only ACTS on
-      // 'organ' — but the attribution itself is kept honest for tests.
+      // INSIDE the bone/organ".
       if (!nearWound(p)) return 'flesh';
       const b = boneMin(p);
       if (b && b.d < 0) return b.organ ? 'organ' : 'bone';
@@ -200,6 +197,9 @@ export function chunkBakeField(parts: ChunkBakeParts): ChunkFieldEvals {
  *  genuine skin vertex at preWound = 0 to well under a tenth of that (measured
  *  p50 = 0.47 mm over the carve library), and a cut face is 3-5 cells across, so
  *  this is a crisp tear rim and not a gradient smeared over the piece. */
+/** The march's bone wetness factor (wet.wgsl.ts `select(1.0, 0.25, isBone)`). */
+export const BONE_MATTE = 0.25;
+
 export const CUT_BAND = 0.0015;
 
 /**
@@ -327,6 +327,8 @@ export interface ChunkLook {
   fatColor: Vec3;
   mottleColor: Vec3;
   organColor: Vec3;
+  /** The march's `boneColor` uniform (MaterialBlock.boneColor). */
+  boneColor: Vec3;
   visceraColor: Vec3;
   /** surfCfg3 = (woundDepthAmp, fatDepth, muscleDepth, visceraAmp). */
   woundDepthAmp: number;
@@ -361,6 +363,7 @@ export function bakeChunkAlbedo(
   faceCover = 0,
 ): [number, number, number, number] {
   const wm = ev.woundMask(p);
+  const isBone = ev.materialAt(p) === 'bone';
   // Tissue ramp by depth beneath the ORIGINAL skin. The march reads
   // max(0, -preWoundField.w) * woundDepthAmp at the hit; the extraction
   // vertices stand on the CARVED surface, so the un-carved field there is
@@ -408,6 +411,16 @@ export function bakeChunkAlbedo(
     albedo = mix3(albedo, look.organColor, look.organAmp);
   }
 
+  // Bone (the isBone branch of the march's organ block, restored 2026-09-28,
+  // head damage spec §14): a bone prim that won the near-wound min reads as
+  // bone, stained toward the meat only at the junction. tissueDepth is the same
+  // pre-wound depth the ramp reads; the 0.22 stain weight is the march's, not
+  // the old 0.55 (which painted a whole skull plate red-brown).
+  if (isBone) {
+    const boneStain = 1 - smoothstep(0, 0.012, tissueDepth - look.muscleDepth);
+    albedo = mix3(look.boneColor, [look.deepColor[0] * 0.8, look.deepColor[1] * 0.8, look.deepColor[2] * 0.8], boneStain * 0.22);
+  }
+
   // Colour mottle: smoothstep on the fbm blotch (the shipped mapping, NOT
   // the 0.5+0.5 remap that read as a flat tint), over the rest anchor.
   if (look.mottleAmp > 0) {
@@ -421,7 +434,9 @@ export function bakeChunkAlbedo(
   // face layer for the same reason — a head must not bake its face under 85%
   // clot. faceCover is 0 off the face and on every non-head piece, so those
   // vertices are unchanged.
-  const goreStrength = look.goreStrength * (1 - faceCover);
+  // Bone is exempt, as in the march's gore block: at a torn end wm ~ 1 would
+  // repaint the ivory stub as dark clot.
+  const goreStrength = look.goreStrength * (1 - faceCover) * (isBone ? 0 : 1);
   if (goreStrength > 0) {
     const mottle = Math.min(1, Math.max(0, fbm([anchor[0] * 6, anchor[1] * 6, anchor[2] * 6]) * 0.5 + 0.5));
     const gore = Math.min(1, mottle * 0.55 + wm * 0.65) * goreStrength;
@@ -433,7 +448,11 @@ export function bakeChunkAlbedo(
     albedo = mix3(albedo, [look.deepColor[0] * 0.22, look.deepColor[1] * 0.22, look.deepColor[2] * 0.22], stain * 0.85);
   }
 
-  return [albedo[0], albedo[1], albedo[2], wm];
+  // The alpha is the wound mask AND the baked mesh's only wetness/roughness
+  // channel (rough = mix(0.9, 0.31, wm)). The march's bone is matte: its wet
+  // term is scaled by select(1.0, 0.25, isBone) (wet.wgsl.ts), so carry the same
+  // 0.25 through the mask and a bone stub keeps its dry look after the bake.
+  return [albedo[0], albedo[1], albedo[2], isBone ? wm * BONE_MATTE : wm];
 }
 
 /** World dir -> chunk-local unit axis helper re-exported for tests. */

@@ -43,6 +43,23 @@ describe('crowd records', () => {
     expect(r.dirty).toBe(true);
   });
 
+  it('carries the per-eye glow switch in REC_GORE.yzw as OFF flags (a zero record = both eyes on)', () => {
+    const r = createCrowdRecords(2);
+    const src = {
+      counts: [0, 0, 0, 0], counts2: [0, 0, 0, 0], woundBound: [0, 0, 0, 1e9],
+      bodyAnchor: [0, 0, 0], windDrift: [0, 0, 0], meltCfg: [0, 0, 0, 0], bodyFlash: [0, 0, 0, 0],
+      noiseShift: [0, 0, 0], bodyYaw: 0, headCentre: [0, 1.6, 0], woundCount: 0,
+      headQuat: [0, 0, 0, 1], volumePose0: [0, 0, 0, 0], volumePose1: [0, 0, 0, 0],
+      bodyCentre: [0, 1, 0], variantSeed: 0, bodyHalf: [0.5, 1, 0.5], damageRevision: 0, gore: 0.5,
+      burn: 0, burnSec: 0, charAmount: 0,
+    };
+    r.write(1, { ...src, eyeMask: [0, 1, 0.07] });
+    const g = 1 * REC_VEC4S * 4 + REC_GORE * 4;
+    expect(Array.from(r.floats.subarray(g, g + 4)).map(v => +v.toFixed(6))).toEqual([0.5, 1, 0, 0.07]);
+    r.write(0, src);
+    expect(Array.from(r.floats.subarray(REC_GORE * 4, REC_GORE * 4 + 4))).toEqual([0.5, 0, 0, 0]);
+  });
+
   it('carries the burn ramp, its clock and the char amount in slot 15', () => {
     // The lab and (spec 2) the game drive burn per BODY, and the crowd shares
     // one material, so a burning body can only wear fire through its record --

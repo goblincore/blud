@@ -38,6 +38,11 @@ export type ShotProvenance =
 export interface Wound {
   /** Stable render-event identity. Wound aging replaces objects each frame. */
   eventId?: number;
+  /** Head damage model (head-damage.ts): the head keeps at most MAX_HEAD_WOUNDS craters of its own; 'keep' craters (the eye socket, the scalp, the brain) outlive 'face' ones and survive the total cap. */
+  headSlot?: 'keep' | 'face';
+  /** Head damage v2 (head-damage.ts, spec §15): the head region this crater belongs to. A region keeps one
+   *  crater: a new one with the same headRegion replaces its predecessor in place. */
+  headRegion?: string;
   shot?: ShotProvenance;
   /** Exposed stump decoration, not another projectile injury. */
   injuryIgnored?: boolean;
@@ -68,6 +73,15 @@ export interface Wound {
   /** Render-only: a single crater with a noise-ragged edge (0..0.45, the fraction of
    *  radius its edge can grow by). Absent = a round crater. See soldier-wounds.ts. */
   ragged?: number;
+  /** Render-only: TORN, SPLAYED LIPS (flail v1.5b, torn-lips.ts), 0..1 intensity. The wound
+   *  uploads with ROW_WOUND_FLAGS.x bit 3: a two-octave ragged edge, petal-shaped taller rim
+   *  pushed outward, a wet red lip over a glossy red interior and a clotted floor. Absent or 0
+   *  = the stock look, pixel for pixel. Set with `tearWound`. */
+  tear?: number;
+  /** Render-only: WET RED LIP (gun wounds, torn-lips.ts GUN_WET_LIP), 0..1. The wound uploads with
+   *  ROW_WOUND_FLAGS.x bit 4: the torn look's wet red lip / glossy walls / clotted floor SHADING on
+   *  the stock crater SHAPE. Absent or 0 = the stock look. Set with `wetLipWound`. */
+  wetLip?: number;
   /**
    * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
    * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses
@@ -537,8 +551,52 @@ export function clothifyWound(prims: Primitive[], wound: Wound, calibre: ClothCa
   return wound;
 }
 
-/** Ring buffer append — oldest is evicted at capacity. */
+/** Marks `wound` torn (Wound.tear, clamped to 0..1): the flail's wounds (game-flail.ts,
+ *  game-head-damage.ts). A cloth DECAL carves nothing, so it has no lip to tear and is left
+ *  alone. Returns the wound. */
+export function tearWound(wound: Wound, tear: number): Wound {
+  if (wound.decal || !(tear > 0)) return wound;
+  wound.tear = Math.min(1, tear);
+  return wound;
+}
+
+/** Marks `wound` with a wet red lip (Wound.wetLip, clamped to 0..1): the gun's craters
+ *  (game-actor.ts hit / hitSlug). Cloth wounds (decal, hole, tear) and burns never take it — a
+ *  robe has no meat lip. Returns the wound. */
+export function wetLipWound(wound: Wound, wetLip: number): Wound {
+  if (wound.decal || wound.cloth || wound.type === 'burn' || !(wetLip > 0)) return wound;
+  wound.wetLip = Math.min(1, wetLip);
+  return wound;
+}
+
+/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts: six regions
+ *  and the brain cavity. */
+export const MAX_HEAD_WOUNDS = 7;
+
+/** Ring buffer append. A wound with a headRegion replaces an earlier wound of the same region, in that
+ *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
+ *  and the total cap evicts the oldest wound that is not a 'keep' head crater. A ring with no head tags
+ *  evicts oldest-first, exactly as before. */
 export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
+  if (wound.headRegion !== undefined) {
+    const prev = ring.findIndex(x => x.headRegion === wound.headRegion);
+    if (prev >= 0) {
+      const replaced = [...ring];
+      replaced[prev] = wound;
+      return replaced;
+    }
+  }
   const next = [...ring, wound];
-  return next.length > cap ? next.slice(next.length - cap) : next;
+  if (wound.headSlot) {
+    const head = next.filter(x => x.headSlot);
+    if (head.length > MAX_HEAD_WOUNDS) {
+      const victim = head.find(x => x.headSlot === 'face') ?? head[0]!;
+      next.splice(next.indexOf(victim), 1);
+    }
+  }
+  while (next.length > cap) {
+    const i = next.findIndex(x => x.headSlot !== 'keep');
+    next.splice(i < 0 ? 0 : i, 1);
+  }
+  return next;
 }

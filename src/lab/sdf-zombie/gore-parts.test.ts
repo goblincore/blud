@@ -10,7 +10,7 @@ import type { Vec3 } from './types';
 /** A plausible zombie look — the same fields the actor's view uniforms carry. */
 const LOOK: ChunkLook = {
   baseColor: [0.62, 0.5, 0.46], deepColor: [0.42, 0.16, 0.16], fatColor: [0.78, 0.72, 0.6],
-  mottleColor: [0.5, 0.42, 0.4], organColor: [0.4, 0.2, 0.22], visceraColor: [0.34, 0.14, 0.16],
+  mottleColor: [0.5, 0.42, 0.4], organColor: [0.4, 0.2, 0.22], boneColor: [0.71, 0.53, 0.35], visceraColor: [0.34, 0.14, 0.16],
   woundDepthAmp: 1, fatDepth: 0.05, muscleDepth: 0.16, visceraAmp: 0.6, visceraDepth: 0.3,
   mottleAmp: 0.3, mottleScale: 3, organAmp: 0.5, goreStrength: 1,
 };

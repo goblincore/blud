@@ -1,0 +1,659 @@
+{
+  "width": 1200,
+  "height": 800,
+  "timing": {
+    "fireLeadSec": 0.34,
+    "reloadSec": 1.85,
+    "unlockSec": 0.18,
+    "openSec": 0.48,
+    "extractSec": 0.5,
+    "ejectSec": 0.61,
+    "carrySec": 0.86,
+    "stageSec": 1.22,
+    "seatSec": 1.43,
+    "closeStartSec": 1.53,
+    "closeSec": 1.65,
+    "openRad": 0.9599310885968813,
+    "roundLengthM": 0.094,
+    "caseLengthM": 0.072,
+    "stageGapM": 0.012
+  },
+  "warm": {
+    "phase": "ready",
+    "timedOut": false
+  },
+  "warmDone": {
+    "ms": 2469,
+    "bootBeforeWarmMs": 162,
+    "flipped": 61,
+    "flippedNames": [
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Group:shell-eject-0",
+      "Group:shell-load-0",
+      "Group:shell-eject-1",
+      "Group:shell-load-1",
+      "Group:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Object3D:launcher-carried-round",
+      "Object3D:launcher-ejected-case",
+      "Mesh:launcher-muzzle-flash"
+    ],
+    "passes": 13,
+    "computes": 9,
+    "phases": {
+      "flip": 0.10000002384185791,
+      "crowdBinsPerType": [
+        3,
+        1.9,
+        1.5,
+        1.4,
+        1.4,
+        11.3,
+        6,
+        1.9,
+        4.7
+      ],
+      "crowdBins": 33.10000002384186,
+      "goo": 69.39999997615814,
+      "asyncFirst": 578.6000000238419,
+      "gibVariant": 0,
+      "drawOnce": 1679.800000011921,
+      "precompile": 108,
+      "backgroundStart": {
+        "gib": 2470,
+        "crowd": 2771
+      },
+      "backgroundDone": {
+        "gib": 2771,
+        "crowd": 3840
+      }
+    }
+  },
+  "errors": [],
+  "samples": [
+    {
+      "name": "fpv-idle",
+      "loaded": true,
+      "spent": false,
+      "fireAge": null,
+      "reloadAge": null,
+      "shots": 0,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": true,
+      "beat": "ready",
+      "hingeRad": 0,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        0.013791145074616238,
+        -0.17359692390176334,
+        -0.5492833866958062
+      ],
+      "right": [
+        0.04299952847286464,
+        -0.18371879829058835,
+        -0.25852930962544995
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": true
+    },
+    {
+      "name": "fpv-fire-045",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 0.045,
+      "reloadAge": null,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "fire",
+      "hingeRad": 0,
+      "visible": true,
+      "flash": true,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        0.01251850000939609,
+        -0.14493549387807414,
+        -0.4842757584108558
+      ],
+      "right": [
+        0.041650675846823276,
+        -0.20129173468084072,
+        -0.19917249935754633
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": false
+    },
+    {
+      "name": "fpv-unlock",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 0.4900000000000001,
+      "reloadAge": 0.15000000000000005,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "unlock",
+      "hingeRad": 0,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        0.009653976565422037,
+        -0.0761274023916662,
+        -0.34681882861973456
+      ],
+      "right": [
+        0.07348038448833524,
+        -0.1993212971616316,
+        -0.2854774805628981
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": false
+    },
+    {
+      "name": "fpv-open",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 0.8300000000000003,
+      "reloadAge": 0.4900000000000002,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "extract",
+      "hingeRad": 0.9599310885968813,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        -0.03681374186083796,
+        -0.2916202096701697,
+        -0.49739201093979996
+      ],
+      "right": [
+        0.1300373292225322,
+        -0.2129179221333668,
+        -0.34998394662334675
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": false
+    },
+    {
+      "name": "fpv-extract",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 0.9100000000000004,
+      "reloadAge": 0.5700000000000003,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "extract",
+      "hingeRad": 0.9599310885968813,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        -0.08309854186083755,
+        -0.3795613296701693,
+        -0.42796481093980165
+      ],
+      "right": [
+        0.13003732922253264,
+        -0.21291792213336658,
+        -0.34998394662334853
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.051362135760592745
+      ],
+      "projectileVisible": false
+    },
+    {
+      "name": "fpv-eject",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 1.0200000000000002,
+      "reloadAge": 0.68,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "eject",
+      "hingeRad": 0.9599310885968813,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": true,
+      "left": [
+        -0.1072649418608346,
+        -0.4254774896701693,
+        -0.3917152109398001
+      ],
+      "right": [
+        0.13003732922253458,
+        -0.21291792213336658,
+        -0.34998394662334675
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": false
+    },
+    {
+      "name": "fpv-carry",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 1.4100000000000026,
+      "reloadAge": 1.0700000000000003,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "carry",
+      "hingeRad": 0.9599310885968813,
+      "visible": true,
+      "flash": false,
+      "carriedRound": true,
+      "ejectedCase": true,
+      "left": [
+        -0.07115831512099721,
+        -0.2232330548848346,
+        -0.380585058347824
+      ],
+      "right": [
+        0.1300373292225314,
+        -0.21291792213336636,
+        -0.34998394662334853
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": false
+    },
+    {
+      "name": "fpv-stage",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 1.560000000000002,
+      "reloadAge": 1.2199999999999998,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "carry",
+      "hingeRad": 0.9599310885968813,
+      "visible": true,
+      "flash": false,
+      "carriedRound": true,
+      "ejectedCase": false,
+      "left": [
+        -0.04938715799585761,
+        -0.10128603947623865,
+        -0.373873927378635
+      ],
+      "right": [
+        0.13003732922253375,
+        -0.2129179221333659,
+        -0.34998394662334853
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": false
+    },
+    {
+      "name": "fpv-seat",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 1.7700000000000025,
+      "reloadAge": 1.4300000000000002,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "close",
+      "hingeRad": 0.9599310885968813,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        -0.05235261508104665,
+        -0.1234600239600693,
+        -0.41406746512274145
+      ],
+      "right": [
+        0.13003732922253308,
+        -0.2129179221333668,
+        -0.34998394662334853
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": true
+    },
+    {
+      "name": "fpv-snap",
+      "loaded": false,
+      "spent": true,
+      "fireAge": 1.9900000000000035,
+      "reloadAge": 1.6500000000000012,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": false,
+      "beat": "settle",
+      "hingeRad": 0,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        0.006813456233634815,
+        -0.15922693540180965,
+        -0.5537190092261528
+      ],
+      "right": [
+        0.05126236985814615,
+        -0.1783358880349728,
+        -0.26541932308549043
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": true
+    },
+    {
+      "name": "fpv-settled",
+      "loaded": true,
+      "spent": false,
+      "fireAge": 2.2300000000000035,
+      "reloadAge": null,
+      "shots": 1,
+      "timing": {
+        "fireLeadSec": 0.34,
+        "reloadSec": 1.85,
+        "unlockSec": 0.18,
+        "openSec": 0.48,
+        "extractSec": 0.5,
+        "ejectSec": 0.61,
+        "carrySec": 0.86,
+        "stageSec": 1.22,
+        "seatSec": 1.43,
+        "closeStartSec": 1.53,
+        "closeSec": 1.65,
+        "openRad": 0.9599310885968813,
+        "roundLengthM": 0.094,
+        "caseLengthM": 0.072,
+        "stageGapM": 0.012
+      },
+      "ready": true,
+      "beat": "ready",
+      "hingeRad": 0,
+      "visible": true,
+      "flash": false,
+      "carriedRound": false,
+      "ejectedCase": false,
+      "left": [
+        0.013791145074614371,
+        -0.1735969239017638,
+        -0.5492833866958027
+      ],
+      "right": [
+        0.042999528472861884,
+        -0.1837187982905888,
+        -0.2585293096254464
+      ],
+      "round": [
+        0,
+        0.0429999977350235,
+        -0.0010000020265579224
+      ],
+      "projectileVisible": true
+    }
+  ],
+  "gpu": {
+    "lost": null,
+    "uncaptured": [],
+    "uncapturedCount": 0
+  }
+}
