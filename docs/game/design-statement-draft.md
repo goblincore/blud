@@ -113,7 +113,7 @@ in §1.2 stands without it.
 - **High up, and outside is paradise** (owner): not a dystopian city but an impossibly beautiful idyll: fluffy volumetric
   clouds, sunsets, sometimes waves, pastoral landscapes that **shift** from day to day. A period CGI image in its own
   right: **Bryce and Terragen** landscapes. The cramped, grotesque, biomechanical room against a heaven it can never reach.
-  The Line climbs through it (§3.7). [Look-dev](../dev-notes/2026-10-01-flat-emergence-lookdev/view-idyll.png). (Draft 2's first pass had a Kowloon-like megablock outside; the owner prefers the
+  The Line climbs through it (§3.7). [Look-dev](../dev-notes/2026-10-01-flat-emergence-lookdev/view-bryce.png): fantastical Bryce, not a natural landscape (a gas giant, floating moons, rock arches, milky seas). (Draft 2's first pass had a Kowloon-like megablock outside; the owner prefers the
   idyll. The room itself can still be a tiny, crammed, Tokyo-style flat.)
 - **Interior design after *Garage*** (owner): recognisable objects in industrial, Giger-esque metal with organic forms;
   grounded first, more biomechanical as the game goes on (§3.4).
@@ -198,8 +198,8 @@ a sea of cloud at sunset), and later the vision's journey (desert, then clouds, 
 Party spoils it slowly:** each stop you clear, the sunset bleeds pinker, the clouds swell like flesh, the sea thickens;
 the music through the ceiling gets louder; the knock moves from the door to the ceiling to the walls. A countdown you see
 and hear, never read as a number. **You go up, it comes down:** the Line climbs toward the Party above; the Party spreads
-down toward you. **The train passes your window**, through the clouds: the exterior train shot's home, and the intro
-cutscene's subject. Technically the view is the cheapest beautiful thing in the game: prerendered panoramas or loops in
+down toward you. **The Line is left out of the window view for now** (owner: the first try read badly; how the train is shown is the
+owner's to decide). Technically the view is the cheapest beautiful thing in the game: prerendered panoramas or loops in
 Blender, period-correct and free at runtime, with a live volumetric sky as the modern-effects option.
 
 ### 3.8 Kept from draft 1
