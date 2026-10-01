@@ -56,6 +56,8 @@ import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
+import { EARLYZ_BOX_EXIT_WGSL } from './earlyz/box-exit.wgsl';
+import { applyConservativeDepth } from './earlyz/conservative-depth-material';
 import {
   encodeSurfaceClass, SURFACE_CLASS_FLESH,
   type ShadowReceiver, type SurfaceOutputOptions,
@@ -245,6 +247,8 @@ export { marchNormalRead, marchAnchorRead, marchMotionRead };
  *  declared in the FOLD_GROUP helper chunk every march chain carries; the include keeps the same
  *  lineage (and eval order after the march output) as the anchor read. */
 export const marchBurnRead = wgslFn(MARCH_BURN_OUT, [marchAnchorRead] as never);
+/** EARLY-Z (spec 2026-10-01 D4): the analytic proxy exit the front material hands the march as worldPos. */
+const earlyzBoxExitPoint = wgslFn(EARLYZ_BOX_EXIT_WGSL);
 /** Run 4: the output-res detail field (DETAIL_FIELD) on the march's own hash/noise/fbm chain. */
 export const detailFieldFn = (() => {
   const chain = [HASH13, NOISE3, FBM].reduce<ReturnType<typeof wgslFn>[]>((acc, src) => [...acc, wgslFn(src, acc.slice(-1))], []);
@@ -1764,8 +1768,12 @@ export function createCrowdMaterial(
   // pair's level-shadow node keeps the game's single per-frame rebind reaching
   // whichever dispatch is active (a private node would stay on the fallback).
   sharedLevelShadowTex?: ReturnType<typeof texture>,
+  // EARLY-Z (spec 2026-10-01 D2-D4), POSITIONALLY LAST. `front: true` builds the
+  // front-face, conservative-depth twin of the boxes material. Omitted: unchanged.
+  earlyz?: { front: boolean },
 ): CrowdMaterialHandles {
   const quad = dispatch === 'quad';
+  const earlyzFront = earlyz?.front === true && !quad;
   // Box: a [-1, 1]^3 BoxGeometry scaled by the instance's half extents and
   // moved to its centre — the iCentre/iHalf attributes ARE the box-entry
   // override the shader reads. Quad: the plane carries no such attributes, so
@@ -1780,6 +1788,23 @@ export function createCrowdMaterial(
     : attribute('iHalf', 'vec3')) as unknown as Vec3Node;
   const positionNode = instCentre.add(positionGeometry.mul(instHalf));
   const quadNodes = quad ? crowdRayNodes() : undefined;
+  // The march body is NOT edited: the override hands it the ANALYTIC box exit as
+  // worldPos, so ray-window's tMaxBox = length(worldPos - camPos) is the exit the back
+  // face used to give it (the hull-refine-view.ts pattern). startT 0 and the type's own
+  // marchCfg are exactly what the boxes path passes when `rays` is undefined (no cone).
+  const frontRays: MarchRayOverride | undefined = earlyzFront
+    ? {
+        worldPos: earlyzBoxExitPoint({
+          camPos: cameraPosition,
+          rd: normalize(sub(positionWorld, cameraPosition)),
+          centre: instCentre,
+          halfExt: instHalf,
+        }),
+        startT: float(0),
+        marchCfg: u.marchCfg,
+        side: THREE.FrontSide,
+      }
+    : undefined;
   const volumeTex = fallbackCrowdVolumeTexture();
   const segFallback = fallbackSegmentVolumeTextures();
   const depthSegAtlasNode = texture3D(segFallback.atlas);
@@ -1799,7 +1824,7 @@ export function createCrowdMaterial(
           marchCfg: u.marchCfg,
           side: THREE.DoubleSide,
         }
-      : undefined,
+      : frontRays,
     sources?.depthPre, 'lit', undefined,
     sources?.probeDyn?.node, sources?.lastFrame,
     undefined,
@@ -1815,6 +1840,9 @@ export function createCrowdMaterial(
   } else {
     material.positionNode = positionNode as never;
   }
+  // D3: front material only. The clamp keeps the `greater` promise; the property is
+  // what the r186 builder patch keys on (earlyz/conservative-depth-patch.ts).
+  if (earlyzFront) applyConservativeDepth(material);
 
   const depthPreCfg = sources?.depthPre ? sources.depthPre.uniforms.cfg : createDepthPreUniforms().cfg;
   const depthPreT = depthPreMarch({
