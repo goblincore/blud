@@ -103,6 +103,7 @@ import { createVoid, createVoidSeams, stepVoid } from './game-void-leaves';
 import { loadLevelArt, placeLevelArt } from './game-art-leaves';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train-leaves';
 import { adoptDiscoFx, createDisco, createDiscoSeams, stepDisco } from './game-disco-leaves';
+import { adoptEggFx, createEgg, createEggSeams, stepEgg } from './game-egg-leaves';
 import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightListOn, torchLane, writeLightList } from './game-light-list-leaves';
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
@@ -972,6 +973,8 @@ async function main() {
   createDynamicLight(ctx);
   // The Boiler Room disco ball (after its room's lamps and beacons, before the light lists: unlit).
   createDisco(ctx);
+  // The control room's egg (after the level art exists; before the light lists: unlit).
+  createEgg(ctx);
 
   (globalThis as Record<string, unknown>).__dungeon = {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(on ? DUNGEON_RIG : GALLERY_RIG); },
@@ -1272,6 +1275,7 @@ async function main() {
   adoptLateFx(ctx);
   adoptLightFx(ctx);
   adoptDiscoFx(ctx);
+  adoptEggFx(ctx);
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -7082,6 +7086,7 @@ async function main() {
     stepDynamicLight(ctx, dt);
     lightSteam(ctx);
     stepDisco(ctx);
+    stepEgg(ctx);
     stepLoop(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
@@ -8676,6 +8681,7 @@ async function main() {
     createLoopSeams(ctx),
     createDynamicLightSeams(ctx),
     createDiscoSeams(ctx),
+    createEggSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
