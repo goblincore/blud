@@ -184,6 +184,11 @@ git commit -m "test(goblin): pin the refinement body (continuous torso, gut in f
   `  # Torso: long and narrow with the gut low, rather than one wide ovoid.` (line 124) through the line
   `  bar head on neck from=0.00 to=1.00 r=0.046 deep=0.94 blend=0.0016` (line 141) inclusive.
 
+> **Review note (2026-10-01):** after this task landed, review revised this block's comments (the daylight claim, the
+> blend-width wording, the cords' path, a source line for the retuned values), dropped the gut's no-op `wide=1.00`, and
+> re-seated the lowest and third vertebrae at `offset=(0,0,-0.072)` (they were nearly flush). The file is now the
+> reference for this text, not the block below.
+
 - [ ] **Step 1: Replace that span with exactly this text**
 
 ```
@@ -347,9 +352,18 @@ git commit -m "feat(goblin): tapered limbs, orbs only at shoulders/hands/ankles/
 ```
     // 0.11 m clears the shoulder round (r 0.042 since the 2026-10-01 rebuild;
     // it was a 0.054 ball) and the deltoid merge above. Measured at 19.2 mm
-    // (27.8 on the old body: the slimmer chest at wide=1.00 is what keeps it
-    // above 15; at 1.06 it read 15.0). The failure this catches is the whole upper arm
+    // (29.0 on the old body; the slimmer chest at wide=1.00 is what keeps it
+    // above 15: at 1.06 it read 14.99). The failure this catches is the whole upper arm
 ```
+
+  Also, from the reviews of Tasks 1 and 2:
+  - Line 35: `const boneAt = (b:ReturnType<typeof built>` needs a space after `b:` (`(b: ReturnType<typeof built>`).
+  - In the torso-continuity test's comment, replace `Old body: 20.5 mm, between its two chest
+  // ellipsoids.` with `Old body: 20.5 mm, at the spine/chest joint, between its spine
+  // and lower chest ellipsoids.` (keep the line wrapping tidy).
+  - In the gut test's comment, replace `Rebuilt: belly +27.0 mm, waist +15.0 mm.` with
+    `Rebuilt: belly +27.0 mm, waist +14.8 mm (pelvis at=0.8, spine1 at=0.3, on the bone axis).` (the waist moved from
+    15.0 when review re-seated the lowest vertebra).
 
 - [ ] **Step 2: Run and type-check**
 
