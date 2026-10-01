@@ -22,9 +22,11 @@ sc.cycles.samples = 16 if os.environ.get('PREVIEW') else 96; sc.cycles.use_denoi
 import os
 PREVIEW = bool(os.environ.get('PREVIEW'))
 sc.render.resolution_x, sc.render.resolution_y = (400, 300) if PREVIEW else (1024, 768)
-sc.view_settings.view_transform = 'Standard'; sc.view_settings.exposure = 0.0
+sc.view_settings.view_transform = 'Standard'; sc.view_settings.exposure = -0.35
 
-HAZE = (0.55, 0.68, 0.86)
+HAZE = (0.42, 0.52, 0.66)
+FOG = (0.6, 0.71, 0.74)          # milky, a touch of the water's cyan
+FOG_TOP, FOG_DIST = 15.0, 700.0
 
 def nodes(m): return m.node_tree.nodes, m.node_tree.links
 
@@ -39,7 +41,24 @@ def hazed(m, color=HAZE, dist=2500.0, strength=1.0):
     fac = n.new('ShaderNodeMath'); fac.operation = 'SUBTRACT'; fac.inputs[0].default_value = 1.0; l.new(ex.outputs[0], fac.inputs[1])
     em = n.new('ShaderNodeEmission'); em.inputs['Color'].default_value = (*color, 1); em.inputs['Strength'].default_value = strength
     mx = n.new('ShaderNodeMixShader'); l.new(fac.outputs[0], mx.inputs['Fac']); l.new(surf, mx.inputs[1]); l.new(em.outputs[0], mx.inputs[2])
-    l.new(mx.outputs[0], out.inputs['Surface'])
+    # the ground fog: thick at the water, gone by FOG_TOP, and thicker with distance
+    geo = n.new('ShaderNodeNewGeometry'); sz = n.new('ShaderNodeSeparateXYZ'); l.new(geo.outputs['Position'], sz.inputs[0])
+    hz = n.new('ShaderNodeMapRange'); hz.interpolation_type = 'SMOOTHSTEP'; hz.inputs['From Min'].default_value = FOG_TOP; hz.inputs['From Max'].default_value = 3.0
+    l.new(sz.outputs['Z'], hz.inputs['Value'])
+    fd = n.new('ShaderNodeMath'); fd.operation = 'DIVIDE'; l.new(cam.outputs['View Distance'], fd.inputs[0]); fd.inputs[1].default_value = FOG_DIST
+    fn = n.new('ShaderNodeMath'); fn.operation = 'MULTIPLY'; l.new(fd.outputs[0], fn.inputs[0]); fn.inputs[1].default_value = -1.0
+    fe = n.new('ShaderNodeMath'); fe.operation = 'EXPONENT'; l.new(fn.outputs[0], fe.inputs[0])
+    fdist = n.new('ShaderNodeMath'); fdist.operation = 'SUBTRACT'; fdist.inputs[0].default_value = 1.0; l.new(fe.outputs[0], fdist.inputs[1])
+    ffac = n.new('ShaderNodeMath'); ffac.operation = 'MULTIPLY'; l.new(hz.outputs['Result'], ffac.inputs[0]); l.new(fdist.outputs[0], ffac.inputs[1])
+    # a little noise so the fog lies in banks rather than a sheet
+    tcf = n.new('ShaderNodeTexCoord'); nzf = n.new('ShaderNodeTexNoise'); nzf.inputs['Scale'].default_value = 0.004; nzf.inputs['Detail'].default_value = 4
+    l.new(tcf.outputs['Object'], nzf.inputs['Vector']) if False else l.new(geo.outputs['Position'], nzf.inputs['Vector'])
+    bank = n.new('ShaderNodeMapRange'); bank.inputs['From Min'].default_value = 0.3; bank.inputs['From Max'].default_value = 0.7
+    bank.inputs['To Min'].default_value = 0.55; bank.inputs['To Max'].default_value = 1.0; l.new(nzf.outputs['Fac'], bank.inputs['Value'])
+    ffac2 = n.new('ShaderNodeMath'); ffac2.operation = 'MULTIPLY'; ffac2.use_clamp = True; l.new(ffac.outputs[0], ffac2.inputs[0]); l.new(bank.outputs['Result'], ffac2.inputs[1])
+    fem = n.new('ShaderNodeEmission'); fem.inputs['Color'].default_value = (*FOG, 1); fem.inputs['Strength'].default_value = 1.0
+    fmx = n.new('ShaderNodeMixShader'); l.new(ffac2.outputs[0], fmx.inputs['Fac']); l.new(mx.outputs[0], fmx.inputs[1]); l.new(fem.outputs[0], fmx.inputs[2])
+    l.new(fmx.outputs[0], out.inputs['Surface'])
     return m
 
 def rock(name, c0, c1, scale=0.08, bump=1.2, rough=0.75):
@@ -59,8 +78,9 @@ def rock(name, c0, c1, scale=0.08, bump=1.2, rough=0.75):
 world = bpy.data.worlds.new('w'); sc.world = world; world.use_nodes = True; nt = world.node_tree
 tcw = nt.nodes.new('ShaderNodeTexCoord'); sep = nt.nodes.new('ShaderNodeSeparateXYZ'); nt.links.new(tcw.outputs['Generated'], sep.inputs[0])
 gr = nt.nodes.new('ShaderNodeValToRGB'); g = gr.color_ramp
-g.elements[0].position = 0.0; g.elements[0].color = (0.62, 0.72, 0.85, 1); g.elements[1].position = 0.55; g.elements[1].color = (0.03, 0.08, 0.28, 1)
-e = g.elements.new(0.15); e.color = (0.3, 0.45, 0.75, 1)
+g.elements[0].position = 0.0; g.elements[0].color = (0.68, 0.8, 0.8, 1); g.elements[1].position = 0.5; g.elements[1].color = (0.01, 0.025, 0.09, 1)
+e = g.elements.new(0.05); e.color = (0.45, 0.58, 0.68, 1)
+e = g.elements.new(0.2); e.color = (0.12, 0.22, 0.42, 1)
 nt.links.new(sep.outputs['Z'], gr.inputs['Fac'])
 st = nt.nodes.new('ShaderNodeTexVoronoi'); st.inputs['Scale'].default_value = 260.0; nt.links.new(tcw.outputs['Generated'], st.inputs['Vector'])
 sm = nt.nodes.new('ShaderNodeMapRange'); sm.inputs['From Min'].default_value = 0.035; sm.inputs['From Max'].default_value = 0.0
@@ -69,8 +89,8 @@ up = nt.nodes.new('ShaderNodeMath'); up.operation = 'MULTIPLY'; nt.links.new(sm.
 add = nt.nodes.new('ShaderNodeMix'); add.data_type = 'RGBA'; add.blend_type = 'ADD'; nt.links.new(up.outputs[0], add.inputs['Factor'])
 nt.links.new(gr.outputs['Color'], add.inputs[6]); add.inputs[7].default_value = (1, 1, 1, 1)
 bg = nt.nodes['Background']; nt.links.new(add.outputs[2], bg.inputs['Color']); bg.inputs['Strength'].default_value = 1.0
-sun = bpy.data.lights.new('sun', 'SUN'); sun.energy = 4.5; sun.color = (1.0, 0.93, 0.84); sun.angle = math.radians(1.0)
-so = bpy.data.objects.new('sun', sun); so.rotation_euler = (math.radians(62), 0, math.radians(-40)); sc.collection.objects.link(so)
+sun = bpy.data.lights.new('sun', 'SUN'); sun.energy = 5.0; sun.color = (1.0, 0.86, 0.68); sun.angle = math.radians(1.0)
+so = bpy.data.objects.new('sun', sun); so.rotation_euler = (math.radians(78), 0, math.radians(-60)); sc.collection.objects.link(so)
 
 # ---------- the gas giant and the moons ----------
 bpy.ops.mesh.primitive_uv_sphere_add(radius=9000, location=(-14000, 30000, 6000), segments=96, ring_count=64); pl = bpy.context.active_object
@@ -80,14 +100,14 @@ tc = n.new('ShaderNodeTexCoord'); wv = n.new('ShaderNodeTexWave'); wv.wave_type 
 wv.inputs['Scale'].default_value = 3.0; wv.inputs['Distortion'].default_value = 9.0; wv.inputs['Detail'].default_value = 8.0; wv.inputs['Detail Scale'].default_value = 2.5
 l.new(tc.outputs['Object'], wv.inputs['Vector'])
 rp = n.new('ShaderNodeValToRGB'); r = rp.color_ramp
-r.elements[0].color = (0.75, 0.55, 0.7, 1); r.elements[1].color = (0.95, 0.9, 0.95, 1)
-e = r.elements.new(0.45); e.color = (0.85, 0.35, 0.45, 1); e = r.elements.new(0.7); e.color = (0.55, 0.62, 0.85, 1)
+r.elements[0].color = (0.55, 0.25, 0.45, 1); r.elements[1].color = (0.92, 0.82, 0.9, 1)
+e = r.elements.new(0.35); e.color = (0.85, 0.22, 0.3, 1); e = r.elements.new(0.55); e.color = (0.95, 0.6, 0.62, 1); e = r.elements.new(0.75); e.color = (0.45, 0.42, 0.75, 1)
 l.new(wv.outputs['Fac'], rp.inputs['Fac'])
 lw = n.new('ShaderNodeLayerWeight'); lw.inputs['Blend'].default_value = 0.35
 rim = n.new('ShaderNodeMix'); rim.data_type = 'RGBA'; l.new(lw.outputs['Facing'], rim.inputs['Factor'])
 l.new(rp.outputs['Color'], rim.inputs[6]); rim.inputs[7].default_value = (0.62, 0.72, 0.9, 1)
-em = n.new('ShaderNodeEmission'); em.inputs['Strength'].default_value = 0.9; l.new(rim.outputs[2], em.inputs['Color'])
-tr = n.new('ShaderNodeBsdfTransparent'); mx = n.new('ShaderNodeMixShader'); mx.inputs['Fac'].default_value = 0.9
+em = n.new('ShaderNodeEmission'); em.inputs['Strength'].default_value = 0.75; l.new(rim.outputs[2], em.inputs['Color'])
+tr = n.new('ShaderNodeBsdfTransparent'); mx = n.new('ShaderNodeMixShader'); mx.inputs['Fac'].default_value = 0.94
 l.new(tr.outputs[0], mx.inputs[1]); l.new(em.outputs[0], mx.inputs[2]); l.new(mx.outputs[0], n['Material Output'].inputs['Surface'])
 pl.data.materials.append(mp); bpy.ops.object.shade_smooth()
 M_MOON = rock('moon', (0.12, 0.11, 0.1), (0.42, 0.4, 0.38), scale=0.03, bump=1.2)
@@ -103,9 +123,9 @@ tc = n.new('ShaderNodeTexCoord'); mp_ = n.new('ShaderNodeMapping'); mp_.inputs['
 mp_.inputs['Rotation'].default_value = (0, 0, math.radians(12)); l.new(tc.outputs['Object'], mp_.inputs['Vector'])
 nz = n.new('ShaderNodeTexNoise'); nz.inputs['Scale'].default_value = 2.0; nz.inputs['Detail'].default_value = 10.0; nz.inputs['Roughness'].default_value = 0.62
 nz.inputs['Distortion'].default_value = 0.6; l.new(mp_.outputs[0], nz.inputs['Vector'])
-al = n.new('ShaderNodeMapRange'); al.inputs['From Min'].default_value = 0.47; al.inputs['From Max'].default_value = 0.72; l.new(nz.outputs['Fac'], al.inputs['Value'])
-em = n.new('ShaderNodeEmission'); em.inputs['Color'].default_value = (0.92, 0.95, 1.0, 1)
-sh = n.new('ShaderNodeMapRange'); sh.inputs['From Min'].default_value = 0.45; sh.inputs['From Max'].default_value = 0.8; sh.inputs['To Min'].default_value = 0.55; sh.inputs['To Max'].default_value = 1.15
+al = n.new('ShaderNodeMapRange'); al.inputs['From Min'].default_value = 0.42; al.inputs['From Max'].default_value = 0.66; l.new(nz.outputs['Fac'], al.inputs['Value'])
+em = n.new('ShaderNodeEmission'); em.inputs['Color'].default_value = (0.82, 0.86, 0.95, 1)
+sh = n.new('ShaderNodeMapRange'); sh.inputs['From Min'].default_value = 0.45; sh.inputs['From Max'].default_value = 0.8; sh.inputs['To Min'].default_value = 0.25; sh.inputs['To Max'].default_value = 0.95
 l.new(nz.outputs['Fac'], sh.inputs['Value']); l.new(sh.outputs['Result'], em.inputs['Strength'])
 tr = n.new('ShaderNodeBsdfTransparent'); mx = n.new('ShaderNodeMixShader'); l.new(al.outputs['Result'], mx.inputs['Fac'])
 l.new(tr.outputs[0], mx.inputs[1]); l.new(em.outputs[0], mx.inputs[2]); l.new(mx.outputs[0], n['Material Output'].inputs['Surface'])
@@ -119,7 +139,7 @@ def terrain(name, loc, size, subdiv, noise_scale, strength, mid, mat, kind='RIDG
     dmm = o.modifiers.new('d', 'DISPLACE'); dmm.texture = tx; dmm.strength = strength; dmm.mid_level = mid; dmm.texture_coords = 'GLOBAL'
     o.data.materials.append(mat); bpy.ops.object.shade_smooth(); return o
 M_FAR = hazed(rock('far', (0.12, 0.14, 0.2), (0.4, 0.42, 0.5), scale=0.004, bump=0.6), dist=14000.0, color=(0.5, 0.62, 0.84))
-M_NEAR = hazed(rock('near', (0.14, 0.11, 0.08), (0.5, 0.42, 0.32), scale=0.06, bump=1.6), dist=6000.0)
+M_NEAR = hazed(rock('near', (0.09, 0.07, 0.05), (0.42, 0.34, 0.25), scale=0.06, bump=1.8), dist=6000.0)
 terrain('range', (0, 15500, 0), 20000, 400, 1600.0, 900, 1.2, M_FAR)
 bpy.ops.mesh.primitive_grid_add(x_subdivisions=420, y_subdivisions=420, size=3600, location=(0, 1200, 0)); shelf = bpy.context.active_object; shelf.name = 'shelf'
 _tx = bpy.data.textures.new('shelfn', 'CLOUDS'); _tx.noise_scale = 70.0; _tx.noise_depth = 6; _tx.noise_basis = 'IMPROVED_PERLIN'
@@ -144,7 +164,7 @@ for k in range(26):
 # ---------- milky water, with boulders breaking through ----------
 bpy.ops.mesh.primitive_plane_add(size=40000, location=(0, 0, 4.0)); wt = bpy.context.active_object
 mw = bpy.data.materials.new('milk'); mw.use_nodes = True; n, l = nodes(mw); p = n['Principled BSDF']
-p.inputs['Base Color'].default_value = (0.3, 0.62, 0.62, 1); p.inputs['Roughness'].default_value = 0.25; p.inputs['Coat Weight'].default_value = 0.3
+p.inputs['Base Color'].default_value = (0.4, 0.66, 0.66, 1); p.inputs['Roughness'].default_value = 0.3; p.inputs['Coat Weight'].default_value = 0.3
 p.inputs['Subsurface Weight'].default_value = 0.4; p.inputs['Subsurface Radius'].default_value = (0.6, 1.0, 1.0)
 tc = n.new('ShaderNodeTexCoord'); nzw = n.new('ShaderNodeTexNoise'); nzw.inputs['Scale'].default_value = 0.08; nzw.inputs['Detail'].default_value = 8
 l.new(tc.outputs['Object'], nzw.inputs['Vector'])
@@ -161,6 +181,20 @@ dg = bpy.context.evaluated_depsgraph_get()
 for nm in ('range', 'shelf'):
     o = bpy.data.objects[nm].evaluated_get(dg); me = o.to_mesh(); zs = [v.co.z for v in me.vertices]
     print('BOUNDS', nm, round(min(zs), 1), round(max(zs), 1), round(sorted(zs)[len(zs) // 2], 1)); o.to_mesh_clear()
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 1400, 9)); wisp = bpy.context.active_object; wisp.scale = (5000, 2600, 12)
+mv = bpy.data.materials.new('wisps'); mv.use_nodes = True; nv = mv.node_tree; nv.nodes.remove(nv.nodes['Principled BSDF'])
+vol = nv.nodes.new('ShaderNodeVolumePrincipled'); vol.inputs['Color'].default_value = (*FOG, 1); vol.inputs['Anisotropy'].default_value = 0.3
+geo = nv.nodes.new('ShaderNodeNewGeometry'); mpw = nv.nodes.new('ShaderNodeMapping'); mpw.inputs['Scale'].default_value = (0.008, 0.02, 0.15)
+nv.links.new(geo.outputs['Position'], mpw.inputs['Vector'])
+nzv = nv.nodes.new('ShaderNodeTexNoise'); nzv.inputs['Scale'].default_value = 1.0; nzv.inputs['Detail'].default_value = 5; nv.links.new(mpw.outputs[0], nzv.inputs['Vector'])
+sepv = nv.nodes.new('ShaderNodeSeparateXYZ'); nv.links.new(geo.outputs['Position'], sepv.inputs[0])
+hfall = nv.nodes.new('ShaderNodeMapRange'); hfall.inputs['From Min'].default_value = 3.0; hfall.inputs['From Max'].default_value = 14.0
+hfall.inputs['To Min'].default_value = 1.0; hfall.inputs['To Max'].default_value = 0.0; nv.links.new(sepv.outputs['Z'], hfall.inputs['Value'])
+dn = nv.nodes.new('ShaderNodeMapRange'); dn.inputs['From Min'].default_value = 0.42; dn.inputs['From Max'].default_value = 0.7
+dn.inputs['To Min'].default_value = 0.0; dn.inputs['To Max'].default_value = 0.05; nv.links.new(nzv.outputs['Fac'], dn.inputs['Value'])
+dmul = nv.nodes.new('ShaderNodeMath'); dmul.operation = 'MULTIPLY'; nv.links.new(dn.outputs['Result'], dmul.inputs[0]); nv.links.new(hfall.outputs['Result'], dmul.inputs[1])
+nv.links.new(dmul.outputs[0], vol.inputs['Density']); nv.links.new(vol.outputs[0], nv.nodes['Material Output'].inputs['Volume']); wisp.data.materials.append(mv)
+sc.cycles.volume_step_rate = 2.0; sc.cycles.volume_bounces = 0
 cd = bpy.data.cameras.new('c'); cd.lens = 26; cd.clip_end = 100000
 cam = bpy.data.objects.new('c', cd); cam.location = (0, -40, 30); sc.collection.objects.link(cam)
 cam.rotation_euler = (Vector((40, 1500, 110)) - cam.location).to_track_quat('-Z', 'Y').to_euler(); sc.camera = cam
