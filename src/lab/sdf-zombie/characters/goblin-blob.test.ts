@@ -105,8 +105,8 @@ describe('goblin.blob', () => {
     // marked as the arm's core; it was a 0.054 ball) and the deltoid merge
     // above. Measured at 19.2 mm (29.0 on the old body; the slimmer chest at
     // wide=1.00 is what keeps it above 15: at 1.06 it read 14.99). The failure
-    // this catches is the whole upper arm
-    // descending INSIDE the ribcage, which is what tilt=7 did before.
+    // this catches is the whole upper arm descending INSIDE the ribcage, which
+    // is what tilt=7 did before.
     expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.11))
       .toBeGreaterThan(0.015);
   });
