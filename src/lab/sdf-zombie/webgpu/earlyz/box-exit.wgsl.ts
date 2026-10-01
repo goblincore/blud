@@ -8,6 +8,7 @@
 // The 1e-8 parallel-axis guard is not scale-invariant.
 export const EARLYZ_BOX_EXIT_WGSL = /* wgsl */ `fn earlyzBoxExitPoint(camPos: vec3<f32>, rd: vec3<f32>, centre: vec3<f32>, halfExt: vec3<f32>) -> vec3<f32> {
   let invRd = select(vec3<f32>(1e9), 1.0 / rd, abs(rd) > vec3<f32>(1e-8));
+  // Camera-relative slab: keeps the f32 terms small far from the origin (Night Train reaches z = -138 m).
   let rel = centre - camPos;
   let lo = (rel - halfExt) * invRd;
   let hi = (rel + halfExt) * invRd;
