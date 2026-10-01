@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Goblin refinement pass (body, kit, weapons, rig, animation) — asked for 2026-10-01, not started
+## Goblin refinement pass (body, kit, weapons, rig, animation) — spec 2026-10-01, phase 1 next
 
 The owner's complaints:
 - the armour kit clips and fits badly;
@@ -35,8 +35,15 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
 - **Also:** bone pitches above about 90° do not take in the look-dev pose overrides
   ([room look-dev notes](../dev-notes/2026-10-01-flat-room-lookdev/notes.md)).
 
-- [ ] Spec the pass with the owner (order proposed: body, then kit parity and fit, then weapons as held props, then rig and
-  animation). Cautionary case: the bride (shelved for janky animation and a sword clipping the body).
+- [x] **Spec** ([design](../superpowers/specs/2026-10-01-goblin-refinement-design.md), owner-approved structure,
+  2026-10-01). The goblin is the protagonist, seen armed in-game (no enemy AI). It holds **the player's weapons**; the buckler
+  and cleaver are retired. **The hands stay orbs** (an early-3D style). Body: **variant A, "sinew"**, picked from three
+  rendered variants ([look-dev](../dev-notes/2026-10-01-goblin-body-lookdev/)).
+- [ ] **Phase 1, body:** re-author `goblin.blob` to variant A (plan next).
+- [ ] Phase 2, armour: redesign and fit (own brainstorm).
+- [ ] Phase 3, held weapons: the player's weapons in the orb hands (own brainstorm).
+- [ ] Phase 4, rig and animation: authored clips and a goblin gait (own brainstorm). Cautionary case: the bride (shelved
+  for janky animation and a sword clipping the body).
 
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 
