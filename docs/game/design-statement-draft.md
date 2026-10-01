@@ -54,11 +54,12 @@ SDF characters go well with this look *because* they are made of primitives. Do 
 
 | Part | What you do | What changes |
 | --- | --- | --- |
-| **The first third** | A classic FPS with the junk weapons (sawn-off, flail, grenade launcher...), stop by stop on the Line | The Flat is quiet; the frame is gentle |
-| **The turn** | Night Train ends: the egg in the control room, the montage, the pull-back, **the egg comes out of the screen** ([emergence spec](../superpowers/specs/2026-10-01-flat-screen-emergence-design.md)) | The egg sits in the Flat; you tend it |
-| **The hatching** | One morning it has hatched. It **crawls into the computer** and nests in the case | The machine starts to change |
-| **The second part** | Shooting as before, but **your weapons mutate**, each into a biomech hybrid with a body effect nothing else has (§3.3); dreams open up | The machine mutates (§3.4); the Party spreads down the tower (§3.7) |
-| **The end** | The terminus, the Party in your flat, the birth (§4) | |
+| **The opening** (owner: 1–2 levels) | A classic FPS with the junk weapons (sawn-off, flail, grenade launcher...), stop by stop on the Line | The Flat is quiet; the frame is gentle |
+| **The egg** | Night Train (or the second level) ends: the egg in the control room, the montage, the pull-back, **the egg comes out of the screen** ([emergence spec](../superpowers/specs/2026-10-01-flat-screen-emergence-design.md)) | The egg sits in the Flat |
+| **The incubation** (a few levels) | More levels, still classic shooting; between them you tend the egg, which grows and changes, mysterious | The egg is the clock |
+| **The hatching** (about the midpoint) | One morning it has hatched. It **crawls into the computer** and nests in the case | The machine starts to change |
+| **The second half** | Shooting as before, but **your weapons mutate**, each into a biomech hybrid with a body effect nothing else has (§3.3); dreams open up | The machine mutates (§3.4); the Party's music grows louder (§3.7) |
+| **The end** | The terminus, the Party in your flat, the birth (§4); open (owner thinking) | |
 
 The shooter stays the product (vision P6): the Flat is where its consequences live, between stops, a few minutes at a time.
 
@@ -193,14 +194,14 @@ weapon mutated, mail, the knock).
 
 ### 3.7 The view, the Line and the Party (proposed)
 
-**The window is the clock.** Outside is the idyll (§3.1), and it changes: a new landscape each day (meadows, a glassy sea,
-a sea of cloud at sunset), and later the vision's journey (desert, then clouds, then stars) as the Line climbs. **The
-Party spoils it slowly:** each stop you clear, the sunset bleeds pinker, the clouds swell like flesh, the sea thickens;
-the music through the ceiling gets louder; the knock moves from the door to the ceiling to the walls. A countdown you see
-and hear, never read as a number. **You go up, it comes down:** the Line climbs toward the Party above; the Party spreads
-down toward you. **The Line is left out of the window view for now** (owner: the first try read badly; how the train is shown is the
-owner's to decide). Technically the view is the cheapest beautiful thing in the game: prerendered panoramas or loops in
-Blender, period-correct and free at runtime, with a live volumetric sky as the modern-effects option.
+- **The window is the idyll** (§3.1): a new fantastical Bryce landscape each day, and later the vision's journey (desert,
+  clouds, stars) as the Line climbs. **The Line is left out of the window view for now** (owner: the first try read
+  badly; how the train is shown is the owner's to decide).
+- **The Party is heard, not seen** (owner): its music comes into the flat through the ceiling, muffled and distant but
+  audible. That is its presence in the Flat.
+- **No race** (the owner was unsure about the Party descending as a countdown). The softer version: the music simply grows
+  nearer as you progress through the game, a dread that follows your progress and never punishes you for being slow. The
+  owner may drop even that.
 
 ### 3.8 Kept from draft 1
 
@@ -253,4 +254,6 @@ Blender, period-correct and free at runtime, with a live volumetric sky as the m
 3. The creature's look: how literal an *Eraserhead* baby, and what it becomes as it moults inside the machine?
 4. Which mutation to prototype first (§3.3)?
 5. The bonsai: in or out?
-6. The ending (§4): does the three-beat shape land?
+6. The ending (§4): the owner is thinking about it ("I guess it's okay").
+7. How long is each part? The owner's current shape: 1–2 levels, the egg, a few more levels, the hatching, then the second
+   half.
