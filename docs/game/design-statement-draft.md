@@ -51,6 +51,9 @@ primitive SDF characters go well with this look *because* they are made of primi
    tracer would have rendered for hours.
 6. **The VHS and CRT treatment belongs to the screen** (the Flat's CRT and moments where layers leak), not to the whole
    image.
+7. **Not too smooth** (owner, on the Blender animatic): period CGI had aliasing, hard terminators between light and
+   shadow, visible procedural noise and low-resolution textures. A clean, denoised, soft-bounced modern finish reads as
+   the wrong decade.
 
 **The Flat is shot like FMV (decided 2026-10-01).** Fixed cinematic camera angles that cut as the goblin moves (*Resident
 Evil*, *FF7*, *Garage*), third person, never its face. Inside the screen **you are the goblin**; outside it **you watch the

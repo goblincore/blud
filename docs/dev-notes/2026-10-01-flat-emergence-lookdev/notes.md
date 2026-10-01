@@ -1,8 +1,10 @@
 # The Flat and the screen emergence: look-dev (2026-10-01)
 
 A Cycles blockout of the goblin's Flat and an animatic of the egg pushing out of the CRT, made for the draft
-[emergence spec](../../superpowers/specs/2026-10-01-flat-screen-emergence-design.md). The owner was away; these are for
-review, not approved.
+[emergence spec](../../superpowers/specs/2026-10-01-flat-screen-emergence-design.md). **A preview only:** the owner wants
+the sequence in the engine (SDF screen, the real SDF goblin), found the Blender finish a little too smooth for period
+CGI, wants the egg bigger than the screen so the bezel deforms and the screen to push much further out, and the goblin
+in a stained vest and shorts at home (not its armour).
 
 | File | What |
 | --- | --- |
@@ -12,6 +14,7 @@ review, not approved.
 | `fmv-treatment.png` | Four frames clean (top) and with a still FMV treatment (bottom); an earlier skin |
 | `goblin-sdf-poses.png` | **The game's own SDF goblin** (`goblin.blob`) meshed from its CPU field, wearing its armour kit (`goblin-kit.gltf`) posed to the same bones: rest, typing, recoil (side and back) |
 | `goblin-kit-option.png` | In the Flat: skin only (as the key frames) and with its armour kit. An open question: does the goblin wear its game armour at home? |
+| `crt-p225f.png`, `crt_p225f.py` | The CRT after the owner's reference, a ViewSonic P225f (22-inch, flat glass): front frame with a sloped inner bevel, the chin's buttons and LED, the long tapered housing, the pedestal. Replaces the animatic's boxy monitor ("looks like a microwave") |
 | `flat_lookdev.py` | The Blender generator: the Flat set, the membrane (`membrane()`), the stand-in egg, the goo, the cameras, the frames and the clip |
 | `blob-mesh.ts` | `.blob` SDF → PLY (surface nets, vertex colours from the owning prim), with bone-angle overrides for poses |
 | `blob-bones.ts` | `.blob` skeleton → JSON (heads and directions, rest and posed), for posing the kit |
