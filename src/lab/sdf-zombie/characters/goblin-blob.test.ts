@@ -32,7 +32,7 @@ const reach = (b: ReturnType<typeof built>, p: Vec3, d: Vec3, max = 0.3): number
   throw new Error(`reach: no surface within ${max} m of (${p.join(', ')})`);
 };
 // The point t (0..1) of the way along a resolved bone, head to tail.
-const boneAt =(b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
+const boneAt = (b:ReturnType<typeof built>, name: string, t: number): Vec3 => {
   const bone = b.bones.get(name)!;
   return lerp(bone.head, bone.tail, t);
 };
