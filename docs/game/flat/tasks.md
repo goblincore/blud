@@ -16,8 +16,11 @@ superpowers spec/plan when they start; link it on the task.
   door, shelf, mattress) exist.
 - [ ] **F-D2 Prop list and stories.** Confirm the prop table (design §3); mark
   hero props and which get SDF variants. *Done when:* the table is final.
-- [ ] **F-D3 Mood board.** Basement light, CRT glow, cheap 90s bedsits, *Moon* /
+- [~] **F-D3 Mood board.** Basement light, CRT glow, cheap 90s bedsits, *Moon* /
   *UFO* rooms, the prerender look. *Done when:* one board, 15–30 images, with notes.
+  2026-10-01: the owner's direction is castle stone + Giger industrial decay + Tokyo otaku cute. A rendered
+  [room look-dev](../../dev-notes/2026-10-01-flat-room-lookdev/) sets the rule (stone for the bones, Giger for the
+  services, cute for the stuff) and shows the machine's last stage. It supersedes the basement and bedsit brief above.
 - [ ] **F-D4 Desk close-up spec.** Composition, props, the post-cold-open stain.
   *Deps:* F-D2. *Done when:* a paintover or blockout render of the shot.
 - [ ] **F-D5 Goblin scale.** Measure eye height, reach and step from the player

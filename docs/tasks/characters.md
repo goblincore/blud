@@ -2,6 +2,42 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Goblin refinement pass (body, kit, weapons, rig, animation) — asked for 2026-10-01, not started
+
+The owner's complaints:
+- the armour kit clips and fits badly;
+- the buckler and the "axe" are poorly modelled and held nonsensically;
+- the body is a series of orbs and should be smoother;
+- the rig needs work and the animation needs an overhaul.
+
+The goblin is also the player character (the first-person arms copy its palette) and the star of the Flat's cutscenes,
+so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), likely causes:
+
+- **Orbs.**
+  - The ball joints are deliberate (`goblin.blob:252-278`): the nubs are 1.3–1.8× the shaft radius.
+  - The blends are 0.0014–0.005 and are then halved (`roundBlendScale` 0.5, `build-body.ts`), so fillets come out at about 3–10 mm. The zombie's median blend is 0.012, giving about 24 mm.
+  - The torso is five ellipsoids. The quality bar for the body is `zombie.blob` (tapered bars, no nubs).
+  - `goblin-blob.test.ts` pins arm daylight, so a fatter torso blend eats it.
+- **Kit.**
+  - `goblin-kit.wam`'s skeleton is a hand-copied transcription of the `.blob` (metres ÷ 1.30, pitch flipped).
+  - The skin is near rigid: 18 of 623 vertices are weighted to more than one joint, and the feet own none.
+  - The breastplate is rigid per ring. The pauldron is buried 36 mm by design.
+  - The tests check the rest pose only. There is no skeleton-parity test; `juggernaut-kit.test.ts:117` has one to copy.
+- **Buckler and cleaver.**
+  - Both are WAM groups, rigid to the hand bone. The cleaver is anchored at the fingertip (`hand.r at=1.0`).
+  - The hand has no roll and is one mitten ellipsoid, so there is no fist to grip with.
+  - The proper system exists and the goblin does not use it: `MotionProfile.prop` (`gripReach`, `fistOnGrip`), `carry.ts`, `webgpu/held-prop.ts`, `sword-swing.ts`.
+  - No shield or left-arm carry exists anywhere yet.
+- **Rig.** Two-point bones with no roll, and the known 8–10 cm foot stretch (below).
+- **Animation.**
+  - The goblin has none of its own: `motionProfileFor('goblin')` falls back to the zombie's SHAMBLE, with metres tuned for 0.96 m legs (the goblin's are 0.56 m) and the zombie's unarmed attacks.
+  - The bar is the soldier family (clip-derived gaits, planted footwork, carries).
+- **Also:** bone pitches above about 90° do not take in the look-dev pose overrides
+  ([room look-dev notes](../dev-notes/2026-10-01-flat-room-lookdev/notes.md)).
+
+- [ ] Spec the pass with the owner (order proposed: body, then kit parity and fit, then weapons as held props, then rig and
+  animation). Cautionary case: the bride (shelved for janky animation and a sword clipping the body).
+
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 
 - [x] **Second draft** (owner rejected the first as the existing bull brutes rescaled): a fresh body from
