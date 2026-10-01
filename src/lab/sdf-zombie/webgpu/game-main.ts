@@ -107,6 +107,7 @@ import { adoptEggFx, createEgg, createEggSeams, stepEgg } from './game-egg-leave
 import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightListOn, torchLane, writeLightList } from './game-light-list-leaves';
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
+import { applySequenceCamera, createSequenceSeams, stepSequence } from './game-sequence-leaves';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, ownsSlot, refillMagazine, stepLoop } from './game-loop-leaves';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
@@ -7088,6 +7089,7 @@ async function main() {
     stepDisco(ctx);
     stepEgg(ctx);
     stepLoop(ctx, dt);
+    stepSequence(ctx, dt);
     ctx.telemetry.telemetry.lap('region', 'tick:input-player');
     // BLAST REFRACTION ages on SIM time, like every other sim clock — never
     // wall time — so a frozen capture advances it exactly one frame per step and
@@ -8131,6 +8133,7 @@ async function main() {
     // The train's roll and bob ride on the view only (never the player or collision).
     applyTrainCamera(ctx, camera);
     applyDeathCamera(ctx, camera);
+    applySequenceCamera(ctx, camera);
     camera.updateMatrixWorld();
 
     // Optional impact crown: rebuild from the current event times after the
@@ -8679,6 +8682,7 @@ async function main() {
     createVoidSeams(ctx),
     createTrainSeams(ctx),
     createLoopSeams(ctx),
+    createSequenceSeams(ctx),
     createDynamicLightSeams(ctx),
     createDiscoSeams(ctx),
     createEggSeams(ctx),

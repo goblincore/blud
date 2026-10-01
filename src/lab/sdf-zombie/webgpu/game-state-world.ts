@@ -25,6 +25,7 @@ import type { LoopRuntime } from './game-loop-leaves';
 import type { TrainRuntime } from './game-train-leaves';
 import type { DiscoRuntime } from './game-disco-leaves';
 import type { EggRuntime } from './game-egg-leaves';
+import type { SequenceRuntime } from './game-sequence-leaves';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';
@@ -76,6 +77,8 @@ export interface WorldState {
   disco: DiscoRuntime | null;
   /** The control room's egg: the real one (WGSL pass) replacing the placeholder; null without one. */
   egg: EggRuntime | null;
+  /** The running scripted sequence (the Night Train ending); null until one starts. */
+  sequence: SequenceRuntime | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -138,6 +141,7 @@ export function makeWorldState(): WorldState {
     light: null,
     disco: null,
     egg: null,
+    sequence: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -176,6 +180,7 @@ export const WORLD_BINDINGS = {
   light: 'world.light',
   disco: 'world.disco',
   egg: 'world.egg',
+  sequence: 'world.sequence',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',
