@@ -1323,7 +1323,7 @@ import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3
 and add after the `./upscale/upscale-model` import:
 
 ```ts
-import { EARLYZ_SEED_WGSL } from './earlyz/seed-depth.wgsl';
+import { EARLYZ_SEED_WGSL, seedScaleSupported } from './earlyz/seed-depth.wgsl';
 import { SEED_RENDER_ORDER } from './earlyz/type-order';
 ```
 
@@ -1357,6 +1357,10 @@ Immediately after `let outputTarget: THREE.RenderTarget | null = null;` add:
   } | null = null;
   let seedOnLast = false;
   let seedReasonLast: string | null = 'not requested';
+  // Task 5 review (GPU-measured): the seed's 4x4 block cap is exact only when
+  // seedScaleSupported() holds for (level depth size, march size). Cached by size.
+  let seedScaleKey = '';
+  let seedScaleOk = false;
   const seedFn = wgslFn(EARLYZ_SEED_WGSL);
   const ensureSeed = (): void => {
     if (seed || !seedScene) return;
@@ -1385,6 +1389,12 @@ Immediately after `let outputTarget: THREE.RenderTarget | null = null;` add:
     if (!seedScene) return 'not requested';
     if (!outputTarget?.depthTexture) return 'no sampleable level depth (post-aa capture off)';
     if (fieldStyle !== 'off') return `field style '${fieldStyle}'`;
+    const scaleKey = `${outputTarget.width}x${outputTarget.height}/${target.width}x${target.height}`;
+    if (scaleKey !== seedScaleKey) {
+      seedScaleKey = scaleKey;
+      seedScaleOk = seedScaleSupported([outputTarget.width, outputTarget.height], [target.width, target.height]);
+    }
+    if (!seedScaleOk) return `march ${target.width}x${target.height} over ${outputTarget.width}x${outputTarget.height}: seed block wider than 4 px`;
     if (target.textures.length !== 1) return 'march MRT boot';
     if (accumOn) return 'temporal accumulation (jittered march)';
     if (marchJitter) return 'capture jitter';
