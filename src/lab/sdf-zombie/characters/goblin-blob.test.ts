@@ -16,10 +16,23 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { checkStance, clearOf, daylightOf, fusedOf } from '../blob-checks';
+import { sdBody } from '../validate';
+import { lerp } from '../vec';
+import type { Vec3 } from '../types';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
 const limb = (b: ReturnType<typeof built>, l: string) => b.clusters.find(c => c.limb === l)!;
+// Distance from p along the unit direction d to the body's surface (where the field turns positive), in 0.5 mm steps.
+const reach = (b: ReturnType<typeof built>, p: Vec3, d: Vec3, max = 0.3): number => {
+  for (let t = 0; t < max; t += 0.0005)
+    if (sdBody([p[0] + d[0] * t, p[1] + d[1] * t, p[2] + d[2] * t], b) > 0) return t;
+  return max;
+};
+const boneAt = (b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
+  const bone = b.bones.get(name)!;
+  return lerp(bone.head, bone.tail, t);
+};
 
 describe('goblin.blob', () => {
   it('compiles and validates clean', () => {
@@ -116,5 +129,47 @@ describe('goblin.blob', () => {
     expect(doc.height).not.toBeNull();
     const hip = b.bones.get('thigh.l')!.head[1];
     expect(hip / doc.height!).toBeGreaterThan(0.50);
+  });
+
+  // 2026-10-01 refinement (docs/superpowers/specs/2026-10-01-goblin-refinement-design.md). The owner's read of the
+  // old body was "a series of orbs": five ellipsoids stacked up the spine at tight blends, and a nub at every joint.
+  // These three pin the rebuild (variant A, "sinew"). The numbers were measured on the old and new bodies.
+
+  // A stacked torso pinches between its rings. Sliced every 5 mm from the pelvis to the lower chest (below the
+  // armpits, where the arms would join the slice), the half-width never steps more than 6 mm between neighbouring
+  // slices. Old body: 9.0 mm. Rebuilt: 4.0 mm.
+  it('has one continuous torso, not stacked rings', () => {
+    const b = built();
+    const p0 = b.bones.get('pelvis')!.head;
+    const p1 = boneAt(b, 'chest', 0.2);
+    let prev = -1, worst = 0;
+    for (let y = p0[1]; y <= p1[1]; y += 0.005) {
+      const t = (y - p0[1]) / (p1[1] - p0[1]);
+      const w = reach(b, [0, y, p0[2] + (p1[2] - p0[2]) * t], [1, 0, 0]);
+      if (prev >= 0) worst = Math.max(worst, Math.abs(w - prev));
+      prev = w;
+    }
+    expect(worst).toBeLessThan(0.006);
+  });
+
+  // deep= scales a prim front and back alike, so a deep torso on the spine's own axis bulges at the back of the
+  // waist as much as at the belly (the look-dev's flaw). The gut hangs in front and the back stays flat enough for
+  // the spine to read. Rebuilt: belly +27.0 mm, waist +15.0 mm. Old body: 0.0 and -9.5 mm.
+  it('carries its gut in front and its back flat', () => {
+    const b = built();
+    const gut = (p: Vec3) => reach(b, p, [0, 0, 1]) - reach(b, p, [0, 0, -1]);
+    expect(gut(boneAt(b, 'pelvis', 0.8))).toBeGreaterThan(0.015);
+    expect(gut(boneAt(b, 'spine1', 0.3))).toBeGreaterThan(0.008);
+  });
+
+  // No ball joints on the limbs. The orbs that stay are a style the owner kept (early 3D): the hands, the shoulder
+  // round (which also attaches the arm), the ankle knob and the toe pad. Any other point-blob on an arm or a leg is a
+  // joint orb coming back.
+  it('keeps orbs only at the shoulders, hands, ankles and toes', () => {
+    const allowed = (p: { bone: string; at: number }) =>
+      p.bone === 'hand' || p.bone === 'foot' ||
+      (p.bone === 'clavicle' && p.at === 1) || (p.bone === 'shin' && p.at === 1);
+    const orbs = doc.parts.filter(p => p.kind === 'blob' && (p.limb === 'arm' || p.limb === 'leg'));
+    expect(orbs.filter(p => !allowed(p)).map(p => `${p.bone} at=${p.at}`)).toEqual([]);
   });
 });
