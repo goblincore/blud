@@ -79,13 +79,13 @@ describe('the figure and the core', () => {
     const tCoreBack = coreEmission(back, [0, 0, 1], C).t;
     expect(figureTau(back, [0, 0, 1], C, 0.5, tCoreBack)).toBeLessThan(0.5 * front);   // from behind, the core is in front
   });
-  it('blur spreads the figure but keeps a single blob\'s peak absorption', () => {
+  it('blur spreads the figure and conserves a single blob\'s total absorption (its peak falls as 1/blur^2)', () => {
     const b = FIGURE[0]!;
     const ci = innerCentre(C);
     const k = EGG.innerScale / 0.6;
     const bc: Vec3 = [ci[0] + (EGG.figureOffset[0] + b.pos[0]) * k, ci[1] + (EGG.figureOffset[1] + b.pos[1]) * k, ci[2] + (EGG.figureOffset[2] + b.pos[2]) * k];
-    const through = (blur: number) => (EGG.figureStrength / blur) * gaussLine([bc[0], bc[1], bc[2] + 3], [0, 0, -1], bc, [b.sc[0] * k * blur, b.sc[1] * k * blur, b.sc[2] * k * blur]).value;
-    expect(through(1.7)).toBeCloseTo(through(1.0), 6);
+    const through = (blur: number) => (EGG.figureStrength / (blur * blur * blur)) * gaussLine([bc[0], bc[1], bc[2] + 3], [0, 0, -1], bc, [b.sc[0] * k * blur, b.sc[1] * k * blur, b.sc[2] * k * blur]).value;
+    expect(through(1.7) * 1.7 * 1.7).toBeCloseTo(through(1.0), 6);
     expect(blurFor(0)).toBeCloseTo(EGG.blurFar, 6);
     expect(blurFor(1)).toBeCloseTo(EGG.blurNear, 6);
   });

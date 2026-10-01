@@ -200,10 +200,10 @@ pass(`pulse: held 0 -> ${lP0.toFixed(1)}, held 1 -> ${lP1.toFixed(1)} (+${((lP1 
 // Frames are 800 x 600; the figure stands at the inner egg's centre (y ~1.4 m, eye height 1.6 m).
 const FIG_BOXES = {
   // far (5.3 m): the inner egg is x 328-475, y 215-420 px; the figure's left half, below the head spot.
-  far: { fig: [0.46, 0.50, 0.50, 0.62], sides: [[0.425, 0.47, 0.452, 0.57], [0.56, 0.47, 0.585, 0.57]] },
+  far: { fig: [0.51, 0.50, 0.55, 0.58], sides: [[0.425, 0.47, 0.452, 0.57], [0.56, 0.47, 0.585, 0.57]] },
   // near (1.8 m): the inner egg fills x 180-620; the big spot sits on the right of the figure (x 410-560, y 290-440),
   // so the figure patch is its left half (x 296-400, y 312-432) and the milk is the strip to its left.
-  near: { fig: [0.37, 0.52, 0.50, 0.72], sides: [[0.27, 0.52, 0.35, 0.68], [0.28, 0.42, 0.35, 0.52]] },
+  near: { fig: [0.50, 0.45, 0.62, 0.70], sides: [[0.27, 0.70, 0.34, 0.82], [0.27, 0.27, 0.34, 0.42], [0.71, 0.50, 0.75, 0.62]] },
 };
 const contrast = (img, set) => {
   const side = set.sides.reduce((a, b) => a + luma(img, b), 0) / set.sides.length;

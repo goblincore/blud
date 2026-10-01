@@ -17,12 +17,12 @@ export const EGG = {
   /** Inner egg: scale of the outer, and its centre's drop below the outer's (m). */
   innerScale: 0.6, innerDy: -0.12,
   /** The warm core glow behind the figure: centre offset from the inner centre, Gaussian scale (x, y, z), gain. */
-  coreOffset: [0, 0, -0.2] as Vec3, coreScale: [0.3, 0.5, 0.18] as Vec3, coreGain: 5.0,
-  /** The figure's centre offset from the inner centre, and the strength of its absorption (the optical depth through its
-   *  middle comes out near 1 at resolve 0.5: a Gaussian blob's peak is strength / blur x sqrt(pi) x its depth scale). */
-  figureOffset: [0, -0.02, -0.08] as Vec3, figureStrength: 3.2,
+  coreOffset: [0, 0, -0.2] as Vec3, coreScale: [0.5, 0.75, 0.3] as Vec3, coreGain: 5.0,
+  /** The figure's centre offset from the inner centre, and the strength of its absorption (a Gaussian blob's peak optical depth is
+   *  strength / blur^2 x sqrt(pi) x its depth scale: about 4 through the body at blur 1, about 1.4 at blur 1.7). */
+  figureOffset: [0, -0.02, -0.08] as Vec3, figureStrength: 16,
   /** Milk: extinction per metre inside the inner egg, the inner front surface's alpha, the outer shell's alpha. */
-  milkSigma: 1.4, milkFront: 0.18, shellAlpha: 0.3,
+  milkSigma: 2.2, milkFront: 0.18, shellAlpha: 0.3,
   /** Figure blur at resolve 0 (far) and 1 (sharpest): a multiplier on the blobs' widths. */
   blurFar: 1.7, blurNear: 1.0,
   /** The default `egg.resolve` setting (0 = always a smudge, 1 = sharpens fully when you are close). */
@@ -34,7 +34,7 @@ export const EGG = {
   /** Beats per second: the base, and what is added at proximity 1. */
   pulseRate: 1.0, pulseRateNear: 1.6,
   /** Surface spots on the inner egg. */
-  spots: 24,
+  spots: 14,
 } as const;
 
 /** The figure: soft Gaussian blobs, offsets from the figure centre and Gaussian scales (x, y, z), at innerScale 0.6. */
@@ -96,8 +96,8 @@ export function figureTau(o: Vec3, d: Vec3, egg: Vec3, resolve: number, tCore: n
       ci[0] + (EGG.figureOffset[0] + b.pos[0]) * k, ci[1] + (EGG.figureOffset[1] + b.pos[1]) * k, ci[2] + (EGG.figureOffset[2] + b.pos[2]) * k,
     ];
     const g = gaussLine(o, d, pos, [b.sc[0] * k * blur, b.sc[1] * k * blur, b.sc[2] * k * blur]);
-    // Dividing by the blur keeps a blob's peak absorption constant while it spreads.
-    if (g.t < tCore) tau += (EGG.figureStrength / blur) * g.value;
+    // Dividing by blur^3 conserves the blob's total absorption (a defocus) while it spreads: the peak falls as 1/blur^2.
+    if (g.t < tCore) tau += (EGG.figureStrength / (blur * blur * blur)) * g.value;
   }
   return tau;
 }

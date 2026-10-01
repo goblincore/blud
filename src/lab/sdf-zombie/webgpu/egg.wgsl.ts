@@ -111,7 +111,7 @@ export const EGG_SHADE = /* wgsl */ `fn eggShade(wpos: vec3<f32>, eye: vec3<f32>
   if (ri.x <= ri.y) {
     let chord = ri.y - ri.x;
     let tm = exp(-milk.x * chord);
-    let milkCol = vec3<f32>(0.86, 0.88, 0.82) * (0.22 + 0.4 * pulse);
+    let milkCol = vec3<f32>(0.95, 0.72, 0.55) * (0.22 + 0.4 * pulse);
     let spotCol = vec3<f32>(0.45, 0.85, 0.85) * (0.45 + 0.55 * pulse);
 
     // Front surface: a little milk and the spots.
@@ -131,13 +131,13 @@ export const EGG_SHADE = /* wgsl */ `fn eggShade(wpos: vec3<f32>, eye: vec3<f32>
     var tauAll = 0.0;
     for (var j = 0; j < ${FIGURE.length}; j = j + 1) {
       let g = eggGauss(o, d, ci + (fo + bp[j]) * kk, bs[j] * kk * blur);
-      let tj = milk.w / blur * g.x;
+      let tj = milk.w / (blur * blur * blur) * g.x;
       tauAll = tauAll + tj;
       if (g.y < gc.y) { tauFront = tauFront + tj; }
     }
     let coreCol = vec3<f32>(1.0, 0.55, 0.25);
     let emit = coreCol * ${f(EGG.coreGain)} * gc.x * (0.55 + 0.45 * pulse) * exp(-tauFront) * sqrt(tm);
-    let scatter = milkCol * (1.0 - tm) * 0.55;
+    let scatter = milkCol * (1.0 - tm) * 0.55 * exp(-tauAll * 0.8);
     col = col + T * (emit + scatter);
     T = T * tm * exp(-tauAll * 0.7);
 
