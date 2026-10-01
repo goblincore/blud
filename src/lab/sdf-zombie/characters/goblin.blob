@@ -90,9 +90,9 @@ skeleton
     # wings. Measured after: 46 mm at the elbow, 44 mm at the forearm midpoint,
     # 59 mm at the wrist. The clavicle came in to 0.036/0.042 in step, because
     # shoulder reach is a function of chest width and the chest moved.
-    # (History: the torso these numbers describe was rebuilt as tapered bars
-    # on 2026-10-01, see the body block. The narrow-x, deep-z rule still holds;
-    # the arm now measures 48.5 mm of daylight below the elbow.)
+    # (History: the torso and arms these numbers describe were rebuilt as
+    # tapered bars on 2026-10-01, see the body block. The narrow-x, deep-z rule
+    # still holds; the arm now measures 48.5 mm of daylight below the elbow.)
     #
     # The knock-on was free: the forearm no longer has to tuck in hard to keep
     # the hands beside the hips, so tilt went -9 to -5, and the hands stopped
@@ -143,11 +143,12 @@ body
   # variants, "A, sinew": docs/dev-notes/2026-10-01-goblin-body-lookdev/.
   #
   # Still narrow in x and deep in z, for the reason the skeleton block gives:
-  # width in x is the budget the arms compete for. With the r 0.042 shoulder
-  # round (arms block below), the chest's wide=1.00 leaves the upper arm 19.2 mm
-  # of daylight at 0.11 m; at the look-dev's wide=1.06 it was 14.99, just under
-  # the test's 15 mm line, so the pin failed. Do not widen x or shrink deep here
-  # without re-running the arm daylight pins in goblin-blob.test.ts.
+  # width in x is the budget the arms compete for. The chest's wide=1.00 leaves
+  # the upper arm 19.2 mm of daylight at 0.11 m (set by the upper-arm bar and
+  # the chest width, whatever the shoulder round's size); at the look-dev's
+  # wide=1.06 it was 14.99, just under the test's 15 mm line, so the pin
+  # failed. Do not widen x or shrink deep here without re-running the arm
+  # daylight pins in goblin-blob.test.ts.
   #
   # THE GUT HANGS IN FRONT. `deep=` scales a prim front and back alike, so a deep
   # torso on the spine's own axis bulged at the back of the waist as much as at
@@ -161,8 +162,8 @@ body
   # These bar and gut values are not the look-dev's: they were retuned on
   # 2026-10-01 (goblin refinement phase 1 plan) against the gut measurement
   # above and the arm pins, keeping the look-dev's front silhouette (the back
-  # was flattened on purpose, by up to 26 mm): pelvis r2 0.078 -> 0.074 and
-  # deep 1.28 -> 1.10; spine r 0.076 -> 0.072 and deep 1.20 -> 1.08; chest
+  # was flattened on purpose, by up to about 28 mm): pelvis r2 0.078 -> 0.074
+  # and deep 1.28 -> 1.10; spine r 0.076 -> 0.072 and deep 1.20 -> 1.08; chest
   # deep 1.06 -> 1.12 and wide 1.06 -> 1.00; the gut blob is new.
   bar  torso on pelvis from=0.00 to=1.00 r=0.068 r2=0.074 deep=1.10 offset=(0,0,0.012) blend=0.014
   blob torso on pelvis at=0.80 r=0.060 tall=1.05 offset=(0,0,0.030) blend=0.016
@@ -304,28 +305,35 @@ body
 
   # ARMS AND LEGS: tapered bars, no ball joints (rebuilt 2026-10-01).
   #
-  # Every joint used to be a nub 1.3-1.8x the shaft it joined, at blends of
-  # 0.0014-0.004, on purpose: "shoulder, elbow, wrist, hip, knee, ankle" as
-  # orbs. The owner's 2026-10-01 read was "a series of orbs", and the pick was
-  # variant A: each segment one bar tapering toward the hand or foot (r2),
-  # filleted into the next at 0.010-0.014 so a joint is a soft crease. The orbs
-  # that stay are a STYLE, kept on purpose (owner: a throwback to early 3D
-  # games): the hands, a small ankle knob, the toe pad, and the shoulder round,
-  # which is structural as much as stylistic (below). goblin-blob.test.ts pins
-  # that no other point-blob comes back on a limb.
+  # Most joints used to be a nub 1.3-1.7x the shaft it joined (wrist and ankle
+  # about 1.1x), at blends of 0.0014-0.004, on purpose: "shoulder, elbow,
+  # wrist, hip, knee, ankle" as orbs. The owner's 2026-10-01 read was "a series
+  # of orbs", and the pick was variant A: each segment one bar tapering toward
+  # the hand or foot (r2), blended into the next at 0.010-0.014 (a smooth-min
+  # band 2-3 cm wide; see the torso block) so a joint is a soft transition. The
+  # orbs that stay are kept on purpose: the owner kept the hands as orbs, a
+  # throwback to early 3D games, and the small ankle knob and the toe pad come
+  # with variant A; the shoulder round is also the arm's core (below).
+  # goblin-blob.test.ts pins that no other point-blob comes back on a limb. All
+  # values below are look-dev variant A's.
   #
-  # The shoulder round is what ATTACHES the arm. At the look-dev's r 0.038,
-  # fusedOf read +2.8 mm: the core-to-core path left the flesh and the arm hung
-  # on by its fillet. 0.042 is the smallest that fuses (-2.9 mm with the chest
-  # at wide=1.00); anything bigger only regrows the orb.
-  blob arm on clavicle at=1.00 r=0.042 blend=0.010 mirror
+  # The shoulder round is the arm's `core`: the prim the fuse probe starts
+  # from (clusterCore in validate.ts). Without the mark the probe takes the
+  # cluster's fattest prim, and the hand (0.046 x deep 0.90 = 0.0414)
+  # out-ranks a slim shoulder: the probe then ran from the hand to the torso
+  # through air and fusedOf read +3.4 mm, though nothing had detached
+  # (daylight and validateBody were unchanged). Marked `core`, the look-dev's
+  # r 0.038 fuses at -2.7 mm. Do not "fix" a positive fusedOf by growing this
+  # orb; check which prim is the core first.
+  blob arm on clavicle at=1.00 r=0.038 blend=0.010 mirror core
   bar  arm on upperarm from=0.00 to=1.00 r=0.031 r2=0.024 blend=0.010 mirror
   bar  arm on forearm  from=0.00 to=1.00 r=0.027 r2=0.018 blend=0.010 mirror
 
-  # Big grabby hands: still orbs, still r 0.046. goblin-skin.ts copies this
-  # radius for the player's first-person arms, so changing it changes the
-  # player's hands. Only the blend widened, 0.0034 -> 0.008, so the wrist runs
-  # into the hand instead of meeting it at a seam.
+  # Big grabby hands: still orbs, still r 0.046. goblin-skin.ts hard-codes this
+  # radius (GOBLIN_SKIN.handRadius) for the player's first-person hands, and
+  # loadHold depends on it. Nothing links the two: change them together. Only
+  # the blend widened, 0.0034 -> 0.008, so the wrist runs into the hand
+  # instead of meeting it at a seam.
   blob arm on hand at=0.55 r=0.046 deep=0.90 blend=0.008 mirror
 
   bar  leg on thigh from=0.00 to=1.00 r=0.046 r2=0.031 blend=0.014 mirror
