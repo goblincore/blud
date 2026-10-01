@@ -31,6 +31,15 @@ describe('conservative depth patch (spec §4 A)', () => {
     p.getFragDepth();
     expect(p.calls.at(-1)).toBe('frag_depth');
   });
+  it('only the exact value greater opts in', () => {
+    const p = fakeProto();
+    installConservativeDepthPatch(p as never, '186');
+    const before = conservativeDepthPatchHits();
+    p.material = { conservativeDepth: 'less' };
+    expect(p.getFragDepth()).toBe('output.depth');
+    expect(p.calls.at(-1)).toBe('frag_depth');
+    expect(conservativeDepthPatchHits()).toBe(before);
+  });
   it('refuses any three revision but 186 and leaves the prototype untouched', () => {
     const p = fakeProto();
     const original = p.getFragDepth;
@@ -184,6 +193,12 @@ describe('detectConservativeDepth (spec D8)', () => {
       expect(device.scopes.popped).toBe(1);
     });
   }
+  it('a rejecting happy-path pop is one pop only, reported as threw', async () => {
+    const device = fakeDevice({ popRejects: 'device lost' });
+    expect(await detectConservativeDepth(device)).toEqual({ ok: false, reason: 'threw: Error: device lost' });
+    expect(device.scopes.pushed).toBe(1);
+    expect(device.scopes.popped).toBe(1);
+  });
   it('does not turn a failing cleanup pop into a rejection', async () => {
     const device = fakeDevice({ compileInfoRejects: 'lost', popRejects: 'gone' });
     expect(await detectConservativeDepth(device)).toEqual({ ok: false, reason: 'threw: Error: lost' });

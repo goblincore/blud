@@ -99,8 +99,10 @@ export async function detectConservativeDepth(device: DeviceLike): Promise<{ ok:
         pipelineError = String((e as Error)?.message ?? e);
       }
     }
-    const scoped = await device.popErrorScope();
+    // popErrorScope consumes the scope even if its promise rejects, so clear the flag first:
+    // a second pop in the finally would take an unrelated scope off the device's stack.
     pushed = false;
+    const scoped = await device.popErrorScope();
     if (errors.length > 0) return { ok: false, reason: `compile: ${errors[0]!.message}` };
     if (pipelineError !== null) return { ok: false, reason: `pipeline: ${pipelineError}` };
     if (scoped) return { ok: false, reason: `validation: ${scoped.message}` };
