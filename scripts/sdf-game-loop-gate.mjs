@@ -6,7 +6,7 @@
 //   2. PICKUPS: standing on the sawn-off collects it loaded (2 | 4); office shells add 8.
 //   3. DAMAGE: seam damage; a live zombie in reach bites.
 //   4. DEATH: health 0 shows the overlay.
-//   5. COMPLETE: reaching the egg in the control room ends the level.
+//   5. ENDING: reaching the egg starts the ending sequence; it freezes input, then completes the level.
 //
 // Usage: LAB_VITE_PORT=5296 LAB_CDP_PORT=9296 node scripts/sdf-game-loop-gate.mjs
 import { execFileSync } from 'node:child_process';
@@ -173,13 +173,44 @@ const shown = await evaluate(`[...document.querySelectorAll('div')].some((d) => 
 if (!shown) fail('death overlay not shown');
 pass('death: health 0 shows YOU DIED');
 
-// 5. COMPLETE — reaching the egg in the control room (the `level.end` trigger, a 3.2 m box around
-//    the egg: x -1.6..1.6, z -135.1 .. -138.3; ending plan 1, 2026-09-30).
+// 5. THE ENDING — reaching the egg (the egg.touch box: x -1.6..1.6, z -135.1 .. -138.3) starts the
+//    `ending` sequence; input and damage freeze; the camera leaves the player's view; the pull is
+//    shot 1 (4 s), black + title is shot 2 (2 s); at the end the level completes (ending plan 3, 2026-09-30).
+const stepN = (n, dt) => evaluate(`__sdfGame.step(${n}${dt === undefined ? '' : `, ${dt}`})`, 300000);
 if (!(await boot('level=night-train&frozen&nospawn&god'))) fail('night-train (god) did not boot');
-await evaluate('__sdfGame.setPose(0, -135.3, 0, 0)');
+await evaluate('__sdfGame.setPose(0, -132.0, 0, 0)');
 await settle();
-if (!(await evaluate('__sdfGame.levelComplete()'))) fail('reaching the egg did not complete the level');
-pass('complete: reaching the egg ends the level');
+if (await evaluate('__sdfGame.sequence()')) fail('a sequence existed before the egg was touched');
+await evaluate('__sdfGame.setPose(0, -135.3, 0, 0)');
+await stepN(3, 1 / 60);
+let S = await evaluate('__sdfGame.sequence()');
+if (!S || S.id !== 'ending' || !S.active) fail(`touching the egg did not start the ending: ${JSON.stringify(S)}`);
+if (S.shot !== 'pull') fail(`the ending did not open on the pull: ${JSON.stringify(S)}`);
+if (await evaluate('__sdfGame.levelComplete()')) fail('the level completed before the sequence ended');
+const eye0 = S.camera?.eye;
+// Frozen: movement and damage do nothing while it runs.
+const p0 = (await evaluate('__sdfGame.pose()')).pos.map((v) => +v.toFixed(3));
+const hp0 = (await evaluate('__sdfGame.vitals()')).health;
+await evaluate('__sdfGame.damagePlayer(30, "pellet")');
+if ((await evaluate('__sdfGame.vitals()')).health !== hp0) fail('damage landed during the sequence');
+// The pull: 4 s of sim time in 60 Hz steps (3 + 120 steps = 2.05 s in); the camera moves and the lens narrows.
+await stepN(120, 1 / 60);
+S = await evaluate('__sdfGame.sequence()');
+if (!S.active || S.shot !== 'pull' || !(S.u > 0.4 && S.u < 0.6)) fail(`2 s in, not halfway through the pull: ${JSON.stringify(S)}`);
+if (!S.camera || !(S.camera.fovDelta < -3)) fail(`the lens did not narrow: ${JSON.stringify(S.camera)}`);
+if (!eye0 || !S.camera || Math.hypot(...S.camera.eye.map((v, i) => v - eye0[i])) < 0.05) fail(`the camera did not move: ${JSON.stringify({ eye0, now: S.camera?.eye })}`);
+// 3 + 120 + 150 steps = 4.55 s: inside the black shot (the pull ends at 4 s, the black at 6 s).
+await stepN(150, 1 / 60);
+S = await evaluate('__sdfGame.sequence()');
+if (S.shot !== 'black' || !(S.overlay.alpha > 0.99) || S.overlay.text !== 'NIGHT TRAIN') fail(`after the pull: not black with the title: ${JSON.stringify(S)}`);
+if ((await evaluate('__sdfGame.pose()')).pos.map((v) => +v.toFixed(3)).join() !== p0.join()) fail('the player moved during the sequence');
+// 3 + 120 + 150 + 130 steps = 6.7 s: past the 6 s end.
+await stepN(130, 1 / 60);
+S = await evaluate('__sdfGame.sequence()');
+if (S.active || !S.finished) fail(`the sequence did not finish after 6.7 s: ${JSON.stringify(S)}`);
+await stepN(3, 1 / 60);
+if (!(await evaluate('__sdfGame.levelComplete()'))) fail('the level did not complete when the sequence ended');
+pass('ending: egg touch -> pull (lens narrows, camera moves) -> black + title -> level complete; input and damage frozen');
 
 console.log('PASS sdf-game-loop-gate');
 process.exit(0);
