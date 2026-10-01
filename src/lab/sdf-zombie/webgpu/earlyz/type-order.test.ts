@@ -14,6 +14,8 @@ describe('typeRenderOrder (spec D7, amended)', () => {
     ]);
     expect(o.get('b')!.back).toBe(BACK_BATCH_BASE);
     expect(o.get('b')!.front).toBe(FRONT_BATCH_BASE);
+    expect(o.get('a')!.back).toBe(BACK_BATCH_BASE + 1);
+    expect(o.get('c')!.back).toBe(BACK_BATCH_BASE + 2);
     expect(o.get('a')!.front).toBe(FRONT_BATCH_BASE + 1);
     expect(o.get('c')!.front).toBe(FRONT_BATCH_BASE + 2);
   });
@@ -23,5 +25,21 @@ describe('typeRenderOrder (spec D7, amended)', () => {
       { key: 'y', nearestBack: Infinity, nearestFront: 3 },
     ]);
     expect(o.get('x')!.front).toBeLessThan(o.get('y')!.front);
+  });
+  it('back and front sorts are independent (order can disagree)', () => {
+    const o = typeRenderOrder([
+      { key: 'p', nearestBack: 0.2, nearestFront: 9 },
+      { key: 'q', nearestBack: Infinity, nearestFront: 1 },
+    ]);
+    expect(o.get('p')!.back).toBeLessThan(o.get('q')!.back);
+    expect(o.get('q')!.front).toBeLessThan(o.get('p')!.front);
+  });
+  it('NaN distances rank after finite ones', () => {
+    const o = typeRenderOrder([
+      { key: 'isEmpty', nearestBack: NaN, nearestFront: NaN },
+      { key: 'notEmpty', nearestBack: 1, nearestFront: 2 },
+    ]);
+    expect(o.get('notEmpty')!.back).toBeLessThan(o.get('isEmpty')!.back);
+    expect(o.get('notEmpty')!.front).toBeLessThan(o.get('isEmpty')!.front);
   });
 });

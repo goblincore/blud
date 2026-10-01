@@ -13,7 +13,7 @@ export const FRONT_BATCH_BASE = -10_000;
 
 export interface TypeDistance {
   key: string;
-  /** Distance to the batch's nearest drawn instance; Infinity when empty. */
+  /** Distance to the batch's nearest drawn instance; Infinity when empty. Keys must be unique. */
   nearestBack: number;
   nearestFront: number;
 }
@@ -21,10 +21,13 @@ export interface TypeDistance {
 export function typeRenderOrder(types: readonly TypeDistance[]): Map<string, { back: number; front: number }> {
   const out = new Map<string, { back: number; front: number }>();
   for (const t of types) out.set(t.key, { back: 0, front: 0 });
+  // Normalize NaN to Infinity so empty/invalid batches sort to the end.
+  const normalize = (x: number) => (Number.isNaN(x) ? Infinity : x);
   // Array.prototype.sort is stable, so ties keep the input order.
-  [...types].sort((a, b) => a.nearestBack - b.nearestBack || 0)
+  // Infinity - Infinity is NaN; `|| 0` makes empty batches tie so the stable sort keeps their input order.
+  [...types].sort((a, b) => normalize(a.nearestBack) - normalize(b.nearestBack) || 0)
     .forEach((t, i) => { out.get(t.key)!.back = BACK_BATCH_BASE + i; });
-  [...types].sort((a, b) => a.nearestFront - b.nearestFront || 0)
+  [...types].sort((a, b) => normalize(a.nearestFront) - normalize(b.nearestFront) || 0)
     .forEach((t, i) => { out.get(t.key)!.front = FRONT_BATCH_BASE + i; });
   return out;
 }
