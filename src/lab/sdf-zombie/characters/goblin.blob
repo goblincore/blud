@@ -13,6 +13,10 @@
 #     chain length. The torso chain is pelvis(0.14) + spine1(0.10) + chest(0.12)
 #     = 0.36, so WAM's t=0.58 lands 0.209 along, i.e. spine1 at 0.69.
 #
+#   (The torso no longer uses this ring mapping: it was rebuilt as three
+#   tapered bars on 2026-10-01; see the body block. The chain lengths above
+#   are the WAM port's, not this skeleton's.)
+#
 # Silhouette intent, carried over from the WAM file: stooped and scheming, not
 # standing at attention. Spine pitches forward, neck pitches back to bring the
 # face level, arms hang long and slightly ahead, legs bow out at the thigh and
@@ -37,8 +41,9 @@ skeleton
   # headRadius on a short skull bone puts the bottom of that ellipsoid BELOW
   # the neck's top — the head does not sit near the shoulders, it encloses the
   # whole neck, and thinning the column cannot reveal something inside a
-  # sphere. Cranium size, skull length, neck length and the chest cap all move
-  # together; none of them works alone.
+  # sphere. Cranium size, skull length, neck length and the top of the chest (a
+  # cap blob until the 2026-10-01 rebuild, now the chest bar's tapered end) all
+  # move together; none of them works alone.
   bone neck   parent=chest  dir=up pitch=-17 len=0.140
   bone skull  parent=neck   dir=up pitch=-5  len=0.235
 
@@ -85,6 +90,9 @@ skeleton
     # wings. Measured after: 46 mm at the elbow, 44 mm at the forearm midpoint,
     # 59 mm at the wrist. The clavicle came in to 0.036/0.042 in step, because
     # shoulder reach is a function of chest width and the chest moved.
+    # (History: the torso these numbers describe was rebuilt as tapered bars
+    # on 2026-10-01, see the body block. The narrow-x, deep-z rule still holds;
+    # the arm now measures 48.5 mm of daylight below the elbow.)
     #
     # The knock-on was free: the forearm no longer has to tuck in hard to keep
     # the hands beside the hips, so tilt went -9 to -5, and the hands stopped
@@ -124,46 +132,60 @@ body
   # Torso: three continuous tapered bars (pelvis, spine, chest), rebuilt 2026-10-01.
   #
   # It used to be five ellipsoids stacked up the spine at blends of 0.004-0.005,
-  # and the owner's read was "a series of orbs" (2026-10-01): with fillets that
-  # tight every ring stays a ring, and the outline pinched between them (a 20 mm
-  # dip in half-width between the chest rings; goblin-blob.test.ts now pins
-  # under 10, and the rebuilt torso's deepest is its 5 mm waist). One bar per bone,
-  # tapered with r2 and filleted at 0.014-0.016 (about 3 cm once
-  # roundBlendScale halves it), is one mass. The body is the owner's pick of
-  # three rendered variants, "A, sinew": docs/dev-notes/2026-10-01-goblin-body-lookdev/.
+  # and the owner's read was "a series of orbs" (2026-10-01): with blends that
+  # tight every ring stays a ring, and the outline pinched between them (a
+  # 20.5 mm dip in half-width at the spine/chest joint, between the spine ring
+  # and the lower chest ring; goblin-blob.test.ts now pins the deepest dip under
+  # 10 mm, and the rebuilt torso's deepest is its 5 mm waist). One bar per bone,
+  # tapered with r2 and blended at 0.014-0.016, is one mass: the smooth-min acts
+  # over a band about 3 cm wide (smin width = 4 x blend x roundBlendScale 0.5;
+  # build-body.ts, validate.ts). The body is the owner's pick of three rendered
+  # variants, "A, sinew": docs/dev-notes/2026-10-01-goblin-body-lookdev/.
   #
   # Still narrow in x and deep in z, for the reason the skeleton block gives:
-  # width in x is the budget the arms compete for. The chest's wide=1.00 is the
-  # number that bought the upper arm its daylight back (19.2 mm at 0.11 m; at
-  # the look-dev's wide=1.06 it was 15.0, exactly on the test's line).
+  # width in x is the budget the arms compete for. With the r 0.042 shoulder
+  # round (arms block below), the chest's wide=1.00 leaves the upper arm 19.2 mm
+  # of daylight at 0.11 m; at the look-dev's wide=1.06 it was 14.99, just under
+  # the test's 15 mm line, so the pin failed. Do not widen x or shrink deep here
+  # without re-running the arm daylight pins in goblin-blob.test.ts.
   #
   # THE GUT HANGS IN FRONT. `deep=` scales a prim front and back alike, so a deep
   # torso on the spine's own axis bulged at the back of the waist as much as at
   # the belly (the look-dev's flaw). The pelvis and spine bars are pushed
   # forward (+z; offsets are world axes) and the gut is its own blob further
   # forward still, so the back stays flat enough for the spine to show: the
-  # front reaches 27 mm further than the back at the belly and 15 mm at the
-  # waist (measured 2026-10-01; goblin-blob.test.ts pins both).
+  # front reaches 27 mm further than the back at the belly (pelvis at=0.8) and
+  # about 15 mm at the waist (spine1 at=0.3), measured on the bone axis
+  # 2026-10-01; goblin-blob.test.ts pins both (over 15 and 8 mm).
+  #
+  # These bar and gut values are not the look-dev's: they were retuned on
+  # 2026-10-01 (goblin refinement phase 1 plan) against the gut measurement
+  # above and the arm pins, keeping the look-dev's silhouette: pelvis r2
+  # 0.078 -> 0.074 and deep 1.28 -> 1.10; spine r 0.076 -> 0.072 and deep
+  # 1.20 -> 1.08; chest deep 1.06 -> 1.12 and wide 1.06 -> 1.00; the gut blob
+  # is new.
   bar  torso on pelvis from=0.00 to=1.00 r=0.068 r2=0.074 deep=1.10 offset=(0,0,0.012) blend=0.014
-  blob torso on pelvis at=0.80 r=0.060 wide=1.00 tall=1.05 offset=(0,0,0.030) blend=0.016
+  blob torso on pelvis at=0.80 r=0.060 tall=1.05 offset=(0,0,0.030) blend=0.016
   bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.068 deep=1.08 offset=(0,0,0.010) blend=0.016
   bar  torso on chest  from=0.00 to=0.95 r=0.068 r2=0.056 wide=1.00 deep=1.12 blend=0.016
 
-  # Spine: vertebrae knuckling through the flat back. Each bead sits just proud
-  # of the back surface at its height (offsets are world axes; -z is the back),
-  # small and tightly blended so it reads as a bump under skin, not as an orb.
-  # Offsets from the look-dev, re-seated on the pushed-forward bars above.
-  blob torso on spine1 at=0.15 r=0.012 offset=(0,0,-0.064) blend=0.005
+  # Spine: vertebrae knuckling through the flat back (offsets are world axes;
+  # -z is the back), small and tightly blended so each reads as a bump under
+  # skin, not as an orb. Seated by measurement (2026-10-01): each stands about
+  # 5-6 mm proud of the bare back at its height, except the one at the waist
+  # (spine1 at=0.55, 8.6 mm), where the back curves in and the spine should show.
+  blob torso on spine1 at=0.15 r=0.012 offset=(0,0,-0.072) blend=0.005
   blob torso on spine1 at=0.55 r=0.012 offset=(0,0,-0.066) blend=0.005
-  blob torso on spine1 at=0.95 r=0.012 offset=(0,0,-0.066) blend=0.005
+  blob torso on spine1 at=0.95 r=0.012 offset=(0,0,-0.072) blend=0.005
   blob torso on chest  at=0.30 r=0.012 offset=(0,0,-0.068) blend=0.005
   blob torso on chest  at=0.65 r=0.012 offset=(0,0,-0.062) blend=0.005
   blob torso on chest  at=0.98 r=0.012 offset=(0,0,-0.056) blend=0.005
 
   # Neck: one tapered column (0.040 at the collar to 0.033 under the skull), a
-  # pair of cords from the collarbone notch up to behind the ears (the sinew
-  # that makes a thin neck read as a neck rather than a pipe), and one more
-  # vertebra. Values from the look-dev variant A, owner-picked.
+  # pair of cords from the collarbone notch up the front of the neck to the
+  # base of the skull, converging (the sinew that makes a thin neck read as a
+  # neck rather than a pipe), and one more vertebra. Values from the look-dev
+  # variant A, owner-picked.
   bar  head on neck from=0.00 to=1.00 r=0.040 r2=0.033 blend=0.010
   blob head on neck at=0.05 r=0.009 r2=0.007 offset=(0.026,0.000,0.018) tip=(-0.012,0.120,-0.030) blend=0.006 both
   blob head on neck at=0.30 r=0.010 offset=(0,0,-0.036) blend=0.005
@@ -319,10 +341,12 @@ bones
   blob head on skull at=0.52 r=0.072 wide=0.88 tall=0.95 deep=0.86
 
   # Ribcage — the same broad shallow plate as the zombie's, scaled to a
-  # narrow chest: the biggest chest blob is r=0.071 against the zombie's
-  # torso 0.150, so r scales by the same ratio (0.052 -> 0.025). Rides the
-  # `chest` bone — this torso is a three-bone chain (pelvis/spine1/chest)
-  # and the chest IS the ribcage; the gut below keeps its auto-derived bone.
+  # narrow chest: the biggest chest blob was r=0.071 when this was sized (a bar
+  # from 0.068 tapering to 0.056 since the 2026-10-01 rebuild; the ratio holds)
+  # against the zombie's torso 0.150, so r scales by the same ratio
+  # (0.052 -> 0.025). Rides the `chest` bone — this torso is a three-bone
+  # chain (pelvis/spine1/chest) and the chest IS the ribcage; the gut below
+  # keeps its auto-derived bone.
   bar torso on chest from=0.20 to=0.92 r=0.025 wide=1.45 deep=0.55
 
 # The head itself is facePrims(), not geometry authored here — .blob gets the
