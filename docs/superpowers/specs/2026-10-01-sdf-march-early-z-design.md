@@ -67,9 +67,12 @@ post-hit noise split ([dev note](../../dev-notes/2026-10-01-posthit-noise-split/
    - The composite's per-pixel depth test against the level stays as it is.
    - Verify in the plan's first task how three 0.186 maps `depthTest`/`depthFunc` for this quad: it must come out
      as compare `always` with depth writes ON. If `depthTest: false` also drops writes, use `depthFunc = AlwaysDepth`.
-7. **Draw order:** near-to-far across crowd types. Every crowd mesh sits at the world origin, so three's z sort ties
+7. **Draw order:** near-to-far across crowd types. *(Amended by the plan, 2026-10-01: the BACK batches draw first,
+   right after the seed, then the front batches near-to-far. The back batch holds the camera-inside bodies, which are
+   the nearest and therefore the best occluders: their plain-`frag_depth` depth lands in the buffer before any
+   front-face fragment is tested. Drawing them last, as first written, would waste them.)* Every crowd mesh sits at the world origin, so three's z sort ties
    them (`Renderer.js:3298-3305`). Under the flag, each type's `renderOrder` is set per frame from its nearest
-   instance; front batches draw before back batches. The seed pass draws before everything (lowest `renderOrder`).
+   instance; back batches draw before front batches (amendment above). The seed pass draws before everything (lowest `renderOrder`).
 8. **Feature detection by compiling, not by `wgslLanguageFeatures`.** At boot, compile a one-line shader with exactly
    the syntax we emit, inside a validation error scope. If it fails, the flag turns itself off with one console
    warning and the boot is the shipped boot. No `requires fragment_depth;` is emitted: Chrome 154 accepts the
@@ -122,8 +125,8 @@ Each frame, under the flag:
 1. Crowd `sync()` sorts instances, then `splitInstances`, then packs the front and back lists.
 2. `typeRenderOrder` sets each mesh's `renderOrder`.
 3. The march target clears, then the seed pass writes level depth.
-4. Front batches draw, rejected by early-Z where something nearer is already in the depth buffer.
-5. Back batches draw (shipped path).
+4. Back batches draw (shipped path; the nearest bodies, so they occlude everything after them).
+5. Front batches draw near-to-far, rejected by early-Z where something nearer is already in the depth buffer.
 6. Composite as today.
 
 Fallbacks, each reported once in `earlyzInfo()` and the console:
