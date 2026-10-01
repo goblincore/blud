@@ -1,6 +1,6 @@
 # Night Train ending: the control room, the egg, the montage — Design
 
-**Date:** 2026-09-30 · **Status:** draft, scope B chosen by the owner in chat (2026-09-30); built through plan 3 (the sequence system) with a two-shot stub; the montage (plan 4) is next.
+**Date:** 2026-09-30 · **Status:** draft, scope B chosen by the owner in chat (2026-09-30); built through plan 3 (the sequence system) with a two-shot stub; the montage (plan 4) is next. **§2 (the egg) is superseded** by [the candled egg and the torn caul](2026-10-01-egg-candled-caul-design.md) (2026-10-01): a candled inner egg in a torn caul of wet flesh, no spots, so montage shot 4 loses its spot.
 **Kind:** design (no code yet). **Changes:** the Night Train cab and ending; adds a level-ending sequence system.
 **Context:** Night Train (level 1) is a good short first level, but it ends on a trigger in the cab and a "LEVEL COMPLETE" overlay (`level.end` → `completeOn`). The docs say *the first CD starts the pull-back into the Flat*, but the Flat, the CRT render-to-texture and the pull-back do not exist yet, and the CD (`dj-cd` on the Boiler Room's DJ deck) triggers nothing. This spec gives the level a real ending that needs none of those.
 **Blockout:** [renders + .blend](../../dev-notes/2026-09-30-egg-ending/) (door view, cutaway overview, egg close-up).
