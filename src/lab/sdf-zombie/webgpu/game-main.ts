@@ -7509,7 +7509,7 @@ async function main() {
     ctx.weapon.headDamage?.tick(dt);
     stepDynamite(dt);
     if (ctx.player.reticleEl) {
-      ctx.player.reticleEl.style.display = ctx.player.freeAimOn ? 'block' : 'none';
+      ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.world.sequence?.started ? 'block' : 'none';
       if (ctx.player.freeAimOn) {
         // Position against the CANVAS, not the window. Percent-of-viewport put
         // the reticle outside the render area whenever the canvas did not fill
