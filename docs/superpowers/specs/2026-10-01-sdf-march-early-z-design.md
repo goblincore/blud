@@ -101,11 +101,11 @@ Pure, renderer-free modules (Vitest):
 - `earlyz/batch-split.ts`: `splitInstances(boxes, cameraPos, nearGuard) → { front: ids[], back: ids[] }`. A box is
   centre + half-extents; it goes in `back` if the inflated box contains the camera. Order is preserved, so the sorted
   nearest-first list stays sorted.
-- `earlyz/type-order.ts`: `typeRenderOrder(types: { key, nearestDist }[]) → Map<key, number>`, near-to-far, with
-  front batches before back batches and a fixed seed slot first.
+- `earlyz/type-order.ts`: `typeRenderOrder(types: { key, nearestBack, nearestFront }[]) → Map<key, { back, front }>`,
+  each batch kind ranked near-to-far, with the seed first, then back batches, then front batches (D7 amended).
 
 Renderer-facing:
-- `earlyz/flag.ts`: `EARLYZ` read once from `location.search`; false under Vitest.
+- `earlyz/flag.ts`: `EARLYZ_FLAG` read once from `location.search`; false under Vitest.
 - `earlyz/conservative-depth-patch.ts`: the §4 A wrapper, plus `detectConservativeDepth(device): Promise<boolean>` (D8).
 - `crowd-type.ts`: under the flag, a second instanced mesh per type with the front-face `greater` material; `sync()`
   calls `splitInstances` and packs two instance lists.
