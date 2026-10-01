@@ -32,7 +32,7 @@ const reach = (b: ReturnType<typeof built>, p: Vec3, d: Vec3, max = 0.3): number
   throw new Error(`reach: no surface within ${max} m of (${p.join(', ')})`);
 };
 // The point t (0..1) of the way along a resolved bone, head to tail.
-const boneAt = (b:ReturnType<typeof built>, name: string, t: number): Vec3 => {
+const boneAt = (b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
   const bone = b.bones.get(name)!;
   return lerp(bone.head, bone.tail, t);
 };
@@ -79,18 +79,20 @@ describe('goblin.blob', () => {
   // comfortable +13.4 mm. See daylightOf's docstring.
   //
   // Split into two assertions because the arm is not equally free along its
-  // length, and shouldn't be. The clearance profile rises smoothly from the
-  // shoulder: 0.6 mm of air 60 mm out, 20 mm at 115 mm, 32 mm at 143 mm. The
-  // buried part is the deltoid — an upper arm that springs clear of the chest
-  // the instant it leaves the shoulder ball reads as glued on, so the top of
-  // that shaft is meant to merge. Only past it does daylight become the point.
+  // length, and shouldn't be. On the ball-jointed body the clearance rose
+  // smoothly from the shoulder: 0.6 mm of air 60 mm out, 20 mm at 115 mm, 32 mm
+  // at 143 mm. The buried part is the deltoid — an upper arm that springs clear
+  // of the chest the instant it leaves the shoulder round reads as glued on, so
+  // the top of that shaft is meant to merge. Only past it does daylight become
+  // the point.
   it.each(['armL', 'armR'] as const)('%s hangs free below the elbow', arm => {
     const b = built();
     const shoulder = b.bones.get(`clavicle.${arm === 'armL' ? 'l' : 'r'}`)!.tail;
     // 0.235 m from the shoulder IS the elbow — the upper arm's length. Below
     // it there is no anatomical excuse for touching the body, and this is the
     // exact stretch the owner rejected: the forearm ran into the gut. Measured
-    // at 43.6 mm; 30 mm is roughly where separation became visible from every
+    // at 43.6 mm on the ball-jointed body, 48.5 mm on the 2026-10-01 rebuild;
+    // 30 mm is roughly where separation became visible from every
     // yaw in the turntable rather than only on the shadowed side.
     expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.235))
       .toBeGreaterThan(0.030);
@@ -99,8 +101,11 @@ describe('goblin.blob', () => {
   it.each(['armL', 'armR'] as const)('%s upper arm emerges from the chest', arm => {
     const b = built();
     const shoulder = b.bones.get(`clavicle.${arm === 'armL' ? 'l' : 'r'}`)!.tail;
-    // 0.11 m clears the shoulder ball (r 0.054) and the deltoid merge above.
-    // Measured at 27.8 mm. The failure this catches is the whole upper arm
+    // 0.11 m clears the shoulder round (r 0.038 since the 2026-10-01 rebuild,
+    // marked as the arm's core; it was a 0.054 ball) and the deltoid merge
+    // above. Measured at 19.2 mm (29.0 on the old body; the slimmer chest at
+    // wide=1.00 is what keeps it above 15: at 1.06 it read 14.99). The failure
+    // this catches is the whole upper arm
     // descending INSIDE the ribcage, which is what tilt=7 did before.
     expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.11))
       .toBeGreaterThan(0.015);
@@ -109,6 +114,9 @@ describe('goblin.blob', () => {
   // ...but still attached. The opposite failure, and equally easy to trip:
   // pushing the shoulder out far enough to clear the torso detaches the arm
   // entirely, and past a point validateBody reports the cluster disconnected.
+  // The fuse probe runs from the arm's `core` (its shoulder round; see
+  // goblin.blob's arms block) to the torso's: without that mark the hand, the
+  // fattest arm prim, would be the start and the probe would cross air.
   it.each(['armL', 'armR'] as const)('%s is nonetheless fused to the torso', arm => {
     const b = built();
     expect(fusedOf(b, limb(b, arm), limb(b, 'torso'))).toBeLessThan(0);
@@ -142,8 +150,8 @@ describe('goblin.blob', () => {
   // A stacked torso pinches between its rings. Switch the arms and legs off first: with them on, the thighs and the
   // old hip orbs own the bottom of every slice and the profile measures legs. Then slice the torso every 5 mm from
   // the pelvis to high on the chest and read its half-width. The deepest dip, how far a slice falls below the lower
-  // of the highs on either side of it, is a pinch between rings. Old body: 20.5 mm, between its two chest
-  // ellipsoids. Rebuilt: 5.0 mm, which is the waist.
+  // of the highs on either side of it, is a pinch between rings. Old body: 20.5 mm, at the spine/chest joint,
+  // between its spine and lower chest ellipsoids. Rebuilt: 5.0 mm, which is the waist.
   it('has one continuous torso, not stacked rings', () => {
     const b = built();
     for (const c of b.clusters) if (c.limb.startsWith('arm') || c.limb.startsWith('leg')) c.alive = false;
@@ -164,7 +172,8 @@ describe('goblin.blob', () => {
 
   // deep= scales a prim front and back alike, so a deep torso on the spine's own axis bulges at the back of the
   // waist as much as at the belly (the look-dev's flaw). The gut hangs in front and the back stays flat enough for
-  // the spine to read. Rebuilt: belly +27.0 mm, waist +15.0 mm. Old body: 0.0 and -9.5 mm.
+  // the spine to read. Rebuilt: belly +27.0 mm, waist +14.7 mm (pelvis at=0.8, spine1 at=0.3, on the bone axis;
+  // reach's 0.5 mm steps read the waist as 14.5). Old body: 0.0 and -9.5 mm.
   it('carries its gut in front, not bulging at the back', () => {
     const b = built();
     const gut = (p: Vec3) => reach(b, p, [0, 0, 1]) - reach(b, p, [0, 0, -1]);
