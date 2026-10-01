@@ -265,6 +265,11 @@ git commit -m "feat(goblin): continuous tapered torso with the gut in front and 
 
 ### Task 3: Re-author the arms and legs
 
+> **Review note (2026-10-01):** after this task landed, review made the shoulder round `blob arm on clavicle at=1.00
+> r=0.038 blend=0.010 mirror core` (not r 0.042; see the traps above) and corrected the block's comments (joint ratios,
+> blend wording, the hand radius being hard-coded in goblin-skin.ts, provenance). Commit 5e4d4f05: the file, not the
+> block below, is now the reference.
+
 **Files:**
 - Modify: `src/lab/sdf-zombie/characters/goblin.blob`, the body block. Replace from the line
   `  # ARMS AND LEGS — ball joints, deliberately.` (about line 252 before Task 2; find it by text) through the line
