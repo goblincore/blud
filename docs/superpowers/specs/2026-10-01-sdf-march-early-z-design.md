@@ -106,7 +106,7 @@ Pure, renderer-free modules (Vitest):
 
 Renderer-facing:
 - `earlyz/flag.ts`: `EARLYZ_FLAG` read once from `location.search`; false under Vitest.
-- `earlyz/conservative-depth-patch.ts`: the §4 A wrapper, plus `detectConservativeDepth(device): Promise<boolean>` (D8).
+- `earlyz/conservative-depth-patch.ts`: the §4 A wrapper, plus `detectConservativeDepth(device): Promise<{ ok: boolean; reason: string | null }>` (D8).
 - `crowd-type.ts`: under the flag, a second instanced mesh per type with the front-face `greater` material; `sync()`
   calls `splitInstances` and packs two instance lists.
 - WGSL, under the flag only:
