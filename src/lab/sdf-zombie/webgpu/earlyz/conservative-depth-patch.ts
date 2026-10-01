@@ -8,6 +8,13 @@
 // the name verbatim. No `requires fragment_depth;`: three's fragment template has no
 // directive slot and Chrome 154 accepts the qualifier without it (probe 2026-10-01).
 // Installed only under ?earlyz=1, and only on the revision it was written against.
+//
+// Caveats:
+// - The opt-in is an own property, so `material.clone()` (which copies only known
+//   material fields) drops it; a clone degrades safely to plain `frag_depth`.
+// - detectConservativeDepth pushes a device-wide validation error scope across awaits.
+//   Run it before other GPU work, never concurrently with renderer work on the same
+//   device, or unrelated validation errors are swallowed into its result.
 import { WGSLNodeBuilder, REVISION } from 'three/webgpu';
 
 export const CONSERVATIVE_DEPTH_BUILTIN = 'frag_depth, greater';
@@ -42,7 +49,8 @@ export function installConservativeDepthPatch(
   return { installed: true, reason: null };
 }
 
-/** How many fragment shaders the patch has emitted `frag_depth, greater` into. */
+/** How many times the patch has answered a getFragDepth call with `frag_depth, greater`.
+ *  This counts calls, not shaders: one build can call getFragDepth more than once. */
 export function conservativeDepthPatchHits(): number {
   return hits;
 }
@@ -51,7 +59,7 @@ export function conservativeDepthPatchHits(): number {
 export const EARLYZ_DETECT_WGSL = /* wgsl */ `@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
   return vec4<f32>(0.0, 0.0, 0.5, 1.0);
 }
-struct EarlyzProbeOut { @location(0) c: vec4<f32>, @builtin(frag_depth, greater) d: f32 }
+struct EarlyzProbeOut { @location(0) c: vec4<f32>, @builtin(${CONSERVATIVE_DEPTH_BUILTIN}) d: f32 }
 @fragment fn fs() -> EarlyzProbeOut {
   var o: EarlyzProbeOut;
   o.c = vec4<f32>(1.0);
@@ -71,8 +79,10 @@ interface DeviceLike {
 /** D8: feature detection by COMPILING, not by wgslLanguageFeatures (Chrome 154 does
  *  not list `fragment_depth` but accepts the syntax). */
 export async function detectConservativeDepth(device: DeviceLike): Promise<{ ok: boolean; reason: string | null }> {
+  let pushed = false;
   try {
     device.pushErrorScope('validation');
+    pushed = true;
     const module = device.createShaderModule({ code: EARLYZ_DETECT_WGSL, label: 'earlyz-detect' });
     const info = await module.getCompilationInfo();
     const errors = info.messages.filter((m) => m.type === 'error');
@@ -90,11 +100,15 @@ export async function detectConservativeDepth(device: DeviceLike): Promise<{ ok:
       }
     }
     const scoped = await device.popErrorScope();
+    pushed = false;
     if (errors.length > 0) return { ok: false, reason: `compile: ${errors[0]!.message}` };
     if (pipelineError !== null) return { ok: false, reason: `pipeline: ${pipelineError}` };
     if (scoped) return { ok: false, reason: `validation: ${scoped.message}` };
     return { ok: true, reason: null };
   } catch (e) {
     return { ok: false, reason: `threw: ${String(e)}` };
+  } finally {
+    // A throw between push and pop must not leave the scope open on the renderer's device.
+    if (pushed) await device.popErrorScope().catch(() => null);
   }
 }
