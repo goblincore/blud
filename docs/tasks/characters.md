@@ -39,9 +39,17 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   2026-10-01). The goblin is the protagonist, seen armed in-game (no enemy AI). It holds **the player's weapons**; the buckler
   and cleaver are retired. **The hands stay orbs** (an early-3D style). Body: **variant A, "sinew"**, picked from three
   rendered variants ([look-dev](../dev-notes/2026-10-01-goblin-body-lookdev/)).
-- [ ] **Phase 1, body:** re-author `goblin.blob` to variant A (plan next).
+- [~] **Phase 1, body:** re-authored to variant A (plan `docs/superpowers/plans/2026-10-01-goblin-body-phase1.md`):
+  continuous torso, tapered limbs, orbs only at the shoulders, hands, ankles and toes; the shoulder round is the arm's
+  `core`. All goblin-reading tests pass plus three new pins (the whole `src/lab/sdf-zombie/` suite: 6604 tests), the
+  pack golden is re-pinned, and `blob:render-check` exits 0. **Awaiting the owner's look at the lab turntable**
+  ([frames](../dev-notes/2026-10-01-goblin-body-lookdev/lab/)). Open for the owner: the back is flatter, but in
+  profile the gut does not read as hanging in front (the pin measures it along the leaning spine's axis).
 - [ ] Phase 2, armour: redesign and fit (own brainstorm).
 - [ ] Phase 3, held weapons: the player's weapons in the orb hands (own brainstorm).
+  - `webgpu/goblin-skin.ts` keeps `forearmRadius` 0.028 and `forearmElbowRadius` 0.038, documented as the goblin's
+    forearm bar and elbow blob, which phase 1 removed (both constants are unreferenced). `handRadius` 0.046 is
+    hard-coded and must stay equal to `goblin.blob`'s hand.
 - [ ] Phase 4, rig and animation: authored clips and a goblin gait (own brainstorm). Cautionary case: the bride (shelved
   for janky animation and a sword clipping the body).
 

@@ -29,7 +29,8 @@ The spec's phase 1 fixes it in A.
 
 The rebuilt body in the lab renderer (`npm run blob:shot -- goblin` with the kit hidden, BLOB_DIST 1.35), from `lab/`.
 It is variant A plus three fixes found while measuring:
-- the gut is pushed forward and the back flattened (gut +27 mm at the belly);
+- the gut is pushed forward and the back flattened (gut +27 mm at the belly, measured along the spine's axis; in the
+  world profile it does not read as hanging in front, see check 3);
 - the shoulder round is marked `core` (at r 0.038 without it, `fusedOf` read +3.4 mm because the probe started at the
   hand, not because anything detached);
 - the chest is wide=1.00 (at 1.06 the upper-arm daylight sat on the 15 mm line).
