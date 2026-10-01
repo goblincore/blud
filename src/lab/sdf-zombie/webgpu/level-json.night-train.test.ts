@@ -89,8 +89,8 @@ describe('night-train.level.json', () => {
     expect(egg).toBeDefined();
     expect(egg!.height).toBeGreaterThan(2.8);
     expect((egg!.minZ + egg!.maxZ) / 2).toBeCloseTo(-136.7, 1);
-    // Completion: the existing level.end trigger, now a 3.2 m box around the egg.
-    const end = t.triggers.find(tr => tr.event === 'level.end')!;
+    // Completion: the egg.touch trigger (a 3.2 m box around the egg) starts the ending sequence.
+    const end = t.triggers.find(tr => tr.event === 'egg.touch')!;
     expect(end.box.min[0]).toBeCloseTo(-1.6, 2);
     expect(end.box.max[0]).toBeCloseTo(1.6, 2);
     expect(roomAtPoint(t, 0, (end.box.min[2] + end.box.max[2]) / 2)?.name).toBe('control-room');
@@ -120,10 +120,13 @@ describe('night-train dynamic light (dynamic light spec §3)', () => {
     expect(torch.id).toBe('torch');
     expect(roomAtPoint(t, torch.pos[0], torch.pos[2])?.name).toBe('coat-check');
   });
-  it('taking it kills the coat-check lamps and wakes the room; blackout, strobe and end triggers', () => {
-    expect(t.cues).toEqual([{ on: 'pickup.flashlight', emit: ['light.die.room.6', 'alert.room.6'] }]);
-    expect(t.triggers.map(tr => [tr.event, tr.once]).sort()).toEqual([['level.end', true], ['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
-    expect(t.completeOn).toBe('level.end');
+  it('taking it kills the coat-check lamps and wakes the room; blackout, strobe and egg triggers', () => {
+    expect(t.cues).toEqual([
+      { on: 'pickup.flashlight', emit: ['light.die.room.6', 'alert.room.6'] },
+      { on: 'egg.touch', emit: ['sequence.ending'] },
+    ]);
+    expect(t.triggers.map(tr => [tr.event, tr.once]).sort()).toEqual([['egg.touch', true], ['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
+    expect(t.completeOn).toBe('ending.end');
   });
   it('two red emergency beacons in the Boiler Room (room 5), dead until the strobe ends', () => {
     const b = room('boiler-room');

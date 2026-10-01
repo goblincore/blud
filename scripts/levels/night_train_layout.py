@@ -36,9 +36,10 @@ T = 0.1  # internal partition thickness
 #             (spin: rev/s about the vertical, sign = direction; Boiler Room beacons spec). Optional.
 FIRE = (1.0, 0.42, 0.12)
 # When `on` fires, the level also fires `emit` (dynamic light spec §3).
-CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"])]
-# The level ends at the egg in the control room (ending plan 1); the CD is a collectible.
-COMPLETE_ON = "level.end"
+CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"]),
+        ("egg.touch", ["sequence.ending"])]   # touching the egg starts the ending sequence (ending plan 3)
+# The level completes when the ending sequence ends (ending-sequence.ts SEQUENCES.ending.endEvent); the CD is a collectible.
+COMPLETE_ON = "ending.end"
 CARRIAGES = [
     dict(rid=1, name="guards-van", w=3.6, L=16.0, h=2.8,
          walls=[(-1.8, -1.7, 5.5, 5.5 + T), (-0.3, 1.8, 5.5, 5.5 + T),        # hold | cage, door west
@@ -135,7 +136,7 @@ CARRIAGES = [
          gates=[], moods=["dying"], fires=[], triggers=[]),
     # Control room (egg ending plan 1, spec 2026-09-30): the old 3 x 8 m cab becomes an 8 x 10 m room,
     # "bigger on the inside". CRT wall on the north, consoles and racks down both sides, the firebox door
-    # in the east wall, the egg on its plinth at u 6.3. Completion stays level.end until plan 3 (egg.touch).
+    # in the east wall, the egg on its plinth at u 6.3. Touching the egg fires egg.touch, whose cue starts the ending sequence (plan 3).
     dict(rid=8, name="control-room", w=8.0, L=10.0, h=3.4,
          walls=[],
          areas=[("control room: the egg on its plinth", -4.0, 4.0, 0, 10.0)],
@@ -147,7 +148,7 @@ CARRIAGES = [
                 ("crt wall", -3.4, 3.4, 9.3, 10.0, 2.4)],
          spawns=[], pickups=[], gates=[], moods=["dying"],
          fires=[("egg", 0.0, 6.3, 1.5, 4.0), ("firebox", 3.3, 8.9, 1.0, 4.0)],
-         triggers=[("end", COMPLETE_ON, -1.6, 1.6, 4.7, 7.9)]),
+         triggers=[("egg", "egg.touch", -1.6, 1.6, 4.7, 7.9)]),
 ]
 
 

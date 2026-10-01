@@ -6,13 +6,19 @@
   "loadout": [
     "melee"
   ],
-  "completeOn": "level.end",
+  "completeOn": "ending.end",
   "cues": [
     {
       "on": "pickup.flashlight",
       "emit": [
         "light.die.room.6",
         "alert.room.6"
+      ]
+    },
+    {
+      "on": "egg.touch",
+      "emit": [
+        "sequence.ending"
       ]
     }
   ],
@@ -1361,8 +1367,8 @@
   ],
   "triggers": [
     {
-      "id": "end",
-      "event": "level.end",
+      "id": "egg",
+      "event": "egg.touch",
       "min": [
         -1.6,
         0.0,
