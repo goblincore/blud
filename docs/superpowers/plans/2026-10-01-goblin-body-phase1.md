@@ -306,6 +306,13 @@ git commit -m "feat(goblin): continuous tapered torso with the gut in front and 
   blob leg on foot  at=0.92 r=0.034 wide=1.15 tall=0.70 deep=0.95 blend=0.008 mirror
 ```
 
+- [ ] **Step 1b: Two wording fixes in the torso comments, from Task 2's review**
+  - In the paragraph that lists the retuned bar and gut values, change `keeping the look-dev's silhouette` to
+    `keeping the look-dev's front silhouette` (the back was flattened on purpose, by up to 26 mm).
+  - In the spine comment, after `Seated by measurement (2026-10-01):`, make the provenance explicit: the chest and neck
+    beads keep the look-dev's offsets; the three on `spine1` were moved onto the pushed-forward bars (the look-dev had
+    -0.086, -0.084, -0.080). Keep the 5-6 mm / 8.6 mm sentence.
+
 - [ ] **Step 2: Run the goblin's tests**
 
   Run: `npx vitest run src/lab/sdf-zombie/characters/goblin-blob.test.ts`
@@ -362,8 +369,8 @@ git commit -m "feat(goblin): tapered limbs, orbs only at shoulders/hands/ankles/
   // ellipsoids.` with `Old body: 20.5 mm, at the spine/chest joint, between its spine
   // and lower chest ellipsoids.` (keep the line wrapping tidy).
   - In the gut test's comment, replace `Rebuilt: belly +27.0 mm, waist +15.0 mm.` with
-    `Rebuilt: belly +27.0 mm, waist +14.8 mm (pelvis at=0.8, spine1 at=0.3, on the bone axis).` (the waist moved from
-    15.0 when review re-seated the lowest vertebra).
+    `Rebuilt: belly +27.0 mm, waist +14.7 mm (pelvis at=0.8, spine1 at=0.3, on the bone axis; reach's 0.5 mm steps
+    read the waist as 14.5).` (the waist moved from 15.0 when review re-seated the lowest vertebra).
 
 - [ ] **Step 2: Run and type-check**
 
