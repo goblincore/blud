@@ -146,7 +146,7 @@ const boneAt = (b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
   });
 
   // No ball joints on the limbs. The orbs that stay are a style the owner kept (early 3D): the hands, the shoulder
-  // round (which also attaches the arm), the ankle knob and the toe pad. Any other point-blob on an arm or a leg is a
+  // round (which is also the arm's `core`), the ankle knob and the toe pad. Any other point-blob on an arm or a leg is a
   // joint orb coming back.
   it('keeps orbs only at the shoulders, hands, ankles and toes', () => {
     const allowed = (p: { bone: string; at: number }) =>
