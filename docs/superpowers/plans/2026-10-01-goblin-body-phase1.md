@@ -45,7 +45,7 @@ The target body below, compared with today's `goblin.blob`:
 | `fusedOf(arm, torso)` (`:98`) | −2.0 mm | −2.9 mm | < 0 |
 | Arm-to-leg `clearOf` (`:105`) | 22.7 mm | 22.4 mm | > 10 mm |
 | Hip / height (`:118`) | 0.542 | 0.542 | > 0.50 |
-| **New:** worst torso half-width step between 5 mm slices | 9.0 mm | 4.0 mm | < 6 mm |
+| **New:** deepest dip in the torso-only half-width profile (arms and legs off) | 20.5 mm | 5.0 mm | < 10 mm |
 | **New:** gut (front − back reach) at pelvis 0.8 / spine1 0.3 | 0.0 / −9.5 mm | 27.0 / 15.0 mm | > 15 / > 8 mm |
 | **New:** point-blobs on arms and legs outside the allowed set | 4 | 0 | 0 |
 
@@ -86,11 +86,14 @@ import type { Vec3 } from '../types';
 
 ```ts
 // Distance from p along the unit direction d to the body's surface (where the field turns positive), in 0.5 mm steps.
+// Throws if p starts outside the body or the ray never leaves it: either would read as a plausible width.
 const reach = (b: ReturnType<typeof built>, p: Vec3, d: Vec3, max = 0.3): number => {
+  if (sdBody(p, b) > 0) throw new Error(`reach: start (${p.join(', ')}) is outside the body`);
   for (let t = 0; t < max; t += 0.0005)
     if (sdBody([p[0] + d[0] * t, p[1] + d[1] * t, p[2] + d[2] * t], b) > 0) return t;
-  return max;
+  throw new Error(`reach: no surface within ${max} m of (${p.join(', ')})`);
 };
+// The point t (0..1) of the way along a resolved bone, head to tail.
 const boneAt = (b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
   const bone = b.bones.get(name)!;
   return lerp(bone.head, bone.tail, t);
@@ -102,33 +105,41 @@ const boneAt = (b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
 ```ts
   // 2026-10-01 refinement (docs/superpowers/specs/2026-10-01-goblin-refinement-design.md). The owner's read of the
   // old body was "a series of orbs": five ellipsoids stacked up the spine at tight blends, and a nub at every joint.
-  // These three pin the rebuild (variant A, "sinew"). The numbers were measured on the old and new bodies.
+  // These three pin the rebuild (variant A, "sinew"). Unlike the pins above, their thresholds are not owner
+  // rejections: each sits between the old body's measured value and the rebuilt one's (2026-10-01).
 
-  // A stacked torso pinches between its rings. Sliced every 5 mm from the pelvis to the lower chest (below the
-  // armpits, where the arms would join the slice), the half-width never steps more than 6 mm between neighbouring
-  // slices. Old body: 9.0 mm. Rebuilt: 4.0 mm.
+  // A stacked torso pinches between its rings. Switch the arms and legs off first: with them on, the thighs and the
+  // old hip orbs own the bottom of every slice and the profile measures legs. Then slice the torso every 5 mm from
+  // the pelvis to high on the chest and read its half-width. The deepest dip, how far a slice falls below the lower
+  // of the highs on either side of it, is a pinch between rings. Old body: 20.5 mm, between its two chest
+  // ellipsoids. Rebuilt: 5.0 mm, which is the waist.
   it('has one continuous torso, not stacked rings', () => {
     const b = built();
+    for (const c of b.clusters) if (c.limb.startsWith('arm') || c.limb.startsWith('leg')) c.alive = false;
     const p0 = b.bones.get('pelvis')!.head;
-    const p1 = boneAt(b, 'chest', 0.2);
-    let prev = -1, worst = 0;
+    const p1 = boneAt(b, 'chest', 0.85);
+    const width: number[] = [];
     for (let y = p0[1]; y <= p1[1]; y += 0.005) {
       const t = (y - p0[1]) / (p1[1] - p0[1]);
-      const w = reach(b, [0, y, p0[2] + (p1[2] - p0[2]) * t], [1, 0, 0]);
-      if (prev >= 0) worst = Math.max(worst, Math.abs(w - prev));
-      prev = w;
+      width.push(reach(b, [0, y, p0[2] + (p1[2] - p0[2]) * t], [1, 0, 0]));
     }
-    expect(worst).toBeLessThan(0.006);
+    let deepest = 0;
+    width.forEach((w, i) => {
+      const dip = Math.min(Math.max(...width.slice(0, i + 1)), Math.max(...width.slice(i))) - w;
+      deepest = Math.max(deepest, dip);
+    });
+    expect(deepest).toBeLessThan(0.010);
   });
 
   // deep= scales a prim front and back alike, so a deep torso on the spine's own axis bulges at the back of the
   // waist as much as at the belly (the look-dev's flaw). The gut hangs in front and the back stays flat enough for
   // the spine to read. Rebuilt: belly +27.0 mm, waist +15.0 mm. Old body: 0.0 and -9.5 mm.
-  it('carries its gut in front and its back flat', () => {
+  it('carries its gut in front, not bulging at the back', () => {
     const b = built();
     const gut = (p: Vec3) => reach(b, p, [0, 0, 1]) - reach(b, p, [0, 0, -1]);
-    expect(gut(boneAt(b, 'pelvis', 0.8))).toBeGreaterThan(0.015);
-    expect(gut(boneAt(b, 'spine1', 0.3))).toBeGreaterThan(0.008);
+    const belly = boneAt(b, 'pelvis', 0.8), waist = boneAt(b, 'spine1', 0.3);
+    expect(gut(belly)).toBeGreaterThan(0.015);
+    expect(gut(waist)).toBeGreaterThan(0.008);
   });
 
   // No ball joints on the limbs. The orbs that stay are a style the owner kept (early 3D): the hands, the shoulder
@@ -136,7 +147,7 @@ const boneAt = (b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
   // joint orb coming back.
   it('keeps orbs only at the shoulders, hands, ankles and toes', () => {
     const allowed = (p: { bone: string; at: number }) =>
-      p.bone === 'hand' || p.bone === 'foot' ||
+      p.bone === 'hand' || (p.bone === 'foot' && p.at > 0.5) ||
       (p.bone === 'clavicle' && p.at === 1) || (p.bone === 'shin' && p.at === 1);
     const orbs = doc.parts.filter(p => p.kind === 'blob' && (p.limb === 'arm' || p.limb === 'leg'));
     expect(orbs.filter(p => !allowed(p)).map(p => `${p.bone} at=${p.at}`)).toEqual([]);
@@ -148,7 +159,7 @@ const boneAt = (b: ReturnType<typeof built>, name: string, t: number): Vec3 => {
   Run: `npx vitest run src/lab/sdf-zombie/characters/goblin-blob.test.ts`
 
   Expected: 3 failed, the rest passing.
-  - `has one continuous torso`: received about 0.009.
+  - `has one continuous torso`: received about 0.0205.
   - `carries its gut in front`: received about 0.
   - `keeps orbs only at…`: received `["forearm at=0", "forearm at=1", "thigh at=0", "shin at=0"]`.
 
@@ -180,8 +191,9 @@ git commit -m "test(goblin): pin the refinement body (continuous torso, gut in f
   #
   # It used to be five ellipsoids stacked up the spine at blends of 0.004-0.005,
   # and the owner's read was "a series of orbs" (2026-10-01): with fillets that
-  # tight every ring stays a ring, and the outline pinched between them (9 mm
-  # steps in half-width; goblin-blob.test.ts now pins under 6). One bar per bone,
+  # tight every ring stays a ring, and the outline pinched between them (a 20 mm
+  # dip in half-width between the chest rings; goblin-blob.test.ts now pins
+  # under 10, and the rebuilt torso's deepest is its 5 mm waist). One bar per bone,
   # tapered with r2 and filleted at 0.014-0.016 (about 3 cm once
   # roundBlendScale halves it), is one mass. The body is the owner's pick of
   # three rendered variants, "A, sinew": docs/dev-notes/2026-10-01-goblin-body-lookdev/.
@@ -227,7 +239,7 @@ git commit -m "test(goblin): pin the refinement body (continuous torso, gut in f
 
   Run: `npx vitest run src/lab/sdf-zombie/characters/goblin-blob.test.ts`
 
-  Expected: `has one continuous torso` and `carries its gut in front` now pass. `keeps orbs only at…` still fails (the
+  Expected: `has one continuous torso` and `carries its gut in front, not bulging at the back` now pass. `keeps orbs only at…` still fails (the
   limbs are Task 3). Everything else passes.
   - If `compiles and validates clean` fails with a breach, the wound-pass ribcage
     (`bar torso on chest from=0.20 to=0.92 r=0.025 wide=1.45 deep=0.55` in the `bones` block) is poking out of the new
