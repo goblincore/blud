@@ -466,9 +466,12 @@ npx vitest run src/lab/sdf-zombie/characters/goblin-blob.test.ts src/lab/sdf-zom
 
 - [ ] **Step 3: The directory suite (the spec asks for it), only on a quiet machine**
 
-  First check that no dispatch task is running: `pgrep -fl "claude.*dispatch|pi-harness" || echo quiet`. If it prints
-  anything but `quiet`, skip this step and say so in the report. Then run:
-  `NODE_OPTIONS=--max-old-space-size=8192 npx vitest run src/lab/sdf-zombie/`
+  First check that no headless dispatch task is running: `pgrep -fl "pi-harness|dispatch-runner|headless" || echo
+  quiet` (a broader `claude.*dispatch` pattern false-matches the desktop app's own sessions). If it prints anything but
+  `quiet`, skip this step and say so in the report. Then run, with capped workers (vitest 2.1 needs `--minWorkers`
+  whenever `--maxWorkers` is set):
+  `NODE_OPTIONS=--max-old-space-size=8192 npx vitest run src/lab/sdf-zombie/ --maxWorkers=4 --minWorkers=1`
+  (2026-10-01: 461 files, 6604 tests pass, about 4.5 minutes)
   Expected: passes. A failure outside the 16 files above means something else reads the goblin: apply the same rules
   as Step 1.
 
