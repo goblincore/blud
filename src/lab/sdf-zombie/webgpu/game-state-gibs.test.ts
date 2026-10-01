@@ -56,6 +56,7 @@ describe('GIBS_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(GIBS_BINDINGS)).toHaveLength(29);
+    // 29 + fleshSpawnRng (the flesh bits' own stream, moved off main() 2026-10-01).
+    expect(Object.keys(GIBS_BINDINGS)).toHaveLength(30);
   });
 });

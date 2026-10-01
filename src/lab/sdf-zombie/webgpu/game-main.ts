@@ -2064,7 +2064,7 @@ async function main() {
           a.view.uniforms.bodyFlash.value.w = 0;
           applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]);
           // Task 11b: the same factor for this actor's bones (their ambient is seeded once).
-          actorFill.set(a, roomFillFactor(ctx, bp[0], bp[2]));
+          ctx.lighting.actorFill.set(a, roomFillFactor(ctx, bp[0], bp[2]));
           applySelfShadow(a.view.uniforms);
         } else { a.view.uniforms.lightListCfg.value.x = 0; const bp = a.pose().pos; applyWindowKey(ctx, a.view.uniforms, bp); applyRoomFill(ctx, a.view.uniforms as never, bp[0], bp[2]); applySelfShadow(a.view.uniforms); }
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
@@ -2221,7 +2221,7 @@ async function main() {
         f.amb = !!liveView;
         f.fill = fill; f.kr = kr; f.kg = kg; f.kb = kb; f.br = br; f.bg = bg; f.bb = bb;
         const body0 = ctx.world.actors[0];
-        f.bodyFactor = (body0 && actorFill.get(body0)) ?? 1;
+        f.bodyFactor = (body0 && ctx.lighting.actorFill.get(body0)) ?? 1;
         pickChunkObjects(ctx, f);
       }
     }
@@ -2621,11 +2621,8 @@ async function main() {
    *  per-frame syncLights call allocates nothing. */
   // `?.view?.`: an owner-less mesh slot (the renderer's fallback slot object) has no view.
   const ownerBodyLights = (o: unknown) => (o as ZombieActor | undefined)?.view?.uniforms.bodyLights.value;
-  /** Task 11b: each actor's room fill factor this frame (roomFillFactor at its root, the factor
-   *  applyRoomFill scales its body fill by), written in the actor light loop; bones scale their
-   *  ambient by it in list mode. Unknown owner = 1. */
-  const actorFill = new WeakMap<object, number>();
-  const ownerFill = (o: unknown) => (typeof o === 'object' && o !== null ? actorFill.get(o) : undefined) ?? 1;
+  /** Task 11b: a bone-mesh instance's owner room fill factor (ctx.lighting.actorFill). Unknown owner = 1. */
+  const ownerFill = (o: unknown) => (typeof o === 'object' && o !== null ? ctx.lighting.actorFill.get(o) : undefined) ?? 1;
   if (ctx.render.segMeshRenderer) scene.add(ctx.render.segMeshRenderer.object);
   ctx.render.skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
   ctx.render.segVolumeCache = ctx.render.skeletonMode === 'volume' ? new SegmentVolumeCache() : null;
@@ -5405,7 +5402,7 @@ async function main() {
     .concat(ctx.bake.attachedViews.map(v => v.object));
   ctx.bake.nextId = 1;
   /** The flesh bits' own throwaway stream for spawnChunkPiece (see there). */
-  const fleshSpawnRng = mulberry32(0xf1e5b175);
+  ctx.gibs.fleshSpawnRng = mulberry32(0xf1e5b175);
   /**
    * Spawn one detached piece. `kind` is the piece's MATERIAL AND PHYSICS, not a
    * label: 'bone' picks the CHUNK_TUNING thud (a ribcage that bounces like meat
@@ -5426,7 +5423,7 @@ async function main() {
   ) {
     // A FLESH BIT (flesh-bits.ts) draws its throwaway launch and tumble from its own stream, so flesh on or
     // off leaves rngStreams.misc — every other piece's sequence — untouched.
-    const rng = piece.tag === 'flesh' ? fleshSpawnRng : rngStreams.misc;
+    const rng = piece.tag === 'flesh' ? ctx.gibs.fleshSpawnRng : rngStreams.misc;
     const vel: Vec3 = [
       (rng() - 0.5) * 4.5,
       2.5 + rng() * 2.5,
