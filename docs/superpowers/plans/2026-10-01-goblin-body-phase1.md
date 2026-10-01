@@ -42,7 +42,7 @@ The target body below, compared with today's `goblin.blob`:
 | --- | --- | --- | --- |
 | Arm daylight below the elbow, L/R (`:79`) | 43.6 mm | 48.5 mm | > 30 mm |
 | Upper-arm daylight at 0.11 m (`:89`) | 29.0 mm | 19.2 mm | > 15 mm |
-| `fusedOf(arm, torso)` (`:98`) | −2.0 mm | −2.9 mm | < 0 |
+| `fusedOf(arm, torso)` (`:98`) | −2.0 mm | −2.7 mm (shoulder marked `core`) | < 0 |
 | Arm-to-leg `clearOf` (`:105`) | 22.7 mm | 22.4 mm | > 10 mm |
 | Hip / height (`:118`) | 0.542 | 0.542 | > 0.50 |
 | **New:** deepest dip in the torso-only half-width profile (arms and legs off) | 20.5 mm | 5.0 mm | < 10 mm |
@@ -51,8 +51,11 @@ The target body below, compared with today's `goblin.blob`:
 
 Three traps were found on the way, so you do not rediscover them:
 
-- **Variant A's look-dev shoulder round (r 0.038) detaches the arm.** `fusedOf` reads +2.8 mm. r 0.042 is the smallest
-  that fuses.
+- **Variant A's look-dev shoulder round (r 0.038) seems to detach the arm, but does not.** `fusedOf` reads +3.4 mm because
+  its probe starts from the cluster's fattest prim, and the hand (0.046 × deep 0.90 = 0.0414) out-ranks a slim shoulder;
+  the probe then runs hand-to-torso through air. Daylight and `validateBody` are unchanged. The fix is to mark the
+  shoulder round `core` (the skill's triage table), which fuses at −2.7 mm with r 0.038. (A first draft of this plan
+  grew it to r 0.042 instead, which passes only by out-ranking the hand by 0.6 mm; Task 3's review caught it.)
 - **At the look-dev chest width (`wide=1.06`) the upper-arm daylight is 15.0 mm**, on the pin's line. `wide=1.00` gives
   19.2 mm. Width in x is the budget the arms compete for (see the skeleton block's shoulder note).
 - **All 16 test files that read the goblin pass against the target**: 498 tests, including `goblin-kit.test.ts`. The
@@ -184,6 +187,9 @@ git commit -m "test(goblin): pin the refinement body (continuous torso, gut in f
   `  # Torso: long and narrow with the gut low, rather than one wide ovoid.` (line 124) through the line
   `  bar head on neck from=0.00 to=1.00 r=0.046 deep=0.94 blend=0.0016` (line 141) inclusive.
 
+> **Review note (2026-10-01, Task 3):** the shoulder round is now r 0.038 marked `core` (see the traps above); the comment
+> about the upper arm's daylight no longer ties it to the shoulder's size.
+>
 > **Review note (2026-10-01):** after this task landed, review revised this block's comments (the daylight claim, the
 > blend-width wording, the cords' path, a source line for the retuned values), dropped the gut's no-op `wide=1.00`, and
 > re-seated the lowest and third vertebrae at `offset=(0,0,-0.072)` (they were nearly flush). The file is now the
@@ -287,10 +293,11 @@ git commit -m "feat(goblin): continuous tapered torso with the gut in front and 
   bar  arm on upperarm from=0.00 to=1.00 r=0.031 r2=0.024 blend=0.010 mirror
   bar  arm on forearm  from=0.00 to=1.00 r=0.027 r2=0.018 blend=0.010 mirror
 
-  # Big grabby hands: still orbs, still r 0.046. goblin-skin.ts copies this
-  # radius for the player's first-person arms, so changing it changes the
-  # player's hands. Only the blend widened, 0.0034 -> 0.008, so the wrist runs
-  # into the hand instead of meeting it at a seam.
+  # Big grabby hands: still orbs, still r 0.046. goblin-skin.ts hard-codes this
+  # radius (GOBLIN_SKIN.handRadius) for the player's first-person hands, and
+  # loadHold depends on it. Nothing links the two: change them together. Only
+  # the blend widened, 0.0034 -> 0.008, so the wrist runs into the hand
+  # instead of meeting it at a seam.
   blob arm on hand at=0.55 r=0.046 deep=0.90 blend=0.008 mirror
 
   bar  leg on thigh from=0.00 to=1.00 r=0.046 r2=0.031 blend=0.014 mirror
@@ -368,6 +375,9 @@ git commit -m "feat(goblin): tapered limbs, orbs only at shoulders/hands/ankles/
   - In the torso-continuity test's comment, replace `Old body: 20.5 mm, between its two chest
   // ellipsoids.` with `Old body: 20.5 mm, at the spine/chest joint, between its spine
   // and lower chest ellipsoids.` (keep the line wrapping tidy).
+  - In the "upper arm emerges from the chest" test's comment, the old-body clearance profile ("0.6 mm of air 60 mm out,
+    20 mm at 115 mm, 32 mm at 143 mm") and "the shoulder ball" describe the ball-jointed body: mark that sentence as
+    the old body's ("On the ball-jointed body the clearance rose ..."), and keep the deltoid-merge reasoning.
   - In the gut test's comment, replace `Rebuilt: belly +27.0 mm, waist +15.0 mm.` with
     `Rebuilt: belly +27.0 mm, waist +14.7 mm (pelvis at=0.8, spine1 at=0.3, on the bone axis; reach's 0.5 mm steps
     read the waist as 14.5).` (the waist moved from 15.0 when review re-seated the lowest vertebra).
@@ -509,6 +519,10 @@ git commit -m "docs(goblin): phase 1 body in the lab renderer (turntable frames,
   In `TASKS.md`, replace `**Goblin refinement pass** asked for (body, kit, weapons, rig, animation; [audit](docs/tasks/characters.md)).`
   with `**Goblin refinement pass**: phase 1 (body) built, awaiting the owner's look; then armour, held weapons, rig and
   animation ([spec](docs/superpowers/specs/2026-10-01-goblin-refinement-design.md), [tasks](docs/tasks/characters.md)).`
+
+  Also add under phase 3 in `docs/tasks/characters.md`: `- [ ] webgpu/goblin-skin.ts keeps forearmRadius 0.028 and
+  forearmElbowRadius 0.038 documented as the goblin's forearm bar and elbow blob, which phase 1 removed (both
+  constants are unreferenced); handRadius 0.046 is hard-coded and must stay equal to goblin.blob's hand.`
 
 - [ ] **Step 2: Commit**
 
