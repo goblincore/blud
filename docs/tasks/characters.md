@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Goblin refinement pass (body, kit, weapons, rig, animation) — spec 2026-10-01, phase 1 next
+## Goblin refinement pass (body, kit, weapons, rig, animation) — phase 1 (body) built 2026-10-01, awaiting the owner's look
 
 The owner's complaints:
 - the armour kit clips and fits badly;
