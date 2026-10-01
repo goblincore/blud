@@ -72,3 +72,5 @@ on the new body and no flesh pokes through it at any yaw.
    (`lab-yaw090.png`).
 5. **Head:** unchanged against the variants sheet: big swept ears, hooked nose and lips (`lab-yaw045.png`,
    `lab-yaw090.png`). The red eyes and the face texture are the lab's own, as before.
+
+**Owner, 2026-10-01: "lgtm".** Phase 1 is done; the profile is accepted as is.

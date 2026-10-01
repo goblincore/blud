@@ -172,15 +172,17 @@ describe('goblin.blob', () => {
   });
 
   // deep= scales a prim front and back alike, so a deep torso on the spine's own axis bulges at the back of the
-  // waist as much as at the belly (the look-dev's flaw). The gut hangs in front and the back stays flat enough for
-  // the spine to read. Rebuilt: belly +27.0 mm, waist +14.7 mm (pelvis at=0.8, spine1 at=0.3, on the bone axis;
-  // reach's 0.5 mm steps read the waist as 14.5). Old body: 0.0 and -9.5 mm.
+  // low spine as much as at the belly (the look-dev's flaw). The gut hangs in front and the back stays flat enough
+  // for the spine to read. Rebuilt: belly +27.0 mm, low spine +14.7 mm (pelvis at=0.8, spine1 at=0.3, on the bone
+  // axis; reach's 0.5 mm steps read it as 14.5). Old body: 0.0 and -9.5 mm. This is relative to the spine's own
+  // (forward-leaning) axis, not the world profile: in profile the belly front sits 16 mm behind the chest front
+  // (owner-accepted 2026-10-01).
   it('carries its gut in front, not bulging at the back', () => {
     const b = built();
     const gut = (p: Vec3) => reach(b, p, [0, 0, 1]) - reach(b, p, [0, 0, -1]);
-    const belly = boneAt(b, 'pelvis', 0.8), waist = boneAt(b, 'spine1', 0.3);
+    const belly = boneAt(b, 'pelvis', 0.8), lowSpine = boneAt(b, 'spine1', 0.3);
     expect(gut(belly)).toBeGreaterThan(0.015);
-    expect(gut(waist)).toBeGreaterThan(0.008);
+    expect(gut(lowSpine)).toBeGreaterThan(0.008);
   });
 
   // No ball joints on the limbs. The orbs that stay are a style the owner kept (early 3D): the hands, the shoulder

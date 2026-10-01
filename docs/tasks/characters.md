@@ -2,7 +2,7 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Goblin refinement pass (body, kit, weapons, rig, animation) — phase 1 (body) built 2026-10-01, awaiting the owner's look
+## Goblin refinement pass (body, kit, weapons, rig, animation) — phase 1 (body) done 2026-10-01
 
 The owner's complaints:
 - the armour kit clips and fits badly;
@@ -39,12 +39,12 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   2026-10-01). The goblin is the protagonist, seen armed in-game (no enemy AI). It holds **the player's weapons**; the buckler
   and cleaver are retired. **The hands stay orbs** (an early-3D style). Body: **variant A, "sinew"**, picked from three
   rendered variants ([look-dev](../dev-notes/2026-10-01-goblin-body-lookdev/)).
-- [~] **Phase 1, body:** re-authored to variant A (plan `docs/superpowers/plans/2026-10-01-goblin-body-phase1.md`):
+- [x] **Phase 1, body:** re-authored to variant A (plan `docs/superpowers/plans/2026-10-01-goblin-body-phase1.md`):
   continuous torso, tapered limbs, orbs only at the shoulders, hands, ankles and toes; the shoulder round is the arm's
   `core`. All goblin-reading tests pass plus three new pins (the whole `src/lab/sdf-zombie/` suite: 6604 tests), the
-  pack golden is re-pinned, and `blob:render-check` exits 0. **Awaiting the owner's look at the lab turntable**
-  ([frames](../dev-notes/2026-10-01-goblin-body-lookdev/lab/)). Open for the owner: the back is flatter, but in
-  profile the gut does not read as hanging in front (the pin measures it along the leaning spine's axis).
+  pack golden is re-pinned, and `blob:render-check` exits 0. **Owner approved 2026-10-01** ("lgtm") from the lab
+  turntable ([frames](../dev-notes/2026-10-01-goblin-body-lookdev/lab/)); the profile (gut not reading in front) is
+  accepted as is.
 - [ ] Phase 2, armour: redesign and fit (own brainstorm).
 - [ ] Phase 3, held weapons: the player's weapons in the orb hands (own brainstorm).
   - `webgpu/goblin-skin.ts` keeps `forearmRadius` 0.028 and `forearmElbowRadius` 0.038, documented as the goblin's
@@ -52,6 +52,10 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     hard-coded and must stay equal to `goblin.blob`'s hand.
 - [ ] Phase 4, rig and animation: authored clips and a goblin gait (own brainstorm). Cautionary case: the bride (shelved
   for janky animation and a sword clipping the body).
+  - `goblin.blob`'s neck vertebra bead (`blob head on neck at=0.30 ...`) is a zero-length head-limb prim, so
+    `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
+    19-47 mm into or off the neck as the head pitches. Make it a short bar (`bar head on neck from=0.28 to=0.32 ...`)
+    so it binds per end, and check with `__sdfLab.heroPosed()`. `female.blob:107` has the same pattern.
 
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 

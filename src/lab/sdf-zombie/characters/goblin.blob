@@ -158,6 +158,11 @@ body
   # front reaches 27 mm further than the back at the belly (pelvis at=0.8) and
   # about 15 mm at the waist (spine1 at=0.3), measured on the bone axis
   # 2026-10-01; goblin-blob.test.ts pins both (over 15 and 8 mm).
+  # Measured along the forward-leaning spine bones (spine1 pitch 13, chest 9),
+  # not in world profile: there the belly front sits 16 mm behind the chest front
+  # and the lower back (the pelvis/spine joint) is the furthest-back point. The
+  # owner accepted that profile on 2026-10-01; to make the gut read in profile,
+  # pin it in the world frame first (belly front vs chest front), then retune.
   #
   # These bar and gut values are not the look-dev's: they were retuned on
   # 2026-10-01 (goblin refinement phase 1 plan) against the gut measurement

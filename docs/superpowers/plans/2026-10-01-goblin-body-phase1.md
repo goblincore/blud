@@ -46,7 +46,7 @@ The target body below, compared with today's `goblin.blob`:
 | Arm-to-leg `clearOf` (`:105`) | 22.7 mm | 22.4 mm | > 10 mm |
 | Hip / height (`:118`) | 0.542 | 0.542 | > 0.50 |
 | **New:** deepest dip in the torso-only half-width profile (arms and legs off) | 20.5 mm | 5.0 mm | < 10 mm |
-| **New:** gut (front − back reach) at pelvis 0.8 / spine1 0.3 | 0.0 / −9.5 mm | 27.0 / 15.0 mm | > 15 / > 8 mm |
+| **New:** gut (front − back reach) at pelvis 0.8 / spine1 0.3 | 0.0 / −9.5 mm | 27.0 / 14.7 mm (after review re-seated a bead) | > 15 / > 8 mm |
 | **New:** point-blobs on arms and legs outside the allowed set | 4 | 0 | 0 |
 
 Three traps were found on the way, so you do not rediscover them:
