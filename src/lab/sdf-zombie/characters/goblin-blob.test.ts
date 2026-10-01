@@ -79,12 +79,12 @@ describe('goblin.blob', () => {
   // comfortable +13.4 mm. See daylightOf's docstring.
   //
   // Split into two assertions because the arm is not equally free along its
-  // length, and shouldn't be. On the ball-jointed body the clearance rose
-  // smoothly from the shoulder: 0.6 mm of air 60 mm out, 20 mm at 115 mm, 32 mm
-  // at 143 mm. The buried part is the deltoid — an upper arm that springs clear
-  // of the chest the instant it leaves the shoulder round reads as glued on, so
-  // the top of that shaft is meant to merge. Only past it does daylight become
-  // the point.
+  // length, and shouldn't be. On the ball-jointed body as first tuned, the
+  // clearance rose smoothly from the shoulder: 0.6 mm of air 60 mm out, 20 mm
+  // at 115 mm, 32 mm at 143 mm. The buried part is the deltoid — an upper arm
+  // that springs clear of the chest the instant it leaves the shoulder round
+  // reads as glued on, so the top of that shaft is meant to merge. Only past
+  // it does daylight become the point.
   it.each(['armL', 'armR'] as const)('%s hangs free below the elbow', arm => {
     const b = built();
     const shoulder = b.bones.get(`clavicle.${arm === 'armL' ? 'l' : 'r'}`)!.tail;
@@ -92,8 +92,8 @@ describe('goblin.blob', () => {
     // it there is no anatomical excuse for touching the body, and this is the
     // exact stretch the owner rejected: the forearm ran into the gut. Measured
     // at 43.6 mm on the ball-jointed body, 48.5 mm on the 2026-10-01 rebuild;
-    // 30 mm is roughly where separation became visible from every
-    // yaw in the turntable rather than only on the shadowed side.
+    // 30 mm is roughly where separation became visible from every yaw
+    // in the turntable rather than only on the shadowed side.
     expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.235))
       .toBeGreaterThan(0.030);
   });
@@ -103,10 +103,10 @@ describe('goblin.blob', () => {
     const shoulder = b.bones.get(`clavicle.${arm === 'armL' ? 'l' : 'r'}`)!.tail;
     // 0.11 m clears the shoulder round (r 0.038 since the 2026-10-01 rebuild,
     // marked as the arm's core; it was a 0.054 ball) and the deltoid merge
-    // above. Measured at 19.2 mm (29.0 on the old body; the slimmer chest at
-    // wide=1.00 is what keeps it above 15: at 1.06 it read 14.99). The failure
-    // this catches is the whole upper arm descending INSIDE the ribcage, which
-    // is what tilt=7 did before.
+    // above. Measured at 19.2 mm (29.0 on the old body; the chest's wide=1.00,
+    // down from the look-dev's 1.06, is what keeps it above 15 mm: at 1.06 it
+    // read 14.99). The failure this catches is the whole upper arm descending
+    // INSIDE the ribcage, which is what tilt=7 did before.
     expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.11))
       .toBeGreaterThan(0.015);
   });
@@ -115,8 +115,9 @@ describe('goblin.blob', () => {
   // pushing the shoulder out far enough to clear the torso detaches the arm
   // entirely, and past a point validateBody reports the cluster disconnected.
   // The fuse probe runs from the arm's `core` (its shoulder round; see
-  // goblin.blob's arms block) to the torso's: without that mark the hand, the
-  // fattest arm prim, would be the start and the probe would cross air.
+  // goblin.blob's arms-and-legs block) to the torso's: without that mark
+  // the hand, the fattest arm prim, would be the start and the probe would
+  // cross air.
   it.each(['armL', 'armR'] as const)('%s is nonetheless fused to the torso', arm => {
     const b = built();
     expect(fusedOf(b, limb(b, arm), limb(b, 'torso'))).toBeLessThan(0);
@@ -183,8 +184,8 @@ describe('goblin.blob', () => {
   });
 
   // No ball joints on the limbs. The orbs that stay are a style the owner kept (early 3D): the hands, the shoulder
-  // round (which also attaches the arm), the ankle knob and the toe pad. Any other point-blob on an arm or a leg is a
-  // joint orb coming back.
+  // round (which is also the arm's `core`), the ankle knob and the toe pad. Any other point-blob on an arm or a leg
+  // is a joint orb coming back.
   it('keeps orbs only at the shoulders, hands, ankles and toes', () => {
     const allowed = (p: { bone: string; at: number }) =>
       p.bone === 'hand' || (p.bone === 'foot' && p.at > 0.5) ||
