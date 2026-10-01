@@ -192,8 +192,8 @@ git commit -m "test(goblin): pin the refinement body (continuous torso, gut in f
 >
 > **Review note (2026-10-01):** after this task landed, review revised this block's comments (the daylight claim, the
 > blend-width wording, the cords' path, a source line for the retuned values), dropped the gut's no-op `wide=1.00`, and
-> re-seated the lowest and third vertebrae at `offset=(0,0,-0.072)` (they were nearly flush). The file is now the
-> reference for this text, not the block below.
+> re-seated the lowest and third vertebrae at `offset=(0,0,-0.072)` (they were nearly flush). The block below now
+> holds the committed text (synced after review).
 
 - [ ] **Step 1: Replace that span with exactly this text**
 
@@ -201,46 +201,64 @@ git commit -m "test(goblin): pin the refinement body (continuous torso, gut in f
   # Torso: three continuous tapered bars (pelvis, spine, chest), rebuilt 2026-10-01.
   #
   # It used to be five ellipsoids stacked up the spine at blends of 0.004-0.005,
-  # and the owner's read was "a series of orbs" (2026-10-01): with fillets that
-  # tight every ring stays a ring, and the outline pinched between them (a 20 mm
-  # dip in half-width between the chest rings; goblin-blob.test.ts now pins
-  # under 10, and the rebuilt torso's deepest is its 5 mm waist). One bar per bone,
-  # tapered with r2 and filleted at 0.014-0.016 (about 3 cm once
-  # roundBlendScale halves it), is one mass. The body is the owner's pick of
-  # three rendered variants, "A, sinew": docs/dev-notes/2026-10-01-goblin-body-lookdev/.
+  # and the owner's read was "a series of orbs" (2026-10-01): with blends that
+  # tight every ring stays a ring, and the outline pinched between them (a
+  # 20.5 mm dip in half-width at the spine/chest joint, between the spine ring
+  # and the lower chest ring; goblin-blob.test.ts now pins the deepest dip under
+  # 10 mm, and the rebuilt torso's deepest is its 5 mm waist). One bar per bone,
+  # tapered with r2 and blended at 0.014-0.016, is one mass: the smooth-min acts
+  # over a band about 3 cm wide (smin width = 4 x blend x roundBlendScale 0.5;
+  # build-body.ts, validate.ts). The body is the owner's pick of three rendered
+  # variants, "A, sinew": docs/dev-notes/2026-10-01-goblin-body-lookdev/.
   #
   # Still narrow in x and deep in z, for the reason the skeleton block gives:
-  # width in x is the budget the arms compete for. The chest's wide=1.00 is the
-  # number that bought the upper arm its daylight back (19.2 mm at 0.11 m; at
-  # the look-dev's wide=1.06 it was 15.0, exactly on the test's line).
+  # width in x is the budget the arms compete for. The chest's wide=1.00 leaves
+  # the upper arm 19.2 mm of daylight at 0.11 m (set by the upper-arm bar and
+  # the chest width, whatever the shoulder round's size); at the look-dev's
+  # wide=1.06 it was 14.99, just under the test's 15 mm line, so the pin
+  # failed. Do not widen x or shrink deep here without re-running the arm
+  # daylight pins in goblin-blob.test.ts.
   #
   # THE GUT HANGS IN FRONT. `deep=` scales a prim front and back alike, so a deep
   # torso on the spine's own axis bulged at the back of the waist as much as at
   # the belly (the look-dev's flaw). The pelvis and spine bars are pushed
   # forward (+z; offsets are world axes) and the gut is its own blob further
   # forward still, so the back stays flat enough for the spine to show: the
-  # front reaches 27 mm further than the back at the belly and 15 mm at the
-  # waist (measured 2026-10-01; goblin-blob.test.ts pins both).
+  # front reaches 27 mm further than the back at the belly (pelvis at=0.8) and
+  # about 15 mm at the waist (spine1 at=0.3), measured on the bone axis
+  # 2026-10-01; goblin-blob.test.ts pins both (over 15 and 8 mm).
+  #
+  # These bar and gut values are not the look-dev's: they were retuned on
+  # 2026-10-01 (goblin refinement phase 1 plan) against the gut measurement
+  # above and the arm pins, keeping the look-dev's front silhouette (the back
+  # was flattened on purpose, by up to about 28 mm): pelvis r2 0.078 -> 0.074
+  # and deep 1.28 -> 1.10; spine r 0.076 -> 0.072 and deep 1.20 -> 1.08; chest
+  # deep 1.06 -> 1.12 and wide 1.06 -> 1.00; the gut blob is new.
   bar  torso on pelvis from=0.00 to=1.00 r=0.068 r2=0.074 deep=1.10 offset=(0,0,0.012) blend=0.014
-  blob torso on pelvis at=0.80 r=0.060 wide=1.00 tall=1.05 offset=(0,0,0.030) blend=0.016
+  blob torso on pelvis at=0.80 r=0.060 tall=1.05 offset=(0,0,0.030) blend=0.016
   bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.068 deep=1.08 offset=(0,0,0.010) blend=0.016
   bar  torso on chest  from=0.00 to=0.95 r=0.068 r2=0.056 wide=1.00 deep=1.12 blend=0.016
 
-  # Spine: vertebrae knuckling through the flat back. Each bead sits just proud
-  # of the back surface at its height (offsets are world axes; -z is the back),
-  # small and tightly blended so it reads as a bump under skin, not as an orb.
-  # Offsets from the look-dev, re-seated on the pushed-forward bars above.
-  blob torso on spine1 at=0.15 r=0.012 offset=(0,0,-0.064) blend=0.005
+  # Spine: vertebrae knuckling through the flat back (offsets are world axes;
+  # -z is the back), small and tightly blended so each reads as a bump under
+  # skin, not as an orb. Seated by measurement (2026-10-01): the chest beads
+  # (and the neck one, below) keep the look-dev's offsets, but the three on
+  # spine1 were moved onto the pushed-forward bars (the look-dev had -0.086,
+  # -0.084, -0.080). Each stands about 5-6 mm proud of the bare back at its
+  # height, except the one at the waist (spine1 at=0.55, 8.6 mm), where the
+  # back curves in and the spine should show.
+  blob torso on spine1 at=0.15 r=0.012 offset=(0,0,-0.072) blend=0.005
   blob torso on spine1 at=0.55 r=0.012 offset=(0,0,-0.066) blend=0.005
-  blob torso on spine1 at=0.95 r=0.012 offset=(0,0,-0.066) blend=0.005
+  blob torso on spine1 at=0.95 r=0.012 offset=(0,0,-0.072) blend=0.005
   blob torso on chest  at=0.30 r=0.012 offset=(0,0,-0.068) blend=0.005
   blob torso on chest  at=0.65 r=0.012 offset=(0,0,-0.062) blend=0.005
   blob torso on chest  at=0.98 r=0.012 offset=(0,0,-0.056) blend=0.005
 
   # Neck: one tapered column (0.040 at the collar to 0.033 under the skull), a
-  # pair of cords from the collarbone notch up to behind the ears (the sinew
-  # that makes a thin neck read as a neck rather than a pipe), and one more
-  # vertebra. Values from the look-dev variant A, owner-picked.
+  # pair of cords from the collarbone notch up the front of the neck to the
+  # base of the skull, converging (the sinew that makes a thin neck read as a
+  # neck rather than a pipe), and one more vertebra. Values from the look-dev
+  # variant A, owner-picked.
   bar  head on neck from=0.00 to=1.00 r=0.040 r2=0.033 blend=0.010
   blob head on neck at=0.05 r=0.009 r2=0.007 offset=(0.026,0.000,0.018) tip=(-0.012,0.120,-0.030) blend=0.006 both
   blob head on neck at=0.30 r=0.010 offset=(0,0,-0.036) blend=0.005
@@ -267,8 +285,8 @@ git commit -m "feat(goblin): continuous tapered torso with the gut in front and 
 
 > **Review note (2026-10-01):** after this task landed, review made the shoulder round `blob arm on clavicle at=1.00
 > r=0.038 blend=0.010 mirror core` (not r 0.042; see the traps above) and corrected the block's comments (joint ratios,
-> blend wording, the hand radius being hard-coded in goblin-skin.ts, provenance). Commit 5e4d4f05: the file, not the
-> block below, is now the reference.
+> blend wording, the hand radius being hard-coded in goblin-skin.ts, provenance). Commit 5e4d4f05: the block below now holds
+> the committed text (synced after review).
 
 **Files:**
 - Modify: `src/lab/sdf-zombie/characters/goblin.blob`, the body block. Replace from the line
@@ -280,21 +298,27 @@ git commit -m "feat(goblin): continuous tapered torso with the gut in front and 
 ```
   # ARMS AND LEGS: tapered bars, no ball joints (rebuilt 2026-10-01).
   #
-  # Every joint used to be a nub 1.3-1.8x the shaft it joined, at blends of
-  # 0.0014-0.004, on purpose: "shoulder, elbow, wrist, hip, knee, ankle" as
-  # orbs. The owner's 2026-10-01 read was "a series of orbs", and the pick was
-  # variant A: each segment one bar tapering toward the hand or foot (r2),
-  # filleted into the next at 0.010-0.014 so a joint is a soft crease. The orbs
-  # that stay are a STYLE, kept on purpose (owner: a throwback to early 3D
-  # games): the hands, a small ankle knob, the toe pad, and the shoulder round,
-  # which is structural as much as stylistic (below). goblin-blob.test.ts pins
-  # that no other point-blob comes back on a limb.
+  # Most joints used to be a nub 1.3-1.7x the shaft it joined (wrist and ankle
+  # about 1.1x), at blends of 0.0014-0.004, on purpose: "shoulder, elbow,
+  # wrist, hip, knee, ankle" as orbs. The owner's 2026-10-01 read was "a series
+  # of orbs", and the pick was variant A: each segment one bar tapering toward
+  # the hand or foot (r2), blended into the next at 0.010-0.014 (a smooth-min
+  # band 2-3 cm wide; see the torso block) so a joint is a soft transition. The
+  # orbs that stay are kept on purpose: the owner kept the hands as orbs, a
+  # throwback to early 3D games, and the small ankle knob and the toe pad come
+  # with variant A; the shoulder round is also the arm's core (below).
+  # goblin-blob.test.ts pins that no other point-blob comes back on a limb. All
+  # values below are look-dev variant A's.
   #
-  # The shoulder round is what ATTACHES the arm. At the look-dev's r 0.038,
-  # fusedOf read +2.8 mm: the core-to-core path left the flesh and the arm hung
-  # on by its fillet. 0.042 is the smallest that fuses (-2.9 mm with the chest
-  # at wide=1.00); anything bigger only regrows the orb.
-  blob arm on clavicle at=1.00 r=0.042 blend=0.010 mirror
+  # The shoulder round is the arm's `core`: the prim the fuse probe starts
+  # from (clusterCore in validate.ts). Without the mark the probe takes the
+  # cluster's fattest prim, and the hand (0.046 x deep 0.90 = 0.0414)
+  # out-ranks a slim shoulder: the probe then ran from the hand to the torso
+  # through air and fusedOf read +3.4 mm, though nothing had detached
+  # (daylight and validateBody were unchanged). Marked `core`, the look-dev's
+  # r 0.038 fuses at -2.7 mm. Do not "fix" a positive fusedOf by growing this
+  # orb; check which prim is the core first.
+  blob arm on clavicle at=1.00 r=0.038 blend=0.010 mirror core
   bar  arm on upperarm from=0.00 to=1.00 r=0.031 r2=0.024 blend=0.010 mirror
   bar  arm on forearm  from=0.00 to=1.00 r=0.027 r2=0.018 blend=0.010 mirror
 
@@ -369,8 +393,8 @@ git commit -m "feat(goblin): tapered limbs, orbs only at shoulders/hands/ankles/
   with:
 
 ```
-    // 0.11 m clears the shoulder round (r 0.042 since the 2026-10-01 rebuild;
-    // it was a 0.054 ball) and the deltoid merge above. Measured at 19.2 mm
+    // 0.11 m clears the shoulder round (r 0.038 since the 2026-10-01 rebuild,
+    // marked as the arm's core; it was a 0.054 ball) and the deltoid merge above. Measured at 19.2 mm
     // (29.0 on the old body; the slimmer chest at wide=1.00 is what keeps it
     // above 15: at 1.06 it read 14.99). The failure this catches is the whole upper arm
 ```
@@ -417,6 +441,14 @@ npx vitest run src/lab/sdf-zombie/characters/goblin-blob.test.ts src/lab/sdf-zom
 
   Expected: 16 files pass. On 2026-10-01 the target body passed all 498 tests then; the new pins add 3.
 
+  **Then the pack golden, which the 16 above miss:** `src/lab/sdf-zombie/pack-golden.test.ts` pins a hash of every
+  character's packed body, so this intended edit moves the goblin's (`goblin.blob packs the pinned bytes` fails,
+  expected `36c1672f21adadf9`). Its header says to re-pin an intended edit with `-u`. Run
+  `npx vitest run -u src/lab/sdf-zombie/pack-golden.test.ts`, then `git diff src/lab/sdf-zombie/__snapshots__/` and
+  confirm that **only the goblin's line** changed. If any other character's hash moved, stop and report: something
+  outside the goblin changed. Commit the snapshot with the step 4 commit. (If the owner's look later changes the body,
+  re-pin again.)
+
   **If one fails:**
   - **`webgpu/goblin-skin.test.ts` or `webgpu/game-arms.test.ts`:** phase 1 changed something it promised not to (the
     hand radius or the palette). Fix the `.blob`, not the test.
@@ -440,11 +472,11 @@ npx vitest run src/lab/sdf-zombie/characters/goblin-blob.test.ts src/lab/sdf-zom
   Expected: passes. A failure outside the 16 files above means something else reads the goblin: apply the same rules
   as Step 1.
 
-- [ ] **Step 4: Commit (only if Step 1 or 3 needed changes)**
+- [ ] **Step 4: Commit (the pack golden always; anything else only if Step 1 or 3 needed changes)**
 
 ```bash
 git add -A src/lab/sdf-zombie docs/tasks/characters.md
-git commit -m "test: re-baseline goblin-dependent pins for the refinement body"
+git commit -m "test: re-pin the goblin's pack golden and re-baseline goblin-dependent pins for the refinement body"
 ```
 
 ### Task 6: Look at it in the real renderer
@@ -489,7 +521,8 @@ git commit -m "test: re-baseline goblin-dependent pins for the refinement body"
 The rebuilt body in the lab renderer (`npm run blob:shot -- goblin`, BLOB_DIST 1.35), from `lab/`. It is variant A plus
 three fixes found while measuring:
 - the gut is pushed forward and the back flattened (gut +27 mm at the belly);
-- the shoulder round is r 0.042 (at 0.038 the arm detached);
+- the shoulder round is marked `core` (at r 0.038 without it, `fusedOf` read +3.4 mm because the probe started at the
+  hand, not because anything detached);
 - the chest is wide=1.00 (at 1.06 the upper-arm daylight sat on the 15 mm line).
 
 `blob:render-check`: exit 0.
