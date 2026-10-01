@@ -109,9 +109,14 @@ Every landscape material is wrapped:
 The game's rule is hand-written WGSL (or TSL) for rendering; level art comes from Blender through the kit pipeline.
 Three routes, from cheapest:
 
-1. **Bake the materials to tileable textures** (rock, sand, boulder, arch): Cycles bake of the colour and a normal map from
-   the bump, on a tiling plane, into `assets-source/levels/kit-textures/` like the train kit's. Usable on level art at
-   once; costs nothing at runtime. Best first step for "use the rock and sand in game".
+1. **Bake the materials to tileable textures.** **Done for the rock and the sand (2026-10-01):** the kit kinds `rock` and
+   `sand` in `scripts/levels/build_train_kit.py` (materials `train.rock`, `train.sand`; 1024², 1 texture = 1 m) baked to
+   `assets-source/levels/kit-textures/{rock,sand}-{color,rough,normal}.png`. They are **seamless**: the UV square is
+   wrapped onto a torus in 4D and fed to 4D noise and Voronoi (`Nodes.periodic`, `noise4`, `voronoi4`), unlike the older
+   kit kinds, which use plain UV noise. Re-bake just these without touching the rest of the kit:
+   `blender --background --factory-startup --python scripts/levels/build_train_kit.py -- --bake-only rock,sand`.
+   Preview: [kit-rock-sand.png](../dev-notes/2026-10-01-flat-emergence-lookdev/kit-rock-sand.png). No kit piece uses them
+   yet.
 2. **Port the procedural material to WGSL**: noise, Voronoi and a bump are a few functions; the two-tone mix and the bump
    recipe above are the whole material. Live, tunable, no texture memory, and it matches the SDF characters' procedural
    skin. The haze and the ground fog become a per-pixel term on level materials, or a depth-based post pass (distance from

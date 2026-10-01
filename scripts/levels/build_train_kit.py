@@ -121,6 +121,27 @@ class Nodes:
                 sock.default_value = v if key == "Factor" else (*v, 1)
         return [s for s in nd.outputs if s.type == "RGBA"][0]
 
+    def periodic(self, freq):
+        """(vector, w) sockets that wrap the UV square onto a torus in 4D: a 4D noise or Voronoi at Scale 1 fed with
+        them repeats exactly once per tile in u and v, with about `freq` features across it. Seamless, unlike plain UV."""
+        sep = self.node("ShaderNodeSeparateXYZ", {"Vector": self.uv}).outputs
+        r = freq / (2 * math.pi)
+        a = self.math("MULTIPLY", sep["X"], 2 * math.pi)
+        b = self.math("MULTIPLY", sep["Y"], 2 * math.pi)
+        x, y = self.math("MULTIPLY", self.math("COSINE", a), r), self.math("MULTIPLY", self.math("SINE", a), r)
+        z, w = self.math("MULTIPLY", self.math("COSINE", b), r), self.math("MULTIPLY", self.math("SINE", b), r)
+        return self.node("ShaderNodeCombineXYZ", {"X": x, "Y": y, "Z": z}).outputs[0], w
+
+    def noise4(self, freq, detail=4.0, rough=0.5):
+        vec, w = self.periodic(freq)
+        return self.node("ShaderNodeTexNoise", {"Vector": vec, "W": w, "Scale": 1.0, "Detail": detail, "Roughness": rough},
+                         noise_dimensions="4D").outputs["Fac"]
+
+    def voronoi4(self, freq, feature="F1"):
+        vec, w = self.periodic(freq)
+        return self.node("ShaderNodeTexVoronoi", {"Vector": vec, "W": w, "Scale": 1.0}, voronoi_dimensions="4D",
+                         feature=feature).outputs["Distance"]
+
     def grid_dots(self, per_m, radius):
         """1 inside a dot of `radius` (in cells) at the centre of each 1/per_m cell."""
         v = self.node("ShaderNodeVectorMath", {0: self.uv, 1: (per_m, per_m, 1.0)}, operation="MULTIPLY").outputs[0]
@@ -171,6 +192,26 @@ def procedural(kind, t):
         col = t.mix(bar, (0.015, 0.015, 0.015), (0.3, 0.3, 0.31))
         rough = t.math("ADD", t.math("MULTIPLY", bar, -0.1), 0.6)
         return col, rough, bar
+    if kind == "sand":
+        # The Bryce look's sand shelf (2026-10-01 look-dev): dark and pale blotches, a pitted ripple from Voronoi cells.
+        n = t.noise4(3.0, 8.0, 0.65)
+        cells = t.voronoi4(9.0)
+        fine = t.noise4(40.0, 4.0, 0.5)
+        tone = t.math("ADD", t.math("MULTIPLY", n, 0.7), t.math("MULTIPLY", cells, 0.35))
+        col = t.ramp(tone, [(0.15, (0.09, 0.07, 0.05)), (0.5, (0.24, 0.19, 0.13)), (0.85, (0.42, 0.34, 0.25))])
+        rough = t.math("SUBTRACT", 0.88, t.math("MULTIPLY", n, 0.12))
+        height = t.math("ADD", t.math("ADD", t.math("MULTIPLY", n, 0.4), t.math("MULTIPLY", cells, 0.8)), t.math("MULTIPLY", fine, 0.15))
+        return col, rough, height
+    if kind == "rock":
+        # The Bryce look's rock (boulders, the spiky arch): blotched two-tone stone, pitted cells, a few dark cracks.
+        n = t.noise4(4.0, 12.0, 0.7)
+        cells = t.voronoi4(24.0)
+        crack = t.math("LESS_THAN", t.voronoi4(5.0, "DISTANCE_TO_EDGE"), 0.01)   # hairlines (0.035 read as crazy paving)
+        base = t.ramp(n, [(0.25, (0.1, 0.085, 0.07)), (0.5, (0.24, 0.2, 0.16)), (0.8, (0.42, 0.36, 0.28))])
+        col = t.mix(t.math("MULTIPLY", crack, 0.45), base, (0.06, 0.05, 0.04))
+        rough = t.math("ADD", 0.76, t.math("MULTIPLY", crack, 0.12))
+        height = t.math("SUBTRACT", t.math("ADD", t.math("MULTIPLY", n, 0.6), t.math("MULTIPLY", cells, 0.9)), t.math("MULTIPLY", crack, 0.5))
+        return col, rough, height
     if kind == "rust":
         n = t.noise(4.0, 6.0, t.stretch(1.0, 6.0))
         col = t.ramp(n, [(0.0, (0.08, 0.035, 0.015)), (0.5, (0.24, 0.1, 0.035)), (1.0, (0.45, 0.2, 0.07))])
@@ -268,15 +309,19 @@ BAKED = {  # name: (kind, size px, metallic)
     "train.coal": ("coal", 512, 0.2),
     "train.mirror": ("mirror", 512, 1.0),
     "train.rubber": ("rubber", 256, 0.0),
+    # The retro-CGI look (docs/reference/retro-cgi-recipes.md): seamless 4D-noise tiles, not yet used by a piece.
+    "train.rock": ("rock", 1024, 0.0),
+    "train.sand": ("sand", 1024, 0.0),
 }
 FLAT = {"soot", "party", "rubber"}  # no roughness/normal maps
 
 
-def bake_textures():
+def bake_textures(only=None):
     """For each material: colour and roughness through EMIT bakes, the normal through a NORMAL
-    bake of a Principled BSDF with Bump(height), all on a UV'd 1 x 1 m plane (1 texture = 1 m)."""
+    bake of a Principled BSDF with Bump(height), all on a UV'd 1 x 1 m plane (1 texture = 1 m).
+    `only`: a set of short names to bake, leaving every other map on disk untouched."""
     os.makedirs(TEX, exist_ok=True)
-    for f in os.listdir(TEX):  # v1's maps (wood, panel, velvet...) must not linger
+    for f in os.listdir(TEX) if only is None else ():  # v1's maps (wood, panel, velvet...) must not linger
         if f.endswith(".png"):
             os.remove(os.path.join(TEX, f))
     scene = bpy.context.scene
@@ -289,6 +334,8 @@ def bake_textures():
     out = {}
     for name, (kind, size, _) in BAKED.items():
         short = name.split(".", 1)[1]
+        if only is not None and short not in only:
+            continue
         maps = ("color",) if kind in FLAT else ("color", "rough", "normal")
         out[name] = {}
         for which in maps:
@@ -1462,6 +1509,9 @@ def shovel():
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    if "--bake-only" in ARGV:  # e.g. --bake-only rock,sand: bake those maps, touch nothing else, build no kit
+        print("baked", bake_textures(only=set(arg("--bake-only", "").split(","))))
+        return
     mats = final_materials(bake_textures())
     widths = sorted({w for w, _ in SIZES})
     heights = sorted({h for _, h in SIZES})
