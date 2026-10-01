@@ -5,7 +5,7 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-offs:** [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
+> **Latest hand-offs:** [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
 > resize, zombie feet, level-list tier, march-hash on Chrome 154) and [2026-09-30 flail / head damage / wounds](docs/dev-notes/2026-09-30-flail-handoff/HANDOFF.md). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
