@@ -1,6 +1,6 @@
 # Night Train egg: the candled egg and the torn caul — Design
 
-**Date:** 2026-10-01 · **Status:** approved by the owner in chat (2026-10-01); not built.
+**Date:** 2026-10-01 · **Status:** approved by the owner in chat (2026-10-01), then **paused** the same day: the owner wants to think about the egg more before a plan is written. Not built.
 **Kind:** design. **Changes:** the control-room egg's look and how it is drawn. **Supersedes** §2 ("The egg") of the
 [ending spec](2026-09-30-night-train-egg-ending-design.md); the room, the trigger and the sequence system are unchanged.
 **Look-dev:** [Cycles renders + generator script](../../dev-notes/2026-10-01-egg-lookdev/) (round 1: lights and three

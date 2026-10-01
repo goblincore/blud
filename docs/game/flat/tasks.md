@@ -49,7 +49,7 @@ superpowers spec/plan when they start; link it on the task.
   *Deps:* F-T1, F-T2.
 - [ ] **F-T4 Input routing.** Room controls vs. FPS controls; what the mouse does
   while leaning in. *Deps:* F-T3.
-- [ ] **F-T5 Screen push-through (SDF).** The CRT glass bulges, an object pushes
+- [ ] **F-T5 Screen push-through.** *2026-10-01: a draft spec proposes a mesh membrane carrying a captured still instead of SDF, for the Night Train egg's emergence: [spec](../../superpowers/specs/2026-10-01-flat-screen-emergence-design.md) (draft, awaiting the owner).* Originally (SDF): The CRT glass bulges, an object pushes
   through and drops onto the desk wet; membrane settles; residue stays.
   *Deps:* F-T2. *Done when:* the cold-open CD push-through plays in the flat.
 - [ ] **F-T6 Room lighting.** Lamp, CRT glow driven by the FPS image, window.
