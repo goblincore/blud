@@ -62,6 +62,10 @@ Probe evidence: `docs/dev-notes/2026-10-01-earlyz-probe/NOTES.md`. Chrome 154 / 
   - Never edit `march/body/**` or `march.wgsl.ts` in this plan.
   - `march-golden.test.ts` and `scripts/march-hash.mjs` (default mode) must pass unchanged after EVERY task.
 - Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- **`march-hash.mjs` needs servers up** (it does not start its own); always run it as
+  `bash -c 'export LAB_VITE_PORT=5323 LAB_CDP_PORT=9323 LAB_TMP=.lab-tmp; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/march-hash.mjs'`.
+  It is bistable under CPU load (its own header, 2026-09-20): if it reports a different hash, check `uptime`,
+  wait for load < 4 and re-run before calling it a regression.
 - Browser scripts run through `scripts/earlyz-run.sh` (Task 11). It owns its own vite and Chrome and stops only what
   it started.
 
@@ -105,7 +109,7 @@ Expected: all PASS. Copy the pass counts into the notes.
 
 - [ ] **Step 2: March hash (default mode) before any change**
 
-Run: `node scripts/march-hash.mjs`
+Run: `bash -c 'export LAB_VITE_PORT=5323 LAB_CDP_PORT=9323 LAB_TMP=.lab-tmp; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/march-hash.mjs'`
 Expected: `PASS` against the pinned default (`d7392d52…` as of 2026-10-01; if the script pins something else, the
 script is the truth). Record the hash line in the notes.
 
@@ -1459,7 +1463,7 @@ Expected: no errors.
 Run: `npm test -- march-golden crowd-type earlyz`
 Expected: PASS.
 
-Run: `node scripts/march-hash.mjs`
+Run: `bash -c 'export LAB_VITE_PORT=5323 LAB_CDP_PORT=9323 LAB_TMP=.lab-tmp; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/march-hash.mjs'`
 Expected: the same PASS line as Task 0. `setEarlyzSeed` is never called with the flag off, so no mesh exists.
 
 - [ ] **Step 8: Commit**
@@ -1777,7 +1781,7 @@ Expected: no errors.
 Run: `npm test -- earlyz crowd-type march-golden game-context`
 Expected: PASS.
 
-Run: `node scripts/march-hash.mjs`
+Run: `bash -c 'export LAB_VITE_PORT=5323 LAB_CDP_PORT=9323 LAB_TMP=.lab-tmp; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/march-hash.mjs'`
 Expected: unchanged PASS line.
 
 - [ ] **Step 9: Commit**
@@ -2247,7 +2251,7 @@ program per crowd type, compiled in the background job). Record all four lines.
 
 - [ ] **Step 2: Flag-off gates, final**
 
-Run: `npm test -- march-golden crowd-type earlyz game-context` then `node scripts/march-hash.mjs`
+Run: `npm test -- march-golden crowd-type earlyz game-context` then `bash -c 'export LAB_VITE_PORT=5323 LAB_CDP_PORT=9323 LAB_TMP=.lab-tmp; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/march-hash.mjs'`
 Expected: PASS; the hash line identical to Task 0.
 
 - [ ] **Step 3: Verdict against spec §8**
