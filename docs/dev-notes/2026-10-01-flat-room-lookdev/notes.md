@@ -99,12 +99,16 @@ TEX=$OUT/tex GOBLIN_DIR=$OUT REPO=$PWD SAMPLES=48 RES_X=960 RES_Y=720 blender --
 Iterate at `SAMPLES=16 RES_X=480 RES_Y=360` (about 20 s a shot on Metal). `NORENDER=1` builds the scene and prints the
 clothes' bounding boxes without rendering.
 
-## Open (for the owner)
+## Owner decisions (2026-10-01, after the first renders)
 
-- **Does the room change with the machine?** Proposed: the Giger layer grows with the machine's stages.
-  - At stage 1 the services are ordinary rusted pipes and every rib is stone.
-  - By stage 3 the conduits are vertebrae, one rib has turned, and the collars weep.
-  - The room becomes the progress clock along with the machine.
-- **The iMac's colour:** bile amber shown. Other possibilities are the G3 flavours as body fluids (bondi bile, lime, grape bruise, tangerine), maybe a different one in each playthrough.
+- **The room grows with the machine.** At stage 1 the services are ordinary rusted pipes and every rib is stone. By stage 3
+  the conduits are vertebrae, a rib has turned, and the collars weep. The room is part of the progress clock.
+- **It gets fleshier too** (owner: "maybe it gets also more fleshy somehow"). Not yet designed. Candidates: the mortar
+  turns to gristle, collars spread into the stone like wet tissue, the tatami stains and grows a nap of fine hair.
+- **The machine stays amber, "bondi bile"** (owner's term now), and gets bloodier with each stage.
+- **The room is good for now.** Next is the goblin refinement pass.
+
+## Open
+
 - **The engine route:** the room as kit meshes through the Blender kit pipeline (ashlar with the baked rock), and the shell
   as a translucent WGSL material that reuses the candled egg's analytic lamp-and-shadow term.

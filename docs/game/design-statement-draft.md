@@ -171,6 +171,12 @@ The PC and the CRT are the creature's body now. They change in stages, a progres
 
 Its case breathes, its tray comes out like a tongue, cables become veins (vision §8.1's schedule, now with a reason).
 
+**The room grows with it** (owner, 2026-10-01; [look-dev](../dev-notes/2026-10-01-flat-room-lookdev/)). The Flat is
+built in three layers: castle stone for the bones, Giger's industrial decay for the services, otaku cute for the stuff.
+The Giger layer spreads with the machine's stages (rusted pipes become vertebrae, a stone rib turns to bone), and the room
+gets **fleshier** as it goes. The stage-3 machine is the **"Giger iMac"**: translucent **"bondi bile"** amber (the owner's
+term), getting **bloodier** with each stage.
+
 ### 3.5 Dreams (agreed: sleep warps the game)
 
 **The futon is the second door into the shooter.** Sleep, and you are back in a stop you have played, warped. A dream is
