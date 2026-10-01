@@ -1,200 +1,256 @@
-# GOBLIN: a design statement (draft for the owner)
+# GOBLIN: a design statement (draft 2, for the owner)
 
-**Status:** a proposal written 2026-10-01 at the owner's request ("an overall statement of what this game is or could be,
-given the references"). **Nothing here is adopted** until the owner picks from it; adopted parts move into
-[vision.md](vision.md) as draft 4. One decision is already made in chat and marked **decided**.
+**Status:** draft 2, 2026-10-01, from a long conversation with the owner. Parts marked **agreed** are the owner's
+direction from that conversation; everything else is a proposal. Agreed parts move into [vision.md](vision.md) as draft 4
+when the owner says so. Draft 1's "everything is hungry" loop is replaced by §3 (the owner found a meat economy less fun
+than plain shooting).
 
-The [vision](vision.md) has strong parts: the three layers, the Line, the knock, the CDs, the Stoker. What holds them
-together today is tone. Every reference on the list is a *mood*; the game also needs one *act* the player does in every
-layer, so the layers feel like one machine instead of three good ideas. This draft proposes a statement in three stacked
-parts, a surface, a loop and a secret, then the systems that follow from it.
+The [vision](vision.md) has strong parts: the three layers, the Line, the knock, the CDs, the Stoker. What held them
+together was tone. This draft gives the game a **shape**: a classic shooter that turns into flesh, with the turn caused
+by something you raise.
 
 ---
 
 ## 1. The statement
 
-> **Kill inside the screen. Feed what comes out.**
-> It looks like a 90s ray-traced competition still, or the prerendered cutscene from a 1997 PlayStation disc,
-> and it never drops out of it.
-> Secretly, it is a gestation.
+> **A shareware shooter that turns into flesh.** For the first third it is a classic FPS. Then an egg comes out of the
+> screen, and what hatches crawls into your computer, and the game you play mutates with it. Above you, the Party
+> spreads down your tower; the train climbs up to meet it.
+> It looks like a 90s ray-traced competition still, or the prerendered cutscene from a 1997 PlayStation disc.
 
-### 1.1 The surface: a 90s ray-traced image you can walk around in (decided for the whole game)
+### 1.1 The surface: a 90s ray-traced image you can walk around in (agreed, the whole game)
 
-**The visual law, from the owner (2026-10-01), for the whole game:** the early ray-traced CGI of the 90s, plus the modern
-effects the game already has (the train level's lighting and particles). References:
+**The visual law, from the owner, for the whole game:** the early ray-traced CGI of the 90s, plus the modern effects the
+game already has (the train level's lighting and particles). References:
 
 - the **Stanford CS 348B rendering competition** (from 1994): student ray tracers, procedural noise, marble and wood, hard
   key lights, sharp white highlights, glass and caustics, noise-modulated blobby objects isolated in black;
-- the **Internet Ray Tracing Competition** stills (IRTC, 1996–2006, mostly POV-Ray), above all the 1999 "Horror" round:
-  staged gory still lifes (a pinned severed head by candlelight, a specimen in a glass tank, a severed finger in a pool of
-  blood), procedural wood and brick, waxy flesh with hard highlights;
+- the **Internet Ray Tracing Competition** stills (IRTC, 1996–2006, mostly POV-Ray; browse at
+  <https://www.irtc.org/ftp/pub/stills/>), above all the 1999 "Horror" round: staged gory still lifes, procedural wood and
+  brick, waxy flesh with hard highlights;
 - the **prerendered cutscenes of PSX-era games** (FF7 and its peers): stylised, crude forms with a smooth, glossy finish.
 
 "The game from the back of the box" already promised this: the box showed prerendered shots the real game never matched.
 This one matches them.
 
 **Why it fits the engine.** The SDF renderer is a ray tracer (a ray marcher), and its characters are built from blended
-primitives, which is exactly how POV-Ray scenes and the competitions' "blobby" hypertextures were built. The owner: the
-primitive SDF characters go well with this look *because* they are made of primitives. Do not hide it.
+primitives, which is how POV-Ray scenes and the competitions' "blobby" hypertextures were built. The owner: the primitive
+SDF characters go well with this look *because* they are made of primitives. Do not hide it.
 
-**Render rules that follow** (candidates for the art bible):
+**Render rules** (candidates for the art bible):
 
-1. **Primitives, visibly.** Characters and props read as built from spheres, capsules, lathes and smooth blends (POV-Ray
-   `blob`, CSG). Bevels are rare; joins are blends.
+1. **Primitives, visibly.** Characters and props read as built from spheres, capsules, lathes and smooth blends.
 2. **Procedural materials.** Noise, marble, wood grain, brick, checker: slightly too clean, slightly repetitive. Flesh is
    waxy and wet with a hard highlight.
 3. **Light like a 90s ray tracer.** A few hard key lights, crisp shadows, sharp white highlights, mirror metal, real glass.
-   Bounce light is faked or absent; darkness falls off to black round the subject.
-4. **Staged tableaux.** Rooms and set pieces are arranged like competition stills (world law 4: game places are arranged,
-   not built).
-5. **Modern effects on top, sparingly.** Volumetric shafts, particles, fog, the dynamic lights, the things a 1999 ray
-   tracer would have rendered for hours.
-6. **The VHS and CRT treatment belongs to the screen** (the Flat's CRT and moments where layers leak), not to the whole
-   image.
-7. **Not too smooth** (owner, on the Blender animatic): period CGI had aliasing, hard terminators between light and
-   shadow, visible procedural noise and low-resolution textures. A clean, denoised, soft-bounced modern finish reads as
-   the wrong decade.
+   Bounce light faked or absent; darkness falls off to black round the subject.
+4. **Staged tableaux.** Rooms and set pieces are arranged like competition stills (world law 4).
+5. **Modern effects on top, sparingly.** Volumetric shafts, particles, fog, the dynamic lights.
+6. **The VHS and CRT treatment belongs to the screen**, not to the whole image.
+7. **Not too smooth** (owner): period CGI had aliasing, hard terminators, visible procedural noise and low-resolution
+   textures. A clean, denoised, soft-bounced modern finish reads as the wrong decade.
 
-**The Flat is shot like FMV (decided 2026-10-01).** Fixed cinematic camera angles that cut as the goblin moves (*Resident
-Evil*, *FF7*, *Garage*), third person, never its face. Inside the screen **you are the goblin**; outside it **you watch the
-goblin**. That is *UFO*'s voyeurism turned on the player's own character. Fixed angles are also cheap to make beautiful:
-each can be lit and dressed like a render. The FPS keeps its first-person camera under the same render rules.
+### 1.2 The shape (agreed)
 
-### 1.2 The loop: everything is hungry
-
-One verb crosses every layer: **feeding**.
-
-| Layer | Who eats | What |
+| Part | What you do | What changes |
 | --- | --- | --- |
-| The FPS | The guests, the Party | You make the food: bodies |
-| The Line | The Stoker's fire | The bodies, shovelled in; the train climbs to the stars on them (vision §10.3) |
-| The Flat | **The egg** (and the bonsai, below) | Whatever comes through the screen, and the music you play it |
-| The finale | The Party | It comes downstairs for you |
+| **The first third** | A classic FPS with the junk weapons (sawn-off, flail, grenade launcher...), stop by stop on the Line | The Flat is quiet; the frame is gentle |
+| **The turn** | Night Train ends: the egg in the control room, the montage, the pull-back, **the egg comes out of the screen** ([emergence spec](../superpowers/specs/2026-10-01-flat-screen-emergence-design.md)) | The egg sits in the Flat; you tend it |
+| **The hatching** | One morning it has hatched. It **crawls into the computer** and nests in the case | The machine starts to change |
+| **The second part** | Shooting as before, but **your weapons mutate**, each into a biomech hybrid with a body effect nothing else has (§3.3); dreams open up | The machine mutates (§3.4); the Party spreads down the tower (§3.7) |
+| **The end** | The terminus, the Party in your flat, the birth (§4) | |
 
-Blood's carnage feeds love-de-lic's care. That tension is the point: the same player is a butcher on one side of the
-glass and a nurse on the other. The Stoker already says it in one image, aspiration powered by flesh; this makes the
-player do it.
+The shooter stays the product (vision P6): the Flat is where its consequences live, between stops, a few minutes at a time.
 
-**The filter for hybrid systems:** a minigame earns a place only if it is a form of feeding or tending. Point-and-click
-passes (it is how you tend). A bonsai passes. Mixing a CD passes. A minigame that is only a minigame does not.
+### 1.3 The secret: it is a gestation (proposed, never said)
 
-### 1.3 The secret: it is a gestation (never said)
-
-A hidden law, like Quake's runes: it never appears in the text, but it decides content.
+A hidden law: it never appears in the text, but it decides content.
 
 - **The Flat is a womb.** You cannot leave it, not yet.
 - **The kick drum through the ceiling is a heartbeat.** A foetal heart runs at 110–160 bpm, which is techno tempo. Gabber
   runs above it: a heartbeat in distress.
 - **The knock is someone outside the body.**
 - **The FPS is the dream of something unborn**, assembled from muffled noise and borrowed games.
-- **Things come through the screen wet.** Birth imagery, every time.
-- **The Line is a sperm going to an egg.** The ending spec already shows the train from outside as a sperm, heading for the
-  egg.
-- **The vision already contains this reading without having meant it:** the door that gives under the hand, the ceiling
-  that bulges, ending 3's door opening onto a lit stairwell.
+- **Things come through the screen wet.** The Line is a sperm going to an egg.
 - **It answers "who is the figure in the egg?"** The next goblin.
 
-**The test it gives every content decision:** *does this belong inside a body that is waiting to be born?* It also caps the
-grotesque: everything soft is warm, not rotten.
-
-This part is optional. Parts 1.1 and 1.2 stand without it.
+The test it gives a content decision: *does this belong inside a body that is waiting to be born?* Optional: the shape
+in §1.2 stands without it.
 
 ---
 
 ## 2. What each reference is for
 
-A job for each, not a mood.
-
 | Reference | Its job in GOBLIN |
 | --- | --- |
-| **Blood** (1997) | The inner game: feel, gore, B-movie level types (unchanged) |
-| **Fallout 1 & 2** | Presentation and consequence. Fallout 1's intro **pulls back out of a TV playing an old ad into the ruined room around it**, which is our monitor transition. Its **ending slides** (one still per place, its fate in a few lines) become ours (§3.6). The deadpan retro-ad irony is our box copy and liner notes |
-| **CS 348B, IRTC (POV-Ray), PSX FMV** | The visual law for every layer (§1.1): primitives, procedural materials, hard light, staged tableaux |
-| **Artdink** | The Flat's slow, strange simulations. *Tail of the Sun*: a tribe builds a tower of tusks to reach the sun, which is our train to the stars, fuelled the same way |
-| **Love-de-lic** | Structure. *Moon*: a game inside a game with collectable music discs you play on your own player, which is our CDs. *UFO*: routines watched in a small building. *L.O.L.*: a wordless language (the knock) |
-| ***Garage: Bad Dream Adventure*** | The PC as a sticky biomechanical organ; the crude, uneasy point-and-click layer |
-| ***Cookie's Bustle*** | The gentle phase's tone: toy-like, dream logic, a little wrong |
-| ***Tetsuo: The Iron Man*** | Transformation outside the screen: goblin and machine fuse over the game (cables into the wrist, the mouse growing into the hand), and the FPS hands change with it |
-| **Troma** | The humour: gross-out played completely straight |
-| ***Angel's Egg*** | The egg, the silence, the melancholy, an ending that refuses to answer |
-| **90s gabber, techno** | Tempo as structure: the heartbeat, the Party, levels built like tracks (§3.7) |
+| **Blood** (1997) | The inner game: feel, gore, B-movie level types |
+| **Fallout 1 & 2** | Fallout 1's intro **pulls back out of a TV into the ruined room round it**: our monitor transition. Its **ending slides** become ours (§4). The deadpan retro-ad irony is our box copy |
+| **CS 348B, IRTC (POV-Ray), PSX FMV** | The visual law (§1.1) |
+| ***Garage: Bad Dream Adventure*** | **The Flat's interior design** (owner): grounded but otherworldly, industrial Giger-esque metal with organic forms; the uneasy point-and-click layer |
+| **H. R. Giger** | The biomechanical vocabulary: ribs, vertebrae, hoses, chrome-bone; the machine's later stages ("if Giger made an iMac") |
+| ***Eraserhead*** (Lynch) | **The creature:** the swaddled, wheezing, needy thing, and the relationship (obligation, disgust, tenderness) |
+| **Cronenberg** (*Scanners*, *Videodrome*, *The Fly*, *eXistenZ*) | Flesh tech: the breathing screen, the flesh gun, the gristle gun, transformation in stages; **more bugs** (owner) |
+| ***Tetsuo: The Iron Man*** | Fusion: the creature and the machine, and in the end the goblin's own hands |
+| **Artdink** | Strange, slow simulations; *Tail of the Sun*'s tower to the sun is our Line |
+| **Love-de-lic** | *Moon*'s game inside a game and its music discs (our CDs); *UFO*'s routines watched in a building (our window); *L.O.L.*'s wordless language (the knock) |
+| ***Cookie's Bustle*** | The gentle phase: toy-like, dream logic, a little wrong |
+| **Tokyo apartments** | The Flat's room: tiny and crammed (§3.1) |
+| **Bryce, Terragen** (90s landscape renderers) | **The view:** the idyll outside the window (§3.1, §3.7) |
+| **Troma** | The humour: gross-out played straight |
+| ***Angel's Egg*** | The egg, the silence, an ending that refuses to answer |
+| **90s gabber, techno** | Tempo as structure: the heartbeat, the Party, levels built like tracks (§3.9) |
 
 ---
 
-## 3. Systems that follow
+## 3. Systems
 
-Each is a candidate, filtered through §1.2. Sizes are rough (S/M/L).
+### 3.1 The Flat (agreed: fixed cameras; setting leaning, open)
 
-### 3.1 The Flat as an FMV adventure (decided: fixed cameras; L)
+- **Shot like FMV** (agreed): fixed cinematic angles that cut as the goblin moves, third person, never its face. Inside
+  the screen you are the goblin; outside it you watch it.
+- **A tiny, crammed room** (owner): like a Tokyo apartment, a six-tatami hikikomori room filled with stuff. The computer
+  on a **low table** with floor sitting (leaning), a futon for the bed (§3.6), a kitchenette.
+- **High up, and outside is paradise** (owner): not a dystopian city but an impossibly beautiful idyll: fluffy volumetric
+  clouds, sunsets, sometimes waves, pastoral landscapes that **shift** from day to day. A period CGI image in its own
+  right: **Bryce and Terragen** landscapes. The cramped, grotesque, biomechanical room against a heaven it can never reach.
+  The Line climbs through it (§3.7). [Look-dev](../dev-notes/2026-10-01-flat-emergence-lookdev/view-idyll.png). (Draft 2's first pass had a Kowloon-like megablock outside; the owner prefers the
+  idyll. The room itself can still be a tiny, crammed, Tokyo-style flat.)
+- **Interior design after *Garage*** (owner): recognisable objects in industrial, Giger-esque metal with organic forms;
+  grounded first, more biomechanical as the game goes on (§3.4).
+- **At home the goblin wears a stained vest and shorts** (agreed).
 
-- **Camera:** authored camera zones that cut as you move, third person.
-- **Movement:** tank controls or camera-relative, decided at build time.
-- **Verbs:** look, take, use, knock. You never see the goblin's face: angles, shadow, or a hood if it must.
-- **Leaving:** sitting down at the desk is how you enter the FPS. The camera pushes into the screen, and Escape pulls it back
-  out.
+### 3.2 The creature (agreed direction)
 
-### 3.2 The egg (the Tamagotchi; M)
+- **The egg:** it comes out of the screen at the turn and sits in the Flat, warm by the machine. It grows while you
+  sleep; things move inside; music changes it (gabber makes it kick, dungeon synth settles it). You cannot make it hatch.
+- **The hatching:** one morning it has hatched, an *Eraserhead* baby, swaddled in the torn membrane, wheezing, crying.
+- **Into the machine** (agreed): it crawls into the computer and nests in the case. **You feed it through the CD tray**,
+  its mouth. It moults in stages (*The Fly*).
+- **Its needs read from its body**, never from meters: it gapes, its colour and breathing change, it makes sounds.
+- **What it eats are discrete finds**, not a resource: secrets in levels, the spotlight enemy's organ, a jar of
+  something; bugs caught in the Flat (optional). Each food decides a mutation (§3.3).
 
-It arrives through the screen at the end of Night Train (the emergence) and stays on the desk by the CRT. It wants
-warmth (the CRT's glow, the lamp), **food** (what comes through the screen) and **music** (CDs played to it). It grows
-across the game: it pulses, it moves inside, it presses against the shell. Its state is the heart of the save file.
+### 3.3 Weapon mutations (agreed direction; found by experiment)
 
-**Consequence:** it hatches at the end into what you fed it. Fed meat (you gibbed everything), fed music (you collected and
-played), or neglected. That is the Fallout lever without a dialogue tree.
+The junk weapons stay the base; after the hatching, **what you feed the creature infects the game**, and the next time
+you play, a weapon has mutated into a biomech hybrid with a body effect nothing else has (vision §10.5's test). Nothing
+crosses out of the game; the infection goes in through the machine, and it is never explained.
 
-### 3.3 The flesh bonsai (the owner's idea, made of meat; M)
+| Junk weapon | Mutated (candidates) | What it does to a body |
+| --- | --- | --- |
+| Sawn-off | **Brood shot** | Pellets are larvae: a hit body swells, bursts, showers its neighbours |
+| Flail | **Jaw flail** | The head grows teeth, bites and holds; yank back and the limb tears away |
+| Grenade launcher | **Egg-sac launcher** | Sacs stick and hatch a swarm that strips flesh to the bone |
+| Flamethrower (if planned) | **The melter** | Bodies sag, slump and pool |
+| *new, late* | **The splicer** | Fuses two enemies into one two-headed thing that turns on itself (the effect only this engine can do) |
 
-A cutting comes through the screen early: a small tree of meat and bone in a cracked pot. Between stops you prune it with
-nail scissors, a slow, tactile Artdink simulation that feels surgical. It grows from what you bring back, and its shape
-records how you played. It is the one thing in the Flat you shape by hand, and it is in the finale.
+**The guiding principle is slapstick body comedy** (owner): the funny ones are the interesting ones, Troma played
+straight. The owner's favourites so far: **budding** (a hit enemy buds baby versions of itself that waddle and nip, or
+turn on their parent) and **bloat-float** (targets inflate and drift up, squeal against the ceiling, pop). More in that
+vein: **the sneeze** (a wind-up "ah... ah..." and the head goes: *Scanners* as a gag), **rubber limbs** (arms and legs go
+long and noodly; enemies trip over themselves), **the flesh magnet** (hit bodies stick together and roll up into a
+growing ball), **the whoopee deflate** (they sag with a rude noise), **puppet tendons** (swing a corpse as a club or a
+shield), **the tongue** (yank enemies, or pull yourself to walls), **the screech** (music-fed: organs liquefy, the body
+ripples and deflates). Dropped: calcify (a freeze effect by another name).
 
-### 3.4 The mix (S–M)
+**Whether each is good is found by playing it** (owner). The cheap way: a mutation test range in the ring testbed (bare
+`/sdf-game.html`, god mode) against the existing enemies. Order proposed: bloat-float or budding (the owner's favourites; bloat
+reuses the bloatmaw's inflation), then the brood shot (wound stamps and gibs), then the splicer (riskiest, most distinctive). The mutated models are designed one at a time, as each mutation lands; the
+junk models stay valid for the first third.
 
-Burn a CD mix from your shelf; the order matters. It is your reply under the door (the right rhythm is the right answer)
-and **the finale's soundtrack is your mix** (vision §9, ending 1, already says "your CD shelf in order").
+### 3.4 The machine mutates (agreed)
 
-### 3.5 The knock (as in the vision; M)
+The PC and the CRT are the creature's body now. They change in stages, a progress clock you can see in the room:
 
-A rhythm language taught by the soundtrack. Its replies are what you feed the door: a track, a knock, an object.
+1. **A period CRT**, slightly off (the first third).
+2. **Grounded biomech:** a bone-yellow face, a ribbed gunmetal carapace, spinal hoses
+   ([look-dev](../dev-notes/2026-10-01-flat-emergence-lookdev/)).
+3. **Full biomech, "if Giger made an iMac"** (owner): a translucent shell with the creature visible inside, backlit like
+   the candled egg.
 
-### 3.6 Ending slides (S)
+Its case breathes, its tray comes out like a tongue, cables become veins (vision §8.1's schedule, now with a reason).
 
-After the finale, one prerendered still per stop on the Line, each with its fate in a line or two (inside the language
-budget), decided by what you did there: bodies left, the CD found or not, the set piece triggered or not. Then the egg.
+### 3.5 Dreams (agreed: sleep warps the game)
 
-### 3.7 Levels built like tracks (design rule; S)
+**The futon is the second door into the shooter.** Sleep, and you are back in a stop you have played, warped. A dream is
+a level plus two to four rules drawn from a deck, weighted by the creature's state:
 
-Each stop has an intro, a build, **a drop (the set piece the player triggers, vision §10.6 rule 9)**, a breakdown and an
-outro. The level's CD is that track. The episode is an album, and the back of the box is its tracklist.
+- **Data only:** slow motion; you are tiny or huge; rooms re-linked in the wrong order (the train's carriages loop
+  forever); every enemy swapped for bugs or for copies of you; no weapons, and the creature hunts you; the Party bleeding
+  through; the dawn that never comes.
+- **Camera and post:** third person or top-down (the iso branch); through the creature's eyes (fisheye, compound-eye
+  mosaic); a datamosh smear, stutter, VHS tracking errors.
+- **The ML idea, made practical:** an image model run offline over a level's textures and sky makes "dreamed" versions,
+  swapped in at runtime.
 
-### 3.8 What tending replaces (scope)
+Start with five or six cheap rules; the deck grows. Sleep is also the clock: the egg grows per sleep and hatches one
+morning.
 
-Let feeding **replace** systems rather than add to them, because the vision is already large:
+### 3.6 The bed
 
-- **Decorating** shrinks to placing what came through.
-- **The mail** can report on the egg and the bonsai instead of carrying its own thread.
-- **Routines** (*UFO*) can be the egg's: when it sleeps, when it kicks.
+The futon: sleep (§3.5) and the passage of days. Waking is where the morning's changes land (the egg, the machine, a
+weapon mutated, mail, the knock).
+
+### 3.7 The view, the Line and the Party (proposed)
+
+**The window is the clock.** Outside is the idyll (§3.1), and it changes: a new landscape each day (meadows, a glassy sea,
+a sea of cloud at sunset), and later the vision's journey (desert, then clouds, then stars) as the Line climbs. **The
+Party spoils it slowly:** each stop you clear, the sunset bleeds pinker, the clouds swell like flesh, the sea thickens;
+the music through the ceiling gets louder; the knock moves from the door to the ceiling to the walls. A countdown you see
+and hear, never read as a number. **You go up, it comes down:** the Line climbs toward the Party above; the Party spreads
+down toward you. **The train passes your window**, through the clouds: the exterior train shot's home, and the intro
+cutscene's subject. Technically the view is the cheapest beautiful thing in the game: prerendered panoramas or loops in
+Blender, period-correct and free at runtime, with a live volumetric sky as the modern-effects option.
+
+### 3.8 Kept from draft 1
+
+- **The knock:** a rhythm language taught by the soundtrack; replies are a track, a knock, an object.
+- **The mix:** burn a CD mix from your shelf; it is your reply under the door and the finale's soundtrack.
+- **Levels built like tracks:** intro, build, drop (the set piece the player triggers), breakdown, outro.
+- **Tending replaces rather than adds:** decorating shrinks to placing what came through; the mail reports on the
+  creature; *UFO* routines are its and the neighbours'.
+
+### 3.9 Dropped
+
+- **A meat economy** (meat as ammo, healing and food): the owner found it less fun than plain shooting.
+- **Weapons crossing out of the game** (leaving a gun by the crib): the infection goes in through the machine instead.
+- **The flesh bonsai:** open (§6).
 
 ---
 
-## 4. Left-field grab bag
+## 4. The ending (proposed)
 
-Unfiltered; any one could be cut.
+1. **The terminus.** The last stop on the Line is the Party itself, the tumour at the top of your own tower. You kill the
+   Host, and **the music stops** for the first time in the game.
+2. **They come downstairs.** In the silence the ceiling gives and the Party pours into your flat: the one fight in your
+   own room (vision ending 1), the soundtrack your mix, your mutated arsenal, the creature in the machine with you.
+3. **The birth.** The creature's last moult is an egg; the epilogue depends on how you raised it and whether you learned
+   the knock:
+   - **raised with care, and you answered the knock:** the door opens onto a lit stairwell, and the goblin carries the
+     egg out;
+   - **raised on violence:** it hatches into the next Host, and the pink light starts at your floor;
+   - **neglected:** it crawls back into the screen; the game boots on its own and you watch it play.
+4. **Ending slides**, Fallout-style: one prerendered still per stop on the Line, each with its fate in a line or two.
+
+---
+
+## 5. Left-field grab bag
 
 - **The mascot:** the shareware box has a grinning cartoon goblin giving a thumbs up, the only face of the goblin anyone
-  sees. A cheerful lie, played straight (Fallout's Vault Boy as a *type*).
-- **Attract mode:** leave the desk idle and the FPS plays a ghost of your last run on the CRT, and the goblin watches it.
-- **Loading as FMV:** level loads are short prerendered stills or loops in the FMV look, compressed to look like the era.
+  sees.
+- **Attract mode:** leave the computer idle and the FPS plays a ghost of your last run on the CRT; the goblin watches.
+- **Loading as FMV:** level loads are short prerendered stills or loops, compressed to look like the era.
 - **The manual:** a printed-style manual for the shareware game, with pages that change between phases.
 - **Eggs as saves:** the save slots are eggs on the desktop.
-- **Music changes what grows:** play the egg gabber and it kicks and darkens; play it dungeon synth and it sleeps.
-- **Baked light in the Flat:** light the Flat in Blender and bake it, so the room is *literally* prerendered.
-- **The goblin's hands:** the FPS hands and the Flat's hands change together (Tetsuo), so the layers leak through the one
-  body part both layers show.
+- **Baked light in the Flat:** light the Flat in Blender and bake it, so the room is literally prerendered.
+- **The goblin's hands:** the FPS hands and the Flat's hands change together, so the layers leak through the one body
+  part both show.
 
-## 5. Open questions for the owner
+## 6. Open questions for the owner
 
-1. Which parts of §1 land beyond the surface (decided): the loop (feeding), the secret (gestation)? Both, or which?
-2. Does the egg in the Flat (§3.2) carry the game's consequence, so it hatches into what you fed it?
-3. Bonsai: in or out? If in, does it come through the screen (a cutting from a level) or is it there from the start?
-4. Does tending replace decorating and the mail thread (§3.8), or sit beside them?
+1. The gestation secret (§1.3): in or out?
+2. The setting: the idyll outside (high up, above the clouds?), a low table or the desk? (§3.1)
+3. The creature's look: how literal an *Eraserhead* baby, and what it becomes as it moults inside the machine?
+4. Which mutation to prototype first (§3.3)?
+5. The bonsai: in or out?
+6. The ending (§4): does the three-beat shape land?

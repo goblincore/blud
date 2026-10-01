@@ -15,6 +15,8 @@ in a stained vest and shorts at home (not its armour).
 | `goblin-sdf-poses.png` | **The game's own SDF goblin** (`goblin.blob`) meshed from its CPU field, wearing its armour kit (`goblin-kit.gltf`) posed to the same bones: rest, typing, recoil (side and back) |
 | `goblin-kit-option.png` | In the Flat: skin only (as the key frames) and with its armour kit. An open question: does the goblin wear its game armour at home? |
 | `crt-p225f.png`, `crt_p225f.py` | The CRT after the owner's reference, a ViewSonic P225f (22-inch, flat glass): front frame with a sloped inner bevel, the chin's buttons and LED, the long tapered housing, the pedestal. Replaces the animatic's boxy monitor ("looks like a microwave") |
+| `crt-biomech.png`, `crt_biomech.py` | The machine's later stages: grounded biomech (bone face, ribbed gunmetal carapace, spinal hoses, vertebra pedestal) and a first crude full-biomech pass (`VARIANT=p225f|grounded|creature`) |
+| `view-idyll.png`, `terragen.py` | The view from the window, the owner's idyll done as Bryce/Terragen did it: a painted gradient sky with a sun glow (not a physical sky), ridged multifractal mountains (noise at kilometre scale, height-banded meadow, rock, snow), a mirror sea, flat textured cloud layers, the Line on pylons with the train |
 | `flat_lookdev.py` | The Blender generator: the Flat set, the membrane (`membrane()`), the stand-in egg, the goo, the cameras, the frames and the clip |
 | `blob-mesh.ts` | `.blob` SDF → PLY (surface nets, vertex colours from the owning prim), with bone-angle overrides for poses |
 | `blob-bones.ts` | `.blob` skeleton → JSON (heads and directions, rest and posed), for posing the kit |
