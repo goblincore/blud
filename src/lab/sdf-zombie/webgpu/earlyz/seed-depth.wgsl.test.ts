@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/earlyz/seed-depth.wgsl.test.ts
 import { describe, it, expect } from 'vitest';
-import { EARLYZ_SEED_WGSL, seedBlock, seedDepthCpu } from './seed-depth.wgsl';
+import { EARLYZ_SEED_WGSL, seedBlock, seedDepthCpu, seedScaleSupported } from './seed-depth.wgsl';
 
 /** INDEPENDENT oracle for the block maths, in exact integer arithmetic: pixel p (cell [p, p+1))
  *  is covered by texel t (span [t*dims/march, (t+1)*dims/march)) iff the two half-open intervals
@@ -40,6 +40,49 @@ describe('seed block (spec D6)', () => {
       }
     }
   });
+  it('matches the overlap oracle for EVERY march 1..40 over EVERY dims 1..120 (one axis)', () => {
+    for (let march = 1; march <= 40; march++) {
+      for (let dims = 1; dims <= 120; dims++) {
+        for (let t = 0; t < march; t++) {
+          const want = coveredPixels(t, march, dims);
+          const b = seedBlock([t, 0], [march, 1], [dims, 1]);
+          if (b.lo[0] !== want[0] || b.hi[0] !== want[want.length - 1]) {
+            throw new Error(`${march}->${dims} texel ${t}: got ${b.lo[0]}..${b.hi[0]}, want ${want[0]}..${want[want.length - 1]}`);
+          }
+        }
+      }
+    }
+  });
+  it('an exact 4x ratio is exactly 4 pixels wide at every texel, for every width 1..600', () => {
+    // The shader once used a float ratio that came out 1.5000001 for 90/60 and broke exact 4x widths; the
+    // integer maths must give lo = 4t and hi = 4t + 3 for all of them.
+    for (let march = 1; march <= 600; march++) {
+      for (const t of [0, 1, march >> 1, march - 1]) {
+        expect(seedBlock([t, 0], [march, 1], [march * 4, 1]), `${march} texel ${t}`).toEqual({ lo: [4 * t, 0], hi: [4 * t + 3, 0] });
+      }
+    }
+  });
+  it('the shipped 90/60 ratio (1.5x) gives exact 1-or-2 pixel blocks', () => {
+    // 60 texels over 90 pixels: texel 0 -> 0..1, texel 1 -> 1..2, texel 2 -> 3..4 (spans [3,4.5)), texel 59 -> 88..89
+    expect(seedBlock([0, 0], [60, 1], [90, 1])).toEqual({ lo: [0, 0], hi: [1, 0] });
+    expect(seedBlock([1, 0], [60, 1], [90, 1])).toEqual({ lo: [1, 0], hi: [2, 0] });
+    expect(seedBlock([2, 0], [60, 1], [90, 1])).toEqual({ lo: [3, 0], hi: [4, 0] });
+    expect(seedBlock([59, 0], [60, 1], [90, 1])).toEqual({ lo: [88, 0], hi: [89, 0] });
+  });
+  it('a march size below 1 is treated as 1 (the shader floors it), and a fractional size truncates', () => {
+    expect(seedBlock([0, 0], [0, 0], [4, 4])).toEqual({ lo: [0, 0], hi: [3, 3] });
+    expect(seedBlock([1, 0], [2.9, 1], [8, 8])).toEqual(seedBlock([1, 0], [2, 1], [8, 8]));
+  });
+  it('lo <= hi always holds (the first loop iteration always reads a pixel)', () => {
+    for (let march = 1; march <= 40; march++) {
+      for (let dims = 1; dims <= 120; dims++) {
+        for (let t = 0; t < march; t++) {
+          const b = seedBlock([t, 0], [march, 1], [dims, 1]);
+          if (b.lo[0] > b.hi[0]) throw new Error(`${march}->${dims} texel ${t}: ${b.lo[0]}..${b.hi[0]}`);
+        }
+      }
+    }
+  });
   it('the blocks of all texels together cover every output pixel (conservative precondition)', () => {
     for (const [march, dims] of [[3, 8], [5, 17], [4, 8], [3, 7]] as Array<[number, number]>) {
       const seen = new Array<boolean>(dims).fill(false);
@@ -48,6 +91,65 @@ describe('seed block (spec D6)', () => {
         for (let p = b.lo[0]; p <= b.hi[0]; p++) seen[p] = true;
       }
       expect(seen.every(Boolean), `${march}->${dims}`).toBe(true);
+    }
+  });
+});
+
+describe('seedScaleSupported (the cap is exact iff every block is at most 4 pixels wide)', () => {
+  it('the shipped boot and native are supported', () => {
+    expect(seedScaleSupported([800, 600], [400, 300])).toBe(true);
+    expect(seedScaleSupported([800, 600], [800, 600])).toBe(true);
+  });
+  it('an exact 4x ratio is supported, on every width 1..600', () => {
+    expect(seedScaleSupported([800, 600], [200, 150])).toBe(true);
+    for (let march = 1; march <= 600; march++) {
+      expect(seedScaleSupported([march * 4, march * 4], [march, march]), `${march}`).toBe(true);
+    }
+  });
+  it('1.5x, 2.5x, 3x, 8/3 and a march grid larger than the depth (below 1x) are supported', () => {
+    expect(seedScaleSupported([90, 90], [60, 60])).toBe(true);
+    expect(seedScaleSupported([20, 20], [8, 8])).toBe(true);
+    expect(seedScaleSupported([300, 300], [100, 100])).toBe(true);
+    expect(seedScaleSupported([8, 8], [3, 3])).toBe(true); // 2.67x: blocks of 3, 4, 3
+    expect(seedScaleSupported([400, 300], [800, 600])).toBe(true);
+  });
+  it('3.4x (17 over 5) and 5x are not supported', () => {
+    expect(seedScaleSupported([17, 17], [5, 5])).toBe(false);
+    expect(seedScaleSupported([1000, 750], [200, 150])).toBe(false);
+    expect(seedScaleSupported([5, 5], [1, 1])).toBe(false);
+  });
+  it('a march size below 1 counts as one texel and a fractional size truncates, like the shader', () => {
+    expect(seedScaleSupported([8, 8], [0, 0])).toBe(false); // one texel over 8 pixels
+    expect(seedScaleSupported([4, 4], [0, 0])).toBe(true); // one texel over 4 pixels
+    expect(seedScaleSupported([3, 3], [0.5, 0.5])).toBe(true);
+    expect(seedScaleSupported([8, 8], [2.9, 2.9])).toBe(true); // truncates to 2: 4x
+  });
+  it('both axes must pass', () => {
+    expect(seedScaleSupported([800, 1000], [400, 200])).toBe(false); // x 2x ok, y 5x not
+    expect(seedScaleSupported([1000, 600], [200, 300])).toBe(false); // x 5x not, y 2x ok
+    expect(seedScaleSupported([17, 8], [5, 4])).toBe(false);
+    expect(seedScaleSupported([8, 17], [4, 5])).toBe(false);
+  });
+  it('agrees with the overlap oracle (max block width <= 4) for every march 1..30 over every dims 1..90', () => {
+    for (let march = 1; march <= 30; march++) {
+      for (let dims = 1; dims <= 90; dims++) {
+        let widest = 0;
+        for (let t = 0; t < march; t++) widest = Math.max(widest, coveredPixels(t, march, dims).length);
+        expect(seedScaleSupported([dims, dims], [march, march]), `${march}->${dims} widest ${widest}`).toBe(widest <= 4);
+      }
+    }
+  });
+  it('supported means the capped CPU seed always sees the block\'s farthest pixel; unsupported means some texel loses it', () => {
+    for (const [dims, march, supported] of [[16, 5, true], [90, 60, true], [17, 5, false], [40, 8, false]] as Array<[number, number, boolean]>) {
+      expect(seedScaleSupported([dims, 1], [march, 1]), `${dims}/${march}`).toBe(supported);
+      let lost = 0;
+      for (let t = 0; t < march; t++) {
+        const b = seedBlock([t, 0], [march, 1], [dims, 1]);
+        const depth = new Float32Array(dims).fill(0.25);
+        depth[b.hi[0]] = 0.5; // the farthest pixel sits at the block's last pixel
+        if (seedDepthCpu(depth, dims, 1, [t, 0], [march, 1]) !== 0.5) lost++;
+      }
+      expect(lost > 0, `${dims}/${march} lost ${lost}`).toBe(!supported);
     }
   });
 });
@@ -86,7 +188,7 @@ describe('seed depth', () => {
     expect(argmaxOffsets.size).toBeGreaterThanOrEqual(3);
   });
 
-  it('a 4x ratio (the integer limit) reads the whole 4x4 block, including its far corner', () => {
+  it('an exact 4x ratio reads the whole 4x4 block, including its far corner', () => {
     // 2x1 march over 8x4: texel 1 covers x 4..7, y 0..3 (a full 4x4).
     const W = 8, H = 4;
     const d = new Float32Array(W * H).fill(0.1);
@@ -155,19 +257,26 @@ describe('seed depth', () => {
     expect(EARLYZ_SEED_WGSL).toContain('d = max(d, textureLoad(levelDepth, clamp(p, vec2<i32>(0), maxI), 0));');
   });
 
-  it('the WGSL block maths mirrors seedBlock: floor on lo, ceil on hi, farthest (max) over the block', () => {
-    expect(EARLYZ_SEED_WGSL).toContain('let dims = vec2<f32>(textureDimensions(levelDepth, 0));');
-    expect(EARLYZ_SEED_WGSL).toContain('let texel = floor(uv * marchSize);');
-    expect(EARLYZ_SEED_WGSL).toContain('let k = dims / max(marchSize, vec2<f32>(1.0));');
-    expect(EARLYZ_SEED_WGSL).toContain('let lo = vec2<i32>(floor(texel * k));');
-    expect(EARLYZ_SEED_WGSL).toContain('let hi = vec2<i32>(ceil((texel + vec2<f32>(1.0)) * k)) - vec2<i32>(1);');
-    expect(EARLYZ_SEED_WGSL).toContain('let maxI = vec2<i32>(dims) - vec2<i32>(1);');
+  it('the WGSL block maths mirrors seedBlock: exact i32 maths, farthest (max) over the block', () => {
+    expect(EARLYZ_SEED_WGSL).toContain('let dI = vec2<i32>(textureDimensions(levelDepth, 0));');
+    expect(EARLYZ_SEED_WGSL).toContain('let m = vec2<i32>(max(marchSize, vec2<f32>(1.0)));');
+    expect(EARLYZ_SEED_WGSL).toContain('let t = vec2<i32>(floor(uv * marchSize));');
+    expect(EARLYZ_SEED_WGSL).toContain('let lo = (t * dI) / m;');
+    expect(EARLYZ_SEED_WGSL).toContain('let hi = ((t + vec2<i32>(1)) * dI + m - vec2<i32>(1)) / m - vec2<i32>(1);');
+    expect(EARLYZ_SEED_WGSL).toContain('let maxI = dI - vec2<i32>(1);');
     expect(EARLYZ_SEED_WGSL).toContain('var d = 0.0;');
     expect(EARLYZ_SEED_WGSL).toContain('for (var x = 0; x < 4; x++) {');
     expect(EARLYZ_SEED_WGSL).toContain('let p = lo + vec2<i32>(x, y);');
     expect(EARLYZ_SEED_WGSL).toContain('if (p.x > hi.x || p.y > hi.y) { continue; }');
     expect(EARLYZ_SEED_WGSL).toContain('return d;');
     expect(EARLYZ_SEED_WGSL).not.toMatch(/\bmin\(d,/);
+  });
+  it('the WGSL block maths uses no float ratio (f32 division is ~2.5 ULP: 90/60 gave 1.5000001)', () => {
+    expect(EARLYZ_SEED_WGSL).not.toContain('let k =');
+    expect(EARLYZ_SEED_WGSL).not.toMatch(/dims\s*\//);
+    expect(EARLYZ_SEED_WGSL).not.toMatch(/\b(floor|ceil)\(texel/);
+    expect(EARLYZ_SEED_WGSL).not.toMatch(/ceil\(/);
+    expect(EARLYZ_SEED_WGSL).not.toMatch(/textureDimensions\([^)]*\)\)?\s*\/\s*(max\(|marchSize)/);
   });
 
   it('the WGSL string carries no comments (they live in the TS header)', () => {
