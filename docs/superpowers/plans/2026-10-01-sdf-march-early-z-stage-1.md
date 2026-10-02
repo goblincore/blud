@@ -1493,7 +1493,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `src/lab/sdf-zombie/webgpu/game-state-crowd.ts`
 - Create: `src/lab/sdf-zombie/webgpu/earlyz/earlyz-boot.ts`
 - Create: `src/lab/sdf-zombie/webgpu/game-seams-earlyz.ts`
-- Modify: `src/lab/sdf-zombie/webgpu/game-crowd-leaves.ts`, `src/lab/sdf-zombie/webgpu/game-main.ts`, `src/lab/sdf-zombie/webgpu/game-seams-world.ts`
+- Modify: `src/lab/sdf-zombie/webgpu/game-crowd-leaves.ts`, `src/lab/sdf-zombie/webgpu/game-main.ts`, `src/lab/sdf-zombie/webgpu/game-seams-world.ts`, `src/lab/sdf-zombie/webgpu/game-seams-render.ts`
 - Test: `src/lab/sdf-zombie/webgpu/earlyz/earlyz-boot.test.ts`
 
 - [ ] **Step 1: Crowd state**
@@ -1783,6 +1783,42 @@ In `game-seams-world.ts`, after `tunnels: ctx.world.level.tunnels.map(t => t.nam
     })),
 ```
 
+- [ ] **Step 7b: Refuse the depth prepass, miss cull and depth gate under early-Z** (Task 8 review, Important 1)
+
+Under the flag, `depthPreMesh` and the depth gate's per-body pass list see only each type's BACK batch, so either
+feature would hand front-batch bodies a wrong ray start or discard. Both ship OFF (`GAME_DEPTH_PREPASS = 0`,
+`GAME_DEPTH_GATE = 0` in `game-main.ts`); the only way to turn them on is the three seams in
+`game-seams-render.ts`. Replace those three members with:
+
+```ts
+    /** Perf round 2, task 5: the front-to-back per-body passes and their
+     *  accumulated-depth gate. OFF restores the single-pass march. Refused under
+     *  ?earlyz=1 (stage 1): its per-body pass list holds only each type's back batch. */
+    setDepthGate(on: boolean) {
+      if (on && ctx.crowd.earlyz.on) { console.warn('[earlyz] setDepthGate(true) refused: stage 1 has no front-batch depth gate'); return; }
+      ctx.render.sdfLayer.setDepthGate(on);
+    },
+    get depthGate() { return ctx.render.sdfLayer.depthGate; },
+    /** Close-up task 3: the quarter-res depth prepass and the march's
+     *  consumption of it. OFF (ship default) is bit-identical to the
+     *  pre-task-3 frame; the census and the bench decide the flip. Refused under
+     *  ?earlyz=1 (stage 1): the prepass twin draws only each type's back batch. */
+    setDepthPrepass(on: boolean) {
+      if (on && ctx.crowd.earlyz.on) { console.warn('[earlyz] setDepthPrepass(true) refused: stage 1 prepass sees only the back batch'); return; }
+      ctx.render.sdfLayer.setDepthPreEnabled(on);
+    },
+    /** MISS CULL (2026-09-22): the quarter-res prepass certifies empty 4x4 blocks and the
+     *  march discards them. Turns the prepass on with it (off leaves the prepass as it was).
+     *  Refused under ?earlyz=1 (stage 1), with the prepass. */
+    setMissCull(on: boolean) {
+      if (on && ctx.crowd.earlyz.on) { console.warn('[earlyz] setMissCull(true) refused: needs the stage-1-unsafe prepass'); return; }
+      if (on) ctx.render.sdfLayer.setDepthPreEnabled(true);
+      ctx.render.sdfLayer.setDepthPreMissCull(on);
+    },
+```
+
+Keep `get missCull()` and every other member unchanged. Add `game-seams-render.ts` to this task's commit.
+
 - [ ] **Step 8: Gates**
 
 Run: `npx tsc --noEmit`
@@ -1797,7 +1833,7 @@ Expected: unchanged PASS line.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/lab/sdf-zombie/webgpu/game-state-crowd.ts src/lab/sdf-zombie/webgpu/earlyz/earlyz-boot.ts src/lab/sdf-zombie/webgpu/earlyz/earlyz-boot.test.ts src/lab/sdf-zombie/webgpu/game-seams-earlyz.ts src/lab/sdf-zombie/webgpu/game-crowd-leaves.ts src/lab/sdf-zombie/webgpu/game-main.ts src/lab/sdf-zombie/webgpu/game-seams-world.ts
+git add src/lab/sdf-zombie/webgpu/game-state-crowd.ts src/lab/sdf-zombie/webgpu/earlyz/earlyz-boot.ts src/lab/sdf-zombie/webgpu/earlyz/earlyz-boot.test.ts src/lab/sdf-zombie/webgpu/game-seams-earlyz.ts src/lab/sdf-zombie/webgpu/game-crowd-leaves.ts src/lab/sdf-zombie/webgpu/game-main.ts src/lab/sdf-zombie/webgpu/game-seams-world.ts src/lab/sdf-zombie/webgpu/game-seams-render.ts
 git commit -m "earlyz: boot detection, crowd wiring, render order, earlyzInfo + tunnelDefs seams
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
