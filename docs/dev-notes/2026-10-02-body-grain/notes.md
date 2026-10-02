@@ -64,4 +64,9 @@ n06 = grain on with `surfaceNoiseAmp` 0.06.
 - Cold boot `drawOnce`: base 1663.1 / 1654.4 ms, head 1980.1 / 2272.7 ms, ratio 1.282 -> FAIL (first pair
   2052.6 / 2324.0 ms, ratio 1.319; both head runs rerun once per the step, still fails; warmMs 2901-3438, no
   Vite pre-bundle).
-- Task 8 done: GATE FAILED (cold boot drawOnce ratio).
+- Cold boot re-checked by the controller (2026-10-02, after Task 8): the FAIL above compared a head measured in this run
+  against a base measured hours earlier in another session. Measured A/B instead, base (`34e3630c`) and head
+  (`0529bf59`) alternating in one session, a fresh profile each run, load 2.4-3.7: base 1641 / 1645.8 / 1644.1 ms
+  (mean 1643.6), head 1597.8 / 1686.2 / 1716.2 ms (mean 1666.7). Ratio 1.014 -> PASS (gate 1.10).
+- Task 8 done: cost PASS, march-hash MATCH, cold boot PASS on the controller's A/B re-check (the in-run ratio of 1.28
+  was session drift).
