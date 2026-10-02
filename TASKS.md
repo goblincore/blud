@@ -64,7 +64,7 @@
   (arena; owner playtest: works), armour aesthetic pass next;
   Grenadier variant deferred; cultist perf pass and cloth feel (paused), the **bride is shelved** (2026-09-30; engine fixes merged, game-LOD work on branch `claude/bride-game-lod`) —
   [characters](docs/tasks/characters.md).
-- [ ] Rendering: merged crowd march, baked mesh LOD, corpse bake for every character —
+- [ ] Rendering: merged crowd march, baked mesh LOD, corpse bake for every character, early-Z stage 1 behind `?earlyz=1` (owner look pending) —
   [rendering](docs/tasks/rendering.md); the 0.25 march + checker work and telemetry v3 live in
   [combat and gore](docs/tasks/combat-and-gore.md) (older sections mixed topics).
 - [ ] Engineering: the rest of the `game-main.ts` decomposition (`tick`, `setDrawFn`, `spawnEnemy`) —
